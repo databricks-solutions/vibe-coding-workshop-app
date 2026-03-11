@@ -338,6 +338,11 @@ export interface LeaderboardEntry {
 export interface WorkshopUser {
   display_name: string;
   email: string;
+  workshop_level?: string;
+  workshop_level_label?: string;
+  updated_at?: string;
+  last_session_id?: string;
+  is_saved?: boolean;
 }
 
 export interface WorkshopUsersResponse {

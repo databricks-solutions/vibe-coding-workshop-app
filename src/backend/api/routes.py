@@ -751,8 +751,8 @@ def get_effective_workshop_parameters(session_id: Optional[str] = None) -> Dict[
         _created_by = results[0].get('created_by', '') or ''
         _uc_name = (
             params.get('custom_use_case_label', '').strip()
-            or (results[0].get('use_case_label') or '')
             or (results[0].get('use_case') or '')
+            or (results[0].get('use_case_label') or '')
         )
         _user_part = "user"
         if _created_by and '@' in _created_by:
@@ -3860,7 +3860,7 @@ async def auto_set_lakehouse_params_from_lakebase(session_id: str) -> LakehouseP
     
     # 2. Derive schema name from email + use case
     import re as _re
-    _uc_label = session_result[0].get('use_case_label') or session_result[0].get('use_case') or ''
+    _uc_label = session_result[0].get('use_case') or session_result[0].get('use_case_label') or ''
     _uc_slug = _re.sub(r'[^a-z0-9]+', '_', _uc_label.strip().lower()).strip('_') if _uc_label.strip() else 'vibe_coding'
     if created_by and '@' in created_by:
         local_part = created_by.split('@')[0]
@@ -4436,8 +4436,8 @@ async def update_session_metadata_endpoint(request_body: SessionUpdateMetadataRe
         # Triggered when use case is selected, custom label is edited, or workshop_level changes
         _uc_name = (
             request_body.custom_use_case_label
-            or request_body.use_case_label
             or request_body.use_case
+            or request_body.use_case_label
         )
         _should_derive = bool(_uc_name and _uc_name.strip()) or request_body.workshop_level is not None
         if _should_derive:

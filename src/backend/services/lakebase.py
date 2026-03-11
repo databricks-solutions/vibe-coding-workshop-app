@@ -1461,12 +1461,27 @@ def get_leaderboard(limit: int = 10) -> List[Dict]:
         return []
 
 
+_WORKSHOP_LEVEL_LABELS: Dict[str, str] = {
+    'app-only': 'Databricks Apps',
+    'app-database': '+ Lakebase',
+    'lakehouse': 'Lakehouse',
+    'lakehouse-di': '+ Data Intelligence',
+    'end-to-end': 'Complete Workshop',
+    'accelerator': 'Data Product Accelerator',
+    'genie-accelerator': 'Genie Accelerator',
+    'data-engineering-accelerator': 'Data Engineering Accelerator',
+    'skills-accelerator': 'Skills Accelerator',
+}
+
+
 def get_workshop_users() -> Dict:
     """
-    Get all distinct users who have created sessions.
+    Get all distinct users with their most recent session details.
     
     Returns:
-        Dict with total count and list of users [{display_name, email}].
+        Dict with total count and list of users, each including
+        display_name, email, workshop_level, updated_at,
+        last_session_id, and is_saved.
     """
     if not is_lakebase_configured():
         return {'total': 0, 'users': []}
@@ -1477,10 +1492,15 @@ def get_workshop_users() -> Dict:
         with get_connection() as conn:
             cursor = conn.cursor(cursor_factory=RealDictCursor)
             cursor.execute(f"""
-                SELECT DISTINCT created_by
+                SELECT DISTINCT ON (created_by)
+                    created_by,
+                    workshop_level,
+                    updated_at,
+                    session_id,
+                    session_name
                 FROM {table_name}
                 WHERE created_by IS NOT NULL AND created_by != ''
-                ORDER BY created_by
+                ORDER BY created_by, updated_at DESC
             """)
             rows = cursor.fetchall()
             cursor.close()
@@ -1488,11 +1508,24 @@ def get_workshop_users() -> Dict:
             users = []
             for row in rows:
                 email = row.get('created_by', '')
-                if email:
-                    users.append({
-                        'display_name': _format_display_name(email),
-                        'email': email,
-                    })
+                if not email:
+                    continue
+                level = row.get('workshop_level') or ''
+                updated_at = row.get('updated_at')
+                if hasattr(updated_at, 'isoformat'):
+                    updated_at = updated_at.isoformat()
+                elif hasattr(updated_at, 'strftime'):
+                    updated_at = updated_at.strftime('%Y-%m-%dT%H:%M:%S')
+                session_name = row.get('session_name') or ''
+                users.append({
+                    'display_name': _format_display_name(email),
+                    'email': email,
+                    'workshop_level': level,
+                    'workshop_level_label': _WORKSHOP_LEVEL_LABELS.get(level, level or 'Unknown'),
+                    'updated_at': updated_at,
+                    'last_session_id': row.get('session_id') or '',
+                    'is_saved': bool(session_name and session_name != 'New Session'),
+                })
             
             return {'total': len(users), 'users': users}
     
