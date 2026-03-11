@@ -536,11 +536,16 @@ if [[ "$TABLES_ONLY" != true && "$PERMISSIONS_ONLY" != true ]]; then
     print_success "Bundle validated"
     
     print_step "Deploying bundle (Lakebase + App infrastructure)..."
+    DEPLOY_TMPFILE=$(mktemp)
+    databricks bundle deploy -t "$TARGET" $PROFILE_FLAG 2>&1 | tee "$DEPLOY_TMPFILE"
+    DEPLOY_EXIT_CODE=${PIPESTATUS[0]}
+    DEPLOY_OUTPUT=$(cat "$DEPLOY_TMPFILE")
+    rm -f "$DEPLOY_TMPFILE"
+
     BUNDLE_DEPLOY_OK=false
-    DEPLOY_OUTPUT=$(databricks bundle deploy -t "$TARGET" $PROFILE_FLAG 2>&1) && BUNDLE_DEPLOY_OK=true
+    [[ $DEPLOY_EXIT_CODE -eq 0 ]] && BUNDLE_DEPLOY_OK=true
 
     if [[ "$BUNDLE_DEPLOY_OK" != true ]]; then
-        echo "$DEPLOY_OUTPUT"
 
         if echo "$DEPLOY_OUTPUT" | grep -q "already exists"; then
             print_warning "Detected pre-existing resources from a previous attempt. Cleaning up..."
@@ -596,8 +601,6 @@ if [[ "$TABLES_ONLY" != true && "$PERMISSIONS_ONLY" != true ]]; then
             print_error "Bundle deploy failed"
             exit 1
         fi
-    else
-        echo "$DEPLOY_OUTPUT"
     fi
     print_success "Bundle deployed"
     

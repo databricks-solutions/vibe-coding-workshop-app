@@ -594,9 +594,20 @@ def cmd_uninstall(args):
     subprocess.run(destroy_cmd, cwd=PROJECT_ROOT, capture_output=True)
     success("Bundle destroyed")
 
-    # Step 4: Clean local files
-    info("Step 4: Cleaning local generated files...")
-    for f in [CONFIG_PATH]:
+    # Step 4: Clean local files and bundle state
+    info("Step 4: Cleaning local generated files and bundle state...")
+    bundle_state = PROJECT_ROOT / ".databricks"
+    if bundle_state.exists():
+        shutil.rmtree(bundle_state)
+        success("Removed .databricks/ bundle state directory")
+
+    generated_files = [
+        CONFIG_PATH,
+        PROJECT_ROOT / "databricks.yml",
+        PROJECT_ROOT / "app.yaml",
+        PROJECT_ROOT / "db" / "lakebase" / "dml_seed" / "03_seed_workshop_parameters.sql",
+    ]
+    for f in generated_files:
         if f.exists():
             f.unlink()
             success(f"Removed {f.name}")
