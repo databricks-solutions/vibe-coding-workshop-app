@@ -19,6 +19,8 @@
 #   Step 3: Create and seed Lakebase tables (DDL + DML)
 #   Step 4: Final app deploy (start → deploy code → verify RUNNING)
 #           Only runs during full install; skipped for --code-only
+#   Step 5: Verify & fix all permissions (app resource link, Lakebase roles,
+#           instance CAN_USE, app CAN_USE, Unity Catalog) -- re-applies any missing
 #
 # PERMISSIONS EXPLAINED:
 #   - Unity Catalog (2a): Allows app to access catalog schemas and tables
@@ -1019,6 +1021,150 @@ if [[ "$TABLES_ONLY" != true && "$PERMISSIONS_ONLY" != true && "$CODE_ONLY" != t
         print_error "App did not stabilize (state: $FINAL_STATE)"
         echo -e "  Check: ${CYAN}databricks apps get $APP_NAME${NC}"
         echo -e "  Logs:  ${CYAN}databricks apps logs $APP_NAME${NC}"
+    fi
+fi
+
+# =============================================================================
+# Step 5: Verify & Fix All Permissions
+# =============================================================================
+# After the final deploy/restart cycle, permissions and resource links set in
+# Step 2 may have been reset. This step verifies each one and re-applies any
+# that are missing, ensuring a clean deployment before declaring success.
+# =============================================================================
+
+if [[ "$TABLES_ONLY" != true && "$PERMISSIONS_ONLY" != true && "$CODE_ONLY" != true ]]; then
+    print_header "STEP 5: Verify & Fix Permissions"
+    VERIFY_ISSUES=0
+
+    # Re-fetch app info for service principal ID (may have changed after restart)
+    VERIFY_APP_INFO=$(databricks apps get "$APP_NAME" $PROFILE_FLAG --output json 2>/dev/null) || true
+    if [[ -n "$VERIFY_APP_INFO" ]]; then
+        SERVICE_PRINCIPAL_ID=$(echo "$VERIFY_APP_INFO" | python3 -c "import sys,json; print(json.load(sys.stdin).get('service_principal_client_id',''))" 2>/dev/null) || true
+    fi
+
+    # ── Check 1: App Resource Link (Lakebase → App) ─────────────────────
+    print_step "Check 1/5: App resource link (Lakebase → App)..."
+    HAS_RESOURCE=$(echo "$VERIFY_APP_INFO" | python3 -c "
+import sys, json
+try:
+    data = json.load(sys.stdin)
+    for r in data.get('resources', []):
+        db = r.get('database', {})
+        if db.get('instance_name') == '$LAKEBASE_INSTANCE':
+            print('yes')
+            sys.exit(0)
+    print('no')
+except: print('no')
+" 2>/dev/null) || true
+
+    if [[ "$HAS_RESOURCE" == "yes" ]]; then
+        print_success "App resource link: Lakebase instance connected"
+    else
+        print_warning "App resource link MISSING -- re-applying..."
+        VERIFY_ISSUES=$((VERIFY_ISSUES + 1))
+        python3 "$SCRIPT_DIR/lakebase_manager.py" \
+            --action link-app-resource \
+            --app-name "$APP_NAME" \
+            --instance-name "$LAKEBASE_INSTANCE" \
+            --host "$WORKSPACE_URL" \
+            --project-root "$PROJECT_ROOT" 2>/dev/null || {
+            print_warning "Could not re-link app resource"
+        }
+    fi
+
+    # ── Check 2: Lakebase Roles ──────────────────────────────────────────
+    print_step "Check 2/5: Lakebase database roles..."
+    VERIFY_ROLES=$(databricks api get "/api/2.0/database/instances/$LAKEBASE_INSTANCE/roles" $PROFILE_FLAG 2>/dev/null) || true
+
+    # 2a. Service principal role
+    if [[ -n "$SERVICE_PRINCIPAL_ID" ]]; then
+        if echo "$VERIFY_ROLES" | grep -q "$SERVICE_PRINCIPAL_ID"; then
+            print_success "Lakebase role: service principal OK"
+        else
+            print_warning "Lakebase role: service principal MISSING -- re-applying..."
+            VERIFY_ISSUES=$((VERIFY_ISSUES + 1))
+            databricks api post "/api/2.0/database/instances/$LAKEBASE_INSTANCE/roles" \
+                $PROFILE_FLAG \
+                --json "{\"name\": \"$SERVICE_PRINCIPAL_ID\", \"identity_type\": \"SERVICE_PRINCIPAL\", \"membership_role\": \"DATABRICKS_SUPERUSER\"}" 2>/dev/null || true
+        fi
+    fi
+
+    # 2b. Current user role
+    if [[ -n "$CURRENT_USER" ]]; then
+        if echo "$VERIFY_ROLES" | grep -q "$CURRENT_USER"; then
+            print_success "Lakebase role: $CURRENT_USER OK"
+        else
+            print_warning "Lakebase role: $CURRENT_USER MISSING -- re-applying..."
+            VERIFY_ISSUES=$((VERIFY_ISSUES + 1))
+            databricks api post "/api/2.0/database/instances/$LAKEBASE_INSTANCE/roles" \
+                $PROFILE_FLAG \
+                --json "{\"name\": \"$CURRENT_USER\", \"identity_type\": \"USER\", \"membership_role\": \"DATABRICKS_SUPERUSER\"}" 2>/dev/null || true
+        fi
+    fi
+
+    # 2c. Account users group role
+    if echo "$VERIFY_ROLES" | grep -q "account users"; then
+        print_success "Lakebase role: account users OK"
+    else
+        print_warning "Lakebase role: account users MISSING -- re-applying..."
+        VERIFY_ISSUES=$((VERIFY_ISSUES + 1))
+        databricks api post "/api/2.0/database/instances/$LAKEBASE_INSTANCE/roles" \
+            $PROFILE_FLAG \
+            --json '{"name": "account users", "identity_type": "GROUP", "membership_role": "DATABRICKS_SUPERUSER", "attributes": ["CREATEDB", "CREATEROLE", "BYPASSRLS"]}' 2>/dev/null || true
+    fi
+
+    # ── Check 3: Lakebase Instance CAN_USE ───────────────────────────────
+    print_step "Check 3/5: Lakebase instance CAN_USE for account users..."
+    VERIFY_INST_PERMS=$(databricks api get "/api/2.0/permissions/database-instances/$LAKEBASE_INSTANCE" $PROFILE_FLAG 2>/dev/null) || true
+
+    if echo "$VERIFY_INST_PERMS" | grep -q "account users"; then
+        print_success "Lakebase instance CAN_USE: account users OK"
+    else
+        print_warning "Lakebase instance CAN_USE: account users MISSING -- re-applying..."
+        VERIFY_ISSUES=$((VERIFY_ISSUES + 1))
+        databricks api patch "/api/2.0/permissions/database-instances/$LAKEBASE_INSTANCE" \
+            $PROFILE_FLAG \
+            --json '{"access_control_list": [{"group_name": "account users", "all_permissions": [{"permission_level": "CAN_USE"}]}]}' 2>/dev/null || true
+    fi
+
+    # ── Check 4: App CAN_USE ─────────────────────────────────────────────
+    print_step "Check 4/5: App CAN_USE for all workspace users..."
+    VERIFY_APP_PERMS=$(databricks api get "/api/2.0/permissions/apps/$APP_NAME" $PROFILE_FLAG 2>/dev/null) || true
+
+    if echo "$VERIFY_APP_PERMS" | grep -q '"group_name".*"users"'; then
+        print_success "App CAN_USE: all workspace users OK"
+    else
+        print_warning "App CAN_USE: all workspace users MISSING -- re-applying..."
+        VERIFY_ISSUES=$((VERIFY_ISSUES + 1))
+        databricks api patch "/api/2.0/permissions/apps/$APP_NAME" \
+            $PROFILE_FLAG \
+            --json '{"access_control_list": [{"group_name": "users", "all_permissions": [{"permission_level": "CAN_USE"}]}]}' 2>/dev/null || true
+    fi
+
+    # ── Check 5: Unity Catalog Permissions ───────────────────────────────
+    print_step "Check 5/5: Unity Catalog permissions..."
+    if [[ -n "$SERVICE_PRINCIPAL_ID" && -n "$LAKEBASE_CATALOG" ]]; then
+        VERIFY_UC_PERMS=$(databricks api get "/api/2.1/unity-catalog/permissions/catalog/$LAKEBASE_CATALOG" $PROFILE_FLAG 2>/dev/null) || true
+
+        if echo "$VERIFY_UC_PERMS" | grep -q "$SERVICE_PRINCIPAL_ID"; then
+            print_success "Unity Catalog: service principal has privileges on $LAKEBASE_CATALOG"
+        else
+            print_warning "Unity Catalog: permissions MISSING -- re-applying..."
+            VERIFY_ISSUES=$((VERIFY_ISSUES + 1))
+            databricks api patch "/api/2.1/unity-catalog/permissions/catalog/$LAKEBASE_CATALOG" \
+                $PROFILE_FLAG \
+                --json "{\"changes\": [{\"principal\": \"$SERVICE_PRINCIPAL_ID\", \"add\": [\"ALL_PRIVILEGES\"]}]}" 2>/dev/null || true
+        fi
+    else
+        print_warning "Unity Catalog: skipped (missing service principal or catalog name)"
+    fi
+
+    # ── Verification Summary ─────────────────────────────────────────────
+    echo ""
+    if [[ $VERIFY_ISSUES -gt 0 ]]; then
+        print_warning "Fixed $VERIFY_ISSUES permission issue(s) -- re-applied during verification"
+    else
+        print_success "All permissions verified -- clean deployment"
     fi
 fi
 
