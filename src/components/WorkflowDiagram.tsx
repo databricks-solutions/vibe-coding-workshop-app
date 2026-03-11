@@ -1120,8 +1120,7 @@ export function WorkflowDiagram({
                       </div>
                     </div>
 
-                    {expandedStep === 10 && (
-                      <div className="border-t border-border">
+                    <div className={`border-t border-border ${expandedStep === 10 ? '' : 'hidden'}`}>
                         {/* Mode tabs */}
                         {showUploadTab && (
                           <div className="flex border-b border-border">
@@ -1216,8 +1215,7 @@ export function WorkflowDiagram({
                             </div>
                           )}
                         </div>
-                      </div>
-                    )}
+                    </div>
                   </div>
                 </div>
               );
@@ -1306,8 +1304,7 @@ export function WorkflowDiagram({
                       </div>
                     </div>
 
-                    {expandedStep === 12 && (
-                      <div className="border-t border-border">
+                    <div className={`border-t border-border ${expandedStep === 12 ? '' : 'hidden'}`}>
                         {/* Mode tabs -- Clone disabled in Genie flow or Upload CSV mode */}
                         {showCloneTab && showGenerateTab && (
                           <div className="flex border-b border-border">
@@ -1395,8 +1392,7 @@ export function WorkflowDiagram({
                             />
                           )}
                         </div>
-                      </div>
-                    )}
+                    </div>
                   </div>
                 </div>
               );
@@ -1501,8 +1497,7 @@ export function WorkflowDiagram({
                       </div>
                     </div>
 
-                    {expandedStep === 22 && (
-                      <div className="border-t border-border">
+                    <div className={`border-t border-border ${expandedStep === 22 ? '' : 'hidden'}`}>
                         {/* Mode tabs */}
                         {showUploadTab22 && (
                           <div className="flex border-b border-border">
@@ -1594,8 +1589,7 @@ export function WorkflowDiagram({
                             </div>
                           )}
                         </div>
-                      </div>
-                    )}
+                    </div>
                   </div>
                 </div>
               );
