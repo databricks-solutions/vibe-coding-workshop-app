@@ -569,7 +569,7 @@ if [[ "$TABLES_ONLY" != true && "$PERMISSIONS_ONLY" != true ]]; then
                 exit 1
             fi
 
-        elif echo "$DEPLOY_OUTPUT" | grep -q "OAuth custom application\|1000.*OAuth"; then
+        elif echo "$DEPLOY_OUTPUT" | grep -q "QUOTA_EXCEEDED\|OAuth custom application\|1000.*OAuth"; then
             print_warning "Hit the account-wide OAuth integration limit (max 1000)."
             print_step "Attempting to free slots by removing stale apps in this workspace..."
 
@@ -639,36 +639,26 @@ if [[ "$BUNDLE_ONLY" == true ]]; then
 fi
 
 # =============================================================================
-# Wait for App Compute Readiness
+# Verify App Exists After Bundle Deploy
 # =============================================================================
-# After bundle deploy creates the app, compute provisioning runs async.
-# We must wait for it to finish before deploying code in Step 2.
+# Bundle deploy creates the app but does not start compute or push code.
+# We just verify the app was created successfully before proceeding to Step 2.
+# Compute starts later in Step 5 after code is deployed and app is started.
 # =============================================================================
 
 if [[ "$TABLES_ONLY" != true && "$PERMISSIONS_ONLY" != true ]]; then
-    print_step "Waiting for app compute to be ready..."
-    APP_READY=false
-    for CHECK in $(seq 1 20); do
-        APP_CHECK=$(databricks apps get "$APP_NAME" $PROFILE_FLAG --output json 2>/dev/null) || true
-        if [[ -n "$APP_CHECK" ]]; then
-            APP_STATE=$(echo "$APP_CHECK" | python3 -c "
+    print_step "Verifying app was created..."
+    APP_CHECK=$(databricks apps get "$APP_NAME" $PROFILE_FLAG --output json 2>/dev/null) || true
+    if [[ -n "$APP_CHECK" ]] && echo "$APP_CHECK" | grep -q '"name"'; then
+        APP_STATE=$(echo "$APP_CHECK" | python3 -c "
 import sys, json
 data = json.load(sys.stdin)
 state = data.get('app_status', {}).get('state', 'UNKNOWN')
 print(state)" 2>/dev/null) || true
-
-            if [[ "$APP_STATE" == "RUNNING" || "$APP_STATE" == "IDLE" || "$APP_STATE" == "CRASHED" ]]; then
-                print_success "App compute ready (state: $APP_STATE)"
-                APP_READY=true
-                break
-            fi
-        fi
-        echo -e "  App state: ${YELLOW}${APP_STATE:-UNKNOWN}${NC} -- waiting 15s ($CHECK/20)..."
-        sleep 15
-    done
-
-    if [[ "$APP_READY" != true ]]; then
-        print_warning "App compute may not be fully ready (state: ${APP_STATE:-UNKNOWN}) -- proceeding anyway"
+        print_success "App exists (state: ${APP_STATE:-UNKNOWN}). Compute will start after code deploy in Step 5."
+    else
+        print_error "App '$APP_NAME' not found after bundle deploy"
+        exit 1
     fi
 fi
 
