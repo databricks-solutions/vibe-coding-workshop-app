@@ -30,9 +30,6 @@ variables:
   lakebase_schema:
     description: "Lakebase schema for configuration tables"
     default: "__LAKEBASE_SCHEMA__"
-  lakebase_user:
-    description: "Lakebase user (email)"
-    default: "__LAKEBASE_USER__"
   app_name:
     description: "Databricks App name"
     default: "__APP_NAME__"

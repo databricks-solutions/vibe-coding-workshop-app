@@ -4062,12 +4062,12 @@ def _get_session_user(request: Request) -> str:
             logger.info(f"Found user email from header '{header}': {user}")
             return user
     
-    # Fallback to LAKEBASE_USER from app.yaml
-    user = os.getenv("LAKEBASE_USER", "")
-    if user and "@" in user:
-        return user
+    # Fallback to PGUSER (auto-injected by Lakebase resource link)
+    pg_user = os.getenv("PGUSER", "")
+    if pg_user and "@" in pg_user:
+        return pg_user
     
-    logger.warning("Could not determine user email, using 'unknown'")
+    logger.warning("Could not determine user email from headers or PGUSER, using 'unknown'")
     return "unknown"
 
 
@@ -4592,7 +4592,6 @@ async def session_lakebase_status():
         "PGSSLMODE": os.getenv("PGSSLMODE", "not set"),
         "LAKEBASE_HOST": bool(os.getenv("LAKEBASE_HOST")),
         "LAKEBASE_DATABASE": bool(os.getenv("LAKEBASE_DATABASE")),
-        "LAKEBASE_USER": bool(os.getenv("LAKEBASE_USER")),
         "LAKEBASE_SCHEMA": os.getenv("LAKEBASE_SCHEMA", "not set"),
         "DATABRICKS_TOKEN": bool(os.getenv("DATABRICKS_TOKEN")),
     }

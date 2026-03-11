@@ -86,7 +86,23 @@ class Config:
         cls.LAKEBASE_DATABASE = get_yaml_value('LAKEBASE_DATABASE')
         cls.LAKEBASE_SCHEMA = get_yaml_value('LAKEBASE_SCHEMA')
         cls.LAKEBASE_PORT = int(get_yaml_value('LAKEBASE_PORT') or '443')
-        cls.LAKEBASE_USER = get_yaml_value('LAKEBASE_USER')
+        
+        # Get current authenticated user from Databricks CLI (not from app.yaml)
+        # lakebase_manager.py runs during deployment as the deployer, not as the app
+        try:
+            import subprocess
+            result = subprocess.run(
+                ['databricks', 'current-user', 'me', '--output', 'json'],
+                capture_output=True, text=True, timeout=15
+            )
+            if result.returncode == 0:
+                import json
+                user_info = json.loads(result.stdout)
+                cls.LAKEBASE_USER = user_info.get('userName', '')
+        except Exception:
+            pass
+        if not cls.LAKEBASE_USER:
+            cls.LAKEBASE_USER = os.getenv('LAKEBASE_USER_OVERRIDE', '')
     
     @classmethod
     def to_dict(cls) -> Dict[str, Any]:

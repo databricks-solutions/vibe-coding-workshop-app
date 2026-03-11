@@ -10,17 +10,19 @@
 #   Step 0: Configure app.yaml with target-specific Lakebase settings
 #   Step 1: Validate and deploy Databricks Asset Bundle (Lakebase + App)
 #           + Update app.yaml with Lakebase host (discovered after instance creation)
-#   Step 2: Setup all required permissions:
+#   Step 2: Setup infrastructure-level permissions (survive bundle deploys):
 #           2a. Unity Catalog permissions (ALL_PRIVILEGES on catalog)
 #           2b. Lakebase database roles (DATABRICKS_SUPERUSER for SP, user, account users)
 #               + CAN_USE on Lakebase instance for account users
-#           2c. App Resource link (CAN_CONNECT_AND_CREATE on Lakebase instance)
-#           2d. App permissions (CAN_USE for all workspace users)
 #   Step 3: Create and seed Lakebase tables (DDL + DML)
-#   Step 4: Final app deploy (start → deploy code → verify RUNNING)
-#           Only runs during full install; skipped for --code-only
+#   Step 4: Final app deploy:
+#           4a-b. Sync final app.yaml via bundle deploy (LAST bundle deploy)
+#           4c.   Apply app-level permissions (resource link + CAN_USE)
+#                 These MUST be after the last bundle deploy (deploy resets them)
+#           4d-g. Start app → deploy code → verify RUNNING
 #   Step 5: Verify & fix all permissions (app resource link, Lakebase roles,
 #           instance CAN_USE, app CAN_USE, Unity Catalog) -- re-applies any missing
+#           + Restarts app if resource link had to be re-applied
 #
 # PERMISSIONS EXPLAINED:
 #   - Unity Catalog (2a): Allows app to access catalog schemas and tables
@@ -859,42 +861,12 @@ if [[ "$TABLES_ONLY" != true && "$SKIP_PERMISSIONS" != true ]]; then
         fi
         
         # =================================================================
-        # 2c. App Resource Link (Critical for Runtime Auth)
-        #     Link Lakebase instance to app with CAN_CONNECT_AND_CREATE
-        #     This enables automatic PGPASSWORD injection at runtime
-        #     Visible in: Databricks UI > Apps > Settings > App Resources
-        #     
-        #     Uses lakebase_manager.py to keep all permission logic centralized
+        # NOTE: App-level permissions (resource link, app CAN_USE) are
+        #       applied in Step 4 AFTER the final bundle deploy.
+        #       Bundle deploy resets app-level settings, so they must be
+        #       applied after the last deploy call to persist.
         # =================================================================
-        if [[ -n "$LAKEBASE_INSTANCE" ]]; then
-            print_step "2c. Linking Lakebase as app resource (via lakebase_manager.py)..."
-            
-            python3 "$SCRIPT_DIR/lakebase_manager.py" \
-                --action link-app-resource \
-                --app-name "$APP_NAME" \
-                --instance-name "$LAKEBASE_INSTANCE" \
-                --host "$WORKSPACE_URL" \
-                --project-root "$PROJECT_ROOT" || {
-                print_warning "Could not link app resource - may need manual setup"
-            }
-        fi
-        
-        # =================================================================
-        # 2d. App Permissions
-        #     Grant CAN_USE on the app to all workspace users
-        #     This allows anyone in the workspace to open and use the app
-        # =================================================================
-        print_step "2d. Granting CAN_USE on app to all workspace users..."
-        APP_PERM_RESULT=$(databricks api patch "/api/2.0/permissions/apps/$APP_NAME" \
-            $PROFILE_FLAG \
-            --json '{"access_control_list": [{"group_name": "users", "permission_level": "CAN_USE"}]}' 2>&1) || true
-
-        if echo "$APP_PERM_RESULT" | grep -q "access_control_list\|CAN_USE"; then
-            print_success "CAN_USE granted on app for all workspace users"
-        else
-            print_warning "Could not grant CAN_USE on app"
-            echo "  Response: $APP_PERM_RESULT"
-        fi
+        print_step "App-level permissions (resource link, CAN_USE) deferred to Step 4..."
     else
         print_warning "Could not get app info - permissions may need manual setup"
     fi
@@ -980,28 +952,59 @@ if [[ "$TABLES_ONLY" != true && "$PERMISSIONS_ONLY" != true && "$CODE_ONLY" != t
         fi
     fi
 
-    # 4b. Sync config to workspace
+    # 4b. Sync config to workspace (LAST bundle deploy -- do not call bundle deploy after this)
     print_step "Syncing final configuration to workspace..."
     databricks bundle deploy -t "$TARGET" $PROFILE_FLAG 2>&1 | tail -3
 
-    # 4c. Get source code path
+    # 4c. App-level permissions (MUST be AFTER last bundle deploy -- bundle deploy resets these)
+    #     These are app-level settings that get wiped by databricks bundle deploy,
+    #     so they must be applied after the last deploy call.
+    print_step "4c. Applying app-level permissions (post-deploy)..."
+
+    # 4c-i. Link Lakebase as app resource (injects PGHOST/PGUSER at runtime)
+    if [[ -n "$LAKEBASE_INSTANCE" ]]; then
+        print_step "  Linking Lakebase as app resource..."
+        python3 "$SCRIPT_DIR/lakebase_manager.py" \
+            --action link-app-resource \
+            --app-name "$APP_NAME" \
+            --instance-name "$LAKEBASE_INSTANCE" \
+            --host "$WORKSPACE_URL" \
+            --project-root "$PROJECT_ROOT" || {
+            print_warning "Could not link app resource - may need manual setup"
+        }
+    fi
+
+    # 4c-ii. Grant CAN_USE on app to all workspace users
+    print_step "  Granting CAN_USE on app to all workspace users..."
+    APP_PERM_RESULT=$(databricks api patch "/api/2.0/permissions/apps/$APP_NAME" \
+        $PROFILE_FLAG \
+        --json '{"access_control_list": [{"group_name": "users", "permission_level": "CAN_USE"}]}' 2>&1) || true
+
+    if echo "$APP_PERM_RESULT" | grep -q "access_control_list\|CAN_USE"; then
+        print_success "CAN_USE granted on app for all workspace users"
+    else
+        print_warning "Could not grant CAN_USE on app"
+        echo "  Response: $APP_PERM_RESULT"
+    fi
+
+    # 4d. Get source code path
     SOURCE_PATH=$(get_source_path)
 
-    # 4d. Ensure app is running BEFORE deploying code
+    # 4e. Ensure app is running BEFORE deploying code
     if ! ensure_app_running; then
         print_error "Cannot deploy code -- app failed to start"
         echo -e "  Try: ${CYAN}databricks apps start $APP_NAME${NC}"
         exit 1
     fi
 
-    # 4e. Deploy code to the running app
+    # 4f. Deploy code to the running app
     if ! deploy_app_code "$SOURCE_PATH"; then
         print_error "App code deployment failed"
         echo -e "  Try: ${CYAN}databricks apps deploy $APP_NAME --source-code-path $SOURCE_PATH${NC}"
         exit 1
     fi
 
-    # 4f. Wait for app to stabilize with new code
+    # 4g. Wait for app to stabilize with new code
     print_step "Waiting for app to stabilize..."
     APP_RUNNING=false
     for CHECK in $(seq 1 8); do
@@ -1027,14 +1030,15 @@ fi
 # =============================================================================
 # Step 5: Verify & Fix All Permissions
 # =============================================================================
-# After the final deploy/restart cycle, permissions and resource links set in
-# Step 2 may have been reset. This step verifies each one and re-applies any
-# that are missing, ensuring a clean deployment before declaring success.
+# Verifies all permissions are correctly applied and re-applies any that are
+# missing. If the app resource link had to be re-applied, the app is restarted
+# so that PGHOST/PGUSER environment variables take effect.
 # =============================================================================
 
 if [[ "$TABLES_ONLY" != true && "$PERMISSIONS_ONLY" != true && "$CODE_ONLY" != true ]]; then
     print_header "STEP 5: Verify & Fix Permissions"
     VERIFY_ISSUES=0
+    RESOURCE_LINK_FIXED=false
 
     # Re-fetch app info for service principal ID (may have changed after restart)
     VERIFY_APP_INFO=$(databricks apps get "$APP_NAME" $PROFILE_FLAG --output json 2>/dev/null) || true
@@ -1062,6 +1066,7 @@ except: print('no')
     else
         print_warning "App resource link MISSING -- re-applying..."
         VERIFY_ISSUES=$((VERIFY_ISSUES + 1))
+        RESOURCE_LINK_FIXED=true
         python3 "$SCRIPT_DIR/lakebase_manager.py" \
             --action link-app-resource \
             --app-name "$APP_NAME" \
@@ -1069,6 +1074,7 @@ except: print('no')
             --host "$WORKSPACE_URL" \
             --project-root "$PROJECT_ROOT" 2>/dev/null || {
             print_warning "Could not re-link app resource"
+            RESOURCE_LINK_FIXED=false
         }
     fi
 
@@ -1163,6 +1169,31 @@ except: print('no')
     echo ""
     if [[ $VERIFY_ISSUES -gt 0 ]]; then
         print_warning "Fixed $VERIFY_ISSUES permission issue(s) -- re-applied during verification"
+
+        # If the resource link was re-applied, the app must be restarted
+        # so that PGHOST/PGUSER env vars from the new link take effect
+        if [[ "$RESOURCE_LINK_FIXED" == true ]]; then
+            print_step "Resource link was re-applied -- restarting app for env vars to take effect..."
+            databricks apps stop "$APP_NAME" $PROFILE_FLAG 2>/dev/null || true
+            sleep 10
+            databricks apps start "$APP_NAME" $PROFILE_FLAG 2>/dev/null || true
+
+            APP_RUNNING=false
+            for CHECK in $(seq 1 8); do
+                sleep 15
+                RESTART_STATE=$(get_app_state)
+                if [[ "$RESTART_STATE" == "RUNNING" ]]; then
+                    print_success "App restarted and RUNNING with correct resource link"
+                    APP_RUNNING=true
+                    break
+                fi
+                echo -e "  App state: ${YELLOW}$RESTART_STATE${NC} ($CHECK/8)"
+            done
+
+            if [[ "$APP_RUNNING" != true ]]; then
+                print_warning "App did not reach RUNNING after restart (state: $RESTART_STATE)"
+            fi
+        fi
     else
         print_success "All permissions verified -- clean deployment"
     fi

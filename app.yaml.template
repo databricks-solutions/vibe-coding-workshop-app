@@ -44,8 +44,10 @@ env:
   - name: LAKEBASE_PORT
     value: "5432"
   
-  - name: LAKEBASE_USER
-    value: "__LAKEBASE_USER__"
+  # NOTE: LAKEBASE_USER is NOT set here. When running on Databricks Apps,
+  # the Lakebase resource link (Step 4c) injects PGUSER automatically with
+  # the correct service principal identity. Hardcoding a user email here
+  # causes auth failures because the app runs as a service principal.
   
   # Toggle Lakebase (set to "false" for YAML fallback)
   - name: USE_LAKEBASE

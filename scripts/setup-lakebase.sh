@@ -182,7 +182,18 @@ fi
 
 LAKEBASE_DATABASE="${LAKEBASE_DATABASE_OVERRIDE:-$(get_yaml_value "LAKEBASE_DATABASE")}"
 LAKEBASE_PORT="${LAKEBASE_PORT_OVERRIDE:-$(get_yaml_value "LAKEBASE_PORT")}"
-LAKEBASE_USER="${LAKEBASE_USER_OVERRIDE:-$(get_yaml_value "LAKEBASE_USER")}"
+
+# Get the current authenticated user from Databricks CLI (not from app.yaml)
+# During deployment, setup-lakebase.sh runs as the deployer, not as the app's service principal
+if [[ -n "${LAKEBASE_USER_OVERRIDE:-}" ]]; then
+    LAKEBASE_USER="$LAKEBASE_USER_OVERRIDE"
+else
+    LAKEBASE_USER=$(databricks current-user me --output json 2>/dev/null | python3 -c "import sys,json; print(json.load(sys.stdin).get('userName',''))" 2>/dev/null) || true
+    if [[ -z "$LAKEBASE_USER" ]]; then
+        echo -e "${RED}Error: Could not determine current Databricks user${NC}"
+        exit 1
+    fi
+fi
 
 # Display configuration source
 if [[ -n "${LAKEBASE_SCHEMA_OVERRIDE:-}" ]]; then

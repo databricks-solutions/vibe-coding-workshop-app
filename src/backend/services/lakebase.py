@@ -6,15 +6,19 @@ Reference: https://github.com/databricks-solutions/lakebase-fastapi-app
 
 This service connects to Lakebase using PostgreSQL drivers with OAuth authentication.
 
-Environment Variables Required (configured in app.yaml):
-  - LAKEBASE_HOST: Lakebase PostgreSQL host
-  - LAKEBASE_DATABASE: Database name
-  - LAKEBASE_SCHEMA: Schema name
-  - LAKEBASE_USER: Database user (email)
-  - LAKEBASE_PORT: PostgreSQL port (default: 5432)
+Environment Variables:
+  When Lakebase is linked as an app resource (recommended), Databricks auto-injects:
+    - PGHOST, PGDATABASE, PGUSER, PGPORT, PGSSLMODE
 
-Note: Default values are defined in app.yaml, NOT in this code.
-The app uses Databricks OAuth for authentication when running on Databricks Apps.
+  Fallback (manual config via app.yaml):
+    - LAKEBASE_HOST: Lakebase PostgreSQL host
+    - LAKEBASE_DATABASE: Database name
+    - LAKEBASE_SCHEMA: Schema name
+    - LAKEBASE_PORT: PostgreSQL port (default: 5432)
+
+  NOTE: LAKEBASE_USER is intentionally NOT set. The app runs as a service principal
+  on Databricks Apps -- the resource link provides PGUSER with the correct identity.
+  Hardcoding a user email causes auth failures (token identity mismatch).
 """
 import os
 import logging
@@ -97,12 +101,34 @@ def _get_config() -> Dict[str, Any]:
     
     # Fallback to custom LAKEBASE_* variables (defaults are in app.yaml)
     logger.info("Using custom LAKEBASE_* environment variables")
+    
+    user = os.getenv("LAKEBASE_USER", "")
+    if not user:
+        logger.warning(
+            "PGUSER not set and LAKEBASE_USER not set. "
+            "This likely means the Lakebase resource link is missing -- "
+            "the app cannot authenticate to PostgreSQL without a user identity. "
+            "Attempting to get identity from Databricks SDK..."
+        )
+        try:
+            if DATABRICKS_SDK_AVAILABLE:
+                w = WorkspaceClient()
+                if hasattr(w.config, 'client_id') and w.config.client_id:
+                    user = w.config.client_id
+                    logger.info(f"Got service principal client_id from SDK: {user[:20]}...")
+                else:
+                    headers = w.config.authenticate()
+                    if headers:
+                        logger.info("SDK authenticated but no client_id -- user still unknown")
+        except Exception as e:
+            logger.warning(f"Could not get identity from SDK: {e}")
+    
     return {
         "host": os.getenv("LAKEBASE_HOST", ""),
         "database": os.getenv("LAKEBASE_DATABASE", ""),
         "schema": os.getenv("LAKEBASE_SCHEMA", ""),
         "port": int(os.getenv("LAKEBASE_PORT", "5432")),
-        "user": os.getenv("LAKEBASE_USER", ""),
+        "user": user,
         "sslmode": "require",
         "source": "manual_config",
     }
@@ -287,7 +313,11 @@ def get_connection():
     # Validate we have credentials
     if not user:
         logger.error("=== CONNECTION FAILED: No user configured ===")
-        raise RuntimeError("No user configured for Lakebase connection (PGUSER or LAKEBASE_USER)")
+        raise RuntimeError(
+            "No user configured for Lakebase connection. "
+            "PGUSER should be auto-injected by the Lakebase resource link. "
+            "Check that the Lakebase instance is linked as an app resource in Databricks UI."
+        )
     
     if not password:
         # Log available env vars for debugging
