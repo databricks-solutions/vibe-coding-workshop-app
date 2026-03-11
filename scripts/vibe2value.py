@@ -327,10 +327,7 @@ def cmd_install(args):
     app_name = input(f"  App name [{defaults['app_name']}]: ").strip() or defaults["app_name"]
     instance_name = input(f"  Lakebase instance [{defaults['instance_name']}]: ").strip() or defaults["instance_name"]
     catalog = input(f"  Catalog [{defaults['catalog']}]: ").strip() or defaults["catalog"]
-    create_catalog_input = input(
-        "  Register Lakebase as UC catalog? (needs CREATE CATALOG permission) [y/N]: "
-    ).strip().lower()
-    create_catalog = create_catalog_input in ("y", "yes")
+    create_catalog = existing_config.get("lakebase", {}).get("create_catalog", "false").lower() == "true"
     endpoint = input(f"  Model endpoint [{defaults['endpoint']}]: ").strip() or defaults["endpoint"]
 
     # ── Step 5: Save configuration ────────────────────────────────────

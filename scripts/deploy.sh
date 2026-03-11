@@ -12,8 +12,10 @@
 #           + Update app.yaml with Lakebase host (discovered after instance creation)
 #   Step 2: Setup all required permissions:
 #           2a. Unity Catalog permissions (ALL_PRIVILEGES on catalog)
-#           2b. Lakebase database role (DATABRICKS_SUPERUSER)
+#           2b. Lakebase database roles (DATABRICKS_SUPERUSER for SP, user, account users)
+#               + CAN_USE on Lakebase instance for account users
 #           2c. App Resource link (CAN_CONNECT_AND_CREATE on Lakebase instance)
+#           2d. App permissions (CAN_USE for all workspace users)
 #   Step 3: Create and seed Lakebase tables (DDL + DML)
 #   Step 4: Final app deploy (start → deploy code → verify RUNNING)
 #           Only runs during full install; skipped for --code-only
@@ -823,6 +825,35 @@ if [[ "$TABLES_ONLY" != true && "$SKIP_PERMISSIONS" != true ]]; then
                     fi
                 fi
             fi
+
+            # Add account users group role (enables all workspace users to access the workshop DB)
+            if echo "$EXISTING_ROLES" | grep -q "account users"; then
+                print_warning "Lakebase role already exists for account users"
+            else
+                ACCT_ROLE_RESULT=$(databricks api post "/api/2.0/database/instances/$LAKEBASE_INSTANCE/roles" \
+                    $PROFILE_FLAG \
+                    --json '{"name": "account users", "identity_type": "GROUP", "membership_role": "DATABRICKS_SUPERUSER", "attributes": ["CREATEDB", "CREATEROLE", "BYPASSRLS"]}' 2>&1) || true
+
+                if echo "$ACCT_ROLE_RESULT" | grep -q "DATABRICKS_SUPERUSER\|GROUP"; then
+                    print_success "Lakebase role granted: DATABRICKS_SUPERUSER for account users (all workspace users)"
+                else
+                    print_warning "Could not grant Lakebase role for account users"
+                    echo "  Response: $ACCT_ROLE_RESULT"
+                fi
+            fi
+
+            # Grant CAN_USE on Lakebase instance to account users
+            print_step "Granting CAN_USE on Lakebase instance to account users..."
+            INSTANCE_PERM_RESULT=$(databricks api patch "/api/2.0/permissions/database-instances/$LAKEBASE_INSTANCE" \
+                $PROFILE_FLAG \
+                --json '{"access_control_list": [{"group_name": "account users", "all_permissions": [{"permission_level": "CAN_USE"}]}]}' 2>&1) || true
+
+            if echo "$INSTANCE_PERM_RESULT" | grep -q "access_control_list\|CAN_USE"; then
+                print_success "CAN_USE granted on Lakebase instance for account users"
+            else
+                print_warning "Could not grant CAN_USE on Lakebase instance"
+                echo "  Response: $INSTANCE_PERM_RESULT"
+            fi
         fi
         
         # =================================================================
@@ -844,6 +875,23 @@ if [[ "$TABLES_ONLY" != true && "$SKIP_PERMISSIONS" != true ]]; then
                 --project-root "$PROJECT_ROOT" || {
                 print_warning "Could not link app resource - may need manual setup"
             }
+        fi
+        
+        # =================================================================
+        # 2d. App Permissions
+        #     Grant CAN_USE on the app to all workspace users
+        #     This allows anyone in the workspace to open and use the app
+        # =================================================================
+        print_step "2d. Granting CAN_USE on app to all workspace users..."
+        APP_PERM_RESULT=$(databricks api patch "/api/2.0/permissions/apps/$APP_NAME" \
+            $PROFILE_FLAG \
+            --json '{"access_control_list": [{"group_name": "users", "all_permissions": [{"permission_level": "CAN_USE"}]}]}' 2>&1) || true
+
+        if echo "$APP_PERM_RESULT" | grep -q "access_control_list\|CAN_USE"; then
+            print_success "CAN_USE granted on app for all workspace users"
+        else
+            print_warning "Could not grant CAN_USE on app"
+            echo "  Response: $APP_PERM_RESULT"
         fi
     else
         print_warning "Could not get app info - permissions may need manual setup"
