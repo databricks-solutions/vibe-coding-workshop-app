@@ -1,5 +1,30 @@
-*conf*.json
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+node_modules
+dist
+dist-ssr
+*.local
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
 .DS_Store
-__pycache__
-.idea/
-.env
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# vibe2value generated files (contain user-specific values)
+user-config.yaml
+databricks.yml
+app.yaml
+db/lakebase/dml_seed/03_seed_workshop_parameters.sql

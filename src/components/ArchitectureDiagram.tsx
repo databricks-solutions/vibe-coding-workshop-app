@@ -1,0 +1,1330 @@
+/**
+ * ArchitectureDiagram Component
+ * 
+ * A self-contained, collapsible section that displays the Databricks end-to-end architecture.
+ * Layout: Left side has App + Lakebase stacked vertically, right side has large Lakehouse and Data Intelligence.
+ * 
+ * Features:
+ * - Per-column fade in/out when workshop level changes (transparent-to-solid transitions)
+ * - Column-aligned learning objectives with staggered bullet reveal
+ * - Service popovers (click for details + chat) via shared ServicePopover component
+ */
+
+import { useState, useEffect, useRef } from 'react';
+import { 
+  ChevronDown,
+  Users, 
+  ArrowDown, 
+  ArrowLeftRight, 
+  Database, 
+  ChevronRight,
+  Layers,
+  Sparkles,
+  Zap,
+  Bot,
+  LayoutDashboard,
+  Info,
+  Globe,
+  HardDrive,
+  Brain,
+  BookOpen,
+  FileCode,
+  Cpu,
+  ShieldCheck
+} from 'lucide-react';
+import { ARCH_VISIBILITY, CHAPTER_VISIBILITY, getCumulativeOverrides, type WorkshopLevel } from '../constants/workflowSections';
+import { ServicePopover } from './ServicePopover';
+
+// Learning objectives tagged by chapter - dynamically filtered by workshop level
+interface LearningObjective {
+  id: string;
+  chapters: ('ch1' | 'ch2' | 'ch3' | 'ch4')[];
+  content: React.ReactNode;
+}
+
+const LEARNING_OBJECTIVES: LearningObjective[] = [
+  { id: '1', chapters: ['ch1'], content: <>Design and deploy a <strong className="text-foreground">web application</strong> on Databricks Apps</> },
+  { id: '2', chapters: ['ch2'], content: <>Back the application with a <strong className="text-foreground">Lakebase PostgreSQL database</strong></> },
+  { id: '3', chapters: ['ch2'], content: <>Wire the UI to <strong className="text-foreground">pull data from Lakebase</strong></> },
+  { id: '4', chapters: ['ch3'], content: <>Sync operational data into the <strong className="text-foreground">Lakehouse</strong></> },
+  { id: '5', chapters: ['ch3'], content: <>Build <strong className="text-foreground">Bronze, Silver, and Gold</strong> data layers</> },
+  { id: '6', chapters: ['ch3'], content: <>Use <strong className="text-foreground">Spark Declarative Pipelines (SDP)</strong> for data quality</> },
+  { id: '7', chapters: ['ch4'], content: <>Define <strong className="text-foreground">Metric Views</strong> to standardize key business metrics</> },
+  { id: '8', chapters: ['ch4'], content: <>Use <strong className="text-foreground">Table Value Functions (TVFs)</strong> to encapsulate reusable query logic</> },
+  { id: '9', chapters: ['ch4'], content: <>Power a <strong className="text-foreground">Genie Space</strong> with curated tables and governed metrics</> },
+  { id: '10', chapters: ['ch4'], content: <>Build an <strong className="text-foreground">AI agent</strong> and connect it back to the deployed web application</> },
+  { id: '11', chapters: ['ch4'], content: <>Create <strong className="text-foreground">AI/BI dashboards</strong> for data visualization and insights</> },
+];
+
+// Animation timing constants
+const FADE_MS = 300;
+const BULLET_STAGGER_MS = 100;
+
+// ---------------------------------------------------------------------------
+// useFadeTransition -- per-element transparent-to-solid fade in/out
+// On initial mount: renders immediately at target state (no animation).
+// On show:  mount -> next frame transition opacity 0→1
+// On hide:  transition opacity 1→0 -> unmount after FADE_MS
+// ---------------------------------------------------------------------------
+function useFadeTransition(visible: boolean) {
+  const isInitial = useRef(true);
+  const [shouldRender, setShouldRender] = useState(visible);
+  const [isVisible, setIsVisible] = useState(visible);
+
+  useEffect(() => {
+    // Skip animation on the very first render so elements appear instantly
+    if (isInitial.current) {
+      isInitial.current = false;
+      return;
+    }
+
+    if (visible) {
+      // Mount first, then trigger CSS transition on next frame
+      setShouldRender(true);
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          setIsVisible(true);
+        });
+      });
+    } else {
+      // Trigger exit transition, then unmount after it completes
+      setIsVisible(false);
+      const timer = setTimeout(() => setShouldRender(false), FADE_MS);
+      return () => clearTimeout(timer);
+    }
+  }, [visible]);
+
+  return { shouldRender, isVisible };
+}
+
+interface ArchitectureDiagramProps {
+  /** When true, forces the section collapsed regardless of user toggle. */
+  forceCollapsed?: boolean;
+  /** Workshop level for filtering visible architecture sections */
+  workshopLevel?: WorkshopLevel;
+  /** Callback to navigate to the prerequisites / start building */
+  onStartBuild?: () => void;
+}
+
+const SKILLS_CONCEPT_CARDS = [
+  {
+    iconName: 'BookOpen' as const,
+    accent: 'violet',
+    title: 'What Are Agent Skills?',
+    summary: 'Open standard for packaging reusable AI capabilities as portable SKILL.md files.',
+    details: [
+      'Agent Skills follow the open agentskills.io specification for packaging domain expertise',
+      'Each skill is a self-contained folder: SKILL.md (instructions), assets/ (templates), references/ (docs)',
+      'Skills are portable across AI coding assistants — Cursor, Claude Code, Copilot, and more',
+      'They encode best practices, patterns, and guardrails that the AI follows consistently',
+      'The SKILL.md is the contract between the skill author and the AI — defining triggers, steps, and validation',
+      'Skills compose together: a data contract skill can reference naming-tagging-standards for consistent governance',
+    ],
+    diagram: {
+      type: 'ecosystem' as const,
+      nodes: [
+        { label: 'SKILL.md', sub: 'Instructions & triggers' },
+        { label: 'references/', sub: 'Patterns & docs' },
+        { label: 'assets/', sub: 'Templates & schemas' },
+        { label: 'AI Agent', sub: 'Reads & executes' },
+      ],
+    },
+    codeExample: `# SKILL.md (front-matter)
+name: data-contract-governance
+description: Applies contract tags to gold tables
+metadata:
+  domain: governance
+  role: shared
+triggers:
+  - "data contract"
+  - "certification"
+  - "gold layer tags"`,
+  },
+  {
+    iconName: 'Cpu' as const,
+    accent: 'cyan',
+    title: 'How Skills Work',
+    summary: 'AI reads the SKILL.md, references supporting files, adapts to your context, and executes.',
+    details: [
+      'Step 1: The AI detects a trigger phrase (e.g., "apply data contracts") and loads the matching skill',
+      'Step 2: It reads the SKILL.md instructions — understanding purpose, rules, and execution steps',
+      'Step 3: It consults references/ for patterns (e.g., validation SQL, tagging best practices)',
+      'Step 4: It loads assets/ for templates (e.g., contract-schema.yaml) to apply to your project',
+      'Step 5: It adapts all instructions to your specific catalog, schema, and table names',
+      'Step 6: It generates code, applies tags, creates validation pipelines — all following the skill\'s rules',
+    ],
+    diagram: {
+      type: 'flow' as const,
+      steps: [
+        { label: 'Trigger', icon: '⚡' },
+        { label: 'Load Skill', icon: '📖' },
+        { label: 'Read Refs', icon: '📋' },
+        { label: 'Adapt', icon: '🔧' },
+        { label: 'Execute', icon: '▶' },
+      ],
+    },
+    codeExample: `-- What the AI generates after reading the skill:
+ALTER TABLE gold.dim_customer SET TAGS (
+  'freshness_sla'            = '24h',
+  'completeness_threshold'   = '99.5',
+  'schema_version'           = '2.1',
+  'data_owner'               = 'data-platform'
+);`,
+  },
+  {
+    iconName: 'FileCode' as const,
+    accent: 'purple',
+    title: 'Anatomy of a Skill',
+    summary: 'A skill is a folder with SKILL.md, references, and assets that the AI reads.',
+    details: [
+      'SKILL.md — The primary file: YAML front-matter (name, description, triggers, metadata) + markdown body (rules & steps)',
+      'references/ — Supporting documentation the AI consults: validation-patterns.md, tagging-best-practices.md',
+      'assets/ — Concrete templates: contract-schema.yaml, validation-pipeline-template.py',
+      'Triggers define when the skill activates: keyword matches like "data contract", "certification", "gold layer tags"',
+      'Instructions are ordered steps with severity levels (Critical, Required, Recommended)',
+      'A validation checklist at the end ensures the AI verifies its own work before finishing',
+    ],
+    diagram: {
+      type: 'tree' as const,
+      root: 'data-contract-governance/',
+      children: [
+        { name: 'SKILL.md', desc: 'Main instructions', highlight: true },
+        { name: 'references/', desc: '', children: [
+          { name: 'validation-patterns.md', desc: 'SQL examples' },
+          { name: 'tagging-best-practices.md', desc: 'UC tag rules' },
+        ]},
+        { name: 'assets/', desc: '', children: [
+          { name: 'contract-schema.yaml', desc: 'Tag definitions' },
+          { name: 'pipeline-template.py', desc: 'Validation job' },
+        ]},
+      ],
+    },
+    codeExample: null,
+  },
+  {
+    iconName: 'ShieldCheck' as const,
+    accent: 'emerald',
+    title: 'Governance & Validation',
+    summary: 'Define governance rules as UC tags, validate compliance, and earn the certified badge.',
+    details: [
+      'Governance rules define what "good" looks like for a data asset: freshness, completeness, schema version, ownership, and more',
+      'Each rule becomes a Unity Catalog tag applied via ALTER TABLE ... SET TAGS — no external tooling needed',
+      'A scheduled validation pipeline reads the tags, runs checks, and scores each asset against its defined rules',
+      'Assets passing all checks receive: system.certification_status = \'certified\'',
+      'The certified badge is native to Databricks — visible in Unity Catalog, Data Explorer, lineage, and search results',
+      'Example: A data contract skill defines freshness_sla, completeness_threshold, and quality_score_min as UC tags',
+    ],
+    diagram: {
+      type: 'pipeline' as const,
+      stages: [
+        { label: 'Define\nContract', color: 'violet' },
+        { label: 'Apply\nUC Tags', color: 'blue' },
+        { label: 'Validate\nMeasures', color: 'amber' },
+        { label: 'Certified\nBadge', color: 'emerald' },
+      ],
+    },
+    codeExample: `-- Validation check (runs on schedule):
+SELECT table_name,
+  CASE WHEN DATEDIFF(hour, max_ts, now()) 
+       <= CAST(tag_value AS INT) 
+  THEN 'PASS' ELSE 'FAIL' END AS freshness
+FROM contract_checks
+WHERE tag_key = 'freshness_sla';
+
+-- Assign certified badge on pass:
+ALTER TABLE gold.dim_customer SET TAGS (
+  'system.certification_status' = 'certified'
+);`,
+  },
+];
+
+const SKILLS_OBJECTIVES = [
+  'Understand the Agent Skills standard',
+  'Explore existing skills in your template',
+  'Define a strategy for your new skill',
+  'Generate a complete SKILL.md package',
+  'Apply, test, and automate validation',
+];
+
+const CARD_ACCENT_CLASSES: Record<string, { border: string; bg: string; text: string; glow: string }> = {
+  violet: { border: 'border-violet-500/40', bg: 'bg-violet-500/10', text: 'text-violet-400', glow: 'shadow-[0_0_12px_rgba(139,92,246,0.15)]' },
+  cyan: { border: 'border-cyan-500/40', bg: 'bg-cyan-500/10', text: 'text-cyan-400', glow: 'shadow-[0_0_12px_rgba(6,182,212,0.15)]' },
+  purple: { border: 'border-purple-500/40', bg: 'bg-purple-500/10', text: 'text-purple-400', glow: 'shadow-[0_0_12px_rgba(168,85,247,0.15)]' },
+  emerald: { border: 'border-emerald-500/40', bg: 'bg-emerald-500/10', text: 'text-emerald-400', glow: 'shadow-[0_0_12px_rgba(16,185,129,0.15)]' },
+};
+
+const CARD_ICONS: Record<string, React.ReactNode> = {
+  BookOpen: <BookOpen className="w-6 h-6 text-violet-400" />,
+  Cpu: <Cpu className="w-6 h-6 text-cyan-400" />,
+  FileCode: <FileCode className="w-6 h-6 text-purple-400" />,
+  ShieldCheck: <ShieldCheck className="w-6 h-6 text-emerald-400" />,
+};
+
+const CARD_ICONS_LG: Record<string, React.ReactNode> = {
+  BookOpen: <BookOpen className="w-5 h-5 text-violet-400" />,
+  Cpu: <Cpu className="w-5 h-5 text-cyan-400" />,
+  FileCode: <FileCode className="w-5 h-5 text-purple-400" />,
+  ShieldCheck: <ShieldCheck className="w-5 h-5 text-emerald-400" />,
+};
+
+function FlowDiagram({ steps }: { steps: { label: string; icon: string }[] }) {
+  return (
+    <div className="flex items-center gap-1 overflow-x-auto py-2">
+      {steps.map((step, i) => (
+        <div key={i} className="flex items-center gap-1">
+          <div className="flex flex-col items-center gap-1 min-w-[56px]">
+            <div className="w-9 h-9 rounded-lg bg-cyan-500/15 border border-cyan-500/30 flex items-center justify-center text-base">
+              {step.icon}
+            </div>
+            <span className="text-[10px] text-muted-foreground text-center leading-tight font-medium">{step.label}</span>
+          </div>
+          {i < steps.length - 1 && (
+            <ChevronRight className="w-3 h-3 text-muted-foreground/40 flex-shrink-0 mt-[-14px]" />
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function PipelineDiagram({ stages }: { stages: { label: string; color: string }[] }) {
+  const colorMap: Record<string, string> = {
+    violet: 'from-violet-500/25 to-violet-600/10 border-violet-500/30 text-violet-300',
+    blue: 'from-blue-500/25 to-blue-600/10 border-blue-500/30 text-blue-300',
+    amber: 'from-amber-500/25 to-amber-600/10 border-amber-500/30 text-amber-300',
+    emerald: 'from-emerald-500/25 to-emerald-600/10 border-emerald-500/30 text-emerald-300',
+  };
+  return (
+    <div className="flex items-center gap-1.5 overflow-x-auto py-2">
+      {stages.map((stage, i) => (
+        <div key={i} className="flex items-center gap-1.5">
+          <div className={`px-3 py-2 rounded-lg bg-gradient-to-b border text-center min-w-[68px] ${colorMap[stage.color] || colorMap.violet}`}>
+            <span className="text-[10px] font-semibold leading-tight whitespace-pre-line">{stage.label}</span>
+          </div>
+          {i < stages.length - 1 && (
+            <div className="flex-shrink-0 text-muted-foreground/30">
+              <svg width="16" height="12" viewBox="0 0 16 12" fill="none"><path d="M0 6h12M10 2l4 4-4 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+            </div>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function TreeDiagram({ root, children }: { root: string; children: { name: string; desc: string; highlight?: boolean; children?: { name: string; desc: string }[] }[] }) {
+  return (
+    <div className="font-mono text-[11px] leading-relaxed">
+      <div className="text-purple-400 font-bold">{root}</div>
+      {children.map((child, i) => {
+        const isLast = i === children.length - 1;
+        const prefix = isLast ? '└── ' : '├── ';
+        const childPrefix = isLast ? '    ' : '│   ';
+        return (
+          <div key={i}>
+            <div className="flex items-baseline gap-1">
+              <span className="text-muted-foreground/50 select-none">{prefix}</span>
+              <span className={child.highlight ? 'text-yellow-400 font-bold' : 'text-foreground'}>{child.name}</span>
+              {child.desc && <span className="text-muted-foreground/60 text-[10px] ml-1">← {child.desc}</span>}
+            </div>
+            {child.children?.map((sub, j) => {
+              const subIsLast = j === (child.children?.length ?? 0) - 1;
+              const subPrefix = subIsLast ? '└── ' : '├── ';
+              return (
+                <div key={j} className="flex items-baseline gap-1">
+                  <span className="text-muted-foreground/50 select-none">{childPrefix}{subPrefix}</span>
+                  <span className="text-foreground/80">{sub.name}</span>
+                  {sub.desc && <span className="text-muted-foreground/60 text-[10px] ml-1">← {sub.desc}</span>}
+                </div>
+              );
+            })}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function EcosystemDiagram({ nodes }: { nodes: { label: string; sub: string }[] }) {
+  return (
+    <div className="grid grid-cols-2 gap-2 py-1">
+      {nodes.map((node, i) => (
+        <div key={i} className={`rounded-lg border px-3 py-2 text-center ${
+          i === 3 ? 'bg-violet-500/15 border-violet-500/30' : 'bg-slate-700/40 border-slate-600/30'
+        }`}>
+          <div className={`text-[11px] font-bold ${i === 3 ? 'text-violet-300' : 'text-foreground/90'}`}>{node.label}</div>
+          <div className="text-[9px] text-muted-foreground mt-0.5">{node.sub}</div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function SkillsAcceleratorView({
+  expandedCard,
+  setExpandedCard,
+  bulletsRevealed,
+}: {
+  expandedCard: number | null;
+  setExpandedCard: (v: number | null) => void;
+  bulletsRevealed: boolean;
+}) {
+  return (
+    <div>
+      {/* Hero Banner */}
+      <div className="bg-gradient-to-r from-violet-900/30 via-purple-900/25 to-indigo-900/30 border border-violet-500/20 rounded-xl p-5 mb-5 animate-in fade-in slide-in-from-bottom-2 duration-500">
+        <div className="flex items-start gap-4">
+          <div className="p-3 rounded-xl bg-violet-500/20 shadow-[0_0_24px_rgba(139,92,246,0.25)] flex-shrink-0">
+            <ShieldCheck className="w-7 h-7 text-violet-400" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <h3 className="text-lg font-bold text-foreground tracking-tight">Data Contract Governance Skill</h3>
+            <p className="text-sm text-muted-foreground mt-1.5 leading-relaxed">
+              Build an Agent Skill that defines <strong className="text-violet-400">data contract measures</strong> as Unity Catalog tags,
+              validates compliance on a schedule, and automatically assigns the Databricks <strong className="text-emerald-400">certified</strong> badge.
+            </p>
+            <div className="flex items-center gap-3 mt-3">
+              <span className="inline-flex items-center gap-1.5 text-[10px] font-medium text-violet-400/80 bg-violet-500/10 border border-violet-500/20 rounded-full px-2.5 py-1">
+                <BookOpen className="w-3 h-3" /> Agent Skills Standard
+              </span>
+              <span className="inline-flex items-center gap-1.5 text-[10px] font-medium text-cyan-400/80 bg-cyan-500/10 border border-cyan-500/20 rounded-full px-2.5 py-1">
+                <Database className="w-3 h-3" /> Unity Catalog Tags
+              </span>
+              <span className="inline-flex items-center gap-1.5 text-[10px] font-medium text-emerald-400/80 bg-emerald-500/10 border border-emerald-500/20 rounded-full px-2.5 py-1">
+                <ShieldCheck className="w-3 h-3" /> Certified Badge
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* 4 Concept Cards */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+        {SKILLS_CONCEPT_CARDS.map((card, idx) => {
+          const accent = CARD_ACCENT_CLASSES[card.accent] || CARD_ACCENT_CLASSES.violet;
+          const isActive = expandedCard === idx;
+          return (
+            <button
+              key={idx}
+              onClick={() => setExpandedCard(isActive ? null : idx)}
+              className={`text-left border rounded-xl p-4 cursor-pointer transition-all duration-250 group relative overflow-hidden ${
+                isActive
+                  ? `${accent.border} bg-slate-800/80 ${accent.glow} scale-[1.01]`
+                  : `border-slate-700/40 bg-slate-800/50 hover:${accent.border} hover:bg-slate-800/70 hover:scale-[1.01]`
+              }`}
+            >
+              <div className={`mb-2.5 p-2 rounded-lg w-fit ${accent.bg} transition-colors`}>
+                {CARD_ICONS[card.iconName]}
+              </div>
+              <h4 className="text-[13px] font-semibold text-foreground mb-1.5 tracking-tight">{card.title}</h4>
+              <p className="text-[11px] text-muted-foreground leading-relaxed">{card.summary}</p>
+              <div className={`mt-2.5 flex items-center gap-1 text-[10px] font-medium transition-colors ${isActive ? accent.text : 'text-muted-foreground/50 group-hover:' + accent.text}`}>
+                <span>{isActive ? 'Click to collapse' : 'Click to explore'}</span>
+                <ChevronDown className={`w-3 h-3 transition-transform duration-200 ${isActive ? 'rotate-180' : ''}`} />
+              </div>
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Expanded Detail Panel */}
+      <div
+        className={`overflow-hidden transition-all duration-300 ease-in-out ${
+          expandedCard !== null ? 'max-h-[600px] opacity-100 mb-4' : 'max-h-0 opacity-0'
+        }`}
+      >
+        {expandedCard !== null && (() => {
+          const card = SKILLS_CONCEPT_CARDS[expandedCard];
+          const accent = CARD_ACCENT_CLASSES[card.accent] || CARD_ACCENT_CLASSES.violet;
+          return (
+            <div className={`border ${accent.border} rounded-xl overflow-hidden`}>
+              <div className={`${accent.bg} px-5 py-3 border-b ${accent.border}`}>
+                <div className="flex items-center gap-2.5">
+                  {CARD_ICONS_LG[card.iconName]}
+                  <h4 className="text-[14px] font-bold text-foreground tracking-tight">{card.title}</h4>
+                </div>
+              </div>
+              <div className="p-5">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                  {/* Left: Key points */}
+                  <div>
+                    <h5 className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-2.5">Key Concepts</h5>
+                    <ul className="space-y-2">
+                      {card.details.map((detail, i) => (
+                        <li key={i} className="flex items-start gap-2 text-[12px] text-muted-foreground leading-relaxed">
+                          <span className={`w-1.5 h-1.5 rounded-full ${accent.text.replace('text-', 'bg-')} mt-[7px] flex-shrink-0`} />
+                          <span>{detail}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                  {/* Right: Visual diagram + code example */}
+                  <div className="space-y-3">
+                    <div>
+                      <h5 className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-2">Visual Overview</h5>
+                      <div className="bg-slate-900/60 border border-slate-700/40 rounded-lg p-3">
+                        {card.diagram.type === 'ecosystem' && <EcosystemDiagram nodes={(card.diagram as { type: 'ecosystem'; nodes: { label: string; sub: string }[] }).nodes} />}
+                        {card.diagram.type === 'flow' && <FlowDiagram steps={(card.diagram as { type: 'flow'; steps: { label: string; icon: string }[] }).steps} />}
+                        {card.diagram.type === 'tree' && <TreeDiagram root={(card.diagram as { type: 'tree'; root: string; children: { name: string; desc: string; highlight?: boolean; children?: { name: string; desc: string }[] }[] }).root} children={(card.diagram as { type: 'tree'; root: string; children: { name: string; desc: string; highlight?: boolean; children?: { name: string; desc: string }[] }[] }).children} />}
+                        {card.diagram.type === 'pipeline' && <PipelineDiagram stages={(card.diagram as { type: 'pipeline'; stages: { label: string; color: string }[] }).stages} />}
+                      </div>
+                    </div>
+                    {card.codeExample && (
+                      <div>
+                        <h5 className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-2">Example</h5>
+                        <pre className="bg-slate-900/80 border border-slate-700/40 rounded-lg p-3 overflow-x-auto text-[10px] leading-relaxed font-mono text-slate-300 max-h-[140px]">
+                          <code>{card.codeExample}</code>
+                        </pre>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+          );
+        })()}
+      </div>
+
+      {/* Learning Objectives */}
+      <div className="pt-1">
+        <h4 className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-3 text-center">
+          What You'll Build
+        </h4>
+        <div className="flex flex-wrap justify-center gap-x-5 gap-y-2">
+          {SKILLS_OBJECTIVES.map((obj, idx) => (
+            <div
+              key={idx}
+              className="flex items-center gap-2 text-[12px] text-muted-foreground transition-all duration-300"
+              style={{
+                opacity: bulletsRevealed ? 1 : 0,
+                transform: bulletsRevealed ? 'translateY(0)' : 'translateY(8px)',
+                transitionDelay: `${idx * 100}ms`,
+              }}
+            >
+              <span className="w-1.5 h-1.5 rounded-full bg-violet-400 flex-shrink-0" />
+              <span>{obj}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+interface ArchitectureDiagramContentProps {
+  workshopLevel?: WorkshopLevel;
+  completedSteps?: Set<number>;
+}
+
+/**
+ * Inner diagram content without the outer card, header, or collapse logic.
+ * Used by PathAndArchitecture to embed inside a combined collapsible card.
+ */
+export function ArchitectureDiagramContent({ workshopLevel = 'end-to-end', completedSteps }: ArchitectureDiagramContentProps) {
+  const [bulletsRevealed, setBulletsRevealed] = useState(false);
+
+  useEffect(() => {
+    const frame = requestAnimationFrame(() => {
+      requestAnimationFrame(() => setBulletsRevealed(true));
+    });
+    return () => cancelAnimationFrame(frame);
+  }, []);
+
+  const prevLevelRef = useRef(workshopLevel);
+  useEffect(() => {
+    if (workshopLevel !== prevLevelRef.current) {
+      prevLevelRef.current = workshopLevel;
+      setBulletsRevealed(false);
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => setBulletsRevealed(true));
+      });
+    }
+  }, [workshopLevel]);
+
+  const isSkillsAccelerator = workshopLevel === 'skills-accelerator';
+  const [expandedCard, setExpandedCard] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (!isSkillsAccelerator) setExpandedCard(null);
+  }, [isSkillsAccelerator]);
+
+  const cumOverrides = completedSteps ? getCumulativeOverrides(workshopLevel, completedSteps) : null;
+  const visibility = cumOverrides?.archVisibility ?? ARCH_VISIBILITY[workshopLevel];
+  const showAppLakebase = visibility.ch1 || visibility.ch2;
+  const showLakehouse = visibility.ch3;
+  const showDataIntel = visibility.ch4;
+  const isGenie = workshopLevel === 'genie-accelerator';
+
+  const appLakebaseFade = useFadeTransition(showAppLakebase);
+  const lakehouseFade = useFadeTransition(showLakehouse);
+  const dataIntelFade = useFadeTransition(showDataIntel);
+
+  if (isSkillsAccelerator) {
+    return (
+      <SkillsAcceleratorView
+        expandedCard={expandedCard}
+        setExpandedCard={setExpandedCard}
+        bulletsRevealed={bulletsRevealed}
+      />
+    );
+  }
+
+  const visibleChapters = cumOverrides?.chapterVisibility ?? CHAPTER_VISIBILITY[workshopLevel];
+  const leftObjectives = LEARNING_OBJECTIVES.filter(obj =>
+    obj.chapters.some(ch => (ch === 'ch1' || ch === 'ch2') && visibleChapters.has(ch))
+  );
+  const middleObjectives = LEARNING_OBJECTIVES.filter(obj =>
+    obj.chapters.some(ch => ch === 'ch3' && visibleChapters.has(ch))
+  );
+  const rightObjectives = LEARNING_OBJECTIVES.filter(obj =>
+    obj.chapters.some(ch => ch === 'ch4' && visibleChapters.has(ch))
+  );
+  const middleStaggerOffset = leftObjectives.length;
+  const rightStaggerOffset = leftObjectives.length + middleObjectives.length;
+  const hasAnyObjectives = leftObjectives.length > 0 || middleObjectives.length > 0 || rightObjectives.length > 0;
+
+  const fadeClass = (isVisible: boolean) =>
+    `transition-all ease-out ${isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-2'}`;
+
+  return (
+    <div>
+      {/* Interactive hint */}
+      <div className="mb-3 flex items-center justify-center gap-2 text-[12px] text-slate-400">
+        <Info className="w-3.5 h-3.5 text-blue-400" />
+        <span>Click on any service to learn more about it</span>
+      </div>
+      
+      {/* Architecture Diagram Container */}
+      <div className="w-full bg-slate-900 p-8 rounded-xl">
+        <div className="max-w-6xl mx-auto">
+          <div className="relative flex items-stretch gap-4 justify-center">
+            {appLakebaseFade.shouldRender && (
+              <div className={`border-2 border-[#FF3621]/60 rounded-xl p-4 bg-slate-800/50 w-[220px] flex-shrink-0 duration-300 ${fadeClass(appLakebaseFade.isVisible)}`}>
+                <div className="bg-[#FF3621] text-center py-2 px-3 rounded-lg mb-4">
+                  <div className="flex items-center justify-center gap-2 mb-1">
+                    {visibility.ch1 && <Globe className="w-4 h-4 text-white" />}
+                    {visibility.ch2 && <HardDrive className="w-4 h-4 text-white" />}
+                  </div>
+                  <p className="text-[13px] font-bold text-white">
+                    {visibility.ch1 && visibility.ch2 ? 'App & Database' : visibility.ch1 ? 'Databricks App' : 'Lakebase'}
+                  </p>
+                </div>
+                <div className="flex flex-col items-center gap-3">
+                  <div className="w-16 h-16 bg-gradient-to-br from-slate-500 to-slate-600 rounded-lg shadow-lg flex items-center justify-center">
+                    <Users className="w-8 h-8 text-white" />
+                  </div>
+                  <p className="text-[13px] font-semibold text-slate-200">User</p>
+                  <ArrowDown className="w-5 h-5 text-slate-400" />
+                  {visibility.ch1 && (
+                    <ServicePopover serviceKey="databricksApp" position="right" block>
+                      <div className="w-full bg-gradient-to-br from-[#FF3621] to-[#E62D1B] rounded-lg shadow-lg p-3.5 hover:shadow-[#FF3621]/40 hover:shadow-xl transition-all duration-200 hover:scale-105">
+                        <div className="flex flex-col items-center gap-1.5">
+                          <Globe className="w-7 h-7 text-white" />
+                          <p className="text-[13px] font-bold text-white text-center">Databricks App</p>
+                        </div>
+                      </div>
+                    </ServicePopover>
+                  )}
+                  {visibility.ch1 && visibility.ch2 && (
+                    <div className="flex items-center gap-1">
+                      <ArrowDown className="w-4 h-4 text-violet-400" />
+                      <ArrowLeftRight className="w-4 h-4 text-violet-400" />
+                    </div>
+                  )}
+                  {visibility.ch2 && (
+                    <ServicePopover serviceKey="lakebase" position="right" block>
+                      <div className="w-full bg-gradient-to-br from-violet-600 to-purple-700 rounded-lg shadow-lg p-3.5 hover:shadow-violet-500/40 hover:shadow-xl transition-all duration-200 hover:scale-105">
+                        <div className="flex flex-col items-center gap-1.5">
+                          <HardDrive className="w-7 h-7 text-white" />
+                          <p className="text-[13px] font-bold text-white">Lakebase</p>
+                        </div>
+                      </div>
+                    </ServicePopover>
+                  )}
+                </div>
+              </div>
+            )}
+            {showAppLakebase && showLakehouse && (
+              <div className="flex flex-col items-center justify-center">
+                <ChevronRight className="w-12 h-12 text-violet-400" strokeWidth={3} />
+              </div>
+            )}
+            {showAppLakebase && !showLakehouse && showDataIntel && (
+              <div className="flex flex-col items-center justify-center">
+                <ChevronRight className="w-12 h-12 text-violet-400" strokeWidth={3} />
+              </div>
+            )}
+            {lakehouseFade.shouldRender && (
+              <div className={`border-2 border-teal-500/60 rounded-xl p-4 bg-slate-800/50 flex-1 duration-300 ${fadeClass(lakehouseFade.isVisible)}`}>
+                <div className="bg-teal-600 text-center py-2 px-3 rounded-lg mb-4">
+                  <div className="flex items-center justify-center gap-2 mb-1">
+                    <Database className="w-4 h-4 text-white" />
+                  </div>
+                  <p className="text-[13px] font-bold text-white">Lakehouse</p>
+                </div>
+                <div className="flex flex-col gap-2">
+                  {!isGenie && (<>
+                    <ServicePopover serviceKey="dataIngestion" position="top" block>
+                      <div className="bg-teal-900/40 rounded-lg px-3 py-2.5 border border-teal-400 hover:bg-teal-900/60 hover:border-teal-300 transition-all duration-200 hover:scale-105">
+                        <p className="text-[12px] font-semibold text-teal-200 text-center">Data Ingestion Pipeline</p>
+                      </div>
+                    </ServicePopover>
+                    <ArrowDown className="w-5 h-5 text-teal-400 mx-auto" />
+                    <ServicePopover serviceKey="bronze" position="left" block>
+                      <div className="bg-gradient-to-br from-orange-700 to-amber-800 rounded-lg p-3.5 shadow-lg hover:shadow-orange-500/30 hover:shadow-xl transition-all duration-200 hover:scale-105">
+                        <div className="flex items-center gap-2 mb-1">
+                          <Layers className="w-5 h-5 text-orange-100" />
+                          <p className="text-[13px] font-bold text-white">Bronze</p>
+                        </div>
+                        <p className="text-[11px] text-orange-200">Raw data</p>
+                      </div>
+                    </ServicePopover>
+                    <ArrowDown className="w-4 h-4 text-slate-400 mx-auto" />
+                    <ServicePopover serviceKey="sdp" position="left" block>
+                      <div className="bg-teal-800/60 border border-teal-600/50 rounded px-2.5 py-1.5 hover:bg-teal-800/80 transition-all duration-200 hover:scale-105">
+                        <p className="text-[11px] font-semibold text-teal-200 text-center">SDP + Quality</p>
+                      </div>
+                    </ServicePopover>
+                    <ArrowDown className="w-4 h-4 text-slate-400 mx-auto" />
+                  </>)}
+                  <ServicePopover serviceKey="silver" position="left" block>
+                    <div className="bg-gradient-to-br from-slate-400 to-slate-500 rounded-lg p-3.5 shadow-lg hover:shadow-slate-300/30 hover:shadow-xl transition-all duration-200 hover:scale-105">
+                      <div className="flex items-center gap-2 mb-1">
+                        <Sparkles className="w-5 h-5 text-white" />
+                        <p className="text-[13px] font-bold text-white">Silver</p>
+                      </div>
+                      <p className="text-[11px] text-slate-100">Cleaned data</p>
+                    </div>
+                  </ServicePopover>
+                  <ArrowDown className="w-4 h-4 text-slate-400 mx-auto" />
+                  <div className="bg-teal-800/60 border border-teal-600/50 rounded px-2.5 py-1.5">
+                    <p className="text-[11px] font-semibold text-teal-200 text-center">SDP Transform</p>
+                  </div>
+                  <ArrowDown className="w-4 h-4 text-slate-400 mx-auto" />
+                  <ServicePopover serviceKey="gold" position="left" block>
+                    <div className="bg-gradient-to-br from-yellow-500 to-amber-600 rounded-lg p-3.5 shadow-lg hover:shadow-yellow-400/30 hover:shadow-xl transition-all duration-200 hover:scale-105">
+                      <div className="flex items-center gap-2 mb-1">
+                        <Zap className="w-5 h-5 text-yellow-100" />
+                        <p className="text-[13px] font-bold text-white">Gold</p>
+                      </div>
+                      <p className="text-[11px] text-yellow-100">Business ready</p>
+                    </div>
+                  </ServicePopover>
+                </div>
+              </div>
+            )}
+            {showLakehouse && showDataIntel && (
+              <div className="flex flex-col items-center justify-center">
+                <ChevronRight className="w-12 h-12 text-amber-400" strokeWidth={3} />
+              </div>
+            )}
+            {dataIntelFade.shouldRender && (
+              <div className={`border-2 border-blue-500/60 rounded-xl p-4 bg-slate-800/50 flex-1 duration-300 ${fadeClass(dataIntelFade.isVisible)}`}>
+                <div className="bg-blue-600 text-center py-2 px-3 rounded-lg mb-4">
+                  <div className="flex items-center justify-center gap-2 mb-1">
+                    <Brain className="w-4 h-4 text-white" />
+                  </div>
+                  <p className="text-[13px] font-bold text-white">Data Intelligence</p>
+                </div>
+                <div className="flex flex-col gap-3">
+                  <div className="bg-slate-800 border-2 border-amber-500/60 rounded-lg p-3.5 shadow-lg">
+                    <p className="text-[13px] font-bold text-amber-300 mb-2">Gold Outputs</p>
+                    <div className="space-y-1.5">
+                      <ServicePopover serviceKey="tvf" position="left" block>
+                        <div className="bg-amber-900/30 rounded px-2.5 py-1.5 border border-amber-500/30 hover:bg-amber-900/50 hover:border-amber-400 transition-all duration-200 hover:scale-105">
+                          <p className="text-[11px] font-semibold text-amber-200">Table Value Functions</p>
+                        </div>
+                      </ServicePopover>
+                      <ServicePopover serviceKey="metricViews" position="left" block>
+                        <div className="bg-amber-900/30 rounded px-2.5 py-1.5 border border-amber-500/30 hover:bg-amber-900/50 hover:border-amber-400 transition-all duration-200 hover:scale-105">
+                          <p className="text-[11px] font-semibold text-amber-200">Metric Views</p>
+                        </div>
+                      </ServicePopover>
+                      <ServicePopover serviceKey="genieSpaces" position="left" block>
+                        <div className="bg-amber-900/30 rounded px-2.5 py-1.5 border border-amber-500/30 hover:bg-amber-900/50 hover:border-amber-400 transition-all duration-200 hover:scale-105">
+                          <p className="text-[11px] font-semibold text-amber-200">Genie Spaces</p>
+                        </div>
+                      </ServicePopover>
+                    </div>
+                  </div>
+                  {!isGenie && (<>
+                    <div className="flex justify-center gap-2">
+                      <ArrowDown className="w-4 h-4 text-green-400" />
+                      <ArrowDown className="w-4 h-4 text-blue-400" />
+                    </div>
+                    <div className="grid grid-cols-2 gap-2.5">
+                      <ServicePopover serviceKey="aiBIDashboards" position="top" block>
+                        <div className="bg-gradient-to-br from-green-500 to-green-600 rounded-lg p-2.5 shadow-lg hover:shadow-green-500/30 hover:shadow-xl transition-all duration-200 hover:scale-105">
+                          <div className="flex flex-col items-center gap-1">
+                            <LayoutDashboard className="w-5 h-5 text-white" />
+                            <p className="text-[12px] font-bold text-white text-center">AI/BI Dashboards</p>
+                          </div>
+                        </div>
+                      </ServicePopover>
+                      <ServicePopover serviceKey="agents" position="top" block>
+                        <div className="bg-gradient-to-br from-blue-500 to-blue-600 rounded-lg p-2.5 shadow-lg hover:shadow-blue-500/30 hover:shadow-xl transition-all duration-200 hover:scale-105">
+                          <div className="flex flex-col items-center gap-1">
+                            <Bot className="w-5 h-5 text-white" />
+                            <p className="text-[12px] font-bold text-white text-center">Agentbricks</p>
+                          </div>
+                        </div>
+                      </ServicePopover>
+                    </div>
+                  </>)}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Legend */}
+          <div className="mt-6 flex flex-wrap justify-center gap-5 md:gap-8">
+            <div className="flex items-center gap-2">
+              <Globe className="w-4 h-4 text-[#FF3621]" />
+              <p className="text-[11px] text-slate-400">Databricks Apps</p>
+            </div>
+            <div className="flex items-center gap-2">
+              <HardDrive className="w-4 h-4 text-violet-500" />
+              <p className="text-[11px] text-slate-400">Lakebase</p>
+            </div>
+            <div className="flex items-center gap-2">
+              <Database className="w-4 h-4 text-teal-500" />
+              <p className="text-[11px] text-slate-400">Lakehouse</p>
+            </div>
+            <div className="flex items-center gap-2">
+              <Brain className="w-4 h-4 text-blue-500" />
+              <p className="text-[11px] text-slate-400">Data Intelligence</p>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="w-2 h-2 rounded-full bg-blue-500 animate-pulse" />
+              <p className="text-[11px] text-slate-400">Click for details</p>
+            </div>
+          </div>
+
+          {hasAnyObjectives && (
+            <div className="mt-5 flex gap-4 justify-center">
+              {appLakebaseFade.shouldRender && leftObjectives.length > 0 && (
+                <div className={`w-[220px] flex-shrink-0 duration-300 ${fadeClass(appLakebaseFade.isVisible)}`}>
+                  <div className="rounded-lg bg-slate-800/40 border border-[#FF3621]/20 p-3">
+                    <ul className="space-y-1.5">
+                      {leftObjectives.map((obj, idx) => (
+                        <li key={obj.id} className={`flex items-start gap-1.5 text-[11px] text-slate-300 transition-all duration-300 ease-out ${bulletsRevealed ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-1'}`}
+                          style={{ transitionDelay: bulletsRevealed ? `${idx * BULLET_STAGGER_MS}ms` : '0ms' }}>
+                          <span className="text-[#FF3621]/70 mt-0.5 shrink-0">&#x2022;</span>
+                          <span>{obj.content}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                </div>
+              )}
+              {showAppLakebase && leftObjectives.length > 0 && (showLakehouse || showDataIntel) && (
+                <div className="w-12 flex-shrink-0" />
+              )}
+              {lakehouseFade.shouldRender && middleObjectives.length > 0 && (
+                <div className={`flex-1 duration-300 ${fadeClass(lakehouseFade.isVisible)}`}>
+                  <div className="rounded-lg bg-slate-800/40 border border-teal-500/20 p-3">
+                    <ul className="space-y-1.5">
+                      {middleObjectives.map((obj, idx) => (
+                        <li key={obj.id} className={`flex items-start gap-1.5 text-[11px] text-slate-300 transition-all duration-300 ease-out ${bulletsRevealed ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-1'}`}
+                          style={{ transitionDelay: bulletsRevealed ? `${(middleStaggerOffset + idx) * BULLET_STAGGER_MS}ms` : '0ms' }}>
+                          <span className="text-teal-400/70 mt-0.5 shrink-0">&#x2022;</span>
+                          <span>{obj.content}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                </div>
+              )}
+              {showLakehouse && middleObjectives.length > 0 && showDataIntel && rightObjectives.length > 0 && (
+                <div className="w-12 flex-shrink-0" />
+              )}
+              {dataIntelFade.shouldRender && rightObjectives.length > 0 && (
+                <div className={`flex-1 duration-300 ${fadeClass(dataIntelFade.isVisible)}`}>
+                  <div className="rounded-lg bg-slate-800/40 border border-blue-500/20 p-3">
+                    <ul className="space-y-1.5">
+                      {rightObjectives.map((obj, idx) => (
+                        <li key={obj.id} className={`flex items-start gap-1.5 text-[11px] text-slate-300 transition-all duration-300 ease-out ${bulletsRevealed ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-1'}`}
+                          style={{ transitionDelay: bulletsRevealed ? `${(rightStaggerOffset + idx) * BULLET_STAGGER_MS}ms` : '0ms' }}>
+                          <span className="text-blue-400/70 mt-0.5 shrink-0">&#x2022;</span>
+                          <span>{obj.content}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export function ArchitectureDiagram({ forceCollapsed = false, workshopLevel = 'end-to-end', onStartBuild }: ArchitectureDiagramProps) {
+  const [userOverride, setUserOverride] = useState<boolean | null>(null);
+  const prevForceCollapsed = useRef(forceCollapsed);
+
+  // Staggered bullet reveal
+  const [bulletsRevealed, setBulletsRevealed] = useState(false);
+
+  // When forceCollapsed transitions to true, reset override so auto-collapse kicks in
+  useEffect(() => {
+    if (forceCollapsed && !prevForceCollapsed.current) {
+      setUserOverride(null);
+    }
+    prevForceCollapsed.current = forceCollapsed;
+  }, [forceCollapsed]);
+
+  const autoExpanded = !forceCollapsed;
+  const isExpanded = userOverride !== null ? userOverride : autoExpanded;
+
+  // Initial mount: trigger bullet stagger
+  useEffect(() => {
+    const frame = requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        setBulletsRevealed(true);
+      });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, []);
+
+  // Re-stagger bullets when workshop level changes
+  const prevLevelRef = useRef(workshopLevel);
+  useEffect(() => {
+    if (workshopLevel !== prevLevelRef.current) {
+      prevLevelRef.current = workshopLevel;
+      setBulletsRevealed(false);
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          setBulletsRevealed(true);
+        });
+      });
+    }
+  }, [workshopLevel]);
+
+  // Compute visibility directly from workshopLevel (no delayed rendering)
+  const visibility = ARCH_VISIBILITY[workshopLevel];
+  const showAppLakebase = visibility.ch1 || visibility.ch2;
+  const showLakehouse = visibility.ch3;
+  const showDataIntel = visibility.ch4;
+  const isGenie = workshopLevel === 'genie-accelerator';
+
+  // Per-column fade transitions (transparent ↔ solid)
+  const appLakebaseFade = useFadeTransition(showAppLakebase);
+  const lakehouseFade = useFadeTransition(showLakehouse);
+  const dataIntelFade = useFadeTransition(showDataIntel);
+
+  // Group objectives by architecture column
+  const visibleChapters = CHAPTER_VISIBILITY[workshopLevel];
+  const leftObjectives = LEARNING_OBJECTIVES.filter(obj =>
+    obj.chapters.some(ch => (ch === 'ch1' || ch === 'ch2') && visibleChapters.has(ch))
+  );
+  const middleObjectives = LEARNING_OBJECTIVES.filter(obj =>
+    obj.chapters.some(ch => ch === 'ch3' && visibleChapters.has(ch))
+  );
+  const rightObjectives = LEARNING_OBJECTIVES.filter(obj =>
+    obj.chapters.some(ch => ch === 'ch4' && visibleChapters.has(ch))
+  );
+  const middleStaggerOffset = leftObjectives.length;
+  const rightStaggerOffset = leftObjectives.length + middleObjectives.length;
+  const hasAnyObjectives = leftObjectives.length > 0 || middleObjectives.length > 0 || rightObjectives.length > 0;
+
+  // Transition class helper
+  const fadeClass = (isVisible: boolean) =>
+    `transition-all ease-out ${isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-2'}`;
+
+  return (
+    <div className="bg-card rounded-lg border border-border overflow-hidden">
+      {/* Clickable Header */}
+      <button
+        onClick={() => setUserOverride(!isExpanded)}
+        className="group w-full p-4 flex items-center gap-3 hover:bg-secondary/30 transition-colors cursor-pointer"
+      >
+        <div className="p-2 rounded-md bg-primary/20">
+          <LayoutDashboard className="w-5 h-5 text-primary" />
+        </div>
+        <div className="flex-1 text-left">
+          <h2 className="text-[15px] font-semibold text-foreground">
+            Architecture Overview
+          </h2>
+          <p className="text-muted-foreground text-[13px]">
+            Databricks services that will be deployed
+          </p>
+        </div>
+        <span className="inline-flex items-center gap-1 text-[11px] font-medium text-muted-foreground border border-border rounded-full px-2.5 py-1 bg-secondary/40 group-hover:bg-secondary group-hover:text-foreground transition-colors">
+          <ChevronDown className={`w-3 h-3 transition-transform duration-200 ${isExpanded ? 'rotate-180' : ''}`} />
+          {isExpanded ? 'Collapse' : 'Expand'}
+        </span>
+      </button>
+
+      {/* Collapsible Content */}
+      <div className={`transition-all duration-300 ease-in-out ${
+        isExpanded ? 'max-h-[2000px] opacity-100' : 'max-h-0 opacity-0 overflow-hidden'
+      }`}>
+        <div className="px-4 pb-4">
+          {/* Interactive hint */}
+          <div className="mb-3 flex items-center justify-center gap-2 text-[12px] text-slate-400">
+            <Info className="w-3.5 h-3.5 text-blue-400" />
+            <span>Click on any service to learn more about it</span>
+          </div>
+          
+          {/* Architecture Diagram Container */}
+          <div className="w-full bg-slate-900 p-8 rounded-xl">
+            <div className="max-w-6xl mx-auto">
+              {/* Main Flow - Horizontal layout with proper sizing, centered */}
+              <div className="relative flex items-stretch gap-4 justify-center">
+                
+                {/* LEFT SECTION: App & Lakebase - Stacked vertically */}
+                {appLakebaseFade.shouldRender && (
+                  <div
+                    className={`border-2 border-[#FF3621]/60 rounded-xl p-4 bg-slate-800/50 w-[220px] flex-shrink-0 duration-300 ${fadeClass(appLakebaseFade.isVisible)}`}
+                  >
+                    <div className="bg-[#FF3621] text-center py-2 px-3 rounded-lg mb-4">
+                      <div className="flex items-center justify-center gap-2 mb-1">
+                        {visibility.ch1 && <Globe className="w-4 h-4 text-white" />}
+                        {visibility.ch2 && <HardDrive className="w-4 h-4 text-white" />}
+                      </div>
+                      <p className="text-[13px] font-bold text-white">
+                        {visibility.ch1 && visibility.ch2 ? 'App & Database' : visibility.ch1 ? 'Databricks App' : 'Lakebase'}
+                      </p>
+                    </div>
+                    
+                    <div className="flex flex-col items-center gap-3">
+                      {/* User */}
+                      <div className="w-16 h-16 bg-gradient-to-br from-slate-500 to-slate-600 rounded-lg shadow-lg flex items-center justify-center">
+                        <Users className="w-8 h-8 text-white" />
+                      </div>
+                      <p className="text-[13px] font-semibold text-slate-200">User</p>
+                      
+                      <ArrowDown className="w-5 h-5 text-slate-400" />
+                      
+                      {/* Databricks App UI */}
+                      {visibility.ch1 && (
+                        <ServicePopover serviceKey="databricksApp" position="right" block>
+                          <div className="w-full bg-gradient-to-br from-[#FF3621] to-[#E62D1B] rounded-lg shadow-lg p-3.5 hover:shadow-[#FF3621]/40 hover:shadow-xl transition-all duration-200 hover:scale-105">
+                            <div className="flex flex-col items-center gap-1.5">
+                              <Globe className="w-7 h-7 text-white" />
+                              <p className="text-[13px] font-bold text-white text-center">Databricks App</p>
+                            </div>
+                          </div>
+                        </ServicePopover>
+                      )}
+                      
+                      {/* Bidirectional Arrow - only if both visible */}
+                      {visibility.ch1 && visibility.ch2 && (
+                        <div className="flex items-center gap-1">
+                          <ArrowDown className="w-4 h-4 text-violet-400" />
+                          <ArrowLeftRight className="w-4 h-4 text-violet-400" />
+                        </div>
+                      )}
+                      
+                      {/* Lakebase */}
+                      {visibility.ch2 && (
+                        <ServicePopover serviceKey="lakebase" position="right" block>
+                          <div className="w-full bg-gradient-to-br from-violet-600 to-purple-700 rounded-lg shadow-lg p-3.5 hover:shadow-violet-500/40 hover:shadow-xl transition-all duration-200 hover:scale-105">
+                            <div className="flex flex-col items-center gap-1.5">
+                              <HardDrive className="w-7 h-7 text-white" />
+                              <p className="text-[13px] font-bold text-white">Lakebase</p>
+                            </div>
+                          </div>
+                        </ServicePopover>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Large Arrow from App/Lakebase to Lakehouse */}
+                {showAppLakebase && showLakehouse && (
+                  <div className="flex flex-col items-center justify-center">
+                    <ChevronRight className="w-12 h-12 text-violet-400" strokeWidth={3} />
+                  </div>
+                )}
+
+                {/* Arrow from App/Lakebase to Data Intelligence (when no Lakehouse) */}
+                {showAppLakebase && !showLakehouse && showDataIntel && (
+                  <div className="flex flex-col items-center justify-center">
+                    <ChevronRight className="w-12 h-12 text-violet-400" strokeWidth={3} />
+                  </div>
+                )}
+
+                {/* MIDDLE SECTION: Lakehouse - Full height */}
+                {lakehouseFade.shouldRender && (
+                  <div
+                    className={`border-2 border-teal-500/60 rounded-xl p-4 bg-slate-800/50 flex-1 duration-300 ${fadeClass(lakehouseFade.isVisible)}`}
+                  >
+                    <div className="bg-teal-600 text-center py-2 px-3 rounded-lg mb-4">
+                      <div className="flex items-center justify-center gap-2 mb-1">
+                        <Database className="w-4 h-4 text-white" />
+                      </div>
+                      <p className="text-[13px] font-bold text-white">Lakehouse</p>
+                    </div>
+                    
+                    <div className="flex flex-col gap-2">
+                      {/* Data Ingestion, Bronze, SDP + Quality -- hidden for Genie Accelerator */}
+                      {!isGenie && (<>
+                        <ServicePopover serviceKey="dataIngestion" position="top" block>
+                          <div className="bg-teal-900/40 rounded-lg px-3 py-2.5 border border-teal-400 hover:bg-teal-900/60 hover:border-teal-300 transition-all duration-200 hover:scale-105">
+                            <p className="text-[12px] font-semibold text-teal-200 text-center">Data Ingestion Pipeline</p>
+                          </div>
+                        </ServicePopover>
+                        
+                        <ArrowDown className="w-5 h-5 text-teal-400 mx-auto" />
+                        
+                        <ServicePopover serviceKey="bronze" position="left" block>
+                          <div className="bg-gradient-to-br from-orange-700 to-amber-800 rounded-lg p-3.5 shadow-lg hover:shadow-orange-500/30 hover:shadow-xl transition-all duration-200 hover:scale-105">
+                            <div className="flex items-center gap-2 mb-1">
+                              <Layers className="w-5 h-5 text-orange-100" />
+                              <p className="text-[13px] font-bold text-white">Bronze</p>
+                            </div>
+                            <p className="text-[11px] text-orange-200">Raw data</p>
+                          </div>
+                        </ServicePopover>
+                        
+                        <ArrowDown className="w-4 h-4 text-slate-400 mx-auto" />
+                        
+                        <ServicePopover serviceKey="sdp" position="left" block>
+                          <div className="bg-teal-800/60 border border-teal-600/50 rounded px-2.5 py-1.5 hover:bg-teal-800/80 transition-all duration-200 hover:scale-105">
+                            <p className="text-[11px] font-semibold text-teal-200 text-center">SDP + Quality</p>
+                          </div>
+                        </ServicePopover>
+                        
+                        <ArrowDown className="w-4 h-4 text-slate-400 mx-auto" />
+                      </>)}
+                      
+                      {/* Silver */}
+                      <ServicePopover serviceKey="silver" position="left" block>
+                        <div className="bg-gradient-to-br from-slate-400 to-slate-500 rounded-lg p-3.5 shadow-lg hover:shadow-slate-300/30 hover:shadow-xl transition-all duration-200 hover:scale-105">
+                          <div className="flex items-center gap-2 mb-1">
+                            <Sparkles className="w-5 h-5 text-white" />
+                            <p className="text-[13px] font-bold text-white">Silver</p>
+                          </div>
+                          <p className="text-[11px] text-slate-100">Cleaned data</p>
+                        </div>
+                      </ServicePopover>
+                      
+                      <ArrowDown className="w-4 h-4 text-slate-400 mx-auto" />
+                      
+                      {/* SDP Transform */}
+                      <div className="bg-teal-800/60 border border-teal-600/50 rounded px-2.5 py-1.5">
+                        <p className="text-[11px] font-semibold text-teal-200 text-center">SDP Transform</p>
+                      </div>
+                      
+                      <ArrowDown className="w-4 h-4 text-slate-400 mx-auto" />
+                      
+                      {/* Gold */}
+                      <ServicePopover serviceKey="gold" position="left" block>
+                        <div className="bg-gradient-to-br from-yellow-500 to-amber-600 rounded-lg p-3.5 shadow-lg hover:shadow-yellow-400/30 hover:shadow-xl transition-all duration-200 hover:scale-105">
+                          <div className="flex items-center gap-2 mb-1">
+                            <Zap className="w-5 h-5 text-yellow-100" />
+                            <p className="text-[13px] font-bold text-white">Gold</p>
+                          </div>
+                          <p className="text-[11px] text-yellow-100">Business ready</p>
+                        </div>
+                      </ServicePopover>
+                    </div>
+                  </div>
+                )}
+
+                {/* Large Arrow from Lakehouse to Data Intelligence */}
+                {showLakehouse && showDataIntel && (
+                  <div className="flex flex-col items-center justify-center">
+                    <ChevronRight className="w-12 h-12 text-amber-400" strokeWidth={3} />
+                  </div>
+                )}
+
+                {/* RIGHT SECTION: Data Intelligence - Full height */}
+                {dataIntelFade.shouldRender && (
+                  <div
+                    className={`border-2 border-blue-500/60 rounded-xl p-4 bg-slate-800/50 flex-1 duration-300 ${fadeClass(dataIntelFade.isVisible)}`}
+                  >
+                    <div className="bg-blue-600 text-center py-2 px-3 rounded-lg mb-4">
+                      <div className="flex items-center justify-center gap-2 mb-1">
+                        <Brain className="w-4 h-4 text-white" />
+                      </div>
+                      <p className="text-[13px] font-bold text-white">Data Intelligence</p>
+                    </div>
+                    
+                    <div className="flex flex-col gap-3">
+                      {/* Gold Outputs */}
+                      <div className="bg-slate-800 border-2 border-amber-500/60 rounded-lg p-3.5 shadow-lg">
+                        <p className="text-[13px] font-bold text-amber-300 mb-2">Gold Outputs</p>
+                        <div className="space-y-1.5">
+                          {/* TVF */}
+                          <ServicePopover serviceKey="tvf" position="left" block>
+                            <div className="bg-amber-900/30 rounded px-2.5 py-1.5 border border-amber-500/30 hover:bg-amber-900/50 hover:border-amber-400 transition-all duration-200 hover:scale-105">
+                              <p className="text-[11px] font-semibold text-amber-200">Table Value Functions</p>
+                            </div>
+                          </ServicePopover>
+                          
+                          {/* Metric Views */}
+                          <ServicePopover serviceKey="metricViews" position="left" block>
+                            <div className="bg-amber-900/30 rounded px-2.5 py-1.5 border border-amber-500/30 hover:bg-amber-900/50 hover:border-amber-400 transition-all duration-200 hover:scale-105">
+                              <p className="text-[11px] font-semibold text-amber-200">Metric Views</p>
+                            </div>
+                          </ServicePopover>
+                          
+                          {/* Genie Spaces */}
+                          <ServicePopover serviceKey="genieSpaces" position="left" block>
+                            <div className="bg-amber-900/30 rounded px-2.5 py-1.5 border border-amber-500/30 hover:bg-amber-900/50 hover:border-amber-400 transition-all duration-200 hover:scale-105">
+                              <p className="text-[11px] font-semibold text-amber-200">Genie Spaces</p>
+                            </div>
+                          </ServicePopover>
+                        </div>
+                      </div>
+
+                      {/* AI/BI Dashboards + Agents -- hidden for Genie Accelerator */}
+                      {!isGenie && (<>
+                        <div className="flex justify-center gap-2">
+                          <ArrowDown className="w-4 h-4 text-green-400" />
+                          <ArrowDown className="w-4 h-4 text-blue-400" />
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-2.5">
+                          <ServicePopover serviceKey="aiBIDashboards" position="top" block>
+                            <div className="bg-gradient-to-br from-green-500 to-green-600 rounded-lg p-2.5 shadow-lg hover:shadow-green-500/30 hover:shadow-xl transition-all duration-200 hover:scale-105">
+                              <div className="flex flex-col items-center gap-1">
+                                <LayoutDashboard className="w-5 h-5 text-white" />
+                                <p className="text-[12px] font-bold text-white text-center">AI/BI Dashboards</p>
+                              </div>
+                            </div>
+                          </ServicePopover>
+
+                          <ServicePopover serviceKey="agents" position="top" block>
+                            <div className="bg-gradient-to-br from-blue-500 to-blue-600 rounded-lg p-2.5 shadow-lg hover:shadow-blue-500/30 hover:shadow-xl transition-all duration-200 hover:scale-105">
+                              <div className="flex flex-col items-center gap-1">
+                                <Bot className="w-5 h-5 text-white" />
+                                <p className="text-[12px] font-bold text-white text-center">Agentbricks</p>
+                              </div>
+                            </div>
+                          </ServicePopover>
+                        </div>
+                      </>)}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Legend */}
+              <div className="mt-6 flex flex-wrap justify-center gap-5 md:gap-8">
+                <div className="flex items-center gap-2">
+                  <Globe className="w-4 h-4 text-[#FF3621]" />
+                  <p className="text-[11px] text-slate-400">Databricks Apps</p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <HardDrive className="w-4 h-4 text-violet-500" />
+                  <p className="text-[11px] text-slate-400">Lakebase</p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Database className="w-4 h-4 text-teal-500" />
+                  <p className="text-[11px] text-slate-400">Lakehouse</p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Brain className="w-4 h-4 text-blue-500" />
+                  <p className="text-[11px] text-slate-400">Data Intelligence</p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="w-2 h-2 rounded-full bg-blue-500 animate-pulse" />
+                  <p className="text-[11px] text-slate-400">Click for details</p>
+                </div>
+              </div>
+
+              {/* Column-aligned learning objectives -- text boxes below each section */}
+              {hasAnyObjectives && (
+                <div className="mt-5 flex gap-4 justify-center">
+                  {/* Left: App & Database objectives */}
+                  {appLakebaseFade.shouldRender && leftObjectives.length > 0 && (
+                    <div className={`w-[220px] flex-shrink-0 duration-300 ${fadeClass(appLakebaseFade.isVisible)}`}>
+                      <div className="rounded-lg bg-slate-800/40 border border-[#FF3621]/20 p-3">
+                        <ul className="space-y-1.5">
+                          {leftObjectives.map((obj, idx) => (
+                            <li
+                              key={obj.id}
+                              className={`flex items-start gap-1.5 text-[11px] text-slate-300 transition-all duration-300 ease-out ${
+                                bulletsRevealed ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-1'
+                              }`}
+                              style={{ transitionDelay: bulletsRevealed ? `${idx * BULLET_STAGGER_MS}ms` : '0ms' }}
+                            >
+                              <span className="text-[#FF3621]/70 mt-0.5 shrink-0">&#x2022;</span>
+                              <span>{obj.content}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Spacer matching arrow between left and next section */}
+                  {showAppLakebase && leftObjectives.length > 0 && (showLakehouse || showDataIntel) && (
+                    <div className="w-12 flex-shrink-0" />
+                  )}
+
+                  {/* Middle: Lakehouse objectives */}
+                  {lakehouseFade.shouldRender && middleObjectives.length > 0 && (
+                    <div className={`flex-1 duration-300 ${fadeClass(lakehouseFade.isVisible)}`}>
+                      <div className="rounded-lg bg-slate-800/40 border border-teal-500/20 p-3">
+                        <ul className="space-y-1.5">
+                          {middleObjectives.map((obj, idx) => (
+                            <li
+                              key={obj.id}
+                              className={`flex items-start gap-1.5 text-[11px] text-slate-300 transition-all duration-300 ease-out ${
+                                bulletsRevealed ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-1'
+                              }`}
+                              style={{ transitionDelay: bulletsRevealed ? `${(middleStaggerOffset + idx) * BULLET_STAGGER_MS}ms` : '0ms' }}
+                            >
+                              <span className="text-teal-400/70 mt-0.5 shrink-0">&#x2022;</span>
+                              <span>{obj.content}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Spacer matching arrow between middle and right */}
+                  {showLakehouse && middleObjectives.length > 0 && showDataIntel && rightObjectives.length > 0 && (
+                    <div className="w-12 flex-shrink-0" />
+                  )}
+
+                  {/* Right: Data Intelligence objectives */}
+                  {dataIntelFade.shouldRender && rightObjectives.length > 0 && (
+                    <div className={`flex-1 duration-300 ${fadeClass(dataIntelFade.isVisible)}`}>
+                      <div className="rounded-lg bg-slate-800/40 border border-blue-500/20 p-3">
+                        <ul className="space-y-1.5">
+                          {rightObjectives.map((obj, idx) => (
+                            <li
+                              key={obj.id}
+                              className={`flex items-start gap-1.5 text-[11px] text-slate-300 transition-all duration-300 ease-out ${
+                                bulletsRevealed ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-1'
+                              }`}
+                              style={{ transitionDelay: bulletsRevealed ? `${(rightStaggerOffset + idx) * BULLET_STAGGER_MS}ms` : '0ms' }}
+                            >
+                              <span className="text-blue-400/70 mt-0.5 shrink-0">&#x2022;</span>
+                              <span>{obj.content}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {onStartBuild && (
+            <div className="flex justify-end mt-4">
+              <button
+                onClick={onStartBuild}
+                className="flex items-center gap-1.5 px-4 py-2 text-[12px] font-medium text-muted-foreground hover:text-foreground bg-secondary/50 hover:bg-secondary rounded-full transition-all duration-200 group"
+              >
+                <span>Start the Build</span>
+                <ArrowDown className="w-3.5 h-3.5 group-hover:translate-y-0.5 transition-transform" />
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}

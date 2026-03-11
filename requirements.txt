@@ -1,0 +1,23 @@
+# Root requirements file for Databricks Apps deployment
+# These dependencies are installed when deploying to Databricks
+
+# FastAPI Backend
+fastapi>=0.109.0
+uvicorn[standard]>=0.27.0
+pydantic>=2.5.0
+pydantic-settings>=2.1.0
+python-multipart>=0.0.6
+httpx>=0.26.0
+requests>=2.31.0  # HTTP client for serving endpoints
+aiofiles>=23.0.0  # Required for serving static files
+pyyaml>=6.0.0     # For loading prompts_config.yaml
+
+# Databricks SDK for OAuth and workspace integration
+databricks-sdk>=0.20.0
+
+# Lakebase (PostgreSQL) connectivity
+# Reference: https://github.com/databricks-solutions/lakebase-fastapi-app
+psycopg2-binary>=2.9.0
+
+# PDF processing for Use Case Builder file uploads (renders pages as images + extracts text)
+PyMuPDF>=1.25.0

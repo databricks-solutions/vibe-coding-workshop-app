@@ -1,0 +1,5 @@
+#!/bin/bash
+# vibe2value - Installer and deployment CLI for Vibe Coding Workshop App
+# Usage: ./vibe2value install | configure | deploy | doctor | uninstall
+PROJECT_ROOT="$(cd "$(dirname "$0")" && pwd)"
+exec python3 "$PROJECT_ROOT/scripts/vibe2value.py" "$@"

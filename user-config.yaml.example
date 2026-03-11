@@ -1,0 +1,36 @@
+# =============================================================================
+# Vibe Coding Workshop - User Configuration (EXAMPLE)
+# =============================================================================
+# Copy this file to user-config.yaml and fill in your values:
+#   cp user-config.yaml.example user-config.yaml
+#
+# Or run the installer which generates it automatically:
+#   ./vibe2value install
+# =============================================================================
+
+workspace:
+  host: "https://your-workspace.cloud.databricks.com"
+  profile: ""                         # Databricks CLI profile (leave empty for default)
+
+lakebase:
+  instance_name: "vibe-coding-workshop-lakebase"
+  catalog: "vibe_coding_workshop_catalog"
+  create_catalog: "false"             # Set to "true" to register Lakebase as a UC catalog (needs CREATE CATALOG permission)
+  schema: "vibe_coding_workshop"
+  database: "databricks_postgres"
+  warehouse: ""                       # Name of your SQL warehouse
+  uc_catalog: "vibe_coding_workshop_lakebase"
+
+app:
+  name: "vibe-coding-workshop-app"
+  serving_endpoint: "databricks-claude-sonnet-4-5"
+
+user:
+  email: ""                           # Auto-discovered during install
+
+# Metadata (managed by vibe2value, do not edit manually)
+_metadata:
+  installed_at: ""
+  installer_version: "1.0.0"
+  target: "user"                      # Deploy target ("user" for new installs, "production" for existing)
+  created_resources: []               # Tracks what the installer created for uninstall
