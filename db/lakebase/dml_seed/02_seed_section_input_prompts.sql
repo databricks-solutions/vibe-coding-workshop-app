@@ -6377,9 +6377,9 @@ The Genie Space deployment follows this protocol:
 - [ ] Ready for Genie Optimization (Step 25)',
 true, 1, true, current_timestamp(), current_timestamp(), current_user());
 
--- Step 25: Optimize Genie - bypass_LLM = TRUE
+-- Step 25: Optimize Genie - bypass_LLM = TRUE, step_enabled = FALSE (hidden by default)
 INSERT INTO ${catalog}.${schema}.section_input_prompts 
-(input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
+(input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, bypass_llm, step_enabled, version, is_active, inserted_at, updated_at, created_by)
 VALUES
 (118, 'optimize_genie',
 'Optimize your Genie Space for production accuracy using @data_product_accelerator/skills/semantic-layer/05-genie-optimization-orchestrator/SKILL.md
@@ -6619,7 +6619,7 @@ When you paste the prompt, the AI reads `@data_product_accelerator/skills/semant
 - [ ] Before/after scores for each quality dimension
 - [ ] Remaining known limitations (if any)
 - [ ] Recommendations for future optimization cycles',
-true, 1, true, current_timestamp(), current_timestamp(), current_user());
+true, false, 1, true, current_timestamp(), current_timestamp(), current_user());
 
 -- =============================================================================
 -- AGENT SKILLS ACCELERATOR (Steps 26-30)

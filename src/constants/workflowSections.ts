@@ -218,7 +218,7 @@ export const WORKFLOW_SECTIONS: WorkflowSection[] = [
   },
   {
     id: 'databricks-app',
-    chapter: '',
+    chapter: 'Databricks App',
     title: 'Databricks App',
     focus: 'Design user interface and deploy to Databricks Apps',
     description: 'Build the frontend of your application. You\'ll design the user interface using AI-assisted tools, test locally, and deploy your first working Databricks App.',
@@ -230,7 +230,7 @@ export const WORKFLOW_SECTIONS: WorkflowSection[] = [
   },
   {
     id: 'lakebase',
-    chapter: '',
+    chapter: 'Lakebase',
     title: 'Lakebase',
     focus: 'Set up PostgreSQL database, connect to your app, and deploy',
     description: 'Add data persistence to your application. You\'ll set up Lakebase as your PostgreSQL backend, wire the UI to pull data from the database, and deploy your working Databricks App.',
@@ -242,7 +242,7 @@ export const WORKFLOW_SECTIONS: WorkflowSection[] = [
   },
   {
     id: 'lakehouse',
-    chapter: '',
+    chapter: 'Lakehouse',
     title: 'Lakehouse',
     focus: 'Data foundation, modeling, and pipelines',
     description: 'Build the data backbone of your solution. You\'ll extract metadata, create data dictionaries, clone source tables, and build Bronze → Silver → Gold layer pipelines following Databricks best practices.',
@@ -254,7 +254,7 @@ export const WORKFLOW_SECTIONS: WorkflowSection[] = [
   },
   {
     id: 'data-intelligence',
-    chapter: '',
+    chapter: 'Data Intelligence',
     title: 'Data Intelligence',
     focus: 'Translating data into insights, logic, and decisions',
     description: 'Convert raw data into actionable intelligence. You\'ll build Genie Spaces with Metric Views and TVFs, create AI agents using the Databricks Agent Framework, and build AI/BI dashboards.',
