@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
-import { Sparkles, Loader2, ChevronDown, Maximize2, Minimize2, X, Copy, Check, Pencil, RotateCcw, Library, PenLine } from 'lucide-react';
+import { Sparkles, Loader2, ChevronDown, Maximize2, Minimize2, X, Copy, Check, Pencil, RotateCcw, Library, PenLine, Palette, Globe } from 'lucide-react';
 import { apiClient, type SelectOption } from '../api/client';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -12,11 +12,13 @@ type DefineMode = 'library' | 'custom';
 
 interface PromptGeneratorProps {
   onPromptGenerated: (prompt: string, industry: string, useCase: string, industryLabel?: string, useCaseLabel?: string, customDescription?: string) => void;
+  onBrandUrlChange?: (url: string) => void;
   initialIndustry?: string;
   initialUseCase?: string;
   initialPrompt?: string;
   initialCustomUseCaseLabel?: string;
   initialCustomDescription?: string;
+  initialBrandUrl?: string;
   isExpanded?: boolean;
   onToggleExpand?: () => void;
   prerequisitesCompleted?: boolean;
@@ -24,13 +26,31 @@ interface PromptGeneratorProps {
   workshopLevel?: WorkshopLevel;
 }
 
+function extractCompanyName(url: string): string | null {
+  try {
+    const parsed = new URL(url);
+    const path = parsed.pathname.replace(/^\/+|\/+$/g, '');
+    if (path) {
+      const lastSeg = path.split('/').pop() || '';
+      if (lastSeg.length > 2 && /[a-zA-Z]/.test(lastSeg)) {
+        return lastSeg.replace(/[-_]/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+      }
+    }
+  } catch {
+    // invalid URL -- ignore
+  }
+  return null;
+}
+
 export function PromptGenerator({ 
   onPromptGenerated,
+  onBrandUrlChange,
   initialIndustry = '',
   initialUseCase = '',
   initialPrompt = '',
   initialCustomUseCaseLabel = '',
   initialCustomDescription = '',
+  initialBrandUrl = '',
   isExpanded = true,
   onToggleExpand,
   prerequisitesCompleted = false,
@@ -67,6 +87,10 @@ export function PromptGenerator({
   const [customIndustry, setCustomIndustry] = useState('');
   const [customUseCaseName, setCustomUseCaseName] = useState('');
   const [customUseCaseDescription, setCustomUseCaseDescription] = useState('');
+
+  // Branding URL (optional)
+  const [brandUrl, setBrandUrl] = useState(initialBrandUrl);
+  const [showBranding, setShowBranding] = useState(!!initialBrandUrl);
 
   // Shared builder hook for the "Create Your Own" AI-powered flow
   const builder = useUseCaseBuilder();
@@ -298,6 +322,11 @@ export function PromptGenerator({
       } finally {
         setIsGenerating(false);
       }
+    }
+
+    // Persist brand URL as session parameter override (empty string clears it)
+    if (onBrandUrlChange) {
+      onBrandUrlChange(brandUrl.trim());
     }
   };
 
@@ -629,6 +658,92 @@ export function PromptGenerator({
               )}
             </div>
           )}
+
+          {/* ====== BRANDING (Optional) — shared across both modes ====== */}
+          {(() => {
+            // After start: only show if a brand URL was provided
+            if (hasStarted && !brandUrl.trim()) return null;
+
+            const parsedName = brandUrl.trim() ? extractCompanyName(brandUrl.trim()) : null;
+
+            // Read-only summary after Get Started
+            if (hasStarted && brandUrl.trim()) {
+              return (
+                <div className="mb-4 flex items-center gap-2 px-3 py-2 bg-secondary/30 rounded-md border border-border/50">
+                  <Palette className="w-3.5 h-3.5 text-primary flex-shrink-0" />
+                  {parsedName ? (
+                    <span className="text-[12px] font-medium text-primary bg-primary/10 rounded-full px-2 py-0.5">{parsedName}</span>
+                  ) : (
+                    <span className="text-[12px] font-medium text-primary bg-primary/10 rounded-full px-2 py-0.5">Brand URL set</span>
+                  )}
+                  <span className="text-[11px] text-muted-foreground truncate flex-1" title={brandUrl}>{brandUrl}</span>
+                </div>
+              );
+            }
+
+            // Editable state (before Get Started)
+            return (
+              <div className="mb-4">
+                {/* Toggle row */}
+                <button
+                  type="button"
+                  onClick={() => setShowBranding(!showBranding)}
+                  className="w-full flex items-center gap-2 py-1.5 text-left group"
+                >
+                  <Palette className="w-3.5 h-3.5 text-muted-foreground group-hover:text-foreground transition-colors" />
+                  <span className="text-[12px] text-muted-foreground group-hover:text-foreground transition-colors">Branding</span>
+                  <span className="text-[10px] bg-secondary/50 text-muted-foreground/70 rounded-full px-1.5 py-0.5 leading-none">Optional</span>
+                  <ChevronDown className={`w-3 h-3 text-muted-foreground ml-auto transition-transform duration-200 ${showBranding ? 'rotate-180' : ''}`} />
+                </button>
+
+                {/* Expandable content */}
+                <div className={`transition-all duration-300 ease-in-out overflow-hidden ${showBranding ? 'max-h-[200px] opacity-100 mt-2' : 'max-h-0 opacity-0'}`}>
+                  <div className="border border-border/50 rounded-md bg-secondary/20 p-3">
+                    {/* URL input with Globe icon */}
+                    <div className="relative">
+                      <Globe className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground/60" />
+                      <input
+                        type="url"
+                        value={brandUrl}
+                        onChange={(e) => setBrandUrl(e.target.value)}
+                        placeholder="https://www.brandcolorcode.com/company-name"
+                        className="w-full pl-9 pr-8 py-2 text-[13px] border border-border rounded-md focus:ring-2 focus:ring-primary focus:border-primary outline-none transition-all bg-input text-foreground placeholder:text-muted-foreground/40"
+                      />
+                      {brandUrl && (
+                        <button
+                          type="button"
+                          onClick={() => setBrandUrl('')}
+                          className="absolute right-2.5 top-1/2 -translate-y-1/2 p-0.5 rounded text-muted-foreground/50 hover:text-foreground hover:bg-secondary transition-colors"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      )}
+                    </div>
+                    {/* Helper text */}
+                    <p className="text-[11px] text-muted-foreground/60 mt-1.5">
+                      Paste a URL with brand colors and assets. UI design prompts will apply these for styling.
+                    </p>
+                    {/* Live preview chip */}
+                    {brandUrl.trim() && (
+                      <div className="mt-2 animate-in fade-in duration-300">
+                        {parsedName ? (
+                          <span className="inline-flex items-center gap-1 text-[11px] font-medium text-primary bg-primary/10 rounded-full px-2 py-0.5">
+                            <Palette className="w-3 h-3" />
+                            {parsedName}
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 text-[11px] font-medium text-primary bg-primary/10 rounded-full px-2 py-0.5">
+                            <Check className="w-3 h-3" />
+                            Brand URL set
+                          </span>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
 
           {/* Get Started Button */}
           {(() => {

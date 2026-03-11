@@ -73,6 +73,7 @@ interface WorkflowDiagramProps {
   selectedUseCaseLabel: string;
   customUseCaseLabel?: string;
   customDescription?: string;
+  initialBrandUrl?: string;
   workshopLevel?: WorkshopLevel;
   onWorkshopLevelChange?: (level: WorkshopLevel) => void;
   levelExplicitlySelected?: boolean;
@@ -81,6 +82,7 @@ interface WorkflowDiagramProps {
   onIndustryChange: (value: string, label: string) => void;
   onUseCaseChange: (value: string, label: string) => void;
   onCustomUseCaseChange?: (customLabel: string, customDescription: string) => void;
+  onBrandUrlChange?: (url: string) => void;
   onCompletedStepsChange: (steps: Set<number>) => void;
   skippedSteps?: Set<number>;
   onSkippedStepsChange?: (steps: Set<number>) => void;
@@ -138,6 +140,7 @@ export function WorkflowDiagram({
   selectedUseCaseLabel,
   customUseCaseLabel = '',
   customDescription = '',
+  initialBrandUrl = '',
   workshopLevel = 'end-to-end',
   onWorkshopLevelChange,
   levelExplicitlySelected = false,
@@ -146,6 +149,7 @@ export function WorkflowDiagram({
   onIndustryChange,
   onUseCaseChange,
   onCustomUseCaseChange,
+  onBrandUrlChange,
   onCompletedStepsChange,
   skippedSteps = new Set<number>(),
   onSkippedStepsChange,
@@ -2148,6 +2152,7 @@ export function WorkflowDiagram({
         customUseCaseLabel={customUseCaseLabel}
         customDescription={customDescription}
         initialPrompt={stepPrompts[1]}
+        initialBrandUrl={initialBrandUrl}
         isComplete={completedSteps.has(1)}
         isSessionLoaded={isSessionLoaded}
         workshopLevel={workshopLevel}
@@ -2155,6 +2160,7 @@ export function WorkflowDiagram({
         forceCollapsed={wizardStage < 2}
         forceExpanded={wizardStage === 2 && !stageTransitioning}
         onIntentDefined={handlePromptGenerated}
+        onBrandUrlChange={onBrandUrlChange}
       />
 
       {/* Stage 3: Path & Architecture (combined section) */}

@@ -10,6 +10,7 @@ interface DefineIntentSectionProps {
   customUseCaseLabel?: string;
   customDescription?: string;
   initialPrompt?: string;
+  initialBrandUrl?: string;
   isComplete: boolean;
   isSessionLoaded?: boolean;
   workshopLevel: WorkshopLevel;
@@ -19,6 +20,7 @@ interface DefineIntentSectionProps {
   /** When true, forces the section expanded (user cannot collapse). */
   forceExpanded?: boolean;
   onIntentDefined: (prompt: string, industry: string, useCase: string, industryLabel?: string, useCaseLabel?: string, customDescription?: string) => void;
+  onBrandUrlChange?: (url: string) => void;
 }
 
 /**
@@ -37,6 +39,7 @@ export function DefineIntentSection({
   customUseCaseLabel,
   customDescription,
   initialPrompt,
+  initialBrandUrl,
   isComplete,
   isSessionLoaded = false,
   workshopLevel,
@@ -44,6 +47,7 @@ export function DefineIntentSection({
   forceCollapsed = false,
   forceExpanded = false,
   onIntentDefined,
+  onBrandUrlChange,
 }: DefineIntentSectionProps) {
   // Tracks user's manual expand/collapse toggle; null = use auto behavior
   const [userOverride, setUserOverride] = useState<boolean | null>(null);
@@ -82,11 +86,13 @@ export function DefineIntentSection({
     <div id="define-intent-section">
       <PromptGenerator
         onPromptGenerated={onIntentDefined}
+        onBrandUrlChange={onBrandUrlChange}
         initialIndustry={selectedIndustry}
         initialUseCase={selectedUseCase}
         initialPrompt={initialPrompt}
         initialCustomUseCaseLabel={customUseCaseLabel}
         initialCustomDescription={customDescription}
+        initialBrandUrl={initialBrandUrl}
         isExpanded={isExpanded}
         onToggleExpand={handleToggle}
         prerequisitesCompleted={true}

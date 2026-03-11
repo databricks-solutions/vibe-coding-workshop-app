@@ -8,7 +8,7 @@
 -- =============================================================================
 
 -- Clear existing data (for recreate scenarios)
-DELETE FROM ${schema}.workshop_parameters WHERE param_key IN ('workspace_url', 'workspace_org_id', 'default_warehouse', 'lakebase_instance_name', 'lakebase_host_name', 'lakehouse_default_catalog', 'model_serving_endpoint', 'chapter_3_lakehouse_catalog', 'chapter_3_lakehouse_schema', 'company_name', 'lakebase_uc_catalog_name', 'app_name');
+DELETE FROM ${schema}.workshop_parameters WHERE param_key IN ('workspace_url', 'workspace_org_id', 'default_warehouse', 'lakebase_instance_name', 'lakebase_host_name', 'lakehouse_default_catalog', 'model_serving_endpoint', 'chapter_3_lakehouse_catalog', 'chapter_3_lakehouse_schema', 'company_brand_url', 'lakebase_uc_catalog_name', 'app_name');
 
 -- Parameter 1: Databricks Workspace URL
 INSERT INTO ${schema}.workshop_parameters 
@@ -163,14 +163,14 @@ VALUES
  CURRENT_TIMESTAMP,
  CURRENT_USER);
 
--- Parameter 9: Company Name (Branding)
+-- Parameter 9: Company Brand URL
 INSERT INTO ${schema}.workshop_parameters 
 (param_key, param_label, param_value, param_description, param_type, display_order, is_required, is_active, allow_session_override, inserted_at, updated_at, created_by)
 VALUES
-('company_name', 
- 'Company Name (Branding)', 
+('company_brand_url', 
+ 'Company Brand URL', 
  '',
- 'When set, UI design prompts (Figma and Cursor/Copilot) will include branding instructions to use this company''s colors and logo from brandcolorcode.com. Leave blank to skip branding.',
+ 'Full URL to a page with brand colors and assets (e.g. https://www.brandcolorcode.com/ralph-lauren-corporation). When set, UI design prompts will include branding instructions. Leave blank to skip branding.',
  'text',
  9,
  FALSE,

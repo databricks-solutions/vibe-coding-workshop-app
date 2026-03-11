@@ -690,7 +690,7 @@ def get_workshop_parameters_sync() -> Dict[str, str]:
             'default_warehouse': os.getenv('DEFAULT_WAREHOUSE', ''),
             'lakebase_instance_name': os.getenv('LAKEBASE_INSTANCE_NAME', ''),
             'lakebase_host_name': os.getenv('LAKEBASE_HOST', ''),
-            'company_name': '',
+            'company_brand_url': '',
             'lakebase_uc_catalog_name': os.getenv('LAKEBASE_UC_CATALOG', '')
         }
     
@@ -892,19 +892,44 @@ def get_section_input_content(industry: str, use_case: str, section_tag: str, pr
         how_to_apply = how_to_apply.replace(key, str(value))
         expected_output = expected_output.replace(key, str(value))
     
-    # Conditional branding injection -- only when company_name is specified
-    company_name = workshop_params.get('company_name', '').strip()
-    if company_name and section_tag in ('figma_ui_design', 'cursor_copilot_ui_design'):
-        branding_section = f"""
+    # Conditional branding injection -- only when company_brand_url is specified
+    brand_url = workshop_params.get('company_brand_url', '').strip()
+    if brand_url and section_tag in ('figma_ui_design', 'cursor_copilot_ui_design'):
+        _company_display = ''
+        try:
+            from urllib.parse import urlparse
+            _parsed = urlparse(brand_url)
+            _path = _parsed.path.strip('/')
+            if _path:
+                _last_seg = _path.split('/')[-1]
+                if any(c.isalpha() for c in _last_seg) and len(_last_seg) > 2:
+                    _company_display = _last_seg.replace('-', ' ').replace('_', ' ').title()
+        except Exception:
+            pass
+
+        if _company_display:
+            branding_section = f"""
 
 ---
 
 ## Branding Guidelines
 
-Use **{company_name}** as the brand for this application.
-- Reference https://www.brandcolorcode.com/{company_name} for the official brand color codes
+Use **{_company_display}** as the brand for this application.
+- Reference {brand_url} for the official brand color codes and assets
 - Apply the company's primary and secondary brand colors throughout the UI (theme, buttons, headers, accents)
 - Use the company's logo where appropriate (e.g., header/navbar, favicon)
+- Ensure all UI elements, buttons, and accents align with the brand's visual identity"""
+        else:
+            branding_section = f"""
+
+---
+
+## Branding Guidelines
+
+Use the brand defined at the following URL for this application.
+- Reference {brand_url} for the official brand color codes and assets
+- Apply the brand's primary and secondary colors throughout the UI (theme, buttons, headers, accents)
+- Use the brand's logo where appropriate (e.g., header/navbar, favicon)
 - Ensure all UI elements, buttons, and accents align with the brand's visual identity"""
         input_text += branding_section
     
@@ -3262,10 +3287,10 @@ async def get_workshop_parameters(response: Response) -> List[WorkshopParameter]
                 allow_session_override=False
             ),
             WorkshopParameter(
-                param_key="company_name",
-                param_label="Company Name (Branding)",
+                param_key="company_brand_url",
+                param_label="Company Brand URL",
                 param_value="",
-                param_description="When set, UI design prompts will include branding instructions to use this company's colors and logo from brandcolorcode.com. Leave blank to skip branding.",
+                param_description="Full URL to a page with brand colors and assets (e.g. https://www.brandcolorcode.com/ralph-lauren-corporation). When set, UI design prompts will include branding instructions. Leave blank to skip branding.",
                 param_type="text",
                 display_order=9,
                 is_required=False,
@@ -4377,6 +4402,7 @@ class SessionUpdateMetadataRequest(BaseModel):
     custom_use_case_label: Optional[str] = Field(None, max_length=30, description="User-edited use case name override")
     custom_use_case_description: Optional[str] = Field(None, description="User-edited use case description override")
     level_explicitly_selected: Optional[bool] = Field(None, description="Whether the user explicitly clicked a level button")
+    company_brand_url: Optional[str] = Field(None, description="URL to company brand colors/assets page")
 
 
 @router.post("/session/update-metadata")
@@ -4431,6 +4457,8 @@ async def update_session_metadata_endpoint(request_body: SessionUpdateMetadataRe
             _session_param_patch['custom_use_case_description'] = request_body.custom_use_case_description
         if request_body.level_explicitly_selected is not None:
             _session_param_patch['level_explicitly_selected'] = request_body.level_explicitly_selected
+        if request_body.company_brand_url is not None:
+            _session_param_patch['company_brand_url'] = request_body.company_brand_url
         
         # Derive user_schema_prefix from email + use case name (or source schema for accelerator)
         # Triggered when use case is selected, custom label is edited, or workshop_level changes

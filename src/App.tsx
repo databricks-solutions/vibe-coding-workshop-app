@@ -88,6 +88,9 @@ export default function App() {
   const [customUseCaseLabel, setCustomUseCaseLabel] = useState<string>('');
   const [customDescription, setCustomDescription] = useState<string>('');
 
+  // Company brand URL (optional, session-level override)
+  const [brandUrl, setBrandUrl] = useState<string>('');
+
   // Dialog state
   const [showSaveDialog, setShowSaveDialog] = useState(false);
   const [showFeedbackDialog, setShowFeedbackDialog] = useState(false);
@@ -195,6 +198,7 @@ export default function App() {
         setCustomUseCaseLabel(sessionParams.custom_use_case_label || '');
         setCustomDescription(sessionParams.custom_use_case_description || '');
         setLevelExplicitlySelected(!!sessionParams.level_explicitly_selected);
+        setBrandUrl(sessionParams.company_brand_url || '');
         
         // Find the next incomplete step using the actual section order for this workshop level
         const nextStep = getNextIncompleteStep(Array.from(restoredCompleted), skippedStepsArray, restoredLevel);
@@ -317,6 +321,7 @@ export default function App() {
         setCustomUseCaseLabel(sessionParams.custom_use_case_label || '');
         setCustomDescription(sessionParams.custom_use_case_description || '');
         setLevelExplicitlySelected(!!sessionParams.level_explicitly_selected);
+        setBrandUrl(sessionParams.company_brand_url || '');
         
         // Navigate to the next incomplete step using the actual section order
         const nextStep = getNextIncompleteStep(Array.from(loadedCompleted), loadedSkippedSteps, loadedLevel);
@@ -878,6 +883,7 @@ export default function App() {
                     selectedUseCaseLabel={selectedUseCaseLabel}
                     customUseCaseLabel={customUseCaseLabel}
                     customDescription={customDescription}
+                    initialBrandUrl={brandUrl}
                     workshopLevel={workshopLevel}
                     onWorkshopLevelChange={handleWorkshopLevelChange}
                     levelExplicitlySelected={levelExplicitlySelected}
@@ -927,6 +933,15 @@ export default function App() {
                           custom_use_case_label: label || undefined,
                           custom_use_case_description: desc || undefined,
                         }).catch(err => console.error('Error saving custom use case:', err));
+                      }
+                    }}
+                    onBrandUrlChange={(url) => {
+                      setBrandUrl(url);
+                      if (sessionId) {
+                        apiClient.updateSessionMetadata({
+                          session_id: sessionId,
+                          company_brand_url: url,
+                        }).catch(err => console.error('Error saving brand URL:', err));
                       }
                     }}
                     onCompletedStepsChange={handleCompletedStepsChange}
