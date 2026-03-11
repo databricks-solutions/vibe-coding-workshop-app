@@ -10,19 +10,18 @@
 #   Step 0: Configure app.yaml with target-specific Lakebase settings
 #   Step 1: Validate and deploy Databricks Asset Bundle (Lakebase + App)
 #           + Update app.yaml with Lakebase host (discovered after instance creation)
-#   Step 2: Sync application source code to Databricks Apps
-#   Step 3: Setup all required permissions:
-#           3a. Unity Catalog permissions (ALL_PRIVILEGES on catalog)
-#           3b. Lakebase database role (DATABRICKS_SUPERUSER)
-#           3c. App Resource link (CAN_CONNECT_AND_CREATE on Lakebase instance)
-#   Step 4: Create and seed Lakebase tables (DDL + DML)
-#   Step 5: Final forced app deploy (stop → redeploy → start → verify RUNNING)
+#   Step 2: Setup all required permissions:
+#           2a. Unity Catalog permissions (ALL_PRIVILEGES on catalog)
+#           2b. Lakebase database role (DATABRICKS_SUPERUSER)
+#           2c. App Resource link (CAN_CONNECT_AND_CREATE on Lakebase instance)
+#   Step 3: Create and seed Lakebase tables (DDL + DML)
+#   Step 4: Final app deploy (start → deploy code → verify RUNNING)
 #           Only runs during full install; skipped for --code-only
 #
 # PERMISSIONS EXPLAINED:
-#   - Unity Catalog (3a): Allows app to access catalog schemas and tables
-#   - Database Role (3b): PostgreSQL superuser for table operations
-#   - App Resource (3c): Links Lakebase instance to app for automatic auth
+#   - Unity Catalog (2a): Allows app to access catalog schemas and tables
+#   - Database Role (2b): PostgreSQL superuser for table operations
+#   - App Resource (2c): Links Lakebase instance to app for automatic auth
 #
 # USAGE:
 #   ./scripts/deploy.sh                        # Full deployment to development
@@ -286,6 +285,78 @@ except Exception:
     return 0
 }
 
+# Get workspace source code path from bundle summary
+get_source_path() {
+    local path
+    path=$(databricks bundle summary -t "$TARGET" $PROFILE_FLAG --output json 2>/dev/null | python3 -c "
+import sys, json
+try:
+    data = json.load(sys.stdin)
+    ws = data.get('workspace',{}).get('file_path','') or data.get('workspace',{}).get('root_path','')
+    if ws: print(ws + '/files' if '/files' not in ws else ws)
+except: pass
+")
+    [[ -z "$path" ]] && path="/Workspace/Users/$CURRENT_USER/.bundle/vibe-coding-workshop-app/$TARGET/files"
+    echo "$path"
+}
+
+# Get current app state as a single string
+get_app_state() {
+    databricks apps get "$APP_NAME" $PROFILE_FLAG --output json 2>/dev/null \
+      | python3 -c "import sys,json; print(json.load(sys.stdin).get('app_status',{}).get('state','UNKNOWN'))" 2>/dev/null || echo "UNKNOWN"
+}
+
+# Start the app if not running and wait for RUNNING state (up to 120s)
+ensure_app_running() {
+    local state
+    state=$(get_app_state)
+    if [[ "$state" == "RUNNING" ]]; then
+        print_success "App is already running"
+        return 0
+    fi
+    print_step "Starting app (current state: $state)..."
+    databricks apps start "$APP_NAME" $PROFILE_FLAG 2>/dev/null || true
+    local elapsed=0
+    while [[ $elapsed -lt 120 ]]; do
+        sleep 10
+        elapsed=$((elapsed + 10))
+        state=$(get_app_state)
+        if [[ "$state" == "RUNNING" ]]; then
+            print_success "App is running"
+            return 0
+        fi
+        echo -e "  App state: ${YELLOW}$state${NC} (${elapsed}s/120s)"
+    done
+    print_error "App did not reach RUNNING after 120s (state: $state)"
+    return 1
+}
+
+# Deploy app code with retries and auto-recovery for "not running" errors
+deploy_app_code() {
+    local source_path=$1
+    print_step "Deploying app code from: $source_path"
+    for attempt in 1 2 3; do
+        local result
+        result=$(databricks apps deploy "$APP_NAME" $PROFILE_FLAG --source-code-path "$source_path" 2>&1) || true
+
+        if echo "$result" | grep -q "SUCCEEDED\|started successfully"; then
+            print_success "App code deployed"
+            return 0
+        elif echo "$result" | grep -q "not in RUNNING state\|start the app first"; then
+            print_warning "App not running -- starting before retry..."
+            ensure_app_running || return 1
+        elif echo "$result" | grep -q "active deployment in progress"; then
+            print_warning "Deployment in progress, waiting 15s ($attempt/3)..."
+            sleep 15
+        else
+            echo "  $result"
+            print_error "Deploy failed ($attempt/3)"
+            [[ $attempt -lt 3 ]] && sleep 10
+        fi
+    done
+    return 1
+}
+
 # =============================================================================
 # Main Deployment Flow
 # =============================================================================
@@ -419,40 +490,24 @@ if [[ "$CODE_ONLY" == true ]]; then
         
         # Step 3: Trigger rolling deployment (picks up new code without full restart)
         print_step "Step 3/3: Triggering app deployment (rolling update)..."
-        
-        # Get the source code path from bundle summary
-        SOURCE_PATH=$(databricks bundle summary -t "$TARGET" $PROFILE_FLAG --output json 2>/dev/null | python3 -c "
-import sys, json
-try:
-    data = json.load(sys.stdin)
-    ws_path = data.get('workspace', {}).get('file_path', '')
-    if not ws_path:
-        ws_path = data.get('workspace', {}).get('root_path', '')
-    if ws_path:
-        print(ws_path + '/files' if '/files' not in ws_path else ws_path)
-except:
-    pass
-")
-        
-        if [[ -z "$SOURCE_PATH" ]]; then
-            SOURCE_PATH="/Workspace/Users/$CURRENT_USER/.bundle/vibe-coding-workshop-app/$TARGET/files"
-        fi
-        
+
+        SOURCE_PATH=$(get_source_path)
         echo -e "  Source path: ${CYAN}$SOURCE_PATH${NC}"
-        
-        # Deploy the app (rolling deployment - no full stop/restart)
-        DEPLOY_RESULT=$(databricks apps deploy "$APP_NAME" $PROFILE_FLAG --source-code-path "$SOURCE_PATH" 2>&1) || true
-        
-        if echo "$DEPLOY_RESULT" | grep -q "SUCCEEDED\|started successfully\|Deployment"; then
-            print_success "App deployment triggered!"
+
+        if ! ensure_app_running; then
+            print_error "App is not running -- cannot deploy code"
+            echo -e "  Try: ${CYAN}databricks apps start $APP_NAME${NC}"
+            exit 1
+        fi
+
+        if deploy_app_code "$SOURCE_PATH"; then
             echo ""
             echo -e "${GREEN}✓ Rolling deployment in progress - zero downtime${NC}"
             echo -e "${GREEN}✓ New code will be live in ~30-60 seconds${NC}"
-        elif echo "$DEPLOY_RESULT" | grep -q "already"; then
-            print_warning "Deployment already in progress"
         else
-            echo "$DEPLOY_RESULT"
-            print_success "Deployment command sent"
+            print_error "App code deployment failed"
+            echo -e "  Try: ${CYAN}databricks apps deploy $APP_NAME --source-code-path $SOURCE_PATH${NC}"
+            exit 1
         fi
         
         echo ""
@@ -642,8 +697,8 @@ fi
 # Verify App Exists After Bundle Deploy
 # =============================================================================
 # Bundle deploy creates the app but does not start compute or push code.
-# We just verify the app was created successfully before proceeding to Step 2.
-# Compute starts later in Step 5 after code is deployed and app is started.
+# We just verify the app was created successfully before proceeding.
+# Compute starts later in Step 4 after code is deployed and app is started.
 # =============================================================================
 
 if [[ "$TABLES_ONLY" != true && "$PERMISSIONS_ONLY" != true ]]; then
@@ -655,7 +710,7 @@ import sys, json
 data = json.load(sys.stdin)
 state = data.get('app_status', {}).get('state', 'UNKNOWN')
 print(state)" 2>/dev/null) || true
-        print_success "App exists (state: ${APP_STATE:-UNKNOWN}). Compute will start after code deploy in Step 5."
+        print_success "App exists (state: ${APP_STATE:-UNKNOWN}). Compute will start after code deploy in Step 4."
     else
         print_error "App '$APP_NAME' not found after bundle deploy"
         exit 1
@@ -663,85 +718,21 @@ print(state)" 2>/dev/null) || true
 fi
 
 # =============================================================================
-# Step 2: Deploy App Source Code
-# =============================================================================
-
-if [[ "$TABLES_ONLY" != true && "$PERMISSIONS_ONLY" != true ]]; then
-    print_header "STEP 2: Deploy App Source Code"
-    
-    # Get the source code path from bundle summary
-    SOURCE_PATH=$(databricks bundle summary -t "$TARGET" $PROFILE_FLAG --output json 2>/dev/null | python3 -c "
-import sys, json
-try:
-    data = json.load(sys.stdin)
-    # Get the workspace path and append /files
-    ws_path = data.get('workspace', {}).get('file_path', '')
-    if not ws_path:
-        ws_path = data.get('workspace', {}).get('root_path', '')
-    if ws_path:
-        print(ws_path + '/files' if '/files' not in ws_path else ws_path)
-except:
-    pass
-")
-
-    if [[ -z "$SOURCE_PATH" ]]; then
-        # Fallback: construct from user
-        SOURCE_PATH="/Workspace/Users/$CURRENT_USER/.bundle/vibe-coding-workshop-app/$TARGET/files"
-    fi
-    
-    print_step "Deploying app source code..."
-    echo "  Source path: $SOURCE_PATH"
-    
-    # Deploy app code -- retry if bundle deploy triggered an implicit active deployment
-    APP_DEPLOY_OK=false
-    for ATTEMPT in 1 2 3; do
-        DEPLOY_RESULT=$(databricks apps deploy "$APP_NAME" $PROFILE_FLAG --source-code-path "$SOURCE_PATH" 2>&1) || true
-
-        if echo "$DEPLOY_RESULT" | grep -q "SUCCEEDED\|started successfully"; then
-            print_success "App source code synced"
-            APP_DEPLOY_OK=true
-            break
-        elif echo "$DEPLOY_RESULT" | grep -q "active deployment in progress\|already"; then
-            if [[ $ATTEMPT -lt 3 ]]; then
-                print_warning "Active deployment in progress, waiting 15s before retry (attempt $ATTEMPT/3)..."
-                sleep 15
-            else
-                print_warning "Active deployment still in progress -- Step 5 will handle final deploy"
-                APP_DEPLOY_OK=true
-            fi
-        else
-            echo "$DEPLOY_RESULT"
-            print_warning "Initial app code deploy did not succeed -- Step 5 will retry"
-            break
-        fi
-    done
-
-    # Get app URL for later (don't try to start -- permissions/tables not ready yet)
-    APP_INFO=$(databricks apps get "$APP_NAME" $PROFILE_FLAG --output json 2>/dev/null) || true
-    if [[ -n "$APP_INFO" ]]; then
-        APP_URL=$(echo "$APP_INFO" | python3 -c "import sys,json; print(json.load(sys.stdin).get('url',''))" 2>/dev/null) || true
-        APP_STATE=$(echo "$APP_INFO" | python3 -c "import sys,json; print(json.load(sys.stdin).get('app_status',{}).get('state',''))" 2>/dev/null) || true
-        echo -e "  App URL:    ${CYAN}$APP_URL${NC}"
-        echo -e "  App State:  ${CYAN}$APP_STATE${NC} (will finalize in Step 5)"
-    fi
-fi
-
-# =============================================================================
-# Step 3: Setup All Required Permissions
+# Step 2: Setup All Required Permissions
 # =============================================================================
 # This step configures three types of permissions required for the app:
 #
-# 3a. Unity Catalog Permissions
+# 2a. Unity Catalog Permissions
 #     API: PATCH /api/2.1/unity-catalog/permissions/catalog/{catalog}
 #     Grants ALL_PRIVILEGES on the catalog to the app's service principal
 #     Required for: Schema/table access in Unity Catalog
 #
-# 3b. Lakebase Database Role
+# 2b. Lakebase Database Role
 #     API: POST /api/2.0/database/instances/{instance}/roles
 #     Adds app service principal as DATABRICKS_SUPERUSER
 #     Required for: PostgreSQL operations (CREATE, INSERT, UPDATE, etc.)
 #
-# 3c. App Resource Link
+# 2c. App Resource Link
 #     API: PATCH /api/2.0/apps/{app}
 #     Links Lakebase instance to app with CAN_CONNECT_AND_CREATE permission
 #     Required for: Automatic PGPASSWORD injection at runtime
@@ -750,7 +741,7 @@ fi
 # =============================================================================
 
 if [[ "$TABLES_ONLY" != true && "$SKIP_PERMISSIONS" != true ]]; then
-    print_header "STEP 3: Setup Permissions"
+    print_header "STEP 2: Setup Permissions"
     
     print_step "Getting app service principal..."
     APP_INFO=$(databricks apps get "$APP_NAME" $PROFILE_FLAG --output json 2>/dev/null) || true
@@ -768,12 +759,12 @@ if [[ "$TABLES_ONLY" != true && "$SKIP_PERMISSIONS" != true ]]; then
         print_success "App State: $APP_STATE"
         
         # =================================================================
-        # 3a. Unity Catalog Permissions
+        # 2a. Unity Catalog Permissions
         #     Grant ALL_PRIVILEGES on catalog to app service principal
         #     This enables the app to access schemas and tables
         # =================================================================
         if [[ -n "$SERVICE_PRINCIPAL_ID" && -n "$LAKEBASE_CATALOG" ]]; then
-            print_step "3a. Adding Unity Catalog permissions..."
+            print_step "2a. Adding Unity Catalog permissions..."
             
             PERM_RESULT=$(databricks api patch "/api/2.1/unity-catalog/permissions/catalog/$LAKEBASE_CATALOG" \
                 $PROFILE_FLAG \
@@ -790,12 +781,12 @@ if [[ "$TABLES_ONLY" != true && "$SKIP_PERMISSIONS" != true ]]; then
         fi
         
         # =================================================================
-        # 3b. Lakebase Database Role (PostgreSQL)
+        # 2b. Lakebase Database Role (PostgreSQL)
         #     Add service principal as DATABRICKS_SUPERUSER in PostgreSQL
         #     This enables CREATE TABLE, INSERT, UPDATE operations
         # =================================================================
         if [[ -n "$SERVICE_PRINCIPAL_ID" && -n "$LAKEBASE_INSTANCE" ]]; then
-            print_step "3b. Adding Lakebase database roles..."
+            print_step "2b. Adding Lakebase database roles..."
             
             EXISTING_ROLES=$(databricks api get "/api/2.0/database/instances/$LAKEBASE_INSTANCE/roles" $PROFILE_FLAG 2>/dev/null) || true
             
@@ -835,7 +826,7 @@ if [[ "$TABLES_ONLY" != true && "$SKIP_PERMISSIONS" != true ]]; then
         fi
         
         # =================================================================
-        # 3c. App Resource Link (Critical for Runtime Auth)
+        # 2c. App Resource Link (Critical for Runtime Auth)
         #     Link Lakebase instance to app with CAN_CONNECT_AND_CREATE
         #     This enables automatic PGPASSWORD injection at runtime
         #     Visible in: Databricks UI > Apps > Settings > App Resources
@@ -843,7 +834,7 @@ if [[ "$TABLES_ONLY" != true && "$SKIP_PERMISSIONS" != true ]]; then
         #     Uses lakebase_manager.py to keep all permission logic centralized
         # =================================================================
         if [[ -n "$LAKEBASE_INSTANCE" ]]; then
-            print_step "3c. Linking Lakebase as app resource (via lakebase_manager.py)..."
+            print_step "2c. Linking Lakebase as app resource (via lakebase_manager.py)..."
             
             python3 "$SCRIPT_DIR/lakebase_manager.py" \
                 --action link-app-resource \
@@ -865,11 +856,11 @@ if [[ "$PERMISSIONS_ONLY" == true ]]; then
 fi
 
 # =============================================================================
-# Step 4: Setup Lakebase Tables
+# Step 3: Setup Lakebase Tables
 # =============================================================================
 
 if [[ "$SKIP_TABLES" != true ]]; then
-    print_header "STEP 4: Setup Lakebase Tables"
+    print_header "STEP 3: Setup Lakebase Tables"
     
     # Get Lakebase instance details to find the correct host
     print_step "Getting Lakebase instance connection details..."
@@ -919,20 +910,13 @@ if [[ "$SKIP_TABLES" != true ]]; then
 fi
 
 # =============================================================================
-# Step 5: Final App Deploy (ensures clean start with all infra ready)
+# Step 4: Final App Deploy (ensures clean start with all infra ready)
 # =============================================================================
 
 if [[ "$TABLES_ONLY" != true && "$PERMISSIONS_ONLY" != true && "$CODE_ONLY" != true ]]; then
-    print_header "STEP 5: Final App Deploy"
-    echo -e "  All infrastructure is ready. Performing a clean app deploy..."
-    echo ""
+    print_header "STEP 4: Final App Deploy"
 
-    # 5a. Stop the app to clear any stale/failed state from earlier implicit deploy
-    print_step "Stopping app to clear stale state..."
-    databricks apps stop "$APP_NAME" $PROFILE_FLAG 2>/dev/null || true
-    sleep 5
-
-    # 5b. Verify app.yaml has correct Lakebase connection details
+    # 4a. Update app.yaml with final Lakebase config
     print_step "Verifying app.yaml configuration..."
     INSTANCE_DETAILS=$(databricks api get "/api/2.0/database/instances/$LAKEBASE_INSTANCE" $PROFILE_FLAG 2>/dev/null) || true
     if [[ -n "$INSTANCE_DETAILS" ]]; then
@@ -946,131 +930,47 @@ if [[ "$TABLES_ONLY" != true && "$PERMISSIONS_ONLY" != true && "$CODE_ONLY" != t
         fi
     fi
 
-    # 5c. Sync updated app.yaml to workspace
-    print_step "Syncing final app.yaml to workspace..."
+    # 4b. Sync config to workspace
+    print_step "Syncing final configuration to workspace..."
     databricks bundle deploy -t "$TARGET" $PROFILE_FLAG 2>&1 | tail -3
 
-    # 5d. Get the source code path
-    SOURCE_PATH=$(databricks bundle summary -t "$TARGET" $PROFILE_FLAG --output json 2>/dev/null | python3 -c "
-import sys, json
-try:
-    data = json.load(sys.stdin)
-    ws_path = data.get('workspace', {}).get('file_path', '')
-    if not ws_path:
-        ws_path = data.get('workspace', {}).get('root_path', '')
-    if ws_path:
-        print(ws_path + '/files' if '/files' not in ws_path else ws_path)
-except:
-    pass
-")
-    if [[ -z "$SOURCE_PATH" ]]; then
-        SOURCE_PATH="/Workspace/Users/$CURRENT_USER/.bundle/vibe-coding-workshop-app/$TARGET/files"
-    fi
+    # 4c. Get source code path
+    SOURCE_PATH=$(get_source_path)
 
-    # 5e. Deploy app code (with retry for active deployments)
-    print_step "Deploying app code..."
-    echo "  Source path: $SOURCE_PATH"
-    APP_DEPLOY_OK=false
-    for ATTEMPT in 1 2 3 4 5; do
-        DEPLOY_RESULT=$(databricks apps deploy "$APP_NAME" $PROFILE_FLAG --source-code-path "$SOURCE_PATH" 2>&1) || true
-
-        if echo "$DEPLOY_RESULT" | grep -q "SUCCEEDED\|started successfully"; then
-            print_success "App code deployed"
-            APP_DEPLOY_OK=true
-            break
-        elif echo "$DEPLOY_RESULT" | grep -q "active deployment in progress\|already"; then
-            if [[ $ATTEMPT -lt 5 ]]; then
-                print_warning "Active deployment in progress, waiting 15s (attempt $ATTEMPT/5)..."
-                sleep 15
-            else
-                print_warning "Active deployment still in progress after 5 attempts"
-            fi
-        else
-            echo "$DEPLOY_RESULT"
-            print_error "App code deploy returned unexpected output (attempt $ATTEMPT/5)"
-            if [[ $ATTEMPT -lt 5 ]]; then
-                sleep 10
-            fi
-        fi
-    done
-
-    # 5e-verify. Confirm the app has an active deployment
-    if [[ "$APP_DEPLOY_OK" == true ]]; then
-        print_step "Verifying app deployment exists..."
-        VERIFY_INFO=$(databricks apps get "$APP_NAME" $PROFILE_FLAG --output json 2>/dev/null) || true
-        HAS_DEPLOYMENT=$(echo "$VERIFY_INFO" | python3 -c "
-import sys, json
-try:
-    data = json.load(sys.stdin)
-    ad = data.get('active_deployment', {})
-    if ad and ad.get('source_code_path', ''):
-        print('yes')
-    else:
-        print('no')
-except: print('no')
-" 2>/dev/null) || true
-        if [[ "$HAS_DEPLOYMENT" == "yes" ]]; then
-            print_success "Active deployment confirmed"
-        else
-            print_warning "No active deployment detected despite success -- will verify after start"
-        fi
-    fi
-
-    if [[ "$APP_DEPLOY_OK" != true ]]; then
-        print_error "Failed to deploy app code after 5 attempts"
-        echo ""
-        echo -e "${YELLOW}Source path used: ${CYAN}$SOURCE_PATH${NC}"
-        echo -e "${YELLOW}Try manually:${NC}"
-        echo -e "  ${CYAN}databricks apps deploy $APP_NAME --source-code-path $SOURCE_PATH${NC}"
-        echo -e "  ${CYAN}databricks apps get $APP_NAME${NC}"
-        echo ""
+    # 4d. Ensure app is running BEFORE deploying code
+    if ! ensure_app_running; then
+        print_error "Cannot deploy code -- app failed to start"
+        echo -e "  Try: ${CYAN}databricks apps start $APP_NAME${NC}"
         exit 1
     fi
 
-    # 5f. Start the app
-    print_step "Starting app..."
-    databricks apps start "$APP_NAME" $PROFILE_FLAG 2>/dev/null || true
+    # 4e. Deploy code to the running app
+    if ! deploy_app_code "$SOURCE_PATH"; then
+        print_error "App code deployment failed"
+        echo -e "  Try: ${CYAN}databricks apps deploy $APP_NAME --source-code-path $SOURCE_PATH${NC}"
+        exit 1
+    fi
 
-    # 5g. Wait for app to reach RUNNING state (with recovery attempt)
-    print_step "Waiting for app to start..."
+    # 4f. Wait for app to stabilize with new code
+    print_step "Waiting for app to stabilize..."
     APP_RUNNING=false
-    RECOVERY_ATTEMPTED=false
-    for CHECK in $(seq 1 12); do
-        FINAL_INFO=$(databricks apps get "$APP_NAME" $PROFILE_FLAG --output json 2>/dev/null) || true
-        if [[ -n "$FINAL_INFO" ]]; then
-            FINAL_STATE=$(echo "$FINAL_INFO" | python3 -c "import sys,json; print(json.load(sys.stdin).get('app_status',{}).get('state',''))" 2>/dev/null) || true
-            APP_URL=$(echo "$FINAL_INFO" | python3 -c "import sys,json; print(json.load(sys.stdin).get('url',''))" 2>/dev/null) || true
-            if [[ "$FINAL_STATE" == "RUNNING" ]]; then
-                print_success "App is RUNNING!"
-                APP_RUNNING=true
-                break
-            fi
-
-            if [[ $CHECK -eq 4 && "$RECOVERY_ATTEMPTED" != true && "$FINAL_STATE" == "UNAVAILABLE" ]]; then
-                RECOVERY_ATTEMPTED=true
-                print_warning "App stuck UNAVAILABLE after 4 checks. Attempting recovery..."
-                print_step "Re-deploying app code..."
-                databricks apps deploy "$APP_NAME" $PROFILE_FLAG --source-code-path "$SOURCE_PATH" 2>&1 || true
-                sleep 5
-                print_step "Restarting app..."
-                databricks apps stop "$APP_NAME" $PROFILE_FLAG 2>/dev/null || true
-                sleep 5
-                databricks apps start "$APP_NAME" $PROFILE_FLAG 2>/dev/null || true
-                print_step "Continuing to wait after recovery..."
-            fi
-        fi
-        echo -e "  App state: ${YELLOW}${FINAL_STATE:-UNKNOWN}${NC} -- waiting 15s ($CHECK/12)..."
+    for CHECK in $(seq 1 8); do
         sleep 15
+        FINAL_STATE=$(get_app_state)
+        APP_URL=$(databricks apps get "$APP_NAME" $PROFILE_FLAG --output json 2>/dev/null \
+          | python3 -c "import sys,json; print(json.load(sys.stdin).get('url',''))" 2>/dev/null) || true
+        if [[ "$FINAL_STATE" == "RUNNING" ]]; then
+            print_success "App is RUNNING!"
+            APP_RUNNING=true
+            break
+        fi
+        echo -e "  App state: ${YELLOW}$FINAL_STATE${NC} ($CHECK/8)"
     done
 
     if [[ "$APP_RUNNING" != true ]]; then
-        print_error "App failed to reach RUNNING state (final state: ${FINAL_STATE:-UNKNOWN})"
-        echo ""
-        echo -e "${YELLOW}Diagnostics:${NC}"
-        echo -e "  ${CYAN}databricks apps get $APP_NAME${NC}"
-        echo -e "  ${CYAN}databricks apps logs $APP_NAME${NC}"
-        echo -e "  ${CYAN}databricks apps deploy $APP_NAME --source-code-path $SOURCE_PATH${NC}"
-        echo ""
+        print_error "App did not stabilize (state: $FINAL_STATE)"
+        echo -e "  Check: ${CYAN}databricks apps get $APP_NAME${NC}"
+        echo -e "  Logs:  ${CYAN}databricks apps logs $APP_NAME${NC}"
     fi
 fi
 
