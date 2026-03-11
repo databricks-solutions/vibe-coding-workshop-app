@@ -228,6 +228,64 @@ if target_match:
 "
 }
 
+# Poll until a deleted app is fully removed from the API
+wait_for_app_deletion() {
+    local app_name=$1
+    local max_wait=60
+    local elapsed=0
+    local interval=5
+    print_step "Waiting for app '$app_name' to be fully removed..."
+    while [[ $elapsed -lt $max_wait ]]; do
+        if ! databricks apps get "$app_name" $PROFILE_FLAG 2>/dev/null | grep -q '"name"'; then
+            print_success "App '$app_name' confirmed deleted"
+            return 0
+        fi
+        sleep $interval
+        elapsed=$((elapsed + interval))
+        echo -e "  Still waiting... (${elapsed}s/${max_wait}s)"
+    done
+    print_warning "App deletion not confirmed after ${max_wait}s, proceeding anyway"
+    return 0
+}
+
+# Find and delete stale apps (CRASHED/UNAVAILABLE/ERROR) to free OAuth slots
+cleanup_stale_apps() {
+    local current_app=$1
+    print_step "Scanning workspace for stale apps to free OAuth integration slots..."
+    local stale_apps
+    stale_apps=$(databricks apps list --output json $PROFILE_FLAG 2>/dev/null | python3 -c "
+import sys, json
+try:
+    data = json.load(sys.stdin)
+    apps = data if isinstance(data, list) else data.get('apps', [])
+    current = sys.argv[1] if len(sys.argv) > 1 else ''
+    for app in apps:
+        name = app.get('name', '')
+        status = app.get('status', {})
+        state = status.get('state', '') if isinstance(status, dict) else ''
+        if name != current and state in ('CRASHED', 'UNAVAILABLE', 'ERROR', 'DELETED'):
+            print(name)
+except Exception:
+    pass
+" "$current_app") || true
+
+    if [[ -z "$stale_apps" ]]; then
+        print_warning "No stale apps found in this workspace"
+        return 1
+    fi
+
+    local count=0
+    while IFS= read -r app; do
+        [[ -z "$app" ]] && continue
+        print_step "Deleting stale app: $app"
+        databricks apps delete "$app" $PROFILE_FLAG 2>/dev/null || true
+        count=$((count + 1))
+    done <<< "$stale_apps"
+    print_success "Deleted $count stale app(s). Waiting for cleanup to propagate..."
+    sleep 15
+    return 0
+}
+
 # =============================================================================
 # Main Deployment Flow
 # =============================================================================
@@ -487,15 +545,12 @@ if [[ "$TABLES_ONLY" != true && "$PERMISSIONS_ONLY" != true ]]; then
         if echo "$DEPLOY_OUTPUT" | grep -q "already exists"; then
             print_warning "Detected pre-existing resources from a previous attempt. Cleaning up..."
 
-            # Check for app conflict (error spans multiple lines so check separately)
             if echo "$DEPLOY_OUTPUT" | grep -q "failed to create app\|databricks_app"; then
                 print_step "Removing pre-existing app: $APP_NAME"
                 databricks apps delete "$APP_NAME" $PROFILE_FLAG 2>/dev/null || true
-                sleep 5
-                print_success "Removed stale app"
+                wait_for_app_deletion "$APP_NAME"
             fi
 
-            # Check for Lakebase instance conflict
             if echo "$DEPLOY_OUTPUT" | grep -q "failed to create database\|databricks_database"; then
                 print_step "Removing pre-existing Lakebase instance: $LAKEBASE_INSTANCE"
                 databricks api delete "/api/2.0/database/instances/$LAKEBASE_INSTANCE" $PROFILE_FLAG 2>/dev/null || true
@@ -504,7 +559,39 @@ if [[ "$TABLES_ONLY" != true && "$PERMISSIONS_ONLY" != true ]]; then
             fi
 
             print_step "Retrying bundle deploy..."
-            databricks bundle deploy -t "$TARGET" $PROFILE_FLAG 2>&1
+            if ! databricks bundle deploy -t "$TARGET" $PROFILE_FLAG 2>&1; then
+                print_error "Bundle deploy failed on retry"
+                exit 1
+            fi
+
+        elif echo "$DEPLOY_OUTPUT" | grep -q "OAuth custom application\|1000.*OAuth"; then
+            print_warning "Hit the account-wide OAuth integration limit (max 1000)."
+            print_step "Attempting to free slots by removing stale apps in this workspace..."
+
+            if cleanup_stale_apps "$APP_NAME"; then
+                print_step "Retrying bundle deploy after stale app cleanup..."
+                if ! databricks bundle deploy -t "$TARGET" $PROFILE_FLAG 2>&1; then
+                    print_error "Bundle deploy still failed after cleanup."
+                    echo ""
+                    echo -e "${YELLOW}The OAuth integration limit is account-wide across all workspaces.${NC}"
+                    echo -e "${YELLOW}An account admin needs to clean up stale integrations:${NC}"
+                    echo -e "  1. Go to ${CYAN}Account Console → Settings → App connections${NC}"
+                    echo -e "  2. Delete integrations for apps that no longer exist"
+                    echo -e "  3. Or use: ${CYAN}databricks account custom-app-integration list${NC}"
+                    echo ""
+                    exit 1
+                fi
+            else
+                print_error "No stale apps to clean up in this workspace."
+                echo ""
+                echo -e "${YELLOW}The OAuth integration limit is account-wide across all workspaces.${NC}"
+                echo -e "${YELLOW}An account admin needs to clean up stale integrations:${NC}"
+                echo -e "  1. Go to ${CYAN}Account Console → Settings → App connections${NC}"
+                echo -e "  2. Delete integrations for apps that no longer exist"
+                echo -e "  3. Or use: ${CYAN}databricks account custom-app-integration list${NC}"
+                echo ""
+                exit 1
+            fi
         else
             print_error "Bundle deploy failed"
             exit 1
