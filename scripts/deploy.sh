@@ -549,6 +549,40 @@ if [[ "$BUNDLE_ONLY" == true ]]; then
 fi
 
 # =============================================================================
+# Wait for App Compute Readiness
+# =============================================================================
+# After bundle deploy creates the app, compute provisioning runs async.
+# We must wait for it to finish before deploying code in Step 2.
+# =============================================================================
+
+if [[ "$TABLES_ONLY" != true && "$PERMISSIONS_ONLY" != true ]]; then
+    print_step "Waiting for app compute to be ready..."
+    APP_READY=false
+    for CHECK in $(seq 1 20); do
+        APP_CHECK=$(databricks apps get "$APP_NAME" $PROFILE_FLAG --output json 2>/dev/null) || true
+        if [[ -n "$APP_CHECK" ]]; then
+            APP_STATE=$(echo "$APP_CHECK" | python3 -c "
+import sys, json
+data = json.load(sys.stdin)
+state = data.get('app_status', {}).get('state', 'UNKNOWN')
+print(state)" 2>/dev/null) || true
+
+            if [[ "$APP_STATE" == "RUNNING" || "$APP_STATE" == "IDLE" || "$APP_STATE" == "CRASHED" ]]; then
+                print_success "App compute ready (state: $APP_STATE)"
+                APP_READY=true
+                break
+            fi
+        fi
+        echo -e "  App state: ${YELLOW}${APP_STATE:-UNKNOWN}${NC} -- waiting 15s ($CHECK/20)..."
+        sleep 15
+    done
+
+    if [[ "$APP_READY" != true ]]; then
+        print_warning "App compute may not be fully ready (state: ${APP_STATE:-UNKNOWN}) -- proceeding anyway"
+    fi
+fi
+
+# =============================================================================
 # Step 2: Deploy App Source Code
 # =============================================================================
 

@@ -1,22 +1,51 @@
-# Vibe Coding Workshop
+<div align="center">
+  <h1>Vibe Coding Workshop</h1>
+  <p>An AI-powered interactive workshop that guides you through building a complete data application on Databricks — from defining your intent to deploying a production-ready solution with embedded best practices.</p>
+  <p>
+    <img src="https://img.shields.io/badge/React-19-61DAFB?style=for-the-badge&logo=react&logoColor=white" alt="React" />
+    <img src="https://img.shields.io/badge/TypeScript-5.9-3178C6?style=for-the-badge&logo=typescript&logoColor=white" alt="TypeScript" />
+    <img src="https://img.shields.io/badge/Databricks-FF3621?style=for-the-badge&logo=databricks&logoColor=white" alt="Databricks" />
+    <img src="https://img.shields.io/badge/Vite-7-646CFF?style=for-the-badge&logo=vite&logoColor=white" alt="Vite" />
+  </p>
+</div>
 
-An AI-powered interactive workshop that guides you through building a complete data application on Databricks — from defining your intent to deploying a production-ready solution with embedded best practices.
+<div align="center">
+  <a href="https://www.youtube.com/watch?v=MUa5kbIV1Lc">
+    <img src="https://img.youtube.com/vi/MUa5kbIV1Lc/maxresdefault.jpg" alt="Workshop Walkthrough" width="70%" />
+  </a>
+  <br/><br/>
+  <a href="https://www.youtube.com/watch?v=MUa5kbIV1Lc">
+    <img src="https://img.shields.io/badge/▶_Watch_Walkthrough-YouTube-FF0000?style=for-the-badge&logo=youtube&logoColor=white" alt="Watch on YouTube" />
+  </a>
+</div>
+
+<h2 align="center">Choose Your Path</h2>
 
 <table>
-<tr>
-<td width="60%">
-<img src="docs/images/workshop-overview.gif" alt="Workshop Overview" width="100%" />
-</td>
-<td width="40%" align="center">
-<a href="https://www.youtube.com/watch?v=MUa5kbIV1Lc">
-<img src="https://img.youtube.com/vi/MUa5kbIV1Lc/maxresdefault.jpg" alt="Workshop Walkthrough" width="100%" />
-</a>
-<br />
-<a href="https://www.youtube.com/watch?v=MUa5kbIV1Lc">
-<img src="https://img.shields.io/badge/▶_Watch_Walkthrough-YouTube-FF0000?style=for-the-badge&logo=youtube&logoColor=white" alt="Watch on YouTube" />
-</a>
-</td>
-</tr>
+  <tr>
+    <td align="center" width="50%">
+      <h3>Build a Sample Booking App</h3>
+      <p><em>Follow the guided workshop with a pre-built use case</em></p>
+      <img src="docs/images/workshop-overview.gif" alt="Workshop Overview" width="100%"/>
+    </td>
+    <td align="center" width="50%">
+      <h3>Define Your Own Use Case</h3>
+      <p><em>Bring your own idea and let AI generate the prompts</em></p>
+      <img src="docs/images/Creating%20your%20own%20custom%20usecase.gif" alt="Custom Use Case" width="100%"/>
+    </td>
+  </tr>
+  <tr>
+    <td align="center" width="50%">
+      <h3>Build a New Agent Skill</h3>
+      <p><em>Extend the platform with custom AI agent capabilities</em></p>
+      <img src="docs/images/Building%20a%20new%20Agent%20Skill.gif" alt="Agent Skill" width="100%"/>
+    </td>
+    <td align="center" width="50%">
+      <h3>Use a Specific Accelerator</h3>
+      <p><em>Jump-start development with pre-built solution patterns</em></p>
+      <img src="docs/images/Using%20specific%20accelerators.gif" alt="Accelerators" width="100%"/>
+    </td>
+  </tr>
 </table>
 
 ---
