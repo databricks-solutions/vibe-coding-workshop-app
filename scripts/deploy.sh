@@ -711,8 +711,7 @@ except:
             fi
         else
             echo "$DEPLOY_RESULT"
-            print_warning "App code sync may need verification -- Step 5 will handle final deploy"
-            APP_DEPLOY_OK=true
+            print_warning "Initial app code deploy did not succeed -- Step 5 will retry"
             break
         fi
     done
@@ -970,6 +969,7 @@ except:
 
     # 5e. Deploy app code (with retry for active deployments)
     print_step "Deploying app code..."
+    echo "  Source path: $SOURCE_PATH"
     APP_DEPLOY_OK=false
     for ATTEMPT in 1 2 3 4 5; do
         DEPLOY_RESULT=$(databricks apps deploy "$APP_NAME" $PROFILE_FLAG --source-code-path "$SOURCE_PATH" 2>&1) || true
@@ -983,24 +983,59 @@ except:
                 print_warning "Active deployment in progress, waiting 15s (attempt $ATTEMPT/5)..."
                 sleep 15
             else
-                print_warning "Forcing app start despite pending deployment"
-                APP_DEPLOY_OK=true
+                print_warning "Active deployment still in progress after 5 attempts"
             fi
         else
             echo "$DEPLOY_RESULT"
-            APP_DEPLOY_OK=true
-            break
+            print_error "App code deploy returned unexpected output (attempt $ATTEMPT/5)"
+            if [[ $ATTEMPT -lt 5 ]]; then
+                sleep 10
+            fi
         fi
     done
+
+    # 5e-verify. Confirm the app has an active deployment
+    if [[ "$APP_DEPLOY_OK" == true ]]; then
+        print_step "Verifying app deployment exists..."
+        VERIFY_INFO=$(databricks apps get "$APP_NAME" $PROFILE_FLAG --output json 2>/dev/null) || true
+        HAS_DEPLOYMENT=$(echo "$VERIFY_INFO" | python3 -c "
+import sys, json
+try:
+    data = json.load(sys.stdin)
+    ad = data.get('active_deployment', {})
+    if ad and ad.get('source_code_path', ''):
+        print('yes')
+    else:
+        print('no')
+except: print('no')
+" 2>/dev/null) || true
+        if [[ "$HAS_DEPLOYMENT" == "yes" ]]; then
+            print_success "Active deployment confirmed"
+        else
+            print_warning "No active deployment detected despite success -- will verify after start"
+        fi
+    fi
+
+    if [[ "$APP_DEPLOY_OK" != true ]]; then
+        print_error "Failed to deploy app code after 5 attempts"
+        echo ""
+        echo -e "${YELLOW}Source path used: ${CYAN}$SOURCE_PATH${NC}"
+        echo -e "${YELLOW}Try manually:${NC}"
+        echo -e "  ${CYAN}databricks apps deploy $APP_NAME --source-code-path $SOURCE_PATH${NC}"
+        echo -e "  ${CYAN}databricks apps get $APP_NAME${NC}"
+        echo ""
+        exit 1
+    fi
 
     # 5f. Start the app
     print_step "Starting app..."
     databricks apps start "$APP_NAME" $PROFILE_FLAG 2>/dev/null || true
 
-    # 5g. Wait for app to reach RUNNING state
+    # 5g. Wait for app to reach RUNNING state (with recovery attempt)
     print_step "Waiting for app to start..."
     APP_RUNNING=false
-    for CHECK in 1 2 3 4 5 6 7 8 9 10; do
+    RECOVERY_ATTEMPTED=false
+    for CHECK in $(seq 1 12); do
         FINAL_INFO=$(databricks apps get "$APP_NAME" $PROFILE_FLAG --output json 2>/dev/null) || true
         if [[ -n "$FINAL_INFO" ]]; then
             FINAL_STATE=$(echo "$FINAL_INFO" | python3 -c "import sys,json; print(json.load(sys.stdin).get('app_status',{}).get('state',''))" 2>/dev/null) || true
@@ -1010,14 +1045,32 @@ except:
                 APP_RUNNING=true
                 break
             fi
+
+            if [[ $CHECK -eq 4 && "$RECOVERY_ATTEMPTED" != true && "$FINAL_STATE" == "UNAVAILABLE" ]]; then
+                RECOVERY_ATTEMPTED=true
+                print_warning "App stuck UNAVAILABLE after 4 checks. Attempting recovery..."
+                print_step "Re-deploying app code..."
+                databricks apps deploy "$APP_NAME" $PROFILE_FLAG --source-code-path "$SOURCE_PATH" 2>&1 || true
+                sleep 5
+                print_step "Restarting app..."
+                databricks apps stop "$APP_NAME" $PROFILE_FLAG 2>/dev/null || true
+                sleep 5
+                databricks apps start "$APP_NAME" $PROFILE_FLAG 2>/dev/null || true
+                print_step "Continuing to wait after recovery..."
+            fi
         fi
-        echo -e "  App state: ${YELLOW}${FINAL_STATE:-UNKNOWN}${NC} -- waiting 15s ($CHECK/10)..."
+        echo -e "  App state: ${YELLOW}${FINAL_STATE:-UNKNOWN}${NC} -- waiting 15s ($CHECK/12)..."
         sleep 15
     done
 
     if [[ "$APP_RUNNING" != true ]]; then
-        print_warning "App not yet RUNNING (state: $FINAL_STATE). It may need more time to start."
-        echo -e "  Check manually: ${BLUE}databricks apps get $APP_NAME${NC}"
+        print_error "App failed to reach RUNNING state (final state: ${FINAL_STATE:-UNKNOWN})"
+        echo ""
+        echo -e "${YELLOW}Diagnostics:${NC}"
+        echo -e "  ${CYAN}databricks apps get $APP_NAME${NC}"
+        echo -e "  ${CYAN}databricks apps logs $APP_NAME${NC}"
+        echo -e "  ${CYAN}databricks apps deploy $APP_NAME --source-code-path $SOURCE_PATH${NC}"
+        echo ""
     fi
 fi
 
@@ -1025,31 +1078,47 @@ fi
 # Final Summary
 # =============================================================================
 
-print_header "DEPLOYMENT COMPLETE"
+if [[ "$APP_RUNNING" == true ]]; then
+    print_header "DEPLOYMENT COMPLETE"
+    echo -e "${GREEN}✓ All deployment steps completed successfully!${NC}"
+    echo ""
 
-echo -e "${GREEN}✓ All deployment steps completed successfully!${NC}"
-echo ""
+    if [[ "$TABLES_ONLY" != true ]]; then
+        echo -e "${BOLD}Resources:${NC}"
+        echo -e "  App URL:           ${CYAN}$APP_URL${NC}"
+        echo -e "  Lakebase Instance: ${CYAN}$LAKEBASE_INSTANCE${NC}"
+        echo -e "  Catalog:           ${CYAN}$LAKEBASE_CATALOG${NC}"
+        echo -e "  Schema:            ${CYAN}$LAKEBASE_SCHEMA${NC}"
+        echo ""
+    fi
 
-if [[ "$TABLES_ONLY" != true ]]; then
-    echo -e "${BOLD}Resources:${NC}"
-    echo -e "  App URL:           ${CYAN}$APP_URL${NC}"
+    echo -e "${BOLD}Quick Commands:${NC}"
+    echo -e "  Quick code sync:      ${BLUE}./scripts/deploy.sh --code-only -t $TARGET${NC}"
+    echo -e "  Watch mode:           ${BLUE}./scripts/deploy.sh --watch -t $TARGET${NC}"
+    echo -e "  Full redeploy:        ${BLUE}./scripts/deploy.sh -t $TARGET${NC}"
+    echo ""
+    echo -e "${BOLD}${GREEN}🚀 App is live at: $APP_URL${NC}"
+
+elif [[ "$TABLES_ONLY" == true || "$CODE_ONLY" == true ]]; then
+    print_header "DEPLOYMENT COMPLETE"
+    echo -e "${GREEN}✓ Deployment steps completed.${NC}"
+    echo ""
+
+else
+    print_header "DEPLOYMENT INCOMPLETE"
+    echo -e "${RED}✗ App did not reach RUNNING state (final state: ${FINAL_STATE:-UNKNOWN})${NC}"
+    echo ""
+    echo -e "${BOLD}Resources deployed:${NC}"
+    echo -e "  App URL:           ${CYAN}${APP_URL:-unknown}${NC}"
     echo -e "  Lakebase Instance: ${CYAN}$LAKEBASE_INSTANCE${NC}"
     echo -e "  Catalog:           ${CYAN}$LAKEBASE_CATALOG${NC}"
     echo -e "  Schema:            ${CYAN}$LAKEBASE_SCHEMA${NC}"
     echo ""
-fi
-
-echo -e "${BOLD}Quick Commands:${NC}"
-echo -e "  Check app status:     ${BLUE}databricks apps get $APP_NAME${NC}"
-echo -e "  View app logs:        ${BLUE}databricks apps logs $APP_NAME${NC}"
-echo -e "  Quick code sync:      ${BLUE}./scripts/deploy.sh --code-only -t $TARGET${NC}"
-echo -e "  Watch mode:           ${BLUE}./scripts/deploy.sh --watch -t $TARGET${NC}"
-echo -e "  Full redeploy:        ${BLUE}./scripts/deploy.sh -t $TARGET${NC}"
-echo -e "  Recreate tables:      ${BLUE}./scripts/setup-lakebase.sh --recreate${NC}"
-echo ""
-
-if [[ -n "$APP_URL" ]]; then
+    echo -e "${BOLD}Troubleshooting:${NC}"
+    echo -e "  Check app status:     ${BLUE}databricks apps get $APP_NAME${NC}"
+    echo -e "  View app logs:        ${BLUE}databricks apps logs $APP_NAME${NC}"
+    echo -e "  Retry full deploy:    ${BLUE}./vibe2value deploy --full${NC}"
     echo ""
-    echo -e "${BOLD}${GREEN}🚀 App is live at: $APP_URL${NC}"
+    exit 1
 fi
 
