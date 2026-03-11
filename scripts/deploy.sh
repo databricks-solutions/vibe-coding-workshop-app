@@ -834,7 +834,7 @@ if [[ "$TABLES_ONLY" != true && "$SKIP_PERMISSIONS" != true ]]; then
             else
                 ACCT_ROLE_RESULT=$(databricks api post "/api/2.0/database/instances/$LAKEBASE_INSTANCE/roles" \
                     $PROFILE_FLAG \
-                    --json '{"name": "account users", "identity_type": "GROUP", "membership_role": "DATABRICKS_SUPERUSER", "attributes": ["CREATEDB", "CREATEROLE", "BYPASSRLS"]}' 2>&1) || true
+                    --json '{"name": "account users", "identity_type": "GROUP", "membership_role": "DATABRICKS_SUPERUSER", "attributes": {"createdb": true, "createrole": true, "bypassrls": true}}' 2>&1) || true
 
                 if echo "$ACCT_ROLE_RESULT" | grep -q "DATABRICKS_SUPERUSER\|GROUP"; then
                     print_success "Lakebase role granted: DATABRICKS_SUPERUSER for account users (all workspace users)"
@@ -848,7 +848,7 @@ if [[ "$TABLES_ONLY" != true && "$SKIP_PERMISSIONS" != true ]]; then
             print_step "Granting CAN_USE on Lakebase instance to account users..."
             INSTANCE_PERM_RESULT=$(databricks api patch "/api/2.0/permissions/database-instances/$LAKEBASE_INSTANCE" \
                 $PROFILE_FLAG \
-                --json '{"access_control_list": [{"group_name": "account users", "all_permissions": [{"permission_level": "CAN_USE"}]}]}' 2>&1) || true
+                --json '{"access_control_list": [{"group_name": "account users", "permission_level": "CAN_USE"}]}' 2>&1) || true
 
             if echo "$INSTANCE_PERM_RESULT" | grep -q "access_control_list\|CAN_USE"; then
                 print_success "CAN_USE granted on Lakebase instance for account users"
@@ -887,7 +887,7 @@ if [[ "$TABLES_ONLY" != true && "$SKIP_PERMISSIONS" != true ]]; then
         print_step "2d. Granting CAN_USE on app to all workspace users..."
         APP_PERM_RESULT=$(databricks api patch "/api/2.0/permissions/apps/$APP_NAME" \
             $PROFILE_FLAG \
-            --json '{"access_control_list": [{"group_name": "users", "all_permissions": [{"permission_level": "CAN_USE"}]}]}' 2>&1) || true
+            --json '{"access_control_list": [{"group_name": "users", "permission_level": "CAN_USE"}]}' 2>&1) || true
 
         if echo "$APP_PERM_RESULT" | grep -q "access_control_list\|CAN_USE"; then
             print_success "CAN_USE granted on app for all workspace users"
@@ -1110,7 +1110,7 @@ except: print('no')
         VERIFY_ISSUES=$((VERIFY_ISSUES + 1))
         databricks api post "/api/2.0/database/instances/$LAKEBASE_INSTANCE/roles" \
             $PROFILE_FLAG \
-            --json '{"name": "account users", "identity_type": "GROUP", "membership_role": "DATABRICKS_SUPERUSER", "attributes": ["CREATEDB", "CREATEROLE", "BYPASSRLS"]}' 2>/dev/null || true
+            --json '{"name": "account users", "identity_type": "GROUP", "membership_role": "DATABRICKS_SUPERUSER", "attributes": {"createdb": true, "createrole": true, "bypassrls": true}}' 2>/dev/null || true
     fi
 
     # ── Check 3: Lakebase Instance CAN_USE ───────────────────────────────
@@ -1124,7 +1124,7 @@ except: print('no')
         VERIFY_ISSUES=$((VERIFY_ISSUES + 1))
         databricks api patch "/api/2.0/permissions/database-instances/$LAKEBASE_INSTANCE" \
             $PROFILE_FLAG \
-            --json '{"access_control_list": [{"group_name": "account users", "all_permissions": [{"permission_level": "CAN_USE"}]}]}' 2>/dev/null || true
+            --json '{"access_control_list": [{"group_name": "account users", "permission_level": "CAN_USE"}]}' 2>/dev/null || true
     fi
 
     # ── Check 4: App CAN_USE ─────────────────────────────────────────────
@@ -1138,7 +1138,7 @@ except: print('no')
         VERIFY_ISSUES=$((VERIFY_ISSUES + 1))
         databricks api patch "/api/2.0/permissions/apps/$APP_NAME" \
             $PROFILE_FLAG \
-            --json '{"access_control_list": [{"group_name": "users", "all_permissions": [{"permission_level": "CAN_USE"}]}]}' 2>/dev/null || true
+            --json '{"access_control_list": [{"group_name": "users", "permission_level": "CAN_USE"}]}' 2>/dev/null || true
     fi
 
     # ── Check 5: Unity Catalog Permissions ───────────────────────────────
