@@ -4919,7 +4919,7 @@ databricks auth login --host {workspace_url}
 
 Create file `apps_lakebase/db/lakebase/ddl/05_app_tables.sql` with CREATE TABLE statements for ALL entities needed by the UI:
 - Use PostgreSQL syntax
-- Use `${schema}` as schema placeholder (setup-lakebase.sh substitutes your schema name at deploy time)
+- Use `{user_schema_prefix}` as your schema name (e.g. varunrao_b_booking_app)
 - Include primary keys, foreign keys, indexes
 - Include created_at/updated_at timestamps
 
@@ -4931,7 +4931,7 @@ Create file `apps_lakebase/db/lakebase/ddl/05_app_tables.sql` with CREATE TABLE 
 
 Create file `apps_lakebase/db/lakebase/dml_seed/04_seed_app_data.sql` with INSERT statements:
 - 10-15 realistic records per table for {industry_name} industry
-- Use `${schema}` as schema placeholder (must match DDL files)
+- Use `{user_schema_prefix}` as your schema name (must match DDL files)
 - Insert parent tables before child tables (e.g., hosts before listings, listings before reviews)
 
 **DML Guidelines for Lakebase:**
