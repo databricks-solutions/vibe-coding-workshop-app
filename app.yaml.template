@@ -32,6 +32,12 @@ env:
   # ---------------------------------------------------------------------------
   # Lakebase PostgreSQL Configuration
   # ---------------------------------------------------------------------------
+  # LAKEBASE_HOST: The PostgreSQL endpoint hostname.
+  #   - Provisioned mode: hostname of the provisioned database instance
+  #     (e.g., "my-instance.cloud.databricks.com")
+  #   - Autoscaling mode: auto-discovered endpoint hostname
+  #     (e.g., "ep-xxxx-yyyy.database.us-east-1.cloud.databricks.com")
+  #   Set automatically by deploy.sh after Lakebase infrastructure is created.
   - name: LAKEBASE_HOST
     value: "__LAKEBASE_HOST__"
   
@@ -45,13 +51,17 @@ env:
     value: "5432"
   
   # NOTE: LAKEBASE_USER is NOT set here. When running on Databricks Apps,
-  # the Lakebase resource link (Step 4c) injects PGUSER automatically with
-  # the correct service principal identity. Hardcoding a user email here
-  # causes auth failures because the app runs as a service principal.
+  # the app's service principal identity is used automatically.
+  # - Autoscaling mode: uses DATABRICKS_CLIENT_ID (injected by platform)
+  # - Provisioned mode: uses PGUSER (injected via resource link in Step 4c)
+  # Hardcoding a user email here causes auth failures.
   
-  # Lakebase Autoscaling endpoint name (format: projects/{id}/branches/{id}/endpoints/{id})
-  # When set, the app uses Autoscaling mode with SDK token rotation.
-  # When empty, falls back to Provisioned mode (PGPASSWORD from resource link).
+  # ENDPOINT_NAME: Lakebase Autoscaling endpoint resource path.
+  # Format: projects/{project_id}/branches/{branch_id}/endpoints/{endpoint_id}
+  # When set, the app uses Autoscaling mode with OAuth token rotation
+  # via the Databricks SDK (databricks-sdk generate_database_credential).
+  # When empty, the app falls back to Provisioned mode using PGPASSWORD
+  # injected by the Lakebase resource link.
   - name: ENDPOINT_NAME
     value: "__ENDPOINT_NAME__"
 
