@@ -13,10 +13,13 @@ aiofiles>=23.0.0  # Required for serving static files
 pyyaml>=6.0.0     # For loading prompts_config.yaml
 
 # Databricks SDK for OAuth and workspace integration
-databricks-sdk>=0.20.0
+# v0.81.0+ required for postgres.generate_database_credential() (Lakebase Autoscaling)
+databricks-sdk>=0.81.0
 
 # Lakebase (PostgreSQL) connectivity
-# Reference: https://github.com/databricks-solutions/lakebase-fastapi-app
+# psycopg3 with binary driver and connection pool support (Autoscaling token rotation)
+psycopg[binary,pool]>=3.1.0
+# psycopg2 kept as fallback for legacy Provisioned deployments
 psycopg2-binary>=2.9.0
 
 # PDF processing for Use Case Builder file uploads (renders pages as images + extracts text)

@@ -49,6 +49,12 @@ env:
   # the correct service principal identity. Hardcoding a user email here
   # causes auth failures because the app runs as a service principal.
   
+  # Lakebase Autoscaling endpoint name (format: projects/{id}/branches/{id}/endpoints/{id})
+  # When set, the app uses Autoscaling mode with SDK token rotation.
+  # When empty, falls back to Provisioned mode (PGPASSWORD from resource link).
+  - name: ENDPOINT_NAME
+    value: "__ENDPOINT_NAME__"
+
   # Toggle Lakebase (set to "false" for YAML fallback)
   - name: USE_LAKEBASE
     value: "true"

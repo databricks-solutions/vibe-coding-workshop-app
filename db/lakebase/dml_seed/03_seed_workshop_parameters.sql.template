@@ -61,14 +61,14 @@ VALUES
  CURRENT_TIMESTAMP,
  CURRENT_USER);
 
--- Parameter 3: Lakebase Instance Name
+-- Parameter 3: Lakebase Instance/Project Name
 INSERT INTO ${schema}.workshop_parameters 
 (param_key, param_label, param_value, param_description, param_type, display_order, is_required, is_active, allow_session_override, inserted_at, updated_at, created_by)
 VALUES
 ('lakebase_instance_name', 
- 'Lakebase Instance Name', 
+ 'Lakebase Instance/Project Name', 
  '__LAKEBASE_INSTANCE_NAME__',
- 'The name of the Lakebase PostgreSQL instance for your application. This is used for OLTP database operations and appears in Steps 5 and 6.',
+ 'The name of the Lakebase PostgreSQL instance (Provisioned) or project (Autoscaling). Used for OLTP database operations and appears in Steps 5 and 6.',
  'text',
  3,
  TRUE,

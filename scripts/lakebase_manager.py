@@ -285,23 +285,27 @@ def deploy_app_source(host: str, token: str, app_name: str, source_path: str) ->
         return False
 
 
+def _roles_api_path(instance_name: str, mode: str = "provisioned", branch: str = "") -> str:
+    """Build the roles REST API path.
+    
+    For autoscaling, roles live at the branch level:
+        /api/2.0/postgres/projects/{pid}/branches/{bid}/roles
+    For provisioned, roles live at the instance level:
+        /api/2.0/database/instances/{name}/roles
+    """
+    if mode == "autoscaling":
+        if branch:
+            return f"/api/2.0/postgres/{branch}/roles"
+        return f"/api/2.0/postgres/projects/{instance_name}/branches/production/roles"
+    return f"/api/2.0/database/instances/{instance_name}/roles"
+
+
 def add_lakebase_role(host: str, token: str, instance_name: str, principal_id: str, 
                       identity_type: str = "SERVICE_PRINCIPAL", 
-                      membership_role: str = "DATABRICKS_SUPERUSER") -> bool:
-    """
-    Add a database role to a Lakebase instance.
-    
-    Args:
-        host: Databricks workspace URL
-        token: OAuth token
-        instance_name: Lakebase instance name
-        principal_id: Service principal ID or user email
-        identity_type: USER or SERVICE_PRINCIPAL
-        membership_role: DATABRICKS_SUPERUSER, etc.
-    
-    Returns:
-        True if successful, False otherwise
-    """
+                      membership_role: str = "DATABRICKS_SUPERUSER",
+                      mode: str = "provisioned",
+                      branch: str = "") -> bool:
+    """Add a database role to a Lakebase instance (provisioned) or branch (autoscaling)."""
     import requests
     
     headers = {
@@ -317,7 +321,7 @@ def add_lakebase_role(host: str, token: str, instance_name: str, principal_id: s
     
     try:
         response = requests.post(
-            f"{host}/api/2.0/database/instances/{instance_name}/roles",
+            f"{host}{_roles_api_path(instance_name, mode, branch)}",
             headers=headers,
             json=payload
         )
@@ -339,18 +343,9 @@ def add_lakebase_role(host: str, token: str, instance_name: str, principal_id: s
         return False
 
 
-def get_lakebase_roles(host: str, token: str, instance_name: str) -> list:
-    """
-    Get all database roles for a Lakebase instance.
-    
-    Args:
-        host: Databricks workspace URL
-        token: OAuth token
-        instance_name: Lakebase instance name
-    
-    Returns:
-        List of role dictionaries
-    """
+def get_lakebase_roles(host: str, token: str, instance_name: str,
+                       mode: str = "provisioned", branch: str = "") -> list:
+    """Get all database roles for a Lakebase instance (provisioned) or branch (autoscaling)."""
     import requests
     
     headers = {
@@ -360,12 +355,13 @@ def get_lakebase_roles(host: str, token: str, instance_name: str) -> list:
     
     try:
         response = requests.get(
-            f"{host}/api/2.0/database/instances/{instance_name}/roles",
+            f"{host}{_roles_api_path(instance_name, mode, branch)}",
             headers=headers
         )
         
         if response.status_code == 200:
-            return response.json().get('database_instance_roles', [])
+            data = response.json()
+            return data.get('database_instance_roles', data.get('roles', []))
         else:
             print(f"⚠️  Get roles returned: {response.status_code}")
             return []
@@ -394,23 +390,14 @@ def get_app_resources(host: str, token: str, app_name: str) -> list:
 
 def link_app_resource(host: str, token: str, app_name: str, instance_name: str,
                       database_name: str = "databricks_postgres",
-                      permission: str = "CAN_CONNECT_AND_CREATE") -> bool:
+                      permission: str = "CAN_CONNECT_AND_CREATE",
+                      mode: str = "provisioned") -> bool:
     """
-    Link a Lakebase instance to a Databricks App as an App Resource.
-    
-    This enables automatic PGPASSWORD injection at runtime.
-    Visible in: Databricks UI > Apps > Settings > App Resources
-    
-    Args:
-        host: Databricks workspace URL
-        token: OAuth token
-        app_name: Name of the app
-        instance_name: Lakebase instance name
-        database_name: Database name (default: databricks_postgres)
-        permission: Permission level (default: CAN_CONNECT_AND_CREATE)
-    
-    Returns:
-        True if successful, False otherwise
+    Link a Lakebase instance/project to a Databricks App as an App Resource.
+
+    For Provisioned: links the database instance directly.
+    For Autoscaling: links the postgres project.
+    Both enable automatic PGHOST/PGUSER injection at runtime.
     """
     import requests
     
@@ -418,19 +405,17 @@ def link_app_resource(host: str, token: str, app_name: str, instance_name: str,
         "Authorization": f"Bearer {token}",
         "Content-Type": "application/json"
     }
-    
-    payload = {
-        "resources": [
-            {
-                "name": "database",
-                "database": {
-                    "instance_name": instance_name,
-                    "database_name": database_name,
-                    "permission": permission
-                }
-            }
-        ]
+
+    resource_entry = {
+        "name": "database",
+        "database": {
+            "instance_name": instance_name,
+            "database_name": database_name,
+            "permission": permission
+        }
     }
+    
+    payload = {"resources": [resource_entry]}
     
     try:
         response = requests.patch(
@@ -445,7 +430,7 @@ def link_app_resource(host: str, token: str, app_name: str, instance_name: str,
             for r in resources:
                 db = r.get('database', {})
                 if db.get('instance_name') == instance_name:
-                    print(f"   Instance: {db.get('instance_name')}")
+                    print(f"   Instance/Project: {db.get('instance_name')}")
                     print(f"   Database: {db.get('database_name')}")
                     print(f"   Permission: {db.get('permission')}")
                     return True
@@ -460,26 +445,31 @@ def link_app_resource(host: str, token: str, app_name: str, instance_name: str,
 
 
 def check_lakebase_connection(config: Config, token: str) -> Tuple[bool, Dict[str, int]]:
-    """
-    Check Lakebase connectivity and return table counts.
-    
-    Returns:
-        Tuple of (success: bool, table_counts: dict)
-    """
-    import psycopg2
-    
+    """Check Lakebase connectivity and return table counts."""
     if not config.LAKEBASE_HOST:
         return False, {"error": "LAKEBASE_HOST not configured"}
     
     try:
-        conn = psycopg2.connect(
-            host=config.LAKEBASE_HOST,
-            port=config.LAKEBASE_PORT,
-            database=config.LAKEBASE_DATABASE,
-            user=config.LAKEBASE_USER,
-            password=token,
-            sslmode='require'
-        )
+        try:
+            import psycopg
+            conn = psycopg.connect(
+                host=config.LAKEBASE_HOST,
+                port=config.LAKEBASE_PORT,
+                dbname=config.LAKEBASE_DATABASE,
+                user=config.LAKEBASE_USER,
+                password=token,
+                sslmode='require'
+            )
+        except ImportError:
+            import psycopg2
+            conn = psycopg2.connect(
+                host=config.LAKEBASE_HOST,
+                port=config.LAKEBASE_PORT,
+                database=config.LAKEBASE_DATABASE,
+                user=config.LAKEBASE_USER,
+                password=token,
+                sslmode='require'
+            )
         cursor = conn.cursor()
         
         tables = ['usecase_descriptions', 'section_input_prompts', 'sessions']
@@ -693,7 +683,7 @@ def action_full_info(config: Config) -> int:
         return 1
 
 
-def action_add_lakebase_role(config: Config) -> int:
+def action_add_lakebase_role(config: Config, mode: str = "provisioned", branch: str = "") -> int:
     """Add app service principal as Lakebase database role."""
     print("🔐 Adding Lakebase Database Role\n")
     
@@ -710,11 +700,11 @@ def action_add_lakebase_role(config: Config) -> int:
     
     print(f"App: {config.APP_NAME}")
     print(f"Service Principal: {sp_id}")
-    print(f"Lakebase Instance: {config.LAKEBASE_INSTANCE_NAME}")
+    print(f"Lakebase Instance: {config.LAKEBASE_INSTANCE_NAME} ({mode})")
     print()
     
     # Check if role already exists
-    existing_roles = get_lakebase_roles(config.DATABRICKS_HOST, token, config.LAKEBASE_INSTANCE_NAME)
+    existing_roles = get_lakebase_roles(config.DATABRICKS_HOST, token, config.LAKEBASE_INSTANCE_NAME, mode=mode)
     for role in existing_roles:
         if role.get('name') == sp_id:
             print(f"⚠️  Role already exists: {role.get('membership_role')}")
@@ -722,7 +712,7 @@ def action_add_lakebase_role(config: Config) -> int:
     
     # Add the role
     print(f"Adding DATABRICKS_SUPERUSER role...")
-    if add_lakebase_role(config.DATABRICKS_HOST, token, config.LAKEBASE_INSTANCE_NAME, sp_id):
+    if add_lakebase_role(config.DATABRICKS_HOST, token, config.LAKEBASE_INSTANCE_NAME, sp_id, mode=mode, branch=branch):
         print(f"\n✓ Successfully added Lakebase role for {sp_id}")
         return 0
     else:
@@ -730,7 +720,7 @@ def action_add_lakebase_role(config: Config) -> int:
         return 1
 
 
-def action_list_lakebase_roles(config: Config) -> int:
+def action_list_lakebase_roles(config: Config, mode: str = "provisioned", branch: str = "") -> int:
     """List all Lakebase database roles."""
     print("📋 Lakebase Database Roles\n")
     
@@ -738,9 +728,9 @@ def action_list_lakebase_roles(config: Config) -> int:
     if not token:
         return 1
     
-    print(f"Instance: {config.LAKEBASE_INSTANCE_NAME}\n")
+    print(f"Instance: {config.LAKEBASE_INSTANCE_NAME} ({mode})\n")
     
-    roles = get_lakebase_roles(config.DATABRICKS_HOST, token, config.LAKEBASE_INSTANCE_NAME)
+    roles = get_lakebase_roles(config.DATABRICKS_HOST, token, config.LAKEBASE_INSTANCE_NAME, mode=mode, branch=branch)
     
     if not roles:
         print("No roles found")
@@ -754,47 +744,41 @@ def action_list_lakebase_roles(config: Config) -> int:
     return 0
 
 
-def action_link_app_resource(config: Config) -> int:
-    """
-    Link Lakebase instance to app as an App Resource.
-    
-    This enables automatic PGPASSWORD injection at runtime.
-    Critical for the app to connect to Lakebase without manual credential management.
-    """
-    print("🔗 Linking Lakebase Instance to App Resource\n")
+def action_link_app_resource(config: Config, mode: str = "provisioned") -> int:
+    """Link Lakebase instance/project to app as an App Resource."""
+    print("🔗 Linking Lakebase to App Resource\n")
     
     token = get_databricks_token(config.DATABRICKS_HOST)
     if not token:
         return 1
     
     print(f"App: {config.APP_NAME}")
-    print(f"Lakebase Instance: {config.LAKEBASE_INSTANCE_NAME}")
+    print(f"Lakebase: {config.LAKEBASE_INSTANCE_NAME} ({mode})")
     print()
     
-    # Check if resource already exists
     existing_resources = get_app_resources(config.DATABRICKS_HOST, token, config.APP_NAME)
     
     for resource in existing_resources:
         db = resource.get('database', {})
         if db.get('instance_name') == config.LAKEBASE_INSTANCE_NAME:
-            print(f"⚠️  Lakebase instance already linked to app")
-            print(f"   Instance: {db.get('instance_name')}")
+            print(f"⚠️  Lakebase already linked to app")
+            print(f"   Instance/Project: {db.get('instance_name')}")
             print(f"   Permission: {db.get('permission')}")
             return 0
     
-    # Link the Lakebase instance as app resource
-    print(f"Linking Lakebase instance with CAN_CONNECT_AND_CREATE permission...")
+    print(f"Linking with CAN_CONNECT_AND_CREATE permission...")
     if link_app_resource(
         config.DATABRICKS_HOST, 
         token, 
         config.APP_NAME, 
-        config.LAKEBASE_INSTANCE_NAME
+        config.LAKEBASE_INSTANCE_NAME,
+        mode=mode
     ):
-        print(f"\n✓ Successfully linked Lakebase instance to app")
+        print(f"\n✓ Successfully linked Lakebase to app")
         print(f"   Visible in: Databricks UI > Apps > {config.APP_NAME} > Settings > App Resources")
         return 0
     else:
-        print(f"\n❌ Failed to link Lakebase instance to app")
+        print(f"\n❌ Failed to link Lakebase to app")
         return 1
 
 
@@ -979,6 +963,18 @@ NOTE: Lakebase management APIs are not yet publicly available.
         help="Source code path (for deploy action)"
     )
     
+    parser.add_argument(
+        "--mode",
+        choices=["autoscaling", "provisioned"],
+        default=os.getenv("LAKEBASE_MODE", "provisioned"),
+        help="Lakebase mode: autoscaling or provisioned (default from LAKEBASE_MODE env)"
+    )
+    parser.add_argument(
+        "--branch",
+        default=os.getenv("AUTOSCALING_BRANCH", ""),
+        help="Branch resource path for autoscaling roles (e.g. projects/{id}/branches/{id})"
+    )
+    
     args = parser.parse_args()
     
     # Update config from args
@@ -991,11 +987,10 @@ NOTE: Lakebase management APIs are not yet publicly available.
     
     # Check for required packages
     try:
-        import psycopg2
         import requests
     except ImportError as e:
         print(f"❌ Missing required package: {e}")
-        print("   Install with: pip install psycopg2-binary requests")
+        print("   Install with: pip install requests")
         return 1
     
     # Execute action
@@ -1020,11 +1015,11 @@ NOTE: Lakebase management APIs are not yet publicly available.
             return 1
         return action_deploy(Config, args.source_path)
     elif args.action == "add-lakebase-role":
-        return action_add_lakebase_role(Config)
+        return action_add_lakebase_role(Config, mode=args.mode, branch=args.branch)
     elif args.action == "list-lakebase-roles":
-        return action_list_lakebase_roles(Config)
+        return action_list_lakebase_roles(Config, mode=args.mode, branch=args.branch)
     elif args.action == "link-app-resource":
-        return action_link_app_resource(Config)
+        return action_link_app_resource(Config, mode=args.mode)
     
     return 1
 

@@ -1,52 +1,69 @@
 """
 Lakebase (Databricks PostgreSQL) Service for Vibe Coding Workshop
 
-Lakebase is Databricks' PostgreSQL-compatible OLTP database.
-Reference: https://github.com/databricks-solutions/lakebase-fastapi-app
+Dual-mode connection layer supporting both Lakebase Provisioned and Autoscaling.
 
-This service connects to Lakebase using PostgreSQL drivers with OAuth authentication.
+Mode detection via ENDPOINT_NAME environment variable:
+  - Set   -> Autoscaling: uses psycopg3 ConnectionPool with OAuth token rotation
+             via generate_database_credential(). Supports scale-to-zero.
+  - Unset -> Provisioned: uses PGPASSWORD from app resource link or SDK OAuth.
 
-Environment Variables:
-  When Lakebase is linked as an app resource (recommended), Databricks auto-injects:
-    - PGHOST, PGDATABASE, PGUSER, PGPORT, PGSSLMODE
+Environment Variables (both modes):
+  PGHOST, PGDATABASE, PGUSER, PGPORT, PGSSLMODE  (auto-injected by Databricks)
+  LAKEBASE_HOST, LAKEBASE_DATABASE, LAKEBASE_SCHEMA, LAKEBASE_PORT  (manual fallback)
 
-  Fallback (manual config via app.yaml):
-    - LAKEBASE_HOST: Lakebase PostgreSQL host
-    - LAKEBASE_DATABASE: Database name
-    - LAKEBASE_SCHEMA: Schema name
-    - LAKEBASE_PORT: PostgreSQL port (default: 5432)
-
-  NOTE: LAKEBASE_USER is intentionally NOT set. The app runs as a service principal
-  on Databricks Apps -- the resource link provides PGUSER with the correct identity.
-  Hardcoding a user email causes auth failures (token identity mismatch).
+Autoscaling-only:
+  ENDPOINT_NAME  - format: projects/{id}/branches/{id}/endpoints/{id}
 """
 import os
 import logging
 import sys
+import time as _time
 from typing import Optional, List, Dict, Any
 from contextlib import contextmanager
 
-# Configure logging to ensure messages appear in Databricks App logs
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.StreamHandler(sys.stdout)
-    ]
+    handlers=[logging.StreamHandler(sys.stdout)]
 )
 logger = logging.getLogger("lakebase")
 logger.setLevel(logging.INFO)
 
-# Try to import PostgreSQL driver
-try:
-    import psycopg2
-    from psycopg2.extras import RealDictCursor
-    PSYCOPG2_AVAILABLE = True
-except ImportError:
-    PSYCOPG2_AVAILABLE = False
-    logger.warning("psycopg2 not available. Using YAML fallback.")
+# ---------------------------------------------------------------------------
+# Driver detection: prefer psycopg3, fall back to psycopg2
+# ---------------------------------------------------------------------------
+PSYCOPG3_AVAILABLE = False
+PSYCOPG2_AVAILABLE = False
+_DRIVER = None  # "psycopg3" | "psycopg2" | None
 
-# Try to import Databricks SDK for OAuth
+try:
+    import psycopg
+    from psycopg.rows import dict_row
+    PSYCOPG3_AVAILABLE = True
+    _DRIVER = "psycopg3"
+    logger.info("Using psycopg3 (psycopg) driver")
+except ImportError:
+    pass
+
+if not PSYCOPG3_AVAILABLE:
+    try:
+        import psycopg2
+        from psycopg2.extras import RealDictCursor
+        PSYCOPG2_AVAILABLE = True
+        _DRIVER = "psycopg2"
+        logger.info("psycopg3 not available, falling back to psycopg2 driver")
+    except ImportError:
+        logger.warning("No PostgreSQL driver available (psycopg3 or psycopg2). Using YAML fallback.")
+
+# Optional: psycopg3 connection pool (for Autoscaling token rotation)
+PSYCOPG3_POOL_AVAILABLE = False
+try:
+    from psycopg_pool import ConnectionPool
+    PSYCOPG3_POOL_AVAILABLE = True
+except ImportError:
+    pass
+
 try:
     from databricks.sdk import WorkspaceClient
     DATABRICKS_SDK_AVAILABLE = True
@@ -54,40 +71,55 @@ except ImportError:
     DATABRICKS_SDK_AVAILABLE = False
     logger.warning("databricks-sdk not available for OAuth.")
 
+# ---------------------------------------------------------------------------
+# Autoscaling mode: singleton pool with OAuth token rotation
+# ---------------------------------------------------------------------------
+_autoscaling_pool = None
+_workspace_client = None
+
+COLD_START_MAX_RETRIES = 5
+COLD_START_RETRY_DELAY = 3  # seconds
+
+
+def _is_autoscaling_mode() -> bool:
+    return bool(os.getenv("ENDPOINT_NAME", ""))
+
+
+def _get_workspace_client() -> "WorkspaceClient":
+    global _workspace_client
+    if _workspace_client is None:
+        _workspace_client = WorkspaceClient()
+    return _workspace_client
+
+
+def _generate_autoscaling_credential() -> str:
+    """Generate a fresh database credential for Lakebase Autoscaling."""
+    endpoint_name = os.environ["ENDPOINT_NAME"]
+    client = _get_workspace_client()
+    credential = client.postgres.generate_database_credential(endpoint=endpoint_name)
+    return credential.token
+
 
 # =============================================================================
-# Configuration (from environment variables)
-# 
-# When a Lakebase database is added as an app resource via the Databricks UI,
-# Databricks automatically sets these environment variables:
-#   - PGHOST: Host name of the PostgreSQL server
-#   - PGDATABASE: Name of the database
-#   - PGPORT: Port for the PostgreSQL server (default 5432)
-#   - PGUSER: Service principal's client ID and role name
-#   - PGSSLMODE: SSL mode for the connection
-#   - PGAPPNAME: App name
-#
-# Fallback: Use custom LAKEBASE_* variables for manual configuration
+# Configuration
 # =============================================================================
 
 
 def _get_config() -> Dict[str, Any]:
     """
     Get Lakebase configuration from environment variables (read at runtime).
-    
+
     Priority:
-    1. Databricks-provided PG* variables (when database resource is added via UI)
-    2. Custom LAKEBASE_* variables (for manual configuration)
+    1. Databricks-provided PG* variables (resource link or Autoscaling)
+    2. Custom LAKEBASE_* variables (manual config via app.yaml)
     """
-    # Check for Databricks-provided variables first
     pg_host = os.getenv("PGHOST", "")
     pg_database = os.getenv("PGDATABASE", "")
     pg_user = os.getenv("PGUSER", "")
     pg_port = os.getenv("PGPORT", "")
     pg_sslmode = os.getenv("PGSSLMODE", "")
-    
+
     if pg_host and pg_database:
-        # Using Databricks-provided configuration
         logger.info("Using Databricks-provided PG* environment variables")
         return {
             "host": pg_host,
@@ -97,32 +129,32 @@ def _get_config() -> Dict[str, Any]:
             "user": pg_user,
             "sslmode": pg_sslmode or "require",
             "source": "databricks_resource",
+            "mode": "autoscaling" if _is_autoscaling_mode() else "provisioned",
         }
-    
-    # Fallback to custom LAKEBASE_* variables (defaults are in app.yaml)
+
     logger.info("Using custom LAKEBASE_* environment variables")
-    
+
     user = os.getenv("LAKEBASE_USER", "")
     if not user:
+        # DATABRICKS_CLIENT_ID is auto-injected by the Databricks Apps platform
+        # and is the correct username for OAuth authentication to Lakebase
+        user = os.getenv("DATABRICKS_CLIENT_ID", "")
+        if user:
+            logger.info(f"Using DATABRICKS_CLIENT_ID as Lakebase user: {user[:20]}...")
+    if not user:
         logger.warning(
-            "PGUSER not set and LAKEBASE_USER not set. "
-            "This likely means the Lakebase resource link is missing -- "
-            "the app cannot authenticate to PostgreSQL without a user identity. "
+            "PGUSER, LAKEBASE_USER, and DATABRICKS_CLIENT_ID all unset. "
             "Attempting to get identity from Databricks SDK..."
         )
         try:
             if DATABRICKS_SDK_AVAILABLE:
-                w = WorkspaceClient()
+                w = _get_workspace_client()
                 if hasattr(w.config, 'client_id') and w.config.client_id:
                     user = w.config.client_id
                     logger.info(f"Got service principal client_id from SDK: {user[:20]}...")
-                else:
-                    headers = w.config.authenticate()
-                    if headers:
-                        logger.info("SDK authenticated but no client_id -- user still unknown")
         except Exception as e:
             logger.warning(f"Could not get identity from SDK: {e}")
-    
+
     return {
         "host": os.getenv("LAKEBASE_HOST", ""),
         "database": os.getenv("LAKEBASE_DATABASE", ""),
@@ -131,6 +163,7 @@ def _get_config() -> Dict[str, Any]:
         "user": user,
         "sslmode": "require",
         "source": "manual_config",
+        "mode": "autoscaling" if _is_autoscaling_mode() else "provisioned",
     }
 
 
@@ -142,235 +175,260 @@ def get_schema() -> str:
 
 def is_lakebase_configured() -> bool:
     """Check if Lakebase is properly configured (reads env vars at runtime)"""
+    has_driver = PSYCOPG3_AVAILABLE or PSYCOPG2_AVAILABLE
     config = _get_config()
-    configured = bool(
-        PSYCOPG2_AVAILABLE 
-        and config["host"]
-        and config["database"]
-    )
+    configured = bool(has_driver and config["host"] and config["database"])
     if not configured:
-        logger.info(f"Lakebase config check: psycopg2={PSYCOPG2_AVAILABLE}, host={bool(config['host'])}, db={bool(config['database'])}")
+        logger.info(f"Lakebase config check: driver={_DRIVER}, host={bool(config['host'])}, db={bool(config['database'])}")
     else:
-        logger.info(f"Lakebase configured via {config.get('source', 'unknown')}: host={config['host'][:30]}...")
+        logger.info(f"Lakebase configured via {config.get('source', 'unknown')} [{config.get('mode')}]: host={config['host'][:30]}...")
     return configured
 
 
 def _get_oauth_token() -> Optional[str]:
     """
-    Get OAuth token for Lakebase authentication.
-    
-    When running on Databricks Apps with a database resource, the app
-    should use OAuth tokens for authentication.
-    
-    Token sources (in order of preference):
-    1. DATABRICKS_TOKEN environment variable
-    2. WorkspaceClient token (from SDK auto-auth)
-    3. Service principal OAuth via SDK
-    
-    Reference: https://docs.databricks.com/aws/en/oltp/oauth
+    Get OAuth token for Lakebase Provisioned authentication.
+
+    For Autoscaling mode, use _generate_autoscaling_credential() instead.
     """
-    logger.info("=== Attempting to get OAuth token for Lakebase ===")
-    
-    # Method 1: Check for explicit token in environment
     databricks_token = os.getenv("DATABRICKS_TOKEN", "")
     lakebase_token = os.getenv("LAKEBASE_TOKEN", "")
-    
+
     if databricks_token:
-        logger.info("✓ Found DATABRICKS_TOKEN environment variable")
         return databricks_token
-    elif lakebase_token:
-        logger.info("✓ Found LAKEBASE_TOKEN environment variable")
+    if lakebase_token:
         return lakebase_token
-    else:
-        logger.info("✗ No token in DATABRICKS_TOKEN or LAKEBASE_TOKEN env vars")
-    
+
     if not DATABRICKS_SDK_AVAILABLE:
-        logger.warning("✗ Databricks SDK not available - cannot get OAuth token")
         return None
-    
-    logger.info("Attempting to get token via Databricks SDK...")
-    
+
     try:
-        # Method 2: Try WorkspaceClient with default auth
-        logger.info("Creating WorkspaceClient...")
-        w = WorkspaceClient()
-        logger.info(f"WorkspaceClient created. Host: {w.config.host if hasattr(w.config, 'host') else 'unknown'}")
-        
-        # Try to get token from the client's config
+        w = _get_workspace_client()
+
         if hasattr(w.config, 'token') and w.config.token:
-            logger.info("✓ Got token from WorkspaceClient.config.token")
             return w.config.token
-        else:
-            logger.info("✗ No token in WorkspaceClient.config.token")
-        
-        # Method 3: Try to authenticate and get headers
-        logger.info("Trying WorkspaceClient.config.authenticate()...")
+
         try:
             headers = w.config.authenticate()
-            logger.info(f"authenticate() returned headers: {list(headers.keys()) if headers else 'None'}")
             if headers and 'Authorization' in headers:
                 auth_header = headers['Authorization']
                 if auth_header.startswith('Bearer '):
-                    token = auth_header[7:]  # Remove 'Bearer ' prefix
-                    logger.info("✓ Got token from WorkspaceClient.config.authenticate()")
-                    return token
-        except Exception as auth_err:
-            logger.info(f"✗ authenticate() failed: {type(auth_err).__name__}: {auth_err}")
-        
-        # Method 4: Check if we can get token from OAuth flow
-        logger.info("Trying OAuth token flow...")
+                    return auth_header[7:]
+        except Exception:
+            pass
+
         try:
             if hasattr(w.config, 'oauth_token') and callable(w.config.oauth_token):
                 token_resp = w.config.oauth_token()
                 if token_resp and hasattr(token_resp, 'access_token'):
-                    logger.info("✓ Got token from OAuth flow")
                     return token_resp.access_token
-                else:
-                    logger.info("✗ oauth_token() returned no access_token")
-            else:
-                logger.info("✗ No oauth_token method available")
-        except Exception as oauth_err:
-            logger.info(f"✗ oauth_token() failed: {type(oauth_err).__name__}: {oauth_err}")
-        
-        logger.warning("=== No OAuth token available from any source ===")
+        except Exception:
+            pass
+
         return None
-        
-    except Exception as e:
-        logger.error(f"=== Failed to get OAuth token: {type(e).__name__}: {e} ===")
+    except Exception:
         return None
+
+
+# ---------------------------------------------------------------------------
+# Autoscaling connection pool (psycopg3 with token rotation)
+# ---------------------------------------------------------------------------
+
+def _get_autoscaling_pool():
+    """Lazily initialise and return the Autoscaling connection pool."""
+    global _autoscaling_pool
+    if _autoscaling_pool is not None:
+        return _autoscaling_pool
+
+    if not (PSYCOPG3_AVAILABLE and PSYCOPG3_POOL_AVAILABLE and DATABRICKS_SDK_AVAILABLE):
+        raise RuntimeError(
+            "Autoscaling mode requires psycopg[binary,pool]>=3.1.0 and "
+            "databricks-sdk>=0.81.0.  Install them and restart the app."
+        )
+
+    config = _get_config()
+    user = config.get("user", "")
+    host = config["host"]
+    port = config["port"]
+    database = config["database"]
+    sslmode = config.get("sslmode", "require")
+
+    conninfo = (
+        f"dbname={database} user={user} host={host} "
+        f"port={port} sslmode={sslmode}"
+    )
+
+    class _OAuthConnection(psycopg.Connection):
+        """Generates a fresh Autoscaling credential per connection."""
+        @classmethod
+        def connect(cls, conninfo='', **kwargs):
+            kwargs['password'] = _generate_autoscaling_credential()
+            return super().connect(conninfo, **kwargs)
+
+    _autoscaling_pool = ConnectionPool(
+        conninfo=conninfo,
+        connection_class=_OAuthConnection,
+        min_size=1,
+        max_size=10,
+        open=True,
+    )
+    logger.info("Autoscaling ConnectionPool initialised (1-10 connections, OAuth token rotation)")
+    return _autoscaling_pool
+
+
+# ---------------------------------------------------------------------------
+# Unified get_connection() -- works for both modes and both drivers
+# ---------------------------------------------------------------------------
+
+def _connect_psycopg3(config: Dict, password: str):
+    """Create a psycopg3 connection for Provisioned mode."""
+    return psycopg.connect(
+        host=config["host"],
+        port=config["port"],
+        dbname=config["database"],
+        user=config["user"],
+        password=password,
+        sslmode=config.get("sslmode", "require"),
+    )
+
+
+def _connect_psycopg2(config: Dict, password: str):
+    """Create a psycopg2 connection (legacy fallback)."""
+    return psycopg2.connect(
+        host=config["host"],
+        port=config["port"],
+        database=config["database"],
+        user=config["user"],
+        password=password,
+        sslmode=config.get("sslmode", "require"),
+    )
 
 
 @contextmanager
 def get_connection():
     """
     Get a connection to Lakebase PostgreSQL database.
-    
-    Authentication methods (in order of preference):
-    1. PGPASSWORD environment variable (set by Databricks when database resource added)
-    2. OAuth token from WorkspaceClient/SDK
-    3. LAKEBASE_PASSWORD for manual configuration
+
+    Autoscaling mode: borrows from the ConnectionPool (token rotation automatic).
+    Provisioned mode: creates a fresh connection per call.
+    Includes retry logic for scale-to-zero cold starts.
     """
-    logger.info("=== Establishing Lakebase Connection ===")
-    
     if not is_lakebase_configured():
-        logger.error("Lakebase not configured. Check environment variables.")
         raise RuntimeError("Lakebase not configured. Check environment variables.")
-    
+
+    # --- Autoscaling path (psycopg3 pool) ---
+    if _is_autoscaling_mode():
+        pool = _get_autoscaling_pool()
+        conn = None
+        try:
+            for attempt in range(1, COLD_START_MAX_RETRIES + 1):
+                try:
+                    conn = pool.getconn()
+                    break
+                except Exception as e:
+                    if attempt == COLD_START_MAX_RETRIES:
+                        logger.error(f"Autoscaling connection failed after {COLD_START_MAX_RETRIES} attempts: {e}")
+                        raise
+                    wait = COLD_START_RETRY_DELAY * attempt
+                    logger.warning(f"Connection attempt {attempt}/{COLD_START_MAX_RETRIES} failed (scale-to-zero wake?), retrying in {wait}s...")
+                    _time.sleep(wait)
+            yield conn
+        except Exception as e:
+            logger.error(f"Autoscaling connection error: {type(e).__name__}: {e}")
+            raise
+        finally:
+            if conn:
+                pool.putconn(conn)
+        return
+
+    # --- Provisioned path ---
     config = _get_config()
-    logger.info(f"Config source: {config.get('source', 'unknown')}")
-    logger.info(f"Host: {config['host'][:40]}...")
-    logger.info(f"Database: {config['database']}")
-    logger.info(f"Schema: {config['schema']}")
-    logger.info(f"Port: {config['port']}")
-    
-    conn_params = {
-        "host": config["host"],
-        "port": config["port"],
-        "database": config["database"],
-        "sslmode": config.get("sslmode", "require"),
-    }
-    
-    # Get user
     user = config.get("user", "")
-    logger.info(f"User: {user[:30]}..." if user else "User: (not set)")
-    
-    # Try to get password from various sources
     password = None
     auth_method = None
-    
-    # Method 1: Check for PGPASSWORD (Databricks might set this for database resources)
-    logger.info("Checking for PGPASSWORD...")
+
     pg_password = os.getenv("PGPASSWORD", "")
     if pg_password:
         password = pg_password
         auth_method = "PGPASSWORD"
-        logger.info("✓ Found PGPASSWORD environment variable")
-    else:
-        logger.info("✗ PGPASSWORD not set")
-    
-    # Method 2: Try OAuth token
     if not password:
-        logger.info("Checking for OAuth token...")
+        # In Autoscaling fallback (psycopg2 only), generate credential manually
+        if _is_autoscaling_mode() and DATABRICKS_SDK_AVAILABLE:
+            try:
+                password = _generate_autoscaling_credential()
+                auth_method = "autoscaling_credential"
+            except Exception:
+                pass
+    if not password:
         token = _get_oauth_token()
         if token:
             password = token
             auth_method = "OAuth"
-            logger.info("✓ Got OAuth token")
-        else:
-            logger.info("✗ No OAuth token available")
-    
-    # Method 3: Fallback to LAKEBASE_PASSWORD
     if not password:
-        logger.info("Checking for LAKEBASE_PASSWORD...")
         lakebase_password = os.getenv("LAKEBASE_PASSWORD", "")
         if lakebase_password:
             password = lakebase_password
             auth_method = "LAKEBASE_PASSWORD"
-            logger.info("✓ Found LAKEBASE_PASSWORD environment variable")
-        else:
-            logger.info("✗ LAKEBASE_PASSWORD not set")
-    
-    # Validate we have credentials
+
     if not user:
-        logger.error("=== CONNECTION FAILED: No user configured ===")
         raise RuntimeError(
             "No user configured for Lakebase connection. "
-            "PGUSER should be auto-injected by the Lakebase resource link. "
-            "Check that the Lakebase instance is linked as an app resource in Databricks UI."
+            "PGUSER should be auto-injected by the Lakebase resource link."
         )
-    
     if not password:
-        # Log available env vars for debugging
-        logger.error("=== CONNECTION FAILED: No password/token available ===")
-        logger.error("Environment variable status:")
-        logger.error(f"  PGPASSWORD: {'(set)' if os.getenv('PGPASSWORD') else '(not set)'}")
-        logger.error(f"  DATABRICKS_TOKEN: {'(set)' if os.getenv('DATABRICKS_TOKEN') else '(not set)'}")
-        logger.error(f"  LAKEBASE_TOKEN: {'(set)' if os.getenv('LAKEBASE_TOKEN') else '(not set)'}")
-        logger.error(f"  LAKEBASE_PASSWORD: {'(set)' if os.getenv('LAKEBASE_PASSWORD') else '(not set)'}")
         raise RuntimeError(
             "No password or OAuth token available. "
             "Ensure PGPASSWORD is set by Databricks, or set DATABRICKS_TOKEN/LAKEBASE_PASSWORD."
         )
-    
-    conn_params["user"] = user
-    conn_params["password"] = password
-    
-    logger.info(f"=== Connecting to Lakebase via {auth_method} ===")
-    logger.info(f"Connection params: host={config['host'][:30]}..., port={config['port']}, db={config['database']}, user={user[:20]}...")
-    
+
+    logger.info(f"Connecting to Lakebase via {auth_method} [{_DRIVER}]")
     conn = None
     try:
-        conn = psycopg2.connect(**conn_params)
-        logger.info("=== SUCCESS: Connected to Lakebase ===")
+        for attempt in range(1, COLD_START_MAX_RETRIES + 1):
+            try:
+                if PSYCOPG3_AVAILABLE:
+                    conn = _connect_psycopg3(config, password)
+                else:
+                    conn = _connect_psycopg2(config, password)
+                break
+            except Exception as e:
+                if attempt == COLD_START_MAX_RETRIES:
+                    raise
+                wait = COLD_START_RETRY_DELAY * attempt
+                logger.warning(f"Connection attempt {attempt}/{COLD_START_MAX_RETRIES} failed, retrying in {wait}s... ({e})")
+                _time.sleep(wait)
+        logger.info("Connected to Lakebase")
         yield conn
     except Exception as e:
-        logger.error(f"=== CONNECTION FAILED: {type(e).__name__} ===")
-        logger.error(f"Error details: {e}")
+        logger.error(f"CONNECTION FAILED: {type(e).__name__}: {e}")
         raise
     finally:
         if conn:
             conn.close()
-            logger.info("Lakebase connection closed")
+
+
+# ---------------------------------------------------------------------------
+# Helper: create a dict-returning cursor for whichever driver is active
+# ---------------------------------------------------------------------------
+
+def _dict_cursor(conn):
+    if PSYCOPG3_AVAILABLE and isinstance(conn, psycopg.Connection):
+        return conn.cursor(row_factory=dict_row)
+    return conn.cursor(cursor_factory=RealDictCursor)
 
 
 def execute_query(sql: str, params: tuple = None) -> List[Dict]:
-    """
-    Execute a SELECT query and return results as list of dicts.
-    """
+    """Execute a SELECT query and return results as list of dicts."""
     if not is_lakebase_configured():
         logger.info("Lakebase not configured - returning empty results")
         return []
-    
+
     try:
         with get_connection() as conn:
-            cursor = conn.cursor(cursor_factory=RealDictCursor)
-            if params:
-                cursor.execute(sql, params)
-            else:
-                cursor.execute(sql)
+            cursor = _dict_cursor(conn)
+            cursor.execute(sql, params)
             results = cursor.fetchall()
             cursor.close()
-            # Convert RealDictRow to regular dict
             return [dict(row) for row in results]
     except Exception as e:
         logger.error(f"Error executing query: {e}")
@@ -378,20 +436,15 @@ def execute_query(sql: str, params: tuple = None) -> List[Dict]:
 
 
 def execute_insert(sql: str, params: tuple = None) -> bool:
-    """
-    Execute an INSERT/UPDATE/DELETE statement. Returns True on success.
-    """
+    """Execute an INSERT/UPDATE/DELETE statement. Returns True on success."""
     if not is_lakebase_configured():
         logger.error("Lakebase not configured - cannot execute insert")
         return False
-    
+
     try:
         with get_connection() as conn:
             cursor = conn.cursor()
-            if params:
-                cursor.execute(sql, params)
-            else:
-                cursor.execute(sql)
+            cursor.execute(sql, params)
             conn.commit()
             cursor.close()
             return True
@@ -725,7 +778,7 @@ def load_session(session_id: str) -> Optional[Dict]:
     
     try:
         with get_connection() as conn:
-            cursor = conn.cursor(cursor_factory=RealDictCursor)
+            cursor = _dict_cursor(conn)
             
             query = f"""
             SELECT 
@@ -874,7 +927,7 @@ def get_user_sessions(created_by: str, limit: int = 50, saved_only: bool = True)
     
     try:
         with get_connection() as conn:
-            cursor = conn.cursor(cursor_factory=RealDictCursor)
+            cursor = _dict_cursor(conn)
             
             # Build query - if saved_only, filter to sessions with a name
             if saved_only:
@@ -962,7 +1015,7 @@ def get_user_default_session(created_by: str) -> Optional[Dict]:
     
     try:
         with get_connection() as conn:
-            cursor = conn.cursor(cursor_factory=RealDictCursor)
+            cursor = _dict_cursor(conn)
             
             # Find the "New Session" with MOST PROGRESS for this user
             # Simple and robust: order by current_step (progress), then recency
@@ -1342,7 +1395,7 @@ def get_leaderboard(limit: int = 10) -> List[Dict]:
     
     try:
         with get_connection() as conn:
-            cursor = conn.cursor(cursor_factory=RealDictCursor)
+            cursor = _dict_cursor(conn)
             
             # Get all sessions with completed_steps
             # We'll process scoring in Python for flexibility
@@ -1490,7 +1543,7 @@ def get_workshop_users() -> Dict:
     
     try:
         with get_connection() as conn:
-            cursor = conn.cursor(cursor_factory=RealDictCursor)
+            cursor = _dict_cursor(conn)
             cursor.execute(f"""
                 SELECT DISTINCT ON (created_by)
                     created_by,
@@ -1554,7 +1607,7 @@ def cleanup_session_steps() -> Dict[str, int]:
     
     try:
         with get_connection() as conn:
-            cursor = conn.cursor(cursor_factory=RealDictCursor)
+            cursor = _dict_cursor(conn)
             
             # Get all sessions with completed_steps
             query = f"""

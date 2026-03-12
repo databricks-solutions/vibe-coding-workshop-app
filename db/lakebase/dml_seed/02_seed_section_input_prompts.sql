@@ -4892,12 +4892,12 @@ VALUES
 '## Create Lakebase Tables from UI Design
 
 **Workspace:** `{workspace_url}`
-**Lakebase Instance Name:** `{lakebase_instance_name}`
+**Lakebase Instance/Project:** `{lakebase_instance_name}`
 **Lakebase Host Name:** `{lakebase_host_name}`
 
 **Working directory:** All app and Lakebase assets go under `apps_lakebase/`. Read the UI design from the parent `docs/` folder.
 
-> **⚠️ IMPORTANT NOTE:** The Lakebase Instance Name and Host Name above are configured in the Workshop Parameters. Make sure these match your Databricks workspace Lakebase instance. You can verify and update these values in the Configuration → Workshop Parameters tab.
+> **⚠️ IMPORTANT NOTE:** The Lakebase Instance/Project Name and Host Name above are configured in the Workshop Parameters. Make sure these match your Databricks workspace Lakebase setup. You can verify and update these values in the Configuration → Workshop Parameters tab.
 
 Read `@docs/ui_design.md` (parent folder at repo root) and create the database tables needed to power the UI under `apps_lakebase/`.
 
@@ -5060,10 +5060,10 @@ Connect the web application to the Lakebase database so the UI displays real dat
 
 **Working directory:** All app code and commands use the `apps_lakebase/` folder.
 
-**Lakebase Instance Name:** `{lakebase_instance_name}`
+**Lakebase Instance/Project:** `{lakebase_instance_name}`
 **Lakebase Host Name:** `{lakebase_host_name}`
 
-> **⚠️ IMPORTANT NOTE:** The Lakebase Instance Name and Host Name above are configured in the Workshop Parameters. Ensure these match your Databricks workspace Lakebase instance before proceeding.
+> **⚠️ IMPORTANT NOTE:** The Lakebase Instance/Project Name and Host Name above are configured in the Workshop Parameters. Ensure these match your Databricks workspace Lakebase setup before proceeding.
 
 ---
 
@@ -5127,7 +5127,7 @@ Look for: `✓ Successfully added Lakebase role`
 ```bash
 cd apps_lakebase && python scripts/lakebase_manager.py --action link-app-resource --app-name $APP_NAME --instance-name {lakebase_instance_name}
 ```
-Look for: `✓ Successfully linked Lakebase instance`
+Look for: `✓ Successfully linked Lakebase`
 
 **Step 4: Verify permissions were added**
 ```bash

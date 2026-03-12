@@ -381,6 +381,28 @@ LAKEBASE_CATALOG=$(get_target_var "lakebase_catalog")
 LAKEBASE_SCHEMA=$(get_target_var "lakebase_schema")
 WORKSPACE_URL=$(get_workspace_host)
 
+# Detect Lakebase mode from user-config.yaml (autoscaling or provisioned)
+LAKEBASE_MODE="provisioned"
+if [[ -f "$PROJECT_ROOT/user-config.yaml" ]]; then
+    DETECTED_MODE=$(python3 -c "
+in_lakebase = False
+for line in open('$PROJECT_ROOT/user-config.yaml'):
+    stripped = line.strip()
+    if not stripped or stripped.startswith('#'):
+        continue
+    if not line[0:1].isspace() and ':' in stripped:
+        in_lakebase = stripped.startswith('lakebase:')
+        continue
+    if in_lakebase and stripped.startswith('mode:'):
+        val = stripped.split(':', 1)[1].strip().strip('\"').strip(\"'\")
+        if val: print(val)
+        break
+" 2>/dev/null) || true
+    if [[ "$DETECTED_MODE" == "autoscaling" ]]; then
+        LAKEBASE_MODE="autoscaling"
+    fi
+fi
+
 # Validate target to prevent accidental production changes
 # Skip confirmation for --code-only (safer operation, just code sync)
 if [[ "$TARGET" == "production" && "$CODE_ONLY" != true ]]; then
@@ -401,7 +423,7 @@ elif [[ "$TARGET" == "production" && "$CODE_ONLY" == true ]]; then
 fi
 
 echo -e "App Name:     ${BLUE}$APP_NAME${NC}"
-echo -e "Instance:     ${BLUE}$LAKEBASE_INSTANCE${NC}"
+echo -e "Lakebase:     ${BLUE}$LAKEBASE_INSTANCE${NC} (${CYAN}$LAKEBASE_MODE${NC})"
 echo -e "Catalog:      ${BLUE}$LAKEBASE_CATALOG${NC}"
 echo -e "Schema:       ${BLUE}$LAKEBASE_SCHEMA${NC}"
 echo ""
@@ -540,45 +562,128 @@ if [[ "$CODE_ONLY" == true ]]; then
 fi
 
 # =============================================================================
+# Lakebase host discovery helper (works for both modes)
+# =============================================================================
+# Autoscaling: walk project → branches → endpoints via separate API calls
+#              (the list-projects API does NOT return nested children)
+# Provisioned: query /api/2.0/database/instances to find read_write_dns
+# Sets: TARGET_LAKEBASE_HOST, ENDPOINT_NAME, AUTOSCALING_BRANCH (autoscaling only)
+ENDPOINT_NAME=""
+AUTOSCALING_BRANCH=""
+
+discover_lakebase_host() {
+    TARGET_LAKEBASE_HOST=""
+    if [[ "$LAKEBASE_MODE" == "autoscaling" ]]; then
+        # Step 1: Find the project by name (format: projects/{project_id})
+        local project_resource=""
+        project_resource=$(databricks postgres list-projects $PROFILE_FLAG --output json 2>/dev/null | python3 -c "
+import sys, json
+try:
+    data = json.load(sys.stdin)
+    items = data if isinstance(data, list) else data.get('projects', [])
+    inst = '$LAKEBASE_INSTANCE'
+    target = f'projects/{inst}'
+    for p in items:
+        name = p.get('name', '')
+        if name == target or name.endswith(f'/{inst}'):
+            print(name)
+            sys.exit(0)
+except Exception:
+    pass
+" 2>/dev/null) || true
+
+        if [[ -z "$project_resource" ]]; then
+            return
+        fi
+
+        # Step 2: List branches - prefer "main", fall back to first available
+        local branch_resource=""
+        branch_resource=$(databricks postgres list-branches "$project_resource" $PROFILE_FLAG --output json 2>/dev/null | python3 -c "
+import sys, json
+try:
+    data = json.load(sys.stdin)
+    items = data if isinstance(data, list) else data.get('branches', [])
+    # prefer our 'main' branch, fall back to first branch
+    for b in items:
+        name = b.get('name', '')
+        if name.endswith('/main'):
+            print(name)
+            sys.exit(0)
+    for b in items:
+        name = b.get('name', '')
+        if name:
+            print(name)
+            sys.exit(0)
+except Exception:
+    pass
+" 2>/dev/null) || true
+
+        if [[ -z "$branch_resource" ]]; then
+            return
+        fi
+        AUTOSCALING_BRANCH="$branch_resource"
+
+        # Step 3: List endpoints - hostname is at status.hosts.host
+        read -r TARGET_LAKEBASE_HOST ENDPOINT_NAME <<< "$(databricks postgres list-endpoints "$branch_resource" $PROFILE_FLAG --output json 2>/dev/null | python3 -c "
+import sys, json
+try:
+    data = json.load(sys.stdin)
+    items = data if isinstance(data, list) else data.get('endpoints', [])
+    for e in items:
+        host = e.get('status', {}).get('hosts', {}).get('host', '')
+        ename = e.get('name', '')
+        if host and ename:
+            print(host, ename)
+            sys.exit(0)
+except Exception:
+    pass
+" 2>/dev/null)"
+    else
+        local details
+        details=$(databricks api get "/api/2.0/database/instances/$LAKEBASE_INSTANCE" $PROFILE_FLAG 2>/dev/null) || true
+        if [[ -n "$details" ]]; then
+            TARGET_LAKEBASE_HOST=$(echo "$details" | python3 -c "import sys,json; print(json.load(sys.stdin).get('read_write_dns',''))")
+        fi
+    fi
+}
+
+update_app_yaml_lakebase() {
+    if [[ -n "$TARGET_LAKEBASE_HOST" ]]; then
+        sed -i.bak '/name: LAKEBASE_HOST/{n;s|value: ".*"|value: "'"$TARGET_LAKEBASE_HOST"'"|;}' app.yaml
+    fi
+    sed -i.bak '/name: LAKEBASE_SCHEMA/{n;s|value: ".*"|value: "'"$LAKEBASE_SCHEMA"'"|;}' app.yaml
+    if [[ -n "$ENDPOINT_NAME" ]]; then
+        sed -i.bak '/name: ENDPOINT_NAME/{n;s|value: ".*"|value: "'"$ENDPOINT_NAME"'"|;}' app.yaml
+    fi
+    rm -f app.yaml.bak
+}
+
+# =============================================================================
 # Step 0: Update app.yaml with target-specific Lakebase config
 # =============================================================================
 
 if [[ "$TABLES_ONLY" != true ]]; then
     print_header "STEP 0: Configure app.yaml for Target"
     
-    # Get Lakebase instance host for this target
-    print_step "Getting Lakebase instance details for target: $TARGET..."
+    print_step "Getting Lakebase details for target: $TARGET ($LAKEBASE_MODE mode)..."
+    discover_lakebase_host
     
-    INSTANCE_DETAILS=$(databricks api get "/api/2.0/database/instances/$LAKEBASE_INSTANCE" $PROFILE_FLAG 2>/dev/null) || true
-    
-    if [[ -n "$INSTANCE_DETAILS" ]]; then
-        TARGET_LAKEBASE_HOST=$(echo "$INSTANCE_DETAILS" | python3 -c "import sys,json; print(json.load(sys.stdin).get('read_write_dns',''))")
+    if [[ -n "$TARGET_LAKEBASE_HOST" ]]; then
+        print_success "Instance/Project: $LAKEBASE_INSTANCE"
+        print_success "Host: $TARGET_LAKEBASE_HOST"
+        [[ -n "$ENDPOINT_NAME" ]] && print_success "Endpoint: $ENDPOINT_NAME"
+        print_success "Schema: $LAKEBASE_SCHEMA"
         
-        if [[ -n "$TARGET_LAKEBASE_HOST" ]]; then
-            print_success "Instance: $LAKEBASE_INSTANCE"
-            print_success "Host: $TARGET_LAKEBASE_HOST"
-            print_success "Schema: $LAKEBASE_SCHEMA"
-            
-            # Update app.yaml with correct values (handles empty or populated values)
-            print_step "Updating app.yaml with target-specific Lakebase config..."
-            
-            # Update LAKEBASE_HOST: find the name line, update value on next line
-            sed -i.bak '/name: LAKEBASE_HOST/{n;s|value: ".*"|value: "'"$TARGET_LAKEBASE_HOST"'"|;}' app.yaml
-            
-            # Update LAKEBASE_SCHEMA: same approach
-            sed -i.bak '/name: LAKEBASE_SCHEMA/{n;s|value: ".*"|value: "'"$LAKEBASE_SCHEMA"'"|;}' app.yaml
-            
-            rm -f app.yaml.bak
-            
-            print_success "app.yaml updated for $TARGET environment"
-            echo ""
-            echo -e "  LAKEBASE_HOST:   ${CYAN}$TARGET_LAKEBASE_HOST${NC}"
-            echo -e "  LAKEBASE_SCHEMA: ${CYAN}$LAKEBASE_SCHEMA${NC}"
-        else
-            print_warning "Could not get instance host"
-        fi
+        print_step "Updating app.yaml with target-specific Lakebase config..."
+        update_app_yaml_lakebase
+        
+        print_success "app.yaml updated for $TARGET environment"
+        echo ""
+        echo -e "  LAKEBASE_HOST:   ${CYAN}$TARGET_LAKEBASE_HOST${NC}"
+        echo -e "  LAKEBASE_SCHEMA: ${CYAN}$LAKEBASE_SCHEMA${NC}"
+        [[ -n "$ENDPOINT_NAME" ]] && echo -e "  ENDPOINT_NAME:   ${CYAN}$ENDPOINT_NAME${NC}"
     else
-        print_warning "Could not get instance details - app.yaml unchanged"
+        print_warning "Could not get Lakebase host - app.yaml unchanged (will be updated after bundle deploy)"
     fi
 fi
 
@@ -669,28 +774,56 @@ if [[ "$TABLES_ONLY" != true && "$PERMISSIONS_ONLY" != true ]]; then
     print_step "Getting deployment summary..."
     databricks bundle summary -t "$TARGET" $PROFILE_FLAG 2>&1 | grep -E "Name:|URL:|Host:|Path:"
 
-    # Now that the Lakebase instance exists, update app.yaml with its host
+    # Now that the Lakebase resources exist, update app.yaml with host/endpoint
     print_step "Updating app.yaml with Lakebase connection details..."
-    INSTANCE_DETAILS=$(databricks api get "/api/2.0/database/instances/$LAKEBASE_INSTANCE" $PROFILE_FLAG 2>/dev/null) || true
-    if [[ -n "$INSTANCE_DETAILS" ]]; then
-        TARGET_LAKEBASE_HOST=$(echo "$INSTANCE_DETAILS" | python3 -c "import sys,json; print(json.load(sys.stdin).get('read_write_dns',''))")
-        if [[ -n "$TARGET_LAKEBASE_HOST" ]]; then
-            # Update LAKEBASE_HOST: find line with "name: LAKEBASE_HOST", update next line's value
-            sed -i.bak '/name: LAKEBASE_HOST/{n;s|value: ".*"|value: "'"$TARGET_LAKEBASE_HOST"'"|;}' app.yaml
-            # Update LAKEBASE_SCHEMA similarly
-            sed -i.bak '/name: LAKEBASE_SCHEMA/{n;s|value: ".*"|value: "'"$LAKEBASE_SCHEMA"'"|;}' app.yaml
-            rm -f app.yaml.bak
-            print_success "LAKEBASE_HOST: $TARGET_LAKEBASE_HOST"
-            print_success "LAKEBASE_SCHEMA: $LAKEBASE_SCHEMA"
+    discover_lakebase_host
+    if [[ -n "$TARGET_LAKEBASE_HOST" ]]; then
+        update_app_yaml_lakebase
+        print_success "LAKEBASE_HOST: $TARGET_LAKEBASE_HOST"
+        print_success "LAKEBASE_SCHEMA: $LAKEBASE_SCHEMA"
+        [[ -n "$ENDPOINT_NAME" ]] && print_success "ENDPOINT_NAME: $ENDPOINT_NAME"
 
-            # Re-sync the updated app.yaml to workspace
-            print_step "Syncing updated app.yaml to workspace..."
-            databricks bundle deploy -t "$TARGET" $PROFILE_FLAG 2>&1 | tail -3
-        else
-            print_warning "Could not get Lakebase host from instance details"
+        # Update autoscaling limits on the auto-created endpoint (if autoscaling mode)
+        if [[ "$LAKEBASE_MODE" == "autoscaling" && -n "$ENDPOINT_NAME" ]]; then
+            LAKEBASE_MIN_CU=$(python3 -c "
+try:
+    import yaml
+    c = yaml.safe_load(open('user-config.yaml'))
+    print(c.get('lakebase',{}).get('min_cu','0.5'))
+except Exception:
+    import re
+    try:
+        text = open('user-config.yaml').read()
+        m = re.search(r'min_cu:\s*\"?([0-9.]+)', text)
+        print(m.group(1) if m else '0.5')
+    except Exception:
+        print('0.5')
+" 2>/dev/null) || LAKEBASE_MIN_CU="0.5"
+            LAKEBASE_MAX_CU=$(python3 -c "
+try:
+    import yaml
+    c = yaml.safe_load(open('user-config.yaml'))
+    print(c.get('lakebase',{}).get('max_cu','2'))
+except Exception:
+    import re
+    try:
+        text = open('user-config.yaml').read()
+        m = re.search(r'max_cu:\s*\"?([0-9.]+)', text)
+        print(m.group(1) if m else '2')
+    except Exception:
+        print('2')
+" 2>/dev/null) || LAKEBASE_MAX_CU="2"
+            print_step "Setting autoscaling limits: ${LAKEBASE_MIN_CU}-${LAKEBASE_MAX_CU} CU..."
+            databricks postgres update-endpoint "$ENDPOINT_NAME" \
+                --json "{\"autoscaling_limit_min_cu\": $LAKEBASE_MIN_CU, \"autoscaling_limit_max_cu\": $LAKEBASE_MAX_CU}" \
+                $PROFILE_FLAG 2>&1 || print_warning "Could not update autoscaling limits"
         fi
+
+        # Re-sync the updated app.yaml to workspace
+        print_step "Syncing updated app.yaml to workspace..."
+        databricks bundle deploy -t "$TARGET" $PROFILE_FLAG 2>&1 | tail -3
     else
-        print_warning "Could not get Lakebase instance details -- app.yaml may need manual update"
+        print_warning "Could not get Lakebase host -- app.yaml may need manual update"
     fi
 fi
 
@@ -790,17 +923,31 @@ if [[ "$TABLES_ONLY" != true && "$SKIP_PERMISSIONS" != true ]]; then
         # 2b. Lakebase Database Role (PostgreSQL)
         #     Add service principal as DATABRICKS_SUPERUSER in PostgreSQL
         #     This enables CREATE TABLE, INSERT, UPDATE operations
+        #     API differs for Autoscaling (postgres/projects) vs Provisioned (database/instances)
         # =================================================================
         if [[ -n "$SERVICE_PRINCIPAL_ID" && -n "$LAKEBASE_INSTANCE" ]]; then
-            print_step "2b. Adding Lakebase database roles..."
-            
-            EXISTING_ROLES=$(databricks api get "/api/2.0/database/instances/$LAKEBASE_INSTANCE/roles" $PROFILE_FLAG 2>/dev/null) || true
+            print_step "2b. Adding Lakebase database roles ($LAKEBASE_MODE mode)..."
+
+            if [[ "$LAKEBASE_MODE" == "autoscaling" ]]; then
+                # Roles are branch-level in Autoscaling (SDK: create_role(parent=branch))
+                if [[ -z "$AUTOSCALING_BRANCH" ]]; then
+                    # Fallback: assume default production branch
+                    AUTOSCALING_BRANCH="projects/$LAKEBASE_INSTANCE/branches/production"
+                fi
+                ROLES_API_BASE="/api/2.0/postgres/${AUTOSCALING_BRANCH}/roles"
+                PERM_RESOURCE_TYPE="database-projects"
+            else
+                ROLES_API_BASE="/api/2.0/database/instances/$LAKEBASE_INSTANCE/roles"
+                PERM_RESOURCE_TYPE="database-instances"
+            fi
+
+            EXISTING_ROLES=$(databricks api get "$ROLES_API_BASE" $PROFILE_FLAG 2>/dev/null) || true
             
             # Add service principal as DATABRICKS_SUPERUSER
             if echo "$EXISTING_ROLES" | grep -q "$SERVICE_PRINCIPAL_ID"; then
                 print_warning "Lakebase role already exists for service principal"
             else
-                ROLE_RESULT=$(databricks api post "/api/2.0/database/instances/$LAKEBASE_INSTANCE/roles" \
+                ROLE_RESULT=$(databricks api post "$ROLES_API_BASE" \
                     $PROFILE_FLAG \
                     --json "{\"name\": \"$SERVICE_PRINCIPAL_ID\", \"identity_type\": \"SERVICE_PRINCIPAL\", \"membership_role\": \"DATABRICKS_SUPERUSER\"}" 2>&1) || true
                 
@@ -817,7 +964,7 @@ if [[ "$TABLES_ONLY" != true && "$SKIP_PERMISSIONS" != true ]]; then
                 if echo "$EXISTING_ROLES" | grep -q "$CURRENT_USER"; then
                     print_warning "Lakebase role already exists for $CURRENT_USER"
                 else
-                    USER_ROLE_RESULT=$(databricks api post "/api/2.0/database/instances/$LAKEBASE_INSTANCE/roles" \
+                    USER_ROLE_RESULT=$(databricks api post "$ROLES_API_BASE" \
                         $PROFILE_FLAG \
                         --json "{\"name\": \"$CURRENT_USER\", \"identity_type\": \"USER\", \"membership_role\": \"DATABRICKS_SUPERUSER\"}" 2>&1) || true
                     
@@ -834,7 +981,7 @@ if [[ "$TABLES_ONLY" != true && "$SKIP_PERMISSIONS" != true ]]; then
             if echo "$EXISTING_ROLES" | grep -q "account users"; then
                 print_warning "Lakebase role already exists for account users"
             else
-                ACCT_ROLE_RESULT=$(databricks api post "/api/2.0/database/instances/$LAKEBASE_INSTANCE/roles" \
+                ACCT_ROLE_RESULT=$(databricks api post "$ROLES_API_BASE" \
                     $PROFILE_FLAG \
                     --json '{"name": "account users", "identity_type": "GROUP", "membership_role": "DATABRICKS_SUPERUSER", "attributes": {"createdb": true, "createrole": true, "bypassrls": true}}' 2>&1) || true
 
@@ -846,16 +993,16 @@ if [[ "$TABLES_ONLY" != true && "$SKIP_PERMISSIONS" != true ]]; then
                 fi
             fi
 
-            # Grant CAN_USE on Lakebase instance to account users
-            print_step "Granting CAN_USE on Lakebase instance to account users..."
-            INSTANCE_PERM_RESULT=$(databricks api patch "/api/2.0/permissions/database-instances/$LAKEBASE_INSTANCE" \
+            # Grant CAN_USE on Lakebase resource to account users
+            print_step "Granting CAN_USE on Lakebase $PERM_RESOURCE_TYPE to account users..."
+            INSTANCE_PERM_RESULT=$(databricks api patch "/api/2.0/permissions/$PERM_RESOURCE_TYPE/$LAKEBASE_INSTANCE" \
                 $PROFILE_FLAG \
                 --json '{"access_control_list": [{"group_name": "account users", "permission_level": "CAN_USE"}]}' 2>&1) || true
 
             if echo "$INSTANCE_PERM_RESULT" | grep -q "access_control_list\|CAN_USE"; then
-                print_success "CAN_USE granted on Lakebase instance for account users"
+                print_success "CAN_USE granted on Lakebase for account users"
             else
-                print_warning "Could not grant CAN_USE on Lakebase instance"
+                print_warning "Could not grant CAN_USE on Lakebase"
                 echo "  Response: $INSTANCE_PERM_RESULT"
             fi
         fi
@@ -884,26 +1031,17 @@ fi
 if [[ "$SKIP_TABLES" != true ]]; then
     print_header "STEP 3: Setup Lakebase Tables"
     
-    # Get Lakebase instance details to find the correct host
-    print_step "Getting Lakebase instance connection details..."
+    print_step "Getting Lakebase connection details ($LAKEBASE_MODE mode)..."
+    discover_lakebase_host
+    LAKEBASE_HOST_FROM_INSTANCE="$TARGET_LAKEBASE_HOST"
     
-    INSTANCE_INFO=$(databricks api get "/api/2.0/database/instances/$LAKEBASE_INSTANCE" $PROFILE_FLAG 2>/dev/null) || true
-    
-    if [[ -n "$INSTANCE_INFO" ]]; then
-        LAKEBASE_HOST_FROM_INSTANCE=$(echo "$INSTANCE_INFO" | python3 -c "import sys,json; print(json.load(sys.stdin).get('read_write_dns',''))")
-        INSTANCE_STATE=$(echo "$INSTANCE_INFO" | python3 -c "import sys,json; print(json.load(sys.stdin).get('state',''))")
-        
-        if [[ -n "$LAKEBASE_HOST_FROM_INSTANCE" ]]; then
-            print_success "Instance: $LAKEBASE_INSTANCE"
-            print_success "Host: $LAKEBASE_HOST_FROM_INSTANCE"
-            print_success "State: $INSTANCE_STATE"
-            print_success "Schema: $LAKEBASE_SCHEMA"
-        else
-            print_warning "Could not get instance host - using app.yaml fallback"
-        fi
+    if [[ -n "$LAKEBASE_HOST_FROM_INSTANCE" ]]; then
+        print_success "Instance/Project: $LAKEBASE_INSTANCE"
+        print_success "Host: $LAKEBASE_HOST_FROM_INSTANCE"
+        [[ -n "$ENDPOINT_NAME" ]] && print_success "Endpoint: $ENDPOINT_NAME"
+        print_success "Schema: $LAKEBASE_SCHEMA"
     else
-        print_warning "Could not get instance info - using app.yaml fallback"
-        LAKEBASE_HOST_FROM_INSTANCE=""
+        print_warning "Could not get Lakebase host - using app.yaml fallback"
     fi
     
     echo ""
@@ -911,15 +1049,20 @@ if [[ "$SKIP_TABLES" != true ]]; then
     echo -e "  Target Schema: ${CYAN}$LAKEBASE_SCHEMA${NC}"
     echo ""
     
-    # CRITICAL: Export environment variable overrides to ensure correct target
-    # These override any values from app.yaml in setup-lakebase.sh
     export DATABRICKS_HOST="$WORKSPACE_URL"
     export LAKEBASE_INSTANCE_NAME="$LAKEBASE_INSTANCE"
     export LAKEBASE_SCHEMA_OVERRIDE="$LAKEBASE_SCHEMA"
     export APP_NAME="$APP_NAME"
+    export LAKEBASE_MODE="$LAKEBASE_MODE"
     
     if [[ -n "$LAKEBASE_HOST_FROM_INSTANCE" ]]; then
         export LAKEBASE_HOST_OVERRIDE="$LAKEBASE_HOST_FROM_INSTANCE"
+    fi
+    if [[ -n "$ENDPOINT_NAME" ]]; then
+        export ENDPOINT_NAME="$ENDPOINT_NAME"
+    fi
+    if [[ -n "$AUTOSCALING_BRANCH" ]]; then
+        export AUTOSCALING_BRANCH="$AUTOSCALING_BRANCH"
     fi
     
     # Run table setup with explicit schema override
@@ -932,6 +1075,81 @@ if [[ "$SKIP_TABLES" != true ]]; then
 fi
 
 # =============================================================================
+# Step 3b: Apply Unity Catalog Tags to Catalog, Schema, and Tables
+# =============================================================================
+# Tags are applied via the Databricks CLI entity-tag-assignments command.
+# This requires the catalog to be registered in Unity Catalog (create_catalog=true).
+# If the catalog is not UC-registered, tagging is skipped gracefully.
+# =============================================================================
+
+if [[ "$SKIP_TABLES" != true && "$CODE_ONLY" != true ]]; then
+    print_header "STEP 3b: Apply Unity Catalog Tags"
+
+    TAG_PROJECT="vibe_coding_workshop"
+    TAG_ENVIRONMENT="$TARGET"
+    TAG_MANAGED_BY="vibe2value"
+    TAG_OWNER="$CURRENT_USER"
+
+    apply_uc_tag() {
+        local entity_type=$1
+        local entity_name=$2
+        local tag_key=$3
+        local tag_value=$4
+        databricks entity-tag-assignments create "$entity_name" "$tag_key" "$entity_type" \
+            --tag-value "$tag_value" $PROFILE_FLAG 2>/dev/null && return 0
+        return 1
+    }
+
+    # Tag the catalog
+    print_step "Tagging catalog: $LAKEBASE_CATALOG"
+    CATALOG_TAG_OK=true
+    for kv in "project:$TAG_PROJECT" "environment:$TAG_ENVIRONMENT" "managed_by:$TAG_MANAGED_BY" "owner:$TAG_OWNER"; do
+        tag_key="${kv%%:*}"
+        tag_val="${kv#*:}"
+        if apply_uc_tag "catalogs" "$LAKEBASE_CATALOG" "$tag_key" "$tag_val"; then
+            print_success "  $tag_key=$tag_val"
+        else
+            print_warning "  Could not apply tag $tag_key to catalog (may not be UC-registered)"
+            CATALOG_TAG_OK=false
+            break
+        fi
+    done
+
+    # Tag the schema (only if catalog tagging succeeded)
+    if [[ "$CATALOG_TAG_OK" == true ]]; then
+        SCHEMA_FQN="${LAKEBASE_CATALOG}.${LAKEBASE_SCHEMA}"
+        print_step "Tagging schema: $SCHEMA_FQN"
+        for kv in "project:$TAG_PROJECT" "environment:$TAG_ENVIRONMENT" "managed_by:$TAG_MANAGED_BY"; do
+            tag_key="${kv%%:*}"
+            tag_val="${kv#*:}"
+            if apply_uc_tag "schemas" "$SCHEMA_FQN" "$tag_key" "$tag_val"; then
+                print_success "  $tag_key=$tag_val"
+            else
+                print_warning "  Could not apply tag $tag_key to schema"
+            fi
+        done
+
+        # Tag each table
+        TABLES="usecase_descriptions section_input_prompts sessions workshop_parameters saved_usecase_descriptions"
+        for table in $TABLES; do
+            TABLE_FQN="${LAKEBASE_CATALOG}.${LAKEBASE_SCHEMA}.${table}"
+            print_step "Tagging table: $table"
+            for kv in "project:$TAG_PROJECT" "managed_by:$TAG_MANAGED_BY" "data_classification:internal"; do
+                tag_key="${kv%%:*}"
+                tag_val="${kv#*:}"
+                if apply_uc_tag "tables" "$TABLE_FQN" "$tag_key" "$tag_val"; then
+                    print_success "  $tag_key=$tag_val"
+                else
+                    print_warning "  Could not apply tag $tag_key to $table"
+                fi
+            done
+        done
+    else
+        print_warning "Skipping schema/table tagging (catalog not UC-registered or tagging not available)"
+    fi
+fi
+
+# =============================================================================
 # Step 4: Final App Deploy (ensures clean start with all infra ready)
 # =============================================================================
 
@@ -940,16 +1158,12 @@ if [[ "$TABLES_ONLY" != true && "$PERMISSIONS_ONLY" != true && "$CODE_ONLY" != t
 
     # 4a. Update app.yaml with final Lakebase config
     print_step "Verifying app.yaml configuration..."
-    INSTANCE_DETAILS=$(databricks api get "/api/2.0/database/instances/$LAKEBASE_INSTANCE" $PROFILE_FLAG 2>/dev/null) || true
-    if [[ -n "$INSTANCE_DETAILS" ]]; then
-        TARGET_LAKEBASE_HOST=$(echo "$INSTANCE_DETAILS" | python3 -c "import sys,json; print(json.load(sys.stdin).get('read_write_dns',''))")
-        if [[ -n "$TARGET_LAKEBASE_HOST" ]]; then
-            sed -i.bak '/name: LAKEBASE_HOST/{n;s|value: ".*"|value: "'"$TARGET_LAKEBASE_HOST"'"|;}' app.yaml
-            sed -i.bak '/name: LAKEBASE_SCHEMA/{n;s|value: ".*"|value: "'"$LAKEBASE_SCHEMA"'"|;}' app.yaml
-            rm -f app.yaml.bak
-            print_success "LAKEBASE_HOST: $TARGET_LAKEBASE_HOST"
-            print_success "LAKEBASE_SCHEMA: $LAKEBASE_SCHEMA"
-        fi
+    discover_lakebase_host
+    if [[ -n "$TARGET_LAKEBASE_HOST" ]]; then
+        update_app_yaml_lakebase
+        print_success "LAKEBASE_HOST: $TARGET_LAKEBASE_HOST"
+        print_success "LAKEBASE_SCHEMA: $LAKEBASE_SCHEMA"
+        [[ -n "$ENDPOINT_NAME" ]] && print_success "ENDPOINT_NAME: $ENDPOINT_NAME"
     fi
 
     # 4b. Sync config to workspace (LAST bundle deploy -- do not call bundle deploy after this)
@@ -961,17 +1175,26 @@ if [[ "$TABLES_ONLY" != true && "$PERMISSIONS_ONLY" != true && "$CODE_ONLY" != t
     #     so they must be applied after the last deploy call.
     print_step "4c. Applying app-level permissions (post-deploy)..."
 
-    # 4c-i. Link Lakebase as app resource (injects PGHOST/PGUSER at runtime)
+    # 4c-i. Link Lakebase as app resource
+    # - Provisioned: links database instance → auto-injects PGHOST/PGUSER/PGPASSWORD
+    # - Autoscaling: skip resource linking (not supported per docs as of Mar 2026);
+    #   env vars (LAKEBASE_HOST, ENDPOINT_NAME, DATABRICKS_CLIENT_ID) are set in app.yaml
     if [[ -n "$LAKEBASE_INSTANCE" ]]; then
-        print_step "  Linking Lakebase as app resource..."
-        python3 "$SCRIPT_DIR/lakebase_manager.py" \
-            --action link-app-resource \
-            --app-name "$APP_NAME" \
-            --instance-name "$LAKEBASE_INSTANCE" \
-            --host "$WORKSPACE_URL" \
-            --project-root "$PROJECT_ROOT" || {
-            print_warning "Could not link app resource - may need manual setup"
-        }
+        if [[ "$LAKEBASE_MODE" == "provisioned" ]]; then
+            print_step "  Linking Lakebase instance as app resource..."
+            python3 "$SCRIPT_DIR/lakebase_manager.py" \
+                --action link-app-resource \
+                --app-name "$APP_NAME" \
+                --instance-name "$LAKEBASE_INSTANCE" \
+                --host "$WORKSPACE_URL" \
+                --project-root "$PROJECT_ROOT" \
+                --mode "$LAKEBASE_MODE" || {
+                print_warning "Could not link app resource - may need manual setup"
+            }
+        else
+            print_step "  Autoscaling mode: skipping database resource link (env vars handle auth)"
+            echo -e "  ${BLUE}App will use DATABRICKS_CLIENT_ID + ENDPOINT_NAME for OAuth token rotation${NC}"
+        fi
     fi
 
     # 4c-ii. Grant CAN_USE on app to all workspace users
@@ -990,18 +1213,27 @@ if [[ "$TABLES_ONLY" != true && "$PERMISSIONS_ONLY" != true && "$CODE_ONLY" != t
     # 4d. Get source code path
     SOURCE_PATH=$(get_source_path)
 
-    # 4e. Ensure app is running BEFORE deploying code
-    if ! ensure_app_running; then
-        print_error "Cannot deploy code -- app failed to start"
-        echo -e "  Try: ${CYAN}databricks apps start $APP_NAME${NC}"
-        exit 1
+    # 4e. Deploy code to the app
+    #     For new apps (UNAVAILABLE), deploy code first -- the app transitions
+    #     to RUNNING only after source code is pushed.  For existing apps that
+    #     are already RUNNING, this still works (rolling deploy).
+    CURRENT_STATE=$(get_app_state)
+    if [[ "$CURRENT_STATE" == "RUNNING" ]]; then
+        print_step "App already RUNNING -- deploying code update..."
+    else
+        print_step "App in $CURRENT_STATE state -- deploying source code to start it..."
     fi
 
-    # 4f. Deploy code to the running app
     if ! deploy_app_code "$SOURCE_PATH"; then
-        print_error "App code deployment failed"
-        echo -e "  Try: ${CYAN}databricks apps deploy $APP_NAME --source-code-path $SOURCE_PATH${NC}"
-        exit 1
+        # If deploy says "not in RUNNING state", try starting it first
+        print_step "Attempting to start the app first..."
+        databricks apps start "$APP_NAME" $PROFILE_FLAG 2>&1 || true
+        sleep 15
+        if ! deploy_app_code "$SOURCE_PATH"; then
+            print_error "App code deployment failed"
+            echo -e "  Try: ${CYAN}databricks apps deploy $APP_NAME --source-code-path $SOURCE_PATH${NC}"
+            exit 1
+        fi
     fi
 
     # 4g. Wait for app to stabilize with new code
@@ -1028,6 +1260,53 @@ if [[ "$TABLES_ONLY" != true && "$PERMISSIONS_ONLY" != true && "$CODE_ONLY" != t
 fi
 
 # =============================================================================
+# Step 4b: Tag the Databricks App (REST API)
+# =============================================================================
+# App tags are applied via the Databricks REST API. This feature is in Public
+# Preview. Tags do not yet propagate to billing or support search.
+# =============================================================================
+
+if [[ "$TABLES_ONLY" != true && "$PERMISSIONS_ONLY" != true && "$CODE_ONLY" != true ]]; then
+    print_header "STEP 4b: Apply App Tags"
+
+    TAG_PROJECT="vibe_coding_workshop"
+    TAG_ENVIRONMENT="${TAG_ENVIRONMENT:-$TARGET}"
+    TAG_MANAGED_BY="vibe2value"
+    TAG_OWNER="$CURRENT_USER"
+    TAG_BUNDLE="vibe-coding-workshop-app"
+    TAG_DEPLOYED_AT=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+
+    apply_app_tag() {
+        local tag_key=$1
+        local tag_value=$2
+        databricks api post "/api/2.0/unity-catalog/workspace-entity-tag-assignments" \
+            $PROFILE_FLAG \
+            --json "{\"entity_type\": \"apps\", \"entity_id\": \"$APP_NAME\", \"tag_key\": \"$tag_key\", \"tag_value\": \"$tag_value\"}" 2>/dev/null && return 0
+        return 1
+    }
+
+    print_step "Tagging app: $APP_NAME"
+    APP_TAG_APPLIED=0
+    for kv in "project:$TAG_PROJECT" "environment:$TAG_ENVIRONMENT" "managed_by:$TAG_MANAGED_BY" "owner:$TAG_OWNER" "bundle_name:$TAG_BUNDLE" "deployed_at:$TAG_DEPLOYED_AT"; do
+        tag_key="${kv%%:*}"
+        tag_val="${kv#*:}"
+        if apply_app_tag "$tag_key" "$tag_val"; then
+            print_success "$tag_key=$tag_val"
+            APP_TAG_APPLIED=$((APP_TAG_APPLIED + 1))
+        else
+            print_warning "Could not apply tag $tag_key (app tagging may not be available in this workspace)"
+            break
+        fi
+    done
+
+    if [[ $APP_TAG_APPLIED -gt 0 ]]; then
+        print_success "Applied $APP_TAG_APPLIED tag(s) to app $APP_NAME"
+    else
+        print_warning "App tagging not available -- tags can be applied manually via the Databricks UI"
+    fi
+fi
+
+# =============================================================================
 # Step 5: Verify & Fix All Permissions
 # =============================================================================
 # Verifies all permissions are correctly applied and re-applies any that are
@@ -1046,9 +1325,25 @@ if [[ "$TABLES_ONLY" != true && "$PERMISSIONS_ONLY" != true && "$CODE_ONLY" != t
         SERVICE_PRINCIPAL_ID=$(echo "$VERIFY_APP_INFO" | python3 -c "import sys,json; print(json.load(sys.stdin).get('service_principal_client_id',''))" 2>/dev/null) || true
     fi
 
+    # Determine API paths based on mode (roles are branch-level for autoscaling)
+    if [[ "$LAKEBASE_MODE" == "autoscaling" ]]; then
+        if [[ -n "$AUTOSCALING_BRANCH" ]]; then
+            VERIFY_ROLES_API="/api/2.0/postgres/${AUTOSCALING_BRANCH}/roles"
+        else
+            VERIFY_ROLES_API="/api/2.0/postgres/projects/$LAKEBASE_INSTANCE/branches/production/roles"
+        fi
+        VERIFY_PERM_TYPE="database-projects"
+    else
+        VERIFY_ROLES_API="/api/2.0/database/instances/$LAKEBASE_INSTANCE/roles"
+        VERIFY_PERM_TYPE="database-instances"
+    fi
+
     # ── Check 1: App Resource Link (Lakebase → App) ─────────────────────
-    print_step "Check 1/5: App resource link (Lakebase → App)..."
-    HAS_RESOURCE=$(echo "$VERIFY_APP_INFO" | python3 -c "
+    print_step "Check 1/6: App resource link (Lakebase → App)..."
+    if [[ "$LAKEBASE_MODE" == "autoscaling" ]]; then
+        print_success "Autoscaling mode: resource link not needed (uses env vars + OAuth)"
+    else
+        HAS_RESOURCE=$(echo "$VERIFY_APP_INFO" | python3 -c "
 import sys, json
 try:
     data = json.load(sys.stdin)
@@ -1061,80 +1356,79 @@ try:
 except: print('no')
 " 2>/dev/null) || true
 
-    if [[ "$HAS_RESOURCE" == "yes" ]]; then
-        print_success "App resource link: Lakebase instance connected"
-    else
-        print_warning "App resource link MISSING -- re-applying..."
-        VERIFY_ISSUES=$((VERIFY_ISSUES + 1))
-        RESOURCE_LINK_FIXED=true
-        python3 "$SCRIPT_DIR/lakebase_manager.py" \
-            --action link-app-resource \
-            --app-name "$APP_NAME" \
-            --instance-name "$LAKEBASE_INSTANCE" \
-            --host "$WORKSPACE_URL" \
-            --project-root "$PROJECT_ROOT" 2>/dev/null || {
-            print_warning "Could not re-link app resource"
-            RESOURCE_LINK_FIXED=false
-        }
+        if [[ "$HAS_RESOURCE" == "yes" ]]; then
+            print_success "App resource link: Lakebase connected"
+        else
+            print_warning "App resource link MISSING -- re-applying..."
+            VERIFY_ISSUES=$((VERIFY_ISSUES + 1))
+            RESOURCE_LINK_FIXED=true
+            python3 "$SCRIPT_DIR/lakebase_manager.py" \
+                --action link-app-resource \
+                --app-name "$APP_NAME" \
+                --instance-name "$LAKEBASE_INSTANCE" \
+                --host "$WORKSPACE_URL" \
+                --project-root "$PROJECT_ROOT" \
+                --mode "$LAKEBASE_MODE" 2>/dev/null || {
+                print_warning "Could not re-link app resource"
+                RESOURCE_LINK_FIXED=false
+            }
+        fi
     fi
 
     # ── Check 2: Lakebase Roles ──────────────────────────────────────────
-    print_step "Check 2/5: Lakebase database roles..."
-    VERIFY_ROLES=$(databricks api get "/api/2.0/database/instances/$LAKEBASE_INSTANCE/roles" $PROFILE_FLAG 2>/dev/null) || true
+    print_step "Check 2/6: Lakebase database roles..."
+    VERIFY_ROLES=$(databricks api get "$VERIFY_ROLES_API" $PROFILE_FLAG 2>/dev/null) || true
 
-    # 2a. Service principal role
     if [[ -n "$SERVICE_PRINCIPAL_ID" ]]; then
         if echo "$VERIFY_ROLES" | grep -q "$SERVICE_PRINCIPAL_ID"; then
             print_success "Lakebase role: service principal OK"
         else
             print_warning "Lakebase role: service principal MISSING -- re-applying..."
             VERIFY_ISSUES=$((VERIFY_ISSUES + 1))
-            databricks api post "/api/2.0/database/instances/$LAKEBASE_INSTANCE/roles" \
+            databricks api post "$VERIFY_ROLES_API" \
                 $PROFILE_FLAG \
                 --json "{\"name\": \"$SERVICE_PRINCIPAL_ID\", \"identity_type\": \"SERVICE_PRINCIPAL\", \"membership_role\": \"DATABRICKS_SUPERUSER\"}" 2>/dev/null || true
         fi
     fi
 
-    # 2b. Current user role
     if [[ -n "$CURRENT_USER" ]]; then
         if echo "$VERIFY_ROLES" | grep -q "$CURRENT_USER"; then
             print_success "Lakebase role: $CURRENT_USER OK"
         else
             print_warning "Lakebase role: $CURRENT_USER MISSING -- re-applying..."
             VERIFY_ISSUES=$((VERIFY_ISSUES + 1))
-            databricks api post "/api/2.0/database/instances/$LAKEBASE_INSTANCE/roles" \
+            databricks api post "$VERIFY_ROLES_API" \
                 $PROFILE_FLAG \
                 --json "{\"name\": \"$CURRENT_USER\", \"identity_type\": \"USER\", \"membership_role\": \"DATABRICKS_SUPERUSER\"}" 2>/dev/null || true
         fi
     fi
 
-    # 2c. Account users group role
     if echo "$VERIFY_ROLES" | grep -q "account users"; then
         print_success "Lakebase role: account users OK"
     else
         print_warning "Lakebase role: account users MISSING -- re-applying..."
         VERIFY_ISSUES=$((VERIFY_ISSUES + 1))
-        databricks api post "/api/2.0/database/instances/$LAKEBASE_INSTANCE/roles" \
+        databricks api post "$VERIFY_ROLES_API" \
             $PROFILE_FLAG \
             --json '{"name": "account users", "identity_type": "GROUP", "membership_role": "DATABRICKS_SUPERUSER", "attributes": {"createdb": true, "createrole": true, "bypassrls": true}}' 2>/dev/null || true
     fi
 
-    # ── Check 3: Lakebase Instance CAN_USE ───────────────────────────────
-    print_step "Check 3/5: Lakebase instance CAN_USE for account users..."
-    VERIFY_INST_PERMS=$(databricks api get "/api/2.0/permissions/database-instances/$LAKEBASE_INSTANCE" $PROFILE_FLAG 2>/dev/null) || true
+    # ── Check 3: Lakebase CAN_USE ───────────────────────────────────────
+    print_step "Check 3/6: Lakebase CAN_USE for account users..."
+    VERIFY_INST_PERMS=$(databricks api get "/api/2.0/permissions/$VERIFY_PERM_TYPE/$LAKEBASE_INSTANCE" $PROFILE_FLAG 2>/dev/null) || true
 
     if echo "$VERIFY_INST_PERMS" | grep -q "account users"; then
-        print_success "Lakebase instance CAN_USE: account users OK"
+        print_success "Lakebase CAN_USE: account users OK"
     else
-        print_warning "Lakebase instance CAN_USE: account users MISSING -- re-applying..."
+        print_warning "Lakebase CAN_USE: account users MISSING -- re-applying..."
         VERIFY_ISSUES=$((VERIFY_ISSUES + 1))
-        databricks api patch "/api/2.0/permissions/database-instances/$LAKEBASE_INSTANCE" \
+        databricks api patch "/api/2.0/permissions/$VERIFY_PERM_TYPE/$LAKEBASE_INSTANCE" \
             $PROFILE_FLAG \
             --json '{"access_control_list": [{"group_name": "account users", "permission_level": "CAN_USE"}]}' 2>/dev/null || true
     fi
 
     # ── Check 4: App CAN_USE ─────────────────────────────────────────────
-    print_step "Check 4/5: App CAN_USE for all workspace users..."
+    print_step "Check 4/6: App CAN_USE for all workspace users..."
     VERIFY_APP_PERMS=$(databricks api get "/api/2.0/permissions/apps/$APP_NAME" $PROFILE_FLAG 2>/dev/null) || true
 
     if echo "$VERIFY_APP_PERMS" | grep -q '"group_name".*"users"'; then
@@ -1148,7 +1442,7 @@ except: print('no')
     fi
 
     # ── Check 5: Unity Catalog Permissions ───────────────────────────────
-    print_step "Check 5/5: Unity Catalog permissions..."
+    print_step "Check 5/6: Unity Catalog permissions..."
     if [[ -n "$SERVICE_PRINCIPAL_ID" && -n "$LAKEBASE_CATALOG" ]]; then
         VERIFY_UC_PERMS=$(databricks api get "/api/2.1/unity-catalog/permissions/catalog/$LAKEBASE_CATALOG" $PROFILE_FLAG 2>/dev/null) || true
 
@@ -1163,6 +1457,36 @@ except: print('no')
         fi
     else
         print_warning "Unity Catalog: skipped (missing service principal or catalog name)"
+    fi
+
+    # ── Check 6: Resource Tags ────────────────────────────────────────────
+    print_step "Check 6/6: Resource tags..."
+    TAG_STATUS_OK=true
+
+    # Verify catalog tags (only if UC-registered)
+    CATALOG_TAGS=$(databricks entity-tag-assignments list "$LAKEBASE_CATALOG" "catalogs" $PROFILE_FLAG --output json 2>/dev/null) || true
+    if [[ -n "$CATALOG_TAGS" ]] && echo "$CATALOG_TAGS" | grep -q '"project"'; then
+        print_success "Catalog tags: project tag present on $LAKEBASE_CATALOG"
+    else
+        print_warning "Catalog tags: not applied (catalog may not be UC-registered)"
+        TAG_STATUS_OK=false
+    fi
+
+    # Verify app tags
+    APP_TAGS=$(databricks api post "/api/2.0/unity-catalog/workspace-entity-tag-assignments/list" \
+        $PROFILE_FLAG \
+        --json "{\"entity_type\": \"apps\", \"entity_id\": \"$APP_NAME\"}" 2>/dev/null) || true
+    if [[ -n "$APP_TAGS" ]] && echo "$APP_TAGS" | grep -q '"project"'; then
+        print_success "App tags: project tag present on $APP_NAME"
+    else
+        print_warning "App tags: not applied (app tagging may not be available)"
+        TAG_STATUS_OK=false
+    fi
+
+    if [[ "$TAG_STATUS_OK" == true ]]; then
+        print_success "All resource tags verified"
+    else
+        print_warning "Some tags could not be verified (tagging features may be in preview)"
     fi
 
     # ── Verification Summary ─────────────────────────────────────────────

@@ -13,13 +13,17 @@ workspace:
   profile: ""                         # Databricks CLI profile (leave empty for default)
 
 lakebase:
-  instance_name: "vibe-coding-workshop-lakebase"
+  mode: "autoscaling"                 # "autoscaling" (default, scale-to-zero) or "provisioned" (fixed CU)
+  instance_name: "vibe-coding-workshop-lakebase"   # Project name (Autoscaling) or instance name (Provisioned)
   catalog: "vibe_coding_workshop_catalog"
   create_catalog: "false"             # Set to "true" to register Lakebase as a UC catalog (needs CREATE CATALOG permission)
   schema: "vibe_coding_workshop"
   database: "databricks_postgres"
   warehouse: ""                       # Name of your SQL warehouse
   uc_catalog: "vibe_coding_workshop_lakebase"
+  min_cu: "0.5"                       # Autoscaling: min compute units (minimum 0.5 CU)
+  max_cu: "2"                         # Autoscaling: max compute units
+  endpoint_name: ""                   # Auto-discovered during deploy (Autoscaling only)
 
 app:
   name: "vibe-coding-workshop-app"
@@ -27,6 +31,12 @@ app:
 
 user:
   email: ""                           # Auto-discovered during install
+
+tags:
+  project: "vibe_coding_workshop"     # Project identifier applied to all resources
+  environment: ""                     # Auto-set from target (development/production)
+  managed_by: "vibe2value"            # Deployment toolchain identifier
+  custom_tags: ""                     # Additional tags (comma-separated key=value pairs)
 
 # Metadata (managed by vibe2value, do not edit manually)
 _metadata:
