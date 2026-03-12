@@ -845,6 +845,112 @@ The CSV must follow the `information_schema.columns` format with required column
 - **This CSV is the starting input for the entire Design-First Pipeline** (all subsequent steps reference it)',
 true, 1, true, current_timestamp(), current_timestamp(), current_user());
 
+-- Step 10 (Generate Mode): Design Schema from PRD - bypass_LLM = TRUE (prompt for coding assistant, like setup_lakebase)
+INSERT INTO ${catalog}.${schema}.section_input_prompts
+(input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
+VALUES
+(135, 'bronze_table_metadata_generate',
+'## Design Database Schema from PRD
+
+Read the PRD below and design a complete relational database schema, then save it as a CSV data dictionary.
+
+---
+
+### PRD (Product Requirements Document)
+
+{prd_document}
+
+---
+
+### Instructions
+
+Based on the PRD above, design a **normalized relational schema** for the **{use_case_title}** use case and save it as a CSV file.
+
+Copy and paste this prompt to the AI:
+
+```
+Read the PRD above and design a complete database schema for the **{use_case_title}** use case.
+
+**Output file:** data_product_accelerator/context/{chapter_3_lakehouse_schema}_Schema.csv
+
+**Schema design requirements:**
+1. Design 5-15 tables covering all entities, relationships, and transactional data described in the PRD
+2. Include primary keys (BIGINT, first column per table) and foreign keys referencing related tables
+3. Use Spark SQL data types: STRING, BIGINT, INT, DOUBLE, DECIMAL(precision,scale), BOOLEAN, DATE, TIMESTAMP
+4. Add descriptive comments for every column explaining its business meaning
+5. Include standard operational columns per table: created_at (TIMESTAMP), updated_at (TIMESTAMP), is_active (BOOLEAN)
+6. Use snake_case for all table and column names
+7. Design for analytics — include fact tables with numeric measures and dimension tables with descriptive attributes
+
+**CSV format (information_schema.columns compatible):**
+```csv
+table_catalog,table_schema,table_name,column_name,ordinal_position,data_type,is_nullable,comment
+{chapter_3_lakehouse_catalog},{chapter_3_lakehouse_schema},<table_name>,<column_name>,<position>,<type>,<YES/NO>,<description>
+```
+
+One row per column, all tables included. ordinal_position restarts at 1 for each table.
+
+**After creating the CSV, validate and enrich:**
+1. Verify required columns: table_name, column_name, data_type, ordinal_position, is_nullable, comment
+2. Check ordinal_position is sequential per table (1, 2, 3...) — fix gaps
+3. Fill empty comment fields with descriptions inferred from column_name and table_name
+4. Normalize data_type to Spark SQL types (VARCHAR -> STRING, INT -> INTEGER, FLOAT -> DOUBLE)
+5. Print verification summary: total tables, total columns, file path, fixes applied
+
+**Downstream Compatibility Note:**
+This CSV drives the entire Design-First Pipeline:
+- Gold Design (Step 11) — reads CSV for dimensional model design
+- Bronze Creation (Step 12) — uses schema to create Delta tables
+- Silver DQ (Step 13) — uses schema for data quality expectations
+- Gold Implementation (Step 14) — uses YAML schemas derived from this CSV
+```',
+'',
+'Table Metadata & Data Dictionary (Design from PRD)',
+'Design table schema from your PRD — for when you don''t have existing tables or a CSV',
+8,
+'## How To Apply
+
+1. **Prerequisite:** Complete Step 3 (PRD Generation) first — the PRD is used as input to design the schema
+2. Click **Generate** to create the prompt with your PRD embedded
+3. Copy the prompt into Cursor or VS Code with Copilot
+4. The coding assistant reads the PRD, designs tables, and saves the CSV to `data_product_accelerator/context/{chapter_3_lakehouse_schema}_Schema.csv`
+5. Review the generated schema and iterate if needed
+
+---
+
+## When to Use This Mode
+
+Use **Design from PRD** when:
+- You **don''t have existing tables** in Databricks yet
+- You **don''t have a CSV export** from another tool
+- You want to **start from scratch** with a schema designed from your requirements
+- You have a **PRD from Step 3** that describes the data entities you need
+
+This mode works just like the Lakebase table creation step — it gives your coding assistant a detailed prompt with the PRD as context, and the AI designs the schema for you.
+
+---
+
+## What Happens Next
+
+The generated CSV becomes the **data dictionary** that drives the entire Design-First Pipeline:
+
+```
+data_product_accelerator/context/{chapter_3_lakehouse_schema}_Schema.csv
+  → Gold Design (Step 11)  — reads CSV to design dimensional model
+  → Bronze (Step 12)       — uses schema to create tables
+  → Silver (Step 13)       — uses schema for DQ expectations
+  → Gold Impl (Step 14)    — uses YAML schemas derived from this CSV
+```',
+'## Expected Deliverables
+
+- `data_product_accelerator/context/{chapter_3_lakehouse_schema}_Schema.csv` file created via coding assistant
+- Contains 5-15 tables with realistic column definitions designed from the PRD
+- Includes: table_catalog, table_schema, table_name, column_name, ordinal_position, data_type, is_nullable, comment
+- Every column has a descriptive business-context comment
+- Ready for use as data dictionary reference
+- **This CSV is the starting input for the entire Design-First Pipeline** (all subsequent steps reference it)',
+true, 1, true, current_timestamp(), current_timestamp(), current_user());
+
 -- Genie Accelerator: Upload CSV for Silver Metadata (bypass_llm = true)
 INSERT INTO ${catalog}.${schema}.section_input_prompts
 (input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, bypass_llm, version, is_active, inserted_at, updated_at, created_by)

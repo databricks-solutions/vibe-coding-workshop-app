@@ -191,7 +191,7 @@ export function WorkflowDiagram({
   // Lakehouse params refresh key -- bumped after auto-set from Step 9 completes
   const [lakehouseParamsRefreshKey, setLakehouseParamsRefreshKey] = useState(0);
   const [lakehouseParamsLoaded, setLakehouseParamsLoaded] = useState(true);
-  const [step10Mode, setStep10Mode] = useState<'extract' | 'upload'>('extract');
+  const [step10Mode, setStep10Mode] = useState<'extract' | 'upload' | 'generate'>('extract');
   const [step12Mode, setStep12Mode] = useState<'clone' | 'generate'>('clone');
   const [step22Mode, setStep22Mode] = useState<'silver' | 'upload'>('silver');
 
@@ -225,7 +225,7 @@ export function WorkflowDiagram({
   }, [currentUser, customUseCaseLabel, selectedUseCaseLabel, defaultCatalog, workshopLevel]);
 
   // Track which mode produced the saved output so we don't bleed it into the other tab
-  const [step10OutputMode, setStep10OutputMode] = useState<'extract' | 'upload' | null>(null);
+  const [step10OutputMode, setStep10OutputMode] = useState<'extract' | 'upload' | 'generate' | null>(null);
   const [step12OutputMode, setStep12OutputMode] = useState<'clone' | 'generate' | null>(null);
   const [step22OutputMode, setStep22OutputMode] = useState<'silver' | 'upload' | null>(null);
 
@@ -237,6 +237,11 @@ export function WorkflowDiagram({
 
   const handleStep10UploadGenerated = useCallback((stepNumber: number, prompt: string) => {
     setStep10OutputMode('upload');
+    onStepPromptGenerated(stepNumber, prompt);
+  }, [onStepPromptGenerated]);
+
+  const handleStep10GenerateGenerated = useCallback((stepNumber: number, prompt: string) => {
+    setStep10OutputMode('generate');
     onStepPromptGenerated(stepNumber, prompt);
   }, [onStepPromptGenerated]);
 
@@ -325,7 +330,7 @@ export function WorkflowDiagram({
 
   // Auto-sync Step 12 mode with Step 10 mode
   useEffect(() => {
-    setStep12Mode(step10Mode === 'upload' ? 'generate' : 'clone');
+    setStep12Mode(step10Mode === 'extract' ? 'clone' : 'generate');
   }, [step10Mode]);
 
   // Programmatic expand for Prerequisites (triggered by "Start the Build" button)
@@ -1090,10 +1095,12 @@ export function WorkflowDiagram({
             // Step 10: Table Metadata (Chapter 3) - tabbed: Extract from Tables OR Upload CSV
             case 10: {
               const showUploadTab = !disabledSectionTags.has('bronze_table_metadata_upload');
+              const showGenerateTab = !disabledSectionTags.has('bronze_table_metadata_generate');
               const step10Done = completedSteps.has(10);
               const step10Skipped = skippedSteps.has(10);
               const extractTabLocked = step10Done && step10Mode !== 'extract';
               const uploadTabLocked = (step10Done && step10Mode !== 'upload') || hasLakebaseRegistration;
+              const generateTabLocked = step10Done && step10Mode !== 'generate';
               return (
                 <div key={10} className="relative mt-5" data-step-number="10">
                   <StepBadge number={10} />
@@ -1126,7 +1133,7 @@ export function WorkflowDiagram({
 
                     <div className={`border-t border-border ${expandedStep === 10 ? '' : 'hidden'}`}>
                         {/* Mode tabs */}
-                        {showUploadTab && (
+                        {(showUploadTab || showGenerateTab) && (
                           <div className="flex border-b border-border">
                             <button
                               onClick={() => !extractTabLocked && setStep10Mode('extract')}
@@ -1143,21 +1150,40 @@ export function WorkflowDiagram({
                               Extract from Tables
                               {extractTabLocked && <Lock className="w-3 h-3 ml-1" />}
                             </button>
-                            <button
-                              onClick={() => !uploadTabLocked && setStep10Mode('upload')}
-                              disabled={uploadTabLocked}
-                              className={`flex-1 px-4 py-3 text-[13px] font-medium transition-all relative flex items-center justify-center gap-2 ${
-                                step10Mode === 'upload'
-                                  ? 'text-primary border-b-2 border-primary -mb-px bg-primary/5'
-                                  : uploadTabLocked
-                                    ? 'text-muted-foreground/40 cursor-not-allowed'
-                                    : 'text-muted-foreground hover:text-foreground hover:bg-secondary/30'
-                              }`}
-                            >
-                              <Upload className="w-4 h-4" />
-                              Upload CSV <span className="text-[10px] opacity-60 ml-0.5">(Beta)</span>
-                              {uploadTabLocked && <Lock className="w-3 h-3 ml-1" />}
-                            </button>
+                            {showUploadTab && (
+                              <button
+                                onClick={() => !uploadTabLocked && setStep10Mode('upload')}
+                                disabled={uploadTabLocked}
+                                className={`flex-1 px-4 py-3 text-[13px] font-medium transition-all relative flex items-center justify-center gap-2 ${
+                                  step10Mode === 'upload'
+                                    ? 'text-primary border-b-2 border-primary -mb-px bg-primary/5'
+                                    : uploadTabLocked
+                                      ? 'text-muted-foreground/40 cursor-not-allowed'
+                                      : 'text-muted-foreground hover:text-foreground hover:bg-secondary/30'
+                                }`}
+                              >
+                                <Upload className="w-4 h-4" />
+                                Upload CSV
+                                {uploadTabLocked && <Lock className="w-3 h-3 ml-1" />}
+                              </button>
+                            )}
+                            {showGenerateTab && (
+                              <button
+                                onClick={() => !generateTabLocked && setStep10Mode('generate')}
+                                disabled={generateTabLocked}
+                                className={`flex-1 px-4 py-3 text-[13px] font-medium transition-all relative flex items-center justify-center gap-2 ${
+                                  step10Mode === 'generate'
+                                    ? 'text-primary border-b-2 border-primary -mb-px bg-primary/5'
+                                    : generateTabLocked
+                                      ? 'text-muted-foreground/40 cursor-not-allowed'
+                                      : 'text-muted-foreground hover:text-foreground hover:bg-secondary/30'
+                                }`}
+                              >
+                                <Sparkles className="w-4 h-4" />
+                                Design from PRD
+                                {generateTabLocked && <Lock className="w-3 h-3 ml-1" />}
+                              </button>
+                            )}
                           </div>
                         )}
 
@@ -1218,6 +1244,30 @@ export function WorkflowDiagram({
                               />
                             </div>
                           )}
+                          {step10Mode === 'generate' && (
+                            <WorkflowStep
+                              icon={<Sparkles className="w-5 h-5" />}
+                              title="Design from PRD"
+                              description="Design a database schema from your PRD — for when you don't have existing tables or a CSV"
+                              color="amber"
+                              isComplete={step10Done}
+                              onToggleComplete={() => toggleStepComplete(10)}
+                              onStepReset={() => { resetStepComplete(10); setStep10OutputMode(null); }}
+                              isSkipped={step10Skipped}
+                              onToggleSkip={() => toggleStepSkip(10)}
+                              onNavigateNext={() => navigateToNextStep(10)}
+                              sectionTag="bronze_table_metadata_generate"
+                              industry={selectedIndustry}
+                              useCase={selectedUseCase}
+                              embedded={true}
+                              stepNumber={10}
+                              onPromptGenerated={handleStep10GenerateGenerated}
+                              initialPrompt={step10OutputMode === 'generate' ? stepPrompts[10] : undefined}
+                              previousOutputs={stepPrompts[3] ? { prd_document: stepPrompts[3] } : undefined}
+                              isPreviousStepComplete={isPreviousStepComplete(10)}
+                              sessionId={sessionId}
+                            />
+                          )}
                         </div>
                     </div>
                   </div>
@@ -1272,7 +1322,7 @@ export function WorkflowDiagram({
               const showGenerateTab = !disabledSectionTags.has('bronze_layer_creation_upload');
               const step12Done = completedSteps.has(12);
               const step12Skipped = skippedSteps.has(12);
-              const cloneTabLocked = (step12Done && effectiveStep12Mode !== 'clone') || step10Mode === 'upload' || isGenieFlow;
+              const cloneTabLocked = (step12Done && effectiveStep12Mode !== 'clone') || step10Mode === 'upload' || step10Mode === 'generate' || isGenieFlow;
               const generateTabLocked = (step12Done && effectiveStep12Mode !== 'generate') || (!isGenieFlow && step10Mode === 'extract') || hasLakebaseRegistration;
               const tableMetadata = stepPrompts[10] || stepPrompts[22] || '';
               const step12PrevOutputs = tableMetadata ? { table_metadata: tableMetadata } : undefined;
