@@ -4919,7 +4919,7 @@ databricks auth login --host {workspace_url}
 
 Create file `apps_lakebase/db/lakebase/ddl/05_app_tables.sql` with CREATE TABLE statements for ALL entities needed by the UI:
 - Use PostgreSQL syntax
-- Use `vibe_coding_workshop` as schema placeholder
+- Use `${schema}` as schema placeholder (setup-lakebase.sh substitutes your schema name at deploy time)
 - Include primary keys, foreign keys, indexes
 - Include created_at/updated_at timestamps
 
@@ -4931,7 +4931,7 @@ Create file `apps_lakebase/db/lakebase/ddl/05_app_tables.sql` with CREATE TABLE 
 
 Create file `apps_lakebase/db/lakebase/dml_seed/04_seed_app_data.sql` with INSERT statements:
 - 10-15 realistic records per table for {industry_name} industry
-- Use `vibe_coding_workshop` as schema placeholder  
+- Use `${schema}` as schema placeholder (must match DDL files)
 - Insert parent tables before child tables (e.g., hosts before listings, listings before reviews)
 
 **DML Guidelines for Lakebase:**
@@ -4958,7 +4958,7 @@ cd apps_lakebase && python3 scripts/lakebase_manager.py --action check --instanc
 # Set environment overrides (replace <values> with your actual values from Step 4)
 export LAKEBASE_HOST_OVERRIDE="<instance-dns-from-step-4>"
 export LAKEBASE_DATABASE_OVERRIDE="databricks_postgres"
-export LAKEBASE_SCHEMA_OVERRIDE="<your-schema-from-step-4>"
+export LAKEBASE_SCHEMA_OVERRIDE="{user_schema_prefix}"
 export LAKEBASE_PORT_OVERRIDE="5432"
 export LAKEBASE_MODE={lakebase_mode}
 # Autoscaling only — skip this line for provisioned:
@@ -4991,7 +4991,7 @@ env:
   - name: LAKEBASE_DATABASE
     value: "databricks_postgres"
   - name: LAKEBASE_SCHEMA
-    value: "<your-schema>"
+    value: "{user_schema_prefix}"
   - name: LAKEBASE_PORT
     value: "5432"
   # Autoscaling only — include ENDPOINT_NAME; omit for provisioned:
