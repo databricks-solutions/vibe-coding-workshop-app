@@ -676,6 +676,29 @@ try:
         conn.commit()
         print("✓ Service principal database access configured")
 
+    # ── Grant public role access so all authenticated users can use the workshop ──
+    print()
+    print("Setting up public access for all workspace users...")
+    try:
+        cursor.execute("GRANT CREATE ON DATABASE databricks_postgres TO public")
+        print("  ✓ CREATE on database granted to public")
+    except Exception as e:
+        if "already" in str(e).lower():
+            print("  ✓ CREATE on database already granted to public")
+        else:
+            print(f"  ⚠ Could not grant CREATE on database: {e}")
+
+    try:
+        cursor.execute(f"GRANT USAGE ON SCHEMA {SCHEMA} TO public")
+        cursor.execute(f"GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA {SCHEMA} TO public")
+        cursor.execute(f"ALTER DEFAULT PRIVILEGES IN SCHEMA {SCHEMA} GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO public")
+        print(f"  ✓ Schema and table permissions granted to public on {SCHEMA}")
+    except Exception as e:
+        print(f"  ⚠ Could not grant public schema permissions: {e}")
+
+    conn.commit()
+    print("✓ Public access configured for all authenticated users")
+
 except Exception as e:
     print(f"❌ Error: {e}")
     import traceback
