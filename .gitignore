@@ -28,3 +28,6 @@ user-config.yaml
 databricks.yml
 app.yaml
 db/lakebase/dml_seed/03_seed_workshop_parameters.sql
+
+# Databricks bundle state (local deployment metadata)
+.databricks/
