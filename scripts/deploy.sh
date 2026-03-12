@@ -1033,14 +1033,14 @@ if [[ "$TABLES_ONLY" != true && "$SKIP_PERMISSIONS" != true ]]; then
                 fi
             fi
 
-            # Grant CAN_USE on Lakebase resource to account users
-            print_step "Granting CAN_USE on Lakebase $PERM_RESOURCE_TYPE to account users..."
+            # Grant CAN_USE on Lakebase resource to all workspace users
+            print_step "Granting CAN_USE on Lakebase $PERM_RESOURCE_TYPE to all workspace users..."
             INSTANCE_PERM_RESULT=$(databricks api patch "/api/2.0/permissions/$PERM_RESOURCE_TYPE/$LAKEBASE_INSTANCE" \
                 $PROFILE_FLAG \
-                --json '{"access_control_list": [{"group_name": "account users", "permission_level": "CAN_USE"}]}' 2>&1) || true
+                --json '{"access_control_list": [{"group_name": "users", "permission_level": "CAN_USE"}]}' 2>&1) || true
 
             if echo "$INSTANCE_PERM_RESULT" | grep -q "access_control_list\|CAN_USE"; then
-                print_success "CAN_USE granted on Lakebase for account users"
+                print_success "CAN_USE granted on Lakebase for all workspace users"
             else
                 print_warning "Could not grant CAN_USE on Lakebase"
                 echo "  Response: $INSTANCE_PERM_RESULT"
@@ -1060,6 +1060,19 @@ if [[ "$TABLES_ONLY" != true && "$SKIP_PERMISSIONS" != true ]]; then
 fi
 
 if [[ "$PERMISSIONS_ONLY" == true ]]; then
+    # Also apply app-level CAN_USE (normally done in Step 4, but needed here too)
+    print_step "Granting CAN_USE on app to all workspace users..."
+    APP_PERM_RESULT=$(databricks api patch "/api/2.0/permissions/apps/$APP_NAME" \
+        $PROFILE_FLAG \
+        --json '{"access_control_list": [{"group_name": "users", "permission_level": "CAN_USE"}]}' 2>&1) || true
+
+    if echo "$APP_PERM_RESULT" | grep -q "access_control_list\|CAN_USE"; then
+        print_success "CAN_USE granted on app for all workspace users"
+    else
+        print_warning "Could not grant CAN_USE on app"
+        echo "  Response: $APP_PERM_RESULT"
+    fi
+
     print_header "PERMISSIONS SETUP COMPLETE"
     exit 0
 fi
@@ -1465,24 +1478,48 @@ except: print('no')
     fi
 
     # ── Check 3: Lakebase CAN_USE ───────────────────────────────────────
-    print_step "Check 3/6: Lakebase CAN_USE for account users..."
+    print_step "Check 3/6: Lakebase CAN_USE for all workspace users..."
     VERIFY_INST_PERMS=$(databricks api get "/api/2.0/permissions/$VERIFY_PERM_TYPE/$LAKEBASE_INSTANCE" $PROFILE_FLAG 2>/dev/null) || true
 
-    if echo "$VERIFY_INST_PERMS" | grep -q "account users"; then
-        print_success "Lakebase CAN_USE: account users OK"
+    # Check for explicit CAN_USE grant on the 'users' group (not just inherited)
+    if echo "$VERIFY_INST_PERMS" | python3 -c "
+import sys, json
+try:
+    data = json.load(sys.stdin)
+    for acl in data.get('access_control_list', []):
+        if acl.get('group_name') == 'users':
+            for perm in acl.get('all_permissions', []):
+                if perm.get('permission_level') == 'CAN_USE' and not perm.get('inherited', False):
+                    sys.exit(0)
+    sys.exit(1)
+except: sys.exit(1)
+" 2>/dev/null; then
+        print_success "Lakebase CAN_USE: all workspace users OK"
     else
-        print_warning "Lakebase CAN_USE: account users MISSING -- re-applying..."
+        print_warning "Lakebase CAN_USE: all workspace users MISSING -- re-applying..."
         VERIFY_ISSUES=$((VERIFY_ISSUES + 1))
         databricks api patch "/api/2.0/permissions/$VERIFY_PERM_TYPE/$LAKEBASE_INSTANCE" \
             $PROFILE_FLAG \
-            --json '{"access_control_list": [{"group_name": "account users", "permission_level": "CAN_USE"}]}' 2>/dev/null || true
+            --json '{"access_control_list": [{"group_name": "users", "permission_level": "CAN_USE"}]}' 2>/dev/null || true
     fi
 
     # ── Check 4: App CAN_USE ─────────────────────────────────────────────
     print_step "Check 4/6: App CAN_USE for all workspace users..."
     VERIFY_APP_PERMS=$(databricks api get "/api/2.0/permissions/apps/$APP_NAME" $PROFILE_FLAG 2>/dev/null) || true
 
-    if echo "$VERIFY_APP_PERMS" | grep -q '"group_name".*"users"'; then
+    # Check for explicit CAN_USE grant on the 'users' group
+    if echo "$VERIFY_APP_PERMS" | python3 -c "
+import sys, json
+try:
+    data = json.load(sys.stdin)
+    for acl in data.get('access_control_list', []):
+        if acl.get('group_name') == 'users':
+            for perm in acl.get('all_permissions', []):
+                if perm.get('permission_level') == 'CAN_USE' and not perm.get('inherited', False):
+                    sys.exit(0)
+    sys.exit(1)
+except: sys.exit(1)
+" 2>/dev/null; then
         print_success "App CAN_USE: all workspace users OK"
     else
         print_warning "App CAN_USE: all workspace users MISSING -- re-applying..."
