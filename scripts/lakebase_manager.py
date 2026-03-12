@@ -313,8 +313,9 @@ def add_lakebase_role(host: str, token: str, instance_name: str, principal_id: s
         "Content-Type": "application/json"
     }
     
+    role_key = "postgres_role" if mode == "autoscaling" else "name"
     payload = {
-        "name": principal_id,
+        role_key: principal_id,
         "identity_type": identity_type,
         "membership_role": membership_role
     }
