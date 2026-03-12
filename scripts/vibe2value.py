@@ -142,6 +142,7 @@ def get_placeholder_map(config: dict) -> dict:
         "__SERVING_ENDPOINT__": app.get("serving_endpoint", "databricks-claude-sonnet-4-5"),
         "__DEFAULT_WAREHOUSE__": lb.get("warehouse", ""),
         "__ENDPOINT_NAME__": lb.get("endpoint_name", ""),
+        "__LAKEBASE_MODE__": lb.get("mode", "autoscaling"),
         "__TAG_PROJECT__": tags.get("project", "vibe_coding_workshop"),
         "__TAG_ENVIRONMENT__": tags.get("environment", "") or target,
         "__TAG_MANAGED_BY__": tags.get("managed_by", "vibe2value"),

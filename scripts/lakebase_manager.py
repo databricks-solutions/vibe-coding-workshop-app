@@ -967,7 +967,7 @@ NOTE: Lakebase management APIs are not yet publicly available.
     parser.add_argument(
         "--mode",
         choices=["autoscaling", "provisioned"],
-        default=os.getenv("LAKEBASE_MODE", "provisioned"),
+        default=os.getenv("LAKEBASE_MODE", "autoscaling"),
         help="Lakebase mode: autoscaling or provisioned (default from LAKEBASE_MODE env)"
     )
     parser.add_argument(

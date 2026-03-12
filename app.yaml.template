@@ -65,6 +65,10 @@ env:
   - name: ENDPOINT_NAME
     value: "__ENDPOINT_NAME__"
 
+  # Lakebase mode: "autoscaling" (default) or "provisioned"
+  - name: LAKEBASE_MODE
+    value: "__LAKEBASE_MODE__"
+
   # Toggle Lakebase (set to "false" for YAML fallback)
   - name: USE_LAKEBASE
     value: "true"

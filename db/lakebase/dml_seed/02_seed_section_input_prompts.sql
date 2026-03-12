@@ -524,7 +524,8 @@ databricks apps logs $APP_NAME --tail 100 | grep -i lakebase
 ```
 
 You should see INFO logs showing:
-- Connection attempts to Lakebase
+- Autoscaling: "ConnectionPool initialised" | Provisioned: "Connected to Lakebase"
+- Connection attempts to Lakebase (may include retries on first connect)
 - Queries being executed for each page/endpoint
 - Success messages with row counts
 
@@ -540,9 +541,12 @@ If any errors occur:
    ```
 
 2. **Common errors and fixes:**
-   - "No module named ''psycopg2''" → Add to requirements.txt and rebuild
-   - "token''s identity did not match" → Set LAKEBASE_USER to service principal ID
-   - "role does not exist" → Run add-lakebase-role command
+   - "No module named ''psycopg''" or "No module named ''psycopg2''" → Add psycopg[binary,pool] and psycopg2-binary to requirements.txt and rebuild
+   - "No module named ''psycopg_pool''" → Add psycopg[binary,pool]>=3.1.0 to requirements.txt
+   - "No module named ''databricks.sdk''" → Add databricks-sdk>=0.81.0 to requirements.txt
+   - "token''s identity did not match" → Check that app.yaml env vars match your mode ({lakebase_mode}): autoscaling needs ENDPOINT_NAME (no LAKEBASE_USER); provisioned needs LAKEBASE_USER via resource link
+   - "role does not exist" → Run add-lakebase-role with --mode {lakebase_mode}
+   - "Connection attempt failed" → Normal on first request (cold start); retries handle this automatically
    - "Could not import module" → Check apps_lakebase/app.yaml command matches file structure
 
 3. **Fix the issue, rebuild, and redeploy (from apps_lakebase/):**
@@ -4940,13 +4944,13 @@ Create file `apps_lakebase/db/lakebase/dml_seed/04_seed_app_data.sql` with INSER
 SCHEMA_NAME="{user_schema_prefix}"
 echo "Your schema: $SCHEMA_NAME"
 
-# Get the Lakebase instance DNS (run from apps_lakebase/ or use path)
-cd apps_lakebase && python3 scripts/lakebase_manager.py --action instance-info --instance-name {lakebase_instance_name}
+# Check Lakebase connectivity and instance status (run from apps_lakebase/ or use path)
+cd apps_lakebase && python3 scripts/lakebase_manager.py --action check --instance-name {lakebase_instance_name}
 ```
 
 **Step 5: Deploy to Lakebase**
 
-> **💡 Note:** The `account users` role is a default group role in Databricks Lakebase that allows OAuth-authenticated users to connect without requiring individual role creation. Use this as the LAKEBASE_USER_OVERRIDE value.
+> **Lakebase Mode:** `{lakebase_mode}`. If autoscaling, authentication uses OAuth credential generation (no LAKEBASE_USER_OVERRIDE needed). If provisioned, set LAKEBASE_USER_OVERRIDE to your email.
 
 ```bash
 # Set environment overrides (replace <values> with your actual values from Step 4)
@@ -4954,7 +4958,9 @@ export LAKEBASE_HOST_OVERRIDE="<instance-dns-from-step-4>"
 export LAKEBASE_DATABASE_OVERRIDE="databricks_postgres"
 export LAKEBASE_SCHEMA_OVERRIDE="<your-schema-from-step-4>"
 export LAKEBASE_PORT_OVERRIDE="5432"
-export LAKEBASE_USER_OVERRIDE="account users"
+export LAKEBASE_MODE={lakebase_mode}
+# Autoscaling only — skip this line for provisioned:
+export ENDPOINT_NAME="projects/{lakebase_instance_name}/branches/main/endpoints/primary"
 
 # Deploy tables (run from apps_lakebase/)
 cd apps_lakebase && ./scripts/setup-lakebase.sh --recreate --instance-name {lakebase_instance_name}
@@ -4984,9 +4990,14 @@ env:
     value: "<your-schema>"
   - name: LAKEBASE_PORT
     value: "5432"
-  - name: LAKEBASE_USER
-    value: "account users"
+  # Autoscaling only — include ENDPOINT_NAME; omit for provisioned:
+  - name: ENDPOINT_NAME
+    value: "projects/{lakebase_instance_name}/branches/main/endpoints/primary"
+  - name: USE_LAKEBASE
+    value: "true"
 ```
+
+> **Note on LAKEBASE_USER:** For **autoscaling**, do NOT set it — the identity is injected automatically. For **provisioned**, it is set via the Lakebase app resource link.
 
 ---
 
@@ -5067,34 +5078,42 @@ Connect the web application to the Lakebase database so the UI displays real dat
 
 ---
 
-## Part A: Install Dependencies (CRITICAL - Prevent "No module named psycopg2" Error)
+## Part A: Install Dependencies (CRITICAL - Prevent driver import errors)
 
 **Both files must be updated in `apps_lakebase/`** - `apps_lakebase/pyproject.toml` is the source of truth and `apps_lakebase/requirements.txt` may be regenerated from it.
 
-1. **Check if `apps_lakebase/pyproject.toml` exists** - if yes, add `psycopg2-binary` to `[project.dependencies]`:
+> **Lakebase Mode:** `{lakebase_mode}`. Both `psycopg` (v3) and `psycopg2-binary` are required regardless of mode. Autoscaling uses psycopg3 ConnectionPool with OAuth token rotation; provisioned uses psycopg2 with resource-linked credentials.
+
+1. **Check if `apps_lakebase/pyproject.toml` exists** - if yes, add these to `[project.dependencies]`:
    ```toml
    [project]
    dependencies = [
-       "psycopg2-binary",
+       "psycopg[binary,pool]>=3.1.0",
+       "psycopg2-binary>=2.9.0",
+       "databricks-sdk>=0.81.0",
        # ... other deps
    ]
    ```
 
-2. **Add to `apps_lakebase/requirements.txt`** - ensure this line exists:
+2. **Add to `apps_lakebase/requirements.txt`** - ensure these lines exist:
    ```
-   psycopg2-binary
+   psycopg[binary,pool]>=3.1.0
+   psycopg2-binary>=2.9.0
+   databricks-sdk>=0.81.0
    ```
 
-3. **Verify both files have the dependency (from apps_lakebase/):**
+3. **Verify both files have the dependencies (from apps_lakebase/):**
    ```bash
    cd apps_lakebase && grep -i psycopg pyproject.toml requirements.txt
+   cd apps_lakebase && grep -i databricks-sdk pyproject.toml requirements.txt
    ```
-   You should see `psycopg2-binary` in BOTH files.
+   You should see `psycopg[binary,pool]` and `databricks-sdk` in BOTH files.
 
 4. **Test locally** before proceeding (from apps_lakebase/):
    ```bash
    cd apps_lakebase && pip install -r requirements.txt
-   cd apps_lakebase && python3 -c "import psycopg2; print(''psycopg2 OK'')"
+   cd apps_lakebase && python3 -c "import psycopg; from psycopg_pool import ConnectionPool; print(''psycopg3 + pool OK'')"
+   cd apps_lakebase && python3 -c "from databricks.sdk import WorkspaceClient; print(''databricks-sdk OK'')"
    ```
 
 5. **Ensure `requirements.txt` is NOT in `apps_lakebase/.gitignore`:**
@@ -5103,7 +5122,7 @@ Connect the web application to the Lakebase database so the UI displays real dat
    ```
    If ignored, Databricks sync will skip it and deployment will fail.
 
-**Why this matters:** Databricks Apps install from `requirements.txt`. If the file is missing or ignored, the deployed app will fail with "No module named ''psycopg2''".
+**Why this matters:** The app uses `psycopg3` + `databricks-sdk` for autoscaling and `psycopg2` for provisioned mode. Both drivers must be available so the code can select the right one at runtime.
 
 ---
 
@@ -5119,30 +5138,43 @@ Copy the Service Principal ID from the output.
 
 **Step 2: Grant Lakebase role**
 ```bash
-cd apps_lakebase && python scripts/lakebase_manager.py --action add-lakebase-role --app-name $APP_NAME --instance-name {lakebase_instance_name}
+cd apps_lakebase && python scripts/lakebase_manager.py --action add-lakebase-role --app-name $APP_NAME --instance-name {lakebase_instance_name} --mode {lakebase_mode} --branch "projects/{lakebase_instance_name}/branches/main"
 ```
+> The `--branch` flag is used by autoscaling; provisioned mode ignores it.
+
 Look for: `✓ Successfully added Lakebase role`
 
 **Step 3: Link Lakebase as App Resource**
 ```bash
-cd apps_lakebase && python scripts/lakebase_manager.py --action link-app-resource --app-name $APP_NAME --instance-name {lakebase_instance_name}
+cd apps_lakebase && python scripts/lakebase_manager.py --action link-app-resource --app-name $APP_NAME --instance-name {lakebase_instance_name} --mode {lakebase_mode}
 ```
 Look for: `✓ Successfully linked Lakebase`
 
 **Step 4: Verify permissions were added**
 ```bash
-cd apps_lakebase && python scripts/lakebase_manager.py --action list-lakebase-roles --instance-name {lakebase_instance_name}
+cd apps_lakebase && python scripts/lakebase_manager.py --action list-lakebase-roles --instance-name {lakebase_instance_name} --mode {lakebase_mode} --branch "projects/{lakebase_instance_name}/branches/main"
 ```
 Your service principal ID must appear with `DATABRICKS_SUPERUSER` role.
 
-**Step 5: Update apps_lakebase/app.yaml**
-Set `LAKEBASE_USER` to the service principal ID (not your email).
+**Step 5: Verify apps_lakebase/app.yaml env vars match your mode (`{lakebase_mode}`)**
+```yaml
+  - name: USE_LAKEBASE
+    value: "true"
+  # Autoscaling only — include ENDPOINT_NAME; omit for provisioned:
+  - name: ENDPOINT_NAME
+    value: "projects/{lakebase_instance_name}/branches/main/endpoints/primary"
+```
+> For autoscaling, do NOT set `LAKEBASE_USER`. For provisioned, `LAKEBASE_USER` is set via the app resource link.
 
-**⚠️ If you skip these steps, you will see this error:**
+**⚠️ If you skip permission steps, you will see errors like:**
 ```
 role "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" does not exist
 ```
-Go back and run steps 2-4 again.
+or for cold-start timeouts:
+```
+Connection attempt 1/5 failed (scale-to-zero wake?), retrying...
+```
+Go back and run steps 2-4 again. Cold-start retries are normal for the first connection after scale-to-zero.
 
 ---
 
@@ -5151,9 +5183,32 @@ Go back and run steps 2-4 again.
 Databricks Apps inject these env vars for linked database resources:
 - `PGHOST`, `PGDATABASE`, `PGUSER`, `PGPORT`, `PGSSLMODE`
 
-**⚠️ PGPASSWORD is NOT injected!** Use OAuth authentication instead:
+**⚠️ PGPASSWORD is NOT injected!** Your mode is `{lakebase_mode}`. Authentication differs by mode:
 
-1. Use `databricks-sdk` to get OAuth token:
+1. **Autoscaling mode** (when `ENDPOINT_NAME` is set) - uses psycopg3 ConnectionPool with credential rotation:
+   ```python
+   from databricks.sdk import WorkspaceClient
+   import psycopg
+   from psycopg_pool import ConnectionPool
+
+   ws = WorkspaceClient()
+   endpoint_name = os.environ["ENDPOINT_NAME"]
+
+   class OAuthConnection(psycopg.Connection):
+       @classmethod
+       def connect(cls, conninfo='''', **kwargs):
+           credential = ws.postgres.generate_database_credential(endpoint=endpoint_name)
+           kwargs[''password''] = credential.token
+           return super().connect(conninfo, **kwargs)
+
+   pool = ConnectionPool(
+       conninfo=f"dbname={db} user={user} host={host} port={port} sslmode=require",
+       connection_class=OAuthConnection,
+       min_size=1, max_size=10, open=True,
+   )
+   ```
+
+2. **Provisioned mode** (when `ENDPOINT_NAME` is NOT set) - uses OAuth token directly:
    ```python
    from databricks.sdk import WorkspaceClient
    ws = WorkspaceClient()
@@ -5161,19 +5216,7 @@ Databricks Apps inject these env vars for linked database resources:
    token = headers["Authorization"][7:]  # Remove "Bearer "
    ```
 
-2. Use the token as the password for psycopg2:
-   ```python
-   psycopg2.connect(
-       host=os.getenv("PGHOST"),
-       user=os.getenv("PGUSER"),
-       password=token,  # OAuth token, NOT env var
-       database=os.getenv("PGDATABASE"),
-       port=os.getenv("PGPORT"),
-       sslmode=os.getenv("PGSSLMODE")
-   )
-   ```
-
-**When updating `@apps_lakebase/src/backend/services/lakebase.py`, ensure it follows this pattern.**
+**When updating `@apps_lakebase/src/backend/services/lakebase.py`, ensure it detects `ENDPOINT_NAME` and uses the appropriate pattern.** The existing lakebase.py template already handles both modes.
 
 ---
 
@@ -5281,13 +5324,13 @@ Health endpoints are mounted at root (`/health/*`), not under `/api`. Frontend c
 
 ## Checklist
 
-- [ ] psycopg2-binary in BOTH pyproject.toml AND requirements.txt
+- [ ] psycopg[binary,pool]>=3.1.0 AND psycopg2-binary AND databricks-sdk in BOTH pyproject.toml AND requirements.txt
 - [ ] requirements.txt NOT in .gitignore (will be skipped by sync!)
-- [ ] Tested locally: `python3 -c "import psycopg2"`
+- [ ] Tested locally: `python3 -c "import psycopg; from psycopg_pool import ConnectionPool"`
 - [ ] Service principal ID obtained
-- [ ] Lakebase database role granted (add-lakebase-role)
-- [ ] Lakebase linked as App Resource (link-app-resource)
-- [ ] apps_lakebase/app.yaml LAKEBASE_USER set to service principal ID
+- [ ] Lakebase database role granted (add-lakebase-role --mode {lakebase_mode})
+- [ ] Lakebase linked as App Resource (link-app-resource --mode {lakebase_mode})
+- [ ] apps_lakebase/app.yaml env vars match mode: ENDPOINT_NAME for autoscaling, LAKEBASE_USER via resource link for provisioned
 - [ ] INFO logging added to all Lakebase connection code
 - [ ] Backend APIs return data with source indicator (live/mock)
 - [ ] Backend falls back to mock data when Lakebase unavailable
@@ -5330,8 +5373,8 @@ Complete Step 6 (Setup Lakebase) first. Tables must exist.
 **Note:** This step focuses on local development. Deployment to Databricks is done in Step 8.',
 '## Expected Deliverables
 
-- Service principal with Lakebase database role granted
-- Lakebase linked as App Resource (enables PGPASSWORD injection)
+- Service principal with Lakebase database role granted (autoscaling mode)
+- Lakebase linked as App Resource (enables PGHOST/PGUSER injection)
 - Backend APIs with fallback to mock data
 - ConnectionStatus indicator showing live/mock state
 - Frontend built successfully (`npm run build`)
@@ -5455,7 +5498,11 @@ databricks apps logs $APP_NAME --tail 100
 
 4. **Repeat up to 3 times.** If errors persist after 3 attempts, report them for manual investigation.
 
-**Common error:** "Could not import module" → Check `apps_lakebase/app.yaml` command matches your file structure (e.g., `app:app` vs `server.app:app`)
+**Common errors:**
+- "Could not import module" → Check `apps_lakebase/app.yaml` command matches your file structure (e.g., `app:app` vs `server.app:app`)
+- "No module named ''psycopg''" → Ensure psycopg[binary,pool]>=3.1.0 is in requirements.txt
+- "Connection attempt failed" → Normal on first connect; check that Lakebase env vars in app.yaml match your mode ({lakebase_mode})
+- "password authentication failed" → For provisioned: verify app resource link and LAKEBASE_USER; for autoscaling: verify ENDPOINT_NAME is set
 
 ---
 

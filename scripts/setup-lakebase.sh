@@ -268,7 +268,7 @@ PORT = int(os.environ.get('LAKEBASE_PORT', '5432'))
 USER = os.environ.get('LAKEBASE_USER', '')
 ACTION = os.environ.get('ACTION', 'create')
 PROJECT_ROOT = os.environ.get('PROJECT_ROOT', '.')
-LAKEBASE_MODE = os.environ.get('LAKEBASE_MODE', 'provisioned')
+LAKEBASE_MODE = os.environ.get('LAKEBASE_MODE', 'autoscaling')
 ENDPOINT_NAME = os.environ.get('ENDPOINT_NAME', '')
 
 # Paths to SQL files
@@ -643,7 +643,7 @@ try:
 
     # ── Create Postgres roles for the app service principal (Autoscaling only) ──
     sp_id = os.environ.get("APP_SERVICE_PRINCIPAL_ID", "")
-    lakebase_mode = os.environ.get("LAKEBASE_MODE", "provisioned")
+    lakebase_mode = os.environ.get("LAKEBASE_MODE", "autoscaling")
     if sp_id and lakebase_mode == "autoscaling":
         print()
         print("Setting up Postgres roles for app service principal...")

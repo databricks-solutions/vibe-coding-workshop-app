@@ -691,7 +691,8 @@ def get_workshop_parameters_sync() -> Dict[str, str]:
             'lakebase_instance_name': os.getenv('LAKEBASE_INSTANCE_NAME', ''),
             'lakebase_host_name': os.getenv('LAKEBASE_HOST', ''),
             'company_brand_url': '',
-            'lakebase_uc_catalog_name': os.getenv('LAKEBASE_UC_CATALOG', '')
+            'lakebase_uc_catalog_name': os.getenv('LAKEBASE_UC_CATALOG', ''),
+            'lakebase_mode': os.getenv('LAKEBASE_MODE', 'autoscaling'),
         }
     
     return {row['param_key']: row['param_value'] for row in results}

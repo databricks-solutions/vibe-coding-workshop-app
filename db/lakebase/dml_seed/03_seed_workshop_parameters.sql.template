@@ -8,7 +8,7 @@
 -- =============================================================================
 
 -- Clear existing data (for recreate scenarios)
-DELETE FROM ${schema}.workshop_parameters WHERE param_key IN ('workspace_url', 'workspace_org_id', 'default_warehouse', 'lakebase_instance_name', 'lakebase_host_name', 'lakehouse_default_catalog', 'model_serving_endpoint', 'chapter_3_lakehouse_catalog', 'chapter_3_lakehouse_schema', 'company_brand_url', 'lakebase_uc_catalog_name', 'app_name');
+DELETE FROM ${schema}.workshop_parameters WHERE param_key IN ('workspace_url', 'workspace_org_id', 'default_warehouse', 'lakebase_instance_name', 'lakebase_host_name', 'lakehouse_default_catalog', 'model_serving_endpoint', 'chapter_3_lakehouse_catalog', 'chapter_3_lakehouse_schema', 'company_brand_url', 'lakebase_uc_catalog_name', 'app_name', 'lakebase_mode');
 
 -- Parameter 1: Databricks Workspace URL
 INSERT INTO ${schema}.workshop_parameters 
@@ -210,6 +210,23 @@ VALUES
  FALSE,
  TRUE,
  TRUE,
+ CURRENT_TIMESTAMP,
+ CURRENT_TIMESTAMP,
+ CURRENT_USER);
+
+-- Parameter 12: Lakebase Mode
+INSERT INTO ${schema}.workshop_parameters 
+(param_key, param_label, param_value, param_description, param_type, display_order, is_required, is_active, allow_session_override, inserted_at, updated_at, created_by)
+VALUES
+('lakebase_mode', 
+ 'Lakebase Mode', 
+ '__LAKEBASE_MODE__',
+ 'The Lakebase operating mode: autoscaling (default) or provisioned. Set during vibe2value configure. Determines connection patterns, CLI flags, and app.yaml configuration.',
+ 'text',
+ 12,
+ TRUE,
+ TRUE,
+ FALSE,
  CURRENT_TIMESTAMP,
  CURRENT_TIMESTAMP,
  CURRENT_USER);

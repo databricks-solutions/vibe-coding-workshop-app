@@ -382,7 +382,7 @@ LAKEBASE_SCHEMA=$(get_target_var "lakebase_schema")
 WORKSPACE_URL=$(get_workspace_host)
 
 # Detect Lakebase mode from user-config.yaml (autoscaling or provisioned)
-LAKEBASE_MODE="provisioned"
+LAKEBASE_MODE="autoscaling"
 if [[ -f "$PROJECT_ROOT/user-config.yaml" ]]; then
     DETECTED_MODE=$(python3 -c "
 in_lakebase = False
@@ -398,8 +398,8 @@ for line in open('$PROJECT_ROOT/user-config.yaml'):
         if val: print(val)
         break
 " 2>/dev/null) || true
-    if [[ "$DETECTED_MODE" == "autoscaling" ]]; then
-        LAKEBASE_MODE="autoscaling"
+    if [[ "$DETECTED_MODE" == "provisioned" ]]; then
+        LAKEBASE_MODE="provisioned"
     fi
 fi
 
