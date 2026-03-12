@@ -641,6 +641,41 @@ try:
         print()
         print("✓ Tables ready")
 
+    # ── Create Postgres roles for the app service principal (Autoscaling only) ──
+    sp_id = os.environ.get("APP_SERVICE_PRINCIPAL_ID", "")
+    lakebase_mode = os.environ.get("LAKEBASE_MODE", "provisioned")
+    if sp_id and lakebase_mode == "autoscaling":
+        print()
+        print("Setting up Postgres roles for app service principal...")
+        try:
+            cursor.execute("CREATE EXTENSION IF NOT EXISTS databricks_auth")
+            print(f"  ✓ databricks_auth extension ready")
+        except Exception as e:
+            if "already exists" in str(e):
+                print(f"  ✓ databricks_auth extension already exists")
+            else:
+                print(f"  ⚠ Could not create extension: {e}")
+
+        try:
+            cursor.execute(f"SELECT databricks_create_role('{sp_id}', 'SERVICE_PRINCIPAL')")
+            print(f"  ✓ Postgres role created for SP: {sp_id[:20]}...")
+        except Exception as e:
+            if "already exists" in str(e):
+                print(f"  ✓ Postgres role already exists for SP: {sp_id[:20]}...")
+            else:
+                print(f"  ⚠ Could not create SP role: {e}")
+
+        try:
+            cursor.execute(f'GRANT USAGE ON SCHEMA {SCHEMA} TO "{sp_id}"')
+            cursor.execute(f'GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA {SCHEMA} TO "{sp_id}"')
+            cursor.execute(f'ALTER DEFAULT PRIVILEGES IN SCHEMA {SCHEMA} GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO "{sp_id}"')
+            print(f"  ✓ Schema permissions granted to SP on {SCHEMA}")
+        except Exception as e:
+            print(f"  ⚠ Could not grant schema permissions: {e}")
+
+        conn.commit()
+        print("✓ Service principal database access configured")
+
 except Exception as e:
     print(f"❌ Error: {e}")
     import traceback

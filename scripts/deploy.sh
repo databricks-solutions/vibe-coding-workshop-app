@@ -1031,6 +1031,14 @@ fi
 if [[ "$SKIP_TABLES" != true ]]; then
     print_header "STEP 3: Setup Lakebase Tables"
     
+    # Ensure SERVICE_PRINCIPAL_ID is available (may have been skipped in Step 2)
+    if [[ -z "$SERVICE_PRINCIPAL_ID" ]]; then
+        _APP_INFO=$(databricks apps get "$APP_NAME" $PROFILE_FLAG --output json 2>/dev/null) || true
+        if [[ -n "$_APP_INFO" ]]; then
+            SERVICE_PRINCIPAL_ID=$(echo "$_APP_INFO" | python3 -c "import sys,json; print(json.load(sys.stdin).get('service_principal_client_id',''))" 2>/dev/null) || true
+        fi
+    fi
+
     print_step "Getting Lakebase connection details ($LAKEBASE_MODE mode)..."
     discover_lakebase_host
     LAKEBASE_HOST_FROM_INSTANCE="$TARGET_LAKEBASE_HOST"
@@ -1063,6 +1071,9 @@ if [[ "$SKIP_TABLES" != true ]]; then
     fi
     if [[ -n "$AUTOSCALING_BRANCH" ]]; then
         export AUTOSCALING_BRANCH="$AUTOSCALING_BRANCH"
+    fi
+    if [[ -n "$SERVICE_PRINCIPAL_ID" ]]; then
+        export APP_SERVICE_PRINCIPAL_ID="$SERVICE_PRINCIPAL_ID"
     fi
     
     # Run table setup with explicit schema override
