@@ -23,6 +23,13 @@ dist-ssr
 *.sln
 *.sw?
 
+# Databricks bundle state (local deployment artifacts)
+.databricks/
+
+# Python cache
+__pycache__/
+*.pyc
+
 # vibe2value generated files (contain user-specific values)
 user-config.yaml
 databricks.yml
