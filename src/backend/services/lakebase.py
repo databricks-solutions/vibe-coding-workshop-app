@@ -324,6 +324,7 @@ def get_connection():
             for attempt in range(1, COLD_START_MAX_RETRIES + 1):
                 try:
                     conn = pool.getconn()
+                    conn.autocommit = True
                     break
                 except Exception as e:
                     if attempt == COLD_START_MAX_RETRIES:
