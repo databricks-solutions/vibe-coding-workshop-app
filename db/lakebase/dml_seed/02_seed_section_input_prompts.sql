@@ -546,6 +546,8 @@ If any errors occur:
    - "No module named ''databricks.sdk''" → Add databricks-sdk>=0.81.0 to requirements.txt
    - "token''s identity did not match" → Check that app.yaml env vars match your mode ({lakebase_mode}): autoscaling needs ENDPOINT_NAME (no LAKEBASE_USER); provisioned needs LAKEBASE_USER via resource link
    - "role does not exist" → Run add-lakebase-role with --mode {lakebase_mode}
+   - "permission denied for sequence" → Re-run setup-lakebase.sh --recreate (adds GRANT on sequences for SERIAL columns)
+   - "404 on link-app-resource" → Autoscaling does not support App Resource linking; skip this step
    - "Connection attempt failed" → Normal on first request (cold start); retries handle this automatically
    - "Could not import module" → Check apps_lakebase/app.yaml command matches file structure
 
@@ -4961,6 +4963,8 @@ export LAKEBASE_PORT_OVERRIDE="5432"
 export LAKEBASE_MODE={lakebase_mode}
 # Autoscaling only — skip this line for provisioned:
 export ENDPOINT_NAME="projects/{lakebase_instance_name}/branches/main/endpoints/primary"
+# If app is already deployed, export the SP ID so setup-lakebase.sh grants sequence permissions:
+# export APP_SERVICE_PRINCIPAL_ID="<service-principal-id-from-app-info>"
 
 # Deploy tables (run from apps_lakebase/)
 cd apps_lakebase && ./scripts/setup-lakebase.sh --recreate --instance-name {lakebase_instance_name}
@@ -5144,11 +5148,16 @@ cd apps_lakebase && python scripts/lakebase_manager.py --action add-lakebase-rol
 
 Look for: `✓ Successfully added Lakebase role`
 
-**Step 3: Link Lakebase as App Resource**
+> **Sequence permissions:** The `setup-lakebase.sh` script (run earlier in setup_lakebase) grants sequence permissions needed for SERIAL columns. If you later see `permission denied for sequence` errors, re-run: `cd apps_lakebase && ./scripts/setup-lakebase.sh --recreate`
+
+**Step 3: Link Lakebase as App Resource (provisioned only)**
+> **Autoscaling mode ({lakebase_mode}):** Skip this step entirely. Autoscaling does not support App Resource linking (returns 404). The app authenticates via `generate_database_credential()` with the SQL-level role from Step 2.
+
 ```bash
+# Provisioned only — do NOT run for autoscaling:
 cd apps_lakebase && python scripts/lakebase_manager.py --action link-app-resource --app-name $APP_NAME --instance-name {lakebase_instance_name} --mode {lakebase_mode}
 ```
-Look for: `✓ Successfully linked Lakebase`
+Look for: `✓ Successfully linked Lakebase` (provisioned) or `ℹ️ Autoscaling mode` (autoscaling)
 
 **Step 4: Verify permissions were added**
 ```bash
@@ -5329,7 +5338,7 @@ Health endpoints are mounted at root (`/health/*`), not under `/api`. Frontend c
 - [ ] Tested locally: `python3 -c "import psycopg; from psycopg_pool import ConnectionPool"`
 - [ ] Service principal ID obtained
 - [ ] Lakebase database role granted (add-lakebase-role --mode {lakebase_mode})
-- [ ] Lakebase linked as App Resource (link-app-resource --mode {lakebase_mode})
+- [ ] Lakebase linked as App Resource (provisioned only; autoscaling skips this step)
 - [ ] apps_lakebase/app.yaml env vars match mode: ENDPOINT_NAME for autoscaling, LAKEBASE_USER via resource link for provisioned
 - [ ] INFO logging added to all Lakebase connection code
 - [ ] Backend APIs return data with source indicator (live/mock)
@@ -5341,7 +5350,7 @@ Health endpoints are mounted at root (`/health/*`), not under `/api`. Frontend c
 
 Key requirements:
 1. Configure service principal permissions (apps don''t run as your user)
-2. Grant both Lakebase database role AND link as App Resource (both are required)
+2. Grant Lakebase database role (required for both modes) AND link as App Resource (provisioned only -- autoscaling skips this)
 3. Backend APIs must indicate data source (live/mock) and fall back gracefully
 4. UI must show a clear indicator: "Live Data" vs "Mock Data"
 5. Display connection errors so users understand any issues
@@ -5503,6 +5512,7 @@ databricks apps logs $APP_NAME --tail 100
 - "No module named ''psycopg''" → Ensure psycopg[binary,pool]>=3.1.0 is in requirements.txt
 - "Connection attempt failed" → Normal on first connect; check that Lakebase env vars in app.yaml match your mode ({lakebase_mode})
 - "password authentication failed" → For provisioned: verify app resource link and LAKEBASE_USER; for autoscaling: verify ENDPOINT_NAME is set
+- "permission denied for sequence" → Sequence GRANT missing; re-run: cd apps_lakebase && ./scripts/setup-lakebase.sh --recreate
 
 ---
 

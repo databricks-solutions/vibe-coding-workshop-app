@@ -551,7 +551,7 @@ try:
         
         # Drop existing tables
         print("  Dropping existing tables...")
-        tables = ['usecase_descriptions', 'section_input_prompts', 'sessions']
+        tables = ['usecase_descriptions', 'section_input_prompts']
         for table in tables:
             cursor.execute(f"DROP TABLE IF EXISTS {SCHEMA}.{table}")
         
@@ -669,7 +669,9 @@ try:
             cursor.execute(f'GRANT USAGE ON SCHEMA {SCHEMA} TO "{sp_id}"')
             cursor.execute(f'GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA {SCHEMA} TO "{sp_id}"')
             cursor.execute(f'ALTER DEFAULT PRIVILEGES IN SCHEMA {SCHEMA} GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO "{sp_id}"')
-            print(f"  ✓ Schema permissions granted to SP on {SCHEMA}")
+            cursor.execute(f'GRANT USAGE, SELECT, UPDATE ON ALL SEQUENCES IN SCHEMA {SCHEMA} TO "{sp_id}"')
+            cursor.execute(f'ALTER DEFAULT PRIVILEGES IN SCHEMA {SCHEMA} GRANT USAGE, SELECT, UPDATE ON SEQUENCES TO "{sp_id}"')
+            print(f"  ✓ Schema, table, and sequence permissions granted to SP on {SCHEMA}")
         except Exception as e:
             print(f"  ⚠ Could not grant schema permissions: {e}")
 
@@ -692,7 +694,9 @@ try:
         cursor.execute(f"GRANT USAGE ON SCHEMA {SCHEMA} TO public")
         cursor.execute(f"GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA {SCHEMA} TO public")
         cursor.execute(f"ALTER DEFAULT PRIVILEGES IN SCHEMA {SCHEMA} GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO public")
-        print(f"  ✓ Schema and table permissions granted to public on {SCHEMA}")
+        cursor.execute(f"GRANT USAGE, SELECT, UPDATE ON ALL SEQUENCES IN SCHEMA {SCHEMA} TO public")
+        cursor.execute(f"ALTER DEFAULT PRIVILEGES IN SCHEMA {SCHEMA} GRANT USAGE, SELECT, UPDATE ON SEQUENCES TO public")
+        print(f"  ✓ Schema, table, and sequence permissions granted to public on {SCHEMA}")
     except Exception as e:
         print(f"  ⚠ Could not grant public schema permissions: {e}")
 

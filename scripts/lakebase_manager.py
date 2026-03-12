@@ -749,6 +749,12 @@ def action_link_app_resource(config: Config, mode: str = "provisioned") -> int:
     """Link Lakebase instance/project to app as an App Resource."""
     print("🔗 Linking Lakebase to App Resource\n")
     
+    if mode == "autoscaling":
+        print("ℹ️  Autoscaling mode: App Resource linking is not supported.")
+        print("   The app authenticates via WorkspaceClient().postgres.generate_database_credential()")
+        print("   using SQL-level role grants. No resource link needed.")
+        return 0
+    
     token = get_databricks_token(config.DATABRICKS_HOST)
     if not token:
         return 1
