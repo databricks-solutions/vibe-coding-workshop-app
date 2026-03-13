@@ -637,7 +637,7 @@ This will:
 
 - **Query information_schema.columns** — extract all table and column metadata from the **{chapter_3_lakehouse_catalog}.{chapter_3_lakehouse_schema}** source
 - **Convert results to CSV** — transform the JSON API response into a structured CSV file using Python
-- **Save as data_product_accelerator/context/{chapter_3_lakehouse_schema}_Schema.csv** — create the data dictionary that drives the entire Design-First Pipeline (all subsequent steps reference this CSV)
+- **Save as data_product_accelerator/context/{use_case_file_prefix}_Schema.csv** — create the data dictionary that drives the entire Design-First Pipeline (all subsequent steps reference this CSV)
 
 **Source:** `{chapter_3_lakehouse_catalog}.{chapter_3_lakehouse_schema}` (configured in the source panel above — auto-set from Step 9 or editable via Edit)
 
@@ -648,7 +648,7 @@ Run this SQL query and save results to CSV:
 
 Query: SELECT * FROM {chapter_3_lakehouse_catalog}.information_schema.columns WHERE table_schema = ''{chapter_3_lakehouse_schema}'' ORDER BY table_name, ordinal_position
 
-Output: data_product_accelerator/context/{chapter_3_lakehouse_schema}_Schema.csv
+Output: data_product_accelerator/context/{use_case_file_prefix}_Schema.csv
 
 ---
 
@@ -690,7 +690,7 @@ Common queries:
 - Sample data: SELECT * FROM <catalog>.<schema>.<table> LIMIT 1000
 
 Expected output (for schema query):
-- Console: "Saved N rows to data_product_accelerator/context/{chapter_3_lakehouse_schema}_Schema.csv"
+- Console: "Saved N rows to data_product_accelerator/context/{use_case_file_prefix}_Schema.csv"
 - CSV file with columns: table_catalog, table_schema, table_name, column_name, ordinal_position, is_nullable, data_type, comment, ...
 ```',
 '',
@@ -703,7 +703,7 @@ Copy the prompt from the Prompt tab, start a new Agent chat in your IDE, paste i
 
 **Prerequisite:** Run this in your cloned Template Repository (see Prerequisites in Step 0). Ensure Databricks CLI is authenticated.
 
-**Steps:** Copy the prompt → paste into Cursor or VS Code with Copilot → AI executes SQL via Databricks CLI → CSV saved to data_product_accelerator/context/{chapter_3_lakehouse_schema}_Schema.csv.
+**Steps:** Copy the prompt → paste into Cursor or VS Code with Copilot → AI executes SQL via Databricks CLI → CSV saved to data_product_accelerator/context/{use_case_file_prefix}_Schema.csv.
 
 **Note:** The source catalog and schema are shown in the **Source** panel above this prompt. If you completed Step 9 (Register Lakebase in Unity Catalog), these are automatically set to your Lakebase UC catalog and user schema. You can edit or reset them using the Edit/Reset buttons.
 
@@ -714,7 +714,7 @@ Copy the prompt from the Prompt tab, start a new Agent chat in your IDE, paste i
 This step extracts the **data dictionary** — a CSV file containing every table, column, data type, and comment from the source schema. This CSV becomes the starting input for the entire Design-First Pipeline:
 
 ```
-data_product_accelerator/context/{chapter_3_lakehouse_schema}_Schema.csv
+data_product_accelerator/context/{use_case_file_prefix}_Schema.csv
   → Gold Design (Step 11)  — reads CSV to design dimensional model
   → Bronze (Step 12)       — uses schema to create tables
   → Silver (Step 13)       — uses schema for DQ expectations
@@ -739,7 +739,7 @@ data_product_accelerator/context/{chapter_3_lakehouse_schema}_Schema.csv
 This step does **not** invoke an Agent Skill — it runs a direct SQL extraction via the Databricks CLI. Every subsequent skill references this CSV (or artifacts derived from it) to **extract** table names, column names, and data types — never generating them from scratch. This is the "Extract, Don''t Generate" principle.',
 '## Expected Deliverables
 
-- data_product_accelerator/context/{chapter_3_lakehouse_schema}_Schema.csv file created
+- data_product_accelerator/context/{use_case_file_prefix}_Schema.csv file created
 - Contains column metadata rows for all tables in {chapter_3_lakehouse_catalog}.{chapter_3_lakehouse_schema}
 - Includes: table_name, column_name, data_type, comment
 - Ready for use as data dictionary reference
@@ -755,7 +755,7 @@ VALUES
 
 This will:
 
-- **Save the CSV file** to `data_product_accelerator/context/{chapter_3_lakehouse_schema}_Schema.csv`
+- **Save the CSV file** to `data_product_accelerator/context/{use_case_file_prefix}_Schema.csv`
 - **Validate metadata quality** — check for missing comments, incorrect data types, and sequencing issues
 - **Enrich if needed** — fill missing fields, normalize types, and add recommended columns
 - **Print verification summary** — confirm table count, column count, and any fixes applied
@@ -763,7 +763,7 @@ This will:
 Copy and paste this prompt to the AI:
 
 ```
-Save the following CSV content to: data_product_accelerator/context/{chapter_3_lakehouse_schema}_Schema.csv
+Save the following CSV content to: data_product_accelerator/context/{use_case_file_prefix}_Schema.csv
 
 --- CSV CONTENT START ---
 {csv_content}
@@ -809,7 +809,7 @@ Select the **Upload CSV** tab in Step 10, upload your schema metadata CSV file, 
 3. Review the preview (table count, column count, detected table names)
 4. Click **Process & Generate** to create the coding assistant prompt
 5. Copy the generated prompt into Cursor or VS Code with Copilot
-6. The coding assistant will save the CSV to `data_product_accelerator/context/{chapter_3_lakehouse_schema}_Schema.csv`
+6. The coding assistant will save the CSV to `data_product_accelerator/context/{use_case_file_prefix}_Schema.csv`
 
 ---
 
@@ -818,7 +818,7 @@ Select the **Upload CSV** tab in Step 10, upload your schema metadata CSV file, 
 Same as the Extract mode — a **data dictionary CSV** that drives the entire Design-First Pipeline. The only difference is the source: instead of querying `information_schema`, you''re providing the CSV directly.
 
 ```
-data_product_accelerator/context/{chapter_3_lakehouse_schema}_Schema.csv
+data_product_accelerator/context/{use_case_file_prefix}_Schema.csv
   → Gold Design (Step 11)  — reads CSV to design dimensional model
   → Bronze (Step 12)       — uses schema to create tables
   → Silver (Step 13)       — uses schema for DQ expectations
@@ -838,7 +838,7 @@ Use this when:
 The CSV must follow the `information_schema.columns` format with required columns: `table_name`, `column_name`, `data_type`, `ordinal_position`, `is_nullable`, `comment`.',
 '## Expected Deliverables
 
-- `data_product_accelerator/context/{chapter_3_lakehouse_schema}_Schema.csv` file created via coding assistant
+- `data_product_accelerator/context/{use_case_file_prefix}_Schema.csv` file created via coding assistant
 - Contains column metadata rows for all tables in your schema
 - Includes: table_name, column_name, data_type, ordinal_position, is_nullable, comment
 - Ready for use as data dictionary reference
@@ -852,26 +852,20 @@ VALUES
 (135, 'bronze_table_metadata_generate',
 '## Design Database Schema from PRD
 
-Read the PRD below and design a complete relational database schema, then save it as a CSV data dictionary.
-
----
-
-### PRD (Product Requirements Document)
-
-{prd_document}
+The business requirements are documented in @docs/design_prd.md.
 
 ---
 
 ### Instructions
 
-Based on the PRD above, design a **normalized relational schema** for the **{use_case_title}** use case and save it as a CSV file.
+Based on the PRD, design a **normalized relational schema** for the **{use_case_title}** use case and save it as a CSV file.
 
 Copy and paste this prompt to the AI:
 
 ```
-Read the PRD above and design a complete database schema for the **{use_case_title}** use case.
+Read the PRD at @docs/design_prd.md and design a complete database schema for the **{use_case_title}** use case.
 
-**Output file:** data_product_accelerator/context/{chapter_3_lakehouse_schema}_Schema.csv
+**Output file:** data_product_accelerator/context/{use_case_file_prefix}_Schema.csv
 
 **Schema design requirements:**
 1. Design 5-15 tables covering all entities, relationships, and transactional data described in the PRD
@@ -913,7 +907,7 @@ This CSV drives the entire Design-First Pipeline:
 1. **Prerequisite:** Complete Step 3 (PRD Generation) first — the PRD is used as input to design the schema
 2. Click **Generate** to create the prompt with your PRD embedded
 3. Copy the prompt into Cursor or VS Code with Copilot
-4. The coding assistant reads the PRD, designs tables, and saves the CSV to `data_product_accelerator/context/{chapter_3_lakehouse_schema}_Schema.csv`
+4. The coding assistant reads the PRD, designs tables, and saves the CSV to `data_product_accelerator/context/{use_case_file_prefix}_Schema.csv`
 5. Review the generated schema and iterate if needed
 
 ---
@@ -935,7 +929,7 @@ This mode works just like the Lakebase table creation step — it gives your cod
 The generated CSV becomes the **data dictionary** that drives the entire Design-First Pipeline:
 
 ```
-data_product_accelerator/context/{chapter_3_lakehouse_schema}_Schema.csv
+data_product_accelerator/context/{use_case_file_prefix}_Schema.csv
   → Gold Design (Step 11)  — reads CSV to design dimensional model
   → Bronze (Step 12)       — uses schema to create tables
   → Silver (Step 13)       — uses schema for DQ expectations
@@ -943,7 +937,7 @@ data_product_accelerator/context/{chapter_3_lakehouse_schema}_Schema.csv
 ```',
 '## Expected Deliverables
 
-- `data_product_accelerator/context/{chapter_3_lakehouse_schema}_Schema.csv` file created via coding assistant
+- `data_product_accelerator/context/{use_case_file_prefix}_Schema.csv` file created via coding assistant
 - Contains 5-15 tables with realistic column definitions designed from the PRD
 - Includes: table_catalog, table_schema, table_name, column_name, ordinal_position, data_type, is_nullable, comment
 - Every column has a descriptive business-context comment
@@ -960,7 +954,7 @@ VALUES
 
 This will:
 
-- **Save the CSV file** to `data_product_accelerator/context/{chapter_3_lakehouse_schema}_Schema.csv`
+- **Save the CSV file** to `data_product_accelerator/context/{use_case_file_prefix}_Schema.csv`
 - **Validate metadata quality** — check for missing comments, incorrect data types, and sequencing issues
 - **Enrich if needed** — fill missing fields, normalize types, and add recommended columns
 - **Print verification summary** — confirm table count, column count, and any fixes applied
@@ -968,7 +962,7 @@ This will:
 Copy and paste this prompt to the AI:
 
 ```
-Save the following CSV content to: data_product_accelerator/context/{chapter_3_lakehouse_schema}_Schema.csv
+Save the following CSV content to: data_product_accelerator/context/{use_case_file_prefix}_Schema.csv
 
 --- CSV CONTENT START ---
 {csv_content}
@@ -1013,7 +1007,7 @@ Select the **Upload CSV** tab in the Analyze Silver Metadata step, upload your s
 3. Review the preview (table count, column count, detected table names)
 4. Click **Process & Generate** to create the coding assistant prompt
 5. Copy the generated prompt into Cursor or VS Code with Copilot
-6. The coding assistant will save the CSV to `data_product_accelerator/context/{chapter_3_lakehouse_schema}_Schema.csv`
+6. The coding assistant will save the CSV to `data_product_accelerator/context/{use_case_file_prefix}_Schema.csv`
 
 ---
 
@@ -1022,7 +1016,7 @@ Select the **Upload CSV** tab in the Analyze Silver Metadata step, upload your s
 A **data dictionary CSV** that drives the Genie Accelerator pipeline. Instead of pointing to Silver layer tables in Databricks, you provide the CSV directly.
 
 ```
-data_product_accelerator/context/{chapter_3_lakehouse_schema}_Schema.csv
+data_product_accelerator/context/{use_case_file_prefix}_Schema.csv
   → Bronze Creation (Step 12)  — uses schema to create tables and sample data
   → Gold Design (Step 11)      — reads CSV to design dimensional model
   → Gold Pipeline (Step 14)    — uses YAML schemas derived from this CSV
@@ -1041,7 +1035,7 @@ Use this when:
 The CSV must follow the `information_schema.columns` format with required columns: `table_name`, `column_name`, `data_type`, `ordinal_position`, `is_nullable`, `comment`.',
 '## Expected Deliverables
 
-- `data_product_accelerator/context/{chapter_3_lakehouse_schema}_Schema.csv` file created via coding assistant
+- `data_product_accelerator/context/{use_case_file_prefix}_Schema.csv` file created via coding assistant
 - Contains column metadata rows for all tables in your Silver layer schema
 - Includes: table_name, column_name, data_type, ordinal_position, is_nullable, comment
 - Ready for use as data dictionary reference
@@ -1053,7 +1047,7 @@ INSERT INTO ${catalog}.${schema}.section_input_prompts
 (input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
 VALUES
 (6, 'gold_layer_design',
-'I have a customer schema at @data_product_accelerator/context/{chapter_3_lakehouse_schema}_Schema.csv.
+'I have a customer schema at @data_product_accelerator/context/{use_case_file_prefix}_Schema.csv.
 
 Please design the Gold layer using @data_product_accelerator/skills/gold/00-gold-layer-design/SKILL.md
 
@@ -1084,7 +1078,7 @@ Copy the prompt from the **Prompt** tab, start a **new Agent chat** in your IDE,
 **Run this in your cloned Template Repository** (see Prerequisites in Step 0).
 
 Ensure you have:
-- ✅ `data_product_accelerator/context/{chapter_3_lakehouse_schema}_Schema.csv` - Your source schema file (from Bronze/Silver)
+- ✅ `data_product_accelerator/context/{use_case_file_prefix}_Schema.csv` - Your source schema file (from Bronze/Silver)
 - ✅ `data_product_accelerator/skills/gold/00-gold-layer-design/SKILL.md` - The Gold layer design orchestrator skill
 
 ---
@@ -1592,7 +1586,7 @@ VALUES
 (120, 'bronze_layer_creation_upload',
 '## Bronze Layer Creation
 
-Schema: @data_product_accelerator/context/{YourSchema}.csv
+Schema: @data_product_accelerator/context/{use_case_file_prefix}_Schema.csv
 Skill: @data_product_accelerator/skills/bronze/00-bronze-layer-setup/SKILL.md
 Approach: **A — Schema CSV + Faker** (DDLs + test data)
 
@@ -1620,7 +1614,7 @@ Copy the prompt above, start a **new Agent chat** in Cursor, and paste it. The A
 **Run this in your cloned Template Repository** (see Prerequisites in Step 0).
 
 Ensure you have:
-- ✅ `data_product_accelerator/context/{YourSchema}_Schema.csv` — created in the previous step (Step 10 Upload CSV mode)
+- ✅ `data_product_accelerator/context/{use_case_file_prefix}_Schema.csv` — created in the previous step (Step 10 Upload CSV mode)
 - ✅ `data_product_accelerator/skills/bronze/00-bronze-layer-setup/SKILL.md` — the Bronze layer setup skill in your repo
 - ✅ Access to `{lakehouse_default_catalog}` catalog in your Databricks workspace
 - ✅ Permissions to create schemas and tables in the target catalog
@@ -1700,7 +1694,7 @@ data_product_accelerator/
 ├── skills/bronze/00-bronze-layer-setup/
 │   └── SKILL.md                          # Bronze layer skill (input)
 ├── context/
-│   └── {YourSchema}_Schema.csv           # Schema metadata CSV (input)
+│   └── {use_case_file_prefix}_Schema.csv           # Schema metadata CSV (input)
 ├── src/bronze/
 │   ├── setup_tables.py                   # CREATE TABLE DDLs for all tables
 │   └── generate_data.py                  # Faker-based data generation scripts
@@ -1717,7 +1711,7 @@ data_product_accelerator/
 ├── skills/bronze/00-bronze-layer-setup/
 │   └── SKILL.md                          # Bronze layer skill (input)
 ├── context/
-│   └── {YourSchema}_Schema.csv           # Schema metadata CSV (input)
+│   └── {use_case_file_prefix}_Schema.csv           # Schema metadata CSV (input)
 ├── src/bronze/
 │   ├── setup_tables.py                   # CREATE TABLE DDLs for all tables
 │   └── generate_data.py                  # Faker-based data generation scripts
@@ -5829,7 +5823,7 @@ ORDER BY table_name
    - Append constraint info (Queries 3-4) as additional columns: constraint_type, constraint_name
    - Append tag info (Queries 5-6) as additional columns: column_tags, table_tags
    - Output columns: table_name, table_type, table_comment, column_name, ordinal_position, data_type, is_nullable, column_default, column_comment, constraint_type, constraint_name, column_tags, table_tags
-   - Save to: data_product_accelerator/context/{chapter_3_lakehouse_schema}_Metadata.csv
+   - Save to: data_product_accelerator/context/{use_case_file_prefix}_Metadata.csv
 
 5. Analyze the metadata and create docs/genie_plan.md with:
    - **Table Inventory**: List each table with its type, row purpose (inferred from table comment and column patterns), and estimated business domain
@@ -5867,7 +5861,7 @@ This step extracts **comprehensive metadata** from your Silver layer — not jus
 
 | File | Purpose |
 |------|---------|
-| `data_product_accelerator/context/{chapter_3_lakehouse_schema}_Metadata.csv` | Enriched metadata CSV with all table/column/constraint/tag information. Fed into Gold Layer Design. |
+| `data_product_accelerator/context/{use_case_file_prefix}_Metadata.csv` | Enriched metadata CSV with all table/column/constraint/tag information. Fed into Gold Layer Design. |
 | `docs/genie_plan.md` | Analysis document with table relevance, relationship maps, Genie Space recommendations, and metric/TVF candidates. |
 
 ### Why Enriched Metadata Matters
@@ -5893,9 +5887,123 @@ This step extracts **comprehensive metadata** from your Silver layer — not jus
 | **Analysis-Driven Design** | The genie_plan.md provides a reasoned assessment before jumping into Gold design |',
 '## Expected Deliverables
 
-- `data_product_accelerator/context/{chapter_3_lakehouse_schema}_Metadata.csv` — enriched metadata CSV
+- `data_product_accelerator/context/{use_case_file_prefix}_Metadata.csv` — enriched metadata CSV
 - `docs/genie_plan.md` — analysis with table relevance, relationships, Genie Space recommendations, metric/TVF candidates
 - CSV contains: table_name, table_type, table_comment, column_name, data_type, is_nullable, column_comment, constraint_type, constraint_name, column_tags, table_tags',
+true, 1, true, current_timestamp(), current_timestamp(), current_user());
+
+-- Step 22 (Generate Mode): Design Silver Schema from PRD - bypass_LLM = TRUE
+INSERT INTO ${catalog}.${schema}.section_input_prompts
+(input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
+VALUES
+(136, 'genie_silver_metadata_generate',
+'## Design Silver Layer Schema from PRD
+
+The business requirements are documented in @docs/design_prd.md.
+
+---
+
+### Instructions
+
+Based on the PRD, design a **normalized relational silver layer schema** for the **{use_case_title}** use case and save it as an enriched metadata CSV.
+
+Copy and paste this prompt to the AI:
+
+```
+Read the PRD at @docs/design_prd.md and design a complete silver layer database schema for the **{use_case_title}** use case.
+
+**Output file:** data_product_accelerator/context/{use_case_file_prefix}_Metadata.csv
+
+**Schema design requirements:**
+1. Design 5-15 silver layer tables covering all entities, relationships, and transactional data described in the PRD
+2. Include primary keys (BIGINT, first column per table) and foreign keys referencing related tables
+3. Use Spark SQL data types: STRING, BIGINT, INT, DOUBLE, DECIMAL(precision,scale), BOOLEAN, DATE, TIMESTAMP
+4. Add descriptive comments for every column explaining its business meaning
+5. Include standard operational columns per table: created_at (TIMESTAMP), updated_at (TIMESTAMP), is_active (BOOLEAN)
+6. Use snake_case for all table and column names
+7. Design for analytics — include fact tables with numeric measures and dimension tables with descriptive attributes
+
+**CSV format (enriched metadata compatible):**
+```csv
+table_name,table_type,table_comment,column_name,ordinal_position,data_type,is_nullable,column_default,column_comment,constraint_type,constraint_name,column_tags,table_tags
+<table_name>,MANAGED,<table description>,<column_name>,<position>,<type>,<YES/NO>,,<column description>,<PK/FK/empty>,<constraint_name_or_empty>,,
+```
+
+One row per column, all tables included. ordinal_position restarts at 1 for each table.
+
+**After creating the CSV, validate and enrich:**
+1. Verify required columns: table_name, table_type, table_comment, column_name, data_type, ordinal_position, is_nullable, column_comment
+2. Check ordinal_position is sequential per table (1, 2, 3...) — fix gaps
+3. Fill empty column_comment fields with descriptions inferred from column_name and table_name
+4. Fill empty table_comment fields with descriptions of the table''s business purpose
+5. Mark primary key columns with constraint_type=PK
+6. Mark foreign key columns with constraint_type=FK and constraint_name referencing the target table
+7. Normalize data_type to Spark SQL types (VARCHAR -> STRING, INT -> INTEGER, FLOAT -> DOUBLE)
+8. Print verification summary: total tables, total columns, file path, fixes applied
+
+**Then create the analysis document** at docs/genie_plan.md with:
+- **Table Inventory**: List each table with its type, purpose, and business domain
+- **Column Analysis**: Key columns per table — identify dimensions, measures, timestamps, and foreign keys
+- **Relationship Map**: Relationships between tables (from FK constraints and naming patterns like *_id)
+- **Table Relevance Assessment**: For each table, assess relevance to the use case (High/Medium/Low)
+- **Recommended Genie Space Structure**: Suggest how tables should be grouped into Genie Spaces (max 25 assets per space)
+- **Metric View Candidates**: Identify numeric columns that could become Metric Views (with suggested dimensions and measures)
+- **TVF Candidates**: Suggest parameterized query patterns based on common access patterns
+
+**Downstream Compatibility Note:**
+This CSV drives the Genie Accelerator pipeline:
+- Gold Design (Step 11) — reads CSV for dimensional model design
+- Deploy Assets (Step 23) — uses schema to create and populate tables
+- Optimize Genie (Step 25) — uses analysis for Genie Space configuration
+```',
+'',
+'Analyze Silver Metadata (Design from PRD)',
+'Design silver layer schema from your PRD — for when you don''t have existing Silver tables or a CSV',
+22,
+'## How To Apply
+
+1. **Prerequisite:** Complete Step 3 (PRD Generation) first — the PRD is used as input to design the schema
+2. Click **Generate** to create the prompt with your PRD embedded
+3. Copy the prompt into Cursor or VS Code with Copilot
+4. The coding assistant reads the PRD, designs tables, and saves the CSV to `data_product_accelerator/context/{use_case_file_prefix}_Metadata.csv`
+5. Review the generated schema and iterate if needed
+
+---
+
+## When to Use This Mode
+
+Use **Design from PRD** when:
+- You **don''t have existing Silver tables** in Databricks yet
+- You **don''t have a CSV export** from another tool
+- You want to **start from scratch** with a schema designed from your requirements
+- You have a **PRD from Step 3** that describes the data entities you need
+
+This mode works just like the Extract and Upload modes — it gives your coding assistant a detailed prompt with the PRD as context, and the AI designs the silver layer schema for you.
+
+---
+
+## What Happens Next
+
+The generated CSV and analysis document drive the entire Genie Accelerator pipeline:
+
+```
+data_product_accelerator/context/{use_case_file_prefix}_Metadata.csv
+  → Gold Design (Step 11)  — reads CSV to design dimensional model
+  → Deploy Assets (Step 23) — uses schema to create tables
+  → Optimize Genie (Step 25) — uses analysis for Genie Space config
+
+docs/genie_plan.md
+  → Genie Space recommendations, metric views, TVF candidates
+```',
+'## Expected Deliverables
+
+- `data_product_accelerator/context/{use_case_file_prefix}_Metadata.csv` file created via coding assistant
+- Contains 5-15 tables with enriched metadata designed from the PRD
+- Includes: table_name, table_type, table_comment, column_name, ordinal_position, data_type, is_nullable, column_comment, constraint_type, constraint_name
+- Every column has a descriptive business-context comment and every table has a table_comment
+- `docs/genie_plan.md` — analysis with table relevance, relationships, Genie Space recommendations, metric/TVF candidates
+- Ready for use as enriched metadata reference for the Genie Accelerator pipeline
+- **This CSV is the starting input for the Genie Accelerator pipeline** (Gold Design, Deploy Assets, Optimize Genie all reference it)',
 true, 1, true, current_timestamp(), current_timestamp(), current_user());
 
 -- Gold Layer Design for Genie Accelerator (references _Metadata.csv + PRD) - bypass_LLM = TRUE
@@ -5903,7 +6011,7 @@ INSERT INTO ${catalog}.${schema}.section_input_prompts
 (input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
 VALUES
 (115, 'genie_gold_design',
-'I have enriched silver layer metadata at @data_product_accelerator/context/{chapter_3_lakehouse_schema}_Metadata.csv and a metadata analysis at @docs/genie_plan.md.
+'I have enriched silver layer metadata at @data_product_accelerator/context/{use_case_file_prefix}_Metadata.csv and a metadata analysis at @docs/genie_plan.md.
 
 The business requirements are documented in @docs/design_prd.md.
 
@@ -5942,7 +6050,7 @@ Copy the prompt from the **Prompt** tab, start a **new Agent chat** in your IDE,
 **Run this in your cloned Template Repository** (see Prerequisites in Step 0).
 
 Ensure you have:
-- ✅ `data_product_accelerator/context/{chapter_3_lakehouse_schema}_Metadata.csv` - Your enriched silver metadata (from Analyze Silver Metadata step)
+- ✅ `data_product_accelerator/context/{use_case_file_prefix}_Metadata.csv` - Your enriched silver metadata (from Analyze Silver Metadata step)
 - ✅ `docs/genie_plan.md` - Metadata analysis with table relevance and Genie recommendations
 - ✅ `docs/design_prd.md` - Product Requirements Document (from PRD Generation step)
 - ✅ `data_product_accelerator/skills/gold/00-gold-layer-design/SKILL.md` - The Gold layer design orchestrator skill

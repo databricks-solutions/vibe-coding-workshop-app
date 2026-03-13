@@ -193,7 +193,7 @@ export function WorkflowDiagram({
   const [lakehouseParamsLoaded, setLakehouseParamsLoaded] = useState(true);
   const [step10Mode, setStep10Mode] = useState<'extract' | 'upload' | 'generate'>('extract');
   const [step12Mode, setStep12Mode] = useState<'clone' | 'generate'>('clone');
-  const [step22Mode, setStep22Mode] = useState<'silver' | 'upload'>('silver');
+  const [step22Mode, setStep22Mode] = useState<'silver' | 'upload' | 'generate'>('silver');
 
   // Gold table target for Agent Skills Accelerator (Step 26+)
   const [goldTableTarget, setGoldTableTarget] = useState<GoldTableTarget>({
@@ -227,7 +227,7 @@ export function WorkflowDiagram({
   // Track which mode produced the saved output so we don't bleed it into the other tab
   const [step10OutputMode, setStep10OutputMode] = useState<'extract' | 'upload' | 'generate' | null>(null);
   const [step12OutputMode, setStep12OutputMode] = useState<'clone' | 'generate' | null>(null);
-  const [step22OutputMode, setStep22OutputMode] = useState<'silver' | 'upload' | null>(null);
+  const [step22OutputMode, setStep22OutputMode] = useState<'silver' | 'upload' | 'generate' | null>(null);
 
   // Wrapped onPromptGenerated that also records which mode produced the output
   const handleStep10ExtractGenerated = useCallback((stepNumber: number, prompt: string) => {
@@ -262,6 +262,11 @@ export function WorkflowDiagram({
 
   const handleStep22UploadGenerated = useCallback((stepNumber: number, prompt: string) => {
     setStep22OutputMode('upload');
+    onStepPromptGenerated(stepNumber, prompt);
+  }, [onStepPromptGenerated]);
+
+  const handleStep22GenerateGenerated = useCallback((stepNumber: number, prompt: string) => {
+    setStep22OutputMode('generate');
     onStepPromptGenerated(stepNumber, prompt);
   }, [onStepPromptGenerated]);
 
@@ -1263,7 +1268,6 @@ export function WorkflowDiagram({
                               stepNumber={10}
                               onPromptGenerated={handleStep10GenerateGenerated}
                               initialPrompt={step10OutputMode === 'generate' ? stepPrompts[10] : undefined}
-                              previousOutputs={stepPrompts[3] ? { prd_document: stepPrompts[3] } : undefined}
                               isPreviousStepComplete={isPreviousStepComplete(10)}
                               sessionId={sessionId}
                             />
@@ -1514,13 +1518,15 @@ export function WorkflowDiagram({
                 </div>
               );
             }
-            // Step 22: Analyze Silver Metadata (Genie Accelerator only) -- tabbed: Point to Silver / Upload CSV
+            // Step 22: Analyze Silver Metadata (Genie Accelerator only) -- tabbed: Point to Silver / Upload CSV / Design from PRD
             case 22: {
               const showUploadTab22 = !disabledSectionTags.has('genie_silver_metadata_upload');
+              const showGenerateTab22 = !disabledSectionTags.has('genie_silver_metadata_generate');
               const step22Done = completedSteps.has(22);
               const step22Skipped = skippedSteps.has(22);
               const silverTabLocked = step22Done && step22Mode !== 'silver';
               const uploadTabLocked22 = step22Done && step22Mode !== 'upload';
+              const generateTabLocked22 = step22Done && step22Mode !== 'generate';
               return (
                 <div key={22} className="relative mt-5" data-step-number="22">
                   <StepBadge number={22} />
@@ -1553,7 +1559,7 @@ export function WorkflowDiagram({
 
                     <div className={`border-t border-border ${expandedStep === 22 ? '' : 'hidden'}`}>
                         {/* Mode tabs */}
-                        {showUploadTab22 && (
+                        {(showUploadTab22 || showGenerateTab22) && (
                           <div className="flex border-b border-border">
                             <button
                               onClick={() => !silverTabLocked && setStep22Mode('silver')}
@@ -1570,21 +1576,40 @@ export function WorkflowDiagram({
                               Point to Silver
                               {silverTabLocked && <Lock className="w-3 h-3 ml-1" />}
                             </button>
-                            <button
-                              onClick={() => !uploadTabLocked22 && setStep22Mode('upload')}
-                              disabled={uploadTabLocked22}
-                              className={`flex-1 px-4 py-3 text-[13px] font-medium transition-all relative flex items-center justify-center gap-2 ${
-                                step22Mode === 'upload'
-                                  ? 'text-primary border-b-2 border-primary -mb-px bg-primary/5'
-                                  : uploadTabLocked22
-                                    ? 'text-muted-foreground/40 cursor-not-allowed'
-                                    : 'text-muted-foreground hover:text-foreground hover:bg-secondary/30'
-                              }`}
-                            >
-                              <Upload className="w-4 h-4" />
-                              Upload CSV <span className="text-[10px] opacity-60 ml-0.5">(Beta)</span>
-                              {uploadTabLocked22 && <Lock className="w-3 h-3 ml-1" />}
-                            </button>
+                            {showUploadTab22 && (
+                              <button
+                                onClick={() => !uploadTabLocked22 && setStep22Mode('upload')}
+                                disabled={uploadTabLocked22}
+                                className={`flex-1 px-4 py-3 text-[13px] font-medium transition-all relative flex items-center justify-center gap-2 ${
+                                  step22Mode === 'upload'
+                                    ? 'text-primary border-b-2 border-primary -mb-px bg-primary/5'
+                                    : uploadTabLocked22
+                                      ? 'text-muted-foreground/40 cursor-not-allowed'
+                                      : 'text-muted-foreground hover:text-foreground hover:bg-secondary/30'
+                                }`}
+                              >
+                                <Upload className="w-4 h-4" />
+                                Upload CSV <span className="text-[10px] opacity-60 ml-0.5">(Beta)</span>
+                                {uploadTabLocked22 && <Lock className="w-3 h-3 ml-1" />}
+                              </button>
+                            )}
+                            {showGenerateTab22 && (
+                              <button
+                                onClick={() => !generateTabLocked22 && setStep22Mode('generate')}
+                                disabled={generateTabLocked22}
+                                className={`flex-1 px-4 py-3 text-[13px] font-medium transition-all relative flex items-center justify-center gap-2 ${
+                                  step22Mode === 'generate'
+                                    ? 'text-primary border-b-2 border-primary -mb-px bg-primary/5'
+                                    : generateTabLocked22
+                                      ? 'text-muted-foreground/40 cursor-not-allowed'
+                                      : 'text-muted-foreground hover:text-foreground hover:bg-secondary/30'
+                                }`}
+                              >
+                                <Sparkles className="w-4 h-4" />
+                                Design from PRD
+                                {generateTabLocked22 && <Lock className="w-3 h-3 ml-1" />}
+                              </button>
+                            )}
                           </div>
                         )}
 
@@ -1641,6 +1666,29 @@ export function WorkflowDiagram({
                                 sectionTag="genie_silver_metadata_upload"
                               />
                             </div>
+                          )}
+                          {step22Mode === 'generate' && (
+                            <WorkflowStep
+                              icon={<Sparkles className="w-5 h-5" />}
+                              title="Design from PRD"
+                              description="Design a silver layer schema from your PRD — for when you don't have existing Silver tables or a CSV"
+                              color="amber"
+                              isComplete={step22Done}
+                              onToggleComplete={() => toggleStepComplete(22)}
+                              onStepReset={() => { resetStepComplete(22); setStep22OutputMode(null); }}
+                              isSkipped={step22Skipped}
+                              onToggleSkip={() => toggleStepSkip(22)}
+                              onNavigateNext={() => navigateToNextStep(22)}
+                              sectionTag="genie_silver_metadata_generate"
+                              industry={selectedIndustry}
+                              useCase={selectedUseCase}
+                              embedded={true}
+                              stepNumber={22}
+                              onPromptGenerated={handleStep22GenerateGenerated}
+                              initialPrompt={step22OutputMode === 'generate' ? stepPrompts[22] : undefined}
+                              isPreviousStepComplete={isPreviousStepComplete(22)}
+                              sessionId={sessionId}
+                            />
                           )}
                         </div>
                     </div>
