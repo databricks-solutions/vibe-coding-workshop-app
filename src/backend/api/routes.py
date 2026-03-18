@@ -743,11 +743,12 @@ def get_effective_workshop_parameters(session_id: Optional[str] = None) -> Dict[
             params.update(session_overrides)
             logger.debug(f"[Session Params] Applied {len(session_overrides)} session overrides for session {session_id}")
     
-    # Derive user_schema_prefix, user_app_name, and use_case_slug on-the-fly if any is missing
+    # Derive user_schema_prefix, user_app_name, use_case_slug, and use_case_file_prefix on-the-fly if any is missing
     _needs_schema = results and 'user_schema_prefix' not in params
     _needs_app_name = results and 'user_app_name' not in params
     _needs_slug = results and 'use_case_slug' not in params
-    if _needs_schema or _needs_app_name or _needs_slug:
+    _needs_file_prefix = results and 'use_case_file_prefix' not in params
+    if _needs_schema or _needs_app_name or _needs_slug or _needs_file_prefix:
         import re as _re
         _created_by = results[0].get('created_by', '') or ''
         _uc_name = (
@@ -790,6 +791,12 @@ def get_effective_workshop_parameters(session_id: Optional[str] = None) -> Dict[
                 params['use_case_slug'] = _uc_slug_hyphen
                 _patch['use_case_slug'] = params['use_case_slug']
                 logger.info(f"[Session Params] Derived use_case_slug: {params['use_case_slug']} for session {session_id}")
+            
+            if _needs_file_prefix:
+                _uc_file_prefix = _re.sub(r'[^a-z0-9]+', '_', (_uc_name.strip().lower() if _uc_name.strip() else 'vibe_coding')).strip('_') or 'vibe_coding'
+                params['use_case_file_prefix'] = _uc_file_prefix
+                _patch['use_case_file_prefix'] = params['use_case_file_prefix']
+                logger.info(f"[Session Params] Derived use_case_file_prefix: {params['use_case_file_prefix']} (from use_case_name, accelerator={_is_accelerator}) for session {session_id}")
             
             if _patch:
                 try:

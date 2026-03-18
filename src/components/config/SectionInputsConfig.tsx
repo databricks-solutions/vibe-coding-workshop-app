@@ -104,6 +104,7 @@ for (const section of WORKFLOW_SECTIONS) {
 // Extra section tags that live under a parent step but aren't steps themselves
 if (SECTION_TAG_TO_GROUP['bronze_table_metadata']) {
   SECTION_TAG_TO_GROUP['bronze_table_metadata_upload'] = SECTION_TAG_TO_GROUP['bronze_table_metadata'];
+  SECTION_TAG_TO_GROUP['bronze_table_metadata_generate'] = SECTION_TAG_TO_GROUP['bronze_table_metadata'];
 }
 
 const GROUP_ORDER = ['Foundation', 'Databricks App', 'Lakebase', 'Lakehouse', 'Data Intelligence', 'Workshop', 'Refinement'];
