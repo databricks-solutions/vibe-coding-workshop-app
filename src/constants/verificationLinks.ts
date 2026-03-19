@@ -10,7 +10,7 @@
  *   {workspace_org_id}            - Numeric workspace org ID (for ?o= parameter)
  *   {user_app_name}               - User's deployed Databricks App name (derived from email)
  *   {app_name}                    - Workshop platform Databricks App name
- *   {lakebase_instance_name}      - Lakebase provisioned instance name
+ *   {lakebase_instance_name}      - Lakebase project name (autoscaling) or instance name (provisioned)
  *   {lakebase_uc_catalog_name}    - Unity Catalog name for Lakebase
  *   {lakehouse_default_catalog}   - Target catalog for Bronze/Silver/Gold
  *   {chapter_3_lakehouse_catalog} - Source catalog for metadata extraction
