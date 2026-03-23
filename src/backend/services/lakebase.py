@@ -1588,6 +1588,325 @@ def get_workshop_users() -> Dict:
         return {'total': 0, 'users': []}
 
 
+# =============================================================================
+# ANALYTICS
+# =============================================================================
+
+def get_analytics() -> Dict[str, Any]:
+    """
+    Aggregate read-only analytics across all sessions.
+    Returns a single dict with summary, usage, breakdowns, and detail lists.
+    All queries are SELECT-only — no data is created, modified, or deleted.
+    """
+    _empty: Dict[str, Any] = {
+        "summary": {"total_sessions": 0, "total_users": 0, "total_feedback": 0, "positive_count": 0, "negative_count": 0},
+        "usage": {"avg_steps_per_session": 0, "prereqs_completed": 0, "total_prompts_generated": 0, "saved_sessions": 0, "avg_score": 0},
+        "by_industry": [],
+        "by_use_case": [],
+        "by_level": [],
+        "step_completion_counts": [],
+        "chapter_feedback": [],
+        "recent_sessions": [],
+        "user_activity": [],
+        "feedback_details": [],
+    }
+
+    if not is_lakebase_configured():
+        return _empty
+
+    table_name = _get_sessions_table_name()
+
+    try:
+        # -- Summary ----------------------------------------------------------
+        summary_rows = execute_query(f"""
+            SELECT
+                (SELECT COUNT(*) FROM {table_name}) AS total_sessions,
+                (SELECT COUNT(DISTINCT created_by) FROM {table_name}
+                 WHERE created_by IS NOT NULL AND created_by != '') AS total_users,
+                (SELECT COUNT(*) FROM {table_name}
+                 WHERE feedback_rating IS NOT NULL AND feedback_rating != '') AS total_feedback,
+                (SELECT COUNT(*) FROM {table_name}
+                 WHERE feedback_rating = 'thumbs_up') AS positive_count,
+                (SELECT COUNT(*) FROM {table_name}
+                 WHERE feedback_rating = 'thumbs_down') AS negative_count
+        """)
+        summary = summary_rows[0] if summary_rows else _empty["summary"]
+
+        # -- Usage metrics ----------------------------------------------------
+        usage_rows = execute_query(f"""
+            SELECT
+                COALESCE(
+                    (SELECT ROUND(AVG(
+                        CASE WHEN completed_steps IS NOT NULL
+                             AND completed_steps != ''
+                             AND completed_steps != '[]'
+                        THEN json_array_length(completed_steps::json)
+                        ELSE 0 END
+                    )::numeric, 1) FROM {table_name}),
+                0) AS avg_steps_per_session,
+                (SELECT COUNT(*) FROM {table_name}
+                 WHERE prerequisites_completed = TRUE) AS prereqs_completed,
+                (SELECT COUNT(*) FROM {table_name}
+                 WHERE session_name IS NOT NULL
+                   AND session_name != ''
+                   AND session_name != 'New Session') AS saved_sessions
+        """)
+        usage_base = usage_rows[0] if usage_rows else {}
+
+        # Count total prompts generated (step_prompts JSONB keys + step_1_prompt presence)
+        prompts_rows = execute_query(f"""
+            SELECT
+                COALESCE(SUM(
+                    (SELECT COUNT(*) FROM jsonb_object_keys(
+                        CASE WHEN step_prompts IS NOT NULL AND step_prompts != '{{}}'::jsonb
+                             THEN step_prompts ELSE '{{}}'::jsonb END
+                    ))
+                ), 0)
+                + (SELECT COUNT(*) FROM {table_name}
+                   WHERE step_1_prompt IS NOT NULL AND step_1_prompt != '')
+            AS total_prompts
+            FROM {table_name}
+        """)
+        total_prompts = int(prompts_rows[0].get("total_prompts", 0)) if prompts_rows else 0
+
+        # Average score — fetch all sessions and compute in Python (like leaderboard)
+        score_rows = execute_query(f"""
+            SELECT completed_steps, skipped_steps
+            FROM {table_name}
+            WHERE completed_steps IS NOT NULL
+              AND completed_steps != ''
+              AND completed_steps != '[]'
+        """)
+        scores = []
+        for sr in score_rows:
+            try:
+                cs = json.loads(sr["completed_steps"]) if isinstance(sr["completed_steps"], str) else (sr["completed_steps"] or [])
+                sk_raw = sr.get("skipped_steps", "[]")
+                sk = json.loads(sk_raw) if isinstance(sk_raw, str) else (sk_raw or [])
+                scores.append(_calculate_score(cs, sk))
+            except Exception:
+                pass
+        avg_score = round(sum(scores) / len(scores), 1) if scores else 0
+
+        usage = {
+            "avg_steps_per_session": float(usage_base.get("avg_steps_per_session", 0)),
+            "prereqs_completed": int(usage_base.get("prereqs_completed", 0)),
+            "total_prompts_generated": total_prompts,
+            "saved_sessions": int(usage_base.get("saved_sessions", 0)),
+            "avg_score": avg_score,
+        }
+
+        # -- By industry ------------------------------------------------------
+        industry_rows = execute_query(f"""
+            SELECT industry_label AS industry, COUNT(*) AS count
+            FROM {table_name}
+            WHERE industry_label IS NOT NULL AND industry_label != ''
+            GROUP BY industry_label
+            ORDER BY count DESC
+            LIMIT 10
+        """)
+
+        # -- By use case ------------------------------------------------------
+        usecase_rows = execute_query(f"""
+            SELECT use_case_label AS use_case, COUNT(*) AS count
+            FROM {table_name}
+            WHERE use_case_label IS NOT NULL AND use_case_label != ''
+            GROUP BY use_case_label
+            ORDER BY count DESC
+            LIMIT 10
+        """)
+
+        # -- By workshop level ------------------------------------------------
+        level_rows = execute_query(f"""
+            SELECT COALESCE(workshop_level, 'unknown') AS level, COUNT(*) AS count
+            FROM {table_name}
+            GROUP BY workshop_level
+            ORDER BY count DESC
+        """)
+        by_level = []
+        for lr in level_rows:
+            lvl = lr.get("level", "unknown")
+            by_level.append({
+                "level": lvl,
+                "label": _WORKSHOP_LEVEL_LABELS.get(lvl, lvl or "Unknown"),
+                "count": int(lr["count"]),
+            })
+
+        # -- Step completion counts -------------------------------------------
+        completed_step_rows = execute_query(f"""
+            SELECT step::int AS step_number, COUNT(*) AS cnt
+            FROM {table_name},
+                 json_array_elements_text(completed_steps::json) AS step
+            WHERE completed_steps IS NOT NULL
+              AND completed_steps != ''
+              AND completed_steps != '[]'
+            GROUP BY step::int
+            ORDER BY step::int
+        """)
+        skipped_step_rows = execute_query(f"""
+            SELECT step::int AS step_number, COUNT(*) AS cnt
+            FROM {table_name},
+                 json_array_elements_text(skipped_steps::json) AS step
+            WHERE skipped_steps IS NOT NULL
+              AND skipped_steps != ''
+              AND skipped_steps != '[]'
+            GROUP BY step::int
+            ORDER BY step::int
+        """)
+        completed_map = {int(r["step_number"]): int(r["cnt"]) for r in completed_step_rows}
+        skipped_map = {int(r["step_number"]): int(r["cnt"]) for r in skipped_step_rows}
+        all_step_nums = sorted(set(list(completed_map.keys()) + list(skipped_map.keys())))
+        step_completion_counts = [
+            {"step_number": s, "completed": completed_map.get(s, 0), "skipped": skipped_map.get(s, 0)}
+            for s in all_step_nums
+        ]
+
+        # -- Chapter feedback -------------------------------------------------
+        cf_rows = execute_query(f"""
+            SELECT chapter_feedback
+            FROM {table_name}
+            WHERE chapter_feedback IS NOT NULL
+              AND chapter_feedback != '{{}}'::jsonb
+        """)
+        ch_tally: Dict[str, Dict[str, int]] = {}
+        for cfr in cf_rows:
+            cf = cfr.get("chapter_feedback")
+            if not cf or not isinstance(cf, dict):
+                continue
+            for ch_name, ch_val in cf.items():
+                if ch_name not in ch_tally:
+                    ch_tally[ch_name] = {"up": 0, "down": 0}
+                rating = ch_val.get("rating", "") if isinstance(ch_val, dict) else ""
+                if rating in ("up", "thumbs_up"):
+                    ch_tally[ch_name]["up"] += 1
+                elif rating in ("down", "thumbs_down"):
+                    ch_tally[ch_name]["down"] += 1
+        chapter_feedback = [
+            {"chapter": ch, "up": vals["up"], "down": vals["down"]}
+            for ch, vals in ch_tally.items()
+        ]
+
+        # -- Recent sessions --------------------------------------------------
+        recent_rows = execute_query(f"""
+            SELECT session_id, created_by, industry_label, use_case_label,
+                   workshop_level, completed_steps, created_at
+            FROM {table_name}
+            ORDER BY created_at DESC
+            LIMIT 10
+        """)
+        recent_sessions = []
+        for rr in recent_rows:
+            email = rr.get("created_by", "")
+            cs_raw = rr.get("completed_steps", "[]")
+            try:
+                cs = json.loads(cs_raw) if isinstance(cs_raw, str) else (cs_raw or [])
+                completed_count = len(cs)
+            except Exception:
+                completed_count = 0
+            lvl = rr.get("workshop_level") or ""
+            ca = rr.get("created_at")
+            if hasattr(ca, "isoformat"):
+                ca = ca.isoformat()
+            elif hasattr(ca, "strftime"):
+                ca = ca.strftime("%Y-%m-%dT%H:%M:%S")
+            recent_sessions.append({
+                "session_id": rr.get("session_id"),
+                "display_name": _format_display_name(email),
+                "industry_label": rr.get("industry_label") or "",
+                "use_case_label": rr.get("use_case_label") or "",
+                "workshop_level": lvl,
+                "workshop_level_label": _WORKSHOP_LEVEL_LABELS.get(lvl, lvl or "Unknown"),
+                "completed_count": completed_count,
+                "created_at": str(ca or ""),
+            })
+
+        # -- User activity ----------------------------------------------------
+        user_rows = execute_query(f"""
+            SELECT created_by, session_id, completed_steps, skipped_steps, feedback_rating
+            FROM {table_name}
+            WHERE created_by IS NOT NULL AND created_by != ''
+        """)
+        user_agg: Dict[str, Dict[str, Any]] = {}
+        for ur in user_rows:
+            email = ur.get("created_by", "")
+            if not email:
+                continue
+            if email not in user_agg:
+                user_agg[email] = {"sessions": set(), "total_steps": 0, "best_score": 0, "feedback_given": 0}
+            user_agg[email]["sessions"].add(ur.get("session_id"))
+            cs_raw = ur.get("completed_steps", "[]")
+            sk_raw = ur.get("skipped_steps", "[]")
+            try:
+                cs = json.loads(cs_raw) if isinstance(cs_raw, str) else (cs_raw or [])
+                sk = json.loads(sk_raw) if isinstance(sk_raw, str) else (sk_raw or [])
+            except Exception:
+                cs, sk = [], []
+            user_agg[email]["total_steps"] += len(cs)
+            score = _calculate_score(cs, sk)
+            if score > user_agg[email]["best_score"]:
+                user_agg[email]["best_score"] = score
+            if ur.get("feedback_rating"):
+                user_agg[email]["feedback_given"] += 1
+
+        user_activity = sorted(
+            [
+                {
+                    "email": email,
+                    "display_name": _format_display_name(email),
+                    "session_count": len(data["sessions"]),
+                    "total_steps": data["total_steps"],
+                    "best_score": data["best_score"],
+                    "feedback_given": data["feedback_given"],
+                }
+                for email, data in user_agg.items()
+            ],
+            key=lambda x: -x["best_score"],
+        )
+
+        # -- Feedback details -------------------------------------------------
+        fb_rows = execute_query(f"""
+            SELECT session_id, created_by, feedback_rating, feedback_comment,
+                   industry_label, use_case_label, created_at
+            FROM {table_name}
+            WHERE feedback_rating IS NOT NULL AND feedback_rating != ''
+            ORDER BY created_at DESC
+            LIMIT 100
+        """)
+        feedback_details = []
+        for fr in fb_rows:
+            email = fr.get("created_by", "")
+            ca = fr.get("created_at")
+            if hasattr(ca, "isoformat"):
+                ca = ca.isoformat()
+            elif hasattr(ca, "strftime"):
+                ca = ca.strftime("%Y-%m-%dT%H:%M:%S")
+            feedback_details.append({
+                "session_id": fr.get("session_id"),
+                "display_name": _format_display_name(email),
+                "feedback_rating": fr.get("feedback_rating") or "",
+                "feedback_comment": fr.get("feedback_comment") or "",
+                "industry_label": fr.get("industry_label") or "",
+                "use_case_label": fr.get("use_case_label") or "",
+                "created_at": str(ca or ""),
+            })
+
+        return {
+            "summary": {k: int(v) for k, v in summary.items()},
+            "usage": usage,
+            "by_industry": [{"industry": r["industry"], "count": int(r["count"])} for r in industry_rows],
+            "by_use_case": [{"use_case": r["use_case"], "count": int(r["count"])} for r in usecase_rows],
+            "by_level": by_level,
+            "step_completion_counts": step_completion_counts,
+            "chapter_feedback": chapter_feedback,
+            "recent_sessions": recent_sessions,
+            "user_activity": user_activity,
+            "feedback_details": feedback_details,
+        }
+    except Exception as e:
+        logger.warning("Analytics query failed: %s", e)
+        return _empty
+
+
 def cleanup_session_steps() -> Dict[str, int]:
     """
     Clean up session data:

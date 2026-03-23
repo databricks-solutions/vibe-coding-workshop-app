@@ -422,13 +422,6 @@ export function PromptGenerator({
               >
                 <PenLine className="w-3.5 h-3.5" />
                 Create Your Own
-                <span className={`px-1.5 py-0.5 text-[9px] font-semibold rounded-full uppercase tracking-wider leading-none border ${
-                  mode === 'custom'
-                    ? 'bg-white/20 text-primary-foreground/80 border-white/20'
-                    : 'bg-muted text-muted-foreground/70 border-border'
-                }`}>
-                  Beta
-                </span>
               </button>
             </div>
           )}
@@ -623,9 +616,6 @@ export function PromptGenerator({
                           <div className="flex items-center gap-2">
                             <PenLine className="w-4 h-4 text-primary" />
                             <h3 className="text-[15px] font-semibold text-foreground">Create Your Own Use Case</h3>
-                            <span className="px-1.5 py-0.5 text-[9px] font-semibold rounded-full uppercase tracking-wider leading-none border bg-muted text-muted-foreground/70 border-border">
-                              Beta
-                            </span>
                           </div>
                           <button
                             onClick={() => setIsBuilderExpanded(false)}

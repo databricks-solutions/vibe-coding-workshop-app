@@ -74,7 +74,7 @@ export type WorkshopLevel = 'app-only' | 'app-database' | 'lakehouse' | 'lakehou
 // Feature flag for the Agent Skills Accelerator
 // ---------------------------------------------------------------------------
 export type AcceleratorStatus = 'enabled' | 'beta' | 'coming-soon';
-export const SKILLS_ACCELERATOR_STATUS: AcceleratorStatus = 'beta';
+export const SKILLS_ACCELERATOR_STATUS: AcceleratorStatus = 'enabled';
 
 // ---------------------------------------------------------------------------
 // Use-case-driven path lock: selecting certain use cases auto-locks the

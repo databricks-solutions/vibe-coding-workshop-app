@@ -89,14 +89,9 @@ export function UseCaseBuilderPage() {
             <Lightbulb className="w-6 h-6 text-amber-400" />
           </div>
           <div>
-            <div className="flex items-center gap-2">
-              <h1 className="text-xl font-bold text-foreground">Build Your Use Case</h1>
-              <span className="px-2 py-0.5 bg-amber-500/20 text-amber-300 text-[10px] font-semibold rounded-full border border-amber-500/30 uppercase tracking-wider">
-                Beta
-              </span>
-            </div>
+            <h1 className="text-xl font-bold text-foreground">Build Your Use Case</h1>
             <p className="text-muted-foreground text-[12px] mt-0.5">
-              Generate professional use case descriptions powered by AI. This feature is in beta — output quality may vary.
+              Generate professional use case descriptions powered by AI.
             </p>
           </div>
         </div>

@@ -395,11 +395,19 @@ async function streamServiceChat(
           if (data === '[DONE]') continue;
           try {
             const parsed = JSON.parse(data);
+            if (parsed.type === 'retry') {
+              // Silently skip retry events — backend handles backoff
+              continue;
+            }
+            if (parsed.type === 'error') {
+              throw new Error(parsed.error || 'Generation failed');
+            }
             if (parsed.content) {
               fullText += parsed.content;
               onChunk(fullText);
             }
-          } catch {
+          } catch (e) {
+            if (e instanceof Error && e.message.includes('Generation failed')) throw e;
             if (data && data !== '[DONE]') {
               fullText += data;
               onChunk(fullText);

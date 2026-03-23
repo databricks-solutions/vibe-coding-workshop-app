@@ -1393,7 +1393,7 @@ export function WorkflowDiagram({
                               }`}
                             >
                               <FileText className="w-4 h-4" />
-                              Generate from CSV <span className="text-[10px] opacity-60 ml-0.5">(Beta)</span>
+                              Generate from CSV
                               {generateTabLocked && <Lock className="w-3 h-3 ml-1" />}
                             </button>
                           </div>
@@ -1589,7 +1589,7 @@ export function WorkflowDiagram({
                                 }`}
                               >
                                 <Upload className="w-4 h-4" />
-                                Upload CSV <span className="text-[10px] opacity-60 ml-0.5">(Beta)</span>
+                                Upload CSV
                                 {uploadTabLocked22 && <Lock className="w-3 h-3 ml-1" />}
                               </button>
                             )}

@@ -18,7 +18,6 @@ import {
   Upload,
   ImageIcon,
   Lightbulb,
-  AlertCircle,
   GitCompareArrows,
   FileText,
   FileSpreadsheet,
@@ -411,11 +410,18 @@ export function UseCaseBuilderPanel({
             )}
           </div>
 
+          {/* Retry status indicator */}
+          {b.isStreaming && b.retryStatus && (
+            <div className="flex items-center gap-2 mb-3 px-3 py-2.5 bg-amber-500/10 border border-amber-500/20 rounded-lg text-amber-300 text-[12px]">
+              <div className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse shrink-0" />
+              Retrying ({b.retryStatus.attempt} of {b.retryStatus.maxAttempts}) &mdash; {b.retryStatus.reason}...
+            </div>
+          )}
           {/* Error */}
-          {b.error && (
-            <div className="flex items-center gap-2 mb-3 px-3 py-2 bg-destructive/10 border border-destructive/20 rounded-lg text-destructive text-[12px]">
-              <AlertCircle className="w-4 h-4 shrink-0" />
-              {b.error}
+          {!b.isStreaming && b.error && (
+            <div className="flex items-center gap-2 mb-3 px-3 py-2 bg-red-900/30 border border-red-700/50 rounded-lg text-red-300 text-[12px]">
+              <div className="w-1.5 h-1.5 rounded-full bg-red-400 shrink-0" />
+              <span>Generation failed &mdash; click <strong>Generate</strong> to try again</span>
             </div>
           )}
 

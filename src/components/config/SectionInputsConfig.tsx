@@ -174,6 +174,7 @@ export function SectionInputsConfig({ onToast }: SectionInputsConfigProps) {
   const [testOutput, setTestOutput] = useState('');
   const [testModel, setTestModel] = useState<string | undefined>();
   const [testError, setTestError] = useState<string | null>(null);
+  const [testRetryStatus, setTestRetryStatus] = useState<{ attempt: number; maxAttempts: number; reason: string } | null>(null);
   const [testCopied, setTestCopied] = useState(false);
   const testAbortRef = useRef<AbortController | null>(null);
 
@@ -512,6 +513,7 @@ export function SectionInputsConfig({ onToast }: SectionInputsConfigProps) {
     setIsTestRunning(true);
     setTestOutput('');
     setTestError(null);
+    setTestRetryStatus(null);
     setTestModel(undefined);
     setIsTestPanelOpen(true);
     
@@ -526,17 +528,26 @@ export function SectionInputsConfig({ onToast }: SectionInputsConfigProps) {
       editingBypassLlm,
       // onContent
       (content: string) => {
+        setTestRetryStatus(null);
         setTestOutput(prev => prev + content);
       },
       // onComplete
       (model?: string) => {
         setIsTestRunning(false);
+        setTestRetryStatus(null);
         setTestModel(model);
       },
       // onError
       (error: string) => {
         setIsTestRunning(false);
+        setTestRetryStatus(null);
         setTestError(error);
+      },
+      undefined,
+      undefined,
+      // onRetry
+      (attempt: number, maxAttempts: number, reason: string) => {
+        setTestRetryStatus({ attempt, maxAttempts, reason });
       }
     );
   }
@@ -552,6 +563,7 @@ export function SectionInputsConfig({ onToast }: SectionInputsConfigProps) {
   function handleClearTest() {
     setTestOutput('');
     setTestError(null);
+    setTestRetryStatus(null);
     setTestModel(undefined);
   }
   
@@ -871,10 +883,18 @@ export function SectionInputsConfig({ onToast }: SectionInputsConfigProps) {
                 
                 {/* Test Panel Content */}
                 <div className="p-4 max-h-80 overflow-y-auto">
-                  {testError && (
-                    <div className="mb-3 p-3 bg-red-500/10 border border-red-500/30 rounded-lg">
-                      <p className="text-sm text-red-400 font-medium">Error</p>
-                      <p className="text-sm text-red-300 mt-1">{testError}</p>
+                  {isTestRunning && testRetryStatus && (
+                    <div className="mb-3 px-3 py-2.5 bg-amber-500/10 border border-amber-500/20 rounded-lg flex items-center gap-2">
+                      <div className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse shrink-0" />
+                      <span className="text-sm text-amber-300">
+                        Retrying ({testRetryStatus.attempt} of {testRetryStatus.maxAttempts}) &mdash; {testRetryStatus.reason}...
+                      </span>
+                    </div>
+                  )}
+                  {!isTestRunning && testError && (
+                    <div className="mb-3 p-3 bg-red-900/30 border border-red-700/50 rounded-lg flex items-center gap-2">
+                      <div className="w-1.5 h-1.5 rounded-full bg-red-400 shrink-0" />
+                      <span className="text-sm text-red-300">Test failed &mdash; click <strong>Test</strong> to try again</span>
                     </div>
                   )}
                   

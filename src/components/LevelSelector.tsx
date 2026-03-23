@@ -343,7 +343,7 @@ function LevelSelectorGrid({
               {isButtonDisabled('accelerator') && <LockedTooltip />}
             </div>
 
-            {/* Genie Accelerator (Beta) */}
+            {/* Genie Accelerator */}
             <div className={isButtonDisabled('genie-accelerator') ? 'relative group' : undefined}>
               <button
                 onClick={() => handleLevelClick('genie-accelerator')}
@@ -356,8 +356,8 @@ function LevelSelectorGrid({
                   <span className={`text-[9px] px-1.5 py-0.5 rounded font-medium ${
                     selectedLevel === 'genie-accelerator'
                       ? 'bg-white/20 text-primary-foreground/80 border border-white/20'
-                      : 'bg-muted text-muted-foreground/70 border border-border'
-                  }`}>Beta</span>
+                      : 'bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30'
+                  }`}>New</span>
                   {!isButtonDisabled('genie-accelerator') && (selectedLevel === 'genie-accelerator' || isHighlighted('genie-accelerator')) && (
                     <Check className={`w-3.5 h-3.5 flex-shrink-0 ${selectedLevel === 'genie-accelerator' ? '' : 'opacity-60'}`} />
                   )}
@@ -366,7 +366,7 @@ function LevelSelectorGrid({
               {isButtonDisabled('genie-accelerator') && <LockedTooltip />}
             </div>
 
-            {/* Data Engineering Accelerator (Beta) */}
+            {/* Data Engineering Accelerator */}
             <div className={isButtonDisabled('data-engineering-accelerator') ? 'relative group' : undefined}>
               <button
                 onClick={() => handleLevelClick('data-engineering-accelerator')}
@@ -379,8 +379,8 @@ function LevelSelectorGrid({
                   <span className={`text-[9px] px-1.5 py-0.5 rounded font-medium ${
                     selectedLevel === 'data-engineering-accelerator'
                       ? 'bg-white/20 text-primary-foreground/80 border border-white/20'
-                      : 'bg-muted text-muted-foreground/70 border border-border'
-                  }`}>Beta</span>
+                      : 'bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30'
+                  }`}>New</span>
                   {!isButtonDisabled('data-engineering-accelerator') && (selectedLevel === 'data-engineering-accelerator' || isHighlighted('data-engineering-accelerator')) && (
                     <Check className={`w-3.5 h-3.5 flex-shrink-0 ${selectedLevel === 'data-engineering-accelerator' ? '' : 'opacity-60'}`} />
                   )}
@@ -415,10 +415,8 @@ function LevelSelectorGrid({
                     <span className={`text-[9px] px-1.5 py-0.5 rounded font-medium ${
                       selectedLevel === 'skills-accelerator'
                         ? 'bg-white/20 text-primary-foreground/80 border border-white/20'
-                        : SKILLS_ACCELERATOR_STATUS === 'beta'
-                          ? 'bg-muted text-muted-foreground/70 border border-border'
-                          : 'bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30'
-                    }`}>{SKILLS_ACCELERATOR_STATUS === 'beta' ? 'Beta' : 'New'}</span>
+                        : 'bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30'
+                    }`}>New</span>
                     {!isButtonDisabled('skills-accelerator') && (selectedLevel === 'skills-accelerator' || isHighlighted('skills-accelerator')) && (
                       <Check className={`w-3.5 h-3.5 flex-shrink-0 ${selectedLevel === 'skills-accelerator' ? '' : 'opacity-60'}`} />
                     )}
