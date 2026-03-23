@@ -580,6 +580,12 @@ If the limit error persists, repeat with the next oldest stopped app -- but **st
 
 ---
 
+### Idle Connection Test (CRITICAL)
+
+After confirming endpoints return `source: "live"`, wait 3-5 minutes, then reload the app. Verify it still shows "Live Data". If it shows "Mock Data", check logs for "terminating connection" errors.
+
+---
+
 ### Summary
 
 Your job is complete when:
@@ -5346,6 +5352,7 @@ Databricks Apps inject these env vars for linked database resources:
    - Ensure OAuth token authentication is used (see pattern above)
    - Functions should return `None` if Lakebase connection fails (for fallback)
    - **Check your work:** Run each query manually to verify it returns expected data without errors
+   - **Connection Resilience (CRITICAL for Autoscaling):** Lakebase autoscaling instances scale to zero after idle periods, which kills pooled connections. Your Lakebase service layer MUST: (1) Configure `psycopg_pool.ConnectionPool` with `check=ConnectionPool.check_connection` and `max_idle=300`. (2) Add retry-once logic in query helpers for "terminating connection" errors. (3) Log retries at WARNING level.
 
 3. **Add INFO logging** to all Lakebase connection code
    - Log when connecting to Lakebase (host, database, schema)
