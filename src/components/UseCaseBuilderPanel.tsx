@@ -6,6 +6,7 @@
  * Supports a `compact` mode for embedding inside Step 1's "Create Your Own".
  */
 
+import { useCallback } from 'react';
 import {
   Sparkles,
   Send,
@@ -21,10 +22,13 @@ import {
   GitCompareArrows,
   FileText,
   FileSpreadsheet,
+  Mic,
+  MicOff,
 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { DiffView } from './DiffView';
+import { useSpeechToText } from '../hooks/useSpeechToText';
 import type { UseCaseBuilderState } from '../hooks/useUseCaseBuilder';
 
 interface UseCaseBuilderPanelProps {
@@ -142,9 +146,15 @@ export function UseCaseBuilderPanel({
   onSaved,
 }: UseCaseBuilderPanelProps) {
   const imgSize = compact ? 'w-10 h-10' : 'w-16 h-16';
-  const textareaRows = compact ? 2 : 4;
+  const textareaRows = compact ? 3 : 5;
   const outputMaxH = compact ? 'max-h-[40vh]' : 'max-h-[60vh]';
   const editMinH = compact ? 'min-h-[200px]' : 'min-h-[400px]';
+
+  const handleAppendTranscript = useCallback(
+    (text: string) => b.setHints((prev: string) => (prev ? `${prev} ${text}` : text)),
+    [b],
+  );
+  const speech = useSpeechToText({ onFinalTranscript: handleAppendTranscript });
 
   const handleSaveWithCallback = async () => {
     await b.handleSave();
@@ -209,7 +219,7 @@ export function UseCaseBuilderPanel({
             </div>
           </div>
 
-          {/* File upload (images, PDFs, text) */}
+          {/* Reference file upload (images, PDFs, text) */}
           <div>
             <label className="block text-[11px] font-medium text-muted-foreground mb-1.5 uppercase tracking-wider">
               Reference Files <span className="text-muted-foreground/60">(images, PDFs, text — up to 5)</span>
@@ -271,18 +281,52 @@ export function UseCaseBuilderPanel({
             )}
           </div>
 
-          {/* Hints */}
+          {/* Description of the use case (voice-enabled) */}
           <div>
             <label className="block text-[11px] font-medium text-muted-foreground mb-1.5 uppercase tracking-wider">
-              Additional Hints
+              Description of the Use Case
             </label>
-            <textarea
-              value={b.hints}
-              onChange={(e) => b.setHints(e.target.value)}
-              placeholder="Describe specific features, personas, data sources, or technical requirements..."
-              rows={textareaRows}
-              className={`w-full bg-background border border-border rounded-lg px-3 py-2 ${compact ? 'text-[12px]' : 'text-[13px]'} text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-1 focus:ring-primary/50 focus:border-primary/50 transition-colors resize-none`}
-            />
+            <div className="relative">
+              <textarea
+                value={b.hints}
+                onChange={(e) => b.setHints(e.target.value)}
+                placeholder="Describe the use case in detail — features, personas, data sources, or technical requirements..."
+                rows={textareaRows}
+                className={`w-full bg-background border rounded-lg px-3 py-2 ${compact ? 'text-[12px] pr-10' : 'text-[13px] pr-12'} text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-1 transition-colors resize-none ${
+                  speech.isListening
+                    ? 'border-red-400/70 focus:ring-red-400/50 focus:border-red-400/70'
+                    : 'border-border focus:ring-primary/50 focus:border-primary/50'
+                }`}
+              />
+              {speech.isSupported && (
+                <button
+                  type="button"
+                  onClick={speech.isListening ? speech.stopListening : speech.startListening}
+                  className={`absolute ${compact ? 'bottom-2 right-2' : 'bottom-2.5 right-2.5'} p-1.5 rounded-lg transition-all ${
+                    speech.isListening
+                      ? 'bg-red-500/20 text-red-400 hover:bg-red-500/30 animate-pulse'
+                      : 'bg-secondary/80 text-muted-foreground hover:text-foreground hover:bg-secondary'
+                  }`}
+                  title={speech.isListening ? 'Stop recording' : 'Speak your use case description'}
+                >
+                  {speech.isListening
+                    ? <MicOff className={compact ? 'w-3.5 h-3.5' : 'w-4 h-4'} />
+                    : <Mic className={compact ? 'w-3.5 h-3.5' : 'w-4 h-4'} />
+                  }
+                </button>
+              )}
+            </div>
+            {speech.isListening && speech.interimTranscript && (
+              <p className={`mt-1 ${compact ? 'text-[10px]' : 'text-[11px]'} text-red-400/70 italic truncate`}>
+                {speech.interimTranscript}
+              </p>
+            )}
+            {speech.isListening && !speech.interimTranscript && (
+              <p className={`mt-1 ${compact ? 'text-[10px]' : 'text-[11px]'} text-red-400/60 flex items-center gap-1`}>
+                <span className="inline-block w-1.5 h-1.5 rounded-full bg-red-400 animate-pulse" />
+                Listening...
+              </p>
+            )}
           </div>
 
           {/* Generate button */}
