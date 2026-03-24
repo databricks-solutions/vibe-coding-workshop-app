@@ -5,6 +5,7 @@ import { apiClient, type SelectOption } from '../api/client';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { useUseCaseBuilder } from '../hooks/useUseCaseBuilder';
+import { useEscapeKey } from '../hooks/useEscapeKey';
 import { UseCaseBuilderPanel } from './UseCaseBuilderPanel';
 import { getLevelUIOverrides, type WorkshopLevel } from '../constants/workflowSections';
 
@@ -98,20 +99,17 @@ export function PromptGenerator({
   // Full-screen expand for the builder panel
   const [isBuilderExpanded, setIsBuilderExpanded] = useState(false);
 
-  const handleBuilderEsc = useCallback((e: KeyboardEvent) => {
-    if (e.key === 'Escape') setIsBuilderExpanded(false);
-  }, []);
+  const closeBuilder = useCallback(() => setIsBuilderExpanded(false), []);
+  useEscapeKey(isBuilderExpanded, closeBuilder);
 
   useEffect(() => {
     if (isBuilderExpanded) {
-      document.addEventListener('keydown', handleBuilderEsc);
       document.body.style.overflow = 'hidden';
     }
     return () => {
-      document.removeEventListener('keydown', handleBuilderEsc);
       document.body.style.overflow = '';
     };
-  }, [isBuilderExpanded, handleBuilderEsc]);
+  }, [isBuilderExpanded]);
 
   const isEdited = (editedUseCaseLabel && editedUseCaseLabel !== defaultUseCaseLabel) || 
                    (editedDescription && editedDescription !== defaultDescription);
@@ -560,7 +558,7 @@ export function PromptGenerator({
           {mode === 'custom' && (
             <div className="mb-5">
               {hasStarted ? (
-                /* When step is done, show a read-only summary */
+                /* When step is done, show a read-only summary with formatted markdown */
                 <div className="space-y-3">
                   <div className="grid grid-cols-2 gap-3">
                     <div>
@@ -573,9 +571,10 @@ export function PromptGenerator({
                     </div>
                   </div>
                   {customUseCaseDescription && (
-                    <div className="p-3 bg-secondary/40 rounded-md border border-border max-h-[200px] overflow-y-auto">
-                      <p className="text-muted-foreground text-[12px] leading-relaxed whitespace-pre-wrap">{customUseCaseDescription}</p>
-                    </div>
+                    <UseCaseDescriptionBox
+                      content={customUseCaseDescription}
+                      useCase={customUseCaseName || 'Custom Use Case'}
+                    />
                   )}
                 </div>
               ) : (
@@ -806,6 +805,8 @@ function UseCaseDescriptionBox({ content, useCase, isEdited, onEdit }: {
 }) {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [copied, setCopied] = useState(false);
+  const closeModal = useCallback(() => setIsModalOpen(false), []);
+  useEscapeKey(isModalOpen, closeModal);
 
   const handleCopy = async (closeModal: boolean = false) => {
     try {
@@ -855,7 +856,7 @@ function UseCaseDescriptionBox({ content, useCase, isEdited, onEdit }: {
             </button>
           </div>
         </div>
-        <div className="max-w-none">
+        <div className="max-w-none max-h-[200px] overflow-y-auto pr-1 scrollbar-thin scrollbar-thumb-border scrollbar-track-transparent">
           <ReactMarkdown 
             remarkPlugins={[remarkGfm]}
             components={{

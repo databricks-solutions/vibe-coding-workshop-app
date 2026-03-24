@@ -23,6 +23,7 @@ import {
   MessageCircle,
   HelpCircle,
 } from 'lucide-react';
+import { useEscapeKey } from '../hooks/useEscapeKey';
 import ReactMarkdown from 'react-markdown';
 
 // =============================================================================
@@ -450,6 +451,7 @@ function ServiceChatModal({
   const [streamingContent, setStreamingContent] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  useEscapeKey(isOpen, onClose);
 
   useEffect(() => {
     setMessages(initialMessages);

@@ -10,6 +10,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { Settings, Lock, RotateCcw, Save, Loader2, Check, AlertCircle, Globe, Database, Server, Layers, Bot, ChevronDown, X } from 'lucide-react';
 import { apiClient, type SessionParameter } from '../../api/client';
+import { useEscapeKey } from '../../hooks/useEscapeKey';
 
 interface SessionParametersPopoverProps {
   sessionId: string | null;
@@ -92,19 +93,8 @@ export function SessionParametersPopover({ sessionId, onParametersChanged }: Ses
     }
   }, [isOpen]);
 
-  // Close on escape key
-  useEffect(() => {
-    function handleEscape(event: KeyboardEvent) {
-      if (event.key === 'Escape') {
-        setIsOpen(false);
-      }
-    }
-
-    if (isOpen) {
-      document.addEventListener('keydown', handleEscape);
-      return () => document.removeEventListener('keydown', handleEscape);
-    }
-  }, [isOpen]);
+  const closePopover = useCallback(() => setIsOpen(false), []);
+  useEscapeKey(isOpen, closePopover);
 
   // Fetch parameters when popover opens
   useEffect(() => {

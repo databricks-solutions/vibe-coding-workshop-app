@@ -283,49 +283,75 @@ export function UseCaseBuilderPanel({
 
           {/* Description of the use case (voice-enabled) */}
           <div>
-            <label className="block text-[11px] font-medium text-muted-foreground mb-1.5 uppercase tracking-wider">
-              Description of the Use Case
-            </label>
-            <div className="relative">
+            <div className="flex items-center justify-between mb-1.5">
+              <label className="block text-[11px] font-medium text-muted-foreground uppercase tracking-wider">
+                Description of the Use Case
+              </label>
+              {speech.isSupported && !speech.isListening && (
+                <span className="text-[10px] text-muted-foreground/50 flex items-center gap-1">
+                  <Mic className="w-3 h-3" />
+                  or use voice
+                </span>
+              )}
+            </div>
+            <div className="flex gap-2 items-start">
               <textarea
                 value={b.hints}
                 onChange={(e) => b.setHints(e.target.value)}
                 placeholder="Describe the use case in detail — features, personas, data sources, or technical requirements..."
                 rows={textareaRows}
-                className={`w-full bg-background border rounded-lg px-3 py-2 ${compact ? 'text-[12px] pr-10' : 'text-[13px] pr-12'} text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-1 transition-colors resize-none ${
+                className={`flex-1 bg-background border rounded-lg px-3 py-2 ${compact ? 'text-[12px]' : 'text-[13px]'} text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-1 transition-colors resize-none ${
                   speech.isListening
                     ? 'border-red-400/70 focus:ring-red-400/50 focus:border-red-400/70'
                     : 'border-border focus:ring-primary/50 focus:border-primary/50'
                 }`}
               />
               {speech.isSupported && (
-                <button
-                  type="button"
-                  onClick={speech.isListening ? speech.stopListening : speech.startListening}
-                  className={`absolute ${compact ? 'bottom-2 right-2' : 'bottom-2.5 right-2.5'} p-1.5 rounded-lg transition-all ${
-                    speech.isListening
-                      ? 'bg-red-500/20 text-red-400 hover:bg-red-500/30 animate-pulse'
-                      : 'bg-secondary/80 text-muted-foreground hover:text-foreground hover:bg-secondary'
-                  }`}
-                  title={speech.isListening ? 'Stop recording' : 'Speak your use case description'}
-                >
-                  {speech.isListening
-                    ? <MicOff className={compact ? 'w-3.5 h-3.5' : 'w-4 h-4'} />
-                    : <Mic className={compact ? 'w-3.5 h-3.5' : 'w-4 h-4'} />
-                  }
-                </button>
+                <div className="flex flex-col items-center gap-1 pt-1">
+                  <div className="relative">
+                    {speech.isListening && (
+                      <>
+                        <span className="absolute inset-0 rounded-full bg-red-500/20 animate-ping" />
+                        <span className="absolute -inset-1 rounded-full border-2 border-red-400/40 animate-pulse" />
+                      </>
+                    )}
+                    <button
+                      type="button"
+                      onClick={speech.isListening ? speech.stopListening : speech.startListening}
+                      className={`relative ${compact ? 'w-9 h-9' : 'w-10 h-10'} rounded-full flex items-center justify-center transition-all duration-200 shadow-sm ${
+                        speech.isListening
+                          ? 'bg-red-500 text-white hover:bg-red-600 shadow-red-500/30 shadow-md scale-110'
+                          : 'bg-gradient-to-br from-primary to-emerald-500 text-white hover:shadow-md hover:shadow-primary/30 hover:scale-105'
+                      }`}
+                      title={speech.isListening ? 'Stop recording' : 'Speak your use case description'}
+                    >
+                      {speech.isListening
+                        ? <MicOff className={compact ? 'w-4 h-4' : 'w-[18px] h-[18px]'} />
+                        : <Mic className={compact ? 'w-4 h-4' : 'w-[18px] h-[18px]'} />
+                      }
+                    </button>
+                  </div>
+                  <span className={`text-[9px] font-medium ${speech.isListening ? 'text-red-400' : 'text-muted-foreground/50'}`}>
+                    {speech.isListening ? 'Stop' : 'Speak'}
+                  </span>
+                </div>
               )}
             </div>
             {speech.isListening && speech.interimTranscript && (
-              <p className={`mt-1 ${compact ? 'text-[10px]' : 'text-[11px]'} text-red-400/70 italic truncate`}>
+              <p className={`mt-1.5 ${compact ? 'text-[10px]' : 'text-[11px]'} text-red-400/80 italic truncate`}>
                 {speech.interimTranscript}
               </p>
             )}
             {speech.isListening && !speech.interimTranscript && (
-              <p className={`mt-1 ${compact ? 'text-[10px]' : 'text-[11px]'} text-red-400/60 flex items-center gap-1`}>
-                <span className="inline-block w-1.5 h-1.5 rounded-full bg-red-400 animate-pulse" />
-                Listening...
-              </p>
+              <div className={`mt-1.5 flex items-center gap-1.5 ${compact ? 'text-[10px]' : 'text-[11px]'} text-red-400/70`}>
+                <span className="flex gap-0.5">
+                  <span className="inline-block w-1 h-3 rounded-full bg-red-400/80 animate-pulse" style={{ animationDelay: '0ms' }} />
+                  <span className="inline-block w-1 h-2 rounded-full bg-red-400/60 animate-pulse" style={{ animationDelay: '150ms' }} />
+                  <span className="inline-block w-1 h-3.5 rounded-full bg-red-400/80 animate-pulse" style={{ animationDelay: '300ms' }} />
+                  <span className="inline-block w-1 h-2 rounded-full bg-red-400/60 animate-pulse" style={{ animationDelay: '450ms' }} />
+                </span>
+                Listening — speak now...
+              </div>
             )}
           </div>
 
