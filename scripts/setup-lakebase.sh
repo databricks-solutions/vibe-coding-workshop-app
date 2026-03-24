@@ -679,8 +679,24 @@ try:
         print("✓ Service principal database access configured")
 
     # ── Grant public role access so all authenticated users can use the workshop ──
+    # Cross-user table visibility: The 'users' group inherits pg_read_all_data
+    # via databricks_superuser (users -> databricks_superuser -> pg_read_all_data).
+    # This gives ALL workspace users automatic USAGE on all schemas and SELECT on
+    # all tables, even schemas created by other users without explicit grants.
+    # The per-schema grants below provide additional write access for the app schema.
     print()
     print("Setting up public access for all workspace users...")
+
+    try:
+        cursor.execute("GRANT pg_read_all_data TO users")
+        print("  ✓ pg_read_all_data granted to users (direct grant for cross-user read access)")
+    except Exception as e:
+        if "already a member" in str(e).lower() or "already" in str(e).lower():
+            print("  ✓ pg_read_all_data already granted to users")
+        else:
+            print(f"  ⚠ Could not grant pg_read_all_data to users: {e}")
+            print("    (OK -- users inherits pg_read_all_data via databricks_superuser)")
+
     try:
         cursor.execute("GRANT CREATE ON DATABASE databricks_postgres TO public")
         print("  ✓ CREATE on database granted to public")
