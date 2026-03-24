@@ -942,10 +942,10 @@ if [[ "$TABLES_ONLY" != true && "$SKIP_PERMISSIONS" != true ]]; then
                     print_warning "Lakebase role already exists for service principal"
                 else
                     ROLE_RESULT=$(databricks postgres create-role "$AUTOSCALING_BRANCH" \
-                        --json "{\"spec\": {\"postgres_role\": \"$SERVICE_PRINCIPAL_ID\", \"identity_type\": \"SERVICE_PRINCIPAL\"}}" \
+                        --json "{\"spec\": {\"postgres_role\": \"$SERVICE_PRINCIPAL_ID\", \"identity_type\": \"SERVICE_PRINCIPAL\", \"membership_roles\": [\"DATABRICKS_SUPERUSER\"]}}" \
                         --no-wait $PROFILE_FLAG 2>&1) || true
                     if echo "$ROLE_RESULT" | grep -q "SERVICE_PRINCIPAL\|name.*roles"; then
-                        print_success "Lakebase role granted for app service principal"
+                        print_success "Lakebase role granted: DATABRICKS_SUPERUSER for app service principal"
                     else
                         print_warning "Could not verify Lakebase role for service principal"
                         echo "  Response: $ROLE_RESULT"
@@ -958,10 +958,10 @@ if [[ "$TABLES_ONLY" != true && "$SKIP_PERMISSIONS" != true ]]; then
                         print_warning "Lakebase role already exists for $CURRENT_USER"
                     else
                         USER_ROLE_RESULT=$(databricks postgres create-role "$AUTOSCALING_BRANCH" \
-                            --json "{\"spec\": {\"postgres_role\": \"$CURRENT_USER\", \"identity_type\": \"USER\"}}" \
+                            --json "{\"spec\": {\"postgres_role\": \"$CURRENT_USER\", \"identity_type\": \"USER\", \"membership_roles\": [\"DATABRICKS_SUPERUSER\"]}}" \
                             --no-wait $PROFILE_FLAG 2>&1) || true
                         if echo "$USER_ROLE_RESULT" | grep -q "USER\|name.*roles"; then
-                            print_success "Lakebase role granted for $CURRENT_USER"
+                            print_success "Lakebase role granted: DATABRICKS_SUPERUSER for $CURRENT_USER"
                         else
                             print_warning "Could not grant Lakebase role for $CURRENT_USER"
                             echo "  Response: $USER_ROLE_RESULT"
@@ -969,17 +969,17 @@ if [[ "$TABLES_ONLY" != true && "$SKIP_PERMISSIONS" != true ]]; then
                     fi
                 fi
 
-                # Account users group role
-                if echo "$EXISTING_ROLES" | grep -q "account users"; then
-                    print_warning "Lakebase role already exists for account users"
+                # Workspace users group role (autoscaling uses workspace-level "users" group)
+                if echo "$EXISTING_ROLES" | grep -q '"users"'; then
+                    print_warning "Lakebase role already exists for users group"
                 else
                     ACCT_ROLE_RESULT=$(databricks postgres create-role "$AUTOSCALING_BRANCH" \
-                        --json '{"spec": {"postgres_role": "account users", "identity_type": "GROUP"}}' \
+                        --json '{"spec": {"postgres_role": "users", "identity_type": "GROUP", "membership_roles": ["DATABRICKS_SUPERUSER"]}}' \
                         --no-wait $PROFILE_FLAG 2>&1) || true
                     if echo "$ACCT_ROLE_RESULT" | grep -q "GROUP\|name.*roles"; then
-                        print_success "Lakebase role granted for account users (all workspace users)"
+                        print_success "Lakebase role granted: DATABRICKS_SUPERUSER for users group (all workspace users)"
                     else
-                        print_warning "Could not grant Lakebase role for account users"
+                        print_warning "Could not grant Lakebase role for users group"
                         echo "  Response: $ACCT_ROLE_RESULT"
                     fi
                 fi
@@ -1449,9 +1449,15 @@ except: print('no')
         else
             print_warning "Lakebase role: service principal MISSING -- re-applying..."
             VERIFY_ISSUES=$((VERIFY_ISSUES + 1))
-            databricks api post "$VERIFY_ROLES_API" \
-                $PROFILE_FLAG \
-                --json "{\"name\": \"$SERVICE_PRINCIPAL_ID\", \"identity_type\": \"SERVICE_PRINCIPAL\", \"membership_role\": \"DATABRICKS_SUPERUSER\"}" 2>/dev/null || true
+            if [[ "$LAKEBASE_MODE" == "autoscaling" ]]; then
+                databricks api post "$VERIFY_ROLES_API" \
+                    $PROFILE_FLAG \
+                    --json "{\"spec\": {\"postgres_role\": \"$SERVICE_PRINCIPAL_ID\", \"identity_type\": \"SERVICE_PRINCIPAL\", \"membership_roles\": [\"DATABRICKS_SUPERUSER\"]}}" 2>/dev/null || true
+            else
+                databricks api post "$VERIFY_ROLES_API" \
+                    $PROFILE_FLAG \
+                    --json "{\"name\": \"$SERVICE_PRINCIPAL_ID\", \"identity_type\": \"SERVICE_PRINCIPAL\", \"membership_role\": \"DATABRICKS_SUPERUSER\"}" 2>/dev/null || true
+            fi
         fi
     fi
 
@@ -1461,20 +1467,39 @@ except: print('no')
         else
             print_warning "Lakebase role: $CURRENT_USER MISSING -- re-applying..."
             VERIFY_ISSUES=$((VERIFY_ISSUES + 1))
-            databricks api post "$VERIFY_ROLES_API" \
-                $PROFILE_FLAG \
-                --json "{\"name\": \"$CURRENT_USER\", \"identity_type\": \"USER\", \"membership_role\": \"DATABRICKS_SUPERUSER\"}" 2>/dev/null || true
+            if [[ "$LAKEBASE_MODE" == "autoscaling" ]]; then
+                databricks api post "$VERIFY_ROLES_API" \
+                    $PROFILE_FLAG \
+                    --json "{\"spec\": {\"postgres_role\": \"$CURRENT_USER\", \"identity_type\": \"USER\", \"membership_roles\": [\"DATABRICKS_SUPERUSER\"]}}" 2>/dev/null || true
+            else
+                databricks api post "$VERIFY_ROLES_API" \
+                    $PROFILE_FLAG \
+                    --json "{\"name\": \"$CURRENT_USER\", \"identity_type\": \"USER\", \"membership_role\": \"DATABRICKS_SUPERUSER\"}" 2>/dev/null || true
+            fi
         fi
     fi
 
-    if echo "$VERIFY_ROLES" | grep -q "account users"; then
-        print_success "Lakebase role: account users OK"
+    # Group name differs: autoscaling uses workspace-level "users", provisioned uses account-level "account users"
+    if [[ "$LAKEBASE_MODE" == "autoscaling" ]]; then
+        VERIFY_GROUP_NAME="users"
     else
-        print_warning "Lakebase role: account users MISSING -- re-applying..."
+        VERIFY_GROUP_NAME="account users"
+    fi
+
+    if echo "$VERIFY_ROLES" | grep -q "\"$VERIFY_GROUP_NAME\""; then
+        print_success "Lakebase role: $VERIFY_GROUP_NAME OK"
+    else
+        print_warning "Lakebase role: $VERIFY_GROUP_NAME MISSING -- re-applying..."
         VERIFY_ISSUES=$((VERIFY_ISSUES + 1))
-        databricks api post "$VERIFY_ROLES_API" \
-            $PROFILE_FLAG \
-            --json '{"name": "account users", "identity_type": "GROUP", "membership_role": "DATABRICKS_SUPERUSER", "attributes": {"createdb": true, "createrole": true, "bypassrls": true}}' 2>/dev/null || true
+        if [[ "$LAKEBASE_MODE" == "autoscaling" ]]; then
+            databricks api post "$VERIFY_ROLES_API" \
+                $PROFILE_FLAG \
+                --json '{"spec": {"postgres_role": "users", "identity_type": "GROUP", "membership_roles": ["DATABRICKS_SUPERUSER"]}}' 2>/dev/null || true
+        else
+            databricks api post "$VERIFY_ROLES_API" \
+                $PROFILE_FLAG \
+                --json '{"name": "account users", "identity_type": "GROUP", "membership_role": "DATABRICKS_SUPERUSER", "attributes": {"createdb": true, "createrole": true, "bypassrls": true}}' 2>/dev/null || true
+        fi
     fi
 
     # ── Check 3: Lakebase CAN_USE ───────────────────────────────────────

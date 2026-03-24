@@ -313,12 +313,20 @@ def add_lakebase_role(host: str, token: str, instance_name: str, principal_id: s
         "Content-Type": "application/json"
     }
     
-    role_key = "postgres_role" if mode == "autoscaling" else "name"
-    payload = {
-        role_key: principal_id,
-        "identity_type": identity_type,
-        "membership_role": membership_role
-    }
+    if mode == "autoscaling":
+        payload = {
+            "spec": {
+                "postgres_role": principal_id,
+                "identity_type": identity_type,
+                "membership_roles": [membership_role]
+            }
+        }
+    else:
+        payload = {
+            "name": principal_id,
+            "identity_type": identity_type,
+            "membership_role": membership_role
+        }
     
     try:
         response = requests.post(
@@ -329,8 +337,13 @@ def add_lakebase_role(host: str, token: str, instance_name: str, principal_id: s
         
         if response.status_code in [200, 201]:
             result = response.json()
-            print(f"   Role: {result.get('membership_role')}")
-            print(f"   Identity Type: {result.get('identity_type')}")
+            if mode == "autoscaling":
+                status = result.get('status', {})
+                print(f"   Role: {status.get('membership_roles', [])}")
+                print(f"   Identity Type: {status.get('identity_type')}")
+            else:
+                print(f"   Role: {result.get('membership_role')}")
+                print(f"   Identity Type: {result.get('identity_type')}")
             return True
         elif response.status_code == 409:
             print(f"⚠️  Role already exists")
