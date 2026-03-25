@@ -440,7 +440,7 @@ Key capabilities:
 The focus is on turning insight into action across *pre-trip, in-stay/in-trip, and post-trip* moments.
 
 This drives **more direct bookings**, stronger loyalty engagement, and better lifetime value through *relevant, timely activation*.', 
-1, TRUE, current_timestamp(), current_timestamp(), current_user());
+1, FALSE, current_timestamp(), current_timestamp(), current_user());
 
 INSERT INTO ${catalog}.${schema}.usecase_descriptions 
 (config_id, industry, industry_label, use_case, use_case_label, prompt_template, version, is_active, inserted_at, updated_at, created_by)
