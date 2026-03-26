@@ -199,4 +199,29 @@ export const STEP_VERIFICATION_LINKS: Record<string, VerificationLink[]> = {
       description: 'Verify the app is connected to the AI agent. Open the app and test the agent-powered features to confirm the wiring is working end-to-end.',
     },
   ],
+
+  // --- Clean Up ---
+
+  workspace_cleanup: [
+    {
+      label: 'Check Apps',
+      urlTemplate: '{workspace_url}apps?o={workspace_org_id}',
+      description: 'Verify your workshop app has been removed from the Apps list.',
+    },
+    {
+      label: 'Check Catalog Explorer',
+      urlTemplate: '{workspace_url}explore/data/{lakehouse_default_catalog}?o={workspace_org_id}',
+      description: 'Verify the Bronze, Silver, and Gold schemas have been removed from the catalog.',
+    },
+    {
+      label: 'Check Lakebase Projects',
+      urlTemplate: '{workspace_url}lakebase/projects?o={workspace_org_id}',
+      description: 'Verify the Lakebase project has been removed.',
+    },
+    {
+      label: 'Check Jobs',
+      urlTemplate: '{workspace_url}jobs?o={workspace_org_id}',
+      description: 'Verify all workshop-related jobs and pipelines have been removed.',
+    },
+  ],
 };

@@ -86,4 +86,14 @@ export const CHAPTER_LEARNING: Record<string, ChapterLearning> = {
     ],
     services: ['databricksApp'],
   },
+  'Clean Up': {
+    congratsTitle: 'Clean Up Complete!',
+    summary: 'You safely removed all workshop resources from your workspace.',
+    bullets: [
+      'Identified all Databricks resources created during the workshop',
+      'Safely deleted apps, databases, schemas, dashboards, and jobs',
+      'Left your workspace clean and ready for the next project',
+    ],
+    services: [],
+  },
 };

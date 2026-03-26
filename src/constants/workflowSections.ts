@@ -42,7 +42,8 @@ import {
   BookOpen,
   FileCode,
   Tag,
-  ShieldCheck
+  ShieldCheck,
+  Trash2
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 
@@ -97,55 +98,55 @@ export const WORKSHOP_LEVELS: Record<WorkshopLevel, LevelConfig> = {
     label: 'Databricks Apps',
     tooltip: 'Build and deploy a web app on Databricks Apps',
     description: 'Build and deploy a web application using Databricks Apps.',
-    sectionIds: ['define-usecase', 'databricks-app', 'iterate-enhance'],
+    sectionIds: ['define-usecase', 'databricks-app', 'iterate-enhance', 'cleanup'],
   },
   'app-database': {
     label: '+ Lakebase',
     tooltip: 'Add a PostgreSQL database to your web app',
     description: 'Connect your Databricks App to a PostgreSQL database for data persistence.',
-    sectionIds: ['define-usecase', 'databricks-app', 'lakebase', 'iterate-enhance'],
+    sectionIds: ['define-usecase', 'databricks-app', 'lakebase', 'iterate-enhance', 'cleanup'],
   },
   'lakehouse': {
     label: 'Lakehouse',
     tooltip: 'Build Bronze/Silver/Gold data pipelines',
     description: 'Build a Lakehouse data foundation with Bronze, Silver, and Gold layer pipelines.',
-    sectionIds: ['define-usecase', 'lakehouse', 'iterate-enhance'],
+    sectionIds: ['define-usecase', 'lakehouse', 'iterate-enhance', 'cleanup'],
   },
   'lakehouse-di': {
     label: '+ Data Intelligence',
     tooltip: 'Add Genie Spaces, Agents & AI/BI Dashboards',
     description: 'Add AI capabilities with Genie Spaces, Agents & AI/BI Dashboards on top of your Lakehouse.',
-    sectionIds: ['define-usecase', 'lakehouse', 'data-intelligence', 'iterate-enhance'],
+    sectionIds: ['define-usecase', 'lakehouse', 'data-intelligence', 'iterate-enhance', 'cleanup'],
   },
   'end-to-end': {
     label: 'Complete Workshop',
     tooltip: 'All chapters: App, Database, Lakehouse & Data Intelligence',
     description: 'The full end-to-end workshop covering every chapter — from Databricks App to Data Intelligence.',
-    sectionIds: ['define-usecase', 'databricks-app', 'lakebase', 'lakehouse', 'data-intelligence', 'iterate-enhance'],
+    sectionIds: ['define-usecase', 'databricks-app', 'lakebase', 'lakehouse', 'data-intelligence', 'iterate-enhance', 'cleanup'],
   },
   'accelerator': {
     label: 'Data Product Accelerator',
     tooltip: 'Focus on Lakehouse + Data Intelligence',
     description: 'Start with table metadata and build end-to-end Bronze/Silver/Gold layers that power your data intelligence.',
-    sectionIds: ['define-usecase', 'lakehouse', 'data-intelligence', 'iterate-enhance'],
+    sectionIds: ['define-usecase', 'lakehouse', 'data-intelligence', 'iterate-enhance', 'cleanup'],
   },
   'genie-accelerator': {
     label: 'Genie Accelerator',
     tooltip: 'Analyze silver metadata, build Gold layer, and create Genie Spaces',
     description: 'Analyze your silver layer metadata, design and build a Gold layer, then create Genie Spaces with Metric Views and TVFs.',
-    sectionIds: ['define-usecase', 'lakehouse', 'data-intelligence', 'iterate-enhance'],
+    sectionIds: ['define-usecase', 'lakehouse', 'data-intelligence', 'iterate-enhance', 'cleanup'],
   },
   'data-engineering-accelerator': {
     label: 'Data Engineering Accelerator',
     tooltip: 'Build Bronze/Silver/Gold data pipelines with best practices',
     description: 'Focus on building production-ready Bronze, Silver, and Gold data pipelines using Databricks Lakehouse best practices.',
-    sectionIds: ['define-usecase', 'lakehouse', 'iterate-enhance'],
+    sectionIds: ['define-usecase', 'lakehouse', 'iterate-enhance', 'cleanup'],
   },
   'skills-accelerator': {
     label: 'Agent Skills Accelerator',
     tooltip: 'Build a custom Agent Skill guided by your use case',
     description: 'Learn to build an Agent Skill following the agentskills.io standard — explore existing skills, define a strategy, generate SKILL.md, apply it, and validate.',
-    sectionIds: ['define-usecase', 'agent-skills', 'iterate-enhance'],
+    sectionIds: ['define-usecase', 'agent-skills', 'iterate-enhance', 'cleanup'],
   },
 };
 
@@ -200,6 +201,9 @@ export const ALL_STEPS: Record<number, WorkflowStep> = {
   28: { number: 28, title: 'Create SKILL.md', icon: FileCode, color: 'text-purple-400', sectionTag: 'skill_create_skillmd' },
   29: { number: 29, title: 'Apply & Test Skill', icon: Tag, color: 'text-teal-400', sectionTag: 'skill_apply_contracts' },
   30: { number: 30, title: 'Validate & Automate', icon: ShieldCheck, color: 'text-emerald-400', sectionTag: 'skill_certify_tables' },
+
+  // Section: Clean Up (Step 31)
+  31: { number: 31, title: 'Workspace Clean Up', icon: Trash2, color: 'text-rose-400', sectionTag: 'workspace_cleanup' },
 };
 
 // The 6 logical sections with their step groupings (new 4-chapter structure)
@@ -287,6 +291,18 @@ export const WORKFLOW_SECTIONS: WorkflowSection[] = [
     bgColor: 'bg-pink-500/15',
     borderColor: 'border-pink-500/30',
     steps: [20, 21].map(n => ALL_STEPS[n]),
+  },
+  {
+    id: 'cleanup',
+    chapter: 'Clean Up',
+    title: 'Workspace Clean Up',
+    focus: 'Safely remove all workshop-created resources from your workspace',
+    description: 'Generate a cleanup prompt to safely delete all Databricks resources created during the workshop — apps, Lakebase projects, lakehouse schemas, dashboards, Genie spaces, agents, jobs, and more. Resources that exist are deleted; resources that don\'t are skipped.',
+    icon: Trash2,
+    color: 'text-rose-400',
+    bgColor: 'bg-rose-500/15',
+    borderColor: 'border-rose-500/30',
+    steps: [31].map(n => ALL_STEPS[n]),
   },
 ];
 
