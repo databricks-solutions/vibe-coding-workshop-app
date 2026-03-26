@@ -51,7 +51,8 @@ import {
   BookOpen,
   FileCode,
   Tag,
-  ShieldCheck
+  ShieldCheck,
+  Trash2
 } from 'lucide-react';
 import { apiClient } from '../api/client';
 
@@ -2175,6 +2176,32 @@ export function WorkflowDiagram({
                     isPreviousStepComplete={isPreviousStepComplete(21)}
                     isExpanded={expandedStep === 21}
                     onToggleExpand={() => toggleExpand(21)}
+                    sessionId={sessionId}
+                  />
+                </div>
+              );
+
+            // Step 31: Workspace Clean Up (Clean Up section)
+            case 31:
+              return (
+                <div key={31} className="relative mt-5" data-step-number="31">
+                  <WorkflowStep
+                    stepNumber={31}
+                    title="Workspace Clean Up"
+                    description="Safely delete all Databricks resources created during the workshop"
+                    icon={<Trash2 className="w-5 h-5" />}
+                    color="red"
+                    isComplete={completedSteps.has(31)}
+                    onToggleComplete={() => toggleStepComplete(31)}
+                    onStepReset={() => resetStepComplete(31)}
+                    sectionTag="workspace_cleanup"
+                    industry={selectedIndustry}
+                    useCase={selectedUseCase}
+                    onPromptGenerated={onStepPromptGenerated}
+                    initialPrompt={stepPrompts[31]}
+                    isPreviousStepComplete={isPreviousStepComplete(31)}
+                    isExpanded={expandedStep === 31}
+                    onToggleExpand={() => toggleExpand(31)}
                     sessionId={sessionId}
                   />
                 </div>

@@ -295,7 +295,7 @@ export const WORKFLOW_SECTIONS: WorkflowSection[] = [
   {
     id: 'cleanup',
     chapter: 'Clean Up',
-    title: 'Workspace Clean Up',
+    title: 'Clean Up',
     focus: 'Safely remove all workshop-created resources from your workspace',
     description: 'Generate a cleanup prompt to safely delete all Databricks resources created during the workshop — apps, Lakebase projects, lakehouse schemas, dashboards, Genie spaces, agents, jobs, and more. Resources that exist are deleted; resources that don\'t are skipped.',
     icon: Trash2,
