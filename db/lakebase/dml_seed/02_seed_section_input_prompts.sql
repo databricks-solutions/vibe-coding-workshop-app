@@ -5004,14 +5004,38 @@ VALUES
 '## Create Lakebase Tables from UI Design
 
 **Workspace:** `{workspace_url}`
-**Lakebase Instance/Project:** `{lakebase_instance_name}`
-**Lakebase Host Name:** `{lakebase_host_name}`
+**Your Lakebase Project:** `{user_app_name}` (created in Step 0 below)
 
 **Working directory:** All app and Lakebase assets go under `apps_lakebase/`. Read the UI design from the parent `docs/` folder.
 
-> **⚠️ IMPORTANT NOTE:** The Lakebase Instance/Project Name and Host Name above are configured in the Workshop Parameters. Make sure these match your Databricks workspace Lakebase setup. You can verify and update these values in the Configuration → Workshop Parameters tab.
-
 Read `@docs/ui_design.md` (parent folder at repo root) and create the database tables needed to power the UI under `apps_lakebase/`.
+
+---
+
+**Step 0: Create Your Own Lakebase Project**
+
+> Each workshop participant creates their own Lakebase project. This gives you full database access with no permission issues.
+
+**0a. Create the project:**
+```bash
+databricks postgres create-project {user_app_name} --json ''''{"spec": {"display_name": "{user_app_name}"}}''''
+```
+
+**0b. Get your endpoint hostname:**
+```bash
+databricks postgres get-endpoint projects/{user_app_name}/branches/production/endpoints/primary --output json
+```
+From the JSON output, copy the value of `status.hosts.host` — this is your `LAKEBASE_HOST`.
+
+**0c. Optimize compute and enable scale-to-zero (saves cost):**
+```bash
+databricks postgres update-endpoint projects/{user_app_name}/branches/production/endpoints/primary "spec" --json ''''{"spec": {"endpoint_type": "ENDPOINT_TYPE_READ_WRITE", "autoscaling_limit_min_cu": 0.5, "autoscaling_limit_max_cu": 2.0, "suspend_timeout_duration": "300s"}}''''
+```
+
+Your project is now ready. Use these values in the steps below:
+- **Project name:** `{user_app_name}`
+- **ENDPOINT_NAME:** `projects/{user_app_name}/branches/production/endpoints/primary`
+- **LAKEBASE_HOST:** (the hostname from Step 0b)
 
 ---
 
@@ -5053,7 +5077,7 @@ SCHEMA_NAME="{user_schema_prefix}"
 echo "Your schema: $SCHEMA_NAME"
 
 # Check Lakebase connectivity and instance status (run from apps_lakebase/ or use path)
-cd apps_lakebase && python3 scripts/lakebase_manager.py --action check --instance-name {lakebase_instance_name}
+cd apps_lakebase && python3 scripts/lakebase_manager.py --action check --instance-name {user_app_name}
 ```
 
 **Step 5: Deploy to Lakebase**
@@ -5068,12 +5092,12 @@ export LAKEBASE_SCHEMA_OVERRIDE="{user_schema_prefix}"
 export LAKEBASE_PORT_OVERRIDE="5432"
 export LAKEBASE_MODE={lakebase_mode}
 # Autoscaling only — skip this line for provisioned:
-export ENDPOINT_NAME="projects/{lakebase_instance_name}/branches/main/endpoints/primary"
+export ENDPOINT_NAME="projects/{user_app_name}/branches/production/endpoints/primary"
 # If app is already deployed, export the SP ID so setup-lakebase.sh grants sequence permissions:
 # export APP_SERVICE_PRINCIPAL_ID="<service-principal-id-from-app-info>"
 
 # Deploy tables (run from apps_lakebase/)
-cd apps_lakebase && ./scripts/setup-lakebase.sh --recreate --instance-name {lakebase_instance_name}
+cd apps_lakebase && ./scripts/setup-lakebase.sh --recreate --instance-name {user_app_name}
 ```
 
 Type `YES-PRODUCTION` when prompted.
@@ -5081,7 +5105,7 @@ Type `YES-PRODUCTION` when prompted.
 **Step 6: Verify deployment**
 
 ```bash
-cd apps_lakebase && ./scripts/setup-lakebase.sh --status --instance-name {lakebase_instance_name}
+cd apps_lakebase && ./scripts/setup-lakebase.sh --status --instance-name {user_app_name}
 ```
 
 All tables must show `✓ exists` with row counts before proceeding.
@@ -5102,7 +5126,7 @@ env:
     value: "5432"
   # Autoscaling only — include ENDPOINT_NAME; omit for provisioned:
   - name: ENDPOINT_NAME
-    value: "projects/{lakebase_instance_name}/branches/main/endpoints/primary"
+    value: "projects/{user_app_name}/branches/production/endpoints/primary"
   - name: USE_LAKEBASE
     value: "true"
 ```
@@ -5144,7 +5168,7 @@ CLI Best Practices:
 
 - DDL file: `apps_lakebase/db/lakebase/ddl/05_app_tables.sql`
 - DML file: `apps_lakebase/db/lakebase/dml_seed/04_seed_app_data.sql`
-- Tables deployed to {lakebase_instance_name}
+- Tables deployed to {user_app_name}
 - apps_lakebase/app.yaml updated with Lakebase config',
 TRUE,
 1, TRUE, current_timestamp(), current_timestamp(), current_user());
@@ -5181,8 +5205,9 @@ Connect the web application to the Lakebase database so the UI displays real dat
 
 **Working directory:** All app code and commands use the `apps_lakebase/` folder.
 
-**Lakebase Instance/Project:** `{lakebase_instance_name}`
-**Lakebase Host Name:** `{lakebase_host_name}`
+**Your Lakebase Project:** `{user_app_name}` (from the setup_lakebase step)
+
+> Use the project name and LAKEBASE_HOST from the **setup_lakebase** step.
 
 > **⚠️ IMPORTANT NOTE:** The Lakebase Instance/Project Name and Host Name above are configured in the Workshop Parameters. Ensure these match your Databricks workspace Lakebase setup before proceeding.
 
@@ -5248,7 +5273,7 @@ Copy the Service Principal ID from the output.
 
 **Step 2: Grant Lakebase role**
 ```bash
-cd apps_lakebase && python scripts/lakebase_manager.py --action add-lakebase-role --app-name $APP_NAME --instance-name {lakebase_instance_name} --mode {lakebase_mode} --branch "projects/{lakebase_instance_name}/branches/main"
+cd apps_lakebase && python scripts/lakebase_manager.py --action add-lakebase-role --app-name $APP_NAME --instance-name {user_app_name} --mode {lakebase_mode} --branch "projects/{user_app_name}/branches/production"
 ```
 > The `--branch` flag is used by autoscaling; provisioned mode ignores it.
 
@@ -5261,13 +5286,13 @@ Look for: `✓ Successfully added Lakebase role`
 
 ```bash
 # Provisioned only — do NOT run for autoscaling:
-cd apps_lakebase && python scripts/lakebase_manager.py --action link-app-resource --app-name $APP_NAME --instance-name {lakebase_instance_name} --mode {lakebase_mode}
+cd apps_lakebase && python scripts/lakebase_manager.py --action link-app-resource --app-name $APP_NAME --instance-name {user_app_name} --mode {lakebase_mode}
 ```
 Look for: `✓ Successfully linked Lakebase` (provisioned) or `ℹ️ Autoscaling mode` (autoscaling)
 
 **Step 4: Verify permissions were added**
 ```bash
-cd apps_lakebase && python scripts/lakebase_manager.py --action list-lakebase-roles --instance-name {lakebase_instance_name} --mode {lakebase_mode} --branch "projects/{lakebase_instance_name}/branches/main"
+cd apps_lakebase && python scripts/lakebase_manager.py --action list-lakebase-roles --instance-name {user_app_name} --mode {lakebase_mode} --branch "projects/{user_app_name}/branches/production"
 ```
 Your service principal ID must appear with `DATABRICKS_SUPERUSER` role.
 
@@ -5277,7 +5302,7 @@ Your service principal ID must appear with `DATABRICKS_SUPERUSER` role.
     value: "true"
   # Autoscaling only — include ENDPOINT_NAME; omit for provisioned:
   - name: ENDPOINT_NAME
-    value: "projects/{lakebase_instance_name}/branches/main/endpoints/primary"
+    value: "projects/{user_app_name}/branches/production/endpoints/primary"
 ```
 > For autoscaling, do NOT set `LAKEBASE_USER`. For provisioned, `LAKEBASE_USER` is set via the app resource link.
 
@@ -5720,7 +5745,7 @@ Register the Lakebase PostgreSQL database as a Unity Catalog database catalog so
 
 ### Configuration
 - **Catalog name:** {lakebase_uc_catalog_name}
-- **Lakebase instance:** {lakebase_instance_name}
+- **Lakebase instance:** {user_app_name}
 - **Database name:** databricks_postgres (standard Lakebase database)
 - **SQL Warehouse:** {default_warehouse}
 
@@ -5740,7 +5765,7 @@ databricks catalogs get {lakebase_uc_catalog_name}
 Register the Lakebase PostgreSQL database as a read-only Unity Catalog catalog:
 
 ```bash
-databricks database create-database-catalog {lakebase_uc_catalog_name} {lakebase_instance_name} databricks_postgres
+databricks database create-database-catalog {lakebase_uc_catalog_name} {user_app_name} databricks_postgres
 ```
 
 After creation, verify the catalog state:

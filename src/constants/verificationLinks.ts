@@ -67,9 +67,9 @@ export const STEP_VERIFICATION_LINKS: Record<string, VerificationLink[]> = {
 
   setup_lakebase: [
     {
-      label: 'Open Lakebase Instance',
-      urlTemplate: '{workspace_url}lakebase/{lakebase_instance_name}?o={workspace_org_id}',
-      description: 'Opens the Lakebase query editor. You should see the instance or project with the schemas and tables created in this step. Try running a query to verify data access.',
+      label: 'Open Lakebase Projects',
+      urlTemplate: '{workspace_url}lakebase/projects?o={workspace_org_id}',
+      description: 'Opens the Lakebase projects page. Look for your project named "{user_app_name}" in the list. Click into it to see the schemas and tables created in this step. Try running a query to verify data access.',
     },
   ],
   sync_from_lakebase: [
