@@ -53,10 +53,28 @@
 ## What It Does
 
 - **AI-Generated Prompts** — Customized, copy-ready prompts for every development step, tailored to your industry and use case
-- **Guided Workflow** — 20+ steps covering Foundation, Databricks App, Lakebase, Lakehouse, Data Intelligence, Refinement, and Agent Skills
+- **Guided Workflow** — 30+ steps covering Foundation, Databricks App, Lakebase, Lakehouse, Data Intelligence, Refinement, Agent Skills, and Workspace Clean Up
 - **Real-Time Streaming** — LLM responses rendered live with markdown formatting
+- **Voice Input** — Describe your use case by speaking; speech-to-text captures your intent
 - **Gamified Experience** — Progress tracking, leaderboard, and completion badges
+- **Analytics Dashboard** — Read-only view of workshop usage metrics and session activity
 - **One-Command Install** — Clone, run the installer, and you're live
+
+---
+
+## Cost to Run
+
+Running the workshop costs **under $300/month** with the app up 24/7 — and significantly less with default settings and typical usage.
+
+| Component | What It Uses | Approximate Cost |
+|-----------|-------------|-----------------|
+| **Databricks App** | Medium compute (0.5 DBU/hr), always-on | Largest steady-state cost |
+| **Lakebase** (Autoscaling) | 0.5–2 CU default; scales to zero on idle | Minimal at default 0.5 CU min |
+| **Foundation Model API** | Pay-per-token (Claude Sonnet); only charged when generating prompts | A few dollars for typical workshop usage |
+
+Actual dollar costs depend on your cloud provider, pricing tier, and DBU rate. See [Databricks Pricing](https://www.databricks.com/product/pricing) for current rates.
+
+> **Tip:** To minimize cost, stop the app when not in use (`databricks apps stop <app-name>`) and keep the default Lakebase autoscaling minimum at 0.5 CU.
 
 ---
 
@@ -66,7 +84,7 @@
 
 - **Node.js 18+** and **Python 3.9+**
 - **Databricks CLI** (`brew install databricks` or `pip install databricks-sdk`)
-- A **Databricks workspace** with Unity Catalog and Lakebase access
+- A **Databricks workspace** with Unity Catalog and Lakebase access (autoscaling mode is default and recommended)
 
 ### Install
 
@@ -109,18 +127,20 @@ user-config.yaml.example         →   user-config.yaml
 
 A full deploy (`./vibe2value deploy --full`) runs these steps:
 
-1. Deploy infrastructure via Databricks Asset Bundle (Lakebase instance + App)
-2. Sync application source code
-3. Configure permissions (Unity Catalog, Lakebase roles, App resource link)
+1. Deploy infrastructure via Databricks Asset Bundle (Lakebase project + App)
+2. Sync application source code and discover Lakebase endpoint
+3. Configure permissions (Unity Catalog, Lakebase database roles, App access)
 4. Create and seed Lakebase tables
 5. Final forced app deploy — stop, redeploy, start, verify RUNNING
+
+The installer prompts for Lakebase mode (autoscaling or provisioned). Autoscaling is the default; it uses a Lakebase project that scales to zero when idle and auto-discovers its endpoint during deploy.
 
 ---
 
 ## Project Structure
 
 ```
-├── vibe2value                  # CLI entry point
+├── vibe2value                  # CLI entry point (bash wrapper)
 ├── app.py                      # FastAPI backend entry point
 ├── app.yaml.template           # App config template
 ├── databricks.yml.template     # Asset Bundle template
@@ -129,20 +149,24 @@ A full deploy (`./vibe2value deploy --full`) runs these steps:
 ├── scripts/
 │   ├── vibe2value.py           # CLI logic (install, deploy, doctor, uninstall)
 │   ├── deploy.sh               # Deployment orchestration
-│   ├── setup-lakebase.sh       # Lakebase table management
+│   ├── setup-lakebase.sh       # Lakebase table management (DDL/DML)
 │   └── lakebase_manager.py     # Lakebase/app management helpers
 │
 ├── db/lakebase/                # DDL and seed data for Lakebase tables
+│   ├── ddl/                    # Table definitions (6 files)
+│   └── dml_seed/               # Seed data + template for workshop params
 │
 ├── src/
 │   ├── App.tsx                 # Main React component
 │   ├── api/client.ts           # Frontend API client
 │   ├── components/             # React UI components
+│   ├── constants/              # Scoring, workflow sections, verification links
+│   ├── hooks/                  # Custom hooks (speech-to-text, keyboard)
 │   └── backend/
 │       ├── api/routes.py       # FastAPI routes
-│       └── services/lakebase.py
+│       └── services/lakebase.py # Lakebase connection layer (autoscaling + provisioned)
 │
-└── docs/                       # Design documentation
+└── docs/                       # Design documentation and images
 ```
 
 ---
@@ -152,7 +176,7 @@ A full deploy (`./vibe2value deploy --full`) runs these steps:
 - **Frontend**: React, TypeScript, Tailwind CSS, Vite
 - **Backend**: FastAPI (Python)
 - **LLM**: Databricks Model Serving
-- **Database**: Lakebase (PostgreSQL) with Unity Catalog
+- **Database**: Lakebase (PostgreSQL) with autoscaling and Unity Catalog integration
 - **Infrastructure**: Databricks Asset Bundles
 - **Deployment**: Databricks Apps
 
@@ -167,6 +191,8 @@ A full deploy (`./vibe2value deploy --full`) runs these steps:
 | "App already exists" | Installer handles this automatically; if persistent: `databricks apps delete <name>` then retry |
 | "Multiple profiles matched" | Set `profile` in `user-config.yaml` or re-run `./vibe2value install` |
 | Lakebase connection error | `./scripts/setup-lakebase.sh --check-instance` then `./vibe2value deploy --tables` |
+| Slow first query after idle | Lakebase autoscaling may need ~30s to wake from zero; the app retries automatically |
+| "Endpoint not found" during deploy | Re-run `./vibe2value deploy --full` — endpoint discovery runs after Lakebase project is ready |
 
 ---
 

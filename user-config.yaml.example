@@ -12,11 +12,14 @@ workspace:
   host: "https://your-workspace.cloud.databricks.com"
   profile: ""                         # Databricks CLI profile (leave empty for default)
 
+database:
+  backend: "lakebase"                 # "lakebase" (default) or "dbsql" (Databricks SQL + Delta tables)
+
 lakebase:
   mode: "autoscaling"                 # "autoscaling" (default, scale-to-zero) or "provisioned" (fixed CU)
   instance_name: "vibe-coding-workshop-lakebase"   # Project name (Autoscaling) or instance name (Provisioned)
   catalog: "vibe_coding_workshop_catalog"
-  create_catalog: "false"             # Set to "true" to register Lakebase as a UC catalog (needs CREATE CATALOG permission)
+  create_catalog: "false"             # Set to "true" to register Lakebase as a UC catalog (needs CREATE CATALOG permission; defaults to "true" if omitted)
   schema: "vibe_coding_workshop"
   database: "databricks_postgres"
   warehouse: ""                       # Name of your SQL warehouse
@@ -42,5 +45,5 @@ tags:
 _metadata:
   installed_at: ""
   installer_version: "1.0.0"
-  target: "user"                      # Deploy target ("user" for new installs, "production" for existing)
+  target: "user"                      # Bundle deploy target (must match a target in databricks.yml)
   created_resources: []               # Tracks what the installer created for uninstall

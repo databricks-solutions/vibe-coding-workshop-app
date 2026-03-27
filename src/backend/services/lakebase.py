@@ -1274,25 +1274,28 @@ STEP_SCORES = {
     4: 20, 5: 20,
     # Chapter 2 - Lakebase (steps 6-8): 30 points each
     6: 30, 7: 30, 8: 30,
-    # Chapter 3 - Lakehouse (steps 9-14, 22): 40 points each
-    9: 40, 10: 40, 11: 40, 12: 40, 13: 40, 14: 40, 22: 40,
-    # Chapter 4 - Data Intelligence (steps 15-19): 50 points each
-    15: 50, 16: 50, 17: 50, 18: 50, 19: 50,
+    # Chapter 3 - Lakehouse (steps 9-14, 22-23): 40 points each
+    9: 40, 10: 40, 11: 40, 12: 40, 13: 40, 14: 40, 22: 40, 23: 40,
+    # Chapter 4 - Data Intelligence (steps 15-19, 24-25): 50 points each
+    15: 50, 16: 50, 17: 50, 18: 50, 19: 50, 24: 50, 25: 50,
     # Refinement (steps 20-21): 60 points each
     20: 60, 21: 60,
     # Agent Skills (steps 26-30): 40 points each
     26: 40, 27: 40, 28: 40, 29: 40, 30: 40,
+    # Clean Up (step 31): 10 points
+    31: 10,
 }
 
-# Chapter definitions for progress tracking
+# Chapter definitions for progress tracking (must match src/constants/scoring.ts)
 CHAPTERS = {
     'Foundation': {'steps': {1, 2, 3}, 'display': 'Foundation'},
     'Chapter 1': {'steps': {4, 5}, 'display': 'Databricks App'},
     'Chapter 2': {'steps': {6, 7, 8}, 'display': 'Lakebase'},
-    'Chapter 3': {'steps': {9, 10, 11, 12, 13, 14, 22}, 'display': 'Lakehouse'},
-    'Chapter 4': {'steps': {15, 16, 17, 18, 19}, 'display': 'Data Intelligence'},
+    'Chapter 3': {'steps': {9, 10, 11, 12, 13, 14, 22, 23}, 'display': 'Lakehouse'},
+    'Chapter 4': {'steps': {15, 16, 17, 18, 19, 24, 25}, 'display': 'Data Intelligence'},
     'Refinement': {'steps': {20, 21}, 'display': 'Refinement'},
     'Agent Skills': {'steps': {26, 27, 28, 29, 30}, 'display': 'Agent Skills'},
+    'Clean Up': {'steps': {31}, 'display': 'Clean Up'},
 }
 
 # Emoji avatar pool for leaderboard display

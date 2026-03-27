@@ -17,12 +17,11 @@ import asyncio
 import yaml
 from pathlib import Path
 import uuid
-import shutil
 from fastapi import APIRouter, HTTPException, Response, UploadFile, File, Form, Request
 from fastapi.responses import StreamingResponse, FileResponse
 from pydantic import BaseModel, Field
 from typing import List, Dict, Optional, Any, AsyncGenerator
-from datetime import datetime
+from datetime import datetime, timezone
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -1179,14 +1178,12 @@ async def call_databricks_serving_endpoint(
     messages.append({"role": "user", "content": prompt})
     
     
-    # Use SDK's serving_endpoints.query() - this automatically uses app's service principal permissions
-    # No direct HTTP calls needed - the SDK handles authentication
+    # Raw HTTP to the serving endpoint (avoids SDK query() serialization issues)
     
     import time
     start_time = time.time()
     
     try:
-        # Use raw HTTP request instead of SDK's query() method to avoid SDK serialization bug
         
         # Get the workspace host from the SDK client
         workspace_host = client.config.host.rstrip('/')
@@ -1421,11 +1418,10 @@ async def call_databricks_serving_endpoint(
         model_used = endpoint
         
         if isinstance(response, dict):
-            # Log all keys and their types for debugging
             for key, val in response.items():
                 val_type = type(val).__name__
                 val_preview = str(val)[:100] if val else "None"
-                logger.info(f"    Key '{key}': type={val_type}, value={val_preview}")
+                logger.debug(f"    Key '{key}': type={val_type}, value={val_preview}")
             
             # Try OpenAI format (choices)
             if "choices" in response and response["choices"]:
@@ -3910,9 +3906,6 @@ async def auto_set_lakehouse_params_from_lakebase(session_id: str) -> LakehouseP
 # SESSION MANAGEMENT API ENDPOINTS
 # =============================================================================
 
-import uuid
-from fastapi import Request
-
 # Import session functions from lakebase service
 try:
     from src.backend.services.lakebase import (
@@ -4919,7 +4912,7 @@ async def upload_section_image(
         "id": image_id,
         "filename": filename,
         "path": f"uploads/section-images/{section_tag}/{safe_filename}",
-        "uploaded_at": datetime.utcnow().isoformat(),
+        "uploaded_at": datetime.now(timezone.utc).isoformat(),
         "uploaded_by": user
     }
     

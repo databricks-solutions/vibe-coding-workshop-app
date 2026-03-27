@@ -27,10 +27,10 @@
 # PERMISSIONS EXPLAINED:
 #   - Unity Catalog (2a): Allows app to access catalog schemas and tables
 #   - Database Role (2b): PostgreSQL superuser for table operations
-#   - App Resource (2c): Links Lakebase instance to app for automatic auth
+#   - App Resource (4c): Links Lakebase instance to app for automatic auth
 #
 # USAGE:
-#   ./scripts/deploy.sh                        # Full deployment to development
+#   ./scripts/deploy.sh                        # Full deployment (default target: user)
 #   ./scripts/deploy.sh --target production    # Deploy to production
 #   ./scripts/deploy.sh --target development --profile my-profile
 #   ./scripts/deploy.sh --skip-tables          # Skip table setup
@@ -41,7 +41,7 @@
 #
 # REQUIREMENTS:
 #   - Databricks CLI (authenticated via `databricks auth login`)
-#   - Python 3 with psycopg2-binary
+#   - Python 3 with psycopg3 (psycopg[binary,pool]) or psycopg2-binary
 #   - Valid databricks.yml with target configuration
 #
 # ENVIRONMENT:
@@ -66,7 +66,7 @@ SCRIPT_DIR="$PROJECT_ROOT/scripts"
 cd "$PROJECT_ROOT"
 
 # Default configuration
-TARGET="development"
+TARGET="user"
 SKIP_TABLES=false
 TABLES_ONLY=false
 SKIP_PERMISSIONS=false
