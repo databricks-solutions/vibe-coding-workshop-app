@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react';
 import { ChevronRight, ChevronDown, Check, SkipForward } from 'lucide-react';
 import { StepStatusLegend } from './StepStatusLegend';
 import type { WorkflowSection } from '../constants/workflowSections';
+import { getDbBackendSectionOverrides, getDbBackendStepTitle } from '../constants/workflowSections';
 import { SessionParametersPopover } from './session';
 
 interface SectionedWorkflowSidebarProps {
@@ -147,13 +148,13 @@ export function SectionedWorkflowSidebar({
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
                       <span className={`text-[10px] font-semibold uppercase tracking-wider ${section.color}`}>
-                        {section.chapter}
+                        {(section.id === 'lakebase' ? getDbBackendSectionOverrides()?.chapter : null) ?? section.chapter}
                       </span>
                     </div>
                     <h4 className={`text-[13px] font-semibold truncate ${
                       isSectionComplete ? 'text-muted-foreground' : 'text-foreground'
                     }`}>
-                      {section.title}
+                      {(section.id === 'lakebase' ? getDbBackendSectionOverrides()?.title : null) ?? section.title}
                     </h4>
                     {/* Mini progress bar */}
                     <div className="flex items-center gap-2 mt-1">
@@ -245,7 +246,7 @@ export function SectionedWorkflowSidebar({
                               ? 'text-emerald-400/80 line-through'
                               : 'text-muted-foreground'
                           }`}>
-                            {step.title}
+                            {getDbBackendStepTitle(step.number) ?? step.title}
                           </span>
 
                           {/* Active indicator */}

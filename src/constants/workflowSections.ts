@@ -544,3 +544,51 @@ export function getCumulativeOverrides(
 
   return { sectionIds: Array.from(sectionIdSet), chapterVisibility: chVis, archVisibility: aVis };
 }
+
+// ---------------------------------------------------------------------------
+// DB Backend-aware helpers
+// ---------------------------------------------------------------------------
+
+let _dbBackend: 'lakebase' | 'dbsql' = 'lakebase';
+
+export function setDbBackend(backend: 'lakebase' | 'dbsql') {
+  _dbBackend = backend;
+}
+
+export function getDbBackend(): 'lakebase' | 'dbsql' {
+  return _dbBackend;
+}
+
+const DBSQL_STEP_TITLES: Record<number, string> = {
+  6: 'Setup DBSQL Tables',
+  7: 'Wire UI to DBSQL',
+  8: 'Deploy and Test',
+};
+
+export function getDbBackendStepTitle(stepNumber: number): string {
+  if (_dbBackend === 'dbsql' && stepNumber in DBSQL_STEP_TITLES) {
+    return DBSQL_STEP_TITLES[stepNumber];
+  }
+  return ALL_STEPS[stepNumber]?.title ?? '';
+}
+
+export function getDbBackendSectionOverrides(): { chapter: string; title: string; description: string } | null {
+  if (_dbBackend === 'dbsql') {
+    return {
+      chapter: 'Database',
+      title: 'Databricks SQL',
+      description: 'Create Delta tables via Databricks SQL, connect your app to the SQL warehouse, and deploy your working Databricks App.',
+    };
+  }
+  return null;
+}
+
+export function getDbBackendLevelLabel(): { label: string; tooltip: string } | null {
+  if (_dbBackend === 'dbsql') {
+    return {
+      label: '+ Databricks SQL',
+      tooltip: 'Add a DBSQL-backed database to your web app',
+    };
+  }
+  return null;
+}

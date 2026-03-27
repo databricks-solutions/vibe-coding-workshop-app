@@ -14,6 +14,8 @@ import {
   getFilteredSections,
   getCumulativeOverrides,
   ALL_STEPS,
+  getDbBackendStepTitle,
+  getDbBackendSectionOverrides,
   type WorkshopLevel
 } from '../constants/workflowSections';
 import { 
@@ -115,15 +117,18 @@ function StepBadge({ number, highlight = false }: { number: number; highlight?: 
 // Section divider component
 function SectionDivider({ section }: { section: typeof WORKFLOW_SECTIONS[0] }) {
   const Icon = section.icon;
+  const override = section.id === 'lakebase' ? getDbBackendSectionOverrides() : null;
+  const chapter = override?.chapter ?? section.chapter;
+  const title = override?.title ?? section.title;
   return (
     <div className="flex items-center gap-3 py-4 my-2">
       <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full ${section.bgColor} border ${section.borderColor}`}>
         <Icon className={`w-4 h-4 ${section.color}`} />
         <span className={`text-[11px] font-semibold uppercase tracking-wider ${section.color}`}>
-          {section.chapter}
+          {chapter}
         </span>
         <span className="text-[12px] font-medium text-foreground">
-          {section.title}
+          {title}
         </span>
       </div>
       <div className="flex-1 h-px bg-border" />
@@ -986,15 +991,15 @@ export function WorkflowDiagram({
                   />
                 </div>
               );
-            // Step 6: Setup Lakebase (Chapter 2)
+            // Step 6: Setup Lakebase / DBSQL Tables (Chapter 2)
             case 6:
               return (
                 <div key={6} className="relative mt-5" data-step-number="6">
                   <StepBadge number={6} />
                   <WorkflowStep
                     icon={<Server className="w-5 h-5" />}
-                    title="Setup Lakebase"
-                    description="Create and deploy Lakebase database tables from your UI design document"
+                    title={getDbBackendStepTitle(6)}
+                    description="Create and deploy database tables from your UI design document"
                     color="cyan"
 
                     isComplete={completedSteps.has(6)}
@@ -1013,15 +1018,15 @@ export function WorkflowDiagram({
                   />
                 </div>
               );
-            // Step 7: Wire UI to Lakebase (Chapter 2) - LOCAL DEVELOPMENT ONLY
+            // Step 7: Wire UI to Lakebase / DBSQL (Chapter 2) - LOCAL DEVELOPMENT ONLY
             case 7:
               return (
                 <div key={7} className="relative mt-5" data-step-number="7">
                   <StepBadge number={7} />
                   <WorkflowStep
                     icon={<Link2 className="w-5 h-5" />}
-                    title="Wire UI to Lakebase"
-                    description="Connect frontend to Lakebase backend, build locally, and test at localhost"
+                    title={getDbBackendStepTitle(7)}
+                    description="Connect frontend to database backend, build locally, and test at localhost"
                     color="teal"
 
                     isComplete={completedSteps.has(7)}
@@ -1047,7 +1052,7 @@ export function WorkflowDiagram({
                   <StepBadge number={8} />
                   <WorkflowStep
                     icon={<Play className="w-5 h-5" />}
-                    title="Deploy and Test"
+                    title={getDbBackendStepTitle(8)}
                     description="Deploy to Databricks Apps and run full end-to-end testing with live data"
                     color="lime"
 

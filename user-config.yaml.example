@@ -8,6 +8,9 @@
 #   ./vibe2value install
 # =============================================================================
 
+database:
+  backend: "lakebase"               # "lakebase" (default, PostgreSQL) or "dbsql" (Databricks SQL + Delta)
+
 workspace:
   host: "https://your-workspace.cloud.databricks.com"
   profile: ""                         # Databricks CLI profile (leave empty for default)
@@ -24,6 +27,13 @@ lakebase:
   min_cu: "0.5"                       # Autoscaling: min compute units (minimum 0.5 CU)
   max_cu: "2"                         # Autoscaling: max compute units
   endpoint_name: ""                   # Auto-discovered during deploy (Autoscaling only)
+
+dbsql:
+  catalog: ""                       # Unity Catalog name for DBSQL tables
+  schema: "vibe_coding_workshop"    # Schema name for DBSQL tables
+  warehouse_id: ""                  # SQL Warehouse ID (auto-created if empty)
+  warehouse_http_path: ""           # SQL Warehouse HTTP path (auto-discovered)
+  warehouse_name: "vibe-coding-dbsql-warehouse"  # Name for auto-created warehouse
 
 app:
   name: "vibe-coding-workshop-app"

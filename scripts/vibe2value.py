@@ -25,6 +25,7 @@ TEMPLATES = {
     "app.yaml": PROJECT_ROOT / "app.yaml.template",
     "databricks.yml": PROJECT_ROOT / "databricks.yml.template",
     "seed_sql": PROJECT_ROOT / "db" / "lakebase" / "dml_seed" / "03_seed_workshop_parameters.sql.template",
+    "dbsql_seed_sql": PROJECT_ROOT / "db" / "dbsql" / "dml_seed" / "03_seed_workshop_parameters.sql.template",
 }
 
 GREEN = "\033[0;32m"
@@ -123,11 +124,14 @@ def get_placeholder_map(config: dict) -> dict:
     """Map __PLACEHOLDER__ tokens to config values."""
     ws = config.get("workspace", {})
     lb = config.get("lakebase", {})
+    db_section = config.get("database", {})
+    dbsql = config.get("dbsql", {})
     app = config.get("app", {})
     user = config.get("user", {})
     tags = config.get("tags", {})
     meta = config.get("_metadata", {})
     target = meta.get("target", "development")
+    db_backend = db_section.get("backend", "lakebase")
     return {
         "__WORKSPACE_HOST__": ws.get("host", ""),
         "__WORKSPACE_URL__": ws.get("host", "").rstrip("/") + "/",
@@ -143,6 +147,11 @@ def get_placeholder_map(config: dict) -> dict:
         "__DEFAULT_WAREHOUSE__": lb.get("warehouse", ""),
         "__ENDPOINT_NAME__": lb.get("endpoint_name", ""),
         "__LAKEBASE_MODE__": lb.get("mode", "autoscaling"),
+        "__DB_BACKEND__": db_backend,
+        "__DBSQL_CATALOG__": dbsql.get("catalog", ""),
+        "__DBSQL_SCHEMA__": dbsql.get("schema", "vibe_coding_workshop"),
+        "__DBSQL_WAREHOUSE_HTTP_PATH__": dbsql.get("warehouse_http_path", ""),
+        "__SQL_WAREHOUSE_ID__": dbsql.get("warehouse_id", ""),
         "__TAG_PROJECT__": tags.get("project", "vibe_coding_workshop"),
         "__TAG_ENVIRONMENT__": tags.get("environment", "") or target,
         "__TAG_MANAGED_BY__": tags.get("managed_by", "vibe2value"),
@@ -353,32 +362,62 @@ def cmd_install(args):
         "lakebase_mode": existing_config.get("lakebase", {}).get("mode", "autoscaling"),
         "min_cu": existing_config.get("lakebase", {}).get("min_cu", "0.5"),
         "max_cu": existing_config.get("lakebase", {}).get("max_cu", "2"),
+        "db_backend": existing_config.get("database", {}).get("backend", "lakebase"),
+        "dbsql_catalog": existing_config.get("dbsql", {}).get("catalog", ""),
+        "dbsql_schema": existing_config.get("dbsql", {}).get("schema", "vibe_coding_workshop"),
+        "dbsql_warehouse_id": existing_config.get("dbsql", {}).get("warehouse_id", ""),
+        "dbsql_warehouse_name": existing_config.get("dbsql", {}).get("warehouse_name", "vibe-coding-dbsql-warehouse"),
     }
 
     app_name = input(f"  App name [{defaults['app_name']}]: ").strip() or defaults["app_name"]
 
-    # Lakebase mode selection
-    default_mode = defaults["lakebase_mode"]
-    mode_prompt = f"  Lakebase mode - (a)utoscaling or (p)rovisioned [{default_mode}]: "
-    mode_input = input(mode_prompt).strip().lower()
-    if mode_input in ("a", "autoscaling"):
-        lakebase_mode = "autoscaling"
-    elif mode_input in ("p", "provisioned"):
-        lakebase_mode = "provisioned"
+    # Database backend selection
+    default_backend = defaults["db_backend"]
+    backend_prompt = f"  Database backend - (l)akebase or (d)bsql [{default_backend}]: "
+    backend_input = input(backend_prompt).strip().lower()
+    if backend_input in ("d", "dbsql"):
+        db_backend = "dbsql"
+    elif backend_input in ("l", "lakebase"):
+        db_backend = "lakebase"
     else:
-        lakebase_mode = default_mode
+        db_backend = default_backend
 
-    instance_label = "Lakebase project" if lakebase_mode == "autoscaling" else "Lakebase instance"
-    instance_name = input(f"  {instance_label} [{defaults['instance_name']}]: ").strip() or defaults["instance_name"]
+    # Backend-specific configuration
+    lakebase_mode = defaults["lakebase_mode"]
+    instance_name = defaults["instance_name"]
+    min_cu = defaults["min_cu"]
+    max_cu = defaults["max_cu"]
+    catalog = defaults["catalog"]
+    dbsql_catalog = defaults["dbsql_catalog"]
+    dbsql_schema = defaults["dbsql_schema"]
+    dbsql_warehouse_id = defaults["dbsql_warehouse_id"]
+    dbsql_warehouse_name = defaults["dbsql_warehouse_name"]
 
-    if lakebase_mode == "autoscaling":
-        min_cu = input(f"  Min CU (minimum 0.5) [{defaults['min_cu']}]: ").strip() or defaults["min_cu"]
-        max_cu = input(f"  Max CU [{defaults['max_cu']}]: ").strip() or defaults["max_cu"]
+    if db_backend == "lakebase":
+        # Lakebase mode selection
+        mode_prompt = f"  Lakebase mode - (a)utoscaling or (p)rovisioned [{lakebase_mode}]: "
+        mode_input = input(mode_prompt).strip().lower()
+        if mode_input in ("a", "autoscaling"):
+            lakebase_mode = "autoscaling"
+        elif mode_input in ("p", "provisioned"):
+            lakebase_mode = "provisioned"
+
+        instance_label = "Lakebase project" if lakebase_mode == "autoscaling" else "Lakebase instance"
+        instance_name = input(f"  {instance_label} [{defaults['instance_name']}]: ").strip() or defaults["instance_name"]
+
+        if lakebase_mode == "autoscaling":
+            min_cu = input(f"  Min CU (minimum 0.5) [{defaults['min_cu']}]: ").strip() or defaults["min_cu"]
+            max_cu = input(f"  Max CU [{defaults['max_cu']}]: ").strip() or defaults["max_cu"]
+
+        catalog = input(f"  Catalog [{defaults['catalog']}]: ").strip() or defaults["catalog"]
     else:
-        min_cu = defaults["min_cu"]
-        max_cu = defaults["max_cu"]
+        # DBSQL configuration
+        dbsql_catalog = input(f"  DBSQL Catalog [{defaults['dbsql_catalog'] or 'vibe_coding_workshop'}]: ").strip() or defaults["dbsql_catalog"] or "vibe_coding_workshop"
+        dbsql_schema = input(f"  DBSQL Schema [{defaults['dbsql_schema']}]: ").strip() or defaults["dbsql_schema"]
+        dbsql_warehouse_id = input(f"  SQL Warehouse ID (leave empty to auto-create) [{defaults['dbsql_warehouse_id']}]: ").strip() or defaults["dbsql_warehouse_id"]
+        if not dbsql_warehouse_id:
+            dbsql_warehouse_name = input(f"  Warehouse name [{defaults['dbsql_warehouse_name']}]: ").strip() or defaults["dbsql_warehouse_name"]
 
-    catalog = input(f"  Catalog [{defaults['catalog']}]: ").strip() or defaults["catalog"]
     create_catalog = existing_config.get("lakebase", {}).get("create_catalog", "false").lower() == "true"
     endpoint = input(f"  Model endpoint [{defaults['endpoint']}]: ").strip() or defaults["endpoint"]
 
@@ -386,6 +425,9 @@ def cmd_install(args):
     step(5, TOTAL, "Saving configuration & generating files")
     target = existing_config.get("_metadata", {}).get("target", "user")
     config = {
+        "database": {
+            "backend": db_backend,
+        },
         "workspace": {
             "host": host,
             "profile": profile,
@@ -402,6 +444,13 @@ def cmd_install(args):
             "min_cu": min_cu,
             "max_cu": max_cu,
             "endpoint_name": "",
+        },
+        "dbsql": {
+            "catalog": dbsql_catalog,
+            "schema": dbsql_schema,
+            "warehouse_id": dbsql_warehouse_id,
+            "warehouse_http_path": "",
+            "warehouse_name": dbsql_warehouse_name,
         },
         "app": {
             "name": app_name,
@@ -472,11 +521,14 @@ def cmd_configure(args, config=None):
     info("Rendering config files from templates...")
     placeholders = get_placeholder_map(config)
     lb = config.get("lakebase", {})
+    db_section = config.get("database", {})
+    db_backend = db_section.get("backend", "lakebase")
     lakebase_mode = lb.get("mode", "autoscaling")
     flags = {
         "CREATE_CATALOG": lb.get("create_catalog", "true").lower() == "true",
-        "LAKEBASE_PROVISIONED": lakebase_mode == "provisioned",
-        "LAKEBASE_AUTOSCALING": lakebase_mode == "autoscaling",
+        "LAKEBASE_PROVISIONED": lakebase_mode == "provisioned" and db_backend == "lakebase",
+        "LAKEBASE_AUTOSCALING": lakebase_mode == "autoscaling" and db_backend == "lakebase",
+        "DBSQL": db_backend == "dbsql",
     }
 
     rendered = []

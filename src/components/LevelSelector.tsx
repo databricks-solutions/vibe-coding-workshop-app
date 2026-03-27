@@ -17,7 +17,7 @@
  * └──────────────────┴──────────────┴─────────────┴─────────────────────┘
  */
 
-import { WORKSHOP_LEVELS, SKILLS_ACCELERATOR_STATUS, getActiveChain, type WorkshopLevel } from '../constants/workflowSections';
+import { WORKSHOP_LEVELS, SKILLS_ACCELERATOR_STATUS, getActiveChain, getDbBackendLevelLabel, type WorkshopLevel } from '../constants/workflowSections';
 import { Check, Info, Globe, HardDrive, Brain, Database, Rocket, Lock, Layers, MessageSquareText, BookOpen } from 'lucide-react';
 
 function LockedTooltip() {
@@ -45,6 +45,14 @@ interface LevelSelectorProps {
   completedSteps?: Set<number>;
   levelExplicitlySelected?: boolean;
   useCaseLockedLevel?: WorkshopLevel | null;
+}
+
+function getButtonLabel(level: WorkshopLevel): string {
+  if (level === 'app-database') {
+    const override = getDbBackendLevelLabel();
+    if (override) return override.label;
+  }
+  return BUTTON_LABELS[level];
 }
 
 const BUTTON_LABELS: Record<WorkshopLevel, string> = {
@@ -239,7 +247,7 @@ function LevelSelectorGrid({
       >
         <div className="flex items-center gap-2.5">
           {icon}
-          <span className="flex-1 text-left">{BUTTON_LABELS[level]}</span>
+          <span className="flex-1 text-left">{getButtonLabel(level)}</span>
           {!disabled && (selectedLevel === level || isHighlighted(level)) && (
             <Check className={`w-3.5 h-3.5 flex-shrink-0 ${selectedLevel === level ? '' : 'opacity-60'}`} />
           )}
@@ -463,11 +471,11 @@ export function LevelSelector({
     const isAnalyticsSelected = selectedLevel === 'lakehouse' || selectedLevel === 'lakehouse-di';
     const isEndToEndSelected = selectedLevel === 'end-to-end';
     const isAcceleratorSelected = selectedLevel === 'accelerator' || selectedLevel === 'genie-accelerator' || selectedLevel === 'data-engineering-accelerator' || selectedLevel === 'skills-accelerator';
-    if (isAppSelected) return `Web App + Database — ${BUTTON_LABELS[selectedLevel]}`;
-    if (isAnalyticsSelected) return `Analytics + AI — ${BUTTON_LABELS[selectedLevel]}`;
+    if (isAppSelected) return `Web App + Database — ${getButtonLabel(selectedLevel)}`;
+    if (isAnalyticsSelected) return `Analytics + AI — ${getButtonLabel(selectedLevel)}`;
     if (isEndToEndSelected) return 'End to End — Complete Workshop';
-    if (isAcceleratorSelected) return `Accelerators — ${BUTTON_LABELS[selectedLevel]}`;
-    return BUTTON_LABELS[selectedLevel];
+    if (isAcceleratorSelected) return `Accelerators — ${getButtonLabel(selectedLevel)}`;
+    return getButtonLabel(selectedLevel);
   })();
 
   const includesText = (() => {

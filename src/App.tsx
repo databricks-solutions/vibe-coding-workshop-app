@@ -14,7 +14,7 @@ import {
 } from './components/session';
 import { apiClient } from './api/client';
 import { Zap, MessageSquare, Trophy, Lightbulb, Plus, PanelLeftClose, PanelLeft, Menu, X, BarChart3 } from 'lucide-react';
-import { normalizeLevel, getFilteredSections, getCumulativeOverrides, USE_CASE_LEVEL_LOCK, isForwardProgression, type WorkshopLevel } from './constants/workflowSections';
+import { normalizeLevel, getFilteredSections, getCumulativeOverrides, USE_CASE_LEVEL_LOCK, isForwardProgression, setDbBackend, type WorkshopLevel } from './constants/workflowSections';
 
 export default function App() {
   const location = useLocation();
@@ -128,10 +128,13 @@ export default function App() {
       .then(param => { if (param?.param_value) setDefaultCatalog(param.param_value); })
       .catch(() => {});
 
-    // Fetch disabled steps
-    apiClient.getDisabledSteps()
-      .then(tags => setDisabledSectionTags(new Set(tags)))
-      .catch(err => console.error('Error fetching disabled steps:', err));
+    // Fetch disabled steps + db_backend via /all-data for a single request
+    apiClient.getAllData()
+      .then(data => {
+        if (data.disabled_steps) setDisabledSectionTags(new Set(data.disabled_steps));
+        if (data.db_backend) setDbBackend(data.db_backend);
+      })
+      .catch(err => console.error('Error fetching initial data:', err));
   }, []);
 
   const fetchCurrentUser = async () => {

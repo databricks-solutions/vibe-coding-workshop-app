@@ -16,6 +16,9 @@ pyyaml>=6.0.0     # For loading prompts_config.yaml
 # v0.81.0+ required for postgres.generate_database_credential() (Lakebase Autoscaling)
 databricks-sdk>=0.81.0
 
+# Databricks SQL warehouse (DBSQL backend / Delta tables)
+databricks-sql-connector>=3.0.0
+
 # Lakebase (PostgreSQL) connectivity
 # psycopg3 with binary driver and connection pool support (Autoscaling token rotation)
 psycopg[binary,pool]>=3.1.0

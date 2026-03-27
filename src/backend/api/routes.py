@@ -34,20 +34,36 @@ logger = logging.getLogger(__name__)
 # Lakebase configuration (PostgreSQL tables)
 USE_LAKEBASE = os.getenv("USE_LAKEBASE", "true").lower() == "true"
 
-# Import Lakebase service
+# Import database service (routes to Lakebase or DBSQL based on DB_BACKEND env var)
 try:
-    from src.backend.services.lakebase import (
+    from src.backend.services.db_service import (
         is_lakebase_configured,
         execute_query,
         execute_insert,
         get_schema,
-        PSYCOPG2_AVAILABLE
+        PSYCOPG2_AVAILABLE,
+        DB_BACKEND as _DB_BACKEND,
+        DB_SERVICE_AVAILABLE as _DB_SVC_OK,
+        get_backend_type,
+        get_latest_usecase_descriptions,
+        get_latest_section_input_prompts,
+        get_latest_prompt_configs as _db_get_latest_prompt_configs,
+        get_prompt_config_versions as _db_get_prompt_config_versions,
+        get_prompt_config_by_version as _db_get_prompt_config_by_version,
+        get_latest_section_inputs as _db_get_latest_section_inputs,
+        get_section_input_versions as _db_get_section_input_versions,
+        get_section_input_by_version as _db_get_section_input_by_version,
+        merge_session_json_field,
+        update_session_metadata_json,
+        update_section_images_json,
     )
     LAKEBASE_SERVICE_AVAILABLE = True
 except ImportError:
     LAKEBASE_SERVICE_AVAILABLE = False
     PSYCOPG2_AVAILABLE = False
-    logger.warning("Lakebase service not available - using YAML fallback")
+    _DB_BACKEND = "lakebase"
+    _DB_SVC_OK = False
+    logger.warning("Database service not available - using YAML fallback")
     
     def is_lakebase_configured():
         return False
@@ -57,6 +73,32 @@ except ImportError:
         return False
     def get_schema():
         return os.getenv("LAKEBASE_SCHEMA", "")
+    def get_backend_type():
+        return "lakebase"
+    def get_latest_usecase_descriptions(schema):
+        return []
+    def get_latest_section_input_prompts(schema):
+        return []
+    def _db_get_latest_prompt_configs(schema):
+        return []
+    def _db_get_prompt_config_versions(schema, industry, use_case):
+        return []
+    def _db_get_prompt_config_by_version(schema, industry, use_case, version):
+        return []
+    def _db_get_latest_section_inputs(schema):
+        return []
+    def _db_get_section_input_versions(schema, section_tag):
+        return []
+    def _db_get_section_input_by_version(schema, section_tag, version):
+        return []
+    def merge_session_json_field(schema, session_id, json_data):
+        return False
+    def update_session_metadata_json(schema, session_id, json_data):
+        return False
+    def update_section_images_json(schema, section_tag, column, json_data):
+        return False
+
+_JSONB_CAST = "" if _DB_BACKEND == "dbsql" else "::jsonb"
 
 # YAML fallback path (for workflow_steps, prerequisites, and fallback data)
 CONFIG_PATH = Path(__file__).parent.parent / "prompts_config.yaml"
@@ -129,30 +171,12 @@ def _refresh_lakebase_cache():
     schema = get_schema()
     
     try:
-        # Fetch latest usecase_descriptions (PostgreSQL syntax with DISTINCT ON)
-        usecase_desc_sql = f"""
-            SELECT DISTINCT ON (industry, use_case)
-                industry, industry_label, use_case, use_case_label, prompt_template, version
-            FROM {schema}.usecase_descriptions
-            WHERE is_active = TRUE
-            ORDER BY industry, use_case, version DESC
-        """
-        usecase_descriptions = execute_query(usecase_desc_sql)
+        usecase_descriptions = get_latest_usecase_descriptions(schema)
         
         if usecase_descriptions:
             _lakebase_cache["usecase_descriptions"] = usecase_descriptions
             
-            # Fetch latest section_input_prompts (PostgreSQL syntax with DISTINCT ON)
-            section_prompts_sql = f"""
-                SELECT DISTINCT ON (section_tag)
-                    section_tag, input_template, system_prompt, section_title, section_description, 
-                    order_number, version, how_to_apply, expected_output, bypass_llm,
-                    how_to_apply_images, expected_output_images
-                FROM {schema}.section_input_prompts
-                WHERE is_active = TRUE
-                ORDER BY section_tag, version DESC
-            """
-            section_prompts = execute_query(section_prompts_sql)
+            section_prompts = get_latest_section_input_prompts(schema)
             
             if section_prompts:
                 _lakebase_cache["section_input_prompts"] = section_prompts
@@ -801,15 +825,8 @@ def get_effective_workshop_parameters(session_id: Optional[str] = None) -> Dict[
             
             if _patch:
                 try:
-                    import json as _json
-                    _merge_sql = f"""
-                        UPDATE {schema}.sessions
-                        SET session_parameters = COALESCE(session_parameters, '{{}}'::jsonb) || %s::jsonb,
-                            updated_at = CURRENT_TIMESTAMP
-                        WHERE session_id = %s
-                    """
-                    execute_insert(_merge_sql, (_json.dumps(_patch), session_id))
-                    logger.info(f"[Session Params] Persisted {list(_patch.keys())} for session {session_id}")
+                    if merge_session_json_field(schema, session_id, _patch):
+                        logger.info(f"[Session Params] Persisted {list(_patch.keys())} for session {session_id}")
                 except Exception as e:
                     logger.warning(f"[Session Params] Failed to persist derived params: {e}")
     
@@ -2243,13 +2260,19 @@ async def get_all_data(response: Response):
     # Clear cache and fetch fresh data (not stale global variables!)
     clear_lakebase_cache()
     
+    disabled = get_disabled_step_tags()
+    # When DBSQL is the active backend, force-disable sync_from_lakebase (step 9)
+    if get_backend_type() == "dbsql" and "sync_from_lakebase" not in disabled:
+        disabled.append("sync_from_lakebase")
+    
     return {
         "industries": get_industries(),
         "use_cases": get_use_cases_map(),
         "prompt_templates": get_prompt_templates_map(),
         "workflow_steps": get_workflow_steps_list() or WORKFLOW_STEPS,
         "prerequisites": PREREQUISITES,
-        "disabled_steps": get_disabled_step_tags()
+        "disabled_steps": disabled,
+        "db_backend": get_backend_type(),
     }
 
 
@@ -2424,18 +2447,7 @@ async def get_latest_prompt_configs(response: Response) -> List[PromptConfigResp
     clear_lakebase_cache()
     
     schema = get_schema()
-    sql = f"""
-        SELECT DISTINCT ON (industry, use_case)
-            config_id, industry, industry_label, use_case, use_case_label, 
-            prompt_template, version, is_active, 
-            TO_CHAR(inserted_at, 'YYYY-MM-DD HH24:MI:SS') as inserted_at, 
-            TO_CHAR(updated_at, 'YYYY-MM-DD HH24:MI:SS') as updated_at, 
-            created_by
-        FROM {schema}.usecase_descriptions
-        ORDER BY industry, use_case, version DESC
-    """
-    
-    results = execute_query(sql)
+    results = _db_get_latest_prompt_configs(schema)
     
     if not results:
         # Fallback to YAML
@@ -2481,18 +2493,7 @@ async def get_prompt_config_versions(industry: str, use_case: str) -> List[Confi
     logger.info(f"[Config API] Fetching versions for {industry}/{use_case}")
     
     schema = get_schema()
-    sql = f"""
-        SELECT version, 
-               TO_CHAR(inserted_at, 'YYYY-MM-DD HH24:MI:SS') as inserted_at, 
-               TO_CHAR(updated_at, 'YYYY-MM-DD HH24:MI:SS') as updated_at, 
-               created_by, is_active
-        FROM {schema}.usecase_descriptions
-        WHERE industry = %s AND use_case = %s
-        ORDER BY version DESC
-        LIMIT 5
-    """
-    
-    results = execute_query(sql, (industry, use_case))
+    results = _db_get_prompt_config_versions(schema, industry, use_case)
     
     if not results:
         return [ConfigVersionInfo(version=1, is_active=True)]
@@ -2508,17 +2509,7 @@ async def get_prompt_config_by_version(industry: str, use_case: str, version: in
     logger.info(f"[Config API] Fetching {industry}/{use_case} version {version}")
     
     schema = get_schema()
-    sql = f"""
-        SELECT config_id, industry, industry_label, use_case, use_case_label, 
-               prompt_template, version, is_active, 
-               TO_CHAR(inserted_at, 'YYYY-MM-DD HH24:MI:SS') as inserted_at, 
-               TO_CHAR(updated_at, 'YYYY-MM-DD HH24:MI:SS') as updated_at, 
-               created_by
-        FROM {schema}.usecase_descriptions
-        WHERE industry = %s AND use_case = %s AND version = %s
-    """
-    
-    results = execute_query(sql, (industry, use_case, version))
+    results = _db_get_prompt_config_by_version(schema, industry, use_case, version)
     
     if not results:
         raise HTTPException(status_code=404, detail=f"Version {version} not found for {industry}/{use_case}")
@@ -2836,22 +2827,7 @@ async def get_latest_section_inputs(response: Response) -> List[SectionInputResp
     clear_lakebase_cache()
     
     schema = get_schema()
-    sql = f"""
-        SELECT DISTINCT ON (section_tag)
-            input_id, section_tag, section_title, section_description,
-            input_template, system_prompt, order_number, how_to_apply, expected_output,
-            how_to_apply_images, expected_output_images,
-            bypass_llm, step_enabled,
-            version, is_active,
-            TO_CHAR(inserted_at, 'YYYY-MM-DD HH24:MI:SS') as inserted_at,
-            TO_CHAR(updated_at, 'YYYY-MM-DD HH24:MI:SS') as updated_at,
-            created_by
-        FROM {schema}.section_input_prompts
-        WHERE is_active = TRUE
-        ORDER BY section_tag, version DESC
-    """
-    
-    results = execute_query(sql)
+    results = _db_get_latest_section_inputs(schema)
     # Sort by order_number after fetching (since DISTINCT ON doesn't allow different ORDER BY)
     if results:
         results = sorted(results, key=lambda x: (x.get('order_number') or 999, x.get('section_tag', '')))
@@ -2885,18 +2861,7 @@ async def get_section_input_versions(section_tag: str) -> List[ConfigVersionInfo
     logger.info(f"[Config API] Fetching versions for section: {section_tag}")
     
     schema = get_schema()
-    sql = f"""
-        SELECT version, 
-               TO_CHAR(inserted_at, 'YYYY-MM-DD HH24:MI:SS') as inserted_at, 
-               TO_CHAR(updated_at, 'YYYY-MM-DD HH24:MI:SS') as updated_at, 
-               created_by, is_active
-        FROM {schema}.section_input_prompts
-        WHERE section_tag = %s
-        ORDER BY version DESC
-        LIMIT 5
-    """
-    
-    results = execute_query(sql, (section_tag,))
+    results = _db_get_section_input_versions(schema, section_tag)
     
     if not results:
         return [ConfigVersionInfo(version=1, is_active=True)]
@@ -2912,20 +2877,7 @@ async def get_section_input_by_version(section_tag: str, version: int) -> Sectio
     logger.info(f"[Config API] Fetching {section_tag} version {version}")
     
     schema = get_schema()
-    sql = f"""
-        SELECT input_id, section_tag, section_title, section_description,
-               input_template, system_prompt, order_number, how_to_apply, expected_output,
-               how_to_apply_images, expected_output_images,
-               bypass_llm,
-               version, is_active,
-               TO_CHAR(inserted_at, 'YYYY-MM-DD HH24:MI:SS') as inserted_at,
-               TO_CHAR(updated_at, 'YYYY-MM-DD HH24:MI:SS') as updated_at,
-               created_by
-        FROM {schema}.section_input_prompts
-        WHERE section_tag = %s AND version = %s
-    """
-    
-    results = execute_query(sql, (section_tag, version))
+    results = _db_get_section_input_by_version(schema, section_tag, version)
     
     if not results:
         raise HTTPException(status_code=404, detail=f"Version {version} not found for section {section_tag}")
@@ -3603,7 +3555,7 @@ async def update_session_parameters(session_id: str, update: SessionParameterUpd
     # Save updated parameters
     update_sql = f"""
         UPDATE {schema}.sessions
-        SET session_parameters = %s::jsonb, updated_at = CURRENT_TIMESTAMP
+        SET session_parameters = %s{_JSONB_CAST}, updated_at = CURRENT_TIMESTAMP
         WHERE session_id = %s
     """
     
@@ -3651,7 +3603,7 @@ async def reset_session_parameter(session_id: str, param_key: str) -> Dict[str, 
     # Save updated parameters
     update_sql = f"""
         UPDATE {schema}.sessions
-        SET session_parameters = %s::jsonb, updated_at = CURRENT_TIMESTAMP
+        SET session_parameters = %s{_JSONB_CAST}, updated_at = CURRENT_TIMESTAMP
         WHERE session_id = %s
     """
     
@@ -3767,7 +3719,7 @@ async def update_lakehouse_params(session_id: str, update: LakehouseParamsUpdate
     # Save updated parameters
     update_sql = f"""
         UPDATE {schema}.sessions
-        SET session_parameters = %s::jsonb, updated_at = CURRENT_TIMESTAMP
+        SET session_parameters = %s{_JSONB_CAST}, updated_at = CURRENT_TIMESTAMP
         WHERE session_id = %s
     """
     
@@ -3816,7 +3768,7 @@ async def reset_lakehouse_params(session_id: str) -> Dict[str, Any]:
     # Save updated parameters
     update_sql = f"""
         UPDATE {schema}.sessions
-        SET session_parameters = %s::jsonb, updated_at = CURRENT_TIMESTAMP
+        SET session_parameters = %s{_JSONB_CAST}, updated_at = CURRENT_TIMESTAMP
         WHERE session_id = %s
     """
     
@@ -3889,7 +3841,7 @@ async def auto_set_lakehouse_params_from_lakebase(session_id: str) -> LakehouseP
     
     update_sql = f"""
         UPDATE {schema}.sessions
-        SET session_parameters = %s::jsonb, updated_at = CURRENT_TIMESTAMP
+        SET session_parameters = %s{_JSONB_CAST}, updated_at = CURRENT_TIMESTAMP
         WHERE session_id = %s
     """
     success = execute_insert(update_sql, (json.dumps(current_overrides), session_id))
@@ -3913,9 +3865,9 @@ async def auto_set_lakehouse_params_from_lakebase(session_id: str) -> LakehouseP
 import uuid
 from fastapi import Request
 
-# Import session functions from lakebase service
+# Import session functions from database service
 try:
-    from src.backend.services.lakebase import (
+    from src.backend.services.db_service import (
         save_session,
         save_chapter_feedback,
         load_session,
@@ -4474,16 +4426,9 @@ async def update_session_metadata_endpoint(request_body: SessionUpdateMetadataRe
         
         if _session_param_patch:
             try:
-                import json as _json
                 schema = get_schema()
-                merge_sql = f"""
-                    UPDATE {schema}.sessions
-                    SET session_parameters = COALESCE(session_parameters, '{{}}'::jsonb) || %s::jsonb,
-                        updated_at = CURRENT_TIMESTAMP
-                    WHERE session_id = %s
-                """
-                execute_insert(merge_sql, (_json.dumps(_session_param_patch), request_body.session_id))
-                logger.info(f"[Session API] Session parameters updated for {request_body.session_id}: {list(_session_param_patch.keys())}")
+                if update_session_metadata_json(schema, request_body.session_id, _session_param_patch):
+                    logger.info(f"[Session API] Session parameters updated for {request_body.session_id}: {list(_session_param_patch.keys())}")
             except Exception as e:
                 logger.error(f"[Session API] Error saving session parameters: {e}")
         
@@ -4602,20 +4547,18 @@ async def session_lakebase_status():
     # Try to get connection info
     connection_test = None
     try:
-        from src.backend.services.lakebase import get_connection, _get_config
-        config = _get_config()
-        connection_test = {
-            "config_source": config.get("source", "unknown"),
-            "host_set": bool(config.get("host")),
-            "database_set": bool(config.get("database")),
-            "schema": config.get("schema", "unknown"),
-        }
+        from src.backend.services.db_service import get_connection_status
+        connection_test = get_connection_status()
+        if connection_test is None:
+            from src.backend.services.db_service import get_schema as _gs
+            connection_test = {"schema": _gs()}
     except Exception as e:
         connection_test = {"error": str(e)}
     
     return {
         "configured": configured,
-        "mode": "lakebase" if configured else "disabled",
+        "db_backend": get_backend_type(),
+        "mode": get_backend_type() if configured else "disabled",
         "session_functions_available": SESSION_FUNCTIONS_AVAILABLE,
         "environment": env_info,
         "connection_test": connection_test,
@@ -4697,7 +4640,7 @@ async def get_workshop_users_endpoint() -> Dict[str, Any]:
         if _workshop_users_cache["data"] is not None and (now - _workshop_users_cache["timestamp"]) < 60:
             return _workshop_users_cache["data"]
 
-        from ..services.lakebase import get_workshop_users
+        from ..services.db_service import get_workshop_users
         result = get_workshop_users()
         _workshop_users_cache["data"] = result
         _workshop_users_cache["timestamp"] = now
@@ -4852,13 +4795,7 @@ def update_section_images(section_tag: str, field_type: str, images: List[Dict])
     column = f"{field_type}_images"
     
     # Update all active versions (they share the same images)
-    sql = f"""
-        UPDATE {schema}.section_input_prompts
-        SET {column} = %s::jsonb, updated_at = CURRENT_TIMESTAMP
-        WHERE section_tag = %s AND is_active = TRUE
-    """
-    
-    return execute_insert(sql, (json.dumps(images), section_tag))
+    return update_section_images_json(schema, section_tag, column, json.dumps(images))
 
 
 @router.post("/uploads/section-image", summary="Upload image for section")
@@ -5023,15 +4960,15 @@ async def list_section_images(section_tag: str, field_type: str):
 # from existing routes. No existing code is modified.
 # =============================================================================
 
-# Import CRUD functions for the new table
+# Import CRUD functions for the use case builder table
 try:
-    from src.backend.services.lakebase import (
+    from src.backend.services.db_service import (
         save_usecase_builder_description,
         get_all_saved_usecases,
         update_saved_usecase,
         delete_saved_usecase,
-        _format_display_name as format_display_name,
     )
+    from src.backend.services.lakebase import _format_display_name as format_display_name
 except ImportError:
     logger.warning("Use case builder CRUD functions not available")
     def save_usecase_builder_description(*args, **kwargs):

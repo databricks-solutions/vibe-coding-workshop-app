@@ -403,6 +403,102 @@ for line in open('$PROJECT_ROOT/user-config.yaml'):
     fi
 fi
 
+# Detect DB_BACKEND from user-config.yaml (lakebase or dbsql)
+DB_BACKEND="lakebase"
+if [[ -f "$PROJECT_ROOT/user-config.yaml" ]]; then
+    DETECTED_BACKEND=$(python3 -c "
+in_database = False
+for line in open('$PROJECT_ROOT/user-config.yaml'):
+    stripped = line.strip()
+    if not stripped or stripped.startswith('#'):
+        continue
+    if not line[0:1].isspace() and ':' in stripped:
+        in_database = stripped.startswith('database:')
+        continue
+    if in_database and stripped.startswith('backend:'):
+        val = stripped.split(':', 1)[1].strip().strip('\"').strip(\"'\")
+        if val: print(val)
+        break
+" 2>/dev/null) || true
+    if [[ "$DETECTED_BACKEND" == "dbsql" ]]; then
+        DB_BACKEND="dbsql"
+    fi
+fi
+
+# Get DBSQL config if backend is dbsql
+if [[ "$DB_BACKEND" == "dbsql" ]]; then
+    DBSQL_CATALOG=$(python3 -c "
+in_dbsql = False
+for line in open('$PROJECT_ROOT/user-config.yaml'):
+    stripped = line.strip()
+    if not stripped or stripped.startswith('#'):
+        continue
+    if not line[0:1].isspace() and ':' in stripped:
+        in_dbsql = stripped.startswith('dbsql:')
+        continue
+    if in_dbsql and stripped.startswith('catalog:'):
+        val = stripped.split(':', 1)[1].strip().strip('\"').strip(\"'\")
+        if val: print(val)
+        break
+" 2>/dev/null) || true
+    DBSQL_SCHEMA=$(python3 -c "
+in_dbsql = False
+for line in open('$PROJECT_ROOT/user-config.yaml'):
+    stripped = line.strip()
+    if not stripped or stripped.startswith('#'):
+        continue
+    if not line[0:1].isspace() and ':' in stripped:
+        in_dbsql = stripped.startswith('dbsql:')
+        continue
+    if in_dbsql and stripped.startswith('schema:'):
+        val = stripped.split(':', 1)[1].strip().strip('\"').strip(\"'\")
+        if val: print(val)
+        break
+" 2>/dev/null) || true
+    SQL_WAREHOUSE_ID=$(python3 -c "
+in_dbsql = False
+for line in open('$PROJECT_ROOT/user-config.yaml'):
+    stripped = line.strip()
+    if not stripped or stripped.startswith('#'):
+        continue
+    if not line[0:1].isspace() and ':' in stripped:
+        in_dbsql = stripped.startswith('dbsql:')
+        continue
+    if in_dbsql and stripped.startswith('warehouse_id:'):
+        val = stripped.split(':', 1)[1].strip().strip('\"').strip(\"'\")
+        if val: print(val)
+        break
+" 2>/dev/null) || true
+    DBSQL_WAREHOUSE_NAME=$(python3 -c "
+in_dbsql = False
+for line in open('$PROJECT_ROOT/user-config.yaml'):
+    stripped = line.strip()
+    if not stripped or stripped.startswith('#'):
+        continue
+    if not line[0:1].isspace() and ':' in stripped:
+        in_dbsql = stripped.startswith('dbsql:')
+        continue
+    if in_dbsql and stripped.startswith('warehouse_name:'):
+        val = stripped.split(':', 1)[1].strip().strip('\"').strip(\"'\")
+        if val: print(val)
+        break
+" 2>/dev/null) || true
+    DBSQL_WAREHOUSE_HTTP_PATH=$(python3 -c "
+in_dbsql = False
+for line in open('$PROJECT_ROOT/user-config.yaml'):
+    stripped = line.strip()
+    if not stripped or stripped.startswith('#'):
+        continue
+    if not line[0:1].isspace() and ':' in stripped:
+        in_dbsql = stripped.startswith('dbsql:')
+        continue
+    if in_dbsql and stripped.startswith('warehouse_http_path:'):
+        val = stripped.split(':', 1)[1].strip().strip('\"').strip(\"'\")
+        if val: print(val)
+        break
+" 2>/dev/null) || true
+fi
+
 # Validate target to prevent accidental production changes
 # Skip confirmation for --code-only (safer operation, just code sync)
 if [[ "$TARGET" == "production" && "$CODE_ONLY" != true ]]; then
@@ -423,9 +519,16 @@ elif [[ "$TARGET" == "production" && "$CODE_ONLY" == true ]]; then
 fi
 
 echo -e "App Name:     ${BLUE}$APP_NAME${NC}"
-echo -e "Lakebase:     ${BLUE}$LAKEBASE_INSTANCE${NC} (${CYAN}$LAKEBASE_MODE${NC})"
-echo -e "Catalog:      ${BLUE}$LAKEBASE_CATALOG${NC}"
-echo -e "Schema:       ${BLUE}$LAKEBASE_SCHEMA${NC}"
+if [[ "$DB_BACKEND" == "lakebase" ]]; then
+    echo -e "Lakebase:     ${BLUE}$LAKEBASE_INSTANCE${NC} (${CYAN}$LAKEBASE_MODE${NC})"
+    echo -e "Catalog:      ${BLUE}$LAKEBASE_CATALOG${NC}"
+    echo -e "Schema:       ${BLUE}$LAKEBASE_SCHEMA${NC}"
+else
+    echo -e "Backend:      ${BLUE}DBSQL${NC}"
+    echo -e "Catalog:      ${BLUE}${DBSQL_CATALOG:-not set}${NC}"
+    echo -e "Schema:       ${BLUE}${DBSQL_SCHEMA:-not set}${NC}"
+    echo -e "Warehouse ID: ${BLUE}${SQL_WAREHOUSE_ID:-not set}${NC}"
+fi
 echo ""
 
 # Check databricks CLI authentication
@@ -677,6 +780,23 @@ update_app_yaml_lakebase() {
     rm -f app.yaml.bak
 }
 
+update_app_yaml_dbsql() {
+    local wh_path="${DBSQL_WAREHOUSE_HTTP_PATH:-}"
+    if [[ -z "$wh_path" && -n "${SQL_WAREHOUSE_ID:-}" ]]; then
+        wh_path="/sql/1.0/warehouses/${SQL_WAREHOUSE_ID}"
+    fi
+    if [[ -n "$wh_path" ]]; then
+        sed -i.bak '/name: DATABRICKS_SQL_WAREHOUSE_HTTP_PATH/{n;s|value: ".*"|value: "'"$wh_path"'"|;}' app.yaml
+    fi
+    if [[ -n "${DBSQL_CATALOG:-}" ]]; then
+        sed -i.bak '/name: LAKEHOUSE_CATALOG/{n;s|value: ".*"|value: "'"$DBSQL_CATALOG"'"|;}' app.yaml
+    fi
+    if [[ -n "${DBSQL_SCHEMA:-}" ]]; then
+        sed -i.bak '/name: LAKEHOUSE_SCHEMA/{n;s|value: ".*"|value: "'"$DBSQL_SCHEMA"'"|;}' app.yaml
+    fi
+    rm -f app.yaml.bak
+}
+
 # =============================================================================
 # Step 0: Update app.yaml with target-specific Lakebase config
 # =============================================================================
@@ -684,27 +804,36 @@ update_app_yaml_lakebase() {
 if [[ "$TABLES_ONLY" != true ]]; then
     print_header "STEP 0: Configure app.yaml for Target"
     
-    print_step "Getting Lakebase details for target: $TARGET ($LAKEBASE_MODE mode)..."
-    discover_lakebase_host
-    discover_all_branches
-    
-    if [[ -n "$TARGET_LAKEBASE_HOST" ]]; then
-        print_success "Instance/Project: $LAKEBASE_INSTANCE"
-        print_success "Host: $TARGET_LAKEBASE_HOST"
-        [[ -n "$ENDPOINT_NAME" ]] && print_success "Endpoint: $ENDPOINT_NAME"
-        print_success "Schema: $LAKEBASE_SCHEMA"
-        [[ ${#ALL_BRANCHES[@]} -gt 0 ]] && print_success "Branches: ${ALL_BRANCHES[*]}"
+    if [[ "$DB_BACKEND" == "lakebase" ]]; then
+        print_step "Getting Lakebase details for target: $TARGET ($LAKEBASE_MODE mode)..."
+        discover_lakebase_host
+        discover_all_branches
         
-        print_step "Updating app.yaml with target-specific Lakebase config..."
-        update_app_yaml_lakebase
-        
-        print_success "app.yaml updated for $TARGET environment"
-        echo ""
-        echo -e "  LAKEBASE_HOST:   ${CYAN}$TARGET_LAKEBASE_HOST${NC}"
-        echo -e "  LAKEBASE_SCHEMA: ${CYAN}$LAKEBASE_SCHEMA${NC}"
-        [[ -n "$ENDPOINT_NAME" ]] && echo -e "  ENDPOINT_NAME:   ${CYAN}$ENDPOINT_NAME${NC}"
+        if [[ -n "$TARGET_LAKEBASE_HOST" ]]; then
+            print_success "Instance/Project: $LAKEBASE_INSTANCE"
+            print_success "Host: $TARGET_LAKEBASE_HOST"
+            [[ -n "$ENDPOINT_NAME" ]] && print_success "Endpoint: $ENDPOINT_NAME"
+            print_success "Schema: $LAKEBASE_SCHEMA"
+            [[ ${#ALL_BRANCHES[@]} -gt 0 ]] && print_success "Branches: ${ALL_BRANCHES[*]}"
+            
+            print_step "Updating app.yaml with target-specific Lakebase config..."
+            update_app_yaml_lakebase
+            
+            print_success "app.yaml updated for $TARGET environment"
+            echo ""
+            echo -e "  LAKEBASE_HOST:   ${CYAN}$TARGET_LAKEBASE_HOST${NC}"
+            echo -e "  LAKEBASE_SCHEMA: ${CYAN}$LAKEBASE_SCHEMA${NC}"
+            [[ -n "$ENDPOINT_NAME" ]] && echo -e "  ENDPOINT_NAME:   ${CYAN}$ENDPOINT_NAME${NC}"
+        else
+            print_warning "Could not get Lakebase host - app.yaml unchanged (will be updated after bundle deploy)"
+        fi
     else
-        print_warning "Could not get Lakebase host - app.yaml unchanged (will be updated after bundle deploy)"
+        print_step "DBSQL backend selected - updating app.yaml with DBSQL config..."
+        update_app_yaml_dbsql
+        print_success "app.yaml updated for DBSQL backend"
+        echo -e "  LAKEHOUSE_CATALOG:                   ${CYAN}${DBSQL_CATALOG:-not set}${NC}"
+        echo -e "  LAKEHOUSE_SCHEMA:                    ${CYAN}${DBSQL_SCHEMA:-not set}${NC}"
+        echo -e "  DATABRICKS_SQL_WAREHOUSE_HTTP_PATH:  ${CYAN}${DBSQL_WAREHOUSE_HTTP_PATH:-/sql/1.0/warehouses/${SQL_WAREHOUSE_ID:-}}${NC}"
     fi
 fi
 
@@ -743,7 +872,7 @@ if [[ "$TABLES_ONLY" != true && "$PERMISSIONS_ONLY" != true ]]; then
                 wait_for_app_deletion "$APP_NAME"
             fi
 
-            if echo "$DEPLOY_OUTPUT" | grep -q "failed to create database\|databricks_database"; then
+            if [[ "$DB_BACKEND" == "lakebase" ]] && echo "$DEPLOY_OUTPUT" | grep -q "failed to create database\|databricks_database"; then
                 print_step "Removing pre-existing Lakebase instance: $LAKEBASE_INSTANCE"
                 databricks api delete "/api/2.0/database/instances/$LAKEBASE_INSTANCE" $PROFILE_FLAG 2>/dev/null || true
                 sleep 10
@@ -795,18 +924,19 @@ if [[ "$TABLES_ONLY" != true && "$PERMISSIONS_ONLY" != true ]]; then
     print_step "Getting deployment summary..."
     databricks bundle summary -t "$TARGET" $PROFILE_FLAG 2>&1 | grep -E "Name:|URL:|Host:|Path:"
 
-    # Now that the Lakebase resources exist, update app.yaml with host/endpoint
-    print_step "Updating app.yaml with Lakebase connection details..."
-    discover_lakebase_host
-    if [[ -n "$TARGET_LAKEBASE_HOST" ]]; then
-        update_app_yaml_lakebase
-        print_success "LAKEBASE_HOST: $TARGET_LAKEBASE_HOST"
-        print_success "LAKEBASE_SCHEMA: $LAKEBASE_SCHEMA"
-        [[ -n "$ENDPOINT_NAME" ]] && print_success "ENDPOINT_NAME: $ENDPOINT_NAME"
+    if [[ "$DB_BACKEND" == "lakebase" ]]; then
+        # Now that the Lakebase resources exist, update app.yaml with host/endpoint
+        print_step "Updating app.yaml with Lakebase connection details..."
+        discover_lakebase_host
+        if [[ -n "$TARGET_LAKEBASE_HOST" ]]; then
+            update_app_yaml_lakebase
+            print_success "LAKEBASE_HOST: $TARGET_LAKEBASE_HOST"
+            print_success "LAKEBASE_SCHEMA: $LAKEBASE_SCHEMA"
+            [[ -n "$ENDPOINT_NAME" ]] && print_success "ENDPOINT_NAME: $ENDPOINT_NAME"
 
-        # Update autoscaling limits on the auto-created endpoint (if autoscaling mode)
-        if [[ "$LAKEBASE_MODE" == "autoscaling" && -n "$ENDPOINT_NAME" ]]; then
-            LAKEBASE_MIN_CU=$(python3 -c "
+            # Update autoscaling limits on the auto-created endpoint (if autoscaling mode)
+            if [[ "$LAKEBASE_MODE" == "autoscaling" && -n "$ENDPOINT_NAME" ]]; then
+                LAKEBASE_MIN_CU=$(python3 -c "
 try:
     import yaml
     c = yaml.safe_load(open('user-config.yaml'))
@@ -820,7 +950,7 @@ except Exception:
     except Exception:
         print('0.5')
 " 2>/dev/null) || LAKEBASE_MIN_CU="0.5"
-            LAKEBASE_MAX_CU=$(python3 -c "
+                LAKEBASE_MAX_CU=$(python3 -c "
 try:
     import yaml
     c = yaml.safe_load(open('user-config.yaml'))
@@ -834,18 +964,21 @@ except Exception:
     except Exception:
         print('2')
 " 2>/dev/null) || LAKEBASE_MAX_CU="2"
-            print_step "Setting autoscaling limits: ${LAKEBASE_MIN_CU}-${LAKEBASE_MAX_CU} CU..."
-            databricks postgres update-endpoint "$ENDPOINT_NAME" \
-                "spec.autoscaling_limit_min_cu,spec.autoscaling_limit_max_cu" \
-                --json "{\"spec\": {\"autoscaling_limit_min_cu\": $LAKEBASE_MIN_CU, \"autoscaling_limit_max_cu\": $LAKEBASE_MAX_CU}}" \
-                --no-wait $PROFILE_FLAG 2>&1 || print_warning "Could not update autoscaling limits"
-        fi
+                print_step "Setting autoscaling limits: ${LAKEBASE_MIN_CU}-${LAKEBASE_MAX_CU} CU..."
+                databricks postgres update-endpoint "$ENDPOINT_NAME" \
+                    "spec.autoscaling_limit_min_cu,spec.autoscaling_limit_max_cu" \
+                    --json "{\"spec\": {\"autoscaling_limit_min_cu\": $LAKEBASE_MIN_CU, \"autoscaling_limit_max_cu\": $LAKEBASE_MAX_CU}}" \
+                    --no-wait $PROFILE_FLAG 2>&1 || print_warning "Could not update autoscaling limits"
+            fi
 
-        # Re-sync the updated app.yaml to workspace
-        print_step "Syncing updated app.yaml to workspace..."
-        databricks bundle deploy -t "$TARGET" $PROFILE_FLAG 2>&1 | tail -3
+            # Re-sync the updated app.yaml to workspace
+            print_step "Syncing updated app.yaml to workspace..."
+            databricks bundle deploy -t "$TARGET" $PROFILE_FLAG 2>&1 | tail -3
+        else
+            print_warning "Could not get Lakebase host -- app.yaml may need manual update"
+        fi
     else
-        print_warning "Could not get Lakebase host -- app.yaml may need manual update"
+        print_step "DBSQL backend -- app.yaml already configured in Step 0"
     fi
 fi
 
@@ -924,15 +1057,19 @@ if [[ "$TABLES_ONLY" != true && "$SKIP_PERMISSIONS" != true ]]; then
         #     Grant ALL_PRIVILEGES on catalog to app service principal
         #     This enables the app to access schemas and tables
         # =================================================================
-        if [[ -n "$SERVICE_PRINCIPAL_ID" && -n "$LAKEBASE_CATALOG" ]]; then
+        UC_CATALOG="${LAKEBASE_CATALOG}"
+        if [[ "$DB_BACKEND" == "dbsql" && -n "${DBSQL_CATALOG:-}" ]]; then
+            UC_CATALOG="${DBSQL_CATALOG}"
+        fi
+        if [[ -n "$SERVICE_PRINCIPAL_ID" && -n "$UC_CATALOG" ]]; then
             print_step "2a. Adding Unity Catalog permissions..."
             
-            PERM_RESULT=$(databricks api patch "/api/2.1/unity-catalog/permissions/catalog/$LAKEBASE_CATALOG" \
+            PERM_RESULT=$(databricks api patch "/api/2.1/unity-catalog/permissions/catalog/$UC_CATALOG" \
                 $PROFILE_FLAG \
                 --json "{\"changes\": [{\"principal\": \"$SERVICE_PRINCIPAL_ID\", \"add\": [\"ALL_PRIVILEGES\"]}]}" 2>&1) || true
             
             if echo "$PERM_RESULT" | grep -q "privilege_assignments\|ALL_PRIVILEGES"; then
-                print_success "Catalog permissions granted: ALL_PRIVILEGES on $LAKEBASE_CATALOG"
+                print_success "Catalog permissions granted: ALL_PRIVILEGES on $UC_CATALOG"
             elif echo "$PERM_RESULT" | grep -q "already"; then
                 print_warning "Catalog permissions already exist"
             else
@@ -947,129 +1084,144 @@ if [[ "$TABLES_ONLY" != true && "$SKIP_PERMISSIONS" != true ]]; then
         #     This enables CREATE TABLE, INSERT, UPDATE operations
         #     API differs for Autoscaling (postgres/projects) vs Provisioned (database/instances)
         # =================================================================
-        if [[ -n "$SERVICE_PRINCIPAL_ID" && -n "$LAKEBASE_INSTANCE" ]]; then
-            print_step "2b. Adding Lakebase database roles ($LAKEBASE_MODE mode)..."
+        if [[ "$DB_BACKEND" == "lakebase" ]]; then
+            if [[ -n "$SERVICE_PRINCIPAL_ID" && -n "$LAKEBASE_INSTANCE" ]]; then
+                print_step "2b. Adding Lakebase database roles ($LAKEBASE_MODE mode)..."
 
-            if [[ "$LAKEBASE_MODE" == "autoscaling" ]]; then
-                if [[ ${#ALL_BRANCHES[@]} -eq 0 ]]; then
-                    if [[ -z "$AUTOSCALING_BRANCH" ]]; then
-                        AUTOSCALING_BRANCH="projects/$LAKEBASE_INSTANCE/branches/production"
+                if [[ "$LAKEBASE_MODE" == "autoscaling" ]]; then
+                    if [[ ${#ALL_BRANCHES[@]} -eq 0 ]]; then
+                        if [[ -z "$AUTOSCALING_BRANCH" ]]; then
+                            AUTOSCALING_BRANCH="projects/$LAKEBASE_INSTANCE/branches/production"
+                        fi
+                        ALL_BRANCHES=("$AUTOSCALING_BRANCH")
                     fi
-                    ALL_BRANCHES=("$AUTOSCALING_BRANCH")
-                fi
-                PERM_RESOURCE_TYPE="database-projects"
+                    PERM_RESOURCE_TYPE="database-projects"
 
-                for BRANCH in "${ALL_BRANCHES[@]}"; do
-                    BRANCH_SHORT="${BRANCH##*/}"
-                    print_step "  Applying roles on branch: $BRANCH_SHORT ..."
+                    for BRANCH in "${ALL_BRANCHES[@]}"; do
+                        BRANCH_SHORT="${BRANCH##*/}"
+                        print_step "  Applying roles on branch: $BRANCH_SHORT ..."
 
-                    EXISTING_ROLES=$(databricks postgres list-roles "$BRANCH" $PROFILE_FLAG --output json 2>/dev/null) || EXISTING_ROLES="[]"
+                        EXISTING_ROLES=$(databricks postgres list-roles "$BRANCH" $PROFILE_FLAG --output json 2>/dev/null) || EXISTING_ROLES="[]"
+
+                        if echo "$EXISTING_ROLES" | grep -q "$SERVICE_PRINCIPAL_ID"; then
+                            print_warning "[$BRANCH_SHORT] Role already exists for service principal"
+                        else
+                            ROLE_RESULT=$(databricks postgres create-role "$BRANCH" \
+                                --json "{\"spec\": {\"postgres_role\": \"$SERVICE_PRINCIPAL_ID\", \"identity_type\": \"SERVICE_PRINCIPAL\", \"membership_roles\": [\"DATABRICKS_SUPERUSER\"]}}" \
+                                --no-wait $PROFILE_FLAG 2>&1) || true
+                            if echo "$ROLE_RESULT" | grep -q "SERVICE_PRINCIPAL\|name.*roles"; then
+                                print_success "[$BRANCH_SHORT] DATABRICKS_SUPERUSER granted for app service principal"
+                            else
+                                print_warning "[$BRANCH_SHORT] Could not verify role for service principal"
+                                echo "  Response: $ROLE_RESULT"
+                            fi
+                        fi
+
+                        if [[ -n "$CURRENT_USER" ]]; then
+                            if echo "$EXISTING_ROLES" | grep -q "$CURRENT_USER"; then
+                                print_warning "[$BRANCH_SHORT] Role already exists for $CURRENT_USER"
+                            else
+                                USER_ROLE_RESULT=$(databricks postgres create-role "$BRANCH" \
+                                    --json "{\"spec\": {\"postgres_role\": \"$CURRENT_USER\", \"identity_type\": \"USER\", \"membership_roles\": [\"DATABRICKS_SUPERUSER\"]}}" \
+                                    --no-wait $PROFILE_FLAG 2>&1) || true
+                                if echo "$USER_ROLE_RESULT" | grep -q "USER\|name.*roles"; then
+                                    print_success "[$BRANCH_SHORT] DATABRICKS_SUPERUSER granted for $CURRENT_USER"
+                                else
+                                    print_warning "[$BRANCH_SHORT] Could not grant role for $CURRENT_USER"
+                                    echo "  Response: $USER_ROLE_RESULT"
+                                fi
+                            fi
+                        fi
+
+                        if echo "$EXISTING_ROLES" | grep -q '"users"'; then
+                            print_warning "[$BRANCH_SHORT] Role already exists for users group"
+                        else
+                            ACCT_ROLE_RESULT=$(databricks postgres create-role "$BRANCH" \
+                                --json '{"spec": {"postgres_role": "users", "identity_type": "GROUP", "membership_roles": ["DATABRICKS_SUPERUSER"]}}' \
+                                --no-wait $PROFILE_FLAG 2>&1) || true
+                            if echo "$ACCT_ROLE_RESULT" | grep -q "GROUP\|name.*roles"; then
+                                print_success "[$BRANCH_SHORT] DATABRICKS_SUPERUSER granted for users group (all workspace users)"
+                            else
+                                print_warning "[$BRANCH_SHORT] Could not grant role for users group"
+                                echo "  Response: $ACCT_ROLE_RESULT"
+                            fi
+                        fi
+                    done
+
+                else
+                    # Provisioned mode: use REST API for database instances
+                    ROLES_API_BASE="/api/2.0/database/instances/$LAKEBASE_INSTANCE/roles"
+                    PERM_RESOURCE_TYPE="database-instances"
+
+                    EXISTING_ROLES=$(databricks api get "$ROLES_API_BASE" $PROFILE_FLAG 2>/dev/null) || true
 
                     if echo "$EXISTING_ROLES" | grep -q "$SERVICE_PRINCIPAL_ID"; then
-                        print_warning "[$BRANCH_SHORT] Role already exists for service principal"
+                        print_warning "Lakebase role already exists for service principal"
                     else
-                        ROLE_RESULT=$(databricks postgres create-role "$BRANCH" \
-                            --json "{\"spec\": {\"postgres_role\": \"$SERVICE_PRINCIPAL_ID\", \"identity_type\": \"SERVICE_PRINCIPAL\", \"membership_roles\": [\"DATABRICKS_SUPERUSER\"]}}" \
-                            --no-wait $PROFILE_FLAG 2>&1) || true
-                        if echo "$ROLE_RESULT" | grep -q "SERVICE_PRINCIPAL\|name.*roles"; then
-                            print_success "[$BRANCH_SHORT] DATABRICKS_SUPERUSER granted for app service principal"
+                        ROLE_RESULT=$(databricks api post "$ROLES_API_BASE" $PROFILE_FLAG \
+                            --json "{\"name\": \"$SERVICE_PRINCIPAL_ID\", \"identity_type\": \"SERVICE_PRINCIPAL\", \"membership_role\": \"DATABRICKS_SUPERUSER\"}" 2>&1) || true
+                        if echo "$ROLE_RESULT" | grep -q "DATABRICKS_SUPERUSER\|SERVICE_PRINCIPAL"; then
+                            print_success "Lakebase role granted: DATABRICKS_SUPERUSER for app service principal"
                         else
-                            print_warning "[$BRANCH_SHORT] Could not verify role for service principal"
+                            print_warning "Could not verify Lakebase role for service principal"
                             echo "  Response: $ROLE_RESULT"
                         fi
                     fi
 
                     if [[ -n "$CURRENT_USER" ]]; then
                         if echo "$EXISTING_ROLES" | grep -q "$CURRENT_USER"; then
-                            print_warning "[$BRANCH_SHORT] Role already exists for $CURRENT_USER"
+                            print_warning "Lakebase role already exists for $CURRENT_USER"
                         else
-                            USER_ROLE_RESULT=$(databricks postgres create-role "$BRANCH" \
-                                --json "{\"spec\": {\"postgres_role\": \"$CURRENT_USER\", \"identity_type\": \"USER\", \"membership_roles\": [\"DATABRICKS_SUPERUSER\"]}}" \
-                                --no-wait $PROFILE_FLAG 2>&1) || true
-                            if echo "$USER_ROLE_RESULT" | grep -q "USER\|name.*roles"; then
-                                print_success "[$BRANCH_SHORT] DATABRICKS_SUPERUSER granted for $CURRENT_USER"
+                            USER_ROLE_RESULT=$(databricks api post "$ROLES_API_BASE" $PROFILE_FLAG \
+                                --json "{\"name\": \"$CURRENT_USER\", \"identity_type\": \"USER\", \"membership_role\": \"DATABRICKS_SUPERUSER\"}" 2>&1) || true
+                            if echo "$USER_ROLE_RESULT" | grep -q "DATABRICKS_SUPERUSER\|USER"; then
+                                print_success "Lakebase role granted: DATABRICKS_SUPERUSER for $CURRENT_USER"
                             else
-                                print_warning "[$BRANCH_SHORT] Could not grant role for $CURRENT_USER"
+                                print_warning "Could not grant Lakebase role for $CURRENT_USER"
                                 echo "  Response: $USER_ROLE_RESULT"
                             fi
                         fi
                     fi
 
-                    if echo "$EXISTING_ROLES" | grep -q '"users"'; then
-                        print_warning "[$BRANCH_SHORT] Role already exists for users group"
+                    if echo "$EXISTING_ROLES" | grep -q "account users"; then
+                        print_warning "Lakebase role already exists for account users"
                     else
-                        ACCT_ROLE_RESULT=$(databricks postgres create-role "$BRANCH" \
-                            --json '{"spec": {"postgres_role": "users", "identity_type": "GROUP", "membership_roles": ["DATABRICKS_SUPERUSER"]}}' \
-                            --no-wait $PROFILE_FLAG 2>&1) || true
-                        if echo "$ACCT_ROLE_RESULT" | grep -q "GROUP\|name.*roles"; then
-                            print_success "[$BRANCH_SHORT] DATABRICKS_SUPERUSER granted for users group (all workspace users)"
+                        ACCT_ROLE_RESULT=$(databricks api post "$ROLES_API_BASE" $PROFILE_FLAG \
+                            --json '{"name": "account users", "identity_type": "GROUP", "membership_role": "DATABRICKS_SUPERUSER", "attributes": {"createdb": true, "createrole": true, "bypassrls": true}}' 2>&1) || true
+                        if echo "$ACCT_ROLE_RESULT" | grep -q "DATABRICKS_SUPERUSER\|GROUP"; then
+                            print_success "Lakebase role granted: DATABRICKS_SUPERUSER for account users (all workspace users)"
                         else
-                            print_warning "[$BRANCH_SHORT] Could not grant role for users group"
+                            print_warning "Could not grant Lakebase role for account users"
                             echo "  Response: $ACCT_ROLE_RESULT"
                         fi
                     fi
-                done
-
-            else
-                # Provisioned mode: use REST API for database instances
-                ROLES_API_BASE="/api/2.0/database/instances/$LAKEBASE_INSTANCE/roles"
-                PERM_RESOURCE_TYPE="database-instances"
-
-                EXISTING_ROLES=$(databricks api get "$ROLES_API_BASE" $PROFILE_FLAG 2>/dev/null) || true
-
-                if echo "$EXISTING_ROLES" | grep -q "$SERVICE_PRINCIPAL_ID"; then
-                    print_warning "Lakebase role already exists for service principal"
-                else
-                    ROLE_RESULT=$(databricks api post "$ROLES_API_BASE" $PROFILE_FLAG \
-                        --json "{\"name\": \"$SERVICE_PRINCIPAL_ID\", \"identity_type\": \"SERVICE_PRINCIPAL\", \"membership_role\": \"DATABRICKS_SUPERUSER\"}" 2>&1) || true
-                    if echo "$ROLE_RESULT" | grep -q "DATABRICKS_SUPERUSER\|SERVICE_PRINCIPAL"; then
-                        print_success "Lakebase role granted: DATABRICKS_SUPERUSER for app service principal"
-                    else
-                        print_warning "Could not verify Lakebase role for service principal"
-                        echo "  Response: $ROLE_RESULT"
-                    fi
                 fi
 
-                if [[ -n "$CURRENT_USER" ]]; then
-                    if echo "$EXISTING_ROLES" | grep -q "$CURRENT_USER"; then
-                        print_warning "Lakebase role already exists for $CURRENT_USER"
-                    else
-                        USER_ROLE_RESULT=$(databricks api post "$ROLES_API_BASE" $PROFILE_FLAG \
-                            --json "{\"name\": \"$CURRENT_USER\", \"identity_type\": \"USER\", \"membership_role\": \"DATABRICKS_SUPERUSER\"}" 2>&1) || true
-                        if echo "$USER_ROLE_RESULT" | grep -q "DATABRICKS_SUPERUSER\|USER"; then
-                            print_success "Lakebase role granted: DATABRICKS_SUPERUSER for $CURRENT_USER"
-                        else
-                            print_warning "Could not grant Lakebase role for $CURRENT_USER"
-                            echo "  Response: $USER_ROLE_RESULT"
-                        fi
-                    fi
-                fi
+                # Grant CAN_USE on Lakebase resource to all workspace users
+                print_step "Granting CAN_USE on Lakebase $PERM_RESOURCE_TYPE to all workspace users..."
+                INSTANCE_PERM_RESULT=$(databricks api patch "/api/2.0/permissions/$PERM_RESOURCE_TYPE/$LAKEBASE_INSTANCE" \
+                    $PROFILE_FLAG \
+                    --json '{"access_control_list": [{"group_name": "users", "permission_level": "CAN_USE"}]}' 2>&1) || true
 
-                if echo "$EXISTING_ROLES" | grep -q "account users"; then
-                    print_warning "Lakebase role already exists for account users"
+                if echo "$INSTANCE_PERM_RESULT" | grep -q "access_control_list\|CAN_USE"; then
+                    print_success "CAN_USE granted on Lakebase for all workspace users"
                 else
-                    ACCT_ROLE_RESULT=$(databricks api post "$ROLES_API_BASE" $PROFILE_FLAG \
-                        --json '{"name": "account users", "identity_type": "GROUP", "membership_role": "DATABRICKS_SUPERUSER", "attributes": {"createdb": true, "createrole": true, "bypassrls": true}}' 2>&1) || true
-                    if echo "$ACCT_ROLE_RESULT" | grep -q "DATABRICKS_SUPERUSER\|GROUP"; then
-                        print_success "Lakebase role granted: DATABRICKS_SUPERUSER for account users (all workspace users)"
-                    else
-                        print_warning "Could not grant Lakebase role for account users"
-                        echo "  Response: $ACCT_ROLE_RESULT"
-                    fi
+                    print_warning "Could not grant CAN_USE on Lakebase"
+                    echo "  Response: $INSTANCE_PERM_RESULT"
                 fi
             fi
-
-            # Grant CAN_USE on Lakebase resource to all workspace users
-            print_step "Granting CAN_USE on Lakebase $PERM_RESOURCE_TYPE to all workspace users..."
-            INSTANCE_PERM_RESULT=$(databricks api patch "/api/2.0/permissions/$PERM_RESOURCE_TYPE/$LAKEBASE_INSTANCE" \
-                $PROFILE_FLAG \
-                --json '{"access_control_list": [{"group_name": "users", "permission_level": "CAN_USE"}]}' 2>&1) || true
-
-            if echo "$INSTANCE_PERM_RESULT" | grep -q "access_control_list\|CAN_USE"; then
-                print_success "CAN_USE granted on Lakebase for all workspace users"
-            else
-                print_warning "Could not grant CAN_USE on Lakebase"
-                echo "  Response: $INSTANCE_PERM_RESULT"
+        else
+            print_step "2b. DBSQL backend - skipping Lakebase database roles"
+            if [[ -n "$SQL_WAREHOUSE_ID" ]]; then
+                print_step "Granting CAN_USE on SQL warehouse to all workspace users..."
+                WH_PERM_RESULT=$(databricks api patch "/api/2.0/permissions/sql/warehouses/$SQL_WAREHOUSE_ID" \
+                    $PROFILE_FLAG \
+                    --json '{"access_control_list": [{"group_name": "users", "permission_level": "CAN_USE"}]}' 2>&1) || true
+                if echo "$WH_PERM_RESULT" | grep -q "access_control_list\|CAN_USE"; then
+                    print_success "CAN_USE granted on SQL warehouse"
+                else
+                    print_warning "Could not grant CAN_USE on SQL warehouse"
+                fi
             fi
         fi
         
@@ -1108,59 +1260,79 @@ fi
 # =============================================================================
 
 if [[ "$SKIP_TABLES" != true ]]; then
-    print_header "STEP 3: Setup Lakebase Tables"
-    
-    # Ensure SERVICE_PRINCIPAL_ID is available (may have been skipped in Step 2)
-    if [[ -z "$SERVICE_PRINCIPAL_ID" ]]; then
-        _APP_INFO=$(databricks apps get "$APP_NAME" $PROFILE_FLAG --output json 2>/dev/null) || true
-        if [[ -n "$_APP_INFO" ]]; then
-            SERVICE_PRINCIPAL_ID=$(echo "$_APP_INFO" | python3 -c "import sys,json; print(json.load(sys.stdin).get('service_principal_client_id',''))" 2>/dev/null) || true
+    if [[ "$DB_BACKEND" == "lakebase" ]]; then
+        print_header "STEP 3: Setup Lakebase Tables"
+        
+        # Ensure SERVICE_PRINCIPAL_ID is available (may have been skipped in Step 2)
+        if [[ -z "$SERVICE_PRINCIPAL_ID" ]]; then
+            _APP_INFO=$(databricks apps get "$APP_NAME" $PROFILE_FLAG --output json 2>/dev/null) || true
+            if [[ -n "$_APP_INFO" ]]; then
+                SERVICE_PRINCIPAL_ID=$(echo "$_APP_INFO" | python3 -c "import sys,json; print(json.load(sys.stdin).get('service_principal_client_id',''))" 2>/dev/null) || true
+            fi
         fi
-    fi
 
-    print_step "Getting Lakebase connection details ($LAKEBASE_MODE mode)..."
-    discover_lakebase_host
-    LAKEBASE_HOST_FROM_INSTANCE="$TARGET_LAKEBASE_HOST"
-    
-    if [[ -n "$LAKEBASE_HOST_FROM_INSTANCE" ]]; then
-        print_success "Instance/Project: $LAKEBASE_INSTANCE"
-        print_success "Host: $LAKEBASE_HOST_FROM_INSTANCE"
-        [[ -n "$ENDPOINT_NAME" ]] && print_success "Endpoint: $ENDPOINT_NAME"
-        print_success "Schema: $LAKEBASE_SCHEMA"
+        print_step "Getting Lakebase connection details ($LAKEBASE_MODE mode)..."
+        discover_lakebase_host
+        LAKEBASE_HOST_FROM_INSTANCE="$TARGET_LAKEBASE_HOST"
+        
+        if [[ -n "$LAKEBASE_HOST_FROM_INSTANCE" ]]; then
+            print_success "Instance/Project: $LAKEBASE_INSTANCE"
+            print_success "Host: $LAKEBASE_HOST_FROM_INSTANCE"
+            [[ -n "$ENDPOINT_NAME" ]] && print_success "Endpoint: $ENDPOINT_NAME"
+            print_success "Schema: $LAKEBASE_SCHEMA"
+        else
+            print_warning "Could not get Lakebase host - using app.yaml fallback"
+        fi
+        
+        echo ""
+        print_step "Running Lakebase table setup..."
+        echo -e "  Target Schema: ${CYAN}$LAKEBASE_SCHEMA${NC}"
+        echo ""
+        
+        export DATABRICKS_HOST="$WORKSPACE_URL"
+        export LAKEBASE_INSTANCE_NAME="$LAKEBASE_INSTANCE"
+        export LAKEBASE_SCHEMA_OVERRIDE="$LAKEBASE_SCHEMA"
+        export APP_NAME="$APP_NAME"
+        export LAKEBASE_MODE="$LAKEBASE_MODE"
+        
+        if [[ -n "$LAKEBASE_HOST_FROM_INSTANCE" ]]; then
+            export LAKEBASE_HOST_OVERRIDE="$LAKEBASE_HOST_FROM_INSTANCE"
+        fi
+        if [[ -n "$ENDPOINT_NAME" ]]; then
+            export ENDPOINT_NAME="$ENDPOINT_NAME"
+        fi
+        if [[ -n "$AUTOSCALING_BRANCH" ]]; then
+            export AUTOSCALING_BRANCH="$AUTOSCALING_BRANCH"
+        fi
+        if [[ -n "$SERVICE_PRINCIPAL_ID" ]]; then
+            export APP_SERVICE_PRINCIPAL_ID="$SERVICE_PRINCIPAL_ID"
+        fi
+        
+        # Run table setup with explicit schema override
+        if ./scripts/setup-lakebase.sh --recreate --yes; then
+            print_success "Lakebase tables created and seeded in schema: $LAKEBASE_SCHEMA"
+        else
+            print_error "Table setup failed"
+            exit 1
+        fi
     else
-        print_warning "Could not get Lakebase host - using app.yaml fallback"
-    fi
-    
-    echo ""
-    print_step "Running Lakebase table setup..."
-    echo -e "  Target Schema: ${CYAN}$LAKEBASE_SCHEMA${NC}"
-    echo ""
-    
-    export DATABRICKS_HOST="$WORKSPACE_URL"
-    export LAKEBASE_INSTANCE_NAME="$LAKEBASE_INSTANCE"
-    export LAKEBASE_SCHEMA_OVERRIDE="$LAKEBASE_SCHEMA"
-    export APP_NAME="$APP_NAME"
-    export LAKEBASE_MODE="$LAKEBASE_MODE"
-    
-    if [[ -n "$LAKEBASE_HOST_FROM_INSTANCE" ]]; then
-        export LAKEBASE_HOST_OVERRIDE="$LAKEBASE_HOST_FROM_INSTANCE"
-    fi
-    if [[ -n "$ENDPOINT_NAME" ]]; then
-        export ENDPOINT_NAME="$ENDPOINT_NAME"
-    fi
-    if [[ -n "$AUTOSCALING_BRANCH" ]]; then
-        export AUTOSCALING_BRANCH="$AUTOSCALING_BRANCH"
-    fi
-    if [[ -n "$SERVICE_PRINCIPAL_ID" ]]; then
-        export APP_SERVICE_PRINCIPAL_ID="$SERVICE_PRINCIPAL_ID"
-    fi
-    
-    # Run table setup with explicit schema override
-    if ./scripts/setup-lakebase.sh --recreate --yes; then
-        print_success "Lakebase tables created and seeded in schema: $LAKEBASE_SCHEMA"
-    else
-        print_error "Table setup failed"
-        exit 1
+        print_header "STEP 3: Setup DBSQL Tables"
+        print_step "Running DBSQL table setup..."
+        echo -e "  Catalog: ${CYAN}${DBSQL_CATALOG}${NC}"
+        echo -e "  Schema:  ${CYAN}${DBSQL_SCHEMA}${NC}"
+        
+        export DBSQL_CATALOG="${DBSQL_CATALOG}"
+        export DBSQL_SCHEMA="${DBSQL_SCHEMA}"
+        export SQL_WAREHOUSE_ID="${SQL_WAREHOUSE_ID:-}"
+        export DBSQL_WAREHOUSE_NAME="${DBSQL_WAREHOUSE_NAME:-vibe-coding-dbsql-warehouse}"
+        [[ -n "${PROFILE:-}" ]] && export DATABRICKS_CONFIG_PROFILE="$PROFILE"
+        
+        if ./scripts/setup-dbsql.sh --recreate --yes; then
+            print_success "DBSQL tables created and seeded in: ${DBSQL_CATALOG}.${DBSQL_SCHEMA}"
+        else
+            print_error "DBSQL table setup failed"
+            exit 1
+        fi
     fi
 fi
 
@@ -1190,13 +1362,22 @@ if [[ "$SKIP_TABLES" != true && "$CODE_ONLY" != true ]]; then
         return 1
     }
 
+    # Determine catalog/schema for tagging
+    if [[ "$DB_BACKEND" == "dbsql" ]]; then
+        TAG_CATALOG="${DBSQL_CATALOG}"
+        TAG_SCHEMA="${DBSQL_SCHEMA}"
+    else
+        TAG_CATALOG="${LAKEBASE_CATALOG}"
+        TAG_SCHEMA="${LAKEBASE_SCHEMA}"
+    fi
+
     # Tag the catalog
-    print_step "Tagging catalog: $LAKEBASE_CATALOG"
+    print_step "Tagging catalog: $TAG_CATALOG"
     CATALOG_TAG_OK=true
     for kv in "project:$TAG_PROJECT" "environment:$TAG_ENVIRONMENT" "managed_by:$TAG_MANAGED_BY" "owner:$TAG_OWNER"; do
         tag_key="${kv%%:*}"
         tag_val="${kv#*:}"
-        if apply_uc_tag "catalogs" "$LAKEBASE_CATALOG" "$tag_key" "$tag_val"; then
+        if apply_uc_tag "catalogs" "$TAG_CATALOG" "$tag_key" "$tag_val"; then
             print_success "  $tag_key=$tag_val"
         else
             print_warning "  Could not apply tag $tag_key to catalog (may not be UC-registered)"
@@ -1207,7 +1388,7 @@ if [[ "$SKIP_TABLES" != true && "$CODE_ONLY" != true ]]; then
 
     # Tag the schema (only if catalog tagging succeeded)
     if [[ "$CATALOG_TAG_OK" == true ]]; then
-        SCHEMA_FQN="${LAKEBASE_CATALOG}.${LAKEBASE_SCHEMA}"
+        SCHEMA_FQN="${TAG_CATALOG}.${TAG_SCHEMA}"
         print_step "Tagging schema: $SCHEMA_FQN"
         for kv in "project:$TAG_PROJECT" "environment:$TAG_ENVIRONMENT" "managed_by:$TAG_MANAGED_BY"; do
             tag_key="${kv%%:*}"
@@ -1222,7 +1403,7 @@ if [[ "$SKIP_TABLES" != true && "$CODE_ONLY" != true ]]; then
         # Tag each table
         TABLES="usecase_descriptions section_input_prompts sessions workshop_parameters saved_usecase_descriptions"
         for table in $TABLES; do
-            TABLE_FQN="${LAKEBASE_CATALOG}.${LAKEBASE_SCHEMA}.${table}"
+            TABLE_FQN="${TAG_CATALOG}.${TAG_SCHEMA}.${table}"
             print_step "Tagging table: $table"
             for kv in "project:$TAG_PROJECT" "managed_by:$TAG_MANAGED_BY" "data_classification:internal"; do
                 tag_key="${kv%%:*}"
@@ -1246,14 +1427,19 @@ fi
 if [[ "$TABLES_ONLY" != true && "$PERMISSIONS_ONLY" != true && "$CODE_ONLY" != true ]]; then
     print_header "STEP 4: Final App Deploy"
 
-    # 4a. Update app.yaml with final Lakebase config
+    # 4a. Update app.yaml with final backend config
     print_step "Verifying app.yaml configuration..."
-    discover_lakebase_host
-    if [[ -n "$TARGET_LAKEBASE_HOST" ]]; then
-        update_app_yaml_lakebase
-        print_success "LAKEBASE_HOST: $TARGET_LAKEBASE_HOST"
-        print_success "LAKEBASE_SCHEMA: $LAKEBASE_SCHEMA"
-        [[ -n "$ENDPOINT_NAME" ]] && print_success "ENDPOINT_NAME: $ENDPOINT_NAME"
+    if [[ "$DB_BACKEND" == "lakebase" ]]; then
+        discover_lakebase_host
+        if [[ -n "$TARGET_LAKEBASE_HOST" ]]; then
+            update_app_yaml_lakebase
+            print_success "LAKEBASE_HOST: $TARGET_LAKEBASE_HOST"
+            print_success "LAKEBASE_SCHEMA: $LAKEBASE_SCHEMA"
+            [[ -n "$ENDPOINT_NAME" ]] && print_success "ENDPOINT_NAME: $ENDPOINT_NAME"
+        fi
+    else
+        update_app_yaml_dbsql
+        print_success "DBSQL warehouse HTTP path set in app.yaml"
     fi
 
     # 4b. Sync config to workspace (LAST bundle deploy -- do not call bundle deploy after this)
@@ -1269,22 +1455,26 @@ if [[ "$TABLES_ONLY" != true && "$PERMISSIONS_ONLY" != true && "$CODE_ONLY" != t
     # - Provisioned: links database instance → auto-injects PGHOST/PGUSER/PGPASSWORD
     # - Autoscaling: skip resource linking (not supported per docs as of Mar 2026);
     #   env vars (LAKEBASE_HOST, ENDPOINT_NAME, DATABRICKS_CLIENT_ID) are set in app.yaml
-    if [[ -n "$LAKEBASE_INSTANCE" ]]; then
-        if [[ "$LAKEBASE_MODE" == "provisioned" ]]; then
-            print_step "  Linking Lakebase instance as app resource..."
-            python3 "$SCRIPT_DIR/lakebase_manager.py" \
-                --action link-app-resource \
-                --app-name "$APP_NAME" \
-                --instance-name "$LAKEBASE_INSTANCE" \
-                --host "$WORKSPACE_URL" \
-                --project-root "$PROJECT_ROOT" \
-                --mode "$LAKEBASE_MODE" || {
-                print_warning "Could not link app resource - may need manual setup"
-            }
-        else
-            print_step "  Autoscaling mode: skipping database resource link (env vars handle auth)"
-            echo -e "  ${BLUE}App will use DATABRICKS_CLIENT_ID + ENDPOINT_NAME for OAuth token rotation${NC}"
+    if [[ "$DB_BACKEND" == "lakebase" ]]; then
+        if [[ -n "$LAKEBASE_INSTANCE" ]]; then
+            if [[ "$LAKEBASE_MODE" == "provisioned" ]]; then
+                print_step "  Linking Lakebase instance as app resource..."
+                python3 "$SCRIPT_DIR/lakebase_manager.py" \
+                    --action link-app-resource \
+                    --app-name "$APP_NAME" \
+                    --instance-name "$LAKEBASE_INSTANCE" \
+                    --host "$WORKSPACE_URL" \
+                    --project-root "$PROJECT_ROOT" \
+                    --mode "$LAKEBASE_MODE" || {
+                    print_warning "Could not link app resource - may need manual setup"
+                }
+            else
+                print_step "  Autoscaling mode: skipping database resource link (env vars handle auth)"
+                echo -e "  ${BLUE}App will use DATABRICKS_CLIENT_ID + ENDPOINT_NAME for OAuth token rotation${NC}"
+            fi
         fi
+    else
+        print_step "DBSQL backend - skipping Lakebase resource link"
     fi
 
     # 4c-ii. Grant CAN_USE on app to all workspace users
@@ -1415,6 +1605,7 @@ if [[ "$TABLES_ONLY" != true && "$PERMISSIONS_ONLY" != true && "$CODE_ONLY" != t
         SERVICE_PRINCIPAL_ID=$(echo "$VERIFY_APP_INFO" | python3 -c "import sys,json; print(json.load(sys.stdin).get('service_principal_client_id',''))" 2>/dev/null) || true
     fi
 
+    if [[ "$DB_BACKEND" == "lakebase" ]]; then
     # Determine API paths based on mode (roles are branch-level for autoscaling)
     if [[ "$LAKEBASE_MODE" == "autoscaling" ]]; then
         VERIFY_PERM_TYPE="database-projects"
@@ -1577,6 +1768,12 @@ except: sys.exit(1)
             --json '{"access_control_list": [{"group_name": "users", "permission_level": "CAN_USE"}]}' 2>/dev/null || true
     fi
 
+    else
+        # DBSQL backend: skip Lakebase checks 1-3
+        print_step "Check 1-3/6: Skipping Lakebase checks (DBSQL backend)"
+        print_success "DBSQL backend -- no Lakebase resource link, roles, or CAN_USE needed"
+    fi
+
     # ── Check 4: App CAN_USE ─────────────────────────────────────────────
     print_step "Check 4/6: App CAN_USE for all workspace users..."
     VERIFY_APP_PERMS=$(databricks api get "/api/2.0/permissions/apps/$APP_NAME" $PROFILE_FLAG 2>/dev/null) || true
@@ -1605,15 +1802,17 @@ except: sys.exit(1)
 
     # ── Check 5: Unity Catalog Permissions ───────────────────────────────
     print_step "Check 5/6: Unity Catalog permissions..."
-    if [[ -n "$SERVICE_PRINCIPAL_ID" && -n "$LAKEBASE_CATALOG" ]]; then
-        VERIFY_UC_PERMS=$(databricks api get "/api/2.1/unity-catalog/permissions/catalog/$LAKEBASE_CATALOG" $PROFILE_FLAG 2>/dev/null) || true
+    VERIFY_CATALOG="${LAKEBASE_CATALOG}"
+    [[ "$DB_BACKEND" == "dbsql" && -n "${DBSQL_CATALOG:-}" ]] && VERIFY_CATALOG="${DBSQL_CATALOG}"
+    if [[ -n "$SERVICE_PRINCIPAL_ID" && -n "$VERIFY_CATALOG" ]]; then
+        VERIFY_UC_PERMS=$(databricks api get "/api/2.1/unity-catalog/permissions/catalog/$VERIFY_CATALOG" $PROFILE_FLAG 2>/dev/null) || true
 
         if echo "$VERIFY_UC_PERMS" | grep -q "$SERVICE_PRINCIPAL_ID"; then
-            print_success "Unity Catalog: service principal has privileges on $LAKEBASE_CATALOG"
+            print_success "Unity Catalog: service principal has privileges on $VERIFY_CATALOG"
         else
             print_warning "Unity Catalog: permissions MISSING -- re-applying..."
             VERIFY_ISSUES=$((VERIFY_ISSUES + 1))
-            databricks api patch "/api/2.1/unity-catalog/permissions/catalog/$LAKEBASE_CATALOG" \
+            databricks api patch "/api/2.1/unity-catalog/permissions/catalog/$VERIFY_CATALOG" \
                 $PROFILE_FLAG \
                 --json "{\"changes\": [{\"principal\": \"$SERVICE_PRINCIPAL_ID\", \"add\": [\"ALL_PRIVILEGES\"]}]}" 2>/dev/null || true
         fi
@@ -1626,9 +1825,9 @@ except: sys.exit(1)
     TAG_STATUS_OK=true
 
     # Verify catalog tags (only if UC-registered)
-    CATALOG_TAGS=$(databricks entity-tag-assignments list "$LAKEBASE_CATALOG" "catalogs" $PROFILE_FLAG --output json 2>/dev/null) || true
+    CATALOG_TAGS=$(databricks entity-tag-assignments list "$VERIFY_CATALOG" "catalogs" $PROFILE_FLAG --output json 2>/dev/null) || true
     if [[ -n "$CATALOG_TAGS" ]] && echo "$CATALOG_TAGS" | grep -q '"project"'; then
-        print_success "Catalog tags: project tag present on $LAKEBASE_CATALOG"
+        print_success "Catalog tags: project tag present on $VERIFY_CATALOG"
     else
         print_warning "Catalog tags: not applied (catalog may not be UC-registered)"
         TAG_STATUS_OK=false
@@ -1697,9 +1896,16 @@ if [[ "$APP_RUNNING" == true ]]; then
     if [[ "$TABLES_ONLY" != true ]]; then
         echo -e "${BOLD}Resources:${NC}"
         echo -e "  App URL:           ${CYAN}$APP_URL${NC}"
-        echo -e "  Lakebase Instance: ${CYAN}$LAKEBASE_INSTANCE${NC}"
-        echo -e "  Catalog:           ${CYAN}$LAKEBASE_CATALOG${NC}"
-        echo -e "  Schema:            ${CYAN}$LAKEBASE_SCHEMA${NC}"
+        if [[ "$DB_BACKEND" == "dbsql" ]]; then
+            echo -e "  Backend:           ${CYAN}DBSQL${NC}"
+            echo -e "  Catalog:           ${CYAN}${DBSQL_CATALOG}${NC}"
+            echo -e "  Schema:            ${CYAN}${DBSQL_SCHEMA}${NC}"
+            echo -e "  Warehouse ID:      ${CYAN}${SQL_WAREHOUSE_ID}${NC}"
+        else
+            echo -e "  Lakebase Instance: ${CYAN}$LAKEBASE_INSTANCE${NC}"
+            echo -e "  Catalog:           ${CYAN}$LAKEBASE_CATALOG${NC}"
+            echo -e "  Schema:            ${CYAN}$LAKEBASE_SCHEMA${NC}"
+        fi
         echo ""
     fi
 
@@ -1721,9 +1927,15 @@ else
     echo ""
     echo -e "${BOLD}Resources deployed:${NC}"
     echo -e "  App URL:           ${CYAN}${APP_URL:-unknown}${NC}"
-    echo -e "  Lakebase Instance: ${CYAN}$LAKEBASE_INSTANCE${NC}"
-    echo -e "  Catalog:           ${CYAN}$LAKEBASE_CATALOG${NC}"
-    echo -e "  Schema:            ${CYAN}$LAKEBASE_SCHEMA${NC}"
+    if [[ "$DB_BACKEND" == "dbsql" ]]; then
+        echo -e "  Backend:           ${CYAN}DBSQL${NC}"
+        echo -e "  Catalog:           ${CYAN}${DBSQL_CATALOG}${NC}"
+        echo -e "  Schema:            ${CYAN}${DBSQL_SCHEMA}${NC}"
+    else
+        echo -e "  Lakebase Instance: ${CYAN}$LAKEBASE_INSTANCE${NC}"
+        echo -e "  Catalog:           ${CYAN}$LAKEBASE_CATALOG${NC}"
+        echo -e "  Schema:            ${CYAN}$LAKEBASE_SCHEMA${NC}"
+    fi
     echo ""
     echo -e "${BOLD}Troubleshooting:${NC}"
     echo -e "  Check app status:     ${BLUE}databricks apps get $APP_NAME${NC}"

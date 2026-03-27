@@ -73,6 +73,24 @@ env:
   - name: USE_LAKEBASE
     value: "true"
 
+  # ---------------------------------------------------------------------------
+  # Database Backend Selection
+  # ---------------------------------------------------------------------------
+  - name: DB_BACKEND
+    value: "__DB_BACKEND__"
+
+  # ---------------------------------------------------------------------------
+  # DBSQL Configuration (only used when DB_BACKEND=dbsql)
+  # ---------------------------------------------------------------------------
+  # __IF_DBSQL__
+  - name: LAKEHOUSE_CATALOG
+    value: "__DBSQL_CATALOG__"
+  - name: LAKEHOUSE_SCHEMA
+    value: "__DBSQL_SCHEMA__"
+  - name: DATABRICKS_SQL_WAREHOUSE_HTTP_PATH
+    value: "__DBSQL_WAREHOUSE_HTTP_PATH__"
+  # __ENDIF_DBSQL__
+
 # Health check endpoint
 health_check:
   path: /health

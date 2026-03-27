@@ -73,6 +73,7 @@ export interface AllData {
   workflow_steps: WorkflowStep[];
   prerequisites: Prerequisite[];
   disabled_steps?: string[];
+  db_backend?: 'lakebase' | 'dbsql';
 }
 
 // ============== Configuration Management Types ==============

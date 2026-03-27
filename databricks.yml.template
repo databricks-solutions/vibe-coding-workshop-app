@@ -40,6 +40,17 @@ variables:
     description: "Databricks App name"
     default: "__APP_NAME__"
 
+  # DBSQL variables (when DB_BACKEND=dbsql)
+  dbsql_catalog:
+    description: "Unity Catalog name for DBSQL tables"
+    default: "__DBSQL_CATALOG__"
+  dbsql_schema:
+    description: "Schema name for DBSQL tables"
+    default: "__DBSQL_SCHEMA__"
+  sql_warehouse_id:
+    description: "SQL Warehouse ID for DBSQL"
+    default: "__SQL_WAREHOUSE_ID__"
+
 # =============================================================================
 # Targets
 # =============================================================================
@@ -61,6 +72,9 @@ targets:
       lakebase_catalog: "__LAKEBASE_CATALOG__"
       lakebase_schema: "__LAKEBASE_SCHEMA__"
       app_name: "__APP_NAME__"
+      dbsql_catalog: "__DBSQL_CATALOG__"
+      dbsql_schema: "__DBSQL_SCHEMA__"
+      sql_warehouse_id: "__SQL_WAREHOUSE_ID__"
 
 # =============================================================================
 # Resources
