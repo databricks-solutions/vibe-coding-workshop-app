@@ -62,22 +62,6 @@
 
 ---
 
-## Cost to Run
-
-Running the workshop costs **under $300/month** with the app up 24/7 — and significantly less with default settings and typical usage.
-
-| Component | What It Uses | Approximate Cost |
-|-----------|-------------|-----------------|
-| **Databricks App** | Medium compute (0.5 DBU/hr), always-on | Largest steady-state cost |
-| **Lakebase** (Autoscaling) | 0.5–2 CU default; scales to zero on idle | Minimal at default 0.5 CU min |
-| **Foundation Model API** | Pay-per-token (Claude Sonnet); only charged when generating prompts | A few dollars for typical workshop usage |
-
-Actual dollar costs depend on your cloud provider, pricing tier, and DBU rate. See [Databricks Pricing](https://www.databricks.com/product/pricing) for current rates.
-
-> **Tip:** To minimize cost, stop the app when not in use (`databricks apps stop <app-name>`) and keep the default Lakebase autoscaling minimum at 0.5 CU.
-
----
-
 ## Quick Start
 
 ### Prerequisites
@@ -210,6 +194,49 @@ Deploy changes: `./vibe2value deploy`
 
 ---
 
+## Cost to Run
+
+Running the workshop costs **under $300/month** with the app up 24/7 — and significantly less with default settings and typical usage.
+
+| Component | What It Uses | Approximate Cost |
+|-----------|-------------|-----------------|
+| **Databricks App** | Medium compute (0.5 DBU/hr), always-on | Largest steady-state cost |
+| **Lakebase** (Autoscaling) | 0.5–2 CU default; scales to zero on idle | Minimal at default 0.5 CU min |
+| **Foundation Model API** | Pay-per-token (Claude Sonnet); only charged when generating prompts | A few dollars for typical workshop usage |
+
+Actual dollar costs depend on your cloud provider, pricing tier, and DBU rate. See [Databricks Pricing](https://www.databricks.com/product/pricing) for current rates.
+
+> **Tip:** To minimize cost, stop the app when not in use (`databricks apps stop <app-name>`) and keep the default Lakebase autoscaling minimum at 0.5 CU.
+
+---
+
 ## License
 
-Internal use — Databricks Field Engineering
+(c) 2026 Databricks, Inc. All rights reserved.
+
+The source in this project is provided subject to the [Databricks License](https://databricks.com/db-license-source). See [LICENSE.md](LICENSE.md) for details.
+
+<details>
+<summary>Third-Party Licenses</summary>
+
+| Package | Version | License | Project URL |
+|---------|---------|---------|-------------|
+| [fastapi](https://github.com/fastapi/fastapi) | ≥0.109.0 | MIT | https://github.com/fastapi/fastapi |
+| [uvicorn](https://github.com/encode/uvicorn) | ≥0.27.0 | BSD-3-Clause | https://github.com/encode/uvicorn |
+| [pydantic](https://github.com/pydantic/pydantic) | ≥2.5.0 | MIT | https://github.com/pydantic/pydantic |
+| [httpx](https://github.com/encode/httpx) | ≥0.26.0 | BSD-3-Clause | https://github.com/encode/httpx |
+| [requests](https://github.com/psf/requests) | ≥2.31.0 | Apache-2.0 | https://github.com/psf/requests |
+| [pyyaml](https://github.com/yaml/pyyaml) | ≥6.0.0 | MIT | https://github.com/yaml/pyyaml |
+| [databricks-sdk](https://github.com/databricks/databricks-sdk-py) | ≥0.81.0 | Apache-2.0 | https://github.com/databricks/databricks-sdk-py |
+| [psycopg](https://github.com/psycopg/psycopg) | ≥3.1.0 | LGPL-3.0 | https://github.com/psycopg/psycopg |
+| [psycopg2-binary](https://github.com/psycopg/psycopg2) | ≥2.9.0 | LGPL-3.0 | https://github.com/psycopg/psycopg2 |
+| [PyMuPDF](https://github.com/pymupdf/PyMuPDF) | ≥1.25.0 | AGPL-3.0 | https://github.com/pymupdf/PyMuPDF |
+| [react](https://github.com/facebook/react) | ≥19.2.0 | MIT | https://github.com/facebook/react |
+| [react-dom](https://github.com/facebook/react) | ≥19.2.0 | MIT | https://github.com/facebook/react |
+| [react-markdown](https://github.com/remarkjs/react-markdown) | ≥10.1.0 | MIT | https://github.com/remarkjs/react-markdown |
+| [react-router-dom](https://github.com/remix-run/react-router) | ≥7.13.0 | MIT | https://github.com/remix-run/react-router |
+| [tailwindcss](https://github.com/tailwindlabs/tailwindcss) | ≥4.1.18 | MIT | https://github.com/tailwindlabs/tailwindcss |
+| [typescript](https://github.com/microsoft/TypeScript) | ~5.9.3 | Apache-2.0 | https://github.com/microsoft/TypeScript |
+| [vite](https://github.com/vitejs/vite) | ≥7.2.4 | MIT | https://github.com/vitejs/vite |
+
+</details>
