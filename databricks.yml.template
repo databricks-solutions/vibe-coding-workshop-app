@@ -125,6 +125,7 @@ sync:
     - "requirements.txt"
     - "scripts/**"
     - "db/**"
+    - "VERSION"
   exclude:
     - "node_modules/**"
     - "__pycache__/**"

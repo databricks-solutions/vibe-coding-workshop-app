@@ -242,8 +242,12 @@ def get_workspace_client() -> Optional['WorkspaceClient']:
             # The SDK automatically detects the environment:
             # - In Databricks Apps: Uses app's OAuth credentials (no token needed)
             # - In local dev: Uses ~/.databrickscfg or environment variables
-            _workspace_client = WorkspaceClient()
-            logger.info("Databricks WorkspaceClient initialized")
+            from src.backend.identity import PRODUCT_NAME, PRODUCT_VERSION
+            _workspace_client = WorkspaceClient(
+                product=PRODUCT_NAME,
+                product_version=PRODUCT_VERSION,
+            )
+            logger.info("Databricks WorkspaceClient initialized (UA: %s/%s)", PRODUCT_NAME, PRODUCT_VERSION)
         except Exception as e:
             logger.warning(f"Could not initialize WorkspaceClient: {e}")
             import traceback
@@ -1780,6 +1784,9 @@ async def _stream_with_retry(
     timeout: float = 120.0,
     flush_chars: int = 100,
     flush_interval: float = 0.05,
+    section_tag: Optional[str] = None,
+    industry: Optional[str] = None,
+    use_case: Optional[str] = None,
 ) -> AsyncGenerator[str, None]:
     """
     Stream LLM response as SSE events with automatic retry on transient errors.
@@ -1795,6 +1802,7 @@ async def _stream_with_retry(
     start flowing, any failure is final (retrying would produce duplicates).
     """
     import httpx
+    from src.backend.identity import build_user_agent
 
     client = get_workspace_client()
     endpoint = get_best_available_endpoint()
@@ -1814,13 +1822,15 @@ async def _stream_with_retry(
     workspace_host = client.config.host.rstrip("/")
     url = f"{workspace_host}/serving-endpoints/{endpoint}/invocations"
 
+    ua = build_user_agent(section_tag=section_tag, industry=industry, use_case=use_case)
+
     yield _sse_event({"type": "start", "model": endpoint})
 
     last_error_msg = ""
 
     async with httpx.AsyncClient(timeout=timeout) as http_client:
         for attempt in range(1, _MAX_RETRIES + 1):
-            headers: Dict[str, str] = {"Content-Type": "application/json"}
+            headers: Dict[str, str] = {"Content-Type": "application/json", "User-Agent": ua}
             try:
                 auth_header = client.config.authenticate()
                 if auth_header:
@@ -1956,7 +1966,10 @@ async def stream_llm_response(
         {"role": "user", "content": f"Generate a detailed prompt based on: {input_text}"}
     ]
 
-    async for event in _stream_with_retry(messages, max_tokens=4000, temperature=0.5):
+    async for event in _stream_with_retry(
+        messages, max_tokens=4000, temperature=0.5,
+        section_tag=section_tag, industry=industry, use_case=use_case,
+    ):
         yield event
 
 
