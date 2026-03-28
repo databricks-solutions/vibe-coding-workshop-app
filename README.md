@@ -1,14 +1,14 @@
 <div align="center">
   <h1>Vibe to Value</h1>
   <h3>Vibe Coding Workshop</h3>
-  <p>An interactive workshop where participants can define their intent and build production-ready data applications grounded by agent skills, deployed using Vibe coding best practices.</p>
+  <p>An interactive workshop where participants can define their intent and build production-ready data applications grounded by <a href="https://agentskills.io/home">agent skills</a>, deployed using Vibe coding best practices.</p>
 </div>
 
 ### 3 Key Learnings
 
 1. **How to vibe code with intent** — fast, structured, and repeatable
 2. **Take an idea through the full lifecycle in a gamified, engaging experience** — from defining the concept to building, deploying, and iterating on a real solution.
-3. **How to apply Databricks best practices through embedded agent skills,** ensuring that AI-generated code stays governed, trusted, and production-ready.
+3. **How to apply Databricks best practices through embedded [agent skills](https://agentskills.io/home),** ensuring that AI-generated code stays governed, trusted, and production-ready.
 
 <div align="center">
   <p>
