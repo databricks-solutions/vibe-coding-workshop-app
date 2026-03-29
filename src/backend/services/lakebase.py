@@ -88,11 +88,8 @@ def _is_autoscaling_mode() -> bool:
 def _get_workspace_client() -> "WorkspaceClient":
     global _workspace_client
     if _workspace_client is None:
-        from src.backend.identity import PRODUCT_NAME, PRODUCT_VERSION
-        _workspace_client = WorkspaceClient(
-            product=PRODUCT_NAME,
-            product_version=PRODUCT_VERSION,
-        )
+        from src.backend.identity import get_tagged_workspace_client
+        _workspace_client = get_tagged_workspace_client()
     return _workspace_client
 
 

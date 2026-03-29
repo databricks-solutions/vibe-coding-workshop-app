@@ -239,14 +239,8 @@ def get_workspace_client() -> Optional['WorkspaceClient']:
     global _workspace_client
     if _workspace_client is None and DATABRICKS_SDK_AVAILABLE:
         try:
-            # The SDK automatically detects the environment:
-            # - In Databricks Apps: Uses app's OAuth credentials (no token needed)
-            # - In local dev: Uses ~/.databrickscfg or environment variables
-            from src.backend.identity import PRODUCT_NAME, PRODUCT_VERSION
-            _workspace_client = WorkspaceClient(
-                product=PRODUCT_NAME,
-                product_version=PRODUCT_VERSION,
-            )
+            from src.backend.identity import get_tagged_workspace_client, PRODUCT_NAME, PRODUCT_VERSION
+            _workspace_client = get_tagged_workspace_client()
             logger.info("Databricks WorkspaceClient initialized (UA: %s/%s)", PRODUCT_NAME, PRODUCT_VERSION)
         except Exception as e:
             logger.warning(f"Could not initialize WorkspaceClient: {e}")
@@ -1309,9 +1303,13 @@ async def call_databricks_serving_endpoint(
         
         # Build payload for OpenAI-compatible endpoint
         # Note: gpt-5-mini doesn't support temperature parameter
+        from src.backend.identity import build_usage_context
         openai_request_body = {
             "messages": messages,
             "max_tokens": max_tokens,
+            "extra_params": {
+                "usage_context": build_usage_context(),
+            },
         }
         # Only add temperature if not using gpt-5-mini (which only supports default temp)
         if "mini" not in endpoint.lower():
@@ -1802,7 +1800,7 @@ async def _stream_with_retry(
     start flowing, any failure is final (retrying would produce duplicates).
     """
     import httpx
-    from src.backend.identity import build_user_agent
+    from src.backend.identity import build_user_agent, build_usage_context
 
     client = get_workspace_client()
     endpoint = get_best_available_endpoint()
@@ -1815,6 +1813,11 @@ async def _stream_with_retry(
         "messages": messages,
         "max_tokens": max_tokens,
         "stream": True,
+        "extra_params": {
+            "usage_context": build_usage_context(
+                section_tag=section_tag, industry=industry, use_case=use_case,
+            ),
+        },
     }
     if "mini" not in endpoint.lower():
         request_body["temperature"] = temperature

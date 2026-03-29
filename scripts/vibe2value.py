@@ -21,6 +21,13 @@ from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 CONFIG_PATH = PROJECT_ROOT / "user-config.yaml"
+
+# Tag all Databricks CLI calls with the workshop identity for centralized tracking
+_version_file = PROJECT_ROOT / "VERSION"
+os.environ.setdefault(
+    "DATABRICKS_USER_AGENT_EXTRA",
+    f"vibe-to-value-workshop/{_version_file.read_text().strip() if _version_file.is_file() else '0.0.0'}",
+)
 TEMPLATES = {
     "app.yaml": PROJECT_ROOT / "app.yaml.template",
     "databricks.yml": PROJECT_ROOT / "databricks.yml.template",

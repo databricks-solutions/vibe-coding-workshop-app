@@ -65,6 +65,11 @@ PROJECT_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 SCRIPT_DIR="$PROJECT_ROOT/scripts"
 cd "$PROJECT_ROOT"
 
+# Tag all Databricks CLI calls with the workshop identity so installs/deploys
+# are attributable via the User-Agent in centralized audit + HTTP access logs.
+VERSION=$(cat "$PROJECT_ROOT/VERSION" 2>/dev/null || echo "0.0.0")
+export DATABRICKS_USER_AGENT_EXTRA="vibe-to-value-workshop/${VERSION}"
+
 # Default configuration
 TARGET="user"
 SKIP_TABLES=false
