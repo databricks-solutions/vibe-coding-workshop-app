@@ -428,6 +428,15 @@ echo -e "Catalog:      ${BLUE}$LAKEBASE_CATALOG${NC}"
 echo -e "Schema:       ${BLUE}$LAKEBASE_SCHEMA${NC}"
 echo ""
 
+# Validate resource names before proceeding
+APP_NAME_LEN=${#APP_NAME}
+if [[ $APP_NAME_LEN -lt 2 || $APP_NAME_LEN -gt 30 ]]; then
+    print_error "App name must be 2-30 characters (got $APP_NAME_LEN: '$APP_NAME')"
+    echo -e "  Databricks Apps enforces a 30-character limit on app names."
+    echo -e "  Fix in ${CYAN}user-config.yaml${NC} under ${CYAN}app.name${NC}, then re-run."
+    exit 1
+fi
+
 # Check databricks CLI authentication
 print_step "Checking Databricks CLI authentication..."
 if ! databricks $PROFILE_FLAG current-user me &>/dev/null; then
@@ -652,7 +661,7 @@ discover_all_branches() {
     ALL_BRANCHES=()
     if [[ "$LAKEBASE_MODE" != "autoscaling" ]]; then return; fi
     local json
-    json=$(databricks postgres list-branches "projects/$LAKEBASE_INSTANCE" $PROFILE_FLAG --output json 2>/dev/null) || return
+    json=$(databricks postgres list-branches "projects/$LAKEBASE_INSTANCE" $PROFILE_FLAG --output json 2>/dev/null) || return 0
     while IFS= read -r name; do
         [[ -n "$name" ]] && ALL_BRANCHES+=("$name")
     done < <(echo "$json" | python3 -c "

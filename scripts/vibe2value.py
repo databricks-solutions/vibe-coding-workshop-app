@@ -355,7 +355,15 @@ def cmd_install(args):
         "max_cu": existing_config.get("lakebase", {}).get("max_cu", "2"),
     }
 
-    app_name = input(f"  App name [{defaults['app_name']}]: ").strip() or defaults["app_name"]
+    while True:
+        app_name = input(f"  App name [{defaults['app_name']}]: ").strip() or defaults["app_name"]
+        if len(app_name) < 2 or len(app_name) > 30:
+            print(f"  [error] App name must be 2-30 characters (got {len(app_name)}). Please try again.")
+            continue
+        if not all(c.isalnum() or c == '-' for c in app_name):
+            print("  [error] App name can only contain letters, numbers, and hyphens. Please try again.")
+            continue
+        break
 
     # Lakebase mode selection
     default_mode = defaults["lakebase_mode"]
