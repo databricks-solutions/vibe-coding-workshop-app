@@ -177,7 +177,7 @@ export default function App() {
 
         // Restore workshop level — use-case lock takes precedence over saved value
         const restoredLevel = restoredLock ?? normalizeLevel(response.workshop_level || 'end-to-end');
-        setWorkshopLevel(restoredLevel);
+        setWorkshopLevel(!restoredLock && restoredLevel === 'skills-accelerator' ? 'end-to-end' : restoredLevel);
         
         // Restore completed steps and skipped steps
         const completedStepsArray: number[] = response.completed_steps || [];
@@ -204,7 +204,7 @@ export default function App() {
         const nextStep = getNextIncompleteStep(Array.from(restoredCompleted), skippedStepsArray, restoredLevel);
         setInitialExpandedStep(nextStep);
         
-        window.history.replaceState({}, '', `?sessionId=${response.session_id}`);
+        window.history.replaceState({}, '', `?sessionId=${response.session_id}${window.location.hash}`);
       }
       // Trigger fade-out animation
       finishSessionLoading();
@@ -216,7 +216,7 @@ export default function App() {
       setSessionId(localSessionId);
       setSessionSaved(false);
       setInitialExpandedStep(1);
-      window.history.replaceState({}, '', `?sessionId=${localSessionId}`);
+      window.history.replaceState({}, '', `?sessionId=${localSessionId}${window.location.hash}`);
       // Still finish loading even on error
       finishSessionLoading();
     }
@@ -314,7 +314,7 @@ export default function App() {
 
         // Restore workshop level — use-case lock takes precedence over saved value
         const loadedLevel = loadedLock ?? normalizeLevel(response.workshop_level || 'end-to-end');
-        setWorkshopLevel(loadedLevel);
+        setWorkshopLevel(!loadedLock && loadedLevel === 'skills-accelerator' ? 'end-to-end' : loadedLevel);
         
         // Restore custom use case overrides from session_parameters
         const sessionParams = response.session_parameters || {};
@@ -546,6 +546,23 @@ export default function App() {
       setHintDismissed(true);
     }
   }, [isConfigPage]);
+
+  // Hash link: expand + scroll to a section (e.g. #path-architecture-section)
+  useEffect(() => {
+    if (isSessionLoading || !window.location.hash) return;
+    const id = window.location.hash.slice(1);
+    const timer = setTimeout(() => {
+      const el = document.getElementById(id);
+      if (!el) return;
+      const btn = el.querySelector<HTMLButtonElement>(':scope > button, :scope > div > button');
+      if (btn) {
+        const collapsed = el.querySelector('[class*="max-h-0"]');
+        if (collapsed) btn.click();
+      }
+      setTimeout(() => el.scrollIntoView({ behavior: 'smooth', block: 'start' }), 300);
+    }, 800);
+    return () => clearTimeout(timer);
+  }, [isSessionLoading]);
 
   return (
     <div className="min-h-screen flex bg-background">
@@ -906,6 +923,7 @@ export default function App() {
                         handleWorkshopLevelChange(lockLevel, true);
                       } else {
                         setUseCaseLockedLevel(null);
+                        if (workshopLevel === 'skills-accelerator') handleWorkshopLevelChange('end-to-end', true);
                       }
                       // Auto-save use case selection to session
                       if (sessionId) {

@@ -3,6 +3,7 @@ import { ChevronDown, Map, ArrowRight } from 'lucide-react';
 import { LevelSelectorContent, BUTTON_LABELS } from './LevelSelector';
 import { ArchitectureDiagramContent } from './ArchitectureDiagram';
 import { BorderBeamButton } from './BorderBeamButton';
+import { CopyLinkButton } from './CopyLinkButton';
 import type { WorkshopLevel } from '../constants/workflowSections';
 
 interface PathAndArchitectureProps {
@@ -63,6 +64,8 @@ export function PathAndArchitecture({
             {BUTTON_LABELS[selectedLevel]}
           </span>
         )}
+
+        <CopyLinkButton sectionId="path-architecture-section" />
 
         <span className="inline-flex items-center gap-1 text-[11px] font-medium text-muted-foreground border border-border rounded-full px-2.5 py-1 bg-secondary/40 group-hover:bg-secondary group-hover:text-foreground transition-colors">
           <ChevronDown className={`w-3 h-3 transition-transform duration-200 ${isExpanded ? 'rotate-180' : ''}`} />
