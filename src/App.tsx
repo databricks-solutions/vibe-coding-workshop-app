@@ -560,7 +560,7 @@ export default function App() {
                   <Zap className="w-4 h-4 text-white" />
                 </div>
                 <div className="min-w-0">
-                  <h1 className="font-semibold text-sidebar-foreground text-[13px] tracking-tight whitespace-nowrap">V2V: Vibe-2-Value</h1>
+                  <h1 className="font-semibold text-sidebar-foreground text-[13px] tracking-tight whitespace-nowrap">V2V: Vibe-to-Value</h1>
                   <p className="text-[10px] text-muted-foreground whitespace-nowrap">Vibe Coding Workshop</p>
                 </div>
               </div>
@@ -612,7 +612,7 @@ export default function App() {
               </div>
               {!sidebarCollapsed && (
                 <div className="min-w-0">
-                  <h1 className="font-semibold text-sidebar-foreground text-[13px] tracking-tight whitespace-nowrap">V2V: Vibe-2-Value</h1>
+                  <h1 className="font-semibold text-sidebar-foreground text-[13px] tracking-tight whitespace-nowrap">V2V: Vibe-to-Value</h1>
                   <p className="text-[10px] text-muted-foreground whitespace-nowrap">Vibe Coding Workshop</p>
                 </div>
               )}
@@ -837,7 +837,7 @@ export default function App() {
                       <Menu className="w-5 h-5" />
                     </button>
                     <div className="min-w-0">
-                      <h1 className="text-[15px] sm:text-[17px] font-semibold text-foreground tracking-tight truncate">V2V: Vibe-2-Value - Vibe Coding Workshop</h1>
+                      <h1 className="text-[15px] sm:text-[17px] font-semibold text-foreground tracking-tight truncate">V2V: Vibe-to-Value - Vibe Coding Workshop</h1>
                       <p className="hidden sm:block text-[12px] text-muted-foreground">Turning ideas into measurable business outcomes faster with reusable patterns, and guided best practices</p>
                     </div>
                   </div>
