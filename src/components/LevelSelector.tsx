@@ -151,7 +151,6 @@ function LevelSelectorGrid({
 
   const isButtonDisabled = (level: WorkshopLevel): boolean => {
     if (useCaseLockedLevel && level !== useCaseLockedLevel) return true;
-    if (level === 'skills-accelerator' && useCaseLockedLevel !== 'skills-accelerator') return true;
     if (!hasStartedWorkflow) return false;
 
     if (activeChain) {
