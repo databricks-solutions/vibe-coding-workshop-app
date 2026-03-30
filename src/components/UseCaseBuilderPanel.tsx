@@ -28,6 +28,7 @@ import {
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { DiffView } from './DiffView';
+import { ExpandableErrorBanner } from './ExpandableErrorBanner';
 import { useSpeechToText } from '../hooks/useSpeechToText';
 import type { UseCaseBuilderState } from '../hooks/useUseCaseBuilder';
 
@@ -36,6 +37,8 @@ interface UseCaseBuilderPanelProps {
   compact?: boolean;
   /** When true, hide the Save button (e.g. in Step 1 where saving isn't needed) */
   hideSave?: boolean;
+  /** When true, hide the industry dropdown (e.g. when industry is pre-determined by config page) */
+  hideIndustry?: boolean;
   /** Callback fired after a successful save, so the parent can refresh lists */
   onSaved?: () => void;
 }
@@ -143,6 +146,7 @@ export function UseCaseBuilderPanel({
   builder: b,
   compact = false,
   hideSave = false,
+  hideIndustry = false,
   onSaved,
 }: UseCaseBuilderPanelProps) {
   const imgSize = compact ? 'w-10 h-10' : 'w-16 h-16';
@@ -171,22 +175,24 @@ export function UseCaseBuilderPanel({
             Describe Your Use Case
           </h2>
 
-          {/* Industry dropdown */}
-          <div>
-            <label className="block text-[11px] font-medium text-muted-foreground mb-1.5 uppercase tracking-wider">
-              Industry
-            </label>
-            <select
-              value={b.industry}
-              onChange={(e) => b.setIndustry(e.target.value)}
-              className={`w-full bg-background border border-border rounded-lg px-3 ${compact ? 'py-1.5 text-[12px]' : 'py-2 text-[13px]'} text-foreground focus:outline-none focus:ring-1 focus:ring-primary/50 focus:border-primary/50 transition-colors`}
-            >
-              <option value="">Select an industry...</option>
-              {INDUSTRY_OPTIONS.map((opt) => (
-                <option key={opt} value={opt}>{opt}</option>
-              ))}
-            </select>
-          </div>
+          {/* Industry dropdown (hidden when industry is pre-determined by parent) */}
+          {!hideIndustry && (
+            <div>
+              <label className="block text-[11px] font-medium text-muted-foreground mb-1.5 uppercase tracking-wider">
+                Industry
+              </label>
+              <select
+                value={b.industry}
+                onChange={(e) => b.setIndustry(e.target.value)}
+                className={`w-full bg-background border border-border rounded-lg px-3 ${compact ? 'py-1.5 text-[12px]' : 'py-2 text-[13px]'} text-foreground focus:outline-none focus:ring-1 focus:ring-primary/50 focus:border-primary/50 transition-colors`}
+              >
+                <option value="">Select an industry...</option>
+                {INDUSTRY_OPTIONS.map((opt) => (
+                  <option key={opt} value={opt}>{opt}</option>
+                ))}
+              </select>
+            </div>
+          )}
 
           {/* Use case name */}
           <div>
@@ -489,10 +495,11 @@ export function UseCaseBuilderPanel({
           )}
           {/* Error */}
           {!b.isStreaming && b.error && (
-            <div className="flex items-center gap-2 mb-3 px-3 py-2 bg-red-900/30 border border-red-700/50 rounded-lg text-red-300 text-[12px]">
-              <div className="w-1.5 h-1.5 rounded-full bg-red-400 shrink-0" />
-              <span>Generation failed &mdash; click <strong>Generate</strong> to try again</span>
-            </div>
+            <ExpandableErrorBanner
+              error={b.error}
+              summary={<>Generation failed &mdash; click <strong>Generate</strong> to try again</>}
+              className="mb-3"
+            />
           )}
 
           {/* Output area */}

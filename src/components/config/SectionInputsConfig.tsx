@@ -14,6 +14,7 @@ import { apiClient } from '../../api/client';
 import type { SectionInput, ConfigVersionInfo, ImageMetadata } from '../../api/client';
 import { ImageGallery } from '../ImageGallery';
 import { WORKFLOW_SECTIONS } from '../../constants/workflowSections';
+import { ExpandableErrorBanner } from '../ExpandableErrorBanner';
 
 // Styled markdown components for nice rendering (dark theme)
 const markdownComponents = {
@@ -892,10 +893,11 @@ export function SectionInputsConfig({ onToast }: SectionInputsConfigProps) {
                     </div>
                   )}
                   {!isTestRunning && testError && (
-                    <div className="mb-3 p-3 bg-red-900/30 border border-red-700/50 rounded-lg flex items-center gap-2">
-                      <div className="w-1.5 h-1.5 rounded-full bg-red-400 shrink-0" />
-                      <span className="text-sm text-red-300">Test failed &mdash; click <strong>Test</strong> to try again</span>
-                    </div>
+                    <ExpandableErrorBanner
+                      error={testError}
+                      summary={<>Test failed &mdash; click <strong>Test</strong> to try again</>}
+                      className="mb-3"
+                    />
                   )}
                   
                   {testOutput ? (

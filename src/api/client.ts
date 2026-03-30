@@ -144,6 +144,7 @@ export interface UseCaseCreateRequest {
   industry: string;
   use_case: string;
   use_case_label: string;
+  prompt_template?: string;
 }
 
 export interface PromptConfigCreateRequest {

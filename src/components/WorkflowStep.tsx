@@ -13,6 +13,7 @@ import { VerificationLinks } from './VerificationLinks';
 import { SkillBlueprintTab, SkillBlueprintFullScreenModal } from './SkillBlueprintTab';
 import { useSkillBlueprint } from '../hooks/useSkillBlueprint';
 import { BorderBeamButton } from './BorderBeamButton';
+import { ExpandableErrorBanner } from './ExpandableErrorBanner';
 
 interface WorkflowStepProps {
   icon: ReactNode;
@@ -447,10 +448,11 @@ export function WorkflowStep({
           )}
           {/* Error message */}
           {!isStreaming && promptError && (
-            <div className="mt-3 p-2.5 bg-red-900/30 border border-red-700/50 rounded text-red-300 text-[13px] flex items-center gap-2">
-              <div className="w-1.5 h-1.5 rounded-full bg-red-400 shrink-0" />
-              <span>Generation failed &mdash; click <strong>Re-generate</strong> to try again</span>
-            </div>
+            <ExpandableErrorBanner
+              error={promptError}
+              summary={<>Generation failed &mdash; click <strong>Re-generate</strong> to try again</>}
+              className="mt-3"
+            />
           )}
 
       {showGeneratedPrompt && (isStreaming || streamedPrompt || generatedContent) && (

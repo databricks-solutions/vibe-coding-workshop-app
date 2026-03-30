@@ -488,6 +488,7 @@ class UseCaseCreate(BaseModel):
     industry: str = Field(..., min_length=1, description="Parent industry identifier")
     use_case: str = Field(..., min_length=1, description="Use case identifier (lowercase, no spaces)")
     use_case_label: str = Field(..., min_length=1, description="Display label for the use case")
+    prompt_template: Optional[str] = Field(default="", description="Initial use case description (from builder)")
 
 
 class ConfigVersionInfo(BaseModel):
@@ -1302,17 +1303,17 @@ async def call_databricks_serving_endpoint(
         last_error = None
         
         # Build payload for OpenAI-compatible endpoint
-        # Note: gpt-5-mini doesn't support temperature parameter
         from src.backend.identity import build_usage_context
-        openai_request_body = {
+        openai_request_body: Dict[str, Any] = {
             "messages": messages,
             "max_tokens": max_tokens,
-            "extra_params": {
-                "usage_context": build_usage_context(),
-            },
         }
-        # Only add temperature if not using gpt-5-mini (which only supports default temp)
-        if "mini" not in endpoint.lower():
+        ep_lower = endpoint.lower()
+        if "claude" not in ep_lower:
+            openai_request_body["extra_params"] = {
+                "usage_context": build_usage_context(),
+            }
+        if "mini" not in ep_lower:
             openai_request_body["temperature"] = temperature
         
         
@@ -1813,13 +1814,15 @@ async def _stream_with_retry(
         "messages": messages,
         "max_tokens": max_tokens,
         "stream": True,
-        "extra_params": {
+    }
+    ep_lower = endpoint.lower()
+    if "claude" not in ep_lower:
+        request_body["extra_params"] = {
             "usage_context": build_usage_context(
                 section_tag=section_tag, industry=industry, use_case=use_case,
             ),
-        },
-    }
-    if "mini" not in endpoint.lower():
+        }
+    if "mini" not in ep_lower:
         request_body["temperature"] = temperature
 
     workspace_host = client.config.host.rstrip("/")
@@ -1845,8 +1848,9 @@ async def _stream_with_retry(
                 async with http_client.stream("POST", url, json=request_body, headers=headers) as response:
                     if response.status_code != 200:
                         error_body = await response.aread()
-                        err_msg = error_body.decode()[:200] if error_body else "Unknown error"
+                        err_msg = error_body.decode()[:500] if error_body else "Unknown error"
                         last_error_msg = f"HTTP {response.status_code}: {err_msg}"
+                        logger.error(f"[LLM Stream] {endpoint} returned {response.status_code}: {err_msg}")
 
                         if response.status_code in _RETRYABLE_STATUS_CODES and attempt < _MAX_RETRIES:
                             delay = _BASE_DELAY * (2 ** (attempt - 1))
@@ -2682,7 +2686,7 @@ async def add_use_case(request: UseCaseCreate) -> Dict[str, Any]:
         industry_label=industry_label,
         use_case=request.use_case,
         use_case_label=request.use_case_label,
-        prompt_template=""
+        prompt_template=request.prompt_template or ""
     )
     
     await create_prompt_config(config)

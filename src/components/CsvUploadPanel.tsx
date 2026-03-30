@@ -5,6 +5,7 @@ import { MarkdownContent, type MarkdownContentRef } from './MarkdownContent';
 import { CopyButton } from './CopyButton';
 import { ExpandableOutputModal } from './ExpandableOutputModal';
 import { useCopyToClipboard } from '../hooks/useCopyToClipboard';
+import { ExpandableErrorBanner } from './ExpandableErrorBanner';
 import { apiClient, type GeneratedContent } from '../api/client';
 
 const REQUIRED_COLUMNS = ['table_name', 'column_name', 'data_type', 'ordinal_position', 'is_nullable', 'comment'] as const;
@@ -413,10 +414,10 @@ export function CsvUploadPanel({
       )}
       {/* Error */}
       {!isStreaming && promptError && !validation?.error && (
-        <div className="p-2.5 bg-red-900/30 border border-red-700/50 rounded text-red-300 text-[13px] flex items-center gap-2">
-          <div className="w-1.5 h-1.5 rounded-full bg-red-400 shrink-0" />
-          <span>Processing failed &mdash; click <strong>Process &amp; Generate</strong> to try again</span>
-        </div>
+        <ExpandableErrorBanner
+          error={promptError}
+          summary={<>Processing failed &mdash; click <strong>Process &amp; Generate</strong> to try again</>}
+        />
       )}
 
       {/* Process button */}

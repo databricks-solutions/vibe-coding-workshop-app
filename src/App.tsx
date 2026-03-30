@@ -4,7 +4,6 @@ import { WorkflowDiagram } from './components/WorkflowDiagram';
 import { ThemeToggle } from './components/ThemeToggle';
 import { ConfigurationPage } from './components/config/ConfigurationPage';
 import { LeaderboardPage } from './components/LeaderboardPage';
-import { UseCaseBuilderPage } from './components/UseCaseBuilderPage';
 import { AnalyticsDashboard } from './components/AnalyticsDashboard';
 import { 
   HeaderSessionMenu,
@@ -13,7 +12,7 @@ import {
   SessionListDialog 
 } from './components/session';
 import { apiClient } from './api/client';
-import { Zap, MessageSquare, Trophy, Lightbulb, Plus, PanelLeftClose, PanelLeft, Menu, X, BarChart3 } from 'lucide-react';
+import { Zap, MessageSquare, Trophy, Plus, PanelLeftClose, PanelLeft, Menu, X, BarChart3 } from 'lucide-react';
 import { normalizeLevel, getFilteredSections, getCumulativeOverrides, USE_CASE_LEVEL_LOCK, isForwardProgression, type WorkshopLevel } from './constants/workflowSections';
 
 export default function App() {
@@ -39,8 +38,7 @@ export default function App() {
   const isConfigPage = location.pathname.startsWith('/config');
   const isLeaderboardPage = location.pathname === '/leaderboard';
   const isAnalyticsPage = location.pathname === '/analytics';
-  const isBuilderPage = location.pathname.startsWith('/build-usecase');
-  const isWorkflowPage = !isConfigPage && !isLeaderboardPage && !isAnalyticsPage && !isBuilderPage;
+  const isWorkflowPage = !isConfigPage && !isLeaderboardPage && !isAnalyticsPage;
   
   // Data refresh key - incremented when navigating from Config to Workflow
   // This forces PromptGenerator and other components to re-fetch data
@@ -587,10 +585,6 @@ export default function App() {
                   <BarChart3 className={`w-4 h-4 flex-shrink-0 ${isAnalyticsPage ? 'text-primary' : 'text-muted-foreground'}`} />
                   <span>Analytics</span>
                 </Link>
-                <Link to="/build-usecase" onClick={() => setMobileSidebarOpen(false)} className={`w-full flex items-center gap-2.5 px-2.5 py-2 rounded-md text-[12px] font-medium transition-all duration-200 ${isBuilderPage ? 'bg-sidebar-accent text-sidebar-primary' : 'text-muted-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-foreground'}`}>
-                  <Lightbulb className={`w-4 h-4 flex-shrink-0 ${isBuilderPage ? 'text-primary' : 'text-muted-foreground'}`} />
-                  <span>Build Use Case</span>
-                </Link>
                 <Link to="/config" onClick={() => setMobileSidebarOpen(false)} className={`w-full flex items-center gap-2.5 px-2.5 py-2 rounded-md text-[12px] font-medium transition-all duration-200 ${isConfigPage ? 'bg-sidebar-accent text-sidebar-primary' : 'text-muted-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-foreground'}`}>
                   <svg className={`w-4 h-4 flex-shrink-0 ${isConfigPage ? 'text-primary' : 'text-muted-foreground'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" /></svg>
                   <span>Configuration</span>
@@ -686,21 +680,6 @@ export default function App() {
             >
               <BarChart3 className={`w-4 h-4 flex-shrink-0 ${isAnalyticsPage ? 'text-primary' : 'text-muted-foreground'}`} />
               {!sidebarCollapsed && <span className="whitespace-nowrap">Analytics</span>}
-            </Link>
-
-            <Link
-              to="/build-usecase"
-              title="Build Use Case"
-              className={`w-full flex items-center ${sidebarCollapsed ? 'justify-center px-0 py-2.5' : 'gap-2.5 px-2.5 py-2'} rounded-md text-[12px] font-medium transition-all duration-200 ${
-                isBuilderPage
-                  ? 'bg-sidebar-accent text-sidebar-primary'
-                  : 'text-muted-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-foreground'
-              }`}
-            >
-              <Lightbulb className={`w-4 h-4 flex-shrink-0 ${isBuilderPage ? 'text-primary' : 'text-muted-foreground'}`} />
-              {!sidebarCollapsed && (
-                <span className="whitespace-nowrap">Build Use Case</span>
-              )}
             </Link>
 
             <div className="relative">
@@ -982,9 +961,6 @@ export default function App() {
           
           {/* Analytics Page */}
           <Route path="/analytics" element={<AnalyticsDashboard />} />
-          
-          {/* Build Your Use Case */}
-          <Route path="/build-usecase" element={<UseCaseBuilderPage />} />
           
           {/* Redirect any unknown routes to home */}
           <Route path="*" element={<Navigate to="/" replace />} />
