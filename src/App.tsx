@@ -555,7 +555,7 @@ export default function App() {
           <div className="absolute inset-0 bg-black/60" onClick={() => setMobileSidebarOpen(false)} />
           <aside className="relative w-52 h-full bg-sidebar border-r border-sidebar-border flex flex-col animate-slide-in-left">
             <div className="px-4 py-4 border-b border-sidebar-border flex items-center justify-between">
-              <div className="flex items-center gap-2.5">
+              <Link to="/" onClick={() => setMobileSidebarOpen(false)} className="flex items-center gap-2.5 cursor-pointer">
                 <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-primary to-emerald-500 flex items-center justify-center flex-shrink-0">
                   <Zap className="w-4 h-4 text-white" />
                 </div>
@@ -563,7 +563,7 @@ export default function App() {
                   <h1 className="font-semibold text-sidebar-foreground text-[13px] tracking-tight whitespace-nowrap">V2V: Vibe-to-Value</h1>
                   <p className="text-[10px] text-muted-foreground whitespace-nowrap">Vibe Coding Workshop</p>
                 </div>
-              </div>
+              </Link>
               <button
                 onClick={() => setMobileSidebarOpen(false)}
                 className="p-1 rounded-md text-muted-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-foreground transition-colors flex-shrink-0"
@@ -606,7 +606,7 @@ export default function App() {
         {/* Logo/Brand + Toggle */}
         <div className={`${sidebarCollapsed ? 'px-2' : 'px-4'} py-4 border-b border-sidebar-border transition-all duration-300`}>
           <div className="flex items-center justify-between">
-            <div className={`flex items-center ${sidebarCollapsed ? 'justify-center w-full' : 'gap-2.5'}`}>
+            <Link to="/" className={`flex items-center ${sidebarCollapsed ? 'justify-center w-full' : 'gap-2.5'} cursor-pointer`}>
               <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-primary to-emerald-500 flex items-center justify-center flex-shrink-0">
                 <Zap className="w-4 h-4 text-white" />
               </div>
@@ -616,7 +616,7 @@ export default function App() {
                   <p className="text-[10px] text-muted-foreground whitespace-nowrap">Vibe Coding Workshop</p>
                 </div>
               )}
-            </div>
+            </Link>
             {!sidebarCollapsed && (
               <button
                 onClick={toggleSidebar}
@@ -836,10 +836,10 @@ export default function App() {
                     >
                       <Menu className="w-5 h-5" />
                     </button>
-                    <div className="min-w-0">
+                    <Link to="/" className="min-w-0 cursor-pointer">
                       <h1 className="text-[15px] sm:text-[17px] font-semibold text-foreground tracking-tight truncate">V2V: Vibe-to-Value - Vibe Coding Workshop</h1>
                       <p className="hidden sm:block text-[12px] text-muted-foreground">Turning ideas into measurable business outcomes faster with reusable patterns, and guided best practices</p>
-                    </div>
+                    </Link>
                   </div>
                   
                   {/* Theme Toggle & Session Menu in Header */}
