@@ -6,7 +6,7 @@
  * Updated to match dark theme
  */
 
-import { useState, useEffect, useMemo, useRef } from 'react';
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { Sparkles, Loader2, Play, ChevronDown, ChevronUp, Copy, Check } from 'lucide-react';
@@ -134,6 +134,12 @@ export function SectionInputsConfig({ onToast }: SectionInputsConfigProps) {
   const [selectedTag, setSelectedTag] = useState<string>('');
   const [searchQuery, setSearchQuery] = useState('');
 
+  const updateUrlStep = useCallback((tag: string) => {
+    const url = new URL(window.location.href);
+    if (tag) { url.searchParams.set('step', tag); } else { url.searchParams.delete('step'); }
+    window.history.replaceState({}, '', url.toString());
+  }, []);
+
   // View/Edit mode state
   const [isEditMode, setIsEditMode] = useState(false);
   
@@ -183,6 +189,15 @@ export function SectionInputsConfig({ onToast }: SectionInputsConfigProps) {
   useEffect(() => {
     loadData();
   }, []);
+
+  // Apply URL param after data loads
+  useEffect(() => {
+    if (loading || sectionInputs.length === 0) return;
+    const step = new URLSearchParams(window.location.search).get('step');
+    if (step && sectionInputs.some(s => s.section_tag === step)) {
+      setSelectedTag(step);
+    }
+  }, [loading, sectionInputs]);
 
   // Load versions when selection changes
   useEffect(() => {
@@ -640,7 +655,7 @@ export function SectionInputsConfig({ onToast }: SectionInputsConfigProps) {
                 {group.sections.map((section) => (
                   <div
                     key={section.section_tag}
-                    onClick={() => setSelectedTag(section.section_tag)}
+                    onClick={() => { setSelectedTag(section.section_tag); updateUrlStep(section.section_tag); }}
                     className={`w-full text-left px-3 py-2 text-sm border-b border-border hover:bg-secondary/50 transition-colors cursor-pointer ${
                       selectedTag === section.section_tag
                         ? 'bg-primary/20 text-primary font-medium'

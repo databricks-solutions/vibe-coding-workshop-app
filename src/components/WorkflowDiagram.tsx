@@ -2300,6 +2300,7 @@ export function WorkflowDiagram({
           forceExpanded={wizardStage === 3 && !stageTransitioning}
           onContinue={handleStartBuild}
           useCaseLockedLevel={useCaseLockedLevel}
+          hasUseCaseSelected={!!selectedUseCase}
         />
       )}
 

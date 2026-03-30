@@ -45,6 +45,7 @@ interface LevelSelectorProps {
   completedSteps?: Set<number>;
   levelExplicitlySelected?: boolean;
   useCaseLockedLevel?: WorkshopLevel | null;
+  hasUseCaseSelected?: boolean;
 }
 
 const BUTTON_LABELS: Record<WorkshopLevel, string> = {
@@ -125,6 +126,7 @@ export function LevelSelectorContent({
   onLevelChange,
   completedSteps = new Set(),
   useCaseLockedLevel,
+  hasUseCaseSelected,
 }: LevelSelectorProps) {
   return (
     <LevelSelectorGrid
@@ -132,6 +134,7 @@ export function LevelSelectorContent({
       onLevelChange={onLevelChange}
       completedSteps={completedSteps}
       useCaseLockedLevel={useCaseLockedLevel}
+      hasUseCaseSelected={hasUseCaseSelected}
     />
   );
 }
@@ -141,6 +144,7 @@ function LevelSelectorGrid({
   onLevelChange,
   completedSteps = new Set(),
   useCaseLockedLevel,
+  hasUseCaseSelected = false,
 }: LevelSelectorProps) {
   const highlightedButtons = getHighlightedButtons(selectedLevel, completedSteps);
 
@@ -151,6 +155,7 @@ function LevelSelectorGrid({
 
   const isButtonDisabled = (level: WorkshopLevel): boolean => {
     if (useCaseLockedLevel && level !== useCaseLockedLevel) return true;
+    if (level === 'skills-accelerator' && !useCaseLockedLevel && hasUseCaseSelected) return true;
     if (!hasStartedWorkflow) return false;
 
     if (activeChain) {

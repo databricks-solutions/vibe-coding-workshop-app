@@ -15,6 +15,7 @@ interface PathAndArchitectureProps {
   forceExpanded?: boolean;
   onContinue?: () => void;
   useCaseLockedLevel?: WorkshopLevel | null;
+  hasUseCaseSelected?: boolean;
 }
 
 export function PathAndArchitecture({
@@ -25,6 +26,7 @@ export function PathAndArchitecture({
   forceExpanded = false,
   onContinue,
   useCaseLockedLevel,
+  hasUseCaseSelected,
 }: PathAndArchitectureProps) {
   const [userOverride, setUserOverride] = useState<boolean | null>(null);
   const prevForceCollapsed = useRef(forceCollapsed);
@@ -84,6 +86,7 @@ export function PathAndArchitecture({
             onLevelChange={onLevelChange}
             completedSteps={completedSteps}
             useCaseLockedLevel={useCaseLockedLevel}
+            hasUseCaseSelected={hasUseCaseSelected}
           />
 
           {/* Divider */}

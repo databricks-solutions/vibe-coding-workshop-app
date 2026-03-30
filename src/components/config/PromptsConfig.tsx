@@ -102,6 +102,13 @@ export function PromptsConfig({ onToast }: PromptsConfigProps) {
   const [selectedUseCase, setSelectedUseCase] = useState<string>('');
   const [searchQuery, setSearchQuery] = useState('');
 
+  const updateUrlParams = useCallback((industry: string, useCase: string) => {
+    const url = new URL(window.location.href);
+    if (industry) { url.searchParams.set('industry', industry); } else { url.searchParams.delete('industry'); }
+    if (useCase) { url.searchParams.set('useCase', useCase); } else { url.searchParams.delete('useCase'); }
+    window.history.replaceState({}, '', url.toString());
+  }, []);
+
   // View/Edit mode state
   const [isEditMode, setIsEditMode] = useState(false);
 
@@ -139,6 +146,20 @@ export function PromptsConfig({ onToast }: PromptsConfigProps) {
   useEffect(() => {
     loadConfigs();
   }, []);
+
+  // Apply URL params after configs load
+  useEffect(() => {
+    if (loading || configs.length === 0) return;
+    const params = new URLSearchParams(window.location.search);
+    const ind = params.get('industry');
+    const uc = params.get('useCase');
+    if (ind && configs.some(c => c.industry === ind && c.use_case !== '_placeholder')) {
+      setSelectedIndustry(ind);
+      if (uc && configs.some(c => c.industry === ind && c.use_case === uc)) {
+        setSelectedUseCase(uc);
+      }
+    }
+  }, [loading, configs]);
 
   // Load versions when selection changes
   useEffect(() => {
@@ -385,6 +406,7 @@ export function PromptsConfig({ onToast }: PromptsConfigProps) {
       resetAndCloseBuilder();
       await loadConfigs();
       setSelectedUseCase(derivedSlug);
+      updateUrlParams(selectedIndustry, derivedSlug);
     } catch (error: any) {
       setBuilderSaveError(error?.message || 'Failed to create use case');
     } finally {
@@ -442,10 +464,12 @@ export function PromptsConfig({ onToast }: PromptsConfigProps) {
         onToast(`Industry "${showDeleteConfirmModal.industry}" deleted`, 'success');
         setSelectedIndustry('');
         setSelectedUseCase('');
+        updateUrlParams('', '');
       } else if (showDeleteConfirmModal.useCase) {
         await apiClient.deleteUseCase(showDeleteConfirmModal.industry, showDeleteConfirmModal.useCase);
         onToast(`Use case deleted`, 'success');
         setSelectedUseCase('');
+        updateUrlParams(selectedIndustry, '');
       }
       setShowDeleteConfirmModal(null);
       setDeleteConfirmText('');
@@ -499,6 +523,7 @@ export function PromptsConfig({ onToast }: PromptsConfigProps) {
                 setSelectedIndustry(ind.value);
                 setSelectedUseCase('');
                 setIsEditMode(false);
+                updateUrlParams(ind.value, '');
               }}
             >
               <span className="truncate">{ind.label}</span>
@@ -548,6 +573,7 @@ export function PromptsConfig({ onToast }: PromptsConfigProps) {
               onClick={() => {
                 setSelectedUseCase(uc.value);
                 setIsEditMode(false);
+                updateUrlParams(selectedIndustry, uc.value);
               }}
             >
               <div className="flex items-center gap-2 min-w-0">
