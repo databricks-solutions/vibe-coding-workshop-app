@@ -53,6 +53,10 @@ export default function App() {
       // Just left config page - increment refresh key to force data re-fetch
       setDataRefreshKey(prev => prev + 1);
       setWasOnConfigPage(false);
+      // Re-fetch disabled steps so step visibility changes take effect immediately
+      apiClient.getDisabledSteps()
+        .then(tags => setDisabledSectionTags(new Set(tags)))
+        .catch(err => console.error('Error fetching disabled steps:', err));
     }
   }, [isConfigPage, wasOnConfigPage]);
 
