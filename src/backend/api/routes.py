@@ -689,8 +689,13 @@ def get_workshop_parameters_sync() -> Dict[str, str]:
             'default_warehouse': os.getenv('DEFAULT_WAREHOUSE', ''),
             'lakebase_instance_name': os.getenv('LAKEBASE_INSTANCE_NAME', ''),
             'lakebase_host_name': os.getenv('LAKEBASE_HOST', ''),
+            'lakehouse_default_catalog': os.getenv('LAKEBASE_CATALOG', ''),
+            'model_serving_endpoint': os.getenv('SERVING_ENDPOINT', ''),
+            'chapter_3_lakehouse_catalog': 'samples',
+            'chapter_3_lakehouse_schema': 'wanderbricks',
             'company_brand_url': '',
             'lakebase_uc_catalog_name': os.getenv('LAKEBASE_UC_CATALOG', ''),
+            'app_name': os.getenv('APP_NAME', ''),
             'lakebase_mode': os.getenv('LAKEBASE_MODE', 'autoscaling'),
         }
     
@@ -3277,6 +3282,50 @@ async def get_workshop_parameters(response: Response) -> List[WorkshopParameter]
                 allow_session_override=False
             ),
             WorkshopParameter(
+                param_key="lakehouse_default_catalog",
+                param_label="Lakehouse Default Catalog",
+                param_value=os.getenv('LAKEBASE_CATALOG', ''),
+                param_description="The default Unity Catalog that will be used to create schemas, tables, and other lakehouse objects.",
+                param_type="catalog",
+                display_order=5,
+                is_required=True,
+                is_active=True,
+                allow_session_override=True
+            ),
+            WorkshopParameter(
+                param_key="model_serving_endpoint",
+                param_label="Model Serving Endpoint",
+                param_value=os.getenv('SERVING_ENDPOINT', ''),
+                param_description="The default model serving endpoint for calling LLMs.",
+                param_type="endpoint",
+                display_order=6,
+                is_required=True,
+                is_active=True,
+                allow_session_override=True
+            ),
+            WorkshopParameter(
+                param_key="chapter_3_lakehouse_catalog",
+                param_label="Lakehouse Source Catalog",
+                param_value="samples",
+                param_description="The catalog containing sample data tables used for table metadata extraction.",
+                param_type="catalog",
+                display_order=7,
+                is_required=True,
+                is_active=True,
+                allow_session_override=False
+            ),
+            WorkshopParameter(
+                param_key="chapter_3_lakehouse_schema",
+                param_label="Lakehouse Source Schema",
+                param_value="wanderbricks",
+                param_description="The schema within the catalog containing sample data tables.",
+                param_type="text",
+                display_order=8,
+                is_required=True,
+                is_active=True,
+                allow_session_override=False
+            ),
+            WorkshopParameter(
                 param_key="company_brand_url",
                 param_label="Company Brand URL",
                 param_value="",
@@ -3297,6 +3346,28 @@ async def get_workshop_parameters(response: Response) -> List[WorkshopParameter]
                 is_required=True,
                 is_active=True,
                 allow_session_override=True
+            ),
+            WorkshopParameter(
+                param_key="app_name",
+                param_label="Databricks App Name",
+                param_value=os.getenv('APP_NAME', ''),
+                param_description="The name of the Databricks App deployed in the workspace.",
+                param_type="text",
+                display_order=11,
+                is_required=False,
+                is_active=True,
+                allow_session_override=True
+            ),
+            WorkshopParameter(
+                param_key="lakebase_mode",
+                param_label="Lakebase Mode",
+                param_value=os.getenv('LAKEBASE_MODE', 'autoscaling'),
+                param_description="The Lakebase operating mode: autoscaling (default) or provisioned.",
+                param_type="text",
+                display_order=12,
+                is_required=True,
+                is_active=True,
+                allow_session_override=False
             )
         ]
     

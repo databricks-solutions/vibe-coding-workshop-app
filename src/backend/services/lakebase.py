@@ -271,9 +271,11 @@ def _get_autoscaling_pool():
         connection_class=_OAuthConnection,
         min_size=1,
         max_size=10,
+        check=ConnectionPool.check_connection,
+        max_idle=300,
         open=True,
     )
-    logger.info("Autoscaling ConnectionPool initialised (1-10 connections, OAuth token rotation)")
+    logger.info("Autoscaling ConnectionPool initialised (1-10 connections, OAuth token rotation, health-check enabled)")
     return _autoscaling_pool
 
 
@@ -419,40 +421,75 @@ def _dict_cursor(conn):
     return conn.cursor(cursor_factory=RealDictCursor)
 
 
+def _is_retriable_connection_error(exc: Exception) -> bool:
+    """Return True if the error indicates a stale/terminated connection worth retrying."""
+    msg = str(exc).lower()
+    return any(phrase in msg for phrase in (
+        "terminating connection",
+        "connection reset",
+        "server closed the connection",
+        "broken pipe",
+        "connection timed out",
+    ))
+
+
 def execute_query(sql: str, params: tuple = None) -> List[Dict]:
-    """Execute a SELECT query and return results as list of dicts."""
+    """Execute a SELECT query and return results as list of dicts.
+
+    Retries once on transient connection errors (e.g. Lakebase scale-to-zero
+    killing a pooled connection between the pool health-check and query execution).
+    """
     if not is_lakebase_configured():
         logger.info("Lakebase not configured - returning empty results")
         return []
 
-    try:
-        with get_connection() as conn:
-            cursor = _dict_cursor(conn)
-            cursor.execute(sql, params)
-            results = cursor.fetchall()
-            cursor.close()
-            return [dict(row) for row in results]
-    except Exception as e:
-        logger.error(f"Error executing query: {e}")
-        return []
+    last_err = None
+    for attempt in range(2):
+        try:
+            with get_connection() as conn:
+                cursor = _dict_cursor(conn)
+                cursor.execute(sql, params)
+                results = cursor.fetchall()
+                cursor.close()
+                return [dict(row) for row in results]
+        except Exception as e:
+            last_err = e
+            if attempt == 0 and _is_retriable_connection_error(e):
+                logger.warning(f"Retriable connection error in execute_query, retrying once: {e}")
+                continue
+            logger.error(f"Error executing query: {e}")
+            return []
+    logger.error(f"Error executing query after retry: {last_err}")
+    return []
 
 
 def execute_insert(sql: str, params: tuple = None) -> bool:
-    """Execute an INSERT/UPDATE/DELETE statement. Returns True on success."""
+    """Execute an INSERT/UPDATE/DELETE statement. Returns True on success.
+
+    Retries once on transient connection errors (same rationale as execute_query).
+    """
     if not is_lakebase_configured():
         logger.error("Lakebase not configured - cannot execute insert")
         return False
 
-    try:
-        with get_connection() as conn:
-            cursor = conn.cursor()
-            cursor.execute(sql, params)
-            conn.commit()
-            cursor.close()
-            return True
-    except Exception as e:
-        logger.error(f"Error executing insert: {e}")
-        return False
+    last_err = None
+    for attempt in range(2):
+        try:
+            with get_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute(sql, params)
+                conn.commit()
+                cursor.close()
+                return True
+        except Exception as e:
+            last_err = e
+            if attempt == 0 and _is_retriable_connection_error(e):
+                logger.warning(f"Retriable connection error in execute_insert, retrying once: {e}")
+                continue
+            logger.error(f"Error executing insert: {e}")
+            return False
+    logger.error(f"Error executing insert after retry: {last_err}")
+    return False
 
 
 # =============================================================================
