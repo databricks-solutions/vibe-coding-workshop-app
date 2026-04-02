@@ -4155,6 +4155,38 @@ def _get_session_user(request: Request) -> str:
     return "unknown"
 
 
+def _set_session_defaults_from_email(session_id: str, created_by: str) -> None:
+    """Set session parameter defaults derived from the user's email."""
+    logger.info(f"[Session API] _set_session_defaults_from_email called: session={session_id}, user={created_by}")
+    if not created_by or '@' not in created_by:
+        logger.warning(f"[Session API] Skipping session defaults - no valid email: '{created_by}'")
+        return
+    try:
+        import json as _json
+        _local = created_by.split('@')[0]
+        _prefix5 = _local[:5].lower() if len(_local) >= 5 else _local.lower()
+        defaults = {
+            'default_warehouse': 'Serverless Starter Warehouse',
+            'lakebase_instance_name': f"{_prefix5}-vibe-coding-workshop",
+            'lakebase_host_name': '',
+            'lakehouse_default_catalog': f"{_prefix5}_vibe_coding_workshop_catalog",
+            'lakebase_uc_catalog_name': f"{_prefix5}_vibe_coding_workshop_catalog",
+            'app_name': f"{_prefix5}-vibe-coding-app",
+        }
+        schema = get_schema()
+        merge_sql = f"""
+            UPDATE {schema}.sessions
+            SET session_parameters = COALESCE(session_parameters, '{{}}'::jsonb) || %s::jsonb,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE session_id = %s
+        """
+        logger.info(f"[Session API] Merging defaults into session {session_id}: {list(defaults.keys())}")
+        result = execute_insert(merge_sql, (_json.dumps(defaults), session_id))
+        logger.info(f"[Session API] Set session defaults for {session_id} from email prefix '{_prefix5}', result={result}")
+    except Exception as e:
+        logger.error(f"[Session API] Failed to set session defaults: {e}", exc_info=True)
+
+
 @router.get("/session/new")
 async def create_new_session(request: Request) -> NewSessionResponse:
     """
@@ -4190,6 +4222,7 @@ async def create_new_session(request: Request) -> NewSessionResponse:
         )
         if success:
             logger.info(f"[Session API] Session {session_id} persisted (user: {created_by})")
+            _set_session_defaults_from_email(session_id, created_by)
         else:
             logger.warning(f"[Session API] Failed to persist session {session_id}")
     except Exception as e:
@@ -4270,6 +4303,7 @@ async def get_or_create_default_session(request: Request) -> SessionLoadResponse
         )
         if success:
             logger.info(f"[Session API] New default session {session_id} created for user: {created_by}")
+            _set_session_defaults_from_email(session_id, created_by)
         else:
             logger.warning(f"[Session API] Failed to create default session {session_id}")
     except Exception as e:
