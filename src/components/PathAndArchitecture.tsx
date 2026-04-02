@@ -3,6 +3,7 @@ import { ChevronDown, Map, ArrowRight } from 'lucide-react';
 import { LevelSelectorContent, BUTTON_LABELS } from './LevelSelector';
 import { ArchitectureDiagramContent } from './ArchitectureDiagram';
 import { BorderBeamButton } from './BorderBeamButton';
+import { CopyLinkButton } from './CopyLinkButton';
 import type { WorkshopLevel } from '../constants/workflowSections';
 
 interface PathAndArchitectureProps {
@@ -14,6 +15,7 @@ interface PathAndArchitectureProps {
   forceExpanded?: boolean;
   onContinue?: () => void;
   useCaseLockedLevel?: WorkshopLevel | null;
+  hasUseCaseSelected?: boolean;
 }
 
 export function PathAndArchitecture({
@@ -24,6 +26,7 @@ export function PathAndArchitecture({
   forceExpanded = false,
   onContinue,
   useCaseLockedLevel,
+  hasUseCaseSelected,
 }: PathAndArchitectureProps) {
   const [userOverride, setUserOverride] = useState<boolean | null>(null);
   const prevForceCollapsed = useRef(forceCollapsed);
@@ -64,6 +67,8 @@ export function PathAndArchitecture({
           </span>
         )}
 
+        <CopyLinkButton sectionId="path-architecture-section" />
+
         <span className="inline-flex items-center gap-1 text-[11px] font-medium text-muted-foreground border border-border rounded-full px-2.5 py-1 bg-secondary/40 group-hover:bg-secondary group-hover:text-foreground transition-colors">
           <ChevronDown className={`w-3 h-3 transition-transform duration-200 ${isExpanded ? 'rotate-180' : ''}`} />
           {isExpanded ? 'Collapse' : 'Expand'}
@@ -81,6 +86,7 @@ export function PathAndArchitecture({
             onLevelChange={onLevelChange}
             completedSteps={completedSteps}
             useCaseLockedLevel={useCaseLockedLevel}
+            hasUseCaseSelected={hasUseCaseSelected}
           />
 
           {/* Divider */}

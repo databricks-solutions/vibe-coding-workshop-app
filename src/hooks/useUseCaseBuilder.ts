@@ -94,6 +94,7 @@ export function useUseCaseBuilder() {
   const [editText, setEditText] = useState('');
   const [streamModel, setStreamModel] = useState<string | undefined>();
   const [error, setError] = useState<string | null>(null);
+  const [retryStatus, setRetryStatus] = useState<{ attempt: number; maxAttempts: number; reason: string } | null>(null);
   const abortRef = useRef<AbortController | null>(null);
 
   // --- Refinement state ---
@@ -120,6 +121,7 @@ export function useUseCaseBuilder() {
   const handleGenerate = useCallback(() => {
     if (!hasInput || isStreaming) return;
     setError(null);
+    setRetryStatus(null);
     setPreviousDraft(null);
     setShowDiff(false);
     setOutputText('');
@@ -149,14 +151,22 @@ export function useUseCaseBuilder() {
             : undefined,
         mode: 'generate',
       },
-      (content) => setOutputText((prev) => prev + content),
+      (content) => {
+        setRetryStatus(null);
+        setOutputText((prev) => prev + content);
+      },
       (model) => {
         setIsStreaming(false);
+        setRetryStatus(null);
         setStreamModel(model);
       },
       (err) => {
         setIsStreaming(false);
+        setRetryStatus(null);
         setError(err);
+      },
+      (attempt, maxAttempts, reason) => {
+        setRetryStatus({ attempt, maxAttempts, reason });
       },
     );
     abortRef.current = controller;
@@ -169,6 +179,7 @@ export function useUseCaseBuilder() {
     setPreviousDraft(textToRefine);
     setShowDiff(false);
     setError(null);
+    setRetryStatus(null);
     setOutputText('');
     setIsEditing(false);
     setIsStreaming(true);
@@ -179,16 +190,24 @@ export function useUseCaseBuilder() {
         refinement_feedback: refineFeedback.trim(),
         mode: 'refine',
       },
-      (content) => setOutputText((prev) => prev + content),
+      (content) => {
+        setRetryStatus(null);
+        setOutputText((prev) => prev + content);
+      },
       (model) => {
         setIsStreaming(false);
+        setRetryStatus(null);
         setStreamModel(model);
         setIterationCount((c) => c + 1);
         setRefineFeedback('');
       },
       (err) => {
         setIsStreaming(false);
+        setRetryStatus(null);
         setError(err);
+      },
+      (attempt, maxAttempts, reason) => {
+        setRetryStatus({ attempt, maxAttempts, reason });
       },
     );
     abortRef.current = controller;
@@ -294,6 +313,7 @@ export function useUseCaseBuilder() {
     streamModel,
     error,
     setError,
+    retryStatus,
 
     // Refinement
     refineFeedback,

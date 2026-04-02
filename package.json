@@ -10,6 +10,8 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@databricks/appkit": "^0.21.0",
+    "@databricks/appkit-ui": "^0.21.0",
     "@tailwindcss/typography": "^0.5.19",
     "diff": "^8.0.3",
     "lucide-react": "^0.561.0",

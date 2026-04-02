@@ -13,15 +13,15 @@ import os
 import json
 import logging
 import time
+import asyncio
 import yaml
 from pathlib import Path
 import uuid
-import shutil
 from fastapi import APIRouter, HTTPException, Response, UploadFile, File, Form, Request
 from fastapi.responses import StreamingResponse, FileResponse
 from pydantic import BaseModel, Field
 from typing import List, Dict, Optional, Any, AsyncGenerator
-from datetime import datetime
+from datetime import datetime, timezone
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -239,11 +239,9 @@ def get_workspace_client() -> Optional['WorkspaceClient']:
     global _workspace_client
     if _workspace_client is None and DATABRICKS_SDK_AVAILABLE:
         try:
-            # The SDK automatically detects the environment:
-            # - In Databricks Apps: Uses app's OAuth credentials (no token needed)
-            # - In local dev: Uses ~/.databrickscfg or environment variables
-            _workspace_client = WorkspaceClient()
-            logger.info("Databricks WorkspaceClient initialized")
+            from src.backend.identity import get_tagged_workspace_client, PRODUCT_NAME, PRODUCT_VERSION
+            _workspace_client = get_tagged_workspace_client()
+            logger.info("Databricks WorkspaceClient initialized (UA: %s/%s)", PRODUCT_NAME, PRODUCT_VERSION)
         except Exception as e:
             logger.warning(f"Could not initialize WorkspaceClient: {e}")
             import traceback
@@ -490,6 +488,7 @@ class UseCaseCreate(BaseModel):
     industry: str = Field(..., min_length=1, description="Parent industry identifier")
     use_case: str = Field(..., min_length=1, description="Use case identifier (lowercase, no spaces)")
     use_case_label: str = Field(..., min_length=1, description="Display label for the use case")
+    prompt_template: Optional[str] = Field(default="", description="Initial use case description (from builder)")
 
 
 class ConfigVersionInfo(BaseModel):
@@ -690,8 +689,14 @@ def get_workshop_parameters_sync() -> Dict[str, str]:
             'default_warehouse': os.getenv('DEFAULT_WAREHOUSE', ''),
             'lakebase_instance_name': os.getenv('LAKEBASE_INSTANCE_NAME', ''),
             'lakebase_host_name': os.getenv('LAKEBASE_HOST', ''),
+            'lakehouse_default_catalog': os.getenv('LAKEBASE_CATALOG', ''),
+            'model_serving_endpoint': os.getenv('SERVING_ENDPOINT', ''),
+            'chapter_3_lakehouse_catalog': 'samples',
+            'chapter_3_lakehouse_schema': 'wanderbricks',
             'company_brand_url': '',
-            'lakebase_uc_catalog_name': os.getenv('LAKEBASE_UC_CATALOG', '')
+            'lakebase_uc_catalog_name': os.getenv('LAKEBASE_UC_CATALOG', ''),
+            'app_name': os.getenv('APP_NAME', ''),
+            'lakebase_mode': os.getenv('LAKEBASE_MODE', 'autoscaling'),
         }
     
     return {row['param_key']: row['param_value'] for row in results}
@@ -1177,14 +1182,12 @@ async def call_databricks_serving_endpoint(
     messages.append({"role": "user", "content": prompt})
     
     
-    # Use SDK's serving_endpoints.query() - this automatically uses app's service principal permissions
-    # No direct HTTP calls needed - the SDK handles authentication
+    # Raw HTTP to the serving endpoint (avoids SDK query() serialization issues)
     
     import time
     start_time = time.time()
     
     try:
-        # Use raw HTTP request instead of SDK's query() method to avoid SDK serialization bug
         
         # Get the workspace host from the SDK client
         workspace_host = client.config.host.rstrip('/')
@@ -1305,13 +1308,17 @@ async def call_databricks_serving_endpoint(
         last_error = None
         
         # Build payload for OpenAI-compatible endpoint
-        # Note: gpt-5-mini doesn't support temperature parameter
-        openai_request_body = {
+        from src.backend.identity import build_usage_context
+        openai_request_body: Dict[str, Any] = {
             "messages": messages,
             "max_tokens": max_tokens,
         }
-        # Only add temperature if not using gpt-5-mini (which only supports default temp)
-        if "mini" not in endpoint.lower():
+        ep_lower = endpoint.lower()
+        if "claude" not in ep_lower:
+            openai_request_body["extra_params"] = {
+                "usage_context": build_usage_context(),
+            }
+        if "mini" not in ep_lower:
             openai_request_body["temperature"] = temperature
         
         
@@ -1419,11 +1426,10 @@ async def call_databricks_serving_endpoint(
         model_used = endpoint
         
         if isinstance(response, dict):
-            # Log all keys and their types for debugging
             for key, val in response.items():
                 val_type = type(val).__name__
                 val_preview = str(val)[:100] if val else "None"
-                logger.info(f"    Key '{key}': type={val_type}, value={val_preview}")
+                logger.debug(f"    Key '{key}': type={val_type}, value={val_preview}")
             
             # Try OpenAI format (choices)
             if "choices" in response and response["choices"]:
@@ -1740,6 +1746,194 @@ async def generate_prompt(request: PromptRequest):
     return GeneratedContent(**content)
 
 
+# ============== LLM Streaming with Exponential Backoff ==============
+
+_MAX_RETRIES = 3
+_BASE_DELAY = 2.0  # seconds — delays: 2s, 4s
+_RETRYABLE_STATUS_CODES = {429, 500, 502, 503, 504}
+
+
+def _is_retryable_exception(exc: Exception) -> bool:
+    """Return True for transient network / timeout errors worth retrying."""
+    import httpx
+    return isinstance(exc, (httpx.TimeoutException, httpx.ConnectError, httpx.ReadError, ConnectionError, OSError))
+
+
+def _friendly_reason(status_code: Optional[int] = None, exc: Optional[Exception] = None) -> str:
+    if status_code == 429:
+        return "rate limited"
+    if status_code in (502, 503, 504):
+        return "endpoint temporarily unavailable"
+    if status_code == 500:
+        return "server error"
+    if exc is not None:
+        name = type(exc).__name__
+        if "Timeout" in name:
+            return "request timed out"
+        if "Connect" in name:
+            return "connection failed"
+        return "network error"
+    return "transient error"
+
+
+def _sse_event(obj: Dict[str, Any]) -> str:
+    """Format a dict as an SSE data line."""
+    return f"data: {json.dumps(obj)}\n\n"
+
+
+async def _stream_with_retry(
+    messages: list,
+    max_tokens: int = 4000,
+    temperature: float = 0.5,
+    timeout: float = 120.0,
+    flush_chars: int = 100,
+    flush_interval: float = 0.05,
+    section_tag: Optional[str] = None,
+    industry: Optional[str] = None,
+    use_case: Optional[str] = None,
+) -> AsyncGenerator[str, None]:
+    """
+    Stream LLM response as SSE events with automatic retry on transient errors.
+
+    Yields SSE-formatted strings:
+    - {"type": "start", "model": "..."}
+    - {"type": "retry", "attempt": N, "max_attempts": 3, "delay": X, "reason": "..."}
+    - {"type": "content", "content": "..."}
+    - {"type": "done"}
+    - {"type": "error", "error": "..."}
+
+    Retries only cover the connection + HTTP status phase. Once content chunks
+    start flowing, any failure is final (retrying would produce duplicates).
+    """
+    import httpx
+    from src.backend.identity import build_user_agent, build_usage_context
+
+    client = get_workspace_client()
+    endpoint = get_best_available_endpoint()
+
+    if not client or not endpoint:
+        yield _sse_event({"type": "error", "error": "LLM not available"})
+        return
+
+    request_body: Dict[str, Any] = {
+        "messages": messages,
+        "max_tokens": max_tokens,
+        "stream": True,
+    }
+    ep_lower = endpoint.lower()
+    if "claude" not in ep_lower:
+        request_body["extra_params"] = {
+            "usage_context": build_usage_context(
+                section_tag=section_tag, industry=industry, use_case=use_case,
+            ),
+        }
+    if "mini" not in ep_lower:
+        request_body["temperature"] = temperature
+
+    workspace_host = client.config.host.rstrip("/")
+    url = f"{workspace_host}/serving-endpoints/{endpoint}/invocations"
+
+    ua = build_user_agent(section_tag=section_tag, industry=industry, use_case=use_case)
+
+    yield _sse_event({"type": "start", "model": endpoint})
+
+    last_error_msg = ""
+
+    async with httpx.AsyncClient(timeout=timeout) as http_client:
+        for attempt in range(1, _MAX_RETRIES + 1):
+            headers: Dict[str, str] = {"Content-Type": "application/json", "User-Agent": ua}
+            try:
+                auth_header = client.config.authenticate()
+                if auth_header:
+                    headers.update(auth_header)
+            except Exception as auth_err:
+                logger.warning(f"Could not get auth headers (attempt {attempt}): {auth_err}")
+
+            try:
+                async with http_client.stream("POST", url, json=request_body, headers=headers) as response:
+                    if response.status_code != 200:
+                        error_body = await response.aread()
+                        err_msg = error_body.decode()[:500] if error_body else "Unknown error"
+                        last_error_msg = f"HTTP {response.status_code}: {err_msg}"
+                        logger.error(f"[LLM Stream] {endpoint} returned {response.status_code}: {err_msg}")
+
+                        if response.status_code in _RETRYABLE_STATUS_CODES and attempt < _MAX_RETRIES:
+                            delay = _BASE_DELAY * (2 ** (attempt - 1))
+                            reason = _friendly_reason(status_code=response.status_code)
+                            logger.warning(f"Retryable HTTP {response.status_code} on attempt {attempt}, retrying in {delay}s")
+                            yield _sse_event({
+                                "type": "retry",
+                                "attempt": attempt,
+                                "max_attempts": _MAX_RETRIES,
+                                "delay": delay,
+                                "reason": reason,
+                            })
+                            await asyncio.sleep(delay)
+                            continue
+
+                        yield _sse_event({"type": "error", "error": last_error_msg})
+                        return
+
+                    content_buffer = ""
+                    last_flush = time.monotonic()
+
+                    async for line in response.aiter_lines():
+                        if not line.startswith("data: "):
+                            continue
+                        data = line[6:]
+                        if data == "[DONE]":
+                            if content_buffer:
+                                yield _sse_event({"type": "content", "content": content_buffer})
+                            yield _sse_event({"type": "done"})
+                            return
+                        try:
+                            chunk = json.loads(data)
+                            if "choices" in chunk and chunk["choices"]:
+                                delta = chunk["choices"][0].get("delta", {})
+                                content = delta.get("content", "")
+                                if content:
+                                    content_buffer += content
+                                    now = time.monotonic()
+                                    if len(content_buffer) >= flush_chars or (now - last_flush) >= flush_interval:
+                                        yield _sse_event({"type": "content", "content": content_buffer})
+                                        content_buffer = ""
+                                        last_flush = now
+                        except json.JSONDecodeError:
+                            pass
+
+                    if content_buffer:
+                        yield _sse_event({"type": "content", "content": content_buffer})
+                    yield _sse_event({"type": "done"})
+                    return
+
+            except Exception as e:
+                last_error_msg = str(e)
+
+                if _is_retryable_exception(e) and attempt < _MAX_RETRIES:
+                    delay = _BASE_DELAY * (2 ** (attempt - 1))
+                    reason = _friendly_reason(exc=e)
+                    logger.warning(f"Retryable error on attempt {attempt}: {e}, retrying in {delay}s")
+                    yield _sse_event({
+                        "type": "retry",
+                        "attempt": attempt,
+                        "max_attempts": _MAX_RETRIES,
+                        "delay": delay,
+                        "reason": reason,
+                    })
+                    await asyncio.sleep(delay)
+                    continue
+
+                logger.error(f"Non-retryable streaming error: {e}")
+                yield _sse_event({"type": "error", "error": last_error_msg})
+                return
+
+    logger.error(f"All {_MAX_RETRIES} attempts failed. Last error: {last_error_msg}")
+    yield _sse_event({
+        "type": "error",
+        "error": f"Generation failed after {_MAX_RETRIES} attempts. Last error: {last_error_msg}",
+    })
+
+
 async def stream_llm_response(
     industry: str,
     use_case: str, 
@@ -1779,88 +1973,16 @@ async def stream_llm_response(
         yield f"data: {json.dumps({'type': 'done'})}\n\n"
         return
     
-    # Get the workspace client
-    client = get_workspace_client()
-    endpoint = get_best_available_endpoint()
-    
-    if not client or not endpoint:
-        yield f"data: {json.dumps({'error': 'LLM not available'})}\n\n"
-        return
-    
-    # Build messages
     messages = [
         {"role": "system", "content": system_prompt},
         {"role": "user", "content": f"Generate a detailed prompt based on: {input_text}"}
     ]
-    
-    # Build streaming request
-    request_body = {
-        "messages": messages,
-        "max_tokens": 4000,  # Increased for full response
-        "stream": True  # Enable streaming!
-    }
-    if "mini" not in endpoint.lower():
-        request_body["temperature"] = 0.5
-    
-    try:
-        # Send initial metadata
-        yield f"data: {json.dumps({'type': 'start', 'model': endpoint})}\n\n"
-        
-        # Make streaming request - use SDK's auth mechanism
-        import httpx
-        workspace_host = client.config.host.rstrip('/')
-        
-        # Get auth from SDK's config - it auto-refreshes OAuth tokens
-        headers = {"Content-Type": "application/json"}
-        
-        # Get OAuth token from SDK's authenticate method
-        try:
-            auth_header = client.config.authenticate()
-            if auth_header:
-                headers.update(auth_header)
-        except Exception as auth_err:
-            logger.warning(f"  Could not get auth headers: {auth_err}")
-        
-        async with httpx.AsyncClient(timeout=120.0) as http_client:
-            async with http_client.stream(
-                "POST",
-                f"{workspace_host}/serving-endpoints/{endpoint}/invocations",
-                json=request_body,
-                headers=headers
-            ) as response:
-                if response.status_code != 200:
-                    error_body = await response.aread()
-                    yield f"data: {json.dumps({'type': 'error', 'error': f'HTTP {response.status_code}: {error_body.decode()[:200]}'})}\n\n"
-                    return
-                    
-                content_buffer = ""
-                last_flush = time.monotonic()
-                async for line in response.aiter_lines():
-                    if line.startswith("data: "):
-                        data = line[6:]
-                        if data == "[DONE]":
-                            if content_buffer:
-                                yield f"data: {json.dumps({'type': 'content', 'content': content_buffer})}\n\n"
-                            yield f"data: {json.dumps({'type': 'done'})}\n\n"
-                        else:
-                            try:
-                                chunk = json.loads(data)
-                                if "choices" in chunk and chunk["choices"]:
-                                    delta = chunk["choices"][0].get("delta", {})
-                                    content = delta.get("content", "")
-                                    if content:
-                                        content_buffer += content
-                                        now = time.monotonic()
-                                        if len(content_buffer) >= 100 or (now - last_flush) >= 0.05:
-                                            yield f"data: {json.dumps({'type': 'content', 'content': content_buffer})}\n\n"
-                                            content_buffer = ""
-                                            last_flush = now
-                            except json.JSONDecodeError:
-                                pass
-                                
-    except Exception as e:
-        logger.error(f"Streaming error: {e}")
-        yield f"data: {json.dumps({'type': 'error', 'error': str(e)})}\n\n"
+
+    async for event in _stream_with_retry(
+        messages, max_tokens=4000, temperature=0.5,
+        section_tag=section_tag, industry=industry, use_case=use_case,
+    ):
+        yield event
 
 
 @router.post("/generate-prompt-stream", summary="Stream prompt generation (SSE)")
@@ -1962,80 +2084,13 @@ async def stream_metadata_csv_response(
         yield f"data: {json.dumps({'type': 'done'})}\n\n"
         return
 
-    # Get workspace client and endpoint
-    client = get_workspace_client()
-    endpoint = get_best_available_endpoint()
-
-    if not client or not endpoint:
-        yield f"data: {json.dumps({'type': 'error', 'error': 'LLM not available'})}\n\n"
-        return
-
     messages = [
         {"role": "system", "content": system_prompt_text},
         {"role": "user", "content": f"Process this uploaded schema CSV ({table_count} tables, {row_count} column definitions) and generate the coding assistant prompt:\n\n{input_text}"}
     ]
 
-    request_body = {
-        "messages": messages,
-        "max_tokens": 8000,
-        "stream": True
-    }
-    if "mini" not in endpoint.lower():
-        request_body["temperature"] = 0.3
-
-    try:
-        yield f"data: {json.dumps({'type': 'start', 'model': endpoint})}\n\n"
-
-        import httpx
-        workspace_host = client.config.host.rstrip('/')
-        headers = {"Content-Type": "application/json"}
-        try:
-            auth_header = client.config.authenticate()
-            if auth_header:
-                headers.update(auth_header)
-        except Exception as auth_err:
-            logger.warning(f"  Could not get auth headers: {auth_err}")
-
-        async with httpx.AsyncClient(timeout=180.0) as http_client:
-            async with http_client.stream(
-                "POST",
-                f"{workspace_host}/serving-endpoints/{endpoint}/invocations",
-                json=request_body,
-                headers=headers
-            ) as response:
-                if response.status_code != 200:
-                    error_body = await response.aread()
-                    yield f"data: {json.dumps({'type': 'error', 'error': f'HTTP {response.status_code}: {error_body.decode()[:200]}'})}\n\n"
-                    return
-
-                content_buffer = ""
-                last_flush = time.monotonic()
-                async for line in response.aiter_lines():
-                    if line.startswith("data: "):
-                        data = line[6:]
-                        if data == "[DONE]":
-                            if content_buffer:
-                                yield f"data: {json.dumps({'type': 'content', 'content': content_buffer})}\n\n"
-                            yield f"data: {json.dumps({'type': 'done'})}\n\n"
-                        else:
-                            try:
-                                chunk = json.loads(data)
-                                if "choices" in chunk and chunk["choices"]:
-                                    delta = chunk["choices"][0].get("delta", {})
-                                    content = delta.get("content", "")
-                                    if content:
-                                        content_buffer += content
-                                        now = time.monotonic()
-                                        if len(content_buffer) >= 100 or (now - last_flush) >= 0.05:
-                                            yield f"data: {json.dumps({'type': 'content', 'content': content_buffer})}\n\n"
-                                            content_buffer = ""
-                                            last_flush = now
-                            except json.JSONDecodeError:
-                                pass
-
-    except Exception as e:
-        logger.error(f"Metadata CSV streaming error: {e}")
-        yield f"data: {json.dumps({'type': 'error', 'error': str(e)})}\n\n"
+    async for event in _stream_with_retry(messages, max_tokens=8000, temperature=0.3, timeout=180.0):
+        yield event
 
 
 @router.post("/process-metadata-csv", summary="Process uploaded metadata CSV (SSE)")
@@ -2128,93 +2183,26 @@ async def stream_test_prompt_response(
         yield f"data: {json.dumps({'type': 'done'})}\n\n"
         return
     
-    # Otherwise, call the LLM with the custom prompts
     logger.info(f"[Test] Generating with LLM for section {section_tag}")
-    
-    # Get workspace client and endpoint (same as regular streaming)
+
+    # Check for LLM availability before delegating (preserve test-mode fallback)
     client = get_workspace_client()
     endpoint = get_best_available_endpoint()
-    
     if not client or not endpoint:
-        # No LLM configured - return test content without LLM
         no_llm_prefix = "**Test Mode (No LLM configured)**\n\n---\n\n"
         test_content = no_llm_prefix + processed_input
-        yield f"data: {json.dumps({'type': 'start', 'model': 'test_mode_no_llm'})}\n\n"
-        yield f"data: {json.dumps({'type': 'content', 'content': test_content})}\n\n"
-        yield f"data: {json.dumps({'type': 'done'})}\n\n"
+        yield _sse_event({"type": "start", "model": "test_mode_no_llm"})
+        yield _sse_event({"type": "content", "content": test_content})
+        yield _sse_event({"type": "done"})
         return
-    
-    # Build messages
+
     messages = [
         {"role": "system", "content": processed_system},
         {"role": "user", "content": f"Generate a detailed prompt based on: {processed_input}"}
     ]
-    
-    # Build streaming request
-    request_body = {
-        "messages": messages,
-        "max_tokens": 4000,
-        "stream": True
-    }
-    if "mini" not in endpoint.lower():
-        request_body["temperature"] = 0.5
-    
-    try:
-        # Send initial metadata
-        yield f"data: {json.dumps({'type': 'start', 'model': endpoint})}\n\n"
-        
-        # Make streaming request
-        import httpx
-        workspace_host = client.config.host.rstrip('/')
-        
-        headers = {"Content-Type": "application/json"}
-        try:
-            auth_header = client.config.authenticate()
-            if auth_header:
-                headers.update(auth_header)
-        except Exception as auth_err:
-            logger.warning(f"[Test] Could not get auth headers: {auth_err}")
-        
-        async with httpx.AsyncClient(timeout=120.0) as http_client:
-            async with http_client.stream(
-                "POST",
-                f"{workspace_host}/serving-endpoints/{endpoint}/invocations",
-                json=request_body,
-                headers=headers
-            ) as response:
-                if response.status_code != 200:
-                    error_body = await response.aread()
-                    yield f"data: {json.dumps({'type': 'error', 'error': f'HTTP {response.status_code}: {error_body.decode()[:200]}'})}\n\n"
-                    return
-                
-                content_buffer = ""
-                last_flush = time.monotonic()
-                async for line in response.aiter_lines():
-                    if line.startswith("data: "):
-                        data = line[6:]
-                        if data == "[DONE]":
-                            if content_buffer:
-                                yield f"data: {json.dumps({'type': 'content', 'content': content_buffer})}\n\n"
-                            yield f"data: {json.dumps({'type': 'done'})}\n\n"
-                        else:
-                            try:
-                                chunk = json.loads(data)
-                                if "choices" in chunk and chunk["choices"]:
-                                    delta = chunk["choices"][0].get("delta", {})
-                                    content = delta.get("content", "")
-                                    if content:
-                                        content_buffer += content
-                                        now = time.monotonic()
-                                        if len(content_buffer) >= 100 or (now - last_flush) >= 0.05:
-                                            yield f"data: {json.dumps({'type': 'content', 'content': content_buffer})}\n\n"
-                                            content_buffer = ""
-                                            last_flush = now
-                            except json.JSONDecodeError:
-                                pass
-    
-    except Exception as e:
-        logger.error(f"[Test] LLM streaming error: {e}")
-        yield f"data: {json.dumps({'type': 'error', 'error': str(e)})}\n\n"
+
+    async for event in _stream_with_retry(messages, max_tokens=4000, temperature=0.5):
+        yield event
 
 
 @router.post("/test-prompt-stream", summary="Test prompt generation with custom values (SSE)")
@@ -2703,7 +2691,7 @@ async def add_use_case(request: UseCaseCreate) -> Dict[str, Any]:
         industry_label=industry_label,
         use_case=request.use_case,
         use_case_label=request.use_case_label,
-        prompt_template=""
+        prompt_template=request.prompt_template or ""
     )
     
     await create_prompt_config(config)
@@ -3294,6 +3282,50 @@ async def get_workshop_parameters(response: Response) -> List[WorkshopParameter]
                 allow_session_override=False
             ),
             WorkshopParameter(
+                param_key="lakehouse_default_catalog",
+                param_label="Lakehouse Default Catalog",
+                param_value=os.getenv('LAKEBASE_CATALOG', ''),
+                param_description="The default Unity Catalog that will be used to create schemas, tables, and other lakehouse objects.",
+                param_type="catalog",
+                display_order=5,
+                is_required=True,
+                is_active=True,
+                allow_session_override=True
+            ),
+            WorkshopParameter(
+                param_key="model_serving_endpoint",
+                param_label="Model Serving Endpoint",
+                param_value=os.getenv('SERVING_ENDPOINT', ''),
+                param_description="The default model serving endpoint for calling LLMs.",
+                param_type="endpoint",
+                display_order=6,
+                is_required=True,
+                is_active=True,
+                allow_session_override=True
+            ),
+            WorkshopParameter(
+                param_key="chapter_3_lakehouse_catalog",
+                param_label="Lakehouse Source Catalog",
+                param_value="samples",
+                param_description="The catalog containing sample data tables used for table metadata extraction.",
+                param_type="catalog",
+                display_order=7,
+                is_required=True,
+                is_active=True,
+                allow_session_override=False
+            ),
+            WorkshopParameter(
+                param_key="chapter_3_lakehouse_schema",
+                param_label="Lakehouse Source Schema",
+                param_value="wanderbricks",
+                param_description="The schema within the catalog containing sample data tables.",
+                param_type="text",
+                display_order=8,
+                is_required=True,
+                is_active=True,
+                allow_session_override=False
+            ),
+            WorkshopParameter(
                 param_key="company_brand_url",
                 param_label="Company Brand URL",
                 param_value="",
@@ -3314,6 +3346,28 @@ async def get_workshop_parameters(response: Response) -> List[WorkshopParameter]
                 is_required=True,
                 is_active=True,
                 allow_session_override=True
+            ),
+            WorkshopParameter(
+                param_key="app_name",
+                param_label="Databricks App Name",
+                param_value=os.getenv('APP_NAME', ''),
+                param_description="The name of the Databricks App deployed in the workspace.",
+                param_type="text",
+                display_order=11,
+                is_required=False,
+                is_active=True,
+                allow_session_override=True
+            ),
+            WorkshopParameter(
+                param_key="lakebase_mode",
+                param_label="Lakebase Mode",
+                param_value=os.getenv('LAKEBASE_MODE', 'autoscaling'),
+                param_description="The Lakebase operating mode: autoscaling (default) or provisioned.",
+                param_type="text",
+                display_order=12,
+                is_required=True,
+                is_active=True,
+                allow_session_override=False
             )
         ]
     
@@ -3943,9 +3997,6 @@ async def auto_set_lakehouse_params_from_lakebase(session_id: str) -> LakehouseP
 # SESSION MANAGEMENT API ENDPOINTS
 # =============================================================================
 
-import uuid
-from fastapi import Request
-
 # Import session functions from lakebase service
 try:
     from src.backend.services.lakebase import (
@@ -3959,6 +4010,7 @@ try:
         update_step_prompt,
         get_leaderboard,
         cleanup_session_steps,
+        get_analytics,
     )
     SESSION_FUNCTIONS_AVAILABLE = True
 except ImportError:
@@ -4775,6 +4827,189 @@ async def cleanup_sessions_endpoint(request: Request) -> Dict[str, Any]:
 
 
 # ============================================================
+# Analytics Endpoint
+# ============================================================
+
+@router.get("/admin/analytics")
+async def get_analytics_endpoint():
+    """
+    Read-only analytics aggregation across all sessions.
+    Returns summary stats, breakdowns by industry/use-case/level,
+    step completion counts, chapter feedback, user activity, and
+    recent session activity. No data is modified or deleted.
+    """
+    try:
+        data = get_analytics()
+        return data
+    except Exception as e:
+        logger.error(f"[Admin API] Analytics error: {e}", exc_info=True)
+        return {
+            "summary": {"total_sessions": 0, "total_users": 0, "total_feedback": 0, "positive_count": 0, "negative_count": 0},
+            "usage": {"avg_steps_per_session": 0, "prereqs_completed": 0, "total_prompts_generated": 0, "saved_sessions": 0, "avg_score": 0},
+            "by_industry": [], "by_use_case": [], "by_level": [],
+            "step_completion_counts": [], "chapter_feedback": [],
+            "recent_sessions": [], "user_activity": [], "feedback_details": [],
+        }
+
+
+@router.post("/admin/reseed")
+async def admin_reseed_endpoint(request: Request) -> Dict[str, Any]:
+    """
+    Admin endpoint to re-run DML seed SQL files against Lakebase.
+    Deletes existing rows from target tables and re-inserts from seed files.
+    """
+    import re as _re
+    import glob as _glob
+    
+    try:
+        current_user = _get_session_user(request)
+        logger.info(f"[Admin Reseed] Triggered by {current_user}")
+        
+        project_root = Path(__file__).parent.parent.parent.parent
+        dml_dir = project_root / "db" / "lakebase" / "dml_seed"
+        
+        if not dml_dir.exists():
+            return {"success": False, "message": f"DML seed directory not found: {dml_dir}"}
+        
+        schema = os.getenv("LAKEBASE_SCHEMA", "vibe_coding_workshop")
+        
+        dml_files = sorted(_glob.glob(str(dml_dir / "*.sql")))
+        if not dml_files:
+            return {"success": False, "message": "No SQL files found in DML seed directory"}
+        
+        tables_to_clear = ['section_input_prompts', 'usecase_descriptions', 'workshop_parameters']
+        for table in tables_to_clear:
+            try:
+                execute_insert(f"DELETE FROM {schema}.{table}")
+                logger.info(f"[Admin Reseed] Cleared {schema}.{table}")
+            except Exception as del_err:
+                logger.warning(f"[Admin Reseed] Could not clear {table}: {del_err}")
+        
+        results = []
+        total_statements = 0
+        total_errors = 0
+        
+        for dml_file in dml_files:
+            filename = os.path.basename(dml_file)
+            logger.info(f"[Admin Reseed] Processing {filename}")
+            
+            with open(dml_file, 'r', encoding='utf-8') as f:
+                content = f.read()
+            
+            content = _re.sub(r'\$\{catalog\}\.\$\{schema\}\.', f'{schema}.', content)
+            content = content.replace('${schema}', schema)
+            content = content.replace('current_timestamp()', 'CURRENT_TIMESTAMP')
+            content = content.replace('current_user()', 'CURRENT_USER')
+            
+            statements = _parse_sql_statements(content)
+            
+            file_ok = 0
+            file_err = 0
+            for stmt in statements:
+                stmt_stripped = stmt.strip()
+                if not stmt_stripped or stmt_stripped.startswith('--'):
+                    continue
+                try:
+                    success = execute_insert(stmt_stripped)
+                    if success:
+                        file_ok += 1
+                    else:
+                        file_err += 1
+                        logger.error(f"[Admin Reseed] Failed statement in {filename}: {stmt_stripped[:100]}...")
+                except Exception as stmt_err:
+                    file_err += 1
+                    logger.error(f"[Admin Reseed] Error in {filename}: {stmt_err}")
+            
+            total_statements += file_ok
+            total_errors += file_err
+            results.append({"file": filename, "ok": file_ok, "errors": file_err})
+            logger.info(f"[Admin Reseed] {filename}: {file_ok} OK, {file_err} errors")
+        
+        from ..services.lakebase import execute_query as _eq
+        count_result = _eq(f"SELECT COUNT(*) as cnt FROM {schema}.section_input_prompts")
+        row_count = count_result[0]['cnt'] if count_result else 'unknown'
+        
+        return {
+            "success": total_errors == 0,
+            "message": f"Reseed complete. {total_statements} statements OK, {total_errors} errors. {row_count} rows in section_input_prompts.",
+            "files": results,
+            "total_rows": row_count
+        }
+    except Exception as e:
+        logger.error(f"[Admin Reseed] Error: {e}", exc_info=True)
+        return {"success": False, "message": str(e)}
+
+
+def _parse_sql_statements(sql_content: str) -> list:
+    """Parse SQL content into individual statements, handling embedded quotes."""
+    statements = []
+    i = 0
+    content_len = len(sql_content)
+    
+    while i < content_len:
+        if sql_content[i:i+2] == '--':
+            while i < content_len and sql_content[i] != '\n':
+                i += 1
+            i += 1
+            continue
+        
+        if sql_content[i] in ' \t\n\r':
+            i += 1
+            continue
+        
+        stmt_start = i
+        in_string = False
+        paren_depth = 0
+        
+        while i < content_len:
+            char = sql_content[i]
+            
+            if char == "'" and not in_string:
+                in_string = True
+                i += 1
+                continue
+            elif char == "'" and in_string:
+                if i + 1 < content_len and sql_content[i + 1] == "'":
+                    i += 2
+                    continue
+                in_string = False
+                i += 1
+                continue
+            
+            if in_string:
+                i += 1
+                continue
+            
+            if char == '-' and i + 1 < content_len and sql_content[i + 1] == '-':
+                while i < content_len and sql_content[i] != '\n':
+                    i += 1
+                i += 1
+                continue
+            
+            if char == '(':
+                paren_depth += 1
+            elif char == ')':
+                paren_depth -= 1
+            
+            if char == ';' and not in_string and paren_depth <= 0:
+                stmt = sql_content[stmt_start:i+1].strip()
+                if stmt and not stmt.startswith('--'):
+                    statements.append(stmt)
+                i += 1
+                break
+            
+            i += 1
+        else:
+            stmt = sql_content[stmt_start:].strip()
+            if stmt and not stmt.startswith('--'):
+                if 'INSERT' in stmt.upper() or 'CREATE' in stmt.upper() or 'DELETE' in stmt.upper():
+                    statements.append(stmt)
+            break
+    
+    return statements
+
+
+# ============================================================
 # User Endpoints
 # ============================================================
 
@@ -4925,7 +5160,7 @@ async def upload_section_image(
         "id": image_id,
         "filename": filename,
         "path": f"uploads/section-images/{section_tag}/{safe_filename}",
-        "uploaded_at": datetime.utcnow().isoformat(),
+        "uploaded_at": datetime.now(timezone.utc).isoformat(),
         "uploaded_by": user
     }
     
@@ -5243,14 +5478,6 @@ async def _stream_usecase_generation(
     request_body: UseCaseGenerateRequest,
 ) -> AsyncGenerator[str, None]:
     """Stream LLM response for use case generation/refinement."""
-    # Get workspace client and endpoint
-    client = get_workspace_client()
-    endpoint = get_best_available_endpoint()
-    
-    if not client or not endpoint:
-        yield f"data: {json.dumps({'type': 'error', 'error': 'LLM not available'})}\n\n"
-        return
-    
     # Choose system prompt based on mode
     if request_body.mode == "refine" and request_body.current_draft:
         system_prompt = USE_CASE_REFINE_SYSTEM_PROMPT
@@ -5341,60 +5568,9 @@ async def _stream_usecase_generation(
     if payload_estimate > 3_800_000:
         logger.warning(f"[UseCase Builder] Payload {payload_estimate} bytes exceeds 3.8MB safety limit, falling back to text-only")
         messages = [{"role": "system", "content": system_prompt}, {"role": "user", "content": user_text}]
-    
-    # Build streaming request
-    request_payload = {
-        "messages": messages,
-        "max_tokens": 4000,
-        "stream": True,
-    }
-    if "mini" not in endpoint.lower():
-        request_payload["temperature"] = 0.5
-    
-    try:
-        yield f"data: {json.dumps({'type': 'start', 'model': endpoint})}\n\n"
-        
-        import httpx
-        workspace_host = client.config.host.rstrip('/')
-        
-        headers = {"Content-Type": "application/json"}
-        try:
-            auth_header = client.config.authenticate()
-            if auth_header:
-                headers.update(auth_header)
-        except Exception as auth_err:
-            logger.warning(f"  [UseCase Builder] Could not get auth headers: {auth_err}")
-        
-        async with httpx.AsyncClient(timeout=120.0) as http_client:
-            async with http_client.stream(
-                "POST",
-                f"{workspace_host}/serving-endpoints/{endpoint}/invocations",
-                json=request_payload,
-                headers=headers
-            ) as response:
-                if response.status_code != 200:
-                    error_body = await response.aread()
-                    yield f"data: {json.dumps({'type': 'error', 'error': f'HTTP {response.status_code}: {error_body.decode()[:200]}'})}\n\n"
-                    return
-                
-                async for line in response.aiter_lines():
-                    if line.startswith("data: "):
-                        data = line[6:]
-                        if data == "[DONE]":
-                            yield f"data: {json.dumps({'type': 'done'})}\n\n"
-                        else:
-                            try:
-                                chunk = json.loads(data)
-                                if "choices" in chunk and chunk["choices"]:
-                                    delta = chunk["choices"][0].get("delta", {})
-                                    content = delta.get("content", "")
-                                    if content:
-                                        yield f"data: {json.dumps({'type': 'content', 'content': content})}\n\n"
-                            except json.JSONDecodeError:
-                                pass
-    except Exception as e:
-        logger.error(f"[UseCase Builder] Streaming error: {e}")
-        yield f"data: {json.dumps({'type': 'error', 'error': str(e)})}\n\n"
+
+    async for event in _stream_with_retry(messages, max_tokens=4000, temperature=0.5):
+        yield event
 
 
 @router.post("/usecase-builder/generate", summary="Generate use case description (streaming SSE)")

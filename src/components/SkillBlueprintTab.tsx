@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
+import { useEscapeKey } from '../hooks/useEscapeKey';
 import {
   FileText,
   Cpu,
@@ -480,20 +481,17 @@ export function SkillBlueprintFullScreenModal({
   const totalSkills = TIER1_FOUNDATION.skills.length +
     config.sections.reduce((sum, s) => sum + s.skills.length, 0);
 
-  const handleKeyDown = useCallback((e: KeyboardEvent) => {
-    if (e.key === 'Escape') setIsOpen(false);
-  }, []);
+  const closeModal = useCallback(() => setIsOpen(false), []);
+  useEscapeKey(isOpen, closeModal);
 
   useEffect(() => {
     if (isOpen) {
-      document.addEventListener('keydown', handleKeyDown);
       document.body.style.overflow = 'hidden';
     }
     return () => {
-      document.removeEventListener('keydown', handleKeyDown);
       document.body.style.overflow = '';
     };
-  }, [isOpen, handleKeyDown]);
+  }, [isOpen]);
 
   return (
     <>

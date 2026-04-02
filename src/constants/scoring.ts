@@ -22,6 +22,8 @@ export const STEP_SCORES: Record<number, number> = {
   20: 60, 21: 60,
   // Agent Skills (steps 26-30): 40 points each
   26: 40, 27: 40, 28: 40, 29: 40, 30: 40,
+  // Clean Up (step 31): 10 points
+  31: 10,
 };
 
 // Chapter definitions for milestone detection
@@ -33,6 +35,7 @@ export const CHAPTERS: Record<string, { steps: Set<number>; display: string }> =
   'Chapter 4': { steps: new Set([15, 16, 17, 18, 19, 24, 25]), display: 'Data Intelligence' },
   'Refinement': { steps: new Set([20, 21]), display: 'Refinement' },
   'Agent Skills': { steps: new Set([26, 27, 28, 29, 30]), display: 'Agent Skills' },
+  'Clean Up': { steps: new Set([31]), display: 'Clean Up' },
 };
 
 /**

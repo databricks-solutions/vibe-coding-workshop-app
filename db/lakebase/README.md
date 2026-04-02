@@ -4,7 +4,7 @@ This directory contains all DDL and DML SQL files for the Vibe Coding Workshop L
 
 > **Note**: For full automated deployment including tables, use:
 > ```bash
-> ./scripts/deploy.sh --target development
+> ./scripts/deploy.sh --target user
 > ```
 
 ## Directory Structure
@@ -16,11 +16,14 @@ db/lakebase/
 │   ├── 01_usecase_descriptions.sql
 │   ├── 02_section_input_prompts.sql
 │   ├── 03_sessions.sql
-│   └── 04_workshop_parameters.sql
+│   ├── 04_workshop_parameters.sql
+│   ├── 05_saved_usecase_descriptions.sql
+│   └── 06_apply_tags.sql
 └── dml_seed/              # Initial seed data (DML)
     ├── 01_seed_usecase_descriptions.sql
     ├── 02_seed_section_input_prompts.sql
-    └── 03_seed_workshop_parameters.sql
+    ├── 03_seed_workshop_parameters.sql
+    └── 03_seed_workshop_parameters.sql.template
 ```
 
 ## SQL File Format
@@ -86,7 +89,7 @@ Stores versioned input prompts for each workflow step.
 | section_description | TEXT | Brief description |
 | input_template | TEXT | Prompt template with variables |
 | system_prompt | TEXT | System prompt for LLM |
-| order_number | INTEGER | Display order (1-15) |
+| order_number | INTEGER | Display order |
 | how_to_apply | TEXT | Instructions for users |
 | expected_output | TEXT | Expected deliverables |
 | version | INTEGER | Version number |
@@ -100,16 +103,37 @@ Stores user sessions with workflow progress.
 | session_id | VARCHAR(36) | Primary key (UUID) |
 | created_by | VARCHAR(255) | User who created the session |
 | session_name | VARCHAR(100) | Optional name |
-| industry/use_case | VARCHAR(100) | Selected industry/use case |
-| step_1_prompt | TEXT | Generated prompt for step 1 (use case selection) |
-| step_prompts | JSONB | Generated prompts for steps 2-21 (keys: "2" to "21"). Default: '{}' |
+| session_description | VARCHAR(500) | Optional description |
+| industry / use_case | VARCHAR(100) | Selected industry/use case |
+| industry_label / use_case_label | VARCHAR(255) | Display labels |
+| feedback_rating | VARCHAR(20) | User feedback rating |
+| feedback_comment | TEXT | User feedback comment |
+| chapter_feedback | JSONB | Per-chapter feedback. Default: '{}' |
+| step_1_prompt | TEXT | Generated prompt for step 1 |
+| step_prompts | JSONB | Generated prompts for steps 2-31 (keys: "2" to "31"). Default: '{}' |
 | prerequisites_completed | BOOLEAN | Whether prerequisites are done |
-| current_step | INTEGER | Current step number (1-21) |
-| workshop_level | VARCHAR(20) | Selected workshop level (100-ui, 100-lakebase, 200, 300, accelerator). Default: '300' |
+| current_step | INTEGER | Current step number (1-31) |
+| workshop_level | VARCHAR(20) | Workshop level (app, app-database, end-to-end, accelerator, etc.) |
 | completed_steps | TEXT | JSON array of completed step numbers |
+| skipped_steps | TEXT | JSON array of skipped step numbers. Default: '[]' |
 | session_parameters | JSONB | Per-session parameter overrides. Default: '{}' |
 
-### 4. workshop_parameters
+### 4. saved_usecase_descriptions
+Community library of user-generated use case descriptions from the Build Your Use Case feature. All users can view and edit.
+
+| Column | Type | Description |
+|--------|------|-------------|
+| id | SERIAL | Primary key |
+| created_by | VARCHAR(255) | Original creator email |
+| display_name | VARCHAR(255) | Display name |
+| updated_by | VARCHAR(255) | Last editor email |
+| industry | VARCHAR(255) | Industry identifier |
+| use_case_name | VARCHAR(255) | Use case name |
+| description | TEXT | Full use case description |
+| version | INTEGER | Version number. Default: 1 |
+| is_active | BOOLEAN | Whether this entry is active. Default: true |
+
+### 5. workshop_parameters
 Stores configurable key-value parameters that are available to all workflow steps and prompts.
 These parameters can be configured via the UI (Configuration → Workshop Parameters tab).
 
@@ -125,11 +149,11 @@ These parameters can be configured via the UI (Configuration → Workshop Parame
 | is_required | BOOLEAN | Whether the parameter is required |
 | is_active | BOOLEAN | Whether this parameter is active |
 
-**Default Parameters:**
-- `workspace_url` - Databricks workspace URL (default: `https://e2-demo-field-eng.cloud.databricks.com`)
+**Default Parameters** (values are generated from `user-config.yaml` during install):
+- `workspace_url` - Databricks workspace URL
 - `default_warehouse` - Default SQL Warehouse name
-- `lakebase_instance_name` - Lakebase PostgreSQL instance name (used in Steps 5 and 6)
-- `lakebase_host_name` - Lakebase PostgreSQL host DNS (the endpoint used to connect to the database)
+- `lakebase_instance_name` - Lakebase project/instance name (used in Steps 6 and 7)
+- `lakebase_host_name` - Lakebase PostgreSQL endpoint DNS
 
 ## Adding New Use Cases
 
@@ -152,22 +176,22 @@ Input templates support these variables (replaced at generation time):
 |----------|--------|---------|
 | `{industry_name}` | Selected industry label | All steps |
 | `{use_case_title}` | Selected use case label | All steps |
-| `{use_case_description}` | From usecase_descriptions table | Steps 1-4 |
-| `{prd_document}` | Output from Step 2 | Steps 3, 5, 12, 13 |
-| `{table_metadata}` | Output from Step 5 | Steps 6, 7, 8 |
-| `{silver_layer_output}` | Output from Step 8 | Step 9 |
-| `{gold_layer_output}` | Output from Step 9 | Steps 10, 11 |
-| `{gold_layer_design}` | Output from Step 6 | Steps 10, 12, 13 |
+| `{use_case_description}` | From usecase_descriptions table | Steps 1-5 |
+| `{prd_document}` | Output from Step 3 | Steps 4, 6, 10, 13, 14 |
+| `{table_metadata}` | Output from Step 10 | Steps 11, 12, 13 |
+| `{silver_layer_output}` | Output from Step 13 | Step 14 |
+| `{gold_layer_output}` | Output from Step 11 | Steps 12, 14 |
+| `{gold_layer_design}` | Output from Step 11 | Steps 12, 13, 14 |
 
 ### Workshop Parameters (Configurable via UI)
 These parameters are stored in the `workshop_parameters` table and can be edited in the Configuration → Workshop Parameters tab:
 
-| Variable | Default Value | Description |
-|----------|---------------|-------------|
-| `{workspace_url}` | `https://e2-demo-field-eng.cloud.databricks.com` | Databricks workspace URL |
-| `{default_warehouse}` | `Starter Warehouse` | Default SQL Warehouse |
-| `{lakebase_instance_name}` | `DONOTDELETE-vibe-coding-workshop-lakebase` | Lakebase PostgreSQL instance name |
-| `{lakebase_host_name}` | `instance-b43d19b6-7ac2-4e4f-9ce6-30c33f8e9ca6.database.cloud.databricks.com` | Lakebase PostgreSQL host DNS |
+| Variable | Description |
+|----------|-------------|
+| `{workspace_url}` | Databricks workspace URL (from `user-config.yaml`) |
+| `{default_warehouse}` | Default SQL Warehouse name |
+| `{lakebase_instance_name}` | Lakebase project/instance name |
+| `{lakebase_host_name}` | Lakebase PostgreSQL endpoint DNS |
 
 To add new workshop parameters:
 1. Insert a new row in `workshop_parameters` table

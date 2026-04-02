@@ -5,6 +5,7 @@ import { MarkdownContent, type MarkdownContentRef } from './MarkdownContent';
 import { CopyButton } from './CopyButton';
 import { ExpandableOutputModal } from './ExpandableOutputModal';
 import { useCopyToClipboard } from '../hooks/useCopyToClipboard';
+import { ExpandableErrorBanner } from './ExpandableErrorBanner';
 import { apiClient, type GeneratedContent } from '../api/client';
 
 const REQUIRED_COLUMNS = ['table_name', 'column_name', 'data_type', 'ordinal_position', 'is_nullable', 'comment'] as const;
@@ -110,6 +111,7 @@ export function CsvUploadPanel({
   const [isStreaming, setIsStreaming] = useState(false);
   const [streamedPrompt, setStreamedPrompt] = useState('');
   const [promptError, setPromptError] = useState<string | null>(null);
+  const [retryStatus, setRetryStatus] = useState<{ attempt: number; maxAttempts: number; reason: string } | null>(null);
   const [showOutput, setShowOutput] = useState(false);
   const [activeTab, setActiveTab] = useState<'prompt' | 'how_to_apply' | 'expected_output'>('prompt');
   const [metadata, setMetadata] = useState<{ how_to_apply: string; expected_output: string } | null>(null);
@@ -204,6 +206,7 @@ export function CsvUploadPanel({
     setShowOutput(true);
     setStreamedPrompt('');
     setPromptError(null);
+    setRetryStatus(null);
     setActiveTab('prompt');
 
     const controller = apiClient.processMetadataCsvStream(
@@ -213,6 +216,7 @@ export function CsvUploadPanel({
       sessionId,
       sectionTag,
       (chunk) => {
+        setRetryStatus(null);
         streamBufferRef.current += chunk;
         if (!rafIdRef.current) {
           rafIdRef.current = requestAnimationFrame(() => {
@@ -226,6 +230,7 @@ export function CsvUploadPanel({
         setStreamedPrompt(streamBufferRef.current);
         setIsProcessing(false);
         setIsStreaming(false);
+        setRetryStatus(null);
         if (streamBufferRef.current) {
           onPromptGenerated(stepNumber, streamBufferRef.current);
         }
@@ -235,7 +240,11 @@ export function CsvUploadPanel({
         setStreamedPrompt(streamBufferRef.current);
         setIsProcessing(false);
         setIsStreaming(false);
+        setRetryStatus(null);
         setPromptError(error);
+      },
+      (attempt, maxAttempts, reason) => {
+        setRetryStatus({ attempt, maxAttempts, reason });
       }
     );
 
@@ -254,6 +263,7 @@ export function CsvUploadPanel({
     setShowOutput(false);
     setStreamedPrompt('');
     setPromptError(null);
+    setRetryStatus(null);
     if (fileInputRef.current) fileInputRef.current.value = '';
   }, []);
 
@@ -395,11 +405,19 @@ export function CsvUploadPanel({
         </div>
       )}
 
-      {/* Error */}
-      {promptError && !validation?.error && (
-        <div className="p-2.5 bg-red-900/30 border border-red-700/50 rounded text-red-300 text-[13px]">
-          {promptError}
+      {/* Retry status indicator */}
+      {isStreaming && retryStatus && (
+        <div className="px-3 py-2.5 rounded-md bg-amber-500/10 border border-amber-500/20 text-amber-300 text-[13px] flex items-center gap-2">
+          <div className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse shrink-0" />
+          Retrying ({retryStatus.attempt} of {retryStatus.maxAttempts}) &mdash; {retryStatus.reason}...
         </div>
+      )}
+      {/* Error */}
+      {!isStreaming && promptError && !validation?.error && (
+        <ExpandableErrorBanner
+          error={promptError}
+          summary={<>Processing failed &mdash; click <strong>Process &amp; Generate</strong> to try again</>}
+        />
       )}
 
       {/* Process button */}

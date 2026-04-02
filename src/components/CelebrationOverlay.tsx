@@ -13,6 +13,7 @@ import {
   Globe, HardDrive, Database, Layers, Zap, Bot, LayoutDashboard, Brain,
   type LucideIcon
 } from 'lucide-react';
+import { useEscapeKey } from '../hooks/useEscapeKey';
 import { CHAPTER_LEARNING } from '../constants/chapterLearning';
 import { buildServiceNameMap, renderTextWithServices } from './TypingText';
 import { ServicePopover, serviceData } from './ServicePopover';
@@ -269,6 +270,7 @@ function MilestoneCelebration({
   const [feedbackGiven, setFeedbackGiven] = useState<'up' | 'down' | null>(null);
   const [feedbackSubmitting, setFeedbackSubmitting] = useState(false);
   const modalRef = useRef<HTMLDivElement>(null);
+  useEscapeKey(true, onComplete);
 
   // Look up chapter learning content
   const chapterKey = chapterName || milestoneTitle || '';

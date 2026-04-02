@@ -5,11 +5,15 @@
  * Updated to match dark theme
  */
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import { Lightbulb, X, Pencil } from 'lucide-react';
 import { apiClient } from '../../api/client';
 import type { PromptConfig, ConfigVersionInfo } from '../../api/client';
+import { useUseCaseBuilder } from '../../hooks/useUseCaseBuilder';
+import { UseCaseBuilderPanel } from '../UseCaseBuilderPanel';
 
 // Styled markdown components for nice rendering (dark theme)
 const markdownComponents = {
@@ -98,6 +102,13 @@ export function PromptsConfig({ onToast }: PromptsConfigProps) {
   const [selectedUseCase, setSelectedUseCase] = useState<string>('');
   const [searchQuery, setSearchQuery] = useState('');
 
+  const updateUrlParams = useCallback((industry: string, useCase: string) => {
+    const url = new URL(window.location.href);
+    if (industry) { url.searchParams.set('industry', industry); } else { url.searchParams.delete('industry'); }
+    if (useCase) { url.searchParams.set('useCase', useCase); } else { url.searchParams.delete('useCase'); }
+    window.history.replaceState({}, '', url.toString());
+  }, []);
+
   // View/Edit mode state
   const [isEditMode, setIsEditMode] = useState(false);
 
@@ -116,19 +127,39 @@ export function PromptsConfig({ onToast }: PromptsConfigProps) {
 
   // Modal state
   const [showAddIndustryModal, setShowAddIndustryModal] = useState(false);
-  const [showAddUseCaseModal, setShowAddUseCaseModal] = useState(false);
   const [showConfirmSaveModal, setShowConfirmSaveModal] = useState(false);
   const [showDeleteConfirmModal, setShowDeleteConfirmModal] = useState<{type: 'industry' | 'usecase', industry: string, useCase?: string} | null>(null);
   const [deleteConfirmText, setDeleteConfirmText] = useState('');
   const [newIndustryId, setNewIndustryId] = useState('');
   const [newIndustryLabel, setNewIndustryLabel] = useState('');
-  const [newUseCaseId, setNewUseCaseId] = useState('');
-  const [newUseCaseLabel, setNewUseCaseLabel] = useState('');
+
+  // Builder overlay state (replaces the old simple Add Use Case modal)
+  const builder = useUseCaseBuilder();
+  const [showBuilderOverlay, setShowBuilderOverlay] = useState(false);
+  const [builderUseCaseId, setBuilderUseCaseId] = useState('');
+  const [builderIdManuallyEdited, setBuilderIdManuallyEdited] = useState(false);
+  const [builderIdEditMode, setBuilderIdEditMode] = useState(false);
+  const [builderSaveError, setBuilderSaveError] = useState<string | null>(null);
+  const [showDiscardConfirm, setShowDiscardConfirm] = useState(false);
 
   // Load configs on mount
   useEffect(() => {
     loadConfigs();
   }, []);
+
+  // Apply URL params after configs load
+  useEffect(() => {
+    if (loading || configs.length === 0) return;
+    const params = new URLSearchParams(window.location.search);
+    const ind = params.get('industry');
+    const uc = params.get('useCase');
+    if (ind && configs.some(c => c.industry === ind && c.use_case !== '_placeholder')) {
+      setSelectedIndustry(ind);
+      if (uc && configs.some(c => c.industry === ind && c.use_case === uc)) {
+        setSelectedUseCase(uc);
+      }
+    }
+  }, [loading, configs]);
 
   // Load versions when selection changes
   useEffect(() => {
@@ -297,27 +328,104 @@ export function PromptsConfig({ onToast }: PromptsConfigProps) {
     }
   }
 
-  async function handleAddUseCase() {
-    if (!selectedIndustry || !newUseCaseId || !newUseCaseLabel) return;
+  // --- Builder overlay helpers ---
+
+  const toSlug = (s: string) => s.trim().toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
+
+  const selectedIndustryLabel = useMemo(() => {
+    const ind = configs.find(c => c.industry === selectedIndustry);
+    return ind?.industry_label || selectedIndustry;
+  }, [configs, selectedIndustry]);
+
+  const openBuilderOverlay = useCallback(() => {
+    builder.setIndustry(selectedIndustryLabel);
+    builder.setUseCaseName('');
+    builder.setHints('');
+    builder.setAttachments([]);
+    builder.setOutputText('');
+    builder.setError(null);
+    setBuilderUseCaseId('');
+    setBuilderIdManuallyEdited(false);
+    setBuilderIdEditMode(false);
+    setBuilderSaveError(null);
+    setShowDiscardConfirm(false);
+    setShowBuilderOverlay(true);
+  }, [builder, selectedIndustryLabel]);
+
+  const resetAndCloseBuilder = useCallback(() => {
+    if (builder.isStreaming) builder.handleStopStreaming();
+    builder.setIndustry('');
+    builder.setUseCaseName('');
+    builder.setHints('');
+    builder.setAttachments([]);
+    builder.setOutputText('');
+    builder.setError(null);
+    setShowBuilderOverlay(false);
+    setShowDiscardConfirm(false);
+    setBuilderSaveError(null);
+  }, [builder]);
+
+  const handleBuilderClose = useCallback(() => {
+    const hasContent = !!(builder.outputText || builder.isStreaming);
+    if (hasContent) {
+      setShowDiscardConfirm(true);
+    } else {
+      resetAndCloseBuilder();
+    }
+  }, [builder.outputText, builder.isStreaming, resetAndCloseBuilder]);
+
+  const derivedSlug = useMemo(() => {
+    if (builderIdManuallyEdited) return builderUseCaseId;
+    return toSlug(builder.useCaseName);
+  }, [builder.useCaseName, builderUseCaseId, builderIdManuallyEdited]);
+
+  const builderDescription = builder.isEditing ? builder.editText : builder.outputText;
+
+  const canSaveBuilder = !!(
+    builder.useCaseName.trim() &&
+    builderDescription.trim() &&
+    derivedSlug &&
+    derivedSlug !== '_placeholder' &&
+    !builder.isStreaming &&
+    !saving
+  );
+
+  async function handleSaveFromBuilder() {
+    if (!selectedIndustry || !canSaveBuilder) return;
 
     try {
       setSaving(true);
+      setBuilderSaveError(null);
       await apiClient.addUseCase({
         industry: selectedIndustry,
-        use_case: newUseCaseId.toLowerCase().replace(/\s+/g, '_'),
-        use_case_label: newUseCaseLabel,
+        use_case: derivedSlug,
+        use_case_label: builder.useCaseName.trim(),
+        prompt_template: builderDescription.trim(),
       });
-      onToast(`Use case "${newUseCaseLabel}" created`, 'success');
-      setShowAddUseCaseModal(false);
-      setNewUseCaseId('');
-      setNewUseCaseLabel('');
+      onToast(`Use case "${builder.useCaseName.trim()}" created and activated`, 'success');
+      resetAndCloseBuilder();
       await loadConfigs();
+      setSelectedUseCase(derivedSlug);
+      updateUrlParams(selectedIndustry, derivedSlug);
     } catch (error: any) {
-      onToast(error?.message || 'Failed to add use case', 'error');
+      setBuilderSaveError(error?.message || 'Failed to create use case');
     } finally {
       setSaving(false);
     }
   }
+
+  // Escape key for builder overlay
+  useEffect(() => {
+    if (!showBuilderOverlay) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        handleBuilderClose();
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [showBuilderOverlay, handleBuilderClose]);
 
   async function handleSaveActiveStatus() {
     if (!selectedIndustry || !selectedUseCase) return;
@@ -356,10 +464,12 @@ export function PromptsConfig({ onToast }: PromptsConfigProps) {
         onToast(`Industry "${showDeleteConfirmModal.industry}" deleted`, 'success');
         setSelectedIndustry('');
         setSelectedUseCase('');
+        updateUrlParams('', '');
       } else if (showDeleteConfirmModal.useCase) {
         await apiClient.deleteUseCase(showDeleteConfirmModal.industry, showDeleteConfirmModal.useCase);
         onToast(`Use case deleted`, 'success');
         setSelectedUseCase('');
+        updateUrlParams(selectedIndustry, '');
       }
       setShowDeleteConfirmModal(null);
       setDeleteConfirmText('');
@@ -413,6 +523,7 @@ export function PromptsConfig({ onToast }: PromptsConfigProps) {
                 setSelectedIndustry(ind.value);
                 setSelectedUseCase('');
                 setIsEditMode(false);
+                updateUrlParams(ind.value, '');
               }}
             >
               <span className="truncate">{ind.label}</span>
@@ -443,9 +554,9 @@ export function PromptsConfig({ onToast }: PromptsConfigProps) {
             <h3 className="font-semibold text-foreground text-sm">Use Cases</h3>
             {selectedIndustry && (
               <button
-                onClick={() => setShowAddUseCaseModal(true)}
+                onClick={openBuilderOverlay}
                 className="text-primary hover:text-primary/80 text-lg font-bold"
-                title="Add Use Case"
+                title="Build New Use Case"
               >
                 +
               </button>
@@ -462,6 +573,7 @@ export function PromptsConfig({ onToast }: PromptsConfigProps) {
               onClick={() => {
                 setSelectedUseCase(uc.value);
                 setIsEditMode(false);
+                updateUrlParams(selectedIndustry, uc.value);
               }}
             >
               <div className="flex items-center gap-2 min-w-0">
@@ -746,54 +858,158 @@ export function PromptsConfig({ onToast }: PromptsConfigProps) {
         </div>
       )}
 
-      {/* Add Use Case Modal */}
-      {showAddUseCaseModal && (
-        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
-          <div className="bg-card rounded-lg shadow-xl w-96 p-6 border border-border">
-            <h3 className="text-lg font-semibold text-foreground mb-4">Add New Use Case</h3>
-            <p className="text-sm text-muted-foreground mb-4">
-              Adding to: <span className="font-medium text-foreground">{currentConfig?.industry_label || selectedIndustry}</span>
-            </p>
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-foreground mb-1">Use Case ID</label>
-                <input
-                  type="text"
-                  value={newUseCaseId}
-                  onChange={e => setNewUseCaseId(e.target.value)}
-                  placeholder="e.g., patient_portal"
-                  className="w-full px-3 py-2 border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary bg-background text-foreground"
-                />
-                <p className="text-xs text-muted-foreground mt-1">Lowercase, no spaces (use underscores)</p>
+      {/* Build Use Case Overlay (full-screen builder) */}
+      {showBuilderOverlay && createPortal(
+        <div
+          className="fixed inset-0 flex items-center justify-center p-4"
+          style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 99999, width: '100vw', height: '100vh' }}
+        >
+          <div className="absolute inset-0 bg-black/90" style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%' }} />
+
+          <div
+            className="relative bg-card border border-border rounded-lg shadow-2xl flex flex-col"
+            style={{ width: 'calc(100vw - 48px)', height: 'calc(100vh - 48px)', maxWidth: 'none', zIndex: 100000 }}
+          >
+            {/* Header */}
+            <div className="flex items-center justify-between px-5 py-3 border-b border-border bg-secondary/30 rounded-t-lg">
+              <div className="flex items-center gap-3">
+                <div className="p-1.5 bg-amber-500/10 rounded-lg border border-amber-500/20">
+                  <Lightbulb className="w-4 h-4 text-amber-400" />
+                </div>
+                <div>
+                  <h3 className="text-[15px] font-semibold text-foreground">Build New Use Case</h3>
+                  <p className="text-[11px] text-muted-foreground">
+                    Industry: <span className="text-foreground font-medium">{selectedIndustryLabel}</span>
+                  </p>
+                </div>
               </div>
-              <div>
-                <label className="block text-sm font-medium text-foreground mb-1">Display Label</label>
-                <input
-                  type="text"
-                  value={newUseCaseLabel}
-                  onChange={e => setNewUseCaseLabel(e.target.value)}
-                  placeholder="e.g., Patient Portal"
-                  className="w-full px-3 py-2 border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary bg-background text-foreground"
-                />
-              </div>
+              <button
+                onClick={handleBuilderClose}
+                className="flex items-center gap-1.5 p-1.5 rounded text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors"
+                title="Close (Esc)"
+              >
+                <X className="w-5 h-5" />
+              </button>
             </div>
-            <div className="flex justify-end gap-3 mt-6">
-              <button
-                onClick={() => setShowAddUseCaseModal(false)}
-                className="px-4 py-2 text-muted-foreground hover:text-foreground"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleAddUseCase}
-                disabled={!newUseCaseId || !newUseCaseLabel || saving}
-                className="px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 disabled:opacity-50"
-              >
-                {saving ? 'Adding...' : 'Add Use Case'}
-              </button>
+
+            {/* Body */}
+            <div className="flex-1 overflow-y-auto px-5 py-4">
+              <UseCaseBuilderPanel builder={builder} hideSave hideIndustry />
+            </div>
+
+            {/* Footer */}
+            <div className="px-5 py-3 border-t border-border bg-secondary/20 rounded-b-lg">
+              {/* Use Case ID display */}
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-2 text-[12px]">
+                  <span className="text-muted-foreground">Use Case ID:</span>
+                  {builderIdEditMode ? (
+                    <input
+                      type="text"
+                      value={builderIdManuallyEdited ? builderUseCaseId : derivedSlug}
+                      onChange={(e) => {
+                        const val = e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, '');
+                        setBuilderUseCaseId(val);
+                        setBuilderIdManuallyEdited(true);
+                      }}
+                      onBlur={() => {
+                        setBuilderIdEditMode(false);
+                        if (!builderUseCaseId.trim()) setBuilderIdManuallyEdited(false);
+                      }}
+                      onKeyDown={(e) => { if (e.key === 'Enter') setBuilderIdEditMode(false); }}
+                      className="px-2 py-0.5 bg-background border border-primary/40 rounded text-[12px] font-mono text-foreground focus:outline-none focus:ring-1 focus:ring-primary/50 w-48"
+                      autoFocus
+                      placeholder="e.g., patient_portal"
+                    />
+                  ) : (
+                    <span className="flex items-center gap-1.5">
+                      <code className="px-1.5 py-0.5 bg-secondary rounded text-[11px] font-mono text-foreground">
+                        {derivedSlug || '...'}
+                      </code>
+                      <button
+                        onClick={() => setBuilderIdEditMode(true)}
+                        className="p-0.5 text-muted-foreground hover:text-primary transition-colors"
+                        title="Edit use case ID"
+                      >
+                        <Pencil className="w-3 h-3" />
+                      </button>
+                    </span>
+                  )}
+                </div>
+                <span className="text-[11px] text-muted-foreground">
+                  Press <kbd className="px-1.5 py-0.5 bg-secondary rounded text-[10px] font-mono">Esc</kbd> to close
+                </span>
+              </div>
+
+              {/* Error display */}
+              {builderSaveError && (
+                <div className="flex items-center gap-2 mb-3 px-3 py-2 bg-red-900/30 border border-red-700/50 rounded-lg text-red-300 text-[12px]">
+                  <div className="w-1.5 h-1.5 rounded-full bg-red-400 shrink-0" />
+                  <span>{builderSaveError}</span>
+                  <button onClick={() => setBuilderSaveError(null)} className="ml-auto text-red-400 hover:text-red-300">
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              )}
+
+              {/* Action buttons */}
+              <div className="flex items-center justify-between">
+                <button
+                  onClick={handleBuilderClose}
+                  className="px-4 py-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleSaveFromBuilder}
+                  disabled={!canSaveBuilder}
+                  className={`flex items-center gap-2 px-5 py-2 text-sm font-medium rounded-lg transition-colors ${
+                    canSaveBuilder
+                      ? 'bg-emerald-600 text-white hover:bg-emerald-500'
+                      : 'bg-secondary text-muted-foreground cursor-not-allowed opacity-50'
+                  }`}
+                >
+                  {saving ? (
+                    <>
+                      <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                      Saving...
+                    </>
+                  ) : (
+                    'Save & Activate Use Case'
+                  )}
+                </button>
+              </div>
             </div>
           </div>
-        </div>
+
+          {/* Discard confirmation overlay */}
+          {showDiscardConfirm && (
+            <div className="absolute inset-0 flex items-center justify-center" style={{ zIndex: 100001 }}>
+              <div className="absolute inset-0 bg-black/60" onClick={() => setShowDiscardConfirm(false)} />
+              <div className="relative bg-card rounded-lg shadow-xl w-96 p-6 border border-border">
+                <h3 className="text-lg font-semibold text-foreground mb-2">Discard unsaved content?</h3>
+                <p className="text-sm text-muted-foreground mb-5">
+                  You have generated content that hasn't been saved. Closing will discard it.
+                </p>
+                <div className="flex justify-end gap-3">
+                  <button
+                    onClick={() => setShowDiscardConfirm(false)}
+                    className="px-4 py-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
+                  >
+                    Keep Editing
+                  </button>
+                  <button
+                    onClick={resetAndCloseBuilder}
+                    className="px-4 py-2 text-sm bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors"
+                  >
+                    Discard & Close
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>,
+        document.body
       )}
 
       {/* Confirm Save Modal */}

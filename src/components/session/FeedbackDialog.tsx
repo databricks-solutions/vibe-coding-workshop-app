@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { MessageSquare, X, ThumbsUp, ThumbsDown, Send } from 'lucide-react';
+import { useEscapeKey } from '../../hooks/useEscapeKey';
 
 interface FeedbackDialogProps {
   isOpen: boolean;
@@ -33,6 +34,8 @@ export function FeedbackDialog({
     }
   }, [isOpen, initialRating, initialComment]);
 
+  useEscapeKey(isOpen, onClose);
+
   if (!isOpen) return null;
 
   const validate = (): boolean => {
@@ -55,17 +58,10 @@ export function FeedbackDialog({
     }
   };
 
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Escape') {
-      onClose();
-    }
-  };
-
   return (
     <div 
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
       onClick={(e) => e.target === e.currentTarget && onClose()}
-      onKeyDown={handleKeyDown}
     >
       <div className="bg-card border border-border rounded-lg shadow-xl w-full max-w-md mx-4 animate-fade-in">
         {/* Header */}

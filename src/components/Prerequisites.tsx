@@ -17,6 +17,7 @@ function WindowsIcon({ className }: { className?: string }) {
 // Icon mapping for dynamic icons from backend
 const iconMap: Record<string, React.ComponentType<{ className?: string }>> = {
   Terminal,
+  code: Terminal,
   GitBranch,
   Download,
   Database,

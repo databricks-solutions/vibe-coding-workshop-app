@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Save, X, ThumbsUp, ThumbsDown } from 'lucide-react';
+import { useEscapeKey } from '../../hooks/useEscapeKey';
 
 interface SaveSessionDialogProps {
   isOpen: boolean;
@@ -37,6 +38,8 @@ export function SaveSessionDialog({
     }
   }, [isOpen, initialName, initialDescription]);
 
+  useEscapeKey(isOpen, onClose);
+
   if (!isOpen) return null;
 
   const validate = (): boolean => {
@@ -64,17 +67,10 @@ export function SaveSessionDialog({
     }
   };
 
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Escape') {
-      onClose();
-    }
-  };
-
   return (
     <div 
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
       onClick={(e) => e.target === e.currentTarget && onClose()}
-      onKeyDown={handleKeyDown}
     >
       <div className="bg-card border border-border rounded-lg shadow-xl w-full max-w-lg mx-4 animate-fade-in">
         {/* Header */}

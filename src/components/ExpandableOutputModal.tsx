@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { X, Copy, Check, Maximize2 } from 'lucide-react';
 import { MarkdownContent } from './MarkdownContent';
+import { useEscapeKey } from '../hooks/useEscapeKey';
 
 interface ExpandableOutputModalProps {
   /** The content to display */
@@ -41,24 +42,17 @@ export function ExpandableOutputModal({
     }
   };
 
-  // Close on Escape key
-  const handleKeyDown = useCallback((e: KeyboardEvent) => {
-    if (e.key === 'Escape') {
-      setIsOpen(false);
-    }
-  }, []);
+  const closeModal = useCallback(() => setIsOpen(false), []);
+  useEscapeKey(isOpen, closeModal);
 
   useEffect(() => {
     if (isOpen) {
-      document.addEventListener('keydown', handleKeyDown);
-      // Prevent body scroll when modal is open
       document.body.style.overflow = 'hidden';
     }
     return () => {
-      document.removeEventListener('keydown', handleKeyDown);
       document.body.style.overflow = '';
     };
-  }, [isOpen, handleKeyDown]);
+  }, [isOpen]);
 
   // Button color classes
   const buttonColorClasses = {

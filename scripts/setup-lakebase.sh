@@ -233,10 +233,10 @@ if ! databricks current-user me &>/dev/null; then
     exit 1
 fi
 
-# Check if required Python packages are available
-python3 -c "import psycopg2" 2>/dev/null || {
-    echo -e "${YELLOW}Installing psycopg2-binary...${NC}"
-    pip3 install -q psycopg2-binary
+# Check if required Python packages are available (prefer psycopg3, fall back to psycopg2)
+python3 -c "import psycopg" 2>/dev/null || python3 -c "import psycopg2" 2>/dev/null || {
+    echo -e "${YELLOW}Installing psycopg[binary]...${NC}"
+    pip3 install -q "psycopg[binary]" || pip3 install -q psycopg2-binary
 }
 
 python3 -c "import requests" 2>/dev/null || {
@@ -250,6 +250,7 @@ python3 -c "import requests" 2>/dev/null || {
 
 # Export variables for Python
 export LAKEBASE_HOST LAKEBASE_DATABASE LAKEBASE_SCHEMA LAKEBASE_PORT LAKEBASE_USER ACTION PROJECT_ROOT DATABRICKS_HOST
+export LAKEBASE_MODE ENDPOINT_NAME
 
 python3 << 'PYTHON_EOF'
 import os
@@ -257,11 +258,9 @@ import sys
 import re
 import glob
 
-# Suppress warnings
 import warnings
 warnings.filterwarnings('ignore')
 
-# Configuration from environment
 HOST = os.environ.get('LAKEBASE_HOST', '')
 DATABASE = os.environ.get('LAKEBASE_DATABASE', '')
 SCHEMA = os.environ.get('LAKEBASE_SCHEMA', '')
@@ -269,6 +268,8 @@ PORT = int(os.environ.get('LAKEBASE_PORT', '5432'))
 USER = os.environ.get('LAKEBASE_USER', '')
 ACTION = os.environ.get('ACTION', 'create')
 PROJECT_ROOT = os.environ.get('PROJECT_ROOT', '.')
+LAKEBASE_MODE = os.environ.get('LAKEBASE_MODE', 'autoscaling')
+ENDPOINT_NAME = os.environ.get('ENDPOINT_NAME', '')
 
 # Paths to SQL files
 DDL_DIR = os.path.join(PROJECT_ROOT, 'db', 'lakebase', 'ddl')
@@ -420,11 +421,12 @@ def execute_sql_file(cursor, file_path: str, schema: str, ignore_errors: bool = 
 
 
 def get_ddl_files() -> list:
-    """Get sorted list of DDL SQL files."""
+    """Get sorted list of DDL SQL files (excluding UC-only files like tags)."""
     if not os.path.exists(DDL_DIR):
         return []
+    EXCLUDE_PATTERNS = {'apply_tags'}
     files = sorted(glob.glob(os.path.join(DDL_DIR, '*.sql')))
-    return files
+    return [f for f in files if not any(p in os.path.basename(f) for p in EXCLUDE_PATTERNS)]
 
 
 def get_dml_seed_files() -> list:
@@ -439,36 +441,47 @@ def get_dml_seed_files() -> list:
 # Database Connection
 # =============================================================================
 
-# Get OAuth token
+# Get OAuth token (or autoscaling credential)
 try:
     from databricks.sdk import WorkspaceClient
     db_host = os.environ.get('DATABRICKS_HOST', '')
     w = WorkspaceClient(host=db_host) if db_host else WorkspaceClient()
-    
+
     token = None
-    if hasattr(w.config, 'token') and w.config.token:
-        token = w.config.token
+    if LAKEBASE_MODE == 'autoscaling' and ENDPOINT_NAME:
+        credential = w.postgres.generate_database_credential(endpoint=ENDPOINT_NAME)
+        token = credential.token
+        print("✓ Got Autoscaling database credential")
     else:
-        headers = w.config.authenticate()
-        if headers and 'Authorization' in headers:
-            auth = headers['Authorization']
-            if auth.startswith('Bearer '):
-                token = auth[7:]
-    
+        if hasattr(w.config, 'token') and w.config.token:
+            token = w.config.token
+        else:
+            headers = w.config.authenticate()
+            if headers and 'Authorization' in headers:
+                auth = headers['Authorization']
+                if auth.startswith('Bearer '):
+                    token = auth[7:]
+        if token:
+            print("✓ Got OAuth token")
+
     if not token:
-        print("❌ Failed to get OAuth token")
+        print("❌ Failed to get authentication token")
         sys.exit(1)
-    
-    print("✓ Got OAuth token")
     print()
 except Exception as e:
-    print(f"❌ Error getting OAuth token: {e}")
+    print(f"❌ Error getting token: {e}")
     sys.exit(1)
 
-# Connect to Lakebase (with retry for fresh instances where identity federation may not be ready)
-import psycopg2
-from psycopg2.extras import RealDictCursor
+# Connect to Lakebase (with retry for fresh instances / scale-to-zero cold starts)
 import time as _time
+
+# Prefer psycopg3, fall back to psycopg2
+try:
+    import psycopg as _pg
+    _USE_PSYCOPG3 = True
+except ImportError:
+    import psycopg2 as _pg
+    _USE_PSYCOPG3 = False
 
 MAX_RETRIES = 5
 RETRY_DELAY = 10
@@ -476,15 +489,18 @@ RETRY_DELAY = 10
 conn = None
 for attempt in range(1, MAX_RETRIES + 1):
     try:
-        conn = psycopg2.connect(
-            host=HOST,
-            port=PORT,
-            database=DATABASE,
-            user=USER,
-            password=token,
-            sslmode='require'
-        )
-        conn.autocommit = True
+        if _USE_PSYCOPG3:
+            conn = _pg.connect(
+                host=HOST, port=PORT, dbname=DATABASE,
+                user=USER, password=token, sslmode='require',
+                autocommit=True,
+            )
+        else:
+            conn = _pg.connect(
+                host=HOST, port=PORT, database=DATABASE,
+                user=USER, password=token, sslmode='require',
+            )
+            conn.autocommit = True
         cursor = conn.cursor()
         print("✓ Connected to Lakebase")
         print()
@@ -535,7 +551,7 @@ try:
         
         # Drop existing tables
         print("  Dropping existing tables...")
-        tables = ['usecase_descriptions', 'section_input_prompts', 'sessions']
+        tables = ['usecase_descriptions', 'section_input_prompts']
         for table in tables:
             cursor.execute(f"DROP TABLE IF EXISTS {SCHEMA}.{table}")
         
@@ -624,6 +640,84 @@ try:
         
         print()
         print("✓ Tables ready")
+
+    # ── Create Postgres roles for the app service principal (Autoscaling only) ──
+    sp_id = os.environ.get("APP_SERVICE_PRINCIPAL_ID", "")
+    lakebase_mode = os.environ.get("LAKEBASE_MODE", "autoscaling")
+    if sp_id and lakebase_mode == "autoscaling":
+        print()
+        print("Setting up Postgres roles for app service principal...")
+        try:
+            cursor.execute("CREATE EXTENSION IF NOT EXISTS databricks_auth")
+            print(f"  ✓ databricks_auth extension ready")
+        except Exception as e:
+            if "already exists" in str(e):
+                print(f"  ✓ databricks_auth extension already exists")
+            else:
+                print(f"  ⚠ Could not create extension: {e}")
+
+        try:
+            cursor.execute(f"SELECT databricks_create_role('{sp_id}', 'SERVICE_PRINCIPAL')")
+            print(f"  ✓ Postgres role created for SP: {sp_id[:20]}...")
+        except Exception as e:
+            if "already exists" in str(e):
+                print(f"  ✓ Postgres role already exists for SP: {sp_id[:20]}...")
+            else:
+                print(f"  ⚠ Could not create SP role: {e}")
+
+        try:
+            cursor.execute(f'GRANT USAGE ON SCHEMA {SCHEMA} TO "{sp_id}"')
+            cursor.execute(f'GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA {SCHEMA} TO "{sp_id}"')
+            cursor.execute(f'ALTER DEFAULT PRIVILEGES IN SCHEMA {SCHEMA} GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO "{sp_id}"')
+            cursor.execute(f'GRANT USAGE, SELECT, UPDATE ON ALL SEQUENCES IN SCHEMA {SCHEMA} TO "{sp_id}"')
+            cursor.execute(f'ALTER DEFAULT PRIVILEGES IN SCHEMA {SCHEMA} GRANT USAGE, SELECT, UPDATE ON SEQUENCES TO "{sp_id}"')
+            print(f"  ✓ Schema, table, and sequence permissions granted to SP on {SCHEMA}")
+        except Exception as e:
+            print(f"  ⚠ Could not grant schema permissions: {e}")
+
+        conn.commit()
+        print("✓ Service principal database access configured")
+
+    # ── Grant public role access so all authenticated users can use the workshop ──
+    # Cross-user table visibility: The 'users' group inherits pg_read_all_data
+    # via databricks_superuser (users -> databricks_superuser -> pg_read_all_data).
+    # This gives ALL workspace users automatic USAGE on all schemas and SELECT on
+    # all tables, even schemas created by other users without explicit grants.
+    # The per-schema grants below provide additional write access for the app schema.
+    print()
+    print("Setting up public access for all workspace users...")
+
+    try:
+        cursor.execute("GRANT pg_read_all_data TO users")
+        print("  ✓ pg_read_all_data granted to users (direct grant for cross-user read access)")
+    except Exception as e:
+        if "already a member" in str(e).lower() or "already" in str(e).lower():
+            print("  ✓ pg_read_all_data already granted to users")
+        else:
+            print(f"  ⚠ Could not grant pg_read_all_data to users: {e}")
+            print("    (OK -- users inherits pg_read_all_data via databricks_superuser)")
+
+    try:
+        cursor.execute("GRANT CREATE ON DATABASE databricks_postgres TO public")
+        print("  ✓ CREATE on database granted to public")
+    except Exception as e:
+        if "already" in str(e).lower():
+            print("  ✓ CREATE on database already granted to public")
+        else:
+            print(f"  ⚠ Could not grant CREATE on database: {e}")
+
+    try:
+        cursor.execute(f"GRANT USAGE ON SCHEMA {SCHEMA} TO public")
+        cursor.execute(f"GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA {SCHEMA} TO public")
+        cursor.execute(f"ALTER DEFAULT PRIVILEGES IN SCHEMA {SCHEMA} GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO public")
+        cursor.execute(f"GRANT USAGE, SELECT, UPDATE ON ALL SEQUENCES IN SCHEMA {SCHEMA} TO public")
+        cursor.execute(f"ALTER DEFAULT PRIVILEGES IN SCHEMA {SCHEMA} GRANT USAGE, SELECT, UPDATE ON SEQUENCES TO public")
+        print(f"  ✓ Schema, table, and sequence permissions granted to public on {SCHEMA}")
+    except Exception as e:
+        print(f"  ⚠ Could not grant public schema permissions: {e}")
+
+    conn.commit()
+    print("✓ Public access configured for all authenticated users")
 
 except Exception as e:
     print(f"❌ Error: {e}")

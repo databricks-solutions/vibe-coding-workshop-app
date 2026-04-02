@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { X, Loader2, AlertCircle, RefreshCw, ExternalLink } from 'lucide-react';
 import { MarkdownContent } from './MarkdownContent';
+import { useEscapeKey } from '../hooks/useEscapeKey';
 import type { SkillItem, SkillType } from '../constants/skillTreeMapping';
 
 const REPO_BASE = 'https://raw.githubusercontent.com/databricks-solutions/vibe-coding-workshop-template/main';
@@ -101,15 +102,14 @@ export function SkillContentModal({ skill, onClose }: SkillContentModalProps) {
 
   useEffect(() => { fetchContent(); }, [fetchContent]);
 
+  useEscapeKey(true, onClose);
+
   useEffect(() => {
-    const handleKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
-    document.addEventListener('keydown', handleKey);
     document.body.style.overflow = 'hidden';
     return () => {
-      document.removeEventListener('keydown', handleKey);
       document.body.style.overflow = '';
     };
-  }, [onClose]);
+  }, []);
 
   return createPortal(
     <div

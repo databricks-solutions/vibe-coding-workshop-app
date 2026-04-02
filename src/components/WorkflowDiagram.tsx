@@ -51,7 +51,8 @@ import {
   BookOpen,
   FileCode,
   Tag,
-  ShieldCheck
+  ShieldCheck,
+  Trash2
 } from 'lucide-react';
 import { apiClient } from '../api/client';
 
@@ -1393,7 +1394,7 @@ export function WorkflowDiagram({
                               }`}
                             >
                               <FileText className="w-4 h-4" />
-                              Generate from CSV <span className="text-[10px] opacity-60 ml-0.5">(Beta)</span>
+                              Generate from CSV
                               {generateTabLocked && <Lock className="w-3 h-3 ml-1" />}
                             </button>
                           </div>
@@ -1589,7 +1590,7 @@ export function WorkflowDiagram({
                                 }`}
                               >
                                 <Upload className="w-4 h-4" />
-                                Upload CSV <span className="text-[10px] opacity-60 ml-0.5">(Beta)</span>
+                                Upload CSV
                                 {uploadTabLocked22 && <Lock className="w-3 h-3 ml-1" />}
                               </button>
                             )}
@@ -2179,6 +2180,32 @@ export function WorkflowDiagram({
                   />
                 </div>
               );
+
+            // Step 31: Workspace Clean Up (Clean Up section)
+            case 31:
+              return (
+                <div key={31} className="relative mt-5" data-step-number="31">
+                  <WorkflowStep
+                    stepNumber={31}
+                    title="Workspace Clean Up"
+                    description="Safely delete all Databricks resources created during the workshop"
+                    icon={<Trash2 className="w-5 h-5" />}
+                    color="red"
+                    isComplete={completedSteps.has(31)}
+                    onToggleComplete={() => toggleStepComplete(31)}
+                    onStepReset={() => resetStepComplete(31)}
+                    sectionTag="workspace_cleanup"
+                    industry={selectedIndustry}
+                    useCase={selectedUseCase}
+                    onPromptGenerated={onStepPromptGenerated}
+                    initialPrompt={stepPrompts[31]}
+                    isPreviousStepComplete={isPreviousStepComplete(31)}
+                    isExpanded={expandedStep === 31}
+                    onToggleExpand={() => toggleExpand(31)}
+                    sessionId={sessionId}
+                  />
+                </div>
+              );
             default:
               return null;
           }
@@ -2273,6 +2300,7 @@ export function WorkflowDiagram({
           forceExpanded={wizardStage === 3 && !stageTransitioning}
           onContinue={handleStartBuild}
           useCaseLockedLevel={useCaseLockedLevel}
+          hasUseCaseSelected={!!selectedUseCase}
         />
       )}
 

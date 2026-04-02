@@ -6,7 +6,7 @@
  * Updated to match dark theme
  */
 
-import { useState, useEffect, useMemo, useRef } from 'react';
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { Sparkles, Loader2, Play, ChevronDown, ChevronUp, Copy, Check } from 'lucide-react';
@@ -14,6 +14,7 @@ import { apiClient } from '../../api/client';
 import type { SectionInput, ConfigVersionInfo, ImageMetadata } from '../../api/client';
 import { ImageGallery } from '../ImageGallery';
 import { WORKFLOW_SECTIONS } from '../../constants/workflowSections';
+import { ExpandableErrorBanner } from '../ExpandableErrorBanner';
 
 // Styled markdown components for nice rendering (dark theme)
 const markdownComponents = {
@@ -133,6 +134,12 @@ export function SectionInputsConfig({ onToast }: SectionInputsConfigProps) {
   const [selectedTag, setSelectedTag] = useState<string>('');
   const [searchQuery, setSearchQuery] = useState('');
 
+  const updateUrlStep = useCallback((tag: string) => {
+    const url = new URL(window.location.href);
+    if (tag) { url.searchParams.set('step', tag); } else { url.searchParams.delete('step'); }
+    window.history.replaceState({}, '', url.toString());
+  }, []);
+
   // View/Edit mode state
   const [isEditMode, setIsEditMode] = useState(false);
   
@@ -174,6 +181,7 @@ export function SectionInputsConfig({ onToast }: SectionInputsConfigProps) {
   const [testOutput, setTestOutput] = useState('');
   const [testModel, setTestModel] = useState<string | undefined>();
   const [testError, setTestError] = useState<string | null>(null);
+  const [testRetryStatus, setTestRetryStatus] = useState<{ attempt: number; maxAttempts: number; reason: string } | null>(null);
   const [testCopied, setTestCopied] = useState(false);
   const testAbortRef = useRef<AbortController | null>(null);
 
@@ -181,6 +189,15 @@ export function SectionInputsConfig({ onToast }: SectionInputsConfigProps) {
   useEffect(() => {
     loadData();
   }, []);
+
+  // Apply URL param after data loads
+  useEffect(() => {
+    if (loading || sectionInputs.length === 0) return;
+    const step = new URLSearchParams(window.location.search).get('step');
+    if (step && sectionInputs.some(s => s.section_tag === step)) {
+      setSelectedTag(step);
+    }
+  }, [loading, sectionInputs]);
 
   // Load versions when selection changes
   useEffect(() => {
@@ -512,6 +529,7 @@ export function SectionInputsConfig({ onToast }: SectionInputsConfigProps) {
     setIsTestRunning(true);
     setTestOutput('');
     setTestError(null);
+    setTestRetryStatus(null);
     setTestModel(undefined);
     setIsTestPanelOpen(true);
     
@@ -526,17 +544,26 @@ export function SectionInputsConfig({ onToast }: SectionInputsConfigProps) {
       editingBypassLlm,
       // onContent
       (content: string) => {
+        setTestRetryStatus(null);
         setTestOutput(prev => prev + content);
       },
       // onComplete
       (model?: string) => {
         setIsTestRunning(false);
+        setTestRetryStatus(null);
         setTestModel(model);
       },
       // onError
       (error: string) => {
         setIsTestRunning(false);
+        setTestRetryStatus(null);
         setTestError(error);
+      },
+      undefined,
+      undefined,
+      // onRetry
+      (attempt: number, maxAttempts: number, reason: string) => {
+        setTestRetryStatus({ attempt, maxAttempts, reason });
       }
     );
   }
@@ -552,6 +579,7 @@ export function SectionInputsConfig({ onToast }: SectionInputsConfigProps) {
   function handleClearTest() {
     setTestOutput('');
     setTestError(null);
+    setTestRetryStatus(null);
     setTestModel(undefined);
   }
   
@@ -627,7 +655,7 @@ export function SectionInputsConfig({ onToast }: SectionInputsConfigProps) {
                 {group.sections.map((section) => (
                   <div
                     key={section.section_tag}
-                    onClick={() => setSelectedTag(section.section_tag)}
+                    onClick={() => { setSelectedTag(section.section_tag); updateUrlStep(section.section_tag); }}
                     className={`w-full text-left px-3 py-2 text-sm border-b border-border hover:bg-secondary/50 transition-colors cursor-pointer ${
                       selectedTag === section.section_tag
                         ? 'bg-primary/20 text-primary font-medium'
@@ -871,11 +899,20 @@ export function SectionInputsConfig({ onToast }: SectionInputsConfigProps) {
                 
                 {/* Test Panel Content */}
                 <div className="p-4 max-h-80 overflow-y-auto">
-                  {testError && (
-                    <div className="mb-3 p-3 bg-red-500/10 border border-red-500/30 rounded-lg">
-                      <p className="text-sm text-red-400 font-medium">Error</p>
-                      <p className="text-sm text-red-300 mt-1">{testError}</p>
+                  {isTestRunning && testRetryStatus && (
+                    <div className="mb-3 px-3 py-2.5 bg-amber-500/10 border border-amber-500/20 rounded-lg flex items-center gap-2">
+                      <div className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse shrink-0" />
+                      <span className="text-sm text-amber-300">
+                        Retrying ({testRetryStatus.attempt} of {testRetryStatus.maxAttempts}) &mdash; {testRetryStatus.reason}...
+                      </span>
                     </div>
+                  )}
+                  {!isTestRunning && testError && (
+                    <ExpandableErrorBanner
+                      error={testError}
+                      summary={<>Test failed &mdash; click <strong>Test</strong> to try again</>}
+                      className="mb-3"
+                    />
                   )}
                   
                   {testOutput ? (

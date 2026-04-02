@@ -144,6 +144,7 @@ export interface UseCaseCreateRequest {
   industry: string;
   use_case: string;
   use_case_label: string;
+  prompt_template?: string;
 }
 
 export interface PromptConfigCreateRequest {
@@ -351,6 +352,78 @@ export interface WorkshopUsersResponse {
   users: WorkshopUser[];
 }
 
+// Analytics types
+export interface AnalyticsSummary {
+  total_sessions: number;
+  total_users: number;
+  total_feedback: number;
+  positive_count: number;
+  negative_count: number;
+}
+
+export interface AnalyticsUsage {
+  avg_steps_per_session: number;
+  prereqs_completed: number;
+  total_prompts_generated: number;
+  saved_sessions: number;
+  avg_score: number;
+}
+
+export interface AnalyticsStepCount {
+  step_number: number;
+  completed: number;
+  skipped: number;
+}
+
+export interface AnalyticsChapterFeedback {
+  chapter: string;
+  up: number;
+  down: number;
+}
+
+export interface AnalyticsRecentSession {
+  session_id: string;
+  display_name: string;
+  industry_label: string;
+  use_case_label: string;
+  workshop_level: string;
+  workshop_level_label: string;
+  completed_count: number;
+  created_at: string;
+}
+
+export interface AnalyticsUserActivity {
+  email: string;
+  display_name: string;
+  session_count: number;
+  total_steps: number;
+  best_score: number;
+  feedback_given: number;
+}
+
+export interface AnalyticsFeedbackDetail {
+  session_id: string;
+  display_name: string;
+  feedback_rating: string;
+  feedback_comment: string;
+  industry_label: string;
+  use_case_label: string;
+  created_at: string;
+}
+
+export interface AnalyticsData {
+  summary: AnalyticsSummary;
+  usage: AnalyticsUsage;
+  by_industry: { industry: string; count: number }[];
+  by_use_case: { use_case: string; count: number }[];
+  by_level: { level: string; label: string; count: number }[];
+  step_completion_counts: AnalyticsStepCount[];
+  chapter_feedback: AnalyticsChapterFeedback[];
+  recent_sessions: AnalyticsRecentSession[];
+  user_activity: AnalyticsUserActivity[];
+  feedback_details: AnalyticsFeedbackDetail[];
+}
+
 // ============== API Client ==============
 
 class ApiClient {
@@ -452,7 +525,8 @@ class ApiClient {
     onComplete: (model?: string) => void,
     onError: (error: string) => void,
     previousOutputs?: Record<string, string>,
-    sessionId?: string | null
+    sessionId?: string | null,
+    onRetry?: (attempt: number, maxAttempts: number, reason: string) => void
   ): AbortController {
     const controller = new AbortController();
 
@@ -505,6 +579,8 @@ class ApiClient {
                 const data = JSON.parse(jsonStr);
                 if (data.type === 'start' && data.model) {
                   model = data.model;
+                } else if (data.type === 'retry' && onRetry) {
+                  onRetry(data.attempt, data.max_attempts, data.reason);
                 } else if (data.type === 'content' && data.content) {
                   onContent(data.content);
                 } else if (data.type === 'done') {
@@ -542,7 +618,8 @@ class ApiClient {
     sectionTag: string = 'bronze_table_metadata_upload',
     onContent: (content: string) => void,
     onComplete: (model?: string) => void,
-    onError: (error: string) => void
+    onError: (error: string) => void,
+    onRetry?: (attempt: number, maxAttempts: number, reason: string) => void
   ): AbortController {
     const controller = new AbortController();
 
@@ -594,6 +671,8 @@ class ApiClient {
                 const data = JSON.parse(jsonStr);
                 if (data.type === 'start' && data.model) {
                   model = data.model;
+                } else if (data.type === 'retry' && onRetry) {
+                  onRetry(data.attempt, data.max_attempts, data.reason);
                 } else if (data.type === 'content' && data.content) {
                   onContent(data.content);
                 } else if (data.type === 'done') {
@@ -632,7 +711,8 @@ class ApiClient {
     onComplete: (model?: string) => void,
     onError: (error: string) => void,
     industry: string = 'sample',
-    useCase: string = 'booking_app'
+    useCase: string = 'booking_app',
+    onRetry?: (attempt: number, maxAttempts: number, reason: string) => void
   ): AbortController {
     const controller = new AbortController();
 
@@ -685,6 +765,8 @@ class ApiClient {
                 const data = JSON.parse(jsonStr);
                 if (data.type === 'start' && data.model) {
                   model = data.model;
+                } else if (data.type === 'retry' && onRetry) {
+                  onRetry(data.attempt, data.max_attempts, data.reason);
                 } else if (data.type === 'content' && data.content) {
                   onContent(data.content);
                 } else if (data.type === 'done') {
@@ -1012,6 +1094,13 @@ class ApiClient {
     return this.fetch<WorkshopUsersResponse>('/workshop-users');
   }
 
+  // ============== Analytics API ==============
+
+  /** Get read-only analytics data for the dashboard */
+  async getAnalytics(): Promise<AnalyticsData> {
+    return this.fetch<AnalyticsData>('/admin/analytics');
+  }
+
   // ============== Section Image Upload Methods ==============
 
   /** Upload an image for a section field (how_to_apply or expected_output) */
@@ -1094,6 +1183,7 @@ class ApiClient {
     onContent: (content: string) => void,
     onComplete: (model?: string) => void,
     onError: (error: string) => void,
+    onRetry?: (attempt: number, maxAttempts: number, reason: string) => void,
   ): AbortController {
     const controller = new AbortController();
 
@@ -1139,6 +1229,8 @@ class ApiClient {
                 const data = JSON.parse(jsonStr);
                 if (data.type === 'start' && data.model) {
                   model = data.model;
+                } else if (data.type === 'retry' && onRetry) {
+                  onRetry(data.attempt, data.max_attempts, data.reason);
                 } else if (data.type === 'content' && data.content) {
                   onContent(data.content);
                 } else if (data.type === 'done') {

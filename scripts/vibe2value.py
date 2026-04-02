@@ -21,6 +21,13 @@ from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 CONFIG_PATH = PROJECT_ROOT / "user-config.yaml"
+
+# Tag all Databricks CLI calls with the workshop identity for centralized tracking
+_version_file = PROJECT_ROOT / "VERSION"
+os.environ.setdefault(
+    "DATABRICKS_USER_AGENT_EXTRA",
+    f"vibe-to-value-workshop/{_version_file.read_text().strip() if _version_file.is_file() else '0.0.0'}",
+)
 TEMPLATES = {
     "app.yaml": PROJECT_ROOT / "app.yaml.template",
     "databricks.yml": PROJECT_ROOT / "databricks.yml.template",
@@ -125,6 +132,9 @@ def get_placeholder_map(config: dict) -> dict:
     lb = config.get("lakebase", {})
     app = config.get("app", {})
     user = config.get("user", {})
+    tags = config.get("tags", {})
+    meta = config.get("_metadata", {})
+    target = meta.get("target", "development")
     return {
         "__WORKSPACE_HOST__": ws.get("host", ""),
         "__WORKSPACE_URL__": ws.get("host", "").rstrip("/") + "/",
@@ -138,6 +148,14 @@ def get_placeholder_map(config: dict) -> dict:
         "__APP_NAME__": app.get("name", ""),
         "__SERVING_ENDPOINT__": app.get("serving_endpoint", "databricks-claude-sonnet-4-5"),
         "__DEFAULT_WAREHOUSE__": lb.get("warehouse", ""),
+        "__ENDPOINT_NAME__": lb.get("endpoint_name", ""),
+        "__LAKEBASE_MODE__": lb.get("mode", "autoscaling"),
+        "__TAG_PROJECT__": tags.get("project", "vibe_coding_workshop"),
+        "__TAG_ENVIRONMENT__": tags.get("environment", "") or target,
+        "__TAG_MANAGED_BY__": tags.get("managed_by", "vibe2value"),
+        "__TAG_CUSTOM__": tags.get("custom_tags", ""),
+        "__DEPLOYER_EMAIL__": user.get("email", ""),
+        "__INSTALLER_VERSION__": meta.get("installer_version", "1.0.0"),
     }
 
 
@@ -180,6 +198,8 @@ def render_template(template_path: Path, output_path: Path, placeholders: dict,
 # Prerequisites
 # ---------------------------------------------------------------------------
 
+MIN_DATABRICKS_CLI_VERSION = (0, 287, 0)
+
 def check_prerequisites() -> bool:
     """Check that required tools are installed."""
     all_ok = True
@@ -198,6 +218,21 @@ def check_prerequisites() -> bool:
             except Exception:
                 pass
             success(f"{label}: {version}")
+
+            if cmd == "databricks" and version:
+                import re as _re
+                m = _re.search(r"v?(\d+)\.(\d+)\.(\d+)", version)
+                if m:
+                    cli_ver = tuple(int(x) for x in m.groups())
+                    if cli_ver < MIN_DATABRICKS_CLI_VERSION:
+                        min_str = ".".join(str(x) for x in MIN_DATABRICKS_CLI_VERSION)
+                        error(
+                            f"Databricks CLI {version} is too old. "
+                            f"Lakebase Autoscaling requires v{min_str}+. "
+                            f"Update with: brew upgrade databricks  (macOS) "
+                            f"or  curl -fsSL https://raw.githubusercontent.com/databricks/setup-cli/main/install.sh | sh"
+                        )
+                        all_ok = False
         else:
             error(f"{label}: NOT FOUND")
             all_ok = False
@@ -322,10 +357,42 @@ def cmd_install(args):
         "schema": existing_config.get("lakebase", {}).get("schema", "vibe_coding_workshop"),
         "endpoint": existing_config.get("app", {}).get("serving_endpoint", "databricks-claude-sonnet-4-5"),
         "warehouse": existing_config.get("lakebase", {}).get("warehouse", ""),
+        "lakebase_mode": existing_config.get("lakebase", {}).get("mode", "autoscaling"),
+        "min_cu": existing_config.get("lakebase", {}).get("min_cu", "0.5"),
+        "max_cu": existing_config.get("lakebase", {}).get("max_cu", "2"),
     }
 
-    app_name = input(f"  App name [{defaults['app_name']}]: ").strip() or defaults["app_name"]
-    instance_name = input(f"  Lakebase instance [{defaults['instance_name']}]: ").strip() or defaults["instance_name"]
+    while True:
+        app_name = input(f"  App name [{defaults['app_name']}]: ").strip() or defaults["app_name"]
+        if len(app_name) < 2 or len(app_name) > 30:
+            print(f"  [error] App name must be 2-30 characters (got {len(app_name)}). Please try again.")
+            continue
+        if not all(c.isalnum() or c == '-' for c in app_name):
+            print("  [error] App name can only contain letters, numbers, and hyphens. Please try again.")
+            continue
+        break
+
+    # Lakebase mode selection
+    default_mode = defaults["lakebase_mode"]
+    mode_prompt = f"  Lakebase mode - (a)utoscaling or (p)rovisioned [{default_mode}]: "
+    mode_input = input(mode_prompt).strip().lower()
+    if mode_input in ("a", "autoscaling"):
+        lakebase_mode = "autoscaling"
+    elif mode_input in ("p", "provisioned"):
+        lakebase_mode = "provisioned"
+    else:
+        lakebase_mode = default_mode
+
+    instance_label = "Lakebase project" if lakebase_mode == "autoscaling" else "Lakebase instance"
+    instance_name = input(f"  {instance_label} [{defaults['instance_name']}]: ").strip() or defaults["instance_name"]
+
+    if lakebase_mode == "autoscaling":
+        min_cu = input(f"  Min CU (minimum 0.5) [{defaults['min_cu']}]: ").strip() or defaults["min_cu"]
+        max_cu = input(f"  Max CU [{defaults['max_cu']}]: ").strip() or defaults["max_cu"]
+    else:
+        min_cu = defaults["min_cu"]
+        max_cu = defaults["max_cu"]
+
     catalog = input(f"  Catalog [{defaults['catalog']}]: ").strip() or defaults["catalog"]
     create_catalog = existing_config.get("lakebase", {}).get("create_catalog", "false").lower() == "true"
     endpoint = input(f"  Model endpoint [{defaults['endpoint']}]: ").strip() or defaults["endpoint"]
@@ -339,6 +406,7 @@ def cmd_install(args):
             "profile": profile,
         },
         "lakebase": {
+            "mode": lakebase_mode,
             "instance_name": instance_name,
             "catalog": catalog,
             "create_catalog": "true" if create_catalog else "false",
@@ -346,6 +414,9 @@ def cmd_install(args):
             "database": "databricks_postgres",
             "warehouse": defaults["warehouse"],
             "uc_catalog": catalog.replace("_catalog", "_lakebase") if "_catalog" in catalog else catalog + "_lakebase",
+            "min_cu": min_cu,
+            "max_cu": max_cu,
+            "endpoint_name": "",
         },
         "app": {
             "name": app_name,
@@ -353,6 +424,12 @@ def cmd_install(args):
         },
         "user": {
             "email": email,
+        },
+        "tags": {
+            "project": existing_config.get("tags", {}).get("project", "vibe_coding_workshop"),
+            "environment": "",
+            "managed_by": "vibe2value",
+            "custom_tags": existing_config.get("tags", {}).get("custom_tags", ""),
         },
         "_metadata": {
             "installed_at": datetime.now(timezone.utc).isoformat(),
@@ -410,8 +487,11 @@ def cmd_configure(args, config=None):
     info("Rendering config files from templates...")
     placeholders = get_placeholder_map(config)
     lb = config.get("lakebase", {})
+    lakebase_mode = lb.get("mode", "autoscaling")
     flags = {
         "CREATE_CATALOG": lb.get("create_catalog", "true").lower() == "true",
+        "LAKEBASE_PROVISIONED": lakebase_mode == "provisioned",
+        "LAKEBASE_AUTOSCALING": lakebase_mode == "autoscaling",
     }
 
     rendered = []

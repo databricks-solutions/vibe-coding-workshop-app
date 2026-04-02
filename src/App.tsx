@@ -4,7 +4,7 @@ import { WorkflowDiagram } from './components/WorkflowDiagram';
 import { ThemeToggle } from './components/ThemeToggle';
 import { ConfigurationPage } from './components/config/ConfigurationPage';
 import { LeaderboardPage } from './components/LeaderboardPage';
-import { UseCaseBuilderPage } from './components/UseCaseBuilderPage';
+import { AnalyticsDashboard } from './components/AnalyticsDashboard';
 import { 
   HeaderSessionMenu,
   SaveSessionDialog, 
@@ -12,7 +12,7 @@ import {
   SessionListDialog 
 } from './components/session';
 import { apiClient } from './api/client';
-import { Zap, MessageSquare, Trophy, Lightbulb, Plus, PanelLeftClose, PanelLeft, Menu, X } from 'lucide-react';
+import { Zap, MessageSquare, Trophy, Plus, PanelLeftClose, PanelLeft, Menu, X, BarChart3 } from 'lucide-react';
 import { normalizeLevel, getFilteredSections, getCumulativeOverrides, USE_CASE_LEVEL_LOCK, isForwardProgression, type WorkshopLevel } from './constants/workflowSections';
 
 export default function App() {
@@ -37,8 +37,8 @@ export default function App() {
   // Determine current page from URL
   const isConfigPage = location.pathname.startsWith('/config');
   const isLeaderboardPage = location.pathname === '/leaderboard';
-  const isBuilderPage = location.pathname.startsWith('/build-usecase');
-  const isWorkflowPage = !isConfigPage && !isLeaderboardPage && !isBuilderPage;
+  const isAnalyticsPage = location.pathname === '/analytics';
+  const isWorkflowPage = !isConfigPage && !isLeaderboardPage && !isAnalyticsPage;
   
   // Data refresh key - incremented when navigating from Config to Workflow
   // This forces PromptGenerator and other components to re-fetch data
@@ -53,6 +53,10 @@ export default function App() {
       // Just left config page - increment refresh key to force data re-fetch
       setDataRefreshKey(prev => prev + 1);
       setWasOnConfigPage(false);
+      // Re-fetch disabled steps so step visibility changes take effect immediately
+      apiClient.getDisabledSteps()
+        .then(tags => setDisabledSectionTags(new Set(tags)))
+        .catch(err => console.error('Error fetching disabled steps:', err));
     }
   }, [isConfigPage, wasOnConfigPage]);
 
@@ -177,7 +181,7 @@ export default function App() {
 
         // Restore workshop level — use-case lock takes precedence over saved value
         const restoredLevel = restoredLock ?? normalizeLevel(response.workshop_level || 'end-to-end');
-        setWorkshopLevel(restoredLevel);
+        setWorkshopLevel(!restoredLock && restoredLevel === 'skills-accelerator' ? 'end-to-end' : restoredLevel);
         
         // Restore completed steps and skipped steps
         const completedStepsArray: number[] = response.completed_steps || [];
@@ -204,7 +208,7 @@ export default function App() {
         const nextStep = getNextIncompleteStep(Array.from(restoredCompleted), skippedStepsArray, restoredLevel);
         setInitialExpandedStep(nextStep);
         
-        window.history.replaceState({}, '', `?sessionId=${response.session_id}`);
+        window.history.replaceState({}, '', `?sessionId=${response.session_id}${window.location.hash}`);
       }
       // Trigger fade-out animation
       finishSessionLoading();
@@ -216,7 +220,7 @@ export default function App() {
       setSessionId(localSessionId);
       setSessionSaved(false);
       setInitialExpandedStep(1);
-      window.history.replaceState({}, '', `?sessionId=${localSessionId}`);
+      window.history.replaceState({}, '', `?sessionId=${localSessionId}${window.location.hash}`);
       // Still finish loading even on error
       finishSessionLoading();
     }
@@ -314,7 +318,7 @@ export default function App() {
 
         // Restore workshop level — use-case lock takes precedence over saved value
         const loadedLevel = loadedLock ?? normalizeLevel(response.workshop_level || 'end-to-end');
-        setWorkshopLevel(loadedLevel);
+        setWorkshopLevel(!loadedLock && loadedLevel === 'skills-accelerator' ? 'end-to-end' : loadedLevel);
         
         // Restore custom use case overrides from session_parameters
         const sessionParams = response.session_parameters || {};
@@ -547,6 +551,23 @@ export default function App() {
     }
   }, [isConfigPage]);
 
+  // Hash link: expand + scroll to a section (e.g. #path-architecture-section)
+  useEffect(() => {
+    if (isSessionLoading || !window.location.hash) return;
+    const id = window.location.hash.slice(1);
+    const timer = setTimeout(() => {
+      const el = document.getElementById(id);
+      if (!el) return;
+      const btn = el.querySelector<HTMLButtonElement>(':scope > button, :scope > div > button');
+      if (btn) {
+        const collapsed = el.querySelector('[class*="max-h-0"]');
+        if (collapsed) btn.click();
+      }
+      setTimeout(() => el.scrollIntoView({ behavior: 'smooth', block: 'start' }), 300);
+    }, 800);
+    return () => clearTimeout(timer);
+  }, [isSessionLoading]);
+
   return (
     <div className="min-h-screen flex bg-background">
       {/* Mobile Sidebar Overlay */}
@@ -555,15 +576,15 @@ export default function App() {
           <div className="absolute inset-0 bg-black/60" onClick={() => setMobileSidebarOpen(false)} />
           <aside className="relative w-52 h-full bg-sidebar border-r border-sidebar-border flex flex-col animate-slide-in-left">
             <div className="px-4 py-4 border-b border-sidebar-border flex items-center justify-between">
-              <div className="flex items-center gap-2.5">
+              <Link to="/" onClick={() => setMobileSidebarOpen(false)} className="flex items-center gap-2.5 cursor-pointer">
                 <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-primary to-emerald-500 flex items-center justify-center flex-shrink-0">
                   <Zap className="w-4 h-4 text-white" />
                 </div>
                 <div className="min-w-0">
-                  <h1 className="font-semibold text-sidebar-foreground text-[13px] tracking-tight whitespace-nowrap">V2V: Vibe-2-Value</h1>
+                  <h1 className="font-semibold text-sidebar-foreground text-[13px] tracking-tight whitespace-nowrap">V2V: Vibe-to-Value</h1>
                   <p className="text-[10px] text-muted-foreground whitespace-nowrap">Vibe Coding Workshop</p>
                 </div>
-              </div>
+              </Link>
               <button
                 onClick={() => setMobileSidebarOpen(false)}
                 className="p-1 rounded-md text-muted-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-foreground transition-colors flex-shrink-0"
@@ -581,9 +602,9 @@ export default function App() {
                   <Trophy className={`w-4 h-4 flex-shrink-0 ${isLeaderboardPage ? 'text-primary' : 'text-muted-foreground'}`} />
                   <span>Leaderboard</span>
                 </Link>
-                <Link to="/build-usecase" onClick={() => setMobileSidebarOpen(false)} className={`w-full flex items-center gap-2.5 px-2.5 py-2 rounded-md text-[12px] font-medium transition-all duration-200 ${isBuilderPage ? 'bg-sidebar-accent text-sidebar-primary' : 'text-muted-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-foreground'}`}>
-                  <Lightbulb className={`w-4 h-4 flex-shrink-0 ${isBuilderPage ? 'text-primary' : 'text-muted-foreground'}`} />
-                  <span className="flex items-center gap-1.5">Build Use Case <span className="px-1 py-0 bg-amber-500/20 text-amber-300 text-[8px] font-semibold rounded uppercase leading-tight">Beta</span></span>
+                <Link to="/analytics" onClick={() => setMobileSidebarOpen(false)} className={`w-full flex items-center gap-2.5 px-2.5 py-2 rounded-md text-[12px] font-medium transition-all duration-200 ${isAnalyticsPage ? 'bg-sidebar-accent text-sidebar-primary' : 'text-muted-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-foreground'}`}>
+                  <BarChart3 className={`w-4 h-4 flex-shrink-0 ${isAnalyticsPage ? 'text-primary' : 'text-muted-foreground'}`} />
+                  <span>Analytics</span>
                 </Link>
                 <Link to="/config" onClick={() => setMobileSidebarOpen(false)} className={`w-full flex items-center gap-2.5 px-2.5 py-2 rounded-md text-[12px] font-medium transition-all duration-200 ${isConfigPage ? 'bg-sidebar-accent text-sidebar-primary' : 'text-muted-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-foreground'}`}>
                   <svg className={`w-4 h-4 flex-shrink-0 ${isConfigPage ? 'text-primary' : 'text-muted-foreground'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" /></svg>
@@ -606,17 +627,17 @@ export default function App() {
         {/* Logo/Brand + Toggle */}
         <div className={`${sidebarCollapsed ? 'px-2' : 'px-4'} py-4 border-b border-sidebar-border transition-all duration-300`}>
           <div className="flex items-center justify-between">
-            <div className={`flex items-center ${sidebarCollapsed ? 'justify-center w-full' : 'gap-2.5'}`}>
+            <Link to="/" className={`flex items-center ${sidebarCollapsed ? 'justify-center w-full' : 'gap-2.5'} cursor-pointer`}>
               <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-primary to-emerald-500 flex items-center justify-center flex-shrink-0">
                 <Zap className="w-4 h-4 text-white" />
               </div>
               {!sidebarCollapsed && (
                 <div className="min-w-0">
-                  <h1 className="font-semibold text-sidebar-foreground text-[13px] tracking-tight whitespace-nowrap">V2V: Vibe-2-Value</h1>
+                  <h1 className="font-semibold text-sidebar-foreground text-[13px] tracking-tight whitespace-nowrap">V2V: Vibe-to-Value</h1>
                   <p className="text-[10px] text-muted-foreground whitespace-nowrap">Vibe Coding Workshop</p>
                 </div>
               )}
-            </div>
+            </Link>
             {!sidebarCollapsed && (
               <button
                 onClick={toggleSidebar}
@@ -670,23 +691,16 @@ export default function App() {
             </Link>
 
             <Link
-              to="/build-usecase"
-              title="Build Use Case"
+              to="/analytics"
+              title="Analytics"
               className={`w-full flex items-center ${sidebarCollapsed ? 'justify-center px-0 py-2.5' : 'gap-2.5 px-2.5 py-2'} rounded-md text-[12px] font-medium transition-all duration-200 ${
-                isBuilderPage
+                isAnalyticsPage
                   ? 'bg-sidebar-accent text-sidebar-primary'
                   : 'text-muted-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-foreground'
               }`}
             >
-              <Lightbulb className={`w-4 h-4 flex-shrink-0 ${isBuilderPage ? 'text-primary' : 'text-muted-foreground'}`} />
-              {!sidebarCollapsed && (
-                <span className="flex items-center gap-1.5 whitespace-nowrap">
-                  Build Use Case
-                  <span className="px-1 py-0 bg-amber-500/20 text-amber-300 text-[8px] font-semibold rounded uppercase leading-tight">
-                    Beta
-                  </span>
-                </span>
-              )}
+              <BarChart3 className={`w-4 h-4 flex-shrink-0 ${isAnalyticsPage ? 'text-primary' : 'text-muted-foreground'}`} />
+              {!sidebarCollapsed && <span className="whitespace-nowrap">Analytics</span>}
             </Link>
 
             <div className="relative">
@@ -843,10 +857,10 @@ export default function App() {
                     >
                       <Menu className="w-5 h-5" />
                     </button>
-                    <div className="min-w-0">
-                      <h1 className="text-[15px] sm:text-[17px] font-semibold text-foreground tracking-tight truncate">V2V: Vibe-2-Value - Vibe Coding Workshop</h1>
+                    <Link to="/" className="min-w-0 cursor-pointer">
+                      <h1 className="text-[15px] sm:text-[17px] font-semibold text-foreground tracking-tight truncate">V2V: Vibe-to-Value - Vibe Coding Workshop</h1>
                       <p className="hidden sm:block text-[12px] text-muted-foreground">Turning ideas into measurable business outcomes faster with reusable patterns, and guided best practices</p>
-                    </div>
+                    </Link>
                   </div>
                   
                   {/* Theme Toggle & Session Menu in Header */}
@@ -913,6 +927,7 @@ export default function App() {
                         handleWorkshopLevelChange(lockLevel, true);
                       } else {
                         setUseCaseLockedLevel(null);
+                        if (workshopLevel === 'skills-accelerator') handleWorkshopLevelChange('end-to-end', true);
                       }
                       // Auto-save use case selection to session
                       if (sessionId) {
@@ -966,8 +981,8 @@ export default function App() {
           {/* Leaderboard Page */}
           <Route path="/leaderboard" element={<LeaderboardPage />} />
           
-          {/* Build Your Use Case [Beta] */}
-          <Route path="/build-usecase" element={<UseCaseBuilderPage />} />
+          {/* Analytics Page */}
+          <Route path="/analytics" element={<AnalyticsDashboard />} />
           
           {/* Redirect any unknown routes to home */}
           <Route path="*" element={<Navigate to="/" replace />} />

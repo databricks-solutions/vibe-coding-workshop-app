@@ -13,6 +13,7 @@ import { VerificationLinks } from './VerificationLinks';
 import { SkillBlueprintTab, SkillBlueprintFullScreenModal } from './SkillBlueprintTab';
 import { useSkillBlueprint } from '../hooks/useSkillBlueprint';
 import { BorderBeamButton } from './BorderBeamButton';
+import { ExpandableErrorBanner } from './ExpandableErrorBanner';
 
 interface WorkflowStepProps {
   icon: ReactNode;
@@ -105,6 +106,7 @@ export function WorkflowStep({
   const [isLoadingPrompt, setIsLoadingPrompt] = useState(false);
   const [isLoadingMetadata, setIsLoadingMetadata] = useState(false);
   const [promptError, setPromptError] = useState<string | null>(null);
+  const [retryStatus, setRetryStatus] = useState<{ attempt: number; maxAttempts: number; reason: string } | null>(null);
   const [isStreaming, setIsStreaming] = useState(false);
   const [streamedPrompt, setStreamedPrompt] = useState('');
   
@@ -134,6 +136,7 @@ export function WorkflowStep({
     setIsLoadingPrompt(true);
     setIsStreaming(true);
     setPromptError(null);
+    setRetryStatus(null);
     setStreamedPrompt('');
     setShowGeneratedPrompt(true);
     
@@ -167,6 +170,7 @@ export function WorkflowStep({
       useCase,
       sectionTag,
       (content: string) => {
+        setRetryStatus(null);
         streamBufferRef.current += content;
         setIsLoadingPrompt(false);
         if (!rafIdRef.current) {
@@ -180,6 +184,7 @@ export function WorkflowStep({
         if (rafIdRef.current) { cancelAnimationFrame(rafIdRef.current); rafIdRef.current = 0; }
         setStreamedPrompt(streamBufferRef.current);
         setIsStreaming(false);
+        setRetryStatus(null);
         setGeneratedContent(prev => ({
           ...prev!,
           source: 'llm_generated',
@@ -194,10 +199,14 @@ export function WorkflowStep({
         setStreamedPrompt(streamBufferRef.current);
         setIsStreaming(false);
         setIsLoadingPrompt(false);
-        setPromptError(`Streaming failed: ${error}`);
+        setRetryStatus(null);
+        setPromptError(error);
       },
       previousOutputs,
-      sessionId
+      sessionId,
+      (attempt, maxAttempts, reason) => {
+        setRetryStatus({ attempt, maxAttempts, reason });
+      }
     );
   }, [industry, useCase, sectionTag, previousOutputs, sessionId, onPromptGenerated, stepNumber]);
 
@@ -210,6 +219,7 @@ export function WorkflowStep({
     setGeneratedContent(null);
     setShowGeneratedPrompt(false);
     setPromptError(null);
+    setRetryStatus(null);
     setStreamedPrompt('');
     setIsStreaming(false);
     
@@ -225,6 +235,7 @@ export function WorkflowStep({
     setGeneratedContent(null);
     setShowGeneratedPrompt(false);
     setPromptError(null);
+    setRetryStatus(null);
     setStreamedPrompt('');
     setIsStreaming(false);
     metadataFetchedRef.current = false;
@@ -333,7 +344,12 @@ export function WorkflowStep({
             {isComplete && (
               <span className="text-emerald-400 text-[11px] font-medium bg-emerald-900/30 px-1.5 py-0.5 rounded">✓ Done</span>
             )}
-            {isStreaming && !isExpanded && (
+            {isStreaming && !isExpanded && retryStatus && (
+              <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-400 animate-pulse inline-flex items-center gap-1">
+                <Loader2 className="w-3 h-3 animate-spin" /> Retrying...
+              </span>
+            )}
+            {isStreaming && !isExpanded && !retryStatus && (
               <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-primary/20 text-primary animate-pulse inline-flex items-center gap-1">
                 <Loader2 className="w-3 h-3 animate-spin" /> Generating...
               </span>
@@ -423,11 +439,20 @@ export function WorkflowStep({
               {prerequisiteReason}
             </div>
           )}
-          {/* Error message */}
-          {promptError && (
-            <div className="mt-3 p-2.5 bg-red-900/30 border border-red-700/50 rounded text-red-300 text-[13px]">
-              {promptError}
+          {/* Retry status indicator */}
+          {isStreaming && retryStatus && (
+            <div className="mt-3 mx-0 px-3 py-2.5 rounded-md bg-amber-500/10 border border-amber-500/20 text-amber-300 text-[13px] flex items-center gap-2">
+              <div className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse shrink-0" />
+              Retrying ({retryStatus.attempt} of {retryStatus.maxAttempts}) &mdash; {retryStatus.reason}...
             </div>
+          )}
+          {/* Error message */}
+          {!isStreaming && promptError && (
+            <ExpandableErrorBanner
+              error={promptError}
+              summary={<>Generation failed &mdash; click <strong>Re-generate</strong> to try again</>}
+              className="mt-3"
+            />
           )}
 
       {showGeneratedPrompt && (isStreaming || streamedPrompt || generatedContent) && (

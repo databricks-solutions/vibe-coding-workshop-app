@@ -13,6 +13,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { X, ChevronLeft, ChevronRight, Plus, Trash2, Loader2, Image as ImageIcon } from 'lucide-react';
 import type { ImageMetadata } from '../api/client';
+import { useEscapeKey } from '../hooks/useEscapeKey';
 
 interface ImageGalleryProps {
   images: ImageMetadata[] | null | undefined;
@@ -134,22 +135,16 @@ export function ImageGallery({
     setCurrentIndex((i) => (i < images.length - 1 ? i + 1 : 0));
   }, [images.length]);
 
-  // Keyboard navigation
+  const closeLightbox = useCallback(() => setLightboxOpen(false), []);
+  useEscapeKey(lightboxOpen, closeLightbox);
+
+  // Arrow key navigation
   useEffect(() => {
     if (!lightboxOpen) return;
 
     const handleKeyDown = (e: KeyboardEvent) => {
-      switch (e.key) {
-        case 'Escape':
-          setLightboxOpen(false);
-          break;
-        case 'ArrowLeft':
-          goToPrevious();
-          break;
-        case 'ArrowRight':
-          goToNext();
-          break;
-      }
+      if (e.key === 'ArrowLeft') goToPrevious();
+      else if (e.key === 'ArrowRight') goToNext();
     };
 
     window.addEventListener('keydown', handleKeyDown);

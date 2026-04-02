@@ -16,11 +16,17 @@ bundle:
 # =============================================================================
 variables:
   lakebase_instance_name:
-    description: "Lakebase PostgreSQL instance name"
+    description: "Lakebase PostgreSQL instance name (Provisioned) or project name (Autoscaling)"
     default: "__LAKEBASE_INSTANCE_NAME__"
   lakebase_capacity:
-    description: "Lakebase instance capacity (CU_1, CU_2, etc.)"
+    description: "Lakebase instance capacity (CU_1, CU_2, etc.) - Provisioned only"
     default: "CU_2"
+  lakebase_min_cu:
+    description: "Minimum compute units for Autoscaling endpoint (minimum 0.5)"
+    default: "0.5"
+  lakebase_max_cu:
+    description: "Maximum compute units for Autoscaling endpoint"
+    default: "2"
   lakebase_catalog:
     description: "Lakebase catalog name (Unity Catalog)"
     default: "__LAKEBASE_CATALOG__"
@@ -41,6 +47,13 @@ targets:
   user:
     mode: development
     default: true
+    presets:
+      tags:
+        project: "vibe_coding_workshop"
+        environment: "development"
+        managed_by: "vibe2value"
+        bundle_name: "vibe-coding-workshop-app"
+        owner: "__DEPLOYER_EMAIL__"
     workspace:
       host: __WORKSPACE_HOST__
     variables:
@@ -53,7 +66,10 @@ targets:
 # Resources
 # =============================================================================
 resources:
-  # Lakebase PostgreSQL Instance
+  # ---------------------------------------------------------------------------
+  # Lakebase Provisioned Instance (legacy mode, used when ENDPOINT_NAME not set)
+  # ---------------------------------------------------------------------------
+  # __IF_LAKEBASE_PROVISIONED__
   database_instances:
     vibe_coding_lakebase:
       name: ${var.lakebase_instance_name}
@@ -68,6 +84,27 @@ resources:
       database_name: ${var.lakebase_database}
       create_database_if_not_exists: true
   # __ENDIF_CREATE_CATALOG__
+  # __ENDIF_LAKEBASE_PROVISIONED__
+
+  # ---------------------------------------------------------------------------
+  # Lakebase Autoscaling (default, used when ENDPOINT_NAME is set)
+  # Docs: https://docs.databricks.com/aws/en/oltp/projects/manage-with-bundles
+  # NOTE: postgres_endpoints is omitted -- Lakebase auto-creates a "primary"
+  #       read-write endpoint per branch.  Autoscaling limits are set via CLI
+  #       post-deploy in deploy.sh.
+  # ---------------------------------------------------------------------------
+  # __IF_LAKEBASE_AUTOSCALING__
+  postgres_projects:
+    vibe_coding_project:
+      project_id: ${var.lakebase_instance_name}
+      display_name: "Vibe Coding Workshop"
+
+  postgres_branches:
+    vibe_coding_branch:
+      parent: ${resources.postgres_projects.vibe_coding_project.id}
+      branch_id: "main"
+      no_expiry: true
+  # __ENDIF_LAKEBASE_AUTOSCALING__
 
   # Databricks App
   apps:
@@ -88,6 +125,7 @@ sync:
     - "requirements.txt"
     - "scripts/**"
     - "db/**"
+    - "VERSION"
   exclude:
     - "node_modules/**"
     - "__pycache__/**"

@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { X, FolderOpen, Clock, MapPin, Trash2, ChevronRight, Loader2, RefreshCw, ThumbsUp, ThumbsDown } from 'lucide-react';
 import { apiClient } from '../../api/client';
 import type { SessionListItem } from '../../api/client';
+import { useEscapeKey } from '../../hooks/useEscapeKey';
 
 interface SessionListDialogProps {
   isOpen: boolean;
@@ -16,6 +17,7 @@ export function SessionListDialog({
   onSelectSession,
   currentSessionId,
 }: SessionListDialogProps) {
+  useEscapeKey(isOpen, onClose);
   const [sessions, setSessions] = useState<SessionListItem[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
