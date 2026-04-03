@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { WorkflowStep } from './WorkflowStep';
 import { Prerequisites } from './Prerequisites';
 import { WorkshopIntro } from './WorkshopIntro';
+import { CodingAssistantSelector } from './CodingAssistantSelector';
 import { SectionedWorkflowSidebar } from './SectionedWorkflowSidebar';
 import { SectionDetailPanel } from './SectionDetailPanel';
 import { DefineIntentSection } from './DefineIntentSection';
@@ -90,6 +91,8 @@ interface WorkflowDiagramProps {
   initialExpandedStep?: number;
   prerequisitesCompleted?: boolean;
   onPrerequisitesComplete?: () => void;
+  codingAssistant?: string | null;
+  onCodingAssistantChange?: (id: string) => void;
   dataRefreshKey?: number; // Incremented when data needs to be refreshed (e.g., after config changes)
   isSessionLoaded?: boolean; // True once session data has been fetched from backend
   useCaseLockedLevel?: WorkshopLevel | null;
@@ -157,6 +160,8 @@ export function WorkflowDiagram({
   initialExpandedStep = 1,
   prerequisitesCompleted = false,
   onPrerequisitesComplete,
+  codingAssistant = null,
+  onCodingAssistantChange,
   dataRefreshKey = 0,
   isSessionLoaded = false,
   useCaseLockedLevel,
@@ -345,15 +350,17 @@ export function WorkflowDiagram({
   // ---------------------------------------------------------------------------
   // Wizard Stage -- progressive disclosure for new users
   // Stage 0: Welcome (WorkshopIntro expanded)
-  // Stage 1: Prerequisites (Prerequisites expanded)
-  // Stage 2: Define Intent (DefineIntentSection expanded)
-  // Stage 3: Path & Architecture (PathAndArchitecture expanded)
-  // Stage 4: Workflow (main workflow area visible)
+  // Stage 1: Coding Assistant (CodingAssistantSelector expanded)
+  // Stage 2: Prerequisites (Prerequisites expanded)
+  // Stage 3: Define Intent (DefineIntentSection expanded)
+  // Stage 4: Path & Architecture (PathAndArchitecture expanded)
+  // Stage 5: Workflow (main workflow area visible)
   // ---------------------------------------------------------------------------
-  type WizardStage = 0 | 1 | 2 | 3 | 4;
+  type WizardStage = 0 | 1 | 2 | 3 | 4 | 5;
 
   // Tracks explicit user actions to advance through wizard stages
   const [welcomeAcknowledged, setWelcomeAcknowledged] = useState(false);
+  const [codingAssistantConfirmed, setCodingAssistantConfirmed] = useState(false);
   const [pathAcknowledged, setPathAcknowledged] = useState(false);
 
   // Reset wizard + UI state when session changes (component doesn't unmount on "Start New Session")
@@ -361,6 +368,7 @@ export function WorkflowDiagram({
   useEffect(() => {
     if (sessionId !== prevSessionId.current) {
       setWelcomeAcknowledged(false);
+      setCodingAssistantConfirmed(false);
       setPathAcknowledged(false);
       setForcePrereqExpanded(false);
       setWorkflowUserOverride(null);
@@ -378,31 +386,36 @@ export function WorkflowDiagram({
 
   // Auto-acknowledge for returning users (they already have progress)
   useEffect(() => {
-    if (isSessionLoaded && (selectedIndustry || selectedUseCase || completedSteps.size > 0 || prerequisitesCompleted)) {
+    if (isSessionLoaded && (selectedIndustry || selectedUseCase || completedSteps.size > 0 || prerequisitesCompleted || codingAssistant)) {
       setWelcomeAcknowledged(true);
+    }
+    if (isSessionLoaded && codingAssistant && (prerequisitesCompleted || completedSteps.size > 0)) {
+      setCodingAssistantConfirmed(true);
     }
     // Only auto-set pathAcknowledged when user has actual workshop progress (step 2+).
     // completedSteps.size === 1 means only Define Intent is done — user still needs to pick a path.
     if (isSessionLoaded && completedSteps.size > 1) {
       setPathAcknowledged(true);
     }
-  }, [isSessionLoaded, selectedIndustry, selectedUseCase, completedSteps.size, prerequisitesCompleted]);
+  }, [isSessionLoaded, selectedIndustry, selectedUseCase, completedSteps.size, prerequisitesCompleted, codingAssistant]);
 
   const deriveWizardStage = useCallback((): WizardStage => {
     const intentDefined = completedSteps.has(1) || (!!selectedIndustry && !!selectedUseCase);
 
-    // Returning user with workflow progress → jump to Stage 4
-    if (completedSteps.size > 1) return 4;
-    // Intent defined and path acknowledged → Stage 4 (Workshop)
-    if (intentDefined && pathAcknowledged) return 4;
-    // Intent defined → Stage 3 (Path & Architecture)
-    if (intentDefined) return 3;
-    // Prerequisites completed → Stage 2 (Define Intent)
-    if (prerequisitesCompleted) return 2;
-    // Welcome acknowledged → Stage 1 (Prerequisites)
+    // Returning user with workflow progress → jump to Stage 5
+    if (completedSteps.size > 1) return 5;
+    // Intent defined and path acknowledged → Stage 5 (Workshop)
+    if (intentDefined && pathAcknowledged) return 5;
+    // Intent defined → Stage 4 (Path & Architecture)
+    if (intentDefined) return 4;
+    // Prerequisites completed → Stage 3 (Define Intent)
+    if (prerequisitesCompleted) return 3;
+    // Coding assistant confirmed → Stage 2 (Prerequisites)
+    if (codingAssistantConfirmed) return 2;
+    // Welcome acknowledged → Stage 1 (Coding Assistant)
     if (welcomeAcknowledged) return 1;
     return 0;
-  }, [completedSteps, prerequisitesCompleted, selectedIndustry, selectedUseCase, welcomeAcknowledged, pathAcknowledged]);
+  }, [completedSteps, prerequisitesCompleted, codingAssistantConfirmed, selectedIndustry, selectedUseCase, welcomeAcknowledged, pathAcknowledged]);
 
   const wizardStage = deriveWizardStage();
   const prevWizardStage = useRef(wizardStage);
@@ -420,7 +433,7 @@ export function WorkflowDiagram({
 
   // Collapsible workflow area state
   const [workflowUserOverride, setWorkflowUserOverride] = useState<boolean | null>(null);
-  const workflowAutoExpanded = wizardStage >= 4;
+  const workflowAutoExpanded = wizardStage >= 5;
   const isWorkflowExpanded = workflowUserOverride !== null ? workflowUserOverride : workflowAutoExpanded;
   
   // Handle initial step and auto-expand section.
@@ -2243,13 +2256,31 @@ export function WorkflowDiagram({
         onGetStarted={() => {
           setWelcomeAcknowledged(true);
           setTimeout(() => {
-            const el = document.getElementById('prerequisites-section');
+            const el = document.getElementById('coding-assistant-section');
             if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
           }, 100);
         }}
       />
 
-      {/* Stage 1: Prerequisites */}
+      {/* Stage 1: Choose Your Coding Assistant */}
+      <CodingAssistantSelector
+        key={`assistant-${sessionId}`}
+        selectedAssistant={codingAssistant}
+        onSelect={(id) => onCodingAssistantChange?.(id)}
+        onConfirm={() => {
+          setCodingAssistantConfirmed(true);
+          setTimeout(() => {
+            const el = document.getElementById('prerequisites-section');
+            if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          }, 100);
+        }}
+        forceExpanded={wizardStage === 1 && !stageTransitioning}
+        forceCollapsed={wizardStage < 1}
+        hideConfirm={wizardStage < 1}
+        highlightConfirm={!!codingAssistant && wizardStage === 1}
+      />
+
+      {/* Stage 2: Prerequisites */}
       <Prerequisites
         key={`prereq-${sessionId}`}
         isComplete={prerequisitesCompleted}
@@ -2261,13 +2292,13 @@ export function WorkflowDiagram({
             if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
           }, 400);
         }}
-        highlightMarkDone={!prerequisitesCompleted && wizardStage === 1}
-        forceExpanded={forcePrereqExpanded || (wizardStage === 1 && !stageTransitioning)}
-        forceCollapsed={wizardStage < 1}
-        hideMarkDone={wizardStage < 1}
+        highlightMarkDone={!prerequisitesCompleted && wizardStage === 2}
+        forceExpanded={forcePrereqExpanded || (wizardStage === 2 && !stageTransitioning)}
+        forceCollapsed={wizardStage < 2}
+        hideMarkDone={wizardStage < 2}
       />
 
-      {/* Stage 2: Define Your Intent */}
+      {/* Stage 3: Define Your Intent */}
       <DefineIntentSection
         key={`intent-${sessionId}`}
         selectedIndustry={selectedIndustry}
@@ -2282,13 +2313,13 @@ export function WorkflowDiagram({
         isSessionLoaded={isSessionLoaded}
         workshopLevel={workshopLevel}
         dataRefreshKey={effectiveRefreshKey}
-        forceCollapsed={wizardStage < 2}
-        forceExpanded={wizardStage === 2 && !stageTransitioning}
+        forceCollapsed={wizardStage < 3}
+        forceExpanded={wizardStage === 3 && !stageTransitioning}
         onIntentDefined={handlePromptGenerated}
         onBrandUrlChange={onBrandUrlChange}
       />
 
-      {/* Stage 3: Path & Architecture (combined section) */}
+      {/* Stage 4: Path & Architecture (combined section) */}
       {onWorkshopLevelChange && (
         <PathAndArchitecture
           key={`path-${sessionId}`}
@@ -2296,15 +2327,15 @@ export function WorkflowDiagram({
           onLevelChange={onWorkshopLevelChange}
           completedSteps={completedSteps}
           levelExplicitlySelected={levelExplicitlySelected}
-          forceCollapsed={wizardStage < 3 || wizardStage > 3}
-          forceExpanded={wizardStage === 3 && !stageTransitioning}
+          forceCollapsed={wizardStage < 4 || wizardStage > 4}
+          forceExpanded={wizardStage === 4 && !stageTransitioning}
           onContinue={handleStartBuild}
           useCaseLockedLevel={useCaseLockedLevel}
           hasUseCaseSelected={!!selectedUseCase}
         />
       )}
 
-      {/* Stage 4: Main Workflow Area -- collapsible wrapper */}
+      {/* Stage 5: Main Workflow Area -- collapsible wrapper */}
       <div id="workflow-area" className="bg-card rounded-lg border border-border overflow-hidden">
         {/* Workflow Area Header */}
         <button

@@ -4462,6 +4462,7 @@ class SessionUpdateMetadataRequest(BaseModel):
     custom_use_case_description: Optional[str] = Field(None, description="User-edited use case description override")
     level_explicitly_selected: Optional[bool] = Field(None, description="Whether the user explicitly clicked a level button")
     company_brand_url: Optional[str] = Field(None, description="URL to company brand colors/assets page")
+    coding_assistant: Optional[str] = Field(None, description="Selected coding assistant: cursor, copilot, or vscode")
 
 
 @router.post("/session/update-metadata")
@@ -4518,6 +4519,8 @@ async def update_session_metadata_endpoint(request_body: SessionUpdateMetadataRe
             _session_param_patch['level_explicitly_selected'] = request_body.level_explicitly_selected
         if request_body.company_brand_url is not None:
             _session_param_patch['company_brand_url'] = request_body.company_brand_url
+        if request_body.coding_assistant is not None:
+            _session_param_patch['coding_assistant'] = request_body.coding_assistant
         
         # Derive user_schema_prefix from email + use case name (or source schema for accelerator)
         # Triggered when use case is selected, custom label is edited, or workshop_level changes

@@ -107,28 +107,6 @@ use_cases:
 # -----------------------------------------------------------------------------
 prerequisites:
   - id: 1
-    title: "Install Code Assistant"
-    description: |
-      Install a code editor with AI-assisted coding capabilities.
-      
-      **Cursor:** A powerful AI-first code editor built on VS Code.
-      
-      **GitHub Copilot:** AI pair programmer that works with VS Code and other editors.
-    icon: "code"
-    icon_color: "blue"
-    is_optional: false
-    links:
-      - label: "Download Cursor"
-        url: "https://cursor.com"
-        color: "blue"
-      - label: "GitHub Copilot"
-        url: "https://github.com/features/copilot"
-        color: "purple"
-      - label: "VS Code (for Copilot)"
-        url: "https://code.visualstudio.com"
-        color: "green"
-
-  - id: 2
     title: "Install Package Manager"
     description: |
       **macOS:** Homebrew is required to install the tools below. If you already have it, run the upgrade command to ensure it is up to date.
@@ -158,7 +136,7 @@ prerequisites:
         url: "https://learn.microsoft.com/en-us/windows/package-manager/winget/"
         color: "blue"
 
-  - id: 3
+  - id: 2
     title: "Install Git"
     description: |
       Git is required for version control and cloning the workshop repository.
@@ -189,7 +167,7 @@ prerequisites:
         url: "https://git-scm.com/book/en/v2/Getting-Started-Installing-Git"
         color: "blue"
 
-  - id: 4
+  - id: 3
     title: "Install Python"
     description: |
       Python 3.8+ is required for the Databricks CLI and backend services.
@@ -224,7 +202,7 @@ prerequisites:
         url: "https://docs.databricks.com/en/dev-tools/cli/install.html#requirements"
         color: "green"
 
-  - id: 5
+  - id: 4
     title: "Install Databricks CLI"
     description: |
       The Databricks CLI is used for workspace management and deployment.
@@ -255,7 +233,7 @@ prerequisites:
         url: "https://docs.databricks.com/en/dev-tools/cli/index.html"
         color: "blue"
 
-  - id: 6
+  - id: 5
     title: "Install Node.js"
     description: |
       Node.js is required for building and running the frontend application.
@@ -291,7 +269,7 @@ prerequisites:
         url: "https://docs.npmjs.com/troubleshooting/common-errors"
         color: "orange"
 
-  - id: 7
+  - id: 6
     title: "(Optional) Access to Figma"
     description: "For Option B (Rich UI Design), you'll need access to Figma for creating polished UI designs. This is optional if you plan to use Option A (Basic UI with AI Coding Assistant)."
     icon: "figma"

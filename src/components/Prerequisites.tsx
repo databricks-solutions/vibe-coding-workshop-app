@@ -415,16 +415,15 @@ export function Prerequisites({ isComplete = false, onMarkComplete, highlightMar
           {prerequisites.map((prereq) => {
             const IconComponent = iconMap[prereq.icon] || Terminal;
             const iconColorClass = iconColorMap[prereq.icon_color] || iconColorMap.slate;
-            const isCodeAssistantStep = prereq.id === 1;
 
             return (
               <div 
                 key={prereq.id}
                 className="bg-secondary/30 rounded-md p-3 border border-border/50 hover:border-border transition-colors"
               >
-                <div className={`flex gap-2.5 ${isCodeAssistantStep ? 'flex-col md:flex-row' : 'items-start'}`}>
+                <div className="flex gap-2.5 items-start">
                   {/* Main content */}
-                  <div className={`flex items-start gap-2.5 ${isCodeAssistantStep ? 'flex-1' : ''}`}>
+                  <div className="flex items-start gap-2.5">
                     <div className={`p-1.5 rounded ${iconColorClass}`}>
                       <IconComponent className="w-3.5 h-3.5" />
                     </div>
@@ -541,24 +540,6 @@ export function Prerequisites({ isComplete = false, onMarkComplete, highlightMar
                       )}
                     </div>
                   </div>
-                  
-                  {/* Video embed for Install Code Assistant (Step 1) */}
-                  {isCodeAssistantStep && (
-                    <div className="md:w-[280px] flex-shrink-0">
-                      <div className="rounded-lg overflow-hidden border border-border bg-slate-900/50">
-                        <iframe
-                          src="https://www.youtube.com/embed/LR04bU_yV5k"
-                          title="How to use Cursor - AI Code Assistant Tutorial"
-                          className="w-full aspect-video"
-                          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                          allowFullScreen
-                        />
-                        <div className="px-2 py-1.5 bg-slate-800/50 text-[10px] text-slate-400">
-                          📺 Watch: How to use Cursor
-                        </div>
-                      </div>
-                    </div>
-                  )}
                 </div>
               </div>
             );

@@ -70,6 +70,7 @@ export default function App() {
   const [completedSteps, setCompletedSteps] = useState<Set<number>>(new Set());
   const [skippedSteps, setSkippedSteps] = useState<Set<number>>(new Set());
   const [prerequisitesCompleted, setPrerequisitesCompleted] = useState(false);
+  const [codingAssistant, setCodingAssistant] = useState<string | null>(null);
   // Default to end-to-end which includes all chapters (complete workshop)
   const [workshopLevel, setWorkshopLevel] = useState<WorkshopLevel>('end-to-end');
   const [levelExplicitlySelected, setLevelExplicitlySelected] = useState(false);
@@ -203,6 +204,7 @@ export default function App() {
         setCustomDescription(sessionParams.custom_use_case_description || '');
         setLevelExplicitlySelected(!!sessionParams.level_explicitly_selected);
         setBrandUrl(sessionParams.company_brand_url || '');
+        setCodingAssistant(sessionParams.coding_assistant || null);
         
         // Find the next incomplete step using the actual section order for this workshop level
         const nextStep = getNextIncompleteStep(Array.from(restoredCompleted), skippedStepsArray, restoredLevel);
@@ -240,6 +242,7 @@ export default function App() {
       setCompletedSteps(new Set());
       setSkippedSteps(new Set());
       setPrerequisitesCompleted(false);
+      setCodingAssistant(null);
       setLevelExplicitlySelected(false);
       setUseCaseLockedLevel(null);
       setWorkshopLevel('end-to-end');
@@ -326,6 +329,7 @@ export default function App() {
         setCustomDescription(sessionParams.custom_use_case_description || '');
         setLevelExplicitlySelected(!!sessionParams.level_explicitly_selected);
         setBrandUrl(sessionParams.company_brand_url || '');
+        setCodingAssistant(sessionParams.coding_assistant || null);
         
         // Navigate to the next incomplete step using the actual section order
         const nextStep = getNextIncompleteStep(Array.from(loadedCompleted), loadedSkippedSteps, loadedLevel);
@@ -427,6 +431,17 @@ export default function App() {
       }).catch(err => console.error('Error saving prerequisites:', err));
     }
   }, [sessionId, workshopLevel]);
+
+  // Handle coding assistant selection
+  const handleCodingAssistantChange = useCallback((assistantId: string) => {
+    setCodingAssistant(assistantId);
+    if (sessionId) {
+      apiClient.updateSessionMetadata({
+        session_id: sessionId,
+        coding_assistant: assistantId,
+      }).catch(err => console.error('Error saving coding assistant:', err));
+    }
+  }, [sessionId]);
 
   const handleSaveSession = async (name: string, description: string, rating?: 'thumbs_up' | 'thumbs_down', comment?: string) => {
     if (!sessionId) return;
@@ -965,6 +980,8 @@ export default function App() {
                     initialExpandedStep={initialExpandedStep}
                     prerequisitesCompleted={prerequisitesCompleted}
                     onPrerequisitesComplete={handlePrerequisitesComplete}
+                    codingAssistant={codingAssistant}
+                    onCodingAssistantChange={handleCodingAssistantChange}
                     isSessionLoaded={!isSessionLoading}
                     currentUser={currentUser}
                     defaultCatalog={defaultCatalog}
