@@ -77,6 +77,18 @@ export const CHAPTER_LEARNING: Record<string, ChapterLearning> = {
     ],
     services: ['genieSpaces', 'metricViews', 'tvf', 'aiBIDashboards', 'agents'],
   },
+  'Activation': {
+    congratsTitle: 'Reverse ETL Complete!',
+    summary: 'You synced analytics data into Lakebase and built an analytics app.',
+    bullets: [
+      'Planned and created Synced Tables using the createSyncedTable API',
+      'Pushed Gold layer data into Lakebase PostgreSQL via Databricks Synced Tables',
+      'Designed an analytics-serving application based on synced data schemas',
+      'Built and wired FastAPI routes and React components to the synced tables',
+      'Deployed and validated end-to-end data freshness and query performance',
+    ],
+    services: ['lakebase', 'gold'],
+  },
   'Refinement': {
     congratsTitle: 'Refinement Complete!',
     summary: 'You polished and finalized your application.',

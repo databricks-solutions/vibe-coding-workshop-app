@@ -14,7 +14,8 @@ import {
   getFilteredSections,
   getCumulativeOverrides,
   ALL_STEPS,
-  type WorkshopLevel
+  type WorkshopLevel,
+  type WorkflowDirection
 } from '../constants/workflowSections';
 import { 
   getStepPoints, 
@@ -95,6 +96,9 @@ interface WorkflowDiagramProps {
   useCaseLockedLevel?: WorkshopLevel | null;
   currentUser?: string;
   defaultCatalog?: string;
+  direction?: WorkflowDirection;
+  directionLocked?: boolean;
+  onDirectionChange?: (direction: WorkflowDirection) => void;
 }
 
 // Step badge component for consistent styling
@@ -162,6 +166,9 @@ export function WorkflowDiagram({
   useCaseLockedLevel,
   currentUser = '',
   defaultCatalog = '',
+  direction = 'forward',
+  directionLocked = false,
+  onDirectionChange,
 }: WorkflowDiagramProps) {
   // UI option is now always cursor (Figma option removed from UI)
   // Lazy initializers ensure correct state on SPA re-mount (navigate away and back)
@@ -301,6 +308,7 @@ export function WorkflowDiagram({
     workshopLevel,
     disabledSectionTags,
     cumulativeOverrides ?? undefined,
+    direction,
   );
   const visibleSections = useMemo(() => {
     if (workshopLevel === 'genie-accelerator' && step22Mode === 'upload') {
@@ -2206,6 +2214,168 @@ export function WorkflowDiagram({
                   />
                 </div>
               );
+
+            // Step 32: Plan Synced Tables (Activation / Reverse ETL)
+            case 32:
+              return (
+                <div key={32} className="relative mt-5" data-step-number="32">
+                  <WorkflowStep
+                    stepNumber={32}
+                    title="Plan Synced Tables"
+                    description="Design which Gold assets to sync into Lakebase via createSyncedTable, including keys, modes, and types"
+                    icon={<Table2 className="w-5 h-5" />}
+                    color="emerald"
+                    isComplete={completedSteps.has(32)}
+                    isSkipped={skippedSteps.has(32)}
+                    onToggleComplete={() => toggleStepComplete(32)}
+                    onToggleSkip={() => toggleStepSkip(32)}
+                    onNavigateNext={() => navigateToNextStep(32)}
+                    sectionTag="activation_table_design"
+                    industry={selectedIndustry}
+                    useCase={selectedUseCase}
+                    onPromptGenerated={onStepPromptGenerated}
+                    initialPrompt={stepPrompts[32]}
+                    previousOutputs={{
+                      ...(stepPrompts[11] ? { gold_layer_design: stepPrompts[11] } : {}),
+                      ...(stepPrompts[15] ? { usecase_plan: stepPrompts[15] } : {}),
+                      ...(stepPrompts[3] ? { prd_document: stepPrompts[3] } : {}),
+                    }}
+                    isPreviousStepComplete={isPreviousStepComplete(32)}
+                    isExpanded={expandedStep === 32}
+                    onToggleExpand={() => toggleExpand(32)}
+                    sessionId={sessionId}
+                  />
+                </div>
+              );
+
+            // Step 33: Create Synced Tables (Activation / Reverse ETL)
+            case 33:
+              return (
+                <div key={33} className="relative mt-5" data-step-number="33">
+                  <WorkflowStep
+                    stepNumber={33}
+                    title="Create Synced Tables"
+                    description="Implement createSyncedTable with CDF, SDK or CLI, and verify sync pipelines"
+                    icon={<RefreshCw className="w-5 h-5" />}
+                    color="emerald"
+                    isComplete={completedSteps.has(33)}
+                    isSkipped={skippedSteps.has(33)}
+                    onToggleComplete={() => toggleStepComplete(33)}
+                    onToggleSkip={() => toggleStepSkip(33)}
+                    onNavigateNext={() => navigateToNextStep(33)}
+                    sectionTag="activation_reverse_sync"
+                    industry={selectedIndustry}
+                    useCase={selectedUseCase}
+                    onPromptGenerated={onStepPromptGenerated}
+                    initialPrompt={stepPrompts[33]}
+                    previousOutputs={
+                      stepPrompts[32] ? { activation_table_design: stepPrompts[32] } : undefined
+                    }
+                    isPreviousStepComplete={isPreviousStepComplete(33)}
+                    isExpanded={expandedStep === 33}
+                    onToggleExpand={() => toggleExpand(33)}
+                    sessionId={sessionId}
+                  />
+                </div>
+              );
+
+            // Step 34: Design Analytics App (Activation / Reverse ETL)
+            case 34:
+              return (
+                <div key={34} className="relative mt-5" data-step-number="34">
+                  <WorkflowStep
+                    stepNumber={34}
+                    title="Design Analytics App"
+                    description="Design analytics dashboards and exploration UI on top of synced Lakebase data"
+                    icon={<Palette className="w-5 h-5" />}
+                    color="emerald"
+                    isComplete={completedSteps.has(34)}
+                    isSkipped={skippedSteps.has(34)}
+                    onToggleComplete={() => toggleStepComplete(34)}
+                    onToggleSkip={() => toggleStepSkip(34)}
+                    onNavigateNext={() => navigateToNextStep(34)}
+                    sectionTag="activation_app_design"
+                    industry={selectedIndustry}
+                    useCase={selectedUseCase}
+                    onPromptGenerated={onStepPromptGenerated}
+                    initialPrompt={stepPrompts[34]}
+                    previousOutputs={{
+                      ...(stepPrompts[32] ? { activation_table_design: stepPrompts[32] } : {}),
+                      ...(stepPrompts[11] ? { gold_layer_design: stepPrompts[11] } : {}),
+                      ...(stepPrompts[3] ? { prd_document: stepPrompts[3] } : {}),
+                    }}
+                    isPreviousStepComplete={isPreviousStepComplete(34)}
+                    isExpanded={expandedStep === 34}
+                    onToggleExpand={() => toggleExpand(34)}
+                    sessionId={sessionId}
+                  />
+                </div>
+              );
+
+            // Step 35: Build & Wire App (Activation / Reverse ETL)
+            case 35:
+              return (
+                <div key={35} className="relative mt-5" data-step-number="35">
+                  <WorkflowStep
+                    stepNumber={35}
+                    title="Build & Wire App"
+                    description="FastAPI + React wired to Lakebase via PostgreSQL (psycopg)"
+                    icon={<Plug className="w-5 h-5" />}
+                    color="emerald"
+                    isComplete={completedSteps.has(35)}
+                    isSkipped={skippedSteps.has(35)}
+                    onToggleComplete={() => toggleStepComplete(35)}
+                    onToggleSkip={() => toggleStepSkip(35)}
+                    onNavigateNext={() => navigateToNextStep(35)}
+                    sectionTag="activation_build_wire"
+                    industry={selectedIndustry}
+                    useCase={selectedUseCase}
+                    onPromptGenerated={onStepPromptGenerated}
+                    initialPrompt={stepPrompts[35]}
+                    previousOutputs={{
+                      ...(stepPrompts[34] ? { activation_app_design: stepPrompts[34] } : {}),
+                      ...(stepPrompts[32] ? { activation_table_design: stepPrompts[32] } : {}),
+                    }}
+                    isPreviousStepComplete={isPreviousStepComplete(35)}
+                    isExpanded={expandedStep === 35}
+                    onToggleExpand={() => toggleExpand(35)}
+                    sessionId={sessionId}
+                  />
+                </div>
+              );
+
+            // Step 36: Deploy & Validate (Activation / Reverse ETL)
+            case 36:
+              return (
+                <div key={36} className="relative mt-5" data-step-number="36">
+                  <WorkflowStep
+                    stepNumber={36}
+                    title="Deploy & Validate"
+                    description="Deploy to Databricks Apps, schedule sync jobs, verify freshness and latency"
+                    icon={<Rocket className="w-5 h-5" />}
+                    color="emerald"
+                    isComplete={completedSteps.has(36)}
+                    isSkipped={skippedSteps.has(36)}
+                    onToggleComplete={() => toggleStepComplete(36)}
+                    onToggleSkip={() => toggleStepSkip(36)}
+                    onNavigateNext={() => navigateToNextStep(36)}
+                    sectionTag="activation_deploy_validate"
+                    industry={selectedIndustry}
+                    useCase={selectedUseCase}
+                    onPromptGenerated={onStepPromptGenerated}
+                    initialPrompt={stepPrompts[36]}
+                    previousOutputs={{
+                      ...(stepPrompts[32] ? { activation_table_design: stepPrompts[32] } : {}),
+                      ...(stepPrompts[35] ? { activation_build_wire: stepPrompts[35] } : {}),
+                    }}
+                    isPreviousStepComplete={isPreviousStepComplete(36)}
+                    isExpanded={expandedStep === 36}
+                    onToggleExpand={() => toggleExpand(36)}
+                    sessionId={sessionId}
+                  />
+                </div>
+              );
+
             default:
               return null;
           }
@@ -2301,6 +2471,9 @@ export function WorkflowDiagram({
           onContinue={handleStartBuild}
           useCaseLockedLevel={useCaseLockedLevel}
           hasUseCaseSelected={!!selectedUseCase}
+          direction={direction}
+          directionLocked={directionLocked}
+          onDirectionChange={onDirectionChange}
         />
       )}
 

@@ -7545,3 +7545,228 @@ databricks bundle destroy --auto-approve
 - [ ] Lakebase Projects page shows no workshop project
 - [ ] Jobs page shows no workshop jobs',
 true, 1, true, current_timestamp(), current_timestamp(), current_user());
+
+-- Activation: Reverse ETL (Steps 32-36)
+INSERT INTO ${catalog}.${schema}.section_input_prompts 
+(input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
+VALUES
+(141, 'activation_table_design',
+'## Context from prior workshop steps
+
+### Gold layer design
+{gold_layer_design}
+
+### Use-case plan
+{usecase_plan}
+
+### PRD
+{prd_document}
+
+---
+
+## Your task
+
+Plan which **Gold tables**, **Metric Views**, and **table-valued functions (TVFs)** to sync into **Lakebase PostgreSQL** using the Databricks **createSyncedTable** API.
+
+Your plan must cover:
+
+- **Scope** — list candidate Gold tables, Metric Views, and TVFs; prioritize what to sync for analytics serving
+- **Primary keys** — identify or define stable primary keys for each synced object
+- **Sync modes** — choose **snapshot**, **triggered**, or **continuous** sync per object and justify each choice
+- **Data type compatibility** — note Databricks → PostgreSQL mapping issues and mitigations (casts, narrowed types, JSON or text fallbacks)
+- **Dependencies** — creation order when objects depend on each other
+
+Produce a concise sync plan suitable for implementation in the next step.',
+'You are a data architect planning reverse ETL sync from Databricks Lakehouse to Lakebase PostgreSQL using Synced Tables.',
+'Plan Synced Tables',
+'Design which Gold assets to sync into Lakebase via createSyncedTable, including keys, modes, and types',
+32,
+'## How to apply
+
+**Run this in your cloned Template Repository** (see Prerequisites in Step 0).
+
+1. Complete prior steps so **Gold layer design**, **use-case plan**, and **PRD** content are available (placeholders are filled by the workshop UI).
+2. Copy the prompt from the **Prompt** tab and paste it into Cursor or your AI coding assistant.
+3. Review the generated sync plan against your actual Unity Catalog Gold schema and Lakebase project.
+4. Save the plan (for example under `docs/`) for use in **Create Synced Tables**.',
+'## Expected output
+
+- [ ] List of Gold tables, Metric Views, and TVFs targeted for sync, with rationale
+- [ ] Primary key (or surrogate key) strategy per synced object
+- [ ] Sync mode (snapshot / triggered / continuous) per object with justification
+- [ ] Data type mapping notes and risk mitigations
+- [ ] Ordered implementation checklist for createSyncedTable calls',
+false, 1, true, current_timestamp(), current_timestamp(), current_user());
+
+INSERT INTO ${catalog}.${schema}.section_input_prompts 
+(input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
+VALUES
+(142, 'activation_reverse_sync',
+'## Sync plan (from previous step)
+
+{activation_table_design}
+
+---
+
+## Your task
+
+Generate **executable** code and CLI commands to create **Synced Tables** using the **Databricks Python SDK** or **Databricks CLI**.
+
+Requirements:
+
+- Enable **Change Data Feed (CDF)** on source Delta tables where required for incremental or continuous sync
+- Execute **createSyncedTable** (or the equivalent API / workflow documented for your workspace) for each object in the plan
+- Configure Lakebase / PostgreSQL targets and credentials per Databricks best practices
+- Include **verification** steps: confirm sync pipelines start, initial load completes, and errors are observable
+
+Output notebooks, Python modules, or shell sequences that an engineer can run with minimal edits.',
+'You are a Databricks engineer implementing Synced Tables for reverse ETL.',
+'Create Synced Tables',
+'Implement createSyncedTable with CDF, SDK or CLI, and verify sync pipelines',
+33,
+'## How to apply
+
+**Run this in your cloned Template Repository** with the Databricks CLI authenticated.
+
+1. Ensure **Plan Synced Tables** is complete and the sync plan is accurate.
+2. Copy the prompt, paste into your AI assistant, and review generated scripts before running against production catalogs.
+3. Enable CDF on sources where the plan requires it, then run createSyncedTable calls in dependency order.
+4. Monitor pipeline runs in the Databricks UI and fix failures before continuing to app design.',
+'## Expected output
+
+- [ ] Python SDK or CLI examples that call createSyncedTable for each planned object
+- [ ] CDF enabled on required source tables (documented commands or properties)
+- [ ] Verification commands or SQL checks showing sync started and rows landed in Lakebase
+- [ ] Notes on secrets, connection names, and catalog/schema targets',
+false, 1, true, current_timestamp(), current_timestamp(), current_user());
+
+INSERT INTO ${catalog}.${schema}.section_input_prompts 
+(input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
+VALUES
+(143, 'activation_app_design',
+'## Context
+
+### Sync plan (tables to activate)
+{activation_table_design}
+
+### Gold layer design
+{gold_layer_design}
+
+### PRD
+{prd_document}
+
+---
+
+## Your task
+
+Design the UI for an **analytics-serving Databricks App** powered by data **synced into Lakebase** from the Gold layer.
+
+Focus on:
+
+- **Dashboards** — layout of primary analytics pages
+- **KPI visualizations** — headline metrics aligned with Gold entities and the use-case plan
+- **Data exploration** — filters, drill-downs, and tabular views for analysts
+
+If an app **already exists from Chapter 1**, specify **new analytics pages or routes** that **extend** it (do not replace working CRUD flows unless necessary).
+
+Deliver wireframe-level descriptions, component hierarchy, and navigation. Implementation is a later step.',
+'You are a UI/UX designer creating an analytics dashboard application powered by Lakebase synced data.',
+'Design Analytics App',
+'Design analytics dashboards and exploration UI on top of synced Lakebase data',
+34,
+'## How to apply
+
+1. Review the **sync plan**, **Gold design**, and **PRD** so KPIs match stakeholder needs.
+2. Copy the prompt into your AI assistant and iterate on information architecture before coding.
+3. If Chapter 1 app exists, explicitly map **new** routes or pages vs existing ones.
+4. Capture the design in `docs/` (for example `docs/analytics_ui_design.md`) for the build step.',
+'## Expected output
+
+- [ ] Page or route list for the analytics experience
+- [ ] KPIs and charts specified per page with data sources (synced tables / views)
+- [ ] Exploration patterns (filters, sort, detail panels) documented
+- [ ] Clear note of extensions to an existing Chapter 1 app vs greenfield',
+false, 1, true, current_timestamp(), current_timestamp(), current_user());
+
+INSERT INTO ${catalog}.${schema}.section_input_prompts 
+(input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
+VALUES
+(144, 'activation_build_wire',
+'## Context
+
+### Analytics UI design
+{activation_app_design}
+
+### Sync plan
+{activation_table_design}
+
+---
+
+## Your task
+
+**Build and wire** the analytics experience:
+
+- **FastAPI** — backend routes that read **synced Lakebase tables** using standard **PostgreSQL** queries via **psycopg** (or another approved driver for this repo)
+- **React** — frontend components that match the design
+- **End-to-end wiring** — request/response contracts, loading and error states, environment configuration for DB host and credentials
+
+Follow the **existing Databricks App project layout** (for example `apps_lakebase/`) and reuse patterns from earlier chapters where possible.',
+'You are a full-stack developer building a Databricks App that queries synced Lakebase tables.',
+'Build & Wire App',
+'FastAPI + React wired to Lakebase via PostgreSQL (psycopg)',
+35,
+'## How to apply
+
+1. From the app root (for example `apps_lakebase/`), implement API routes that query synced tables only (no mock data in production paths).
+2. Configure database URL or secrets per Databricks Apps / Lakebase documentation.
+3. Connect UI components to the new endpoints and test locally before deploy.
+4. Commit working code for the **Deploy & Validate** step.',
+'## Expected output
+
+- [ ] FastAPI routes with parameterized SQL against synced Lakebase tables
+- [ ] React components matching the analytics design
+- [ ] psycopg (or equivalent) connection handling and safe query patterns
+- [ ] Local smoke test documented (curl or browser) for at least one KPI path',
+false, 1, true, current_timestamp(), current_timestamp(), current_user());
+
+INSERT INTO ${catalog}.${schema}.section_input_prompts 
+(input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
+VALUES
+(145, 'activation_deploy_validate',
+'## Context
+
+### Sync plan
+{activation_table_design}
+
+### Build artifacts
+{activation_build_wire}
+
+---
+
+## Your task
+
+**Deploy and validate** the reverse ETL analytics application end to end:
+
+1. **Deploy** the app to **Databricks Apps** (asset bundle, CLI, or documented UI workflow)
+2. **Configure sync schedules** using **Lakeflow Jobs** (or Databricks Jobs) so pipelines refresh on the intended cadence
+3. **Validate data freshness** from Lakehouse → Lakebase → app: define checks that prove recent upstream changes appear in the UI
+4. **Performance** — document how to verify **sub-10ms query latency** from the app to synced Lakebase tables (assumptions, warm connection pooling, measurement method, and where to read timings)
+
+Produce a **runbook**: commands, configuration pointers, and pass/fail criteria.',
+'You are a DevOps engineer deploying and validating a reverse ETL analytics application on Databricks.',
+'Deploy & Validate',
+'Deploy to Databricks Apps, schedule sync jobs, verify freshness and latency',
+36,
+'## How to apply
+
+1. Deploy or update the app bundle; confirm the Apps URL serves the analytics UI.
+2. Attach or verify Lakeflow / Jobs schedules for sync pipelines match SLAs.
+3. Run the validation checklist after a controlled upstream change (or wait for a scheduled run).
+4. Capture latency measurements using your chosen tool (logs, APM, or `EXPLAIN ANALYZE` patterns as appropriate for PostgreSQL).',
+'## Expected output
+
+- [ ] App live on Databricks Apps with correct environment and secrets
+- [ ] Sync schedules documented and confirmed running
+- [ ] Freshness checks passed (timestamps or row counts align with expectations)
+- [ ] Latency validation documented with method and results toward sub-10ms read path from Lakebase',
+false, 1, true, current_timestamp(), current_timestamp(), current_user());

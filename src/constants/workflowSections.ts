@@ -69,7 +69,9 @@ export interface WorkflowSection {
 }
 
 // Workshop Level Types - 4-column structure
-export type WorkshopLevel = 'app-only' | 'app-database' | 'lakehouse' | 'lakehouse-di' | 'end-to-end' | 'accelerator' | 'genie-accelerator' | 'data-engineering-accelerator' | 'skills-accelerator';
+export type WorkshopLevel = 'app-only' | 'app-database' | 'lakehouse' | 'lakehouse-di' | 'end-to-end' | 'accelerator' | 'genie-accelerator' | 'data-engineering-accelerator' | 'skills-accelerator' | 'reverse-lakehouse' | 'reverse-lakehouse-di' | 'reverse-lakebase' | 'reverse-app';
+
+export type WorkflowDirection = 'forward' | 'reverse';
 
 // ---------------------------------------------------------------------------
 // Feature flag for the Agent Skills Accelerator
@@ -148,6 +150,30 @@ export const WORKSHOP_LEVELS: Record<WorkshopLevel, LevelConfig> = {
     description: 'Learn to build an Agent Skill following the agentskills.io standard — explore existing skills, define a strategy, generate SKILL.md, apply it, and validate.',
     sectionIds: ['define-usecase', 'agent-skills', 'iterate-enhance', 'cleanup'],
   },
+  'reverse-lakehouse': {
+    label: 'Lakehouse',
+    tooltip: 'Build Bronze/Silver/Gold data pipelines (reverse ETL start)',
+    description: 'Start with Lakehouse data engineering, then sync analytics into Lakebase.',
+    sectionIds: ['define-usecase', 'lakehouse', 'iterate-enhance', 'cleanup'],
+  },
+  'reverse-lakehouse-di': {
+    label: '+ Data Intelligence',
+    tooltip: 'Add DI outputs on top of your Lakehouse (reverse ETL)',
+    description: 'Build Gold layer analytics and Genie Spaces, then sync into Lakebase.',
+    sectionIds: ['define-usecase', 'lakehouse', 'data-intelligence', 'iterate-enhance', 'cleanup'],
+  },
+  'reverse-lakebase': {
+    label: '+ Lakebase (Synced)',
+    tooltip: 'Sync Gold layer data into Lakebase via Synced Tables',
+    description: 'Push curated analytics data into Lakebase PostgreSQL using Databricks Synced Tables.',
+    sectionIds: ['define-usecase', 'lakehouse', 'data-intelligence', 'activation', 'iterate-enhance', 'cleanup'],
+  },
+  'reverse-app': {
+    label: '+ Analytics App',
+    tooltip: 'Build an analytics-serving app on top of synced Lakebase data',
+    description: 'Design and deploy an analytics application powered by synced Lakebase data.',
+    sectionIds: ['define-usecase', 'lakehouse', 'data-intelligence', 'activation', 'iterate-enhance', 'cleanup'],
+  },
 };
 
 // Define all steps with their properties (21 total steps)
@@ -204,6 +230,13 @@ export const ALL_STEPS: Record<number, WorkflowStep> = {
 
   // Section: Clean Up (Step 31)
   31: { number: 31, title: 'Workspace Clean Up', icon: Trash2, color: 'text-rose-400', sectionTag: 'workspace_cleanup' },
+
+  // Activation: Reverse ETL (Steps 32-36) - Only visible in reverse direction
+  32: { number: 32, title: 'Plan Synced Tables', icon: Table2, color: 'text-emerald-400', sectionTag: 'activation_table_design' },
+  33: { number: 33, title: 'Create Synced Tables', icon: RefreshCw, color: 'text-emerald-500', sectionTag: 'activation_reverse_sync' },
+  34: { number: 34, title: 'Design Analytics App', icon: Palette, color: 'text-emerald-400', sectionTag: 'activation_app_design' },
+  35: { number: 35, title: 'Build & Wire App', icon: Plug, color: 'text-emerald-500', sectionTag: 'activation_build_wire' },
+  36: { number: 36, title: 'Deploy & Validate', icon: Rocket, color: 'text-emerald-400', sectionTag: 'activation_deploy_validate' },
 };
 
 // The 6 logical sections with their step groupings (new 4-chapter structure)
@@ -269,6 +302,18 @@ export const WORKFLOW_SECTIONS: WorkflowSection[] = [
     steps: [15, 16, 17, 24, 25, 18, 19].map(n => ALL_STEPS[n]),
   },
   {
+    id: 'activation',
+    chapter: 'Activation',
+    title: 'Reverse ETL',
+    focus: 'Sync analytics into Lakebase and build an analytics-serving app',
+    description: 'Use Databricks Synced Tables to push Gold layer data into Lakebase, then design and build an app that serves analytics to users.',
+    icon: RefreshCw,
+    color: 'text-emerald-400',
+    bgColor: 'bg-emerald-500/15',
+    borderColor: 'border-emerald-500/30',
+    steps: [32, 33, 34, 35, 36].map(n => ALL_STEPS[n]),
+  },
+  {
     id: 'agent-skills',
     chapter: 'Workshop',
     title: 'Build Agent Skill',
@@ -326,7 +371,9 @@ export function normalizeLevel(level: string): WorkshopLevel {
     case '200-di': return 'end-to-end';
     case '200': return 'end-to-end';
     case '300': return 'end-to-end';
-    default: return level as WorkshopLevel;
+    default:
+      if (level in WORKSHOP_LEVELS) return level as WorkshopLevel;
+      return 'end-to-end';
   }
 }
 
@@ -337,11 +384,12 @@ export function getFilteredSections(
   level: WorkshopLevel,
   disabledSectionTags: Set<string> = new Set(),
   overrides?: { sectionIds: string[]; chapterVisibility: Set<'ch1' | 'ch2' | 'ch3' | 'ch4'> },
+  direction: WorkflowDirection = 'forward',
 ): WorkflowSection[] {
   const normalizedLevel = normalizeLevel(level);
-  const levelConfig = WORKSHOP_LEVELS[normalizedLevel];
+  const levelConfig = WORKSHOP_LEVELS[normalizedLevel] ?? WORKSHOP_LEVELS['end-to-end'];
   const sectionIds = overrides?.sectionIds ?? levelConfig.sectionIds;
-  const chapterVisibility = overrides?.chapterVisibility ?? CHAPTER_VISIBILITY[normalizedLevel];
+  const chapterVisibility = overrides?.chapterVisibility ?? (CHAPTER_VISIBILITY[normalizedLevel] ?? CHAPTER_VISIBILITY['end-to-end']);
   
   const isGenie = normalizedLevel === 'genie-accelerator';
   const isSkillsAccelerator = normalizedLevel === 'skills-accelerator';
@@ -397,6 +445,22 @@ export function getFilteredSections(
       .filter(section => section.steps.length > 0);
   }
 
+  if (direction === 'reverse') {
+    filtered.sort((a, b) => {
+      const ai = REVERSE_SECTION_ORDER.indexOf(a.id);
+      const bi = REVERSE_SECTION_ORDER.indexOf(b.id);
+      return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi);
+    });
+  }
+
+  // Guarantee: iterate-enhance and cleanup are always the last two sections
+  filtered.sort((a, b) => {
+    const tailOrder: Record<string, number> = { 'iterate-enhance': 998, 'cleanup': 999 };
+    const aT = tailOrder[a.id] ?? 0;
+    const bT = tailOrder[b.id] ?? 0;
+    return aT - bT;
+  });
+
   return filtered;
 }
 
@@ -411,6 +475,10 @@ export const CHAPTER_VISIBILITY: Record<WorkshopLevel, Set<'ch1' | 'ch2' | 'ch3'
   'genie-accelerator': new Set(['ch3', 'ch4']),
   'data-engineering-accelerator': new Set(['ch3']),
   'skills-accelerator': new Set([]),
+  'reverse-lakehouse': new Set(['ch3']),
+  'reverse-lakehouse-di': new Set(['ch3', 'ch4']),
+  'reverse-lakebase': new Set(['ch2', 'ch3', 'ch4']),
+  'reverse-app': new Set(['ch1', 'ch2', 'ch3', 'ch4']),
 };
 
 // Architecture visibility for diagram sections
@@ -424,6 +492,10 @@ export const ARCH_VISIBILITY: Record<WorkshopLevel, { ch1: boolean; ch2: boolean
   'genie-accelerator': { ch1: false, ch2: false, ch3: true, ch4: true },
   'data-engineering-accelerator': { ch1: false, ch2: false, ch3: true, ch4: false },
   'skills-accelerator': { ch1: false, ch2: false, ch3: false, ch4: false },
+  'reverse-lakehouse': { ch1: false, ch2: false, ch3: true, ch4: false },
+  'reverse-lakehouse-di': { ch1: false, ch2: false, ch3: true, ch4: true },
+  'reverse-lakebase': { ch1: false, ch2: true, ch3: true, ch4: true },
+  'reverse-app': { ch1: true, ch2: true, ch3: true, ch4: true },
 };
 
 // ---------------------------------------------------------------------------
@@ -455,7 +527,21 @@ export function getLevelUIOverrides(level: WorkshopLevel): LevelUIOverrides {
 
 const APP_CHAIN: WorkshopLevel[] = ['app-only', 'app-database', 'lakehouse', 'lakehouse-di'];
 const LAKEHOUSE_CHAIN: WorkshopLevel[] = ['lakehouse', 'lakehouse-di'];
-export const PROGRESSION_CHAINS: WorkshopLevel[][] = [APP_CHAIN, LAKEHOUSE_CHAIN];
+
+// Reverse ETL section ordering
+export const REVERSE_SECTION_ORDER = [
+  'define-usecase',
+  'lakehouse',
+  'data-intelligence',
+  'activation',
+  'iterate-enhance',
+  'cleanup',
+];
+
+const REVERSE_ANALYTICS_CHAIN: WorkshopLevel[] = ['reverse-lakehouse', 'reverse-lakehouse-di', 'reverse-lakebase', 'reverse-app'];
+export { REVERSE_ANALYTICS_CHAIN };
+
+export const PROGRESSION_CHAINS: WorkshopLevel[][] = [APP_CHAIN, LAKEHOUSE_CHAIN, REVERSE_ANALYTICS_CHAIN];
 
 const APP_LAKEBASE_STEPS = new Set([4, 5, 6, 7, 8]);
 
@@ -468,6 +554,14 @@ export function getActiveChain(
   completedSteps: Set<number>,
 ): WorkshopLevel[] | null {
   if (level === 'app-only' || level === 'app-database') return APP_CHAIN;
+  if (
+    level === 'reverse-lakehouse' ||
+    level === 'reverse-lakehouse-di' ||
+    level === 'reverse-lakebase' ||
+    level === 'reverse-app'
+  ) {
+    return REVERSE_ANALYTICS_CHAIN;
+  }
   if (level === 'lakehouse' || level === 'lakehouse-di') {
     for (const s of APP_LAKEBASE_STEPS) {
       if (completedSteps.has(s)) return APP_CHAIN;
@@ -533,13 +627,18 @@ export function getCumulativeOverrides(
 
   for (let i = 0; i <= idx; i++) {
     const l = chain[i];
-    for (const sid of WORKSHOP_LEVELS[l].sectionIds) sectionIdSet.add(sid);
-    for (const ch of CHAPTER_VISIBILITY[l]) chVis.add(ch);
+    const wl = WORKSHOP_LEVELS[l];
+    if (!wl) continue;
+    for (const sid of wl.sectionIds) sectionIdSet.add(sid);
+    const cv = CHAPTER_VISIBILITY[l];
+    if (cv) for (const ch of cv) chVis.add(ch);
     const av = ARCH_VISIBILITY[l];
-    if (av.ch1) aVis.ch1 = true;
-    if (av.ch2) aVis.ch2 = true;
-    if (av.ch3) aVis.ch3 = true;
-    if (av.ch4) aVis.ch4 = true;
+    if (av) {
+      if (av.ch1) aVis.ch1 = true;
+      if (av.ch2) aVis.ch2 = true;
+      if (av.ch3) aVis.ch3 = true;
+      if (av.ch4) aVis.ch4 = true;
+    }
   }
 
   return { sectionIds: Array.from(sectionIdSet), chapterVisibility: chVis, archVisibility: aVis };

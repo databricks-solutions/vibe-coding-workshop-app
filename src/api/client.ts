@@ -304,6 +304,7 @@ export interface UpdateSessionMetadataRequest {
   custom_use_case_description?: string;
   level_explicitly_selected?: boolean;
   company_brand_url?: string;
+  direction?: 'forward' | 'reverse';
 }
 
 export interface SessionListItem {
