@@ -1,0 +1,21 @@
+/*
+ * StayFinder Theme — teal brand color overrides for @databricks/appkit-ui
+ *
+ * Add these overrides after @import "@databricks/appkit-ui/styles.css"
+ * in client/src/index.css. Only the brand colors are overridden;
+ * backgrounds, borders, and status colors use AppKit defaults.
+ */
+
+:root {
+  --primary: oklch(0.62 0.10 178);
+  --accent: oklch(0.62 0.10 178);
+  --ring: oklch(0.62 0.10 178);
+  --sidebar-primary: oklch(0.62 0.10 178);
+}
+
+.dark {
+  --primary: oklch(0.78 0.12 178);
+  --accent: oklch(0.78 0.12 178);
+  --ring: oklch(0.78 0.12 178);
+  --sidebar-primary: oklch(0.78 0.12 178);
+}
