@@ -7610,34 +7610,170 @@ VALUES
 
 ## Your task
 
-Generate **executable** code and CLI commands to create **Synced Tables** using the **Databricks Python SDK** or **Databricks CLI**.
+Generate **executable** code and CLI commands to create **Synced Tables** using the **Databricks Python SDK** and **REST API (curl)** for each object in the sync plan.
 
-Requirements:
+### Supported sources
 
-- Enable **Change Data Feed (CDF)** on source Delta tables where required for incremental or continuous sync
-- Execute **createSyncedTable** (or the equivalent API / workflow documented for your workspace) for each object in the plan
-- Configure Lakebase / PostgreSQL targets and credentials per Databricks best practices
-- Include **verification** steps: confirm sync pipelines start, initial load completes, and errors are observable
+Synced tables support the following Unity Catalog source types:
+- Managed and external **Delta tables**
+- Managed and external **Iceberg tables**
+- **Views** and **materialized views**
 
-Output notebooks, Python modules, or shell sequences that an engineer can run with minimal edits.',
-'You are a Databricks engineer implementing Synced Tables for reverse ETL.',
+### Sync modes and CDF requirements
+
+Choose the correct sync mode per the plan. CDF requirements differ by mode:
+
+| Mode | Description | CDF required? | When to use |
+|------|-------------|---------------|-------------|
+| **Snapshot** | One-time full copy | No — also works with views and Iceberg tables | Source changes >10% of rows per cycle, or source does not support CDF |
+| **Triggered** | Scheduled incremental updates | Yes | Source rows change on a known cadence; good cost/lag balance |
+| **Continuous** | Real-time streaming (seconds of latency) | Yes | Changes must appear in Lakebase in near real time |
+
+> **Workshop note:** Use **Snapshot** or **Triggered** mode for this workshop. Only use **Continuous** mode if explicitly requested by the workshop participant.
+
+For **Triggered** or **Continuous** mode, enable CDF on the source Delta table first:
+
+```sql
+ALTER TABLE <catalog>.<schema>.<table>
+SET TBLPROPERTIES (delta.enableChangeDataFeed = true)
+```
+
+### Requirements
+
+1. **Create synced tables** — execute `createSyncedTable` for each object in the plan using the appropriate sync mode
+2. **Use the correct `synced_table_id` format** — `catalog.schema.table` (the UC schema name becomes the Postgres schema name)
+3. **Provide both Python SDK and REST API examples**:
+
+   **Python SDK:**
+   ```python
+   from databricks.sdk import WorkspaceClient
+   from databricks.sdk.service.postgres import (
+       SyncedTable,
+       SyncedTableSyncedTableSpec,
+       SyncedTableSyncedTableSpecSyncedTableSchedulingPolicy,
+   )
+
+   w = WorkspaceClient()
+
+   synced_table = w.postgres.create_synced_table(
+       synced_table=SyncedTable(spec=SyncedTableSyncedTableSpec(
+           source_table_full_name="<catalog>.<schema>.<gold_table>",
+           project="projects/<lakebase-project>",
+           branch="projects/<lakebase-project>/branches/main",
+           primary_key_columns=["<primary_key_column>"],
+           scheduling_policy=SyncedTableSyncedTableSpecSyncedTableSchedulingPolicy.TRIGGERED,
+           postgres_database="<database>",
+           create_database_objects_if_missing=True,
+       )),
+       synced_table_id="<catalog>.<schema>.<synced_table_name>",
+   ).wait()
+
+   print(f"Synced table created: {synced_table.name}")
+   ```
+
+   **REST API (curl):**
+   ```bash
+   curl -X POST "https://{workspace_url}/api/2.0/postgres/synced_tables?synced_table_id=<catalog>.<schema>.<synced_table_name>" \
+     -H "Authorization: Bearer ${DATABRICKS_TOKEN}" \
+     -H "Content-Type: application/json" \
+     -d ''{"spec": {"source_table_full_name": "<catalog>.<schema>.<gold_table>", "project": "projects/<lakebase-project>", "branch": "projects/<lakebase-project>/branches/main", "primary_key_columns": ["<pk>"], "scheduling_policy": "TRIGGERED", "postgres_database": "<database>", "create_database_objects_if_missing": true}}''
+   ```
+   Note: the REST API returns a long-running operation — poll the returned `name` field until `done: true`.
+
+4. **Check sync status** after creation:
+   ```python
+   table = w.postgres.get_synced_table("synced_tables/<catalog>.<schema>.<synced_table_name>")
+   print(f"State: {table.status.detailed_state}")
+   print(f"Last sync: {table.status.last_sync_time}")
+   print(f"Message: {table.status.message}")
+   ```
+
+5. **Schedule subsequent syncs** (Snapshot and Triggered modes require explicit triggers after the initial sync):
+
+   **Programmatic trigger:**
+   ```python
+   table = w.postgres.get_synced_table("synced_tables/<catalog>.<schema>.<synced_table_name>")
+   pipeline_id = table.status.pipeline_id
+   w.pipelines.start_update(pipeline_id=pipeline_id)
+   ```
+
+   **Lakeflow Jobs options:**
+   - **Table update trigger** — fires when the source UC table is updated (ideal for Triggered mode)
+   - **Scheduled trigger** — runs on a cron schedule (ideal for Snapshot mode with nightly/weekly refresh)
+
+   Both use the **Database Table Sync pipeline** task type in Lakeflow Jobs.
+
+6. **Verify data landed** — query the Postgres table:
+   ```sql
+   SELECT count(*) FROM <schema>.<synced_table_name>;
+   ```
+
+### Data type compatibility
+
+Key Unity Catalog to Postgres type mappings:
+
+| Source column type | Postgres column type |
+|---|---|
+| STRING | TEXT |
+| INT | INTEGER |
+| BIGINT | BIGINT |
+| DOUBLE | DOUBLE PRECISION |
+| FLOAT | REAL |
+| DECIMAL(p,s) | NUMERIC |
+| BOOLEAN | BOOLEAN |
+| DATE | DATE |
+| TIMESTAMP | TIMESTAMP WITH TIME ZONE |
+| TIMESTAMP_NTZ | TIMESTAMP WITHOUT TIME ZONE |
+| BINARY | BYTEA |
+| ARRAY, MAP, STRUCT | JSONB |
+
+**Unsupported types:** GEOGRAPHY, GEOMETRY, VARIANT, OBJECT.
+
+**Invalid characters:** Null bytes (0x00) in STRING/ARRAY/MAP/STRUCT columns cause sync failures. Sanitize before syncing:
+```sql
+SELECT REPLACE(column_name, CAST(CHAR(0) AS STRING), '''''''') AS cleaned FROM your_table
+```
+
+### Capacity planning constraints
+
+- Each synced table uses up to **16 connections** to the Lakebase database
+- Total logical data limit: **8 TB** across all synced tables
+- Database, schema, and table names: **alphanumeric and underscores only** (`[A-Za-z0-9_]+`)
+- Schema evolution: only **additive changes** (e.g., adding columns) supported for Triggered and Continuous modes
+- Throughput: ~150 rows/sec/CU (Triggered/Continuous), ~2,000 rows/sec/CU (Snapshot)
+
+### References
+- Docs: https://docs.databricks.com/aws/en/oltp/projects/sync-tables
+- API: https://docs.databricks.com/api/workspace/postgres/createsyncedtable',
+'You are a Databricks engineer implementing Synced Tables for reverse ETL using the Databricks Python SDK, REST API, or CLI. You understand all three sync modes (Snapshot, Triggered, Continuous) and their CDF requirements. You produce executable code with proper error handling, status checking, and scheduling configuration. You account for data type compatibility between Unity Catalog and Postgres and adhere to capacity planning constraints.',
 'Create Synced Tables',
-'Implement createSyncedTable with CDF, SDK or CLI, and verify sync pipelines',
+'Implement createSyncedTable with SDK and REST API, configure sync modes and CDF, verify pipelines, and schedule subsequent syncs',
 33,
 '## How to apply
 
 **Run this in your cloned Template Repository** with the Databricks CLI authenticated.
 
-1. Ensure **Plan Synced Tables** is complete and the sync plan is accurate.
+1. Ensure **Plan Synced Tables** (Step 32) is complete and the sync plan is accurate.
 2. Copy the prompt, paste into your AI assistant, and review generated scripts before running against production catalogs.
-3. Enable CDF on sources where the plan requires it, then run createSyncedTable calls in dependency order.
-4. Monitor pipeline runs in the Databricks UI and fix failures before continuing to app design.',
+3. For each object in the sync plan, choose the correct sync mode:
+   - **Snapshot** for one-time copies or sources without CDF support (views, Iceberg)
+   - **Triggered** for scheduled incremental updates (enable CDF first)
+   - **Continuous** for real-time streaming (enable CDF first)
+4. Enable CDF on source Delta tables where required: `ALTER TABLE ... SET TBLPROPERTIES (delta.enableChangeDataFeed = true)`
+5. Run `createSyncedTable` calls in dependency order per the plan.
+6. After each creation, check sync status using `get_synced_table()` — confirm `detailed_state` shows sync completed and `last_sync_time` is populated.
+7. Configure scheduling for subsequent syncs via Lakeflow Jobs (table update trigger or cron schedule) or programmatic trigger.
+8. Verify data landed in Postgres: `SELECT count(*) FROM <schema>.<synced_table_name>;`
+9. Monitor pipeline runs in the Databricks UI and fix failures before continuing to app design.',
 '## Expected output
 
-- [ ] Python SDK or CLI examples that call createSyncedTable for each planned object
-- [ ] CDF enabled on required source tables (documented commands or properties)
-- [ ] Verification commands or SQL checks showing sync started and rows landed in Lakebase
-- [ ] Notes on secrets, connection names, and catalog/schema targets',
+- [ ] Python SDK and curl examples that call createSyncedTable for each planned object with the correct sync mode
+- [ ] CDF enabled on required source tables (ALTER TABLE commands documented)
+- [ ] Status check commands confirming sync completed (detailed_state, last_sync_time)
+- [ ] Scheduling configuration for subsequent syncs (Lakeflow Jobs or programmatic trigger)
+- [ ] Data type compatibility confirmed — no unsupported types or invalid characters in source data
+- [ ] Verification SQL showing row counts match between source tables and synced Lakebase tables
+- [ ] Notes on capacity (connections, data size limits) and naming constraints',
 false, 1, true, current_timestamp(), current_timestamp(), current_user());
 
 INSERT INTO ${catalog}.${schema}.section_input_prompts 

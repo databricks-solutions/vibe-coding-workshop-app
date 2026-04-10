@@ -927,6 +927,16 @@ export function ArchitectureDiagramContent({
                       <p className="text-[13px] font-bold text-white">Lakehouse</p>
                     </div>
                     <div className="flex flex-col gap-2">
+                      <ServicePopover serviceKey="bronze" position="left" block>
+                        <div className="bg-gradient-to-br from-orange-700 to-amber-800 rounded-lg p-3.5 shadow-lg hover:shadow-orange-500/30 hover:shadow-xl transition-all duration-200 hover:scale-105">
+                          <div className="flex items-center gap-2 mb-1">
+                            <Layers className="w-5 h-5 text-orange-100" />
+                            <p className="text-[13px] font-bold text-white">Bronze</p>
+                          </div>
+                          <p className="text-[11px] text-orange-200">Raw data</p>
+                        </div>
+                      </ServicePopover>
+                      <ArrowDown className="w-4 h-4 text-slate-400 mx-auto" />
                       <ServicePopover serviceKey="silver" position="left" block>
                         <div className="bg-gradient-to-br from-slate-400 to-slate-500 rounded-lg p-3.5 shadow-lg hover:shadow-slate-300/30 hover:shadow-xl transition-all duration-200 hover:scale-105">
                           <div className="flex items-center gap-2 mb-1">

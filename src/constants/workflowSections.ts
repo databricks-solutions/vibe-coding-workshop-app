@@ -124,7 +124,7 @@ export const WORKSHOP_LEVELS: Record<WorkshopLevel, LevelConfig> = {
     label: 'Complete Workshop',
     tooltip: 'All chapters: App, Database, Lakehouse & Data Intelligence',
     description: 'The full end-to-end workshop covering every chapter — from Databricks App to Data Intelligence.',
-    sectionIds: ['define-usecase', 'databricks-app', 'lakebase', 'lakehouse', 'data-intelligence', 'iterate-enhance', 'cleanup'],
+    sectionIds: ['define-usecase', 'databricks-app', 'lakebase', 'lakehouse', 'data-intelligence', 'activation', 'iterate-enhance', 'cleanup'],
   },
   'accelerator': {
     label: 'Data Product Accelerator',
@@ -421,10 +421,14 @@ export function getFilteredSections(
       // Non-genie paths: always hide step 22 and conditionally hide step 9
       if (section.id === 'lakehouse' && !isGenie) {
         let steps = section.steps.filter(step => step.number !== 22);
-        if (!chapterVisibility.has('ch2')) {
+        if (!chapterVisibility.has('ch2') || direction === 'reverse') {
           steps = steps.filter(step => step.number !== 9);
         }
         return { ...section, steps };
+      }
+      // Activation section: only visible in reverse direction
+      if (section.id === 'activation' && direction !== 'reverse') {
+        return { ...section, steps: [] };
       }
       // Exclude step 19 (Wire UI to Agent) when there is no UI being built (ch1 not in path)
       if (section.id === 'data-intelligence' && !chapterVisibility.has('ch1')) {
