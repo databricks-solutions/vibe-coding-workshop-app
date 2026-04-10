@@ -253,135 +253,6 @@ Simple UI design mockups that match the PRD:
 TRUE,
 1, TRUE, current_timestamp(), current_timestamp(), current_user());
 
--- Install AppKit (Prerequisite)
-INSERT INTO ${catalog}.${schema}.section_input_prompts 
-(input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
-VALUES
-(100, 'install_appkit',
-'## Install and Set Up Databricks AppKit
-
-Complete this prerequisite before running any app-building prompts.
-
-> **Where to run:** Steps marked 🖥️ **Terminal** run in your system terminal (outside Cursor). Steps marked ✏️ **Cursor/IDE** are file edits done in Cursor or your code editor.
-
----
-
-### Step 1: Verify System Requirements — 🖥️ Terminal
-
-```bash
-node -v              # Must be v22+
-databricks --version # Must be v0.295.0+
-```
-
-If missing: Node.js from https://nodejs.org/ (v22 LTS), Databricks CLI from https://docs.databricks.com/en/dev-tools/cli/install.html
-
----
-
-### Step 2: Authenticate to Databricks — 🖥️ Terminal
-
-```bash
-databricks auth login --host {workspace_url}
-databricks current-user me --output json | jq -r ''.userName''
-```
-
-Verify the output shows your username and the host matches `{workspace_url}`.
-
----
-
-### Step 3: Bootstrap the AppKit Project — 🖥️ Terminal (interactive)
-
-```bash
-databricks apps init
-```
-
-When prompted:
-- Select **AppKit** as the framework
-- Select the **analytics** and **lakebase** plugins (both are needed for this workshop)
-- Enter your app name when asked (use lowercase letters, numbers, and dashes only)
-- Choose whether to deploy immediately or skip (you can deploy later)
-
-The CLI scaffolds the project with `server/server.ts`, `client/src/`, and `config/queries/`.
-
----
-
-### Step 4: Verify app.yaml — 🖥️ Terminal or ✏️ Cursor/IDE
-
-After bootstrap, check that `app.yaml` was generated with the correct resources:
-
-```bash
-cat app.yaml
-```
-
-Verify it includes:
-- `env` section with `LAKEBASE_ENDPOINT` (valueFrom: postgres) and `DATABRICKS_WAREHOUSE_ID` (valueFrom: sql-warehouse)
-- `resources` section with a `postgres` resource
-
-If any are missing, the lakebase or analytics plugins were not selected during init — re-run `databricks apps init` in the terminal.
-
----
-
-### Step 5: Install AI Coding Assistant Skills — 🖥️ Terminal
-
-```bash
-databricks experimental aitools skills install
-```
-
-This installs Agent Skills that help AI assistants (Cursor, Copilot) work with AppKit projects — data exploration, CLI commands, and workspace resource discovery.
-
----
-
-### Step 6: Apply {use_case} Theme — ✏️ Cursor/IDE
-
-Open `client/src/index.css` in Cursor and add these overrides **after** the AppKit styles import to set a teal brand color:
-
-```css
-@import "@databricks/appkit-ui/styles.css";
-
-:root       { --primary: oklch(0.62 0.10 178); --accent: oklch(0.62 0.10 178); --ring: oklch(0.62 0.10 178); --sidebar-primary: oklch(0.62 0.10 178); }
-.dark       { --primary: oklch(0.78 0.12 178); --accent: oklch(0.78 0.12 178); --ring: oklch(0.78 0.12 178); --sidebar-primary: oklch(0.78 0.12 178); }
-```
-
----
-
-### Step 7: Verify — 🖥️ Terminal + 🌐 Browser
-
-```bash
-npm run dev
-```
-
-Open http://localhost:8000 in your browser — the default AppKit page should load with teal accents on a dark background.
-
-**AppKit documentation reference** — run these in the terminal anytime you need guidance:
-```bash
-npx @databricks/appkit docs              # documentation index
-npx @databricks/appkit docs "lakebase"   # search specific topic
-npx @databricks/appkit docs --full       # full index with all API entries
-```',
-'You are setting up a Databricks AppKit project. Guide the user through prerequisites, bootstrapping, and verification.',
-'Install AppKit',
-'Bootstrap AppKit project via databricks apps init, verify dev server',
-3,
-'## How to Use
-
-1. **Copy the generated prompt**
-2. **Paste into Cursor or Copilot**
-3. The code assistant will verify requirements, authenticate, bootstrap, and verify
-
-### AppKit Documentation:
-- `npx @databricks/appkit docs` for inline docs
-- https://databricks.github.io/appkit/
-- https://databricks.github.io/appkit/llms.txt
-
-If issues: https://databricks.github.io/appkit/docs/',
-'## Expected Output
-
-- AppKit project bootstrapped with `server/server.ts`, `client/`, and `config/queries/`
-- StayFinder theme applied — teal primary color on dark background
-- Dev server running at http://localhost:8000
-- Ready to proceed with the UI Design step',
-TRUE,
-1, TRUE, current_timestamp(), current_timestamp(), current_user());
-
 -- UI Design - Build Locally
 INSERT INTO ${catalog}.${schema}.section_input_prompts 
 (input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
@@ -5933,7 +5804,8 @@ Register the Lakebase PostgreSQL database as a Unity Catalog database catalog so
 ### Configuration
 - **Workspace:** {workspace_url}
 - **Catalog name:** {lakebase_uc_catalog_name}
-- **Lakebase instance:** {user_app_name}
+- **Lakebase project/instance:** {lakebase_instance_name}
+- **Lakebase mode:** {lakebase_mode} (autoscaling or provisioned)
 - **Database name:** databricks_postgres (standard Lakebase database)
 - **SQL Warehouse:** {default_warehouse}
 
@@ -5959,10 +5831,18 @@ databricks catalogs get {lakebase_uc_catalog_name}
 
 ### Step 2: Create the Database Catalog (only if it does not exist)
 
-Register the Lakebase PostgreSQL database as a read-only Unity Catalog catalog:
+Register the Lakebase PostgreSQL database as a read-only Unity Catalog catalog. The command depends on the Lakebase mode:
+
+**If {lakebase_mode} = autoscaling** — use the REST API:
 
 ```bash
-databricks database create-database-catalog {lakebase_uc_catalog_name} {user_app_name} databricks_postgres
+databricks api post /api/2.0/postgres/catalogs --json ''{"catalog_name": "{lakebase_uc_catalog_name}", "project_id": "{lakebase_instance_name}", "database_name": "databricks_postgres"}''
+```
+
+**If {lakebase_mode} = provisioned** — use the CLI:
+
+```bash
+databricks database create-database-catalog {lakebase_uc_catalog_name} {lakebase_instance_name} databricks_postgres
 ```
 
 After creation, verify the catalog state:
@@ -6007,7 +5887,7 @@ This replaces the manual process of syncing individual tables and converting typ
 1. Copy the generated prompt using the copy button
 2. Paste it into Cursor or VS Code with Copilot
 3. The AI will check if the catalog already exists
-4. If not, it will create the database catalog using the Databricks CLI
+4. If not, it will create the database catalog using the REST API (autoscaling) or CLI (provisioned)
 5. It will verify the catalog is ACTIVE
 6. Finally, it will list all schemas in the catalog as confirmation
 

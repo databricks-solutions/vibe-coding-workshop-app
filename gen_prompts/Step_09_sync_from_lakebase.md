@@ -7,7 +7,8 @@ Register the Lakebase PostgreSQL database as a Unity Catalog database catalog so
 
 ### Configuration
 - **Catalog name:** jaiwa_vibe_coding_workshop_catalog
-- **Lakebase instance:** jaiwa-vibe-coding-workshop
+- **Lakebase project/instance:** jaiwa-vibe-coding-workshop
+- **Lakebase mode:** autoscaling (autoscaling or provisioned)
 - **Database name:** databricks_postgres (standard Lakebase database)
 - **SQL Warehouse:** Serverless Starter Warehouse
 
@@ -24,7 +25,15 @@ databricks catalogs get jaiwa_vibe_coding_workshop_catalog
 
 ### Step 2: Create the Database Catalog (only if it does not exist)
 
-Register the Lakebase PostgreSQL database as a read-only Unity Catalog catalog:
+Register the Lakebase PostgreSQL database as a read-only Unity Catalog catalog. The command depends on the Lakebase mode:
+
+**If autoscaling** — use the REST API:
+
+```bash
+databricks api post /api/2.0/postgres/catalogs --json '{"catalog_name": "jaiwa_vibe_coding_workshop_catalog", "project_id": "jaiwa-vibe-coding-workshop", "database_name": "databricks_postgres"}'
+```
+
+**If provisioned** — use the CLI:
 
 ```bash
 databricks database create-database-catalog jaiwa_vibe_coding_workshop_catalog jaiwa-vibe-coding-workshop databricks_postgres

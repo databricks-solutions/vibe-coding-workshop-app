@@ -280,48 +280,6 @@ prerequisites:
         url: "https://figma.com"
         color: "pink"
 
-  - id: 8
-    title: "Install Databricks AppKit"
-    description: |
-      Databricks AppKit is a TypeScript SDK for building full-stack Databricks applications with a plugin-based architecture. Install it and register it with your AI coding assistant.
-
-      **Step 1: Bootstrap a new AppKit project** (or add to an existing one):
-      Run `databricks apps init` and select **AppKit** as the framework, or install the packages directly.
-
-      **Step 2: Register with your AI coding assistant:**
-      - **Cursor / VS Code:** Install the **Databricks AI Dev Kit** extension from the marketplace, or run the skills install command below.
-      - **Claude Code:** Run the skills install command — Agent Skills are added to `.claude/` configuration automatically.
-      - **GitHub Copilot:** Run the skills install command to add Databricks skills to your workspace context.
-
-      **Step 3: Verify** by running `npm run dev` — the AppKit dev server should start at `http://localhost:8000`.
-    commands:
-      - label: "Bootstrap new AppKit project (interactive)"
-        cmd: "databricks apps init"
-      - label: "Or add AppKit to existing project"
-        cmd: "npm install @databricks/appkit @databricks/appkit-ui"
-      - label: "Install AI coding assistant skills"
-        cmd: "databricks experimental aitools skills install"
-      - label: "Verify AppKit dev server"
-        cmd: "npm run dev"
-      - label: "View AppKit docs (inline)"
-        cmd: "npx @databricks/appkit docs"
-    icon: "Download"
-    icon_color: "blue"
-    is_optional: false
-    links:
-      - label: "AppKit GitHub"
-        url: "https://github.com/databricks/appkit"
-        color: "blue"
-      - label: "AppKit Docs"
-        url: "https://databricks.github.io/appkit/"
-        color: "green"
-      - label: "LLM Guide"
-        url: "https://databricks.github.io/appkit/llms.txt"
-        color: "purple"
-      - label: "App Templates"
-        url: "https://github.com/databricks/app-templates"
-        color: "orange"
-
 # =============================================================================
 # NOTE: Clone Repository, Open Project, and Configure Auth have been moved
 # to Workflow Step 2 "Set Up Project". See WorkflowDiagram.tsx for the

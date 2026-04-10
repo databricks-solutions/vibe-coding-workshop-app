@@ -5748,7 +5748,8 @@ Register the Lakebase PostgreSQL database as a Unity Catalog database catalog so
 
 ### Configuration
 - **Catalog name:** {lakebase_uc_catalog_name}
-- **Lakebase instance:** {user_app_name}
+- **Lakebase project/instance:** {lakebase_instance_name}
+- **Lakebase mode:** {lakebase_mode} (autoscaling or provisioned)
 - **Database name:** databricks_postgres (standard Lakebase database)
 - **SQL Warehouse:** {default_warehouse}
 
@@ -5765,10 +5766,18 @@ databricks catalogs get {lakebase_uc_catalog_name}
 
 ### Step 2: Create the Database Catalog (only if it does not exist)
 
-Register the Lakebase PostgreSQL database as a read-only Unity Catalog catalog:
+Register the Lakebase PostgreSQL database as a read-only Unity Catalog catalog. The command depends on the Lakebase mode:
+
+**If {lakebase_mode} = autoscaling** — use the REST API:
 
 ```bash
-databricks database create-database-catalog {lakebase_uc_catalog_name} {user_app_name} databricks_postgres
+databricks api post /api/2.0/postgres/catalogs --json ''{"catalog_name": "{lakebase_uc_catalog_name}", "project_id": "{lakebase_instance_name}", "database_name": "databricks_postgres"}''
+```
+
+**If {lakebase_mode} = provisioned** — use the CLI:
+
+```bash
+databricks database create-database-catalog {lakebase_uc_catalog_name} {lakebase_instance_name} databricks_postgres
 ```
 
 After creation, verify the catalog state:
@@ -5813,7 +5822,7 @@ This replaces the manual process of syncing individual tables and converting typ
 1. Copy the generated prompt using the copy button
 2. Paste it into Cursor or VS Code with Copilot
 3. The AI will check if the catalog already exists
-4. If not, it will create the database catalog using the Databricks CLI
+4. If not, it will create the database catalog using the REST API (autoscaling) or CLI (provisioned)
 5. It will verify the catalog is ACTIVE
 6. Finally, it will list all schemas in the catalog as confirmation
 
