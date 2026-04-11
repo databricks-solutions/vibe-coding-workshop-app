@@ -260,7 +260,7 @@ TRUE,
 INSERT INTO ${catalog}.${schema}.section_input_prompts 
 (input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
 VALUES
-(1, 'cursor_copilot_scaffold_build_test',
+(3, 'cursor_copilot_ui_design',
 '## Your Task
 
 You are a full-stack developer building a web application on Databricks AppKit. Your goal is to scaffold an AppKit project, implement UI and backend features from a PRD, and test locally.
@@ -406,7 +406,7 @@ This prompt is returned as-is for direct use in Cursor/Copilot. No LLM processin
 
 'Scaffold, Build, and Test Locally',
 'Scaffold an AppKit project, build UI and backend from a PRD, test locally before deployment',
-1,
+4,
 
 '## How to Use
 
@@ -472,7 +472,7 @@ TRUE,
 INSERT INTO ${catalog}.${schema}.section_input_prompts 
 (input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
 VALUES
-(5, 'deploy_e2e_test_lakebase',
+(4, 'workspace_setup_deploy',
 '## Your Task
 
 Deploy the locally-tested web application to Databricks Apps and run comprehensive end-to-end testing to verify Lakebase connectivity, API correctness, and idle resilience.
@@ -792,7 +792,7 @@ This prompt is returned as-is for direct use in Cursor/Copilot. No LLM processin
 
 'Deploy and E2E Test with Lakebase',
 'Deploy the Lakebase-wired app to Databricks Apps, test APIs, check logs, verify idle resilience',
-5,
+7,
 
 '## How to Use
 
@@ -5235,7 +5235,7 @@ true, 1, true, current_timestamp(), current_timestamp(), current_user());
 INSERT INTO ${catalog}.${schema}.section_input_prompts 
 (input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
 VALUES
-(3, 'setup_lakebase',
+(16, 'setup_lakebase',
 '## Your Task
 
 Create and configure a Lakebase (PostgreSQL) project so the AppKit application can connect to a transactional database in subsequent phases.
@@ -5403,7 +5403,7 @@ This prompt is returned as-is for direct use in Cursor/Copilot. No LLM processin
 
 'Setup Lakebase Project',
 'Create and configure a Lakebase PostgreSQL project with optimized compute for development',
-3,
+5,
 
 '## How to Use
 
@@ -5483,7 +5483,7 @@ Generate a detailed, actionable prompt for {section_tag} in a {industry_name} {u
 INSERT INTO ${catalog}.${schema}.section_input_prompts 
 (input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
 VALUES
-(4, 'wire_appkit_lakebase',
+(108, 'wire_ui_lakebase',
 '## Your Task
 
 Wire the AppKit web application to a Lakebase database so the UI displays real data from both a SQL warehouse (analytics/reporting) and Lakebase PostgreSQL (transactional CRUD). This step focuses on local development and testing.
@@ -5931,7 +5931,7 @@ This prompt is returned as-is for direct use in Cursor/Copilot. No LLM processin
 
 'Wire AppKit App to Lakebase',
 'Add Lakebase plugin, create DDL/seed data, build CRUD APIs, replace static data with live sources, test locally',
-4,
+6,
 
 '## How to Use
 
@@ -6001,7 +6001,7 @@ TRUE,
 INSERT INTO ${catalog}.${schema}.section_input_prompts 
 (input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
 VALUES
-(2, 'deploy_databricks_app',
+(110, 'deploy_databricks_app',
 '## Your Task
 
 Deploy the locally-tested AppKit web application to Databricks Apps.
@@ -6092,7 +6092,7 @@ This prompt is returned as-is for direct use in Cursor/Copilot. No LLM processin
 
 'Deploy to Databricks Apps',
 'Deploy the locally-tested AppKit app to Databricks Apps and verify it is running',
-2,
+4,
 
 '## How to Use
 
