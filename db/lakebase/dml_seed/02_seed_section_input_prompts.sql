@@ -455,7 +455,46 @@ Output format varies by AppKit version. Look for confirmation that the server is
 
 **Architecture — Local Development:**
 
-Browser (localhost:8000) -> Vite Dev Server (HMR + Proxy) -> AppKit Backend (Node.js/Express) -> SQL Warehouse (Databricks)
+```mermaid
+graph LR
+    Browser["Browser<br/>localhost:8000"] --> Vite["Vite Dev Server<br/>(HMR + Proxy)"]
+    Vite --> AppKit["AppKit Backend<br/>(Node.js/Express)"]
+    AppKit --> SQLWarehouse["SQL Warehouse<br/>(Databricks)"]
+
+    subgraph local [Local Machine]
+        Browser
+        Vite
+        AppKit
+    end
+
+    subgraph cloud [Databricks Cloud]
+        SQLWarehouse
+    end
+```
+
+**What you should see in the browser:**
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│  My App                                    Dashboard | Details│
+├─────────────────────────────────────────────────────────────┤
+│                                                             │
+│  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐   │
+│  │ Total    │  │ Active   │  │ Revenue  │  │ Growth   │   │
+│  │ Orders   │  │ Users    │  │ $12,450  │  │ +15.3%   │   │
+│  │ 1,247    │  │ 342      │  │          │  │          │   │
+│  └──────────┘  └──────────┘  └──────────┘  └──────────┘   │
+│                                                             │
+│  ┌─────────────────────────────┐  ┌────────────────────┐   │
+│  │  Orders by Status           │  │  Recent Activity   │   │
+│  │  ████████████ Completed 72% │  │  Order #1247 ...   │   │
+│  │  ██████      Pending   20% │  │  Order #1246 ...   │   │
+│  │  ███         Cancelled  8% │  │  Order #1245 ...   │   │
+│  │                             │  │  Order #1244 ...   │   │
+│  └─────────────────────────────┘  └────────────────────┘   │
+│                                                             │
+└─────────────────────────────────────────────────────────────┘
+```
 
 **Verification — curl test:**
 
@@ -814,7 +853,7 @@ This prompt is returned as-is for direct use in Cursor/Copilot. No LLM processin
 
 **Full API test battery:**
 
-```
+```json
 $ curl -s "$APP_URL/api/health/lakebase" | jq .
 {
   "status": "connected",
@@ -834,39 +873,62 @@ $ curl -s "$APP_URL/api/orders" | jq .
 
 **App logs — healthy Lakebase connections:**
 
-Log format varies by AppKit version. Check for: Analytics and Lakebase plugins loaded, ConnectionPool initialized, DDL executed, server listening on port 8000, and [Lakebase]-prefixed query logs. Absence of ERROR-level messages indicates a healthy startup.
+Log format varies by AppKit version. Check `databricks apps logs $APP_NAME --tail-lines 30 --profile $PROFILE` for: Analytics and Lakebase plugins loaded, ConnectionPool initialized, DDL executed, server listening on port 8000, and [Lakebase]-prefixed query logs. Absence of ERROR-level messages indicates a healthy startup.
 
 **Idle connection test timeline:**
 
 ```
-T+0:00  All endpoints return "source": "live"
-T+3:00  Lakebase may scale to zero (idle)
-T+5:00  Reload browser + re-test
-        curl /api/health/lakebase -> { "status": "connected", "source": "live" }
+T+0:00  ───── All endpoints return "source": "live" ✓
+        │
+        │     (no interaction — app idle)
+        │
+T+3:00  ───── Lakebase may scale to zero
+        │
+T+5:00  ───── Reload browser + re-test
+        │
+        ▼
+        curl /api/health/lakebase → { "status": "connected", "source": "live" } ✓
         ConnectionPool auto-recovered after cold start
 ```
 
 **Architecture — Final Production State:**
 
-User Browser (HTTPS) -> Databricks Apps (Managed Hosting) -> AppKit Server (Node.js)
-  -> Analytics queries -> SQL Warehouse
-  -> CRUD operations -> Lakebase PostgreSQL
-  -> OAuth token refresh (automatic, every 58min) -> Databricks Auth
+```mermaid
+graph LR
+    User["User Browser<br/>(HTTPS)"] --> DatabricksApps["Databricks Apps<br/>(Managed Hosting)"]
+    DatabricksApps --> AppKit["AppKit Server<br/>(Node.js)"]
+    AppKit -->|"Analytics queries"| SQLWarehouse["SQL Warehouse"]
+    AppKit -->|"CRUD operations"| Lakebase["Lakebase PostgreSQL"]
+    AppKit -.->|"OAuth token refresh<br/>(automatic, every 58min)"| TokenService["Databricks Auth"]
+
+    subgraph cloud [Databricks Cloud]
+        DatabricksApps
+        AppKit
+        SQLWarehouse
+        Lakebase
+        TokenService
+    end
+```
 
 **Final verification dashboard:**
 
 ```
-  E2E Verification Results
-  Test                        Status    Details
-  App deployed & RUNNING      PASS      State: RUNNING
-  UI loads in browser         PASS      React app rendered
-  /api/health/lakebase        PASS      source: live
-  /api/orders                 PASS      3 rows, source: live
-  App logs - no errors        PASS      ConnectionPool OK
-  SQL warehouse queries       PASS      Analytics data loaded
-  Idle test (5 min)           PASS      Auto-recovered
-  ConnectionStatus UI         PASS      Shows "Live Data"
-  TOTAL                       8/8       All tests passed
+┌──────────────────────────────────────────────────────────────────┐
+│  E2E Verification Results                                        │
+├──────────────────────────────┬──────────┬────────────────────────┤
+│  Test                        │  Status  │  Details               │
+├──────────────────────────────┼──────────┼────────────────────────┤
+│  App deployed & RUNNING      │  PASS ✓  │  State: RUNNING        │
+│  UI loads in browser         │  PASS ✓  │  React app rendered    │
+│  /api/health/lakebase        │  PASS ✓  │  source: live          │
+│  /api/orders                 │  PASS ✓  │  3 rows, source: live  │
+│  App logs — no errors        │  PASS ✓  │  ConnectionPool OK     │
+│  SQL warehouse queries       │  PASS ✓  │  Analytics data loaded │
+│  Idle test (5 min)           │  PASS ✓  │  Auto-recovered        │
+│  ConnectionStatus UI         │  PASS ✓  │  Shows "Live Data"     │
+├──────────────────────────────┼──────────┼────────────────────────┤
+│  TOTAL                       │  8/8 ✓   │  All tests passed      │
+└──────────────────────────────┴──────────┴────────────────────────┘
 ```',
 
 TRUE,
@@ -5953,13 +6015,26 @@ This prompt is returned as-is for direct use in Cursor/Copilot. No LLM processin
 
 **Architecture — Dual Data Sources:**
 
-Browser (localhost:8000) -> AppKit Backend (Node.js/Express)
-  -> useAnalyticsQuery() -> SQL Warehouse (Analytics reads)
-  -> AppKit.lakebase.query() -> Lakebase (CRUD writes)
+```mermaid
+graph LR
+    Browser["Browser<br/>localhost:8000"] --> AppKit["AppKit Backend<br/>(Node.js/Express)"]
+    AppKit -->|"useAnalyticsQuery()"| SQLWarehouse["SQL Warehouse<br/>(Analytics reads)"]
+    AppKit -->|"AppKit.lakebase.query()"| Lakebase["Lakebase<br/>(CRUD writes)"]
+
+    subgraph local [Local Machine]
+        Browser
+        AppKit
+    end
+
+    subgraph cloud [Databricks Cloud]
+        SQLWarehouse
+        Lakebase
+    end
+```
 
 **API health check — Lakebase connected:**
 
-```
+```json
 $ curl -s http://localhost:8000/api/health/lakebase | jq .
 {
   "status": "connected",
@@ -5969,7 +6044,7 @@ $ curl -s http://localhost:8000/api/health/lakebase | jq .
 
 **API data endpoint — live data:**
 
-```
+```json
 $ curl -s http://localhost:8000/api/orders | jq .
 {
   "data": [
@@ -5987,12 +6062,23 @@ $ curl -s http://localhost:8000/api/orders | jq .
 
 **Before/After — The Phase 1 to Phase 4 Switch:**
 
-BEFORE (Phase 1): Static demo data arrays, Mock Data indicator
-AFTER (Phase 4): Live Lakebase data, Live Data indicator, real rows from database
+```
+BEFORE (Phase 1 — static demo data):          AFTER (Phase 4 — live Lakebase data):
+┌────────────────────────────────┐             ┌────────────────────────────────┐
+│  ⚠ Mock Data — orders         │             │  ✓ Live Data — orders          │
+│                                │             │                                │
+│  id │ user   │ amount │ status │             │  id │ user   │ amount │ status │
+│  ───┼────────┼────────┼────────│             │  ───┼────────┼────────┼────────│
+│  1  │ demo   │ $99.99 │ mock   │             │  1  │ demo-  │ $99.99 │ compl- │
+│     │        │        │        │             │  2  │ user   │ $45.00 │ eted   │
+│  (hardcoded static array)      │             │  3  │ alice  │ $72.50 │ pend-  │
+│                                │             │  (live from Lakebase)  │ ing    │
+└────────────────────────────────┘             └────────────────────────────────┘
+```
 
 **Terminal output — npm run dev with Lakebase:**
 
-Server running on port 8000, analytics and Lakebase plugins loaded, ConnectionPool initialized, DDL executed, [Lakebase]-prefixed query logs with row counts.',
+Output format varies by AppKit version. Look for confirmation that the server is running on port 8000, both the analytics and Lakebase plugins loaded, and the ConnectionPool initialized. You should see your DDL statements executing successfully and [Lakebase]-prefixed query logs with row counts.',
 
 TRUE,
 1, TRUE, current_timestamp(), current_timestamp(), current_user());
@@ -6126,11 +6212,22 @@ App deployed successfully!
 
 **Architecture — Deployed on Databricks:**
 
-User Browser (HTTPS) -> Databricks Apps (Managed Hosting) -> AppKit Server (Node.js) -> SQL Warehouse
+```mermaid
+graph LR
+    User["User Browser<br/>(HTTPS)"] --> DatabricksApps["Databricks Apps<br/>(Managed Hosting)"]
+    DatabricksApps --> AppKit["AppKit Server<br/>(Node.js)"]
+    AppKit --> SQLWarehouse["SQL Warehouse"]
+
+    subgraph cloud [Databricks Cloud]
+        DatabricksApps
+        AppKit
+        SQLWarehouse
+    end
+```
 
 **App status — databricks apps get:**
 
-```
+```json
 {
   "name": "prashanth-s-bookings",
   "url": "https://prashanth-s-bookings.cloud.databricks.com",
