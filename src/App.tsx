@@ -646,6 +646,7 @@ export default function App() {
                 <div className="min-w-0">
                   <h1 className="font-semibold text-sidebar-foreground text-[13px] tracking-tight whitespace-nowrap">{brandConfig?.company_name || 'V2V: Vibe-to-Value'}</h1>
                   <p className="text-[10px] text-muted-foreground whitespace-nowrap">Vibe Coding Workshop</p>
+                  <p className="text-[9px] text-muted-foreground/60 whitespace-nowrap">v{__APP_VERSION__}</p>
                 </div>
               </Link>
               <button
@@ -701,6 +702,7 @@ export default function App() {
                 <div className="min-w-0">
                   <h1 className="font-semibold text-sidebar-foreground text-[13px] tracking-tight whitespace-nowrap">{brandConfig?.company_name || 'V2V: Vibe-to-Value'}</h1>
                   <p className="text-[10px] text-muted-foreground whitespace-nowrap">Vibe Coding Workshop</p>
+                  <p className="text-[9px] text-muted-foreground/60 whitespace-nowrap">v{__APP_VERSION__}</p>
                 </div>
               )}
             </Link>
@@ -862,7 +864,7 @@ export default function App() {
         <div className={`${sidebarCollapsed ? 'px-2 flex justify-center' : 'px-4'} py-3 border-t border-sidebar-border transition-all duration-300`}>
           <div className={`flex items-center ${sidebarCollapsed ? 'justify-center' : 'gap-1.5'} text-[10px] text-muted-foreground`}>
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse flex-shrink-0"></span>
-            {!sidebarCollapsed && <span className="whitespace-nowrap">Connected</span>}
+            {!sidebarCollapsed && <span className="whitespace-nowrap">Connected · v{__APP_VERSION__}</span>}
           </div>
         </div>
       </aside>
