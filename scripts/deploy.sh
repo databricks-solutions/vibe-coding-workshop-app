@@ -408,6 +408,31 @@ for line in open('$PROJECT_ROOT/user-config.yaml'):
     fi
 fi
 
+# Read Lakebase UC catalog name from user-config.yaml (the read-only UC-registered catalog)
+LAKEBASE_UC_CATALOG=""
+if [[ -f "$PROJECT_ROOT/user-config.yaml" ]]; then
+    LAKEBASE_UC_CATALOG=$(python3 -c "
+in_lakebase = False
+for line in open('$PROJECT_ROOT/user-config.yaml'):
+    stripped = line.strip()
+    if not stripped or stripped.startswith('#'):
+        continue
+    if not line[0:1].isspace() and ':' in stripped:
+        in_lakebase = stripped.startswith('lakebase:')
+        continue
+    if in_lakebase and stripped.startswith('uc_catalog:'):
+        val = stripped.split(':', 1)[1].strip().strip('\"').strip(\"'\")
+        if val: print(val)
+        break
+" 2>/dev/null) || true
+fi
+if [[ -z "$LAKEBASE_UC_CATALOG" && -n "$LAKEBASE_CATALOG" ]]; then
+    LAKEBASE_UC_CATALOG="${LAKEBASE_CATALOG/_catalog/_lakebase}"
+    if [[ "$LAKEBASE_UC_CATALOG" == "$LAKEBASE_CATALOG" ]]; then
+        LAKEBASE_UC_CATALOG="${LAKEBASE_CATALOG}_lakebase"
+    fi
+fi
+
 # Validate target to prevent accidental production changes
 # Skip confirmation for --code-only (safer operation, just code sync)
 if [[ "$TARGET" == "production" && "$CODE_ONLY" != true ]]; then
@@ -430,6 +455,7 @@ fi
 echo -e "App Name:     ${BLUE}$APP_NAME${NC}"
 echo -e "Lakebase:     ${BLUE}$LAKEBASE_INSTANCE${NC} (${CYAN}$LAKEBASE_MODE${NC})"
 echo -e "Catalog:      ${BLUE}$LAKEBASE_CATALOG${NC}"
+echo -e "UC Catalog:   ${BLUE}$LAKEBASE_UC_CATALOG${NC}"
 echo -e "Schema:       ${BLUE}$LAKEBASE_SCHEMA${NC}"
 echo ""
 
@@ -893,6 +919,52 @@ print(state)" 2>/dev/null) || true
 fi
 
 # =============================================================================
+# Step 1c: Register Lakebase as Unity Catalog Database Catalog
+# =============================================================================
+# Registers the Lakebase PostgreSQL database as a read-only Unity Catalog catalog
+# so tables are queryable via SQL/notebooks. This runs as the admin (who has
+# CREATE CATALOG permission), removing the need for participants to do it in Step 9.
+# If registration fails for any reason, deploy continues -- Step 9 is the fallback.
+# =============================================================================
+
+if [[ "$TABLES_ONLY" != true && "$PERMISSIONS_ONLY" != true && -n "$LAKEBASE_UC_CATALOG" ]]; then
+    print_header "STEP 1c: Register Lakebase in Unity Catalog"
+    print_step "Checking if UC catalog '$LAKEBASE_UC_CATALOG' already exists..."
+
+    EXISTING_UC_CATALOG=$(databricks catalogs get "$LAKEBASE_UC_CATALOG" $PROFILE_FLAG --output json 2>/dev/null) || true
+
+    if echo "$EXISTING_UC_CATALOG" | grep -q '"state"'; then
+        UC_STATE=$(echo "$EXISTING_UC_CATALOG" | python3 -c "import sys,json; print(json.load(sys.stdin).get('state','UNKNOWN'))" 2>/dev/null) || UC_STATE="UNKNOWN"
+        print_success "UC catalog '$LAKEBASE_UC_CATALOG' already exists (state: $UC_STATE)"
+    else
+        print_step "Registering Lakebase as UC catalog: $LAKEBASE_UC_CATALOG..."
+
+        if [[ "$LAKEBASE_MODE" == "autoscaling" ]]; then
+            UC_REG_RESULT=$(databricks api post /api/2.0/postgres/catalogs $PROFILE_FLAG \
+                --json "{\"catalog_name\": \"$LAKEBASE_UC_CATALOG\", \"project_id\": \"$LAKEBASE_INSTANCE\", \"database_name\": \"databricks_postgres\"}" 2>&1) || true
+        else
+            UC_REG_RESULT=$(databricks database create-database-catalog "$LAKEBASE_UC_CATALOG" "$LAKEBASE_INSTANCE" databricks_postgres $PROFILE_FLAG 2>&1) || true
+        fi
+
+        if echo "$UC_REG_RESULT" | grep -qi "error\|PERMISSION_DENIED\|ACCESS_DENIED\|FORBIDDEN"; then
+            print_warning "Could not register UC catalog '$LAKEBASE_UC_CATALOG'"
+            echo "  Response: $UC_REG_RESULT"
+            echo -e "  ${YELLOW}Participants will be prompted to register in Step 9 (needs CREATE CATALOG permission)${NC}"
+        else
+            # Verify the catalog was created
+            sleep 3
+            VERIFY_UC=$(databricks catalogs get "$LAKEBASE_UC_CATALOG" $PROFILE_FLAG --output json 2>/dev/null) || true
+            if echo "$VERIFY_UC" | grep -q '"state"'; then
+                UC_STATE=$(echo "$VERIFY_UC" | python3 -c "import sys,json; print(json.load(sys.stdin).get('state','UNKNOWN'))" 2>/dev/null) || UC_STATE="UNKNOWN"
+                print_success "UC catalog '$LAKEBASE_UC_CATALOG' registered (state: $UC_STATE)"
+            else
+                print_success "UC catalog registration initiated for '$LAKEBASE_UC_CATALOG'"
+            fi
+        fi
+    fi
+fi
+
+# =============================================================================
 # Step 2: Setup All Required Permissions
 # =============================================================================
 # This step configures three types of permissions required for the app:
@@ -952,6 +1024,38 @@ if [[ "$TABLES_ONLY" != true && "$SKIP_PERMISSIONS" != true ]]; then
             else
                 print_warning "Could not verify catalog permissions"
                 echo "  Response: $PERM_RESULT"
+            fi
+        fi
+
+        # =================================================================
+        # 2a-ii. Unity Catalog Permissions on UC Catalog (Lakebase read-only mirror)
+        #        Grant ALL_PRIVILEGES to app SP + USE_CATALOG to all workspace users
+        #        so participants can verify the registered catalog in Step 9.
+        # =================================================================
+        if [[ -n "$SERVICE_PRINCIPAL_ID" && -n "$LAKEBASE_UC_CATALOG" && "$LAKEBASE_UC_CATALOG" != "$LAKEBASE_CATALOG" ]]; then
+            print_step "2a-ii. Adding Unity Catalog permissions on UC catalog '$LAKEBASE_UC_CATALOG'..."
+
+            UC_PERM_RESULT=$(databricks api patch "/api/2.1/unity-catalog/permissions/catalog/$LAKEBASE_UC_CATALOG" \
+                $PROFILE_FLAG \
+                --json "{\"changes\": [{\"principal\": \"$SERVICE_PRINCIPAL_ID\", \"add\": [\"ALL_PRIVILEGES\"]}]}" 2>&1) || true
+
+            if echo "$UC_PERM_RESULT" | grep -q "privilege_assignments\|ALL_PRIVILEGES"; then
+                print_success "UC catalog permissions granted: ALL_PRIVILEGES on $LAKEBASE_UC_CATALOG for app SP"
+            elif echo "$UC_PERM_RESULT" | grep -qi "CATALOG_DOES_NOT_EXIST\|not found"; then
+                print_warning "UC catalog '$LAKEBASE_UC_CATALOG' not registered yet -- participants will register in Step 9"
+            else
+                print_warning "Could not verify UC catalog permissions for app SP"
+                echo "  Response: $UC_PERM_RESULT"
+            fi
+
+            UC_USER_PERM=$(databricks api patch "/api/2.1/unity-catalog/permissions/catalog/$LAKEBASE_UC_CATALOG" \
+                $PROFILE_FLAG \
+                --json "{\"changes\": [{\"principal\": \"users\", \"add\": [\"USE_CATALOG\"]}]}" 2>&1) || true
+
+            if echo "$UC_USER_PERM" | grep -q "privilege_assignments\|USE_CATALOG"; then
+                print_success "UC catalog permissions granted: USE_CATALOG on $LAKEBASE_UC_CATALOG for all workspace users"
+            else
+                print_warning "Could not grant USE_CATALOG to workspace users on $LAKEBASE_UC_CATALOG"
             fi
         fi
         
@@ -1633,6 +1737,26 @@ except: sys.exit(1)
         fi
     else
         print_warning "Unity Catalog: skipped (missing service principal or catalog name)"
+    fi
+
+    # Also verify UC catalog permissions (the read-only Lakebase mirror)
+    if [[ -n "$SERVICE_PRINCIPAL_ID" && -n "$LAKEBASE_UC_CATALOG" && "$LAKEBASE_UC_CATALOG" != "$LAKEBASE_CATALOG" ]]; then
+        VERIFY_UC_PERMS2=$(databricks api get "/api/2.1/unity-catalog/permissions/catalog/$LAKEBASE_UC_CATALOG" $PROFILE_FLAG 2>/dev/null) || true
+
+        if echo "$VERIFY_UC_PERMS2" | grep -q "$SERVICE_PRINCIPAL_ID"; then
+            print_success "Unity Catalog: service principal has privileges on $LAKEBASE_UC_CATALOG (UC catalog)"
+        elif echo "$VERIFY_UC_PERMS2" | grep -qi "CATALOG_DOES_NOT_EXIST\|not found"; then
+            print_warning "Unity Catalog: UC catalog '$LAKEBASE_UC_CATALOG' not registered -- participants will register in Step 9"
+        else
+            print_warning "Unity Catalog: permissions MISSING on UC catalog '$LAKEBASE_UC_CATALOG' -- re-applying..."
+            VERIFY_ISSUES=$((VERIFY_ISSUES + 1))
+            databricks api patch "/api/2.1/unity-catalog/permissions/catalog/$LAKEBASE_UC_CATALOG" \
+                $PROFILE_FLAG \
+                --json "{\"changes\": [{\"principal\": \"$SERVICE_PRINCIPAL_ID\", \"add\": [\"ALL_PRIVILEGES\"]}]}" 2>/dev/null || true
+            databricks api patch "/api/2.1/unity-catalog/permissions/catalog/$LAKEBASE_UC_CATALOG" \
+                $PROFILE_FLAG \
+                --json "{\"changes\": [{\"principal\": \"users\", \"add\": [\"USE_CATALOG\"]}]}" 2>/dev/null || true
+        fi
     fi
 
     # ── Check 6: Resource Tags ────────────────────────────────────────────
