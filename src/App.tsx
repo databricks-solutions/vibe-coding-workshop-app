@@ -644,9 +644,9 @@ export default function App() {
                   <Zap className="w-4 h-4 text-white" style={brandConfig?.logo_url ? { display: 'none' } : undefined} />
                 </div>
                 <div className="min-w-0">
-                  <h1 className="font-semibold text-sidebar-foreground text-[13px] tracking-tight whitespace-nowrap">{brandConfig?.company_name || 'V2V: Vibe-to-Value'}</h1>
-                  <p className="text-[10px] text-muted-foreground whitespace-nowrap">Vibe Coding Workshop</p>
-                  <p className="text-[9px] text-muted-foreground/60 whitespace-nowrap">v{__APP_VERSION__}</p>
+                  <h1 className="font-semibold text-sidebar-foreground text-ui-md tracking-tight whitespace-nowrap">{brandConfig?.company_name || 'V2V: Vibe-to-Value'}</h1>
+                  <p className="text-ui-xs text-muted-foreground whitespace-nowrap">Vibe Coding Workshop</p>
+                  <p className="text-ui-2xs text-muted-foreground/60 whitespace-nowrap">v{__APP_VERSION__}</p>
                 </div>
               </Link>
               <button
@@ -658,26 +658,26 @@ export default function App() {
             </div>
             <nav className="flex-1 px-2.5 py-3">
               <div className="space-y-0.5">
-                <Link to={sessionId ? `/?sessionId=${sessionId}` : '/'} onClick={() => setMobileSidebarOpen(false)} className={`w-full flex items-center gap-2.5 px-2.5 py-2 rounded-md text-[12px] font-medium transition-all duration-200 ${isWorkflowPage ? 'bg-sidebar-accent text-sidebar-primary' : 'text-muted-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-foreground'}`}>
+                <Link to={sessionId ? `/?sessionId=${sessionId}` : '/'} onClick={() => setMobileSidebarOpen(false)} className={`w-full flex items-center gap-2.5 px-2.5 py-2 rounded-md text-ui-base font-medium transition-all duration-200 ${isWorkflowPage ? 'bg-sidebar-accent text-sidebar-primary' : 'text-muted-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-foreground'}`}>
                   <svg className={`w-4 h-4 flex-shrink-0 ${isWorkflowPage ? 'text-primary' : 'text-muted-foreground'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M4 5a1 1 0 011-1h14a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM4 13a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H5a1 1 0 01-1-1v-6zM16 13a1 1 0 011-1h2a1 1 0 011 1v6a1 1 0 01-1 1h-2a1 1 0 01-1-1v-6z" /></svg>
                   <span>Workflow</span>
                 </Link>
-                <Link to="/leaderboard" onClick={() => setMobileSidebarOpen(false)} className={`w-full flex items-center gap-2.5 px-2.5 py-2 rounded-md text-[12px] font-medium transition-all duration-200 ${isLeaderboardPage ? 'bg-sidebar-accent text-sidebar-primary' : 'text-muted-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-foreground'}`}>
+                <Link to="/leaderboard" onClick={() => setMobileSidebarOpen(false)} className={`w-full flex items-center gap-2.5 px-2.5 py-2 rounded-md text-ui-base font-medium transition-all duration-200 ${isLeaderboardPage ? 'bg-sidebar-accent text-sidebar-primary' : 'text-muted-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-foreground'}`}>
                   <Trophy className={`w-4 h-4 flex-shrink-0 ${isLeaderboardPage ? 'text-primary' : 'text-muted-foreground'}`} />
                   <span>Leaderboard</span>
                 </Link>
-                <Link to="/analytics" onClick={() => setMobileSidebarOpen(false)} className={`w-full flex items-center gap-2.5 px-2.5 py-2 rounded-md text-[12px] font-medium transition-all duration-200 ${isAnalyticsPage ? 'bg-sidebar-accent text-sidebar-primary' : 'text-muted-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-foreground'}`}>
+                <Link to="/analytics" onClick={() => setMobileSidebarOpen(false)} className={`w-full flex items-center gap-2.5 px-2.5 py-2 rounded-md text-ui-base font-medium transition-all duration-200 ${isAnalyticsPage ? 'bg-sidebar-accent text-sidebar-primary' : 'text-muted-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-foreground'}`}>
                   <BarChart3 className={`w-4 h-4 flex-shrink-0 ${isAnalyticsPage ? 'text-primary' : 'text-muted-foreground'}`} />
                   <span>Analytics</span>
                 </Link>
-                <Link to="/config" onClick={() => setMobileSidebarOpen(false)} className={`w-full flex items-center gap-2.5 px-2.5 py-2 rounded-md text-[12px] font-medium transition-all duration-200 ${isConfigPage ? 'bg-sidebar-accent text-sidebar-primary' : 'text-muted-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-foreground'}`}>
+                <Link to="/config" onClick={() => setMobileSidebarOpen(false)} className={`w-full flex items-center gap-2.5 px-2.5 py-2 rounded-md text-ui-base font-medium transition-all duration-200 ${isConfigPage ? 'bg-sidebar-accent text-sidebar-primary' : 'text-muted-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-foreground'}`}>
                   <svg className={`w-4 h-4 flex-shrink-0 ${isConfigPage ? 'text-primary' : 'text-muted-foreground'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" /></svg>
                   <span>Configuration</span>
                 </Link>
               </div>
             </nav>
             <div className="px-4 py-3 border-t border-sidebar-border">
-              <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
+              <div className="flex items-center gap-1.5 text-ui-xs text-muted-foreground">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse flex-shrink-0"></span>
                 <span>Connected</span>
               </div>
@@ -700,9 +700,9 @@ export default function App() {
               </div>
               {!sidebarCollapsed && (
                 <div className="min-w-0">
-                  <h1 className="font-semibold text-sidebar-foreground text-[13px] tracking-tight whitespace-nowrap">{brandConfig?.company_name || 'V2V: Vibe-to-Value'}</h1>
-                  <p className="text-[10px] text-muted-foreground whitespace-nowrap">Vibe Coding Workshop</p>
-                  <p className="text-[9px] text-muted-foreground/60 whitespace-nowrap">v{__APP_VERSION__}</p>
+                  <h1 className="font-semibold text-sidebar-foreground text-ui-md tracking-tight whitespace-nowrap">{brandConfig?.company_name || 'V2V: Vibe-to-Value'}</h1>
+                  <p className="text-ui-xs text-muted-foreground whitespace-nowrap">Vibe Coding Workshop</p>
+                  <p className="text-ui-2xs text-muted-foreground/60 whitespace-nowrap">v{__APP_VERSION__}</p>
                 </div>
               )}
             </Link>
@@ -733,7 +733,7 @@ export default function App() {
             <Link
               to={sessionId ? `/?sessionId=${sessionId}` : '/'}
               title="Workflow"
-              className={`w-full flex items-center ${sidebarCollapsed ? 'justify-center px-0 py-2.5' : 'gap-2.5 px-2.5 py-2'} rounded-md text-[12px] font-medium transition-all duration-200 ${
+              className={`w-full flex items-center ${sidebarCollapsed ? 'justify-center px-0 py-2.5' : 'gap-2.5 px-2.5 py-2'} rounded-md text-ui-base font-medium transition-all duration-200 ${
                 isWorkflowPage
                   ? 'bg-sidebar-accent text-sidebar-primary'
                   : 'text-muted-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-foreground'
@@ -748,7 +748,7 @@ export default function App() {
             <Link
               to="/leaderboard"
               title="Leaderboard"
-              className={`w-full flex items-center ${sidebarCollapsed ? 'justify-center px-0 py-2.5' : 'gap-2.5 px-2.5 py-2'} rounded-md text-[12px] font-medium transition-all duration-200 ${
+              className={`w-full flex items-center ${sidebarCollapsed ? 'justify-center px-0 py-2.5' : 'gap-2.5 px-2.5 py-2'} rounded-md text-ui-base font-medium transition-all duration-200 ${
                 isLeaderboardPage
                   ? 'bg-sidebar-accent text-sidebar-primary'
                   : 'text-muted-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-foreground'
@@ -761,7 +761,7 @@ export default function App() {
             <Link
               to="/analytics"
               title="Analytics"
-              className={`w-full flex items-center ${sidebarCollapsed ? 'justify-center px-0 py-2.5' : 'gap-2.5 px-2.5 py-2'} rounded-md text-[12px] font-medium transition-all duration-200 ${
+              className={`w-full flex items-center ${sidebarCollapsed ? 'justify-center px-0 py-2.5' : 'gap-2.5 px-2.5 py-2'} rounded-md text-ui-base font-medium transition-all duration-200 ${
                 isAnalyticsPage
                   ? 'bg-sidebar-accent text-sidebar-primary'
                   : 'text-muted-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-foreground'
@@ -775,7 +775,7 @@ export default function App() {
               <Link
                 to="/config"
                 title="Configuration"
-                className={`w-full flex items-center ${sidebarCollapsed ? 'justify-center px-0 py-2.5' : 'gap-2.5 px-2.5 py-2'} rounded-md text-[12px] font-medium transition-all duration-200 ${
+                className={`w-full flex items-center ${sidebarCollapsed ? 'justify-center px-0 py-2.5' : 'gap-2.5 px-2.5 py-2'} rounded-md text-ui-base font-medium transition-all duration-200 ${
                   isConfigPage
                     ? 'bg-sidebar-accent text-sidebar-primary'
                     : 'text-muted-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-foreground'
@@ -808,7 +808,7 @@ export default function App() {
                       </svg>
                     </div>
                   </div>
-                  <div className="absolute left-8 top-1/2 -translate-y-1/2 bg-primary text-primary-foreground text-[10px] font-medium px-2.5 py-1.5 rounded shadow-lg whitespace-nowrap">
+                  <div className="absolute left-8 top-1/2 -translate-y-1/2 bg-primary text-primary-foreground text-ui-xs font-medium px-2.5 py-1.5 rounded shadow-lg whitespace-nowrap">
                     <div className="absolute -left-1.5 top-1/2 -translate-y-1/2 w-0 h-0 border-t-[5px] border-t-transparent border-b-[5px] border-b-transparent border-r-[6px] border-r-primary"></div>
                     Configure prompts here!
                   </div>
@@ -820,13 +820,13 @@ export default function App() {
           {/* Resources Section - hidden when collapsed */}
           {!sidebarCollapsed && (
             <div className="mt-6 pt-4 border-t border-sidebar-border">
-              <p className="text-[9px] text-muted-foreground uppercase font-semibold tracking-wider mb-2 px-2.5">Resources</p>
+              <p className="text-ui-2xs text-muted-foreground uppercase font-semibold tracking-wider mb-2 px-2.5">Resources</p>
               <div className="space-y-0">
                 <a
                   href="https://github.com/databricks-solutions/vibe-coding-workshop-template"
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-md text-[11px] text-muted-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-foreground transition-all duration-200"
+                  className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-md text-ui-sm text-muted-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-foreground transition-all duration-200"
                 >
                   <svg className="w-3.5 h-3.5 flex-shrink-0" fill="currentColor" viewBox="0 0 24 24">
                     <path fillRule="evenodd" clipRule="evenodd" d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.531 1.032 1.531 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z" />
@@ -837,7 +837,7 @@ export default function App() {
                   href="https://docs.databricks.com"
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-md text-[11px] text-muted-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-foreground transition-all duration-200"
+                  className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-md text-ui-sm text-muted-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-foreground transition-all duration-200"
                 >
                   <svg className="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
@@ -848,7 +848,7 @@ export default function App() {
                   href="https://github.com/databricks-solutions/vibe-coding-workshop-app/issues/new"
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-md text-[11px] text-muted-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-foreground transition-all duration-200"
+                  className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-md text-ui-sm text-muted-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-foreground transition-all duration-200"
                 >
                   <svg className="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
@@ -862,7 +862,7 @@ export default function App() {
 
         {/* Footer */}
         <div className={`${sidebarCollapsed ? 'px-2 flex justify-center' : 'px-4'} py-3 border-t border-sidebar-border transition-all duration-300`}>
-          <div className={`flex items-center ${sidebarCollapsed ? 'justify-center' : 'gap-1.5'} text-[10px] text-muted-foreground`}>
+          <div className={`flex items-center ${sidebarCollapsed ? 'justify-center' : 'gap-1.5'} text-ui-xs text-muted-foreground`}>
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse flex-shrink-0"></span>
             {!sidebarCollapsed && <span className="whitespace-nowrap">Connected · v{__APP_VERSION__}</span>}
           </div>
@@ -886,7 +886,7 @@ export default function App() {
                       <div className="relative">
                         <div className="w-5 h-5 rounded-full border-2 border-primary/30 border-t-primary animate-spin" />
                       </div>
-                      <p className="text-[13px] font-medium text-foreground">
+                      <p className="text-ui-md font-medium text-foreground">
                         Restoring your session<span className="loading-dots-inline">...</span>
                       </p>
                     </div>
@@ -905,7 +905,7 @@ export default function App() {
                       <div className="relative">
                         <div className="w-5 h-5 rounded-full border-2 border-amber-500/30 border-t-amber-500 animate-spin" />
                       </div>
-                      <p className="text-[13px] font-medium text-foreground">
+                      <p className="text-ui-md font-medium text-foreground">
                         Creating new session<span className="loading-dots-inline">...</span>
                       </p>
                     </div>
@@ -914,8 +914,8 @@ export default function App() {
               )}
 
               {/* Header Bar - Clean minimal styling */}
-              <div className="sticky top-0 z-10 bg-card/90 backdrop-blur-md border-b border-border px-3 sm:px-6 py-3">
-                <div className="max-w-7xl mx-auto flex items-center justify-between gap-3">
+              <div className="sticky top-0 z-10 bg-card/90 backdrop-blur-md border-b border-border px-3 sm:px-6 xl:px-12 2xl:px-20 py-3">
+                <div className="max-w-7xl xl:max-w-[1320px] 2xl:max-w-[1400px] mx-auto flex items-center justify-between gap-3">
                   <div className="flex items-center gap-3 min-w-0">
                     {/* Mobile hamburger button */}
                     <button
@@ -926,8 +926,8 @@ export default function App() {
                       <Menu className="w-5 h-5" />
                     </button>
                     <Link to="/" className="min-w-0 cursor-pointer">
-                      <h1 className="text-[15px] sm:text-[17px] font-semibold text-foreground tracking-tight truncate">V2V: Vibe-to-Value - Vibe Coding Workshop</h1>
-                      <p className="hidden sm:block text-[12px] text-muted-foreground">Turning ideas into measurable business outcomes faster with reusable patterns, and guided best practices</p>
+                      <h1 className="text-ui-lg sm:text-ui-xl font-semibold text-foreground tracking-tight truncate">V2V: Vibe-to-Value - Vibe Coding Workshop</h1>
+                      <p className="hidden sm:block text-ui-base text-muted-foreground">Turning ideas into measurable business outcomes faster with reusable patterns, and guided best practices</p>
                     </Link>
                   </div>
                   
@@ -935,7 +935,7 @@ export default function App() {
                   <div className="flex items-center gap-2 sm:gap-3 flex-shrink-0">
                     <ThemeToggle />
                     {readOnly ? (
-                      <div className="flex items-center gap-2 text-muted-foreground text-[12px]">
+                      <div className="flex items-center gap-2 text-muted-foreground text-ui-base">
                         <Eye className="w-3.5 h-3.5" />
                         <span>
                           <span className="font-medium text-foreground/80">
@@ -968,8 +968,8 @@ export default function App() {
               </div>
               
               {/* Content Area */}
-              <div className="p-3 sm:p-6">
-                <div className="max-w-7xl mx-auto">
+              <div className="p-3 sm:p-6 xl:px-12 2xl:px-20">
+                <div className="max-w-7xl xl:max-w-[1320px] 2xl:max-w-[1400px] mx-auto">
                   <WorkflowDiagram
                     sessionId={sessionId}
                     stepPrompts={stepPrompts}
@@ -1111,29 +1111,29 @@ export default function App() {
                 </div>
                 <div>
                   <h3 className="text-base font-semibold text-foreground">Start New Session</h3>
-                  <p className="text-[12px] text-muted-foreground">This will reset all your current progress</p>
+                  <p className="text-ui-base text-muted-foreground">This will reset all your current progress</p>
                 </div>
               </div>
-              <p className="text-[13px] text-muted-foreground leading-relaxed mt-2">
+              <p className="text-ui-md text-muted-foreground leading-relaxed mt-2">
                 Would you like to save your current session before starting a new one, or discard it and start fresh?
               </p>
             </div>
             <div className="flex items-center gap-2 px-6 py-4 bg-secondary/30 border-t border-border">
               <button
                 onClick={() => setShowNewSessionConfirm(false)}
-                className="flex-1 px-4 py-2 rounded-lg text-[12px] font-medium bg-secondary hover:bg-secondary/80 text-foreground transition-colors"
+                className="flex-1 px-4 py-2 rounded-lg text-ui-base font-medium bg-secondary hover:bg-secondary/80 text-foreground transition-colors"
               >
                 Cancel
               </button>
               <button
                 onClick={handleSaveAndNewSession}
-                className="flex-1 px-4 py-2 rounded-lg text-[12px] font-medium bg-emerald-600 hover:bg-emerald-500 text-white transition-colors"
+                className="flex-1 px-4 py-2 rounded-lg text-ui-base font-medium bg-emerald-600 hover:bg-emerald-500 text-white transition-colors"
               >
                 Save &amp; Start New
               </button>
               <button
                 onClick={handleDiscardAndNewSession}
-                className="flex-1 px-4 py-2 rounded-lg text-[12px] font-medium bg-red-600/80 hover:bg-red-500 text-white transition-colors"
+                className="flex-1 px-4 py-2 rounded-lg text-ui-base font-medium bg-red-600/80 hover:bg-red-500 text-white transition-colors"
               >
                 Discard &amp; Start New
               </button>
@@ -1147,7 +1147,7 @@ export default function App() {
         <div className="fixed bottom-5 left-1/2 -translate-x-1/2 z-40">
           <button
             onClick={() => setShowFeedbackDialog(true)}
-            className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-purple-600 to-primary hover:from-purple-500 hover:to-primary/90 text-white rounded-full shadow-lg hover:shadow-xl transition-all duration-200 text-[12px] font-medium group"
+            className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-purple-600 to-primary hover:from-purple-500 hover:to-primary/90 text-white rounded-full shadow-lg hover:shadow-xl transition-all duration-200 text-ui-base font-medium group"
             title="Share your feedback"
           >
             <MessageSquare className="h-4 w-4 group-hover:scale-110 transition-transform" />

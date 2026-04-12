@@ -106,7 +106,7 @@ interface WorkflowDiagramProps {
 function StepBadge({ number, highlight = false }: { number: number; highlight?: boolean }) {
   return (
     <div className="absolute -top-3 left-1/2 -translate-x-1/2 z-10">
-      <div className={`w-7 h-7 rounded-full flex items-center justify-center text-[12px] font-semibold border-2 shadow-md ${
+      <div className={`w-7 h-7 rounded-full flex items-center justify-center text-ui-sm font-semibold border-2 shadow-md ${
         highlight 
           ? 'bg-primary text-primary-foreground border-primary shadow-primary/30' 
           : 'bg-card text-foreground border-border'
@@ -124,10 +124,10 @@ function SectionDivider({ section }: { section: typeof WORKFLOW_SECTIONS[0] }) {
     <div className="flex items-center gap-3 py-4 my-2">
       <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full ${section.bgColor} border ${section.borderColor}`}>
         <Icon className={`w-4 h-4 ${section.color}`} />
-        <span className={`text-[11px] font-semibold uppercase tracking-wider ${section.color}`}>
+        <span className={`text-ui-xs font-semibold uppercase tracking-wider ${section.color}`}>
           {section.chapter}
         </span>
-        <span className="text-[12px] font-medium text-foreground">
+        <span className="text-ui-sm font-medium text-foreground">
           {section.title}
         </span>
       </div>
@@ -936,14 +936,14 @@ export function WorkflowDiagram({
                       </div>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2">
-                          <h3 className={`text-[15px] font-semibold text-foreground leading-tight ${completedSteps.has(4) ? 'line-through opacity-50' : ''}`}>
+                          <h3 className={`text-ui-lg font-semibold text-foreground leading-tight ${completedSteps.has(4) ? 'line-through opacity-50' : ''}`}>
                             UI Design
                           </h3>
                           {completedSteps.has(4) && (
-                            <span className="text-emerald-400 text-[11px] font-medium bg-emerald-900/30 px-1.5 py-0.5 rounded">✓ Done</span>
+                            <span className="text-emerald-400 text-ui-xs font-medium bg-emerald-900/30 px-1.5 py-0.5 rounded">✓ Done</span>
                           )}
                         </div>
-                        <p className={`text-[13px] text-muted-foreground mt-1 leading-relaxed ${completedSteps.has(4) ? 'line-through opacity-50' : ''}`}>
+                        <p className={`text-ui-base text-muted-foreground mt-1 leading-relaxed ${completedSteps.has(4) ? 'line-through opacity-50' : ''}`}>
                           Build UI and backend APIs from PRD, then test locally before deployment
                         </p>
                       </div>
@@ -1141,14 +1141,14 @@ export function WorkflowDiagram({
                       </div>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2">
-                          <h3 className={`text-[15px] font-semibold text-foreground leading-tight ${step10Done ? 'line-through opacity-50' : ''}`}>
+                          <h3 className={`text-ui-lg font-semibold text-foreground leading-tight ${step10Done ? 'line-through opacity-50' : ''}`}>
                             Table Metadata & Data Dictionary
                           </h3>
                           {step10Done && (
-                            <span className="text-emerald-400 text-[11px] font-medium bg-emerald-900/30 px-1.5 py-0.5 rounded">✓ Done</span>
+                            <span className="text-emerald-400 text-ui-xs font-medium bg-emerald-900/30 px-1.5 py-0.5 rounded">✓ Done</span>
                           )}
                         </div>
-                        <p className={`text-[13px] text-muted-foreground mt-1 leading-relaxed ${step10Done ? 'line-through opacity-50' : ''}`}>
+                        <p className={`text-ui-base text-muted-foreground mt-1 leading-relaxed ${step10Done ? 'line-through opacity-50' : ''}`}>
                           Extract table schema metadata from Databricks and save as a CSV data dictionary
                         </p>
                       </div>
@@ -1164,7 +1164,7 @@ export function WorkflowDiagram({
                             <button
                               onClick={() => !extractTabLocked && setStep10Mode('extract')}
                               disabled={extractTabLocked}
-                              className={`flex-1 px-4 py-3 text-[13px] font-medium transition-all relative flex items-center justify-center gap-2 ${
+                              className={`flex-1 px-4 py-3 text-ui-base font-medium transition-all relative flex items-center justify-center gap-2 ${
                                 step10Mode === 'extract'
                                   ? 'text-primary border-b-2 border-primary -mb-px bg-primary/5'
                                   : extractTabLocked
@@ -1180,7 +1180,7 @@ export function WorkflowDiagram({
                               <button
                                 onClick={() => !uploadTabLocked && setStep10Mode('upload')}
                                 disabled={uploadTabLocked}
-                                className={`flex-1 px-4 py-3 text-[13px] font-medium transition-all relative flex items-center justify-center gap-2 ${
+                                className={`flex-1 px-4 py-3 text-ui-base font-medium transition-all relative flex items-center justify-center gap-2 ${
                                   step10Mode === 'upload'
                                     ? 'text-primary border-b-2 border-primary -mb-px bg-primary/5'
                                     : uploadTabLocked
@@ -1197,7 +1197,7 @@ export function WorkflowDiagram({
                               <button
                                 onClick={() => !generateTabLocked && setStep10Mode('generate')}
                                 disabled={generateTabLocked}
-                                className={`flex-1 px-4 py-3 text-[13px] font-medium transition-all relative flex items-center justify-center gap-2 ${
+                                className={`flex-1 px-4 py-3 text-ui-base font-medium transition-all relative flex items-center justify-center gap-2 ${
                                   step10Mode === 'generate'
                                     ? 'text-primary border-b-2 border-primary -mb-px bg-primary/5'
                                     : generateTabLocked
@@ -1365,14 +1365,14 @@ export function WorkflowDiagram({
                       </div>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2">
-                          <h3 className={`text-[15px] font-semibold text-foreground leading-tight ${step12Done ? 'line-through opacity-50' : ''}`}>
+                          <h3 className={`text-ui-lg font-semibold text-foreground leading-tight ${step12Done ? 'line-through opacity-50' : ''}`}>
                             Bronze Layer Creation
                           </h3>
                           {step12Done && (
-                            <span className="text-emerald-400 text-[11px] font-medium bg-emerald-900/30 px-1.5 py-0.5 rounded">✓ Done</span>
+                            <span className="text-emerald-400 text-ui-xs font-medium bg-emerald-900/30 px-1.5 py-0.5 rounded">✓ Done</span>
                           )}
                         </div>
-                        <p className={`text-[13px] text-muted-foreground mt-1 leading-relaxed ${step12Done ? 'line-through opacity-50' : ''}`}>
+                        <p className={`text-ui-base text-muted-foreground mt-1 leading-relaxed ${step12Done ? 'line-through opacity-50' : ''}`}>
                           {isGenieFlow
                             ? 'Generate Bronze layer DDLs and sample data from the uploaded schema CSV'
                             : 'Create Bronze layer by cloning from source or generating from uploaded CSV'}
@@ -1390,7 +1390,7 @@ export function WorkflowDiagram({
                             <button
                               onClick={() => !cloneTabLocked && setStep12Mode('clone')}
                               disabled={cloneTabLocked}
-                              className={`flex-1 px-4 py-3 text-[13px] font-medium transition-all relative flex items-center justify-center gap-2 ${
+                              className={`flex-1 px-4 py-3 text-ui-base font-medium transition-all relative flex items-center justify-center gap-2 ${
                                 effectiveStep12Mode === 'clone'
                                   ? 'text-primary border-b-2 border-primary -mb-px bg-primary/5'
                                   : cloneTabLocked
@@ -1405,7 +1405,7 @@ export function WorkflowDiagram({
                             <button
                               onClick={() => !generateTabLocked && setStep12Mode('generate')}
                               disabled={generateTabLocked}
-                              className={`flex-1 px-4 py-3 text-[13px] font-medium transition-all relative flex items-center justify-center gap-2 ${
+                              className={`flex-1 px-4 py-3 text-ui-base font-medium transition-all relative flex items-center justify-center gap-2 ${
                                 effectiveStep12Mode === 'generate'
                                   ? 'text-primary border-b-2 border-primary -mb-px bg-primary/5'
                                   : generateTabLocked
@@ -1562,14 +1562,14 @@ export function WorkflowDiagram({
                       </div>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2">
-                          <h3 className={`text-[15px] font-semibold text-foreground leading-tight ${step22Done ? 'line-through opacity-50' : ''}`}>
+                          <h3 className={`text-ui-lg font-semibold text-foreground leading-tight ${step22Done ? 'line-through opacity-50' : ''}`}>
                             Analyze Silver Metadata
                           </h3>
                           {step22Done && (
-                            <span className="text-emerald-400 text-[11px] font-medium bg-emerald-900/30 px-1.5 py-0.5 rounded">✓ Done</span>
+                            <span className="text-emerald-400 text-ui-xs font-medium bg-emerald-900/30 px-1.5 py-0.5 rounded">✓ Done</span>
                           )}
                         </div>
-                        <p className={`text-[13px] text-muted-foreground mt-1 leading-relaxed ${step22Done ? 'line-through opacity-50' : ''}`}>
+                        <p className={`text-ui-base text-muted-foreground mt-1 leading-relaxed ${step22Done ? 'line-through opacity-50' : ''}`}>
                           Extract and analyze table/column metadata from your silver layer schema
                         </p>
                       </div>
@@ -1585,7 +1585,7 @@ export function WorkflowDiagram({
                             <button
                               onClick={() => !silverTabLocked && setStep22Mode('silver')}
                               disabled={silverTabLocked}
-                              className={`flex-1 px-4 py-3 text-[13px] font-medium transition-all relative flex items-center justify-center gap-2 ${
+                              className={`flex-1 px-4 py-3 text-ui-base font-medium transition-all relative flex items-center justify-center gap-2 ${
                                 step22Mode === 'silver'
                                   ? 'text-primary border-b-2 border-primary -mb-px bg-primary/5'
                                   : silverTabLocked
@@ -1601,7 +1601,7 @@ export function WorkflowDiagram({
                               <button
                                 onClick={() => !uploadTabLocked22 && setStep22Mode('upload')}
                                 disabled={uploadTabLocked22}
-                                className={`flex-1 px-4 py-3 text-[13px] font-medium transition-all relative flex items-center justify-center gap-2 ${
+                                className={`flex-1 px-4 py-3 text-ui-base font-medium transition-all relative flex items-center justify-center gap-2 ${
                                   step22Mode === 'upload'
                                     ? 'text-primary border-b-2 border-primary -mb-px bg-primary/5'
                                     : uploadTabLocked22
@@ -1618,7 +1618,7 @@ export function WorkflowDiagram({
                               <button
                                 onClick={() => !generateTabLocked22 && setStep22Mode('generate')}
                                 disabled={generateTabLocked22}
-                                className={`flex-1 px-4 py-3 text-[13px] font-medium transition-all relative flex items-center justify-center gap-2 ${
+                                className={`flex-1 px-4 py-3 text-ui-base font-medium transition-all relative flex items-center justify-center gap-2 ${
                                   step22Mode === 'generate'
                                     ? 'text-primary border-b-2 border-primary -mb-px bg-primary/5'
                                     : generateTabLocked22
@@ -2355,16 +2355,16 @@ export function WorkflowDiagram({
             <ArrowDown className={`w-5 h-5 text-primary transition-transform duration-200 ${isWorkflowExpanded ? '' : '-rotate-90'}`} />
           </div>
           <div className="flex-1 text-left">
-            <h2 className="text-[15px] font-semibold text-foreground">
+            <h2 className="text-ui-lg font-semibold text-foreground">
               Workshop Steps
             </h2>
-            <p className="text-muted-foreground text-[13px]">
+            <p className="text-muted-foreground text-ui-base">
               Follow each step to build your application end-to-end
             </p>
           </div>
           {/* Progress badge */}
           {totalVisibleSteps > 0 && (
-            <span className={`text-[11px] font-medium px-2.5 py-1 rounded-full ${
+            <span className={`text-ui-xs font-medium px-2.5 py-1 rounded-full ${
               completedVisibleSteps === totalVisibleSteps
                 ? 'bg-emerald-900/40 text-emerald-300'
                 : completedVisibleSteps > 0

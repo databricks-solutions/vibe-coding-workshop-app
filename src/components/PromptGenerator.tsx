@@ -340,7 +340,7 @@ export function PromptGenerator({
       <div className="bg-card rounded-lg p-5 border border-border">
         <div className="flex items-center justify-center gap-2">
           <Loader2 className="w-4 h-4 text-primary animate-spin" />
-          <span className="text-muted-foreground text-[13px]">Loading industries and use cases...</span>
+          <span className="text-muted-foreground text-ui-base">Loading industries and use cases...</span>
         </div>
       </div>
     );
@@ -350,10 +350,10 @@ export function PromptGenerator({
     return (
       <div className="bg-card rounded-lg p-5 border border-red-700/30">
         <div className="text-center">
-          <p className="text-red-400 mb-3 text-[13px]">{error}</p>
+          <p className="text-red-400 mb-3 text-ui-base">{error}</p>
           <button
             onClick={() => window.location.reload()}
-            className="px-3 py-1.5 bg-red-900/30 text-red-300 rounded text-[13px] hover:bg-red-900/50"
+            className="px-3 py-1.5 bg-red-900/30 text-red-300 rounded text-ui-base hover:bg-red-900/50"
           >
             Retry
           </button>
@@ -374,18 +374,18 @@ export function PromptGenerator({
         </div>
         <div className="flex-1 text-left">
           <div className="flex items-center gap-2">
-            <h2 className={`text-[15px] font-semibold text-foreground ${hasStarted ? 'line-through opacity-50' : ''}`}>
+            <h2 className={`text-ui-lg font-semibold text-foreground ${hasStarted ? 'line-through opacity-50' : ''}`}>
               Define Your Intent
             </h2>
             {hasStarted && (
-              <span className="text-emerald-400 text-[11px] font-medium bg-emerald-900/30 px-1.5 py-0.5 rounded">Done</span>
+              <span className="text-emerald-400 text-ui-xs font-medium bg-emerald-900/30 px-1.5 py-0.5 rounded">Done</span>
             )}
           </div>
-          <p className={`text-muted-foreground text-[13px] ${hasStarted ? 'line-through opacity-50' : ''}`}>
+          <p className={`text-muted-foreground text-ui-base ${hasStarted ? 'line-through opacity-50' : ''}`}>
             Select your industry and use case to set the direction for your workshop
           </p>
         </div>
-        <span className="inline-flex items-center gap-1 text-[11px] font-medium text-muted-foreground border border-border rounded-full px-2.5 py-1 bg-secondary/40 group-hover:bg-secondary group-hover:text-foreground transition-colors">
+        <span className="inline-flex items-center gap-1 text-ui-xs font-medium text-muted-foreground border border-border rounded-full px-2.5 py-1 bg-secondary/40 group-hover:bg-secondary group-hover:text-foreground transition-colors">
           <ChevronDown className={`w-3 h-3 transition-transform duration-200 ${isExpanded ? 'rotate-180' : ''}`} />
           {isExpanded ? 'Collapse' : 'Expand'}
         </span>
@@ -401,7 +401,7 @@ export function PromptGenerator({
             <div className="flex items-center gap-1 p-1 bg-secondary/50 rounded-lg mb-5">
               <button
                 onClick={() => handleModeChange('library')}
-                className={`flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-md text-[12px] font-medium transition-all duration-200 ${
+                className={`flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-md text-ui-sm font-medium transition-all duration-200 ${
                   mode === 'library'
                     ? 'bg-primary text-primary-foreground shadow-sm'
                     : 'text-muted-foreground hover:text-foreground hover:bg-secondary/80'
@@ -412,7 +412,7 @@ export function PromptGenerator({
               </button>
               <button
                 onClick={() => handleModeChange('custom')}
-                className={`flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-md text-[12px] font-medium transition-all duration-200 ${
+                className={`flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-md text-ui-sm font-medium transition-all duration-200 ${
                   mode === 'custom'
                     ? 'bg-primary text-primary-foreground shadow-sm'
                     : 'text-muted-foreground hover:text-foreground hover:bg-secondary/80'
@@ -427,7 +427,7 @@ export function PromptGenerator({
           {/* Show current mode badge when step is done */}
           {hasStarted && (
             <div className="flex items-center gap-1.5 mb-4">
-              <span className="text-[11px] text-muted-foreground bg-secondary/50 px-2 py-0.5 rounded-full flex items-center gap-1">
+              <span className="text-ui-xs text-muted-foreground bg-secondary/50 px-2 py-0.5 rounded-full flex items-center gap-1">
                 {mode === 'library' ? <Library className="w-3 h-3" /> : <PenLine className="w-3 h-3" />}
                 {mode === 'library' ? 'From Library' : 'Custom Use Case'}
               </span>
@@ -438,7 +438,7 @@ export function PromptGenerator({
           {mode === 'library' && (
             <>
               {!hasStarted && !selectedIndustry && (
-                <div className="mb-4 px-3 py-2.5 rounded-md bg-primary/10 border border-primary/20 text-primary text-[12px] flex items-center gap-2 animate-in fade-in duration-500">
+                <div className="mb-4 px-3 py-2.5 rounded-md bg-primary/10 border border-primary/20 text-primary text-ui-sm flex items-center gap-2 animate-in fade-in duration-500">
                   <Sparkles className="w-4 h-4 flex-shrink-0 animate-pulse" />
                   <span className="font-medium">Select an industry and use case below to get started</span>
                 </div>
@@ -446,12 +446,12 @@ export function PromptGenerator({
               <div className="space-y-3 mb-5">
                 {/* Industry Dropdown */}
                 <div>
-                  <label className="block text-[13px] font-medium text-foreground mb-1.5">Industry</label>
+                  <label className="block text-ui-base font-medium text-foreground mb-1.5">Industry</label>
                   <select
                     value={selectedIndustry}
                     onChange={(e) => handleIndustryChange(e.target.value)}
                     disabled={hasStarted}
-                    className="w-full px-3 py-2 text-[13px] border border-border rounded-md focus:ring-2 focus:ring-primary focus:border-primary outline-none transition-all bg-input text-foreground disabled:bg-muted disabled:cursor-not-allowed"
+                    className="w-full px-3 py-2 text-ui-base border border-border rounded-md focus:ring-2 focus:ring-primary focus:border-primary outline-none transition-all bg-input text-foreground disabled:bg-muted disabled:cursor-not-allowed"
                   >
                     {industries.map((industry) => (
                       <option key={industry.value} value={industry.value}>
@@ -463,12 +463,12 @@ export function PromptGenerator({
 
                 {/* Use Case Dropdown */}
                 <div>
-                  <label className="block text-[13px] font-medium text-foreground mb-1.5">Use Case</label>
+                  <label className="block text-ui-base font-medium text-foreground mb-1.5">Use Case</label>
                   <select
                     value={selectedUsecase}
                     onChange={(e) => handleUsecaseChange(e.target.value)}
                     disabled={!selectedIndustry || hasStarted}
-                    className="w-full px-3 py-2 text-[13px] border border-border rounded-md focus:ring-2 focus:ring-primary focus:border-primary outline-none transition-all bg-input text-foreground disabled:bg-muted disabled:cursor-not-allowed"
+                    className="w-full px-3 py-2 text-ui-base border border-border rounded-md focus:ring-2 focus:ring-primary focus:border-primary outline-none transition-all bg-input text-foreground disabled:bg-muted disabled:cursor-not-allowed"
                   >
                     {availableUsecases.length > 0 ? (
                       availableUsecases.map((usecase) => (
@@ -488,13 +488,13 @@ export function PromptGenerator({
                 isEditMode && !hasStarted ? (
                   <div className="mb-5 space-y-3">
                     <div>
-                      <label className="block text-[13px] font-medium text-foreground mb-1.5">Use Case Name</label>
+                      <label className="block text-ui-base font-medium text-foreground mb-1.5">Use Case Name</label>
                       <input
                         type="text"
                         value={editedUseCaseLabel}
                         maxLength={30}
                         onChange={(e) => setEditedUseCaseLabel(e.target.value)}
-                        className={`w-full px-3 py-2 text-[13px] border rounded-md focus:ring-2 outline-none transition-all bg-input text-foreground ${
+                        className={`w-full px-3 py-2 text-ui-base border rounded-md focus:ring-2 outline-none transition-all bg-input text-foreground ${
                           editedUseCaseLabel.length >= 30
                             ? 'border-red-400/70 focus:ring-red-400/50 focus:border-red-400/70'
                             : editedUseCaseLabel.length >= 25
@@ -504,9 +504,9 @@ export function PromptGenerator({
                         placeholder="Enter use case name..."
                       />
                       <div className="flex items-center justify-between mt-1 min-h-[18px]">
-                        <span className="text-[10px] text-muted-foreground/60">Short, descriptive name</span>
+                        <span className="text-ui-2xs text-muted-foreground/60">Short, descriptive name</span>
                         {editedUseCaseLabel.length >= 20 && (
-                          <span className={`text-[10px] font-medium transition-colors ${
+                          <span className={`text-ui-2xs font-medium transition-colors ${
                             editedUseCaseLabel.length >= 30 ? 'text-red-500' : editedUseCaseLabel.length >= 25 ? 'text-amber-500' : 'text-muted-foreground/60'
                           }`}>
                             {editedUseCaseLabel.length >= 30 ? '30/30 — Try a shorter name' : `${editedUseCaseLabel.length}/30`}
@@ -515,25 +515,25 @@ export function PromptGenerator({
                       </div>
                     </div>
                     <div>
-                      <label className="block text-[13px] font-medium text-foreground mb-1.5">Description</label>
+                      <label className="block text-ui-base font-medium text-foreground mb-1.5">Description</label>
                       <textarea
                         value={editedDescription}
                         onChange={(e) => setEditedDescription(e.target.value)}
                         rows={10}
-                        className="w-full px-3 py-2 text-[13px] border border-border rounded-md focus:ring-2 focus:ring-primary focus:border-primary outline-none transition-all bg-input text-foreground font-mono leading-relaxed resize-y"
+                        className="w-full px-3 py-2 text-ui-base border border-border rounded-md focus:ring-2 focus:ring-primary focus:border-primary outline-none transition-all bg-input text-foreground font-mono leading-relaxed resize-y"
                         placeholder="Enter use case description..."
                       />
                     </div>
                     <div className="flex items-center gap-2">
                       <button
                         onClick={handleDoneEditing}
-                        className="px-3 py-1.5 text-[12px] font-medium rounded bg-primary text-primary-foreground hover:bg-primary/90 transition-all"
+                        className="px-3 py-1.5 text-ui-sm font-medium rounded bg-primary text-primary-foreground hover:bg-primary/90 transition-all"
                       >
                         Done
                       </button>
                       <button
                         onClick={handleResetEdits}
-                        className="flex items-center gap-1 px-3 py-1.5 text-[12px] rounded text-muted-foreground hover:text-foreground hover:bg-secondary transition-all"
+                        className="flex items-center gap-1 px-3 py-1.5 text-ui-sm rounded text-muted-foreground hover:text-foreground hover:bg-secondary transition-all"
                       >
                         <RotateCcw className="w-3 h-3" />
                         Reset to default
@@ -562,12 +562,12 @@ export function PromptGenerator({
                 <div className="space-y-3">
                   <div className="grid grid-cols-2 gap-3">
                     <div>
-                      <label className="block text-[11px] font-medium text-muted-foreground mb-1 uppercase tracking-wider">Industry</label>
-                      <p className="text-[13px] text-foreground bg-muted/50 rounded-md px-3 py-1.5">{customIndustry || '—'}</p>
+                      <label className="block text-ui-xs font-medium text-muted-foreground mb-1 uppercase tracking-wider">Industry</label>
+                      <p className="text-ui-base text-foreground bg-muted/50 rounded-md px-3 py-1.5">{customIndustry || '—'}</p>
                     </div>
                     <div>
-                      <label className="block text-[11px] font-medium text-muted-foreground mb-1 uppercase tracking-wider">Use Case</label>
-                      <p className="text-[13px] text-foreground bg-muted/50 rounded-md px-3 py-1.5">{customUseCaseName || '—'}</p>
+                      <label className="block text-ui-xs font-medium text-muted-foreground mb-1 uppercase tracking-wider">Use Case</label>
+                      <p className="text-ui-base text-foreground bg-muted/50 rounded-md px-3 py-1.5">{customUseCaseName || '—'}</p>
                     </div>
                   </div>
                   {customUseCaseDescription && (
@@ -581,12 +581,12 @@ export function PromptGenerator({
                 <>
                   {/* Expand toolbar */}
                   <div className="flex items-center justify-between mb-2">
-                    <p className="text-[11px] text-muted-foreground">
+                    <p className="text-ui-xs text-muted-foreground">
                       Build your use case with AI assistance
                     </p>
                     <button
                       onClick={() => setIsBuilderExpanded(true)}
-                      className="flex items-center gap-1 px-2 py-0.5 text-[11px] rounded border border-primary/30 text-primary hover:bg-primary/10 transition-all hover:scale-105"
+                      className="flex items-center gap-1 px-2 py-0.5 text-ui-xs rounded border border-primary/30 text-primary hover:bg-primary/10 transition-all hover:scale-105"
                       title="Expand to full screen for more space"
                     >
                       <Maximize2 className="w-3 h-3" />
@@ -614,7 +614,7 @@ export function PromptGenerator({
                         <div className="flex items-center justify-between px-5 py-3 border-b border-border bg-secondary/30 rounded-t-lg">
                           <div className="flex items-center gap-2">
                             <PenLine className="w-4 h-4 text-primary" />
-                            <h3 className="text-[15px] font-semibold text-foreground">Create Your Own Use Case</h3>
+                            <h3 className="text-ui-lg font-semibold text-foreground">Create Your Own Use Case</h3>
                           </div>
                           <button
                             onClick={() => setIsBuilderExpanded(false)}
@@ -632,10 +632,10 @@ export function PromptGenerator({
 
                         {/* Footer */}
                         <div className="flex items-center justify-between px-5 py-2 border-t border-border bg-secondary/20 rounded-b-lg">
-                          <span className="text-[11px] text-muted-foreground">
-                            Press <kbd className="px-1.5 py-0.5 bg-secondary rounded text-[10px] font-mono">Esc</kbd> to close
+                          <span className="text-ui-xs text-muted-foreground">
+                            Press <kbd className="px-1.5 py-0.5 bg-secondary rounded text-ui-2xs font-mono">Esc</kbd> to close
                           </span>
-                          <span className="text-[11px] text-muted-foreground">
+                          <span className="text-ui-xs text-muted-foreground">
                             All changes are preserved when you close
                           </span>
                         </div>
@@ -661,11 +661,11 @@ export function PromptGenerator({
                 <div className="mb-4 flex items-center gap-2 px-3 py-2 bg-secondary/30 rounded-md border border-border/50">
                   <Palette className="w-3.5 h-3.5 text-primary flex-shrink-0" />
                   {parsedName ? (
-                    <span className="text-[12px] font-medium text-primary bg-primary/10 rounded-full px-2 py-0.5">{parsedName}</span>
+                    <span className="text-ui-sm font-medium text-primary bg-primary/10 rounded-full px-2 py-0.5">{parsedName}</span>
                   ) : (
-                    <span className="text-[12px] font-medium text-primary bg-primary/10 rounded-full px-2 py-0.5">Brand URL set</span>
+                    <span className="text-ui-sm font-medium text-primary bg-primary/10 rounded-full px-2 py-0.5">Brand URL set</span>
                   )}
-                  <span className="text-[11px] text-muted-foreground truncate flex-1" title={brandUrl}>{brandUrl}</span>
+                  <span className="text-ui-xs text-muted-foreground truncate flex-1" title={brandUrl}>{brandUrl}</span>
                 </div>
               );
             }
@@ -680,8 +680,8 @@ export function PromptGenerator({
                   className="w-full flex items-center gap-2 py-1.5 text-left group"
                 >
                   <Palette className="w-3.5 h-3.5 text-muted-foreground group-hover:text-foreground transition-colors" />
-                  <span className="text-[12px] text-muted-foreground group-hover:text-foreground transition-colors">Branding</span>
-                  <span className="text-[10px] bg-secondary/50 text-muted-foreground/70 rounded-full px-1.5 py-0.5 leading-none">Optional</span>
+                  <span className="text-ui-sm text-muted-foreground group-hover:text-foreground transition-colors">Branding</span>
+                  <span className="text-ui-2xs bg-secondary/50 text-muted-foreground/70 rounded-full px-1.5 py-0.5 leading-none">Optional</span>
                   <ChevronDown className={`w-3 h-3 text-muted-foreground ml-auto transition-transform duration-200 ${showBranding ? 'rotate-180' : ''}`} />
                 </button>
 
@@ -696,7 +696,7 @@ export function PromptGenerator({
                         value={brandUrl}
                         onChange={(e) => setBrandUrl(e.target.value)}
                         placeholder="https://www.brandcolorcode.com/company-name"
-                        className="w-full pl-9 pr-8 py-2 text-[13px] border border-border rounded-md focus:ring-2 focus:ring-primary focus:border-primary outline-none transition-all bg-input text-foreground placeholder:text-muted-foreground/40"
+                        className="w-full pl-9 pr-8 py-2 text-ui-base border border-border rounded-md focus:ring-2 focus:ring-primary focus:border-primary outline-none transition-all bg-input text-foreground placeholder:text-muted-foreground/40"
                       />
                       {brandUrl && (
                         <button
@@ -709,19 +709,19 @@ export function PromptGenerator({
                       )}
                     </div>
                     {/* Helper text */}
-                    <p className="text-[11px] text-muted-foreground/60 mt-1.5">
+                    <p className="text-ui-xs text-muted-foreground/60 mt-1.5">
                       Paste a URL with brand colors and assets. UI design prompts will apply these for styling.
                     </p>
                     {/* Live preview chip */}
                     {brandUrl.trim() && (
                       <div className="mt-2 animate-in fade-in duration-300">
                         {parsedName ? (
-                          <span className="inline-flex items-center gap-1 text-[11px] font-medium text-primary bg-primary/10 rounded-full px-2 py-0.5">
+                          <span className="inline-flex items-center gap-1 text-ui-xs font-medium text-primary bg-primary/10 rounded-full px-2 py-0.5">
                             <Palette className="w-3 h-3" />
                             {parsedName}
                           </span>
                         ) : (
-                          <span className="inline-flex items-center gap-1 text-[11px] font-medium text-primary bg-primary/10 rounded-full px-2 py-0.5">
+                          <span className="inline-flex items-center gap-1 text-ui-xs font-medium text-primary bg-primary/10 rounded-full px-2 py-0.5">
                             <Check className="w-3 h-3" />
                             Brand URL set
                           </span>
@@ -736,7 +736,7 @@ export function PromptGenerator({
 
           {/* Get Started Button */}
           {(() => {
-            const baseClasses = 'w-full py-2.5 px-4 rounded-md transition-all flex items-center justify-center gap-2 text-[13px] font-medium';
+            const baseClasses = 'w-full py-2.5 px-4 rounded-md transition-all flex items-center justify-center gap-2 text-ui-base font-medium';
 
             if (!prerequisitesCompleted) {
               return (
@@ -829,17 +829,17 @@ function UseCaseDescriptionBox({ content, useCase, isEdited, onEdit }: {
     <>
       <div className="mb-5 p-3 bg-secondary/40 rounded-md border border-border">
         <div className="flex items-center justify-between mb-2">
-          <span className="text-[13px] font-medium text-foreground flex items-center gap-1.5">
+          <span className="text-ui-base font-medium text-foreground flex items-center gap-1.5">
             Description of the Use Case:
             {isEdited && (
-              <span className="text-[10px] font-medium bg-amber-900/30 text-amber-400 px-1.5 py-0.5 rounded">Edited</span>
+              <span className="text-ui-2xs font-medium bg-amber-900/30 text-amber-400 px-1.5 py-0.5 rounded">Edited</span>
             )}
           </span>
           <div className="flex items-center gap-1.5">
             {onEdit && (
               <button
                 onClick={onEdit}
-                className="flex items-center gap-1 px-2 py-0.5 text-[11px] rounded border border-border text-muted-foreground hover:text-foreground hover:border-primary/30 transition-all"
+                className="flex items-center gap-1 px-2 py-0.5 text-ui-xs rounded border border-border text-muted-foreground hover:text-foreground hover:border-primary/30 transition-all"
                 title="Edit use case name and description"
               >
                 <Pencil className="w-3 h-3" />
@@ -848,7 +848,7 @@ function UseCaseDescriptionBox({ content, useCase, isEdited, onEdit }: {
             )}
             <button
               onClick={() => setIsModalOpen(true)}
-              className="flex items-center gap-1 px-2 py-0.5 text-[11px] rounded border border-primary/30 text-primary hover:bg-primary/10 transition-all hover:scale-105"
+              className="flex items-center gap-1 px-2 py-0.5 text-ui-xs rounded border border-primary/30 text-primary hover:bg-primary/10 transition-all hover:scale-105"
               title="Review in full view"
             >
               <Maximize2 className="w-3 h-3" />
@@ -860,16 +860,16 @@ function UseCaseDescriptionBox({ content, useCase, isEdited, onEdit }: {
           <ReactMarkdown 
             remarkPlugins={[remarkGfm]}
             components={{
-              h1: ({ children }) => <h1 className="text-[16px] font-bold text-foreground mt-3 mb-1.5">{children}</h1>,
-              h2: ({ children }) => <h2 className="text-[15px] font-bold text-foreground mt-3 mb-1.5">{children}</h2>,
-              h3: ({ children }) => <h3 className="text-[14px] font-semibold text-foreground mt-2.5 mb-1">{children}</h3>,
-              h4: ({ children }) => <h4 className="text-[13px] font-semibold text-foreground mt-2 mb-1">{children}</h4>,
-              h5: ({ children }) => <h5 className="text-[13px] font-medium text-foreground mt-2 mb-1">{children}</h5>,
-              p: ({ children }) => <p className="text-foreground text-[13px] mb-2 last:mb-0 leading-relaxed">{children}</p>,
+              h1: ({ children }) => <h1 className="text-ui-lg font-bold text-foreground mt-3 mb-1.5">{children}</h1>,
+              h2: ({ children }) => <h2 className="text-ui-lg font-bold text-foreground mt-3 mb-1.5">{children}</h2>,
+              h3: ({ children }) => <h3 className="text-ui-md font-semibold text-foreground mt-2.5 mb-1">{children}</h3>,
+              h4: ({ children }) => <h4 className="text-ui-base font-semibold text-foreground mt-2 mb-1">{children}</h4>,
+              h5: ({ children }) => <h5 className="text-ui-base font-medium text-foreground mt-2 mb-1">{children}</h5>,
+              p: ({ children }) => <p className="text-foreground text-ui-base mb-2 last:mb-0 leading-relaxed">{children}</p>,
               strong: ({ children }) => <strong className="font-semibold text-foreground">{children}</strong>,
               em: ({ children }) => <em className="text-primary not-italic font-medium">{children}</em>,
-              ul: ({ children }) => <ul className="list-disc list-inside space-y-0.5 my-1.5 text-foreground text-[13px]">{children}</ul>,
-              ol: ({ children }) => <ol className="list-decimal list-inside space-y-0.5 my-1.5 text-foreground text-[13px]">{children}</ol>,
+              ul: ({ children }) => <ul className="list-disc list-inside space-y-0.5 my-1.5 text-foreground text-ui-base">{children}</ul>,
+              ol: ({ children }) => <ol className="list-decimal list-inside space-y-0.5 my-1.5 text-foreground text-ui-base">{children}</ol>,
               li: ({ children }) => <li className="text-foreground">{children}</li>,
             }}
           >
@@ -910,13 +910,13 @@ function UseCaseDescriptionBox({ content, useCase, isEdited, onEdit }: {
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between px-4 py-3 border-b border-border bg-secondary/30">
-              <h3 className="text-[15px] font-semibold text-foreground">
+              <h3 className="text-ui-lg font-semibold text-foreground">
                 Use Case: {useCase}
               </h3>
               <div className="flex items-center gap-2">
                 <button
                   onClick={() => handleCopy(true)}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 text-[12px] font-medium rounded transition-all ${
+                  className={`flex items-center gap-1.5 px-3 py-1.5 text-ui-sm font-medium rounded transition-all ${
                     copied
                       ? 'bg-emerald-900/40 text-emerald-400'
                       : 'bg-blue-600/20 text-blue-400 hover:bg-blue-600/30 animate-button-glow-copy'
@@ -949,16 +949,16 @@ function UseCaseDescriptionBox({ content, useCase, isEdited, onEdit }: {
                 <ReactMarkdown 
                   remarkPlugins={[remarkGfm]}
                   components={{
-                    p: ({ children }) => <p className="text-foreground text-[14px] mb-3 last:mb-0 leading-relaxed">{children}</p>,
+                    p: ({ children }) => <p className="text-foreground text-ui-md mb-3 last:mb-0 leading-relaxed">{children}</p>,
                     strong: ({ children }) => <strong className="font-semibold text-foreground">{children}</strong>,
                     em: ({ children }) => <em className="text-primary not-italic font-medium">{children}</em>,
-                    ul: ({ children }) => <ul className="list-disc list-inside space-y-1 my-2 text-foreground text-[14px]">{children}</ul>,
-                    ol: ({ children }) => <ol className="list-decimal list-inside space-y-1 my-2 text-foreground text-[14px]">{children}</ol>,
+                    ul: ({ children }) => <ul className="list-disc list-inside space-y-1 my-2 text-foreground text-ui-md">{children}</ul>,
+                    ol: ({ children }) => <ol className="list-decimal list-inside space-y-1 my-2 text-foreground text-ui-md">{children}</ol>,
                     li: ({ children }) => <li className="text-foreground">{children}</li>,
-                    h1: ({ children }) => <h1 className="text-[18px] font-bold text-foreground mb-3 mt-4">{children}</h1>,
-                    h2: ({ children }) => <h2 className="text-[16px] font-semibold text-foreground mb-2 mt-3">{children}</h2>,
-                    h3: ({ children }) => <h3 className="text-[14px] font-semibold text-foreground mb-2 mt-2">{children}</h3>,
-                    code: ({ children }) => <code className="bg-background/80 px-1.5 py-0.5 rounded text-primary font-mono text-[12px]">{children}</code>,
+                    h1: ({ children }) => <h1 className="text-ui-xl font-bold text-foreground mb-3 mt-4">{children}</h1>,
+                    h2: ({ children }) => <h2 className="text-ui-lg font-semibold text-foreground mb-2 mt-3">{children}</h2>,
+                    h3: ({ children }) => <h3 className="text-ui-md font-semibold text-foreground mb-2 mt-2">{children}</h3>,
+                    code: ({ children }) => <code className="bg-background/80 px-1.5 py-0.5 rounded text-primary font-mono text-ui-sm">{children}</code>,
                     pre: ({ children }) => <pre className="bg-background/80 p-3 rounded-md overflow-x-auto my-2">{children}</pre>,
                   }}
                 >
@@ -968,10 +968,10 @@ function UseCaseDescriptionBox({ content, useCase, isEdited, onEdit }: {
             </div>
 
             <div className="flex items-center justify-between px-4 py-2 border-t border-border bg-secondary/20">
-              <span className="text-[11px] text-muted-foreground">
-                Press <kbd className="px-1.5 py-0.5 bg-secondary rounded text-[10px] font-mono">Esc</kbd> to close
+              <span className="text-ui-xs text-muted-foreground">
+                Press <kbd className="px-1.5 py-0.5 bg-secondary rounded text-ui-2xs font-mono">Esc</kbd> to close
               </span>
-              <span className="text-[11px] text-muted-foreground">
+              <span className="text-ui-xs text-muted-foreground">
                 {(content ?? '').length.toLocaleString()} characters
               </span>
             </div>

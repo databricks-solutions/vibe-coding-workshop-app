@@ -340,24 +340,24 @@ export function WorkflowStep({
           onClick={onToggleExpand}
         >
           <div className="flex items-center gap-2">
-            <h3 className={`text-[15px] font-semibold text-foreground leading-tight ${isComplete ? 'line-through opacity-50' : ''}`}>
+            <h3 className={`text-ui-lg font-semibold text-foreground leading-tight ${isComplete ? 'line-through opacity-50' : ''}`}>
               {title}
             </h3>
             {isComplete && (
-              <span className="text-emerald-400 text-[11px] font-medium bg-emerald-900/30 px-1.5 py-0.5 rounded">✓ Done</span>
+              <span className="text-emerald-400 text-ui-xs font-medium bg-emerald-900/30 px-1.5 py-0.5 rounded">✓ Done</span>
             )}
             {isStreaming && !isExpanded && retryStatus && (
-              <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-400 animate-pulse inline-flex items-center gap-1">
+              <span className="text-ui-2xs font-medium px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-400 animate-pulse inline-flex items-center gap-1">
                 <Loader2 className="w-3 h-3 animate-spin" /> Retrying...
               </span>
             )}
             {isStreaming && !isExpanded && !retryStatus && (
-              <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-primary/20 text-primary animate-pulse inline-flex items-center gap-1">
+              <span className="text-ui-2xs font-medium px-2 py-0.5 rounded-full bg-primary/20 text-primary animate-pulse inline-flex items-center gap-1">
                 <Loader2 className="w-3 h-3 animate-spin" /> Generating...
               </span>
             )}
             {onToggleExpand && (
-              <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded transition-colors ${
+              <span className={`text-ui-2xs font-medium px-1.5 py-0.5 rounded transition-colors ${
                 isExpanded 
                   ? 'bg-primary/20 text-primary' 
                   : 'bg-secondary text-muted-foreground hover:text-foreground'
@@ -366,11 +366,11 @@ export function WorkflowStep({
               </span>
             )}
           </div>
-          <p className={`text-[13px] text-muted-foreground mt-1 leading-relaxed ${isComplete ? 'line-through opacity-50' : ''}`}>
+          <p className={`text-ui-base text-muted-foreground mt-1 leading-relaxed ${isComplete ? 'line-through opacity-50' : ''}`}>
             {description}
           </p>
           {input && (
-            <div className={`inline-block mt-2.5 px-2.5 py-1 text-[11px] font-medium rounded ${colors.badge} ${isComplete ? 'line-through opacity-50' : ''}`}>
+            <div className={`inline-block mt-2.5 px-2.5 py-1 text-ui-xs font-medium rounded ${colors.badge} ${isComplete ? 'line-through opacity-50' : ''}`}>
               {input}
             </div>
           )}
@@ -400,7 +400,7 @@ export function WorkflowStep({
                   }
                 }}
                 disabled={isLoadingPrompt || isStreaming || !canClick}
-                className={`flex items-center gap-1.5 px-3 py-1.5 text-[12px] font-medium rounded transition-all group ${
+                className={`flex items-center gap-1.5 px-3 py-1.5 text-ui-sm font-medium rounded transition-all group ${
                   showBeam
                     ? 'relative z-10 rounded-[calc(0.5rem-2px)] bg-emerald-600 text-white hover:bg-emerald-500'
                     : shouldShowRegenerate
@@ -434,7 +434,7 @@ export function WorkflowStep({
         <div className="animate-in fade-in slide-in-from-top-2 duration-300 ease-out">
           {/* Prerequisite hint when step is blocked */}
           {!isComplete && !isSkipped && prerequisiteReason && (
-            <div className="mt-3 mx-0 px-3 py-2.5 rounded-md bg-amber-500/10 border border-amber-500/20 text-amber-300 text-[13px] flex items-center gap-2 animate-prerequisite-pulse">
+            <div className="mt-3 mx-0 px-3 py-2.5 rounded-md bg-amber-500/10 border border-amber-500/20 text-amber-300 text-ui-base flex items-center gap-2 animate-prerequisite-pulse">
               <svg className="w-4 h-4 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
               </svg>
@@ -443,7 +443,7 @@ export function WorkflowStep({
           )}
           {/* Retry status indicator */}
           {isStreaming && retryStatus && (
-            <div className="mt-3 mx-0 px-3 py-2.5 rounded-md bg-amber-500/10 border border-amber-500/20 text-amber-300 text-[13px] flex items-center gap-2">
+            <div className="mt-3 mx-0 px-3 py-2.5 rounded-md bg-amber-500/10 border border-amber-500/20 text-amber-300 text-ui-base flex items-center gap-2">
               <div className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse shrink-0" />
               Retrying ({retryStatus.attempt} of {retryStatus.maxAttempts}) &mdash; {retryStatus.reason}...
             </div>
@@ -463,7 +463,7 @@ export function WorkflowStep({
           <div className="flex border-b border-border">
             <button
               onClick={() => setActiveTab('prompt')}
-              className={`flex-1 px-3 py-2 text-[12px] font-medium transition-all ${
+              className={`flex-1 px-3 py-2 text-ui-sm font-medium transition-all ${
                 activeTab === 'prompt'
                   ? 'text-foreground bg-secondary/60 border-b-2 border-primary -mb-[1px]'
                   : 'text-muted-foreground hover:text-foreground hover:bg-secondary/40'
@@ -473,7 +473,7 @@ export function WorkflowStep({
             </button>
             <button
               onClick={() => setActiveTab('how_to_apply')}
-              className={`flex-1 px-3 py-2 text-[12px] font-medium transition-all ${
+              className={`flex-1 px-3 py-2 text-ui-sm font-medium transition-all ${
                 activeTab === 'how_to_apply'
                   ? 'text-foreground bg-secondary/60 border-b-2 border-emerald-500 -mb-[1px]'
                   : 'text-muted-foreground hover:text-foreground hover:bg-secondary/40'
@@ -483,7 +483,7 @@ export function WorkflowStep({
             </button>
             <button
               onClick={() => setActiveTab('expected_output')}
-              className={`flex-1 px-3 py-2 text-[12px] font-medium transition-all ${
+              className={`flex-1 px-3 py-2 text-ui-sm font-medium transition-all ${
                 activeTab === 'expected_output'
                   ? 'text-foreground bg-secondary/60 border-b-2 border-amber-500 -mb-[1px]'
                   : 'text-muted-foreground hover:text-foreground hover:bg-secondary/40'
@@ -494,7 +494,7 @@ export function WorkflowStep({
             {skillBlueprint && (
               <button
                 onClick={() => setActiveTab('skill_blueprint')}
-                className={`flex-1 px-3 py-2 text-[12px] font-medium transition-all ${
+                className={`flex-1 px-3 py-2 text-ui-sm font-medium transition-all ${
                   activeTab === 'skill_blueprint'
                     ? 'text-foreground bg-secondary/60 border-b-2 border-cyan-500 -mb-[1px]'
                     : 'text-muted-foreground hover:text-foreground hover:bg-secondary/40'
@@ -508,7 +508,7 @@ export function WorkflowStep({
           {/* Content */}
           <div className="p-3">
             <div className="flex items-center justify-between mb-2">
-              <span className={`text-[12px] font-medium ${
+              <span className={`text-ui-sm font-medium ${
                 activeTab === 'prompt' ? 'text-primary' : 
                 activeTab === 'how_to_apply' ? 'text-emerald-400' :
                 activeTab === 'skill_blueprint' ? 'text-cyan-400' : 'text-amber-400'
@@ -565,7 +565,7 @@ export function WorkflowStep({
               isLoadingPrompt && !promptText ? (
                 <div className="flex items-center gap-2 py-4 text-muted-foreground">
                   <Loader2 className="w-4 h-4 animate-spin text-primary" />
-                  <span className="text-[13px]">Generating prompt...</span>
+                  <span className="text-ui-base">Generating prompt...</span>
                 </div>
               ) : (
                 <MarkdownContent 
@@ -580,7 +580,7 @@ export function WorkflowStep({
               isLoadingMetadata ? (
                 <div className="flex items-center gap-2 py-4 text-muted-foreground">
                   <Loader2 className="w-4 h-4 animate-spin text-emerald-400" />
-                  <span className="text-[13px]">Loading application steps...</span>
+                  <span className="text-ui-base">Loading application steps...</span>
                 </div>
               ) : (
                 <>
@@ -605,7 +605,7 @@ export function WorkflowStep({
               isLoadingMetadata ? (
                 <div className="flex items-center gap-2 py-4 text-muted-foreground">
                   <Loader2 className="w-4 h-4 animate-spin text-amber-400" />
-                  <span className="text-[13px]">Loading verification checklist...</span>
+                  <span className="text-ui-base">Loading verification checklist...</span>
                 </div>
               ) : (
                 <>
@@ -645,7 +645,7 @@ export function WorkflowStep({
                 {!readOnly && onToggleSkip && !isComplete && (
                   <button
                     onClick={(e) => { e.stopPropagation(); onToggleSkip(); }}
-                    className={`text-[11px] font-medium px-3 py-1.5 rounded transition-all inline-flex items-center gap-1.5 ${
+                    className={`text-ui-xs font-medium px-3 py-1.5 rounded transition-all inline-flex items-center gap-1.5 ${
                       isSkipped
                         ? 'bg-amber-500/20 text-amber-400 hover:bg-amber-500/30 border border-amber-500/30'
                         : 'text-muted-foreground/60 hover:text-muted-foreground hover:bg-secondary/60'
@@ -663,19 +663,19 @@ export function WorkflowStep({
               <div>
                 {isSkipped ? (
                   readOnly ? (
-                    <div className="text-[12px] font-medium px-4 py-2 rounded bg-amber-500/15 text-amber-400 border border-amber-500/30 select-none inline-flex items-center gap-1.5">
+                    <div className="text-ui-sm font-medium px-4 py-2 rounded bg-amber-500/15 text-amber-400 border border-amber-500/30 select-none inline-flex items-center gap-1.5">
                       <SkipForward className="w-3.5 h-3.5" /> Skipped
                     </div>
                   ) : (
                     <button
                       onClick={(e) => { e.stopPropagation(); onNavigateNext?.(); }}
-                      className="text-[12px] font-medium px-4 py-2 rounded bg-amber-500/20 text-amber-400 hover:bg-amber-500/30 transition-all inline-flex items-center gap-1.5 cursor-pointer"
+                      className="text-ui-sm font-medium px-4 py-2 rounded bg-amber-500/20 text-amber-400 hover:bg-amber-500/30 transition-all inline-flex items-center gap-1.5 cursor-pointer"
                     >
                       <SkipForward className="w-3.5 h-3.5" /> Skipped — Next Step →
                     </button>
                   )
                 ) : isComplete ? (
-                  <div className="text-[12px] font-medium px-4 py-2 rounded bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 select-none inline-flex items-center gap-1.5 animate-fade-in">
+                  <div className="text-ui-sm font-medium px-4 py-2 rounded bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 select-none inline-flex items-center gap-1.5 animate-fade-in">
                     <CheckCircle className="w-3.5 h-3.5" /> Done
                   </div>
                 ) : !readOnly ? (

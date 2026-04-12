@@ -82,7 +82,7 @@ export function SectionedWorkflowSidebar({
       {/* Header with overall progress */}
       <div className="p-4 border-b border-border bg-secondary/30">
         <div className="flex items-center justify-between mb-2">
-          <h3 className="text-[13px] font-semibold text-foreground">Workshop Progress</h3>
+          <h3 className="text-ui-base font-semibold text-foreground">Workshop Progress</h3>
           <SessionParametersPopover sessionId={sessionId} onParametersChanged={onParametersChanged} />
         </div>
         <div className="flex items-center gap-2">
@@ -92,7 +92,7 @@ export function SectionedWorkflowSidebar({
               style={{ width: `${progressPercent}%` }}
             />
           </div>
-          <span className="text-[11px] font-semibold text-foreground tabular-nums">
+          <span className="text-ui-xs font-semibold text-foreground tabular-nums">
             {totalCompleted}/{totalSteps}
           </span>
         </div>
@@ -146,11 +146,11 @@ export function SectionedWorkflowSidebar({
                   {/* Title and Progress */}
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
-                      <span className={`text-[10px] font-semibold uppercase tracking-wider ${section.color}`}>
+                      <span className={`text-ui-2xs font-semibold uppercase tracking-wider ${section.color}`}>
                         {section.chapter}
                       </span>
                     </div>
-                    <h4 className={`text-[13px] font-semibold truncate ${
+                    <h4 className={`text-ui-base font-semibold truncate ${
                       isSectionComplete ? 'text-muted-foreground' : 'text-foreground'
                     }`}>
                       {section.title}
@@ -165,7 +165,7 @@ export function SectionedWorkflowSidebar({
                           style={{ width: `${(completed / total) * 100}%` }}
                         />
                       </div>
-                      <span className="text-[10px] font-medium text-muted-foreground tabular-nums">
+                      <span className="text-ui-2xs font-medium text-muted-foreground tabular-nums">
                         {completed}/{total}
                       </span>
                     </div>
@@ -217,7 +217,7 @@ export function SectionedWorkflowSidebar({
                           }`}
                         >
                           {/* Step Status Icon */}
-                          <div className={`w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 text-[9px] font-bold transition-all ${
+                          <div className={`w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 text-ui-2xs font-bold transition-all ${
                             isSkipped
                               ? 'bg-amber-500/30 text-amber-400'
                               : isComplete
@@ -236,7 +236,7 @@ export function SectionedWorkflowSidebar({
                           </div>
 
                           {/* Step Title */}
-                          <span className={`text-[11px] font-medium flex-1 truncate ${
+                          <span className={`text-ui-xs font-medium flex-1 truncate ${
                             isActive
                               ? 'text-foreground'
                               : isSkipped
