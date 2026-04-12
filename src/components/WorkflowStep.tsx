@@ -14,6 +14,7 @@ import { SkillBlueprintTab, SkillBlueprintFullScreenModal } from './SkillBluepri
 import { useSkillBlueprint } from '../hooks/useSkillBlueprint';
 import { BorderBeamButton } from './BorderBeamButton';
 import { ExpandableErrorBanner } from './ExpandableErrorBanner';
+import { useReadOnly } from '../contexts/ReadOnlyContext';
 
 interface WorkflowStepProps {
   icon: ReactNode;
@@ -83,8 +84,9 @@ export function WorkflowStep({
   isSkipped = false,
   onToggleSkip,
   onNavigateNext,
-  generateDisabledReason
+  generateDisabledReason,
 }: WorkflowStepProps) {
+  const readOnly = useReadOnly();
   const colors = colorClasses[color];
   
   // Container styles - simplified when embedded in tabs
@@ -377,9 +379,9 @@ export function WorkflowStep({
           {customHeaderContent}
         </div>
 
-        {/* Generate Button - Always visible in header */}
+        {/* Generate Button - Always visible in header (hidden in read-only) */}
         <div className="flex items-center gap-2 flex-shrink-0">
-          {showGenerateButton && (() => {
+          {showGenerateButton && !readOnly && (() => {
             const shouldShowRegenerate = (isComplete || showGeneratedPrompt) && !isStreaming && !isLoadingPrompt;
             const canClick = shouldShowRegenerate || canClickGeneratePrompt;
             const showBeam = !!canClickGeneratePrompt && !shouldShowRegenerate;
@@ -635,12 +637,12 @@ export function WorkflowStep({
         </div>
       )}
 
-          {/* Footer bar: Skip + Mark Done */}
+          {/* Footer bar: Skip + Mark Done (read-only shows status only) */}
           {onToggleComplete && (
             <div ref={footerRef} className="flex items-center justify-between mt-4 pt-3 border-t border-border/50">
               {/* Left side: Skip / Undo Skip */}
               <div>
-                {onToggleSkip && !isComplete && (
+                {!readOnly && onToggleSkip && !isComplete && (
                   <button
                     onClick={(e) => { e.stopPropagation(); onToggleSkip(); }}
                     className={`text-[11px] font-medium px-3 py-1.5 rounded transition-all inline-flex items-center gap-1.5 ${
@@ -660,17 +662,23 @@ export function WorkflowStep({
               {/* Right side: Mark Done / Complete badge */}
               <div>
                 {isSkipped ? (
-                  <button
-                    onClick={(e) => { e.stopPropagation(); onNavigateNext?.(); }}
-                    className="text-[12px] font-medium px-4 py-2 rounded bg-amber-500/20 text-amber-400 hover:bg-amber-500/30 transition-all inline-flex items-center gap-1.5 cursor-pointer"
-                  >
-                    <SkipForward className="w-3.5 h-3.5" /> Skipped — Next Step →
-                  </button>
+                  readOnly ? (
+                    <div className="text-[12px] font-medium px-4 py-2 rounded bg-amber-500/15 text-amber-400 border border-amber-500/30 select-none inline-flex items-center gap-1.5">
+                      <SkipForward className="w-3.5 h-3.5" /> Skipped
+                    </div>
+                  ) : (
+                    <button
+                      onClick={(e) => { e.stopPropagation(); onNavigateNext?.(); }}
+                      className="text-[12px] font-medium px-4 py-2 rounded bg-amber-500/20 text-amber-400 hover:bg-amber-500/30 transition-all inline-flex items-center gap-1.5 cursor-pointer"
+                    >
+                      <SkipForward className="w-3.5 h-3.5" /> Skipped — Next Step →
+                    </button>
+                  )
                 ) : isComplete ? (
                   <div className="text-[12px] font-medium px-4 py-2 rounded bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 select-none inline-flex items-center gap-1.5 animate-fade-in">
                     <CheckCircle className="w-3.5 h-3.5" /> Done
                   </div>
-                ) : (
+                ) : !readOnly ? (
                   <BorderBeamButton
                     active={canClickMarkComplete}
                     onClick={(e) => { e.stopPropagation(); handleMarkComplete(); }}
@@ -678,7 +686,7 @@ export function WorkflowStep({
                   >
                     Done
                   </BorderBeamButton>
-                )}
+                ) : null}
               </div>
             </div>
           )}

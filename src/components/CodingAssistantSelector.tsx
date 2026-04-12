@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { ChevronDown, CheckCircle, ExternalLink, Download, Sparkles, Terminal } from 'lucide-react';
+import { ChevronDown, CheckCircle, ExternalLink, Download, Sparkles, Terminal, Lock } from 'lucide-react';
 import { BorderBeamButton } from './BorderBeamButton';
 
 // ---------------------------------------------------------------------------
@@ -165,6 +165,8 @@ interface CodingAssistantSelectorProps {
   forceCollapsed?: boolean;
   hideConfirm?: boolean;
   highlightConfirm?: boolean;
+  /** When true, the selection is locked for this session -- cards are disabled and Continue is hidden */
+  isLocked?: boolean;
 }
 
 export function CodingAssistantSelector({
@@ -175,6 +177,7 @@ export function CodingAssistantSelector({
   forceCollapsed = false,
   hideConfirm = false,
   highlightConfirm = false,
+  isLocked = false,
 }: CodingAssistantSelectorProps) {
   const [userOverride, setUserOverride] = useState<boolean | null>(null);
   const prevForceCollapsed = useRef(forceCollapsed);
@@ -257,7 +260,7 @@ export function CodingAssistantSelector({
           <div className="flex flex-wrap gap-2">
             {ASSISTANTS.map((assistant) => {
               const isSelected = selectedAssistant === assistant.id;
-              const isDisabled = assistant.comingSoon;
+              const isDisabled = assistant.comingSoon || isLocked;
               const Icon = assistant.icon;
 
               return (
@@ -266,11 +269,13 @@ export function CodingAssistantSelector({
                   onClick={() => { if (!isDisabled) onSelect(assistant.id); }}
                   disabled={isDisabled}
                   className={`relative flex items-center gap-2.5 rounded-lg border px-3 py-2.5 transition-all ${
-                    isDisabled
-                      ? 'border-border/40 opacity-40 cursor-not-allowed'
-                      : isSelected
-                        ? `${assistant.selectedBorder} ring-1 ${assistant.selectedRing} ${assistant.selectedBg}`
-                        : 'border-border hover:border-muted-foreground/50 hover:bg-secondary/20 cursor-pointer'
+                    isSelected && isLocked
+                      ? `${assistant.selectedBorder} ring-1 ${assistant.selectedRing} ${assistant.selectedBg} cursor-default`
+                      : isDisabled
+                        ? 'border-border/40 opacity-40 cursor-not-allowed'
+                        : isSelected
+                          ? `${assistant.selectedBorder} ring-1 ${assistant.selectedRing} ${assistant.selectedBg}`
+                          : 'border-border hover:border-muted-foreground/50 hover:bg-secondary/20 cursor-pointer'
                   }`}
                 >
                   <div className={`p-1.5 rounded-md ${isSelected ? assistant.iconBg : 'bg-secondary/60'}`}>
@@ -285,7 +290,7 @@ export function CodingAssistantSelector({
                     </div>
                     <span className="text-[10px] text-muted-foreground">{assistant.tagline}</span>
                   </div>
-                  {isDisabled && (
+                  {assistant.comingSoon && (
                     <span className="ml-auto text-[8px] font-bold uppercase tracking-widest px-1.5 py-0.5 rounded bg-amber-900/50 text-amber-300/80 border border-amber-700/30 whitespace-nowrap">
                       Soon
                     </span>
@@ -352,8 +357,16 @@ export function CodingAssistantSelector({
             </div>
           )}
 
+          {/* Locked notice */}
+          {isLocked && isExpanded && selected && (
+            <div className="flex items-center gap-2 py-2 px-3 rounded-lg bg-slate-800/50 border border-slate-700/40 text-[11px] text-muted-foreground">
+              <Lock className="w-3 h-3 flex-shrink-0" />
+              <span>Locked for this session. Start a new session to change your coding assistant.</span>
+            </div>
+          )}
+
           {/* Bottom continue bar */}
-          {!hideConfirm && isExpanded && selectedAssistant && (
+          {!hideConfirm && !isLocked && isExpanded && selectedAssistant && (
             <div className="pt-3 border-t border-border flex items-center justify-between">
               <div className="flex items-center gap-2 text-emerald-400">
                 <CheckCircle className="w-3.5 h-3.5" />

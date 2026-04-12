@@ -4717,6 +4717,7 @@ class LeaderboardEntry(BaseModel):
     """Leaderboard entry with user score and progress details"""
     rank: int = Field(..., description="Position in leaderboard (1-10)")
     user_id: str = Field(..., description="User identifier for tracking changes")
+    session_id: Optional[str] = Field(None, description="Session ID of the user's best session")
     display_name: str = Field(..., description="Formatted display name (e.g., 'John D.')")
     avatar: str = Field(..., description="Emoji avatar for the user")
     score: int = Field(..., description="Total score based on completed steps")
@@ -4793,6 +4794,17 @@ async def get_workshop_users_endpoint() -> Dict[str, Any]:
     except Exception as e:
         logger.error(f"[Workshop Users API] Error: {e}", exc_info=True)
         return {"total": 0, "users": []}
+
+
+@router.get("/workshop-users/sessions")
+async def get_user_sessions_by_email(email: str) -> List[SessionListItem]:
+    """Get all sessions (saved and unsaved) for a specific user by email."""
+    try:
+        sessions = get_user_sessions(email, saved_only=False)
+        return [SessionListItem(**s) for s in sessions]
+    except Exception as e:
+        logger.error(f"[Workshop Users API] Error fetching sessions for {email}: {e}", exc_info=True)
+        return []
 
 
 @router.post("/admin/cleanup-sessions")

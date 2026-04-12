@@ -11,6 +11,7 @@
 import { useState, useEffect } from 'react';
 import { GitBranch, Copy, Check, CheckCircle, ChevronDown, ChevronUp, ExternalLink, RefreshCw } from 'lucide-react';
 import { BorderBeamButton } from './BorderBeamButton';
+import { useReadOnly } from '../contexts/ReadOnlyContext';
 
 interface SetUpProjectStepProps {
   isComplete: boolean;
@@ -142,6 +143,7 @@ export function SetUpProjectStep({
   sessionId,
   useCaseLabel,
 }: SetUpProjectStepProps) {
+  const readOnly = useReadOnly();
   const folderName = deriveFolderName(useCaseLabel);
   const cloneCmd = `git clone ${REPO_URL} ${folderName}`;
 
@@ -220,26 +222,27 @@ export function SetUpProjectStep({
         </div>
         
         <div className="flex items-center gap-3">
-          {/* Reload button */}
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              handleReload();
-            }}
-            disabled={isReloading}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-[12px] font-medium rounded bg-emerald-900/40 text-emerald-300 hover:bg-emerald-900/60 transition-all group"
-            title="Reload with latest parameters"
-          >
-            <RefreshCw className={`w-3 h-3 ${isReloading ? 'animate-spin' : 'group-hover:rotate-180 transition-transform duration-300'}`} />
-            Reload
-          </button>
+          {!readOnly && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                handleReload();
+              }}
+              disabled={isReloading}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-[12px] font-medium rounded bg-emerald-900/40 text-emerald-300 hover:bg-emerald-900/60 transition-all group"
+              title="Reload with latest parameters"
+            >
+              <RefreshCw className={`w-3 h-3 ${isReloading ? 'animate-spin' : 'group-hover:rotate-180 transition-transform duration-300'}`} />
+              Reload
+            </button>
+          )}
 
           {isComplete ? (
             <span className="flex items-center gap-1.5 text-emerald-400 text-sm font-medium bg-emerald-500/15 border border-emerald-500/30 px-3 py-1 rounded-lg animate-fade-in">
               <CheckCircle className="w-3.5 h-3.5" />
               Done
             </span>
-          ) : (
+          ) : !readOnly ? (
             <BorderBeamButton
               active={isPreviousStepComplete}
               onClick={(e) => {
@@ -251,7 +254,7 @@ export function SetUpProjectStep({
             >
               Done
             </BorderBeamButton>
-          )}
+          ) : null}
           
           {isExpanded ? (
             <ChevronUp className="w-5 h-5 text-muted-foreground" />
@@ -462,7 +465,7 @@ In **Cursor**, click on the model selector in the Agent panel and choose the lat
           
           {/* Bottom Mark Done Button */}
           <div className="flex justify-end pt-4 border-t border-border/50">
-            {!isComplete && (
+            {!isComplete && !readOnly && (
               <BorderBeamButton
                 active={isPreviousStepComplete}
                 onClick={onMarkComplete}

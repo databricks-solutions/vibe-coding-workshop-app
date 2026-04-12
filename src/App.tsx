@@ -12,7 +12,7 @@ import {
   SessionListDialog 
 } from './components/session';
 import { apiClient } from './api/client';
-import { Zap, MessageSquare, Trophy, Plus, PanelLeftClose, PanelLeft, Menu, X, BarChart3 } from 'lucide-react';
+import { Zap, MessageSquare, Trophy, Plus, PanelLeftClose, PanelLeft, Menu, X, BarChart3, Eye } from 'lucide-react';
 import { normalizeLevel, getFilteredSections, getCumulativeOverrides, USE_CASE_LEVEL_LOCK, isForwardProgression, type WorkshopLevel } from './constants/workflowSections';
 
 export default function App() {
@@ -77,6 +77,8 @@ export default function App() {
   const [useCaseLockedLevel, setUseCaseLockedLevel] = useState<WorkshopLevel | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [currentUser, setCurrentUser] = useState('user@databricks.com');
+  const [currentUserResolved, setCurrentUserResolved] = useState(false);
+  const [sessionOwner, setSessionOwner] = useState<string | null>(null);
   const [defaultCatalog, setDefaultCatalog] = useState('');
   const [initialExpandedStep, setInitialExpandedStep] = useState<number>(1);
 
@@ -96,6 +98,12 @@ export default function App() {
   // Company brand URL (optional, session-level override)
   const [brandUrl, setBrandUrl] = useState<string>('');
 
+  // Build-time brand config (extracted during install from customer website)
+  const [brandConfig, setBrandConfig] = useState<{
+    company_name?: string; logo_url?: string;
+    primary_color_hsl?: string; secondary_color_hsl?: string;
+  } | null>(null);
+
   // Dialog state
   const [showSaveDialog, setShowSaveDialog] = useState(false);
   const [showFeedbackDialog, setShowFeedbackDialog] = useState(false);
@@ -103,6 +111,12 @@ export default function App() {
   const [isSubmittingFeedback, setIsSubmittingFeedback] = useState(false);
   const [showNewSessionConfirm, setShowNewSessionConfirm] = useState(false);
   const [pendingNewSession, setPendingNewSession] = useState(false);
+
+  // Read-only when viewing another user's session (ownership-based)
+  const readOnly = currentUserResolved
+    && sessionOwner !== null
+    && sessionOwner !== ''
+    && currentUser !== sessionOwner;
 
   // Session loading state - for professional loading overlay
   const [isSessionLoading, setIsSessionLoading] = useState(true);
@@ -135,6 +149,26 @@ export default function App() {
     apiClient.getDisabledSteps()
       .then(tags => setDisabledSectionTags(new Set(tags)))
       .catch(err => console.error('Error fetching disabled steps:', err));
+
+    // Load build-time brand config (generated during install from customer website)
+    fetch('/brand-config.json')
+      .then(r => r.ok ? r.json() : null)
+      .catch(() => null)
+      .then(brand => {
+        if (!brand) return;
+        setBrandConfig(brand);
+        const root = document.documentElement;
+        if (brand.primary_color_hsl) {
+          const parts = brand.primary_color_hsl.split(' ');
+          if (parts.length >= 2) {
+            root.style.setProperty('--brand-h', parts[0]);
+            root.style.setProperty('--brand-s', parts[1]);
+          }
+        }
+        if (brand.company_name) {
+          document.title = `${brand.company_name} — Vibe Coding Workshop`;
+        }
+      });
   }, []);
 
   const fetchCurrentUser = async () => {
@@ -145,6 +179,8 @@ export default function App() {
       }
     } catch (err) {
       console.error('Error fetching current user:', err);
+    } finally {
+      setCurrentUserResolved(true);
     }
   };
 
@@ -167,6 +203,7 @@ export default function App() {
       const response = await apiClient.getDefaultSession();
       if (response.success) {
         setSessionId(response.session_id);
+        setSessionOwner(null);
         setSessionSaved(response.is_saved || false);
         setSessionName(response.session_name);
         setSessionDescription(response.session_description);
@@ -234,6 +271,7 @@ export default function App() {
     try {
       const response = await apiClient.createNewSession();
       setSessionId(response.session_id);
+      setSessionOwner(null);
       setSessionSaved(false);
       setSessionName(undefined);
       setSessionDescription(undefined);
@@ -296,6 +334,7 @@ export default function App() {
       const response = await apiClient.loadSession(id);
       if (response.success) {
         setSessionId(id);
+        setSessionOwner(response.created_by || null);
         setSessionSaved(response.is_saved);
         setSessionName(response.session_name);
         setSessionDescription(response.session_description);
@@ -352,6 +391,7 @@ export default function App() {
   // Wrap setWorkshopLevel to also mark the selection as explicit.
   // `force` bypasses the started-workflow guard (used by use-case-driven locks).
   const handleWorkshopLevelChange = useCallback((level: WorkshopLevel, force = false) => {
+    if (readOnly) return;
     if (!force) {
       const hasStartedWorkflow = Array.from(completedSteps).some(s => s >= 2);
       if (hasStartedWorkflow && level !== workshopLevel) {
@@ -374,9 +414,10 @@ export default function App() {
         workshop_level: level,
       }).catch(err => console.error('Error saving workshop level:', err));
     }
-  }, [sessionId, levelExplicitlySelected, completedSteps, workshopLevel]);
+  }, [sessionId, levelExplicitlySelected, completedSteps, workshopLevel, readOnly]);
 
   const handleStepPromptGenerated = useCallback((stepNumber: number, promptText: string) => {
+    if (readOnly) return;
     setStepPrompts(prev => ({
       ...prev,
       [stepNumber]: promptText
@@ -390,10 +431,11 @@ export default function App() {
         workshop_level: workshopLevel,  // Piggyback workshop level save on progress
       }).catch(err => console.error('Error updating step prompt:', err));
     }
-  }, [sessionId, workshopLevel]);
+  }, [sessionId, workshopLevel, readOnly]);
 
   // Handle completed steps change and auto-save to backend
   const handleCompletedStepsChange = useCallback((newSteps: Set<number>) => {
+    if (readOnly) return;
     setCompletedSteps(newSteps);
     
     // Auto-save completed steps to backend (piggyback workshop level)
@@ -404,10 +446,11 @@ export default function App() {
         workshop_level: workshopLevel,  // Piggyback workshop level save on progress
       }).catch(err => console.error('Error saving completed steps:', err));
     }
-  }, [sessionId, workshopLevel]);
+  }, [sessionId, workshopLevel, readOnly]);
 
   // Handle skipped steps change and auto-save to backend
   const handleSkippedStepsChange = useCallback((newSkipped: Set<number>) => {
+    if (readOnly) return;
     setSkippedSteps(newSkipped);
     
     if (sessionId) {
@@ -416,10 +459,11 @@ export default function App() {
         skipped_steps: Array.from(newSkipped),
       }).catch(err => console.error('Error saving skipped steps:', err));
     }
-  }, [sessionId]);
+  }, [sessionId, readOnly]);
 
   // Handle prerequisites completion
   const handlePrerequisitesComplete = useCallback(() => {
+    if (readOnly) return;
     setPrerequisitesCompleted(true);
     
     // Auto-save to backend (piggyback workshop level)
@@ -430,10 +474,11 @@ export default function App() {
         workshop_level: workshopLevel,  // Piggyback workshop level save on progress
       }).catch(err => console.error('Error saving prerequisites:', err));
     }
-  }, [sessionId, workshopLevel]);
+  }, [sessionId, workshopLevel, readOnly]);
 
   // Handle coding assistant selection
   const handleCodingAssistantChange = useCallback((assistantId: string) => {
+    if (readOnly) return;
     setCodingAssistant(assistantId);
     if (sessionId) {
       apiClient.updateSessionMetadata({
@@ -441,10 +486,10 @@ export default function App() {
         coding_assistant: assistantId,
       }).catch(err => console.error('Error saving coding assistant:', err));
     }
-  }, [sessionId]);
+  }, [sessionId, readOnly]);
 
   const handleSaveSession = async (name: string, description: string, rating?: 'thumbs_up' | 'thumbs_down', comment?: string) => {
-    if (!sessionId) return;
+    if (!sessionId || readOnly) return;
     
     setIsSaving(true);
     try {
@@ -592,11 +637,14 @@ export default function App() {
           <aside className="relative w-52 h-full bg-sidebar border-r border-sidebar-border flex flex-col animate-slide-in-left">
             <div className="px-4 py-4 border-b border-sidebar-border flex items-center justify-between">
               <Link to="/" onClick={() => setMobileSidebarOpen(false)} className="flex items-center gap-2.5 cursor-pointer">
-                <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-primary to-emerald-500 flex items-center justify-center flex-shrink-0">
-                  <Zap className="w-4 h-4 text-white" />
+                <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-primary to-emerald-500 flex items-center justify-center flex-shrink-0 overflow-hidden">
+                  {brandConfig?.logo_url ? (
+                    <img src={brandConfig.logo_url} alt="" className="w-full h-full object-contain" onError={(e) => { e.currentTarget.style.display = 'none'; e.currentTarget.nextElementSibling?.removeAttribute('style'); }} />
+                  ) : null}
+                  <Zap className="w-4 h-4 text-white" style={brandConfig?.logo_url ? { display: 'none' } : undefined} />
                 </div>
                 <div className="min-w-0">
-                  <h1 className="font-semibold text-sidebar-foreground text-[13px] tracking-tight whitespace-nowrap">V2V: Vibe-to-Value</h1>
+                  <h1 className="font-semibold text-sidebar-foreground text-[13px] tracking-tight whitespace-nowrap">{brandConfig?.company_name || 'V2V: Vibe-to-Value'}</h1>
                   <p className="text-[10px] text-muted-foreground whitespace-nowrap">Vibe Coding Workshop</p>
                 </div>
               </Link>
@@ -643,12 +691,15 @@ export default function App() {
         <div className={`${sidebarCollapsed ? 'px-2' : 'px-4'} py-4 border-b border-sidebar-border transition-all duration-300`}>
           <div className="flex items-center justify-between">
             <Link to="/" className={`flex items-center ${sidebarCollapsed ? 'justify-center w-full' : 'gap-2.5'} cursor-pointer`}>
-              <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-primary to-emerald-500 flex items-center justify-center flex-shrink-0">
-                <Zap className="w-4 h-4 text-white" />
+              <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-primary to-emerald-500 flex items-center justify-center flex-shrink-0 overflow-hidden">
+                {brandConfig?.logo_url ? (
+                  <img src={brandConfig.logo_url} alt="" className="w-full h-full object-contain" onError={(e) => { e.currentTarget.style.display = 'none'; e.currentTarget.nextElementSibling?.removeAttribute('style'); }} />
+                ) : null}
+                <Zap className="w-4 h-4 text-white" style={brandConfig?.logo_url ? { display: 'none' } : undefined} />
               </div>
               {!sidebarCollapsed && (
                 <div className="min-w-0">
-                  <h1 className="font-semibold text-sidebar-foreground text-[13px] tracking-tight whitespace-nowrap">V2V: Vibe-to-Value</h1>
+                  <h1 className="font-semibold text-sidebar-foreground text-[13px] tracking-tight whitespace-nowrap">{brandConfig?.company_name || 'V2V: Vibe-to-Value'}</h1>
                   <p className="text-[10px] text-muted-foreground whitespace-nowrap">Vibe Coding Workshop</p>
                 </div>
               )}
@@ -881,20 +932,35 @@ export default function App() {
                   {/* Theme Toggle & Session Menu in Header */}
                   <div className="flex items-center gap-2 sm:gap-3 flex-shrink-0">
                     <ThemeToggle />
+                    {readOnly ? (
+                      <div className="flex items-center gap-2 text-muted-foreground text-[12px]">
+                        <Eye className="w-3.5 h-3.5" />
+                        <span>
+                          <span className="font-medium text-foreground/80">
+                            {sessionOwner ? sessionOwner.split('@')[0].replace('.', ' ') : 'User'}
+                          </span>
+                          {sessionName && sessionName !== 'New Session' && (
+                            <span className="text-muted-foreground/60"> — {sessionName}</span>
+                          )}
+                          <span className="ml-1.5 text-muted-foreground/50">(read-only)</span>
+                        </span>
+                      </div>
+                    ) : (
                       <HeaderSessionMenu
-                      sessionId={sessionId}
-                      sessionSaved={sessionSaved}
-                      sessionName={sessionName}
-                      shareUrl={shareUrl}
-                      isSaving={isSaving}
-                      currentUser={currentUser}
-                      completedSteps={completedSteps.size}
-                      totalSteps={20}
-                      onSave={() => setShowSaveDialog(true)}
-                      onLoadSession={() => setShowSessionList(true)}
-                      onNewSession={() => setShowNewSessionConfirm(true)}
-                      onShare={handleShare}
-                    />
+                        sessionId={sessionId}
+                        sessionSaved={sessionSaved}
+                        sessionName={sessionName}
+                        shareUrl={shareUrl}
+                        isSaving={isSaving}
+                        currentUser={currentUser}
+                        completedSteps={completedSteps.size}
+                        totalSteps={20}
+                        onSave={() => setShowSaveDialog(true)}
+                        onLoadSession={() => setShowSessionList(true)}
+                        onNewSession={() => setShowNewSessionConfirm(true)}
+                        onShare={handleShare}
+                      />
+                    )}
                   </div>
                 </div>
               </div>
@@ -921,9 +987,9 @@ export default function App() {
                     dataRefreshKey={dataRefreshKey}
                     onStepPromptGenerated={handleStepPromptGenerated}
                     onIndustryChange={(val, label) => { 
+                      if (readOnly) return;
                       setSelectedIndustry(val); 
                       setSelectedIndustryLabel(label);
-                      // Auto-save industry selection to session
                       if (sessionId) {
                         apiClient.updateSessionMetadata({
                           session_id: sessionId,
@@ -933,9 +999,9 @@ export default function App() {
                       }
                     }}
                     onUseCaseChange={(val, label) => { 
+                      if (readOnly) return;
                       setSelectedUseCase(val); 
                       setSelectedUseCaseLabel(label);
-                      // Check for use-case-driven path lock
                       const lockLevel = USE_CASE_LEVEL_LOCK[val];
                       if (lockLevel) {
                         setUseCaseLockedLevel(lockLevel);
@@ -944,7 +1010,6 @@ export default function App() {
                         setUseCaseLockedLevel(null);
                         if (workshopLevel === 'skills-accelerator') handleWorkshopLevelChange('end-to-end', true);
                       }
-                      // Auto-save use case selection to session
                       if (sessionId) {
                         apiClient.updateSessionMetadata({
                           session_id: sessionId,
@@ -954,9 +1019,9 @@ export default function App() {
                       }
                     }}
                     onCustomUseCaseChange={(label, desc) => {
+                      if (readOnly) return;
                       setCustomUseCaseLabel(label);
                       setCustomDescription(desc);
-                      // Save custom use case overrides directly to session
                       if (sessionId) {
                         apiClient.updateSessionMetadata({
                           session_id: sessionId,
@@ -966,6 +1031,7 @@ export default function App() {
                       }
                     }}
                     onBrandUrlChange={(url) => {
+                      if (readOnly) return;
                       setBrandUrl(url);
                       if (sessionId) {
                         apiClient.updateSessionMetadata({
@@ -985,6 +1051,7 @@ export default function App() {
                     isSessionLoaded={!isSessionLoading}
                     currentUser={currentUser}
                     defaultCatalog={defaultCatalog}
+                    readOnly={readOnly}
                   />
                 </div>
               </div>

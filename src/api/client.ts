@@ -327,6 +327,7 @@ export interface SessionListItem {
 export interface LeaderboardEntry {
   rank: number;
   user_id: string;
+  session_id?: string;
   display_name: string;
   avatar: string;
   score: number;
@@ -346,6 +347,7 @@ export interface WorkshopUser {
   updated_at?: string;
   last_session_id?: string;
   is_saved?: boolean;
+  session_count?: number;
 }
 
 export interface WorkshopUsersResponse {
@@ -1093,6 +1095,11 @@ class ApiClient {
   /** Get all distinct workshop users */
   async getWorkshopUsers(): Promise<WorkshopUsersResponse> {
     return this.fetch<WorkshopUsersResponse>('/workshop-users');
+  }
+
+  /** Get all sessions (saved + unsaved) for a specific user */
+  async getUserSessionsByEmail(email: string): Promise<SessionListItem[]> {
+    return this.fetch<SessionListItem[]>(`/workshop-users/sessions?email=${encodeURIComponent(email)}`);
   }
 
   // ============== Analytics API ==============

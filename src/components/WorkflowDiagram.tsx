@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { ReadOnlyProvider } from '../contexts/ReadOnlyContext';
 import { WorkflowStep } from './WorkflowStep';
 import { Prerequisites } from './Prerequisites';
 import { WorkshopIntro } from './WorkshopIntro';
@@ -98,6 +99,7 @@ interface WorkflowDiagramProps {
   useCaseLockedLevel?: WorkshopLevel | null;
   currentUser?: string;
   defaultCatalog?: string;
+  readOnly?: boolean;
 }
 
 // Step badge component for consistent styling
@@ -167,6 +169,7 @@ export function WorkflowDiagram({
   useCaseLockedLevel,
   currentUser = '',
   defaultCatalog = '',
+  readOnly = false,
 }: WorkflowDiagramProps) {
   // UI option is now always cursor (Figma option removed from UI)
   // Lazy initializers ensure correct state on SPA re-mount (navigate away and back)
@@ -538,6 +541,7 @@ export function WorkflowDiagram({
   }, [visibleSections, completedSteps, skippedSteps, scrollToStep]);
 
   const handlePromptGenerated = (prompt: string, industry: string, useCase: string, industryLabel?: string, useCaseLabel?: string, customDesc?: string) => {
+    if (readOnly) return;
     onIndustryChange(industry, industryLabel || industry);
     onUseCaseChange(useCase, useCaseLabel || useCase);
     
@@ -660,6 +664,7 @@ export function WorkflowDiagram({
   }, [completedSteps, skippedSteps, visibleSections, getStepTitle, sessionId]);
 
   const toggleStepComplete = useCallback((stepId: number, shouldExpandNext: boolean = true) => {
+    if (readOnly) return;
     const newSet = new Set(completedSteps);
     
     if (newSet.has(stepId)) {
@@ -719,6 +724,7 @@ export function WorkflowDiagram({
   
   // Reset a step (mark as incomplete) - called when user re-generates
   const resetStepComplete = useCallback((stepId: number) => {
+    if (readOnly) return;
     const newSet = new Set(completedSteps);
     if (newSet.has(stepId)) {
       newSet.delete(stepId);
@@ -743,6 +749,7 @@ export function WorkflowDiagram({
 
   // Toggle skip state for a step (Ch3/Ch4 only)
   const toggleStepSkip = useCallback((stepId: number) => {
+    if (readOnly) return;
     const newSkipped = new Set(skippedSteps);
     const isUndoing = newSkipped.has(stepId);
     
@@ -2247,6 +2254,7 @@ export function WorkflowDiagram({
   }, [visibleSections, completedSteps]);
 
   return (
+    <ReadOnlyProvider value={readOnly}>
     <div className="space-y-5">
       {/* Stage 0: Workshop Introduction */}
       <WorkshopIntro
@@ -2278,6 +2286,7 @@ export function WorkflowDiagram({
         forceCollapsed={wizardStage < 1}
         hideConfirm={wizardStage < 1}
         highlightConfirm={!!codingAssistant && wizardStage === 1}
+        isLocked={codingAssistantConfirmed || readOnly}
       />
 
       {/* Stage 2: Prerequisites */}
@@ -2292,10 +2301,10 @@ export function WorkflowDiagram({
             if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
           }, 400);
         }}
-        highlightMarkDone={!prerequisitesCompleted && wizardStage === 2}
+        highlightMarkDone={!prerequisitesCompleted && wizardStage === 2 && !readOnly}
         forceExpanded={forcePrereqExpanded || (wizardStage === 2 && !stageTransitioning)}
         forceCollapsed={wizardStage < 2}
-        hideMarkDone={wizardStage < 2}
+        hideMarkDone={wizardStage < 2 || readOnly}
       />
 
       {/* Stage 3: Define Your Intent */}
@@ -2425,10 +2434,13 @@ export function WorkflowDiagram({
       </div>
 
       {/* Celebration Overlay */}
-      <CelebrationOverlay 
-        celebration={celebration} 
-        onComplete={handleCelebrationComplete} 
-      />
+      {!readOnly && (
+        <CelebrationOverlay 
+          celebration={celebration} 
+          onComplete={handleCelebrationComplete} 
+        />
+      )}
     </div>
+    </ReadOnlyProvider>
   );
 }
