@@ -430,7 +430,7 @@ Your job is complete when:
 - [ ] Backend (`server/server.ts`) has the `server()` plugin registered
 - [ ] Frontend (`client/src/`) implements key pages with mock data
 - [ ] Loading/error/empty states on every data-driven component
-- [ ] `tests/smoke.spec.ts` selectors updated for your app''s DOM structure
+- [ ] `tests/smoke.spec.ts` uses `data-testid` selectors (not text/role); key page elements have `data-testid` attributes
 - [ ] `@docs/ui_design.md` is created (parent docs folder)
 - [ ] `npm run dev` runs cleanly at `http://localhost:8000`
 - [ ] `.vibecoding-state.md` updated (see below)
@@ -623,7 +623,56 @@ cd apps_lakebase/$APP_NAME && databricks apps validate --profile $PROFILE
 
 Fix any validation errors before deploying.
 
-You should see `valueFrom: postgres` for `LAKEBASE_ENDPOINT` in `app.yaml` and `postgres_project`/`postgres_branch`/`postgres_endpoint` resources in `databricks.yml`. The platform auto-injects `PGHOST`, `PGPORT`, `PGDATABASE`, `PGSSLMODE` from the bundle resource binding — these should NOT appear as static values in `app.yaml`.
+You should see `valueFrom: postgres` for `LAKEBASE_ENDPOINT` in `app.yaml` and `postgres_projects` in `databricks.yml`. The platform auto-injects `PGHOST`, `PGPORT`, `PGDATABASE`, `PGSSLMODE` from the bundle resource binding — these should NOT appear as static values in `app.yaml`.
+
+> **Do NOT declare `postgres_branches` or `postgres_endpoints`** in `databricks.yml`. Lakebase Autoscaling auto-creates the default `production` branch and `primary` endpoint with the project. Declaring them causes Terraform "already exists" errors.
+
+---
+
+### Step 1b: Complete Lakebase Two-Phase Resource Binding
+
+The **Setup Lakebase** step declared `postgres_projects` in `databricks.yml` (Phase 1). Before deploying, you must complete Phase 2: add the `app.resources.postgres` binding so `valueFrom: postgres` resolves at runtime.
+
+**If this is the first deploy** (project does not exist yet), deploy once to create the project, then discover the database ID:
+
+```bash
+cd apps_lakebase/$APP_NAME
+databricks apps deploy --profile $PROFILE
+# Wait for deploy to complete, then:
+DB_ID=$(databricks postgres list-databases projects/$APP_NAME/branches/production \
+  --profile $PROFILE --output json | jq -r ''.[0].name'')
+echo "Database ID: $DB_ID"
+```
+
+**If the project already exists** (from a prior deploy), just discover the database ID:
+
+```bash
+DB_ID=$(databricks postgres list-databases projects/$APP_NAME/branches/production \
+  --profile $PROFILE --output json | jq -r ''.[0].name'')
+echo "Database ID: $DB_ID"
+```
+
+Then add the `resources` array to your `apps.app` resource in `databricks.yml`:
+
+```yaml
+resources:
+  apps:
+    app:
+      name: "<APP_NAME>"
+      source_code_path: ./
+      resources:
+        - name: "postgres"
+          postgres:
+            branch: "projects/<APP_NAME>/branches/production"
+            database: "projects/<APP_NAME>/branches/production/databases/<DB_ID>"
+            permission: "CAN_CONNECT_AND_CREATE"
+```
+
+Replace `<APP_NAME>` with the actual app name and `<DB_ID>` with the discovered database ID (e.g., `db-jzmj-xj802bpntj`).
+
+> **Why this matters:** `valueFrom: postgres` in `app.yaml` resolves against the **app''s resource list** (`apps.app.resources`), not the top-level bundle resources (`postgres_projects`). Without `app.resources.postgres`, the platform cannot inject `LAKEBASE_ENDPOINT` and the app falls back to mock data silently.
+
+For the full schema reference, see `@apps_lakebase/skills/04-appkit-plugin-add/references/plugin-lakebase.md` section "app.resources.postgres Schema Reference".
 
 ---
 
@@ -637,7 +686,7 @@ This is the first deploy with Lakebase code. The Service Principal runs the DDL 
 
 > **Deploy-first requirement (from [agent-skills lakebase.md](https://github.com/databricks/databricks-agent-skills/blob/main/skills/databricks-apps/references/appkit/lakebase.md)):** The SP must create the schema to own it. If you ran local dev before deploying, the schema is owned by your personal credentials and the SP cannot access it. In that case, drop the schema from the Lakebase SQL Console and redeploy.
 
-> **SP permissions:** The Service Principal is auto-granted `CONNECT_AND_CREATE` via the bundle resource binding. No manual grants are needed. If you see permission errors, verify `postgres_project`/`postgres_branch`/`postgres_endpoint` are declared in `databricks.yml`.
+> **SP permissions:** The Service Principal is auto-granted `CONNECT_AND_CREATE` via the `app.resources.postgres` binding (with `permission: CAN_CONNECT_AND_CREATE`). No manual grants are needed. If you see permission errors, verify the `app.resources.postgres` binding is declared in `databricks.yml` (see Step 1b).
 
 **Timing:** First deploys take 3-5 minutes (npm install runs on the platform). Redeployments take 1-3 minutes. Use `databricks apps logs $APP_NAME --follow --profile $PROFILE` to stream logs in real-time instead of polling repeatedly.
 
@@ -678,7 +727,15 @@ Databricks Apps require authentication. Get a bearer token, then test:
 ```bash
 TOKEN=$(databricks auth token --profile $PROFILE | jq -r ''.access_token'')
 AUTH_HEADER="Authorization: Bearer $TOKEN"
+```
 
+> **Token expiry:** Databricks Apps bearer tokens can expire quickly. If any `curl` call returns an empty `{}` response, check the HTTP status code — it is likely 401 (expired token). The Databricks Apps proxy returns `{}` instead of a standard 401 body. Refresh the token before each test batch:
+>
+> ```bash
+> TOKEN=$(databricks auth token --profile $PROFILE | jq -r ''.access_token'')
+> ```
+
+```bash
 # Health endpoint
 curl -s -H "$AUTH_HEADER" "$APP_URL/api/health/lakebase" | jq .
 
@@ -735,8 +792,8 @@ databricks apps logs $APP_NAME --tail-lines 100 --profile $PROFILE
 | Error | Cause | Fix |
 |-------|-------|-----|
 | `ERR_MODULE_NOT_FOUND` for `@databricks/lakebase` | Package not installed | Verify `@databricks/lakebase` is in `package.json` dependencies; redeploy |
-| `error resolving resource postgres for env LAKEBASE_ENDPOINT: resource postgres not found` | `app.yaml` uses `valueFrom: postgres` but no `postgres` resource in `databricks.yml`; `bundle deploy` stripped it | Add `postgres_project`/`postgres_branch`/`postgres_endpoint` resources to `databricks.yml`; redeploy |
-| `LAKEBASE_ENDPOINT is not set` or `PGHOST is not set` | Missing resource binding or bundle resources | Verify `valueFrom: postgres` for `LAKEBASE_ENDPOINT` in `app.yaml` and `postgres_project`/`postgres_branch`/`postgres_endpoint` resources in `databricks.yml`; redeploy |
+| `error resolving resource postgres for env LAKEBASE_ENDPOINT: resource postgres not found` | `app.yaml` uses `valueFrom: postgres` but no `postgres` resource in `databricks.yml`; `bundle deploy` stripped it | Add the `app.resources.postgres` binding to `databricks.yml` (see Step 1b); redeploy |
+| `LAKEBASE_ENDPOINT is not set` or `PGHOST is not set` | Missing app resource binding | Verify `valueFrom: postgres` in `app.yaml` and that `apps.app.resources` has a `postgres` entry in `databricks.yml` (see Step 1b); redeploy |
 | `role "xxxxxxxx-xxxx-..." does not exist` | Service Principal lacks Lakebase role | Re-deploy the app so the SP re-creates and owns objects. If the SP was just created, grant via SQL (see Step 2 callout) |
 | `permission denied for sequence` | SP lacks GRANT on sequences for SERIAL columns | Re-deploy the app so the SP re-creates objects, or grant manually: `GRANT ALL ON ALL SEQUENCES IN SCHEMA <DB_SCHEMA> TO "<sp-id>";` |
 | `Connection attempt 1/5 failed` | Normal on first request — Lakebase autoscaling cold start | Wait and retry. The connection pool handles retries automatically |
@@ -5403,7 +5460,16 @@ Read `@apps_lakebase/skills/04-appkit-plugin-add/references/plugin-lakebase.md` 
 
 ### Step 4: Add Bundle Resources to `databricks.yml`
 
-Add the following `resources` section to `databricks.yml`. The bundle creates the Lakebase project, branch, and endpoint automatically on first deploy — no manual CLI project creation is needed.
+Lakebase Autoscaling uses a **two-phase** deploy process because the database ID is auto-generated and cannot be known until the project exists:
+
+- **Phase 1 (this step):** Declare `postgres_projects` only. The first deploy creates the project. Lakebase automatically creates a default `production` branch and `primary` endpoint.
+- **Phase 2 (Deploy and E2E Test step):** After the project exists, discover the database ID and add the `app.resources.postgres` binding so `valueFrom: postgres` resolves.
+
+> **The first deploy WILL show the app in CRASHED state.** This is expected — `valueFrom: postgres` cannot resolve until `app.resources.postgres` is configured in Phase 2. Proceed to database ID discovery; the second deploy will succeed.
+
+> **Do NOT declare `postgres_branches` or `postgres_endpoints`** in `databricks.yml`. Lakebase Autoscaling auto-creates these with the project. Declaring them causes Terraform errors: `branch already exists` / `read_write endpoint already exists`.
+
+Add the following to `databricks.yml`:
 
 ```yaml
 resources:
@@ -5416,25 +5482,13 @@ resources:
         autoscaling_limit_min_cu: 0.5
         autoscaling_limit_max_cu: 2.0
         suspend_timeout_duration: "300s"
-
-  postgres_branches:
-    main:
-      parent: ${resources.postgres_projects.my_db.id}
-      branch_id: production
-      is_protected: false
-      no_expiry: true
-
-  postgres_endpoints:
-    primary:
-      parent: ${resources.postgres_branches.main.id}
-      endpoint_id: primary
-      endpoint_type: ENDPOINT_TYPE_READ_WRITE
-      autoscaling_limit_min_cu: 0.5
-      autoscaling_limit_max_cu: 2.0
-      suspend_timeout_duration: "300s"
 ```
 
-Replace `<APP_NAME>` with the actual `$APP_NAME` value. If `databricks.yml` already has a `resources:` section, merge the `postgres_*` resources into it.
+Replace `<APP_NAME>` with the actual `$APP_NAME` value. If `databricks.yml` already has a `resources:` section, merge the `postgres_projects` resource into it.
+
+> **Pre-existing project?** If the Lakebase project already exists (from a prior deploy or manual creation), remove the `postgres_projects` declaration entirely and skip to Phase 2. Bundle deploy will fail with "project already exists" if you try to re-create it.
+
+For the full two-phase reference including the `app.resources.postgres` schema and database ID discovery, see `@apps_lakebase/skills/04-appkit-plugin-add/references/plugin-lakebase.md` section "3. Declare Bundle Resources".
 
 ---
 
@@ -5481,7 +5535,7 @@ Must complete without import or module errors for `@databricks/lakebase`.
 - [ ] `@databricks/lakebase` installed in `package.json`
 - [ ] `lakebase()` registered in `server/server.ts` plugins
 - [ ] `DB_SCHEMA` derived from `$APP_NAME` (hyphens to underscores)
-- [ ] `databricks.yml` has `postgres_project`/`postgres_branch`/`postgres_endpoint` resources
+- [ ] `databricks.yml` has `postgres_projects` resource (no `postgres_branches` or `postgres_endpoints` — auto-created)
 - [ ] `app.yaml` has `LAKEBASE_ENDPOINT` with `valueFrom: postgres` and `DB_SCHEMA` as static value
 - [ ] `npm run build` passes
 - [ ] `.vibecoding-state.md` updated (see below)
@@ -5496,7 +5550,7 @@ Must complete without import or module errors for `@databricks/lakebase`.
 Key requirements:
 
 - Install `@databricks/lakebase` and register the plugin in `server/server.ts`
-- Declare `postgres_project`/`postgres_branch`/`postgres_endpoint` resources in `databricks.yml`
+- Declare `postgres_projects` resource in `databricks.yml` (do NOT declare `postgres_branches` or `postgres_endpoints` — Lakebase auto-creates these)
 - Configure `app.yaml` with `valueFrom: postgres` for `LAKEBASE_ENDPOINT` and a static `DB_SCHEMA`
 - Derive `DB_SCHEMA` from `$APP_NAME` (hyphens to underscores) for user-scoped database isolation
 - Verify with `npm run build`
@@ -5853,7 +5907,6 @@ This prompt is returned as-is for direct use in Cursor/Copilot. No LLM processin
 
 ```
 $ cd apps_lakebase/$APP_NAME
-$ databricks bundle deploy --profile $PROFILE
 $ databricks apps deploy --profile $PROFILE
 
 Deploying app ''prashanth-s-bookings''...
