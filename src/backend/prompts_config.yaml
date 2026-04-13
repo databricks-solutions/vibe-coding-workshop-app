@@ -280,6 +280,26 @@ prerequisites:
         url: "https://figma.com"
         color: "pink"
 
+  - id: 7
+    title: "(Optional) Add Playwright MCP Server"
+    description: |
+      Playwright MCP enables your AI coding assistant to interact with web browsers for testing and automation. This is optional but recommended.
+
+      Add the following JSON to your IDE's `mcp.json` config file. See the setup docs for your IDE below.
+    commands:
+      - label: "Playwright MCP server config"
+        cmd: '{"mcpServers":{"playwright":{"command":"npx","args":["-y","@executeautomation/playwright-mcp-server"]}}}'
+    icon: "terminal"
+    icon_color: "blue"
+    is_optional: true
+    links:
+      - label: "Cursor MCP Setup"
+        url: "https://cursor.com/docs/mcp#using-mcpjson"
+        color: "blue"
+      - label: "VS Code MCP Setup"
+        url: "https://code.visualstudio.com/docs/copilot/customization/mcp-servers#_configure-the-mcpjson-file"
+        color: "purple"
+
 # =============================================================================
 # NOTE: Clone Repository, Open Project, and Configure Auth have been moved
 # to Workflow Step 2 "Set Up Project". See WorkflowDiagram.tsx for the
