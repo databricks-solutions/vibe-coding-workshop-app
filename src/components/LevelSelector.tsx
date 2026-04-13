@@ -537,7 +537,7 @@ export function LevelSelector({
       case 'reverse-lakehouse': return 'Foundation → Lakehouse → Refinement';
       case 'reverse-lakehouse-di': return 'Foundation → Lakehouse → Data Intelligence → Refinement';
       case 'reverse-lakebase': return 'Foundation → Lakehouse → Data Intelligence → Reverse ETL (Synced Tables) → Refinement';
-      case 'reverse-app': return 'Foundation → Lakehouse → Data Intelligence → Reverse ETL → Refinement';
+      case 'reverse-app': return 'Foundation → Lakehouse → Data Intelligence → Reverse ETL (Analytics App) → Refinement';
       default: return '';
     }
   })();

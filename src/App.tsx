@@ -469,6 +469,7 @@ export default function App() {
         feedback_comment: comment,
         current_step: Math.max(...Array.from(completedSteps), 1),
         workshop_level: workshopLevel,
+        direction,
         completed_steps: Array.from(completedSteps),
         step_prompts: stepPrompts
       });

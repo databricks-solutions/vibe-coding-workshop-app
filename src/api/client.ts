@@ -230,6 +230,7 @@ export interface SessionSaveRequest {
   feedback_comment?: string;
   current_step: number;
   workshop_level?: string;
+  direction?: string;
   completed_steps: number[];
   step_prompts: Record<number, string>;
 }

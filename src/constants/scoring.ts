@@ -16,8 +16,8 @@ export const STEP_SCORES: Record<number, number> = {
   6: 30, 7: 30, 8: 30,
   // Chapter 3 - Lakehouse (steps 9-14, 22-23): 40 points each
   9: 40, 10: 40, 11: 40, 12: 40, 13: 40, 14: 40, 22: 40, 23: 40,
-  // Activation - Reverse ETL (steps 32-36): 40 points each
-  32: 40, 33: 40, 34: 40, 35: 40, 36: 40,
+  // Activation - Reverse ETL (steps 32-37): 40 points each
+  32: 40, 33: 40, 34: 40, 35: 40, 36: 40, 37: 40,
   // Chapter 4 - Data Intelligence (steps 15-19, 24-25): 50 points each
   15: 50, 16: 50, 17: 50, 18: 50, 19: 50, 24: 50, 25: 50,
   // Refinement (steps 20-21): 60 points each
@@ -35,7 +35,7 @@ export const CHAPTERS: Record<string, { steps: Set<number>; display: string }> =
   'Chapter 2': { steps: new Set([6, 7, 8]), display: 'Lakebase' },
   'Chapter 3': { steps: new Set([9, 10, 11, 12, 13, 14, 22, 23]), display: 'Lakehouse' },
   'Chapter 4': { steps: new Set([15, 16, 17, 18, 19, 24, 25]), display: 'Data Intelligence' },
-  'Activation': { steps: new Set([32, 33, 34, 35, 36]), display: 'Reverse ETL' },
+  'Activation': { steps: new Set([32, 33, 34, 35, 36, 37]), display: 'Reverse ETL' },
   'Refinement': { steps: new Set([20, 21]), display: 'Refinement' },
   'Agent Skills': { steps: new Set([26, 27, 28, 29, 30]), display: 'Agent Skills' },
   'Clean Up': { steps: new Set([31]), display: 'Clean Up' },

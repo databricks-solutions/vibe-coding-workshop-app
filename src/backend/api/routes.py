@@ -4051,6 +4051,7 @@ class SessionSaveRequest(BaseModel):
     feedback_comment: Optional[str] = Field(None, description="Feedback comment")
     current_step: int = Field(1, description="Current step number (1-22)")
     workshop_level: Optional[str] = Field(None, description="Workshop level: app-only, app-database, lakehouse, lakehouse-di, end-to-end, accelerator, or genie-accelerator")
+    direction: Optional[str] = Field(None, description="Workflow direction: forward or reverse")
     completed_steps: List[int] = Field(default_factory=list, description="List of completed step numbers")
     step_prompts: Dict[int, str] = Field(default_factory=dict, description="Map of step number to generated prompt")
 
@@ -4332,6 +4333,19 @@ async def save_session_endpoint(request_body: SessionSaveRequest, request: Reque
             created_by=current_user,
         )
         
+        # Persist direction in session_parameters if provided
+        if success and request_body.direction:
+            try:
+                schema = get_schema()
+                execute_insert(f"""
+                    UPDATE {schema}.sessions
+                    SET session_parameters = COALESCE(session_parameters, '{{}}'::jsonb) || %s::jsonb,
+                        updated_at = CURRENT_TIMESTAMP
+                    WHERE session_id = %s
+                """, (json.dumps({"direction": request_body.direction}), request_body.session_id))
+            except Exception as e:
+                logger.warning(f"[Session API] Failed to persist direction: {e}")
+        
         if success:
             share_url = f"{base_url}?sessionId={request_body.session_id}"
             logger.info(f"[Session API] Session {request_body.session_id} saved successfully")
@@ -4462,6 +4476,7 @@ class SessionUpdateMetadataRequest(BaseModel):
     custom_use_case_description: Optional[str] = Field(None, description="User-edited use case description override")
     level_explicitly_selected: Optional[bool] = Field(None, description="Whether the user explicitly clicked a level button")
     company_brand_url: Optional[str] = Field(None, description="URL to company brand colors/assets page")
+    direction: Optional[str] = Field(None, description="Workflow direction: forward or reverse")
 
 
 @router.post("/session/update-metadata")
@@ -4518,6 +4533,8 @@ async def update_session_metadata_endpoint(request_body: SessionUpdateMetadataRe
             _session_param_patch['level_explicitly_selected'] = request_body.level_explicitly_selected
         if request_body.company_brand_url is not None:
             _session_param_patch['company_brand_url'] = request_body.company_brand_url
+        if request_body.direction is not None:
+            _session_param_patch['direction'] = request_body.direction
         
         # Derive user_schema_prefix from email + use case name (or source schema for accelerator)
         # Triggered when use case is selected, custom label is edited, or workshop_level changes

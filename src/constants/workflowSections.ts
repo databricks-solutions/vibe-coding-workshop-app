@@ -1,7 +1,7 @@
 /**
  * Workflow Sections Configuration
  * 
- * Defines the 7 logical groupings of the 30 workflow steps.
+ * Defines the logical groupings of the workflow steps.
  * Each section has a chapter, title, focus, description, and the steps it contains.
  * 
  * 4-Chapter Structure:
@@ -176,7 +176,7 @@ export const WORKSHOP_LEVELS: Record<WorkshopLevel, LevelConfig> = {
   },
 };
 
-// Define all steps with their properties (21 total steps)
+// Define all steps with their properties
 // IMPORTANT: sectionTag must match exactly with backend section_input_prompts.section_tag
 export const ALL_STEPS: Record<number, WorkflowStep> = {
   // Step 1: Define Your Intent (standalone top-level section, not part of Foundation workflow)
@@ -231,15 +231,16 @@ export const ALL_STEPS: Record<number, WorkflowStep> = {
   // Section: Clean Up (Step 31)
   31: { number: 31, title: 'Workspace Clean Up', icon: Trash2, color: 'text-rose-400', sectionTag: 'workspace_cleanup' },
 
-  // Activation: Reverse ETL (Steps 32-36) - Only visible in reverse direction
+  // Activation: Reverse ETL (Steps 32-37) - Only visible in reverse direction
   32: { number: 32, title: 'Plan Synced Tables', icon: Table2, color: 'text-emerald-400', sectionTag: 'activation_table_design' },
   33: { number: 33, title: 'Create Synced Tables', icon: RefreshCw, color: 'text-emerald-500', sectionTag: 'activation_reverse_sync' },
   34: { number: 34, title: 'Design Analytics App', icon: Palette, color: 'text-emerald-400', sectionTag: 'activation_app_design' },
-  35: { number: 35, title: 'Build & Wire App', icon: Plug, color: 'text-emerald-500', sectionTag: 'activation_build_wire' },
+  35: { number: 35, title: 'Build Analytics App', icon: Plug, color: 'text-emerald-500', sectionTag: 'activation_build_wire' },
   36: { number: 36, title: 'Deploy & Validate', icon: Rocket, color: 'text-emerald-400', sectionTag: 'activation_deploy_validate' },
+  37: { number: 37, title: 'Wire to Lakebase', icon: Link2, color: 'text-emerald-500', sectionTag: 'activation_wire_lakebase' },
 };
 
-// The 6 logical sections with their step groupings (new 4-chapter structure)
+// The logical sections with their step groupings (4-chapter structure + activation + skills)
 export const WORKFLOW_SECTIONS: WorkflowSection[] = [
   {
     id: 'define-usecase',
@@ -311,7 +312,7 @@ export const WORKFLOW_SECTIONS: WorkflowSection[] = [
     color: 'text-emerald-400',
     bgColor: 'bg-emerald-500/15',
     borderColor: 'border-emerald-500/30',
-    steps: [32, 33, 34, 35, 36].map(n => ALL_STEPS[n]),
+    steps: [32, 33, 34, 35, 37, 36].map(n => ALL_STEPS[n]),
   },
   {
     id: 'agent-skills',
@@ -430,15 +431,30 @@ export function getFilteredSections(
       if (section.id === 'activation' && direction !== 'reverse') {
         return { ...section, steps: [] };
       }
+      // Databricks App and Lakebase sections: hidden in reverse direction
+      // (Activation steps replace their functionality with Synced Tables + analytics app)
+      if ((section.id === 'databricks-app' || section.id === 'lakebase') && direction === 'reverse') {
+        return { ...section, steps: [] };
+      }
       // Exclude step 19 (Wire UI to Agent) when there is no UI being built (ch1 not in path)
-      if (section.id === 'data-intelligence' && !chapterVisibility.has('ch1')) {
-        return {
-          ...section,
-          steps: section.steps.filter(step => step.number !== 19)
-        };
+      // or when in reverse direction (Reverse ETL flows build analytics apps, not agent-wired UIs)
+      if (section.id === 'data-intelligence' && (!chapterVisibility.has('ch1') || direction === 'reverse')) {
+        let steps = section.steps.filter(step => step.number !== 19);
+        // In reverse ETL, Genie Space (17) must precede AI/BI Dashboard (16)
+        // because the dashboard queries Metric Views created by the semantic layer
+        if (direction === 'reverse') {
+          const i16 = steps.findIndex(s => s.number === 16);
+          const i17 = steps.findIndex(s => s.number === 17);
+          if (i16 !== -1 && i17 !== -1 && i16 < i17) {
+            [steps[i16], steps[i17]] = [steps[i17], steps[i16]];
+          }
+        }
+        return { ...section, steps };
       }
       return section;
     });
+
+  filtered = filtered.filter(section => section.steps.length > 0);
 
   if (disabledSectionTags.size > 0) {
     filtered = filtered

@@ -2318,8 +2318,8 @@ export function WorkflowDiagram({
                 <div key={35} className="relative mt-5" data-step-number="35">
                   <WorkflowStep
                     stepNumber={35}
-                    title="Build & Wire App"
-                    description="FastAPI + React wired to Lakebase via PostgreSQL (psycopg)"
+                    title="Build Analytics App"
+                    description="Build FastAPI + React analytics app with placeholder data and ConnectionStatus indicator"
                     icon={<Plug className="w-5 h-5" />}
                     color="emerald"
                     isComplete={completedSteps.has(35)}
@@ -2344,6 +2344,38 @@ export function WorkflowDiagram({
                 </div>
               );
 
+            // Step 37: Wire to Lakebase (Activation / Reverse ETL)
+            case 37:
+              return (
+                <div key={37} className="relative mt-5" data-step-number="37">
+                  <WorkflowStep
+                    stepNumber={37}
+                    title="Wire to Lakebase"
+                    description="Replace placeholder API data with real PostgreSQL queries against synced Lakebase tables"
+                    icon={<Link2 className="w-5 h-5" />}
+                    color="emerald"
+                    isComplete={completedSteps.has(37)}
+                    isSkipped={skippedSteps.has(37)}
+                    onToggleComplete={() => toggleStepComplete(37)}
+                    onToggleSkip={() => toggleStepSkip(37)}
+                    onNavigateNext={() => navigateToNextStep(37)}
+                    sectionTag="activation_wire_lakebase"
+                    industry={selectedIndustry}
+                    useCase={selectedUseCase}
+                    onPromptGenerated={onStepPromptGenerated}
+                    initialPrompt={stepPrompts[37]}
+                    previousOutputs={{
+                      ...(stepPrompts[32] ? { activation_table_design: stepPrompts[32] } : {}),
+                      ...(stepPrompts[35] ? { activation_build_wire: stepPrompts[35] } : {}),
+                    }}
+                    isPreviousStepComplete={isPreviousStepComplete(37)}
+                    isExpanded={expandedStep === 37}
+                    onToggleExpand={() => toggleExpand(37)}
+                    sessionId={sessionId}
+                  />
+                </div>
+              );
+
             // Step 36: Deploy & Validate (Activation / Reverse ETL)
             case 36:
               return (
@@ -2351,7 +2383,7 @@ export function WorkflowDiagram({
                   <WorkflowStep
                     stepNumber={36}
                     title="Deploy & Validate"
-                    description="Deploy to Databricks Apps, schedule sync jobs, verify freshness and latency"
+                    description="Deploy analytics app to Databricks Apps and validate the full reverse ETL pipeline"
                     icon={<Rocket className="w-5 h-5" />}
                     color="emerald"
                     isComplete={completedSteps.has(36)}
@@ -2366,7 +2398,7 @@ export function WorkflowDiagram({
                     initialPrompt={stepPrompts[36]}
                     previousOutputs={{
                       ...(stepPrompts[32] ? { activation_table_design: stepPrompts[32] } : {}),
-                      ...(stepPrompts[35] ? { activation_build_wire: stepPrompts[35] } : {}),
+                      ...(stepPrompts[37] ? { activation_wire_lakebase: stepPrompts[37] } : {}),
                     }}
                     isPreviousStepComplete={isPreviousStepComplete(36)}
                     isExpanded={expandedStep === 36}
