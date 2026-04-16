@@ -11,7 +11,7 @@
  * - Staggered entrance animations
  */
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, Fragment } from 'react';
 import { 
   Trophy, 
   RefreshCw, 
@@ -32,7 +32,7 @@ import {
   Search,
   ExternalLink
 } from 'lucide-react';
-import { apiClient, type LeaderboardEntry, type WorkshopUser } from '../api/client';
+import { apiClient, type LeaderboardEntry, type WorkshopUser, type SessionListItem } from '../api/client';
 import { ThemeToggle } from './ThemeToggle';
 import { WORKSHOP_LEVELS, type WorkshopLevel } from '../constants/workflowSections';
 
@@ -242,16 +242,24 @@ function LeaderboardRow({
     ? WORKSHOP_LEVELS[entry.workshop_level as WorkshopLevel]?.label
     : undefined;
 
-  return (
-    <div
-      className={`relative group flex items-center gap-4 p-4 rounded-xl border transition-all duration-300
+  const rowClasses = `relative group flex items-center gap-4 p-4 rounded-xl border transition-all duration-300
         ${isFirst ? 'bg-gradient-to-r from-amber-500/10 to-amber-600/5 border-amber-500/30 shadow-lg shadow-amber-500/10' : ''}
         ${entry.rank === 2 ? 'bg-slate-500/5 border-slate-500/20' : ''}
         ${entry.rank === 3 ? 'bg-orange-500/5 border-orange-500/20' : ''}
         ${!isTop3 ? 'bg-card border-border hover:border-primary/30 hover:bg-primary/5' : ''}
         animate-leaderboard-slide-in
-      `}
-      style={{ animationDelay: `${index * 80}ms` }}
+        ${entry.session_id ? 'cursor-pointer' : ''}`;
+
+  const Wrapper = entry.session_id ? 'a' : 'div';
+  const wrapperProps = entry.session_id
+    ? { href: `/?sessionId=${entry.session_id}`, target: '_blank' as const, rel: 'noopener noreferrer' }
+    : {};
+
+  return (
+    <Wrapper
+      {...wrapperProps}
+      className={rowClasses}
+      style={{ animationDelay: `${index * 80}ms`, textDecoration: 'none', color: 'inherit' }}
     >
       {/* Confetti for #1 */}
       {isFirst && <ConfettiBurst />}
@@ -333,7 +341,7 @@ function LeaderboardRow({
         skippedSteps={entry.skipped_steps || []}
         workshopLevel={entry.workshop_level}
       />
-    </div>
+    </Wrapper>
   );
 }
 
@@ -351,7 +359,10 @@ export function LeaderboardPage() {
   const [showUsersModal, setShowUsersModal] = useState(false);
   const [usersPage, setUsersPage] = useState(0);
   const [usersSearch, setUsersSearch] = useState('');
-  
+  const [expandedUser, setExpandedUser] = useState<string | null>(null);
+  const [userSessions, setUserSessions] = useState<Record<string, SessionListItem[]>>({});
+  const [loadingSessions, setLoadingSessions] = useState(false);
+
   // Track previous ranks for movement detection
   const previousRanksRef = useRef<Map<string, number>>(new Map());
 
@@ -456,6 +467,25 @@ export function LeaderboardPage() {
       minute: '2-digit',
       second: '2-digit',
     });
+  };
+
+  const toggleUserExpand = async (email: string) => {
+    if (expandedUser === email) {
+      setExpandedUser(null);
+      return;
+    }
+    setExpandedUser(email);
+    if (userSessions[email]) return;
+    setLoadingSessions(true);
+    try {
+      const sessions = await apiClient.getUserSessionsByEmail(email);
+      setUserSessions(prev => ({ ...prev, [email]: sessions }));
+    } catch (err) {
+      console.error('Failed to fetch sessions:', err);
+      setExpandedUser(null);
+    } finally {
+      setLoadingSessions(false);
+    }
   };
 
   return (
@@ -659,7 +689,7 @@ export function LeaderboardPage() {
         return (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center p-4"
-          onClick={() => { setShowUsersModal(false); setUsersSearch(''); }}
+          onClick={() => { setShowUsersModal(false); setUsersSearch(''); setExpandedUser(null); }}
         >
           <div className="absolute inset-0 bg-black/70" />
           <div
@@ -674,7 +704,7 @@ export function LeaderboardPage() {
                 <span className="text-[11px] text-muted-foreground bg-secondary px-2 py-0.5 rounded-full">{totalUsers}</span>
               </div>
               <button
-                onClick={() => { setShowUsersModal(false); setUsersSearch(''); }}
+                onClick={() => { setShowUsersModal(false); setUsersSearch(''); setExpandedUser(null); }}
                 className="p-1.5 rounded-lg hover:bg-secondary transition-colors text-muted-foreground hover:text-foreground"
               >
                 <X className="w-4 h-4" />
@@ -689,7 +719,7 @@ export function LeaderboardPage() {
                   type="text"
                   placeholder="Search by name or email..."
                   value={usersSearch}
-                  onChange={e => { setUsersSearch(e.target.value); setUsersPage(0); }}
+                  onChange={e => { setUsersSearch(e.target.value); setUsersPage(0); setExpandedUser(null); }}
                   className="w-full pl-9 pr-3 py-2 text-[13px] bg-secondary/50 border border-border rounded-lg text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary"
                 />
               </div>
@@ -704,47 +734,77 @@ export function LeaderboardPage() {
                     <th className="text-left pb-2 font-medium">Email</th>
                     <th className="text-left pb-2 font-medium">Last Path</th>
                     <th className="text-left pb-2 font-medium">Last Updated</th>
-                    <th className="text-left pb-2 font-medium">Session</th>
+                    <th className="text-left pb-2 font-medium">Sessions</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {pageUsers.map((user, i) => (
-                    <tr key={user.email} className={`text-[13px] border-b border-border/50 ${i % 2 === 0 ? '' : 'bg-secondary/20'}`}>
-                      <td className="py-2.5 pr-4 text-foreground font-medium whitespace-nowrap">{user.display_name}</td>
-                      <td className="py-2.5 pr-4 text-muted-foreground">{user.email}</td>
-                      <td className="py-2.5 pr-4 whitespace-nowrap">
-                        {user.workshop_level_label ? (
-                          <span className="text-[11px] font-medium bg-primary/15 text-primary px-2 py-0.5 rounded-full">
-                            {user.workshop_level_label}
-                          </span>
-                        ) : (
-                          <span className="text-muted-foreground">—</span>
-                        )}
-                      </td>
-                      <td className="py-2.5 pr-4 text-muted-foreground whitespace-nowrap text-[12px]">
-                        {formatDate(user.updated_at)}
-                      </td>
-                      <td className="py-2.5 whitespace-nowrap">
-                        {user.last_session_id ? (
-                          <a
-                            href={`${window.location.origin}?sessionId=${user.last_session_id}`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="inline-flex items-center gap-1.5 text-[11px] font-medium px-2 py-0.5 rounded-full transition-colors hover:opacity-80"
-                            style={{
-                              backgroundColor: user.is_saved ? 'rgba(16,185,129,0.15)' : 'rgba(234,179,8,0.15)',
-                              color: user.is_saved ? 'rgb(52,211,153)' : 'rgb(250,204,21)',
-                            }}
-                          >
-                            <ExternalLink className="w-3 h-3" />
-                            {user.is_saved ? 'Saved' : 'Unsaved'}
-                          </a>
-                        ) : (
-                          <span className="text-muted-foreground text-[11px]">—</span>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
+                  {pageUsers.map((user, i) => {
+                    const isExpanded = expandedUser === user.email;
+                    const sessions = userSessions[user.email];
+                    const count = user.session_count || 1;
+                    return (
+                      <Fragment key={user.email}>
+                        <tr
+                          className={`text-[13px] border-b border-border/50 cursor-pointer transition-colors hover:bg-secondary/30 ${i % 2 === 0 ? '' : 'bg-secondary/20'}`}
+                          onClick={() => toggleUserExpand(user.email)}
+                        >
+                          <td className="py-2.5 pr-4 text-foreground font-medium whitespace-nowrap">{user.display_name}</td>
+                          <td className="py-2.5 pr-4 text-muted-foreground">{user.email}</td>
+                          <td className="py-2.5 pr-4 whitespace-nowrap">
+                            {user.workshop_level_label ? (
+                              <span className="text-[11px] font-medium bg-primary/15 text-primary px-2 py-0.5 rounded-full">
+                                {user.workshop_level_label}
+                              </span>
+                            ) : (
+                              <span className="text-muted-foreground">—</span>
+                            )}
+                          </td>
+                          <td className="py-2.5 pr-4 text-muted-foreground whitespace-nowrap text-[12px]">
+                            {formatDate(user.updated_at)}
+                          </td>
+                          <td className="py-2.5 whitespace-nowrap">
+                            <span className="inline-flex items-center gap-1.5 text-[11px] font-medium text-muted-foreground">
+                              {loadingSessions && isExpanded ? (
+                                <Loader2 className="w-3 h-3 animate-spin" />
+                              ) : isExpanded ? (
+                                <ChevronDown className="w-3 h-3" />
+                              ) : (
+                                <ChevronRight className="w-3 h-3" />
+                              )}
+                              {count} {count === 1 ? 'session' : 'sessions'}
+                            </span>
+                          </td>
+                        </tr>
+                        {isExpanded && sessions && sessions.map(session => (
+                          <tr key={session.session_id} className="text-[12px] bg-secondary/10 border-b border-border/30">
+                            <td colSpan={2} className="py-2 pl-8 pr-4 text-muted-foreground">
+                              {session.is_saved ? session.session_name : 'Unsaved Session'}
+                            </td>
+                            <td className="py-2 pr-4" />
+                            <td className="py-2 pr-4 text-muted-foreground/70 whitespace-nowrap text-[11px]">
+                              {formatDate(session.updated_at)}
+                            </td>
+                            <td className="py-2 whitespace-nowrap">
+                              <a
+                                href={`${window.location.origin}?sessionId=${session.session_id}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                onClick={e => e.stopPropagation()}
+                                className="inline-flex items-center gap-1.5 text-[11px] font-medium px-2 py-0.5 rounded-full transition-colors hover:opacity-80"
+                                style={{
+                                  backgroundColor: session.is_saved ? 'rgba(16,185,129,0.15)' : 'rgba(234,179,8,0.15)',
+                                  color: session.is_saved ? 'rgb(52,211,153)' : 'rgb(250,204,21)',
+                                }}
+                              >
+                                <ExternalLink className="w-3 h-3" />
+                                {session.is_saved ? 'Saved' : 'Unsaved'}
+                              </a>
+                            </td>
+                          </tr>
+                        ))}
+                      </Fragment>
+                    );
+                  })}
                   {pageUsers.length === 0 && (
                     <tr>
                       <td colSpan={5} className="py-6 text-center text-[13px] text-muted-foreground">

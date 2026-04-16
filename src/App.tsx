@@ -12,7 +12,7 @@ import {
   SessionListDialog 
 } from './components/session';
 import { apiClient } from './api/client';
-import { Zap, MessageSquare, Trophy, Plus, PanelLeftClose, PanelLeft, Menu, X, BarChart3 } from 'lucide-react';
+import { Zap, MessageSquare, Trophy, Plus, PanelLeftClose, PanelLeft, Menu, X, BarChart3, Eye } from 'lucide-react';
 import { normalizeLevel, getFilteredSections, getCumulativeOverrides, USE_CASE_LEVEL_LOCK, isForwardProgression, type WorkshopLevel } from './constants/workflowSections';
 
 export default function App() {
@@ -70,12 +70,15 @@ export default function App() {
   const [completedSteps, setCompletedSteps] = useState<Set<number>>(new Set());
   const [skippedSteps, setSkippedSteps] = useState<Set<number>>(new Set());
   const [prerequisitesCompleted, setPrerequisitesCompleted] = useState(false);
+  const [codingAssistant, setCodingAssistant] = useState<string | null>(null);
   // Default to end-to-end which includes all chapters (complete workshop)
   const [workshopLevel, setWorkshopLevel] = useState<WorkshopLevel>('end-to-end');
   const [levelExplicitlySelected, setLevelExplicitlySelected] = useState(false);
   const [useCaseLockedLevel, setUseCaseLockedLevel] = useState<WorkshopLevel | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [currentUser, setCurrentUser] = useState('user@databricks.com');
+  const [currentUserResolved, setCurrentUserResolved] = useState(false);
+  const [sessionOwner, setSessionOwner] = useState<string | null>(null);
   const [defaultCatalog, setDefaultCatalog] = useState('');
   const [initialExpandedStep, setInitialExpandedStep] = useState<number>(1);
 
@@ -95,6 +98,12 @@ export default function App() {
   // Company brand URL (optional, session-level override)
   const [brandUrl, setBrandUrl] = useState<string>('');
 
+  // Build-time brand config (extracted during install from customer website)
+  const [brandConfig, setBrandConfig] = useState<{
+    company_name?: string; logo_url?: string;
+    primary_color_hsl?: string; secondary_color_hsl?: string;
+  } | null>(null);
+
   // Dialog state
   const [showSaveDialog, setShowSaveDialog] = useState(false);
   const [showFeedbackDialog, setShowFeedbackDialog] = useState(false);
@@ -102,6 +111,12 @@ export default function App() {
   const [isSubmittingFeedback, setIsSubmittingFeedback] = useState(false);
   const [showNewSessionConfirm, setShowNewSessionConfirm] = useState(false);
   const [pendingNewSession, setPendingNewSession] = useState(false);
+
+  // Read-only when viewing another user's session (ownership-based)
+  const readOnly = currentUserResolved
+    && sessionOwner !== null
+    && sessionOwner !== ''
+    && currentUser !== sessionOwner;
 
   // Session loading state - for professional loading overlay
   const [isSessionLoading, setIsSessionLoading] = useState(true);
@@ -134,6 +149,26 @@ export default function App() {
     apiClient.getDisabledSteps()
       .then(tags => setDisabledSectionTags(new Set(tags)))
       .catch(err => console.error('Error fetching disabled steps:', err));
+
+    // Load build-time brand config (generated during install from customer website)
+    fetch('/brand-config.json')
+      .then(r => r.ok ? r.json() : null)
+      .catch(() => null)
+      .then(brand => {
+        if (!brand) return;
+        setBrandConfig(brand);
+        const root = document.documentElement;
+        if (brand.primary_color_hsl) {
+          const parts = brand.primary_color_hsl.split(' ');
+          if (parts.length >= 2) {
+            root.style.setProperty('--brand-h', parts[0]);
+            root.style.setProperty('--brand-s', parts[1]);
+          }
+        }
+        if (brand.company_name) {
+          document.title = `${brand.company_name} — Vibe Coding Workshop`;
+        }
+      });
   }, []);
 
   const fetchCurrentUser = async () => {
@@ -144,6 +179,8 @@ export default function App() {
       }
     } catch (err) {
       console.error('Error fetching current user:', err);
+    } finally {
+      setCurrentUserResolved(true);
     }
   };
 
@@ -166,6 +203,7 @@ export default function App() {
       const response = await apiClient.getDefaultSession();
       if (response.success) {
         setSessionId(response.session_id);
+        setSessionOwner(null);
         setSessionSaved(response.is_saved || false);
         setSessionName(response.session_name);
         setSessionDescription(response.session_description);
@@ -203,6 +241,7 @@ export default function App() {
         setCustomDescription(sessionParams.custom_use_case_description || '');
         setLevelExplicitlySelected(!!sessionParams.level_explicitly_selected);
         setBrandUrl(sessionParams.company_brand_url || '');
+        setCodingAssistant(sessionParams.coding_assistant || null);
         
         // Find the next incomplete step using the actual section order for this workshop level
         const nextStep = getNextIncompleteStep(Array.from(restoredCompleted), skippedStepsArray, restoredLevel);
@@ -232,6 +271,7 @@ export default function App() {
     try {
       const response = await apiClient.createNewSession();
       setSessionId(response.session_id);
+      setSessionOwner(null);
       setSessionSaved(false);
       setSessionName(undefined);
       setSessionDescription(undefined);
@@ -240,6 +280,7 @@ export default function App() {
       setCompletedSteps(new Set());
       setSkippedSteps(new Set());
       setPrerequisitesCompleted(false);
+      setCodingAssistant(null);
       setLevelExplicitlySelected(false);
       setUseCaseLockedLevel(null);
       setWorkshopLevel('end-to-end');
@@ -293,6 +334,7 @@ export default function App() {
       const response = await apiClient.loadSession(id);
       if (response.success) {
         setSessionId(id);
+        setSessionOwner(response.created_by || null);
         setSessionSaved(response.is_saved);
         setSessionName(response.session_name);
         setSessionDescription(response.session_description);
@@ -326,6 +368,7 @@ export default function App() {
         setCustomDescription(sessionParams.custom_use_case_description || '');
         setLevelExplicitlySelected(!!sessionParams.level_explicitly_selected);
         setBrandUrl(sessionParams.company_brand_url || '');
+        setCodingAssistant(sessionParams.coding_assistant || null);
         
         // Navigate to the next incomplete step using the actual section order
         const nextStep = getNextIncompleteStep(Array.from(loadedCompleted), loadedSkippedSteps, loadedLevel);
@@ -348,6 +391,7 @@ export default function App() {
   // Wrap setWorkshopLevel to also mark the selection as explicit.
   // `force` bypasses the started-workflow guard (used by use-case-driven locks).
   const handleWorkshopLevelChange = useCallback((level: WorkshopLevel, force = false) => {
+    if (readOnly) return;
     if (!force) {
       const hasStartedWorkflow = Array.from(completedSteps).some(s => s >= 2);
       if (hasStartedWorkflow && level !== workshopLevel) {
@@ -370,9 +414,10 @@ export default function App() {
         workshop_level: level,
       }).catch(err => console.error('Error saving workshop level:', err));
     }
-  }, [sessionId, levelExplicitlySelected, completedSteps, workshopLevel]);
+  }, [sessionId, levelExplicitlySelected, completedSteps, workshopLevel, readOnly]);
 
   const handleStepPromptGenerated = useCallback((stepNumber: number, promptText: string) => {
+    if (readOnly) return;
     setStepPrompts(prev => ({
       ...prev,
       [stepNumber]: promptText
@@ -386,10 +431,11 @@ export default function App() {
         workshop_level: workshopLevel,  // Piggyback workshop level save on progress
       }).catch(err => console.error('Error updating step prompt:', err));
     }
-  }, [sessionId, workshopLevel]);
+  }, [sessionId, workshopLevel, readOnly]);
 
   // Handle completed steps change and auto-save to backend
   const handleCompletedStepsChange = useCallback((newSteps: Set<number>) => {
+    if (readOnly) return;
     setCompletedSteps(newSteps);
     
     // Auto-save completed steps to backend (piggyback workshop level)
@@ -400,10 +446,11 @@ export default function App() {
         workshop_level: workshopLevel,  // Piggyback workshop level save on progress
       }).catch(err => console.error('Error saving completed steps:', err));
     }
-  }, [sessionId, workshopLevel]);
+  }, [sessionId, workshopLevel, readOnly]);
 
   // Handle skipped steps change and auto-save to backend
   const handleSkippedStepsChange = useCallback((newSkipped: Set<number>) => {
+    if (readOnly) return;
     setSkippedSteps(newSkipped);
     
     if (sessionId) {
@@ -412,10 +459,11 @@ export default function App() {
         skipped_steps: Array.from(newSkipped),
       }).catch(err => console.error('Error saving skipped steps:', err));
     }
-  }, [sessionId]);
+  }, [sessionId, readOnly]);
 
   // Handle prerequisites completion
   const handlePrerequisitesComplete = useCallback(() => {
+    if (readOnly) return;
     setPrerequisitesCompleted(true);
     
     // Auto-save to backend (piggyback workshop level)
@@ -426,10 +474,22 @@ export default function App() {
         workshop_level: workshopLevel,  // Piggyback workshop level save on progress
       }).catch(err => console.error('Error saving prerequisites:', err));
     }
-  }, [sessionId, workshopLevel]);
+  }, [sessionId, workshopLevel, readOnly]);
+
+  // Handle coding assistant selection
+  const handleCodingAssistantChange = useCallback((assistantId: string) => {
+    if (readOnly) return;
+    setCodingAssistant(assistantId);
+    if (sessionId) {
+      apiClient.updateSessionMetadata({
+        session_id: sessionId,
+        coding_assistant: assistantId,
+      }).catch(err => console.error('Error saving coding assistant:', err));
+    }
+  }, [sessionId, readOnly]);
 
   const handleSaveSession = async (name: string, description: string, rating?: 'thumbs_up' | 'thumbs_down', comment?: string) => {
-    if (!sessionId) return;
+    if (!sessionId || readOnly) return;
     
     setIsSaving(true);
     try {
@@ -577,12 +637,16 @@ export default function App() {
           <aside className="relative w-52 h-full bg-sidebar border-r border-sidebar-border flex flex-col animate-slide-in-left">
             <div className="px-4 py-4 border-b border-sidebar-border flex items-center justify-between">
               <Link to="/" onClick={() => setMobileSidebarOpen(false)} className="flex items-center gap-2.5 cursor-pointer">
-                <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-primary to-emerald-500 flex items-center justify-center flex-shrink-0">
-                  <Zap className="w-4 h-4 text-white" />
+                <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-primary to-emerald-500 flex items-center justify-center flex-shrink-0 overflow-hidden">
+                  {brandConfig?.logo_url ? (
+                    <img src={brandConfig.logo_url} alt="" className="w-full h-full object-contain" onError={(e) => { e.currentTarget.style.display = 'none'; e.currentTarget.nextElementSibling?.removeAttribute('style'); }} />
+                  ) : null}
+                  <Zap className="w-4 h-4 text-white" style={brandConfig?.logo_url ? { display: 'none' } : undefined} />
                 </div>
                 <div className="min-w-0">
-                  <h1 className="font-semibold text-sidebar-foreground text-[13px] tracking-tight whitespace-nowrap">V2V: Vibe-to-Value</h1>
-                  <p className="text-[10px] text-muted-foreground whitespace-nowrap">Vibe Coding Workshop</p>
+                  <h1 className="font-semibold text-sidebar-foreground text-ui-md tracking-tight whitespace-nowrap">{brandConfig?.company_name || 'V2V: Vibe-to-Value'}</h1>
+                  <p className="text-ui-xs text-muted-foreground whitespace-nowrap">Vibe Coding Workshop</p>
+                  <p className="text-ui-2xs text-muted-foreground/60 whitespace-nowrap">v{__APP_VERSION__}</p>
                 </div>
               </Link>
               <button
@@ -594,26 +658,26 @@ export default function App() {
             </div>
             <nav className="flex-1 px-2.5 py-3">
               <div className="space-y-0.5">
-                <Link to={sessionId ? `/?sessionId=${sessionId}` : '/'} onClick={() => setMobileSidebarOpen(false)} className={`w-full flex items-center gap-2.5 px-2.5 py-2 rounded-md text-[12px] font-medium transition-all duration-200 ${isWorkflowPage ? 'bg-sidebar-accent text-sidebar-primary' : 'text-muted-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-foreground'}`}>
+                <Link to={sessionId ? `/?sessionId=${sessionId}` : '/'} onClick={() => setMobileSidebarOpen(false)} className={`w-full flex items-center gap-2.5 px-2.5 py-2 rounded-md text-ui-base font-medium transition-all duration-200 ${isWorkflowPage ? 'bg-sidebar-accent text-sidebar-primary' : 'text-muted-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-foreground'}`}>
                   <svg className={`w-4 h-4 flex-shrink-0 ${isWorkflowPage ? 'text-primary' : 'text-muted-foreground'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M4 5a1 1 0 011-1h14a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM4 13a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H5a1 1 0 01-1-1v-6zM16 13a1 1 0 011-1h2a1 1 0 011 1v6a1 1 0 01-1 1h-2a1 1 0 01-1-1v-6z" /></svg>
                   <span>Workflow</span>
                 </Link>
-                <Link to="/leaderboard" onClick={() => setMobileSidebarOpen(false)} className={`w-full flex items-center gap-2.5 px-2.5 py-2 rounded-md text-[12px] font-medium transition-all duration-200 ${isLeaderboardPage ? 'bg-sidebar-accent text-sidebar-primary' : 'text-muted-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-foreground'}`}>
+                <Link to="/leaderboard" onClick={() => setMobileSidebarOpen(false)} className={`w-full flex items-center gap-2.5 px-2.5 py-2 rounded-md text-ui-base font-medium transition-all duration-200 ${isLeaderboardPage ? 'bg-sidebar-accent text-sidebar-primary' : 'text-muted-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-foreground'}`}>
                   <Trophy className={`w-4 h-4 flex-shrink-0 ${isLeaderboardPage ? 'text-primary' : 'text-muted-foreground'}`} />
                   <span>Leaderboard</span>
                 </Link>
-                <Link to="/analytics" onClick={() => setMobileSidebarOpen(false)} className={`w-full flex items-center gap-2.5 px-2.5 py-2 rounded-md text-[12px] font-medium transition-all duration-200 ${isAnalyticsPage ? 'bg-sidebar-accent text-sidebar-primary' : 'text-muted-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-foreground'}`}>
+                <Link to="/analytics" onClick={() => setMobileSidebarOpen(false)} className={`w-full flex items-center gap-2.5 px-2.5 py-2 rounded-md text-ui-base font-medium transition-all duration-200 ${isAnalyticsPage ? 'bg-sidebar-accent text-sidebar-primary' : 'text-muted-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-foreground'}`}>
                   <BarChart3 className={`w-4 h-4 flex-shrink-0 ${isAnalyticsPage ? 'text-primary' : 'text-muted-foreground'}`} />
                   <span>Analytics</span>
                 </Link>
-                <Link to="/config" onClick={() => setMobileSidebarOpen(false)} className={`w-full flex items-center gap-2.5 px-2.5 py-2 rounded-md text-[12px] font-medium transition-all duration-200 ${isConfigPage ? 'bg-sidebar-accent text-sidebar-primary' : 'text-muted-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-foreground'}`}>
+                <Link to="/config" onClick={() => setMobileSidebarOpen(false)} className={`w-full flex items-center gap-2.5 px-2.5 py-2 rounded-md text-ui-base font-medium transition-all duration-200 ${isConfigPage ? 'bg-sidebar-accent text-sidebar-primary' : 'text-muted-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-foreground'}`}>
                   <svg className={`w-4 h-4 flex-shrink-0 ${isConfigPage ? 'text-primary' : 'text-muted-foreground'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" /></svg>
                   <span>Configuration</span>
                 </Link>
               </div>
             </nav>
             <div className="px-4 py-3 border-t border-sidebar-border">
-              <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
+              <div className="flex items-center gap-1.5 text-ui-xs text-muted-foreground">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse flex-shrink-0"></span>
                 <span>Connected</span>
               </div>
@@ -628,13 +692,17 @@ export default function App() {
         <div className={`${sidebarCollapsed ? 'px-2' : 'px-4'} py-4 border-b border-sidebar-border transition-all duration-300`}>
           <div className="flex items-center justify-between">
             <Link to="/" className={`flex items-center ${sidebarCollapsed ? 'justify-center w-full' : 'gap-2.5'} cursor-pointer`}>
-              <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-primary to-emerald-500 flex items-center justify-center flex-shrink-0">
-                <Zap className="w-4 h-4 text-white" />
+              <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-primary to-emerald-500 flex items-center justify-center flex-shrink-0 overflow-hidden">
+                {brandConfig?.logo_url ? (
+                  <img src={brandConfig.logo_url} alt="" className="w-full h-full object-contain" onError={(e) => { e.currentTarget.style.display = 'none'; e.currentTarget.nextElementSibling?.removeAttribute('style'); }} />
+                ) : null}
+                <Zap className="w-4 h-4 text-white" style={brandConfig?.logo_url ? { display: 'none' } : undefined} />
               </div>
               {!sidebarCollapsed && (
                 <div className="min-w-0">
-                  <h1 className="font-semibold text-sidebar-foreground text-[13px] tracking-tight whitespace-nowrap">V2V: Vibe-to-Value</h1>
-                  <p className="text-[10px] text-muted-foreground whitespace-nowrap">Vibe Coding Workshop</p>
+                  <h1 className="font-semibold text-sidebar-foreground text-ui-md tracking-tight whitespace-nowrap">{brandConfig?.company_name || 'V2V: Vibe-to-Value'}</h1>
+                  <p className="text-ui-xs text-muted-foreground whitespace-nowrap">Vibe Coding Workshop</p>
+                  <p className="text-ui-2xs text-muted-foreground/60 whitespace-nowrap">v{__APP_VERSION__}</p>
                 </div>
               )}
             </Link>
@@ -665,7 +733,7 @@ export default function App() {
             <Link
               to={sessionId ? `/?sessionId=${sessionId}` : '/'}
               title="Workflow"
-              className={`w-full flex items-center ${sidebarCollapsed ? 'justify-center px-0 py-2.5' : 'gap-2.5 px-2.5 py-2'} rounded-md text-[12px] font-medium transition-all duration-200 ${
+              className={`w-full flex items-center ${sidebarCollapsed ? 'justify-center px-0 py-2.5' : 'gap-2.5 px-2.5 py-2'} rounded-md text-ui-base font-medium transition-all duration-200 ${
                 isWorkflowPage
                   ? 'bg-sidebar-accent text-sidebar-primary'
                   : 'text-muted-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-foreground'
@@ -680,7 +748,7 @@ export default function App() {
             <Link
               to="/leaderboard"
               title="Leaderboard"
-              className={`w-full flex items-center ${sidebarCollapsed ? 'justify-center px-0 py-2.5' : 'gap-2.5 px-2.5 py-2'} rounded-md text-[12px] font-medium transition-all duration-200 ${
+              className={`w-full flex items-center ${sidebarCollapsed ? 'justify-center px-0 py-2.5' : 'gap-2.5 px-2.5 py-2'} rounded-md text-ui-base font-medium transition-all duration-200 ${
                 isLeaderboardPage
                   ? 'bg-sidebar-accent text-sidebar-primary'
                   : 'text-muted-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-foreground'
@@ -693,7 +761,7 @@ export default function App() {
             <Link
               to="/analytics"
               title="Analytics"
-              className={`w-full flex items-center ${sidebarCollapsed ? 'justify-center px-0 py-2.5' : 'gap-2.5 px-2.5 py-2'} rounded-md text-[12px] font-medium transition-all duration-200 ${
+              className={`w-full flex items-center ${sidebarCollapsed ? 'justify-center px-0 py-2.5' : 'gap-2.5 px-2.5 py-2'} rounded-md text-ui-base font-medium transition-all duration-200 ${
                 isAnalyticsPage
                   ? 'bg-sidebar-accent text-sidebar-primary'
                   : 'text-muted-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-foreground'
@@ -707,7 +775,7 @@ export default function App() {
               <Link
                 to="/config"
                 title="Configuration"
-                className={`w-full flex items-center ${sidebarCollapsed ? 'justify-center px-0 py-2.5' : 'gap-2.5 px-2.5 py-2'} rounded-md text-[12px] font-medium transition-all duration-200 ${
+                className={`w-full flex items-center ${sidebarCollapsed ? 'justify-center px-0 py-2.5' : 'gap-2.5 px-2.5 py-2'} rounded-md text-ui-base font-medium transition-all duration-200 ${
                   isConfigPage
                     ? 'bg-sidebar-accent text-sidebar-primary'
                     : 'text-muted-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-foreground'
@@ -740,7 +808,7 @@ export default function App() {
                       </svg>
                     </div>
                   </div>
-                  <div className="absolute left-8 top-1/2 -translate-y-1/2 bg-primary text-primary-foreground text-[10px] font-medium px-2.5 py-1.5 rounded shadow-lg whitespace-nowrap">
+                  <div className="absolute left-8 top-1/2 -translate-y-1/2 bg-primary text-primary-foreground text-ui-xs font-medium px-2.5 py-1.5 rounded shadow-lg whitespace-nowrap">
                     <div className="absolute -left-1.5 top-1/2 -translate-y-1/2 w-0 h-0 border-t-[5px] border-t-transparent border-b-[5px] border-b-transparent border-r-[6px] border-r-primary"></div>
                     Configure prompts here!
                   </div>
@@ -752,13 +820,13 @@ export default function App() {
           {/* Resources Section - hidden when collapsed */}
           {!sidebarCollapsed && (
             <div className="mt-6 pt-4 border-t border-sidebar-border">
-              <p className="text-[9px] text-muted-foreground uppercase font-semibold tracking-wider mb-2 px-2.5">Resources</p>
+              <p className="text-ui-2xs text-muted-foreground uppercase font-semibold tracking-wider mb-2 px-2.5">Resources</p>
               <div className="space-y-0">
                 <a
                   href="https://github.com/databricks-solutions/vibe-coding-workshop-template"
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-md text-[11px] text-muted-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-foreground transition-all duration-200"
+                  className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-md text-ui-sm text-muted-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-foreground transition-all duration-200"
                 >
                   <svg className="w-3.5 h-3.5 flex-shrink-0" fill="currentColor" viewBox="0 0 24 24">
                     <path fillRule="evenodd" clipRule="evenodd" d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.531 1.032 1.531 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z" />
@@ -769,7 +837,7 @@ export default function App() {
                   href="https://docs.databricks.com"
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-md text-[11px] text-muted-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-foreground transition-all duration-200"
+                  className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-md text-ui-sm text-muted-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-foreground transition-all duration-200"
                 >
                   <svg className="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
@@ -780,7 +848,7 @@ export default function App() {
                   href="https://github.com/databricks-solutions/vibe-coding-workshop-app/issues/new"
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-md text-[11px] text-muted-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-foreground transition-all duration-200"
+                  className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-md text-ui-sm text-muted-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-foreground transition-all duration-200"
                 >
                   <svg className="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
@@ -794,9 +862,9 @@ export default function App() {
 
         {/* Footer */}
         <div className={`${sidebarCollapsed ? 'px-2 flex justify-center' : 'px-4'} py-3 border-t border-sidebar-border transition-all duration-300`}>
-          <div className={`flex items-center ${sidebarCollapsed ? 'justify-center' : 'gap-1.5'} text-[10px] text-muted-foreground`}>
+          <div className={`flex items-center ${sidebarCollapsed ? 'justify-center' : 'gap-1.5'} text-ui-xs text-muted-foreground`}>
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse flex-shrink-0"></span>
-            {!sidebarCollapsed && <span className="whitespace-nowrap">Connected</span>}
+            {!sidebarCollapsed && <span className="whitespace-nowrap">Connected · v{__APP_VERSION__}</span>}
           </div>
         </div>
       </aside>
@@ -818,7 +886,7 @@ export default function App() {
                       <div className="relative">
                         <div className="w-5 h-5 rounded-full border-2 border-primary/30 border-t-primary animate-spin" />
                       </div>
-                      <p className="text-[13px] font-medium text-foreground">
+                      <p className="text-ui-md font-medium text-foreground">
                         Restoring your session<span className="loading-dots-inline">...</span>
                       </p>
                     </div>
@@ -837,7 +905,7 @@ export default function App() {
                       <div className="relative">
                         <div className="w-5 h-5 rounded-full border-2 border-amber-500/30 border-t-amber-500 animate-spin" />
                       </div>
-                      <p className="text-[13px] font-medium text-foreground">
+                      <p className="text-ui-md font-medium text-foreground">
                         Creating new session<span className="loading-dots-inline">...</span>
                       </p>
                     </div>
@@ -846,8 +914,8 @@ export default function App() {
               )}
 
               {/* Header Bar - Clean minimal styling */}
-              <div className="sticky top-0 z-10 bg-card/90 backdrop-blur-md border-b border-border px-3 sm:px-6 py-3">
-                <div className="max-w-7xl mx-auto flex items-center justify-between gap-3">
+              <div className="sticky top-0 z-10 bg-card/90 backdrop-blur-md border-b border-border px-3 sm:px-6 xl:px-12 2xl:px-20 py-3">
+                <div className="max-w-7xl xl:max-w-[1320px] 2xl:max-w-[1400px] mx-auto flex items-center justify-between gap-3">
                   <div className="flex items-center gap-3 min-w-0">
                     {/* Mobile hamburger button */}
                     <button
@@ -858,35 +926,50 @@ export default function App() {
                       <Menu className="w-5 h-5" />
                     </button>
                     <Link to="/" className="min-w-0 cursor-pointer">
-                      <h1 className="text-[15px] sm:text-[17px] font-semibold text-foreground tracking-tight truncate">V2V: Vibe-to-Value - Vibe Coding Workshop</h1>
-                      <p className="hidden sm:block text-[12px] text-muted-foreground">Turning ideas into measurable business outcomes faster with reusable patterns, and guided best practices</p>
+                      <h1 className="text-ui-lg sm:text-ui-xl font-semibold text-foreground tracking-tight truncate">V2V: Vibe-to-Value - Vibe Coding Workshop</h1>
+                      <p className="hidden sm:block text-ui-base text-muted-foreground">Turning ideas into measurable business outcomes faster with reusable patterns, and guided best practices</p>
                     </Link>
                   </div>
                   
                   {/* Theme Toggle & Session Menu in Header */}
                   <div className="flex items-center gap-2 sm:gap-3 flex-shrink-0">
                     <ThemeToggle />
+                    {readOnly ? (
+                      <div className="flex items-center gap-2 text-muted-foreground text-ui-base">
+                        <Eye className="w-3.5 h-3.5" />
+                        <span>
+                          <span className="font-medium text-foreground/80">
+                            {sessionOwner ? sessionOwner.split('@')[0].replace('.', ' ') : 'User'}
+                          </span>
+                          {sessionName && sessionName !== 'New Session' && (
+                            <span className="text-muted-foreground/60"> — {sessionName}</span>
+                          )}
+                          <span className="ml-1.5 text-muted-foreground/50">(read-only)</span>
+                        </span>
+                      </div>
+                    ) : (
                       <HeaderSessionMenu
-                      sessionId={sessionId}
-                      sessionSaved={sessionSaved}
-                      sessionName={sessionName}
-                      shareUrl={shareUrl}
-                      isSaving={isSaving}
-                      currentUser={currentUser}
-                      completedSteps={completedSteps.size}
-                      totalSteps={20}
-                      onSave={() => setShowSaveDialog(true)}
-                      onLoadSession={() => setShowSessionList(true)}
-                      onNewSession={() => setShowNewSessionConfirm(true)}
-                      onShare={handleShare}
-                    />
+                        sessionId={sessionId}
+                        sessionSaved={sessionSaved}
+                        sessionName={sessionName}
+                        shareUrl={shareUrl}
+                        isSaving={isSaving}
+                        currentUser={currentUser}
+                        completedSteps={completedSteps.size}
+                        totalSteps={20}
+                        onSave={() => setShowSaveDialog(true)}
+                        onLoadSession={() => setShowSessionList(true)}
+                        onNewSession={() => setShowNewSessionConfirm(true)}
+                        onShare={handleShare}
+                      />
+                    )}
                   </div>
                 </div>
               </div>
               
               {/* Content Area */}
-              <div className="p-3 sm:p-6">
-                <div className="max-w-7xl mx-auto">
+              <div className="p-3 sm:p-6 xl:px-12 2xl:px-20">
+                <div className="max-w-7xl xl:max-w-[1320px] 2xl:max-w-[1400px] mx-auto">
                   <WorkflowDiagram
                     sessionId={sessionId}
                     stepPrompts={stepPrompts}
@@ -906,9 +989,9 @@ export default function App() {
                     dataRefreshKey={dataRefreshKey}
                     onStepPromptGenerated={handleStepPromptGenerated}
                     onIndustryChange={(val, label) => { 
+                      if (readOnly) return;
                       setSelectedIndustry(val); 
                       setSelectedIndustryLabel(label);
-                      // Auto-save industry selection to session
                       if (sessionId) {
                         apiClient.updateSessionMetadata({
                           session_id: sessionId,
@@ -918,9 +1001,9 @@ export default function App() {
                       }
                     }}
                     onUseCaseChange={(val, label) => { 
+                      if (readOnly) return;
                       setSelectedUseCase(val); 
                       setSelectedUseCaseLabel(label);
-                      // Check for use-case-driven path lock
                       const lockLevel = USE_CASE_LEVEL_LOCK[val];
                       if (lockLevel) {
                         setUseCaseLockedLevel(lockLevel);
@@ -929,7 +1012,6 @@ export default function App() {
                         setUseCaseLockedLevel(null);
                         if (workshopLevel === 'skills-accelerator') handleWorkshopLevelChange('end-to-end', true);
                       }
-                      // Auto-save use case selection to session
                       if (sessionId) {
                         apiClient.updateSessionMetadata({
                           session_id: sessionId,
@@ -939,9 +1021,9 @@ export default function App() {
                       }
                     }}
                     onCustomUseCaseChange={(label, desc) => {
+                      if (readOnly) return;
                       setCustomUseCaseLabel(label);
                       setCustomDescription(desc);
-                      // Save custom use case overrides directly to session
                       if (sessionId) {
                         apiClient.updateSessionMetadata({
                           session_id: sessionId,
@@ -951,6 +1033,7 @@ export default function App() {
                       }
                     }}
                     onBrandUrlChange={(url) => {
+                      if (readOnly) return;
                       setBrandUrl(url);
                       if (sessionId) {
                         apiClient.updateSessionMetadata({
@@ -965,9 +1048,12 @@ export default function App() {
                     initialExpandedStep={initialExpandedStep}
                     prerequisitesCompleted={prerequisitesCompleted}
                     onPrerequisitesComplete={handlePrerequisitesComplete}
+                    codingAssistant={codingAssistant}
+                    onCodingAssistantChange={handleCodingAssistantChange}
                     isSessionLoaded={!isSessionLoading}
                     currentUser={currentUser}
                     defaultCatalog={defaultCatalog}
+                    readOnly={readOnly}
                   />
                 </div>
               </div>
@@ -1025,29 +1111,29 @@ export default function App() {
                 </div>
                 <div>
                   <h3 className="text-base font-semibold text-foreground">Start New Session</h3>
-                  <p className="text-[12px] text-muted-foreground">This will reset all your current progress</p>
+                  <p className="text-ui-base text-muted-foreground">This will reset all your current progress</p>
                 </div>
               </div>
-              <p className="text-[13px] text-muted-foreground leading-relaxed mt-2">
+              <p className="text-ui-md text-muted-foreground leading-relaxed mt-2">
                 Would you like to save your current session before starting a new one, or discard it and start fresh?
               </p>
             </div>
             <div className="flex items-center gap-2 px-6 py-4 bg-secondary/30 border-t border-border">
               <button
                 onClick={() => setShowNewSessionConfirm(false)}
-                className="flex-1 px-4 py-2 rounded-lg text-[12px] font-medium bg-secondary hover:bg-secondary/80 text-foreground transition-colors"
+                className="flex-1 px-4 py-2 rounded-lg text-ui-base font-medium bg-secondary hover:bg-secondary/80 text-foreground transition-colors"
               >
                 Cancel
               </button>
               <button
                 onClick={handleSaveAndNewSession}
-                className="flex-1 px-4 py-2 rounded-lg text-[12px] font-medium bg-emerald-600 hover:bg-emerald-500 text-white transition-colors"
+                className="flex-1 px-4 py-2 rounded-lg text-ui-base font-medium bg-emerald-600 hover:bg-emerald-500 text-white transition-colors"
               >
                 Save &amp; Start New
               </button>
               <button
                 onClick={handleDiscardAndNewSession}
-                className="flex-1 px-4 py-2 rounded-lg text-[12px] font-medium bg-red-600/80 hover:bg-red-500 text-white transition-colors"
+                className="flex-1 px-4 py-2 rounded-lg text-ui-base font-medium bg-red-600/80 hover:bg-red-500 text-white transition-colors"
               >
                 Discard &amp; Start New
               </button>
@@ -1061,7 +1147,7 @@ export default function App() {
         <div className="fixed bottom-5 left-1/2 -translate-x-1/2 z-40">
           <button
             onClick={() => setShowFeedbackDialog(true)}
-            className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-purple-600 to-primary hover:from-purple-500 hover:to-primary/90 text-white rounded-full shadow-lg hover:shadow-xl transition-all duration-200 text-[12px] font-medium group"
+            className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-purple-600 to-primary hover:from-purple-500 hover:to-primary/90 text-white rounded-full shadow-lg hover:shadow-xl transition-all duration-200 text-ui-base font-medium group"
             title="Share your feedback"
           >
             <MessageSquare className="h-4 w-4 group-hover:scale-110 transition-transform" />

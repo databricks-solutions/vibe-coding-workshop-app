@@ -134,3 +134,5 @@ sync:
     - "deploy.py"
     - "*.template"
     - "user-config.yaml*"
+    - "package.json"
+    - "package-lock.json"

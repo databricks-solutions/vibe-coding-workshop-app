@@ -1,7 +1,9 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { ReadOnlyProvider } from '../contexts/ReadOnlyContext';
 import { WorkflowStep } from './WorkflowStep';
 import { Prerequisites } from './Prerequisites';
 import { WorkshopIntro } from './WorkshopIntro';
+import { CodingAssistantSelector } from './CodingAssistantSelector';
 import { SectionedWorkflowSidebar } from './SectionedWorkflowSidebar';
 import { SectionDetailPanel } from './SectionDetailPanel';
 import { DefineIntentSection } from './DefineIntentSection';
@@ -90,18 +92,21 @@ interface WorkflowDiagramProps {
   initialExpandedStep?: number;
   prerequisitesCompleted?: boolean;
   onPrerequisitesComplete?: () => void;
+  codingAssistant?: string | null;
+  onCodingAssistantChange?: (id: string) => void;
   dataRefreshKey?: number; // Incremented when data needs to be refreshed (e.g., after config changes)
   isSessionLoaded?: boolean; // True once session data has been fetched from backend
   useCaseLockedLevel?: WorkshopLevel | null;
   currentUser?: string;
   defaultCatalog?: string;
+  readOnly?: boolean;
 }
 
 // Step badge component for consistent styling
 function StepBadge({ number, highlight = false }: { number: number; highlight?: boolean }) {
   return (
     <div className="absolute -top-3 left-1/2 -translate-x-1/2 z-10">
-      <div className={`w-7 h-7 rounded-full flex items-center justify-center text-[12px] font-semibold border-2 shadow-md ${
+      <div className={`w-7 h-7 rounded-full flex items-center justify-center text-ui-sm font-semibold border-2 shadow-md ${
         highlight 
           ? 'bg-primary text-primary-foreground border-primary shadow-primary/30' 
           : 'bg-card text-foreground border-border'
@@ -119,10 +124,10 @@ function SectionDivider({ section }: { section: typeof WORKFLOW_SECTIONS[0] }) {
     <div className="flex items-center gap-3 py-4 my-2">
       <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full ${section.bgColor} border ${section.borderColor}`}>
         <Icon className={`w-4 h-4 ${section.color}`} />
-        <span className={`text-[11px] font-semibold uppercase tracking-wider ${section.color}`}>
+        <span className={`text-ui-xs font-semibold uppercase tracking-wider ${section.color}`}>
           {section.chapter}
         </span>
-        <span className="text-[12px] font-medium text-foreground">
+        <span className="text-ui-sm font-medium text-foreground">
           {section.title}
         </span>
       </div>
@@ -157,11 +162,14 @@ export function WorkflowDiagram({
   initialExpandedStep = 1,
   prerequisitesCompleted = false,
   onPrerequisitesComplete,
+  codingAssistant = null,
+  onCodingAssistantChange,
   dataRefreshKey = 0,
   isSessionLoaded = false,
   useCaseLockedLevel,
   currentUser = '',
   defaultCatalog = '',
+  readOnly = false,
 }: WorkflowDiagramProps) {
   // UI option is now always cursor (Figma option removed from UI)
   // Lazy initializers ensure correct state on SPA re-mount (navigate away and back)
@@ -345,15 +353,17 @@ export function WorkflowDiagram({
   // ---------------------------------------------------------------------------
   // Wizard Stage -- progressive disclosure for new users
   // Stage 0: Welcome (WorkshopIntro expanded)
-  // Stage 1: Prerequisites (Prerequisites expanded)
-  // Stage 2: Define Intent (DefineIntentSection expanded)
-  // Stage 3: Path & Architecture (PathAndArchitecture expanded)
-  // Stage 4: Workflow (main workflow area visible)
+  // Stage 1: Coding Assistant (CodingAssistantSelector expanded)
+  // Stage 2: Prerequisites (Prerequisites expanded)
+  // Stage 3: Define Intent (DefineIntentSection expanded)
+  // Stage 4: Path & Architecture (PathAndArchitecture expanded)
+  // Stage 5: Workflow (main workflow area visible)
   // ---------------------------------------------------------------------------
-  type WizardStage = 0 | 1 | 2 | 3 | 4;
+  type WizardStage = 0 | 1 | 2 | 3 | 4 | 5;
 
   // Tracks explicit user actions to advance through wizard stages
   const [welcomeAcknowledged, setWelcomeAcknowledged] = useState(false);
+  const [codingAssistantConfirmed, setCodingAssistantConfirmed] = useState(false);
   const [pathAcknowledged, setPathAcknowledged] = useState(false);
 
   // Reset wizard + UI state when session changes (component doesn't unmount on "Start New Session")
@@ -361,6 +371,7 @@ export function WorkflowDiagram({
   useEffect(() => {
     if (sessionId !== prevSessionId.current) {
       setWelcomeAcknowledged(false);
+      setCodingAssistantConfirmed(false);
       setPathAcknowledged(false);
       setForcePrereqExpanded(false);
       setWorkflowUserOverride(null);
@@ -378,31 +389,36 @@ export function WorkflowDiagram({
 
   // Auto-acknowledge for returning users (they already have progress)
   useEffect(() => {
-    if (isSessionLoaded && (selectedIndustry || selectedUseCase || completedSteps.size > 0 || prerequisitesCompleted)) {
+    if (isSessionLoaded && (selectedIndustry || selectedUseCase || completedSteps.size > 0 || prerequisitesCompleted || codingAssistant)) {
       setWelcomeAcknowledged(true);
+    }
+    if (isSessionLoaded && codingAssistant && (prerequisitesCompleted || completedSteps.size > 0)) {
+      setCodingAssistantConfirmed(true);
     }
     // Only auto-set pathAcknowledged when user has actual workshop progress (step 2+).
     // completedSteps.size === 1 means only Define Intent is done — user still needs to pick a path.
     if (isSessionLoaded && completedSteps.size > 1) {
       setPathAcknowledged(true);
     }
-  }, [isSessionLoaded, selectedIndustry, selectedUseCase, completedSteps.size, prerequisitesCompleted]);
+  }, [isSessionLoaded, selectedIndustry, selectedUseCase, completedSteps.size, prerequisitesCompleted, codingAssistant]);
 
   const deriveWizardStage = useCallback((): WizardStage => {
     const intentDefined = completedSteps.has(1) || (!!selectedIndustry && !!selectedUseCase);
 
-    // Returning user with workflow progress → jump to Stage 4
-    if (completedSteps.size > 1) return 4;
-    // Intent defined and path acknowledged → Stage 4 (Workshop)
-    if (intentDefined && pathAcknowledged) return 4;
-    // Intent defined → Stage 3 (Path & Architecture)
-    if (intentDefined) return 3;
-    // Prerequisites completed → Stage 2 (Define Intent)
-    if (prerequisitesCompleted) return 2;
-    // Welcome acknowledged → Stage 1 (Prerequisites)
+    // Returning user with workflow progress → jump to Stage 5
+    if (completedSteps.size > 1) return 5;
+    // Intent defined and path acknowledged → Stage 5 (Workshop)
+    if (intentDefined && pathAcknowledged) return 5;
+    // Intent defined → Stage 4 (Path & Architecture)
+    if (intentDefined) return 4;
+    // Prerequisites completed → Stage 3 (Define Intent)
+    if (prerequisitesCompleted) return 3;
+    // Coding assistant confirmed → Stage 2 (Prerequisites)
+    if (codingAssistantConfirmed) return 2;
+    // Welcome acknowledged → Stage 1 (Coding Assistant)
     if (welcomeAcknowledged) return 1;
     return 0;
-  }, [completedSteps, prerequisitesCompleted, selectedIndustry, selectedUseCase, welcomeAcknowledged, pathAcknowledged]);
+  }, [completedSteps, prerequisitesCompleted, codingAssistantConfirmed, selectedIndustry, selectedUseCase, welcomeAcknowledged, pathAcknowledged]);
 
   const wizardStage = deriveWizardStage();
   const prevWizardStage = useRef(wizardStage);
@@ -420,7 +436,7 @@ export function WorkflowDiagram({
 
   // Collapsible workflow area state
   const [workflowUserOverride, setWorkflowUserOverride] = useState<boolean | null>(null);
-  const workflowAutoExpanded = wizardStage >= 4;
+  const workflowAutoExpanded = wizardStage >= 5;
   const isWorkflowExpanded = workflowUserOverride !== null ? workflowUserOverride : workflowAutoExpanded;
   
   // Handle initial step and auto-expand section.
@@ -525,6 +541,7 @@ export function WorkflowDiagram({
   }, [visibleSections, completedSteps, skippedSteps, scrollToStep]);
 
   const handlePromptGenerated = (prompt: string, industry: string, useCase: string, industryLabel?: string, useCaseLabel?: string, customDesc?: string) => {
+    if (readOnly) return;
     onIndustryChange(industry, industryLabel || industry);
     onUseCaseChange(useCase, useCaseLabel || useCase);
     
@@ -647,6 +664,7 @@ export function WorkflowDiagram({
   }, [completedSteps, skippedSteps, visibleSections, getStepTitle, sessionId]);
 
   const toggleStepComplete = useCallback((stepId: number, shouldExpandNext: boolean = true) => {
+    if (readOnly) return;
     const newSet = new Set(completedSteps);
     
     if (newSet.has(stepId)) {
@@ -706,6 +724,7 @@ export function WorkflowDiagram({
   
   // Reset a step (mark as incomplete) - called when user re-generates
   const resetStepComplete = useCallback((stepId: number) => {
+    if (readOnly) return;
     const newSet = new Set(completedSteps);
     if (newSet.has(stepId)) {
       newSet.delete(stepId);
@@ -730,6 +749,7 @@ export function WorkflowDiagram({
 
   // Toggle skip state for a step (Ch3/Ch4 only)
   const toggleStepSkip = useCallback((stepId: number) => {
+    if (readOnly) return;
     const newSkipped = new Set(skippedSteps);
     const isUndoing = newSkipped.has(stepId);
     
@@ -916,14 +936,14 @@ export function WorkflowDiagram({
                       </div>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2">
-                          <h3 className={`text-[15px] font-semibold text-foreground leading-tight ${completedSteps.has(4) ? 'line-through opacity-50' : ''}`}>
+                          <h3 className={`text-ui-lg font-semibold text-foreground leading-tight ${completedSteps.has(4) ? 'line-through opacity-50' : ''}`}>
                             UI Design
                           </h3>
                           {completedSteps.has(4) && (
-                            <span className="text-emerald-400 text-[11px] font-medium bg-emerald-900/30 px-1.5 py-0.5 rounded">✓ Done</span>
+                            <span className="text-emerald-400 text-ui-xs font-medium bg-emerald-900/30 px-1.5 py-0.5 rounded">✓ Done</span>
                           )}
                         </div>
-                        <p className={`text-[13px] text-muted-foreground mt-1 leading-relaxed ${completedSteps.has(4) ? 'line-through opacity-50' : ''}`}>
+                        <p className={`text-ui-base text-muted-foreground mt-1 leading-relaxed ${completedSteps.has(4) ? 'line-through opacity-50' : ''}`}>
                           Build UI and backend APIs from PRD, then test locally before deployment
                         </p>
                       </div>
@@ -1121,14 +1141,14 @@ export function WorkflowDiagram({
                       </div>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2">
-                          <h3 className={`text-[15px] font-semibold text-foreground leading-tight ${step10Done ? 'line-through opacity-50' : ''}`}>
+                          <h3 className={`text-ui-lg font-semibold text-foreground leading-tight ${step10Done ? 'line-through opacity-50' : ''}`}>
                             Table Metadata & Data Dictionary
                           </h3>
                           {step10Done && (
-                            <span className="text-emerald-400 text-[11px] font-medium bg-emerald-900/30 px-1.5 py-0.5 rounded">✓ Done</span>
+                            <span className="text-emerald-400 text-ui-xs font-medium bg-emerald-900/30 px-1.5 py-0.5 rounded">✓ Done</span>
                           )}
                         </div>
-                        <p className={`text-[13px] text-muted-foreground mt-1 leading-relaxed ${step10Done ? 'line-through opacity-50' : ''}`}>
+                        <p className={`text-ui-base text-muted-foreground mt-1 leading-relaxed ${step10Done ? 'line-through opacity-50' : ''}`}>
                           Extract table schema metadata from Databricks and save as a CSV data dictionary
                         </p>
                       </div>
@@ -1144,7 +1164,7 @@ export function WorkflowDiagram({
                             <button
                               onClick={() => !extractTabLocked && setStep10Mode('extract')}
                               disabled={extractTabLocked}
-                              className={`flex-1 px-4 py-3 text-[13px] font-medium transition-all relative flex items-center justify-center gap-2 ${
+                              className={`flex-1 px-4 py-3 text-ui-base font-medium transition-all relative flex items-center justify-center gap-2 ${
                                 step10Mode === 'extract'
                                   ? 'text-primary border-b-2 border-primary -mb-px bg-primary/5'
                                   : extractTabLocked
@@ -1160,7 +1180,7 @@ export function WorkflowDiagram({
                               <button
                                 onClick={() => !uploadTabLocked && setStep10Mode('upload')}
                                 disabled={uploadTabLocked}
-                                className={`flex-1 px-4 py-3 text-[13px] font-medium transition-all relative flex items-center justify-center gap-2 ${
+                                className={`flex-1 px-4 py-3 text-ui-base font-medium transition-all relative flex items-center justify-center gap-2 ${
                                   step10Mode === 'upload'
                                     ? 'text-primary border-b-2 border-primary -mb-px bg-primary/5'
                                     : uploadTabLocked
@@ -1177,7 +1197,7 @@ export function WorkflowDiagram({
                               <button
                                 onClick={() => !generateTabLocked && setStep10Mode('generate')}
                                 disabled={generateTabLocked}
-                                className={`flex-1 px-4 py-3 text-[13px] font-medium transition-all relative flex items-center justify-center gap-2 ${
+                                className={`flex-1 px-4 py-3 text-ui-base font-medium transition-all relative flex items-center justify-center gap-2 ${
                                   step10Mode === 'generate'
                                     ? 'text-primary border-b-2 border-primary -mb-px bg-primary/5'
                                     : generateTabLocked
@@ -1345,14 +1365,14 @@ export function WorkflowDiagram({
                       </div>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2">
-                          <h3 className={`text-[15px] font-semibold text-foreground leading-tight ${step12Done ? 'line-through opacity-50' : ''}`}>
+                          <h3 className={`text-ui-lg font-semibold text-foreground leading-tight ${step12Done ? 'line-through opacity-50' : ''}`}>
                             Bronze Layer Creation
                           </h3>
                           {step12Done && (
-                            <span className="text-emerald-400 text-[11px] font-medium bg-emerald-900/30 px-1.5 py-0.5 rounded">✓ Done</span>
+                            <span className="text-emerald-400 text-ui-xs font-medium bg-emerald-900/30 px-1.5 py-0.5 rounded">✓ Done</span>
                           )}
                         </div>
-                        <p className={`text-[13px] text-muted-foreground mt-1 leading-relaxed ${step12Done ? 'line-through opacity-50' : ''}`}>
+                        <p className={`text-ui-base text-muted-foreground mt-1 leading-relaxed ${step12Done ? 'line-through opacity-50' : ''}`}>
                           {isGenieFlow
                             ? 'Generate Bronze layer DDLs and sample data from the uploaded schema CSV'
                             : 'Create Bronze layer by cloning from source or generating from uploaded CSV'}
@@ -1370,7 +1390,7 @@ export function WorkflowDiagram({
                             <button
                               onClick={() => !cloneTabLocked && setStep12Mode('clone')}
                               disabled={cloneTabLocked}
-                              className={`flex-1 px-4 py-3 text-[13px] font-medium transition-all relative flex items-center justify-center gap-2 ${
+                              className={`flex-1 px-4 py-3 text-ui-base font-medium transition-all relative flex items-center justify-center gap-2 ${
                                 effectiveStep12Mode === 'clone'
                                   ? 'text-primary border-b-2 border-primary -mb-px bg-primary/5'
                                   : cloneTabLocked
@@ -1385,7 +1405,7 @@ export function WorkflowDiagram({
                             <button
                               onClick={() => !generateTabLocked && setStep12Mode('generate')}
                               disabled={generateTabLocked}
-                              className={`flex-1 px-4 py-3 text-[13px] font-medium transition-all relative flex items-center justify-center gap-2 ${
+                              className={`flex-1 px-4 py-3 text-ui-base font-medium transition-all relative flex items-center justify-center gap-2 ${
                                 effectiveStep12Mode === 'generate'
                                   ? 'text-primary border-b-2 border-primary -mb-px bg-primary/5'
                                   : generateTabLocked
@@ -1542,14 +1562,14 @@ export function WorkflowDiagram({
                       </div>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2">
-                          <h3 className={`text-[15px] font-semibold text-foreground leading-tight ${step22Done ? 'line-through opacity-50' : ''}`}>
+                          <h3 className={`text-ui-lg font-semibold text-foreground leading-tight ${step22Done ? 'line-through opacity-50' : ''}`}>
                             Analyze Silver Metadata
                           </h3>
                           {step22Done && (
-                            <span className="text-emerald-400 text-[11px] font-medium bg-emerald-900/30 px-1.5 py-0.5 rounded">✓ Done</span>
+                            <span className="text-emerald-400 text-ui-xs font-medium bg-emerald-900/30 px-1.5 py-0.5 rounded">✓ Done</span>
                           )}
                         </div>
-                        <p className={`text-[13px] text-muted-foreground mt-1 leading-relaxed ${step22Done ? 'line-through opacity-50' : ''}`}>
+                        <p className={`text-ui-base text-muted-foreground mt-1 leading-relaxed ${step22Done ? 'line-through opacity-50' : ''}`}>
                           Extract and analyze table/column metadata from your silver layer schema
                         </p>
                       </div>
@@ -1565,7 +1585,7 @@ export function WorkflowDiagram({
                             <button
                               onClick={() => !silverTabLocked && setStep22Mode('silver')}
                               disabled={silverTabLocked}
-                              className={`flex-1 px-4 py-3 text-[13px] font-medium transition-all relative flex items-center justify-center gap-2 ${
+                              className={`flex-1 px-4 py-3 text-ui-base font-medium transition-all relative flex items-center justify-center gap-2 ${
                                 step22Mode === 'silver'
                                   ? 'text-primary border-b-2 border-primary -mb-px bg-primary/5'
                                   : silverTabLocked
@@ -1581,7 +1601,7 @@ export function WorkflowDiagram({
                               <button
                                 onClick={() => !uploadTabLocked22 && setStep22Mode('upload')}
                                 disabled={uploadTabLocked22}
-                                className={`flex-1 px-4 py-3 text-[13px] font-medium transition-all relative flex items-center justify-center gap-2 ${
+                                className={`flex-1 px-4 py-3 text-ui-base font-medium transition-all relative flex items-center justify-center gap-2 ${
                                   step22Mode === 'upload'
                                     ? 'text-primary border-b-2 border-primary -mb-px bg-primary/5'
                                     : uploadTabLocked22
@@ -1598,7 +1618,7 @@ export function WorkflowDiagram({
                               <button
                                 onClick={() => !generateTabLocked22 && setStep22Mode('generate')}
                                 disabled={generateTabLocked22}
-                                className={`flex-1 px-4 py-3 text-[13px] font-medium transition-all relative flex items-center justify-center gap-2 ${
+                                className={`flex-1 px-4 py-3 text-ui-base font-medium transition-all relative flex items-center justify-center gap-2 ${
                                   step22Mode === 'generate'
                                     ? 'text-primary border-b-2 border-primary -mb-px bg-primary/5'
                                     : generateTabLocked22
@@ -2234,6 +2254,7 @@ export function WorkflowDiagram({
   }, [visibleSections, completedSteps]);
 
   return (
+    <ReadOnlyProvider value={readOnly}>
     <div className="space-y-5">
       {/* Stage 0: Workshop Introduction */}
       <WorkshopIntro
@@ -2243,13 +2264,32 @@ export function WorkflowDiagram({
         onGetStarted={() => {
           setWelcomeAcknowledged(true);
           setTimeout(() => {
-            const el = document.getElementById('prerequisites-section');
+            const el = document.getElementById('coding-assistant-section');
             if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
           }, 100);
         }}
       />
 
-      {/* Stage 1: Prerequisites */}
+      {/* Stage 1: Choose Your Coding Assistant */}
+      <CodingAssistantSelector
+        key={`assistant-${sessionId}`}
+        selectedAssistant={codingAssistant}
+        onSelect={(id) => onCodingAssistantChange?.(id)}
+        onConfirm={() => {
+          setCodingAssistantConfirmed(true);
+          setTimeout(() => {
+            const el = document.getElementById('prerequisites-section');
+            if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          }, 100);
+        }}
+        forceExpanded={wizardStage === 1 && !stageTransitioning}
+        forceCollapsed={wizardStage < 1}
+        hideConfirm={wizardStage < 1}
+        highlightConfirm={!!codingAssistant && wizardStage === 1}
+        isLocked={codingAssistantConfirmed || readOnly}
+      />
+
+      {/* Stage 2: Prerequisites */}
       <Prerequisites
         key={`prereq-${sessionId}`}
         isComplete={prerequisitesCompleted}
@@ -2261,13 +2301,13 @@ export function WorkflowDiagram({
             if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
           }, 400);
         }}
-        highlightMarkDone={!prerequisitesCompleted && wizardStage === 1}
-        forceExpanded={forcePrereqExpanded || (wizardStage === 1 && !stageTransitioning)}
-        forceCollapsed={wizardStage < 1}
-        hideMarkDone={wizardStage < 1}
+        highlightMarkDone={!prerequisitesCompleted && wizardStage === 2 && !readOnly}
+        forceExpanded={forcePrereqExpanded || (wizardStage === 2 && !stageTransitioning)}
+        forceCollapsed={wizardStage < 2}
+        hideMarkDone={wizardStage < 2 || readOnly}
       />
 
-      {/* Stage 2: Define Your Intent */}
+      {/* Stage 3: Define Your Intent */}
       <DefineIntentSection
         key={`intent-${sessionId}`}
         selectedIndustry={selectedIndustry}
@@ -2282,13 +2322,13 @@ export function WorkflowDiagram({
         isSessionLoaded={isSessionLoaded}
         workshopLevel={workshopLevel}
         dataRefreshKey={effectiveRefreshKey}
-        forceCollapsed={wizardStage < 2}
-        forceExpanded={wizardStage === 2 && !stageTransitioning}
+        forceCollapsed={wizardStage < 3}
+        forceExpanded={wizardStage === 3 && !stageTransitioning}
         onIntentDefined={handlePromptGenerated}
         onBrandUrlChange={onBrandUrlChange}
       />
 
-      {/* Stage 3: Path & Architecture (combined section) */}
+      {/* Stage 4: Path & Architecture (combined section) */}
       {onWorkshopLevelChange && (
         <PathAndArchitecture
           key={`path-${sessionId}`}
@@ -2296,15 +2336,15 @@ export function WorkflowDiagram({
           onLevelChange={onWorkshopLevelChange}
           completedSteps={completedSteps}
           levelExplicitlySelected={levelExplicitlySelected}
-          forceCollapsed={wizardStage < 3 || wizardStage > 3}
-          forceExpanded={wizardStage === 3 && !stageTransitioning}
+          forceCollapsed={wizardStage < 4 || wizardStage > 4}
+          forceExpanded={wizardStage === 4 && !stageTransitioning}
           onContinue={handleStartBuild}
           useCaseLockedLevel={useCaseLockedLevel}
           hasUseCaseSelected={!!selectedUseCase}
         />
       )}
 
-      {/* Stage 4: Main Workflow Area -- collapsible wrapper */}
+      {/* Stage 5: Main Workflow Area -- collapsible wrapper */}
       <div id="workflow-area" className="bg-card rounded-lg border border-border overflow-hidden">
         {/* Workflow Area Header */}
         <button
@@ -2315,16 +2355,16 @@ export function WorkflowDiagram({
             <ArrowDown className={`w-5 h-5 text-primary transition-transform duration-200 ${isWorkflowExpanded ? '' : '-rotate-90'}`} />
           </div>
           <div className="flex-1 text-left">
-            <h2 className="text-[15px] font-semibold text-foreground">
+            <h2 className="text-ui-lg font-semibold text-foreground">
               Workshop Steps
             </h2>
-            <p className="text-muted-foreground text-[13px]">
+            <p className="text-muted-foreground text-ui-base">
               Follow each step to build your application end-to-end
             </p>
           </div>
           {/* Progress badge */}
           {totalVisibleSteps > 0 && (
-            <span className={`text-[11px] font-medium px-2.5 py-1 rounded-full ${
+            <span className={`text-ui-xs font-medium px-2.5 py-1 rounded-full ${
               completedVisibleSteps === totalVisibleSteps
                 ? 'bg-emerald-900/40 text-emerald-300'
                 : completedVisibleSteps > 0
@@ -2394,10 +2434,13 @@ export function WorkflowDiagram({
       </div>
 
       {/* Celebration Overlay */}
-      <CelebrationOverlay 
-        celebration={celebration} 
-        onComplete={handleCelebrationComplete} 
-      />
+      {!readOnly && (
+        <CelebrationOverlay 
+          celebration={celebration} 
+          onComplete={handleCelebrationComplete} 
+        />
+      )}
     </div>
+    </ReadOnlyProvider>
   );
 }

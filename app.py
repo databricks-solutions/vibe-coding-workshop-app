@@ -96,6 +96,12 @@ async def serve_spa(full_path: str):
     if full_path.startswith("api/") or full_path == "health" or full_path == "docs" or full_path == "openapi.json":
         return JSONResponse({"error": "Not found"}, status_code=404)
     
+    # Serve static files from dist/ if they exist (e.g. brand-config.json)
+    if full_path and DIST_DIR.exists():
+        file_path = DIST_DIR / full_path
+        if file_path.is_file() and file_path.resolve().is_relative_to(DIST_DIR.resolve()):
+            return FileResponse(str(file_path))
+    
     # Serve index.html for the SPA
     index_path = DIST_DIR / "index.html"
     if index_path.exists():

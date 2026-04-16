@@ -1168,6 +1168,9 @@ if [[ "$SKIP_TABLES" != true ]]; then
     if [[ -n "$SERVICE_PRINCIPAL_ID" ]]; then
         export APP_SERVICE_PRINCIPAL_ID="$SERVICE_PRINCIPAL_ID"
     fi
+    if [[ -n "$PROFILE" ]]; then
+        export DATABRICKS_CONFIG_PROFILE="$PROFILE"
+    fi
     
     # Run table setup with explicit schema override
     if ./scripts/setup-lakebase.sh --recreate --yes; then

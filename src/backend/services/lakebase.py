@@ -1443,6 +1443,7 @@ def get_leaderboard(limit: int = 10) -> List[Dict]:
             # We'll process scoring in Python for flexibility
             query = f"""
             SELECT 
+                session_id,
                 created_by,
                 completed_steps,
                 skipped_steps,
@@ -1496,9 +1497,12 @@ def get_leaderboard(limit: int = 10) -> List[Dict]:
                 
                 workshop_level = row.get('workshop_level')
                 
+                session_id = row.get('session_id')
+
                 # Keep the best session for each user
                 if email not in user_scores or score > user_scores[email]['score']:
                     user_scores[email] = {
+                        'session_id': session_id,
                         'score': score,
                         'completed_steps': completed_steps,
                         'skipped_steps': skipped_steps,
@@ -1509,6 +1513,7 @@ def get_leaderboard(limit: int = 10) -> List[Dict]:
                     if updated_at and user_scores[email]['updated_at']:
                         if updated_at < user_scores[email]['updated_at']:
                             user_scores[email] = {
+                                'session_id': session_id,
                                 'score': score,
                                 'completed_steps': completed_steps,
                                 'skipped_steps': skipped_steps,
@@ -1537,6 +1542,7 @@ def get_leaderboard(limit: int = 10) -> List[Dict]:
                 leaderboard.append({
                     'rank': rank,
                     'user_id': email,  # Used for tracking movement
+                    'session_id': data.get('session_id'),
                     'display_name': _format_display_name(email),
                     'avatar': _get_avatar_for_user(email),
                     'score': data['score'],
@@ -1592,7 +1598,8 @@ def get_workshop_users() -> Dict:
                     workshop_level,
                     updated_at,
                     session_id,
-                    session_name
+                    session_name,
+                    COUNT(*) OVER (PARTITION BY created_by) as session_count
                 FROM {table_name}
                 WHERE created_by IS NOT NULL AND created_by != ''
                 ORDER BY created_by, updated_at DESC
@@ -1620,6 +1627,7 @@ def get_workshop_users() -> Dict:
                     'updated_at': updated_at,
                     'last_session_id': row.get('session_id') or '',
                     'is_saved': bool(session_name and session_name != 'New Session'),
+                    'session_count': row.get('session_count', 1),
                 })
             
             return {'total': len(users), 'users': users}

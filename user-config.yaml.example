@@ -41,6 +41,15 @@ tags:
   managed_by: "vibe2value"            # Deployment toolchain identifier
   custom_tags: ""                     # Additional tags (comma-separated key=value pairs)
 
+# Branding (optional — auto-extracted during install from customer website URL)
+branding:
+  customer_url: ""                    # Customer website URL (e.g. https://www.databricks.com)
+  company_name: ""                    # Auto-extracted company name
+  logo_url: ""                        # Auto-extracted logo URL
+  primary_color: ""                   # Auto-extracted hex color (e.g. #00274D)
+  secondary_color: ""                 # Auto-extracted secondary hex color
+  accent_color: ""                    # Auto-extracted accent hex color
+
 # Metadata (managed by vibe2value, do not edit manually)
 _metadata:
   installed_at: ""

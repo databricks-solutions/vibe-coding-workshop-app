@@ -905,8 +905,13 @@ def get_section_input_content(industry: str, use_case: str, section_tag: str, pr
         expected_output = expected_output.replace(key, str(value))
     
     # Conditional branding injection -- only when company_brand_url is specified
-    brand_url = workshop_params.get('company_brand_url', '').strip()
-    if brand_url and section_tag in ('figma_ui_design', 'cursor_copilot_ui_design'):
+    # Session overrides may store empty string for brand URL (e.g. from initial
+    # "Get Started" before URL was populated). Fall back to the global workshop
+    # parameter when the effective value is empty.
+    brand_url = (workshop_params.get('company_brand_url') or '').strip()
+    if not brand_url and session_id:
+        brand_url = (get_workshop_parameters_sync().get('company_brand_url') or '').strip()
+    if brand_url and section_tag in ('prd_generation', 'figma_ui_design', 'cursor_copilot_ui_design'):
         _company_display = ''
         try:
             from urllib.parse import urlparse
@@ -919,8 +924,36 @@ def get_section_input_content(industry: str, use_case: str, section_tag: str, pr
         except Exception:
             pass
 
-        if _company_display:
-            branding_section = f"""
+        if section_tag == 'prd_generation':
+            if _company_display:
+                branding_section = f"""
+
+---
+
+## Company Context and Branding
+
+This application is being built for **{_company_display}**.
+- Reference {brand_url} for the company's brand identity, colors, and visual assets
+- Contextualize all user personas, workflows, and terminology to align with {_company_display}'s business domain and customer base
+- Use {_company_display}-appropriate product naming, voice, and tone throughout the PRD
+- User journeys should reflect realistic scenarios within {_company_display}'s industry and operations
+- Include brand identity considerations (name, logo, color palette) in any UI-related requirements sections"""
+            else:
+                branding_section = f"""
+
+---
+
+## Company Context and Branding
+
+This application is being built for the company defined at the following URL.
+- Reference {brand_url} for the company's brand identity, colors, and visual assets
+- Contextualize all user personas, workflows, and terminology to align with the company's business domain and customer base
+- Use company-appropriate product naming, voice, and tone throughout the PRD
+- User journeys should reflect realistic scenarios within the company's industry and operations
+- Include brand identity considerations (name, logo, color palette) in any UI-related requirements sections"""
+        else:
+            if _company_display:
+                branding_section = f"""
 
 ---
 
@@ -931,8 +964,8 @@ Use **{_company_display}** as the brand for this application.
 - Apply the company's primary and secondary brand colors throughout the UI (theme, buttons, headers, accents)
 - Use the company's logo where appropriate (e.g., header/navbar, favicon)
 - Ensure all UI elements, buttons, and accents align with the brand's visual identity"""
-        else:
-            branding_section = f"""
+            else:
+                branding_section = f"""
 
 ---
 
@@ -968,7 +1001,8 @@ Generate a detailed, actionable prompt for {section_tag} in a {industry_name} {u
         "expected_output": expected_output,
         "how_to_apply_images": how_to_apply_images,
         "expected_output_images": expected_output_images,
-        "bypass_llm": bypass_llm
+        "bypass_llm": bypass_llm,
+        "_brand_url": brand_url,
     }
 
 
@@ -1978,11 +2012,36 @@ async def stream_llm_response(
         {"role": "user", "content": f"Generate a detailed prompt based on: {input_text}"}
     ]
 
-    async for event in _stream_with_retry(
-        messages, max_tokens=4000, temperature=0.5,
-        section_tag=section_tag, industry=industry, use_case=use_case,
-    ):
-        yield event
+    _brand_url = (section_content.get("_brand_url") or "").strip()
+    _needs_brand_appendix = bool(_brand_url) and section_tag == 'prd_generation'
+
+    if _needs_brand_appendix:
+        from urllib.parse import urlparse as _urlparse
+        _cd = ''
+        try:
+            _pp = _urlparse(_brand_url)
+            _seg = _pp.netloc.split('.')[0] if _pp.netloc else _pp.path.strip('/').split('/')[-1]
+            if _seg and any(c.isalpha() for c in _seg) and len(_seg) > 2:
+                _cd = _seg.replace('-', ' ').replace('_', ' ').title()
+        except Exception:
+            pass
+        _brand_label = f"**{_cd}**" if _cd else f"the company at {_brand_url}"
+        _brand_appendix = f"\n\n---\n\n## Company Branding Reference\n\nThe PRD above should be contextualized for {_brand_label}. Reference {_brand_url} for official brand colors, logo, and visual identity. Ensure personas, workflows, and terminology align with this company's business domain."
+        _done_sse = _sse_event({"type": "done"})
+
+        async for event in _stream_with_retry(
+            messages, max_tokens=4000, temperature=0.5,
+            section_tag=section_tag, industry=industry, use_case=use_case,
+        ):
+            if event == _done_sse:
+                yield _sse_event({"type": "content", "content": _brand_appendix})
+            yield event
+    else:
+        async for event in _stream_with_retry(
+            messages, max_tokens=4000, temperature=0.5,
+            section_tag=section_tag, industry=industry, use_case=use_case,
+        ):
+            yield event
 
 
 @router.post("/generate-prompt-stream", summary="Stream prompt generation (SSE)")
@@ -4462,6 +4521,7 @@ class SessionUpdateMetadataRequest(BaseModel):
     custom_use_case_description: Optional[str] = Field(None, description="User-edited use case description override")
     level_explicitly_selected: Optional[bool] = Field(None, description="Whether the user explicitly clicked a level button")
     company_brand_url: Optional[str] = Field(None, description="URL to company brand colors/assets page")
+    coding_assistant: Optional[str] = Field(None, description="Selected coding assistant: cursor, copilot, or vscode")
 
 
 @router.post("/session/update-metadata")
@@ -4518,6 +4578,8 @@ async def update_session_metadata_endpoint(request_body: SessionUpdateMetadataRe
             _session_param_patch['level_explicitly_selected'] = request_body.level_explicitly_selected
         if request_body.company_brand_url is not None:
             _session_param_patch['company_brand_url'] = request_body.company_brand_url
+        if request_body.coding_assistant is not None:
+            _session_param_patch['coding_assistant'] = request_body.coding_assistant
         
         # Derive user_schema_prefix from email + use case name (or source schema for accelerator)
         # Triggered when use case is selected, custom label is edited, or workshop_level changes
@@ -4714,6 +4776,7 @@ class LeaderboardEntry(BaseModel):
     """Leaderboard entry with user score and progress details"""
     rank: int = Field(..., description="Position in leaderboard (1-10)")
     user_id: str = Field(..., description="User identifier for tracking changes")
+    session_id: Optional[str] = Field(None, description="Session ID of the user's best session")
     display_name: str = Field(..., description="Formatted display name (e.g., 'John D.')")
     avatar: str = Field(..., description="Emoji avatar for the user")
     score: int = Field(..., description="Total score based on completed steps")
@@ -4790,6 +4853,17 @@ async def get_workshop_users_endpoint() -> Dict[str, Any]:
     except Exception as e:
         logger.error(f"[Workshop Users API] Error: {e}", exc_info=True)
         return {"total": 0, "users": []}
+
+
+@router.get("/workshop-users/sessions")
+async def get_user_sessions_by_email(email: str) -> List[SessionListItem]:
+    """Get all sessions (saved and unsaved) for a specific user by email."""
+    try:
+        sessions = get_user_sessions(email, saved_only=False)
+        return [SessionListItem(**s) for s in sessions]
+    except Exception as e:
+        logger.error(f"[Workshop Users API] Error fetching sessions for {email}: {e}", exc_info=True)
+        return []
 
 
 @router.post("/admin/cleanup-sessions")
