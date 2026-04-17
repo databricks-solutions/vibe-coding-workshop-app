@@ -225,7 +225,7 @@ export default function App() {
         const completedStepsArray: number[] = response.completed_steps || [];
         const restoredCompleted = new Set(completedStepsArray);
         // Intent is defined when industry + use case are selected — ensure step 1 is in completedSteps
-        if ((response.industry && response.use_case) || response.prerequisites_completed) {
+        if (response.industry && response.use_case) {
           restoredCompleted.add(1);
         }
         setCompletedSteps(restoredCompleted);
@@ -346,7 +346,7 @@ export default function App() {
         const loadedCompletedSteps: number[] = response.completed_steps || [];
         const loadedCompleted = new Set(loadedCompletedSteps);
         // Intent is defined when industry + use case are selected — ensure step 1 is in completedSteps
-        if ((response.industry && response.use_case) || response.prerequisites_completed) {
+        if (response.industry && response.use_case) {
           loadedCompleted.add(1);
         }
         setCompletedSteps(loadedCompleted);

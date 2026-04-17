@@ -10,6 +10,7 @@ const API_BASE_URL = '/api';
 export interface SelectOption {
   value: string;
   label: string;
+  path_type?: 'use_case' | 'skill';
 }
 
 export interface GeneratedContent {
@@ -69,6 +70,7 @@ export interface Prerequisite {
 export interface AllData {
   industries: SelectOption[];
   use_cases: Record<string, SelectOption[]>;
+  skills?: Record<string, SelectOption[]>;
   prompt_templates: Record<string, Record<string, string>>;
   workflow_steps: WorkflowStep[];
   prerequisites: Prerequisite[];
@@ -89,6 +91,7 @@ export interface PromptConfig {
   inserted_at?: string;
   updated_at?: string;
   created_by?: string;
+  path_type?: 'use_case' | 'skill';
 }
 
 export interface ImageMetadata {
@@ -145,6 +148,7 @@ export interface UseCaseCreateRequest {
   use_case: string;
   use_case_label: string;
   prompt_template?: string;
+  path_type?: 'use_case' | 'skill';
 }
 
 export interface PromptConfigCreateRequest {
@@ -153,6 +157,7 @@ export interface PromptConfigCreateRequest {
   use_case: string;
   use_case_label: string;
   prompt_template: string;
+  path_type?: 'use_case' | 'skill';
 }
 
 export interface SectionInputCreateRequest {

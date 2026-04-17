@@ -523,7 +523,8 @@ CREATE TABLE IF NOT EXISTS {schema}.usecase_descriptions (
     is_active BOOLEAN NOT NULL DEFAULT TRUE,
     inserted_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    created_by VARCHAR(255)
+    created_by VARCHAR(255),
+    path_type VARCHAR(50) NOT NULL DEFAULT 'use_case'
 );
 
 -- Indexes for usecase_descriptions

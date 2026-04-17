@@ -420,6 +420,7 @@ class PromptConfigCreate(BaseModel):
     use_case: str = Field(..., min_length=1, description="Use case identifier")
     use_case_label: str = Field(..., min_length=1, description="Display label for use case")
     prompt_template: str = Field(..., description="The prompt template text")
+    path_type: str = Field(default="use_case", description="Entry type: 'use_case' or 'skill'")
 
 
 class PromptConfigResponse(BaseModel):
@@ -435,6 +436,7 @@ class PromptConfigResponse(BaseModel):
     inserted_at: Optional[str] = None
     updated_at: Optional[str] = None
     created_by: Optional[str] = None
+    path_type: str = "use_case"
 
 
 class SectionInputCreate(BaseModel):
@@ -546,8 +548,14 @@ def get_industries() -> List[Dict]:
     logger.info("[YAML Fallback] Using industries from prompts_config.yaml")
     return get_config().get('industries', [])
 
+SKILL_USE_CASES = {"build_skill"}
+
+def _derive_path_type(row: Dict) -> str:
+    """Derive path_type from row data, falling back to convention if column missing."""
+    return row.get("path_type") or ("skill" if row.get("use_case") in SKILL_USE_CASES else "use_case")
+
 def get_use_cases_map() -> Dict[str, List[Dict]]:
-    """Get use cases map - from Lakebase or YAML fallback."""
+    """Get use cases map - from Lakebase or YAML fallback. Includes path_type per entry."""
     # Try Lakebase first
     lakebase_data = get_usecase_descriptions_from_lakebase()
     if lakebase_data:
@@ -561,13 +569,29 @@ def get_use_cases_map() -> Dict[str, List[Dict]]:
                     use_cases_map[industry] = [{"value": "", "label": "Select a use case..."}]
                 use_cases_map[industry].append({
                     "value": use_case,
-                    "label": row.get("use_case_label", use_case.title())
+                    "label": row.get("use_case_label", use_case.title()),
+                    "path_type": _derive_path_type(row)
                 })
         return use_cases_map
     
-    # Fallback to YAML
+    # Fallback to YAML (no path_type in YAML — default to 'use_case')
     logger.info("[YAML Fallback] Using use_cases from prompts_config.yaml")
-    return get_config().get('use_cases', {})
+    yaml_data = get_config().get('use_cases', {})
+    for industry_key, uc_list in yaml_data.items():
+        for uc in uc_list:
+            if uc.get("value"):
+                uc.setdefault("path_type", "skill" if uc["value"] in SKILL_USE_CASES else "use_case")
+    return yaml_data
+
+def get_skills_map() -> Dict[str, List[Dict]]:
+    """Get skills map (entries with path_type='skill') grouped by industry."""
+    all_use_cases = get_use_cases_map()
+    skills_map = {}
+    for industry, uc_list in all_use_cases.items():
+        skills = [uc for uc in uc_list if uc.get("path_type") == "skill"]
+        if skills:
+            skills_map[industry] = skills
+    return skills_map
 
 def get_prompt_templates_map() -> Dict[str, Dict[str, str]]:
     """Get prompt templates - from Lakebase database only (no YAML fallback)."""
@@ -2326,6 +2350,7 @@ async def get_all_data(response: Response):
     return {
         "industries": get_industries(),
         "use_cases": get_use_cases_map(),
+        "skills": get_skills_map(),
         "prompt_templates": get_prompt_templates_map(),
         "workflow_steps": get_workflow_steps_list() or WORKFLOW_STEPS,
         "prerequisites": PREREQUISITES,
@@ -2545,10 +2570,14 @@ async def get_latest_prompt_configs(response: Response) -> List[PromptConfigResp
                     use_case_label=use_case_label,
                     prompt_template=template,
                     version=1,
-                    is_active=True
+                    is_active=True,
+                    path_type="skill" if use_case in SKILL_USE_CASES else "use_case"
                 ))
         return configs
     
+    # Derive path_type for rows that may not have the column yet (pre-migration)
+    for row in results:
+        row["path_type"] = _derive_path_type(row)
     return [PromptConfigResponse(**row) for row in results]
 
 

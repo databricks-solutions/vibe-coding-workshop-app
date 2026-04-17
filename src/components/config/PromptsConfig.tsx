@@ -9,11 +9,15 @@ import { useState, useEffect, useMemo, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { Lightbulb, X, Pencil } from 'lucide-react';
+import { Lightbulb, X, Pencil, Layers, FileCode } from 'lucide-react';
 import { apiClient } from '../../api/client';
 import type { PromptConfig, ConfigVersionInfo } from '../../api/client';
 import { useUseCaseBuilder } from '../../hooks/useUseCaseBuilder';
 import { UseCaseBuilderPanel } from '../UseCaseBuilderPanel';
+
+type PathFilter = 'use_case' | 'skill';
+
+const SKILL_USE_CASES = new Set(['build_skill']);
 
 // Styled markdown components for nice rendering (dark theme)
 const markdownComponents = {
@@ -101,6 +105,7 @@ export function PromptsConfig({ onToast }: PromptsConfigProps) {
   const [selectedIndustry, setSelectedIndustry] = useState<string>('');
   const [selectedUseCase, setSelectedUseCase] = useState<string>('');
   const [searchQuery, setSearchQuery] = useState('');
+  const [pathFilter, setPathFilter] = useState<PathFilter>('use_case');
 
   const updateUrlParams = useCallback((industry: string, useCase: string) => {
     const url = new URL(window.location.href);
@@ -205,26 +210,26 @@ export function PromptsConfig({ onToast }: PromptsConfigProps) {
     }
   }
 
-  // Derive unique industries from configs
+  const getPathType = useCallback((c: PromptConfig): PathFilter => {
+    return (c.path_type as PathFilter) || (SKILL_USE_CASES.has(c.use_case) ? 'skill' : 'use_case');
+  }, []);
+
+  // Derive unique industries from configs, filtered by path type
   const industries = useMemo(() => {
+    const filtered = configs.filter(c => c.use_case !== '_placeholder' && getPathType(c) === pathFilter);
     const seen = new Set<string>();
-    return configs
-      .filter(c => {
-        if (seen.has(c.industry)) return false;
-        seen.add(c.industry);
-        return true;
-      })
-      .filter(c => c.use_case !== '_placeholder')
+    return filtered
+      .filter(c => { if (seen.has(c.industry)) return false; seen.add(c.industry); return true; })
       .map(c => ({ value: c.industry, label: c.industry_label }))
       .filter(i => !searchQuery || i.label.toLowerCase().includes(searchQuery.toLowerCase()));
-  }, [configs, searchQuery]);
+  }, [configs, searchQuery, pathFilter, getPathType]);
 
-  // Derive use cases for selected industry
+  // Derive use cases for selected industry, filtered by path type
   const useCases = useMemo(() => {
     return configs
-      .filter(c => c.industry === selectedIndustry && c.use_case !== '_placeholder')
+      .filter(c => c.industry === selectedIndustry && c.use_case !== '_placeholder' && getPathType(c) === pathFilter)
       .map(c => ({ value: c.use_case, label: c.use_case_label, is_active: c.is_active }));
-  }, [configs, selectedIndustry]);
+  }, [configs, selectedIndustry, pathFilter, getPathType]);
 
   // Current config for selected industry/use case
   const currentConfig = useMemo(() => {
@@ -490,7 +495,34 @@ export function PromptsConfig({ onToast }: PromptsConfigProps) {
   }
 
   return (
-    <div className="flex h-full gap-4">
+    <div className="flex flex-col h-full gap-4">
+      {/* Path Type Toggle */}
+      <div className="flex items-center gap-1 p-1 bg-secondary/30 rounded-lg border border-border/50 w-fit">
+        <button
+          onClick={() => { setPathFilter('use_case'); setSelectedIndustry(''); setSelectedUseCase(''); }}
+          className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-all ${
+            pathFilter === 'use_case'
+              ? 'bg-card text-foreground shadow-sm border border-border/50'
+              : 'text-muted-foreground hover:text-foreground'
+          }`}
+        >
+          <Layers className="w-3.5 h-3.5" />
+          Use Cases
+        </button>
+        <button
+          onClick={() => { setPathFilter('skill'); setSelectedIndustry(''); setSelectedUseCase(''); }}
+          className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-all ${
+            pathFilter === 'skill'
+              ? 'bg-card text-foreground shadow-sm border border-border/50'
+              : 'text-muted-foreground hover:text-foreground'
+          }`}
+        >
+          <FileCode className="w-3.5 h-3.5" />
+          Skills
+        </button>
+      </div>
+
+    <div className="flex flex-1 gap-4 min-h-0">
       {/* Left Column - Industries */}
       <div className="w-56 flex-shrink-0 bg-card rounded-lg border border-border overflow-hidden flex flex-col">
         <div className="p-3 border-b border-border bg-secondary/50">
@@ -1109,6 +1141,7 @@ export function PromptsConfig({ onToast }: PromptsConfigProps) {
           </div>
         </div>
       )}
+    </div>
     </div>
   );
 }
