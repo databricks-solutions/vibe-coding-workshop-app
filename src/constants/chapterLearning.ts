@@ -81,7 +81,7 @@ export const CHAPTER_LEARNING: Record<string, ChapterLearning> = {
     congratsTitle: 'Reverse ETL Complete!',
     summary: 'You synced analytics data into Lakebase and built an analytics app.',
     bullets: [
-      'Planned and created Synced Tables using the createSyncedTable API',
+      'Planned and created Synced Tables using the Databricks REST API',
       'Pushed Gold layer data into Lakebase PostgreSQL via Databricks Synced Tables',
       'Designed an analytics-serving application based on synced data schemas',
       'Built and wired FastAPI routes and React components to the synced tables',

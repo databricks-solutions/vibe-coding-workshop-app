@@ -13,6 +13,7 @@
 --   {lakebase_instance_name}  - From Workshop Parameters config (Lakebase instance name)
 --   {lakebase_host_name}      - From Workshop Parameters config (Lakebase host DNS)
 --   {default_warehouse}       - From Workshop Parameters config
+--   {lakehouse_default_catalog} - From Workshop Parameters config (default catalog)
 --   {use_case_slug}            - Derived per-session: e.g. booking-app (hyphens)
 --   {user_schema_prefix}      - Derived per-session: e.g. varunrao_b_booking_app
 --   {user_app_name}           - Derived per-session: Lakebase project / app name
@@ -7556,6 +7557,9 @@ VALUES
 
 Plan which Gold layer assets to sync into Lakebase PostgreSQL using Databricks Synced Tables, then save the plan for implementation in the next step.
 
+Your Gold layer lives in `{lakehouse_default_catalog}.{user_schema_prefix}`.
+Target Lakebase project: `{lakebase_instance_name}`.
+
 ---
 
 ### Step 1: Review Prior Outputs
@@ -7574,11 +7578,13 @@ From the Gold layer design, list every Gold table, Metric View, and table-valued
 
 - Name the source object (full three-level Unity Catalog name)
 - Identify or define a stable **primary key**
+- **Synced table names MUST differ from source** — append `_synced` suffix (e.g., `fact_flights` becomes `fact_flights_synced`)
 - Choose a **sync mode**: `SNAPSHOT` or `TRIGGERED`
   - Use **SNAPSHOT** for views, Iceberg tables, or sources without Change Data Feed (CDF)
-  - Use **TRIGGERED** for Delta tables that change on a known cadence — schedule hourly or less frequently (do NOT set intervals under 15 minutes to balance cost)
-  - Do NOT use **CONTINUOUS** mode in this workshop — it streams in real time and incurs significant compute cost
+  - Use **TRIGGERED** for Delta tables that change on a known cadence — use a 24-hour (daily) schedule minimum to balance cost
 - Note any columns with types that need special handling (ARRAY/MAP/STRUCT → JSONB, unsupported GEOGRAPHY/GEOMETRY → drop or cast)
+
+**WORKSHOP OVERRIDE:** If your Gold design or use-case plan suggests Continuous sync mode for any table, use SNAPSHOT instead. Continuous mode incurs significant streaming compute cost.
 
 ---
 
@@ -7595,11 +7601,17 @@ Save the plan to `@docs/activation_sync_plan.md` with this structure:
 ```markdown
 # Synced Tables Plan
 
+## Environment
+- Source catalog: {lakehouse_default_catalog}
+- Source schema: {user_schema_prefix}
+- Lakebase project: {lakebase_instance_name}
+- Target database: <specify>
+
 ## Candidates
 
-| # | Source Object | Primary Key | Sync Mode | Type Notes |
-|---|---|---|---|---|
-| 1 | catalog.schema.table | id | TRIGGERED | — |
+| # | Source Object | Synced Table Name | Primary Key | Sync Mode | Type Notes |
+|---|---|---|---|---|---|
+| 1 | {lakehouse_default_catalog}.{user_schema_prefix}.table | table_synced | id | SNAPSHOT | -- |
 
 ## Creation Order
 1. ...
@@ -7615,14 +7627,14 @@ Save the plan to `@docs/activation_sync_plan.md` with this structure:
 
 Your job is complete when:
 - `@docs/activation_sync_plan.md` exists with a table of sync candidates
-- Each candidate has a source name, primary key, sync mode, and type notes
+- Each candidate has a source name, synced table name (with `_synced` suffix), primary key, sync mode, and type notes
 - Creation order is defined
 - STOP after saving — do not create synced tables yet',
 'You are a data architect planning reverse ETL sync from Databricks Lakehouse to Lakebase PostgreSQL using Synced Tables.
 
 This prompt is returned as-is for direct use in Cursor/Copilot. No LLM processing.',
 'Plan Synced Tables',
-'Design which Gold assets to sync into Lakebase via createSyncedTable, including keys, modes, and types',
+'Design which Gold assets to sync into Lakebase via Synced Tables, including keys, modes, and types',
 32,
 '## Prerequisite
 
@@ -7648,7 +7660,7 @@ This prompt is returned as-is for direct use in Cursor/Copilot. No LLM processin
 | **Triggered** | Scheduled incremental updates | Yes | Known change cadence; good cost/lag balance |
 | **Continuous** | Real-time streaming | Yes | NOT recommended for this workshop (high compute cost) |
 
-> **Workshop note:** Use **Snapshot** or **Triggered** only. Do NOT use Continuous mode — it incurs significant streaming compute cost. For Triggered mode, schedule hourly or less frequently (never under 15 minutes).
+> **Workshop note:** Use **Snapshot** or **Triggered** only. Do NOT use Continuous mode — it incurs significant streaming compute cost. For Triggered mode, use a 24-hour (daily) schedule minimum.
 
 ## Reference: Data Type Mappings
 
@@ -7682,10 +7694,37 @@ VALUES
 (142, 'activation_reverse_sync',
 '## Your Task
 
-Create Synced Tables in Lakebase using the Databricks Python SDK, following the sync plan from the previous step.
+Create Synced Tables in Lakebase using the Databricks REST API, following the sync plan from the previous step.
 
 **Workspace:** `{workspace_url}`
-**Lakebase Project:** `{user_app_name}`
+**Your Lakebase Project:** `{user_app_name}` (your personal project within the shared instance `{lakebase_instance_name}`)
+
+---
+
+### Mandatory Reads
+
+Before generating any code, read these files:
+
+1. `@docs/activation_sync_plan.md` -- sync plan with PKs, modes, dependencies
+2. `@docs/gold_layer_design.md` -- actual table inventory
+
+---
+
+### Source of Truth / Overrides
+
+These overrides apply regardless of what the sync plan says:
+
+- **NO continuous mode** -- use SNAPSHOT for all tables marked Continuous
+- **ALL triggered tables:** 24-hour cron schedule minimum
+- **Snapshot tables:** retain daily/weekly per sync plan
+
+---
+
+### IMPORTANT -- API Usage
+
+- Do NOT use the Python SDK `databricks.sdk.service.postgres` module -- it manages infrastructure (projects/branches), NOT synced tables
+- Do NOT use `databricks.sdk.service.database.DatabaseInstancesAPI` -- that is for Provisioned Lakebase only
+- Use the `requests` library directly for all API calls (pre-installed on Databricks)
 
 ---
 
@@ -7697,75 +7736,101 @@ databricks auth login --host {workspace_url}
 
 ---
 
-### Step 2: Read the Sync Plan
-
-Read `@docs/activation_sync_plan.md` to get the list of Gold tables to sync, their primary keys, sync modes, and creation order.
-
----
-
-### Step 3: Enable CDF on Source Tables (if needed)
+### Step 2: Enable CDF on Source Tables (if needed)
 
 For any table using **TRIGGERED** sync mode, enable Change Data Feed first:
 
 ```sql
-ALTER TABLE <catalog>.<schema>.<table>
+ALTER TABLE {lakehouse_default_catalog}.{user_schema_prefix}.<table>
 SET TBLPROPERTIES (delta.enableChangeDataFeed = true)
 ```
 
-Skip this for **SNAPSHOT** mode tables — CDF is not required.
+Skip this for **SNAPSHOT** mode tables -- CDF is not required.
 
 ---
 
-### Step 4: Create Synced Tables
+### Step 3: Create Synced Tables via REST API
 
-For each object in the sync plan (in dependency order), create a synced table using the Databricks Python SDK:
+For each object in the sync plan (in dependency order), create a synced table:
 
 ```python
-from databricks.sdk import WorkspaceClient
-from databricks.sdk.service.postgres import (
-    SyncedTable, SyncedTableSyncedTableSpec,
-    SyncedTableSyncedTableSpecSyncedTableSchedulingPolicy,
-)
+import requests, json, subprocess
 
-w = WorkspaceClient()
-synced_table = w.postgres.create_synced_table(
-    synced_table=SyncedTable(spec=SyncedTableSyncedTableSpec(
-        source_table_full_name="<catalog>.<schema>.<gold_table>",
-        project="projects/{user_app_name}",
-        branch="projects/{user_app_name}/branches/production",
-        primary_key_columns=["<primary_key_column>"],
-        scheduling_policy=SyncedTableSyncedTableSpecSyncedTableSchedulingPolicy.TRIGGERED,
-        create_database_objects_if_missing=True,
-    )),
-    synced_table_id="<catalog>.<schema>.<synced_table_name>",
-).wait()
-print(f"Synced table created: {synced_table.name}")
+# Get auth token
+token = subprocess.check_output(
+    ["databricks", "auth", "token", "--host", "{workspace_url}"]
+).decode().strip()
+
+HEADERS = {
+    "Authorization": f"Bearer {token}",
+    "Content-Type": "application/json"
+}
+BASE_URL = "{workspace_url}/api/2.0/postgres/synced_tables"
+
+# --- CREATE a synced table ---
+resp = requests.post(
+    BASE_URL,
+    params={"synced_table_id": "{lakehouse_default_catalog}.{user_schema_prefix}.<table_name>_synced"},
+    json={
+        "spec": {
+            "source_table_full_name": "{lakehouse_default_catalog}.{user_schema_prefix}.<source_table>",
+            "project": "projects/{user_app_name}",
+            "branch": "projects/{user_app_name}/branches/main",
+            "primary_key_columns": ["<pk_col>"],
+            "scheduling_policy": "TRIGGERED",
+            "postgres_database": "<database_name>",
+            "create_database_objects_if_missing": True
+        }
+    },
+    headers=HEADERS
+)
+print(resp.status_code, resp.json())
 ```
 
-Replace placeholders with actual values from the sync plan. Adjust `scheduling_policy` to match the chosen mode per table.
+Replace `<table_name>`, `<source_table>`, `<pk_col>`, and `<database_name>` with actual values from the sync plan. Adjust `scheduling_policy` to `SNAPSHOT` or `TRIGGERED` per table.
 
-**Cost note:** Do NOT use CONTINUOUS mode. For TRIGGERED tables, if you configure a Lakeflow Jobs schedule for subsequent syncs, use hourly or less frequent intervals — never more often than every 15 minutes.
+**Key API details:**
+- Endpoint: `POST /api/2.0/postgres/synced_tables` (underscores, not hyphens)
+- `synced_table_id` is a **query parameter**, not a body field
+- Body structure: `{"spec": {...}}` at root level, NOT nested inside `"synced_table"`
+- Synced table names **must differ** from source table names (use `_synced` suffix)
 
 ---
 
-### Step 5: Verify Sync Status
+### Step 4: Verify Sync Status
 
 After each creation, confirm the sync completed:
 
 ```python
-table = w.postgres.get_synced_table("synced_tables/<catalog>.<schema>.<synced_table_name>")
-print(f"State: {table.status.detailed_state}")
-print(f"Last sync: {table.status.last_sync_time}")
+# --- GET sync status ---
+table_id = "{lakehouse_default_catalog}.{user_schema_prefix}.<table_name>_synced"
+resp = requests.get(f"{BASE_URL}/{table_id}", headers=HEADERS)
+status = resp.json()
+print(f"State: {status.get(''status'', {}).get(''detailed_state'')}")
 ```
 
 ---
 
-### Step 6: Verify Data Landed in Lakebase
+### Step 5: Verify Data Landed in Lakebase
 
 Query each synced table in Postgres to confirm rows arrived:
 
 ```sql
+-- Use the synced table name from your plan (already includes _synced suffix)
 SELECT count(*) FROM <schema>.<synced_table_name>;
+```
+
+---
+
+### Step 6: Delete and Recreate (if needed)
+
+If you need to fix a synced table definition:
+
+```python
+# --- DELETE (if needed to recreate) ---
+table_id = "{lakehouse_default_catalog}.{user_schema_prefix}.<table_name>_synced"
+resp = requests.delete(f"{BASE_URL}/{table_id}", headers=HEADERS)
+print(resp.status_code)
 ```
 
 ---
@@ -7774,10 +7839,10 @@ SELECT count(*) FROM <schema>.<synced_table_name>;
 
 Your job is complete when:
 - CDF is enabled on source tables that use TRIGGERED mode
-- All synced tables from the plan are created in dependency order
-- `get_synced_table` shows each table in a healthy sync state
+- All synced tables from the plan are created in dependency order via REST API
+- GET status shows each table in a healthy sync state
 - Row counts in Lakebase match expectations from the source Gold tables
-- STOP after verification — app design is the next step',
+- STOP after verification -- app design is the next step',
 'You are a Databricks engineer implementing Synced Tables for reverse ETL from the Lakehouse Gold layer into Lakebase PostgreSQL.
 
 CLI Best Practices:
@@ -7785,7 +7850,7 @@ CLI Best Practices:
 
 This prompt is returned as-is for direct use in Cursor/Copilot. No LLM processing.',
 'Create Synced Tables',
-'Create Synced Tables from Gold layer into Lakebase using the Databricks Python SDK',
+'Create Synced Tables from Gold layer into Lakebase using the Databricks REST API',
 33,
 '## Prerequisite
 
@@ -7798,10 +7863,16 @@ This prompt is returned as-is for direct use in Cursor/Copilot. No LLM processin
 1. Copy the generated prompt
 2. Paste into Cursor or Copilot
 3. The code assistant will:
-   - Read your sync plan
+   - Read your sync plan and Gold layer design
    - Enable CDF where needed
-   - Create synced tables via the Python SDK
+   - Create synced tables via the REST API (`POST /api/2.0/postgres/synced_tables`)
    - Verify sync status and row counts
+
+## IMPORTANT -- API Usage
+
+- Do NOT use the Python SDK `databricks.sdk.service.postgres` module -- it manages infrastructure (projects/branches), NOT synced tables
+- Do NOT use `databricks.sdk.service.database.DatabaseInstancesAPI` -- that is for Provisioned Lakebase only
+- Use the `requests` library directly for all API calls
 
 ## Reference: Sync Modes and CDF
 
@@ -7811,7 +7882,7 @@ This prompt is returned as-is for direct use in Cursor/Copilot. No LLM processin
 | **Triggered** | Yes | Known change cadence; good cost/lag balance |
 | **Continuous** | Yes | NOT recommended for this workshop (high compute cost) |
 
-> **Workshop note:** Use **Snapshot** or **Triggered** only. Do NOT use Continuous mode — it incurs significant streaming compute cost. For Triggered mode, schedule hourly or less frequently (never under 15 minutes).
+> **Workshop note:** Use **Snapshot** or **Triggered** only. Do NOT use Continuous mode -- it incurs significant streaming compute cost. For Triggered mode, schedule at 24-hour minimum intervals.
 
 ## Reference: Capacity Constraints
 
@@ -7823,15 +7894,12 @@ This prompt is returned as-is for direct use in Cursor/Copilot. No LLM processin
 
 ## Reference: Scheduling Subsequent Syncs
 
-After initial sync, Snapshot and Triggered modes need explicit triggers:
-
-- **Programmatic:** `w.pipelines.start_update(pipeline_id=table.status.pipeline_id)`
-- **Lakeflow Jobs:** Table update trigger (Triggered) or cron schedule (Snapshot)
+After initial sync, Snapshot and Triggered modes need explicit triggers via REST API or Lakeflow Jobs cron schedule.
 
 ## Docs
 
 - [Synced Tables](https://docs.databricks.com/aws/en/oltp/projects/sync-tables)
-- [createSyncedTable API](https://docs.databricks.com/api/workspace/postgres/createsyncedtable)',
+- [createSyncedTable REST API](https://docs.databricks.com/api/workspace/postgres/createsyncedtable)',
 '## Expected Output
 
 - [ ] CDF enabled on required source tables
@@ -7848,28 +7916,37 @@ VALUES
 
 Design the UI for an analytics-serving Databricks App powered by data synced into Lakebase from the Gold layer, then save the design document.
 
+Synced data lives in Lakebase project `{lakebase_instance_name}`, sourced from `{lakehouse_default_catalog}.{user_schema_prefix}`.
+
 ---
 
 ### Step 1: Review Prior Outputs
 
 Read these documents to understand the available data and app requirements:
 
-- **Sync plan:** `@docs/activation_sync_plan.md` — which tables are available in Lakebase
-- **Gold layer design:** `@docs/gold_layer_design.md` — entity relationships and metrics
-- **PRD:** `@docs/design_prd.md` — stakeholder needs and personas
+- **Sync plan:** `@docs/activation_sync_plan.md` -- which tables are available in Lakebase
+- **Gold layer design:** `@docs/gold_layer_design.md` -- entity relationships and metrics
+- **PRD:** `@docs/design_prd.md` -- stakeholder needs and personas
 
-If an app already exists from Chapter 1, also review:
-- **Existing UI design:** `@docs/ui_design.md` — current pages, routes, and components
+If you completed Chapter 1 (Databricks App) earlier in this workshop:
+- Review existing UI design at `@docs/ui_design.md`
+- Design new analytics routes that extend the existing app
+
+If you are on the Reverse ETL track (no existing app):
+- This is a greenfield analytics application
+- Create the `apps_lakebase/` directory from scratch
 
 ---
 
 ### Step 2: Design Analytics Pages
 
+Design for **mock-data-first architecture**: all pages must work with realistic placeholder data before any database connection is required.
+
 For each synced table or group of related tables, design analytics pages covering:
 
-- **Dashboard pages** — layout with headline KPIs, charts, and summary cards
-- **Data exploration** — filters, sorting, drill-downs, and tabular detail views
-- **Navigation** — how analytics pages connect to each other (and to existing app pages if extending)
+- **Dashboard pages** -- layout with headline KPIs, charts, and summary cards
+- **Data exploration** -- filters, sorting, drill-downs, and tabular detail views
+- **Navigation** -- how analytics pages connect to each other (and to existing app pages if extending)
 
 ---
 
@@ -7887,6 +7964,12 @@ If a Chapter 1 app already exists:
 - Add a navigation entry to the existing sidebar or nav bar
 
 If no app exists, design a standalone analytics application.
+
+If an Agent was built in Step 18 (Build Agent), the analytics app should include:
+- A natural language search bar that queries the Agent endpoint
+- The Agent uses the Genie Space as its query interface
+- Dashboard pages query synced Lakebase tables directly for structured analytics
+- The NL search bar queries the Agent for conversational data access
 
 ---
 
@@ -7908,7 +7991,7 @@ Your job is complete when:
 - `@docs/analytics_ui_design.md` exists with page designs, KPIs, data sources, and navigation
 - Every visualization traces to a synced Lakebase table from the sync plan
 - Extensions vs greenfield is clearly noted
-- STOP after saving — do not build the app yet',
+- STOP after saving -- do not build the app yet',
 'You are a UI/UX designer creating analytics dashboards powered by Lakebase synced data.
 
 This prompt is returned as-is for direct use in Cursor/Copilot. No LLM processing.',
@@ -7953,6 +8036,44 @@ Build the analytics application designed in the previous step: FastAPI backend r
 
 ---
 
+## Local Development (Priority 0)
+
+The app MUST run locally with zero external dependencies on first try:
+
+- Include a `MOCK_DATA=true` environment variable that serves realistic in-memory data
+- No Docker, no database, no API keys required for the default dev path
+- Backend: `pip install -r requirements.txt && uvicorn main:app --reload`
+- Frontend: `npm install && npm run dev`
+- The mock layer should cover ALL endpoints with realistic sample data
+
+**IMPORTANT -- DO NOT:**
+- Create a Dockerfile or docker-compose.yml
+- Require a running database for local development
+- Require API keys or secrets for the default dev path
+- Import database drivers at module level (use lazy imports behind `MOCK_DATA` check)
+
+The ConnectionStatus indicator should show "Mock Data" by default. It switches to "Live Data" only after Lakebase wiring in the next step.
+
+---
+
+### Directory Scaffolding
+
+If the `apps_lakebase/` directory does not exist yet, create it with this structure:
+
+```
+apps_lakebase/
+  main.py           # FastAPI entrypoint (uvicorn main:app)
+  app.yaml          # Databricks App config
+  requirements.txt  # Python dependencies
+  src/
+    backend/
+      api/routes.py # API endpoints
+    components/     # React components (if using frontend)
+  package.json      # Node dependencies (if using frontend)
+```
+
+---
+
 ### Step 1: Read the Analytics Design
 
 Review `@docs/analytics_ui_design.md` to understand:
@@ -7968,11 +8089,15 @@ Add analytics API endpoints in `@apps_lakebase/src/backend/api/routes.py`:
 
 - Each endpoint must return both `data` AND a `source` field (`"mock"` for now)
 - Use realistic placeholder data that matches the analytics design (correct shape, field names, and types)
-- Lakebase wiring comes in the next step — do NOT add database queries yet
+- Lakebase wiring comes in the next step -- do NOT add database queries yet
 
 **Code Pattern:**
 
 ```python
+import os
+
+MOCK_DATA = os.getenv("MOCK_DATA", "true").lower() == "true"
+
 @router.get("/api/analytics/kpis")
 async def get_kpis():
     return {
@@ -8007,7 +8132,7 @@ useEffect(() => {
 }, []);
 ```
 
-The UI must call backend APIs — no hardcoded data in frontend components.
+The UI must call backend APIs -- no hardcoded data in frontend components.
 
 ---
 
@@ -8039,10 +8164,11 @@ If building greenfield:
 
 From the `apps_lakebase/` directory:
 
-1. Build the frontend: `npm install && npm run build`
-2. Start the backend: `python app.py`
-3. Open `http://localhost:8000` in your browser
-4. Verify:
+1. Install dependencies: `pip install -r requirements.txt && npm install`
+2. Start the backend: `uvicorn main:app --reload`
+3. Start the frontend: `npm run dev`
+4. Open `http://localhost:8000` in your browser
+5. Verify:
    - Analytics pages load correctly
    - Placeholder data renders in KPI cards, charts, and tables
    - ConnectionStatus shows "Mock Data"
@@ -8060,8 +8186,8 @@ Your job is complete when:
 - React components match the analytics design document
 - ConnectionStatus indicator shows "Mock Data" at the top of the page
 - Navigation connects analytics pages to the app
-- Local testing passes at `http://localhost:8000`
-- STOP — do not wire to Lakebase yet, that is the next step',
+- Local testing passes -- app runs with zero external dependencies
+- STOP -- do not wire to Lakebase yet, that is the next step',
 'You are a full-stack developer building an analytics Databricks App with placeholder data.
 
 This prompt is returned as-is for direct use in Cursor/Copilot. No LLM processing.',
@@ -8103,12 +8229,53 @@ VALUES
 Replace placeholder API responses with real PostgreSQL queries against the synced Lakebase tables. After wiring, the ConnectionStatus indicator should switch from "Mock Data" to "Live Data."
 
 **Workspace:** `{workspace_url}`
+**Lakebase Instance:** `{lakebase_instance_name}`
 
 **Working directory:** All app code is under `apps_lakebase/`.
 
 ---
 
-### Step 1: Review Prior Outputs
+### Step 0: Refresh Lakebase Token
+
+Before any database work, refresh your authentication:
+
+```bash
+databricks auth login --host {workspace_url}
+```
+
+---
+
+### Step 1: Discover Synced Table Schemas
+
+Before writing any queries, run schema discovery on EVERY synced table.
+
+For each table in `@docs/activation_sync_plan.md`:
+- List all columns and their PostgreSQL data types
+- Check distinct values for string/enum columns
+- Check date ranges for timestamp columns
+- Note any NULL patterns
+
+Save discoveries to `@docs/lakebase_schema_discovery.md`.
+
+This prevents query errors from wrong column names, case mismatches, or unexpected data types.
+
+---
+
+### Verify DB_SCHEMA Matches Synced Table Schema
+
+The synced tables are NOT in the `public` Postgres schema. They live in the schema matching your Gold layer: `{user_schema_prefix}_gold`.
+
+Verify by querying:
+
+```sql
+SELECT schema_name FROM information_schema.schemata;
+```
+
+Note the correct schema name -- you will configure `DB_SCHEMA` in `app.yaml` during the Deploy step (Step 37). For now, use this schema in all your SQL queries below.
+
+---
+
+### Step 2: Review Prior Outputs
 
 Read `@docs/activation_sync_plan.md` to identify:
 - Synced table names and their Postgres schemas
@@ -8120,24 +8287,26 @@ Read `@docs/analytics_ui_design.md` to identify:
 
 ---
 
-### Step 2: Wire Backend API Routes to Lakebase
+### Step 3: Wire Backend API Routes to Lakebase
 
 Update each analytics endpoint in `@apps_lakebase/src/backend/api/routes.py`:
 
 - Replace placeholder return values with real PostgreSQL queries against synced tables
 - Use the existing database connection pattern from the project (psycopg or equivalent)
+- Create a simple connection per request -- do NOT set up a connection pool (the Databricks Apps runtime handles connection lifecycle)
 - On successful query, return `source: "live"`
 - On database error, fall back to placeholder data and return `source: "mock"`
 
-**Code Pattern:**
+**Code Pattern** (adapt to your chosen driver -- psycopg3 or asyncpg):
 
 ```python
 @router.get("/api/analytics/kpis")
 async def get_kpis():
     try:
-        async with get_db_connection() as conn:
-            result = await conn.fetch("SELECT metric, value FROM <schema>.<synced_table>")
-            return {"data": [dict(r) for r in result], "source": "live"}
+        conn = await get_db_connection()
+        rows = await conn.execute("SELECT metric, value FROM {user_schema_prefix}_gold.<synced_table>")
+        data = [dict(row) for row in rows]
+        return {"data": data, "source": "live"}
     except Exception:
         return {
             "data": [{"metric": "Total Revenue", "value": 125000}],
@@ -8145,9 +8314,19 @@ async def get_kpis():
         }
 ```
 
+### Query Best Practices
+
+- Use `LOWER()` for ALL string comparisons unless you have verified the exact casing
+- Use 7-day rolling windows for date-filtered dashboard queries (not hardcoded date ranges)
+- Test EVERY backend endpoint via curl BEFORE wiring the frontend:
+  ```bash
+  curl -s http://localhost:8000/api/analytics/<endpoint> | jq .
+  ```
+- Handle NULL values explicitly in aggregations
+
 ---
 
-### Step 3: Add Lakebase Health Endpoint
+### Step 4: Add Lakebase Health Endpoint
 
 Create a `/api/health/lakebase` endpoint that tests the database connection:
 
@@ -8155,21 +8334,21 @@ Create a `/api/health/lakebase` endpoint that tests the database connection:
 @router.get("/api/health/lakebase")
 async def health_lakebase():
     try:
-        async with get_db_connection() as conn:
-            await conn.fetchval("SELECT 1")
-            return {"status": "connected", "source": "live"}
+        conn = await get_db_connection()
+        await conn.execute("SELECT 1")
+        return {"status": "connected", "source": "live"}
     except Exception as e:
         return {"status": "disconnected", "error": str(e), "source": "mock"}
 ```
 
 ---
 
-### Step 4: Test Locally
+### Step 5: Test Locally
 
 From the `apps_lakebase/` directory:
 
-1. Build the frontend: `npm install && npm run build`
-2. Start the backend: `python app.py`
+1. Start the backend: `uvicorn main:app --reload`
+2. Start the frontend: `npm run dev`
 3. Open `http://localhost:8000` in your browser
 4. Verify:
    - ConnectionStatus indicator switches to "Live Data"
@@ -8184,17 +8363,19 @@ From the `apps_lakebase/` directory:
 ### Summary
 
 Your job is complete when:
+- Schema discovery is saved to `@docs/lakebase_schema_discovery.md`
+- Queries use schema `{user_schema_prefix}_gold` (not `public`)
 - All analytics API endpoints query synced Lakebase tables (not placeholder data)
 - Each endpoint returns `source: "live"` on success, falls back to `source: "mock"` on error
 - `/api/health/lakebase` endpoint exists and works
 - ConnectionStatus indicator shows "Live Data" during local testing
-- STOP — deployment is the next step',
+- STOP -- deployment is the next step',
 'You are a backend developer wiring a Databricks analytics app to synced Lakebase (PostgreSQL) tables.
 
 This prompt is returned as-is for direct use in Cursor/Copilot. No LLM processing.',
 'Wire to Lakebase',
 'Replace placeholder API data with real PostgreSQL queries against synced Lakebase tables',
-37,
+36,
 '## Prerequisite
 
 Complete **Build Analytics App** (Step 35). The app must be running locally with placeholder data and a ConnectionStatus indicator showing "Mock Data."
@@ -8206,13 +8387,16 @@ Complete **Build Analytics App** (Step 35). The app must be running locally with
 1. Copy the generated prompt
 2. Paste into Cursor or Copilot
 3. The code assistant will:
-   - Read the sync plan for table names and schemas
+   - Discover synced table schemas and save to `@docs/lakebase_schema_discovery.md`
+   - Verify DB_SCHEMA matches `{user_schema_prefix}_gold`
    - Replace placeholder responses with real PostgreSQL queries
    - Add a `/api/health/lakebase` endpoint
    - Test locally and verify ConnectionStatus switches to "Live Data"
 4. Confirm ConnectionStatus shows "Live Data" before proceeding to deploy',
 '## Expected Output
 
+- [ ] Schema discovery saved to `@docs/lakebase_schema_discovery.md`
+- [ ] Queries use schema `{user_schema_prefix}_gold` (app.yaml config deferred to Deploy step)
 - [ ] All analytics endpoints query synced Lakebase tables via PostgreSQL
 - [ ] Each endpoint returns `source: "live"` on success, `source: "mock"` on fallback
 - [ ] `/api/health/lakebase` endpoint returns connection status
@@ -8229,40 +8413,78 @@ VALUES
 Deploy the analytics application to Databricks Apps and validate the full reverse ETL pipeline end to end: Lakehouse Gold → Synced Tables → Lakebase → App.
 
 **Workspace:** `{workspace_url}`
+**App Name:** `{user_app_name}`
+**Lakebase Instance:** `{lakebase_instance_name}`
 
-> **Prerequisite:** Complete Step 37 (Wire to Lakebase) first. Local testing must pass with ConnectionStatus showing "Live Data" before deployment.
+> **Prerequisite:** Complete Step 36 (Wire to Lakebase) first. Local testing must pass with ConnectionStatus showing "Live Data" before deployment.
 
 ---
 
-### Step 1: Verify Local Build
+### Step 1: Configure app.yaml
 
-Ensure the frontend is built and local testing has passed:
-```bash
-ls apps_lakebase/dist/index.html || (cd apps_lakebase && npm run build)
+Ensure your `apps_lakebase/app.yaml` has the correct configuration for reverse ETL:
+
+```yaml
+env:
+  - name: DB_SCHEMA
+    value: "{user_schema_prefix}_gold"   # NOT "public"
+  - name: AUTO_SEED
+    value: "false"                        # Synced tables provide data
+  - name: ENDPOINT_NAME
+    value: "{lakebase_instance_name}"     # For autoscaling token generation
+command:
+  - "uvicorn"
+  - "main:app"
+  - "--host"
+  - "0.0.0.0"
+  - "--port"
+  - "8000"
+  - "--timeout-keep-alive"
+  - "120"                                 # Prevent premature connection drops
 ```
 
 ---
 
 ### Step 2: Deploy Application
 
-1. **Review the `apps_lakebase/scripts/` folder** to find a deployment script (e.g., `deploy.sh`)
-2. **Read the script** to understand its usage and options
-3. **Run the deployment script** from `apps_lakebase/` with appropriate parameters
-4. **If errors occur:** Fix them and retry (up to 3 times)
-5. **If no deployment script exists:** Use `databricks apps` CLI commands to deploy manually
+**Option A** -- If `scripts/deploy.sh` exists:
+
+```bash
+cd apps_lakebase && ./scripts/deploy.sh --code-only -t development
+```
+
+**Option B** -- Manual deployment:
+
+```bash
+# Build frontend
+cd apps_lakebase && npm run build
+
+# Create app (first time only)
+databricks apps create {user_app_name} --description "Analytics app powered by synced Lakebase data"
+
+# Deploy
+databricks apps deploy {user_app_name} --source-code-path apps_lakebase/
+
+# Wait for app to be running
+databricks apps get {user_app_name} --output json | jq -r ''.status.state''
+```
 
 ---
 
-### Step 3: Verify App Is Running
+### Step 3: Verify Deployment
 
-Derive your app name and get the URL:
 ```bash
-FIRSTNAME=$(databricks current-user me --output json | jq -r ''.userName'' | cut -d''@'' -f1 | cut -d''.'' -f1)
-LASTINITIAL=$(databricks current-user me --output json | jq -r ''.userName'' | cut -d''@'' -f1 | cut -d''.'' -f2 | cut -c1)
-USERNAME="${FIRSTNAME}-${LASTINITIAL}"
-APP_NAME="${USERNAME}-{use_case_slug}"
-APP_URL=$(databricks apps get $APP_NAME --output json | jq -r ''.url'')
-echo "App URL: $APP_URL"
+APP_URL=$(databricks apps get {user_app_name} --output json | jq -r ''.url'')
+
+# Test health endpoint
+curl -s "$APP_URL/api/health/lakebase" | jq .
+
+# Test analytics endpoints
+curl -s "$APP_URL/api/analytics/kpis" | jq .source
+# Must return "live", not "mock"
+
+# Check logs
+databricks apps logs {user_app_name} --tail 100
 ```
 
 Open the URL and verify:
@@ -8272,45 +8494,26 @@ Open the URL and verify:
 
 ---
 
-### Step 4: Test Analytics API Endpoints
-
-Test each analytics endpoint returns live data from synced tables:
-```bash
-curl -s "$APP_URL/api/analytics/kpis" | jq .
-# Add all analytics endpoints from your build
-```
-
-Verify responses contain real data from synced Lakebase tables and `source: "live"` (not `"mock"`).
-
----
-
-### Step 5: Check Logs
-
-```bash
-databricks apps logs $APP_NAME --tail 100
-```
-
-Confirm:
-- Database connections are successful
-- Queries against synced tables return results
-- No connection errors or timeouts
-
----
-
-### Step 6: Fix Errors (up to 3 iterations)
+### Step 4: Fix Errors (up to 3 iterations)
 
 If any errors occur:
-1. Check logs: `databricks apps logs $APP_NAME --tail 100`
-2. Fix the issue, rebuild, and redeploy:
-   ```bash
-   cd apps_lakebase && npm run build
-   # Re-run deploy script
-   ```
+1. Check logs: `databricks apps logs {user_app_name} --tail 100`
+2. Fix the issue, rebuild, and redeploy
 3. Repeat up to 3 times. If errors persist, stop and report for investigation.
+
+### Common Errors
+
+| Error | Fix |
+|-------|-----|
+| No module named ''psycopg'' | Add `psycopg[binary,pool]>=3.1.0` to requirements.txt |
+| permission denied for sequence | Run: `./scripts/setup-lakebase.sh --recreate` |
+| role does not exist | Grant DATABRICKS_SUPERUSER role to service principal |
+| source: "mock" in responses | Lakebase connection failed -- check ENDPOINT_NAME env var in app.yaml |
+| App not found | Run `databricks apps create` first |
 
 ---
 
-### Step 7: Validate Data Freshness
+### Step 5: Validate Data Freshness
 
 Confirm that data from the Gold layer has reached the app:
 - Check synced table row counts match Gold layer expectations
@@ -8337,10 +8540,10 @@ CLI Best Practices:
 This prompt is returned as-is for direct use in Cursor/Copilot. No LLM processing.',
 'Deploy & Validate',
 'Deploy analytics app to Databricks Apps and validate the full reverse ETL pipeline',
-36,
+37,
 '## Prerequisite
 
-Complete **Wire to Lakebase** (Step 37). Local testing must pass at `http://localhost:8000` with ConnectionStatus showing "Live Data."
+Complete **Wire to Lakebase** (Step 36). Local testing must pass at `http://localhost:8000` with ConnectionStatus showing "Live Data."
 
 ---
 
@@ -8349,15 +8552,16 @@ Complete **Wire to Lakebase** (Step 37). Local testing must pass at `http://loca
 1. Copy the generated prompt
 2. Paste into Cursor or Copilot
 3. The code assistant will:
+   - Configure app.yaml with correct DB_SCHEMA and ENDPOINT_NAME
    - Build the frontend and deploy to Databricks Apps
-   - Get the app URL and verify the analytics UI loads
-   - Confirm ConnectionStatus shows "Live Data" on the deployed app
-   - Test all analytics API endpoints for live data with `source: "live"`
+   - Verify the analytics UI loads with "Live Data"
+   - Test all analytics API endpoints for `source: "live"`
    - Check logs for database connectivity
-   - Fix errors and retry if needed
+   - Fix errors using the common errors table
    - Validate data freshness end to end',
 '## Expected Output
 
+- [ ] app.yaml configured with DB_SCHEMA={user_schema_prefix}_gold and AUTO_SEED=false
 - [ ] Databricks App deployed and running
 - [ ] Analytics UI accessible at the app URL
 - [ ] ConnectionStatus indicator shows "Live Data" on deployed app

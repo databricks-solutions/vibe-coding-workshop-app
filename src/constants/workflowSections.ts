@@ -236,8 +236,8 @@ export const ALL_STEPS: Record<number, WorkflowStep> = {
   33: { number: 33, title: 'Create Synced Tables', icon: RefreshCw, color: 'text-emerald-500', sectionTag: 'activation_reverse_sync' },
   34: { number: 34, title: 'Design Analytics App', icon: Palette, color: 'text-emerald-400', sectionTag: 'activation_app_design' },
   35: { number: 35, title: 'Build Analytics App', icon: Plug, color: 'text-emerald-500', sectionTag: 'activation_build_wire' },
-  36: { number: 36, title: 'Deploy & Validate', icon: Rocket, color: 'text-emerald-400', sectionTag: 'activation_deploy_validate' },
-  37: { number: 37, title: 'Wire to Lakebase', icon: Link2, color: 'text-emerald-500', sectionTag: 'activation_wire_lakebase' },
+  36: { number: 36, title: 'Wire to Lakebase', icon: Link2, color: 'text-emerald-500', sectionTag: 'activation_wire_lakebase' },
+  37: { number: 37, title: 'Deploy & Validate', icon: Rocket, color: 'text-emerald-400', sectionTag: 'activation_deploy_validate' },
 };
 
 // The logical sections with their step groupings (4-chapter structure + activation + skills)
@@ -312,7 +312,7 @@ export const WORKFLOW_SECTIONS: WorkflowSection[] = [
     color: 'text-emerald-400',
     bgColor: 'bg-emerald-500/15',
     borderColor: 'border-emerald-500/30',
-    steps: [32, 33, 34, 35, 37, 36].map(n => ALL_STEPS[n]),
+    steps: [32, 33, 34, 35, 36, 37].map(n => ALL_STEPS[n]),
   },
   {
     id: 'agent-skills',
@@ -431,6 +431,14 @@ export function getFilteredSections(
       if (section.id === 'activation' && direction !== 'reverse') {
         return { ...section, steps: [] };
       }
+      // reverse-lakebase: only Plan + Create synced tables (steps 32-33)
+      // reverse-app: show all activation steps (32-37)
+      if (section.id === 'activation' && normalizedLevel === 'reverse-lakebase') {
+        return {
+          ...section,
+          steps: section.steps.filter(step => [32, 33].includes(step.number)),
+        };
+      }
       // Databricks App and Lakebase sections: hidden in reverse direction
       // (Activation steps replace their functionality with Synced Tables + analytics app)
       if ((section.id === 'databricks-app' || section.id === 'lakebase') && direction === 'reverse') {
@@ -440,9 +448,13 @@ export function getFilteredSections(
       // or when in reverse direction (Reverse ETL flows build analytics apps, not agent-wired UIs)
       if (section.id === 'data-intelligence' && (!chapterVisibility.has('ch1') || direction === 'reverse')) {
         let steps = section.steps.filter(step => step.number !== 19);
-        // In reverse ETL, Genie Space (17) must precede AI/BI Dashboard (16)
-        // because the dashboard queries Metric Views created by the semantic layer
         if (direction === 'reverse') {
+          // For reverse-lakebase, also remove Build Agent (no app to wire it to)
+          if (normalizedLevel === 'reverse-lakebase') {
+            steps = steps.filter(step => step.number !== 18);
+          }
+          // In reverse ETL, Genie Space (17) must precede AI/BI Dashboard (16)
+          // because the dashboard queries Metric Views created by the semantic layer
           const i16 = steps.findIndex(s => s.number === 16);
           const i17 = steps.findIndex(s => s.number === 17);
           if (i16 !== -1 && i17 !== -1 && i16 < i17) {
