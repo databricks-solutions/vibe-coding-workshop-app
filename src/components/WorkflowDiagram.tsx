@@ -439,47 +439,95 @@ export function WorkflowDiagram({
   const workflowAutoExpanded = wizardStage >= 5;
   const isWorkflowExpanded = workflowUserOverride !== null ? workflowUserOverride : workflowAutoExpanded;
   
-  // Handle initial step and auto-expand section.
-  // On first mount, lazy initializers already set the correct state — we only need to scroll.
-  // On subsequent dependency changes (session switch, etc.), we update state AND scroll.
-  const stepRestoreMountRef = useRef(true);
+  // Session restore: when a session finishes loading, jump the returning user
+  // back to the exact step they left off on and expand it.
+  //
+  // Waits for `isSessionLoaded === true` so we never touch state during the
+  // in-flight load (App.tsx applies session data in one batch and flips
+  // isSessionLoading ~550ms later; acting on the earlier batch would wipe
+  // expandedStep/showSectionDetail back to defaults and cause the inner
+  // scroll container to unmount mid-scroll -- the root cause of the
+  // "only scrolls to top of workflow" regression).
+  //
+  // Restores exactly once per sessionId (guarded by restoredSessionIdRef), so
+  // switching sessions from "My Saved Sessions" also works.
+  const restoredSessionIdRef = useRef<string | null>(null);
   useEffect(() => {
+    if (!isSessionLoaded) return;
+    if (!sessionId) return;
     if (!initialExpandedStep) return;
+    if (restoredSessionIdRef.current === sessionId) return;
 
-    const isFirstMount = stepRestoreMountRef.current;
-    stepRestoreMountRef.current = false;
-
-    if (!isFirstMount) {
-      // Subsequent change — update state
-      const section = getSectionForStep(initialExpandedStep);
-      if (section) {
-        setExpandedSectionId(section.id);
-        setSelectedSectionId(section.id);
-      }
-      if (isSessionLoaded && completedSteps.size > 0) {
-        setExpandedStep(initialExpandedStep);
-        setShowSectionDetail(false);
-      } else {
-        setExpandedStep(null);
-        setShowSectionDetail(true);
-      }
+    // Only restore for returning users with real progress. A brand-new
+    // session (nothing completed, step still 1) should follow the normal
+    // wizard flow -- don't hijack it.
+    const hasProgress = completedSteps.size > 1 || initialExpandedStep > 1;
+    if (!hasProgress) {
+      restoredSessionIdRef.current = sessionId;
+      return;
     }
 
-    // Scroll on both first mount and subsequent changes
-    if (isSessionLoaded && completedSteps.size > 0) {
-      setTimeout(() => {
-        const workflowArea = document.getElementById('workflow-main-area');
-        if (workflowArea) {
-          workflowArea.scrollIntoView({ behavior: 'smooth', block: 'start' });
-        }
-        scrollToStepInContainer(initialExpandedStep);
-      }, 600);
-    } else {
-      setTimeout(() => {
-        scrollToStepInContainer(initialExpandedStep);
-      }, 300);
+    restoredSessionIdRef.current = sessionId;
+
+    // Batch the state updates: expand the right section, show the step list
+    // (not the section detail panel), and expand the target step.
+    const section = getSectionForStep(initialExpandedStep);
+    if (section) {
+      setExpandedSectionId(section.id);
+      setSelectedSectionId(section.id);
     }
-  }, [initialExpandedStep, isSessionLoaded, sessionId]);
+    setExpandedStep(initialExpandedStep);
+    setShowSectionDetail(false);
+
+    // Scroll in two phases after React has committed and the browser has
+    // laid out (RAF x2). Outer smooth-scroll brings the workflow card into
+    // view; inner uses 'auto' to avoid racing the outer animation, with a
+    // short retry loop so we succeed even if the step DOM mounts late.
+    let cancelled = false;
+    const outerRaf = requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        if (cancelled) return;
+        const workflowArea = document.getElementById('workflow-area');
+        workflowArea?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+        const stepNumber = initialExpandedStep;
+        const maxAttempts = 6;
+        const attemptDelayMs = 120;
+        let attempt = 0;
+        const tryScroll = () => {
+          if (cancelled) return;
+          const stepElement = document.querySelector(
+            `[data-step-number="${stepNumber}"]`
+          ) as HTMLElement | null;
+          const contentContainer = document.getElementById('workflow-content');
+          if (stepElement && contentContainer) {
+            const containerRect = contentContainer.getBoundingClientRect();
+            const stepRect = stepElement.getBoundingClientRect();
+            const target = Math.max(
+              0,
+              contentContainer.scrollTop + (stepRect.top - containerRect.top) - 20
+            );
+            contentContainer.scrollTo({ top: target, behavior: 'auto' });
+            // Verify we landed close to the target; if not, retry.
+            const drift = Math.abs(contentContainer.scrollTop - target);
+            if (drift < 4 || attempt >= maxAttempts - 1) return;
+          }
+          if (attempt < maxAttempts - 1) {
+            attempt += 1;
+            setTimeout(tryScroll, attemptDelayMs);
+          }
+        };
+        // Let the outer smooth scroll settle first so getBoundingClientRect
+        // reads stable coordinates.
+        setTimeout(tryScroll, 350);
+      });
+    });
+
+    return () => {
+      cancelled = true;
+      cancelAnimationFrame(outerRaf);
+    };
+  }, [isSessionLoaded, sessionId, initialExpandedStep, completedSteps.size]);
 
   // Auto-expand section when a step becomes active
   useEffect(() => {
