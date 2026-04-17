@@ -27,6 +27,8 @@ import {
   ChevronDown,
   ChevronLeft,
   ChevronRight,
+  ChevronUp,
+  ChevronsUpDown,
   Users,
   X,
   Search,
@@ -38,6 +40,10 @@ import { WORKSHOP_LEVELS, type WorkshopLevel } from '../constants/workflowSectio
 
 // Movement type for rank changes
 type Movement = 'up' | 'down' | 'new' | 'same';
+
+// Sort config for the Workshop Participants modal table
+type UsersSortKey = 'display_name' | 'email' | 'workshop_level_label' | 'updated_at';
+type SortDir = 'asc' | 'desc';
 
 // Extended entry with movement tracking
 interface LeaderboardEntryWithMovement extends LeaderboardEntry {
@@ -362,6 +368,19 @@ export function LeaderboardPage() {
   const [expandedUser, setExpandedUser] = useState<string | null>(null);
   const [userSessions, setUserSessions] = useState<Record<string, SessionListItem[]>>({});
   const [loadingSessions, setLoadingSessions] = useState(false);
+  const [usersSort, setUsersSort] = useState<{ key: UsersSortKey; dir: SortDir } | null>(
+    { key: 'updated_at', dir: 'desc' }
+  );
+
+  const toggleUsersSort = (key: UsersSortKey) => {
+    setUsersPage(0);
+    setExpandedUser(null);
+    setUsersSort(prev => {
+      if (!prev || prev.key !== key) return { key, dir: 'asc' };
+      if (prev.dir === 'asc') return { key, dir: 'desc' };
+      return null;
+    });
+  };
 
   // Track previous ranks for movement detection
   const previousRanksRef = useRef<Map<string, number>>(new Map());
@@ -678,8 +697,19 @@ export function LeaderboardPage() {
               u.email.toLowerCase().includes(searchLower)
             )
           : workshopUsers;
-        const filteredTotal = filteredUsers.length;
-        const pageUsers = filteredUsers.slice(usersPage * 10, (usersPage + 1) * 10);
+        const sortedUsers = usersSort
+          ? [...filteredUsers].sort((a, b) => {
+              const { key, dir } = usersSort;
+              const av = (a[key] ?? '') as string;
+              const bv = (b[key] ?? '') as string;
+              const cmp = key === 'updated_at'
+                ? new Date(av || 0).getTime() - new Date(bv || 0).getTime()
+                : av.localeCompare(bv, undefined, { sensitivity: 'base' });
+              return dir === 'asc' ? cmp : -cmp;
+            })
+          : filteredUsers;
+        const filteredTotal = sortedUsers.length;
+        const pageUsers = sortedUsers.slice(usersPage * 10, (usersPage + 1) * 10);
         const formatDate = (iso?: string) => {
           if (!iso) return '—';
           try {
@@ -730,10 +760,29 @@ export function LeaderboardPage() {
               <table className="w-full">
                 <thead>
                   <tr className="text-ui-2xs text-muted-foreground uppercase tracking-wider border-b border-border">
-                    <th className="text-left pb-2 font-medium">Name</th>
-                    <th className="text-left pb-2 font-medium">Email</th>
-                    <th className="text-left pb-2 font-medium">Last Path</th>
-                    <th className="text-left pb-2 font-medium">Last Updated</th>
+                    {([
+                      { label: 'Name', key: 'display_name' as const },
+                      { label: 'Email', key: 'email' as const },
+                      { label: 'Last Path', key: 'workshop_level_label' as const },
+                      { label: 'Last Updated', key: 'updated_at' as const },
+                    ]).map(col => {
+                      const active = usersSort?.key === col.key;
+                      const dir = active ? usersSort!.dir : null;
+                      return (
+                        <th key={col.key} className="text-left pb-2 font-medium">
+                          <button
+                            type="button"
+                            onClick={() => toggleUsersSort(col.key)}
+                            className={`inline-flex items-center gap-1 uppercase tracking-wider transition-colors hover:text-foreground ${active ? 'text-foreground' : ''}`}
+                          >
+                            {col.label}
+                            {dir === 'asc' && <ChevronUp className="w-3 h-3" />}
+                            {dir === 'desc' && <ChevronDown className="w-3 h-3" />}
+                            {!active && <ChevronsUpDown className="w-3 h-3 opacity-40" />}
+                          </button>
+                        </th>
+                      );
+                    })}
                     <th className="text-left pb-2 font-medium">Sessions</th>
                   </tr>
                 </thead>
