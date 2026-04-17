@@ -129,7 +129,15 @@ function HorizontalBarList({
   );
 }
 
-function LevelDistribution({ items }: { items: { level: string; label: string; count: number }[] }) {
+function LevelDistribution({
+  items,
+  activeLevel,
+  onSelect,
+}: {
+  items: { level: string; label: string; count: number }[];
+  activeLevel: string | null;
+  onSelect: (level: string) => void;
+}) {
   if (items.length === 0) return null;
   const total = items.reduce((s, i) => s + i.count, 0);
 
@@ -139,20 +147,46 @@ function LevelDistribution({ items }: { items: { level: string; label: string; c
         <Zap size={14} className="text-primary" />
         <h3 className="text-ui-base font-bold text-foreground">Workshop Levels</h3>
         <span className="text-ui-xs text-muted-foreground">({total} sessions)</span>
+        {activeLevel && (
+          <span className="ml-auto text-ui-2xs text-muted-foreground">
+            Click again to clear filter
+          </span>
+        )}
       </div>
       <div className="flex flex-wrap gap-2">
         {items.map((m) => {
           const pct = total > 0 ? Math.round((m.count / total) * 100) : 0;
+          const isActive = activeLevel === m.level;
           return (
-            <div
+            <button
               key={m.level}
-              className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border border-border bg-secondary text-ui-sm"
+              type="button"
+              onClick={() => onSelect(m.level)}
+              aria-pressed={isActive}
+              title={isActive ? `Clear ${m.label} filter` : `Filter Recent Activity by ${m.label}`}
+              className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border text-ui-sm transition-colors ${
+                isActive
+                  ? 'border-primary bg-primary/10 text-primary'
+                  : 'border-border bg-secondary hover:bg-secondary/70 hover:border-primary/40'
+              }`}
             >
-              <span className="font-semibold text-foreground">{m.label}</span>
-              <span className="text-muted-foreground">·</span>
-              <span className="font-medium text-muted-foreground tabular-nums">{m.count}</span>
-              <span className="text-ui-2xs text-muted-foreground">({pct}%)</span>
-            </div>
+              <span className={`font-semibold ${isActive ? 'text-primary' : 'text-foreground'}`}>
+                {m.label}
+              </span>
+              <span className={isActive ? 'text-primary/70' : 'text-muted-foreground'}>·</span>
+              <span
+                className={`font-medium tabular-nums ${
+                  isActive ? 'text-primary/90' : 'text-muted-foreground'
+                }`}
+              >
+                {m.count}
+              </span>
+              <span
+                className={`text-ui-2xs ${isActive ? 'text-primary/70' : 'text-muted-foreground'}`}
+              >
+                ({pct}%)
+              </span>
+            </button>
           );
         })}
       </div>
@@ -394,7 +428,23 @@ function TopContributors({ users }: { users: AnalyticsUserActivity[] }) {
   );
 }
 
-function RecentActivityTable({ sessions }: { sessions: AnalyticsRecentSession[] }) {
+function RecentActivityTable({
+  sessions,
+  levelFilter,
+  levelLabel,
+  onClearFilter,
+}: {
+  sessions: AnalyticsRecentSession[];
+  levelFilter: string | null;
+  levelLabel: string | null;
+  onClearFilter: () => void;
+}) {
+  const visible = useMemo(
+    () =>
+      levelFilter ? sessions.filter((s) => s.workshop_level === levelFilter) : sessions,
+    [sessions, levelFilter],
+  );
+
   if (sessions.length === 0) {
     return (
       <div className="rounded-xl border border-dashed border-border bg-card p-8 text-center">
@@ -409,6 +459,33 @@ function RecentActivityTable({ sessions }: { sessions: AnalyticsRecentSession[] 
         <h3 className="text-ui-base font-bold text-foreground">Recent Activity</h3>
         <p className="text-ui-xs text-muted-foreground">Last 10 sessions created</p>
       </div>
+      {levelFilter && (
+        <div className="px-5 py-2 border-b border-border bg-primary/5 flex items-center justify-between text-ui-xs">
+          <span className="text-muted-foreground">
+            Filtered:{' '}
+            <span className="font-semibold text-foreground">{levelLabel ?? levelFilter}</span>
+            <span className="ml-1">
+              — showing {visible.length} of last {sessions.length} recent sessions
+            </span>
+          </span>
+          <button
+            type="button"
+            onClick={onClearFilter}
+            className="text-primary hover:underline font-medium"
+          >
+            Clear
+          </button>
+        </div>
+      )}
+      {visible.length === 0 && levelFilter ? (
+        <div className="px-5 py-6 text-center text-ui-sm text-muted-foreground">
+          No recent sessions match <span className="font-semibold">{levelLabel ?? levelFilter}</span>.
+          <br />
+          <span className="text-ui-xs">
+            (Recent Activity only covers the last 10 sessions; the pill counts above span all sessions.)
+          </span>
+        </div>
+      ) : (
       <div className="overflow-x-auto">
         <table className="w-full text-left">
           <thead>
@@ -434,7 +511,7 @@ function RecentActivityTable({ sessions }: { sessions: AnalyticsRecentSession[] 
             </tr>
           </thead>
           <tbody className="divide-y divide-border">
-            {sessions.map((s) => (
+            {visible.map((s) => (
               <tr
                 key={s.session_id}
                 className="hover:bg-secondary/30 transition-colors duration-150"
@@ -464,6 +541,7 @@ function RecentActivityTable({ sessions }: { sessions: AnalyticsRecentSession[] 
           </tbody>
         </table>
       </div>
+      )}
     </div>
   );
 }
@@ -624,6 +702,7 @@ export function AnalyticsDashboard() {
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<Tab>('overview');
   const [searchTerm, setSearchTerm] = useState('');
+  const [levelFilter, setLevelFilter] = useState<string | null>(null);
 
   useEffect(() => {
     apiClient
@@ -769,7 +848,14 @@ export function AnalyticsDashboard() {
         {/* Workshop Level Distribution */}
         {by_level.length > 0 && (
           <div className="mb-6">
-            <LevelDistribution items={by_level} />
+            <LevelDistribution
+              items={by_level}
+              activeLevel={levelFilter}
+              onSelect={(lvl) => {
+                setLevelFilter((prev) => (prev === lvl ? null : lvl));
+                setActiveTab('overview');
+              }}
+            />
           </div>
         )}
 
@@ -837,7 +923,12 @@ export function AnalyticsDashboard() {
               />
               <TopContributors users={user_activity} />
             </div>
-            <RecentActivityTable sessions={recent_sessions} />
+            <RecentActivityTable
+              sessions={recent_sessions}
+              levelFilter={levelFilter}
+              levelLabel={by_level.find((l) => l.level === levelFilter)?.label ?? null}
+              onClearFilter={() => setLevelFilter(null)}
+            />
           </div>
         )}
 
