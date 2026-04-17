@@ -73,7 +73,7 @@ export function HeaderSessionMenu({
           {sessionName && sessionSaved ? (
             <>
               <FileText className="h-3.5 w-3.5 text-primary" />
-              <span className="text-ui-sm font-medium text-foreground truncate max-w-[100px]">
+              <span className="text-ui-sm font-medium text-foreground truncate max-w-[6.25rem]">
                 {sessionName}
               </span>
               <CheckCircle className="h-3 w-3 text-emerald-400" />

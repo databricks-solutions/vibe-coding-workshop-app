@@ -130,12 +130,12 @@ export function SkillContentModal({ skill, onClose }: SkillContentModalProps) {
         {/* Header */}
         <div className={`flex items-center justify-between px-5 py-3.5 border-b ${colors.border} bg-secondary/30`}>
           <div className="flex items-center gap-3 min-w-0">
-            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${colors.badge} flex-shrink-0`}>
+            <span className={`text-ui-2xs font-bold px-2 py-0.5 rounded-full ${colors.badge} flex-shrink-0`}>
               {TYPE_LABELS[skill.type]}
             </span>
             <div className="min-w-0">
-              <h3 className="text-[14px] font-semibold text-foreground truncate">{skill.name}</h3>
-              <p className="text-[11px] text-muted-foreground/60 font-mono truncate">{skill.shortPath}</p>
+              <h3 className="text-ui-md font-semibold text-foreground truncate">{skill.name}</h3>
+              <p className="text-ui-xs text-muted-foreground/60 font-mono truncate">{skill.shortPath}</p>
             </div>
           </div>
           <div className="flex items-center gap-2 flex-shrink-0">
@@ -144,7 +144,7 @@ export function SkillContentModal({ skill, onClose }: SkillContentModalProps) {
                 href={githubUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="flex items-center gap-1 px-2.5 py-1 text-[11px] text-muted-foreground hover:text-foreground border border-border rounded-md hover:bg-secondary transition-colors"
+                className="flex items-center gap-1 px-2.5 py-1 text-ui-xs text-muted-foreground hover:text-foreground border border-border rounded-md hover:bg-secondary transition-colors"
                 title="View on GitHub"
               >
                 <ExternalLink className="w-3 h-3" />
@@ -166,17 +166,17 @@ export function SkillContentModal({ skill, onClose }: SkillContentModalProps) {
           {loading && (
             <div className="flex flex-col items-center justify-center h-full gap-3 text-muted-foreground">
               <Loader2 className="w-6 h-6 animate-spin" />
-              <span className="text-[13px]">Loading skill content...</span>
+              <span className="text-ui-base">Loading skill content...</span>
             </div>
           )}
 
           {error && (
             <div className="flex flex-col items-center justify-center h-full gap-3">
               <AlertCircle className="w-6 h-6 text-red-400" />
-              <span className="text-[13px] text-red-400">{error}</span>
+              <span className="text-ui-base text-red-400">{error}</span>
               <button
                 onClick={fetchContent}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-[12px] font-medium rounded-md bg-secondary hover:bg-secondary/80 transition-colors"
+                className="flex items-center gap-1.5 px-3 py-1.5 text-ui-sm font-medium rounded-md bg-secondary hover:bg-secondary/80 transition-colors"
               >
                 <RefreshCw className="w-3.5 h-3.5" />
                 Retry
@@ -193,11 +193,11 @@ export function SkillContentModal({ skill, onClose }: SkillContentModalProps) {
 
         {/* Footer */}
         <div className="flex items-center justify-between px-4 py-2 border-t border-border bg-secondary/20">
-          <span className="text-[11px] text-muted-foreground">
-            Press <kbd className="px-1.5 py-0.5 bg-secondary rounded text-[10px] font-mono">Esc</kbd> to close
+          <span className="text-ui-xs text-muted-foreground">
+            Press <kbd className="px-1.5 py-0.5 bg-secondary rounded text-ui-2xs font-mono">Esc</kbd> to close
           </span>
           {content && (
-            <span className="text-[11px] text-muted-foreground">
+            <span className="text-ui-xs text-muted-foreground">
               {content.split('\n').length} lines
             </span>
           )}

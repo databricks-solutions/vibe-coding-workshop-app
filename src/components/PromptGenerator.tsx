@@ -127,13 +127,24 @@ export function PromptGenerator({
   const isEdited = (editedUseCaseLabel && editedUseCaseLabel !== defaultUseCaseLabel) || 
                    (editedDescription && editedDescription !== defaultDescription);
 
+  const handleEnterEditMode = () => {
+    builder.setOutputText(editedDescription || defaultDescription);
+    builder.setError(null);
+    setIsEditMode(true);
+  };
+
   const handleResetEdits = () => {
     setEditedUseCaseLabel(defaultUseCaseLabel);
     setEditedDescription(defaultDescription);
+    builder.setOutputText(defaultDescription);
     setIsEditMode(false);
   };
 
   const handleDoneEditing = () => {
+    const refinedText = builder.isEditing ? builder.editText : builder.outputText;
+    if (refinedText.trim()) {
+      setEditedDescription(refinedText);
+    }
     setIsEditMode(false);
   };
 
@@ -537,7 +548,7 @@ export function PromptGenerator({
                             }`}
                             placeholder="Enter use case name..."
                           />
-                          <div className="flex items-center justify-between mt-1 min-h-[18px]">
+                          <div className="flex items-center justify-between mt-1 min-h-[1.125rem]">
                             <span className="text-ui-2xs text-muted-foreground/60">Short, descriptive name</span>
                             {editedUseCaseLabel.length >= 20 && (
                               <span className={`text-ui-2xs font-medium transition-colors ${
@@ -548,16 +559,7 @@ export function PromptGenerator({
                             )}
                           </div>
                         </div>
-                        <div>
-                          <label className="block text-ui-base font-medium text-foreground mb-1.5">Description</label>
-                          <textarea
-                            value={editedDescription}
-                            onChange={(e) => setEditedDescription(e.target.value)}
-                            rows={10}
-                            className="w-full px-3 py-2 text-ui-base border border-border rounded-md focus:ring-2 focus:ring-primary focus:border-primary outline-none transition-all bg-input text-foreground font-mono leading-relaxed resize-y"
-                            placeholder="Enter use case description..."
-                          />
-                        </div>
+                        <UseCaseBuilderPanel builder={builder} compact hideInputs hideSave />
                         <div className="flex items-center gap-2">
                           <button onClick={handleDoneEditing} className="px-3 py-1.5 text-ui-sm font-medium rounded bg-primary text-primary-foreground hover:bg-primary/90 transition-all">Done</button>
                           <button onClick={handleResetEdits} className="flex items-center gap-1 px-3 py-1.5 text-ui-sm rounded text-muted-foreground hover:text-foreground hover:bg-secondary transition-all">
@@ -572,7 +574,8 @@ export function PromptGenerator({
                           content={displayContent}
                           useCase={displayLabel}
                           isEdited={!!isEdited}
-                          onEdit={!hasStarted ? () => setIsEditMode(true) : undefined}
+                          onEdit={!hasStarted ? handleEnterEditMode : undefined}
+                          onContentChange={!hasStarted ? (text) => setEditedDescription(text) : undefined}
                         />
                       </div>
                     )

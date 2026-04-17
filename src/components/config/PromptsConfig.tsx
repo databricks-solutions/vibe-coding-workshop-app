@@ -909,8 +909,8 @@ export function PromptsConfig({ onToast }: PromptsConfigProps) {
                   <Lightbulb className="w-4 h-4 text-amber-400" />
                 </div>
                 <div>
-                  <h3 className="text-[15px] font-semibold text-foreground">Build New Use Case</h3>
-                  <p className="text-[11px] text-muted-foreground">
+                  <h3 className="text-ui-md2 font-semibold text-foreground">Build New Use Case</h3>
+                  <p className="text-ui-xs text-muted-foreground">
                     Industry: <span className="text-foreground font-medium">{selectedIndustryLabel}</span>
                   </p>
                 </div>
@@ -933,7 +933,7 @@ export function PromptsConfig({ onToast }: PromptsConfigProps) {
             <div className="px-5 py-3 border-t border-border bg-secondary/20 rounded-b-lg">
               {/* Use Case ID display */}
               <div className="flex items-center justify-between mb-3">
-                <div className="flex items-center gap-2 text-[12px]">
+                <div className="flex items-center gap-2 text-ui-sm">
                   <span className="text-muted-foreground">Use Case ID:</span>
                   {builderIdEditMode ? (
                     <input
@@ -949,13 +949,13 @@ export function PromptsConfig({ onToast }: PromptsConfigProps) {
                         if (!builderUseCaseId.trim()) setBuilderIdManuallyEdited(false);
                       }}
                       onKeyDown={(e) => { if (e.key === 'Enter') setBuilderIdEditMode(false); }}
-                      className="px-2 py-0.5 bg-background border border-primary/40 rounded text-[12px] font-mono text-foreground focus:outline-none focus:ring-1 focus:ring-primary/50 w-48"
+                      className="px-2 py-0.5 bg-background border border-primary/40 rounded text-ui-sm font-mono text-foreground focus:outline-none focus:ring-1 focus:ring-primary/50 w-48"
                       autoFocus
                       placeholder="e.g., patient_portal"
                     />
                   ) : (
                     <span className="flex items-center gap-1.5">
-                      <code className="px-1.5 py-0.5 bg-secondary rounded text-[11px] font-mono text-foreground">
+                      <code className="px-1.5 py-0.5 bg-secondary rounded text-ui-xs font-mono text-foreground">
                         {derivedSlug || '...'}
                       </code>
                       <button
@@ -968,14 +968,14 @@ export function PromptsConfig({ onToast }: PromptsConfigProps) {
                     </span>
                   )}
                 </div>
-                <span className="text-[11px] text-muted-foreground">
-                  Press <kbd className="px-1.5 py-0.5 bg-secondary rounded text-[10px] font-mono">Esc</kbd> to close
+                <span className="text-ui-xs text-muted-foreground">
+                  Press <kbd className="px-1.5 py-0.5 bg-secondary rounded text-ui-2xs font-mono">Esc</kbd> to close
                 </span>
               </div>
 
               {/* Error display */}
               {builderSaveError && (
-                <div className="flex items-center gap-2 mb-3 px-3 py-2 bg-red-900/30 border border-red-700/50 rounded-lg text-red-300 text-[12px]">
+                <div className="flex items-center gap-2 mb-3 px-3 py-2 bg-red-900/30 border border-red-700/50 rounded-lg text-red-300 text-ui-sm">
                   <div className="w-1.5 h-1.5 rounded-full bg-red-400 shrink-0" />
                   <span>{builderSaveError}</span>
                   <button onClick={() => setBuilderSaveError(null)} className="ml-auto text-red-400 hover:text-red-300">
@@ -1074,7 +1074,7 @@ export function PromptsConfig({ onToast }: PromptsConfigProps) {
       {/* Delete Confirmation Modal - Two-Step Confirmation */}
       {showDeleteConfirmModal && (
         <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
-          <div className="bg-card rounded-lg shadow-xl w-[450px] p-6 border border-red-500/50">
+          <div className="bg-card rounded-lg shadow-xl w-[28.125rem] p-6 border border-red-500/50">
             <div className="flex items-center gap-3 mb-4">
               <div className="w-10 h-10 rounded-full bg-red-500/20 flex items-center justify-center">
                 <svg className="w-6 h-6 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">

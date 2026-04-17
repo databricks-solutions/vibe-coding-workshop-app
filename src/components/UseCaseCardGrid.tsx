@@ -29,7 +29,7 @@ export function UseCaseCardGrid({ useCases, selectedUseCase, onSelect, disabled 
               key={uc.value}
               onClick={() => !disabled && onSelect(uc.value)}
               disabled={disabled}
-              className={`group relative text-left p-4 rounded-xl border-2 min-h-[72px] transition-all duration-200 animate-slide-up-fade ${
+              className={`group relative text-left p-4 rounded-xl border-2 min-h-[4.5rem] transition-all duration-200 animate-slide-up-fade ${
                 disabled ? 'cursor-default' : 'cursor-pointer'
               } ${
                 isSelected

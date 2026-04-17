@@ -72,7 +72,7 @@ export function ExpandableOutputModal({
       {/* View Full Screen Button */}
       <button
         onClick={() => setIsOpen(true)}
-        className={`flex items-center gap-1 px-2 py-0.5 text-[11px] rounded border transition-all hover:scale-105 ${buttonColorClasses[buttonColor]}`}
+        className={`flex items-center gap-1 px-2 py-0.5 text-ui-xs rounded border transition-all hover:scale-105 ${buttonColorClasses[buttonColor]}`}
         title="View in full screen"
       >
         <Maximize2 className="w-3 h-3" />
@@ -114,10 +114,10 @@ export function ExpandableOutputModal({
           >
             {/* Header */}
             <div className="flex items-center justify-between px-6 py-4 border-b border-border bg-secondary/30">
-              <h3 className="text-[15px] font-semibold text-foreground flex items-center gap-2">
+              <h3 className="text-ui-md2 font-semibold text-foreground flex items-center gap-2">
                 {title}
                 {isStreaming && (
-                  <span className="text-[11px] font-normal text-primary animate-pulse">● Streaming...</span>
+                  <span className="text-ui-xs font-normal text-primary animate-pulse">● Streaming...</span>
                 )}
               </h3>
               <div className="flex items-center gap-2">
@@ -125,7 +125,7 @@ export function ExpandableOutputModal({
                 <button
                   onClick={handleCopy}
                   disabled={isStreaming}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 text-[12px] font-medium rounded transition-all ${
+                  className={`flex items-center gap-1.5 px-3 py-1.5 text-ui-sm font-medium rounded transition-all ${
                     copied
                       ? 'bg-emerald-900/40 text-emerald-400'
                       : isStreaming
@@ -169,10 +169,10 @@ export function ExpandableOutputModal({
 
             {/* Footer */}
             <div className="flex items-center justify-between px-4 py-2 border-t border-border bg-secondary/20">
-              <span className="text-[11px] text-muted-foreground">
-                Press <kbd className="px-1.5 py-0.5 bg-secondary rounded text-[10px] font-mono">Esc</kbd> to close
+              <span className="text-ui-xs text-muted-foreground">
+                Press <kbd className="px-1.5 py-0.5 bg-secondary rounded text-ui-2xs font-mono">Esc</kbd> to close
               </span>
-              <span className="text-[11px] text-muted-foreground">
+              <span className="text-ui-xs text-muted-foreground">
                 {(content ?? '').split('\n').length} lines • {(content ?? '').length.toLocaleString()} characters
               </span>
             </div>

@@ -2,7 +2,7 @@ import { Check, Circle, SkipForward } from 'lucide-react';
 
 export function StepStatusLegend() {
   return (
-    <div className="flex items-center justify-between text-[9px] text-muted-foreground">
+    <div className="flex items-center justify-between text-ui-3xs text-muted-foreground">
       <div className="flex items-center gap-1.5">
         <div className="w-3.5 h-3.5 rounded-full bg-emerald-500 flex items-center justify-center">
           <Check className="w-2 h-2 text-white" strokeWidth={3} />

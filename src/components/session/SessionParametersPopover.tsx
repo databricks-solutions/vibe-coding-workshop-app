@@ -226,7 +226,7 @@ export function SessionParametersPopover({ sessionId, onParametersChanged }: Ses
           left: popoverPosition.left,
           zIndex: 101,
         }}
-        className="w-[420px] bg-card border border-border rounded-xl shadow-2xl animate-in fade-in zoom-in-95 duration-200"
+        className="w-[26.25rem] bg-card border border-border rounded-xl shadow-2xl animate-in fade-in zoom-in-95 duration-200"
       >
         {/* Header */}
         <div className="px-5 py-4 border-b border-border bg-secondary/30 rounded-t-xl">
@@ -236,8 +236,8 @@ export function SessionParametersPopover({ sessionId, onParametersChanged }: Ses
                 <Settings className="h-5 w-5 text-primary" />
               </div>
               <div>
-                <span className="text-[15px] font-semibold text-foreground">Session Settings</span>
-                <p className="text-[11px] text-muted-foreground">Override parameters for this session</p>
+                <span className="text-ui-md2 font-semibold text-foreground">Session Settings</span>
+                <p className="text-ui-xs text-muted-foreground">Override parameters for this session</p>
               </div>
             </div>
             <button
@@ -258,7 +258,7 @@ export function SessionParametersPopover({ sessionId, onParametersChanged }: Ses
           ) : error ? (
             <div className="flex items-center gap-3 p-4 bg-red-900/20 border border-red-700/30 rounded-lg text-red-300">
               <AlertCircle className="h-5 w-5 flex-shrink-0" />
-              <span className="text-[13px]">{error}</span>
+              <span className="text-ui-base">{error}</span>
             </div>
           ) : (
             <div className="space-y-4">
@@ -282,14 +282,14 @@ export function SessionParametersPopover({ sessionId, onParametersChanged }: Ses
                     <div className="flex items-center justify-between mb-2.5">
                       <div className="flex items-center gap-2">
                         <Icon className="h-4 w-4 text-muted-foreground" />
-                        <label className="text-[13px] font-medium text-foreground">
+                        <label className="text-ui-base font-medium text-foreground">
                           {param.param_label}
                         </label>
                         {isDisabled && (
                           <Lock className="h-3.5 w-3.5 text-muted-foreground" />
                         )}
                         {isModified && !isDisabled && (
-                          <span className="px-2 py-0.5 text-[10px] font-medium bg-amber-500/20 text-amber-400 rounded">
+                          <span className="px-2 py-0.5 text-ui-2xs font-medium bg-amber-500/20 text-amber-400 rounded">
                             Modified
                           </span>
                         )}
@@ -297,7 +297,7 @@ export function SessionParametersPopover({ sessionId, onParametersChanged }: Ses
                       {param.is_overridden && !isDisabled && (
                         <button
                           onClick={() => handleReset(param.param_key)}
-                          className="flex items-center gap-1.5 text-[11px] text-muted-foreground hover:text-primary transition-colors"
+                          className="flex items-center gap-1.5 text-ui-xs text-muted-foreground hover:text-primary transition-colors"
                           title="Reset to default"
                         >
                           <RotateCcw className="h-3.5 w-3.5" />
@@ -312,7 +312,7 @@ export function SessionParametersPopover({ sessionId, onParametersChanged }: Ses
                       value={editedValues[param.param_key] || ''}
                       onChange={(e) => handleValueChange(param.param_key, e.target.value)}
                       disabled={isDisabled}
-                      className={`w-full px-3 py-2.5 text-[13px] rounded-md border transition-colors ${
+                      className={`w-full px-3 py-2.5 text-ui-base rounded-md border transition-colors ${
                         isDisabled
                           ? 'bg-secondary/30 border-border/30 text-muted-foreground cursor-not-allowed'
                           : 'bg-input border-border focus:border-primary focus:ring-1 focus:ring-primary/30 text-foreground'
@@ -322,7 +322,7 @@ export function SessionParametersPopover({ sessionId, onParametersChanged }: Ses
                     
                     {/* Show default if modified */}
                     {isModified && !isDisabled && (
-                      <p className="mt-2 text-[11px] text-muted-foreground truncate">
+                      <p className="mt-2 text-ui-xs text-muted-foreground truncate">
                         Default: <span className="font-mono">{param.global_value}</span>
                       </p>
                     )}
@@ -336,14 +336,14 @@ export function SessionParametersPopover({ sessionId, onParametersChanged }: Ses
         {/* Footer */}
         <div className="px-5 py-4 border-t border-border bg-secondary/20 rounded-b-xl">
           {success && (
-            <div className="flex items-center gap-2 text-emerald-400 text-[12px] mb-2">
+            <div className="flex items-center gap-2 text-emerald-400 text-ui-sm mb-2">
               <Check className="h-4 w-4" />
               <span>{success}</span>
             </div>
           )}
           
           <div className="flex items-center justify-between">
-            <p className="text-[11px] text-muted-foreground">
+            <p className="text-ui-xs text-muted-foreground">
               <Lock className="inline h-3.5 w-3.5 mr-1" />
               Locked = admin only
             </p>
@@ -352,7 +352,7 @@ export function SessionParametersPopover({ sessionId, onParametersChanged }: Ses
               <button
                 onClick={handleSave}
                 disabled={saving}
-                className="flex items-center gap-2 px-4 py-2 text-[12px] font-medium bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors disabled:opacity-50"
+                className="flex items-center gap-2 px-4 py-2 text-ui-sm font-medium bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors disabled:opacity-50"
               >
                 {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
                 Save Changes
@@ -371,7 +371,7 @@ export function SessionParametersPopover({ sessionId, onParametersChanged }: Ses
       <button
         ref={buttonRef}
         onClick={() => setIsOpen(!isOpen)}
-        className={`flex items-center gap-1.5 px-2 py-1.5 rounded-md text-[11px] font-medium transition-all ${
+        className={`flex items-center gap-1.5 px-2 py-1.5 rounded-md text-ui-xs font-medium transition-all ${
           isOpen
             ? 'bg-primary/20 text-primary'
             : modifiedCount > 0
@@ -383,7 +383,7 @@ export function SessionParametersPopover({ sessionId, onParametersChanged }: Ses
         <Settings className="h-3.5 w-3.5" />
         <span className="hidden sm:inline">Settings</span>
         {modifiedCount > 0 && (
-          <span className="px-1 py-0.5 text-[9px] bg-amber-500 text-white rounded-full font-bold">
+          <span className="px-1 py-0.5 text-ui-3xs bg-amber-500 text-white rounded-full font-bold">
             {modifiedCount}
           </span>
         )}

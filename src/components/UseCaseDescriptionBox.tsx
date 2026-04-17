@@ -4,28 +4,42 @@ import { Maximize2, X, Copy, Check, Pencil } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { useEscapeKey } from '../hooks/useEscapeKey';
+import { useUseCaseBuilder } from '../hooks/useUseCaseBuilder';
+import { UseCaseBuilderPanel } from './UseCaseBuilderPanel';
 
 interface UseCaseDescriptionBoxProps {
   content: string;
   useCase: string;
   isEdited?: boolean;
   onEdit?: () => void;
+  /** When provided, the fullscreen Review modal gains an Edit & Refine capability */
+  onContentChange?: (newContent: string) => void;
   heading?: string;
 }
 
-export function UseCaseDescriptionBox({ content, useCase, isEdited, onEdit, heading }: UseCaseDescriptionBoxProps) {
+export function UseCaseDescriptionBox({ content, useCase, isEdited, onEdit, onContentChange, heading }: UseCaseDescriptionBoxProps) {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [copied, setCopied] = useState(false);
-  const closeModal = useCallback(() => setIsModalOpen(false), []);
+  const [isModalEditing, setIsModalEditing] = useState(false);
+  const closeModal = useCallback(() => {
+    setIsModalOpen(false);
+    setIsModalEditing(false);
+  }, []);
   useEscapeKey(isModalOpen, closeModal);
+
+  const modalBuilder = useUseCaseBuilder();
 
   const handleCopy = async (shouldCloseModal: boolean = false) => {
     try {
-      await navigator.clipboard.writeText(content);
+      const textToCopy = isModalEditing
+        ? (modalBuilder.isEditing ? modalBuilder.editText : modalBuilder.outputText) || content
+        : content;
+      await navigator.clipboard.writeText(textToCopy);
       setCopied(true);
       if (shouldCloseModal) {
         setTimeout(() => {
           setIsModalOpen(false);
+          setIsModalEditing(false);
           setCopied(false);
         }, 500);
       } else {
@@ -34,6 +48,24 @@ export function UseCaseDescriptionBox({ content, useCase, isEdited, onEdit, head
     } catch (err) {
       console.error('Failed to copy:', err);
     }
+  };
+
+  const handleModalEdit = () => {
+    modalBuilder.setOutputText(content);
+    modalBuilder.setError(null);
+    setIsModalEditing(true);
+  };
+
+  const handleModalDone = () => {
+    const refinedText = modalBuilder.isEditing ? modalBuilder.editText : modalBuilder.outputText;
+    if (refinedText.trim() && onContentChange) {
+      onContentChange(refinedText);
+    }
+    setIsModalEditing(false);
+  };
+
+  const handleModalCancel = () => {
+    setIsModalEditing(false);
   };
 
   return (
@@ -102,7 +134,7 @@ export function UseCaseDescriptionBox({ content, useCase, isEdited, onEdit, head
             width: '100vw',
             height: '100vh'
           }}
-          onClick={() => setIsModalOpen(false)}
+          onClick={closeModal}
         >
           <div 
             className="absolute inset-0 bg-black/90" 
@@ -124,28 +156,57 @@ export function UseCaseDescriptionBox({ content, useCase, isEdited, onEdit, head
                 {useCase}
               </h3>
               <div className="flex items-center gap-2">
-                <button
-                  onClick={() => handleCopy(true)}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 text-ui-sm font-medium rounded transition-all ${
-                    copied
-                      ? 'bg-emerald-900/40 text-emerald-400'
-                      : 'bg-blue-600/20 text-blue-400 hover:bg-blue-600/30 animate-button-glow-copy'
-                  }`}
-                >
-                  {copied ? (
-                    <>
+                {isModalEditing ? (
+                  <>
+                    <button
+                      onClick={handleModalDone}
+                      className="flex items-center gap-1.5 px-3 py-1.5 text-ui-sm font-medium rounded bg-primary text-primary-foreground hover:bg-primary/90 transition-all"
+                    >
                       <Check className="w-3.5 h-3.5" />
-                      Copied!
-                    </>
-                  ) : (
-                    <>
-                      <Copy className="w-3.5 h-3.5" />
-                      Copy All
-                    </>
-                  )}
-                </button>
+                      Done
+                    </button>
+                    <button
+                      onClick={handleModalCancel}
+                      className="flex items-center gap-1.5 px-3 py-1.5 text-ui-sm font-medium rounded text-muted-foreground hover:text-foreground hover:bg-secondary transition-all"
+                    >
+                      Cancel
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    {onContentChange && (
+                      <button
+                        onClick={handleModalEdit}
+                        className="flex items-center gap-1.5 px-3 py-1.5 text-ui-sm font-medium rounded border border-border text-muted-foreground hover:text-foreground hover:border-primary/30 transition-all"
+                      >
+                        <Pencil className="w-3.5 h-3.5" />
+                        Edit & Refine
+                      </button>
+                    )}
+                    <button
+                      onClick={() => handleCopy(true)}
+                      className={`flex items-center gap-1.5 px-3 py-1.5 text-ui-sm font-medium rounded transition-all ${
+                        copied
+                          ? 'bg-emerald-900/40 text-emerald-400'
+                          : 'bg-blue-600/20 text-blue-400 hover:bg-blue-600/30 animate-button-glow-copy'
+                      }`}
+                    >
+                      {copied ? (
+                        <>
+                          <Check className="w-3.5 h-3.5" />
+                          Copied!
+                        </>
+                      ) : (
+                        <>
+                          <Copy className="w-3.5 h-3.5" />
+                          Copy All
+                        </>
+                      )}
+                    </button>
+                  </>
+                )}
                 <button
-                  onClick={() => setIsModalOpen(false)}
+                  onClick={closeModal}
                   className="p-1.5 rounded text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors"
                   title="Close (Esc)"
                 >
@@ -155,26 +216,30 @@ export function UseCaseDescriptionBox({ content, useCase, isEdited, onEdit, head
             </div>
 
             <div className="flex-1 overflow-y-auto px-6 py-5">
-              <div className="max-w-none">
-                <ReactMarkdown 
-                  remarkPlugins={[remarkGfm]}
-                  components={{
-                    p: ({ children }) => <p className="text-foreground text-ui-md mb-3 last:mb-0 leading-relaxed">{children}</p>,
-                    strong: ({ children }) => <strong className="font-semibold text-foreground">{children}</strong>,
-                    em: ({ children }) => <em className="text-primary not-italic font-medium">{children}</em>,
-                    ul: ({ children }) => <ul className="list-disc list-inside space-y-1 my-2 text-foreground text-ui-md">{children}</ul>,
-                    ol: ({ children }) => <ol className="list-decimal list-inside space-y-1 my-2 text-foreground text-ui-md">{children}</ol>,
-                    li: ({ children }) => <li className="text-foreground">{children}</li>,
-                    h1: ({ children }) => <h1 className="text-ui-xl font-bold text-foreground mb-3 mt-4">{children}</h1>,
-                    h2: ({ children }) => <h2 className="text-ui-lg font-semibold text-foreground mb-2 mt-3">{children}</h2>,
-                    h3: ({ children }) => <h3 className="text-ui-md font-semibold text-foreground mb-2 mt-2">{children}</h3>,
-                    code: ({ children }) => <code className="bg-background/80 px-1.5 py-0.5 rounded text-primary font-mono text-ui-sm">{children}</code>,
-                    pre: ({ children }) => <pre className="bg-background/80 p-3 rounded-md overflow-x-auto my-2">{children}</pre>,
-                  }}
-                >
-                  {content}
-                </ReactMarkdown>
-              </div>
+              {isModalEditing ? (
+                <UseCaseBuilderPanel builder={modalBuilder} hideInputs hideSave />
+              ) : (
+                <div className="max-w-none">
+                  <ReactMarkdown 
+                    remarkPlugins={[remarkGfm]}
+                    components={{
+                      p: ({ children }) => <p className="text-foreground text-ui-md mb-3 last:mb-0 leading-relaxed">{children}</p>,
+                      strong: ({ children }) => <strong className="font-semibold text-foreground">{children}</strong>,
+                      em: ({ children }) => <em className="text-primary not-italic font-medium">{children}</em>,
+                      ul: ({ children }) => <ul className="list-disc list-inside space-y-1 my-2 text-foreground text-ui-md">{children}</ul>,
+                      ol: ({ children }) => <ol className="list-decimal list-inside space-y-1 my-2 text-foreground text-ui-md">{children}</ol>,
+                      li: ({ children }) => <li className="text-foreground">{children}</li>,
+                      h1: ({ children }) => <h1 className="text-ui-xl font-bold text-foreground mb-3 mt-4">{children}</h1>,
+                      h2: ({ children }) => <h2 className="text-ui-lg font-semibold text-foreground mb-2 mt-3">{children}</h2>,
+                      h3: ({ children }) => <h3 className="text-ui-md font-semibold text-foreground mb-2 mt-2">{children}</h3>,
+                      code: ({ children }) => <code className="bg-background/80 px-1.5 py-0.5 rounded text-primary font-mono text-ui-sm">{children}</code>,
+                      pre: ({ children }) => <pre className="bg-background/80 p-3 rounded-md overflow-x-auto my-2">{children}</pre>,
+                    }}
+                  >
+                    {content}
+                  </ReactMarkdown>
+                </div>
+              )}
             </div>
 
             <div className="flex items-center justify-between px-4 py-2 border-t border-border bg-secondary/20">

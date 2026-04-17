@@ -172,12 +172,12 @@ export function ImageGallery({
         <div className="flex items-center gap-2 mb-3">
           <div className={`flex items-center gap-2 px-2.5 py-1 rounded-md ${colors.bg} border ${colors.border}`}>
             <ImageIcon className={`w-4 h-4 ${colors.text}`} />
-            <span className={`text-[12px] font-semibold ${colors.text} uppercase tracking-wide`}>
+            <span className={`text-ui-sm font-semibold ${colors.text} uppercase tracking-wide`}>
               📸 Reference Screenshots
             </span>
           </div>
           {images.length > 0 && (
-            <span className="text-[11px] text-muted-foreground">
+            <span className="text-ui-xs text-muted-foreground">
               ({images.length} image{images.length !== 1 ? 's' : ''} - click to enlarge)
             </span>
           )}
@@ -201,7 +201,7 @@ export function ImageGallery({
               
               {/* Hover overlay with "Click to view" */}
               <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                <span className="text-white text-[11px] font-medium">Click to view</span>
+                <span className="text-white text-ui-xs font-medium">Click to view</span>
               </div>
               
               {/* Delete button overlay */}
@@ -235,7 +235,7 @@ export function ImageGallery({
               ) : (
                 <>
                   <Plus className={`w-6 h-6 ${colors.text}`} />
-                  <span className={`text-[11px] ${colors.text} mt-1 font-medium`}>Add Screenshot</span>
+                  <span className={`text-ui-xs ${colors.text} mt-1 font-medium`}>Add Screenshot</span>
                 </>
               )}
             </button>
@@ -252,7 +252,7 @@ export function ImageGallery({
 
           {/* Max images reached indicator */}
           {editable && images.length >= maxImages && (
-            <span className="text-[11px] text-muted-foreground ml-2 self-center">
+            <span className="text-ui-xs text-muted-foreground ml-2 self-center">
               Max {maxImages} images
             </span>
           )}

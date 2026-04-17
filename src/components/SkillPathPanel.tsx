@@ -1,6 +1,9 @@
-import { FileCode, Sparkles } from 'lucide-react';
+import { useState } from 'react';
+import { FileCode, Sparkles, RotateCcw } from 'lucide-react';
 import type { SelectOption } from '../api/client';
 import { UseCaseDescriptionBox } from './UseCaseDescriptionBox';
+import { UseCaseBuilderPanel } from './UseCaseBuilderPanel';
+import { useUseCaseBuilder } from '../hooks/useUseCaseBuilder';
 
 interface SkillPathPanelProps {
   skills: Record<string, SelectOption[]>;
@@ -22,9 +25,34 @@ export function SkillPathPanel({ skills, promptTemplates, onGetStarted, hasStart
     items.map(item => ({ industry, ...item }))
   )[0];
 
+  const [isEditMode, setIsEditMode] = useState(false);
+  const [editedDescription, setEditedDescription] = useState('');
+  const builder = useUseCaseBuilder();
+
   if (!skillEntry) return null;
 
-  const description = promptTemplates[skillEntry.industry]?.[skillEntry.value] || '';
+  const defaultDescription = promptTemplates[skillEntry.industry]?.[skillEntry.value] || '';
+  const currentDescription = editedDescription || defaultDescription;
+
+  const handleEnterEditMode = () => {
+    builder.setOutputText(currentDescription);
+    builder.setError(null);
+    setIsEditMode(true);
+  };
+
+  const handleDoneEditing = () => {
+    const refinedText = builder.isEditing ? builder.editText : builder.outputText;
+    if (refinedText.trim()) {
+      setEditedDescription(refinedText);
+    }
+    setIsEditMode(false);
+  };
+
+  const handleResetEdits = () => {
+    setEditedDescription('');
+    builder.setOutputText(defaultDescription);
+    setIsEditMode(false);
+  };
 
   const handleStart = () => {
     onGetStarted(
@@ -32,7 +60,7 @@ export function SkillPathPanel({ skills, promptTemplates, onGetStarted, hasStart
       skillEntry.value,
       'Sample',
       skillEntry.label,
-      description
+      currentDescription
     );
   };
 
@@ -48,13 +76,27 @@ export function SkillPathPanel({ skills, promptTemplates, onGetStarted, hasStart
         </p>
       </div>
 
-      {description && (
+      {isEditMode && !hasStarted ? (
+        <div className="mb-5 space-y-3 animate-slide-up-fade">
+          <UseCaseBuilderPanel builder={builder} compact hideInputs hideSave />
+          <div className="flex items-center gap-2">
+            <button onClick={handleDoneEditing} className="px-3 py-1.5 text-ui-sm font-medium rounded bg-primary text-primary-foreground hover:bg-primary/90 transition-all">Done</button>
+            <button onClick={handleResetEdits} className="flex items-center gap-1 px-3 py-1.5 text-ui-sm rounded text-muted-foreground hover:text-foreground hover:bg-secondary transition-all">
+              <RotateCcw className="w-3 h-3" />
+              Reset to default
+            </button>
+          </div>
+        </div>
+      ) : currentDescription ? (
         <UseCaseDescriptionBox
-          content={description}
+          content={currentDescription}
           useCase={skillEntry.label}
           heading="Skill Description:"
+          isEdited={!!editedDescription && editedDescription !== defaultDescription}
+          onEdit={!hasStarted ? handleEnterEditMode : undefined}
+          onContentChange={!hasStarted ? (text) => setEditedDescription(text) : undefined}
         />
-      )}
+      ) : null}
 
       <div className="mb-6">
         <p className="text-ui-xs font-medium text-muted-foreground uppercase tracking-wider mb-3 text-center">
@@ -65,7 +107,7 @@ export function SkillPathPanel({ skills, promptTemplates, onGetStarted, hasStart
             <div key={step} className="flex items-center">
               <div className="flex flex-col items-center">
                 <div className="w-2.5 h-2.5 rounded-full bg-violet-500/40 border border-violet-500/60" />
-                <span className="text-ui-2xs text-muted-foreground/70 mt-1.5 max-w-[72px] text-center leading-tight">
+                <span className="text-ui-2xs text-muted-foreground/70 mt-1.5 max-w-[4.5rem] text-center leading-tight">
                   {step}
                 </span>
               </div>

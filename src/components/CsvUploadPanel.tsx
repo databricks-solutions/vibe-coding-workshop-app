@@ -283,7 +283,7 @@ export function CsvUploadPanel({
     <div className="mt-3 space-y-3">
       {/* Prerequisite hint when step is blocked */}
       {!isPreviousStepComplete && !isComplete && (
-        <div className="px-3 py-2.5 rounded-md bg-amber-500/10 border border-amber-500/20 text-amber-300 text-[12px] flex items-center gap-2">
+        <div className="px-3 py-2.5 rounded-md bg-amber-500/10 border border-amber-500/20 text-amber-300 text-ui-sm flex items-center gap-2">
           <svg className="w-4 h-4 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
           </svg>
@@ -318,10 +318,10 @@ export function CsvUploadPanel({
           {!fileName ? (
             <div className="space-y-2">
               <Upload className="w-8 h-8 mx-auto text-muted-foreground/60" />
-              <p className="text-[13px] text-muted-foreground">
+              <p className="text-ui-base text-muted-foreground">
                 Drop your schema CSV here or <span className="text-primary font-medium">click to browse</span>
               </p>
-              <p className="text-[11px] text-muted-foreground/60">
+              <p className="text-ui-xs text-muted-foreground/60">
                 CSV must include: table_name, column_name, data_type, ordinal_position, is_nullable, comment
               </p>
             </div>
@@ -329,7 +329,7 @@ export function CsvUploadPanel({
             <div className="space-y-1">
               <div className="flex items-center justify-center gap-2">
                 <FileSpreadsheet className="w-5 h-5 text-primary" />
-                <span className="text-[13px] font-medium text-foreground">{fileName}</span>
+                <span className="text-ui-base font-medium text-foreground">{fileName}</span>
                 <button
                   onClick={(e) => { e.stopPropagation(); handleReset(); }}
                   className="p-0.5 rounded hover:bg-secondary/80 text-muted-foreground hover:text-foreground transition-colors"
@@ -338,7 +338,7 @@ export function CsvUploadPanel({
                 </button>
               </div>
               {validation && (
-                <p className="text-[11px] text-muted-foreground/60">
+                <p className="text-ui-xs text-muted-foreground/60">
                   Click to upload a different file
                 </p>
               )}
@@ -355,7 +355,7 @@ export function CsvUploadPanel({
             {REQUIRED_COLUMNS.map(col => {
               const present = validation.presentRequired.includes(col);
               return (
-                <div key={col} className="flex items-center gap-1.5 text-[11px]">
+                <div key={col} className="flex items-center gap-1.5 text-ui-xs">
                   {present
                     ? <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 flex-shrink-0" />
                     : <XCircle className="w-3.5 h-3.5 text-red-400 flex-shrink-0" />
@@ -368,14 +368,14 @@ export function CsvUploadPanel({
 
           {/* Recommended columns warning */}
           {validation.valid && validation.missingRecommended.length > 0 && (
-            <p className="text-[11px] text-amber-400/80">
+            <p className="text-ui-xs text-amber-400/80">
               Recommended columns not found: {validation.missingRecommended.join(', ')}
             </p>
           )}
 
           {/* Error banner */}
           {!validation.valid && validation.error && (
-            <div className="flex items-start gap-2 p-2 bg-red-900/20 border border-red-700/30 rounded text-[12px] text-red-300">
+            <div className="flex items-start gap-2 p-2 bg-red-900/20 border border-red-700/30 rounded text-ui-sm text-red-300">
               <XCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
               <span>{validation.error}. Please fix and re-upload.</span>
             </div>
@@ -384,18 +384,18 @@ export function CsvUploadPanel({
           {/* Success preview */}
           {validation.valid && (
             <div className="space-y-1.5">
-              <div className="flex items-center gap-2 text-[12px] text-emerald-400 font-medium">
+              <div className="flex items-center gap-2 text-ui-sm text-emerald-400 font-medium">
                 <CheckCircle2 className="w-4 h-4" />
                 CSV validated — {validation.tableCount} tables, {validation.columnCount} columns detected
               </div>
               <div className="flex flex-wrap gap-1.5">
                 {validation.tableNames.slice(0, 12).map(name => (
-                  <span key={name} className="text-[10px] px-1.5 py-0.5 bg-secondary/60 border border-border/40 rounded text-muted-foreground">
+                  <span key={name} className="text-ui-2xs px-1.5 py-0.5 bg-secondary/60 border border-border/40 rounded text-muted-foreground">
                     {name}
                   </span>
                 ))}
                 {validation.tableNames.length > 12 && (
-                  <span className="text-[10px] px-1.5 py-0.5 text-muted-foreground/60">
+                  <span className="text-ui-2xs px-1.5 py-0.5 text-muted-foreground/60">
                     +{validation.tableNames.length - 12} more
                   </span>
                 )}
@@ -407,7 +407,7 @@ export function CsvUploadPanel({
 
       {/* Retry status indicator */}
       {isStreaming && retryStatus && (
-        <div className="px-3 py-2.5 rounded-md bg-amber-500/10 border border-amber-500/20 text-amber-300 text-[13px] flex items-center gap-2">
+        <div className="px-3 py-2.5 rounded-md bg-amber-500/10 border border-amber-500/20 text-amber-300 text-ui-base flex items-center gap-2">
           <div className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse shrink-0" />
           Retrying ({retryStatus.attempt} of {retryStatus.maxAttempts}) &mdash; {retryStatus.reason}...
         </div>
@@ -427,7 +427,7 @@ export function CsvUploadPanel({
           <button
             onClick={handleProcess}
             disabled={!canProcess}
-            className={`flex items-center gap-2 px-4 py-2 rounded-md text-[13px] font-medium transition-all ${
+            className={`flex items-center gap-2 px-4 py-2 rounded-md text-ui-base font-medium transition-all ${
               canProcess
                 ? 'bg-primary text-primary-foreground hover:bg-primary/90'
                 : 'bg-secondary/50 text-muted-foreground/50 cursor-not-allowed'
@@ -447,13 +447,13 @@ export function CsvUploadPanel({
         <div className="flex items-center justify-between">
           <button
             onClick={handleReset}
-            className="flex items-center gap-1.5 text-[11px] text-muted-foreground/70 hover:text-foreground transition-colors"
+            className="flex items-center gap-1.5 text-ui-xs text-muted-foreground/70 hover:text-foreground transition-colors"
           >
             <RefreshCw className="w-3 h-3" />
             Upload Different CSV
           </button>
           {fileName && (
-            <span className="text-[11px] text-muted-foreground/50 flex items-center gap-1">
+            <span className="text-ui-xs text-muted-foreground/50 flex items-center gap-1">
               <FileSpreadsheet className="w-3 h-3" />
               {fileName}
             </span>
@@ -468,7 +468,7 @@ export function CsvUploadPanel({
           <div className="flex border-b border-border">
             <button
               onClick={() => setActiveTab('prompt')}
-              className={`flex-1 px-3 py-2 text-[12px] font-medium transition-all ${
+              className={`flex-1 px-3 py-2 text-ui-sm font-medium transition-all ${
                 activeTab === 'prompt'
                   ? 'text-foreground bg-secondary/60 border-b-2 border-primary -mb-[1px]'
                   : 'text-muted-foreground hover:text-foreground hover:bg-secondary/40'
@@ -478,7 +478,7 @@ export function CsvUploadPanel({
             </button>
             <button
               onClick={() => setActiveTab('how_to_apply')}
-              className={`flex-1 px-3 py-2 text-[12px] font-medium transition-all ${
+              className={`flex-1 px-3 py-2 text-ui-sm font-medium transition-all ${
                 activeTab === 'how_to_apply'
                   ? 'text-foreground bg-secondary/60 border-b-2 border-emerald-500 -mb-[1px]'
                   : 'text-muted-foreground hover:text-foreground hover:bg-secondary/40'
@@ -488,7 +488,7 @@ export function CsvUploadPanel({
             </button>
             <button
               onClick={() => setActiveTab('expected_output')}
-              className={`flex-1 px-3 py-2 text-[12px] font-medium transition-all ${
+              className={`flex-1 px-3 py-2 text-ui-sm font-medium transition-all ${
                 activeTab === 'expected_output'
                   ? 'text-foreground bg-secondary/60 border-b-2 border-violet-500 -mb-[1px]'
                   : 'text-muted-foreground hover:text-foreground hover:bg-secondary/40'
@@ -501,7 +501,7 @@ export function CsvUploadPanel({
           {/* Content */}
           <div className="p-3">
             <div className="flex items-center justify-between mb-2">
-              <span className={`text-[12px] font-medium inline-flex items-center gap-2 ${
+              <span className={`text-ui-sm font-medium inline-flex items-center gap-2 ${
                 activeTab === 'prompt' ? 'text-primary' :
                 activeTab === 'how_to_apply' ? 'text-emerald-400' : 'text-violet-400'
               }`}>
@@ -509,7 +509,7 @@ export function CsvUploadPanel({
                 {activeTab === 'how_to_apply' && '🚀 Steps to Apply:'}
                 {activeTab === 'expected_output' && '✨ Expected Results:'}
                 {activeTab === 'prompt' && isStreaming && (
-                  <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-primary/20 text-primary animate-pulse">
+                  <span className="text-ui-2xs font-medium px-2 py-0.5 rounded-full bg-primary/20 text-primary animate-pulse">
                     Streaming...
                   </span>
                 )}
@@ -554,7 +554,7 @@ export function CsvUploadPanel({
               isProcessing && !promptText ? (
                 <div className="flex items-center gap-2 py-4 text-muted-foreground">
                   <Loader2 className="w-4 h-4 animate-spin text-primary" />
-                  <span className="text-[13px]">Processing CSV and generating prompt...</span>
+                  <span className="text-ui-base">Processing CSV and generating prompt...</span>
                 </div>
               ) : (
                 <MarkdownContent
@@ -569,7 +569,7 @@ export function CsvUploadPanel({
               isLoadingMetadata ? (
                 <div className="flex items-center gap-2 py-4 text-muted-foreground">
                   <Loader2 className="w-4 h-4 animate-spin text-emerald-400" />
-                  <span className="text-[13px]">Loading application steps...</span>
+                  <span className="text-ui-base">Loading application steps...</span>
                 </div>
               ) : (
                 <MarkdownContent
@@ -583,7 +583,7 @@ export function CsvUploadPanel({
               isLoadingMetadata ? (
                 <div className="flex items-center gap-2 py-4 text-muted-foreground">
                   <Loader2 className="w-4 h-4 animate-spin text-violet-400" />
-                  <span className="text-[13px]">Loading expected output...</span>
+                  <span className="text-ui-base">Loading expected output...</span>
                 </div>
               ) : (
                 <MarkdownContent
@@ -604,7 +604,7 @@ export function CsvUploadPanel({
             {onToggleSkip && !isComplete && (
               <button
                 onClick={(e) => { e.stopPropagation(); onToggleSkip(); }}
-                className={`text-[11px] font-medium px-3 py-1.5 rounded transition-all inline-flex items-center gap-1.5 ${
+                className={`text-ui-xs font-medium px-3 py-1.5 rounded transition-all inline-flex items-center gap-1.5 ${
                   isSkipped
                     ? 'bg-amber-500/20 text-amber-400 hover:bg-amber-500/30 border border-amber-500/30'
                     : 'text-muted-foreground/60 hover:text-muted-foreground hover:bg-secondary/60'
@@ -622,12 +622,12 @@ export function CsvUploadPanel({
             {isSkipped ? (
               <button
                 onClick={(e) => { e.stopPropagation(); onNavigateNext?.(); }}
-                className="text-[12px] font-medium px-4 py-2 rounded bg-amber-500/20 text-amber-400 hover:bg-amber-500/30 transition-all inline-flex items-center gap-1.5 cursor-pointer"
+                className="text-ui-sm font-medium px-4 py-2 rounded bg-amber-500/20 text-amber-400 hover:bg-amber-500/30 transition-all inline-flex items-center gap-1.5 cursor-pointer"
               >
                 <SkipForward className="w-3.5 h-3.5" /> Skipped — Next Step →
               </button>
             ) : isComplete ? (
-              <div className="text-[12px] font-medium px-4 py-2 rounded bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 select-none inline-flex items-center gap-1.5 animate-fade-in">
+              <div className="text-ui-sm font-medium px-4 py-2 rounded bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 select-none inline-flex items-center gap-1.5 animate-fade-in">
                 <CheckCircle className="w-3.5 h-3.5" /> Done
               </div>
             ) : (

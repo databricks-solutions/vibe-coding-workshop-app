@@ -915,7 +915,7 @@ export default function App() {
 
               {/* Header Bar - Clean minimal styling */}
               <div className="sticky top-0 z-10 bg-card/90 backdrop-blur-md border-b border-border px-3 sm:px-6 xl:px-12 2xl:px-20 py-3">
-                <div className="max-w-7xl xl:max-w-[1320px] 2xl:max-w-[1400px] mx-auto flex items-center justify-between gap-3">
+                <div className="max-w-7xl xl:max-w-[82.5rem] 2xl:max-w-[87.5rem] mx-auto flex items-center justify-between gap-3">
                   <div className="flex items-center gap-3 min-w-0">
                     {/* Mobile hamburger button */}
                     <button
@@ -969,7 +969,7 @@ export default function App() {
               
               {/* Content Area */}
               <div className="p-3 sm:p-6 xl:px-12 2xl:px-20">
-                <div className="max-w-7xl xl:max-w-[1320px] 2xl:max-w-[1400px] mx-auto">
+                <div className="max-w-7xl xl:max-w-[82.5rem] 2xl:max-w-[87.5rem] mx-auto">
                   <WorkflowDiagram
                     sessionId={sessionId}
                     stepPrompts={stepPrompts}

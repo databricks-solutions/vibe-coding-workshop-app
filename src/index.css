@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,100..900&display=swap');
 @import "tailwindcss";
 
 @custom-variant dark (&:is(.dark *));
@@ -13,14 +13,21 @@
   --brand-h: 172;
   --brand-s: 66%;
 
-  /* UI text size scale — single source of truth for component font sizes */
-  --text-ui-2xs: 10px;
-  --text-ui-xs: 11px;
-  --text-ui-sm: 12px;
-  --text-ui-base: 13px;
-  --text-ui-md: 14px;
-  --text-ui-lg: 16px;
+  /* UI text size scale — single source of truth for component font sizes.
+     Base values EXACTLY match the legacy hard-coded pixel values they replace,
+     so there is zero visual change at default viewports. Progressive scaling
+     below lifts every token together on wider screens. */
+  --text-ui-3xs: 9px;   /* covers legacy text-[7/8/9px] */
+  --text-ui-2xs: 10px;  /* covers legacy text-ui-2xs */
+  --text-ui-xs: 11px;   /* covers legacy text-ui-xs */
+  --text-ui-sm: 12px;   /* covers legacy text-ui-sm */
+  --text-ui-base: 13px; /* covers legacy text-ui-base */
+  --text-ui-md: 14px;   /* covers legacy text-ui-md */
+  --text-ui-md2: 15px;  /* covers legacy text-ui-md2 */
+  --text-ui-lg: 16px;   /* covers legacy text-ui-lg */
   --text-ui-xl: 18px;
+  --text-ui-2xl: 20px;
+  --text-ui-3xl: 24px;  /* covers legacy text-ui-3xl */
   
   /* -------------------------------------------------------------------------
      DARK THEME (Default) - Enhanced visibility & contrast
@@ -59,16 +66,70 @@
   --sidebar-ring: var(--brand-h) var(--brand-s) 50%;
 }
 
+/* =============================================================================
+   PROGRESSIVE TYPE SCALING — keeps the app readable across laptop -> 4K / 5K.
+   Each tier bumps the root font-size (for rem-based utilities: spacing, icons,
+   padding) and the --text-ui-* tokens together, so proportions stay consistent.
+   ============================================================================= */
+
 @media (min-width: 1280px) {
   :root {
     --font-size: 16px;
+    --text-ui-3xs: 10px;
     --text-ui-2xs: 11px;
     --text-ui-xs: 12px;
     --text-ui-sm: 13px;
     --text-ui-base: 14px;
     --text-ui-md: 15px;
+    --text-ui-md2: 16px;
     --text-ui-lg: 17px;
     --text-ui-xl: 19px;
+    --text-ui-2xl: 21px;
+    --text-ui-3xl: 25px;
+  }
+}
+
+@media (min-width: 1600px) {
+  :root {
+    --font-size: 16.5px;
+    --text-ui-md: 16px;
+    --text-ui-xl: 20px;
+    --text-ui-2xl: 22px;
+    --text-ui-3xl: 26px;
+  }
+}
+
+@media (min-width: 1920px) {
+  :root {
+    --font-size: 17px;
+    --text-ui-3xs: 11px;
+    --text-ui-2xs: 12px;
+    --text-ui-xs: 13px;
+    --text-ui-sm: 14px;
+    --text-ui-base: 15px;
+    --text-ui-md: 17px;
+    --text-ui-md2: 17px;
+    --text-ui-lg: 18px;
+    --text-ui-xl: 21px;
+    --text-ui-2xl: 23px;
+    --text-ui-3xl: 27px;
+  }
+}
+
+@media (min-width: 2560px) {
+  :root {
+    --font-size: 18px;
+    --text-ui-3xs: 11px;
+    --text-ui-2xs: 12px;
+    --text-ui-xs: 14px;
+    --text-ui-sm: 15px;
+    --text-ui-base: 16px;
+    --text-ui-md: 18px;
+    --text-ui-md2: 18px;
+    --text-ui-lg: 19px;
+    --text-ui-xl: 22px;
+    --text-ui-2xl: 24px;
+    --text-ui-3xl: 28px;
   }
 }
 
@@ -162,14 +223,19 @@
   --color-sidebar-ring: hsl(var(--sidebar-ring));
 }
 
-/* Responsive UI text utilities — use these instead of text-[Xpx] */
-@utility text-ui-2xs { font-size: var(--text-ui-2xs); }
-@utility text-ui-xs  { font-size: var(--text-ui-xs); }
-@utility text-ui-sm  { font-size: var(--text-ui-sm); }
+/* Responsive UI text utilities — the ONLY sanctioned way to set component
+   font sizes. Do not introduce new text-[Xpx] usages. */
+@utility text-ui-3xs  { font-size: var(--text-ui-3xs); }
+@utility text-ui-2xs  { font-size: var(--text-ui-2xs); }
+@utility text-ui-xs   { font-size: var(--text-ui-xs); }
+@utility text-ui-sm   { font-size: var(--text-ui-sm); }
 @utility text-ui-base { font-size: var(--text-ui-base); }
-@utility text-ui-md  { font-size: var(--text-ui-md); }
-@utility text-ui-lg  { font-size: var(--text-ui-lg); }
-@utility text-ui-xl  { font-size: var(--text-ui-xl); }
+@utility text-ui-md   { font-size: var(--text-ui-md); }
+@utility text-ui-md2  { font-size: var(--text-ui-md2); }
+@utility text-ui-lg   { font-size: var(--text-ui-lg); }
+@utility text-ui-xl   { font-size: var(--text-ui-xl); }
+@utility text-ui-2xl  { font-size: var(--text-ui-2xl); }
+@utility text-ui-3xl  { font-size: var(--text-ui-3xl); }
 
 @layer base {
   * {
@@ -186,7 +252,9 @@
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     letter-spacing: -0.006em;
+    line-height: 1.55;
     font-feature-settings: "rlig" 1, "calt" 1;
+    font-optical-sizing: auto;
     font-weight: 400;
   }
 
@@ -200,6 +268,7 @@
     font-size: 1.5rem;
     font-weight: 600;
     line-height: 1.3;
+    letter-spacing: -0.03em;
   }
 
   h2 {

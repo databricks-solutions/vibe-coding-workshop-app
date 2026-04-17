@@ -18,7 +18,7 @@ export function ExpandableErrorBanner({ error, summary, className = '' }: Expand
   const [expanded, setExpanded] = useState(false);
 
   return (
-    <div className={`bg-red-900/30 border border-red-700/50 rounded-lg text-red-300 text-[12px] overflow-hidden ${className}`}>
+    <div className={`bg-red-900/30 border border-red-700/50 rounded-lg text-red-300 text-ui-sm overflow-hidden ${className}`}>
       <button
         type="button"
         onClick={() => setExpanded((v) => !v)}
@@ -34,7 +34,7 @@ export function ExpandableErrorBanner({ error, summary, className = '' }: Expand
       </button>
       {expanded && (
         <div className="px-3 pb-2.5 pt-0.5 border-t border-red-700/30">
-          <pre className="whitespace-pre-wrap break-all text-[11px] text-red-300/80 font-mono leading-relaxed max-h-40 overflow-y-auto">
+          <pre className="whitespace-pre-wrap break-all text-ui-xs text-red-300/80 font-mono leading-relaxed max-h-40 overflow-y-auto">
             {error}
           </pre>
         </div>

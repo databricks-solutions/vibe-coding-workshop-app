@@ -646,10 +646,10 @@ export function SectionInputsConfig({ onToast }: SectionInputsConfigProps) {
                 {/* Chapter group header */}
                 <div className={`sticky top-0 z-10 px-3 py-1.5 ${style.bg} border-b ${style.border} flex items-center gap-2`}>
                   <span className={`w-2 h-2 rounded-full ${style.dot} flex-shrink-0`} />
-                  <span className={`text-[11px] font-semibold uppercase tracking-wider ${style.text}`}>
+                  <span className={`text-ui-xs font-semibold uppercase tracking-wider ${style.text}`}>
                     {style.label}
                   </span>
-                  <span className="text-[10px] text-muted-foreground/60 ml-auto">{group.sections.length}</span>
+                  <span className="text-ui-2xs text-muted-foreground/60 ml-auto">{group.sections.length}</span>
                 </div>
                 {/* Section items in this group */}
                 {group.sections.map((section) => (
@@ -711,7 +711,7 @@ export function SectionInputsConfig({ onToast }: SectionInputsConfigProps) {
                       const style = GROUP_STYLES[group.chapter];
                       if (!style) return null;
                       return (
-                        <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-wider ${style.bg} ${style.border} border ${style.text}`}>
+                        <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-ui-2xs font-semibold uppercase tracking-wider ${style.bg} ${style.border} border ${style.text}`}>
                           <span className={`w-1.5 h-1.5 rounded-full ${style.dot}`} />
                           {style.label}
                         </span>
@@ -977,7 +977,7 @@ export function SectionInputsConfig({ onToast }: SectionInputsConfigProps) {
                   >
                     <span className={`w-2 h-2 rounded-full ${editingBypassLlm ? 'bg-amber-500' : 'bg-blue-500'}`}></span>
                     Input Template
-                    {editingBypassLlm && <span className="text-[10px] text-amber-400 ml-1">(bypass)</span>}
+                    {editingBypassLlm && <span className="text-ui-2xs text-amber-400 ml-1">(bypass)</span>}
                   </button>
                   <button
                     onClick={() => setActiveContentTab('how_to_apply')}
@@ -1205,7 +1205,7 @@ export function SectionInputsConfig({ onToast }: SectionInputsConfigProps) {
                   >
                     <span className={`w-2 h-2 rounded-full ${editingBypassLlm ? 'bg-amber-500' : 'bg-blue-500'}`}></span>
                     Input Template
-                    {editingBypassLlm && <span className="text-[10px] text-amber-400 ml-1">(bypass)</span>}
+                    {editingBypassLlm && <span className="text-ui-2xs text-amber-400 ml-1">(bypass)</span>}
                   </button>
                   <button
                     onClick={() => setActiveContentTab('how_to_apply')}
