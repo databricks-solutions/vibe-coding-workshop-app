@@ -669,6 +669,9 @@ def save_session(
         
         # Serialize completed_steps and skipped_steps to JSON
         # Use SQL NULL (None) when not provided so COALESCE preserves existing DB values
+        # Deduplicate step IDs to prevent inflated scores from duplicate entries
+        if completed_steps is not None:
+            completed_steps = list(set(completed_steps))
         completed_steps_json = json.dumps(completed_steps) if completed_steps is not None else None
         skipped_steps_json = json.dumps(skipped_steps) if skipped_steps is not None else None
         
@@ -1343,7 +1346,8 @@ AVATAR_EMOJIS = ['🦊', '🐙', '🦄', '🐼', '🦉', '🐬', '🦁', '🐸',
 def _calculate_score(completed_steps: List[int], skipped_steps: List[int] = None) -> int:
     """Calculate total score from completed steps. Skipped steps earn 0."""
     skipped = set(skipped_steps) if skipped_steps else set()
-    return sum(STEP_SCORES.get(step, 0) for step in completed_steps if step not in skipped)
+    unique_steps = set(completed_steps)
+    return sum(STEP_SCORES.get(step, 0) for step in unique_steps if step not in skipped)
 
 
 def _get_chapter_status(completed_steps: List[int], skipped_steps: List[int] = None) -> tuple:
@@ -1546,7 +1550,7 @@ def get_leaderboard(limit: int = 10) -> List[Dict]:
                     'display_name': _format_display_name(email),
                     'avatar': _get_avatar_for_user(email),
                     'score': data['score'],
-                    'completed_steps': sorted(data['completed_steps']),
+                    'completed_steps': sorted(set(data['completed_steps'])),
                     'skipped_steps': sorted(data.get('skipped_steps', [])),
                     'completed_chapters': completed_chapters,
                     'in_progress_chapters': in_progress_chapters,
@@ -1890,7 +1894,7 @@ def get_analytics() -> Dict[str, Any]:
                 sk = json.loads(sk_raw) if isinstance(sk_raw, str) else (sk_raw or [])
             except Exception:
                 cs, sk = [], []
-            user_agg[email]["total_steps"] += len(cs)
+            user_agg[email]["total_steps"] += len(set(cs))
             score = _calculate_score(cs, sk)
             if score > user_agg[email]["best_score"]:
                 user_agg[email]["best_score"] = score

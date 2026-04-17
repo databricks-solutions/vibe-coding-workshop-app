@@ -4544,6 +4544,10 @@ async def update_session_metadata_endpoint(request_body: SessionUpdateMetadataRe
         }.items() if v is not None]
         logger.info(f"[Session API] Updating metadata for session {request_body.session_id}: fields={_updating}")
         
+        # Deduplicate step IDs to prevent score inflation from duplicate entries
+        if request_body.completed_steps is not None:
+            request_body.completed_steps = list(set(request_body.completed_steps))
+        
         # Safety: warn if completed_steps is being explicitly set to empty
         if request_body.completed_steps is not None and len(request_body.completed_steps) == 0:
             logger.warning(f"[Session API] CAUTION: completed_steps being set to EMPTY for session {request_body.session_id}")
