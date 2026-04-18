@@ -183,7 +183,7 @@ The prompt should be focused and specific to {use_case_title}, incorporating the
 - All user journeys have success AND failure paths
 - Edge cases and error states are documented
 - Analytics events are specified for key actions',
-1, TRUE, current_timestamp(), current_timestamp(), current_user());
+1, true, current_timestamp(), current_timestamp(), current_user());
 
 -- Figma UI Design
 INSERT INTO ${catalog}.${schema}.section_input_prompts 
@@ -253,8 +253,7 @@ Simple UI design mockups that match the PRD:
 - Basic component designs
 - Clean, minimal layouts
 - Ready for implementation in Cursor/Copilot',
-TRUE,
-1, TRUE, current_timestamp(), current_timestamp(), current_user());
+true, 1, true, current_timestamp(), current_timestamp(), current_user());
 
 -- Scaffold, Build, and Test Locally
 INSERT INTO ${catalog}.${schema}.section_input_prompts 
@@ -331,14 +330,15 @@ The skill will guide you through:
 - **Description:** `"{use_case_slug} app"`
 - **Working directory:** Run `cd apps_lakebase` first so the app is created inside `apps_lakebase/`
 
-After the skill completes scaffold + `npm install`, verify config files:
+After the skill completes scaffold + `npm install`, verify the bundle config:
 
 ```bash
-grep "name:" app.yaml
+# app.yaml has no name field (only the start command) — this is expected.
+# The app name lives in databricks.yml:
 grep "name:" databricks.yml
 ```
 
-If these don''t match `$APP_NAME`, update them manually.
+If `databricks.yml` doesn''t contain `$APP_NAME`, update it manually.
 
 **From this point on, all file paths are relative to `apps_lakebase/$APP_NAME/`** — this is your app root.
 
@@ -357,7 +357,7 @@ Review `@docs/design_prd.md` (parent `docs/` folder at repo root) to understand:
 
 ### Step 4: Build the App
 
-Read and follow the `02-appkit-build` skill at `@apps_lakebase/skills/02-appkit-build/SKILL.md`. The skill covers frontend components, design quality, routing, and testing.
+Read and follow the `02-appkit-build` skill at `@apps_lakebase/skills/02-appkit-build/SKILL.md`. The skill covers frontend components, design quality, routing, and testing. **Read every reference file the skill points to** — especially `references/llm-guardrails.md` and `references/design-quality.md` — before writing component code.
 
 **Demo data strategy:** Use static mock data arrays directly in your components. All charts, tables, and data-driven components should use the `data` prop with hardcoded representative sample data. There is no live backend, no SQL warehouse, and no database at this stage — the goal is a fully functional UI with realistic-looking mock data.
 
@@ -367,9 +367,10 @@ Read and follow the `02-appkit-build` skill at `@apps_lakebase/skills/02-appkit-
 - `useAnalyticsQuery` hooks
 - `useMemo` on query parameters and `sql.*` helpers
 
-The backend only needs the `server()` plugin registered:
+The backend only needs the `server()` plugin registered. The scaffold generates `.catch(console.error)` instead of `await` — **replace the entire `server/server.ts`** with:
 
 ```typescript
+// REPLACE the scaffold-generated server/server.ts with this:
 import { createApp, server } from "@databricks/appkit";
 
 await createApp({
@@ -427,12 +428,13 @@ Your job is complete when:
 
 - [ ] Databricks CLI is authenticated and `APP_NAME` is set
 - [ ] AppKit project is scaffolded inside `apps_lakebase/` as a blank app (no plugins)
-- [ ] Backend (`server/server.ts`) has the `server()` plugin registered
+- [ ] Backend (`server/server.ts`) uses `await createApp({ plugins: [server()] })` (not `.catch(console.error)`)
 - [ ] Frontend (`client/src/`) implements key pages with mock data
 - [ ] Loading/error/empty states on every data-driven component
 - [ ] `tests/smoke.spec.ts` uses `data-testid` selectors (not text/role); key page elements have `data-testid` attributes
 - [ ] `@docs/ui_design.md` is created (parent docs folder)
 - [ ] `npm run dev` runs cleanly at `http://localhost:8000`
+- [ ] `databricks apps validate` passes (catches strict-mode TS errors and smoke test regressions that `npm run build` alone misses)
 - [ ] `.vibecoding-state.md` updated (see below)
 
 **Before finishing**, write (or append to) `apps_lakebase/$APP_NAME/.vibecoding-state.md` with:
@@ -441,7 +443,6 @@ Your job is complete when:
 - Any resolved issues or workarounds encountered during this phase
 
 Only proceed to deployment after local testing passes.',
-
 'You are a full-stack developer building a web application on Databricks AppKit. Your goal is to scaffold a blank AppKit project, implement a UI with mock data from a PRD, and test locally.
 
 Key requirements:
@@ -459,11 +460,9 @@ CLI Best Practices:
 - Run CLI commands outside the IDE sandbox to avoid SSL/TLS certificate errors
 
 This prompt is returned as-is for direct use in Cursor/Copilot. No LLM processing.',
-
 'Scaffold, Build, and Test Locally',
 'Scaffold a blank AppKit project, build UI with mock data from a PRD, test locally before deployment',
 4,
-
 '## How to Use
 
 1. **Copy the generated prompt**
@@ -476,7 +475,6 @@ This prompt is returned as-is for direct use in Cursor/Copilot. No LLM processin
    - Test locally at `http://localhost:8000`
 
 **Note:** This step focuses on local development with static mock data. No SQL warehouse or database is needed. Deployment to Databricks happens in the **Deploy to Databricks Apps** step. Live data wiring via Lakebase happens in the **Setup Lakebase**, **Wire Lakebase Backend**, and **Deploy and E2E Test** steps.',
-
 '## Expected Output
 
 **Project directory tree:**
@@ -550,9 +548,7 @@ graph LR
 $ curl -s http://localhost:8000 | head -1
 <!DOCTYPE html>
 ```',
-
-TRUE,
-1, TRUE, current_timestamp(), current_timestamp(), current_user());
+true, 1, true, current_timestamp(), current_timestamp(), current_user());
 
 -- Deploy and E2E Test with Lakebase
 INSERT INTO ${catalog}.${schema}.section_input_prompts 
@@ -652,23 +648,31 @@ DB_ID=$(databricks postgres list-databases projects/$APP_NAME/branches/productio
 echo "Database ID: $DB_ID"
 ```
 
-Then add the `resources` array to your `apps.app` resource in `databricks.yml`:
+Then add the `resources` array to your `apps.app` resource in `databricks.yml`. Your final file should have BOTH `postgres_projects` (from Setup Lakebase) AND the new `app.resources.postgres` binding:
 
 ```yaml
+# Complete databricks.yml after Phase 2 binding.
+# IMPORTANT: postgres_projects from Setup Lakebase MUST remain.
+# Only the ''resources'' array under apps.app is new.
 resources:
   apps:
     app:
       name: "<APP_NAME>"
       source_code_path: ./
-      resources:
+      resources:                          # <-- NEW: add this block
         - name: "postgres"
           postgres:
             branch: "projects/<APP_NAME>/branches/production"
             database: "projects/<APP_NAME>/branches/production/databases/<DB_ID>"
             permission: "CAN_CONNECT_AND_CREATE"
+
+  postgres_projects:                      # <-- KEEP: from Setup Lakebase step
+    my_db:
+      project_id: <APP_NAME>
+      # ... existing settings from Setup Lakebase ...
 ```
 
-Replace `<APP_NAME>` with the actual app name and `<DB_ID>` with the discovered database ID (e.g., `db-jzmj-xj802bpntj`).
+Replace `<APP_NAME>` and `<DB_ID>` with actual values. **Keep all existing `postgres_projects` settings** — only add the `resources` array under `apps.app`.
 
 > **Why this matters:** `valueFrom: postgres` in `app.yaml` resolves against the **app''s resource list** (`apps.app.resources`), not the top-level bundle resources (`postgres_projects`). Without `app.resources.postgres`, the platform cannot inject `LAKEBASE_ENDPOINT` and the app falls back to mock data silently.
 
@@ -711,8 +715,9 @@ The primary readiness signal is `compute_status.state: ACTIVE`. `status.state` m
 
 1. Read `server/server.ts` (or equivalent) to identify all registered routes, HTTP methods, and request body schemas
 2. For POST/PUT endpoints, extract exact field names from the INSERT/UPDATE SQL statements
-3. Construct test payloads that match the actual code — do NOT guess based on REST conventions
-4. Only test routes that actually exist in the code
+3. Read the seed data file (`server/mock-data.ts` or equivalent) for exact values needed by lookup/filter endpoints (reference numbers, emails, IDs)
+4. Construct test payloads that match the actual code — do NOT guess based on REST conventions
+5. Only test routes that actually exist in the code
 
 DO NOT guess request body fields or assume standard REST endpoints exist (e.g., `GET /api/bookings` may not exist even if `POST /api/bookings` does).
 
@@ -917,7 +922,6 @@ Your job is complete when:
 - Step name (`## Deploy and E2E Test`)
 - Key variable values (`APP_URL`, test results summary)
 - Any resolved issues or workarounds encountered during this phase',
-
 'You are a QA engineer deploying and running end-to-end tests for an AppKit web application with Lakebase. Your goal is to deploy the Lakebase-wired app to Databricks Apps (where the Service Principal creates database objects on first boot), verify Lakebase connectivity and API correctness, and test connection resilience after idle periods.
 
 Key requirements:
@@ -937,11 +941,9 @@ CLI Best Practices:
 - Run CLI commands outside the IDE sandbox to avoid SSL/TLS certificate errors
 
 This prompt is returned as-is for direct use in Cursor/Copilot. No LLM processing.',
-
 'Deploy and E2E Test with Lakebase',
 'Deploy the Lakebase-wired app to Databricks Apps, test APIs, check logs, verify idle resilience',
 8,
-
 '## How to Use
 
 1. **Copy the generated prompt**
@@ -958,7 +960,6 @@ This prompt is returned as-is for direct use in Cursor/Copilot. No LLM processin
    - Run the idle connection test
 
 **Note:** This is the final step. After this, your AppKit application is fully deployed with Lakebase backend verified end-to-end.',
-
 '## Expected Output
 
 **Full API test battery:**
@@ -1037,9 +1038,7 @@ graph LR
 │  TOTAL                       │  7/7 ✓   │  All tests passed      │
 └──────────────────────────────┴──────────┴────────────────────────┘
 ```',
-
-TRUE,
-1, TRUE, current_timestamp(), current_timestamp(), current_user());
+true, 1, true, current_timestamp(), current_timestamp(), current_user());
 
 -- Step 9: Table Metadata & Data Dictionary (Bronze Layer) - bypass_llm=TRUE
 INSERT INTO ${catalog}.${schema}.section_input_prompts 
@@ -1151,7 +1150,9 @@ data_product_accelerator/context/{use_case_file_prefix}_Schema.csv
 
 ## 4️⃣ What Happens Behind the Scenes?
 
-This step does **not** invoke an Agent Skill — it runs a direct SQL extraction via the Databricks CLI. Every subsequent skill references this CSV (or artifacts derived from it) to **extract** table names, column names, and data types — never generating them from scratch. This is the "Extract, Don''t Generate" principle.',
+This step does **not** invoke an Agent Skill — it runs a direct SQL extraction via the Databricks CLI. Every subsequent skill references this CSV (or artifacts derived from it) to **extract** table names, column names, and data types — never generating them from scratch. This is the "Extract, Don''t Generate" principle.
+
+**Downstream Compatibility Note:** Bronze setup (Step 10) additionally requires per-table governance annotations (entity_type, contains_pii, data_classification, business_owner). If these are not present in the extracted CSV, the Bronze skill will infer them from column/table name patterns or ask.',
 '## Expected Deliverables
 
 - data_product_accelerator/context/{use_case_file_prefix}_Schema.csv file created
@@ -1209,6 +1210,8 @@ This CSV drives the entire Design-First Pipeline:
 - Silver DQ (Step 13) — uses schema for data quality expectations
 - Gold Implementation (Step 14) — uses YAML schemas derived from this CSV
 Missing comments, incorrect types, or invalid rows will cascade into errors downstream.
+
+Note: Bronze setup (Step 10) additionally requires per-table governance annotations (entity_type, contains_pii, data_classification, business_owner). If these are not present in the uploaded CSV, the Bronze skill will infer them from column/table name patterns or ask.
 ```',
 '',
 'Table Metadata & Data Dictionary (Upload CSV)',
@@ -1261,7 +1264,7 @@ The CSV must follow the `information_schema.columns` format with required column
 true, 1, true, current_timestamp(), current_timestamp(), current_user());
 
 -- Step 10 (Generate Mode): Design Schema from PRD - bypass_LLM = TRUE (prompt for coding assistant, like setup_lakebase)
-INSERT INTO ${catalog}.${schema}.section_input_prompts
+INSERT INTO ${catalog}.${schema}.section_input_prompts 
 (input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
 VALUES
 (135, 'bronze_table_metadata_generate',
@@ -1312,6 +1315,8 @@ This CSV drives the entire Design-First Pipeline:
 - Bronze Creation (Step 12) — uses schema to create Delta tables
 - Silver DQ (Step 13) — uses schema for data quality expectations
 - Gold Implementation (Step 14) — uses YAML schemas derived from this CSV
+
+Note: Bronze setup (Step 10) additionally requires per-table governance annotations (entity_type, contains_pii, data_classification, business_owner). If these are not present in the generated CSV, the Bronze skill will infer them from column/table name patterns or ask. Well-chosen column names (e.g., `email`, `phone_number`) improve downstream inference accuracy.
 ```',
 '',
 'Table Metadata & Data Dictionary (Design from PRD)',
@@ -1361,7 +1366,7 @@ data_product_accelerator/context/{use_case_file_prefix}_Schema.csv
 true, 1, true, current_timestamp(), current_timestamp(), current_user());
 
 -- Genie Accelerator: Upload CSV for Silver Metadata (bypass_llm = true)
-INSERT INTO ${catalog}.${schema}.section_input_prompts
+INSERT INTO ${catalog}.${schema}.section_input_prompts 
 (input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
 VALUES
 (121, 'genie_silver_metadata_upload',
@@ -1470,6 +1475,7 @@ This skill will orchestrate the following end-to-end design workflow:
 
 - **Parse the schema CSV** — read the source schema file, classify each table as a dimension, fact, or bridge, and infer foreign key relationships from column names and comments
 - **Design the dimensional model** — identify dimensions (with SCD Type 1/2 decisions), fact tables (with explicit grain definitions), and measures, then assign tables to business domains
+- **Persist design decisions** — write `DESIGN_DECISIONS.md` before generating YAML so every YAML file shares one FK format, description format, and transformation enum
 - **Create ERD diagrams** — generate Mermaid Entity-Relationship Diagrams organized by table count (master ERD always, plus domain and summary ERDs for larger schemas)
 - **Generate YAML schema files** — produce one YAML file per Gold table with column definitions, PK/FK constraints, table properties, lineage metadata, and dual-purpose descriptions (human + LLM readable)
 - **Document column-level lineage** — trace every Gold column back through Silver to Bronze with transformation type (DIRECT_COPY, AGGREGATION, DERIVATION, etc.) in both CSV and Markdown formats
@@ -1586,13 +1592,13 @@ This framework uses a **skills-first architecture** with an **orchestrator/worke
 |-------|-------------|------------|
 | **Phase 0** | Parse schema CSV, classify tables (dim/fact/bridge), infer FKs | Table inventory |
 | **Phase 1** | Gather project requirements (domain, use cases, stakeholders) | Project context |
-| **Phase 2** | Design dimensional model (dimensions, facts, grain, SCD types) | Model blueprint |
+| **Phase 2** | Design dimensional model (dimensions, facts, grain, SCD types) | Model blueprint → writes `DESIGN_DECISIONS.md` |
 | **Phase 3** | Create ERD diagrams using Mermaid syntax | `erd_master.md` + domain ERDs |
 | **Phase 4** | Generate YAML schema files with lineage and descriptions | `yaml/{domain}/{table}.yaml` |
 | **Phase 5** | Document column-level lineage (Bronze → Silver → Gold) | `COLUMN_LINEAGE.csv` |
 | **Phase 6** | Write Business Onboarding Guide with real-world scenarios | `BUSINESS_ONBOARDING_GUIDE.md` |
 | **Phase 7** | Map source tables with inclusion/exclusion rationale | `SOURCE_TABLE_MAPPING.csv` |
-| **Phase 8** | Validate design consistency (YAML ↔ ERD ↔ Lineage) | Validation report |
+| **Phase 8** | Validate design consistency (YAML ↔ ERD ↔ Lineage) | Validation report (structural + semantic) |
 
 ### Orchestrator / Worker Pattern
 
@@ -1640,6 +1646,7 @@ This framework uses a **skills-first architecture** with an **orchestrator/worke
 ```
 gold_layer_design/
 ├── README.md                           # Navigation hub
+├── DESIGN_DECISIONS.md                 # ⭐ Per-run contract (FK format, transformation enum, description format)
 ├── erd_master.md                       # Complete ERD (ALWAYS)
 ├── erd_summary.md                      # Domain overview (if 20+ tables)
 ├── erd/                                # Domain ERDs (if 9+ tables)
@@ -1691,8 +1698,10 @@ primary_key:
 foreign_keys:
   - columns: [''property_id'']
     references: dim_property(property_id)
+    nullable: true
   - columns: [''host_id'']
     references: dim_host(host_id)
+    nullable: true
 
 columns:
   - name: property_id
@@ -1706,6 +1715,19 @@ columns:
       silver_table: silver_bookings
       silver_column: property_id
       transformation: "DIRECT_COPY"
+```
+
+**Dimensions referenced by `nullable: true` FKs declare an `unknown_member:` block** (sentinel row for NULL/missing references):
+
+```yaml
+# gold_layer_design/yaml/property/dim_property.yaml (excerpt)
+unknown_member:
+  description: "Sentinel row for NULL or missing FK references from fact tables."
+  key_value: "-1"
+  business_key_value: -1
+  attribute_defaults:
+    name: "Unknown"
+    status: "Not Applicable"
 ```
 
 ---
@@ -1734,6 +1756,9 @@ columns:
 - [ ] Grain explicitly stated for each fact
 - [ ] SCD type specified for each dimension
 - [ ] All columns trace back to source
+- [ ] `DESIGN_DECISIONS.md` exists and was written before any YAML
+- [ ] All transformation types from standard 15-type enum (no invented values)
+- [ ] `unknown_member` documented for each dimension referenced by a `nullable: true` FK
 - [ ] Stakeholder sign-off obtained',
 true, 1, true, current_timestamp(), current_timestamp(), current_user());
 
@@ -1963,7 +1988,7 @@ When you paste the prompt, the AI reads `@data_product_accelerator/skills/bronze
 project_root/
 ├── databricks.yml                      # Bundle configuration (updated)
 ├── src/
-│   └── source_bronze/
+│   └── {project}_bronze/
 │       ├── __init__.py
 │       └── clone_samples.py            # Code to copy sample data
 └── resources/
@@ -2184,7 +2209,9 @@ Validate the results in the UI to ensure the DQ rules show up in centralized del
 
 IMPORTANT: Use the EXISTING catalog `{lakehouse_default_catalog}` -- do NOT create a new catalog. Create the Silver schema `{user_schema_prefix}_silver` and all Silver tables inside this catalog.
 
-NOTE: Before creating the schema, check if `{lakehouse_default_catalog}.{user_schema_prefix}_silver` already exists. If it does, DROP the schema with CASCADE and recreate it from scratch. These are user-specific schemas so dropping is safe.',
+NOTE: Before creating the schema, check if `{lakehouse_default_catalog}.{user_schema_prefix}_silver` already exists. If it does, DROP the schema with CASCADE and recreate it from scratch. These are user-specific schemas so dropping is safe.
+
+NOTE: This is a shared workshop workspace. Include a `user_prefix` variable in your pipeline/job `name:` fields (e.g., `"[${bundle.target} ${var.user_prefix}] Silver Layer Pipeline"`) to avoid `pipeline name is already used` collisions with other attendees. `databricks bundle deploy --force` does NOT resolve these — see `common/databricks-asset-bundles` → "Shared Workspace Naming".',
 '',
 'Silver Layer Pipelines (SDP)',
 'Create Silver layer using Spark Declarative Pipelines with centralized data quality rules',
@@ -2266,6 +2293,18 @@ After pipeline completes, verify in Databricks UI:
    - Navigate to: Workflows → DLT Pipelines → Your Pipeline
    - Click "Data Quality" tab
    - ✅ Should show Expectations being evaluated
+   - **For per-expectation pass/fail counts**, run this in the SQL editor (the `databricks pipelines list-pipeline-events` CLI does NOT return this detail):
+
+     ```sql
+     SELECT
+       event_type,
+       details:flow_progress.data_quality.dropped_records AS dropped,
+       details:flow_progress.data_quality.expectations    AS expectations
+     FROM event_log(TABLE({lakehouse_default_catalog}.{user_schema_prefix}_silver.<silver_table>))
+     WHERE details:flow_progress.data_quality IS NOT NULL
+     ORDER BY timestamp DESC
+     LIMIT 5;
+     ```
 
 3. **Check Silver Tables:**
    ```sql
@@ -2365,7 +2404,7 @@ When you paste the prompt, the AI reads `@data_product_accelerator/skills/silver
 project_root/
 ├── databricks.yml                        # Updated with Silver resources
 ├── src/
-│   └── source_silver/
+│   └── {project}_silver/
 │       ├── setup_dq_rules_table.py       # Notebook: Create & populate DQ rules Delta table
 │       ├── dq_rules_loader.py            # Pure Python module (NO notebook header!)
 │       ├── silver_dimensions.py          # DLT notebook: Dimension tables
@@ -2453,12 +2492,14 @@ FROM {lakehouse_default_catalog}.{user_schema_prefix}_silver.dq_rules;
 **Deployment:**
 - [ ] Bundle validates with no errors
 - [ ] Bundle deploys successfully
+- [ ] Pipeline and job names include `${var.user_prefix}` (no collisions in shared workspace)
 - [ ] DQ rules setup job runs and creates `dq_rules` table (**must run FIRST**)
 - [ ] DLT pipeline runs without failures
 
 **Data Quality:**
 - [ ] DQ rules loaded into centralized Delta table
 - [ ] Expectations show in pipeline event log (Data Quality tab)
+- [ ] Expectations verified via `event_log(TABLE(...))` TVF in SQL editor (per-expectation pass/fail counts)
 - [ ] Quarantine table captures failed records (not silently dropped)
 
 **Tables & Properties:**
@@ -2743,6 +2784,8 @@ Unity Catalog constraints are **NOT ENFORCED** — they are **informational only
 
 This is a key Databricks concept: PK/FK in Unity Catalog are for **metadata enrichment and BI tool discovery**, not data integrity enforcement.
 
+**Serverless limitation:** In serverless compute, FK references must target PRIMARY KEY columns (UNIQUE constraints are unavailable). If a YAML FK references a non-PK column (e.g., a business key instead of a surrogate key), the FK script will log a warning and skip that constraint — this is expected behavior, not an error.
+
 ---
 
 ## 3️⃣ Why Are We Building It This Way? (Databricks Best Practices)
@@ -2797,7 +2840,7 @@ When you paste the prompt, the AI reads `@data_product_accelerator/skills/gold/0
 project_root/
 ├── databricks.yml                          # Bundle config (MUST sync YAML files!)
 ├── src/
-│   └── source_gold/
+│   └── {project}_gold/
 │       ├── setup_tables.py                 # Creates Gold tables from YAML + adds PKs
 │       ├── add_fk_constraints.py           # Adds FK constraints (separate script)
 │       └── merge_gold_tables.py            # Merges Silver → Gold (dedup + map + merge)
@@ -2966,8 +3009,9 @@ LIMIT 10;
 **Gold Setup Job (2 tasks):**
 - [ ] Task 1: All 5 tables created from YAML (no hardcoded DDL)
 - [ ] Primary keys added to dimension tables (via `ALTER TABLE`)
-- [ ] Task 2: Foreign key constraints added (runs after Task 1 via `depends_on`)
-- [ ] Constraints visible in `information_schema.table_constraints`
+- [ ] Task 2: Foreign key constraints attempted (runs after Task 1 via `depends_on`) — some may be skipped in serverless if they reference non-PK columns
+- [ ] FK constraint script completes without crashing (warnings OK, errors not OK)
+- [ ] PK constraints visible in `information_schema.table_constraints` (FK constraints may be partial)
 
 **Table Properties (non-negotiable):**
 - [ ] `CLUSTER BY AUTO` on every table (never specific columns)
@@ -3003,8 +3047,9 @@ VALUES
 This will involve the following steps:
 
 - **Analyze Gold layer** — examine your completed Gold tables to identify natural business domains, key relationships, and analytical questions
-- **Generate use-case plans** — create structured plans organized as Phase 1 addendums (1.2 TVFs, 1.3 Metric Views, 1.4 Monitors, 1.5 Dashboards, 1.6 Genie Spaces, 1.7 Alerts, 1.1 ML Models)
+- **Generate use-case plans** — create structured plans organized as Phase 1 addendums (1.2 TVFs, 1.3 Metric Views, 1.4 Monitors, 1.5 Dashboards, 1.6 Genie Spaces, 1.7 Alerts, 1.1 ML Models). Filenames must match the canonical numbering table at `data_product_accelerator/skills/planning/00-project-planning/assets/addendum-numbering.md`.
 - **Produce YAML manifests** — generate 4 machine-readable manifest files (semantic-layer, observability, ML, GenAI agents) as contracts for downstream implementation stages
+- **Emit Gold dependency manifest** — write `plans/manifests/gold-dependency-manifest.yaml` with every Gold table/column referenced across all addendums, then intersect it against `{lakehouse_default_catalog}.information_schema` for `{user_schema_prefix}_gold`. If any reference is missing, the skill writes `plans/gold-gap-remediation.md` and STOPS — downstream orchestrators (semantic layer, observability, ML, GenAI agents) will refuse to run until Gold is fixed.
 - **Apply workshop mode caps** — enforce hard limits (3-5 TVFs, 1-2 Metric Views, 1 Genie Space) to keep the workshop focused on pattern variety over depth
 - **Define deployment order** — establish build sequence: TVFs → Metric Views → Genie Spaces → Dashboards → Monitors → Alerts → Agents
 
@@ -3269,7 +3314,12 @@ plans/
     ├── semantic-layer-manifest.yaml        # TVFs + Metric Views + Genie Spaces
     ├── observability-manifest.yaml         # Monitors + Dashboards + Alerts
     ├── ml-manifest.yaml                    # Feature Tables + Models + Experiments
-    └── genai-agents-manifest.yaml          # Agents + Tools + Eval Datasets
+    ├── genai-agents-manifest.yaml          # Agents + Tools + Eval Datasets
+    └── gold-dependency-manifest.yaml       # ⭐ Gold tables/columns referenced by ALL addendums
+                                             #   (validated against live catalog; gaps → STOP)
+
+# Emitted ONLY when the live-catalog intersection finds missing Gold references:
+plans/gold-gap-remediation.md                # Lists missing tables/columns → fix Gold first
 ```
 
 > **Key innovation: Plan-as-Contract.** The 4 YAML manifests serve as **contracts** between planning and implementation. When downstream skills (semantic layer, monitoring, ML, GenAI) run, they read their manifest to know exactly what to build — enforcing "Extract, Don''t Generate" across the planning-to-implementation handoff. In workshop mode, manifests include `planning_mode: workshop` to prevent downstream skills from expanding beyond listed artifacts.
@@ -3376,7 +3426,8 @@ This workshop uses `planning_mode: workshop` — hard caps prevent artifact bloa
 **Plan Structure:**
 - [ ] First line confirms mode: `**Planning Mode:** Workshop (explicit opt-in)`
 - [ ] `plans/README.md` provides navigation with links to all documents
-- [ ] Phase 1 master + selected addendums (1.2 TVFs, 1.3 MVs, 1.6 Genie included by default in workshop)
+- [ ] `plans/README.md`, `plans/prerequisites.md`, `plans/use-case-catalog.md`, and `plans/phase1-use-cases.md` all exist (workshop mode does NOT waive these)
+- [ ] All selected Phase 1 addendum files exist in `plans/` (one per selected artifact type — 1.2 TVFs, 1.3 MVs, 1.6 Genie at minimum in workshop mode)
 - [ ] Each plan document follows standard template (Overview, Specs, Timeline, Validation)
 
 **Agent Domain Framework:**
@@ -3391,12 +3442,17 @@ This workshop uses `planning_mode: workshop` — hard caps prevent artifact bloa
 - [ ] Each Genie Space has ≤ 25 data assets and ≥ 10 assets
 - [ ] Genie Space count based on total asset volume (not domain count)
 - [ ] Workshop caps respected: 3-5 TVFs, 1-2 MVs, 1 Genie Space
+- [ ] No row in the Traceability Matrix has Genie Space as its ONLY coverage (every question must have a TVF, Metric View, or listed Gold table backing it)
 
 **YAML Manifests (Plan-as-Contract):**
-- [ ] 4 manifests generated in `plans/manifests/`
+- [ ] 4 domain manifests generated in `plans/manifests/`
+- [ ] `plans/manifests/gold-dependency-manifest.yaml` generated AND intersected against the live `{lakehouse_default_catalog}.{user_schema_prefix}_gold` catalog with zero missing tables/columns (if gaps: `plans/gold-gap-remediation.md` emitted and planning STOPS)
 - [ ] `planning_mode: workshop` present in all manifests
 - [ ] All table/column references validated against Gold YAML
 - [ ] Artifact counts in manifests match plan addendum counts
+- [ ] Observability manifest TimeSeries monitors use a business event date (FK to `dim_date`), NOT an audit column like `record_updated_timestamp`
+- [ ] Zero literal schema names in manifest SQL — every query uses `${catalog}.${gold_schema}.*` (run `grep -n "gold" plans/manifests/*.yaml` and verify only the variable form appears in `query:` blocks)
+- [ ] Any cross-domain Genie Space uses the documented `unified_genie_space` (singular) key — NOT an ad-hoc `unified_genie_spaces` or similar plural/alternative key
 
 **Deployment Order:**
 - [ ] Phase 1 addendum dependencies documented
@@ -3420,23 +3476,32 @@ VALUES
 This will involve the following end-to-end workflow:
 
 - **Build Lakeview dashboard** — create a complete `.lvdash.json` configuration with KPI counters, charts, data tables, and filters for business self-service analytics
-- **Use 6-column grid layout** — position all widgets on a 6-column grid (NOT 12!) with correct widget versions (KPIs=v2, Charts=v3, Tables=v1, Filters=v2)
+- **Use 6-column grid layout** — position all widgets on a 6-column grid (NOT 12!) with correct widget versions (KPIs=v2, Charts=v3, Tables=v2, Filters=v2)
 - **Query Metric Views** — write dataset queries using `MEASURE()` function against Metric Views with `${catalog}.${gold_schema}` variable substitution
+- **Use a mixed dataset strategy** — `MEASURE()` for KPIs, trends, and dimension breakdowns sourced from Metric Views; direct Gold SQL for detail/drill-down tables and filter value datasets (e.g., `SELECT DISTINCT ...`)
 - **Validate SQL and widget alignment** — run pre-deployment validation ensuring every widget `fieldName` matches its SQL alias exactly (90% reduction in dev loop time)
-- **Deploy via UPDATE-or-CREATE** — use Workspace Import API with `overwrite: true` to preserve dashboard URLs and viewer permissions
+- **Run Phase 0.5 pre-flight** — BEFORE any deploy, enumerate every `${var}` placeholder in the `.lvdash.json`, then assert the deploy job provides every one. Missing a single variable corrupts the upload silently (see `monitoring/02-databricks-aibi-dashboards/SKILL.md` → "Pre-loop variable enumeration").
+- **Deploy via UPDATE-or-CREATE** — use Workspace Import API with `overwrite: true` AND base64-encoded ASCII content (raw UTF-8 bytes silently corrupts the file). Preserves dashboard URLs and viewer permissions.
 
-Reference the dashboard plan at @data_product_accelerator/plans/phase1-addendum-1.1-dashboards.md
+Reference the dashboard plan at @plans/phase1-addendum-1.5-aibi-dashboards.md (canonical numbering — see `data_product_accelerator/skills/planning/00-project-planning/assets/addendum-numbering.md`; the legacy name `1.1-dashboards.md` is forbidden).
 
 The skill provides:
 - Dashboard JSON structure with **6-column grid** layout (NOT 12!)
-- Widget patterns: KPI counters (v2), charts (v3), tables (v1), filters (v2)
+- Widget patterns: KPI counters (v2), charts (v3), tables (v2), filters (v2)
 - Query patterns from Metric Views using `MEASURE()` function
 - Pre-deployment SQL validation (90% reduction in dev loop time)
 - UPDATE-or-CREATE deployment pattern (preserves URLs and permissions)
 - Variable substitution (`${catalog}`, `${gold_schema}`) — no hardcoded schemas
 - Monitoring table query patterns (window structs, CASE pivots) if Lakehouse Monitors exist
 
+Before building, load prerequisite skills:
+- **MUST READ** `semantic-layer/01-metric-views-patterns/SKILL.md` for MEASURE() syntax (since this dashboard queries Metric Views)
+- **MUST READ** `common/databricks-expert-agent/SKILL.md` for "Extract Don''t Generate" principle
+- **MUST READ** `common/naming-tagging-standards/SKILL.md` for dashboard and file naming conventions
+- Check installed skills for `databricks-lakeview-dashboard` (16+ widget patterns, mandatory query testing workflow)
+
 Build the dashboard in this order:
+0. Validate inputs — verify the plan file and manifests exist. If the plan file is missing, STOP and ask.
 1. Plan layout (KPIs, filters, charts, tables)
 2. Create datasets (validated SQL queries)
 3. Build widgets with correct version specs
@@ -3461,7 +3526,7 @@ Ensure you have:
 - ✅ Gold Layer Implementation completed (Step 12) — with column COMMENTs
 - ✅ Semantic Layer completed (Step 14) — Metric Views for dashboard queries
 - ✅ Use-Case Plan created (Step 13) — with dashboard requirements
-- ✅ Plan file exists: `plans/phase1-addendum-1.1-dashboards.md`
+- ✅ Plan file exists: `plans/phase1-addendum-1.5-aibi-dashboards.md`
 - ✅ Gold YAML schemas available for column name validation
 
 ---
@@ -3472,11 +3537,13 @@ Ensure you have:
 
 **Step 2:** Copy and paste the prompt — Copy the entire prompt using the copy button, paste it into Cursor. The AI will build the dashboard in phases.
 
-**Step 3:** Plan Reading — The AI will read dashboard plan (`plans/phase1-addendum-1.1-dashboards.md`), extract KPI requirements, chart types, filter dimensions, and identify data sources (Metric Views preferred over raw Gold tables).
+**Step 2.5:** Input Validation — The AI will verify the plan file exists at `plans/phase1-addendum-1.5-aibi-dashboards.md`. **If missing**, the AI should ask you for the correct path rather than silently proceeding. It will also load prerequisite skills (`metric-views-patterns` for MEASURE() syntax, `databricks-expert-agent` for extract-don''t-generate).
+
+**Step 3:** Plan Reading — The AI will read dashboard plan (`plans/phase1-addendum-1.5-aibi-dashboards.md`), extract KPI requirements, chart types, filter dimensions, and identify data sources (Metric Views preferred over raw Gold tables).
 
 **Step 4:** Dataset Creation — The AI will create SQL queries for each widget (using `${catalog}` substitution), use `MEASURE()` function for Metric View queries, include "All" option for filter datasets, and handle NULLs with `COALESCE()` and SCD2 with `is_current = true`.
 
-**Step 5:** Widget and Layout Creation — The AI will build KPI counters (version 2) for top-line metrics, build charts (version 3) for trends and comparisons, build data tables (version 1) for drill-down, and position using 6-column grid (widths 1-6, NOT 12!).
+**Step 5:** Widget and Layout Creation — The AI will build KPI counters (version 2) for top-line metrics, build charts (version 3) for trends and comparisons, build data tables (version 2) for drill-down, and position using 6-column grid (widths 1-6, NOT 12!).
 
 **Step 6:** Parameter and Filter Configuration — The AI will add DATE parameters with static defaults (not DATETIME), create Global Filters page (`PAGE_TYPE_GLOBAL_FILTERS`), and link filter widgets to dataset parameters.
 
@@ -3540,7 +3607,7 @@ WHERE table_schema = ''{user_schema_prefix}_gold'' AND comment IS NOT NULL;
 │  │  │  │  Trend over time│ │  By dimension   │                    │ │   │
 │  │  │  └─────────────────┘ └─────────────────┘                    │ │   │
 │  │  │  ┌─────────────────────────────────────┐                    │ │   │
-│  │  │  │         Data Table (v1)              │                    │ │   │
+│  │  │  │         Data Table (v2)              │                    │ │   │
 │  │  │  │         Detailed drill-down          │                    │ │   │
 │  │  │  └─────────────────────────────────────┘                    │ │   │
 │  │  └───────────────────────────────────────────────────────────────┘ │   │
@@ -3569,7 +3636,7 @@ WHERE table_schema = ''{user_schema_prefix}_gold'' AND comment IS NOT NULL;
 |---------|--------------|----------------|
 | **Lakeview JSON** | Dashboards are defined as `.lvdash.json` files | Version-controlled, deployable via API |
 | **6-Column Grid** | Widget positions use columns 0-5 (NOT 12!) | #1 cause of widget snapping issues |
-| **Widget Versions** | KPIs=v2, Charts=v3, Tables=v1, Filters=v2 | Wrong version causes rendering errors |
+| **Widget Versions** | KPIs=v2, Charts=v3, Tables=v2, Filters=v2 | Wrong version causes rendering errors |
 | **DATE Parameters** | Use DATE type (not DATETIME) with static defaults | DATETIME with dynamic expressions won''t work |
 | **`dataset_catalog`/`dataset_schema`** | Variable substitution for environment portability | Never hardcode catalog/schema in queries |
 | **Widget-Query Alignment** | Widget `fieldName` MUST match query output alias | #1 cause of "no fields to visualize" errors |
@@ -3589,7 +3656,7 @@ WHERE table_schema = ''{user_schema_prefix}_gold'' AND comment IS NOT NULL;
 | **Line Chart** | v3 | Trends over time (daily revenue) | width: 3, height: 6 |
 | **Pie Chart** | v3 | Distribution (booking share by type) | width: 3, height: 6 |
 | **Area Chart** | v3 | Stacked trends (revenue by category over time) | width: 3-6, height: 6 |
-| **Data Table** | v1 | Detailed drill-down data | width: 6, height: 6+ |
+| **Data Table** | v2 | Detailed drill-down data | width: 6, height: 6+ |
 | **Filter** | v2 | Single-select / multi-select / date range | width: 2, height: 2 |
 
 #### Chart Scale Rules (Encoding Requirements)
@@ -3647,32 +3714,34 @@ Area Charts:  x.scale = temporal, y.scale = quantitative, y.stack = "zero"
 
 #### Use Metric Views (Preferred)
 
+> **Example names used below** (`<metric_view_name>`, `<dim_name>`, `<fact_name>`, `<dimension_col>`, `<measure_col>`) are generic placeholders — substitute with the concrete Metric View and column names from `plans/phase1-addendum-1.3-metric-views.md` and `plans/deploy-checkpoint.md`.
+
 ```sql
 -- ✅ PREFERRED: Query Metric View with MEASURE()
-SELECT 
-  destination,
-  MEASURE(total_revenue) as revenue,
-  MEASURE(booking_count) as bookings
-FROM ${catalog}.${gold_schema}.revenue_analytics_metrics
-WHERE booking_date BETWEEN :start_date AND :end_date
-GROUP BY destination
-ORDER BY revenue DESC
+-- No explicit GROUP BY needed — aggregation is implicit from dimensions in SELECT
+SELECT
+  <dimension_col>,
+  MEASURE(`<measure_col_1>`) as <alias_1>,
+  MEASURE(`<measure_col_2>`) as <alias_2>
+FROM ${catalog}.${gold_schema}.<metric_view_name>
+WHERE <date_col> BETWEEN :start_date AND :end_date
+ORDER BY <alias_1> DESC
 ```
 
 #### Direct Gold Table Query (Fallback)
 
 ```sql
 -- When no Metric View exists for the data
-SELECT 
-  d.destination_name as destination,
-  SUM(f.total_amount) as revenue,
-  COUNT(*) as bookings
-FROM ${catalog}.${gold_schema}.fact_booking_detail f
-JOIN ${catalog}.${gold_schema}.dim_destination d 
-  ON f.destination_id = d.destination_id
-WHERE f.booking_date BETWEEN :start_date AND :end_date
-GROUP BY d.destination_name
-ORDER BY revenue DESC
+SELECT
+  d.<dim_label_col> as <dimension_col>,
+  SUM(f.<amount_col>) as <alias_1>,
+  COUNT(*) as <alias_2>
+FROM ${catalog}.${gold_schema}.<fact_name> f
+JOIN ${catalog}.${gold_schema}.<dim_name> d
+  ON f.<fk_col> = d.<pk_col>
+WHERE f.<date_col> BETWEEN :start_date AND :end_date
+GROUP BY d.<dim_label_col>
+ORDER BY <alias_1> DESC
 ```
 
 #### Number Formatting Rules
@@ -3692,7 +3761,7 @@ ORDER BY revenue DESC
 | Practice | How It''s Used Here |
 |----------|-------------------|
 | **6-Column Grid (NOT 12!)** | Widget widths use 1-6 columns. `width: 6` = full width, `width: 3` = half. This is the #1 cause of layout issues — most platforms use 12 columns, Lakeview uses 6. |
-| **Widget Version Specs** | KPI Counters = version 2, Charts (bar/line/pie/area) = version 3, Tables = version 1, Filters = version 2. Wrong version causes rendering failures. |
+| **Widget Version Specs** | KPI Counters = version 2, Charts (bar/line/pie/area) = version 3, Tables = version 2, Filters = version 2. Wrong version causes rendering failures. |
 | **Widget-Query Column Alignment** | Every widget `fieldName` MUST exactly match the SQL alias in its dataset query. Mismatch = "no fields to visualize" error. |
 | **Raw Number Formatting** | Queries return raw numbers (e.g., `0.85` for 85%). Widgets apply formatting (`number-percent`, `number-currency`, `number-plain`). NEVER use `FORMAT_NUMBER()` or string concatenation. |
 | **DATE Parameters (Not DATETIME)** | Dashboard parameters use `DATE` type with static default values. `DATETIME` with dynamic expressions like `now-30d/d` does NOT work. |
@@ -3710,10 +3779,11 @@ ORDER BY revenue DESC
 
 When you paste the prompt, the AI reads `@data_product_accelerator/skills/monitoring/02-databricks-aibi-dashboards/SKILL.md` — the **AI/BI Dashboard worker skill**. Behind the scenes:
 
-1. **Plan reading** — the skill reads your dashboard plan (`plans/phase1-addendum-1.1-dashboards.md`) to extract: KPIs, charts, filters, layout requirements
+1. **Plan reading** — the skill reads your dashboard plan (`plans/phase1-addendum-1.5-aibi-dashboards.md`) to extract: KPIs, charts, filters, layout requirements
 2. **Dashboard skill loaded** — provides complete JSON templates, widget specs, grid layout rules, query patterns, validation scripts, and deployment workflows
-3. **5 Common skills auto-loaded:**
+3. **6 Common skills auto-loaded:**
    - `databricks-expert-agent` — "Extract, Don''t Generate" for table/column names
+   - `semantic-layer/01-metric-views-patterns` — MEASURE() syntax for Metric View queries (loaded when dashboard uses MEASURE())
    - `databricks-asset-bundles` — dashboard resource deployment
    - `databricks-python-imports` — deployment script module patterns
    - `naming-tagging-standards` — dashboard and file naming conventions
@@ -3723,6 +3793,8 @@ When you paste the prompt, the AI reads `@data_product_accelerator/skills/monito
 6. **UPDATE-or-CREATE deployment** — Workspace Import API with `overwrite: true` preserves URLs and permissions
 
 **Key principle:** The AI reads your plan to **extract** KPI/chart requirements. Dashboard queries use `${catalog}` and `${gold_schema}` variable substitution — never hardcoded schemas.
+
+> **Important:** If the plan file at `plans/phase1-addendum-1.5-aibi-dashboards.md` doesn''t exist, the AI should tell you and ask for the correct path — not silently reconstruct requirements from other sources.
 
 > **Note:** For the full observability stack (Lakehouse Monitoring + Dashboards + SQL Alerts), use the orchestrator at `@data_product_accelerator/skills/monitoring/00-observability-setup/SKILL.md`. This step focuses specifically on the dashboard.',
 '## Expected Deliverables
@@ -3765,16 +3837,20 @@ resources/monitoring/
 
 ### 📊 What Each Widget Does
 
-| Widget | Type | Version | Data Source | Insight |
-|--------|------|---------|-------------|---------|
-| Total Revenue | KPI Counter | v2 | `revenue_analytics_metrics` | Top-line revenue figure |
-| Booking Count | KPI Counter | v2 | `revenue_analytics_metrics` | Total bookings in period |
-| Avg Nightly Rate | KPI Counter | v2 | `revenue_analytics_metrics` | Average price metric |
-| Revenue Trend | Line Chart | v3 | `fact_booking_detail` | Revenue over time |
-| Revenue by Destination | Bar Chart | v3 | `revenue_analytics_metrics` | Geographic breakdown |
-| Booking Details | Data Table | v1 | `fact_booking_detail + dims` | Drill-down for analysis |
-| Date Range | Filter | v2 | Parameter | Cross-page date filtering |
-| Destination | Filter | v2 | `dim_destination` | Geographic filtering |
+> **Illustrative example** from a bookings-domain dashboard — substitute with the concrete Metric View, fact, and dimension names from `plans/phase1-addendum-1.5-aibi-dashboards.md` and `plans/deploy-checkpoint.md` for your project. The pattern (KPIs/trends → `MEASURE()` on Metric Views; detail tables and filter lists → direct Gold SQL) is task-invariant.
+
+| Widget | Type | Version | Data Source | Query Pattern | Insight |
+|--------|------|---------|-------------|---------------|---------|
+| Total <measure_1> | KPI Counter | v2 | `<metric_view_name>` (Metric View) | `MEASURE()` | Top-line figure (e.g., Total Revenue) |
+| <count_metric> Count | KPI Counter | v2 | `<metric_view_name>` (Metric View) | `MEASURE()` | Total count in period (e.g., Booking Count) |
+| Avg <rate_metric> | KPI Counter | v2 | `<metric_view_name>` (Metric View) | `MEASURE()` | Average metric (e.g., Avg Nightly Rate) |
+| <measure_1> Trend | Line Chart | v3 | `<metric_view_name>` (Metric View) | `MEASURE()` with temporal dimension | Value over time |
+| <measure_1> by <dim_label> | Bar Chart | v3 | `<metric_view_name>` (Metric View) | `MEASURE()` with categorical dimension | Breakdown by dimension |
+| <fact_name> Details | Data Table | v2 | `<fact_name>` + dims (Gold) | Direct SQL with JOINs | Drill-down for analysis |
+| Date Range | Filter | v2 | Parameter | n/a (parameter widget) | Cross-page date filtering |
+| <dim_label> | Filter | v2 | `<dim_name>` (Gold) | `SELECT DISTINCT` | Categorical filtering |
+
+> **Pattern rule:** Aggregates (KPIs, trends, breakdowns) use `MEASURE()` against Metric Views. Detail tables and filter value lists use direct Gold SQL. This mirrors the dataset strategy in `references/metric-view-dashboard-queries.md`.
 
 ---
 
@@ -3848,7 +3924,7 @@ resources/monitoring/
 **Widget Versions (non-negotiable):**
 - [ ] KPI Counters use version 2 (not 3)
 - [ ] Bar/Line/Pie/Area Charts use version 3
-- [ ] Data Tables use version 1
+- [ ] Data Tables use version 2
 - [ ] Filters use version 2
 
 **Widget-Query Alignment:**
@@ -3877,7 +3953,8 @@ resources/monitoring/
 
 **Deployment:**
 - [ ] `.lvdash.json` file created and version-controlled
-- [ ] `deploy_dashboard.py` uses UPDATE-or-CREATE pattern
+- [ ] Phase 0.5 variable-enumeration pre-flight run: every `${var}` placeholder in the JSON template is covered by a `--var` or `dbutils.widgets.get(...)` value before the deploy job starts (STOP if any is missing)
+- [ ] `deploy_dashboard.py` uses UPDATE-or-CREATE pattern AND base64-encodes the rendered JSON (ASCII string) before calling `ws.workspace.import_` — never raw UTF-8 bytes
 - [ ] `validate_dashboard_queries.py` passes all SQL checks
 - [ ] `validate_widget_encodings.py` passes all alignment checks
 - [ ] `databricks bundle deploy -t dev` succeeds
@@ -3887,8 +3964,8 @@ resources/monitoring/
 -- Check dashboard exists in workspace
 -- Navigate to: Databricks → Dashboards → find your dashboard
 
--- Verify data sources are connected
-SELECT COUNT(*) FROM ${catalog}.${gold_schema}.fact_booking_detail;
+-- Verify data sources are connected (substitute <fact_name> from plans/deploy-checkpoint.md)
+SELECT COUNT(*) FROM ${catalog}.${gold_schema}.<fact_name>;
 
 -- Verify Metric Views exist
 SELECT table_name, table_type 
@@ -3910,14 +3987,16 @@ This will involve the following end-to-end workflow:
 - **Create Metric Views** — build Metric Views using `WITH METRICS LANGUAGE YAML` syntax with dimensions, measures, 3-5 synonyms each, and format specifications
 - **Create Table-Valued Functions (TVFs)** — write parameterized SQL functions with STRING date params (non-negotiable for Genie), v3.0 bullet-point COMMENTs, and ROW_NUMBER for Top-N patterns
 - **Configure Genie Space** — set up natural language query interface with data assets (Metric Views → TVFs → Gold tables priority), General Instructions (≤20 lines), and ≥10 benchmark questions with exact expected SQL
-- **Create JSON exports** — export Genie Space configuration as JSON for CI/CD deployment across environments
+- **Create JSON exports** — export Genie Space configuration as JSON for CI/CD deployment across environments. Before every POST/PATCH, run the `_assert_sql_arrays` validator: every `sql:` field in the `serialized_space` payload must be a `List[str]` (never a bare string) — see `semantic-layer/04-genie-space-export-import-api/SKILL.md` → "Required `serialized_space` Invariants".
+- **Bake `semantic_warehouse_id`** — the warehouse ID must be a CONCRETE value stamped into the exported JSON at deploy time, NOT a `--var` runtime parameter. Copy the resolved warehouse ID from `plans/deploy-checkpoint.md` (emitted by `bundle validate`).
+- **Persist space IDs** — after the first successful POST, copy the `[ACTION REQUIRED]` `genie_space_id_<stem>` block from the deploy script output into `databricks.yml` so subsequent runs PATCH the existing space instead of creating duplicates.
 - **Optimize for accuracy** — run benchmark questions via Conversation API and tune 6 control levers until accuracy ≥95% and repeatability ≥90%
 
 Implement in this order:
 
-1. **Table-Valued Functions (TVFs)** — using plan at @data_product_accelerator/plans/phase1-addendum-1.2-tvfs.md
-2. **Metric Views** — using plan at @data_product_accelerator/plans/phase1-addendum-1.3-metric-views.md
-3. **Genie Space** — using plan at @data_product_accelerator/plans/phase1-addendum-1.6-genie-spaces.md
+1. **Table-Valued Functions (TVFs)** — using plan at @plans/phase1-addendum-1.2-tvfs.md
+2. **Metric Views** — using plan at @plans/phase1-addendum-1.3-metric-views.md
+3. **Genie Space** — using plan at @plans/phase1-addendum-1.6-genie-spaces.md
 4. **Genie JSON Exports** — create export/import deployment jobs
 
 The orchestrator skill automatically loads worker skills for TVFs, Metric Views, Genie Space patterns, and export/import API.',
@@ -3938,8 +4017,8 @@ Copy the prompt above, start a **new Agent chat** in Cursor, and paste it. The A
 Ensure you have:
 - ✅ Gold Layer Implementation completed (Step 12) — with column COMMENTs on all tables
 - ✅ Use-Case Plan created (Step 13) — with `planning_mode: workshop`
-- ✅ Plan manifest exists: `plans/manifests/semantic-layer-manifest.yaml`
-- ✅ Plan addendum files exist:
+- ✅ Plan manifest exists: `plans/manifests/semantic-layer-manifest.yaml` (REQUIRED)
+- Plan addendum files (if available — the manifest has sufficient detail without these):
   - `plans/phase1-addendum-1.2-tvfs.md`
   - `plans/phase1-addendum-1.3-metric-views.md`
   - `plans/phase1-addendum-1.6-genie-spaces.md`
@@ -3957,9 +4036,15 @@ Ensure you have:
 
 **Step 4: Phase 1 — Metric Views** — The AI will read Metric View plan (`plans/phase1-addendum-1.3-metric-views.md`), create YAML definition files (dimensions, measures, synonyms, formats), create `create_metric_views.py` (reads YAML → `CREATE VIEW WITH METRICS LANGUAGE YAML`), create `metric_views_job.yml` for Asset Bundle deployment.
 
+**Checkpoint:** After Phase 1 completes, review the generated Metric View artifacts before moving to the next phase.
+
 **Step 5: Phase 2 — TVFs** — The AI will read TVF plan (`plans/phase1-addendum-1.2-tvfs.md`), validate Gold YAML schemas (confirm column names/types exist), create `table_valued_functions.sql` with v3.0 bullet-point COMMENTs, create `tvf_job.yml` (SQL task) for Asset Bundle deployment.
 
+**Checkpoint:** After Phase 2 completes, review the generated TVF artifacts before moving to the next phase.
+
 **Step 6: Phase 3 — Genie Space** — The AI will read Genie Space plan (`plans/phase1-addendum-1.6-genie-spaces.md`), verify ALL Gold tables have column COMMENTs (prerequisite), configure: data assets (MVs → TVFs → tables), General Instructions (≤20 lines), create ≥10 benchmark questions with exact expected SQL.
+
+**Checkpoint:** After Phase 3 completes, review the generated Genie Space artifacts before deploying.
 
 **Step 7: Deploy and Validate**
 
@@ -4320,6 +4405,24 @@ SQL: SELECT destination, MEASURE(booking_count) FROM revenue_analytics_metrics G
 | **Serverless SQL Warehouse** | Genie Spaces MUST use a Serverless SQL warehouse — required for natural language query execution. NEVER Classic or Pro. |
 | **Synonym-Rich Definitions** | 3-5 synonyms per dimension/measure (e.g., "revenue" → "earnings", "income", "amount") — dramatically improves Genie NL understanding |
 
+### Known Pitfalls (from deployment retrospectives)
+
+These issues have caused real deployment failures. The agent MUST avoid them:
+
+1. **Read ALL common skills before generating code.** Skipping `databricks-python-imports` causes fragile workspace paths. Skipping `databricks-asset-bundles` causes missing job parameters.
+
+2. **Verify DBR version before using snowflake nested joins in Metric Views.** Nested joins require DBR 17.1+. If unsure, ask the user or use denormalized columns instead.
+
+3. **Genie Space JSON must have `"version": 2` at root.** Omitting it causes API failures.
+
+4. **`data_sources.tables` and `data_sources.metric_views` do NOT have `id` fields.** Only `config.sample_questions`, `instructions.sql_functions`, `instructions.text_instructions`, and `benchmarks.questions` have `id` fields.
+
+5. **Use Databricks SQL dialect in all benchmark SQL.** Common mistakes: `TRUNC()` should be `DATE_TRUNC()`, `NVL()` should be `COALESCE()`, `SYSDATE` should be `CURRENT_DATE()`.
+
+6. **Do not bulk-create all files without checkpoints.** After each phase (Metric Views, TVFs, Genie Space), pause and confirm with the user before proceeding.
+
+7. **Treat complex domains (cross-table joins, engagement analytics) with higher risk flagging** than simple domains (single-table aggregation).
+
 ---
 
 ## 4️⃣ What Happens Behind the Scenes?
@@ -4348,12 +4451,12 @@ When you paste the prompt, the AI reads `@data_product_accelerator/skills/semant
 ### 📁 Semantic Layer Files Created
 
 ```
-src/source_gold/
+src/{project}_gold/
 ├── table_valued_functions.sql           # All TVFs in one SQL file (3-5 functions)
 ├── semantic/
 │   └── metric_views/
-│       ├── revenue_analytics_metrics.yaml   # Metric view YAML definition
-│       └── create_metric_views.py           # Script: reads YAML → CREATE VIEW WITH METRICS
+│       ├── <metric_view_name>.yaml      # Metric view YAML (one file per MV; names in plans/deploy-checkpoint.md)
+│       └── create_metric_views.py       # Script: reads YAML → CREATE VIEW WITH METRICS
 ├── genie/
 │   └── genie_space_config.json          # Exported Genie Space config (CI/CD)
 resources/
@@ -4464,97 +4567,285 @@ spark.sql(create_sql)
 - [ ] `tvf_job.yml` — SQL task for TVF deployment
 - [ ] `metric_views_job.yml` — Python task for Metric View deployment
 - [ ] JSON export created for Genie Space CI/CD (optional)
+- [ ] `_assert_sql_arrays` validator passes on every `serialized_space` payload BEFORE POST/PATCH — every `sql:` field is a `List[str]`, never a bare string
+- [ ] `semantic_warehouse_id` is a concrete value baked into the exported JSON at deploy time (sourced from `plans/deploy-checkpoint.md`), NOT a runtime `--var`
+- [ ] First-run `space_id`s persisted back into `databricks.yml` (`genie_space_id_<stem>`) so subsequent runs PATCH the existing space instead of creating duplicates
 - [ ] `databricks bundle deploy -t dev` succeeds',
 true, 1, true, current_timestamp(), current_timestamp(), current_user());
 
--- Build Agent
+-- Step 16: Build & Deploy Agent - bypass_LLM = TRUE
 INSERT INTO ${catalog}.${schema}.section_input_prompts 
 (input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
 VALUES
 (13, 'agent_framework',
-'Build a multi-agent orchestrator for this project by analyzing the PRD document from @docs/design_prd.md and the UI design documents from @docs/ folder.
+'## Your Task
 
-Refer to the instruction from @vibe-coding-workshop-template/agentic-framework/agents/multi-agent-build-prompt.md to build the agentic framework.
-',
-'You are a senior full-stack engineer implementing advanced agentic search capabilities.',
-'Build Agent',
-'Build advanced agentic search with Genie integration, LLM rewrite, and web search fallback',
+Build and deploy an MCP tool-calling agent that connects to the Genie Spaces created in Step 15, then deploy it to Databricks Model Serving.
+
+**First:** Read `apps_lakebase/$APP_NAME/.vibecoding-state.md` if it exists — it contains Genie Space IDs from the Build Genie Space step (Step 15) and variable values from prior phases.
+
+**Workspace:** `{workspace_url}`
+
+**Prerequisite:** Step 15 completed. **Before writing any agent code, run the Genie Space connectivity test in the skill''s Prerequisites section** — a space that exists but can''t answer questions will produce a greeting-only agent. Genie Space ID(s) available from Step 15 output or `.vibecoding-state.md`.
+
+---
+
+### Step 0: Gather Context
+
+Verify prerequisites and set up the UC schema for model registration:
+
+```bash
+GENIE_SPACE_ID="<FROM_STEP_15_OR_VIBECODING_STATE>"
+
+databricks serving-endpoints get databricks-claude-sonnet-4-6 --profile $PROFILE --output json | jq ''.state''
+
+UC_CATALOG="{lakehouse_default_catalog}"
+UC_SCHEMA="{user_schema_prefix}_agents"
+databricks schemas get "$UC_CATALOG.$UC_SCHEMA" --profile $PROFILE 2>/dev/null || \
+  databricks schemas create --catalog-name "$UC_CATALOG" --name "$UC_SCHEMA" --profile $PROFILE
+```
+
+If no interactive cluster is available, plan to run Steps 2–5 as a serverless job (see the skill''s Step 2 "No interactive cluster?" callout and `references/job-submission.md`).
+
+---
+
+### Build and Deploy the Agent
+
+Read `@data_product_accelerator/skills/genai-agents/09-simple-agent-scaffold/SKILL.md` and follow **Steps 1-5**.
+
+The skill''s Step 5a/5b auto-discovers the endpoint system SP and applies UC grants (`USE CATALOG`, `USE SCHEMA`, `SELECT`, `EXECUTE`) idempotently — do not paste a `TODO_SP_UUID` or try to grep the SP UUID out of an error message. Step 5c emits a `DEPLOY_CHECKPOINT.md` file that Step 17 reads verbatim.
+
+The skill covers:
+
+- **Step 1** — Write `agent.py`: copy template from `references/`, configure `agent-config.yaml` with the Genie Space ID from Step 15 and a domain-specific system prompt
+- **Step 2** — Test locally: verify `predict()` and `predict_stream()` in a Databricks notebook (MCP servers require workspace connectivity)
+- **Step 3** — Log with MLflow: `log_model()` with resource declarations for auth passthrough
+- **Step 4** — Register in Unity Catalog: use `{lakehouse_default_catalog}.{user_schema_prefix}_agents.{use_case_slug}-genie-agent` as the UC model name
+- **Step 5** — Deploy to Model Serving: `databricks.agents.deploy()` creates the endpoint; then Step 5a disambiguates `PERMISSION_DENIED`, Step 5b auto-grants UC privileges to the endpoint system SP, and Step 5c writes `DEPLOY_CHECKPOINT.md` for Step 17
+
+After Step 5, verify the tool-calling path with `curl + PAT` against `/invocations` using a **domain-specific data question** — a Playground greeting is insufficient because `EMBEDDED_CREDENTIALS` endpoints route MCP calls through the system SP regardless of caller.
+
+---
+
+### Checklist
+
+- [ ] `agent-config.yaml` has no `TODO_REPLACE` strings remaining (skill Step 1 gate)
+- [ ] `predict()` and `predict_stream()` return valid responses in notebook (skill Step 2 gate)
+- [ ] `mlflow.models.predict()` pre-deployment validation passes (skill Step 3 gate)
+- [ ] Model registered in Unity Catalog with version number (skill Step 4 gate)
+- [ ] Serving endpoint in `READY` state (skill Step 5 gate)
+- [ ] Step 5 gate passed: `curl + PAT` against `/invocations` returned a `function_call` to the Genie MCP tool (see skill Step 5 verification gate)
+- [ ] Step 5b auto-grant ran (see skill): UC privileges on `{lakehouse_default_catalog}.{gold_schema}` applied idempotently to the endpoint system SP UUID, and the SP UUID is recorded in `DEPLOY_CHECKPOINT.md`
+- [ ] `DEPLOY_CHECKPOINT.md` written to `apps_lakebase/$APP_NAME/agents/` (Step 17 reads endpoint name + SP UUID from it)
+- [ ] `.vibecoding-state.md` updated (see below)
+
+**Before finishing**, append to `apps_lakebase/$APP_NAME/.vibecoding-state.md`:
+- Step name (`## Build & Deploy Agent (Step 16)`)
+- UC Model Name (`{catalog}.{schema}.{model_name}`)
+- Serving Endpoint Name (derived from UC model name, dots replaced with hyphens)
+- Genie Space ID used
+- AI Playground: verified working',
+'You are a senior ML engineer deploying an MCP tool-calling agent to Databricks Model Serving. Follow the canonical OpenAI MCP Tool Calling Agent notebook pattern exactly — no custom orchestration, no LangGraph, no bespoke tool-calling loops.
+
+Approach: Read the skill, then execute each step sequentially. Use the skill''s Decision Defaults table for any choices. If a decision is not covered there, pick the simpler option and move on.
+
+This prompt is returned as-is for direct use in Cursor/Copilot. No LLM processing.',
+'Build & Deploy Agent',
+'Create an MCP tool-calling agent with Genie Space access and deploy it to Databricks Model Serving using the canonical ResponsesAgent pattern',
 16,
-'
-## Steps to Apply
+'## How to Use
 
-1. **Copy the generated prompt** using the copy button
-2. **Paste into Cursor or VS Code** with Copilot
-3. Let the AI **analyze the PRD and UI design structure**
-4. **Implement** agent orchestrator and tool calling
-5. **Test** with mock data
-',
-'## Expected Agent Deliverables
+1. Copy the **Input Template** section above
+2. Replace `{workspace_url}`, `{lakehouse_default_catalog}`, `{user_schema_prefix}`, and `{use_case_slug}` with your values
+3. Paste into Cursor or Copilot
+4. The code assistant will:
+   - Read `.vibecoding-state.md` for Genie Space IDs from Step 15
+   - Read the `09-simple-agent-scaffold` skill and follow all 5 steps
+   - Deploy the agent to Model Serving and verify in AI Playground
 
-### Backend Modules
+**Note:** The agent runs in a Databricks notebook (not local Python) since MCP servers require workspace connectivity. After deployment, the endpoint is ready for AppKit wiring in Step 17.',
+'## Expected Output
 
-| Module | Purpose |
-|--------|---------|
-| `genie_client` | Genie Space integration |
-| `llm_client` | LLM rewrite functionality |
-| `web_search_client` | Web search fallback |
+**Endpoint status:**
 
-### API Endpoints
+```
+$ databricks serving-endpoints get $ENDPOINT_NAME --profile $PROFILE --output json | jq ''.state''
+{
+  "ready": "READY",
+  "config_update": "NOT_UPDATING"
+}
+```
 
-- `POST /api/search/standard`
-- `POST /api/search/nl`
-- `POST /api/search/assistant`
+**AI Playground test:** Navigate to Workspace → Machine Learning → Serving → your endpoint → Query. Ask a question your Genie Space can answer and verify the agent returns a valid response.
 
-### Configuration
+**Files created:**
 
-- `.env.example` with all required variables
-- Mock mode for local development
+```
+agent.py                # MCPToolCallingAgent class (from skill template)
+agent-config.yaml       # ModelConfig parameters (LLM endpoint, system prompt, Genie Space IDs)
+```',
+true, 3, true, current_timestamp(), current_timestamp(), current_user());
 
-### Tests
-
-- Unit tests for LLM parsing
-- Unit tests for Genie no-answer detection
-- Integration tests in mock mode',
-true, 1, TRUE, current_timestamp(), current_timestamp(), current_user());
-
--- Step 19: Wire UI to Agent - bypass_LLM = TRUE
+-- Step 17: Wire Agent to AppKit UI - bypass_LLM = TRUE
 INSERT INTO ${catalog}.${schema}.section_input_prompts 
 (input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
 VALUES
 (113, 'wire_ui_agent',
-'## Task: Wire Frontend UI to Agent Serving Endpoint
+'## Your Task
 
-Connect your web application''s frontend to the Agent serving endpoint built in the previous step (Build Agent). This enables end-to-end natural language search in your application.
+Wire the deployed agent endpoint from Step 16 into the existing AppKit application using the Serving plugin.
 
-Refer to the instruction from @vibe-coding-workshop-template/agentic-framework/agents/agent-ui-wiring-prompt.md to wire the multi-agent system with the UI.',
-'',
-'Wire UI to Agent',
-'Connect frontend UI to the Agent serving endpoint for end-to-end natural language search',
-17,
-'## What is Wire UI to Agent?
+**First:** Read `apps_lakebase/$APP_NAME/.vibecoding-state.md` — it contains the serving endpoint name and UC model name from Step 16 (Build & Deploy Agent).
 
-This step connects your frontend application to the AI Agent built in the previous step. 
+**Workspace:** `{workspace_url}`
+
+**Working directory:** All app paths and commands use the `apps_lakebase/` folder. The scaffolded AppKit app lives at `apps_lakebase/$APP_NAME/`.
+
+**Prerequisite:** Step 16 completed — the agent endpoint is deployed on Databricks Model Serving and in `READY` state. The AppKit app is already deployed with Lakebase wiring (from Step 19).
 
 ---
 
-## Steps to Apply
+### Step 1: Verify Endpoint
 
-1. Copy the generated prompt using the copy button
-2. Paste it into Cursor or VS Code with Copilot
-4. Test the Agent''s response.
+```bash
+ENDPOINT_NAME="<FROM_STEP_16_OR_VIBECODING_STATE>"
+databricks serving-endpoints get $ENDPOINT_NAME --profile $PROFILE --output json | jq ''.state''
+```
 
-**Note:** This step requires the Build Agent step to be completed first. The Agent serving endpoint must be deployed and accessible.',
-'## Expected Deliverables
+---
 
-- Agent endpoint configured in `apps_lakebase/app.yaml`
-- `agent_client.py` module with query function and mock mode
-- Backend API route `POST /api/agent/query` responding correctly
-- Frontend NL search wired to agent endpoint
-- Results rendering inline without page navigation
-- Local testing passed in both mock and live modes
+### Step 2: Register the Serving Plugin
 
-**Next Step:** Iterate and enhance your application in Step 20',
-true, 1, TRUE, current_timestamp(), current_timestamp(), current_user());
+Read and follow `@apps_lakebase/skills/04-appkit-plugin-add/SKILL.md` with `@apps_lakebase/skills/04-appkit-plugin-add/references/plugin-serving.md` to add the Serving plugin to the existing AppKit project.
+
+The skill covers: importing `serving` in `server/server.ts`, adding the serving endpoint as an app resource with `CAN_QUERY`, and configuring `app.yaml`.
+
+**Before importing `serving`**, run the plugin availability check from `@apps_lakebase/skills/04-appkit-plugin-add/SKILL.md` Step 1b. If `serving` is `undefined` in your installed AppKit version, stop and follow `@apps_lakebase/skills/06-appkit-serving-wiring/references/custom-proxy-fallback.md` instead of Step 3 below.
+
+> **Critical gotcha — env var name mismatch:** The platform injects `SERVING_ENDPOINT=<name>` via the resource binding, but the AppKit Serving plugin reads `DATABRICKS_SERVING_ENDPOINT_NAME`. You MUST use the name `DATABRICKS_SERVING_ENDPOINT_NAME` with `valueFrom: serving-endpoint` in `app.yaml`.
+
+---
+
+### Step 3: Wire Frontend and Deploy
+
+Read `@apps_lakebase/skills/06-appkit-serving-wiring/SKILL.md` starting at **Step 4** for the streaming chat pattern. Also read `@apps_lakebase/skills/06-appkit-serving-wiring/references/chat-ui-patterns.md` for conversation state management.
+
+The skill covers:
+
+- **Step 4** — Streaming chat: `useServingStream` hook, conversation state in `useState`, `onComplete` handler, `reset()` between turns
+- **Step 5** — Invoke (optional): `useServingInvoke` for single-shot queries
+- **Step 6** — Server-side proxy (optional): `server.extend()` for post-processing agent responses
+- **Step 8** — Build gate: `npm run build` must pass (do NOT run `npm run dev` — env vars not set yet)
+- **Step 9** — Deploy and test: `databricks apps deploy`, verify `/api/serving/invoke`, check frontend
+
+---
+
+### Build Gate
+
+```bash
+cd apps_lakebase/$APP_NAME
+npm run build
+```
+
+> **Do NOT run `npm run dev`.** The Serving plugin throws `ConfigurationError` when `DATABRICKS_SERVING_ENDPOINT_NAME` is not set. This env var is injected by the platform after deploy.
+
+---
+
+### Deploy
+
+Before `databricks apps deploy`, read `@apps_lakebase/skills/03-appkit-deploy/SKILL.md` Prerequisites — in particular the `package-lock.json` rule in `@apps_lakebase/skills/03-appkit-deploy/references/lockfile-and-recreation.md`. Do NOT run `rm -f package-lock.json && npm install` locally before deploying.
+
+Deploy using the `03-appkit-deploy` skill pattern:
+
+```bash
+cd apps_lakebase/$APP_NAME
+databricks apps deploy --profile $PROFILE
+```
+
+If deployment fails, check logs with `databricks apps logs $APP_NAME --tail-lines 100 --profile $PROFILE` and match against the Gotchas table in the `06-appkit-serving-wiring` skill. Fix and redeploy up to 3 times.
+
+---
+
+### Checklist
+
+- [ ] Plugin export verified via `node -e` one-liner BEFORE importing (skill 04 Step 1b)
+- [ ] If `serving` is undefined, Step 6c custom proxy used (not a guessed import)
+- [ ] Custom proxy (if used) calls `config.authenticate(headers)` — NOT `config.getToken()` (skill 06 Step 6c)
+- [ ] Custom proxy (if used) transforms `messages` → `input` before forwarding (skill 06 Step 6c)
+- [ ] Frontend parser handles BOTH Responses API and OpenAI chunk formats (skill 06 Step 4c)
+- [ ] `databricks.yml` serving_endpoint resource uses `name:` NOT `endpoint_name:` (skill 04 references/plugin-serving.md)
+- [ ] Domain question (e.g., "what are top bookings?") returns real data, not just a greeting (skill 06 Step 9d)
+- [ ] Serving plugin registered in `server/server.ts` (skill 04 plugin-add)
+- [ ] `DATABRICKS_SERVING_ENDPOINT_NAME` in `app.yaml` with `valueFrom: serving-endpoint`
+- [ ] Streaming chat component renders in the UI (skill 06 Step 4)
+- [ ] `npm run build` passes with zero errors (skill 06 Step 8)
+- [ ] `package-lock.json` not regenerated locally before deploy (skill 03 references/lockfile-and-recreation.md)
+- [ ] App redeployed and in RUNNING state (skill 06 Step 9)
+- [ ] `/api/serving/invoke` returns a valid agent response
+- [ ] Multi-turn conversation works (second message includes first exchange)
+- [ ] `.vibecoding-state.md` updated (see below)
+
+**Before finishing**, append to `apps_lakebase/$APP_NAME/.vibecoding-state.md`:
+- Step name (`## Wire Agent to AppKit UI (Step 17)`)
+- Serving plugin registered in `server/server.ts`
+- `DATABRICKS_SERVING_ENDPOINT_NAME` bound in `app.yaml`
+- Chat component added to UI
+- Streaming responses verified
+- Agent endpoint name (from Step 16)',
+'You are a senior AppKit engineer wiring a Databricks Model Serving endpoint into an existing AppKit application. You use the AppKit Serving plugin — not custom API routes, not direct fetch calls, not FastAPI middleware.
+
+Key requirements:
+
+- Use the `06-appkit-serving-wiring` skill for all wiring patterns
+- Use the `04-appkit-plugin-add` skill to register the Serving plugin
+- Do NOT improvise npm lifecycle hooks, platform-detection conditionals, or workarounds that skip the platform''s build pipeline
+- Use `npm run build` as the build gate — do NOT run `npm run dev` before the first deploy with the Serving plugin (env vars won''t be set)
+- Run from `apps_lakebase/` or use `apps_lakebase/$APP_NAME/` for app commands
+
+> **When in doubt, consult these authoritative sources before improvising:**
+> - Serving plugin docs: https://databricks.github.io/appkit/docs/plugins/serving
+> - AppKit deploy docs: https://databricks.github.io/appkit/docs/app-management
+> - In-terminal: `npx @databricks/appkit docs "serving"`
+
+This prompt is returned as-is for direct use in Cursor/Copilot. No LLM processing.',
+'Wire Agent to AppKit UI',
+'Connect the deployed Model Serving agent endpoint to the existing AppKit application using the Serving plugin with streaming chat hooks',
+17,
+'## How to Use
+
+1. Copy the **Input Template** section above
+2. Replace `{workspace_url}` with your workspace URL
+3. Paste into Cursor or Copilot
+4. The code assistant will:
+   - Read `.vibecoding-state.md` for the endpoint name from Step 16
+   - Register the Serving plugin via the `04-appkit-plugin-add` skill
+   - Wire the streaming chat UI via the `06-appkit-serving-wiring` skill
+   - Build, deploy, and verify the app with working agent chat
+
+**Note:** This step adds the Serving plugin to the already-deployed AppKit app. The agent endpoint (from Step 16) must be in `READY` state before starting.',
+'## Expected Output
+
+**App redeployed with agent chat:**
+
+```
+$ databricks apps get $APP_NAME --output json --profile $PROFILE | jq ''{status: .status.state}''
+{
+  "status": "RUNNING"
+}
+```
+
+**Agent endpoint responds via AppKit:**
+
+```
+$ TOKEN=$(databricks auth token --profile $PROFILE | jq -r ''.access_token'')
+$ curl -s -X POST "${APP_URL}/api/serving/invoke" \
+    -H "Content-Type: application/json" \
+    -H "Authorization: Bearer $TOKEN" \
+    -d ''{"messages": [{"role": "user", "content": "What were total sales last month?"}]}'' | jq .
+```
+
+**Browser:** The app shows a streaming chat interface where user messages get progressive responses from the agent.',
+true, 2, true, current_timestamp(), current_timestamp(), current_user());
 
 -- Iterate & Enhance App
 INSERT INTO ${catalog}.${schema}.section_input_prompts 
@@ -4712,7 +5003,7 @@ What areas could be improved?
 - [ ] Updated user guide
 - [ ] API documentation
 - [ ] Release notes',
-1, TRUE, current_timestamp(), current_timestamp(), current_user());
+1, true, current_timestamp(), current_timestamp(), current_user());
 
 -- Step 21: Redeploy & Test Application (Autonomous Operations + Repository Documentation) - bypass_LLM = TRUE
 INSERT INTO ${catalog}.${schema}.section_input_prompts 
@@ -4792,7 +5083,7 @@ databricks bundle deploy -t dev
 If you have Databricks Asset Bundles configured:
 ```bash
 # Authenticate if needed
-databricks auth login --host https://e2-demo-field-eng.cloud.databricks.com --profile DEFAULT
+databricks auth login --host https://{workspace_url} --profile DEFAULT
 
 # Validate and deploy
 databricks bundle validate
@@ -5414,21 +5705,22 @@ Install the Lakebase (PostgreSQL) package and configure bundle resources so the 
 
 **Working directory:** All app code and commands use the `apps_lakebase/` folder. The scaffolded AppKit app lives at `apps_lakebase/$APP_NAME/`.
 
-> **Important:** The CLI profile used here must point to the target workspace. If this differs from the profile used in the **Scaffold, Build & Test** step, update `$PROFILE` accordingly.
+> **MANDATORY:** Read `.vibecoding-state.md` first to get the `PROFILE` value from prior phases. Use `--profile $PROFILE` on every `databricks` CLI command in this step. If the returned email doesn''t match the prior phase, stop and verify the profile.
 
 ---
 
 ### Step 1: Set Variables
 
 ```bash
-USER_JSON=$(databricks current-user me --output json)
+PROFILE="<your-databricks-cli-profile>"  # Must match the profile from prior phases
+USER_JSON=$(databricks current-user me --profile $PROFILE --output json)
 EMAIL=$(echo "$USER_JSON" | jq -r ''.userName'')
 FIRSTNAME=$(echo "$EMAIL" | cut -d''@'' -f1 | cut -d''.'' -f1)
 LASTINITIAL=$(echo "$EMAIL" | cut -d''@'' -f1 | cut -d''.'' -f2 | cut -c1)
 APP_PREFIX="${FIRSTNAME}-${LASTINITIAL}"
 APP_NAME="${APP_PREFIX}-{use_case_slug}"
 DB_SCHEMA=$(echo "$APP_NAME" | tr ''-'' ''_'')
-echo "APP_NAME=$APP_NAME  DB_SCHEMA=$DB_SCHEMA"
+echo "PROFILE=$PROFILE  APP_NAME=$APP_NAME  DB_SCHEMA=$DB_SCHEMA"
 ```
 
 ---
@@ -5444,6 +5736,8 @@ npm install @databricks/lakebase
 
 ### Step 3: Add Bundle Resources to `databricks.yml`
 
+> **MANDATORY: Before proceeding, read `@apps_lakebase/skills/04-appkit-plugin-add/references/plugin-lakebase.md` section "3. Declare Bundle Resources".** It contains critical Terraform state warnings. Key rule: **never remove `postgres_projects` from `databricks.yml` after the first deploy.**
+
 Lakebase Autoscaling uses a **two-phase** deploy process because the database ID is auto-generated and cannot be known until the project exists:
 
 - **Phase 1 (this step):** Declare `postgres_projects` only. The first deploy creates the project. Lakebase automatically creates a default `production` branch and `primary` endpoint.
@@ -5452,6 +5746,14 @@ Lakebase Autoscaling uses a **two-phase** deploy process because the database ID
 > **The first deploy WILL show the app in CRASHED state.** This is expected — `valueFrom: postgres` cannot resolve until `app.resources.postgres` is configured in Phase 2. Proceed to database ID discovery; the second deploy will succeed.
 
 > **Do NOT declare `postgres_branches` or `postgres_endpoints`** in `databricks.yml`. Lakebase Autoscaling auto-creates these with the project. Declaring them causes Terraform errors: `branch already exists` / `read_write endpoint already exists`.
+
+**Pre-check — does the project already exist?**
+
+```bash
+databricks postgres get-project projects/$APP_NAME --profile $PROFILE --output json 2>&1
+```
+
+If this succeeds (project exists from a prior run), skip the `postgres_projects` declaration and note "Project already exists" in `.vibecoding-state.md`. If it fails with "not found", proceed normally.
 
 Add the following to `databricks.yml`:
 
@@ -5470,9 +5772,9 @@ resources:
 
 Replace `<APP_NAME>` with the actual `$APP_NAME` value. If `databricks.yml` already has a `resources:` section, merge the `postgres_projects` resource into it.
 
-> **Pre-existing project?** If the Lakebase project already exists (from a prior deploy or manual creation), remove the `postgres_projects` declaration entirely and skip to Phase 2. Bundle deploy will fail with "project already exists" if you try to re-create it.
-
-For the full two-phase reference including the `app.resources.postgres` schema and database ID discovery, see `@apps_lakebase/skills/04-appkit-plugin-add/references/plugin-lakebase.md` section "3. Declare Bundle Resources".
+> **Keep `postgres_projects` during Phase 2.** After Phase 1 creates the project, Terraform state tracks the resource. The Phase 2 redeploy is idempotent. Do NOT remove `postgres_projects` between Phase 1 and Phase 2.
+>
+> **Re-running the workshop?** If the project exists from a **prior run or manual CLI creation** (current bundle has no Terraform state for it), either delete the project first (`databricks postgres delete-project projects/$APP_NAME --profile $PROFILE`) and proceed normally, or remove `postgres_projects` from `databricks.yml` and skip to Phase 2. If `databricks bundle deploy` fails with `"project already exists"`, this is the case — use one of these two options.
 
 ---
 
@@ -5514,6 +5816,17 @@ Must show `@databricks/lakebase` in the dependency tree.
 
 ---
 
+### Step 7: Validate Configuration
+
+```bash
+cd apps_lakebase/$APP_NAME
+databricks apps validate --profile $PROFILE
+```
+
+Must pass with no errors. Common issues: YAML indentation errors (use 2-space indent), missing `resources:` key. A warning about `valueFrom: postgres` not resolving is expected until Phase 2.
+
+---
+
 ### Checklist
 
 - [ ] `@databricks/lakebase` installed in `package.json`
@@ -5521,13 +5834,16 @@ Must show `@databricks/lakebase` in the dependency tree.
 - [ ] `DB_SCHEMA` derived from `$APP_NAME` (hyphens to underscores)
 - [ ] `databricks.yml` has `postgres_projects` resource (no `postgres_branches` or `postgres_endpoints` — auto-created)
 - [ ] `app.yaml` has `LAKEBASE_ENDPOINT` with `valueFrom: postgres` and `DB_SCHEMA` as static value
+- [ ] `databricks apps validate` passes (warning about `valueFrom: postgres` is expected)
 - [ ] `.vibecoding-state.md` updated (see below)
 
 **Before finishing**, append to `apps_lakebase/$APP_NAME/.vibecoding-state.md` with:
 - Step name (`## Setup Lakebase`)
-- Key variable values (`DB_SCHEMA`, bundle resource project_id)
-- Any resolved issues or workarounds encountered during this phase',
-
+- Key variable values (`DB_SCHEMA`, bundle resource project_id, `PROFILE`)
+- Any resolved issues or workarounds encountered during this phase
+- **Critical Notes for Next Phase:**
+  - DO NOT remove `postgres_projects` from `databricks.yml` after Phase 1 deploy — Terraform state tracks it
+  - Phase 2 redeploy is idempotent; Terraform sees no diff and skips the resource',
 'You are a full-stack developer adding the Lakebase (PostgreSQL) package to an existing AppKit application and configuring bundle resources for deployment. This is a **config-only** step — install the npm package and configure YAML files, but do NOT modify `server.ts`. Plugin registration happens in the **Wire Lakebase Backend** step.
 
 Key requirements:
@@ -5541,11 +5857,9 @@ Key requirements:
 - Do NOT add `lakebase()` to `server.ts` — that happens in the **Wire Lakebase Backend** step
 
 This prompt is returned as-is for direct use in Cursor/Copilot. No LLM processing.',
-
 'Setup Lakebase',
 'Install Lakebase package, declare bundle resources in databricks.yml, configure valueFrom: postgres (config-only, no server.ts changes)',
 6,
-
 '## How to Use
 
 1. Copy the **Input Template** section above
@@ -5558,7 +5872,6 @@ This prompt is returned as-is for direct use in Cursor/Copilot. No LLM processin
    - Configure `.env` with `DB_SCHEMA`
 
 **Note:** This is a config-only step. `server.ts` is not modified — plugin registration (`lakebase()` in the plugins array) and database code happen in the **Wire Lakebase Backend** step. The Lakebase project is created automatically on first deploy (in the **Deploy and E2E Test** step).',
-
 '## Expected Output
 
 **Package verification:**
@@ -5576,11 +5889,9 @@ env:
   - name: LAKEBASE_ENDPOINT
     valueFrom: postgres
   - name: DB_SCHEMA
-    value: ''prashanth_s_booking_app''
+    value: ''{user_schema_prefix}_booking_app''
 ```',
-
-TRUE,
-1, TRUE, current_timestamp(), current_timestamp(), current_user());
+true, 1, true, current_timestamp(), current_timestamp(), current_user());
 
 -- Default Section
 INSERT INTO ${catalog}.${schema}.section_input_prompts 
@@ -5601,7 +5912,7 @@ Generate a detailed, actionable prompt for {section_tag} in a {industry_name} {u
 99,
 '',
 '',
-1, TRUE, current_timestamp(), current_timestamp(), current_user());
+1, true, current_timestamp(), current_timestamp(), current_user());
 
 -- Wire AppKit App to Lakebase
 INSERT INTO ${catalog}.${schema}.section_input_prompts 
@@ -5630,7 +5941,7 @@ The skill covers:
 
 - **Step 1** — Database schema design: PRD-to-schema methodology, PostgreSQL type conventions, idempotent DDL, count-check seed pattern. Also read `@apps_lakebase/skills/05-appkit-lakebase-wiring/references/database-design-guide.md` for normalization rules and data type guidance.
 - **Step 2** — API routes: `server.extend()` pattern, `{ data, source }` response contract, mock fallback, health endpoint
-- **Step 3** — Frontend wiring: `useLakebaseData` hook, `ConnectionStatus` component, defensive data handling (DECIMAL coercion, DATE coercion, snake_case mapping)
+- **Step 3** — Frontend wiring: `useLakebaseData` hook, `ConnectionStatus` component, defensive data handling (DECIMAL coercion, DATE coercion, snake_case mapping). **Run `npm run build` after every 2-3 page rewrites** — do not rewrite all pages in a single pass. When removing a static data import, audit whether UI elements that depended on that data (e.g., property images from `PROPERTIES.find()`) are preserved via API or intentionally removed. Read `@apps_lakebase/skills/05-appkit-lakebase-wiring/references/multi-table-example.md` for cross-entity enrichment patterns (LEFT JOIN for lookup pages that need related entity data).
 
 When deployed in the **Deploy and E2E Test** step, the Service Principal will run this code on first boot to create database objects.
 
@@ -5667,13 +5978,14 @@ Follow **Step 4** of the `05-appkit-lakebase-wiring` skill. In summary:
 - [ ] All static mock data replaced with API calls
 - [ ] DECIMAL/DATE coercion and snake_case mapping handled
 - [ ] `npm run build` passes (do NOT run `npm run dev` — Lakebase env vars not set yet)
+- [ ] "Critical Notes for Next Phase" from prior step''s `.vibecoding-state.md` are preserved (especially: do NOT remove `postgres_projects` from `databricks.yml`)
 - [ ] `.vibecoding-state.md` updated (see below)
 
 **Before finishing**, append to `apps_lakebase/$APP_NAME/.vibecoding-state.md` with:
 - Step name (`## Wire Lakebase Backend`)
 - Key variable values (`DB_SCHEMA`, API endpoints created)
-- Any resolved issues or workarounds encountered during this phase',
-
+- Any resolved issues or workarounds encountered during this phase
+- Carry forward any "Critical Notes for Next Phase" from the Setup Lakebase step',
 'You are a full-stack developer wiring a Lakebase PostgreSQL backend into an AppKit web application. Follow the `05-appkit-lakebase-wiring` skill for all reusable patterns (database design, API routes, frontend hooks, testing). Use the PRD to derive application-specific tables, routes, and seed data.
 
 Approach: Start coding after reading the skill. Do not plan the entire implementation in advance — follow the skill steps sequentially and make decisions using the Decision Defaults table in the skill. If a decision is not covered there, pick the simpler option and move on.
@@ -5688,11 +6000,9 @@ Key requirements:
 - Local validation is `npm run build` only — `npm run dev` will crash because Lakebase env vars are not set until after the first deploy
 
 This prompt is returned as-is for direct use in Cursor/Copilot. No LLM processing.',
-
 'Wire AppKit App to Lakebase',
 'Register lakebase() plugin and wire Lakebase backend via 05-appkit-lakebase-wiring skill, validate with npm run build only',
 7,
-
 '## How to Use
 
 1. Copy the **Input Template** section above
@@ -5707,7 +6017,6 @@ This prompt is returned as-is for direct use in Cursor/Copilot. No LLM processin
    - Verify with `npm run build` (not `npm run dev`)
 
 **Note:** This phase registers the `lakebase()` plugin and writes all Lakebase code. Local validation is `npm run build` only — `npm run dev` crashes without Lakebase env vars. Deployment and live data verification happen in the **Deploy and E2E Test** step.',
-
 '## Expected Output
 
 **Build validation:**
@@ -5721,9 +6030,7 @@ Build completed successfully.
 After the **Deploy and E2E Test** step, the ConnectionStatus switches from "Mock Data" to "Live Data" and all endpoints return `"source": "live"`.
 
 > **Why no `npm run dev`?** The `lakebase()` plugin throws `ConfigurationError` at startup when `LAKEBASE_ENDPOINT` and `PGHOST` are not set. These env vars are provisioned by the Databricks Apps platform after the first deploy creates the Lakebase project. `npm run build` validates all code without executing it. Runtime testing with live or mock data happens after deployment.',
-
-TRUE,
-1, TRUE, current_timestamp(), current_timestamp(), current_user());
+true, 1, true, current_timestamp(), current_timestamp(), current_user());
 
 -- Deploy to Databricks Apps
 INSERT INTO ${catalog}.${schema}.section_input_prompts 
@@ -5834,7 +6141,6 @@ Your job is complete when:
 - Step name (`## Deploy to Databricks Apps`)
 - Key variable values (`APP_NAME`, `PROFILE`, app URL, workspace URL)
 - Any resolved issues or workarounds encountered during this phase',
-
 'You are a DevOps engineer deploying an AppKit web application to Databricks Apps. Your goal is to deploy the locally-tested app so it is accessible via a public HTTPS URL.
 
 Key requirements:
@@ -5850,11 +6156,9 @@ CLI Best Practices:
 - Run CLI commands outside the IDE sandbox to avoid SSL/TLS certificate errors
 
 This prompt is returned as-is for direct use in Cursor/Copilot. No LLM processing.',
-
 'Deploy to Databricks Apps',
 'Deploy the locally-tested AppKit app to Databricks Apps and verify it is running',
 5,
-
 '## How to Use
 
 1. **Copy the generated prompt**
@@ -5866,7 +6170,6 @@ This prompt is returned as-is for direct use in Cursor/Copilot. No LLM processin
    - Verify the app is running and accessible
 
 **Note:** This step deploys the mock-data app from the **Scaffold, Build & Test** step. For Lakebase integration (live data), continue to the **Setup Lakebase**, **Wire Lakebase Backend**, and **Deploy and E2E Test** steps.',
-
 '## Expected Output
 
 **Terminal output — deploy sequence:**
@@ -5875,12 +6178,12 @@ This prompt is returned as-is for direct use in Cursor/Copilot. No LLM processin
 $ cd apps_lakebase/$APP_NAME
 $ databricks apps deploy --profile $PROFILE
 
-Deploying app ''prashanth-s-bookings''...
+Deploying app ''{user_app_name}''...
 Building application... done
 Starting application... done
 
 App deployed successfully!
-  URL:    https://prashanth-s-bookings.cloud.databricks.com
+  URL:    https://{user_app_name}.{workspace_url}
   Status: RUNNING
 ```
 
@@ -5901,8 +6204,8 @@ graph LR
 
 ```json
 {
-  "name": "prashanth-s-bookings",
-  "url": "https://prashanth-s-bookings.cloud.databricks.com",
+  "name": "{user_app_name}",
+  "url": "https://{user_app_name}.{workspace_url}",
   "status": {
     "state": "RUNNING",
     "message": "Application is running"
@@ -5921,9 +6224,7 @@ Log format varies by AppKit version. Look for messages confirming the server is 
 **What you should see in the browser:**
 
 The same mock-data UI from the **Scaffold, Build & Test** step, now accessible at a public HTTPS URL — no local machine required.',
-
-TRUE,
-1, TRUE, current_timestamp(), current_timestamp(), current_user());
+true, 1, true, current_timestamp(), current_timestamp(), current_user());
 
 -- Register Lakebase in Unity Catalog - step_enabled = FALSE (hidden by default)
 INSERT INTO ${catalog}.${schema}.section_input_prompts 
@@ -6176,7 +6477,7 @@ This step extracts **comprehensive metadata** from your Silver layer — not jus
 true, 1, true, current_timestamp(), current_timestamp(), current_user());
 
 -- Step 22 (Generate Mode): Design Silver Schema from PRD - bypass_LLM = TRUE
-INSERT INTO ${catalog}.${schema}.section_input_prompts
+INSERT INTO ${catalog}.${schema}.section_input_prompts 
 (input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
 VALUES
 (136, 'genie_silver_metadata_generate',
@@ -6460,9 +6761,9 @@ Copy the prompt from the **Prompt** tab, start a **new Agent chat** in your IDE,
 **Run this in your cloned Template Repository** (see Prerequisites in Step 0).
 
 Ensure you have:
-- ✅ Bronze layer code generated (Step 10): `src/source_bronze/`, `resources/bronze/`
-- ✅ Silver layer code generated (Step 11): `src/source_silver/`, `resources/silver/`
-- ✅ Gold layer code generated (Step 12): `src/source_gold/`, `resources/gold/`, `gold_layer_design/yaml/`
+- ✅ Bronze layer code generated (Step 10): `src/{project}_bronze/`, `resources/bronze/`
+- ✅ Silver layer code generated (Step 11): `src/{project}_silver/`, `resources/silver/`
+- ✅ Gold layer code generated (Step 12): `src/{project}_gold/`, `resources/gold/`, `gold_layer_design/yaml/`
 - ✅ `databricks.yml` bundle configuration file (created/updated in Steps 10-12)
 - ✅ Databricks CLI installed and authenticated (`databricks auth login`)
 
@@ -6512,15 +6813,15 @@ This is a **deployment checkpoint** that validates the entire Lakehouse pipeline
 project_root/
 ├── databricks.yml                        # Bundle configuration (all layers)
 ├── src/
-│   ├── source_bronze/                    # Bronze notebooks (clone/generate)
+│   ├── {project}_bronze/                # Bronze notebooks (clone/generate)
 │   │   └── clone_samples.py
-│   ├── source_silver/                    # Silver notebooks (DLT + DQ)
+│   ├── {project}_silver/                # Silver notebooks (DLT + DQ)
 │   │   ├── setup_dq_rules_table.py
 │   │   ├── dq_rules_loader.py           # Pure Python (NO notebook header)
 │   │   ├── silver_dimensions.py
 │   │   ├── silver_facts.py
 │   │   └── data_quality_monitoring.py
-│   └── source_gold/                      # Gold notebooks (YAML-driven)
+│   └── {project}_gold/                   # Gold notebooks (YAML-driven)
 │       ├── setup_tables.py
 │       ├── add_fk_constraints.py
 │       └── merge_gold_tables.py
@@ -6635,7 +6936,16 @@ INSERT INTO ${catalog}.${schema}.section_input_prompts
 (input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
 VALUES
 (117, 'deploy_di_assets',
-'Deploy all Data Intelligence assets (TVFs, Metric Views, Genie Spaces, and AI/BI Dashboards) using @data_product_accelerator/skills/common/databricks-asset-bundles/SKILL.md and @data_product_accelerator/skills/semantic-layer/04-genie-space-export-import-api/SKILL.md
+'Deploy all Data Intelligence assets (TVFs, Metric Views, Genie Spaces, and AI/BI Dashboards). Follow this orchestrator first, then its referenced worker skills:
+
+- **Primary orchestrator (read first):** @data_product_accelerator/skills/semantic-layer/00-semantic-layer-setup/SKILL.md — owns Phase 0 (gold inventory check), phase gates, and template-first workflow. Any task touching 2+ semantic-layer asset types MUST route through this skill.
+- **Worker skills (referenced by the orchestrator):** @data_product_accelerator/skills/common/databricks-asset-bundles/SKILL.md and @data_product_accelerator/skills/semantic-layer/04-genie-space-export-import-api/SKILL.md
+
+Before starting:
+- **Verify Gold schema inventory.** Query `information_schema.tables` / `information_schema.columns` in the live catalog and only deploy artifacts whose target tables and columns exist on disk AND in the live Gold schema. Do NOT trust `semantic-layer-manifest.yaml` as ground truth.
+- **Use templates, don''t write from scratch.** Start `src/{project}_semantic/deploy_genie_spaces.py` from `data_product_accelerator/skills/semantic-layer/04-genie-space-export-import-api/assets/templates/deploy_genie_spaces.py`, and `resources/semantic/genie_deploy_job.yml` from `genie-deployment-job-template.yml` — then customize. Hand-written versions are the #1 source of multi-cycle deploy failures.
+- **Read `plans/deploy-checkpoint.md` for concrete values.** Template variables below (e.g. `{lakehouse_default_catalog}`, `{user_schema_prefix}_gold`, job names like `tvf_job`) are project-invariant placeholders; the concrete resolved values for THIS deployment — actual job names, metric-view names, `semantic_warehouse_id`, workspace paths — live in `plans/deploy-checkpoint.md`, emitted by the Asset Bundles skill immediately after `databricks bundle validate`. If that file is missing, run the checkpoint emitter first (see `data_product_accelerator/skills/common/databricks-asset-bundles/SKILL.md` → "Emit Deploy Checkpoint") — do NOT invent names.
+- **Run Phase 0.5 local pre-flight.** Before any `bundle deploy`, execute the four local checks in `data_product_accelerator/skills/semantic-layer/00-semantic-layer-setup/SKILL.md` → "Phase 0.5: Local Pre-Flight": variable enumeration, DDL smoke test, Genie `_assert_sql_arrays`, live-catalog intersection. Any STOP rule triggering here halts deployment.
 
 This is a **semantic layer deployment checkpoint** — it deploys and verifies all Data Intelligence assets in the correct order.
 
@@ -6673,22 +6983,27 @@ The Genie Space is deployed programmatically using the Export/Import API skill:
 - Data asset arrays sorted before submission (tables by `table_name`, TVFs by `function_name`)
 - Genie Space MUST use a **Serverless SQL Warehouse** (non-negotiable)
 
-## Verification
+## Verification (per-task, NOT end-of-flow)
+
+Run the **per-task verification** table in `data_product_accelerator/skills/semantic-layer/00-semantic-layer-setup/SKILL.md` → "Per-task verification (MANDATORY — run AFTER each task completes)". Each row lists pass criteria and a STOP rule. Do NOT defer verification to the end of the deploy — a failed TVF will silently break Metric Views, which will silently break the Genie Space.
+
+Concrete TVF / Metric View names for THIS deployment come from `plans/deploy-checkpoint.md` (emitted after `bundle validate`). The snippets below use placeholder names — replace with the concrete names from the checkpoint.
 
 ```sql
--- Verify TVFs are created
-SELECT * FROM get_revenue_by_period(''2024-01-01'', ''2024-12-31'');
+-- Verify TVFs are created (replace <tvf_name> / params with values from plans/deploy-checkpoint.md)
+SELECT * FROM {lakehouse_default_catalog}.{user_schema_prefix}_gold.<tvf_name>(<args>);
 
 -- Verify Metric Views exist
 SELECT table_name, table_type FROM {lakehouse_default_catalog}.information_schema.tables
 WHERE table_schema = ''{user_schema_prefix}_gold'' AND table_type = ''METRIC_VIEW'';
 
--- Test Metric View queries
-SELECT MEASURE(total_revenue) FROM {lakehouse_default_catalog}.{user_schema_prefix}_gold.revenue_analytics_metrics;
+-- Test a Metric View query (replace <metric_view_name> / <measure_name> with values from plans/deploy-checkpoint.md)
+SELECT MEASURE(<measure_name>) FROM {lakehouse_default_catalog}.{user_schema_prefix}_gold.<metric_view_name>;
 ```
 
 Target catalog: `{lakehouse_default_catalog}`
-Gold schema: `{user_schema_prefix}_gold`',
+Gold schema: `{user_schema_prefix}_gold`
+Concrete job names, metric-view names, TVF names, warehouse IDs, workspace paths: `plans/deploy-checkpoint.md`',
 '',
 'Deploy Semantic Layer Assets (TVFs → Metric Views → Genie → Dashboard)',
 'Deploy TVFs, Metric Views, Genie Spaces (via Export/Import API), and AI/BI Dashboards in dependency order',
@@ -6705,7 +7020,7 @@ Copy the prompt from the **Prompt** tab, start a **new Agent chat** in your IDE,
 
 Ensure you have:
 - ✅ Lakehouse Deployment Checkpoint passed (Step 23) — Bronze, Silver, Gold tables populated
-- ✅ Semantic layer code generated (Step 15): `src/source_gold/table_valued_functions.sql`, `src/source_gold/semantic/`, `src/source_gold/genie/`
+- ✅ Semantic layer code generated (Step 15): `src/{project}_semantic/table_valued_functions.sql`, `src/{project}_semantic/metric_views/`, `src/{project}_semantic/genie/` (or the actual directory names in `plans/deploy-checkpoint.md`)
 - ✅ AI/BI Dashboard generated (Step 14): `docs/dashboards/*.lvdash.json`, `scripts/deploy_dashboard.py`
 - ✅ Plan files: `plans/phase1-addendum-1.2-tvfs.md`, `plans/phase1-addendum-1.3-metric-views.md`, `plans/phase1-addendum-1.6-genie-spaces.md`
 - ✅ Serverless SQL Warehouse available in your workspace
@@ -6732,17 +7047,19 @@ Ensure you have:
 - ≥ 10 benchmark questions with exact expected SQL
 - Serverless SQL Warehouse (non-negotiable)
 
-**Step 7: Verify All Components**
+**Step 7: Verify All Components (per-task — run AFTER each step, not at the end)**
+
+Follow the per-task verification matrix in `data_product_accelerator/skills/semantic-layer/00-semantic-layer-setup/SKILL.md` — each of TVFs / Metric Views / Dashboard / Genie Space has its own pass criteria and STOP rule. Concrete names come from `plans/deploy-checkpoint.md` (never invent).
 
 ```sql
--- Test TVFs
-SELECT * FROM get_revenue_by_period(''2024-01-01'', ''2024-12-31'');
+-- Test TVFs (replace <tvf_name> / args with names from plans/deploy-checkpoint.md)
+SELECT * FROM {lakehouse_default_catalog}.{user_schema_prefix}_gold.<tvf_name>(<args>);
 
 -- Verify Metric Views
-SELECT table_name, table_type FROM information_schema.tables
+SELECT table_name, table_type FROM {lakehouse_default_catalog}.information_schema.tables
 WHERE table_schema = ''{user_schema_prefix}_gold'' AND table_type = ''METRIC_VIEW'';
 
--- Navigate to Genie Space in Databricks UI and ask a sample question
+-- Navigate to Genie Space in Databricks UI (Space ID from plans/deploy-checkpoint.md) and ask a benchmark question.
 ```
 
 ---
@@ -6783,11 +7100,11 @@ This deployment checkpoint verifies the complete **Data Intelligence layer** —
 ### Files Deployed
 
 ```
-src/source_gold/
+src/{project}_semantic/                     # actual directory name in plans/deploy-checkpoint.md
 ├── table_valued_functions.sql              # TVFs (STRING params, v3.0 comments)
 ├── semantic/
 │   └── metric_views/
-│       ├── revenue_analytics_metrics.yaml  # Metric View YAML definitions
+│       ├── <metric_view_name>.yaml         # Metric View YAML (one file per MV — names in checkpoint)
 │       └── create_metric_views.py          # Reads YAML → CREATE VIEW WITH METRICS
 ├── genie/
 │   └── genie_space_config.json             # Exported Genie Space (CI/CD)
@@ -6867,6 +7184,16 @@ The Genie Space deployment follows this protocol:
 - [ ] ≥ 10 benchmark questions with expected SQL
 - [ ] Natural language queries produce correct SQL
 - [ ] JSON export saved for CI/CD (`genie_space_config.json`)
+
+**Deploy Checkpoint (emitted by Asset Bundles skill):**
+- [ ] `plans/deploy-checkpoint.md` exists and lists every resolved job name, task name, warehouse ID, catalog, Gold schema, Metric View name, TVF name, dashboard path, and Genie Space ID for this deployment
+- [ ] Every concrete name in subsequent steps/prompts is sourced from the checkpoint (never invented)
+
+**Per-Task Verification (run AFTER each task, not at the end):**
+- [ ] TVF verification SQL passes (see semantic-layer orchestrator per-task table) — STOP if any TVF fails
+- [ ] Metric View `table_type = ''METRIC_VIEW''` check passes AND `MEASURE(...)` smoke query returns rows — STOP on failure
+- [ ] Dashboard opens in the AI/BI editor without parse errors — STOP on failure (usually means base64 encoding or a missing `${var}`)
+- [ ] Genie Space `_assert_sql_arrays` passed pre-POST AND GET API returns the new/updated Space — STOP on failure
 
 **End-to-End:**
 - [ ] All 4 components deployed and functional
@@ -7257,7 +7584,10 @@ Structure the strategy as a clear, actionable document with sections for each ar
 'You are an expert in Databricks data governance, Unity Catalog, and data quality best practices. Generate a comprehensive skill strategy based on the provided use case specification. The strategy should define measures as Unity Catalog tags, provide validation SQL for each measure, and specify success/certification criteria. The strategy should be practical, follow Databricks best practices, and be ready to implement as an Agent Skill following the agentskills.io standard.',
 'Define Skill Strategy',
 'Generate a comprehensive strategy for your Agent Skill based on your use case specification',
-27, '', '', false, 1, true, current_timestamp(), current_timestamp(), current_user());
+27,
+'',
+'',
+false, 1, true, current_timestamp(), current_timestamp(), current_user());
 
 -- Step 28: Create SKILL.md
 INSERT INTO ${catalog}.${schema}.section_input_prompts 
@@ -7309,7 +7639,10 @@ Generate all files with clear file path headers. Use proper markdown for SKILL.m
 'You are an expert Agent Skills author following the agentskills.io specification. Generate a complete, production-ready Agent Skill package based on the provided use case specification and skill strategy. The SKILL.md must be clear, actionable, and follow the standard structure. All patterns must use real Databricks SQL syntax where applicable. Config files must be valid YAML. Derive the skill name, folder structure, and all content from the use case specification.',
 'Create SKILL.md',
 'Generate the complete SKILL.md package with references and assets based on your skill strategy',
-28, '', '', false, 1, true, current_timestamp(), current_timestamp(), current_user());
+28,
+'',
+'',
+false, 1, true, current_timestamp(), current_timestamp(), current_user());
 
 -- Step 29: Apply & Test Skill
 INSERT INTO ${catalog}.${schema}.section_input_prompts 
@@ -7492,157 +7825,292 @@ VALUES
 ## Workspace Context
 
 - **Workspace URL**: {workspace_url}
-- **User App Name**: {user_app_name}
-- **Lakebase Project/Instance**: {lakebase_instance_name}
-- **Lakebase UC Catalog**: {lakebase_uc_catalog_name}
-- **Lakehouse Catalog**: {lakehouse_default_catalog}
-- **User Schema Prefix**: {user_schema_prefix}
 - **User Email**: {created_by}
+
+> **All other values must be discovered at runtime** — read `databricks.yml` (root and app-level) to extract catalog names, schema names, app names, Lakebase project IDs, and warehouse references. Do NOT hardcode resource names.
 
 ---
 
 ## IMPORTANT: Safety Rules
 
-1. **Inventory first** — before deleting anything, list every resource that will be affected and print a summary.
-2. **Confirm with the user** — after showing the inventory, ask for explicit confirmation before proceeding.
-3. **If-exists checks** — every delete operation must check existence first. If the resource is not found, print a skip message and continue.
-4. **Dependency order** — delete in the correct order to avoid dependency errors (children before parents, consumers before producers).
-5. **Never delete resources outside the workshop scope** — only target resources matching the naming patterns below.
-6. **Report results** — at the end, print a summary table showing each resource, whether it was deleted or skipped, and any errors.
+1. **Discover config first** — read `databricks.yml` at the repo root and any `apps_lakebase/*/databricks.yml` to extract actual resource names (catalog, schemas, app name, Lakebase project ID, warehouse).
+2. **Set the correct CLI profile** — match the workspace URL against `~/.databrickscfg` profiles and `export DATABRICKS_CONFIG_PROFILE=<matching_profile>` before any `databricks api` calls.
+3. **Inventory first** — before deleting anything, list every resource that will be affected and print a summary.
+4. **Confirm with the user** — after showing the inventory, ask for explicit confirmation before proceeding.
+5. **If-exists checks** — every delete operation must check existence first. If the resource is not found, print a skip message and continue.
+6. **Dependency order** — delete in the correct order to avoid dependency errors (children before parents, consumers before producers).
+7. **Never delete resources outside the workshop scope** — only target resources matching the discovered naming patterns.
+8. **Report results** — at the end, print a summary table showing each resource, whether it was deleted or skipped, and any errors.
+
+---
+
+## Step 0: Runtime Discovery (MANDATORY — run before any cleanup)
+
+### 0a. Resolve CLI Profile
+
+```bash
+# Find the profile in ~/.databrickscfg whose host matches the workspace URL
+# Export it so all subsequent `databricks api` calls authenticate correctly
+export DATABRICKS_CONFIG_PROFILE=<matched_profile>
+
+# Verify
+databricks current-user me --output json
+```
+
+### 0b. Read Bundle Configs
+
+Read `databricks.yml` at the repo root to extract:
+- `variables.catalog.default` → the **Lakehouse catalog** (e.g. `mkim_fevm_azure_classic`)
+- `variables.bronze_schema.default` → bronze schema name
+- `variables.silver_schema.default` → silver schema name
+- `variables.gold_schema.default` → gold schema name
+- `variables.source_schema.default` → **source/seed schema** (often different from the medallion schemas)
+- `variables.source_catalog.default` → source catalog (may equal the main catalog)
+- Warehouse lookup name → resolve to a warehouse ID
+
+Read `apps_lakebase/*/databricks.yml` to extract:
+- `resources.apps.app.name` → the **Databricks App name**
+- `resources.postgres_projects.*.project_id` → the **Lakebase project ID**
+- `resources.apps.app.resources[].postgres.branch` → confirms the Lakebase project path
+
+### 0c. Find a SQL Warehouse
+
+```bash
+databricks warehouses list --output json
+# Pick a running/startable warehouse, capture its ID as WAREHOUSE_ID
+```
+
+### 0d. Discover Lakebase UC Catalog
+
+The Lakebase UC catalog name is typically provided by the user or found via:
+```bash
+# Post via SQL Statements API (NOT `databricks sql execute` which doesn''t exist)
+databricks api post /api/2.0/sql/statements \
+  --json @<(cat <<''EOF''
+{"warehouse_id": "<WAREHOUSE_ID>", "statement": "SHOW CATALOGS LIKE ''%lakebase%''", "wait_timeout": "30s"}
+EOF
+)
+```
 
 ---
 
 ## Resources to Clean Up (in order)
 
-### Phase 1: Jobs and Pipelines
-Delete all Databricks jobs whose name contains `{user_schema_prefix}` or that are tagged with `project=vibe_coding_workshop`.
+### Phase 1: Jobs and DLT Pipelines
+
+**Jobs**: Use a broad search. Workshop jobs may NOT contain the schema prefix in their name. Search for jobs matching ANY of these patterns:
+- Job name contains the schema prefix (e.g. `minah_k_loyalty_rewards_analytics`)
+- Job name contains workshop-related keywords: `Loyalty Rewards`, `Bronze`, `Silver`, `Gold`, `Metric Views`, `TVF`, `Genie`, `Dashboard Deployment`
+- Job is tagged with `project=loyalty_rewards_analytics` or similar
+- Job is tagged with the user''s `dev` tag (e.g. `dev: minah_kim`)
+- Job creator matches the user email
 
 ```bash
-# List matching jobs
 databricks jobs list --output json | python3 -c "
 import sys, json
-jobs = json.load(sys.stdin).get(''jobs'', [])
+data = json.load(sys.stdin)
+jobs = data.get(''jobs'', []) if isinstance(data, dict) else data
+keywords = [''loyalty'', ''rewards'', ''bronze'', ''silver'', ''gold'', ''metric'', ''tvf'',
+            ''genie'', ''dashboard'', ''dlt'', ''dq'', ''clone'', ''merge'', ''setup'',
+            ''skill_validation'', ''{user_schema_prefix}'']
 for j in jobs:
-    name = j.get(''settings'', {}).get(''name'', '''')
-    tags = j.get(''settings'', {}).get(''tags'', {})
-    if ''{user_schema_prefix}'' in name or tags.get(''project'') == ''vibe_coding_workshop'':
-        print(f\"Job {j[''job_id'']}: {name}\")
+    settings = j.get(''settings'', {})
+    name = settings.get(''name'', '''').lower()
+    tags = settings.get(''tags'', {})
+    creator = j.get(''creator_user_name'', '''')
+    if (any(kw in name for kw in keywords)
+        or tags.get(''project'', '''') in [''loyalty_rewards_analytics'', ''vibe_coding_workshop'']
+        or creator == ''{created_by}''):
+        print(f\"Job {j[''job_id'']}: {settings.get(''name'', '''')} (creator: {creator})\")
+"
+```
+
+Delete each matching job (positional arg, NOT `--job-id`):
+```bash
+databricks jobs delete <JOB_ID>
+```
+
+**DLT Pipelines**: Also search for pipelines — these are separate from jobs.
+```bash
+databricks pipelines list-pipelines --output json | python3 -c "
+import sys, json
+pipelines = json.load(sys.stdin)
+if not isinstance(pipelines, list):
+    pipelines = pipelines.get(''statuses'', [])
+keywords = [''loyalty'', ''rewards'', ''silver'', ''bronze'', ''gold'', ''dlt'', ''{user_schema_prefix}'']
+for p in pipelines:
+    name = p.get(''name'', '''').lower()
+    creator = p.get(''creator_user_name'', '''')
+    if any(kw in name for kw in keywords) or creator == ''{created_by}'':
+        print(f\"Pipeline {p.get(''pipeline_id'','''')}: {p.get(''name'','''')} (creator: {creator})\")
 "
 
-# Delete each matching job
-databricks jobs delete --job-id <JOB_ID>
+# Delete each matching pipeline
+databricks pipelines delete <PIPELINE_ID>
 ```
 
 ### Phase 2: AI/BI Dashboards
-Delete Lakeview dashboards owned by `{created_by}` or whose name contains `{user_schema_prefix}`.
 
+Search by name patterns AND creator:
 ```bash
-# List dashboards
-databricks lakeview list --output json
+databricks lakeview list --output json | python3 -c "
+import sys, json
+data = json.load(sys.stdin)
+dashboards = data if isinstance(data, list) else data.get(''dashboards'', [])
+keywords = [''loyalty'', ''rewards'', ''{user_schema_prefix}'']
+for d in dashboards:
+    name = d.get(''display_name'', d.get(''name'', '''')).lower()
+    creator = d.get(''creator_user_name'', '''')
+    if any(kw in name for kw in keywords) or creator == ''{created_by}'':
+        print(f\"Dashboard {d.get(''dashboard_id'','''')}: {d.get(''display_name'','''')} (creator: {creator})\")
+"
+```
 
-# Delete matching dashboards
-databricks lakeview delete <DASHBOARD_ID>
+Delete via trash (the `delete` subcommand may not exist — use `trash` instead):
+```bash
+databricks lakeview trash <DASHBOARD_ID>
 ```
 
 ### Phase 3: Genie Spaces
-Delete Genie rooms created by the user. Use the Genie REST API:
+
+Genie spaces often have **human-readable names** (e.g. "Loyalty Rewards Intelligence"), not underscore-prefixed names. Search broadly:
 
 ```bash
-# List Genie rooms
-databricks api get /api/2.0/genie/spaces
+# Requires the correct CLI profile to be set
+databricks api get /api/2.0/genie/spaces | python3 -c "
+import sys, json
+data = json.load(sys.stdin)
+spaces = data.get(''spaces'', [])
+keywords = [''loyalty'', ''rewards'', ''{user_schema_prefix}'']
+for s in spaces:
+    title = s.get(''title'', '''').lower()
+    creator = s.get(''creator_user_name'', '''')
+    if any(kw in title for kw in keywords) or creator == ''{created_by}'':
+        print(f\"Genie Space {s.get(''space_id'','''')}: {s.get(''title'','''')} (creator: {creator})\")
+"
 
-# Delete matching Genie room
+# Delete each matching Genie space
 databricks api delete /api/2.0/genie/spaces/<SPACE_ID>
 ```
 
-### Phase 4: Model Serving Endpoints (Agents)
-Delete any model serving endpoints whose name contains `{user_schema_prefix}` or that were created for the workshop agent.
+### Phase 4: Model Serving Endpoints
 
 ```bash
-# List serving endpoints
-databricks serving-endpoints list --output json
+databricks serving-endpoints list --output json | python3 -c "
+import sys, json
+data = json.load(sys.stdin)
+endpoints = data.get(''endpoints'', []) if isinstance(data, dict) else data
+keywords = [''loyalty'', ''rewards'', ''{user_schema_prefix}'']
+for e in endpoints:
+    name = e.get(''name'', '''').lower()
+    if any(kw in name for kw in keywords):
+        print(f\"Endpoint: {e.get(''name'','''')} (state: {e.get(''state'',{}).get(''ready'',''?'')})\")
+"
 
-# Delete matching endpoint
+# Delete each matching endpoint
 databricks serving-endpoints delete <ENDPOINT_NAME>
 ```
 
-### Phase 5: Lakehouse Schemas (Bronze / Silver / Gold)
-Drop the three medallion schemas from Unity Catalog. Use CASCADE to remove all tables and views within them.
+### Phase 5: Lakehouse Schemas
 
-```sql
-DROP SCHEMA IF EXISTS `{lakehouse_default_catalog}`.`{user_schema_prefix}_bronze` CASCADE;
-DROP SCHEMA IF EXISTS `{lakehouse_default_catalog}`.`{user_schema_prefix}_silver` CASCADE;
-DROP SCHEMA IF EXISTS `{lakehouse_default_catalog}`.`{user_schema_prefix}_gold` CASCADE;
-```
+Drop ALL schemas discovered from `databricks.yml` — including the **source schema** which the original cleanup missed. Use the SQL Statements REST API (not `databricks sql execute`):
 
-Run via CLI:
 ```bash
-databricks sql execute --warehouse-id <WAREHOUSE_ID> --statement "DROP SCHEMA IF EXISTS \`{lakehouse_default_catalog}\`.\`{user_schema_prefix}_bronze\` CASCADE"
-databricks sql execute --warehouse-id <WAREHOUSE_ID> --statement "DROP SCHEMA IF EXISTS \`{lakehouse_default_catalog}\`.\`{user_schema_prefix}_silver\` CASCADE"
-databricks sql execute --warehouse-id <WAREHOUSE_ID> --statement "DROP SCHEMA IF EXISTS \`{lakehouse_default_catalog}\`.\`{user_schema_prefix}_gold\` CASCADE"
+WAREHOUSE_ID="<discovered_warehouse_id>"
+CATALOG="<from databricks.yml variables.catalog.default>"
+
+# Schemas to drop (all from databricks.yml):
+#   - variables.bronze_schema.default
+#   - variables.silver_schema.default
+#   - variables.gold_schema.default
+#   - variables.source_schema.default  ← IMPORTANT: often missed
+
+for SCHEMA in <bronze_schema> <silver_schema> <gold_schema> <source_schema>; do
+  cat > /tmp/sql_stmt.json << ENDJSON
+{"warehouse_id": "$WAREHOUSE_ID", "statement": "DROP SCHEMA IF EXISTS $CATALOG.$SCHEMA CASCADE", "wait_timeout": "50s"}
+ENDJSON
+  databricks api post /api/2.0/sql/statements --json @/tmp/sql_stmt.json
+done
 ```
+
+> **Note**: `wait_timeout` must be between 5s and 50s (not 60s). Write the JSON to a temp file to avoid shell quoting issues.
 
 ### Phase 6: Lakebase Unity Catalog Registration
-Drop the UC database catalog that was created when registering Lakebase in Unity Catalog (Step 9).
+
+Drop the UC catalog that was created when registering Lakebase (discovered in Step 0d):
 
 ```bash
-databricks sql execute --warehouse-id <WAREHOUSE_ID> --statement "DROP CATALOG IF EXISTS \`{lakebase_uc_catalog_name}\` CASCADE"
+cat > /tmp/sql_stmt.json << ''ENDJSON''
+{"warehouse_id": "<WAREHOUSE_ID>", "statement": "DROP CATALOG IF EXISTS <LAKEBASE_UC_CATALOG> CASCADE", "wait_timeout": "50s"}
+ENDJSON
+databricks api post /api/2.0/sql/statements --json @/tmp/sql_stmt.json
 ```
 
-Or via CLI:
+### Phase 7: Lakebase Project
+
+The project ID comes from `apps_lakebase/*/databricks.yml` → `resources.postgres_projects.*.project_id`.
+
+**Autoscaling mode** (dedicated project — safe to delete entirely):
 ```bash
-databricks unity-catalog catalogs delete {lakebase_uc_catalog_name} --force
+# The NAME argument must use the `projects/<project_id>` format
+databricks postgres delete-project projects/<PROJECT_ID> --no-wait
 ```
 
-### Phase 7: Lakebase Project / Schema
-
-**IMPORTANT**: The behavior here depends on the Lakebase mode.
-
-**Autoscaling mode** — the workshop created a dedicated Lakebase project, so it is safe to delete the entire project:
+**Provisioned mode** (shared instance — only drop the schema):
 ```bash
-databricks postgres delete-project --project-id {lakebase_instance_name}
+# DO NOT delete the instance. Only drop the workshop schema via psql.
+DROP SCHEMA IF EXISTS <user_schema> CASCADE;
 ```
 
-**Provisioned mode** — the workshop uses a **shared** Lakebase instance and only created a schema inside it. **DO NOT delete the instance** — other users may be sharing it. Only drop the workshop schema:
-```bash
-# Drop the workshop schema from the shared Lakebase instance (provisioned mode only)
-# Connect to the Lakebase PostgreSQL instance and run:
-DROP SCHEMA IF EXISTS {user_schema_prefix} CASCADE;
-```
-If unsure which mode was used, check `user-config.yaml` for `lakebase.mode` (`autoscaling` or `provisioned`). When in doubt, only drop the schema — never delete the instance.
+If unsure, check whether the project name matches the app name (autoscaling) or is a shared name like `donotdelete-*` (provisioned). When in doubt, only drop the schema.
 
 ### Phase 8: Databricks App
-Stop and delete the user''s deployed Databricks App.
+
+The app name comes from `apps_lakebase/*/databricks.yml` → `resources.apps.app.name`.
 
 ```bash
 # Stop the app first (ignore error if already stopped)
-databricks apps stop {user_app_name} || true
+databricks apps stop <APP_NAME> || true
+
+# Wait a few seconds for stop to propagate
+sleep 5
 
 # Delete the app
-databricks apps delete {user_app_name}
+databricks apps delete <APP_NAME>
 ```
 
-### Phase 9: Databricks Asset Bundle (DAB)
-If you are inside the user''s cloned template repository, destroy the DAB bundle to remove any remaining workspace files.
+> **Important**: The app name may be truncated (e.g. `minah-k-loyalty-rewards-an` instead of `minah-k-loyalty-rewards-analytics`). Always use the name from the bundle config, not an assumed full name.
+
+### Phase 9: Databricks Asset Bundles (DAB)
+
+Destroy bundles in **both** locations — the root data-product bundle and the app-level bundle:
 
 ```bash
+# Root bundle (data product jobs, pipelines, workspace files)
+cd <REPO_ROOT>
+databricks bundle destroy --auto-approve
+
+# App bundle (app deployment, Lakebase project)
+cd <REPO_ROOT>/apps_lakebase/<APP_DIR>
 databricks bundle destroy --auto-approve
 ```
 
 ### Phase 10: Skill Validation Assets (if Agent Skills track was used)
-Delete the skill validation job and notebook if they exist.
 
-```bash
-# Find and delete skill_validation_job
-databricks jobs list --output json | python3 -c "
-import sys, json
-jobs = json.load(sys.stdin).get(''jobs'', [])
-for j in jobs:
-    if ''skill_validation'' in j.get(''settings'', {}).get(''name'', '''').lower():
-        print(j[''job_id''])
-"
-# databricks jobs delete --job-id <JOB_ID>
-```
+Search for any `skill_validation` jobs (included in Phase 1 keyword search).
+
+---
+
+## CLI Syntax Reference (common pitfalls)
+
+| Operation | Correct Syntax | Common Mistake |
+|-----------|---------------|----------------|
+| Delete job | `databricks jobs delete <JOB_ID>` (positional) | ~~`--job-id <ID>`~~ (flag doesn''t exist) |
+| Delete dashboard | `databricks lakeview trash <ID>` | ~~`databricks lakeview delete <ID>`~~ (may not exist) |
+| Execute SQL | `databricks api post /api/2.0/sql/statements --json @file.json` | ~~`databricks sql execute`~~ (command doesn''t exist) |
+| Delete Lakebase project | `databricks postgres delete-project projects/<ID>` | ~~`--project-id <ID>`~~ (positional, needs `projects/` prefix) |
+| SQL wait_timeout | `"wait_timeout": "50s"` (max 50s) | ~~`"wait_timeout": "60s"`~~ (rejected) |
+| API with auth | Set `DATABRICKS_CONFIG_PROFILE` first | ~~Rely on default auth~~ (fails for `databricks api` calls) |
 
 ---
 
@@ -7654,22 +8122,21 @@ After running all phases, print a summary like this:
 ============================================================
                  WORKSHOP CLEANUP SUMMARY
 ============================================================
- Resource                        | Status
----------------------------------|---------------------------
- Jobs / Pipelines                | Deleted (3) / Skipped (0)
- AI/BI Dashboards                | Deleted (1) / Skipped (0)
- Genie Spaces                    | Deleted (1) / Skipped (0)
- Model Serving Endpoints         | Skipped (not found)
- Bronze Schema                   | Deleted
- Silver Schema                   | Deleted
- Gold Schema                     | Deleted
- Lakebase UC Catalog             | Deleted
- Lakebase Project                | Deleted
- Databricks App                  | Deleted
- DAB Bundle                      | Destroyed
- Skill Validation Assets         | Skipped (not found)
+ Phase | Resource                        | Status
+-------|---------------------------------|-------------------------
+   1   | Jobs                            | Deleted (N) / Skipped (M)
+   1   | DLT Pipelines                   | Deleted (N) / Skipped (M)
+   2   | AI/BI Dashboards                | Deleted (N) / Skipped (M)
+   3   | Genie Spaces                    | Deleted (N) / Skipped (M)
+   4   | Model Serving Endpoints         | Deleted (N) / Skipped (M)
+   5   | Lakehouse Schemas               | Dropped (N) / Skipped (M)
+   6   | Lakebase UC Catalog             | Deleted / Skipped
+   7   | Lakebase Project                | Deleted / Skipped
+   8   | Databricks App                  | Deleted / Skipped
+   9   | DAB Bundles                     | Destroyed (N)
+  10   | Skill Validation Assets         | Deleted (N) / Skipped (M)
 ============================================================
- Total: 10 deleted, 2 skipped, 0 errors
+ Total: X deleted, Y skipped, Z errors
 ============================================================
 ```
 
@@ -7677,62 +8144,70 @@ After running all phases, print a summary like this:
 
 ## Execution Approach
 
-Create a single cleanup shell script called `cleanup.sh` that:
-1. Accepts the workspace context variables above (or reads them from environment / `user-config.yaml`)
-2. Runs each phase in order
-3. Wraps every delete in a try/catch (bash: `|| true` with error capture)
-4. Prints the summary report at the end
-5. Returns exit code 0 even if some resources were not found (skip is not an error)
-
-Alternatively, execute the phases interactively one at a time using the Databricks CLI, confirming with the user between phases.',
+Execute the phases interactively one at a time using the Databricks CLI:
+1. Run Step 0 (discovery) to populate all variable values
+2. Run the inventory scan across all phases
+3. Present the full inventory and ask for user confirmation
+4. Execute each phase in order, wrapping every delete in `|| true` with error capture
+5. Print the summary report at the end
+6. Return exit code 0 even if some resources were not found (skip is not an error)',
 '',
 'Workspace Clean Up',
 'Safely delete all Databricks resources created during the workshop',
 31,
-'## How to Apply
-
-**Run this in your cloned Template Repository** (see Prerequisites in Step 0). These commands assume the Databricks CLI is authenticated and you are in the project root.
+'**Run this in your cloned Template Repository** (see Prerequisites in Step 0). These commands assume the Databricks CLI is installed and you have a profile in `~/.databrickscfg` whose `host` matches `{workspace_url}`.
 
 ---
 
-### Step 1: Copy the Generated Prompt
-Copy the cleanup prompt into your AI coding assistant (Cursor or Copilot).
-
-### Step 2: Review the Inventory
-The assistant will first list all resources it finds that match the workshop naming patterns. Review the list carefully.
-
-### Step 3: Confirm Deletion
-Once you are satisfied the list is correct, confirm to proceed. The assistant will delete resources in dependency order.
-
-### Step 4: Verify
-Use the verification links to confirm resources have been removed:
-- Check the **Apps** page — your app should no longer appear
-- Check **Catalog Explorer** — Bronze, Silver, Gold schemas should be gone
-- Check **Lakebase Projects** — your project should be removed
-- Check **Jobs** — workshop-related jobs should be deleted
-
-### Step 5: Optional — Destroy DAB Bundle
-If you want to remove workspace-synced files as well:
+### Step 1: Set the Correct Databricks CLI Profile
+Match `{workspace_url}` against `~/.databrickscfg` and export the profile before running any commands:
 ```bash
-databricks bundle destroy --auto-approve
-```',
-'## Expected Cleanup Results
+export DATABRICKS_CONFIG_PROFILE=<matched_profile>
+databricks current-user me --output json
+```
+This is required — `databricks api` calls will silently hit the wrong workspace without it.
 
-### Resources Removed
-- [ ] All workshop jobs and pipelines deleted
-- [ ] AI/BI dashboards deleted
+### Step 2: Copy the Generated Prompt
+Copy the cleanup prompt into your AI coding assistant (Cursor or Copilot) from the project root.
+
+### Step 3: Let the Assistant Run Discovery and Present the Inventory
+The assistant will execute Step 0 (discover the CLI profile, read `databricks.yml` at the repo root and under `apps_lakebase/<APP_DIR>/`, find a warehouse, resolve the Lakebase UC catalog), then sweep every phase and print a full inventory of resources that will be deleted.
+
+### Step 4: Review and Confirm
+Review the inventory carefully. If the list looks correct, confirm to proceed. The assistant will delete resources in dependency order (jobs/pipelines → dashboards → Genie → serving → schemas → Lakebase UC catalog → Lakebase project → app → DAB bundles).
+
+### Step 5: Verify
+Use these links to confirm resources have been removed:
+- **Apps** page — your app should no longer appear
+- **Catalog Explorer** — bronze, silver, gold, and **source** schemas should be gone; the Lakebase UC catalog should be gone
+- **Lakebase Projects** — autoscaling project should be removed (provisioned instances remain, but the workshop schema should be dropped)
+- **Jobs** page — workshop-related jobs should be deleted
+- **Pipelines** page — workshop DLT pipelines should be deleted
+- **Dashboards** page — workshop dashboards should be in Trash
+- **Genie** page — workshop Genie spaces should be deleted
+
+### Step 6: DAB Bundles
+Both bundles are destroyed automatically in Phase 9 — the root bundle (`databricks.yml` in the repo root) and the app bundle (`apps_lakebase/<APP_DIR>/databricks.yml`). No manual step is required.',
+'### Resources Removed
+- [ ] All workshop jobs deleted
+- [ ] All workshop DLT pipelines deleted
+- [ ] AI/BI dashboards deleted (moved to Trash)
 - [ ] Genie spaces deleted
-- [ ] Agent serving endpoints deleted (if created)
-- [ ] Bronze, Silver, Gold schemas dropped (CASCADE)
-- [ ] Lakebase UC catalog dropped
-- [ ] Lakebase project/instance deleted
+- [ ] Model serving endpoints deleted (if created)
+- [ ] Source, bronze, silver, gold schemas dropped (CASCADE)
+- [ ] Lakebase UC catalog dropped (CASCADE)
+- [ ] Lakebase project deleted (autoscaling) **or** workshop schema dropped (provisioned)
 - [ ] Databricks App stopped and deleted
-- [ ] DAB bundle destroyed (workspace files removed)
+- [ ] Root DAB bundle destroyed (`<REPO_ROOT>`)
+- [ ] App DAB bundle destroyed (`<REPO_ROOT>/apps_lakebase/<APP_DIR>`)
 - [ ] Skill validation assets deleted (if created)
 
 ### Verification
 - [ ] Apps page shows no workshop app
-- [ ] Catalog Explorer shows no workshop schemas
-- [ ] Lakebase Projects page shows no workshop project
-- [ ] Jobs page shows no workshop jobs',
+- [ ] Catalog Explorer shows no workshop schemas (source/bronze/silver/gold) and no Lakebase UC catalog
+- [ ] Lakebase Projects page shows no workshop project (autoscaling mode)
+- [ ] Jobs page shows no workshop jobs
+- [ ] Pipelines page shows no workshop DLT pipelines
+- [ ] Dashboards page shows no workshop dashboards (check Trash too)
+- [ ] Genie page shows no workshop Genie spaces',
 true, 1, true, current_timestamp(), current_timestamp(), current_user());
