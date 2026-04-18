@@ -10,6 +10,7 @@ The system uses Lakebase as the primary source of truth with YAML fallback.
 """
 
 import os
+import re
 import json
 import logging
 import time
@@ -22,6 +23,16 @@ from fastapi.responses import StreamingResponse, FileResponse
 from pydantic import BaseModel, Field
 from typing import List, Dict, Optional, Any, AsyncGenerator
 from datetime import datetime, timezone
+
+SECTION_TAG_RE = re.compile(r"^[a-zA-Z0-9_-]{1,64}$")
+
+
+def _validate_section_tag(section_tag: str) -> None:
+    """Reject section_tag values that could enable path traversal in the uploads dir.
+    Allowed: letters, digits, underscore, hyphen; 1-64 chars. All real tags conform.
+    """
+    if not isinstance(section_tag, str) or not SECTION_TAG_RE.match(section_tag):
+        raise HTTPException(status_code=400, detail="invalid section_tag")
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -5067,7 +5078,7 @@ async def upload_section_image(
     - Updates database JSON array with image metadata
     - Returns the uploaded image metadata
     """
-    # Validate field_type
+    _validate_section_tag(section_tag)
     if field_type not in ('how_to_apply', 'expected_output'):
         raise HTTPException(status_code=400, detail="field_type must be 'how_to_apply' or 'expected_output'")
     
@@ -5090,13 +5101,16 @@ async def upload_section_image(
     if len(current_images) >= 5:
         raise HTTPException(status_code=400, detail="Maximum 5 images per section field")
     
-    # Create unique filename
+    # Create unique filename (use only the basename to block embedded path separators)
     image_id = str(uuid.uuid4())[:8]
-    safe_filename = f"{image_id}_{filename.replace(' ', '_')}"
+    safe_filename = f"{image_id}_{Path(filename).name.replace(' ', '_')}"
     
     # Ensure directory exists
     ensure_uploads_dir()
-    section_dir = UPLOADS_DIR / section_tag
+    section_dir = (UPLOADS_DIR / section_tag).resolve()
+    # Defence in depth: confirm the resolved directory is inside UPLOADS_DIR.
+    if not str(section_dir).startswith(str(UPLOADS_DIR.resolve())):
+        raise HTTPException(status_code=400, detail="invalid section_tag")
     section_dir.mkdir(parents=True, exist_ok=True)
     
     # Save file
@@ -5147,7 +5161,7 @@ async def delete_section_image(
     - Removes file from workspace
     - Updates database JSON array
     """
-    # Validate field_type
+    _validate_section_tag(section_tag)
     if field_type not in ('how_to_apply', 'expected_output'):
         raise HTTPException(status_code=400, detail="field_type must be 'how_to_apply' or 'expected_output'")
     
@@ -5195,6 +5209,7 @@ async def list_section_images(section_tag: str, field_type: str):
     """
     Get all images for a section field.
     """
+    _validate_section_tag(section_tag)
     if field_type not in ('how_to_apply', 'expected_output'):
         raise HTTPException(status_code=400, detail="field_type must be 'how_to_apply' or 'expected_output'")
     
