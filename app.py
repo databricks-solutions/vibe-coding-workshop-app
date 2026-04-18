@@ -6,14 +6,17 @@ Serves both the React frontend and API endpoints.
 
 import os
 import sys
+import time
+from collections import deque
 from pathlib import Path
+from urllib.parse import urlparse
 
 # Add the src/backend directory to the Python path
 backend_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'src', 'backend')
 if backend_path not in sys.path:
     sys.path.insert(0, backend_path)
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, JSONResponse
@@ -33,12 +36,70 @@ app = FastAPI(
     version="1.0.0",
 )
 
-# Configure CORS
+# ============== Security Configuration ==============
+# All values below are env-tunable so prod can override without code changes.
+# Defaults chosen to be safe for the current Databricks Apps (same-origin) deployment.
+
+ALLOWED_ORIGINS = [
+    o.strip() for o in os.environ.get("ALLOWED_ORIGINS", "").split(",") if o.strip()
+]
+MAX_REQUEST_BYTES = int(os.environ.get("MAX_REQUEST_BYTES", 50 * 1024 * 1024))
+RATE_LIMIT_PER_MIN = int(os.environ.get("RATE_LIMIT_PER_MIN", 1000))  # 0 disables
+_RATE_BUCKETS: dict[str, deque] = {}
+
+
+def _client_key(request: Request) -> str:
+    fwd = request.headers.get("x-forwarded-for")
+    if fwd:
+        return fwd.split(",")[0].strip()
+    return request.client.host if request.client else "unknown"
+
+
+@app.middleware("http")
+async def security_middleware(request: Request, call_next):
+    """Request-time security checks: size cap, rate limit, origin guard.
+    Safe response headers are appended after the endpoint runs.
+    """
+    if request.url.path.startswith("/api/"):
+        cl = request.headers.get("content-length")
+        if cl and cl.isdigit() and int(cl) > MAX_REQUEST_BYTES:
+            return JSONResponse({"error": "request too large"}, status_code=413)
+
+        if RATE_LIMIT_PER_MIN > 0:
+            now = time.monotonic()
+            key = _client_key(request)
+            bucket = _RATE_BUCKETS.setdefault(key, deque())
+            cutoff = now - 60.0
+            while bucket and bucket[0] < cutoff:
+                bucket.popleft()
+            if len(bucket) >= RATE_LIMIT_PER_MIN:
+                return JSONResponse({"error": "rate limit exceeded"}, status_code=429)
+            bucket.append(now)
+
+        if request.method in {"POST", "PUT", "PATCH", "DELETE"}:
+            origin = request.headers.get("origin") or request.headers.get("referer")
+            if origin:
+                expected_host = request.headers.get("x-forwarded-host") or request.url.netloc
+                if urlparse(origin).netloc != expected_host:
+                    return JSONResponse(
+                        {"error": "cross-origin request blocked"}, status_code=403
+                    )
+
+    response = await call_next(request)
+    response.headers.setdefault("X-Content-Type-Options", "nosniff")
+    response.headers.setdefault("X-Frame-Options", "SAMEORIGIN")
+    response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
+    response.headers.setdefault(
+        "Permissions-Policy", "geolocation=(), microphone=(), camera=()"
+    )
+    return response
+
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
+    allow_origins=ALLOWED_ORIGINS,
+    allow_credentials=False,
+    allow_methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
     allow_headers=["*"],
 )
 

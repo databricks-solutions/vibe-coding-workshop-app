@@ -54,7 +54,7 @@ export function VerificationLinks({ sectionTag, sessionId }: VerificationLinksPr
     return (
       <div className="flex items-center gap-2 py-3 text-muted-foreground mb-3">
         <Loader2 className="w-4 h-4 animate-spin text-violet-400" />
-        <span className="text-[12px]">Loading verification links...</span>
+        <span className="text-ui-sm">Loading verification links...</span>
       </div>
     );
   }
@@ -73,9 +73,9 @@ export function VerificationLinks({ sectionTag, sessionId }: VerificationLinksPr
       <div className="px-4 pt-3 pb-2">
         <div className="flex items-center gap-2 mb-0.5">
           <CheckCircle2 className="w-4 h-4 text-violet-400 shrink-0" />
-          <h4 className="text-[13px] font-semibold text-foreground">Verify Deployed Assets</h4>
+          <h4 className="text-ui-base font-semibold text-foreground">Verify Deployed Assets</h4>
         </div>
-        <p className="text-[11px] text-muted-foreground ml-6">
+        <p className="text-ui-xs text-muted-foreground ml-6">
           Open your Databricks workspace to verify the results.
         </p>
       </div>
@@ -92,12 +92,12 @@ export function VerificationLinks({ sectionTag, sessionId }: VerificationLinksPr
           >
             <div className="flex items-center gap-2">
               <ExternalLink className="w-3.5 h-3.5 text-violet-400 shrink-0" />
-              <span className="text-[12px] font-medium text-violet-400 group-hover:text-violet-300 transition-colors">
+              <span className="text-ui-sm font-medium text-violet-400 group-hover:text-violet-300 transition-colors">
                 {link.label}
               </span>
               <ArrowUpRight className="w-3 h-3 text-muted-foreground ml-auto shrink-0 opacity-0 group-hover:opacity-100 transition-opacity" />
             </div>
-            <p className="text-[11px] text-muted-foreground mt-1.5 ml-5.5 leading-relaxed">
+            <p className="text-ui-xs text-muted-foreground mt-1.5 ml-5.5 leading-relaxed">
               {link.description}
             </p>
           </a>

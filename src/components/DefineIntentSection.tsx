@@ -102,7 +102,7 @@ export function DefineIntentSection({
       {/* Summary line visible when collapsed and complete */}
       {!isExpanded && intentDefined && summaryText && (
         <div className="mt-1 px-5 pb-0">
-          <p className="text-[11px] text-muted-foreground/60 truncate">
+          <p className="text-ui-xs text-muted-foreground/60 truncate">
             {selectedIndustryLabel || selectedIndustry}
             {summaryText !== (selectedIndustryLabel || selectedIndustry) && ` › ${summaryText}`}
           </p>

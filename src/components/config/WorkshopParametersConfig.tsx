@@ -381,7 +381,7 @@ export function WorkshopParametersConfig({ onToast }: WorkshopParametersConfigPr
       {/* Delete Confirmation Modal - Two-Step Confirmation */}
       {showDeleteConfirmModal && (
         <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
-          <div className="bg-card rounded-lg shadow-xl w-[450px] p-6 border border-red-500/50">
+          <div className="bg-card rounded-lg shadow-xl w-[28.125rem] p-6 border border-red-500/50">
             <div className="flex items-center gap-3 mb-4">
               <div className="w-10 h-10 rounded-full bg-red-500/20 flex items-center justify-center">
                 <svg className="w-6 h-6 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">

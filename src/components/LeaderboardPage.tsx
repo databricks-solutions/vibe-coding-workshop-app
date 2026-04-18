@@ -27,6 +27,8 @@ import {
   ChevronDown,
   ChevronLeft,
   ChevronRight,
+  ChevronUp,
+  ChevronsUpDown,
   Users,
   X,
   Search,
@@ -38,6 +40,10 @@ import { WORKSHOP_LEVELS, type WorkshopLevel } from '../constants/workflowSectio
 
 // Movement type for rank changes
 type Movement = 'up' | 'down' | 'new' | 'same';
+
+// Sort config for the Workshop Participants modal table
+type UsersSortKey = 'display_name' | 'email' | 'workshop_level_label' | 'updated_at';
+type SortDir = 'asc' | 'desc';
 
 // Extended entry with movement tracking
 interface LeaderboardEntryWithMovement extends LeaderboardEntry {
@@ -96,53 +102,53 @@ function ChapterTooltip({
 
   return (
     <div className="absolute left-full ml-3 top-1/2 -translate-y-1/2 z-50 opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none">
-      <div className="bg-popover border border-border rounded-lg shadow-xl p-3 min-w-[200px] text-left">
+      <div className="bg-popover border border-border rounded-lg shadow-xl p-3 min-w-[12.5rem] text-left">
         {levelLabel && (
           <div className="mb-2 pb-2 border-b border-border">
-            <div className="flex items-center gap-1.5 text-[10px] font-semibold text-primary uppercase tracking-wider mb-1">
+            <div className="flex items-center gap-1.5 text-ui-2xs font-semibold text-primary uppercase tracking-wider mb-1">
               <Sparkles className="w-3 h-3" />
               Workshop Path
             </div>
-            <div className="text-[11px] text-foreground font-medium">
+            <div className="text-ui-xs text-foreground font-medium">
               {levelLabel}
             </div>
           </div>
         )}
         {completed.length > 0 && (
           <div className="mb-2">
-            <div className="flex items-center gap-1.5 text-[10px] font-semibold text-emerald-400 uppercase tracking-wider mb-1">
+            <div className="flex items-center gap-1.5 text-ui-2xs font-semibold text-emerald-400 uppercase tracking-wider mb-1">
               <CheckCircle2 className="w-3 h-3" />
               Completed
             </div>
-            <div className="text-[11px] text-foreground">
+            <div className="text-ui-xs text-foreground">
               {completed.join(', ')}
             </div>
           </div>
         )}
         {inProgress.length > 0 && (
           <div>
-            <div className="flex items-center gap-1.5 text-[10px] font-semibold text-amber-400 uppercase tracking-wider mb-1">
+            <div className="flex items-center gap-1.5 text-ui-2xs font-semibold text-amber-400 uppercase tracking-wider mb-1">
               <Circle className="w-3 h-3" />
               In Progress
             </div>
-            <div className="text-[11px] text-muted-foreground">
+            <div className="text-ui-xs text-muted-foreground">
               {inProgress.join(', ')}
             </div>
           </div>
         )}
         {skippedSteps.length > 0 && (
           <div className="mt-2">
-            <div className="flex items-center gap-1.5 text-[10px] font-semibold text-amber-500/80 uppercase tracking-wider mb-1">
+            <div className="flex items-center gap-1.5 text-ui-2xs font-semibold text-amber-500/80 uppercase tracking-wider mb-1">
               <SkipForward className="w-3 h-3" />
               {skippedSteps.length} Step{skippedSteps.length !== 1 ? 's' : ''} Skipped
             </div>
-            <div className="text-[10px] text-muted-foreground/70">
+            <div className="text-ui-2xs text-muted-foreground/70">
               Steps: {skippedSteps.join(', ')}
             </div>
           </div>
         )}
         {completed.length === 0 && inProgress.length === 0 && !levelLabel && (
-          <div className="text-[11px] text-muted-foreground">No progress yet</div>
+          <div className="text-ui-xs text-muted-foreground">No progress yet</div>
         )}
         {/* Arrow */}
         <div className="absolute right-full top-1/2 -translate-y-1/2 w-0 h-0 border-t-[6px] border-t-transparent border-b-[6px] border-b-transparent border-r-[6px] border-r-border" />
@@ -165,7 +171,7 @@ function MovementIndicator({ movement, rankChange }: { movement: Movement; rankC
         <>
           <TrendingUp className="w-4 h-4" />
           {rankChange && rankChange > 1 && (
-            <span className="text-[10px] font-bold">+{rankChange}</span>
+            <span className="text-ui-2xs font-bold">+{rankChange}</span>
           )}
         </>
       )}
@@ -173,7 +179,7 @@ function MovementIndicator({ movement, rankChange }: { movement: Movement; rankC
         <>
           <TrendingDown className="w-4 h-4" />
           {rankChange && rankChange > 1 && (
-            <span className="text-[10px] font-bold">-{rankChange}</span>
+            <span className="text-ui-2xs font-bold">-{rankChange}</span>
           )}
         </>
       )}
@@ -284,7 +290,7 @@ function LeaderboardRow({
           </h3>
           {isFirst && <Flame className="w-4 h-4 text-orange-500 animate-pulse" />}
         </div>
-        <div className="text-[11px] text-muted-foreground space-y-0.5">
+        <div className="text-ui-xs text-muted-foreground space-y-0.5">
           <p className="flex items-center gap-1.5">
             <span className="inline-flex items-center gap-1">
               <span className="text-green-500">✓</span>
@@ -300,12 +306,12 @@ function LeaderboardRow({
             )}
           </p>
           {entry.completed_chapters.length > 0 && (
-            <p className="text-[10px] text-muted-foreground/70 truncate">
+            <p className="text-ui-2xs text-muted-foreground/70 truncate">
               {entry.completed_chapters.join(' → ')}
             </p>
           )}
           {pathLabel && (
-            <span className="inline-flex items-center gap-1 mt-0.5 text-[10px] font-medium text-primary bg-primary/10 rounded-full px-2 py-0.5 w-fit">
+            <span className="inline-flex items-center gap-1 mt-0.5 text-ui-2xs font-medium text-primary bg-primary/10 rounded-full px-2 py-0.5 w-fit">
               <Sparkles className="w-2.5 h-2.5" />
               {pathLabel}
             </span>
@@ -320,11 +326,11 @@ function LeaderboardRow({
         `}>
           {entry.score.toLocaleString()}
         </div>
-        <div className="text-[10px] text-muted-foreground uppercase tracking-wider">
+        <div className="text-ui-2xs text-muted-foreground uppercase tracking-wider">
           points
         </div>
         {entry.updated_at && (
-          <div className="flex items-center justify-end gap-1 mt-1 text-[10px] text-muted-foreground/60">
+          <div className="flex items-center justify-end gap-1 mt-1 text-ui-2xs text-muted-foreground/60">
             <Clock className="w-2.5 h-2.5" />
             {formatRelativeTime(entry.updated_at)}
           </div>
@@ -362,6 +368,19 @@ export function LeaderboardPage() {
   const [expandedUser, setExpandedUser] = useState<string | null>(null);
   const [userSessions, setUserSessions] = useState<Record<string, SessionListItem[]>>({});
   const [loadingSessions, setLoadingSessions] = useState(false);
+  const [usersSort, setUsersSort] = useState<{ key: UsersSortKey; dir: SortDir } | null>(
+    { key: 'updated_at', dir: 'desc' }
+  );
+
+  const toggleUsersSort = (key: UsersSortKey) => {
+    setUsersPage(0);
+    setExpandedUser(null);
+    setUsersSort(prev => {
+      if (!prev || prev.key !== key) return { key, dir: 'asc' };
+      if (prev.dir === 'asc') return { key, dir: 'desc' };
+      return null;
+    });
+  };
 
   // Track previous ranks for movement detection
   const previousRanksRef = useRef<Map<string, number>>(new Map());
@@ -501,7 +520,7 @@ export function LeaderboardPage() {
               </div>
               <div>
                 <h1 className="text-xl font-bold text-foreground tracking-tight">Leaderboard</h1>
-                <p className="text-[11px] text-muted-foreground">Top workshop performers</p>
+                <p className="text-ui-xs text-muted-foreground">Top workshop performers</p>
               </div>
             </div>
 
@@ -513,7 +532,7 @@ export function LeaderboardPage() {
                 onMouseEnter={() => setIsPaused(true)}
                 onMouseLeave={() => setIsPaused(false)}
               >
-                <label className="text-[11px] text-muted-foreground">Auto-refresh</label>
+                <label className="text-ui-xs text-muted-foreground">Auto-refresh</label>
                 <button
                   onClick={() => setAutoRefresh(!autoRefresh)}
                   className={`relative w-10 h-5 rounded-full transition-colors ${
@@ -525,7 +544,7 @@ export function LeaderboardPage() {
                   }`} />
                 </button>
                 {autoRefresh && (
-                  <span className={`text-[10px] font-mono tabular-nums px-1.5 py-0.5 rounded ${
+                  <span className={`text-ui-2xs font-mono tabular-nums px-1.5 py-0.5 rounded ${
                     isPaused ? 'bg-amber-500/20 text-amber-400' : 'bg-primary/20 text-primary'
                   }`}>
                     {isPaused ? 'paused' : `${countdown}s`}
@@ -554,12 +573,12 @@ export function LeaderboardPage() {
         <div className="max-w-3xl mx-auto">
           {/* Workshop user count banner */}
           {totalUsers > 0 && (
-            <div className="mb-5 flex items-center justify-center gap-2 text-[13px] text-muted-foreground">
+            <div className="mb-5 flex items-center justify-center gap-2 text-ui-base text-muted-foreground">
               <Users className="w-4 h-4 text-primary" />
               <span className="flex items-center gap-1.5">
                 This workshop has been used by
                 <span className="border-beam-wrapper inline-flex mx-0.5">
-                  <span className="relative z-10 rounded-[calc(0.5rem-2px)] bg-emerald-600 text-white text-[13px] font-bold px-2.5 py-0.5 tabular-nums">
+                  <span className="relative z-10 rounded-[calc(0.5rem-2px)] bg-emerald-600 text-white text-ui-base font-bold px-2.5 py-0.5 tabular-nums">
                     {totalUsers}
                   </span>
                 </span>
@@ -568,7 +587,7 @@ export function LeaderboardPage() {
               <span className="border-beam-wrapper inline-flex ml-1">
                 <button
                   onClick={() => { setShowUsersModal(true); setUsersPage(0); }}
-                  className="relative z-10 rounded-[calc(0.5rem-2px)] bg-emerald-600 text-white hover:bg-emerald-500 text-[12px] font-medium px-3 py-0.5 transition-colors"
+                  className="relative z-10 rounded-[calc(0.5rem-2px)] bg-emerald-600 text-white hover:bg-emerald-500 text-ui-sm font-medium px-3 py-0.5 transition-colors"
                 >
                   View all
                 </button>
@@ -611,7 +630,7 @@ export function LeaderboardPage() {
             <div className="mt-4 flex justify-center">
               <button
                 onClick={() => setVisibleCount(prev => prev + 10)}
-                className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg bg-secondary hover:bg-secondary/80 text-foreground text-[13px] font-medium transition-colors border border-border"
+                className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg bg-secondary hover:bg-secondary/80 text-foreground text-ui-base font-medium transition-colors border border-border"
               >
                 <ChevronDown className="w-4 h-4" />
                 Show 10 more ({entries.length - visibleCount} remaining)
@@ -622,7 +641,7 @@ export function LeaderboardPage() {
           {/* Footer with last updated */}
           {lastUpdated && !isLoading && (
             <div className="mt-6 text-center">
-              <div className="inline-flex items-center gap-2 text-[11px] text-muted-foreground bg-secondary/50 px-3 py-1.5 rounded-full">
+              <div className="inline-flex items-center gap-2 text-ui-xs text-muted-foreground bg-secondary/50 px-3 py-1.5 rounded-full">
                 <Clock className="w-3 h-3" />
                 Last updated: {formatLastUpdated(lastUpdated)}
               </div>
@@ -631,11 +650,11 @@ export function LeaderboardPage() {
 
           {/* Scoring info */}
           <div className="mt-8 p-4 bg-card rounded-xl border border-border">
-            <h3 className="text-[12px] font-semibold text-foreground mb-3 flex items-center gap-2">
+            <h3 className="text-ui-sm font-semibold text-foreground mb-3 flex items-center gap-2">
               <Sparkles className="w-4 h-4 text-primary" />
               Scoring System
             </h3>
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-3 text-[11px]">
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-3 text-ui-xs">
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Foundation (1-3)</span>
                 <span className="text-foreground font-medium">10 pts/step</span>
@@ -661,7 +680,7 @@ export function LeaderboardPage() {
                 <span className="text-foreground font-medium">60 pts/step</span>
               </div>
             </div>
-            <div className="mt-3 pt-3 border-t border-border flex justify-between text-[11px]">
+            <div className="mt-3 pt-3 border-t border-border flex justify-between text-ui-xs">
               <span className="text-muted-foreground">Maximum possible score</span>
               <span className="text-primary font-bold">720 points</span>
             </div>
@@ -678,8 +697,19 @@ export function LeaderboardPage() {
               u.email.toLowerCase().includes(searchLower)
             )
           : workshopUsers;
-        const filteredTotal = filteredUsers.length;
-        const pageUsers = filteredUsers.slice(usersPage * 10, (usersPage + 1) * 10);
+        const sortedUsers = usersSort
+          ? [...filteredUsers].sort((a, b) => {
+              const { key, dir } = usersSort;
+              const av = (a[key] ?? '') as string;
+              const bv = (b[key] ?? '') as string;
+              const cmp = key === 'updated_at'
+                ? new Date(av || 0).getTime() - new Date(bv || 0).getTime()
+                : av.localeCompare(bv, undefined, { sensitivity: 'base' });
+              return dir === 'asc' ? cmp : -cmp;
+            })
+          : filteredUsers;
+        const filteredTotal = sortedUsers.length;
+        const pageUsers = sortedUsers.slice(usersPage * 10, (usersPage + 1) * 10);
         const formatDate = (iso?: string) => {
           if (!iso) return '—';
           try {
@@ -700,8 +730,8 @@ export function LeaderboardPage() {
             <div className="flex items-center justify-between px-5 py-4 border-b border-border">
               <div className="flex items-center gap-2">
                 <Users className="w-5 h-5 text-primary" />
-                <h2 className="text-[15px] font-semibold text-foreground">Workshop Participants</h2>
-                <span className="text-[11px] text-muted-foreground bg-secondary px-2 py-0.5 rounded-full">{totalUsers}</span>
+                <h2 className="text-ui-md2 font-semibold text-foreground">Workshop Participants</h2>
+                <span className="text-ui-xs text-muted-foreground bg-secondary px-2 py-0.5 rounded-full">{totalUsers}</span>
               </div>
               <button
                 onClick={() => { setShowUsersModal(false); setUsersSearch(''); setExpandedUser(null); }}
@@ -720,7 +750,7 @@ export function LeaderboardPage() {
                   placeholder="Search by name or email..."
                   value={usersSearch}
                   onChange={e => { setUsersSearch(e.target.value); setUsersPage(0); setExpandedUser(null); }}
-                  className="w-full pl-9 pr-3 py-2 text-[13px] bg-secondary/50 border border-border rounded-lg text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+                  className="w-full pl-9 pr-3 py-2 text-ui-base bg-secondary/50 border border-border rounded-lg text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary"
                 />
               </div>
             </div>
@@ -729,11 +759,30 @@ export function LeaderboardPage() {
             <div className="flex-1 overflow-auto px-5 py-3">
               <table className="w-full">
                 <thead>
-                  <tr className="text-[10px] text-muted-foreground uppercase tracking-wider border-b border-border">
-                    <th className="text-left pb-2 font-medium">Name</th>
-                    <th className="text-left pb-2 font-medium">Email</th>
-                    <th className="text-left pb-2 font-medium">Last Path</th>
-                    <th className="text-left pb-2 font-medium">Last Updated</th>
+                  <tr className="text-ui-2xs text-muted-foreground uppercase tracking-wider border-b border-border">
+                    {([
+                      { label: 'Name', key: 'display_name' as const },
+                      { label: 'Email', key: 'email' as const },
+                      { label: 'Last Path', key: 'workshop_level_label' as const },
+                      { label: 'Last Updated', key: 'updated_at' as const },
+                    ]).map(col => {
+                      const active = usersSort?.key === col.key;
+                      const dir = active ? usersSort!.dir : null;
+                      return (
+                        <th key={col.key} className="text-left pb-2 font-medium">
+                          <button
+                            type="button"
+                            onClick={() => toggleUsersSort(col.key)}
+                            className={`inline-flex items-center gap-1 uppercase tracking-wider transition-colors hover:text-foreground ${active ? 'text-foreground' : ''}`}
+                          >
+                            {col.label}
+                            {dir === 'asc' && <ChevronUp className="w-3 h-3" />}
+                            {dir === 'desc' && <ChevronDown className="w-3 h-3" />}
+                            {!active && <ChevronsUpDown className="w-3 h-3 opacity-40" />}
+                          </button>
+                        </th>
+                      );
+                    })}
                     <th className="text-left pb-2 font-medium">Sessions</th>
                   </tr>
                 </thead>
@@ -745,25 +794,25 @@ export function LeaderboardPage() {
                     return (
                       <Fragment key={user.email}>
                         <tr
-                          className={`text-[13px] border-b border-border/50 cursor-pointer transition-colors hover:bg-secondary/30 ${i % 2 === 0 ? '' : 'bg-secondary/20'}`}
+                          className={`text-ui-base border-b border-border/50 cursor-pointer transition-colors hover:bg-secondary/30 ${i % 2 === 0 ? '' : 'bg-secondary/20'}`}
                           onClick={() => toggleUserExpand(user.email)}
                         >
                           <td className="py-2.5 pr-4 text-foreground font-medium whitespace-nowrap">{user.display_name}</td>
                           <td className="py-2.5 pr-4 text-muted-foreground">{user.email}</td>
                           <td className="py-2.5 pr-4 whitespace-nowrap">
                             {user.workshop_level_label ? (
-                              <span className="text-[11px] font-medium bg-primary/15 text-primary px-2 py-0.5 rounded-full">
+                              <span className="text-ui-xs font-medium bg-primary/15 text-primary px-2 py-0.5 rounded-full">
                                 {user.workshop_level_label}
                               </span>
                             ) : (
                               <span className="text-muted-foreground">—</span>
                             )}
                           </td>
-                          <td className="py-2.5 pr-4 text-muted-foreground whitespace-nowrap text-[12px]">
+                          <td className="py-2.5 pr-4 text-muted-foreground whitespace-nowrap text-ui-sm">
                             {formatDate(user.updated_at)}
                           </td>
                           <td className="py-2.5 whitespace-nowrap">
-                            <span className="inline-flex items-center gap-1.5 text-[11px] font-medium text-muted-foreground">
+                            <span className="inline-flex items-center gap-1.5 text-ui-xs font-medium text-muted-foreground">
                               {loadingSessions && isExpanded ? (
                                 <Loader2 className="w-3 h-3 animate-spin" />
                               ) : isExpanded ? (
@@ -776,12 +825,12 @@ export function LeaderboardPage() {
                           </td>
                         </tr>
                         {isExpanded && sessions && sessions.map(session => (
-                          <tr key={session.session_id} className="text-[12px] bg-secondary/10 border-b border-border/30">
+                          <tr key={session.session_id} className="text-ui-sm bg-secondary/10 border-b border-border/30">
                             <td colSpan={2} className="py-2 pl-8 pr-4 text-muted-foreground">
                               {session.is_saved ? session.session_name : 'Unsaved Session'}
                             </td>
                             <td className="py-2 pr-4" />
-                            <td className="py-2 pr-4 text-muted-foreground/70 whitespace-nowrap text-[11px]">
+                            <td className="py-2 pr-4 text-muted-foreground/70 whitespace-nowrap text-ui-xs">
                               {formatDate(session.updated_at)}
                             </td>
                             <td className="py-2 whitespace-nowrap">
@@ -790,7 +839,7 @@ export function LeaderboardPage() {
                                 target="_blank"
                                 rel="noopener noreferrer"
                                 onClick={e => e.stopPropagation()}
-                                className="inline-flex items-center gap-1.5 text-[11px] font-medium px-2 py-0.5 rounded-full transition-colors hover:opacity-80"
+                                className="inline-flex items-center gap-1.5 text-ui-xs font-medium px-2 py-0.5 rounded-full transition-colors hover:opacity-80"
                                 style={{
                                   backgroundColor: session.is_saved ? 'rgba(16,185,129,0.15)' : 'rgba(234,179,8,0.15)',
                                   color: session.is_saved ? 'rgb(52,211,153)' : 'rgb(250,204,21)',
@@ -807,7 +856,7 @@ export function LeaderboardPage() {
                   })}
                   {pageUsers.length === 0 && (
                     <tr>
-                      <td colSpan={5} className="py-6 text-center text-[13px] text-muted-foreground">
+                      <td colSpan={5} className="py-6 text-center text-ui-base text-muted-foreground">
                         No users found matching &ldquo;{usersSearch}&rdquo;
                       </td>
                     </tr>
@@ -818,7 +867,7 @@ export function LeaderboardPage() {
 
             {/* Pagination */}
             {filteredTotal > 10 && (
-              <div className="flex items-center justify-between px-5 py-3 border-t border-border text-[12px]">
+              <div className="flex items-center justify-between px-5 py-3 border-t border-border text-ui-sm">
                 <span className="text-muted-foreground">
                   {usersPage * 10 + 1}–{Math.min((usersPage + 1) * 10, filteredTotal)} of {filteredTotal}
                   {usersSearch && ` (filtered)`}

@@ -79,7 +79,7 @@ export function SaveSessionDialog({
             <div className="p-1.5 bg-emerald-500/20 rounded">
               <Save className="h-4 w-4 text-emerald-400" />
             </div>
-            <h2 className="text-[15px] font-semibold text-foreground">Save Session</h2>
+            <h2 className="text-ui-md2 font-semibold text-foreground">Save Session</h2>
           </div>
           <button 
             onClick={onClose} 
@@ -94,7 +94,7 @@ export function SaveSessionDialog({
         <div className="p-5 space-y-4">
           {/* Name Field */}
           <div className="space-y-1.5">
-            <label htmlFor="session-name" className="text-[13px] font-medium text-foreground">
+            <label htmlFor="session-name" className="text-ui-base font-medium text-foreground">
               Session Name <span className="text-red-400">*</span>
             </label>
             <input
@@ -109,12 +109,12 @@ export function SaveSessionDialog({
               maxLength={100}
               autoFocus
               disabled={isSaving}
-              className={`w-full px-3 py-2 bg-input border rounded text-[13px] text-foreground placeholder:text-muted-foreground 
+              className={`w-full px-3 py-2 bg-input border rounded text-ui-base text-foreground placeholder:text-muted-foreground 
                          focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent
                          disabled:opacity-50 disabled:cursor-not-allowed
                          ${errors.name ? 'border-red-500' : 'border-border'}`}
             />
-            <div className="flex justify-between text-[11px]">
+            <div className="flex justify-between text-ui-xs">
               {errors.name ? (
                 <span className="text-red-400">{errors.name}</span>
               ) : (
@@ -126,7 +126,7 @@ export function SaveSessionDialog({
 
           {/* Description Field - REQUIRED */}
           <div className="space-y-1.5">
-            <label htmlFor="session-description" className="text-[13px] font-medium text-foreground">
+            <label htmlFor="session-description" className="text-ui-base font-medium text-foreground">
               Description <span className="text-red-400">*</span>
             </label>
             <textarea
@@ -140,12 +140,12 @@ export function SaveSessionDialog({
               maxLength={500}
               rows={3}
               disabled={isSaving}
-              className={`w-full px-3 py-2 bg-input border rounded text-[13px] text-foreground placeholder:text-muted-foreground 
+              className={`w-full px-3 py-2 bg-input border rounded text-ui-base text-foreground placeholder:text-muted-foreground 
                          focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent
                          disabled:opacity-50 disabled:cursor-not-allowed resize-none
                          ${errors.description ? 'border-red-500' : 'border-border'}`}
             />
-            <div className="flex justify-between text-[11px]">
+            <div className="flex justify-between text-ui-xs">
               {errors.description ? (
                 <span className="text-red-400">{errors.description}</span>
               ) : (
@@ -158,8 +158,8 @@ export function SaveSessionDialog({
           {/* Feedback Section */}
           {showFeedback && (
             <div className="space-y-2 pt-2 border-t border-border">
-              <label className="text-[13px] font-medium text-foreground">
-                How was your experience? <span className="text-muted-foreground text-[11px]">(optional)</span>
+              <label className="text-ui-base font-medium text-foreground">
+                How was your experience? <span className="text-muted-foreground text-ui-xs">(optional)</span>
               </label>
               
               {/* Rating Buttons */}
@@ -168,7 +168,7 @@ export function SaveSessionDialog({
                   type="button"
                   onClick={() => setFeedbackRating(feedbackRating === 'thumbs_up' ? null : 'thumbs_up')}
                   disabled={isSaving}
-                  className={`flex items-center gap-1.5 px-3 py-2 rounded border transition-all text-[12px] font-medium
+                  className={`flex items-center gap-1.5 px-3 py-2 rounded border transition-all text-ui-sm font-medium
                              ${feedbackRating === 'thumbs_up' 
                                ? 'bg-emerald-500/20 border-emerald-500 text-emerald-400' 
                                : 'bg-secondary border-border text-muted-foreground hover:border-muted-foreground'}`}
@@ -180,7 +180,7 @@ export function SaveSessionDialog({
                   type="button"
                   onClick={() => setFeedbackRating(feedbackRating === 'thumbs_down' ? null : 'thumbs_down')}
                   disabled={isSaving}
-                  className={`flex items-center gap-1.5 px-3 py-2 rounded border transition-all text-[12px] font-medium
+                  className={`flex items-center gap-1.5 px-3 py-2 rounded border transition-all text-ui-sm font-medium
                              ${feedbackRating === 'thumbs_down' 
                                ? 'bg-red-500/20 border-red-500 text-red-400' 
                                : 'bg-secondary border-border text-muted-foreground hover:border-muted-foreground'}`}
@@ -201,7 +201,7 @@ export function SaveSessionDialog({
                   maxLength={500}
                   rows={2}
                   disabled={isSaving}
-                  className="w-full px-3 py-2 bg-input border border-border rounded text-[13px] text-foreground 
+                  className="w-full px-3 py-2 bg-input border border-border rounded text-ui-base text-foreground 
                            placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary 
                            focus:border-transparent disabled:opacity-50 resize-none"
                 />
@@ -215,7 +215,7 @@ export function SaveSessionDialog({
           <button 
             onClick={onClose} 
             disabled={isSaving}
-            className="px-4 py-2 text-[13px] font-medium text-muted-foreground hover:text-foreground 
+            className="px-4 py-2 text-ui-base font-medium text-muted-foreground hover:text-foreground 
                      hover:bg-secondary rounded transition-colors disabled:opacity-50"
           >
             Cancel
@@ -224,7 +224,7 @@ export function SaveSessionDialog({
             onClick={handleSave} 
             disabled={isSaving || !name.trim() || !description.trim()}
             className="flex items-center gap-1.5 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 
-                     text-white text-[13px] font-medium rounded transition-colors 
+                     text-white text-ui-base font-medium rounded transition-colors 
                      disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {isSaving ? (

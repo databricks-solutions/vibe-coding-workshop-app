@@ -851,3 +851,14 @@ The outcome is **better crew quality of life** (higher preference satisfaction, 
 
 **Take care of the crew, and the crew takes care of the operation.**',
 1, TRUE, current_timestamp(), current_timestamp(), current_user());
+
+-- =============================================================================
+-- SET path_type FOR SKILL ENTRIES
+-- =============================================================================
+-- All rows default to path_type='use_case' via column DEFAULT.
+-- Skill entries are explicitly marked here.
+-- =============================================================================
+
+UPDATE ${catalog}.${schema}.usecase_descriptions
+SET path_type = 'skill'
+WHERE use_case = 'build_skill';

@@ -126,7 +126,7 @@ export function StepVisibilityConfig({ onToast }: StepVisibilityConfigProps) {
           {Object.entries(grouped).map(([chapter, steps]) => (
             <div key={chapter} className="rounded-xl border border-border bg-card overflow-hidden">
               <div className="px-5 py-3 bg-secondary/30 border-b border-border">
-                <h3 className="text-[13px] font-semibold text-foreground">{chapter}</h3>
+                <h3 className="text-ui-base font-semibold text-foreground">{chapter}</h3>
               </div>
               <div className="divide-y divide-border/50">
                 {steps.map((step) => (
@@ -137,10 +137,10 @@ export function StepVisibilityConfig({ onToast }: StepVisibilityConfigProps) {
                     <div className="flex items-center gap-3 min-w-0">
                       <div className={`w-2 h-2 rounded-full shrink-0 ${step.enabled ? 'bg-emerald-500' : 'bg-muted-foreground/30'}`} />
                       <div className="min-w-0">
-                        <span className={`text-[13px] font-medium block ${step.enabled ? 'text-foreground' : 'text-muted-foreground line-through'}`}>
+                        <span className={`text-ui-base font-medium block ${step.enabled ? 'text-foreground' : 'text-muted-foreground line-through'}`}>
                           {step.title}
                         </span>
-                        <span className="text-[11px] text-muted-foreground block mt-0.5">
+                        <span className="text-ui-xs text-muted-foreground block mt-0.5">
                           {step.sectionTag}
                         </span>
                       </div>
@@ -173,7 +173,7 @@ export function StepVisibilityConfig({ onToast }: StepVisibilityConfigProps) {
         </div>
 
         <div className="mt-6 mb-10 p-4 rounded-lg bg-amber-500/5 border border-amber-500/20">
-          <p className="text-[12px] text-amber-400/90">
+          <p className="text-ui-sm text-amber-400/90">
             Changes take effect immediately for new page loads. Participants currently in a session will see the updated step list on their next refresh.
           </p>
         </div>

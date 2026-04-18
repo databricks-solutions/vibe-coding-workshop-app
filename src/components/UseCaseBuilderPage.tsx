@@ -90,7 +90,7 @@ export function UseCaseBuilderPage() {
           </div>
           <div>
             <h1 className="text-xl font-bold text-foreground">Build Your Use Case</h1>
-            <p className="text-muted-foreground text-[12px] mt-0.5">
+            <p className="text-muted-foreground text-ui-sm mt-0.5">
               Generate professional use case descriptions powered by AI.
             </p>
           </div>
@@ -111,7 +111,7 @@ export function UseCaseBuilderPage() {
             <span className="flex items-center gap-2">
               <ExternalLink className="w-4 h-4 text-primary" />
               Saved Use Cases
-              <span className="text-[10px] text-muted-foreground font-normal">
+              <span className="text-ui-2xs text-muted-foreground font-normal">
                 ({savedUseCases.length} total)
               </span>
             </span>
@@ -123,10 +123,10 @@ export function UseCaseBuilderPage() {
               {loadingSaved ? (
                 <div className="flex items-center justify-center py-6">
                   <RefreshCw className="w-4 h-4 animate-spin text-muted-foreground" />
-                  <span className="ml-2 text-[12px] text-muted-foreground">Loading...</span>
+                  <span className="ml-2 text-ui-sm text-muted-foreground">Loading...</span>
                 </div>
               ) : savedUseCases.length === 0 ? (
-                <p className="text-center py-6 text-muted-foreground/60 text-[12px]">
+                <p className="text-center py-6 text-muted-foreground/60 text-ui-sm">
                   No saved use cases yet. Generate and save one to start the community library!
                 </p>
               ) : (
@@ -142,16 +142,16 @@ export function UseCaseBuilderPage() {
                     <div className="flex items-start justify-between gap-2">
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 mb-0.5">
-                          <span className="text-[13px] font-medium text-foreground truncate">
+                          <span className="text-ui-base font-medium text-foreground truncate">
                             {uc.use_case_name || 'Untitled Use Case'}
                           </span>
                           {uc.industry && (
-                            <span className="px-1.5 py-0.5 bg-primary/10 text-primary text-[9px] font-medium rounded-full shrink-0">
+                            <span className="px-1.5 py-0.5 bg-primary/10 text-primary text-ui-3xs font-medium rounded-full shrink-0">
                               {uc.industry}
                             </span>
                           )}
                         </div>
-                        <div className="flex items-center gap-2 text-[10px] text-muted-foreground/60">
+                        <div className="flex items-center gap-2 text-ui-2xs text-muted-foreground/60">
                           <span>by {uc.display_name}</span>
                           <span>·</span>
                           <span>{new Date(uc.updated_at).toLocaleDateString()}</span>
@@ -194,18 +194,18 @@ export function UseCaseBuilderPage() {
                         <textarea
                           value={editingSavedText}
                           onChange={(e) => setEditingSavedText(e.target.value)}
-                          className="w-full bg-background border border-primary/30 rounded-lg px-3 py-2 text-[12px] text-foreground font-mono focus:outline-none focus:ring-1 focus:ring-primary/50 resize-none min-h-[120px]"
+                          className="w-full bg-background border border-primary/30 rounded-lg px-3 py-2 text-ui-sm text-foreground font-mono focus:outline-none focus:ring-1 focus:ring-primary/50 resize-none min-h-[120px]"
                         />
                         <div className="flex justify-end gap-2 mt-1.5">
                           <button
                             onClick={() => setEditingId(null)}
-                            className="px-2.5 py-1 text-[11px] text-muted-foreground hover:text-foreground transition-colors"
+                            className="px-2.5 py-1 text-ui-xs text-muted-foreground hover:text-foreground transition-colors"
                           >
                             Cancel
                           </button>
                           <button
                             onClick={() => handleUpdateSaved(uc.id, editingSavedText)}
-                            className="px-2.5 py-1 bg-primary text-primary-foreground rounded-md text-[11px] font-medium hover:bg-primary/90 transition-colors"
+                            className="px-2.5 py-1 bg-primary text-primary-foreground rounded-md text-ui-xs font-medium hover:bg-primary/90 transition-colors"
                           >
                             Save Changes
                           </button>

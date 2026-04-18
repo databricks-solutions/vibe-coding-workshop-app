@@ -59,7 +59,7 @@ export function GoldTableTargetEditor({ value, onChange, defaultValues }: GoldTa
               {value.catalog}.{value.schema}{value.prefix ? ` (prefix: ${value.prefix}*)` : ''}
             </span>
             {isCustom && (
-              <span className="text-[10px] px-1.5 py-0.5 bg-violet-500/20 text-violet-600 dark:text-violet-400 rounded-full font-medium flex-shrink-0">
+              <span className="text-ui-2xs px-1.5 py-0.5 bg-violet-500/20 text-violet-600 dark:text-violet-400 rounded-full font-medium flex-shrink-0">
                 Custom
               </span>
             )}
@@ -105,7 +105,7 @@ export function GoldTableTargetEditor({ value, onChange, defaultValues }: GoldTa
         
         <div className="flex gap-3">
           <div className="flex-1">
-            <label className="block text-[10px] font-medium text-muted-foreground uppercase tracking-wider mb-1">
+            <label className="block text-ui-2xs font-medium text-muted-foreground uppercase tracking-wider mb-1">
               Catalog
             </label>
             <input
@@ -117,7 +117,7 @@ export function GoldTableTargetEditor({ value, onChange, defaultValues }: GoldTa
             />
           </div>
           <div className="flex-1">
-            <label className="block text-[10px] font-medium text-muted-foreground uppercase tracking-wider mb-1">
+            <label className="block text-ui-2xs font-medium text-muted-foreground uppercase tracking-wider mb-1">
               Schema
             </label>
             <input
@@ -129,7 +129,7 @@ export function GoldTableTargetEditor({ value, onChange, defaultValues }: GoldTa
             />
           </div>
           <div className="flex-[0.7]">
-            <label className="block text-[10px] font-medium text-muted-foreground uppercase tracking-wider mb-1">
+            <label className="block text-ui-2xs font-medium text-muted-foreground uppercase tracking-wider mb-1">
               Table Prefix <span className="normal-case text-muted-foreground/60">(optional)</span>
             </label>
             <input
@@ -142,7 +142,7 @@ export function GoldTableTargetEditor({ value, onChange, defaultValues }: GoldTa
           </div>
         </div>
         
-        <p className="text-[10px] text-muted-foreground">
+        <p className="text-ui-2xs text-muted-foreground">
           Specify the catalog and schema containing your gold-layer tables. Optional prefix filters tables by name (e.g., <code className="text-violet-400">dim_</code>).
         </p>
       </div>

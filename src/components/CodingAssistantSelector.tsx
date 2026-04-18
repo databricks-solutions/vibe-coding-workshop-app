@@ -222,16 +222,16 @@ export function CodingAssistantSelector({
           </div>
           <div className="flex-1 text-left">
             <div className="flex items-center gap-2">
-              <h2 className={`text-[15px] font-semibold text-foreground ${isComplete ? 'line-through opacity-60' : ''}`}>
+              <h2 className={`text-ui-md2 font-semibold text-foreground ${isComplete ? 'line-through opacity-60' : ''}`}>
                 Choose Your Coding Assistant
               </h2>
               {isComplete && (
-                <span className="text-emerald-400 text-[11px] font-medium bg-emerald-900/30 px-1.5 py-0.5 rounded">
+                <span className="text-emerald-400 text-ui-xs font-medium bg-emerald-900/30 px-1.5 py-0.5 rounded">
                   ✓ {getDisplayName(selectedAssistant!)}
                 </span>
               )}
             </div>
-            <p className={`text-muted-foreground text-[13px] ${isComplete ? 'line-through opacity-60' : ''}`}>
+            <p className={`text-muted-foreground text-ui-base ${isComplete ? 'line-through opacity-60' : ''}`}>
               Select the AI coding tool you'll use during this workshop
             </p>
           </div>
@@ -243,7 +243,7 @@ export function CodingAssistantSelector({
         </button>
 
         {!hideConfirm && isComplete && !isExpanded && (
-          <div className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 text-[12px] font-medium animate-fade-in">
+          <div className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 text-ui-sm font-medium animate-fade-in">
             <CheckCircle className="w-3.5 h-3.5" /> Completed
           </div>
         )}
@@ -283,15 +283,15 @@ export function CodingAssistantSelector({
                   </div>
                   <div className="text-left">
                     <div className="flex items-center gap-1.5">
-                      <span className={`text-[13px] font-medium ${isSelected ? 'text-foreground' : 'text-foreground/80'}`}>
+                      <span className={`text-ui-base font-medium ${isSelected ? 'text-foreground' : 'text-foreground/80'}`}>
                         {assistant.name}
                       </span>
                       {isSelected && <CheckCircle className={`w-3.5 h-3.5 ${assistant.iconColor}`} />}
                     </div>
-                    <span className="text-[10px] text-muted-foreground">{assistant.tagline}</span>
+                    <span className="text-ui-2xs text-muted-foreground">{assistant.tagline}</span>
                   </div>
                   {assistant.comingSoon && (
-                    <span className="ml-auto text-[8px] font-bold uppercase tracking-widest px-1.5 py-0.5 rounded bg-amber-900/50 text-amber-300/80 border border-amber-700/30 whitespace-nowrap">
+                    <span className="ml-auto text-ui-3xs font-bold uppercase tracking-widest px-1.5 py-0.5 rounded bg-amber-900/50 text-amber-300/80 border border-amber-700/30 whitespace-nowrap">
                       Soon
                     </span>
                   )}
@@ -310,15 +310,15 @@ export function CodingAssistantSelector({
                     <selected.icon className={`w-7 h-7 ${selected.iconColor}`} />
                   </div>
                   <div className="flex-1 min-w-0">
-                    <h3 className="text-[14px] font-semibold text-foreground">{selected.name}</h3>
-                    <p className="text-[12px] text-muted-foreground mt-1 leading-relaxed">{selected.detail}</p>
+                    <h3 className="text-ui-md font-semibold text-foreground">{selected.name}</h3>
+                    <p className="text-ui-sm text-muted-foreground mt-1 leading-relaxed">{selected.detail}</p>
 
                     {/* Features */}
                     <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1.5">
                       {selected.features.map((feature, i) => (
                         <div key={i} className="flex items-center gap-1.5">
                           <div className={`w-1 h-1 rounded-full ${selected.iconColor.replace('text-', 'bg-')}`} />
-                          <span className="text-[11px] text-muted-foreground">{feature}</span>
+                          <span className="text-ui-xs text-muted-foreground">{feature}</span>
                         </div>
                       ))}
                     </div>
@@ -329,7 +329,7 @@ export function CodingAssistantSelector({
                         href={selected.url}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className={`inline-flex items-center gap-2 px-3.5 py-1.5 rounded-md text-[12px] font-medium transition-colors ${selected.iconBg} ${selected.iconColor} hover:opacity-80 border ${selected.selectedBorder}`}
+                        className={`inline-flex items-center gap-2 px-3.5 py-1.5 rounded-md text-ui-sm font-medium transition-colors ${selected.iconBg} ${selected.iconColor} hover:opacity-80 border ${selected.selectedBorder}`}
                       >
                         <Download className="w-3.5 h-3.5" />
                         {selected.downloadLabel}
@@ -338,7 +338,7 @@ export function CodingAssistantSelector({
                         href={selected.url}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="inline-flex items-center gap-1.5 text-[11px] text-muted-foreground hover:text-foreground transition-colors"
+                        className="inline-flex items-center gap-1.5 text-ui-xs text-muted-foreground hover:text-foreground transition-colors"
                       >
                         <ExternalLink className="w-3 h-3" />
                         Visit website
@@ -352,14 +352,14 @@ export function CodingAssistantSelector({
 
           {/* Prompt to select if nothing chosen yet */}
           {!selected && (
-            <div className="flex items-center justify-center py-3 text-[12px] text-muted-foreground/60">
+            <div className="flex items-center justify-center py-3 text-ui-sm text-muted-foreground/60">
               Select a coding assistant above to see details and download links
             </div>
           )}
 
           {/* Locked notice */}
           {isLocked && isExpanded && selected && (
-            <div className="flex items-center gap-2 py-2 px-3 rounded-lg bg-slate-800/50 border border-slate-700/40 text-[11px] text-muted-foreground">
+            <div className="flex items-center gap-2 py-2 px-3 rounded-lg bg-slate-800/50 border border-slate-700/40 text-ui-xs text-muted-foreground">
               <Lock className="w-3 h-3 flex-shrink-0" />
               <span>Locked for this session. Start a new session to change your coding assistant.</span>
             </div>
@@ -370,14 +370,14 @@ export function CodingAssistantSelector({
             <div className="pt-3 border-t border-border flex items-center justify-between">
               <div className="flex items-center gap-2 text-emerald-400">
                 <CheckCircle className="w-3.5 h-3.5" />
-                <span className="text-[12px]">
+                <span className="text-ui-sm">
                   Ready with <strong>{getDisplayName(selectedAssistant)}</strong> — continue to prerequisites.
                 </span>
               </div>
               <BorderBeamButton
                 active={highlightConfirm}
                 onClick={handleConfirm}
-                className="text-[12px] font-medium px-5 py-2"
+                className="text-ui-sm font-medium px-5 py-2"
               >
                 Continue
               </BorderBeamButton>
