@@ -5925,9 +5925,9 @@ The same mock-data UI from the **Scaffold, Build & Test** step, now accessible a
 TRUE,
 1, TRUE, current_timestamp(), current_timestamp(), current_user());
 
--- Register Lakebase in Unity Catalog
+-- Register Lakebase in Unity Catalog - step_enabled = FALSE (hidden by default)
 INSERT INTO ${catalog}.${schema}.section_input_prompts 
-(input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
+(input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, bypass_llm, step_enabled, version, is_active, inserted_at, updated_at, created_by)
 VALUES
 (112, 'sync_from_lakebase',
 'Copy and paste this prompt to the AI:
@@ -6014,7 +6014,7 @@ This replaces the manual process of syncing individual tables and converting typ
 - Catalog `{lakebase_uc_catalog_name}` is registered in Unity Catalog with state ACTIVE
 - All schemas from the Lakebase PostgreSQL database are listed and displayed to the user
 - Tables are queryable via standard SQL (e.g., `SELECT * FROM {lakebase_uc_catalog_name}.<schema>.<table>`)',
-TRUE,
+TRUE, FALSE,
 1, TRUE, current_timestamp(), current_timestamp(), current_user());
 
 -- =============================================
