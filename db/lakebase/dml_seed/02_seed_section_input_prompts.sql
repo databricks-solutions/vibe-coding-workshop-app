@@ -8088,7 +8088,6 @@ Environment values (workspace, project, endpoint, Postgres database/schema) come
 - `@docs/activation_sync_plan.md` -- synced table names, PKs, Postgres schemas
 - `@docs/analytics_ui_design.md` -- which endpoint/page maps to which synced table and columns
 - `apps_lakebase/src/backend/api/routes.py` -- the mock endpoints from Step 35 to update in place
-- `src/backend/services/lakebase.py` (repo root) -- **source of truth for the Autoscaling connection pattern**; port its `_OAuthConnection` + `ConnectionPool` code to `apps_lakebase/src/backend/services/lakebase.py`. Do not invent a different pattern.
 
 ---
 
@@ -8223,30 +8222,40 @@ Environment values (workspace, app name / Lakebase project, endpoint, Postgres d
 
 ### Mandatory Reads
 
-- `@docs/reverse_etl.md` -- authoritative environment block; the values in `app.yaml` MUST match
+- `@docs/reverse_etl.md` -- authoritative environment block (IDs, caps, auth rules); the values in `app.yaml` MUST match
 - `apps_lakebase/app.py` and `apps_lakebase/requirements.txt` -- current entrypoint and deps
 - `apps_lakebase/app.yaml` -- current config (may not exist yet; create it per the contract below)
 - `apps_lakebase/scripts/` -- reuse any existing `deploy.sh` instead of writing ad-hoc commands
+- `apps_lakebase/resources.json` (or the equivalent resources block passed to `databricks apps update`) -- the app SP needs every binding below before verification will pass
 - `@docs/activation_sync_plan.md` -- which synced tables (and row counts) to spot-check for freshness
+- Repo-root `.gitignore` -- note the `dist/` exclusion under the Python block; it must be commented out **only for the duration of the sync**, then restored
 
 ---
 
 ### Steps
 
 1. **Pre-deploy cost check.** Run `databricks postgres get-endpoint projects/{user_app_name}/branches/production/endpoints/primary --output json` and assert that `autoscaling_limit_min_cu`, `autoscaling_limit_max_cu`, and `suspend_timeout_duration` match the values in `@docs/reverse_etl.md`. If any value has drifted, re-apply the Step 32 `update-endpoint` call and re-check before continuing. Do NOT proceed to deploy with a larger endpoint ceiling or a disabled suspend -- a running Databricks App keeps the endpoint warm and will bill against whatever ceiling you leave in place.
-2. Write `apps_lakebase/app.yaml` using exactly the contract below. Do not invent additional top-level keys.
-3. Deploy the app. Prefer `apps_lakebase/scripts/deploy.sh --code-only -t development` if it exists; otherwise build the frontend (`npm run build`), run `databricks apps create {user_app_name}` on first deploy, then `databricks apps deploy {user_app_name} --source-code-path apps_lakebase/`.
-4. Poll deployment state (`databricks apps get {user_app_name}`) until the app status is running, then grab the app URL.
-5. Verify the deployment: open the URL and confirm ConnectionStatus shows "Live Data"; `curl $APP_URL/api/health/lakebase` and each `/api/analytics/*` endpoint return `source: "live"`; `databricks apps logs {user_app_name} --tail 100` shows successful DB connections.
-6. If anything fails, consult the Common Errors table below, fix, redeploy, and retry -- cap at 3 iterations before stopping and reporting.
-7. Validate freshness: spot-check synced-table row counts match the Gold source, and that any recent timestamps are present. Reload the UI a few minutes later to confirm ConnectionStatus stays on "Live Data".
-8. **Post-deploy cost re-check.** Re-run `get-endpoint` after the app has been up for a few minutes and confirm the sizing values still match `@docs/reverse_etl.md`. If the endpoint reports a larger `max_cu` (e.g., because a well-meaning "fix" raised it), shrink it back to the ceiling in `@docs/reverse_etl.md` immediately -- the app will keep functioning; only peak throughput is capped.
+2. **Grant the app SP all four permission classes** (Lakebase bind + schema USAGE/SELECT, Genie space CAN_RUN via PATCH, warehouse CAN_USE, UC USE_CATALOG/USE_SCHEMA/SELECT + EXECUTE on TVF schemas) per the "App-SP Permissions" section below. Miss any one and Step 7 verification will fail with masked exceptions.
+3. Write `apps_lakebase/app.yaml` using exactly the contract below. Do not invent additional top-level keys. Every `os.environ[...]` read by the backend must appear in `env` -- DAB variables declared in `databricks.yml` are **invisible** to the app runtime.
+4. **Sync the source tree** per the "Sync rules" section below. Key: use `databricks sync` (never `workspace import-dir`), and comment out the `dist/` line in the repo-root `.gitignore` before syncing, then restore it.
+5. Deploy the app. Prefer `apps_lakebase/scripts/deploy.sh --code-only -t development` if it exists; otherwise build the frontend (`npm run build`), run `databricks apps create {user_app_name}` on first deploy, then `databricks apps deploy {user_app_name} --source-code-path apps_lakebase/`.
+6. Poll deployment state (`databricks apps get {user_app_name}`) until the app status is `RUNNING` **and** the latest deployment state is `SUCCEEDED`. **Neither is sufficient alone** -- Step 7 is where real verification happens.
+7. **Verify the deployment via envelope semantics, not HTTP status.** Every analytics route and `/api/chat` wraps its live path in `try/except` and falls back to `_mock_envelope` with HTTP 200 on any exception. Parse `envelope.source` from the JSON body; `"mock"` is a deployment failure, not a warning. `curl $APP_URL/api/health/lakebase` and each `/api/analytics/*` must return `"source":"live"`. Then `databricks apps logs {user_app_name} --tail 200 | grep "falling back to mock"` -- any matching `logger.warning("/<route> falling back to mock: ...")` line reveals the masked exception and must be resolved. For `/api/chat`, confirm wiring from `response.citations[0].sql` (the Genie-generated SQL) -- an empty result set is NOT a failure, because TVFs default to `CURRENT_DATE`.
+8. **If any analytics route falls back to mock with a Postgres auth error**, check `databricks postgres list-roles` for the app-SP client ID. If `auth_method=NO_LOGIN`, run the role re-provision flip-flop:
+   a. `databricks postgres delete-role <app_sp_client_id>`
+   b. `databricks apps update {user_app_name} --json ''{"resources":[]}''`
+   c. `databricks apps update {user_app_name} --json @resources.json`
+   The flip (b → c) forces the control plane to mint the role with `LAKEBASE_OAUTH_V1` + `SERVICE_PRINCIPAL`. A plain re-apply is a no-op. After the role is re-created, re-run the `GRANT USAGE`/`GRANT SELECT` statements from Step 2.
+9. If other failures appear, consult the Common Errors table below, fix, redeploy, and retry -- cap at 3 iterations before stopping and reporting. Do NOT use `databricks apps stop` to "pause" between iterations -- it drops the active deployment (status flips to `UNAVAILABLE`) and is only safe when immediately followed by `apps deploy`.
+10. Validate freshness: spot-check synced-table row counts match the Gold source, and that any recent timestamps are present. Reload the UI a few minutes later to confirm ConnectionStatus stays on "Live Data".
+11. **Remove any debug/diagnostic routes** (e.g., `/api/debug/*`, `/api/_introspect`, exception-detail endpoints) that were added during iteration. They must not ship in the final deployment.
+12. **Post-deploy cost re-check.** Re-run `get-endpoint` after the app has been up for a few minutes and confirm the sizing values still match `@docs/reverse_etl.md`. If the endpoint reports a larger `max_cu` (e.g., because a well-meaning "fix" raised it), shrink it back to the ceiling in `@docs/reverse_etl.md` immediately -- the app will keep functioning; only peak throughput is capped.
 
 ---
 
 ### `apps_lakebase/app.yaml` contract (Autoscaling-only, docs-aligned)
 
-Officially, Databricks Apps `app.yaml` only supports two top-level keys: `command` (array) and `env` (list of `{name, value|valueFrom}`). Anything else is ignored or will break future runtimes -- do not add `name`, `description`, or `health_check` at the top level.
+Officially, Databricks Apps `app.yaml` only supports two top-level keys: `command` (array) and `env` (list of `{name, value|valueFrom}`). Anything else is ignored or will break future runtimes -- do not add `name`, `description`, `health_check`, `resources`, or `config` at the top level. App resources (Lakebase bindings, Genie bindings, warehouse bindings, secrets) are defined in the resources JSON passed to `databricks apps update --json @resources.json`, not in `app.yaml`.
 
 ```
 command: ["python", "app.py"]
@@ -8271,26 +8280,46 @@ env:
     value: "false"
 ```
 
-- `DATABRICKS_CLIENT_ID` and `DATABRICKS_CLIENT_SECRET` are **auto-injected** by the Databricks Apps runtime for the app''s service principal -- do NOT put them in `app.yaml` and do NOT reference a PAT.
+- `DATABRICKS_HOST`, `DATABRICKS_CLIENT_ID`, and `DATABRICKS_CLIENT_SECRET` are **auto-injected** by the Databricks Apps runtime for the app''s service principal -- do NOT put any of them in `app.yaml` and do NOT reference a PAT. Setting any of the three in `env` (even to the "correct" value) silently breaks OAuth, because the runtime''s injection happens before `env` is applied only for unset keys. Symptom: Lakebase routes return `source: "mock"` with `fe_sendauth: no password supplied` in the logs.
+- **Every `os.environ[...]` the backend reads at runtime must be listed in this `env` block.** Variables declared in `databricks.yml` (DAB) are visible to the bundle tooling only -- they are **not** propagated to the app container at runtime.
 - The app authorizes to Lakebase via the service principal + the OAuth token minted by `WorkspaceClient().postgres.generate_database_credential(endpoint=ENDPOINT_NAME)` in the Step 36 connection service. No `PGPASSWORD`, no user-authorization flows.
 - `command: ["python", "app.py"]` only -- do not use `uvicorn` directly or pass `--timeout-keep-alive`. The entrypoint file owns the uvicorn call and reads `PORT` from the environment.
 
 ---
 
-### Technical Guardrails (IDE agent cannot guess these)
+### App-SP Permissions (all four classes required before verification will pass)
 
-- **Do NOT assert specific latency targets.** Use cases created in earlier steps have varying latencies depending on sync mode (SNAPSHOT vs TRIGGERED) and Lakebase warm state, so hardcoded SLOs like "sub-10ms query latency" are misleading. Validation in this step is limited to: app reachable, ConnectionStatus=Live Data, every analytics endpoint returns `source: "live"`, clean app logs, and Gold -> Lakebase row-count freshness.
-- **Use the Postgres schema from `@docs/reverse_etl.md`.** Do not set `LAKEBASE_SCHEMA` to `public` or to the Gold-layer schema -- those values will make every analytics query return zero rows.
-- **Endpoint name format is fixed:** `projects/<project>/branches/production/endpoints/primary`. Use the project from `@docs/reverse_etl.md`; do not substitute a Provisioned instance name.
-- **Scale-to-zero is normal.** Autoscaling Lakebase can idle; the first request after a cold start may take several seconds while `ConnectionPool.check_connection` re-auths. That is expected and is not a failure condition.
-- **CLI sandbox note:** run all `databricks apps ...` commands outside the IDE sandbox to avoid SSL/TLS certificate errors.
+The app runs as a dedicated service principal; it is **not** a member of the `users` group, so inherited grants will not cover it. All four classes must be in place before Step 7 verification will succeed:
 
-**Cost Controls (must hold before AND after deploy):**
-- The `primary` endpoint''s `autoscaling_limit_min_cu`, `autoscaling_limit_max_cu`, and `suspend_timeout_duration` MUST match `@docs/reverse_etl.md`. Verified via `databricks postgres get-endpoint` in Steps 1 and 8.
-- Do NOT fix cold-start latency by raising `max_cu` or disabling suspend -- both are expected behaviors, not bugs.
-- Do NOT run a warmup cron / keep-alive ping against `/api/health/lakebase`. It defeats scale-to-zero and is a cost regression.
-- Do NOT add extra Lakebase branches or endpoints. Stay on `production` + `primary`.
-- If the student requests a resize for their use case after the workshop, that is out of scope for this step -- document it as a post-workshop action rather than changing sizing here.
+1. **Lakebase.** In the app resources JSON, bind `{postgres, CAN_CONNECT_AND_CREATE}`. This grants CONNECT/CREATE on the database only. **Separately** run, as a Postgres admin:
+   ```
+   GRANT USAGE ON SCHEMA {user_schema_prefix} TO "<app_sp_client_id>";
+   GRANT SELECT ON ALL TABLES IN SCHEMA {user_schema_prefix} TO "<app_sp_client_id>";
+   ALTER DEFAULT PRIVILEGES IN SCHEMA {user_schema_prefix} GRANT SELECT ON TABLES TO "<app_sp_client_id>";
+   ```
+2. **Genie space.** `CAN_RUN` via `PATCH /api/2.0/permissions/genie/{genie_space_id}` with body `{"access_control_list":[{"service_principal_name":"<app_sp_client_id>","permission_level":"CAN_RUN"}]}`. Use **PATCH, not PUT** -- PUT replaces the entire ACL and will clobber admin access.
+3. **Warehouse backing the Genie space.** `CAN_USE` granted explicitly to the app SP. Do not rely on `users` group inheritance.
+4. **Unity Catalog.** `USE_CATALOG` on the catalog, `USE_SCHEMA` + `SELECT` on every schema Genie reads, and `EXECUTE` on any schema containing TVFs. Miss any and `/api/chat` falls back to mock with the exception masked in the envelope.
+
+---
+
+### Sync rules (deploying the source tree)
+
+- Use `databricks sync apps_lakebase/ /Workspace/Users/<you>/{user_app_name}` only. It honors `.gitignore` (including the repo-root `.gitignore`). Despite the name, it does **not** honor `.databricksignore`.
+- Do NOT use `databricks workspace import-dir` against the app source path. It ignores `.gitignore` and will upload `.venv/`, causing the next `apps deploy` to fail with a cryptic 10 MB export-size error.
+- The repo-root `.gitignore` excludes `dist/` under its Python block -- the built frontend lives there and is required in the deployed image. For every deploy: comment out that single line, run the sync, then restore the line. Commit hygiene: do not leave the comment in place.
+- For a single-file change (e.g. editing `app.yaml`), prefer `databricks workspace import apps_lakebase/app.yaml /Workspace/.../{user_app_name}/app.yaml --overwrite` over a full re-sync.
+
+---
+
+### Guardrails (field-verified; IDE agent cannot guess these)
+
+- **Schema comes from `@docs/reverse_etl.md`.** Do not set `LAKEBASE_SCHEMA` to `public` or to the Gold-layer schema -- every analytics query will return zero rows.
+- **No latency assertions.** Sync mode (SNAPSHOT vs TRIGGERED) and Lakebase warm state make any hardcoded SLO ("sub-10ms") misleading. Validation is: reachable + `source: "live"` + clean logs + row-count freshness.
+- **Scale-to-zero is normal.** A cold-start request may take several seconds while `ConnectionPool.check_connection` re-auths -- not a failure. Never "fix" it by raising `max_cu` or disabling suspend.
+- **Cost controls hold before AND after deploy.** `autoscaling_limit_min_cu`, `autoscaling_limit_max_cu`, and `suspend_timeout_duration` must match `@docs/reverse_etl.md` at both Step 1 and Step 12. If they drift, re-apply Step 32''s `update-endpoint` JSON.
+- **No warmup cron, no keep-alive ping** against `/api/health/lakebase` or the app URL. It defeats scale-to-zero; dashboards/`curl` loops hitting the app are cost regressions.
+- **Stay on `production` + `primary`.** Do not add extra Lakebase branches or endpoints. Student-requested resizes are out of scope here -- document as post-workshop action.
 
 **Common Errors (Autoscaling-only):**
 
@@ -8299,26 +8328,23 @@ env:
 | `No module named ''psycopg''` | Add `psycopg[binary,pool]>=3.2.0` to `apps_lakebase/requirements.txt` (do NOT add `psycopg2-binary`) |
 | `fe_sendauth: no password supplied` | Step 36 connection service is not generating the OAuth token. Confirm `ENDPOINT_NAME` is set and `_OAuthConnection.connect` injects `password = _generate_autoscaling_credential()` before `super().connect` |
 | `relation "<table>_synced" does not exist` | Query is missing the schema qualifier -- use `{user_schema_prefix}.<table>_synced` or set `search_path` per connection |
-| Endpoints return `source: "mock"` on deployed app | Lakebase connection failed -- check `ENDPOINT_NAME` and `LAKEBASE_HOST` in `app.yaml`, and confirm the app''s service principal has access to the project |
-| `App not found` | Run `databricks apps create {user_app_name}` before `deploy` |
-| `permission denied for schema {user_schema_prefix}` | Grant schema privileges to the app''s service principal on the Autoscaling project |
+| Endpoints return `source: "mock"` on deployed app | `curl` returns HTTP 200 but `envelope.source == "mock"`. Run `databricks apps logs {user_app_name} --tail 200 \| grep "falling back to mock"` -- the masked exception is in the `logger.warning` line. Most common: missing `USAGE`/`SELECT` on the Autoscaling schema, app-SP role in `NO_LOGIN`, or `DATABRICKS_HOST`/`CLIENT_ID`/`CLIENT_SECRET` overridden in `env` |
+| `/api/chat` returns `source: "mock"` but analytics routes are live | Genie permission gap. Verify all four: Genie space `CAN_RUN` (via **PATCH** not PUT), warehouse `CAN_USE` granted to the app SP explicitly, and UC `USE_CATALOG`/`USE_SCHEMA`/`SELECT` (+ `EXECUTE` for TVF schemas) |
+| `/api/chat` returns empty results | Not a wiring failure -- TVFs default to `CURRENT_DATE` and legitimately return no rows. Confirm wiring via `response.citations[0].sql`, not row count |
+| App-SP shows `auth_method=NO_LOGIN` in `databricks postgres list-roles` | Run the role re-provision flip-flop: `postgres delete-role` → `apps update --json ''{"resources":[]}''` → `apps update --json @resources.json`. Then re-`GRANT USAGE`/`SELECT`. A plain `apps update` is a no-op |
+| `permission denied for schema {user_schema_prefix}` | The resources-JSON binding only grants DB-level CONNECT/CREATE. Run `GRANT USAGE ON SCHEMA {user_schema_prefix}` + `GRANT SELECT ON ALL TABLES IN SCHEMA {user_schema_prefix}` to the app-SP client ID, plus `ALTER DEFAULT PRIVILEGES ... GRANT SELECT` so future tables inherit |
+| Deploy fails with cryptic 10 MB export-size error | You used `databricks workspace import-dir` instead of `databricks sync`; `.venv/` got uploaded. Delete the workspace source directory and re-sync via `databricks sync` |
+| Frontend 404s / blank page after deploy, but API works | The repo-root `.gitignore` was not edited; `dist/` was excluded from the sync. Comment out the `dist/` line under the Python block, re-sync, restore |
+| Auth-related errors even though `DATABRICKS_HOST`/`CLIENT_ID`/`CLIENT_SECRET` "look right" in `app.yaml` | Remove them from `app.yaml`. All three are auto-injected by the runtime; any `env` override is silent auth poison |
+| Backend `KeyError` on an env var that exists in `databricks.yml` | DAB `variables` are invisible at runtime. Add the var to the `env` block in `app.yaml` |
 | `get-endpoint` shows `autoscaling_limit_max_cu` above the ceiling in `@docs/reverse_etl.md` | Re-apply the Step 32 `update-endpoint` JSON to restore the values recorded in `@docs/reverse_etl.md` before deploying |
 | `get-endpoint` shows `suspend_timeout_duration` unset, `0s`, or longer than the value in `@docs/reverse_etl.md` | Re-apply the Step 32 `update-endpoint` JSON so scale-to-zero stays enabled |
-| Unexpected Lakebase bill / endpoint stays warm overnight | Confirm no external warmup cron, dashboard, or `curl` loop is hitting the app; verify `suspend_timeout_duration` matches `@docs/reverse_etl.md`; check `databricks postgres get-endpoint ... status` to see recent activity |
-| First request after idle takes several seconds | Expected cold-start; do NOT "fix" by raising `max_cu` or disabling suspend. The pool''s `check_connection` handles it |
 
 ---
 
 ### Done When
 
-- Pre- and post-deploy `get-endpoint` both report `autoscaling_limit_min_cu`, `autoscaling_limit_max_cu`, and `suspend_timeout_duration` matching `@docs/reverse_etl.md`.
-- `apps_lakebase/app.yaml` contains only `command` and `env` top-level keys, with `command: ["python", "app.py"]` and the env block listed above.
-- Databricks App is deployed and reachable at its URL.
-- ConnectionStatus shows "Live Data" on the deployed app.
-- Every `/api/analytics/*` endpoint returns `source: "live"`; `/api/health/lakebase` returns connected with `mode: "autoscaling"` and the schema from `@docs/reverse_etl.md`.
-- Logs show successful DB connections (no latency assertion required).
-- Row-count freshness check (Gold -> Lakebase -> App) passes for the synced tables in the sync plan.
-- No warmup cron, keep-alive loop, or oversized endpoint was left behind that would prevent scale-to-zero.',
+The deployed app passes envelope-level verification: every `/api/analytics/*` and `/api/chat` returns `envelope.source == "live"`, `databricks apps logs ... --tail 200 | grep "falling back to mock"` is empty, and `/api/chat` wiring is confirmed via `response.citations[0].sql`. The app SP holds all four permission classes from the App-SP Permissions section and `databricks postgres list-roles` shows `auth_method=LAKEBASE_OAUTH_V1` + `identity_type=SERVICE_PRINCIPAL`. Pre- and post-deploy `get-endpoint` both match `@docs/reverse_etl.md` (scale-to-zero preserved; no warmup cron). The `Expected Output` checklist (see `how_to_apply` / student UI) is the canonical item-by-item acceptance list.',
 'You are deploying an analytics application to Databricks Apps and validating the reverse ETL data pipeline.
 
 CLI Best Practices:
@@ -8340,26 +8366,33 @@ Complete **Wire to Lakebase** (Step 36). Local testing must pass at `http://loca
 1. Copy the generated prompt
 2. Paste into Cursor or Copilot
 3. The code assistant will:
-   - Read `@docs/reverse_etl.md` and run a pre-deploy cost check asserting `get-endpoint` values match that doc
-   - Write `apps_lakebase/app.yaml` with only `command` and `env` top-level keys, populated from `@docs/reverse_etl.md`
-   - Build the frontend and deploy to Databricks Apps via `databricks apps create` + `databricks apps deploy`
-   - Verify the analytics UI loads with "Live Data"
-   - Test all analytics API endpoints for `source: "live"`
-   - Check logs for database connectivity
-   - Fix errors using the common errors table (up to 3 iterations)
-   - Validate data freshness end to end
-   - Run a post-deploy cost re-check and confirm scale-to-zero still applies',
+   - Pre- and post-deploy, assert `get-endpoint` sizing matches `@docs/reverse_etl.md`
+   - Grant the four app-SP permission classes (Lakebase bind + schema USAGE/SELECT; Genie space CAN_RUN via **PATCH**; warehouse CAN_USE; UC USE_CATALOG/USE_SCHEMA/SELECT + EXECUTE for TVF schemas)
+   - Write `apps_lakebase/app.yaml` (only `command` + `env`; no `DATABRICKS_HOST`/`CLIENT_ID`/`CLIENT_SECRET`; every `os.environ[...]` listed), sync via `databricks sync` with the `.gitignore` `dist/` toggle, then `apps create` + `apps deploy`
+   - Verify per-envelope: every `/api/analytics/*` AND `/api/chat` return `source: "live"`; `grep "falling back to mock"` in logs is empty; `/api/chat` wiring confirmed via `response.citations[0].sql`
+   - If app-SP shows `auth_method=NO_LOGIN`, run the role re-provision flip-flop (`postgres delete-role` → `apps update --json ''{"resources":[]}''` → `apps update --json @resources.json`) and re-`GRANT USAGE`/`SELECT`
+   - Remove any debug routes and confirm scale-to-zero still applies before declaring done',
 '## Expected Output
 
 - [ ] `databricks postgres get-endpoint` reports `autoscaling_limit_min_cu`, `autoscaling_limit_max_cu`, and `suspend_timeout_duration` matching `@docs/reverse_etl.md` (both pre- and post-deploy)
-- [ ] `apps_lakebase/app.yaml` uses only `command` and `env` top-level keys
+- [ ] `apps_lakebase/app.yaml` uses only `command` and `env` top-level keys (no `resources`, `config`, `name`, `description`, `health_check`)
 - [ ] `command: ["python", "app.py"]`
-- [ ] `env` block populated from `@docs/reverse_etl.md` (`LAKEBASE_MODE`, `LAKEBASE_SCHEMA`, `LAKEBASE_DATABASE`, `ENDPOINT_NAME`, etc.)
-- [ ] Databricks App deployed and running
+- [ ] `env` block populated from `@docs/reverse_etl.md` (`LAKEBASE_MODE`, `LAKEBASE_SCHEMA`, `LAKEBASE_DATABASE`, `ENDPOINT_NAME`, etc.); no `DATABRICKS_HOST`, `DATABRICKS_CLIENT_ID`, or `DATABRICKS_CLIENT_SECRET`
+- [ ] Every `os.environ[...]` read by the backend is present in the `env` block (no reliance on DAB-only variables)
+- [ ] App SP has Lakebase `CAN_CONNECT_AND_CREATE` binding + `USAGE ON SCHEMA {user_schema_prefix}` + `SELECT ON ALL TABLES IN SCHEMA {user_schema_prefix}` (with `ALTER DEFAULT PRIVILEGES`)
+- [ ] App SP has Genie space `CAN_RUN` (set via `PATCH /api/2.0/permissions/genie/{id}`, not PUT)
+- [ ] App SP has warehouse `CAN_USE` granted explicitly (not via `users` group)
+- [ ] App SP has UC `USE_CATALOG` + `USE_SCHEMA` + `SELECT` on every schema Genie reads, plus `EXECUTE` for schemas containing TVFs
+- [ ] `databricks postgres list-roles` shows the app-SP row with `auth_method=LAKEBASE_OAUTH_V1` + `identity_type=SERVICE_PRINCIPAL`
+- [ ] Deployment used `databricks sync`; repo-root `.gitignore` `dist/` block was restored after sync
+- [ ] `apps get` shows `state=RUNNING` AND latest deployment `state=SUCCEEDED`
 - [ ] Analytics UI accessible at the app URL
 - [ ] ConnectionStatus indicator shows "Live Data" on deployed app
-- [ ] All analytics endpoints return live data with `source: "live"`
+- [ ] All `/api/analytics/*` endpoints AND `/api/chat` return `envelope.source == "live"`
+- [ ] `databricks apps logs ... --tail 200 | grep "falling back to mock"` returns zero matches
+- [ ] `/api/chat` wiring confirmed via `response.citations[0].sql` (not row count)
 - [ ] App logs show successful database connections
 - [ ] Data freshness confirmed (Gold → Lakebase → App)
+- [ ] No debug/diagnostic routes remain mounted in the deployed app
 - [ ] No keep-alive/warmup cron in place; endpoint is allowed to scale-to-zero when idle',
 true, 1, true, current_timestamp(), current_timestamp(), current_user());
