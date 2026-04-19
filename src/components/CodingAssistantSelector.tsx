@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { ChevronDown, CheckCircle, ExternalLink, Download, Sparkles, Terminal, Lock } from 'lucide-react';
 import { BorderBeamButton } from './BorderBeamButton';
+import { AiGatewaySetupGuide } from './AiGatewaySetupGuide';
 
 // ---------------------------------------------------------------------------
 // Brand SVG icons
@@ -43,7 +44,7 @@ function DatabricksIcon({ className }: { className?: string }) {
 // Assistant data with richer detail
 // ---------------------------------------------------------------------------
 
-type AssistantId = 'cursor' | 'copilot' | 'vscode' | 'coda' | 'genie-code';
+type AssistantId = 'cursor' | 'copilot' | 'vscode' | 'ai-gateway' | 'coda' | 'genie-code';
 
 interface AssistantOption {
   id: AssistantId;
@@ -109,6 +110,26 @@ const ASSISTANTS: AssistantOption[] = [
     selectedBorder: 'border-sky-500/60',
     selectedRing: 'ring-sky-500/30',
     selectedBg: 'bg-sky-500/5',
+    icon: VSCodeIcon,
+  },
+  {
+    id: 'ai-gateway',
+    name: 'VS Code + Databricks AI Gateway',
+    tagline: 'Claude Code routed through Databricks AI Gateway',
+    detail: 'Use VS Code with the Claude Code CLI, routed through a Databricks AI Gateway endpoint. Governed model access, per-user quotas, and usage tracking — no direct Anthropic account required.',
+    features: [
+      'Governed model access via AI Gateway',
+      'Per-user quotas and usage tracking',
+      'Works in the VS Code integrated terminal',
+    ],
+    url: 'https://docs.databricks.com/aws/en/mlflow3/genai/tracing/integrations/claude-code',
+    downloadLabel: 'Open Docs',
+    comingSoon: false,
+    iconColor: 'text-emerald-400',
+    iconBg: 'bg-emerald-500/15',
+    selectedBorder: 'border-emerald-500/60',
+    selectedRing: 'ring-emerald-500/30',
+    selectedBg: 'bg-emerald-500/5',
     icon: VSCodeIcon,
   },
   {
@@ -349,6 +370,9 @@ export function CodingAssistantSelector({
               </div>
             </div>
           )}
+
+          {/* Inline setup guide — only for the AI Gateway assistant */}
+          {selected?.id === 'ai-gateway' && <AiGatewaySetupGuide />}
 
           {/* Prompt to select if nothing chosen yet */}
           {!selected && (

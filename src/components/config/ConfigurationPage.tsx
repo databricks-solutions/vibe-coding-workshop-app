@@ -5,8 +5,10 @@
  * 
  * URL Routes:
  * - /config or /config/prompts -> Use Case Descriptions tab
- * - /config/section-inputs -> Section Input Prompts tab  
+ * - /config/section-inputs -> Section Input Prompts tab
  * - /config/workshop-parameters -> Workshop Parameters tab
+ * - /config/step-visibility -> Step Visibility tab
+ * - /config/ai-gateway -> Set up AI Gateway Endpoint tab
  */
 
 import { useState, useEffect } from 'react';
@@ -15,8 +17,9 @@ import { PromptsConfig } from './PromptsConfig';
 import { SectionInputsConfig } from './SectionInputsConfig';
 import { WorkshopParametersConfig } from './WorkshopParametersConfig';
 import { StepVisibilityConfig } from './StepVisibilityConfig';
+import { AiGatewayEndpointConfig } from './AiGatewayEndpointConfig';
 
-type TabType = 'prompts' | 'section-inputs' | 'workshop-parameters' | 'step-visibility';
+type TabType = 'prompts' | 'section-inputs' | 'workshop-parameters' | 'step-visibility' | 'ai-gateway';
 
 interface Toast {
   id: number;
@@ -30,6 +33,7 @@ const tabParamMap: Record<string, TabType> = {
   'section-inputs': 'section-inputs',
   'workshop-parameters': 'workshop-parameters',
   'step-visibility': 'step-visibility',
+  'ai-gateway': 'ai-gateway',
 };
 
 export function ConfigurationPage() {
@@ -72,7 +76,7 @@ export function ConfigurationPage() {
       <div className="flex-shrink-0 border-b border-border bg-card px-6 py-4">
         <h1 className="text-xl font-semibold text-foreground mb-1">Configuration</h1>
         <p className="text-sm text-muted-foreground">
-          Manage use case descriptions and section input prompts with version history
+          Manage workshop content, visibility, and coding-agent infrastructure
         </p>
       </div>
 
@@ -141,6 +145,21 @@ export function ConfigurationPage() {
               Step Visibility
             </span>
           </Link>
+          <Link
+            to="/config/ai-gateway"
+            className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
+              activeTab === 'ai-gateway'
+                ? 'border-primary text-primary'
+                : 'border-transparent text-muted-foreground hover:text-foreground hover:border-border'
+            }`}
+          >
+            <span className="flex items-center gap-2">
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+              </svg>
+              Set up AI Gateway Endpoint
+            </span>
+          </Link>
         </div>
       </div>
 
@@ -151,6 +170,7 @@ export function ConfigurationPage() {
           {activeTab === 'section-inputs' && <SectionInputsConfig onToast={showToast} />}
           {activeTab === 'workshop-parameters' && <WorkshopParametersConfig onToast={showToast} />}
           {activeTab === 'step-visibility' && <StepVisibilityConfig onToast={showToast} />}
+          {activeTab === 'ai-gateway' && <AiGatewayEndpointConfig onToast={showToast} />}
         </div>
       </div>
 
