@@ -7592,7 +7592,7 @@ Plan which Gold layer assets to sync from the Lakehouse into Lakebase PostgreSQL
    # Cost controls (workshop defaults; every later step MUST respect these)
    autoscaling_limit_min_cu:     0.5                   # floor compute; allows scale-to-zero
    autoscaling_limit_max_cu:     2.0                   # ceiling compute; do NOT raise during workshop
-   suspend_timeout_duration:     300s                  # idle -> suspend after 5 minutes
+   suspend_timeout_duration:     1800s                 # idle -> suspend after 30 minutes (long enough that a student reading docs or stepping away does NOT trigger mid-workshop cold starts)
    endpoint_type:                ENDPOINT_TYPE_READ_WRITE
    sync_mode_allowlist:          ["SNAPSHOT", "TRIGGERED"]   # CONTINUOUS is banned for cost reasons
    triggered_min_cron_interval:  24h                   # TRIGGERED cadence floor
@@ -7605,13 +7605,13 @@ Plan which Gold layer assets to sync from the Lakehouse into Lakebase PostgreSQL
    databricks postgres create-project {user_app_name} --json ''''{"spec": {"display_name": "{user_app_name}"}}''''
 
    # Apply or re-apply the cost-control settings on the primary endpoint
-   databricks postgres update-endpoint projects/{user_app_name}/branches/production/endpoints/primary "spec" --json ''''{"spec": {"endpoint_type": "ENDPOINT_TYPE_READ_WRITE", "autoscaling_limit_min_cu": 0.5, "autoscaling_limit_max_cu": 2.0, "suspend_timeout_duration": "300s"}}''''
+   databricks postgres update-endpoint projects/{user_app_name}/branches/production/endpoints/primary "spec" --json ''''{"spec": {"endpoint_type": "ENDPOINT_TYPE_READ_WRITE", "autoscaling_limit_min_cu": 0.5, "autoscaling_limit_max_cu": 2.0, "suspend_timeout_duration": "1800s"}}''''
 
    # Verify the settings round-trip
    databricks postgres get-endpoint projects/{user_app_name}/branches/production/endpoints/primary --output json
    ```
 
-   If `get-endpoint` comes back with `autoscaling_limit_max_cu > 2.0` or `suspend_timeout_duration` unset/larger than `300s`, re-run `update-endpoint` -- do not proceed to Step 3 until the endpoint reports the workshop defaults. Record the actual host (`status.hosts.host`) into `@docs/reverse_etl.md` as `lakebase_host`.
+   If `get-endpoint` comes back with `autoscaling_limit_max_cu > 2.0`, `suspend_timeout_duration` unset, or `suspend_timeout_duration < 1800s` or `> 1800s`, re-run `update-endpoint` -- do not proceed to Step 3 until the endpoint reports the workshop defaults (including the 30-minute suspend window). Record the actual host (`status.hosts.host`) into `@docs/reverse_etl.md` as `lakebase_host`.
 
 3. Inventory sync candidates from the Gold design (tables, Metric Views, TVFs) and map each to a stable primary key.
 4. Choose a sync mode per candidate -- **SNAPSHOT or TRIGGERED only** (see Technical Guardrails; CONTINUOUS is banned as a cost control).
@@ -7636,7 +7636,7 @@ Plan which Gold layer assets to sync from the Lakehouse into Lakebase PostgreSQL
 
 - **CONTINUOUS sync mode is banned.** It incurs streaming compute 24/7 and blows the workshop budget in hours. If any candidate is marked CONTINUOUS in the Gold design, convert it to SNAPSHOT (or TRIGGERED with >=24h cron for Delta sources) and note the conversion in the sync plan. No exceptions.
 - **Endpoint sizing is capped.** `autoscaling_limit_min_cu = 0.5`, `autoscaling_limit_max_cu = 2.0`. Do NOT call `update-endpoint` with a higher `max_cu` at any point in Steps 32-37, and do not disable autoscaling. If a student reports slow queries, document it -- do not raise the ceiling in the workshop.
-- **Scale-to-zero must stay on.** `suspend_timeout_duration = 300s`. Never set it to `0s` / `never` / a value > `300s`. A suspended Lakebase project costs $0 compute; a non-suspending one can idle-bill the whole workshop.
+- **Scale-to-zero must stay on, but must not trigger mid-workshop.** `suspend_timeout_duration = 1800s` (30 minutes). This window is intentionally long enough that a student reading docs, watching a demo video, or stepping away briefly will NOT hit a cold start in the middle of their workshop -- a 5-minute window would cause repeated mid-session cold-starts and is not acceptable. It is still short enough that a forgotten endpoint suspends within half an hour of true idle. Never set it to `0s` / `never` / any value other than `1800s`. A suspended Lakebase project costs $0 compute; a non-suspending one can idle-bill the whole workshop.
 - **TRIGGERED cron floor is 24h.** Sub-daily schedules multiply sync compute and Lakebase write cost.
 - **One project per student.** Do not create additional projects/branches/endpoints beyond the required `production` branch + `primary` endpoint -- each extra endpoint is independently billable.
 
@@ -7645,7 +7645,7 @@ Plan which Gold layer assets to sync from the Lakehouse into Lakebase PostgreSQL
 ### Done When
 
 - `@docs/reverse_etl.md` exists with all fields listed above, including the cost-control block and the actual `lakebase_host` from `get-endpoint`.
-- The Lakebase project `{user_app_name}` exists and `get-endpoint` returns `autoscaling_limit_min_cu=0.5`, `autoscaling_limit_max_cu=2.0`, `suspend_timeout_duration=300s`.
+- The Lakebase project `{user_app_name}` exists and `get-endpoint` returns `autoscaling_limit_min_cu=0.5`, `autoscaling_limit_max_cu=2.0`, `suspend_timeout_duration=1800s` (30 minutes).
 - `@docs/activation_sync_plan.md` exists with: candidate table, per-candidate PK + sync mode + type notes, creation order, and per-candidate CDF notes (including explicit "CDF not applicable" rows for Metric Views / TVFs / Iceberg).
 - Every synced name uses the `_synced` suffix.
 - No candidate is marked CONTINUOUS. Every TRIGGERED candidate cites a `>=24h` cron.
@@ -7672,32 +7672,7 @@ This prompt is returned as-is for direct use in Cursor/Copilot. No LLM processin
    - Save the plan to `@docs/activation_sync_plan.md`
 4. Review the plan against your actual Unity Catalog Gold schema before proceeding
 
-## Reference: Sync Modes
-
-| Mode | Description | CDF Required? | When to Use |
-|------|-------------|---------------|-------------|
-| **Snapshot** | One-time full copy | No (works with views and Iceberg) | Source changes >10% of rows per cycle, or no CDF support |
-| **Triggered** | Scheduled incremental updates | Yes | Known change cadence; good cost/lag balance |
-| **Continuous** | Real-time streaming | Yes | NOT recommended for this workshop (high compute cost) |
-
-> **Workshop note:** Use **Snapshot** or **Triggered** only. Do NOT use Continuous mode — it incurs significant streaming compute cost. For Triggered mode, use a 24-hour (daily) schedule minimum.
-
-## Reference: Data Type Mappings
-
-| Source (Unity Catalog) | Target (Postgres) |
-|---|---|
-| STRING | TEXT |
-| INT / BIGINT | INTEGER / BIGINT |
-| DOUBLE / FLOAT | DOUBLE PRECISION / REAL |
-| DECIMAL(p,s) | NUMERIC |
-| BOOLEAN | BOOLEAN |
-| DATE | DATE |
-| TIMESTAMP | TIMESTAMP WITH TIME ZONE |
-| TIMESTAMP_NTZ | TIMESTAMP WITHOUT TIME ZONE |
-| BINARY | BYTEA |
-| ARRAY, MAP, STRUCT | JSONB |
-
-**Unsupported:** GEOGRAPHY, GEOMETRY, VARIANT, OBJECT.',
+The allowed sync modes (SNAPSHOT / TRIGGERED; CONTINUOUS is banned) and the UC → Postgres type mitigations (ARRAY/MAP/STRUCT → JSONB; GEOGRAPHY/GEOMETRY/VARIANT/OBJECT unsupported) are documented in the Technical Guardrails of the generated prompt. The resolved table of candidates, PKs, modes, and type notes is written to `@docs/activation_sync_plan.md` so Steps 33-37 read it back instead of re-deriving it.',
 '## Expected Output
 
 - `@docs/reverse_etl.md` with:
@@ -7705,10 +7680,10 @@ This prompt is returned as-is for direct use in Cursor/Copilot. No LLM processin
   - [ ] `lakebase_postgres_database: databricks_postgres` and `lakebase_postgres_schema: {user_schema_prefix}`
   - [ ] `endpoint_name: projects/{user_app_name}/branches/production/endpoints/primary`
   - [ ] `lakebase_mode: autoscaling`
-  - [ ] Cost-control block: `autoscaling_limit_min_cu: 0.5`, `autoscaling_limit_max_cu: 2.0`, `suspend_timeout_duration: 300s`, `triggered_min_cron_interval: 24h`, `sync_mode_allowlist: ["SNAPSHOT","TRIGGERED"]`
+  - [ ] Cost-control block: `autoscaling_limit_min_cu: 0.5`, `autoscaling_limit_max_cu: 2.0`, `suspend_timeout_duration: 1800s` (30 min so students don''t cold-start mid-workshop), `triggered_min_cron_interval: 24h`, `sync_mode_allowlist: ["SNAPSHOT","TRIGGERED"]`
   - [ ] `lakebase_host` recorded from `databricks postgres get-endpoint`
 
-- Lakebase project `{user_app_name}` exists with `get-endpoint` reporting min_cu=0.5, max_cu=2.0, suspend_timeout=300s
+- Lakebase project `{user_app_name}` exists with `get-endpoint` reporting min_cu=0.5, max_cu=2.0, suspend_timeout=1800s (30 minutes)
 
 - `@docs/activation_sync_plan.md` with:
   - [ ] List of Gold tables, Metric Views, and TVFs targeted for sync
@@ -7728,11 +7703,7 @@ VALUES
 
 Create Synced Tables in Lakebase by calling the Databricks Postgres REST API for each candidate in Step 32''s sync plan, then poll each to a healthy state and verify row counts.
 
-- **Workspace:** `{workspace_url}`
-- **Lakebase Autoscaling project (yours):** `{user_app_name}` (one project per student)
-- **Root branch:** `production` (Lakebase Autoscaling creates this automatically)
-- **Target Postgres database / schema:** `databricks_postgres` / `{user_schema_prefix}`
-- **Source schema:** `{lakehouse_default_catalog}.{user_schema_prefix}`
+Environment values (workspace, project, root branch, endpoint, Postgres database/schema, source schema) come from `@docs/reverse_etl.md`. Candidate list, PKs, sync modes, and dependency order come from `@docs/activation_sync_plan.md`. Do not restate them here -- read them back from those docs at runtime.
 
 ---
 
@@ -7797,11 +7768,11 @@ while time.time() < deadline:
 - **CDF is Delta-only.** Never attempt `ALTER TABLE ... SET TBLPROPERTIES (delta.enableChangeDataFeed = true)` on a Metric View, TVF, or Iceberg table -- it will fail. These must be SNAPSHOT.
 
 **Cost Controls (hard limits -- re-checked here in case Step 32 was skipped):**
-- **CONTINUOUS sync mode is banned.** If a candidate in `@docs/activation_sync_plan.md` says CONTINUOUS, convert it to SNAPSHOT (or TRIGGERED with `>=24h` cron for a Delta source) and update the plan before calling the API. Do NOT POST a synced table with `scheduling_policy: "CONTINUOUS"`.
-- **TRIGGERED cron floor is 24h.** Reject any cron expression tighter than daily -- even a single hourly-TRIGGERED sync can dominate workshop cost.
+- **CONTINUOUS sync mode is banned** (per `@docs/reverse_etl.md` `sync_mode_allowlist`). If a candidate in `@docs/activation_sync_plan.md` says CONTINUOUS, convert it to SNAPSHOT (or TRIGGERED with a cron at the `triggered_min_cron_interval` floor from `@docs/reverse_etl.md` for a Delta source) and update the plan before calling the API. Do NOT POST a synced table with `scheduling_policy: "CONTINUOUS"`.
+- **Honor the TRIGGERED cron floor** from `@docs/reverse_etl.md`. Reject any cron tighter than that floor -- even a single sub-floor TRIGGERED sync can dominate workshop cost.
 - **Do NOT create new branches or endpoints.** Reuse the existing `production` branch and `primary` endpoint only. Any API call that would spawn an additional branch/endpoint is a cost regression and is not allowed in the workshop.
-- **Do NOT call `update-endpoint`** to change sizing in this step. Endpoint sizing is set in Step 32 (`min_cu=0.5`, `max_cu=2.0`, `suspend_timeout=300s`) and must stay at those values.
-- Before the first POST, re-run `databricks postgres get-endpoint projects/{user_app_name}/branches/production/endpoints/primary --output json` and confirm the sizing in `@docs/reverse_etl.md` still matches. If it has drifted, stop and re-apply from Step 32 before creating synced tables.
+- **Do NOT call `update-endpoint`** to change sizing in this step. Endpoint sizing was set in Step 32 and must stay at the values recorded in `@docs/reverse_etl.md`.
+- Before the first POST, re-run `databricks postgres get-endpoint projects/{user_app_name}/branches/production/endpoints/primary --output json` and confirm the sizing matches `@docs/reverse_etl.md`. If it has drifted, stop and re-apply from Step 32 before creating synced tables.
 
 **CLI sandbox note:** run `databricks auth login`, `databricks auth token`, and any `databricks apps ...` commands outside the IDE sandbox to avoid SSL/TLS certificate errors.
 
@@ -7814,7 +7785,7 @@ while time.time() < deadline:
 
 ### Done When
 
-- Pre-flight `get-endpoint` confirms `min_cu=0.5`, `max_cu=2.0`, `suspend_timeout=300s` (matches `@docs/reverse_etl.md`).
+- Pre-flight `get-endpoint` confirms `min_cu=0.5`, `max_cu=2.0`, `suspend_timeout=1800s` (matches `@docs/reverse_etl.md`).
 - CDF is enabled on every Delta source that a TRIGGERED candidate points at; no CDF attempts were made on non-Delta sources.
 - No synced table was created with `scheduling_policy: "CONTINUOUS"`; every TRIGGERED entry uses a `>=24h` cron.
 - Every candidate in `@docs/activation_sync_plan.md` has been created via the REST API contract above, with `spec.project = projects/{user_app_name}` and `spec.branch = projects/{user_app_name}/branches/production`, in dependency order.
@@ -7852,15 +7823,7 @@ This prompt is returned as-is for direct use in Cursor/Copilot. No LLM processin
 - Do NOT use `databricks.sdk.service.database.DatabaseInstancesAPI` -- that is for Provisioned Lakebase only
 - Use the `requests` library directly for all API calls
 
-## Reference: Sync Modes and CDF
-
-| Mode | CDF Required? | When to Use |
-|------|---------------|-------------|
-| **Snapshot** | No (works with views and Iceberg) | Source changes >10% per cycle, or no CDF support |
-| **Triggered** | Yes | Known change cadence; good cost/lag balance |
-| **Continuous** | Yes | NOT recommended for this workshop (high compute cost) |
-
-> **Workshop note:** Use **Snapshot** or **Triggered** only. Do NOT use Continuous mode -- it incurs significant streaming compute cost. For Triggered mode, schedule at 24-hour minimum intervals.
+Per-candidate sync modes (SNAPSHOT / TRIGGERED; CONTINUOUS is banned) are already resolved in `@docs/activation_sync_plan.md`. Do not re-decide modes here; honor the plan.
 
 ## Reference: Capacity Constraints
 
@@ -7894,8 +7857,7 @@ VALUES
 
 Design the UI for an analytics Databricks App powered by the Lakebase synced tables from Step 33, and save the design as `@docs/analytics_ui_design.md`.
 
-- **Synced data location:** Lakebase Autoscaling project `{user_app_name}`, Postgres database `databricks_postgres`, schema `{user_schema_prefix}` (sourced from `{lakehouse_default_catalog}.{user_schema_prefix}`)
-- **Working directory:** App code will live under `apps_lakebase/` (Steps 35-37). This step produces only the design doc in `@docs/`.
+Synced data location (project, Postgres database, schema, Lakehouse source) comes from `@docs/reverse_etl.md`, and the concrete synced-table names and columns available to the UI come from `@docs/activation_sync_plan.md`. App code will live under `apps_lakebase/` (Steps 35-37); this step produces only the design doc in `@docs/`.
 
 ---
 
@@ -7926,9 +7888,8 @@ Design the UI for an analytics Databricks App powered by the Lakebase synced tab
   - **Greenfield** if either `apps_lakebase/app.py` is missing OR `@docs/ui_design.md` is missing -- design a standalone analytics app and Step 35 will scaffold the directory.
   - Do NOT guess from filenames alone; open `apps_lakebase/app.py` and `@docs/ui_design.md` to confirm both exist.
 - **Mock-data-first:** the design must not assume a live DB; Step 35 will implement with placeholder data, Step 36 wires Lakebase. Keep all visualizations mock-compatible.
-- **Synced table names already have `_synced` suffix** -- reference them as they appear in the sync plan, not the Gold source names.
-- **Postgres schema is `{user_schema_prefix}`** -- when the design refers to DB objects, qualify them as `{user_schema_prefix}.<synced_table>`.
-- Do not propose Continuous-mode data; only candidates present in `@docs/activation_sync_plan.md` are available.
+- **Reference synced objects exactly as written in `@docs/activation_sync_plan.md`** (names include the `_synced` suffix) and qualify them with the Postgres schema from `@docs/reverse_etl.md`. Do not invent names or restate values here.
+- Only candidates listed in `@docs/activation_sync_plan.md` are available -- no CONTINUOUS-mode data, no Gold objects that were not synced.
 
 ---
 
@@ -7975,9 +7936,7 @@ VALUES
 
 You are a full-stack developer building an analytics web application. Your goal is to **generate analytics UI + backend APIs** from the prior-step design and **test locally** against placeholder data. Lakebase wiring happens in the next step.
 
-**Workspace:** `{workspace_url}`
-
-**Working directory:** Run all app commands and create/edit app files under `apps_lakebase/`. Design docs (PRD, analytics UI design, sync plan, environment) stay in `@docs/` at repo root.
+Environment values live in `@docs/reverse_etl.md`; analytics scope lives in `@docs/analytics_ui_design.md` and `@docs/activation_sync_plan.md`. Run all app commands and create/edit app files under `apps_lakebase/`. Design docs stay in `@docs/` at repo root.
 
 ---
 
@@ -8119,11 +8078,7 @@ VALUES
 
 Replace the placeholder analytics API responses from Step 35 with real PostgreSQL queries against the synced Lakebase tables from Step 33. After wiring, the ConnectionStatus indicator flips from "Mock Data" to "Live Data" when Lakebase is reachable.
 
-- **Workspace:** `{workspace_url}`
-- **Lakebase Autoscaling project:** `{user_app_name}` (one project per student)
-- **Endpoint name:** `projects/{user_app_name}/branches/production/endpoints/primary`
-- **Postgres database / schema:** `databricks_postgres` / `{user_schema_prefix}`
-- **Working directory:** `apps_lakebase/`
+Environment values (workspace, project, endpoint, Postgres database/schema) come from `@docs/reverse_etl.md`. Working directory is `apps_lakebase/`.
 
 ---
 
@@ -8186,10 +8141,21 @@ Replace the placeholder analytics API responses from Step 35 with real PostgreSQ
 
 ### Technical Guardrails (IDE agent cannot guess these)
 
-- **Schema is `{user_schema_prefix}` -- NOT `public`, NOT `{user_schema_prefix}_gold`.** Qualify every query (`FROM {user_schema_prefix}.<synced_table>`) or `SET search_path TO {user_schema_prefix}` at the top of each pooled connection.
+- **Qualify every query with the Postgres schema from `@docs/reverse_etl.md`** (not `public`, not the Gold-layer schema). Either prefix tables (`FROM <schema>.<synced_table>`) or `SET search_path TO <schema>` at the top of each pooled connection.
 - **Autoscaling requires a pool with token rotation.** Do NOT open a raw `psycopg.connect()` per request -- OAuth tokens expire and you will thrash the SDK. Always borrow from `_pool` via the `_OAuthConnection` subclass; the pool and subclass together rotate tokens safely.
 - **App authorization only.** The Databricks Apps runtime auto-injects `DATABRICKS_CLIENT_ID` and `DATABRICKS_CLIENT_SECRET` for the app''s service principal. Do not ask users to paste a PAT, do not handle user-authorization flows in this step, and do not set `PGPASSWORD` manually -- the OAuth connection subclass owns password generation.
-- **Local-dev auth.** For local `python app.py`, the Databricks SDK picks up credentials from `databricks auth login` (CLI profile) automatically. Expose Lakebase host/port/user via `LAKEBASE_HOST`, `LAKEBASE_PORT`, `LAKEBASE_DATABASE=databricks_postgres`, `LAKEBASE_SCHEMA={user_schema_prefix}`, `ENDPOINT_NAME=projects/{user_app_name}/branches/production/endpoints/primary`, and `LAKEBASE_MODE=autoscaling` in a local `.env` (git-ignored) or shell exports. Never commit tokens.
+- **Local-dev auth.** For local `python app.py`, the Databricks SDK picks up credentials from `databricks auth login` (CLI profile) automatically. Populate a git-ignored `.env` (or shell exports) using the values in `@docs/reverse_etl.md`, e.g.:
+
+  ```
+  LAKEBASE_HOST=<from @docs/reverse_etl.md lakebase_host>
+  LAKEBASE_PORT=5432
+  LAKEBASE_DATABASE=databricks_postgres
+  LAKEBASE_SCHEMA={user_schema_prefix}
+  ENDPOINT_NAME=projects/{user_app_name}/branches/production/endpoints/primary
+  LAKEBASE_MODE=autoscaling
+  ```
+
+  Never commit tokens.
 - **Envelope stays intact:** keep the `{ data, source }` contract from Step 35; never remove the mock fallback branch.
 - **No hardcoded date ranges or SLO assertions.** Drive date filters from UI-supplied parameters so the app works for use cases with different data cadences and latencies. Do not assert specific latency targets.
 - **String comparisons:** use `LOWER()` (or schema-verified exact casing from `@docs/lakebase_schema_discovery.md`) for any enum/string filter.
@@ -8251,11 +8217,7 @@ VALUES
 
 Deploy the locally-tested analytics application to Databricks Apps and validate the end-to-end reverse ETL pipeline: Lakehouse Gold -> Synced Tables -> Lakebase -> App.
 
-- **Workspace:** `{workspace_url}`
-- **App name:** `{user_app_name}` (also your Lakebase project_id)
-- **Endpoint name:** `projects/{user_app_name}/branches/production/endpoints/primary`
-- **Postgres database / schema:** `databricks_postgres` / `{user_schema_prefix}`
-- **Prerequisite:** Step 36 local testing passed with ConnectionStatus showing "Live Data" at `http://localhost:8000`.
+Environment values (workspace, app name / Lakebase project, endpoint, Postgres database/schema, cost-control targets) come from `@docs/reverse_etl.md`; `apps_lakebase/app.yaml` values below MUST match that doc. **Prerequisite:** Step 36 local testing passed with ConnectionStatus showing "Live Data" at `http://localhost:8000`.
 
 ---
 
@@ -8271,14 +8233,14 @@ Deploy the locally-tested analytics application to Databricks Apps and validate 
 
 ### Steps
 
-1. **Pre-deploy cost check.** Run `databricks postgres get-endpoint projects/{user_app_name}/branches/production/endpoints/primary --output json` and assert `autoscaling_limit_min_cu == 0.5`, `autoscaling_limit_max_cu == 2.0`, `suspend_timeout_duration == "300s"`. If any value has drifted, re-apply the Step 32 `update-endpoint` call and re-check before continuing. Do NOT proceed to deploy with a larger endpoint ceiling or a disabled suspend -- a running Databricks App keeps the endpoint warm and will bill against whatever ceiling you leave in place.
+1. **Pre-deploy cost check.** Run `databricks postgres get-endpoint projects/{user_app_name}/branches/production/endpoints/primary --output json` and assert that `autoscaling_limit_min_cu`, `autoscaling_limit_max_cu`, and `suspend_timeout_duration` match the values in `@docs/reverse_etl.md`. If any value has drifted, re-apply the Step 32 `update-endpoint` call and re-check before continuing. Do NOT proceed to deploy with a larger endpoint ceiling or a disabled suspend -- a running Databricks App keeps the endpoint warm and will bill against whatever ceiling you leave in place.
 2. Write `apps_lakebase/app.yaml` using exactly the contract below. Do not invent additional top-level keys.
 3. Deploy the app. Prefer `apps_lakebase/scripts/deploy.sh --code-only -t development` if it exists; otherwise build the frontend (`npm run build`), run `databricks apps create {user_app_name}` on first deploy, then `databricks apps deploy {user_app_name} --source-code-path apps_lakebase/`.
 4. Poll deployment state (`databricks apps get {user_app_name}`) until the app status is running, then grab the app URL.
 5. Verify the deployment: open the URL and confirm ConnectionStatus shows "Live Data"; `curl $APP_URL/api/health/lakebase` and each `/api/analytics/*` endpoint return `source: "live"`; `databricks apps logs {user_app_name} --tail 100` shows successful DB connections.
 6. If anything fails, consult the Common Errors table below, fix, redeploy, and retry -- cap at 3 iterations before stopping and reporting.
 7. Validate freshness: spot-check synced-table row counts match the Gold source, and that any recent timestamps are present. Reload the UI a few minutes later to confirm ConnectionStatus stays on "Live Data".
-8. **Post-deploy cost re-check.** Re-run `get-endpoint` after the app has been up for a few minutes and confirm the sizing values still match `@docs/reverse_etl.md`. If the endpoint reports a larger `max_cu` (e.g., because a well-meaning "fix" raised it), shrink it back to `2.0` immediately -- the app will keep functioning; only peak throughput is capped.
+8. **Post-deploy cost re-check.** Re-run `get-endpoint` after the app has been up for a few minutes and confirm the sizing values still match `@docs/reverse_etl.md`. If the endpoint reports a larger `max_cu` (e.g., because a well-meaning "fix" raised it), shrink it back to the ceiling in `@docs/reverse_etl.md` immediately -- the app will keep functioning; only peak throughput is capped.
 
 ---
 
@@ -8318,13 +8280,13 @@ env:
 ### Technical Guardrails (IDE agent cannot guess these)
 
 - **Do NOT assert specific latency targets.** Use cases created in earlier steps have varying latencies depending on sync mode (SNAPSHOT vs TRIGGERED) and Lakebase warm state, so hardcoded SLOs like "sub-10ms query latency" are misleading. Validation in this step is limited to: app reachable, ConnectionStatus=Live Data, every analytics endpoint returns `source: "live"`, clean app logs, and Gold -> Lakebase row-count freshness.
-- **Schema is `{user_schema_prefix}`.** Do not set `LAKEBASE_SCHEMA` to `public` or `{user_schema_prefix}_gold` -- those values will make every analytics query return zero rows.
-- **Endpoint name format is fixed:** `projects/{user_app_name}/branches/production/endpoints/primary`. Do not substitute a Provisioned instance name here.
+- **Use the Postgres schema from `@docs/reverse_etl.md`.** Do not set `LAKEBASE_SCHEMA` to `public` or to the Gold-layer schema -- those values will make every analytics query return zero rows.
+- **Endpoint name format is fixed:** `projects/<project>/branches/production/endpoints/primary`. Use the project from `@docs/reverse_etl.md`; do not substitute a Provisioned instance name.
 - **Scale-to-zero is normal.** Autoscaling Lakebase can idle; the first request after a cold start may take several seconds while `ConnectionPool.check_connection` re-auths. That is expected and is not a failure condition.
 - **CLI sandbox note:** run all `databricks apps ...` commands outside the IDE sandbox to avoid SSL/TLS certificate errors.
 
 **Cost Controls (must hold before AND after deploy):**
-- `autoscaling_limit_min_cu = 0.5`, `autoscaling_limit_max_cu = 2.0`, `suspend_timeout_duration = "300s"` on the `primary` endpoint. Verified via `databricks postgres get-endpoint` in Steps 1 and 8.
+- The `primary` endpoint''s `autoscaling_limit_min_cu`, `autoscaling_limit_max_cu`, and `suspend_timeout_duration` MUST match `@docs/reverse_etl.md`. Verified via `databricks postgres get-endpoint` in Steps 1 and 8.
 - Do NOT fix cold-start latency by raising `max_cu` or disabling suspend -- both are expected behaviors, not bugs.
 - Do NOT run a warmup cron / keep-alive ping against `/api/health/lakebase`. It defeats scale-to-zero and is a cost regression.
 - Do NOT add extra Lakebase branches or endpoints. Stay on `production` + `primary`.
@@ -8340,20 +8302,20 @@ env:
 | Endpoints return `source: "mock"` on deployed app | Lakebase connection failed -- check `ENDPOINT_NAME` and `LAKEBASE_HOST` in `app.yaml`, and confirm the app''s service principal has access to the project |
 | `App not found` | Run `databricks apps create {user_app_name}` before `deploy` |
 | `permission denied for schema {user_schema_prefix}` | Grant schema privileges to the app''s service principal on the Autoscaling project |
-| `get-endpoint` shows `autoscaling_limit_max_cu > 2.0` | Re-apply the Step 32 `update-endpoint` JSON to restore `min_cu=0.5`, `max_cu=2.0`, `suspend_timeout=300s` before deploying |
-| `get-endpoint` shows `suspend_timeout_duration` unset, `0s`, or larger than `300s` | Re-apply the Step 32 `update-endpoint` JSON so scale-to-zero stays enabled |
-| Unexpected Lakebase bill / endpoint stays warm overnight | Confirm no external warmup cron, dashboard, or `curl` loop is hitting the app; verify `suspend_timeout_duration = 300s`; check `databricks postgres get-endpoint ... status` to see recent activity |
+| `get-endpoint` shows `autoscaling_limit_max_cu` above the ceiling in `@docs/reverse_etl.md` | Re-apply the Step 32 `update-endpoint` JSON to restore the values recorded in `@docs/reverse_etl.md` before deploying |
+| `get-endpoint` shows `suspend_timeout_duration` unset, `0s`, or longer than the value in `@docs/reverse_etl.md` | Re-apply the Step 32 `update-endpoint` JSON so scale-to-zero stays enabled |
+| Unexpected Lakebase bill / endpoint stays warm overnight | Confirm no external warmup cron, dashboard, or `curl` loop is hitting the app; verify `suspend_timeout_duration` matches `@docs/reverse_etl.md`; check `databricks postgres get-endpoint ... status` to see recent activity |
 | First request after idle takes several seconds | Expected cold-start; do NOT "fix" by raising `max_cu` or disabling suspend. The pool''s `check_connection` handles it |
 
 ---
 
 ### Done When
 
-- Pre- and post-deploy `get-endpoint` both show `autoscaling_limit_min_cu=0.5`, `autoscaling_limit_max_cu=2.0`, `suspend_timeout_duration=300s` (matches `@docs/reverse_etl.md`).
+- Pre- and post-deploy `get-endpoint` both report `autoscaling_limit_min_cu`, `autoscaling_limit_max_cu`, and `suspend_timeout_duration` matching `@docs/reverse_etl.md`.
 - `apps_lakebase/app.yaml` contains only `command` and `env` top-level keys, with `command: ["python", "app.py"]` and the env block listed above.
 - Databricks App is deployed and reachable at its URL.
 - ConnectionStatus shows "Live Data" on the deployed app.
-- Every `/api/analytics/*` endpoint returns `source: "live"`; `/api/health/lakebase` returns connected with `mode: "autoscaling"` and `schema: "{user_schema_prefix}"`.
+- Every `/api/analytics/*` endpoint returns `source: "live"`; `/api/health/lakebase` returns connected with `mode: "autoscaling"` and the schema from `@docs/reverse_etl.md`.
 - Logs show successful DB connections (no latency assertion required).
 - Row-count freshness check (Gold -> Lakebase -> App) passes for the synced tables in the sync plan.
 - No warmup cron, keep-alive loop, or oversized endpoint was left behind that would prevent scale-to-zero.',
@@ -8378,9 +8340,8 @@ Complete **Wire to Lakebase** (Step 36). Local testing must pass at `http://loca
 1. Copy the generated prompt
 2. Paste into Cursor or Copilot
 3. The code assistant will:
-   - Read `@docs/reverse_etl.md` and run a pre-deploy cost check (`get-endpoint` asserts min_cu=0.5 / max_cu=2.0 / suspend=300s)
-   - Write `apps_lakebase/app.yaml` with only `command` and `env` top-level keys
-   - Set `LAKEBASE_MODE=autoscaling`, `LAKEBASE_SCHEMA={user_schema_prefix}`, `ENDPOINT_NAME=projects/{user_app_name}/branches/production/endpoints/primary`
+   - Read `@docs/reverse_etl.md` and run a pre-deploy cost check asserting `get-endpoint` values match that doc
+   - Write `apps_lakebase/app.yaml` with only `command` and `env` top-level keys, populated from `@docs/reverse_etl.md`
    - Build the frontend and deploy to Databricks Apps via `databricks apps create` + `databricks apps deploy`
    - Verify the analytics UI loads with "Live Data"
    - Test all analytics API endpoints for `source: "live"`
@@ -8390,10 +8351,10 @@ Complete **Wire to Lakebase** (Step 36). Local testing must pass at `http://loca
    - Run a post-deploy cost re-check and confirm scale-to-zero still applies',
 '## Expected Output
 
-- [ ] `databricks postgres get-endpoint` reports `autoscaling_limit_min_cu=0.5`, `autoscaling_limit_max_cu=2.0`, `suspend_timeout_duration=300s` (both pre- and post-deploy)
+- [ ] `databricks postgres get-endpoint` reports `autoscaling_limit_min_cu`, `autoscaling_limit_max_cu`, and `suspend_timeout_duration` matching `@docs/reverse_etl.md` (both pre- and post-deploy)
 - [ ] `apps_lakebase/app.yaml` uses only `command` and `env` top-level keys
 - [ ] `command: ["python", "app.py"]`
-- [ ] `env` includes `LAKEBASE_MODE=autoscaling`, `LAKEBASE_SCHEMA={user_schema_prefix}`, `LAKEBASE_DATABASE=databricks_postgres`, and `ENDPOINT_NAME=projects/{user_app_name}/branches/production/endpoints/primary`
+- [ ] `env` block populated from `@docs/reverse_etl.md` (`LAKEBASE_MODE`, `LAKEBASE_SCHEMA`, `LAKEBASE_DATABASE`, `ENDPOINT_NAME`, etc.)
 - [ ] Databricks App deployed and running
 - [ ] Analytics UI accessible at the app URL
 - [ ] ConnectionStatus indicator shows "Live Data" on deployed app
