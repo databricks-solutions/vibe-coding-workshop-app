@@ -211,6 +211,12 @@ export function CodingAssistantSelector({
   const isExpanded = forceExpanded ? true : (userOverride ?? false);
   const isComplete = !!selectedAssistant;
   const selected = selectedAssistant ? getAssistant(selectedAssistant) : null;
+  // Bug fix: when 'ai-gateway' is selected, the inline AiGatewaySetupGuide
+  // pushes the collapsible body past the default 800px cap, clipping the
+  // Continue button. Only this one option gets the looser cap so the collapse
+  // animation on the other assistants stays snappy (see #ai-gateway-continue).
+  const expandedMaxH =
+    selected?.id === 'ai-gateway' ? 'max-h-[1200px]' : 'max-h-[800px]';
 
   const handleConfirm = () => {
     setUserOverride(false);
@@ -273,7 +279,7 @@ export function CodingAssistantSelector({
       {/* Collapsible Content */}
       <div
         className={`transition-all duration-300 ease-in-out ${
-          isExpanded ? 'max-h-[800px] opacity-100' : 'max-h-0 opacity-0 overflow-hidden'
+          isExpanded ? `${expandedMaxH} opacity-100` : 'max-h-0 opacity-0 overflow-hidden'
         }`}
       >
         <div className="px-4 pb-4 space-y-3">
