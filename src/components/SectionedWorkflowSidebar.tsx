@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { ChevronRight, ChevronDown, Check, SkipForward } from 'lucide-react';
 import { StepStatusLegend } from './StepStatusLegend';
 import type { WorkflowSection } from '../constants/workflowSections';
@@ -105,25 +106,30 @@ export function SectionedWorkflowSidebar({
 
       {/* Sections List */}
       <div ref={sidebarScrollRef} className="flex-1 overflow-y-auto p-2 space-y-2">
-        {visibleSections.map((section) => {
-          const { completed, total } = getSectionCompletion(section);
-          const isExpanded = expandedSectionId === section.id;
-          const isSelected = selectedSectionId === section.id;
-          const isSectionComplete = completed === total;
-          const Icon = section.icon;
+        <AnimatePresence mode="popLayout">
+          {visibleSections.map((section) => {
+            const { completed, total } = getSectionCompletion(section);
+            const isExpanded = expandedSectionId === section.id;
+            const isSelected = selectedSectionId === section.id;
+            const isSectionComplete = completed === total;
+            const Icon = section.icon;
 
-          return (
-            <div 
-              key={section.id}
-              data-sidebar-section={section.id}
-              className={`rounded-lg border transition-all duration-200 ${
-                isSelected 
-                  ? `${section.bgColor} ${section.borderColor} border-2 shadow-sm` 
-                  : isExpanded
-                  ? 'bg-secondary/40 border-border'
-                  : 'border-transparent hover:bg-secondary/30'
-              }`}
-            >
+            return (
+              <motion.div
+                key={section.id}
+                layout
+                layoutId={`sidebar-section-${section.id}`}
+                data-sidebar-section={section.id}
+                initial={false}
+                transition={{ type: 'spring', stiffness: 200, damping: 20 }}
+                className={`rounded-lg border transition-colors duration-200 ${
+                  isSelected
+                    ? `${section.bgColor} ${section.borderColor} border-2 shadow-sm`
+                    : isExpanded
+                      ? 'bg-secondary/40 border-border'
+                      : 'border-transparent hover:bg-secondary/30'
+                }`}
+              >
               {/* Section Header */}
               <button
                 onClick={() => onSectionClick(section.id)}
@@ -258,9 +264,10 @@ export function SectionedWorkflowSidebar({
                   </div>
                 </div>
               )}
-            </div>
-          );
-        })}
+              </motion.div>
+            );
+          })}
+        </AnimatePresence>
       </div>
 
       {/* Footer Legend */}

@@ -102,13 +102,24 @@ for (const section of WORKFLOW_SECTIONS) {
     }
   }
 }
+// Build a global sort index from workflow step arrays so config UI matches execution order
+const SECTION_TAG_SORT_ORDER: Record<string, number> = {};
+let sortIdx = 0;
+for (const section of WORKFLOW_SECTIONS) {
+  for (const step of section.steps) {
+    if (step?.sectionTag) {
+      SECTION_TAG_SORT_ORDER[step.sectionTag] = sortIdx++;
+    }
+  }
+}
+
 // Extra section tags that live under a parent step but aren't steps themselves
 if (SECTION_TAG_TO_GROUP['bronze_table_metadata']) {
   SECTION_TAG_TO_GROUP['bronze_table_metadata_upload'] = SECTION_TAG_TO_GROUP['bronze_table_metadata'];
   SECTION_TAG_TO_GROUP['bronze_table_metadata_generate'] = SECTION_TAG_TO_GROUP['bronze_table_metadata'];
 }
 
-const GROUP_ORDER = ['Foundation', 'Databricks App', 'Lakebase', 'Lakehouse', 'Data Intelligence', 'Workshop', 'Refinement'];
+const GROUP_ORDER = ['Foundation', 'Databricks App', 'Lakebase', 'Lakehouse', 'Data Intelligence', 'Activation', 'Workshop', 'Refinement'];
 
 const GROUP_STYLES: Record<string, { label: string; bg: string; border: string; text: string; dot: string }> = {
   'Foundation':        { label: 'Foundation',        bg: 'bg-blue-500/8',   border: 'border-blue-500/20',   text: 'text-blue-400',   dot: 'bg-blue-500' },
@@ -116,6 +127,7 @@ const GROUP_STYLES: Record<string, { label: string; bg: string; border: string; 
   'Lakebase':          { label: 'Lakebase',          bg: 'bg-violet-500/8', border: 'border-violet-500/20', text: 'text-violet-400', dot: 'bg-violet-500' },
   'Lakehouse':         { label: 'Lakehouse',         bg: 'bg-amber-500/8',  border: 'border-amber-500/20',  text: 'text-amber-400',  dot: 'bg-amber-500' },
   'Data Intelligence': { label: 'Data Intelligence', bg: 'bg-cyan-500/8',   border: 'border-cyan-500/20',   text: 'text-cyan-400',   dot: 'bg-cyan-500' },
+  'Activation':        { label: 'Activation',        bg: 'bg-emerald-500/8', border: 'border-emerald-500/20', text: 'text-emerald-400', dot: 'bg-emerald-500' },
   'Workshop':          { label: 'Agent Skills',      bg: 'bg-purple-500/8', border: 'border-purple-500/20', text: 'text-purple-400', dot: 'bg-purple-500' },
   'Refinement':        { label: 'Refinement',        bg: 'bg-pink-500/8',   border: 'border-pink-500/20',   text: 'text-pink-400',   dot: 'bg-pink-500' },
 };
@@ -256,7 +268,11 @@ export function SectionInputsConfig({ onToast }: SectionInputsConfigProps) {
         s.section_tag.toLowerCase().includes(searchQuery.toLowerCase()) ||
         (s.section_title || '').toLowerCase().includes(searchQuery.toLowerCase())
     );
-    const sorted = filtered.sort((a, b) => (a.order_number || 999) - (b.order_number || 999));
+    const sorted = filtered.sort((a, b) => {
+      const aIdx = SECTION_TAG_SORT_ORDER[a.section_tag] ?? (a.order_number || 999);
+      const bIdx = SECTION_TAG_SORT_ORDER[b.section_tag] ?? (b.order_number || 999);
+      return aIdx - bIdx;
+    });
 
     const groups: { chapter: string; sections: SectionInput[] }[] = [];
     const grouped = new Map<string, SectionInput[]>();

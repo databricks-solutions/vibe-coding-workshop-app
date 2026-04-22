@@ -13,7 +13,7 @@ import {
 } from './components/session';
 import { apiClient } from './api/client';
 import { Zap, MessageSquare, Trophy, Plus, PanelLeftClose, PanelLeft, Menu, X, BarChart3, Eye } from 'lucide-react';
-import { normalizeLevel, getFilteredSections, getCumulativeOverrides, USE_CASE_LEVEL_LOCK, isForwardProgression, type WorkshopLevel } from './constants/workflowSections';
+import { normalizeLevel, getFilteredSections, getCumulativeOverrides, USE_CASE_LEVEL_LOCK, isForwardProgression, type WorkshopLevel, type WorkflowDirection } from './constants/workflowSections';
 
 export default function App() {
   const location = useLocation();
@@ -73,6 +73,7 @@ export default function App() {
   const [codingAssistant, setCodingAssistant] = useState<string | null>(null);
   // Default to end-to-end which includes all chapters (complete workshop)
   const [workshopLevel, setWorkshopLevel] = useState<WorkshopLevel>('end-to-end');
+  const [direction, setDirection] = useState<WorkflowDirection>('forward');
   const [levelExplicitlySelected, setLevelExplicitlySelected] = useState(false);
   const [useCaseLockedLevel, setUseCaseLockedLevel] = useState<WorkshopLevel | null>(null);
   const [isSaving, setIsSaving] = useState(false);
@@ -123,6 +124,10 @@ export default function App() {
   const [isFadingOut, setIsFadingOut] = useState(false);
   const [isCreatingNewSession, setIsCreatingNewSession] = useState(false);
   const [isCreatingFadingOut, setIsCreatingFadingOut] = useState(false);
+
+  const directionLocked = Object.keys(stepPrompts).some(
+    k => parseInt(k) >= 4 && stepPrompts[parseInt(k)]?.trim()
+  ) || Array.from(completedSteps).some(s => s >= 4);
 
   // Initialize or load session on mount
   useEffect(() => {
@@ -241,6 +246,9 @@ export default function App() {
         setCustomDescription(sessionParams.custom_use_case_description || '');
         setLevelExplicitlySelected(!!sessionParams.level_explicitly_selected);
         setBrandUrl(sessionParams.company_brand_url || '');
+        if (sessionParams.direction) {
+          setDirection(sessionParams.direction as WorkflowDirection);
+        }
         setCodingAssistant(sessionParams.coding_assistant || null);
         
         // Find the next incomplete step using the actual section order for this workshop level
@@ -291,6 +299,7 @@ export default function App() {
       setSelectedUseCaseLabel('');
       setCustomUseCaseLabel('');
       setCustomDescription('');
+      setDirection('forward');
       window.history.replaceState({}, '', `?sessionId=${response.session_id}`);
     } catch (err) {
       console.error('Error creating session:', err);
@@ -317,6 +326,7 @@ export default function App() {
       effectiveLevel,
       disabledSectionTags,
       cumOverrides ?? undefined,
+      direction,
     );
     const stepOrder = sections.flatMap(s => s.steps.map(st => st.number));
     
@@ -368,6 +378,9 @@ export default function App() {
         setCustomDescription(sessionParams.custom_use_case_description || '');
         setLevelExplicitlySelected(!!sessionParams.level_explicitly_selected);
         setBrandUrl(sessionParams.company_brand_url || '');
+        if (sessionParams.direction) {
+          setDirection(sessionParams.direction as WorkflowDirection);
+        }
         setCodingAssistant(sessionParams.coding_assistant || null);
         
         // Navigate to the next incomplete step using the actual section order
@@ -488,6 +501,17 @@ export default function App() {
     }
   }, [sessionId, readOnly]);
 
+  const handleDirectionChange = useCallback((newDirection: WorkflowDirection) => {
+    if (directionLocked) return;
+    setDirection(newDirection);
+    if (sessionId) {
+      apiClient.updateSessionMetadata({
+        session_id: sessionId,
+        direction: newDirection,
+      }).catch(err => console.error('Error persisting direction:', err));
+    }
+  }, [directionLocked, sessionId]);
+
   const handleSaveSession = async (name: string, description: string, rating?: 'thumbs_up' | 'thumbs_down', comment?: string) => {
     if (!sessionId || readOnly) return;
     
@@ -505,6 +529,7 @@ export default function App() {
         feedback_comment: comment,
         current_step: Math.max(...Array.from(completedSteps), 1),
         workshop_level: workshopLevel,
+        direction,
         completed_steps: Array.from(completedSteps),
         step_prompts: stepPrompts
       });
@@ -986,6 +1011,9 @@ export default function App() {
                     levelExplicitlySelected={levelExplicitlySelected}
                     disabledSectionTags={disabledSectionTags}
                     useCaseLockedLevel={useCaseLockedLevel}
+                    direction={direction}
+                    directionLocked={directionLocked}
+                    onDirectionChange={handleDirectionChange}
                     dataRefreshKey={dataRefreshKey}
                     onStepPromptGenerated={handleStepPromptGenerated}
                     onIndustryChange={(val, label) => { 

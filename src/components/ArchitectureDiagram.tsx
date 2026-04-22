@@ -30,9 +30,15 @@ import {
   BookOpen,
   FileCode,
   Cpu,
-  ShieldCheck
+  ShieldCheck,
+  RefreshCw,
 } from 'lucide-react';
-import { ARCH_VISIBILITY, CHAPTER_VISIBILITY, getCumulativeOverrides, type WorkshopLevel } from '../constants/workflowSections';
+import {
+  ARCH_VISIBILITY,
+  CHAPTER_VISIBILITY,
+  getCumulativeOverrides,
+  type WorkshopLevel,
+} from '../constants/workflowSections';
 import { ServicePopover } from './ServicePopover';
 
 // Learning objectives tagged by chapter - dynamically filtered by workshop level
@@ -54,6 +60,31 @@ const LEARNING_OBJECTIVES: LearningObjective[] = [
   { id: '9', chapters: ['ch4'], content: <>Power a <strong className="text-foreground">Genie Space</strong> with curated tables and governed metrics</> },
   { id: '10', chapters: ['ch4'], content: <>Build an <strong className="text-foreground">AI agent</strong> and connect it back to the deployed web application</> },
   { id: '11', chapters: ['ch4'], content: <>Create <strong className="text-foreground">AI/BI dashboards</strong> for data visualization and insights</> },
+];
+
+interface ReverseObjective {
+  id: string;
+  content: React.ReactNode;
+}
+
+const REVERSE_LAKEHOUSE_OBJECTIVES: ReverseObjective[] = [
+  { id: 'r1', content: <>Build <strong className="text-foreground">Bronze, Silver, and Gold</strong> data layers</> },
+  { id: 'r2', content: <>Use <strong className="text-foreground">Spark Declarative Pipelines</strong> for data quality</> },
+  { id: 'r3', content: <>Create curated <strong className="text-foreground">Gold tables</strong> ready for analytics</> },
+];
+
+const REVERSE_DI_OBJECTIVES: ReverseObjective[] = [
+  { id: 'r4', content: <>Define <strong className="text-foreground">Metric Views</strong> to standardize business metrics</> },
+  { id: 'r5', content: <>Use <strong className="text-foreground">Table Value Functions (TVFs)</strong> for reusable query logic</> },
+  { id: 'r6', content: <>Power a <strong className="text-foreground">Genie Space</strong> with governed metrics</> },
+];
+
+const REVERSE_ACTIVATION_OBJECTIVES: ReverseObjective[] = [
+  { id: 'r7', content: <>Use <strong className="text-foreground">Synced Tables</strong> to push Gold data into Lakebase</> },
+  { id: 'r8', content: <>Design an <strong className="text-foreground">analytics-serving app</strong> powered by synced data</> },
+  { id: 'r9', content: <>Embed a <strong className="text-foreground">Genie Space</strong> in the app for conversational analytics</> },
+  { id: 'r10', content: <>Wire the app to <strong className="text-foreground">Lakebase + Genie</strong> for dual-channel engagement</> },
+  { id: 'r11', content: <>Deploy and validate the <strong className="text-foreground">reverse ETL pipeline</strong></> },
 ];
 
 // Animation timing constants
@@ -514,13 +545,18 @@ function SkillsAcceleratorView({
 interface ArchitectureDiagramContentProps {
   workshopLevel?: WorkshopLevel;
   completedSteps?: Set<number>;
+  direction?: 'forward' | 'reverse';
 }
 
 /**
  * Inner diagram content without the outer card, header, or collapse logic.
  * Used by PathAndArchitecture to embed inside a combined collapsible card.
  */
-export function ArchitectureDiagramContent({ workshopLevel = 'end-to-end', completedSteps }: ArchitectureDiagramContentProps) {
+export function ArchitectureDiagramContent({
+  workshopLevel = 'end-to-end',
+  completedSteps,
+  direction = 'forward',
+}: ArchitectureDiagramContentProps) {
   const [bulletsRevealed, setBulletsRevealed] = useState(false);
 
   useEffect(() => {
@@ -540,6 +576,17 @@ export function ArchitectureDiagramContent({ workshopLevel = 'end-to-end', compl
       });
     }
   }, [workshopLevel]);
+
+  const prevDirectionRef = useRef(direction);
+  useEffect(() => {
+    if (direction !== prevDirectionRef.current) {
+      prevDirectionRef.current = direction;
+      setBulletsRevealed(false);
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => setBulletsRevealed(true));
+      });
+    }
+  }, [direction]);
 
   const isSkillsAccelerator = workshopLevel === 'skills-accelerator';
   const [expandedCard, setExpandedCard] = useState<number | null>(null);
@@ -589,14 +636,22 @@ export function ArchitectureDiagramContent({ workshopLevel = 'end-to-end', compl
   return (
     <div>
       {/* Interactive hint */}
-      <div className="mb-3 flex items-center justify-center gap-2 text-ui-sm text-slate-400">
-        <Info className="w-3.5 h-3.5 text-blue-400" />
-        <span>Click on any service to learn more about it</span>
+      <div className="mb-3 flex items-center justify-center gap-2 text-ui-sm text-slate-400 text-center px-2">
+        <Info className="w-3.5 h-3.5 text-blue-400 flex-shrink-0" />
+        <span>
+          <span className="font-medium text-slate-300">Interactive hint</span>
+          {' — '}
+          Click on any service to learn more about it
+          {direction === 'reverse' ? ' (Reverse ETL flow)' : ''}
+        </span>
       </div>
-      
-      {/* Architecture Diagram Container */}
-      <div className="w-full bg-slate-900 p-8 rounded-xl">
-        <div className="max-w-6xl mx-auto">
+
+      {/* Architecture Diagram Container - 3D Flip */}
+      <div className="arch-perspective">
+        <div className={`arch-card relative ${direction === 'reverse' ? 'flipped' : ''}`}>
+          {/* FRONT FACE - Forward Layout */}
+          <div className="arch-face w-full bg-slate-900 p-8 rounded-xl">
+            <div className="max-w-6xl mx-auto">
           <div className="relative flex items-stretch gap-4 justify-center">
             {appLakebaseFade.shouldRender && (
               <div className={`border-2 border-[#FF3621]/60 rounded-xl p-4 bg-slate-800/50 w-[13.75rem] flex-shrink-0 duration-300 ${fadeClass(appLakebaseFade.isVisible)}`}>
@@ -855,6 +910,272 @@ export function ArchitectureDiagramContent({ workshopLevel = 'end-to-end', compl
               )}
             </div>
           )}
+        </div>
+          </div>
+
+          {/* BACK FACE - Reverse Layout */}
+          <div className="arch-face arch-face-back w-full bg-slate-900 p-8 rounded-xl overflow-y-auto">
+            <div className="max-w-6xl mx-auto">
+              <div className="relative flex items-stretch gap-4 justify-center">
+                {/* LEFT: Lakehouse */}
+                {lakehouseFade.shouldRender && (
+                  <div className={`border-2 border-teal-500/60 rounded-xl p-4 bg-slate-800/50 flex-1 duration-300 ${fadeClass(lakehouseFade.isVisible)}`}>
+                    <div className="bg-teal-600 text-center py-2 px-3 rounded-lg mb-4">
+                      <div className="flex items-center justify-center gap-2 mb-1">
+                        <Database className="w-4 h-4 text-white" />
+                      </div>
+                      <p className="text-[13px] font-bold text-white">Lakehouse</p>
+                    </div>
+                    <div className="flex flex-col gap-2">
+                      <ServicePopover serviceKey="bronze" position="left" block>
+                        <div className="bg-gradient-to-br from-orange-700 to-amber-800 rounded-lg p-3.5 shadow-lg hover:shadow-orange-500/30 hover:shadow-xl transition-all duration-200 hover:scale-105">
+                          <div className="flex items-center gap-2 mb-1">
+                            <Layers className="w-5 h-5 text-orange-100" />
+                            <p className="text-[13px] font-bold text-white">Bronze</p>
+                          </div>
+                          <p className="text-[11px] text-orange-200">Raw data</p>
+                        </div>
+                      </ServicePopover>
+                      <ArrowDown className="w-4 h-4 text-slate-400 mx-auto" />
+                      <ServicePopover serviceKey="silver" position="left" block>
+                        <div className="bg-gradient-to-br from-slate-400 to-slate-500 rounded-lg p-3.5 shadow-lg hover:shadow-slate-300/30 hover:shadow-xl transition-all duration-200 hover:scale-105">
+                          <div className="flex items-center gap-2 mb-1">
+                            <Sparkles className="w-5 h-5 text-white" />
+                            <p className="text-[13px] font-bold text-white">Silver</p>
+                          </div>
+                          <p className="text-[11px] text-slate-100">Cleaned data</p>
+                        </div>
+                      </ServicePopover>
+                      <ArrowDown className="w-4 h-4 text-slate-400 mx-auto" />
+                      <ServicePopover serviceKey="gold" position="left" block>
+                        <div className="bg-gradient-to-br from-yellow-500 to-amber-600 rounded-lg p-3.5 shadow-lg hover:shadow-yellow-400/30 hover:shadow-xl transition-all duration-200 hover:scale-105">
+                          <div className="flex items-center gap-2 mb-1">
+                            <Zap className="w-5 h-5 text-yellow-100" />
+                            <p className="text-[13px] font-bold text-white">Gold</p>
+                          </div>
+                          <p className="text-[11px] text-yellow-100">Business ready</p>
+                        </div>
+                      </ServicePopover>
+                    </div>
+                  </div>
+                )}
+
+                {/* Arrow: Lakehouse → DI */}
+                {showLakehouse && showDataIntel && (
+                  <div className="flex flex-col items-center justify-center">
+                    <ChevronRight className="w-12 h-12 text-amber-400" strokeWidth={3} />
+                  </div>
+                )}
+
+                {/* MIDDLE: Data Intelligence */}
+                {dataIntelFade.shouldRender && (
+                  <div className={`border-2 border-blue-500/60 rounded-xl p-4 bg-slate-800/50 flex-1 duration-300 ${fadeClass(dataIntelFade.isVisible)}`}>
+                    <div className="bg-blue-600 text-center py-2 px-3 rounded-lg mb-4">
+                      <div className="flex items-center justify-center gap-2 mb-1">
+                        <Brain className="w-4 h-4 text-white" />
+                      </div>
+                      <p className="text-[13px] font-bold text-white">Data Intelligence</p>
+                    </div>
+                    <div className="flex flex-col gap-3">
+                      <div className="bg-slate-800 border-2 border-amber-500/60 rounded-lg p-3.5 shadow-lg">
+                        <p className="text-[13px] font-bold text-amber-300 mb-2">Gold Outputs</p>
+                        <div className="space-y-1.5">
+                          <ServicePopover serviceKey="tvf" position="left" block>
+                            <div className="bg-amber-900/30 rounded px-2.5 py-1.5 border border-amber-500/30 hover:bg-amber-900/50 hover:border-amber-400 transition-all duration-200 hover:scale-105">
+                              <p className="text-[11px] font-semibold text-amber-200">Table Value Functions</p>
+                            </div>
+                          </ServicePopover>
+                          <ServicePopover serviceKey="metricViews" position="left" block>
+                            <div className="bg-amber-900/30 rounded px-2.5 py-1.5 border border-amber-500/30 hover:bg-amber-900/50 hover:border-amber-400 transition-all duration-200 hover:scale-105">
+                              <p className="text-[11px] font-semibold text-amber-200">Metric Views</p>
+                            </div>
+                          </ServicePopover>
+                          <ServicePopover serviceKey="genieSpaces" position="left" block>
+                            <div className="bg-amber-900/30 rounded px-2.5 py-1.5 border border-amber-500/30 hover:bg-amber-900/50 hover:border-amber-400 transition-all duration-200 hover:scale-105">
+                              <p className="text-[11px] font-semibold text-amber-200">Genie Spaces</p>
+                            </div>
+                          </ServicePopover>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Dual-path arrows: DI → App & DB */}
+                {showDataIntel && showAppLakebase && (
+                  <div className="flex flex-col items-center justify-center gap-3">
+                    <div className="flex flex-col items-center">
+                      <div className="reverse-arrow">
+                        <ChevronRight className="w-10 h-10" strokeWidth={3} />
+                      </div>
+                      <span className="text-[9px] text-emerald-400/70 font-medium mt-0.5">Synced Tables</span>
+                    </div>
+                    <div className="flex flex-col items-center">
+                      <ChevronRight className="w-10 h-10 text-blue-400/80" strokeWidth={2} />
+                      <span className="text-[9px] text-blue-400/70 font-medium mt-0.5">Genie Embed</span>
+                    </div>
+                  </div>
+                )}
+
+                {/* RIGHT: App & Database */}
+                {appLakebaseFade.shouldRender && (
+                  <div className={`border-2 border-emerald-500/60 rounded-xl p-4 bg-slate-800/50 w-[220px] flex-shrink-0 duration-300 ${fadeClass(appLakebaseFade.isVisible)}`}>
+                    <div className="bg-emerald-600 text-center py-2 px-3 rounded-lg mb-4">
+                      <div className="flex items-center justify-center gap-2 mb-1">
+                        {visibility.ch2 && <HardDrive className="w-4 h-4 text-white" />}
+                        {visibility.ch1 && <Globe className="w-4 h-4 text-white" />}
+                      </div>
+                      <p className="text-[13px] font-bold text-white">
+                        {visibility.ch1 && visibility.ch2 ? 'App & Database' : visibility.ch1 ? 'Databricks App' : 'Lakebase'}
+                      </p>
+                    </div>
+                    <div className="flex flex-col items-center gap-3">
+                      {visibility.ch2 && (
+                        <ServicePopover serviceKey="lakebase" position="left" block>
+                          <div className="w-full bg-gradient-to-br from-violet-600 to-purple-700 rounded-lg shadow-lg p-3.5 hover:shadow-violet-500/40 hover:shadow-xl transition-all duration-200 hover:scale-105">
+                            <div className="flex flex-col items-center gap-1.5">
+                              <HardDrive className="w-7 h-7 text-white" />
+                              <p className="text-[13px] font-bold text-white">Lakebase</p>
+                              <p className="text-[10px] text-violet-200">Synced Tables</p>
+                            </div>
+                          </div>
+                        </ServicePopover>
+                      )}
+                      {visibility.ch1 && visibility.ch2 && (
+                        <ArrowDown className="w-4 h-4 text-emerald-400" />
+                      )}
+                      {visibility.ch1 && (
+                        <ServicePopover serviceKey="databricksApp" position="left" block>
+                          <div className="w-full bg-gradient-to-br from-[#FF3621] to-[#E62D1B] rounded-lg shadow-lg p-3.5 hover:shadow-[#FF3621]/40 hover:shadow-xl transition-all duration-200 hover:scale-105">
+                            <div className="flex flex-col items-center gap-1.5">
+                              <Globe className="w-7 h-7 text-white" />
+                              <p className="text-[13px] font-bold text-white">Analytics App</p>
+                              <span className="inline-flex items-center gap-1 text-[9px] font-medium text-blue-200 bg-blue-500/25 border border-blue-400/30 rounded-full px-2 py-0.5">
+                                <Sparkles className="w-2.5 h-2.5" />
+                                Genie Embedded
+                              </span>
+                            </div>
+                          </div>
+                        </ServicePopover>
+                      )}
+                      <ArrowDown className="w-5 h-5 text-slate-400" />
+                      <div className="w-16 h-16 bg-gradient-to-br from-slate-500 to-slate-600 rounded-lg shadow-lg flex items-center justify-center">
+                        <Users className="w-8 h-8 text-white" />
+                      </div>
+                      <p className="text-[13px] font-semibold text-slate-200">User</p>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Reverse Legend */}
+              <div className="mt-6 flex flex-wrap justify-center gap-5 md:gap-8">
+                <div className="flex items-center gap-2">
+                  <Database className="w-4 h-4 text-teal-500" />
+                  <p className="text-[11px] text-slate-400">Lakehouse</p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Brain className="w-4 h-4 text-blue-500" />
+                  <p className="text-[11px] text-slate-400">Data Intelligence</p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Sparkles className="w-4 h-4 text-amber-400" />
+                  <p className="text-[11px] text-slate-400">Genie Spaces</p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <RefreshCw className="w-4 h-4 text-emerald-500" />
+                  <p className="text-[11px] text-slate-400">Synced Tables (Reverse ETL)</p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <HardDrive className="w-4 h-4 text-violet-500" />
+                  <p className="text-[11px] text-slate-400">Lakebase</p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Globe className="w-4 h-4 text-[#FF3621]" />
+                  <p className="text-[11px] text-slate-400">Analytics App</p>
+                </div>
+              </div>
+
+              {/* Column-aligned reverse learning objectives */}
+              <div className="mt-5 flex gap-4 justify-center">
+                {/* Left: Lakehouse objectives */}
+                {lakehouseFade.shouldRender && REVERSE_LAKEHOUSE_OBJECTIVES.length > 0 && (
+                  <div className={`flex-1 duration-300 ${fadeClass(lakehouseFade.isVisible)}`}>
+                    <div className="rounded-lg bg-slate-800/40 border border-teal-500/20 p-3">
+                      <ul className="space-y-1.5">
+                        {REVERSE_LAKEHOUSE_OBJECTIVES.map((obj, idx) => (
+                          <li
+                            key={obj.id}
+                            className={`flex items-start gap-1.5 text-[11px] text-slate-300 transition-all duration-300 ease-out ${
+                              bulletsRevealed ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-1'
+                            }`}
+                            style={{ transitionDelay: bulletsRevealed ? `${idx * BULLET_STAGGER_MS}ms` : '0ms' }}
+                          >
+                            <span className="text-teal-400/70 mt-0.5 shrink-0">&#x2022;</span>
+                            <span>{obj.content}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  </div>
+                )}
+
+                {/* Spacer */}
+                {showLakehouse && showDataIntel && (
+                  <div className="w-12 flex-shrink-0" />
+                )}
+
+                {/* Middle: Data Intelligence objectives */}
+                {dataIntelFade.shouldRender && REVERSE_DI_OBJECTIVES.length > 0 && (
+                  <div className={`flex-1 duration-300 ${fadeClass(dataIntelFade.isVisible)}`}>
+                    <div className="rounded-lg bg-slate-800/40 border border-blue-500/20 p-3">
+                      <ul className="space-y-1.5">
+                        {REVERSE_DI_OBJECTIVES.map((obj, idx) => (
+                          <li
+                            key={obj.id}
+                            className={`flex items-start gap-1.5 text-[11px] text-slate-300 transition-all duration-300 ease-out ${
+                              bulletsRevealed ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-1'
+                            }`}
+                            style={{ transitionDelay: bulletsRevealed ? `${(REVERSE_LAKEHOUSE_OBJECTIVES.length + idx) * BULLET_STAGGER_MS}ms` : '0ms' }}
+                          >
+                            <span className="text-blue-400/70 mt-0.5 shrink-0">&#x2022;</span>
+                            <span>{obj.content}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  </div>
+                )}
+
+                {/* Spacer */}
+                {showDataIntel && showAppLakebase && (
+                  <div className="w-12 flex-shrink-0" />
+                )}
+
+                {/* Right: Activation / App & Database objectives */}
+                {appLakebaseFade.shouldRender && REVERSE_ACTIVATION_OBJECTIVES.length > 0 && (
+                  <div className={`w-[220px] flex-shrink-0 duration-300 ${fadeClass(appLakebaseFade.isVisible)}`}>
+                    <div className="rounded-lg bg-slate-800/40 border border-emerald-500/20 p-3">
+                      <ul className="space-y-1.5">
+                        {REVERSE_ACTIVATION_OBJECTIVES.map((obj, idx) => (
+                          <li
+                            key={obj.id}
+                            className={`flex items-start gap-1.5 text-[11px] text-slate-300 transition-all duration-300 ease-out ${
+                              bulletsRevealed ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-1'
+                            }`}
+                            style={{ transitionDelay: bulletsRevealed ? `${(REVERSE_LAKEHOUSE_OBJECTIVES.length + REVERSE_DI_OBJECTIVES.length + idx) * BULLET_STAGGER_MS}ms` : '0ms' }}
+                          >
+                            <span className="text-emerald-400/70 mt-0.5 shrink-0">&#x2022;</span>
+                            <span>{obj.content}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </div>

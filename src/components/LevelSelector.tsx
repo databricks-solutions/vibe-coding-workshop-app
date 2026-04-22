@@ -17,7 +17,8 @@
  * └──────────────────┴──────────────┴─────────────┴─────────────────────┘
  */
 
-import { WORKSHOP_LEVELS, SKILLS_ACCELERATOR_STATUS, getActiveChain, type WorkshopLevel } from '../constants/workflowSections';
+import { motion, LayoutGroup } from 'framer-motion';
+import { WORKSHOP_LEVELS, SKILLS_ACCELERATOR_STATUS, getActiveChain, type WorkshopLevel, type WorkflowDirection } from '../constants/workflowSections';
 import { Check, Info, Globe, HardDrive, Brain, Database, Rocket, Lock, Layers, MessageSquareText, BookOpen } from 'lucide-react';
 
 function LockedTooltip() {
@@ -46,6 +47,7 @@ interface LevelSelectorProps {
   levelExplicitlySelected?: boolean;
   useCaseLockedLevel?: WorkshopLevel | null;
   hasUseCaseSelected?: boolean;
+  direction?: WorkflowDirection;
 }
 
 const BUTTON_LABELS: Record<WorkshopLevel, string> = {
@@ -58,6 +60,10 @@ const BUTTON_LABELS: Record<WorkshopLevel, string> = {
   'genie-accelerator': 'Genie Accelerator',
   'data-engineering-accelerator': 'Data Engineering Accelerator',
   'skills-accelerator': 'Agent Skills Accelerator',
+  'reverse-lakehouse': 'Lakehouse',
+  'reverse-lakehouse-di': '+ Data Intelligence',
+  'reverse-lakebase': '+ Lakebase (Synced)',
+  'reverse-app': '+ Analytics App',
 };
 
 const LEVEL_DESCRIPTIONS: Record<WorkshopLevel, string> = {
@@ -70,15 +76,19 @@ const LEVEL_DESCRIPTIONS: Record<WorkshopLevel, string> = {
   'genie-accelerator': 'Analyze silver metadata, design Gold layer, and build Genie Spaces with Metric Views and TVFs',
   'data-engineering-accelerator': 'Build production-ready Bronze, Silver, and Gold data pipelines using Databricks Lakehouse best practices',
   'skills-accelerator': 'Build a Data Contract Governance Skill that tags gold-layer tables and validates compliance for certification',
+  'reverse-lakehouse': 'Start with Lakehouse data engineering, then sync analytics into Lakebase.',
+  'reverse-lakehouse-di': 'Build Gold layer analytics and Genie Spaces, then sync into Lakebase.',
+  'reverse-lakebase': 'Push curated analytics data into Lakebase PostgreSQL using Databricks Synced Tables.',
+  'reverse-app': 'Design and deploy an analytics application powered by synced Lakebase data.',
 };
 
 type Track = 'app' | 'analytics' | 'full' | 'accelerator';
 
 function getTrack(level: WorkshopLevel): Track {
-  if (level === 'app-only' || level === 'app-database') return 'app';
-  if (level === 'lakehouse' || level === 'lakehouse-di') return 'analytics';
+  if (level === 'app-only' || level === 'app-database' || level === 'reverse-lakebase' || level === 'reverse-app') return 'app';
+  if (level === 'lakehouse' || level === 'lakehouse-di' || level === 'reverse-lakehouse' || level === 'reverse-lakehouse-di') return 'analytics';
   if (level === 'end-to-end') return 'full';
-  return 'accelerator'; // 'accelerator', 'genie-accelerator', 'data-engineering-accelerator'
+  return 'accelerator';
 }
 
 /**
@@ -127,6 +137,7 @@ export function LevelSelectorContent({
   completedSteps = new Set(),
   useCaseLockedLevel,
   hasUseCaseSelected,
+  direction,
 }: LevelSelectorProps) {
   return (
     <LevelSelectorGrid
@@ -135,6 +146,7 @@ export function LevelSelectorContent({
       completedSteps={completedSteps}
       useCaseLockedLevel={useCaseLockedLevel}
       hasUseCaseSelected={hasUseCaseSelected}
+      direction={direction}
     />
   );
 }
@@ -145,6 +157,7 @@ function LevelSelectorGrid({
   completedSteps = new Set(),
   useCaseLockedLevel,
   hasUseCaseSelected = false,
+  direction = 'forward',
 }: LevelSelectorProps) {
   const highlightedButtons = getHighlightedButtons(selectedLevel, completedSteps);
 
@@ -202,12 +215,12 @@ function LevelSelectorGrid({
     }
   `;
 
-  const appHasHighlight = isHighlighted('app-only') || isHighlighted('app-database');
-  const analyticsHasHighlight = isHighlighted('lakehouse') || isHighlighted('lakehouse-di');
+  const appHasHighlight = isHighlighted('app-only') || isHighlighted('app-database') || isHighlighted('reverse-lakebase') || isHighlighted('reverse-app');
+  const analyticsHasHighlight = isHighlighted('lakehouse') || isHighlighted('lakehouse-di') || isHighlighted('reverse-lakehouse') || isHighlighted('reverse-lakehouse-di');
   const endToEndHasHighlight = isHighlighted('end-to-end');
 
-  const isAppSelected = appHasHighlight && (selectedLevel === 'app-only' || selectedLevel === 'app-database');
-  const isAnalyticsSelected = analyticsHasHighlight && (selectedLevel === 'lakehouse' || selectedLevel === 'lakehouse-di');
+  const isAppSelected = appHasHighlight && (selectedLevel === 'app-only' || selectedLevel === 'app-database' || selectedLevel === 'reverse-lakebase' || selectedLevel === 'reverse-app');
+  const isAnalyticsSelected = analyticsHasHighlight && (selectedLevel === 'lakehouse' || selectedLevel === 'lakehouse-di' || selectedLevel === 'reverse-lakehouse' || selectedLevel === 'reverse-lakehouse-di');
   const isEndToEndSelected = selectedLevel === 'end-to-end';
   const isAcceleratorSelected = selectedLevel === 'accelerator' || selectedLevel === 'genie-accelerator' || selectedLevel === 'data-engineering-accelerator' || selectedLevel === 'skills-accelerator';
 
@@ -293,24 +306,53 @@ function LevelSelectorGrid({
       </div>
 
       {/* 4-Column Box Layout */}
-      <div className="flex gap-3">
-        {/* Column 1: Web App + Database */}
-        <div className={getBoxClass(isAppSelected, appHasHighlight && !isAppSelected, isColumnLocked('app'))}>
-          {columnHeader('app')}
-          <div className="space-y-2">
-            {renderButton('app-only', <Globe className="w-4 h-4 flex-shrink-0" />)}
-            {renderButton('app-database', <HardDrive className="w-4 h-4 flex-shrink-0" />)}
-          </div>
-        </div>
+      <LayoutGroup>
+        <div className="flex gap-3">
+          {direction === 'reverse' ? (
+            <>
+              {/* Column 1 (was Column 2): Analytics + AI — reverse levels */}
+              <motion.div layout layoutId="col-analytics" className={getBoxClass(isAnalyticsSelected, analyticsHasHighlight && !isAnalyticsSelected, isColumnLocked('analytics'))}
+                transition={{ type: 'spring', stiffness: 250, damping: 22, mass: 0.9 }}>
+                {columnHeader('analytics')}
+                <div className="space-y-2">
+                  {renderButton('reverse-lakehouse', <Database className="w-4 h-4 flex-shrink-0" />)}
+                  {renderButton('reverse-lakehouse-di', <Brain className="w-4 h-4 flex-shrink-0" />)}
+                </div>
+              </motion.div>
 
-        {/* Column 2: Analytics + AI */}
-        <div className={getBoxClass(isAnalyticsSelected, analyticsHasHighlight && !isAnalyticsSelected, isColumnLocked('analytics'))}>
-          {columnHeader('analytics')}
-          <div className="space-y-2">
-            {renderButton('lakehouse', <Database className="w-4 h-4 flex-shrink-0" />)}
-            {renderButton('lakehouse-di', <Brain className="w-4 h-4 flex-shrink-0" />)}
-          </div>
-        </div>
+              {/* Column 2 (was Column 1): Web App + DB — reverse levels */}
+              <motion.div layout layoutId="col-app" className={getBoxClass(isAppSelected, appHasHighlight && !isAppSelected, isColumnLocked('app'))}
+                transition={{ type: 'spring', stiffness: 250, damping: 22, mass: 0.9 }}>
+                {columnHeader('app')}
+                <div className="space-y-2">
+                  {renderButton('reverse-lakebase', <HardDrive className="w-4 h-4 flex-shrink-0" />)}
+                  {renderButton('reverse-app', <Globe className="w-4 h-4 flex-shrink-0" />)}
+                </div>
+              </motion.div>
+            </>
+          ) : (
+            <>
+              {/* Column 1: Web App + Database (default) */}
+              <motion.div layout layoutId="col-app" className={getBoxClass(isAppSelected, appHasHighlight && !isAppSelected, isColumnLocked('app'))}
+                transition={{ type: 'spring', stiffness: 250, damping: 22, mass: 0.9 }}>
+                {columnHeader('app')}
+                <div className="space-y-2">
+                  {renderButton('app-only', <Globe className="w-4 h-4 flex-shrink-0" />)}
+                  {renderButton('app-database', <HardDrive className="w-4 h-4 flex-shrink-0" />)}
+                </div>
+              </motion.div>
+
+              {/* Column 2: Analytics + AI (default) */}
+              <motion.div layout layoutId="col-analytics" className={getBoxClass(isAnalyticsSelected, analyticsHasHighlight && !isAnalyticsSelected, isColumnLocked('analytics'))}
+                transition={{ type: 'spring', stiffness: 250, damping: 22, mass: 0.9 }}>
+                {columnHeader('analytics')}
+                <div className="space-y-2">
+                  {renderButton('lakehouse', <Database className="w-4 h-4 flex-shrink-0" />)}
+                  {renderButton('lakehouse-di', <Brain className="w-4 h-4 flex-shrink-0" />)}
+                </div>
+              </motion.div>
+            </>
+          )}
 
         {/* Column 3: End to End */}
         <div className={getBoxClass(isEndToEndSelected, endToEndHasHighlight && !isEndToEndSelected, isColumnLocked('full'))}>
@@ -444,7 +486,8 @@ function LevelSelectorGrid({
             </button>
           </div>
         </div>
-      </div>
+        </div>
+      </LayoutGroup>
     </>
   );
 }
@@ -453,6 +496,7 @@ export function LevelSelector({
   selectedLevel,
   onLevelChange,
   completedSteps = new Set(),
+  direction = 'forward',
 }: LevelSelectorProps) {
   const chain = getActiveChain(selectedLevel, completedSteps);
   const isAppChainCrossColumn = chain && chain.length === 4 && (selectedLevel === 'lakehouse' || selectedLevel === 'lakehouse-di');
@@ -463,8 +507,8 @@ export function LevelSelector({
         ? 'Progressive — App + Lakebase + Lakehouse'
         : 'Progressive — App + Lakebase + Lakehouse + Data Intelligence';
     }
-    const isAppSelected = selectedLevel === 'app-only' || selectedLevel === 'app-database';
-    const isAnalyticsSelected = selectedLevel === 'lakehouse' || selectedLevel === 'lakehouse-di';
+    const isAppSelected = selectedLevel === 'app-only' || selectedLevel === 'app-database' || selectedLevel === 'reverse-lakebase' || selectedLevel === 'reverse-app';
+    const isAnalyticsSelected = selectedLevel === 'lakehouse' || selectedLevel === 'lakehouse-di' || selectedLevel === 'reverse-lakehouse' || selectedLevel === 'reverse-lakehouse-di';
     const isEndToEndSelected = selectedLevel === 'end-to-end';
     const isAcceleratorSelected = selectedLevel === 'accelerator' || selectedLevel === 'genie-accelerator' || selectedLevel === 'data-engineering-accelerator' || selectedLevel === 'skills-accelerator';
     if (isAppSelected) return `Web App + Database — ${BUTTON_LABELS[selectedLevel]}`;
@@ -490,13 +534,17 @@ export function LevelSelector({
       case 'genie-accelerator': return 'Foundation → Silver Metadata → Gold Layer → Use-Case Plan → Genie Space → Refinement';
       case 'data-engineering-accelerator': return 'Foundation → Lakehouse (Bronze → Silver → Gold) → Refinement';
       case 'skills-accelerator': return 'Foundation → Build Agent Skill (Explore, Strategy, SKILL.md, Apply & Test, Validate) → Refinement';
+      case 'reverse-lakehouse': return 'Foundation → Lakehouse → Refinement';
+      case 'reverse-lakehouse-di': return 'Foundation → Lakehouse → Data Intelligence → Refinement';
+      case 'reverse-lakebase': return 'Foundation → Lakehouse → Data Intelligence → Reverse ETL (Synced Tables) → Refinement';
+      case 'reverse-app': return 'Foundation → Lakehouse → Data Intelligence → Reverse ETL (Analytics App) → Refinement';
       default: return '';
     }
   })();
 
   return (
     <div className="bg-card rounded-lg border border-border p-4 mb-4">
-      <LevelSelectorGrid selectedLevel={selectedLevel} onLevelChange={onLevelChange} completedSteps={completedSteps} />
+      <LevelSelectorGrid selectedLevel={selectedLevel} onLevelChange={onLevelChange} completedSteps={completedSteps} direction={direction} />
 
       {/* Description for selected level */}
       <div className="mt-4 pt-3 border-t border-border/50">

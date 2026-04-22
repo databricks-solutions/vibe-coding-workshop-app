@@ -235,6 +235,7 @@ export interface SessionSaveRequest {
   feedback_comment?: string;
   current_step: number;
   workshop_level?: string;
+  direction?: string;
   completed_steps: number[];
   step_prompts: Record<number, string>;
 }
@@ -309,6 +310,7 @@ export interface UpdateSessionMetadataRequest {
   custom_use_case_description?: string;
   level_explicitly_selected?: boolean;
   company_brand_url?: string;
+  direction?: 'forward' | 'reverse';
   coding_assistant?: string;
 }
 

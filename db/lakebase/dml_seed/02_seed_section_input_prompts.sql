@@ -13,8 +13,10 @@
 --   {lakebase_instance_name}  - From Workshop Parameters config (Lakebase instance name)
 --   {lakebase_host_name}      - From Workshop Parameters config (Lakebase host DNS)
 --   {default_warehouse}       - From Workshop Parameters config
+--   {lakehouse_default_catalog} - From Workshop Parameters config (default catalog)
 --   {use_case_slug}            - Derived per-session: e.g. booking-app (hyphens)
 --   {user_schema_prefix}      - Derived per-session: e.g. varunrao_b_booking_app
+--   {user_app_name}           - Derived per-session: Lakebase project / app name
 --   {prd_document}            - PRD from previous step
 --   {table_metadata}          - Table metadata from previous step
 --
@@ -8210,4 +8212,853 @@ Both bundles are destroyed automatically in Phase 9 — the root bundle (`databr
 - [ ] Pipelines page shows no workshop DLT pipelines
 - [ ] Dashboards page shows no workshop dashboards (check Trash too)
 - [ ] Genie page shows no workshop Genie spaces',
+true, 1, true, current_timestamp(), current_timestamp(), current_user());
+
+-- Activation: Reverse ETL (Steps 32-36)
+INSERT INTO ${catalog}.${schema}.section_input_prompts 
+(input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
+VALUES
+(141, 'activation_table_design',
+'## Your Task
+
+Plan which Gold layer assets to sync from the Lakehouse into Lakebase PostgreSQL using Databricks Synced Tables, then emit two design artifacts for every downstream reverse-ETL step: a shared reverse-ETL context document and a sync plan.
+
+- **Source:** `{lakehouse_default_catalog}.{user_schema_prefix}` (Gold)
+- **Target:** Lakebase Autoscaling project `{user_app_name}` (one project per student)
+- **Output artifacts (both required):**
+  - `@docs/reverse_etl.md` -- shared single source of truth for every downstream step
+  - `@docs/activation_sync_plan.md` -- per-candidate sync plan
+
+---
+
+### Mandatory Reads
+
+- `@docs/gold_layer_design.md` -- Gold tables, Metric Views, TVFs, and relationships
+- `@docs/usecase_plan.md` -- which artifacts the app needs
+- `@docs/design_prd.md` -- personas and analytics use cases the app must serve
+
+---
+
+### Steps
+
+1. Write `@docs/reverse_etl.md` first so Steps 33-37 can read back a single, authoritative environment block. It must contain **exactly** these fields:
+
+   ```
+   workspace_url:            {workspace_url}
+   lakehouse_default_catalog: {lakehouse_default_catalog}
+   user_schema_prefix:       {user_schema_prefix}
+   user_app_name:            {user_app_name}    # also Lakebase project_id
+   lakebase_instance_name:   {lakebase_instance_name}
+   lakebase_postgres_database: databricks_postgres   # fixed Lakebase default DB
+   lakebase_postgres_schema: {user_schema_prefix}    # custom schema; NOT public, NOT _gold
+   lakebase_root_branch:     production               # root branch is always production
+   endpoint_name:            projects/{user_app_name}/branches/production/endpoints/primary
+   lakebase_mode:            autoscaling               # workshop is Autoscaling-only
+
+   # Cost controls (workshop defaults; every later step MUST respect these)
+   autoscaling_limit_min_cu:     0.5                   # floor compute; allows scale-to-zero
+   autoscaling_limit_max_cu:     2.0                   # ceiling compute; do NOT raise during workshop
+   suspend_timeout_duration:     1800s                 # idle -> suspend after 30 minutes (long enough that a student reading docs or stepping away does NOT trigger mid-workshop cold starts)
+   endpoint_type:                ENDPOINT_TYPE_READ_WRITE
+   sync_mode_allowlist:          ["SNAPSHOT", "TRIGGERED"]   # CONTINUOUS is banned for cost reasons
+   triggered_min_cron_interval:  24h                   # TRIGGERED cadence floor
+   ```
+
+2. **Ensure the Lakebase project exists with cost-optimized sizing** (idempotent; safe to re-run):
+
+   ```bash
+   # Create the per-student project if it does not already exist (ignore "already exists")
+   databricks postgres create-project {user_app_name} --json ''''{"spec": {"display_name": "{user_app_name}"}}''''
+
+   # Apply or re-apply the cost-control settings on the primary endpoint
+   databricks postgres update-endpoint projects/{user_app_name}/branches/production/endpoints/primary "spec" --json ''''{"spec": {"endpoint_type": "ENDPOINT_TYPE_READ_WRITE", "autoscaling_limit_min_cu": 0.5, "autoscaling_limit_max_cu": 2.0, "suspend_timeout_duration": "1800s"}}''''
+
+   # Verify the settings round-trip
+   databricks postgres get-endpoint projects/{user_app_name}/branches/production/endpoints/primary --output json
+   ```
+
+   If `get-endpoint` comes back with `autoscaling_limit_max_cu > 2.0`, `suspend_timeout_duration` unset, or `suspend_timeout_duration < 1800s` or `> 1800s`, re-run `update-endpoint` -- do not proceed to Step 3 until the endpoint reports the workshop defaults (including the 30-minute suspend window). Record the actual host (`status.hosts.host`) into `@docs/reverse_etl.md` as `lakebase_host`.
+
+3. Inventory sync candidates from the Gold design (tables, Metric Views, TVFs) and map each to a stable primary key.
+4. Choose a sync mode per candidate -- **SNAPSHOT or TRIGGERED only** (see Technical Guardrails; CONTINUOUS is banned as a cost control).
+5. Flag columns that need type mitigation (ARRAY/MAP/STRUCT -> JSONB; GEOGRAPHY/GEOMETRY/VARIANT/OBJECT unsupported -- drop or cast).
+6. Order the candidates so dependencies (dims) are created before dependents (facts).
+7. Save the plan to `@docs/activation_sync_plan.md`. Reference `@docs/reverse_etl.md` for the environment block instead of re-inlining values. Include a candidate table (source object, synced name, PK, mode, type notes), creation order, and CDF enablement notes per candidate. Every TRIGGERED candidate must cite a cron expression `>= 24h`.
+
+---
+
+### Technical Guardrails (IDE agent cannot guess these)
+
+- **Autoscaling-only workshop.** Students each own one Lakebase project identified by `project_id = {user_app_name}`; the root branch is `production`. Do not design around Provisioned Lakebase, resource links, or PGPASSWORD flows.
+- **Target Postgres schema is `{user_schema_prefix}`** (no `_gold` suffix, not `public`). Lakebase creates a default `public` schema per database but this workshop uses a custom schema; record this in `@docs/reverse_etl.md` and reference it from every later step.
+- **Synced table names MUST differ from source** -- append a `_synced` suffix (e.g., `fact_flights` -> `fact_flights_synced`). Names must be `[A-Za-z0-9_]+` only.
+- **SNAPSHOT is the only valid mode for non-Delta sources.** Metric Views, Table-Valued Functions (TVFs), and Iceberg sources do NOT support Change Data Feed and therefore cannot be TRIGGERED. Mark these as SNAPSHOT in the sync plan and add a one-line note "non-Delta; SNAPSHOT only; CDF not applicable" so Step 33 will not attempt to enable CDF on them.
+- **TRIGGERED** for Delta tables that change on a known cadence (CDF required on the source Delta table).
+- Type map and unsupported types are in this step''s "How to Apply" reference -- use it, do not guess.
+
+---
+
+### Cost Controls (workshop hard limits -- the IDE agent MUST enforce these)
+
+- **CONTINUOUS sync mode is banned.** It incurs streaming compute 24/7 and blows the workshop budget in hours. If any candidate is marked CONTINUOUS in the Gold design, convert it to SNAPSHOT (or TRIGGERED with >=24h cron for Delta sources) and note the conversion in the sync plan. No exceptions.
+- **Endpoint sizing is capped.** `autoscaling_limit_min_cu = 0.5`, `autoscaling_limit_max_cu = 2.0`. Do NOT call `update-endpoint` with a higher `max_cu` at any point in Steps 32-37, and do not disable autoscaling. If a student reports slow queries, document it -- do not raise the ceiling in the workshop.
+- **Scale-to-zero must stay on, but must not trigger mid-workshop.** `suspend_timeout_duration = 1800s` (30 minutes). This window is intentionally long enough that a student reading docs, watching a demo video, or stepping away briefly will NOT hit a cold start in the middle of their workshop -- a 5-minute window would cause repeated mid-session cold-starts and is not acceptable. It is still short enough that a forgotten endpoint suspends within half an hour of true idle. Never set it to `0s` / `never` / any value other than `1800s`. A suspended Lakebase project costs $0 compute; a non-suspending one can idle-bill the whole workshop.
+- **TRIGGERED cron floor is 24h.** Sub-daily schedules multiply sync compute and Lakebase write cost.
+- **One project per student.** Do not create additional projects/branches/endpoints beyond the required `production` branch + `primary` endpoint -- each extra endpoint is independently billable.
+
+---
+
+### Done When
+
+- `@docs/reverse_etl.md` exists with all fields listed above, including the cost-control block and the actual `lakebase_host` from `get-endpoint`.
+- The Lakebase project `{user_app_name}` exists and `get-endpoint` returns `autoscaling_limit_min_cu=0.5`, `autoscaling_limit_max_cu=2.0`, `suspend_timeout_duration=1800s` (30 minutes).
+- `@docs/activation_sync_plan.md` exists with: candidate table, per-candidate PK + sync mode + type notes, creation order, and per-candidate CDF notes (including explicit "CDF not applicable" rows for Metric Views / TVFs / Iceberg).
+- Every synced name uses the `_synced` suffix.
+- No candidate is marked CONTINUOUS. Every TRIGGERED candidate cites a `>=24h` cron.
+- STOP after saving -- do not create synced tables in this step.',
+'You are a data architect planning reverse ETL sync from Databricks Lakehouse to Lakebase PostgreSQL using Synced Tables.
+
+This prompt is returned as-is for direct use in Cursor/Copilot. No LLM processing.',
+'Plan Synced Tables',
+'Design which Gold assets to sync into Lakebase via Synced Tables, including keys, modes, and types',
+32,
+'## Prerequisite
+
+**Run this in your cloned Template Repository** (see Prerequisites in Step 0). Prior steps (Gold layer design, use-case plan, PRD) must be complete.
+
+---
+
+## Steps to Apply
+
+1. Copy the generated prompt
+2. Paste into Cursor or Copilot
+3. The code assistant will:
+   - Read your Gold layer design, use-case plan, and PRD
+   - Identify sync candidates with primary keys and sync modes
+   - Save the plan to `@docs/activation_sync_plan.md`
+4. Review the plan against your actual Unity Catalog Gold schema before proceeding
+
+The allowed sync modes (SNAPSHOT / TRIGGERED; CONTINUOUS is banned) and the UC → Postgres type mitigations (ARRAY/MAP/STRUCT → JSONB; GEOGRAPHY/GEOMETRY/VARIANT/OBJECT unsupported) are documented in the Technical Guardrails of the generated prompt. The resolved table of candidates, PKs, modes, and type notes is written to `@docs/activation_sync_plan.md` so Steps 33-37 read it back instead of re-deriving it.',
+'## Expected Output
+
+- `@docs/reverse_etl.md` with:
+  - [ ] Workspace, catalog, schema, app name, and Lakebase instance fields from the environment block
+  - [ ] `lakebase_postgres_database: databricks_postgres` and `lakebase_postgres_schema: {user_schema_prefix}`
+  - [ ] `endpoint_name: projects/{user_app_name}/branches/production/endpoints/primary`
+  - [ ] `lakebase_mode: autoscaling`
+  - [ ] Cost-control block: `autoscaling_limit_min_cu: 0.5`, `autoscaling_limit_max_cu: 2.0`, `suspend_timeout_duration: 1800s` (30 min so students don''t cold-start mid-workshop), `triggered_min_cron_interval: 24h`, `sync_mode_allowlist: ["SNAPSHOT","TRIGGERED"]`
+  - [ ] `lakebase_host` recorded from `databricks postgres get-endpoint`
+
+- Lakebase project `{user_app_name}` exists with `get-endpoint` reporting min_cu=0.5, max_cu=2.0, suspend_timeout=1800s (30 minutes)
+
+- `@docs/activation_sync_plan.md` with:
+  - [ ] List of Gold tables, Metric Views, and TVFs targeted for sync
+  - [ ] Primary key strategy per synced object
+  - [ ] Sync mode (SNAPSHOT / TRIGGERED) per object — no CONTINUOUS (hard cost control)
+  - [ ] SNAPSHOT forced for Metric Views / TVFs / Iceberg (CDF not applicable)
+  - [ ] Each TRIGGERED entry cites a `>=24h` cron
+  - [ ] Data type mapping notes and mitigations
+  - [ ] Ordered creation checklist',
+true, 1, true, current_timestamp(), current_timestamp(), current_user());
+
+INSERT INTO ${catalog}.${schema}.section_input_prompts 
+(input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
+VALUES
+(142, 'activation_reverse_sync',
+'## Your Task
+
+Create Synced Tables in Lakebase by calling the Databricks Postgres REST API for each candidate in Step 32''s sync plan, then poll each to a healthy state and verify row counts.
+
+Environment values (workspace, project, root branch, endpoint, Postgres database/schema, source schema) come from `@docs/reverse_etl.md`. Candidate list, PKs, sync modes, and dependency order come from `@docs/activation_sync_plan.md`. Do not restate them here -- read them back from those docs at runtime.
+
+---
+
+### Mandatory Reads
+
+- `@docs/reverse_etl.md` -- authoritative environment block (workspace, catalog, schema, project, branch, endpoint, mode)
+- `@docs/activation_sync_plan.md` -- the source of truth for which objects to sync, PKs, and modes
+- `@docs/gold_layer_design.md` -- confirm source table names and columns actually exist
+
+---
+
+### Steps
+
+1. Authenticate to Databricks (`databricks auth login --host {workspace_url}`) and fetch a bearer token for API calls via `databricks auth token`.
+2. For every **Delta-sourced TRIGGERED** candidate, enable Change Data Feed on the source Delta table (`ALTER TABLE ... SET TBLPROPERTIES (delta.enableChangeDataFeed = true)`). Skip for SNAPSHOT and skip for any non-Delta source (Metric Views, TVFs, Iceberg) -- these must be SNAPSHOT per Step 32.
+3. In dependency order (dims before facts), create one synced table per candidate by POSTing to the synced tables endpoint (see API Contract below).
+4. After each create, poll the GET endpoint on a 10-second interval until `status.detailed_state` is a terminal healthy value (`ONLINE_TRIGGERED_UPDATE` / `ONLINE_NO_PENDING_UPDATE` / `ONLINE_SNAPSHOT_UPDATED`). Cap the wait at 15 minutes per table; if still not healthy, DELETE and recreate or surface the `status` payload for troubleshooting.
+5. Query each synced table in Lakebase Postgres (`SELECT count(*) FROM {user_schema_prefix}.<synced_table>`) and confirm rows match expectations from the Gold source.
+6. If a definition is wrong, DELETE the synced table and recreate -- do not edit in place.
+
+---
+
+### Technical Guardrails (IDE agent cannot guess these)
+
+**SDK pitfalls -- do NOT use these:**
+- `databricks.sdk.service.postgres` -- manages Lakebase infrastructure (projects/branches), NOT synced tables.
+- `databricks.sdk.service.database.DatabaseInstancesAPI` -- Provisioned Lakebase only; this workshop is Autoscaling-only.
+- Use the `requests` library directly (pre-installed on Databricks) with the bearer token from `databricks auth token`.
+
+**API contract (the non-obvious bits):**
+- Method + endpoint: `POST {workspace_url}/api/2.0/postgres/synced_tables` (underscores in path, not hyphens).
+- `synced_table_id` is a **query parameter**, not a body field. Value shape: `{lakehouse_default_catalog}.{user_schema_prefix}.<table>_synced`.
+- Request body is `{"spec": {...}}` at the root. Do NOT nest under `"synced_table"`.
+- Required `spec` fields (Autoscaling, one project per student):
+  - `source_table_full_name` -- three-level UC name of the Gold source
+  - `project` -- `projects/{user_app_name}` (one project per student; matches `@docs/reverse_etl.md`)
+  - `branch` -- `projects/{user_app_name}/branches/production` (root branch is always `production` for Autoscaling)
+  - `primary_key_columns` -- list
+  - `scheduling_policy` -- `SNAPSHOT` or `TRIGGERED` (no `CONTINUOUS`). Must match `@docs/activation_sync_plan.md`.
+  - `postgres_database` -- `databricks_postgres` (Lakebase''s default database)
+  - `postgres_schema` -- `{user_schema_prefix}` (NOT `public`, NOT `_gold`)
+  - `create_database_objects_if_missing` -- `true`
+- GET status: `GET {workspace_url}/api/2.0/postgres/synced_tables/{synced_table_id}` -- read `status.detailed_state`.
+- DELETE: `DELETE {workspace_url}/api/2.0/postgres/synced_tables/{synced_table_id}`.
+
+**Polling pattern (required):**
+```
+import time, requests
+deadline = time.time() + 900   # 15 minutes
+while time.time() < deadline:
+    state = requests.get(url, headers=auth).json()["status"]["detailed_state"]
+    if state in {"ONLINE_TRIGGERED_UPDATE", "ONLINE_NO_PENDING_UPDATE", "ONLINE_SNAPSHOT_UPDATED"}:
+        break
+    if state.startswith("FAILED") or state == "OFFLINE_FAILED":
+        raise RuntimeError(state)
+    time.sleep(10)
+```
+
+**Workshop overrides (override the sync plan if it conflicts):**
+- Synced table names must differ from source and end in `_synced`.
+- Per-synced-table limits: up to 16 Lakebase connections; 8 TB total logical data across all synced tables; schema evolution is additive-only for TRIGGERED.
+- **CDF is Delta-only.** Never attempt `ALTER TABLE ... SET TBLPROPERTIES (delta.enableChangeDataFeed = true)` on a Metric View, TVF, or Iceberg table -- it will fail. These must be SNAPSHOT.
+
+**Cost Controls (hard limits -- re-checked here in case Step 32 was skipped):**
+- **CONTINUOUS sync mode is banned** (per `@docs/reverse_etl.md` `sync_mode_allowlist`). If a candidate in `@docs/activation_sync_plan.md` says CONTINUOUS, convert it to SNAPSHOT (or TRIGGERED with a cron at the `triggered_min_cron_interval` floor from `@docs/reverse_etl.md` for a Delta source) and update the plan before calling the API. Do NOT POST a synced table with `scheduling_policy: "CONTINUOUS"`.
+- **Honor the TRIGGERED cron floor** from `@docs/reverse_etl.md`. Reject any cron tighter than that floor -- even a single sub-floor TRIGGERED sync can dominate workshop cost.
+- **Do NOT create new branches or endpoints.** Reuse the existing `production` branch and `primary` endpoint only. Any API call that would spawn an additional branch/endpoint is a cost regression and is not allowed in the workshop.
+- **Do NOT call `update-endpoint`** to change sizing in this step. Endpoint sizing was set in Step 32 and must stay at the values recorded in `@docs/reverse_etl.md`.
+- Before the first POST, re-run `databricks postgres get-endpoint projects/{user_app_name}/branches/production/endpoints/primary --output json` and confirm the sizing matches `@docs/reverse_etl.md`. If it has drifted, stop and re-apply from Step 32 before creating synced tables.
+
+**CLI sandbox note:** run `databricks auth login`, `databricks auth token`, and any `databricks apps ...` commands outside the IDE sandbox to avoid SSL/TLS certificate errors.
+
+**Docs:**
+- Lakebase projects (Autoscaling): https://docs.databricks.com/aws/en/oltp/projects/manage-projects
+- Synced Tables: https://docs.databricks.com/aws/en/oltp/projects/sync-tables
+- createSyncedTable REST API: https://docs.databricks.com/api/workspace/postgres/createsyncedtable
+
+---
+
+### Done When
+
+- Pre-flight `get-endpoint` confirms `min_cu=0.5`, `max_cu=2.0`, `suspend_timeout=1800s` (matches `@docs/reverse_etl.md`).
+- CDF is enabled on every Delta source that a TRIGGERED candidate points at; no CDF attempts were made on non-Delta sources.
+- No synced table was created with `scheduling_policy: "CONTINUOUS"`; every TRIGGERED entry uses a `>=24h` cron.
+- Every candidate in `@docs/activation_sync_plan.md` has been created via the REST API contract above, with `spec.project = projects/{user_app_name}` and `spec.branch = projects/{user_app_name}/branches/production`, in dependency order.
+- Polling shows a healthy `detailed_state` for each synced table within the 15-minute cap.
+- `SELECT count(*) FROM {user_schema_prefix}.<synced_table>` returns non-zero row counts consistent with the Gold source.
+- STOP after verification -- analytics app design is the next step.',
+'You are a Databricks engineer implementing Synced Tables for reverse ETL from the Lakehouse Gold layer into Lakebase PostgreSQL.
+
+CLI Best Practices:
+- Run CLI commands outside the IDE sandbox to avoid SSL/TLS certificate errors
+
+This prompt is returned as-is for direct use in Cursor/Copilot. No LLM processing.',
+'Create Synced Tables',
+'Create Synced Tables from Gold layer into Lakebase using the Databricks REST API',
+33,
+'## Prerequisite
+
+**Run this in your cloned Template Repository** with the Databricks CLI authenticated. Complete **Plan Synced Tables** (Step 32) first.
+
+---
+
+## Steps to Apply
+
+1. Copy the generated prompt
+2. Paste into Cursor or Copilot
+3. The code assistant will:
+   - Read your sync plan and Gold layer design
+   - Enable CDF where needed
+   - Create synced tables via the REST API (`POST /api/2.0/postgres/synced_tables`)
+   - Verify sync status and row counts
+
+## IMPORTANT -- API Usage
+
+- Do NOT use the Python SDK `databricks.sdk.service.postgres` module -- it manages infrastructure (projects/branches), NOT synced tables
+- Do NOT use `databricks.sdk.service.database.DatabaseInstancesAPI` -- that is for Provisioned Lakebase only
+- Use the `requests` library directly for all API calls
+
+Per-candidate sync modes (SNAPSHOT / TRIGGERED; CONTINUOUS is banned) are already resolved in `@docs/activation_sync_plan.md`. Do not re-decide modes here; honor the plan.
+
+## Reference: Capacity Constraints
+
+- Each synced table uses up to **16 connections** to the Lakebase database
+- Total logical data limit: **8 TB** across all synced tables
+- Names must be **alphanumeric and underscores only** (`[A-Za-z0-9_]+`)
+- Schema evolution: only **additive changes** for Triggered mode
+- Throughput: ~150 rows/sec/CU (Triggered), ~2,000 rows/sec/CU (Snapshot)
+
+## Reference: Scheduling Subsequent Syncs
+
+After initial sync, Snapshot and Triggered modes need explicit triggers via REST API or Lakeflow Jobs cron schedule.
+
+## Docs
+
+- [Synced Tables](https://docs.databricks.com/aws/en/oltp/projects/sync-tables)
+- [createSyncedTable REST API](https://docs.databricks.com/api/workspace/postgres/createsyncedtable)',
+'## Expected Output
+
+- [ ] CDF enabled on required source tables
+- [ ] All synced tables created in dependency order
+- [ ] Sync status confirmed healthy for each table
+- [ ] Row counts verified in Lakebase',
+true, 1, true, current_timestamp(), current_timestamp(), current_user());
+
+INSERT INTO ${catalog}.${schema}.section_input_prompts 
+(input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
+VALUES
+(143, 'activation_app_design',
+'## Your Task
+
+Design the UI for an analytics Databricks App powered by the Lakebase synced tables from Step 33, and save the design as `@docs/analytics_ui_design.md`.
+
+Synced data location (project, Postgres database, schema, Lakehouse source) comes from `@docs/reverse_etl.md`, and the concrete synced-table names and columns available to the UI come from `@docs/activation_sync_plan.md`. App code will live under `apps_lakebase/` (Steps 35-37); this step produces only the design doc in `@docs/`.
+
+---
+
+### Mandatory Reads
+
+- `@docs/reverse_etl.md` -- authoritative environment block; reference values instead of inventing them
+- `@docs/activation_sync_plan.md` -- which tables are now in Lakebase and their PKs
+- `@docs/gold_layer_design.md` -- entity relationships and metrics semantics
+- `@docs/design_prd.md` -- personas, journeys, and analytics needs
+- `@docs/ui_design.md` -- only if Chapter 1 built an existing app you are extending (optional)
+
+---
+
+### Steps
+
+1. Decide **extend vs greenfield** using the explicit rule below, then record the decision and the evidence (files you looked at) at the top of `@docs/analytics_ui_design.md`.
+2. Design analytics pages (dashboards with KPIs/charts/summary cards; exploration views with filters, sort, drill-downs) assuming a **mock-data-first** contract -- every page must work with placeholder data before any DB is wired.
+3. Map each visualization back to a specific synced Lakebase table and column from `@docs/activation_sync_plan.md`. No UI element is allowed that cannot cite its source.
+4. If a Genie-powered Agent exists from earlier in the workshop, include a natural-language search bar that calls the Agent endpoint alongside the structured dashboards.
+5. Save `@docs/analytics_ui_design.md` with: page/route list, per-page KPIs + charts + data sources, component hierarchy, navigation flow, and the extend-vs-greenfield note from Step 1.
+
+---
+
+### Technical Guardrails (IDE agent cannot guess these)
+
+- **Extend-vs-greenfield rule (apply it mechanically):**
+  - **Extend** if BOTH `apps_lakebase/app.py` AND `@docs/ui_design.md` exist -- add new analytics routes and pages without replacing existing CRUD flows, navigation, or ConnectionStatus placement.
+  - **Greenfield** if either `apps_lakebase/app.py` is missing OR `@docs/ui_design.md` is missing -- design a standalone analytics app and Step 35 will scaffold the directory.
+  - Do NOT guess from filenames alone; open `apps_lakebase/app.py` and `@docs/ui_design.md` to confirm both exist.
+- **Mock-data-first:** the design must not assume a live DB; Step 35 will implement with placeholder data, Step 36 wires Lakebase. Keep all visualizations mock-compatible.
+- **Reference synced objects exactly as written in `@docs/activation_sync_plan.md`** (names include the `_synced` suffix) and qualify them with the Postgres schema from `@docs/reverse_etl.md`. Do not invent names or restate values here.
+- Only candidates listed in `@docs/activation_sync_plan.md` are available -- no CONTINUOUS-mode data, no Gold objects that were not synced.
+
+---
+
+### Done When
+
+- `@docs/analytics_ui_design.md` exists with pages, per-page KPIs/charts, data sources (`{user_schema_prefix}.<synced_table>` + columns), navigation, and the extend-vs-greenfield decision with file evidence.
+- Every visualization cites a synced Lakebase table from the sync plan.
+- STOP after saving -- do not build the app in this step.',
+'You are a UI/UX designer creating analytics dashboards powered by Lakebase synced data.
+
+This prompt is returned as-is for direct use in Cursor/Copilot. No LLM processing.',
+'Design Analytics App',
+'Design analytics dashboards and exploration UI on top of synced Lakebase data',
+34,
+'## Prerequisite
+
+Complete **Create Synced Tables** (Step 33) so data is available in Lakebase.
+
+---
+
+## Steps to Apply
+
+1. Copy the generated prompt
+2. Paste into Cursor or Copilot
+3. The code assistant will:
+   - Read the sync plan, Gold design, and PRD
+   - Design analytics pages with KPIs and data sources
+   - Save the design to `@docs/analytics_ui_design.md`
+4. If a Chapter 1 app exists, confirm the design extends it rather than replacing it',
+'## Expected Output
+
+- `@docs/analytics_ui_design.md` with:
+  - [ ] Page or route list for the analytics experience
+  - [ ] KPIs and charts per page with data sources (synced tables + columns)
+  - [ ] Exploration patterns (filters, sort, detail panels)
+  - [ ] Clear note of extensions to existing app vs greenfield',
+true, 1, true, current_timestamp(), current_timestamp(), current_user());
+
+INSERT INTO ${catalog}.${schema}.section_input_prompts 
+(input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
+VALUES
+(144, 'activation_build_wire',
+'## Your Task
+
+You are a full-stack developer building an analytics web application. Your goal is to **generate analytics UI + backend APIs** from the prior-step design and **test locally** against placeholder data. Lakebase wiring happens in the next step.
+
+Environment values live in `@docs/reverse_etl.md`; analytics scope lives in `@docs/analytics_ui_design.md` and `@docs/activation_sync_plan.md`. Run all app commands and create/edit app files under `apps_lakebase/`. Design docs stay in `@docs/` at repo root.
+
+---
+
+### Mandatory Reads
+
+- `@docs/reverse_etl.md` -- authoritative environment block (workspace, schema, endpoint, mode)
+- `@docs/analytics_ui_design.md` -- pages, KPIs, charts, data sources, extend-vs-greenfield decision
+- `@docs/activation_sync_plan.md` -- which synced tables and columns the APIs will eventually serve
+- `@docs/design_prd.md` -- personas and journeys
+- `@docs/ui_design.md` -- only if extending an existing Chapter 1 app (optional)
+
+---
+
+### Local Development (Priority 0)
+
+The app MUST run locally with zero external dependencies on first try.
+
+- Placeholder (mock) data path is the default; control it with a `MOCK_DATA=true` env var.
+- No Docker, no running database, no API keys required for the default dev path.
+- **FastAPI entrypoint is `apps_lakebase/app.py` and is launched with `python app.py`** (the file calls `uvicorn.run(app, host="0.0.0.0", port=int(os.environ.get("PORT", 8000)))` from its `__main__` block). Do NOT launch with `uvicorn <module>:app` -- that contract is legacy and diverges from the parent repo.
+- Frontend boots with `npm run dev`.
+- Lazy-import any database drivers behind the `MOCK_DATA` check -- do not import at module level.
+
+The ConnectionStatus indicator shows "Mock Data" by default. It flips to "Live Data" only after Step 36 wires Lakebase.
+
+---
+
+### Directory Scaffolding (only if `apps_lakebase/app.py` does not exist -- otherwise extend in place)
+
+```
+apps_lakebase/
+  app.py                FastAPI entrypoint; run with `python app.py`
+  app.yaml              Databricks App config (filled in Step 37)
+  requirements.txt      Python dependencies (see minimums below)
+  package.json          Node dependencies
+  src/
+    backend/
+      api/routes.py     analytics API endpoints; {data, source} envelope
+      services/         (Step 36 will add lakebase.py here)
+    components/         React components for analytics pages
+    pages/              route-level React pages
+```
+
+**`apps_lakebase/app.py` contract (mirror the parent repo):**
+- imports `FastAPI`, `CORSMiddleware`, `StaticFiles`, `FileResponse`, `JSONResponse`
+- mounts `src/backend` on `sys.path` so `from src.backend.api.routes import router as api_router` works
+- `app.include_router(api_router, prefix="/api")`
+- registers `GET /health` returning `{"status": "healthy", ...}`
+- serves the built React `dist/` as static + SPA fallback
+- `if __name__ == "__main__": uvicorn.run(app, host="0.0.0.0", port=int(os.environ.get("PORT", 8000)))`
+
+**`apps_lakebase/requirements.txt` minimums (Autoscaling-only):**
+
+```
+fastapi>=0.109.0
+uvicorn[standard]>=0.27.0
+pydantic>=2.5.0
+databricks-sdk>=0.81.0
+psycopg[binary,pool]>=3.2.0
+```
+
+Do NOT add `psycopg2-binary` -- Lakebase Autoscaling uses `psycopg3` with a custom OAuth-aware connection (Step 36). Both drivers on the same app will cause import ambiguity.
+
+---
+
+### Steps
+
+1. Read `@docs/analytics_ui_design.md` and apply its extend-vs-greenfield decision. Only scaffold the tree above if `apps_lakebase/app.py` is missing.
+2. Create or extend `apps_lakebase/app.py` per the contract above. Keep it runnable with `python app.py` directly; the `PORT` env var must default to 8000.
+3. Add analytics API routes in `apps_lakebase/src/backend/api/routes.py`. Every route returns a `{ data, source }` envelope with `source: "mock"` -- realistic shapes that match the design, no database calls yet.
+4. Build React components under `apps_lakebase/src/components/` (and route-level pages under `apps_lakebase/src/pages/`) for the design. UI must call the backend APIs -- no hardcoded data in components. Include loading and error states.
+5. Add a ConnectionStatus indicator at the top center of the page header. Render "Mock Data" when any page''s `source` is `"mock"`; it will flip to "Live Data" after Step 36.
+6. Wire navigation -- extend the existing router if a Chapter 1 app exists, else add a minimal navigation component for the greenfield app.
+7. Test locally from `apps_lakebase/`: `pip install -r requirements.txt && npm install`, then boot the backend (`python app.py`) and frontend (`npm run dev`). Open `http://localhost:8000` and confirm pages render, ConnectionStatus shows "Mock Data", and there are no console errors.
+
+---
+
+### Technical Guardrails (IDE agent cannot guess these)
+
+- **Entrypoint is `app.py`, not `main.py`.** The Databricks Apps runtime will launch whatever `app.yaml` says in Step 37; the local dev contract is `python app.py`. Never generate a `main.py` file or a `uvicorn main:app --reload` command.
+- **Envelope contract:** every analytics route returns `{ data: ..., source: "mock" | "live" }`. Frontend reads both and feeds `source` into ConnectionStatus.
+- **Do NOT:** create a Dockerfile / docker-compose.yml, require a running DB locally, require secrets for the default dev path, or import DB drivers at module top-level.
+- **No hardcoded frontend data:** components always fetch from the backend; placeholder data lives in the backend mock layer only.
+- **Reuse project patterns:** follow the framework, styling, and folder conventions already present under `apps_lakebase/`.
+- **STOP after local mock pages render** -- do not wire Lakebase in this step.
+
+---
+
+### Done When
+
+- `apps_lakebase/app.py` runs with `python app.py` and serves the frontend + `/api` routes on `http://localhost:8000`.
+- `apps_lakebase/requirements.txt` lists `psycopg[binary,pool]` and `databricks-sdk` (no `psycopg2-binary`).
+- Backend analytics routes return placeholder data with `source: "mock"`.
+- React components match the analytics design and call the backend APIs.
+- ConnectionStatus is visible at the top center and shows "Mock Data".
+- Navigation works (extending existing app or greenfield).
+- Local dev passes at `http://localhost:8000` with zero external dependencies.
+- STOP -- proceed to Step 36 to wire Lakebase.',
+'You are a full-stack developer building an analytics Databricks App with placeholder data.
+
+This prompt is returned as-is for direct use in Cursor/Copilot. No LLM processing.',
+'Build Analytics App',
+'Build FastAPI + React analytics app with placeholder data and ConnectionStatus indicator, test locally',
+35,
+'## Prerequisite
+
+Complete **Design Analytics App** (Step 34). The design document at `@docs/analytics_ui_design.md` must exist.
+
+---
+
+## Steps to Apply
+
+1. Copy the generated prompt
+2. Paste into Cursor or Copilot
+3. The code assistant will:
+   - Read `@docs/reverse_etl.md` and the analytics design
+   - Scaffold `apps_lakebase/app.py` (runs via `python app.py`), `requirements.txt`, and the `src/` tree
+   - Create backend API routes with placeholder data and `source: "mock"` field
+   - Build React components for dashboards and exploration
+   - Create a ConnectionStatus indicator showing "Mock Data"
+   - Test locally at `http://localhost:8000`
+4. Verify ConnectionStatus shows "Mock Data" and all pages render before proceeding to wire',
+'## Expected Output
+
+- [ ] `apps_lakebase/app.py` runnable via `python app.py` on port 8000
+- [ ] `apps_lakebase/requirements.txt` lists `fastapi`, `uvicorn[standard]`, `databricks-sdk`, `psycopg[binary,pool]` (no `psycopg2-binary`)
+- [ ] FastAPI routes returning placeholder data with `source: "mock"`
+- [ ] React components matching the analytics design
+- [ ] ConnectionStatus indicator showing "Mock Data" at top of page
+- [ ] Navigation wired (extending existing app or greenfield)
+- [ ] Local testing passes at `http://localhost:8000`',
+true, 1, true, current_timestamp(), current_timestamp(), current_user());
+
+INSERT INTO ${catalog}.${schema}.section_input_prompts 
+(input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
+VALUES
+(146, 'activation_wire_lakebase',
+'## Your Task
+
+Replace the placeholder analytics API responses from Step 35 with real PostgreSQL queries against the synced Lakebase tables from Step 33. After wiring, the ConnectionStatus indicator flips from "Mock Data" to "Live Data" when Lakebase is reachable.
+
+Environment values (workspace, project, endpoint, Postgres database/schema) come from `@docs/reverse_etl.md`. Working directory is `apps_lakebase/`.
+
+---
+
+### Mandatory Reads
+
+- `@docs/reverse_etl.md` -- authoritative environment block (host, schema, endpoint, mode)
+- `@docs/activation_sync_plan.md` -- synced table names, PKs, Postgres schemas
+- `@docs/analytics_ui_design.md` -- which endpoint/page maps to which synced table and columns
+- `apps_lakebase/src/backend/api/routes.py` -- the mock endpoints from Step 35 to update in place
+
+---
+
+### Steps
+
+1. Refresh auth: `databricks auth login --host {workspace_url}`. Confirm `databricks auth describe` resolves a profile for `{workspace_url}`.
+2. Create `apps_lakebase/src/backend/services/lakebase.py` with the Autoscaling-only connection service (see "Connection service" below). Do not top-level-import `psycopg` from routes; import inside the request handler or inside service functions.
+3. **Schema discovery:** for every synced table in the sync plan, query PostgreSQL for column names, data types, NULL patterns, and distinct values on string/enum columns. Save findings to `@docs/lakebase_schema_discovery.md` and use this doc as the source of truth for all queries below.
+4. Update each analytics endpoint in `apps_lakebase/src/backend/api/routes.py` to query the relevant synced table(s) in schema `{user_schema_prefix}`. Keep the `{ data, source }` envelope from Step 35. On a successful query, set `source: "live"`; on any DB error, fall back to the existing placeholder response and set `source: "mock"` -- do not delete the mock branch.
+5. Add a `/api/health/lakebase` endpoint that borrows one connection from the pool, runs `SELECT 1`, and returns `{ "connected": true|false, "mode": "autoscaling", "schema": "{user_schema_prefix}", "error": ... }`. The ConnectionStatus indicator reads this.
+6. Test locally (`python app.py` + `npm run dev`, then `http://localhost:8000`). Verify: ConnectionStatus shows "Live Data", pages show real rows, `curl` on each analytics endpoint returns `source: "live"`, and the app still renders "Mock Data" cleanly if Lakebase is unreachable.
+
+---
+
+### Connection service (Autoscaling-only; port from the parent repo''s `src/backend/services/lakebase.py`)
+
+- Detect Autoscaling by presence of the env var `ENDPOINT_NAME`; if unset, the service must fail loudly rather than silently falling back to any other mode.
+- Generate credentials with the Databricks SDK:
+
+  ```
+  from databricks.sdk import WorkspaceClient
+  credential = WorkspaceClient().postgres.generate_database_credential(endpoint=os.environ["ENDPOINT_NAME"])
+  token = credential.token
+  ```
+
+- Use `psycopg3` with a module-level `ConnectionPool` (min 1, max 10) and a custom connection subclass that injects a freshly-generated token as the Postgres password on every new connection:
+
+  ```
+  from psycopg_pool import ConnectionPool
+  import psycopg
+
+  class _OAuthConnection(psycopg.Connection):
+      @classmethod
+      def connect(cls, conninfo="", **kwargs):
+          kwargs["password"] = _generate_autoscaling_credential()  # fresh OAuth token
+          return super().connect(conninfo, **kwargs)
+
+  _pool = ConnectionPool(
+      conninfo=_build_conninfo(),           # host, port, dbname=databricks_postgres, user=DATABRICKS_CLIENT_ID, sslmode=require
+      min_size=1, max_size=10,
+      connection_class=_OAuthConnection,
+      check=ConnectionPool.check_connection,
+  )
+  ```
+
+- `user` MUST be the app''s service principal. In the Databricks Apps runtime this is auto-injected as `DATABRICKS_CLIENT_ID`; locally it is the same when you run `databricks auth login` and the SDK resolves the service principal profile.
+- Expose a single `get_connection()` helper (context manager) for routes to use: `with get_connection() as conn: ...`.
+
+---
+
+### Technical Guardrails (IDE agent cannot guess these)
+
+- **Qualify every query with the Postgres schema from `@docs/reverse_etl.md`** (not `public`, not the Gold-layer schema). Either prefix tables (`FROM <schema>.<synced_table>`) or `SET search_path TO <schema>` at the top of each pooled connection.
+- **Autoscaling requires a pool with token rotation.** Do NOT open a raw `psycopg.connect()` per request -- OAuth tokens expire and you will thrash the SDK. Always borrow from `_pool` via the `_OAuthConnection` subclass; the pool and subclass together rotate tokens safely.
+- **App authorization only.** The Databricks Apps runtime auto-injects `DATABRICKS_CLIENT_ID` and `DATABRICKS_CLIENT_SECRET` for the app''s service principal. Do not ask users to paste a PAT, do not handle user-authorization flows in this step, and do not set `PGPASSWORD` manually -- the OAuth connection subclass owns password generation.
+- **Local-dev auth.** For local `python app.py`, the Databricks SDK picks up credentials from `databricks auth login` (CLI profile) automatically. Populate a git-ignored `.env` (or shell exports) using the values in `@docs/reverse_etl.md`, e.g.:
+
+  ```
+  LAKEBASE_HOST=<from @docs/reverse_etl.md lakebase_host>
+  LAKEBASE_PORT=5432
+  LAKEBASE_DATABASE=databricks_postgres
+  LAKEBASE_SCHEMA={user_schema_prefix}
+  ENDPOINT_NAME=projects/{user_app_name}/branches/production/endpoints/primary
+  LAKEBASE_MODE=autoscaling
+  ```
+
+  Never commit tokens.
+- **Envelope stays intact:** keep the `{ data, source }` contract from Step 35; never remove the mock fallback branch.
+- **No hardcoded date ranges or SLO assertions.** Drive date filters from UI-supplied parameters so the app works for use cases with different data cadences and latencies. Do not assert specific latency targets.
+- **String comparisons:** use `LOWER()` (or schema-verified exact casing from `@docs/lakebase_schema_discovery.md`) for any enum/string filter.
+- **Handle NULLs explicitly** in aggregations (`COALESCE`, filtered aggregates) -- synced data can contain NULLs the mock layer did not.
+- **CLI sandbox note:** run `databricks auth login` outside the IDE sandbox to avoid SSL/TLS certificate errors.
+- **Test endpoints before UI:** `curl` each analytics endpoint and confirm `source: "live"` before reloading the frontend.
+
+---
+
+### Done When
+
+- `apps_lakebase/src/backend/services/lakebase.py` exists with `ConnectionPool` + `_OAuthConnection` + `get_connection()`, porting the Autoscaling branch of the parent repo''s `src/backend/services/lakebase.py`.
+- `@docs/lakebase_schema_discovery.md` exists and lists columns, types, NULL patterns, and enum values for every synced table in schema `{user_schema_prefix}`.
+- Every analytics endpoint queries `{user_schema_prefix}.*` synced tables and returns `source: "live"` on success with a working mock fallback on error.
+- `/api/health/lakebase` exists and returns `{connected, mode: "autoscaling", schema: "{user_schema_prefix}", error?}`.
+- ConnectionStatus shows "Live Data" on the local app at `http://localhost:8000` and degrades gracefully to "Mock Data" if Lakebase is unreachable.
+- STOP -- deployment is the next step.',
+'You are a backend developer wiring a Databricks analytics app to synced Lakebase (PostgreSQL) tables.
+
+This prompt is returned as-is for direct use in Cursor/Copilot. No LLM processing.',
+'Wire to Lakebase',
+'Replace placeholder API data with real PostgreSQL queries against synced Lakebase tables',
+36,
+'## Prerequisite
+
+Complete **Build Analytics App** (Step 35). The app must be running locally with placeholder data and a ConnectionStatus indicator showing "Mock Data."
+
+---
+
+## Steps to Apply
+
+1. Copy the generated prompt
+2. Paste into Cursor or Copilot
+3. The code assistant will:
+   - Read `@docs/reverse_etl.md` and port the Autoscaling connection pattern from the parent repo''s `src/backend/services/lakebase.py`
+   - Create `apps_lakebase/src/backend/services/lakebase.py` with `ConnectionPool` + `_OAuthConnection` + `get_connection()`
+   - Discover synced-table schemas in `{user_schema_prefix}` and save to `@docs/lakebase_schema_discovery.md`
+   - Replace placeholder responses with real PostgreSQL queries against `{user_schema_prefix}.<synced_table>`
+   - Add a `/api/health/lakebase` endpoint reporting `{connected, mode, schema}`
+   - Test locally with `python app.py` and verify ConnectionStatus switches to "Live Data"
+4. Confirm ConnectionStatus shows "Live Data" before proceeding to deploy',
+'## Expected Output
+
+- [ ] `apps_lakebase/src/backend/services/lakebase.py` uses `ConnectionPool` + `_OAuthConnection` (Autoscaling-only; OAuth token rotation)
+- [ ] Schema discovery saved to `@docs/lakebase_schema_discovery.md`
+- [ ] Queries qualify with schema `{user_schema_prefix}` (not `public`, not `_gold`)
+- [ ] All analytics endpoints query synced Lakebase tables via the pooled service
+- [ ] Each endpoint returns `source: "live"` on success, `source: "mock"` on fallback
+- [ ] `/api/health/lakebase` returns `{connected, mode: "autoscaling", schema: "{user_schema_prefix}"}`
+- [ ] ConnectionStatus indicator shows "Live Data" at top of page
+- [ ] App still functions with placeholder data if Lakebase is unreachable',
+true, 1, true, current_timestamp(), current_timestamp(), current_user());
+
+INSERT INTO ${catalog}.${schema}.section_input_prompts 
+(input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
+VALUES
+(145, 'activation_deploy_validate',
+'## Your Task
+
+Deploy the locally-tested analytics application to Databricks Apps and validate the end-to-end reverse ETL pipeline: Lakehouse Gold -> Synced Tables -> Lakebase -> App.
+
+Environment values (workspace, app name / Lakebase project, endpoint, Postgres database/schema, cost-control targets) come from `@docs/reverse_etl.md`; `apps_lakebase/app.yaml` values below MUST match that doc. **Prerequisite:** Step 36 local testing passed with ConnectionStatus showing "Live Data" at `http://localhost:8000`.
+
+---
+
+### Mandatory Reads
+
+- `@docs/reverse_etl.md` -- authoritative environment block (IDs, caps, auth rules); the values in `app.yaml` MUST match
+- `apps_lakebase/app.py` and `apps_lakebase/requirements.txt` -- current entrypoint and deps
+- `apps_lakebase/app.yaml` -- current config (may not exist yet; create it per the contract below)
+- `apps_lakebase/scripts/` -- reuse any existing `deploy.sh` instead of writing ad-hoc commands
+- `apps_lakebase/resources.json` (or the equivalent resources block passed to `databricks apps update`) -- the app SP needs every binding below before verification will pass
+- `@docs/activation_sync_plan.md` -- which synced tables (and row counts) to spot-check for freshness
+- Repo-root `.gitignore` -- note the `dist/` exclusion under the Python block; it must be commented out **only for the duration of the sync**, then restored
+
+---
+
+### Steps
+
+1. **Pre-deploy cost check.** Run `databricks postgres get-endpoint projects/{user_app_name}/branches/production/endpoints/primary --output json` and assert that `autoscaling_limit_min_cu`, `autoscaling_limit_max_cu`, and `suspend_timeout_duration` match the values in `@docs/reverse_etl.md`. If any value has drifted, re-apply the Step 32 `update-endpoint` call and re-check before continuing. Do NOT proceed to deploy with a larger endpoint ceiling or a disabled suspend -- a running Databricks App keeps the endpoint warm and will bill against whatever ceiling you leave in place.
+2. **Grant the app SP all four permission classes** (Lakebase bind + schema USAGE/SELECT, Genie space CAN_RUN via PATCH, warehouse CAN_USE, UC USE_CATALOG/USE_SCHEMA/SELECT + EXECUTE on TVF schemas) per the "App-SP Permissions" section below. Miss any one and Step 7 verification will fail with masked exceptions.
+3. Write `apps_lakebase/app.yaml` using exactly the contract below. Do not invent additional top-level keys. Every `os.environ[...]` read by the backend must appear in `env` -- DAB variables declared in `databricks.yml` are **invisible** to the app runtime.
+4. **Sync the source tree** per the "Sync rules" section below. Key: use `databricks sync` (never `workspace import-dir`), and comment out the `dist/` line in the repo-root `.gitignore` before syncing, then restore it.
+5. Deploy the app. Prefer `apps_lakebase/scripts/deploy.sh --code-only -t development` if it exists; otherwise build the frontend (`npm run build`), run `databricks apps create {user_app_name}` on first deploy, then `databricks apps deploy {user_app_name} --source-code-path apps_lakebase/`.
+6. Poll deployment state (`databricks apps get {user_app_name}`) until the app status is `RUNNING` **and** the latest deployment state is `SUCCEEDED`. **Neither is sufficient alone** -- Step 7 is where real verification happens.
+7. **Verify the deployment via envelope semantics, not HTTP status.** Every analytics route and `/api/chat` wraps its live path in `try/except` and falls back to `_mock_envelope` with HTTP 200 on any exception. Parse `envelope.source` from the JSON body; `"mock"` is a deployment failure, not a warning. `curl $APP_URL/api/health/lakebase` and each `/api/analytics/*` must return `"source":"live"`. Then `databricks apps logs {user_app_name} --tail 200 | grep "falling back to mock"` -- any matching `logger.warning("/<route> falling back to mock: ...")` line reveals the masked exception and must be resolved. For `/api/chat`, confirm wiring from `response.citations[0].sql` (the Genie-generated SQL) -- an empty result set is NOT a failure, because TVFs default to `CURRENT_DATE`.
+8. **If any analytics route falls back to mock with a Postgres auth error**, check `databricks postgres list-roles` for the app-SP client ID. If `auth_method=NO_LOGIN`, run the role re-provision flip-flop:
+   a. `databricks postgres delete-role <app_sp_client_id>`
+   b. `databricks apps update {user_app_name} --json ''{"resources":[]}''`
+   c. `databricks apps update {user_app_name} --json @resources.json`
+   The flip (b → c) forces the control plane to mint the role with `LAKEBASE_OAUTH_V1` + `SERVICE_PRINCIPAL`. A plain re-apply is a no-op. After the role is re-created, re-run the `GRANT USAGE`/`GRANT SELECT` statements from Step 2.
+9. If other failures appear, consult the Common Errors table below, fix, redeploy, and retry -- cap at 3 iterations before stopping and reporting. Do NOT use `databricks apps stop` to "pause" between iterations -- it drops the active deployment (status flips to `UNAVAILABLE`) and is only safe when immediately followed by `apps deploy`.
+10. Validate freshness: spot-check synced-table row counts match the Gold source, and that any recent timestamps are present. Reload the UI a few minutes later to confirm ConnectionStatus stays on "Live Data".
+11. **Remove any debug/diagnostic routes** (e.g., `/api/debug/*`, `/api/_introspect`, exception-detail endpoints) that were added during iteration. They must not ship in the final deployment.
+12. **Post-deploy cost re-check.** Re-run `get-endpoint` after the app has been up for a few minutes and confirm the sizing values still match `@docs/reverse_etl.md`. If the endpoint reports a larger `max_cu` (e.g., because a well-meaning "fix" raised it), shrink it back to the ceiling in `@docs/reverse_etl.md` immediately -- the app will keep functioning; only peak throughput is capped.
+
+---
+
+### `apps_lakebase/app.yaml` contract (Autoscaling-only, docs-aligned)
+
+Officially, Databricks Apps `app.yaml` only supports two top-level keys: `command` (array) and `env` (list of `{name, value|valueFrom}`). Anything else is ignored or will break future runtimes -- do not add `name`, `description`, `health_check`, `resources`, or `config` at the top level. App resources (Lakebase bindings, Genie bindings, warehouse bindings, secrets) are defined in the resources JSON passed to `databricks apps update --json @resources.json`, not in `app.yaml`.
+
+```
+command: ["python", "app.py"]
+env:
+  - name: LAKEBASE_MODE
+    value: "autoscaling"
+  - name: USE_LAKEBASE
+    value: "true"
+  - name: LAKEBASE_HOST
+    value: "<fill from `databricks apps get {user_app_name}` or from your Lakebase project>"
+  - name: LAKEBASE_PORT
+    value: "5432"
+  - name: LAKEBASE_DATABASE
+    value: "databricks_postgres"
+  - name: LAKEBASE_SCHEMA
+    value: "{user_schema_prefix}"
+  - name: ENDPOINT_NAME
+    value: "projects/{user_app_name}/branches/production/endpoints/primary"
+  - name: AUTO_SEED
+    value: "false"
+  - name: MOCK_DATA
+    value: "false"
+```
+
+- `DATABRICKS_HOST`, `DATABRICKS_CLIENT_ID`, and `DATABRICKS_CLIENT_SECRET` are **auto-injected** by the Databricks Apps runtime for the app''s service principal -- do NOT put any of them in `app.yaml` and do NOT reference a PAT. Setting any of the three in `env` (even to the "correct" value) silently breaks OAuth, because the runtime''s injection happens before `env` is applied only for unset keys. Symptom: Lakebase routes return `source: "mock"` with `fe_sendauth: no password supplied` in the logs.
+- **Every `os.environ[...]` the backend reads at runtime must be listed in this `env` block.** Variables declared in `databricks.yml` (DAB) are visible to the bundle tooling only -- they are **not** propagated to the app container at runtime.
+- The app authorizes to Lakebase via the service principal + the OAuth token minted by `WorkspaceClient().postgres.generate_database_credential(endpoint=ENDPOINT_NAME)` in the Step 36 connection service. No `PGPASSWORD`, no user-authorization flows.
+- `command: ["python", "app.py"]` only -- do not use `uvicorn` directly or pass `--timeout-keep-alive`. The entrypoint file owns the uvicorn call and reads `PORT` from the environment.
+
+---
+
+### App-SP Permissions (all four classes required before verification will pass)
+
+The app runs as a dedicated service principal; it is **not** a member of the `users` group, so inherited grants will not cover it. All four classes must be in place before Step 7 verification will succeed:
+
+1. **Lakebase.** In the app resources JSON, bind `{postgres, CAN_CONNECT_AND_CREATE}`. This grants CONNECT/CREATE on the database only. **Separately** run, as a Postgres admin:
+   ```
+   GRANT USAGE ON SCHEMA {user_schema_prefix} TO "<app_sp_client_id>";
+   GRANT SELECT ON ALL TABLES IN SCHEMA {user_schema_prefix} TO "<app_sp_client_id>";
+   ALTER DEFAULT PRIVILEGES IN SCHEMA {user_schema_prefix} GRANT SELECT ON TABLES TO "<app_sp_client_id>";
+   ```
+2. **Genie space.** `CAN_RUN` via `PATCH /api/2.0/permissions/genie/{genie_space_id}` with body `{"access_control_list":[{"service_principal_name":"<app_sp_client_id>","permission_level":"CAN_RUN"}]}`. Use **PATCH, not PUT** -- PUT replaces the entire ACL and will clobber admin access.
+3. **Warehouse backing the Genie space.** `CAN_USE` granted explicitly to the app SP. Do not rely on `users` group inheritance.
+4. **Unity Catalog.** `USE_CATALOG` on the catalog, `USE_SCHEMA` + `SELECT` on every schema Genie reads, and `EXECUTE` on any schema containing TVFs. Miss any and `/api/chat` falls back to mock with the exception masked in the envelope.
+
+---
+
+### Sync rules (deploying the source tree)
+
+- Use `databricks sync apps_lakebase/ /Workspace/Users/<you>/{user_app_name}` only. It honors `.gitignore` (including the repo-root `.gitignore`). Despite the name, it does **not** honor `.databricksignore`.
+- Do NOT use `databricks workspace import-dir` against the app source path. It ignores `.gitignore` and will upload `.venv/`, causing the next `apps deploy` to fail with a cryptic 10 MB export-size error.
+- The repo-root `.gitignore` excludes `dist/` under its Python block -- the built frontend lives there and is required in the deployed image. For every deploy: comment out that single line, run the sync, then restore the line. Commit hygiene: do not leave the comment in place.
+- For a single-file change (e.g. editing `app.yaml`), prefer `databricks workspace import apps_lakebase/app.yaml /Workspace/.../{user_app_name}/app.yaml --overwrite` over a full re-sync.
+
+---
+
+### Guardrails (field-verified; IDE agent cannot guess these)
+
+- **Schema comes from `@docs/reverse_etl.md`.** Do not set `LAKEBASE_SCHEMA` to `public` or to the Gold-layer schema -- every analytics query will return zero rows.
+- **No latency assertions.** Sync mode (SNAPSHOT vs TRIGGERED) and Lakebase warm state make any hardcoded SLO ("sub-10ms") misleading. Validation is: reachable + `source: "live"` + clean logs + row-count freshness.
+- **Scale-to-zero is normal.** A cold-start request may take several seconds while `ConnectionPool.check_connection` re-auths -- not a failure. Never "fix" it by raising `max_cu` or disabling suspend.
+- **Cost controls hold before AND after deploy.** `autoscaling_limit_min_cu`, `autoscaling_limit_max_cu`, and `suspend_timeout_duration` must match `@docs/reverse_etl.md` at both Step 1 and Step 12. If they drift, re-apply Step 32''s `update-endpoint` JSON.
+- **No warmup cron, no keep-alive ping** against `/api/health/lakebase` or the app URL. It defeats scale-to-zero; dashboards/`curl` loops hitting the app are cost regressions.
+- **Stay on `production` + `primary`.** Do not add extra Lakebase branches or endpoints. Student-requested resizes are out of scope here -- document as post-workshop action.
+
+**Common Errors (Autoscaling-only):**
+
+| Error | Fix |
+|-------|-----|
+| `No module named ''psycopg''` | Add `psycopg[binary,pool]>=3.2.0` to `apps_lakebase/requirements.txt` (do NOT add `psycopg2-binary`) |
+| `fe_sendauth: no password supplied` | Step 36 connection service is not generating the OAuth token. Confirm `ENDPOINT_NAME` is set and `_OAuthConnection.connect` injects `password = _generate_autoscaling_credential()` before `super().connect` |
+| `relation "<table>_synced" does not exist` | Query is missing the schema qualifier -- use `{user_schema_prefix}.<table>_synced` or set `search_path` per connection |
+| Endpoints return `source: "mock"` on deployed app | `curl` returns HTTP 200 but `envelope.source == "mock"`. Run `databricks apps logs {user_app_name} --tail 200 \| grep "falling back to mock"` -- the masked exception is in the `logger.warning` line. Most common: missing `USAGE`/`SELECT` on the Autoscaling schema, app-SP role in `NO_LOGIN`, or `DATABRICKS_HOST`/`CLIENT_ID`/`CLIENT_SECRET` overridden in `env` |
+| `/api/chat` returns `source: "mock"` but analytics routes are live | Genie permission gap. Verify all four: Genie space `CAN_RUN` (via **PATCH** not PUT), warehouse `CAN_USE` granted to the app SP explicitly, and UC `USE_CATALOG`/`USE_SCHEMA`/`SELECT` (+ `EXECUTE` for TVF schemas) |
+| `/api/chat` returns empty results | Not a wiring failure -- TVFs default to `CURRENT_DATE` and legitimately return no rows. Confirm wiring via `response.citations[0].sql`, not row count |
+| App-SP shows `auth_method=NO_LOGIN` in `databricks postgres list-roles` | Run the role re-provision flip-flop: `postgres delete-role` → `apps update --json ''{"resources":[]}''` → `apps update --json @resources.json`. Then re-`GRANT USAGE`/`SELECT`. A plain `apps update` is a no-op |
+| `permission denied for schema {user_schema_prefix}` | The resources-JSON binding only grants DB-level CONNECT/CREATE. Run `GRANT USAGE ON SCHEMA {user_schema_prefix}` + `GRANT SELECT ON ALL TABLES IN SCHEMA {user_schema_prefix}` to the app-SP client ID, plus `ALTER DEFAULT PRIVILEGES ... GRANT SELECT` so future tables inherit |
+| Deploy fails with cryptic 10 MB export-size error | You used `databricks workspace import-dir` instead of `databricks sync`; `.venv/` got uploaded. Delete the workspace source directory and re-sync via `databricks sync` |
+| Frontend 404s / blank page after deploy, but API works | The repo-root `.gitignore` was not edited; `dist/` was excluded from the sync. Comment out the `dist/` line under the Python block, re-sync, restore |
+| Auth-related errors even though `DATABRICKS_HOST`/`CLIENT_ID`/`CLIENT_SECRET` "look right" in `app.yaml` | Remove them from `app.yaml`. All three are auto-injected by the runtime; any `env` override is silent auth poison |
+| Backend `KeyError` on an env var that exists in `databricks.yml` | DAB `variables` are invisible at runtime. Add the var to the `env` block in `app.yaml` |
+| `get-endpoint` shows `autoscaling_limit_max_cu` above the ceiling in `@docs/reverse_etl.md` | Re-apply the Step 32 `update-endpoint` JSON to restore the values recorded in `@docs/reverse_etl.md` before deploying |
+| `get-endpoint` shows `suspend_timeout_duration` unset, `0s`, or longer than the value in `@docs/reverse_etl.md` | Re-apply the Step 32 `update-endpoint` JSON so scale-to-zero stays enabled |
+
+---
+
+### Done When
+
+The deployed app passes envelope-level verification: every `/api/analytics/*` and `/api/chat` returns `envelope.source == "live"`, `databricks apps logs ... --tail 200 | grep "falling back to mock"` is empty, and `/api/chat` wiring is confirmed via `response.citations[0].sql`. The app SP holds all four permission classes from the App-SP Permissions section and `databricks postgres list-roles` shows `auth_method=LAKEBASE_OAUTH_V1` + `identity_type=SERVICE_PRINCIPAL`. Pre- and post-deploy `get-endpoint` both match `@docs/reverse_etl.md` (scale-to-zero preserved; no warmup cron). The `Expected Output` checklist (see `how_to_apply` / student UI) is the canonical item-by-item acceptance list.',
+'You are deploying an analytics application to Databricks Apps and validating the reverse ETL data pipeline.
+
+CLI Best Practices:
+- Check the `apps_lakebase/scripts/` folder for existing deploy scripts before writing ad-hoc commands
+- Run CLI commands outside the IDE sandbox to avoid SSL/TLS certificate errors
+
+This prompt is returned as-is for direct use in Cursor/Copilot. No LLM processing.',
+'Deploy & Validate',
+'Deploy analytics app to Databricks Apps and validate the full reverse ETL pipeline',
+37,
+'## Prerequisite
+
+Complete **Wire to Lakebase** (Step 36). Local testing must pass at `http://localhost:8000` with ConnectionStatus showing "Live Data."
+
+---
+
+## Steps to Apply
+
+1. Copy the generated prompt
+2. Paste into Cursor or Copilot
+3. The code assistant will:
+   - Pre- and post-deploy, assert `get-endpoint` sizing matches `@docs/reverse_etl.md`
+   - Grant the four app-SP permission classes (Lakebase bind + schema USAGE/SELECT; Genie space CAN_RUN via **PATCH**; warehouse CAN_USE; UC USE_CATALOG/USE_SCHEMA/SELECT + EXECUTE for TVF schemas)
+   - Write `apps_lakebase/app.yaml` (only `command` + `env`; no `DATABRICKS_HOST`/`CLIENT_ID`/`CLIENT_SECRET`; every `os.environ[...]` listed), sync via `databricks sync` with the `.gitignore` `dist/` toggle, then `apps create` + `apps deploy`
+   - Verify per-envelope: every `/api/analytics/*` AND `/api/chat` return `source: "live"`; `grep "falling back to mock"` in logs is empty; `/api/chat` wiring confirmed via `response.citations[0].sql`
+   - If app-SP shows `auth_method=NO_LOGIN`, run the role re-provision flip-flop (`postgres delete-role` → `apps update --json ''{"resources":[]}''` → `apps update --json @resources.json`) and re-`GRANT USAGE`/`SELECT`
+   - Remove any debug routes and confirm scale-to-zero still applies before declaring done',
+'## Expected Output
+
+- [ ] `databricks postgres get-endpoint` reports `autoscaling_limit_min_cu`, `autoscaling_limit_max_cu`, and `suspend_timeout_duration` matching `@docs/reverse_etl.md` (both pre- and post-deploy)
+- [ ] `apps_lakebase/app.yaml` uses only `command` and `env` top-level keys (no `resources`, `config`, `name`, `description`, `health_check`)
+- [ ] `command: ["python", "app.py"]`
+- [ ] `env` block populated from `@docs/reverse_etl.md` (`LAKEBASE_MODE`, `LAKEBASE_SCHEMA`, `LAKEBASE_DATABASE`, `ENDPOINT_NAME`, etc.); no `DATABRICKS_HOST`, `DATABRICKS_CLIENT_ID`, or `DATABRICKS_CLIENT_SECRET`
+- [ ] Every `os.environ[...]` read by the backend is present in the `env` block (no reliance on DAB-only variables)
+- [ ] App SP has Lakebase `CAN_CONNECT_AND_CREATE` binding + `USAGE ON SCHEMA {user_schema_prefix}` + `SELECT ON ALL TABLES IN SCHEMA {user_schema_prefix}` (with `ALTER DEFAULT PRIVILEGES`)
+- [ ] App SP has Genie space `CAN_RUN` (set via `PATCH /api/2.0/permissions/genie/{id}`, not PUT)
+- [ ] App SP has warehouse `CAN_USE` granted explicitly (not via `users` group)
+- [ ] App SP has UC `USE_CATALOG` + `USE_SCHEMA` + `SELECT` on every schema Genie reads, plus `EXECUTE` for schemas containing TVFs
+- [ ] `databricks postgres list-roles` shows the app-SP row with `auth_method=LAKEBASE_OAUTH_V1` + `identity_type=SERVICE_PRINCIPAL`
+- [ ] Deployment used `databricks sync`; repo-root `.gitignore` `dist/` block was restored after sync
+- [ ] `apps get` shows `state=RUNNING` AND latest deployment `state=SUCCEEDED`
+- [ ] Analytics UI accessible at the app URL
+- [ ] ConnectionStatus indicator shows "Live Data" on deployed app
+- [ ] All `/api/analytics/*` endpoints AND `/api/chat` return `envelope.source == "live"`
+- [ ] `databricks apps logs ... --tail 200 | grep "falling back to mock"` returns zero matches
+- [ ] `/api/chat` wiring confirmed via `response.citations[0].sql` (not row count)
+- [ ] App logs show successful database connections
+- [ ] Data freshness confirmed (Gold → Lakebase → App)
+- [ ] No debug/diagnostic routes remain mounted in the deployed app
+- [ ] No keep-alive/warmup cron in place; endpoint is allowed to scale-to-zero when idle',
 true, 1, true, current_timestamp(), current_timestamp(), current_user());

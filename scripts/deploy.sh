@@ -155,10 +155,11 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-# Build profile flag
+# Build profile flag and export for child scripts (e.g. setup-lakebase.sh)
 PROFILE_FLAG=""
 if [[ -n "$PROFILE" ]]; then
     PROFILE_FLAG="--profile $PROFILE"
+    export DATABRICKS_CONFIG_PROFILE="$PROFILE"
 fi
 
 # =============================================================================
