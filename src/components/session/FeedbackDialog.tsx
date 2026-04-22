@@ -71,8 +71,8 @@ export function FeedbackDialog({
               <MessageSquare className="h-4 w-4 text-primary" />
             </div>
             <div>
-              <h2 className="text-[15px] font-semibold text-foreground">Share Feedback</h2>
-              <p className="text-[12px] text-muted-foreground">Help us improve the workshop</p>
+              <h2 className="text-ui-md2 font-semibold text-foreground">Share Feedback</h2>
+              <p className="text-ui-sm text-muted-foreground">Help us improve the workshop</p>
             </div>
           </div>
           <button 
@@ -88,7 +88,7 @@ export function FeedbackDialog({
         <div className="p-5 space-y-4">
           {/* Rating Selection */}
           <div className="space-y-2">
-            <label className="text-[13px] font-medium text-foreground">
+            <label className="text-ui-base font-medium text-foreground">
               How was your experience? <span className="text-red-400">*</span>
             </label>
             
@@ -106,7 +106,7 @@ export function FeedbackDialog({
                              : 'bg-secondary border-border text-muted-foreground hover:border-muted-foreground hover:bg-secondary/80'}`}
               >
                 <ThumbsUp className={`h-6 w-6 ${rating === 'thumbs_up' ? 'fill-current' : ''}`} />
-                <span className="text-[12px] font-medium">Great!</span>
+                <span className="text-ui-sm font-medium">Great!</span>
               </button>
               
               <button
@@ -122,18 +122,18 @@ export function FeedbackDialog({
                              : 'bg-secondary border-border text-muted-foreground hover:border-muted-foreground hover:bg-secondary/80'}`}
               >
                 <ThumbsDown className={`h-6 w-6 ${rating === 'thumbs_down' ? 'fill-current' : ''}`} />
-                <span className="text-[12px] font-medium">Needs Work</span>
+                <span className="text-ui-sm font-medium">Needs Work</span>
               </button>
             </div>
             
             {errors.rating && (
-              <p className="text-[12px] text-red-400">{errors.rating}</p>
+              <p className="text-ui-sm text-red-400">{errors.rating}</p>
             )}
           </div>
 
           {/* Comment Field - REQUIRED */}
           <div className="space-y-1.5">
-            <label htmlFor="feedback-comment" className="text-[13px] font-medium text-foreground">
+            <label htmlFor="feedback-comment" className="text-ui-base font-medium text-foreground">
               Additional Comments <span className="text-red-400">*</span>
             </label>
             <textarea
@@ -151,12 +151,12 @@ export function FeedbackDialog({
               maxLength={1000}
               rows={4}
               disabled={isSubmitting}
-              className={`w-full px-3 py-2 bg-input border rounded text-[13px] text-foreground 
+              className={`w-full px-3 py-2 bg-input border rounded text-ui-base text-foreground 
                        placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary 
                        focus:border-transparent disabled:opacity-50 resize-none
                        ${errors.comment ? 'border-red-500' : 'border-border'}`}
             />
-            <div className="flex justify-between text-[11px]">
+            <div className="flex justify-between text-ui-xs">
               {errors.comment ? (
                 <span className="text-red-400">{errors.comment}</span>
               ) : (
@@ -189,10 +189,10 @@ export function FeedbackDialog({
                 </div>
               </div>
               <div className="flex-1">
-                <span className="text-[13px] font-medium text-foreground">
+                <span className="text-ui-base font-medium text-foreground">
                   Request follow-up support
                 </span>
-                <p className="text-[11px] text-muted-foreground mt-0.5">
+                <p className="text-ui-xs text-muted-foreground mt-0.5">
                   Check this if you'd like our team to reach out and provide additional help
                 </p>
               </div>
@@ -205,7 +205,7 @@ export function FeedbackDialog({
           <button 
             onClick={onClose} 
             disabled={isSubmitting}
-            className="px-4 py-2 text-[13px] font-medium text-muted-foreground hover:text-foreground 
+            className="px-4 py-2 text-ui-base font-medium text-muted-foreground hover:text-foreground 
                      hover:bg-secondary rounded transition-colors disabled:opacity-50"
           >
             Cancel
@@ -214,7 +214,7 @@ export function FeedbackDialog({
             onClick={handleSubmit} 
             disabled={isSubmitting || !rating || !comment.trim()}
             className="flex items-center gap-1.5 px-4 py-2 bg-primary hover:bg-primary/90 
-                     text-primary-foreground text-[13px] font-medium rounded transition-colors 
+                     text-primary-foreground text-ui-base font-medium rounded transition-colors 
                      disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {isSubmitting ? (

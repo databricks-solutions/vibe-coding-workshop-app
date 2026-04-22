@@ -30,9 +30,9 @@ function LockedTooltip() {
       <div className="relative bg-popover/95 backdrop-blur-md border border-border/50 shadow-xl rounded-lg px-3.5 py-2.5 whitespace-nowrap">
         <div className="flex items-center gap-2">
           <Lock className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-          <span className="text-[12px] font-semibold text-foreground">Path is locked</span>
+          <span className="text-ui-sm font-semibold text-foreground">Path is locked</span>
         </div>
-        <p className="text-[11px] text-muted-foreground mt-1 ml-[22px]">
+        <p className="text-ui-xs text-muted-foreground mt-1 ml-[22px]">
           Start a new session to switch tracks.
         </p>
       </div>
@@ -189,16 +189,16 @@ function LevelSelectorGrid({
     const disabled = isButtonDisabled(level);
 
     if (disabled) {
-      return `px-4 py-2.5 rounded-lg text-[12px] font-medium transition-all duration-200 w-full
+      return `px-4 py-2.5 rounded-lg text-ui-sm font-medium transition-all duration-200 w-full
         bg-secondary/40 text-muted-foreground/50 cursor-not-allowed`;
     } else if (isSelected) {
-      return `px-4 py-2.5 rounded-lg text-[12px] font-medium transition-all duration-200 w-full
+      return `px-4 py-2.5 rounded-lg text-ui-sm font-medium transition-all duration-200 w-full
         bg-primary text-primary-foreground shadow-md ring-2 ring-primary/30`;
     } else if (isIncluded) {
-      return `px-4 py-2.5 rounded-lg text-[12px] font-medium transition-all duration-200 w-full
+      return `px-4 py-2.5 rounded-lg text-ui-sm font-medium transition-all duration-200 w-full
         bg-primary/20 text-primary border border-primary/40 shadow-sm`;
     } else {
-      return `px-4 py-2.5 rounded-lg text-[12px] font-medium transition-all duration-200 w-full
+      return `px-4 py-2.5 rounded-lg text-ui-sm font-medium transition-all duration-200 w-full
         bg-secondary/60 text-foreground hover:bg-secondary hover:shadow-sm`;
     }
   };
@@ -275,7 +275,7 @@ function LevelSelectorGrid({
   };
 
   const columnHeader = (track: Track) => (
-    <div className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider mb-2 text-center flex items-center justify-center gap-1.5">
+    <div className="text-ui-xs font-bold text-muted-foreground uppercase tracking-wider mb-2 text-center flex items-center justify-center gap-1.5">
       {isColumnLocked(track) && <Lock className="w-3 h-3 text-muted-foreground/60" />}
       {TRACK_LABEL[track]}
     </div>
@@ -289,7 +289,7 @@ function LevelSelectorGrid({
           Choose Your Workshop Path
         </span>
         {isPathLocked ? (
-          <div className={`flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full ${
+          <div className={`flex items-center gap-1 text-ui-2xs px-2 py-0.5 rounded-full ${
             activeChain
               ? 'text-emerald-400/80 bg-emerald-500/10 border border-emerald-500/20'
               : 'text-amber-400/80 bg-amber-500/10 border border-amber-500/20'
@@ -298,7 +298,7 @@ function LevelSelectorGrid({
             <span className="font-medium">{activeChain ? 'Progressive' : 'Locked'}</span>
           </div>
         ) : (
-          <div className="flex items-center gap-1 text-[10px] text-muted-foreground bg-secondary/50 px-2 py-0.5 rounded-full">
+          <div className="flex items-center gap-1 text-ui-2xs text-muted-foreground bg-secondary/50 px-2 py-0.5 rounded-full">
             <Info className="w-3 h-3" />
             <span>Options within each track build on each other</span>
           </div>
@@ -376,7 +376,7 @@ function LevelSelectorGrid({
                 <div className="flex items-center gap-2.5">
                   <Rocket className="w-4 h-4 flex-shrink-0" />
                   <span className="flex-1 text-left">{BUTTON_LABELS['accelerator']}</span>
-                  <span className={`text-[9px] px-1.5 py-0.5 rounded font-medium ${
+                  <span className={`text-ui-3xs px-1.5 py-0.5 rounded font-medium ${
                     selectedLevel === 'accelerator'
                       ? 'bg-white/20 text-primary-foreground/80 border border-white/20'
                       : 'bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30'
@@ -399,7 +399,7 @@ function LevelSelectorGrid({
                 <div className="flex items-center gap-2.5">
                   <MessageSquareText className="w-4 h-4 flex-shrink-0" />
                   <span className="flex-1 text-left">{BUTTON_LABELS['genie-accelerator']}</span>
-                  <span className={`text-[9px] px-1.5 py-0.5 rounded font-medium ${
+                  <span className={`text-ui-3xs px-1.5 py-0.5 rounded font-medium ${
                     selectedLevel === 'genie-accelerator'
                       ? 'bg-white/20 text-primary-foreground/80 border border-white/20'
                       : 'bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30'
@@ -422,7 +422,7 @@ function LevelSelectorGrid({
                 <div className="flex items-center gap-2.5">
                   <Database className="w-4 h-4 flex-shrink-0" />
                   <span className="flex-1 text-left">{BUTTON_LABELS['data-engineering-accelerator']}</span>
-                  <span className={`text-[9px] px-1.5 py-0.5 rounded font-medium ${
+                  <span className={`text-ui-3xs px-1.5 py-0.5 rounded font-medium ${
                     selectedLevel === 'data-engineering-accelerator'
                       ? 'bg-white/20 text-primary-foreground/80 border border-white/20'
                       : 'bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30'
@@ -440,12 +440,12 @@ function LevelSelectorGrid({
               <button
                 disabled
                 title="Coming soon — Agent Skills Accelerator"
-                className="px-4 py-2.5 rounded-lg text-[12px] font-medium w-full bg-secondary/50 text-muted-foreground cursor-not-allowed border border-dashed border-border"
+                className="px-4 py-2.5 rounded-lg text-ui-sm font-medium w-full bg-secondary/50 text-muted-foreground cursor-not-allowed border border-dashed border-border"
               >
                 <div className="flex items-center gap-2.5">
                   <BookOpen className="w-4 h-4 flex-shrink-0 opacity-70" />
                   <span className="flex-1 text-left truncate">{BUTTON_LABELS['skills-accelerator']}</span>
-                  <span className="text-[9px] px-1.5 py-0.5 bg-muted rounded text-muted-foreground">soon</span>
+                  <span className="text-ui-3xs px-1.5 py-0.5 bg-muted rounded text-muted-foreground">soon</span>
                 </div>
               </button>
             ) : (
@@ -458,7 +458,7 @@ function LevelSelectorGrid({
                   <div className="flex items-center gap-2.5">
                     <BookOpen className="w-4 h-4 flex-shrink-0" />
                     <span className="flex-1 text-left">{BUTTON_LABELS['skills-accelerator']}</span>
-                    <span className={`text-[9px] px-1.5 py-0.5 rounded font-medium ${
+                    <span className={`text-ui-3xs px-1.5 py-0.5 rounded font-medium ${
                       selectedLevel === 'skills-accelerator'
                         ? 'bg-white/20 text-primary-foreground/80 border border-white/20'
                         : 'bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30'
@@ -476,12 +476,12 @@ function LevelSelectorGrid({
             <button
               disabled
               title="Coming soon — Lakebase Accelerator"
-              className="px-4 py-2.5 rounded-lg text-[12px] font-medium w-full bg-secondary/50 text-muted-foreground cursor-not-allowed border border-dashed border-border"
+              className="px-4 py-2.5 rounded-lg text-ui-sm font-medium w-full bg-secondary/50 text-muted-foreground cursor-not-allowed border border-dashed border-border"
             >
               <div className="flex items-center gap-2.5">
                 <HardDrive className="w-4 h-4 flex-shrink-0 opacity-70" />
                 <span className="flex-1 text-left truncate">Lakebase Accelerator</span>
-                <span className="text-[9px] px-1.5 py-0.5 bg-muted rounded text-muted-foreground">soon</span>
+                <span className="text-ui-3xs px-1.5 py-0.5 bg-muted rounded text-muted-foreground">soon</span>
               </div>
             </button>
           </div>
@@ -553,17 +553,17 @@ export function LevelSelector({
             <div className="w-2 h-2 rounded-full bg-primary animate-pulse" />
           </div>
           <div>
-            <span className="text-[13px] font-semibold text-foreground">
+            <span className="text-ui-base font-semibold text-foreground">
               {descriptionLabel}:
             </span>{' '}
-            <span className="text-[13px] text-muted-foreground">
+            <span className="text-ui-base text-muted-foreground">
               {LEVEL_DESCRIPTIONS[selectedLevel]}
             </span>
           </div>
         </div>
 
         {/* What's included hint */}
-        <div className="mt-2 text-[11px] text-muted-foreground/80 pl-4">
+        <div className="mt-2 text-ui-xs text-muted-foreground/80 pl-4">
           <span className="font-medium">Includes: </span>
           {includesText}
         </div>

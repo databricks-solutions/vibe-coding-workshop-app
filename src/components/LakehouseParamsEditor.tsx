@@ -90,7 +90,7 @@ export function LakehouseParamsEditor({ sessionId, isExpanded, label = 'Source:'
       <div className="mt-3 px-4 py-3 bg-muted/20 rounded-md border border-border/40">
         <div className="flex items-center gap-2.5">
           <Loader2 className="w-4 h-4 text-amber-500 animate-spin shrink-0" />
-          <span className="text-[13px] text-muted-foreground">Loading source catalog &amp; schema...</span>
+          <span className="text-ui-base text-muted-foreground">Loading source catalog &amp; schema...</span>
         </div>
         <div className="mt-2 flex gap-3">
           <div className="flex-1 h-7 bg-muted/40 rounded-md animate-pulse" />
@@ -111,7 +111,7 @@ export function LakehouseParamsEditor({ sessionId, isExpanded, label = 'Source:'
               {params.catalog}.{params.schema_name}
             </span>
             {params.is_overridden && (
-              <span className="text-[10px] px-1.5 py-0.5 bg-amber-500/20 text-amber-600 dark:text-amber-400 rounded-full font-medium">
+              <span className="text-ui-2xs px-1.5 py-0.5 bg-amber-500/20 text-amber-600 dark:text-amber-400 rounded-full font-medium">
                 Custom
               </span>
             )}
@@ -167,7 +167,7 @@ export function LakehouseParamsEditor({ sessionId, isExpanded, label = 'Source:'
           
           <div className="flex gap-3">
             <div className="flex-1">
-              <label className="block text-[10px] font-medium text-muted-foreground uppercase tracking-wider mb-1">
+              <label className="block text-ui-2xs font-medium text-muted-foreground uppercase tracking-wider mb-1">
                 Catalog
               </label>
               <input
@@ -179,7 +179,7 @@ export function LakehouseParamsEditor({ sessionId, isExpanded, label = 'Source:'
               />
             </div>
             <div className="flex-1">
-              <label className="block text-[10px] font-medium text-muted-foreground uppercase tracking-wider mb-1">
+              <label className="block text-ui-2xs font-medium text-muted-foreground uppercase tracking-wider mb-1">
                 Schema
               </label>
               <input
@@ -196,7 +196,7 @@ export function LakehouseParamsEditor({ sessionId, isExpanded, label = 'Source:'
             <p className="text-xs text-red-500">{error}</p>
           )}
           
-          <p className="text-[10px] text-muted-foreground">
+          <p className="text-ui-2xs text-muted-foreground">
             Changes are saved to your session only. Other users will see global defaults.
           </p>
         </div>

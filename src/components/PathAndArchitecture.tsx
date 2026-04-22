@@ -59,24 +59,24 @@ export function PathAndArchitecture({
           <Map className="w-5 h-5 text-primary" />
         </div>
         <div className="flex-1 text-left">
-          <h2 className="text-[15px] font-semibold text-foreground">
+          <h2 className="text-ui-md2 font-semibold text-foreground">
             Workshop Path & Architecture
           </h2>
-          <p className="text-muted-foreground text-[13px]">
+          <p className="text-muted-foreground text-ui-base">
             Choose your track and preview the services you'll build
           </p>
         </div>
 
         {/* Selected path badge when collapsed */}
         {!isExpanded && (
-          <span className="text-[11px] font-medium text-primary bg-primary/10 border border-primary/20 px-2.5 py-1 rounded-full">
+          <span className="text-ui-xs font-medium text-primary bg-primary/10 border border-primary/20 px-2.5 py-1 rounded-full">
             {BUTTON_LABELS[selectedLevel]}
           </span>
         )}
 
         <CopyLinkButton sectionId="path-architecture-section" />
 
-        <span className="inline-flex items-center gap-1 text-[11px] font-medium text-muted-foreground border border-border rounded-full px-2.5 py-1 bg-secondary/40 group-hover:bg-secondary group-hover:text-foreground transition-colors">
+        <span className="inline-flex items-center gap-1 text-ui-xs font-medium text-muted-foreground border border-border rounded-full px-2.5 py-1 bg-secondary/40 group-hover:bg-secondary group-hover:text-foreground transition-colors">
           <ChevronDown className={`w-3 h-3 transition-transform duration-200 ${isExpanded ? 'rotate-180' : ''}`} />
           {isExpanded ? 'Collapse' : 'Expand'}
         </span>
@@ -192,7 +192,7 @@ export function PathAndArchitecture({
                   setUserOverride(null);
                   onContinue();
                 }}
-                className="flex items-center gap-2 px-5 py-2.5 text-[13px] font-medium"
+                className="flex items-center gap-2 px-5 py-2.5 text-ui-base font-medium"
               >
                 <span>Start Building</span>
                 <ArrowRight className="w-4 h-4" />

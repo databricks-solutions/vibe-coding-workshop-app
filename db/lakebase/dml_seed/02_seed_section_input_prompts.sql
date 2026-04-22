@@ -185,7 +185,7 @@ The prompt should be focused and specific to {use_case_title}, incorporating the
 - All user journeys have success AND failure paths
 - Edge cases and error states are documented
 - Analytics events are specified for key actions',
-1, TRUE, current_timestamp(), current_timestamp(), current_user());
+1, true, current_timestamp(), current_timestamp(), current_user());
 
 -- Figma UI Design
 INSERT INTO ${catalog}.${schema}.section_input_prompts 
@@ -255,21 +255,35 @@ Simple UI design mockups that match the PRD:
 - Basic component designs
 - Clean, minimal layouts
 - Ready for implementation in Cursor/Copilot',
-TRUE,
-1, TRUE, current_timestamp(), current_timestamp(), current_user());
+true, 1, true, current_timestamp(), current_timestamp(), current_user());
 
--- UI Design - Build Locally
+-- Scaffold, Build, and Test Locally
 INSERT INTO ${catalog}.${schema}.section_input_prompts 
 (input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
 VALUES
 (3, 'cursor_copilot_ui_design',
 '## Your Task
 
-You are a full-stack developer building a web application. Your goal is to **generate UI and backend APIs** from the PRD and **test locally**.
+You are a full-stack developer building a web application on Databricks AppKit. Your goal is to scaffold a blank AppKit project, build a UI with mock data from a PRD, and test locally.
+
+**First:** Read `apps_lakebase/$APP_NAME/.vibecoding-state.md` if it exists — it contains resolved issues and variable values from prior phases.
 
 **Workspace:** `{workspace_url}`
 
-**Working directory:** Run all app commands and create/edit app files under the `apps_lakebase/` folder. Design docs (PRD, UI design) remain in the parent `docs/` folder at repo root.
+### File Locations
+
+| What | Where |
+|------|-------|
+| All app source, configs, server, client | `apps_lakebase/$APP_NAME/` |
+| Design docs (PRD, UI design) | `docs/` (repo root) |
+
+All file paths below are relative to `apps_lakebase/$APP_NAME/` unless explicitly prefixed with `docs/`.
+
+### Hard Constraints
+
+- **Workspace access:** Verify with `databricks current-user me --host {workspace_url}` before proceeding. If you get a 403, STOP and ask the user for a different workspace.
+- **Typegen noise:** `npm run dev` triggers `npm run typegen` via the `predev` hook. `TABLE_OR_VIEW_NOT_FOUND` errors are expected when no live SQL queries are configured. These do not block the app.
+- **App name:** Constructed below — do not use a shell variable named `USERNAME` (collides with system env vars on macOS/Linux).
 
 ---
 
@@ -280,368 +294,753 @@ You are a full-stack developer building a web application. Your goal is to **gen
 databricks auth login --host {workspace_url}
 
 # Derive app name from your username + use case
-FIRSTNAME=$(databricks current-user me --output json | jq -r ''.userName'' | cut -d''@'' -f1 | cut -d''.'' -f1)
-LASTINITIAL=$(databricks current-user me --output json | jq -r ''.userName'' | cut -d''@'' -f1 | cut -d''.'' -f2 | cut -c1)
-USERNAME="${FIRSTNAME}-${LASTINITIAL}"
-APP_NAME="${USERNAME}-{use_case_slug}"
-EMAIL=$(databricks current-user me --output json | jq -r ''.userName'')
+USER_JSON=$(databricks current-user me --output json)
+EMAIL=$(echo "$USER_JSON" | jq -r ''.userName'')
+FIRSTNAME=$(echo "$EMAIL" | cut -d''@'' -f1 | cut -d''.'' -f1)
+LASTINITIAL=$(echo "$EMAIL" | cut -d''@'' -f1 | cut -d''.'' -f2 | cut -c1)
+APP_PREFIX="${FIRSTNAME}-${LASTINITIAL}"
+APP_NAME="${APP_PREFIX}-{use_case_slug}"
 echo "App: $APP_NAME | Email: $EMAIL"
+
+# Validate and auto-truncate APP_NAME
+if [ ${#APP_NAME} -gt 26 ]; then
+  APP_NAME=$(echo "$APP_NAME" | cut -c1-26 | sed ''s/-$//'')
+  echo "Truncated to: $APP_NAME"
+fi
+if echo "$APP_NAME" | grep -q ''[^a-z0-9-]''; then
+  echo "ERROR: APP_NAME contains invalid characters: $APP_NAME"
+  echo "Must be lowercase letters, numbers, and hyphens only."
+fi
 ```
+
+**Important:** App names must be max 26 characters, lowercase letters/numbers/hyphens only (no underscores). The validation above catches issues automatically.
 
 ---
 
-### Step 2: Update Configuration Files
+### Step 2: Install Agent Skills and Scaffold the AppKit App
 
-Update `apps_lakebase/app.yaml` with your app name:
+Read and follow **every step** in the `01-appkit-scaffold` skill at `@apps_lakebase/skills/01-appkit-scaffold/SKILL.md`. Do not skip any steps.
 
-```yaml
-name: <APP_NAME>  # Replace with your APP_NAME from Step 1
+The skill will guide you through:
+1. **Installing Databricks Agent Skills** — required before scaffolding. Do not skip this.
+2. **Scaffolding the AppKit project** inside `apps_lakebase/`
+
+**Parameters to use** (the skill needs these values):
+- **Profile:** Use `$PROFILE` (or select one via `databricks auth profiles`)
+- **App name:** Use `$APP_NAME` from Step 1
+- **Features:** None — scaffold a **blank** app (no `--features` flag)
+- **Description:** `"{use_case_slug} app"`
+- **Working directory:** Run `cd apps_lakebase` first so the app is created inside `apps_lakebase/`
+
+After the skill completes scaffold + `npm install`, verify the bundle config:
+
+```bash
+# app.yaml has no name field (only the start command) — this is expected.
+# The app name lives in databricks.yml:
+grep "name:" databricks.yml
 ```
 
-Update `apps_lakebase/databricks.yml` with your app name in the resources section:
+If `databricks.yml` doesn''t contain `$APP_NAME`, update it manually.
 
-```yaml
-resources:
-  apps:
-    vibe_coding_workshop:
-      name: <APP_NAME>  # Replace with your APP_NAME from Step 1
-```
-
-**Important:** These files must have matching app names for deployment to work correctly. Both files are under `apps_lakebase/`.
+**From this point on, all file paths are relative to `apps_lakebase/$APP_NAME/`** — this is your app root.
 
 ---
 
 ### Step 3: Read the PRD
 
-Review `@docs/design_prd.md` (parent folder) to understand:
+Review `@docs/design_prd.md` (parent `docs/` folder at repo root) to understand:
+
 - User personas and their needs
 - Key user journeys (Happy Path only)
 - Core features and requirements
+- Data requirements — what entities and relationships the UI needs to display
 
 ---
 
-### Step 4: Generate the UI
+### Step 4: Build the App
 
-Create a **working web UI** with:
-- Key pages/views for primary user personas
-- Components for core features (Happy Path only)
-- Simple data display and forms for high-value user journeys
-- Follow the existing project''s framework, styling, and patterns
+Read and follow the `02-appkit-build` skill at `@apps_lakebase/skills/02-appkit-build/SKILL.md`. The skill covers frontend components, design quality, routing, and testing. **Read every reference file the skill points to** — especially `references/llm-guardrails.md` and `references/design-quality.md` — before writing component code.
 
-**Frontend code location:** `@apps_lakebase/src/components/`
+**Demo data strategy:** Use static mock data arrays directly in your components. All charts, tables, and data-driven components should use the `data` prop with hardcoded representative sample data. There is no live backend, no SQL warehouse, and no database at this stage — the goal is a fully functional UI with realistic-looking mock data.
 
----
+**Skip these parts of the build skill** (they are not relevant for a blank app):
+- SQL query file creation (`config/queries/`)
+- `npm run typegen` (type generation from SQL files)
+- `useAnalyticsQuery` hooks
+- `useMemo` on query parameters and `sql.*` helpers
 
-### Step 5: Create Backend APIs
-
-Add API endpoints in `@apps_lakebase/src/backend/api/routes.py` for each UI feature:
-- The UI must call these APIs - no hardcoded/mock data in components
-- Use placeholder data in API responses for now (Lakebase wiring comes later)
-
-**Code Pattern:**
-
-```python
-# Backend API (routes.py)
-@router.get("/api/items")
-async def get_items():
-    return {"data": [...]}
-```
+The backend only needs the `server()` plugin registered. The scaffold generates `.catch(console.error)` instead of `await` — **replace the entire `server/server.ts`** with:
 
 ```typescript
-// Frontend component - calls backend API
-useEffect(() => {
-  fetch(''/api/items'').then(res => res.json()).then(data => setItems(data.data));
-}, []);
+// REPLACE the scaffold-generated server/server.ts with this:
+import { createApp, server } from "@databricks/appkit";
+
+await createApp({
+  plugins: [server()],
+});
 ```
 
 ---
 
-### Step 6: Create UI Design Document
+### Step 5: Create UI Design Document
 
-Save a design overview to `@docs/ui_design.md` (parent folder at repo root) describing:
+Save a design overview to `@docs/ui_design.md` (parent `docs/` folder at repo root) describing:
+
 - Key screens/pages
-- Core components
-- Basic navigation flow
+- Core components and their mock data sources
+- Navigation flow
+- Design direction and aesthetic choices
 
 ---
 
-### Step 7: Verify app.py Serves Frontend
+### Step 6: Test Locally
 
-From the `apps_lakebase/` folder, ensure `app.py` serves the built frontend. It should have routes to serve `/` and `/assets`.
+From your app directory (`apps_lakebase/$APP_NAME/`):
+
+```bash
+# Free port 8000 if something is already bound to it
+lsof -ti:8000 | xargs kill -9 2>/dev/null || true
+
+npm run dev
+```
+
+**Note:** `npm run dev` triggers `npm run typegen` automatically via the `predev` hook. You may see `TABLE_OR_VIEW_NOT_FOUND` errors for queries referencing tables that don''t exist yet — this is expected and does not block the app from running.
+
+Open `http://localhost:8000` and verify:
+
+- The UI loads without console errors
+- Navigation works across pages
+- All interactive elements respond
+- Static mock data renders correctly in all components
+
+**Automated check (if browser is unavailable):**
+
+```bash
+curl -s -o /dev/null -w "%{http_code}" http://localhost:8000
+# Should return 200
+```
+
+**Visual verification** is recommended before proceeding. If you have access to the `web-devloop-tester` subagent, use it to check for console errors and layout issues.
 
 ---
 
-### Step 8: Test Locally
-
-**Test the app locally before deployment (run from `apps_lakebase/`):**
-
-1. Build the frontend: `npm install && npm run build`
-2. Start the backend server: `python app.py`
-3. Open `http://localhost:8000` in your browser
-4. Verify:
-   - The UI loads correctly
-   - Navigation works
-   - Backend API endpoints respond
-   - No console errors
-
-**Only proceed to deployment (next step) after local testing passes.**
-
----
-
-### Summary
+### Summary Checklist
 
 Your job is complete when:
-- Configuration files (apps_lakebase/app.yaml, apps_lakebase/databricks.yml) are updated with your app name
-- A working web UI is generated under apps_lakebase/
-- Backend APIs are created in apps_lakebase/src/backend/api/routes.py
-- `@docs/ui_design.md` is created (parent docs folder)
-- Local testing passes at `http://localhost:8000` (run from apps_lakebase/)',
-'You are a full-stack developer who builds web applications with React frontends and Python backends.
 
-Your approach:
-1. Read the PRD to understand user needs and journeys
-2. Build functional UI components with clean code
-3. Create backend API endpoints for data flow
-4. Test locally before deployment
+- [ ] Databricks CLI is authenticated and `APP_NAME` is set
+- [ ] AppKit project is scaffolded inside `apps_lakebase/` as a blank app (no plugins)
+- [ ] Backend (`server/server.ts`) uses `await createApp({ plugins: [server()] })` (not `.catch(console.error)`)
+- [ ] Frontend (`client/src/`) implements key pages with mock data
+- [ ] Loading/error/empty states on every data-driven component
+- [ ] `tests/smoke.spec.ts` uses `data-testid` selectors (not text/role); key page elements have `data-testid` attributes
+- [ ] `@docs/ui_design.md` is created (parent docs folder)
+- [ ] `npm run dev` runs cleanly at `http://localhost:8000`
+- [ ] `databricks apps validate` passes (catches strict-mode TS errors and smoke test regressions that `npm run build` alone misses)
+- [ ] `.vibecoding-state.md` updated (see below)
 
-Development principles:
-- Keep it simple - focus on Happy Path flows first
-- UI must call backend APIs - no hardcoded/mock data
-- Reuse existing components where possible
-- Follow the project''s existing patterns and conventions
+**Before finishing**, write (or append to) `apps_lakebase/$APP_NAME/.vibecoding-state.md` with:
+- Step name (`## Scaffold, Build & Test`)
+- Key variable values (`APP_NAME`, `PROFILE`, workspace URL)
+- Any resolved issues or workarounds encountered during this phase
+
+Only proceed to deployment after local testing passes.',
+'You are a full-stack developer building a web application on Databricks AppKit. Your goal is to scaffold a blank AppKit project, implement a UI with mock data from a PRD, and test locally.
+
+Key requirements:
+
+- Scaffold a **blank** AppKit project (no plugins) using the `01-appkit-scaffold` skill
+- Read the PRD to understand user personas, journeys, and data requirements
+- Build the app using the `02-appkit-build` skill (frontend components, design quality, routing)
+- Use static mock data arrays in all components — no live backend, no SQL warehouse, no database
+- Create a UI design document describing screens, components, and navigation
+- Test locally at `http://localhost:8000` before proceeding
+
+CLI Best Practices:
+
+- Run from `apps_lakebase/` or use `apps_lakebase/scripts/` for scripts
+- Run CLI commands outside the IDE sandbox to avoid SSL/TLS certificate errors
 
 This prompt is returned as-is for direct use in Cursor/Copilot. No LLM processing.',
-'UI Design - Build Locally',
-'Build UI and backend APIs, test locally before deployment',
+'Scaffold, Build, and Test Locally',
+'Scaffold a blank AppKit project, build UI with mock data from a PRD, test locally before deployment',
 4,
 '## How to Use
 
 1. **Copy the generated prompt**
-2. **Paste into Cursor or Copilot**
-3. The code assistant will:
-   - Read your PRD
-   - Generate UI components and backend APIs
-   - Create ui_design.md document
-   - Test locally at localhost:8000
+2. **Replace** `{workspace_url}` and `{use_case_slug}` with your values
+3. **Paste into Cursor or Copilot**
+4. The code assistant will:
+   - Authenticate and scaffold a blank AppKit project
+   - Read your PRD and build the UI with mock data
+   - Create `ui_design.md`
+   - Test locally at `http://localhost:8000`
 
-**Note:** This step focuses on local development. Deployment to Databricks happens in the next step.',
+**Note:** This step focuses on local development with static mock data. No SQL warehouse or database is needed. Deployment to Databricks happens in the **Deploy to Databricks Apps** step. Live data wiring via Lakebase happens in the **Setup Lakebase**, **Wire Lakebase Backend**, and **Deploy and E2E Test** steps.',
 '## Expected Output
 
-- Working web UI components under apps_lakebase/src/
-- Backend API endpoints in apps_lakebase/src/backend/api/routes.py
-- UI components calling backend APIs (not static HTML)
-- UI design document at `@docs/ui_design.md` (parent folder)
-- App running locally at `http://localhost:8000` (from apps_lakebase/)',
-TRUE,
-1, TRUE, current_timestamp(), current_timestamp(), current_user());
+**Project directory tree:**
 
--- Deploy and Test
+```
+apps_lakebase/$APP_NAME/
+├── app.yaml                    # App deployment configuration
+├── databricks.yml              # Databricks bundle config
+├── package.json                # Dependencies (@databricks/appkit, etc.)
+├── tsconfig.json
+├── server/
+│   └── server.ts               # AppKit backend (server plugin only)
+├── client/
+│   ├── index.html
+│   ├── vite.config.ts
+│   └── src/
+│       ├── main.tsx
+│       ├── App.tsx             # Root component with routing
+│       └── components/         # UI components with mock data
+└── tests/
+    └── smoke.spec.ts           # Smoke test (update selectors for your app)
+```
+
+Pages and components under `client/src/` will vary based on your PRD.
+
+**Terminal output — `npm run dev`:**
+
+Output format varies by AppKit version. Look for confirmation that the server is running on port 8000 and the Vite dev server is ready. You may see a Registered Routes table and `[appkit:server]`-prefixed log lines — this is normal.
+
+**Architecture — Local Development:**
+
+```mermaid
+graph LR
+    Browser["Browser<br/>localhost:8000"] --> Vite["Vite Dev Server<br/>(HMR + Proxy)"]
+    Vite --> AppKit["AppKit Backend<br/>(Node.js/Express)"]
+
+    subgraph local [Local Machine]
+        Browser
+        Vite
+        AppKit
+    end
+```
+
+**What you should see in the browser:**
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│  My App                                    Dashboard | Details│
+├─────────────────────────────────────────────────────────────┤
+│                                                             │
+│  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐   │
+│  │ Total    │  │ Active   │  │ Revenue  │  │ Growth   │   │
+│  │ Orders   │  │ Users    │  │ $12,450  │  │ +15.3%   │   │
+│  │ 1,247    │  │ 342      │  │          │  │          │   │
+│  └──────────┘  └──────────┘  └──────────┘  └──────────┘   │
+│                                                             │
+│  ┌─────────────────────────────┐  ┌────────────────────┐   │
+│  │  Orders by Status           │  │  Recent Activity   │   │
+│  │  ████████████ Completed 72% │  │  Order #1247 ...   │   │
+│  │  ██████      Pending   20% │  │  Order #1246 ...   │   │
+│  │  ███         Cancelled  8% │  │  Order #1245 ...   │   │
+│  │                             │  │  Order #1244 ...   │   │
+│  └─────────────────────────────┘  └────────────────────┘   │
+│                                                             │
+└─────────────────────────────────────────────────────────────┘
+```
+
+**Verification — curl test:**
+
+```bash
+$ curl -s http://localhost:8000 | head -1
+<!DOCTYPE html>
+```',
+true, 1, true, current_timestamp(), current_timestamp(), current_user());
+
+-- Deploy and E2E Test with Lakebase
 INSERT INTO ${catalog}.${schema}.section_input_prompts 
 (input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
 VALUES
 (4, 'workspace_setup_deploy',
 '## Your Task
 
-Deploy the locally-tested web application to Databricks Apps and run comprehensive end-to-end testing.
+Deploy the Lakebase-wired web application to Databricks Apps and run comprehensive end-to-end testing. This is the first deploy with Lakebase code — the Service Principal will create the database schema, tables, and seed data on startup.
+
+**First:** Read `apps_lakebase/$APP_NAME/.vibecoding-state.md` if it exists — it contains resolved issues and variable values from prior phases.
 
 **Workspace:** `{workspace_url}`
 
-**Working directory:** All app paths and commands use the `apps_lakebase/` folder.
+**Working directory:** All app paths and commands use the `apps_lakebase/` folder. The scaffolded AppKit app lives at `apps_lakebase/$APP_NAME/`.
 
-> **Prerequisite:** Complete Step 7 (Wire UI to Lakebase) first. Local testing must pass before deployment.
-
----
-
-## Deployment Constraints
-- Databricks App names must use only lowercase letters, numbers, and dashes (no underscores).
-  Use hyphens: `my-app-name` not `my_app_name`.
-- The Databricks Apps runtime auto-runs `npm install` and `npm run build` when it
-  finds a `package.json`. Ensure `databricks.yml` sync config includes both `dist/**`
-  AND `src/**` so the platform build succeeds.
+**Prerequisite:** Complete the **Wire Lakebase Backend** step first. Local testing must pass with mock fallback data before deployment.
 
 ---
 
-### Step 1: Verify Local Build
+### Deployment Constraints
 
-Ensure the frontend is built and local testing has passed (from `apps_lakebase/` or check path):
+- Databricks App names must use only lowercase letters, numbers, and dashes (no underscores). Use hyphens: `my-app-name` not `my_app_name`.
+- App names are max 26 characters.
+
+---
+
+### Step 1: Set Variables and Validate Lakebase Config
+
+Derive your app name and auto-detect a CLI profile for the target workspace:
+
 ```bash
-ls apps_lakebase/dist/index.html || (cd apps_lakebase && npm run build)
+USER_JSON=$(databricks current-user me --output json)
+EMAIL=$(echo "$USER_JSON" | jq -r ''.userName'')
+FIRSTNAME=$(echo "$EMAIL" | cut -d''@'' -f1 | cut -d''.'' -f1)
+LASTINITIAL=$(echo "$EMAIL" | cut -d''@'' -f1 | cut -d''.'' -f2 | cut -c1)
+APP_PREFIX="${FIRSTNAME}-${LASTINITIAL}"
+APP_NAME="${APP_PREFIX}-{use_case_slug}"
+
+TARGET_HOST="{workspace_url}"
+PROFILE=$(databricks auth profiles --output json 2>/dev/null \
+  | jq -r --arg host "$TARGET_HOST" \
+    ''[.profiles[] | select(.host == $host)] | .[0].name // empty'')
+
+if [ -z "$PROFILE" ]; then
+  echo "No profile found for $TARGET_HOST — creating one..."
+  databricks auth login --host "$TARGET_HOST"
+  PROFILE=$(databricks auth profiles --output json 2>/dev/null \
+    | jq -r --arg host "$TARGET_HOST" \
+      ''[.profiles[] | select(.host == $host)] | .[0].name // empty'')
+fi
+
+echo "Using profile: $PROFILE"
 ```
 
----
+Verify `app.yaml` has the Lakebase-specific environment variables (in addition to the generic checks the deploy skill performs):
 
-### Step 2: Deploy Application
-
-1. **Review the `apps_lakebase/scripts/` folder** in this project to find a deployment script (e.g., `deploy.sh`)
-2. **Read the script** to understand its usage and options
-3. **Run the deployment script** from `apps_lakebase/` (e.g. `cd apps_lakebase && ./scripts/deploy.sh`) with appropriate parameters for your target environment
-4. **If errors occur:** Fix them and retry the deployment
-5. **If no deployment script exists:** Search Databricks documentation for `databricks apps` CLI commands and deploy manually
-
-**Note:** If the app already exists, use sync and redeploy instead of stop/start - it''s faster.
-
----
-
-### Step 3: Derive App Name and Verify UI
-
-Derive your app name and verify it''s running:
 ```bash
-FIRSTNAME=$(databricks current-user me --output json | jq -r ''.userName'' | cut -d''@'' -f1 | cut -d''.'' -f1)
-LASTINITIAL=$(databricks current-user me --output json | jq -r ''.userName'' | cut -d''@'' -f1 | cut -d''.'' -f2 | cut -c1)
-USERNAME="${FIRSTNAME}-${LASTINITIAL}"
-APP_NAME="${USERNAME}-{use_case_slug}"
-databricks apps get $APP_NAME --output json | jq -r ''.url''
+grep "valueFrom.*postgres" apps_lakebase/$APP_NAME/app.yaml && echo "LAKEBASE_ENDPOINT: OK"
+grep "postgres_project" apps_lakebase/$APP_NAME/databricks.yml && echo "Bundle resources: OK"
 ```
 
-You should see the web UI, not JSON. Verify:
-- The UI loads correctly
-- Navigation works
-- ConnectionStatus indicator shows "Live Data" or "Mock Data"
+Then run the AppKit validator to catch schema or resource binding issues early:
+
+```bash
+cd apps_lakebase/$APP_NAME && databricks apps validate --profile $PROFILE
+```
+
+Fix any validation errors before deploying.
+
+You should see `valueFrom: postgres` for `LAKEBASE_ENDPOINT` in `app.yaml` and `postgres_projects` in `databricks.yml`. The platform auto-injects `PGHOST`, `PGPORT`, `PGDATABASE`, `PGSSLMODE` from the bundle resource binding — these should NOT appear as static values in `app.yaml`.
+
+> **Do NOT declare `postgres_branches` or `postgres_endpoints`** in `databricks.yml`. Lakebase Autoscaling auto-creates the default `production` branch and `primary` endpoint with the project. Declaring them causes Terraform "already exists" errors.
 
 ---
 
-### Step 4: Test All Backend APIs
+### Step 1b: Complete Lakebase Two-Phase Resource Binding
 
-Test the health endpoint and all data endpoints:
+The **Setup Lakebase** step declared `postgres_projects` in `databricks.yml` (Phase 1). Before deploying, you must complete Phase 2: add the `app.resources.postgres` binding so `valueFrom: postgres` resolves at runtime.
+
+**If this is the first deploy** (project does not exist yet), deploy once to create the project, then discover the database ID:
+
 ```bash
-APP_URL=$(databricks apps get $APP_NAME --output json | jq -r ''.url'')
+cd apps_lakebase/$APP_NAME
+databricks apps deploy --profile $PROFILE
+# Wait for deploy to complete, then:
+DB_ID=$(databricks postgres list-databases projects/$APP_NAME/branches/production \
+  --profile $PROFILE --output json | jq -r ''.[0].name'')
+echo "Database ID: $DB_ID"
+```
 
-# Test health endpoint
-curl -s "$APP_URL/api/health/lakebase" | jq .
+**If the project already exists** (from a prior deploy), just discover the database ID:
 
-# Test each data endpoint used by your UI pages
+```bash
+DB_ID=$(databricks postgres list-databases projects/$APP_NAME/branches/production \
+  --profile $PROFILE --output json | jq -r ''.[0].name'')
+echo "Database ID: $DB_ID"
+```
+
+Then add the `resources` array to your `apps.app` resource in `databricks.yml`. Your final file should have BOTH `postgres_projects` (from Setup Lakebase) AND the new `app.resources.postgres` binding:
+
+```yaml
+# Complete databricks.yml after Phase 2 binding.
+# IMPORTANT: postgres_projects from Setup Lakebase MUST remain.
+# Only the ''resources'' array under apps.app is new.
+resources:
+  apps:
+    app:
+      name: "<APP_NAME>"
+      source_code_path: ./
+      resources:                          # <-- NEW: add this block
+        - name: "postgres"
+          postgres:
+            branch: "projects/<APP_NAME>/branches/production"
+            database: "projects/<APP_NAME>/branches/production/databases/<DB_ID>"
+            permission: "CAN_CONNECT_AND_CREATE"
+
+  postgres_projects:                      # <-- KEEP: from Setup Lakebase step
+    my_db:
+      project_id: <APP_NAME>
+      # ... existing settings from Setup Lakebase ...
+```
+
+Replace `<APP_NAME>` and `<DB_ID>` with actual values. **Keep all existing `postgres_projects` settings** — only add the `resources` array under `apps.app`.
+
+> **Why this matters:** `valueFrom: postgres` in `app.yaml` resolves against the **app''s resource list** (`apps.app.resources`), not the top-level bundle resources (`postgres_projects`). Without `app.resources.postgres`, the platform cannot inject `LAKEBASE_ENDPOINT` and the app falls back to mock data silently.
+
+For the full schema reference, see `@apps_lakebase/skills/04-appkit-plugin-add/references/plugin-lakebase.md` section "app.resources.postgres Schema Reference".
+
+---
+
+### Step 2: Deploy (SP Creates Database Objects)
+
+Read and follow the `03-appkit-deploy` skill at `@apps_lakebase/skills/03-appkit-deploy/SKILL.md`. Run all skill commands from the `apps_lakebase/` directory.
+
+The skill covers: config validation, build, deploy, UI verification, error diagnosis (3-iteration fix loop), and workspace app limit handling.
+
+This is the first deploy with Lakebase code. The Service Principal runs the DDL in `server.ts` on startup, creating the schema, tables, and seed data. The SP owns all database objects it creates.
+
+> **Deploy-first requirement (from [agent-skills lakebase.md](https://github.com/databricks/databricks-agent-skills/blob/main/skills/databricks-apps/references/appkit/lakebase.md)):** The SP must create the schema to own it. If you ran local dev before deploying, the schema is owned by your personal credentials and the SP cannot access it. In that case, drop the schema from the Lakebase SQL Console and redeploy.
+
+> **SP permissions:** The Service Principal is auto-granted `CONNECT_AND_CREATE` via the `app.resources.postgres` binding (with `permission: CAN_CONNECT_AND_CREATE`). No manual grants are needed. If you see permission errors, verify the `app.resources.postgres` binding is declared in `databricks.yml` (see Step 1b).
+
+**Timing:** First deploys take 3-5 minutes (npm install runs on the platform). Redeployments take 1-3 minutes. Use `databricks apps logs $APP_NAME --follow --profile $PROFILE` to stream logs in real-time instead of polling repeatedly.
+
+**Important:** Always use `databricks apps deploy` — never `databricks apps start` — to push code changes. `databricks apps deploy` runs the full pipeline (build + bundle deploy + start). `apps start` only resumes a stopped app without updating code, and may hang if compute is in STOPPED state.
+
+After the skill completes, verify the app status is RUNNING before testing:
+
+```bash
+databricks apps get $APP_NAME --output json --profile $PROFILE | jq ''{status: .status.state, compute: .compute_status.state, url: .url}''
+
+APP_URL=$(databricks apps get $APP_NAME --output json --profile $PROFILE | jq -r ''.url'')
+echo "App URL: $APP_URL"
+```
+
+The primary readiness signal is `compute_status.state: ACTIVE`. `status.state` may remain `null` in some CLI versions or workspace configurations — this is normal and does not indicate a problem. If `compute` is not `ACTIVE`, wait 30 seconds and re-check.
+
+**Warning:** `databricks bundle deploy` resets the app''s resource list to match `databricks.yml`. If no code changes are needed since the **Wire Lakebase Backend** step, you may skip redeployment — the app is already running.
+
+---
+
+### Rule: Before Testing ANY API Endpoint
+
+1. Read `server/server.ts` (or equivalent) to identify all registered routes, HTTP methods, and request body schemas
+2. For POST/PUT endpoints, extract exact field names from the INSERT/UPDATE SQL statements
+3. Read the seed data file (`server/mock-data.ts` or equivalent) for exact values needed by lookup/filter endpoints (reference numbers, emails, IDs)
+4. Construct test payloads that match the actual code — do NOT guess based on REST conventions
+5. Only test routes that actually exist in the code
+
+DO NOT guess request body fields or assume standard REST endpoints exist (e.g., `GET /api/bookings` may not exist even if `POST /api/bookings` does).
+
+> **Smoke test selectors:** If the app includes `tests/smoke.spec.ts` (from AppKit scaffold), update heading and text selectors to match your app''s actual content before running `databricks apps validate`. The default template assertions will fail for custom apps. See [testing.md](https://github.com/databricks/databricks-agent-skills/blob/main/skills/databricks-apps/references/testing.md).
+
+---
+
+### Step 3: Test All Backend APIs
+
+Databricks Apps require authentication. Get a bearer token, then test:
+
+```bash
+TOKEN=$(databricks auth token --profile $PROFILE | jq -r ''.access_token'')
+AUTH_HEADER="Authorization: Bearer $TOKEN"
+```
+
+> **Token expiry:** Databricks Apps bearer tokens can expire quickly. If any `curl` call returns an empty `{}` response, check the HTTP status code — it is likely 401 (expired token). The Databricks Apps proxy returns `{}` instead of a standard 401 body. Refresh the token before each test batch:
+>
+> ```bash
+> TOKEN=$(databricks auth token --profile $PROFILE | jq -r ''.access_token'')
+> ```
+
+```bash
+# Health endpoint
+curl -s -H "$AUTH_HEADER" "$APP_URL/api/health/lakebase" | jq .
+
+# Test each data endpoint used by your UI pages.
 # Replace with your actual API endpoints:
-curl -s "$APP_URL/api/listings" | jq .
-curl -s "$APP_URL/api/bookings" | jq .
+curl -s -H "$AUTH_HEADER" "$APP_URL/api/orders" | jq .
+# curl -s -H "$AUTH_HEADER" "$APP_URL/api/bookings" | jq .
+# curl -s -H "$AUTH_HEADER" "$APP_URL/api/listings" | jq .
 # ... add all endpoints that fetch from Lakebase
 ```
 
+If `curl` returns HTML (a login page) or 401, the token may have expired. Re-run the `TOKEN=...` line to refresh it.
+
 **Verify each response includes:**
-- `"source": "live"` (not "mock") when Lakebase is connected
-- Actual data from your Lakebase tables
+
+- `"source": "live"` (not `"mock"`) when Lakebase is connected
+- Actual data rows from your Lakebase tables
+- Health endpoint returns `{ "status": "connected", "source": "live" }`
+
+If any endpoint returns `"source": "mock"`, there is a Lakebase connection issue — proceed to Step 5.
 
 ---
 
-### Step 5: Check Logs for Lakebase Connections
+### Step 4: Check Logs for Lakebase Connections
 
 ```bash
-databricks apps logs $APP_NAME --tail 100 | grep -i lakebase
+databricks apps logs $APP_NAME --tail-lines 100 --search lakebase --profile $PROFILE
 ```
 
 You should see INFO logs showing:
-- Autoscaling: "ConnectionPool initialised" | Provisioned: "Connected to Lakebase"
-- Connection attempts to Lakebase (may include retries on first connect)
-- Queries being executed for each page/endpoint
-- Success messages with row counts
+
+- `ConnectionPool initialised` — the Lakebase plugin started successfully
+- Connection attempts to Lakebase (may include retries on first connect after scale-to-zero wake)
+- `[Lakebase]` prefixed query logs with row counts for each endpoint
+
+If the `--search` flag is not supported by your CLI version, fall back to:
+
+```bash
+databricks apps logs $APP_NAME --tail-lines 100 --profile $PROFILE | grep -i lakebase
+```
 
 ---
 
-### Step 6: Fix Errors (up to 3 iterations)
+### Step 5: Fix Lakebase Errors (up to 3 iterations)
 
-If any errors occur:
+If Lakebase-specific errors occur (the deploy skill already handles generic AppKit errors), check the logs:
 
-1. **Check the logs:**
-   ```bash
-   databricks apps logs $APP_NAME --tail 100
-   ```
+```bash
+databricks apps logs $APP_NAME --tail-lines 100 --profile $PROFILE
+```
 
-2. **Common errors and fixes:**
-   - "No module named ''psycopg''" or "No module named ''psycopg2''" → Add psycopg[binary,pool] and psycopg2-binary to requirements.txt and rebuild
-   - "No module named ''psycopg_pool''" → Add psycopg[binary,pool]>=3.1.0 to requirements.txt
-   - "No module named ''databricks.sdk''" → Add databricks-sdk>=0.81.0 to requirements.txt
-   - "token''s identity did not match" → Check that app.yaml env vars match your mode ({lakebase_mode}): autoscaling needs ENDPOINT_NAME (no LAKEBASE_USER); provisioned needs LAKEBASE_USER via resource link
-   - "role does not exist" → Run add-lakebase-role with --mode {lakebase_mode}
-   - "permission denied for sequence" → Re-run setup-lakebase.sh --recreate (adds GRANT on sequences for SERIAL columns)
-   - "404 on link-app-resource" → Autoscaling does not support App Resource linking; skip this step
-   - "Connection attempt failed" → Normal on first request (cold start); retries handle this automatically
-   - "Could not import module" → Check apps_lakebase/app.yaml command matches file structure
+#### Lakebase-Specific Errors
 
-3. **Fix the issue, rebuild, and redeploy (from apps_lakebase/):**
-   ```bash
-   cd apps_lakebase && npm run build
-   # Run deploy script again from apps_lakebase/
-   ```
+| Error | Cause | Fix |
+|-------|-------|-----|
+| `ERR_MODULE_NOT_FOUND` for `@databricks/lakebase` | Package not installed | Verify `@databricks/lakebase` is in `package.json` dependencies; redeploy |
+| `error resolving resource postgres for env LAKEBASE_ENDPOINT: resource postgres not found` | `app.yaml` uses `valueFrom: postgres` but no `postgres` resource in `databricks.yml`; `bundle deploy` stripped it | Add the `app.resources.postgres` binding to `databricks.yml` (see Step 1b); redeploy |
+| `LAKEBASE_ENDPOINT is not set` or `PGHOST is not set` | Missing app resource binding | Verify `valueFrom: postgres` in `app.yaml` and that `apps.app.resources` has a `postgres` entry in `databricks.yml` (see Step 1b); redeploy |
+| `role "xxxxxxxx-xxxx-..." does not exist` | Service Principal lacks Lakebase role | Re-deploy the app so the SP re-creates and owns objects. If the SP was just created, grant via SQL (see Step 2 callout) |
+| `permission denied for sequence` | SP lacks GRANT on sequences for SERIAL columns | Re-deploy the app so the SP re-creates objects, or grant manually: `GRANT ALL ON ALL SEQUENCES IN SCHEMA <DB_SCHEMA> TO "<sp-id>";` |
+| `Connection attempt 1/5 failed` | Normal on first request — Lakebase autoscaling cold start | Wait and retry. The connection pool handles retries automatically |
+| `token''s identity did not match` | OAuth token mismatch | Verify `app.yaml` has correct static env vars; do NOT set `PGUSER` or `PGPASSWORD` manually |
+| `permission denied for schema` / `must be owner of schema` | Schema owned by another identity (e.g., from a prior deploy or local dev) | Drop the schema (`DROP SCHEMA <DB_SCHEMA> CASCADE;`) from the Lakebase SQL Console and redeploy so the SP re-creates it |
 
-4. **Repeat up to 3 times.** If errors persist, report them for manual investigation.
+> **Note:** If you previously ran an older version of the **Wire Lakebase Backend** step that deployed the app, you may have schema ownership conflicts. Drop the schema from the Lakebase SQL Console and redeploy to let the SP recreate it cleanly.
 
----
+**Fix cycle:**
 
-### If the Workspace App Limit Is Reached
+1. Identify the error from logs
+2. Apply the fix in `apps_lakebase/$APP_NAME/`
+3. Redeploy: `cd apps_lakebase/$APP_NAME && databricks apps deploy --profile $PROFILE`
+4. Wait for the app to reach RUNNING state (stream logs with `databricks apps logs $APP_NAME --follow --profile $PROFILE`)
+5. Re-test endpoints
 
-If deployment fails because the workspace has hit its app limit, do NOT rename your app. Instead, free up a slot by removing the oldest stopped app:
-
-1. Find stopped apps sorted by oldest first:
-   ```bash
-   databricks apps list -o json | jq -r ''[.[] | select(.compute_status.state == "STOPPED")] | sort_by(.update_time) | .[0] | .name''
-   ```
-2. Delete it and wait for cleanup to complete:
-   ```bash
-   databricks apps delete <name-from-above>
-   sleep 10
-   ```
-3. Retry the deployment.
-
-If the limit error persists, repeat with the next oldest stopped app -- but **stop after 3 total attempts** (increase the wait to 20s, then 40s between retries). If it still fails after 3 tries, stop and report the issue for manual workspace cleanup. Never delete apps in RUNNING state.
+Repeat up to 3 times. If errors persist after 3 attempts, report them for manual investigation.
 
 ---
 
-### Idle Connection Test (CRITICAL)
+### Step 6: Idle Connection Test (CRITICAL)
 
-After confirming endpoints return `source: "live"`, wait 3-5 minutes, then reload the app. Verify it still shows "Live Data". If it shows "Mock Data", check logs for "terminating connection" errors.
+After confirming all endpoints return `"source": "live"`, wait 3-5 minutes without interacting with the app. Lakebase autoscaling instances may scale to zero during idle periods.
+
+After waiting, reload the app in your browser and re-test:
+
+```bash
+TOKEN=$(databricks auth token --profile $PROFILE | jq -r ''.access_token'')
+curl -s -H "Authorization: Bearer $TOKEN" "$APP_URL/api/health/lakebase" | jq .
+```
+
+**Expected:** Still returns `"source": "live"`. The AppKit Lakebase plugin handles automatic OAuth token refresh and connection pool recovery.
+
+If it returns `"source": "mock"` or the health check shows `"disconnected"`, check logs for `terminating connection` or `Connection attempt failed` errors:
+
+```bash
+databricks apps logs $APP_NAME --tail-lines 50 --profile $PROFILE
+```
+
+The connection pool should recover automatically after the autoscaling instance wakes. If it does not recover after 2-3 page reloads, verify pool settings configured in the **Wire Lakebase Backend** step (`lakebase({ pool: { ... } })` in `server.ts`).
+
+---
+
+### Step 7: Grant Local Development Permissions (Optional)
+
+After deployment, you can optionally grant your Databricks identity access to the Lakebase database for local development against live data.
+
+**Option 1: `databricks_superuser` via Lakebase UI (recommended — simpler)**
+
+1. Open the Lakebase Autoscaling UI (Compute > Lakebase Postgres > your project)
+2. Navigate to the Branch Overview page for `production`
+3. Click **Add role** (or **Edit role** if your OAuth role already exists)
+4. Select your Databricks identity as the principal and check the **`databricks_superuser`** system role
+
+This grants full DML access (read/write) to all objects in the branch. `databricks_superuser` has DML access but NOT DDL (create schema/table) — the SP already created objects during deploy. Reference: [AppKit Lakebase docs - Local development](https://databricks.github.io/appkit/docs/plugins/lakebase#local-development)
+
+**Option 2: Fine-grained SQL grants (for schema-level control)**
+
+```sql
+CREATE EXTENSION IF NOT EXISTS databricks_auth;
+
+DO $$
+DECLARE
+  subject TEXT := ''<YOUR_EMAIL>'';
+  schema TEXT := ''<DB_SCHEMA>'';
+BEGIN
+  PERFORM databricks_create_role(subject, ''USER'');
+  EXECUTE format(''GRANT CONNECT ON DATABASE "databricks_postgres" TO %I'', subject);
+  EXECUTE format(''GRANT ALL ON SCHEMA %s TO %I'', schema, subject);
+  EXECUTE format(''GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA %s TO %I'', schema, subject);
+  EXECUTE format(''GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA %s TO %I'', schema, subject);
+  EXECUTE format(''ALTER DEFAULT PRIVILEGES IN SCHEMA %s GRANT ALL ON TABLES TO %I'', schema, subject);
+  EXECUTE format(''ALTER DEFAULT PRIVILEGES IN SCHEMA %s GRANT ALL ON SEQUENCES TO %I'', schema, subject);
+END $$;
+```
+
+**How to run this SQL** — choose one method:
+
+1. **Lakebase SQL Console** — open the Lakebase project in the Databricks UI (Compute > Lakebase Postgres > your project), click the branch, and use the built-in SQL editor.
+
+2. **`psql` with OAuth credentials:**
+   ```bash
+   # Generate short-lived credentials (endpoint path is a REQUIRED positional argument)
+   ENDPOINT="projects/{user_app_name}/branches/production/endpoints/primary"
+   CREDS=$(databricks postgres generate-database-credential "$ENDPOINT" \
+     --profile $PROFILE --output json)
+   PGUSER="$(databricks current-user me --output json --profile $PROFILE | jq -r ''.userName'')"
+   PGPASSWORD=$(echo "$CREDS" | jq -r ''.token'')
+
+   # Connect
+   PGPASSWORD=$PGPASSWORD psql -h {LAKEBASE_HOST} -U $PGUSER -d databricks_postgres --set=sslmode=require
+   ```
+
+After granting, verify local connectivity:
+
+```bash
+cd apps_lakebase/$APP_NAME
+lsof -ti:8000 | xargs kill -9 2>/dev/null || true
+npm run dev
+# In another terminal:
+curl -s http://localhost:8000/api/health/lakebase | jq .
+# Expected: { "status": "connected", "source": "live" }
+```
 
 ---
 
 ### Summary
 
 Your job is complete when:
-- Databricks App is deployed and running
-- Web UI is accessible at the app URL
-- ConnectionStatus shows "Live Data" (connected to Lakebase)
-- All API endpoints return live data from Lakebase
-- No errors in the app logs',
-'You are deploying a web application to Databricks Apps and running comprehensive testing.
 
-Your approach:
-1. Use existing deployment scripts when available
-2. Deploy to Databricks Apps
-3. Verify the deployment by testing the app URL
-4. Test all API endpoints for live data
-5. Check logs for Lakebase connectivity
-6. Debug and fix any deployment errors
+- [ ] Databricks App is deployed and running
+- [ ] Web UI is accessible at the app URL (React application, not an error page)
+- [ ] ConnectionStatus shows "Live Data" (connected to Lakebase)
+- [ ] `GET /api/health/lakebase` returns `{ "status": "connected", "source": "live" }`
+- [ ] All data API endpoints return `"source": "live"` with real data from Lakebase
+- [ ] No errors in the app logs
+- [ ] Idle connection test passes (still "Live Data" after 3-5 minutes idle)
+- [ ] `.vibecoding-state.md` updated (see below)
+
+**Before finishing**, append to `apps_lakebase/$APP_NAME/.vibecoding-state.md` with:
+- Step name (`## Deploy and E2E Test`)
+- Key variable values (`APP_URL`, test results summary)
+- Any resolved issues or workarounds encountered during this phase',
+'You are a QA engineer deploying and running end-to-end tests for an AppKit web application with Lakebase. Your goal is to deploy the Lakebase-wired app to Databricks Apps (where the Service Principal creates database objects on first boot), verify Lakebase connectivity and API correctness, and test connection resilience after idle periods.
+
+Key requirements:
+
+- Validate Lakebase config in `app.yaml` before deploying
+- Deploy using the `03-appkit-deploy` skill (SP creates schema/tables on first boot)
+- Test all backend API endpoints with bearer token authentication
+- Check app logs for healthy Lakebase connections
+- Fix Lakebase-specific errors (up to 3 iterations)
+- Optionally grant local dev permissions for post-deploy local testing
+- Run the critical idle connection test (3-5 minutes idle, then re-test)
+- Consult the [databricks-agent-skills references](https://github.com/databricks/databricks-agent-skills/tree/main/skills/databricks-apps/references/appkit) for Lakebase patterns, platform constraints, and testing guidance
 
 CLI Best Practices:
-- Check the `apps_lakebase/scripts/` folder for existing deploy scripts before writing ad-hoc commands
+
+- Run from `apps_lakebase/` or use `apps_lakebase/scripts/` for scripts
 - Run CLI commands outside the IDE sandbox to avoid SSL/TLS certificate errors
 
 This prompt is returned as-is for direct use in Cursor/Copilot. No LLM processing.',
-'Deploy and Test',
-'Deploy the application to Databricks and run full end-to-end testing',
-7,
-'## Prerequisite
+'Deploy and E2E Test with Lakebase',
+'Deploy the Lakebase-wired app to Databricks Apps, test APIs, check logs, verify idle resilience',
+8,
+'## How to Use
 
-Complete Step 7 (Wire UI to Lakebase) first. Local testing must pass.
+1. **Copy the generated prompt**
+2. **Replace** `{workspace_url}` and `{use_case_slug}` with your values
+3. **Paste into Cursor or Copilot**
+4. The code assistant will:
+   - Validate Lakebase config in `app.yaml`
+   - Deploy the app (SP creates database objects on first boot)
+   - Read server.ts to identify actual routes before testing
+   - Test all backend API endpoints with bearer token auth
+   - Check logs for healthy Lakebase connections
+   - Fix any Lakebase-specific errors (up to 3 iterations)
+   - Optionally grant local dev permissions
+   - Run the idle connection test
 
----
+**Note:** This is the final step. After this, your AppKit application is fully deployed with Lakebase backend verified end-to-end.',
+'## Expected Output
 
-## Steps to Apply
+**Full API test battery:**
 
-1. Copy the generated prompt
-2. Paste into Cursor or Copilot
-3. The code assistant will:
-   - Deploy the app to Databricks
-   - Get the app URL and verify UI loads
-   - Test all backend APIs for live data
-   - Check logs for Lakebase connectivity
-   - Fix any errors and retry',
-'## Expected Deliverables
+```json
+$ curl -s "$APP_URL/api/health/lakebase" | jq .
+{
+  "status": "connected",
+  "source": "live"
+}
 
-- Databricks App deployed and running
-- Web UI accessible at the app URL
-- ConnectionStatus shows "Live Data"
-- All API endpoints return live data from Lakebase
-- No errors in the app logs',
-TRUE,
-1, TRUE, current_timestamp(), current_timestamp(), current_user());
+$ curl -s "$APP_URL/api/orders" | jq .
+{
+  "data": [
+    { "id": 1, "user_id": "demo-user", "amount": 99.99, "status": "completed", "created_at": "2026-04-10T14:45:00Z" },
+    { "id": 2, "user_id": "alice",      "amount": 45.00, "status": "pending",   "created_at": "2026-04-10T14:46:00Z" },
+    { "id": 3, "user_id": "bob",        "amount": 72.50, "status": "completed", "created_at": "2026-04-10T14:47:00Z" }
+  ],
+  "source": "live"
+}
+```
+
+**App logs — healthy Lakebase connections:**
+
+Log format varies by AppKit version. Check `databricks apps logs $APP_NAME --tail-lines 30 --profile $PROFILE` for: Lakebase plugin loaded, ConnectionPool initialized, DDL executed, server listening on port 8000, and `[Lakebase]`-prefixed query logs. Absence of ERROR-level messages indicates a healthy startup.
+
+**Idle connection test timeline:**
+
+```
+T+0:00  ───── All endpoints return "source": "live" ✓
+        │
+        │     (no interaction — app idle)
+        │
+T+3:00  ───── Lakebase may scale to zero
+        │
+T+5:00  ───── Reload browser + re-test
+        │
+        ▼
+        curl /api/health/lakebase → { "status": "connected", "source": "live" } ✓
+        ConnectionPool auto-recovered after cold start
+```
+
+**Architecture — Final Production State:**
+
+```mermaid
+graph LR
+    User["User Browser<br/>(HTTPS)"] --> DatabricksApps["Databricks Apps<br/>(Managed Hosting)"]
+    DatabricksApps --> AppKit["AppKit Server<br/>(Node.js)"]
+    AppKit -->|"All data operations"| Lakebase["Lakebase PostgreSQL"]
+    AppKit -.->|"OAuth token refresh<br/>(automatic, every 58min)"| TokenService["Databricks Auth"]
+
+    subgraph cloud [Databricks Cloud]
+        DatabricksApps
+        AppKit
+        Lakebase
+        TokenService
+    end
+```
+
+**Final verification dashboard:**
+
+```
+┌──────────────────────────────────────────────────────────────────┐
+│  E2E Verification Results                                        │
+├──────────────────────────────┬──────────┬────────────────────────┤
+│  Test                        │  Status  │  Details               │
+├──────────────────────────────┼──────────┼────────────────────────┤
+│  App deployed & RUNNING      │  PASS ✓  │  State: RUNNING        │
+│  UI loads in browser         │  PASS ✓  │  React app rendered    │
+│  /api/health/lakebase        │  PASS ✓  │  source: live          │
+│  /api/orders                 │  PASS ✓  │  3 rows, source: live  │
+│  App logs — no errors        │  PASS ✓  │  ConnectionPool OK     │
+│  Idle test (5 min)           │  PASS ✓  │  Auto-recovered        │
+│  ConnectionStatus UI         │  PASS ✓  │  Shows "Live Data"     │
+├──────────────────────────────┼──────────┼────────────────────────┤
+│  TOTAL                       │  7/7 ✓   │  All tests passed      │
+└──────────────────────────────┴──────────┴────────────────────────┘
+```',
+true, 1, true, current_timestamp(), current_timestamp(), current_user());
 
 -- Step 9: Table Metadata & Data Dictionary (Bronze Layer) - bypass_llm=TRUE
 INSERT INTO ${catalog}.${schema}.section_input_prompts 
@@ -753,7 +1152,9 @@ data_product_accelerator/context/{use_case_file_prefix}_Schema.csv
 
 ## 4️⃣ What Happens Behind the Scenes?
 
-This step does **not** invoke an Agent Skill — it runs a direct SQL extraction via the Databricks CLI. Every subsequent skill references this CSV (or artifacts derived from it) to **extract** table names, column names, and data types — never generating them from scratch. This is the "Extract, Don''t Generate" principle.',
+This step does **not** invoke an Agent Skill — it runs a direct SQL extraction via the Databricks CLI. Every subsequent skill references this CSV (or artifacts derived from it) to **extract** table names, column names, and data types — never generating them from scratch. This is the "Extract, Don''t Generate" principle.
+
+**Downstream Compatibility Note:** Bronze setup (Step 10) additionally requires per-table governance annotations (entity_type, contains_pii, data_classification, business_owner). If these are not present in the extracted CSV, the Bronze skill will infer them from column/table name patterns or ask.',
 '## Expected Deliverables
 
 - data_product_accelerator/context/{use_case_file_prefix}_Schema.csv file created
@@ -811,6 +1212,8 @@ This CSV drives the entire Design-First Pipeline:
 - Silver DQ (Step 13) — uses schema for data quality expectations
 - Gold Implementation (Step 14) — uses YAML schemas derived from this CSV
 Missing comments, incorrect types, or invalid rows will cascade into errors downstream.
+
+Note: Bronze setup (Step 10) additionally requires per-table governance annotations (entity_type, contains_pii, data_classification, business_owner). If these are not present in the uploaded CSV, the Bronze skill will infer them from column/table name patterns or ask.
 ```',
 '',
 'Table Metadata & Data Dictionary (Upload CSV)',
@@ -863,7 +1266,7 @@ The CSV must follow the `information_schema.columns` format with required column
 true, 1, true, current_timestamp(), current_timestamp(), current_user());
 
 -- Step 10 (Generate Mode): Design Schema from PRD - bypass_LLM = TRUE (prompt for coding assistant, like setup_lakebase)
-INSERT INTO ${catalog}.${schema}.section_input_prompts
+INSERT INTO ${catalog}.${schema}.section_input_prompts 
 (input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
 VALUES
 (135, 'bronze_table_metadata_generate',
@@ -914,6 +1317,8 @@ This CSV drives the entire Design-First Pipeline:
 - Bronze Creation (Step 12) — uses schema to create Delta tables
 - Silver DQ (Step 13) — uses schema for data quality expectations
 - Gold Implementation (Step 14) — uses YAML schemas derived from this CSV
+
+Note: Bronze setup (Step 10) additionally requires per-table governance annotations (entity_type, contains_pii, data_classification, business_owner). If these are not present in the generated CSV, the Bronze skill will infer them from column/table name patterns or ask. Well-chosen column names (e.g., `email`, `phone_number`) improve downstream inference accuracy.
 ```',
 '',
 'Table Metadata & Data Dictionary (Design from PRD)',
@@ -963,7 +1368,7 @@ data_product_accelerator/context/{use_case_file_prefix}_Schema.csv
 true, 1, true, current_timestamp(), current_timestamp(), current_user());
 
 -- Genie Accelerator: Upload CSV for Silver Metadata (bypass_llm = true)
-INSERT INTO ${catalog}.${schema}.section_input_prompts
+INSERT INTO ${catalog}.${schema}.section_input_prompts 
 (input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
 VALUES
 (121, 'genie_silver_metadata_upload',
@@ -1072,6 +1477,7 @@ This skill will orchestrate the following end-to-end design workflow:
 
 - **Parse the schema CSV** — read the source schema file, classify each table as a dimension, fact, or bridge, and infer foreign key relationships from column names and comments
 - **Design the dimensional model** — identify dimensions (with SCD Type 1/2 decisions), fact tables (with explicit grain definitions), and measures, then assign tables to business domains
+- **Persist design decisions** — write `DESIGN_DECISIONS.md` before generating YAML so every YAML file shares one FK format, description format, and transformation enum
 - **Create ERD diagrams** — generate Mermaid Entity-Relationship Diagrams organized by table count (master ERD always, plus domain and summary ERDs for larger schemas)
 - **Generate YAML schema files** — produce one YAML file per Gold table with column definitions, PK/FK constraints, table properties, lineage metadata, and dual-purpose descriptions (human + LLM readable)
 - **Document column-level lineage** — trace every Gold column back through Silver to Bronze with transformation type (DIRECT_COPY, AGGREGATION, DERIVATION, etc.) in both CSV and Markdown formats
@@ -1188,13 +1594,13 @@ This framework uses a **skills-first architecture** with an **orchestrator/worke
 |-------|-------------|------------|
 | **Phase 0** | Parse schema CSV, classify tables (dim/fact/bridge), infer FKs | Table inventory |
 | **Phase 1** | Gather project requirements (domain, use cases, stakeholders) | Project context |
-| **Phase 2** | Design dimensional model (dimensions, facts, grain, SCD types) | Model blueprint |
+| **Phase 2** | Design dimensional model (dimensions, facts, grain, SCD types) | Model blueprint → writes `DESIGN_DECISIONS.md` |
 | **Phase 3** | Create ERD diagrams using Mermaid syntax | `erd_master.md` + domain ERDs |
 | **Phase 4** | Generate YAML schema files with lineage and descriptions | `yaml/{domain}/{table}.yaml` |
 | **Phase 5** | Document column-level lineage (Bronze → Silver → Gold) | `COLUMN_LINEAGE.csv` |
 | **Phase 6** | Write Business Onboarding Guide with real-world scenarios | `BUSINESS_ONBOARDING_GUIDE.md` |
 | **Phase 7** | Map source tables with inclusion/exclusion rationale | `SOURCE_TABLE_MAPPING.csv` |
-| **Phase 8** | Validate design consistency (YAML ↔ ERD ↔ Lineage) | Validation report |
+| **Phase 8** | Validate design consistency (YAML ↔ ERD ↔ Lineage) | Validation report (structural + semantic) |
 
 ### Orchestrator / Worker Pattern
 
@@ -1242,6 +1648,7 @@ This framework uses a **skills-first architecture** with an **orchestrator/worke
 ```
 gold_layer_design/
 ├── README.md                           # Navigation hub
+├── DESIGN_DECISIONS.md                 # ⭐ Per-run contract (FK format, transformation enum, description format)
 ├── erd_master.md                       # Complete ERD (ALWAYS)
 ├── erd_summary.md                      # Domain overview (if 20+ tables)
 ├── erd/                                # Domain ERDs (if 9+ tables)
@@ -1293,8 +1700,10 @@ primary_key:
 foreign_keys:
   - columns: [''property_id'']
     references: dim_property(property_id)
+    nullable: true
   - columns: [''host_id'']
     references: dim_host(host_id)
+    nullable: true
 
 columns:
   - name: property_id
@@ -1308,6 +1717,19 @@ columns:
       silver_table: silver_bookings
       silver_column: property_id
       transformation: "DIRECT_COPY"
+```
+
+**Dimensions referenced by `nullable: true` FKs declare an `unknown_member:` block** (sentinel row for NULL/missing references):
+
+```yaml
+# gold_layer_design/yaml/property/dim_property.yaml (excerpt)
+unknown_member:
+  description: "Sentinel row for NULL or missing FK references from fact tables."
+  key_value: "-1"
+  business_key_value: -1
+  attribute_defaults:
+    name: "Unknown"
+    status: "Not Applicable"
 ```
 
 ---
@@ -1336,6 +1758,9 @@ columns:
 - [ ] Grain explicitly stated for each fact
 - [ ] SCD type specified for each dimension
 - [ ] All columns trace back to source
+- [ ] `DESIGN_DECISIONS.md` exists and was written before any YAML
+- [ ] All transformation types from standard 15-type enum (no invented values)
+- [ ] `unknown_member` documented for each dimension referenced by a `nullable: true` FK
 - [ ] Stakeholder sign-off obtained',
 true, 1, true, current_timestamp(), current_timestamp(), current_user());
 
@@ -1565,7 +1990,7 @@ When you paste the prompt, the AI reads `@data_product_accelerator/skills/bronze
 project_root/
 ├── databricks.yml                      # Bundle configuration (updated)
 ├── src/
-│   └── source_bronze/
+│   └── {project}_bronze/
 │       ├── __init__.py
 │       └── clone_samples.py            # Code to copy sample data
 └── resources/
@@ -1786,7 +2211,9 @@ Validate the results in the UI to ensure the DQ rules show up in centralized del
 
 IMPORTANT: Use the EXISTING catalog `{lakehouse_default_catalog}` -- do NOT create a new catalog. Create the Silver schema `{user_schema_prefix}_silver` and all Silver tables inside this catalog.
 
-NOTE: Before creating the schema, check if `{lakehouse_default_catalog}.{user_schema_prefix}_silver` already exists. If it does, DROP the schema with CASCADE and recreate it from scratch. These are user-specific schemas so dropping is safe.',
+NOTE: Before creating the schema, check if `{lakehouse_default_catalog}.{user_schema_prefix}_silver` already exists. If it does, DROP the schema with CASCADE and recreate it from scratch. These are user-specific schemas so dropping is safe.
+
+NOTE: This is a shared workshop workspace. Include a `user_prefix` variable in your pipeline/job `name:` fields (e.g., `"[${bundle.target} ${var.user_prefix}] Silver Layer Pipeline"`) to avoid `pipeline name is already used` collisions with other attendees. `databricks bundle deploy --force` does NOT resolve these — see `common/databricks-asset-bundles` → "Shared Workspace Naming".',
 '',
 'Silver Layer Pipelines (SDP)',
 'Create Silver layer using Spark Declarative Pipelines with centralized data quality rules',
@@ -1868,6 +2295,18 @@ After pipeline completes, verify in Databricks UI:
    - Navigate to: Workflows → DLT Pipelines → Your Pipeline
    - Click "Data Quality" tab
    - ✅ Should show Expectations being evaluated
+   - **For per-expectation pass/fail counts**, run this in the SQL editor (the `databricks pipelines list-pipeline-events` CLI does NOT return this detail):
+
+     ```sql
+     SELECT
+       event_type,
+       details:flow_progress.data_quality.dropped_records AS dropped,
+       details:flow_progress.data_quality.expectations    AS expectations
+     FROM event_log(TABLE({lakehouse_default_catalog}.{user_schema_prefix}_silver.<silver_table>))
+     WHERE details:flow_progress.data_quality IS NOT NULL
+     ORDER BY timestamp DESC
+     LIMIT 5;
+     ```
 
 3. **Check Silver Tables:**
    ```sql
@@ -1967,7 +2406,7 @@ When you paste the prompt, the AI reads `@data_product_accelerator/skills/silver
 project_root/
 ├── databricks.yml                        # Updated with Silver resources
 ├── src/
-│   └── source_silver/
+│   └── {project}_silver/
 │       ├── setup_dq_rules_table.py       # Notebook: Create & populate DQ rules Delta table
 │       ├── dq_rules_loader.py            # Pure Python module (NO notebook header!)
 │       ├── silver_dimensions.py          # DLT notebook: Dimension tables
@@ -2055,12 +2494,14 @@ FROM {lakehouse_default_catalog}.{user_schema_prefix}_silver.dq_rules;
 **Deployment:**
 - [ ] Bundle validates with no errors
 - [ ] Bundle deploys successfully
+- [ ] Pipeline and job names include `${var.user_prefix}` (no collisions in shared workspace)
 - [ ] DQ rules setup job runs and creates `dq_rules` table (**must run FIRST**)
 - [ ] DLT pipeline runs without failures
 
 **Data Quality:**
 - [ ] DQ rules loaded into centralized Delta table
 - [ ] Expectations show in pipeline event log (Data Quality tab)
+- [ ] Expectations verified via `event_log(TABLE(...))` TVF in SQL editor (per-expectation pass/fail counts)
 - [ ] Quarantine table captures failed records (not silently dropped)
 
 **Tables & Properties:**
@@ -2345,6 +2786,8 @@ Unity Catalog constraints are **NOT ENFORCED** — they are **informational only
 
 This is a key Databricks concept: PK/FK in Unity Catalog are for **metadata enrichment and BI tool discovery**, not data integrity enforcement.
 
+**Serverless limitation:** In serverless compute, FK references must target PRIMARY KEY columns (UNIQUE constraints are unavailable). If a YAML FK references a non-PK column (e.g., a business key instead of a surrogate key), the FK script will log a warning and skip that constraint — this is expected behavior, not an error.
+
 ---
 
 ## 3️⃣ Why Are We Building It This Way? (Databricks Best Practices)
@@ -2399,7 +2842,7 @@ When you paste the prompt, the AI reads `@data_product_accelerator/skills/gold/0
 project_root/
 ├── databricks.yml                          # Bundle config (MUST sync YAML files!)
 ├── src/
-│   └── source_gold/
+│   └── {project}_gold/
 │       ├── setup_tables.py                 # Creates Gold tables from YAML + adds PKs
 │       ├── add_fk_constraints.py           # Adds FK constraints (separate script)
 │       └── merge_gold_tables.py            # Merges Silver → Gold (dedup + map + merge)
@@ -2568,8 +3011,9 @@ LIMIT 10;
 **Gold Setup Job (2 tasks):**
 - [ ] Task 1: All 5 tables created from YAML (no hardcoded DDL)
 - [ ] Primary keys added to dimension tables (via `ALTER TABLE`)
-- [ ] Task 2: Foreign key constraints added (runs after Task 1 via `depends_on`)
-- [ ] Constraints visible in `information_schema.table_constraints`
+- [ ] Task 2: Foreign key constraints attempted (runs after Task 1 via `depends_on`) — some may be skipped in serverless if they reference non-PK columns
+- [ ] FK constraint script completes without crashing (warnings OK, errors not OK)
+- [ ] PK constraints visible in `information_schema.table_constraints` (FK constraints may be partial)
 
 **Table Properties (non-negotiable):**
 - [ ] `CLUSTER BY AUTO` on every table (never specific columns)
@@ -2605,8 +3049,9 @@ VALUES
 This will involve the following steps:
 
 - **Analyze Gold layer** — examine your completed Gold tables to identify natural business domains, key relationships, and analytical questions
-- **Generate use-case plans** — create structured plans organized as Phase 1 addendums (1.2 TVFs, 1.3 Metric Views, 1.4 Monitors, 1.5 Dashboards, 1.6 Genie Spaces, 1.7 Alerts, 1.1 ML Models)
+- **Generate use-case plans** — create structured plans organized as Phase 1 addendums (1.2 TVFs, 1.3 Metric Views, 1.4 Monitors, 1.5 Dashboards, 1.6 Genie Spaces, 1.7 Alerts, 1.1 ML Models). Filenames must match the canonical numbering table at `data_product_accelerator/skills/planning/00-project-planning/assets/addendum-numbering.md`.
 - **Produce YAML manifests** — generate 4 machine-readable manifest files (semantic-layer, observability, ML, GenAI agents) as contracts for downstream implementation stages
+- **Emit Gold dependency manifest** — write `plans/manifests/gold-dependency-manifest.yaml` with every Gold table/column referenced across all addendums, then intersect it against `{lakehouse_default_catalog}.information_schema` for `{user_schema_prefix}_gold`. If any reference is missing, the skill writes `plans/gold-gap-remediation.md` and STOPS — downstream orchestrators (semantic layer, observability, ML, GenAI agents) will refuse to run until Gold is fixed.
 - **Apply workshop mode caps** — enforce hard limits (3-5 TVFs, 1-2 Metric Views, 1 Genie Space) to keep the workshop focused on pattern variety over depth
 - **Define deployment order** — establish build sequence: TVFs → Metric Views → Genie Spaces → Dashboards → Monitors → Alerts → Agents
 
@@ -2871,7 +3316,12 @@ plans/
     ├── semantic-layer-manifest.yaml        # TVFs + Metric Views + Genie Spaces
     ├── observability-manifest.yaml         # Monitors + Dashboards + Alerts
     ├── ml-manifest.yaml                    # Feature Tables + Models + Experiments
-    └── genai-agents-manifest.yaml          # Agents + Tools + Eval Datasets
+    ├── genai-agents-manifest.yaml          # Agents + Tools + Eval Datasets
+    └── gold-dependency-manifest.yaml       # ⭐ Gold tables/columns referenced by ALL addendums
+                                             #   (validated against live catalog; gaps → STOP)
+
+# Emitted ONLY when the live-catalog intersection finds missing Gold references:
+plans/gold-gap-remediation.md                # Lists missing tables/columns → fix Gold first
 ```
 
 > **Key innovation: Plan-as-Contract.** The 4 YAML manifests serve as **contracts** between planning and implementation. When downstream skills (semantic layer, monitoring, ML, GenAI) run, they read their manifest to know exactly what to build — enforcing "Extract, Don''t Generate" across the planning-to-implementation handoff. In workshop mode, manifests include `planning_mode: workshop` to prevent downstream skills from expanding beyond listed artifacts.
@@ -2978,7 +3428,8 @@ This workshop uses `planning_mode: workshop` — hard caps prevent artifact bloa
 **Plan Structure:**
 - [ ] First line confirms mode: `**Planning Mode:** Workshop (explicit opt-in)`
 - [ ] `plans/README.md` provides navigation with links to all documents
-- [ ] Phase 1 master + selected addendums (1.2 TVFs, 1.3 MVs, 1.6 Genie included by default in workshop)
+- [ ] `plans/README.md`, `plans/prerequisites.md`, `plans/use-case-catalog.md`, and `plans/phase1-use-cases.md` all exist (workshop mode does NOT waive these)
+- [ ] All selected Phase 1 addendum files exist in `plans/` (one per selected artifact type — 1.2 TVFs, 1.3 MVs, 1.6 Genie at minimum in workshop mode)
 - [ ] Each plan document follows standard template (Overview, Specs, Timeline, Validation)
 
 **Agent Domain Framework:**
@@ -2993,12 +3444,17 @@ This workshop uses `planning_mode: workshop` — hard caps prevent artifact bloa
 - [ ] Each Genie Space has ≤ 25 data assets and ≥ 10 assets
 - [ ] Genie Space count based on total asset volume (not domain count)
 - [ ] Workshop caps respected: 3-5 TVFs, 1-2 MVs, 1 Genie Space
+- [ ] No row in the Traceability Matrix has Genie Space as its ONLY coverage (every question must have a TVF, Metric View, or listed Gold table backing it)
 
 **YAML Manifests (Plan-as-Contract):**
-- [ ] 4 manifests generated in `plans/manifests/`
+- [ ] 4 domain manifests generated in `plans/manifests/`
+- [ ] `plans/manifests/gold-dependency-manifest.yaml` generated AND intersected against the live `{lakehouse_default_catalog}.{user_schema_prefix}_gold` catalog with zero missing tables/columns (if gaps: `plans/gold-gap-remediation.md` emitted and planning STOPS)
 - [ ] `planning_mode: workshop` present in all manifests
 - [ ] All table/column references validated against Gold YAML
 - [ ] Artifact counts in manifests match plan addendum counts
+- [ ] Observability manifest TimeSeries monitors use a business event date (FK to `dim_date`), NOT an audit column like `record_updated_timestamp`
+- [ ] Zero literal schema names in manifest SQL — every query uses `${catalog}.${gold_schema}.*` (run `grep -n "gold" plans/manifests/*.yaml` and verify only the variable form appears in `query:` blocks)
+- [ ] Any cross-domain Genie Space uses the documented `unified_genie_space` (singular) key — NOT an ad-hoc `unified_genie_spaces` or similar plural/alternative key
 
 **Deployment Order:**
 - [ ] Phase 1 addendum dependencies documented
@@ -3022,23 +3478,32 @@ VALUES
 This will involve the following end-to-end workflow:
 
 - **Build Lakeview dashboard** — create a complete `.lvdash.json` configuration with KPI counters, charts, data tables, and filters for business self-service analytics
-- **Use 6-column grid layout** — position all widgets on a 6-column grid (NOT 12!) with correct widget versions (KPIs=v2, Charts=v3, Tables=v1, Filters=v2)
+- **Use 6-column grid layout** — position all widgets on a 6-column grid (NOT 12!) with correct widget versions (KPIs=v2, Charts=v3, Tables=v2, Filters=v2)
 - **Query Metric Views** — write dataset queries using `MEASURE()` function against Metric Views with `${catalog}.${gold_schema}` variable substitution
+- **Use a mixed dataset strategy** — `MEASURE()` for KPIs, trends, and dimension breakdowns sourced from Metric Views; direct Gold SQL for detail/drill-down tables and filter value datasets (e.g., `SELECT DISTINCT ...`)
 - **Validate SQL and widget alignment** — run pre-deployment validation ensuring every widget `fieldName` matches its SQL alias exactly (90% reduction in dev loop time)
-- **Deploy via UPDATE-or-CREATE** — use Workspace Import API with `overwrite: true` to preserve dashboard URLs and viewer permissions
+- **Run Phase 0.5 pre-flight** — BEFORE any deploy, enumerate every `${var}` placeholder in the `.lvdash.json`, then assert the deploy job provides every one. Missing a single variable corrupts the upload silently (see `monitoring/02-databricks-aibi-dashboards/SKILL.md` → "Pre-loop variable enumeration").
+- **Deploy via UPDATE-or-CREATE** — use Workspace Import API with `overwrite: true` AND base64-encoded ASCII content (raw UTF-8 bytes silently corrupts the file). Preserves dashboard URLs and viewer permissions.
 
-Reference the dashboard plan at @data_product_accelerator/plans/phase1-addendum-1.1-dashboards.md
+Reference the dashboard plan at @plans/phase1-addendum-1.5-aibi-dashboards.md (canonical numbering — see `data_product_accelerator/skills/planning/00-project-planning/assets/addendum-numbering.md`; the legacy name `1.1-dashboards.md` is forbidden).
 
 The skill provides:
 - Dashboard JSON structure with **6-column grid** layout (NOT 12!)
-- Widget patterns: KPI counters (v2), charts (v3), tables (v1), filters (v2)
+- Widget patterns: KPI counters (v2), charts (v3), tables (v2), filters (v2)
 - Query patterns from Metric Views using `MEASURE()` function
 - Pre-deployment SQL validation (90% reduction in dev loop time)
 - UPDATE-or-CREATE deployment pattern (preserves URLs and permissions)
 - Variable substitution (`${catalog}`, `${gold_schema}`) — no hardcoded schemas
 - Monitoring table query patterns (window structs, CASE pivots) if Lakehouse Monitors exist
 
+Before building, load prerequisite skills:
+- **MUST READ** `semantic-layer/01-metric-views-patterns/SKILL.md` for MEASURE() syntax (since this dashboard queries Metric Views)
+- **MUST READ** `common/databricks-expert-agent/SKILL.md` for "Extract Don''t Generate" principle
+- **MUST READ** `common/naming-tagging-standards/SKILL.md` for dashboard and file naming conventions
+- Check installed skills for `databricks-lakeview-dashboard` (16+ widget patterns, mandatory query testing workflow)
+
 Build the dashboard in this order:
+0. Validate inputs — verify the plan file and manifests exist. If the plan file is missing, STOP and ask.
 1. Plan layout (KPIs, filters, charts, tables)
 2. Create datasets (validated SQL queries)
 3. Build widgets with correct version specs
@@ -3063,7 +3528,7 @@ Ensure you have:
 - ✅ Gold Layer Implementation completed (Step 12) — with column COMMENTs
 - ✅ Semantic Layer completed (Step 14) — Metric Views for dashboard queries
 - ✅ Use-Case Plan created (Step 13) — with dashboard requirements
-- ✅ Plan file exists: `plans/phase1-addendum-1.1-dashboards.md`
+- ✅ Plan file exists: `plans/phase1-addendum-1.5-aibi-dashboards.md`
 - ✅ Gold YAML schemas available for column name validation
 
 ---
@@ -3074,11 +3539,13 @@ Ensure you have:
 
 **Step 2:** Copy and paste the prompt — Copy the entire prompt using the copy button, paste it into Cursor. The AI will build the dashboard in phases.
 
-**Step 3:** Plan Reading — The AI will read dashboard plan (`plans/phase1-addendum-1.1-dashboards.md`), extract KPI requirements, chart types, filter dimensions, and identify data sources (Metric Views preferred over raw Gold tables).
+**Step 2.5:** Input Validation — The AI will verify the plan file exists at `plans/phase1-addendum-1.5-aibi-dashboards.md`. **If missing**, the AI should ask you for the correct path rather than silently proceeding. It will also load prerequisite skills (`metric-views-patterns` for MEASURE() syntax, `databricks-expert-agent` for extract-don''t-generate).
+
+**Step 3:** Plan Reading — The AI will read dashboard plan (`plans/phase1-addendum-1.5-aibi-dashboards.md`), extract KPI requirements, chart types, filter dimensions, and identify data sources (Metric Views preferred over raw Gold tables).
 
 **Step 4:** Dataset Creation — The AI will create SQL queries for each widget (using `${catalog}` substitution), use `MEASURE()` function for Metric View queries, include "All" option for filter datasets, and handle NULLs with `COALESCE()` and SCD2 with `is_current = true`.
 
-**Step 5:** Widget and Layout Creation — The AI will build KPI counters (version 2) for top-line metrics, build charts (version 3) for trends and comparisons, build data tables (version 1) for drill-down, and position using 6-column grid (widths 1-6, NOT 12!).
+**Step 5:** Widget and Layout Creation — The AI will build KPI counters (version 2) for top-line metrics, build charts (version 3) for trends and comparisons, build data tables (version 2) for drill-down, and position using 6-column grid (widths 1-6, NOT 12!).
 
 **Step 6:** Parameter and Filter Configuration — The AI will add DATE parameters with static defaults (not DATETIME), create Global Filters page (`PAGE_TYPE_GLOBAL_FILTERS`), and link filter widgets to dataset parameters.
 
@@ -3142,7 +3609,7 @@ WHERE table_schema = ''{user_schema_prefix}_gold'' AND comment IS NOT NULL;
 │  │  │  │  Trend over time│ │  By dimension   │                    │ │   │
 │  │  │  └─────────────────┘ └─────────────────┘                    │ │   │
 │  │  │  ┌─────────────────────────────────────┐                    │ │   │
-│  │  │  │         Data Table (v1)              │                    │ │   │
+│  │  │  │         Data Table (v2)              │                    │ │   │
 │  │  │  │         Detailed drill-down          │                    │ │   │
 │  │  │  └─────────────────────────────────────┘                    │ │   │
 │  │  └───────────────────────────────────────────────────────────────┘ │   │
@@ -3171,7 +3638,7 @@ WHERE table_schema = ''{user_schema_prefix}_gold'' AND comment IS NOT NULL;
 |---------|--------------|----------------|
 | **Lakeview JSON** | Dashboards are defined as `.lvdash.json` files | Version-controlled, deployable via API |
 | **6-Column Grid** | Widget positions use columns 0-5 (NOT 12!) | #1 cause of widget snapping issues |
-| **Widget Versions** | KPIs=v2, Charts=v3, Tables=v1, Filters=v2 | Wrong version causes rendering errors |
+| **Widget Versions** | KPIs=v2, Charts=v3, Tables=v2, Filters=v2 | Wrong version causes rendering errors |
 | **DATE Parameters** | Use DATE type (not DATETIME) with static defaults | DATETIME with dynamic expressions won''t work |
 | **`dataset_catalog`/`dataset_schema`** | Variable substitution for environment portability | Never hardcode catalog/schema in queries |
 | **Widget-Query Alignment** | Widget `fieldName` MUST match query output alias | #1 cause of "no fields to visualize" errors |
@@ -3191,7 +3658,7 @@ WHERE table_schema = ''{user_schema_prefix}_gold'' AND comment IS NOT NULL;
 | **Line Chart** | v3 | Trends over time (daily revenue) | width: 3, height: 6 |
 | **Pie Chart** | v3 | Distribution (booking share by type) | width: 3, height: 6 |
 | **Area Chart** | v3 | Stacked trends (revenue by category over time) | width: 3-6, height: 6 |
-| **Data Table** | v1 | Detailed drill-down data | width: 6, height: 6+ |
+| **Data Table** | v2 | Detailed drill-down data | width: 6, height: 6+ |
 | **Filter** | v2 | Single-select / multi-select / date range | width: 2, height: 2 |
 
 #### Chart Scale Rules (Encoding Requirements)
@@ -3249,32 +3716,34 @@ Area Charts:  x.scale = temporal, y.scale = quantitative, y.stack = "zero"
 
 #### Use Metric Views (Preferred)
 
+> **Example names used below** (`<metric_view_name>`, `<dim_name>`, `<fact_name>`, `<dimension_col>`, `<measure_col>`) are generic placeholders — substitute with the concrete Metric View and column names from `plans/phase1-addendum-1.3-metric-views.md` and `plans/deploy-checkpoint.md`.
+
 ```sql
 -- ✅ PREFERRED: Query Metric View with MEASURE()
-SELECT 
-  destination,
-  MEASURE(total_revenue) as revenue,
-  MEASURE(booking_count) as bookings
-FROM ${catalog}.${gold_schema}.revenue_analytics_metrics
-WHERE booking_date BETWEEN :start_date AND :end_date
-GROUP BY destination
-ORDER BY revenue DESC
+-- No explicit GROUP BY needed — aggregation is implicit from dimensions in SELECT
+SELECT
+  <dimension_col>,
+  MEASURE(`<measure_col_1>`) as <alias_1>,
+  MEASURE(`<measure_col_2>`) as <alias_2>
+FROM ${catalog}.${gold_schema}.<metric_view_name>
+WHERE <date_col> BETWEEN :start_date AND :end_date
+ORDER BY <alias_1> DESC
 ```
 
 #### Direct Gold Table Query (Fallback)
 
 ```sql
 -- When no Metric View exists for the data
-SELECT 
-  d.destination_name as destination,
-  SUM(f.total_amount) as revenue,
-  COUNT(*) as bookings
-FROM ${catalog}.${gold_schema}.fact_booking_detail f
-JOIN ${catalog}.${gold_schema}.dim_destination d 
-  ON f.destination_id = d.destination_id
-WHERE f.booking_date BETWEEN :start_date AND :end_date
-GROUP BY d.destination_name
-ORDER BY revenue DESC
+SELECT
+  d.<dim_label_col> as <dimension_col>,
+  SUM(f.<amount_col>) as <alias_1>,
+  COUNT(*) as <alias_2>
+FROM ${catalog}.${gold_schema}.<fact_name> f
+JOIN ${catalog}.${gold_schema}.<dim_name> d
+  ON f.<fk_col> = d.<pk_col>
+WHERE f.<date_col> BETWEEN :start_date AND :end_date
+GROUP BY d.<dim_label_col>
+ORDER BY <alias_1> DESC
 ```
 
 #### Number Formatting Rules
@@ -3294,7 +3763,7 @@ ORDER BY revenue DESC
 | Practice | How It''s Used Here |
 |----------|-------------------|
 | **6-Column Grid (NOT 12!)** | Widget widths use 1-6 columns. `width: 6` = full width, `width: 3` = half. This is the #1 cause of layout issues — most platforms use 12 columns, Lakeview uses 6. |
-| **Widget Version Specs** | KPI Counters = version 2, Charts (bar/line/pie/area) = version 3, Tables = version 1, Filters = version 2. Wrong version causes rendering failures. |
+| **Widget Version Specs** | KPI Counters = version 2, Charts (bar/line/pie/area) = version 3, Tables = version 2, Filters = version 2. Wrong version causes rendering failures. |
 | **Widget-Query Column Alignment** | Every widget `fieldName` MUST exactly match the SQL alias in its dataset query. Mismatch = "no fields to visualize" error. |
 | **Raw Number Formatting** | Queries return raw numbers (e.g., `0.85` for 85%). Widgets apply formatting (`number-percent`, `number-currency`, `number-plain`). NEVER use `FORMAT_NUMBER()` or string concatenation. |
 | **DATE Parameters (Not DATETIME)** | Dashboard parameters use `DATE` type with static default values. `DATETIME` with dynamic expressions like `now-30d/d` does NOT work. |
@@ -3312,10 +3781,11 @@ ORDER BY revenue DESC
 
 When you paste the prompt, the AI reads `@data_product_accelerator/skills/monitoring/02-databricks-aibi-dashboards/SKILL.md` — the **AI/BI Dashboard worker skill**. Behind the scenes:
 
-1. **Plan reading** — the skill reads your dashboard plan (`plans/phase1-addendum-1.1-dashboards.md`) to extract: KPIs, charts, filters, layout requirements
+1. **Plan reading** — the skill reads your dashboard plan (`plans/phase1-addendum-1.5-aibi-dashboards.md`) to extract: KPIs, charts, filters, layout requirements
 2. **Dashboard skill loaded** — provides complete JSON templates, widget specs, grid layout rules, query patterns, validation scripts, and deployment workflows
-3. **5 Common skills auto-loaded:**
+3. **6 Common skills auto-loaded:**
    - `databricks-expert-agent` — "Extract, Don''t Generate" for table/column names
+   - `semantic-layer/01-metric-views-patterns` — MEASURE() syntax for Metric View queries (loaded when dashboard uses MEASURE())
    - `databricks-asset-bundles` — dashboard resource deployment
    - `databricks-python-imports` — deployment script module patterns
    - `naming-tagging-standards` — dashboard and file naming conventions
@@ -3325,6 +3795,8 @@ When you paste the prompt, the AI reads `@data_product_accelerator/skills/monito
 6. **UPDATE-or-CREATE deployment** — Workspace Import API with `overwrite: true` preserves URLs and permissions
 
 **Key principle:** The AI reads your plan to **extract** KPI/chart requirements. Dashboard queries use `${catalog}` and `${gold_schema}` variable substitution — never hardcoded schemas.
+
+> **Important:** If the plan file at `plans/phase1-addendum-1.5-aibi-dashboards.md` doesn''t exist, the AI should tell you and ask for the correct path — not silently reconstruct requirements from other sources.
 
 > **Note:** For the full observability stack (Lakehouse Monitoring + Dashboards + SQL Alerts), use the orchestrator at `@data_product_accelerator/skills/monitoring/00-observability-setup/SKILL.md`. This step focuses specifically on the dashboard.',
 '## Expected Deliverables
@@ -3367,16 +3839,20 @@ resources/monitoring/
 
 ### 📊 What Each Widget Does
 
-| Widget | Type | Version | Data Source | Insight |
-|--------|------|---------|-------------|---------|
-| Total Revenue | KPI Counter | v2 | `revenue_analytics_metrics` | Top-line revenue figure |
-| Booking Count | KPI Counter | v2 | `revenue_analytics_metrics` | Total bookings in period |
-| Avg Nightly Rate | KPI Counter | v2 | `revenue_analytics_metrics` | Average price metric |
-| Revenue Trend | Line Chart | v3 | `fact_booking_detail` | Revenue over time |
-| Revenue by Destination | Bar Chart | v3 | `revenue_analytics_metrics` | Geographic breakdown |
-| Booking Details | Data Table | v1 | `fact_booking_detail + dims` | Drill-down for analysis |
-| Date Range | Filter | v2 | Parameter | Cross-page date filtering |
-| Destination | Filter | v2 | `dim_destination` | Geographic filtering |
+> **Illustrative example** from a bookings-domain dashboard — substitute with the concrete Metric View, fact, and dimension names from `plans/phase1-addendum-1.5-aibi-dashboards.md` and `plans/deploy-checkpoint.md` for your project. The pattern (KPIs/trends → `MEASURE()` on Metric Views; detail tables and filter lists → direct Gold SQL) is task-invariant.
+
+| Widget | Type | Version | Data Source | Query Pattern | Insight |
+|--------|------|---------|-------------|---------------|---------|
+| Total <measure_1> | KPI Counter | v2 | `<metric_view_name>` (Metric View) | `MEASURE()` | Top-line figure (e.g., Total Revenue) |
+| <count_metric> Count | KPI Counter | v2 | `<metric_view_name>` (Metric View) | `MEASURE()` | Total count in period (e.g., Booking Count) |
+| Avg <rate_metric> | KPI Counter | v2 | `<metric_view_name>` (Metric View) | `MEASURE()` | Average metric (e.g., Avg Nightly Rate) |
+| <measure_1> Trend | Line Chart | v3 | `<metric_view_name>` (Metric View) | `MEASURE()` with temporal dimension | Value over time |
+| <measure_1> by <dim_label> | Bar Chart | v3 | `<metric_view_name>` (Metric View) | `MEASURE()` with categorical dimension | Breakdown by dimension |
+| <fact_name> Details | Data Table | v2 | `<fact_name>` + dims (Gold) | Direct SQL with JOINs | Drill-down for analysis |
+| Date Range | Filter | v2 | Parameter | n/a (parameter widget) | Cross-page date filtering |
+| <dim_label> | Filter | v2 | `<dim_name>` (Gold) | `SELECT DISTINCT` | Categorical filtering |
+
+> **Pattern rule:** Aggregates (KPIs, trends, breakdowns) use `MEASURE()` against Metric Views. Detail tables and filter value lists use direct Gold SQL. This mirrors the dataset strategy in `references/metric-view-dashboard-queries.md`.
 
 ---
 
@@ -3450,7 +3926,7 @@ resources/monitoring/
 **Widget Versions (non-negotiable):**
 - [ ] KPI Counters use version 2 (not 3)
 - [ ] Bar/Line/Pie/Area Charts use version 3
-- [ ] Data Tables use version 1
+- [ ] Data Tables use version 2
 - [ ] Filters use version 2
 
 **Widget-Query Alignment:**
@@ -3479,7 +3955,8 @@ resources/monitoring/
 
 **Deployment:**
 - [ ] `.lvdash.json` file created and version-controlled
-- [ ] `deploy_dashboard.py` uses UPDATE-or-CREATE pattern
+- [ ] Phase 0.5 variable-enumeration pre-flight run: every `${var}` placeholder in the JSON template is covered by a `--var` or `dbutils.widgets.get(...)` value before the deploy job starts (STOP if any is missing)
+- [ ] `deploy_dashboard.py` uses UPDATE-or-CREATE pattern AND base64-encodes the rendered JSON (ASCII string) before calling `ws.workspace.import_` — never raw UTF-8 bytes
 - [ ] `validate_dashboard_queries.py` passes all SQL checks
 - [ ] `validate_widget_encodings.py` passes all alignment checks
 - [ ] `databricks bundle deploy -t dev` succeeds
@@ -3489,8 +3966,8 @@ resources/monitoring/
 -- Check dashboard exists in workspace
 -- Navigate to: Databricks → Dashboards → find your dashboard
 
--- Verify data sources are connected
-SELECT COUNT(*) FROM ${catalog}.${gold_schema}.fact_booking_detail;
+-- Verify data sources are connected (substitute <fact_name> from plans/deploy-checkpoint.md)
+SELECT COUNT(*) FROM ${catalog}.${gold_schema}.<fact_name>;
 
 -- Verify Metric Views exist
 SELECT table_name, table_type 
@@ -3512,14 +3989,16 @@ This will involve the following end-to-end workflow:
 - **Create Metric Views** — build Metric Views using `WITH METRICS LANGUAGE YAML` syntax with dimensions, measures, 3-5 synonyms each, and format specifications
 - **Create Table-Valued Functions (TVFs)** — write parameterized SQL functions with STRING date params (non-negotiable for Genie), v3.0 bullet-point COMMENTs, and ROW_NUMBER for Top-N patterns
 - **Configure Genie Space** — set up natural language query interface with data assets (Metric Views → TVFs → Gold tables priority), General Instructions (≤20 lines), and ≥10 benchmark questions with exact expected SQL
-- **Create JSON exports** — export Genie Space configuration as JSON for CI/CD deployment across environments
+- **Create JSON exports** — export Genie Space configuration as JSON for CI/CD deployment across environments. Before every POST/PATCH, run the `_assert_sql_arrays` validator: every `sql:` field in the `serialized_space` payload must be a `List[str]` (never a bare string) — see `semantic-layer/04-genie-space-export-import-api/SKILL.md` → "Required `serialized_space` Invariants".
+- **Bake `semantic_warehouse_id`** — the warehouse ID must be a CONCRETE value stamped into the exported JSON at deploy time, NOT a `--var` runtime parameter. Copy the resolved warehouse ID from `plans/deploy-checkpoint.md` (emitted by `bundle validate`).
+- **Persist space IDs** — after the first successful POST, copy the `[ACTION REQUIRED]` `genie_space_id_<stem>` block from the deploy script output into `databricks.yml` so subsequent runs PATCH the existing space instead of creating duplicates.
 - **Optimize for accuracy** — run benchmark questions via Conversation API and tune 6 control levers until accuracy ≥95% and repeatability ≥90%
 
 Implement in this order:
 
-1. **Table-Valued Functions (TVFs)** — using plan at @data_product_accelerator/plans/phase1-addendum-1.2-tvfs.md
-2. **Metric Views** — using plan at @data_product_accelerator/plans/phase1-addendum-1.3-metric-views.md
-3. **Genie Space** — using plan at @data_product_accelerator/plans/phase1-addendum-1.6-genie-spaces.md
+1. **Table-Valued Functions (TVFs)** — using plan at @plans/phase1-addendum-1.2-tvfs.md
+2. **Metric Views** — using plan at @plans/phase1-addendum-1.3-metric-views.md
+3. **Genie Space** — using plan at @plans/phase1-addendum-1.6-genie-spaces.md
 4. **Genie JSON Exports** — create export/import deployment jobs
 
 The orchestrator skill automatically loads worker skills for TVFs, Metric Views, Genie Space patterns, and export/import API.',
@@ -3540,8 +4019,8 @@ Copy the prompt above, start a **new Agent chat** in Cursor, and paste it. The A
 Ensure you have:
 - ✅ Gold Layer Implementation completed (Step 12) — with column COMMENTs on all tables
 - ✅ Use-Case Plan created (Step 13) — with `planning_mode: workshop`
-- ✅ Plan manifest exists: `plans/manifests/semantic-layer-manifest.yaml`
-- ✅ Plan addendum files exist:
+- ✅ Plan manifest exists: `plans/manifests/semantic-layer-manifest.yaml` (REQUIRED)
+- Plan addendum files (if available — the manifest has sufficient detail without these):
   - `plans/phase1-addendum-1.2-tvfs.md`
   - `plans/phase1-addendum-1.3-metric-views.md`
   - `plans/phase1-addendum-1.6-genie-spaces.md`
@@ -3559,9 +4038,15 @@ Ensure you have:
 
 **Step 4: Phase 1 — Metric Views** — The AI will read Metric View plan (`plans/phase1-addendum-1.3-metric-views.md`), create YAML definition files (dimensions, measures, synonyms, formats), create `create_metric_views.py` (reads YAML → `CREATE VIEW WITH METRICS LANGUAGE YAML`), create `metric_views_job.yml` for Asset Bundle deployment.
 
+**Checkpoint:** After Phase 1 completes, review the generated Metric View artifacts before moving to the next phase.
+
 **Step 5: Phase 2 — TVFs** — The AI will read TVF plan (`plans/phase1-addendum-1.2-tvfs.md`), validate Gold YAML schemas (confirm column names/types exist), create `table_valued_functions.sql` with v3.0 bullet-point COMMENTs, create `tvf_job.yml` (SQL task) for Asset Bundle deployment.
 
+**Checkpoint:** After Phase 2 completes, review the generated TVF artifacts before moving to the next phase.
+
 **Step 6: Phase 3 — Genie Space** — The AI will read Genie Space plan (`plans/phase1-addendum-1.6-genie-spaces.md`), verify ALL Gold tables have column COMMENTs (prerequisite), configure: data assets (MVs → TVFs → tables), General Instructions (≤20 lines), create ≥10 benchmark questions with exact expected SQL.
+
+**Checkpoint:** After Phase 3 completes, review the generated Genie Space artifacts before deploying.
 
 **Step 7: Deploy and Validate**
 
@@ -3922,6 +4407,24 @@ SQL: SELECT destination, MEASURE(booking_count) FROM revenue_analytics_metrics G
 | **Serverless SQL Warehouse** | Genie Spaces MUST use a Serverless SQL warehouse — required for natural language query execution. NEVER Classic or Pro. |
 | **Synonym-Rich Definitions** | 3-5 synonyms per dimension/measure (e.g., "revenue" → "earnings", "income", "amount") — dramatically improves Genie NL understanding |
 
+### Known Pitfalls (from deployment retrospectives)
+
+These issues have caused real deployment failures. The agent MUST avoid them:
+
+1. **Read ALL common skills before generating code.** Skipping `databricks-python-imports` causes fragile workspace paths. Skipping `databricks-asset-bundles` causes missing job parameters.
+
+2. **Verify DBR version before using snowflake nested joins in Metric Views.** Nested joins require DBR 17.1+. If unsure, ask the user or use denormalized columns instead.
+
+3. **Genie Space JSON must have `"version": 2` at root.** Omitting it causes API failures.
+
+4. **`data_sources.tables` and `data_sources.metric_views` do NOT have `id` fields.** Only `config.sample_questions`, `instructions.sql_functions`, `instructions.text_instructions`, and `benchmarks.questions` have `id` fields.
+
+5. **Use Databricks SQL dialect in all benchmark SQL.** Common mistakes: `TRUNC()` should be `DATE_TRUNC()`, `NVL()` should be `COALESCE()`, `SYSDATE` should be `CURRENT_DATE()`.
+
+6. **Do not bulk-create all files without checkpoints.** After each phase (Metric Views, TVFs, Genie Space), pause and confirm with the user before proceeding.
+
+7. **Treat complex domains (cross-table joins, engagement analytics) with higher risk flagging** than simple domains (single-table aggregation).
+
 ---
 
 ## 4️⃣ What Happens Behind the Scenes?
@@ -3950,12 +4453,12 @@ When you paste the prompt, the AI reads `@data_product_accelerator/skills/semant
 ### 📁 Semantic Layer Files Created
 
 ```
-src/source_gold/
+src/{project}_gold/
 ├── table_valued_functions.sql           # All TVFs in one SQL file (3-5 functions)
 ├── semantic/
 │   └── metric_views/
-│       ├── revenue_analytics_metrics.yaml   # Metric view YAML definition
-│       └── create_metric_views.py           # Script: reads YAML → CREATE VIEW WITH METRICS
+│       ├── <metric_view_name>.yaml      # Metric view YAML (one file per MV; names in plans/deploy-checkpoint.md)
+│       └── create_metric_views.py       # Script: reads YAML → CREATE VIEW WITH METRICS
 ├── genie/
 │   └── genie_space_config.json          # Exported Genie Space config (CI/CD)
 resources/
@@ -4066,97 +4569,285 @@ spark.sql(create_sql)
 - [ ] `tvf_job.yml` — SQL task for TVF deployment
 - [ ] `metric_views_job.yml` — Python task for Metric View deployment
 - [ ] JSON export created for Genie Space CI/CD (optional)
+- [ ] `_assert_sql_arrays` validator passes on every `serialized_space` payload BEFORE POST/PATCH — every `sql:` field is a `List[str]`, never a bare string
+- [ ] `semantic_warehouse_id` is a concrete value baked into the exported JSON at deploy time (sourced from `plans/deploy-checkpoint.md`), NOT a runtime `--var`
+- [ ] First-run `space_id`s persisted back into `databricks.yml` (`genie_space_id_<stem>`) so subsequent runs PATCH the existing space instead of creating duplicates
 - [ ] `databricks bundle deploy -t dev` succeeds',
 true, 1, true, current_timestamp(), current_timestamp(), current_user());
 
--- Build Agent
+-- Step 16: Build & Deploy Agent - bypass_LLM = TRUE
 INSERT INTO ${catalog}.${schema}.section_input_prompts 
 (input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
 VALUES
 (13, 'agent_framework',
-'Build a multi-agent orchestrator for this project by analyzing the PRD document from @docs/design_prd.md and the UI design documents from @docs/ folder.
+'## Your Task
 
-Refer to the instruction from @vibe-coding-workshop-template/agentic-framework/agents/multi-agent-build-prompt.md to build the agentic framework.
-',
-'You are a senior full-stack engineer implementing advanced agentic search capabilities.',
-'Build Agent',
-'Build advanced agentic search with Genie integration, LLM rewrite, and web search fallback',
+Build and deploy an MCP tool-calling agent that connects to the Genie Spaces created in Step 15, then deploy it to Databricks Model Serving.
+
+**First:** Read `apps_lakebase/$APP_NAME/.vibecoding-state.md` if it exists — it contains Genie Space IDs from the Build Genie Space step (Step 15) and variable values from prior phases.
+
+**Workspace:** `{workspace_url}`
+
+**Prerequisite:** Step 15 completed. **Before writing any agent code, run the Genie Space connectivity test in the skill''s Prerequisites section** — a space that exists but can''t answer questions will produce a greeting-only agent. Genie Space ID(s) available from Step 15 output or `.vibecoding-state.md`.
+
+---
+
+### Step 0: Gather Context
+
+Verify prerequisites and set up the UC schema for model registration:
+
+```bash
+GENIE_SPACE_ID="<FROM_STEP_15_OR_VIBECODING_STATE>"
+
+databricks serving-endpoints get databricks-claude-sonnet-4-6 --profile $PROFILE --output json | jq ''.state''
+
+UC_CATALOG="{lakehouse_default_catalog}"
+UC_SCHEMA="{user_schema_prefix}_agents"
+databricks schemas get "$UC_CATALOG.$UC_SCHEMA" --profile $PROFILE 2>/dev/null || \
+  databricks schemas create --catalog-name "$UC_CATALOG" --name "$UC_SCHEMA" --profile $PROFILE
+```
+
+If no interactive cluster is available, plan to run Steps 2–5 as a serverless job (see the skill''s Step 2 "No interactive cluster?" callout and `references/job-submission.md`).
+
+---
+
+### Build and Deploy the Agent
+
+Read `@data_product_accelerator/skills/genai-agents/09-simple-agent-scaffold/SKILL.md` and follow **Steps 1-5**.
+
+The skill''s Step 5a/5b auto-discovers the endpoint system SP and applies UC grants (`USE CATALOG`, `USE SCHEMA`, `SELECT`, `EXECUTE`) idempotently — do not paste a `TODO_SP_UUID` or try to grep the SP UUID out of an error message. Step 5c emits a `DEPLOY_CHECKPOINT.md` file that Step 17 reads verbatim.
+
+The skill covers:
+
+- **Step 1** — Write `agent.py`: copy template from `references/`, configure `agent-config.yaml` with the Genie Space ID from Step 15 and a domain-specific system prompt
+- **Step 2** — Test locally: verify `predict()` and `predict_stream()` in a Databricks notebook (MCP servers require workspace connectivity)
+- **Step 3** — Log with MLflow: `log_model()` with resource declarations for auth passthrough
+- **Step 4** — Register in Unity Catalog: use `{lakehouse_default_catalog}.{user_schema_prefix}_agents.{use_case_slug}-genie-agent` as the UC model name
+- **Step 5** — Deploy to Model Serving: `databricks.agents.deploy()` creates the endpoint; then Step 5a disambiguates `PERMISSION_DENIED`, Step 5b auto-grants UC privileges to the endpoint system SP, and Step 5c writes `DEPLOY_CHECKPOINT.md` for Step 17
+
+After Step 5, verify the tool-calling path with `curl + PAT` against `/invocations` using a **domain-specific data question** — a Playground greeting is insufficient because `EMBEDDED_CREDENTIALS` endpoints route MCP calls through the system SP regardless of caller.
+
+---
+
+### Checklist
+
+- [ ] `agent-config.yaml` has no `TODO_REPLACE` strings remaining (skill Step 1 gate)
+- [ ] `predict()` and `predict_stream()` return valid responses in notebook (skill Step 2 gate)
+- [ ] `mlflow.models.predict()` pre-deployment validation passes (skill Step 3 gate)
+- [ ] Model registered in Unity Catalog with version number (skill Step 4 gate)
+- [ ] Serving endpoint in `READY` state (skill Step 5 gate)
+- [ ] Step 5 gate passed: `curl + PAT` against `/invocations` returned a `function_call` to the Genie MCP tool (see skill Step 5 verification gate)
+- [ ] Step 5b auto-grant ran (see skill): UC privileges on `{lakehouse_default_catalog}.{gold_schema}` applied idempotently to the endpoint system SP UUID, and the SP UUID is recorded in `DEPLOY_CHECKPOINT.md`
+- [ ] `DEPLOY_CHECKPOINT.md` written to `apps_lakebase/$APP_NAME/agents/` (Step 17 reads endpoint name + SP UUID from it)
+- [ ] `.vibecoding-state.md` updated (see below)
+
+**Before finishing**, append to `apps_lakebase/$APP_NAME/.vibecoding-state.md`:
+- Step name (`## Build & Deploy Agent (Step 16)`)
+- UC Model Name (`{catalog}.{schema}.{model_name}`)
+- Serving Endpoint Name (derived from UC model name, dots replaced with hyphens)
+- Genie Space ID used
+- AI Playground: verified working',
+'You are a senior ML engineer deploying an MCP tool-calling agent to Databricks Model Serving. Follow the canonical OpenAI MCP Tool Calling Agent notebook pattern exactly — no custom orchestration, no LangGraph, no bespoke tool-calling loops.
+
+Approach: Read the skill, then execute each step sequentially. Use the skill''s Decision Defaults table for any choices. If a decision is not covered there, pick the simpler option and move on.
+
+This prompt is returned as-is for direct use in Cursor/Copilot. No LLM processing.',
+'Build & Deploy Agent',
+'Create an MCP tool-calling agent with Genie Space access and deploy it to Databricks Model Serving using the canonical ResponsesAgent pattern',
 16,
-'
-## Steps to Apply
+'## How to Use
 
-1. **Copy the generated prompt** using the copy button
-2. **Paste into Cursor or VS Code** with Copilot
-3. Let the AI **analyze the PRD and UI design structure**
-4. **Implement** agent orchestrator and tool calling
-5. **Test** with mock data
-',
-'## Expected Agent Deliverables
+1. Copy the **Input Template** section above
+2. Replace `{workspace_url}`, `{lakehouse_default_catalog}`, `{user_schema_prefix}`, and `{use_case_slug}` with your values
+3. Paste into Cursor or Copilot
+4. The code assistant will:
+   - Read `.vibecoding-state.md` for Genie Space IDs from Step 15
+   - Read the `09-simple-agent-scaffold` skill and follow all 5 steps
+   - Deploy the agent to Model Serving and verify in AI Playground
 
-### Backend Modules
+**Note:** The agent runs in a Databricks notebook (not local Python) since MCP servers require workspace connectivity. After deployment, the endpoint is ready for AppKit wiring in Step 17.',
+'## Expected Output
 
-| Module | Purpose |
-|--------|---------|
-| `genie_client` | Genie Space integration |
-| `llm_client` | LLM rewrite functionality |
-| `web_search_client` | Web search fallback |
+**Endpoint status:**
 
-### API Endpoints
+```
+$ databricks serving-endpoints get $ENDPOINT_NAME --profile $PROFILE --output json | jq ''.state''
+{
+  "ready": "READY",
+  "config_update": "NOT_UPDATING"
+}
+```
 
-- `POST /api/search/standard`
-- `POST /api/search/nl`
-- `POST /api/search/assistant`
+**AI Playground test:** Navigate to Workspace → Machine Learning → Serving → your endpoint → Query. Ask a question your Genie Space can answer and verify the agent returns a valid response.
 
-### Configuration
+**Files created:**
 
-- `.env.example` with all required variables
-- Mock mode for local development
+```
+agent.py                # MCPToolCallingAgent class (from skill template)
+agent-config.yaml       # ModelConfig parameters (LLM endpoint, system prompt, Genie Space IDs)
+```',
+true, 3, true, current_timestamp(), current_timestamp(), current_user());
 
-### Tests
-
-- Unit tests for LLM parsing
-- Unit tests for Genie no-answer detection
-- Integration tests in mock mode',
-true, 1, TRUE, current_timestamp(), current_timestamp(), current_user());
-
--- Step 19: Wire UI to Agent - bypass_LLM = TRUE
+-- Step 17: Wire Agent to AppKit UI - bypass_LLM = TRUE
 INSERT INTO ${catalog}.${schema}.section_input_prompts 
 (input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
 VALUES
 (113, 'wire_ui_agent',
-'## Task: Wire Frontend UI to Agent Serving Endpoint
+'## Your Task
 
-Connect your web application''s frontend to the Agent serving endpoint built in the previous step (Build Agent). This enables end-to-end natural language search in your application.
+Wire the deployed agent endpoint from Step 16 into the existing AppKit application using the Serving plugin.
 
-Refer to the instruction from @vibe-coding-workshop-template/agentic-framework/agents/agent-ui-wiring-prompt.md to wire the multi-agent system with the UI.',
-'',
-'Wire UI to Agent',
-'Connect frontend UI to the Agent serving endpoint for end-to-end natural language search',
-17,
-'## What is Wire UI to Agent?
+**First:** Read `apps_lakebase/$APP_NAME/.vibecoding-state.md` — it contains the serving endpoint name and UC model name from Step 16 (Build & Deploy Agent).
 
-This step connects your frontend application to the AI Agent built in the previous step. 
+**Workspace:** `{workspace_url}`
+
+**Working directory:** All app paths and commands use the `apps_lakebase/` folder. The scaffolded AppKit app lives at `apps_lakebase/$APP_NAME/`.
+
+**Prerequisite:** Step 16 completed — the agent endpoint is deployed on Databricks Model Serving and in `READY` state. The AppKit app is already deployed with Lakebase wiring (from Step 19).
 
 ---
 
-## Steps to Apply
+### Step 1: Verify Endpoint
 
-1. Copy the generated prompt using the copy button
-2. Paste it into Cursor or VS Code with Copilot
-4. Test the Agent''s response.
+```bash
+ENDPOINT_NAME="<FROM_STEP_16_OR_VIBECODING_STATE>"
+databricks serving-endpoints get $ENDPOINT_NAME --profile $PROFILE --output json | jq ''.state''
+```
 
-**Note:** This step requires the Build Agent step to be completed first. The Agent serving endpoint must be deployed and accessible.',
-'## Expected Deliverables
+---
 
-- Agent endpoint configured in `apps_lakebase/app.yaml`
-- `agent_client.py` module with query function and mock mode
-- Backend API route `POST /api/agent/query` responding correctly
-- Frontend NL search wired to agent endpoint
-- Results rendering inline without page navigation
-- Local testing passed in both mock and live modes
+### Step 2: Register the Serving Plugin
 
-**Next Step:** Iterate and enhance your application in Step 20',
-true, 1, TRUE, current_timestamp(), current_timestamp(), current_user());
+Read and follow `@apps_lakebase/skills/04-appkit-plugin-add/SKILL.md` with `@apps_lakebase/skills/04-appkit-plugin-add/references/plugin-serving.md` to add the Serving plugin to the existing AppKit project.
+
+The skill covers: importing `serving` in `server/server.ts`, adding the serving endpoint as an app resource with `CAN_QUERY`, and configuring `app.yaml`.
+
+**Before importing `serving`**, run the plugin availability check from `@apps_lakebase/skills/04-appkit-plugin-add/SKILL.md` Step 1b. If `serving` is `undefined` in your installed AppKit version, stop and follow `@apps_lakebase/skills/06-appkit-serving-wiring/references/custom-proxy-fallback.md` instead of Step 3 below.
+
+> **Critical gotcha — env var name mismatch:** The platform injects `SERVING_ENDPOINT=<name>` via the resource binding, but the AppKit Serving plugin reads `DATABRICKS_SERVING_ENDPOINT_NAME`. You MUST use the name `DATABRICKS_SERVING_ENDPOINT_NAME` with `valueFrom: serving-endpoint` in `app.yaml`.
+
+---
+
+### Step 3: Wire Frontend and Deploy
+
+Read `@apps_lakebase/skills/06-appkit-serving-wiring/SKILL.md` starting at **Step 4** for the streaming chat pattern. Also read `@apps_lakebase/skills/06-appkit-serving-wiring/references/chat-ui-patterns.md` for conversation state management.
+
+The skill covers:
+
+- **Step 4** — Streaming chat: `useServingStream` hook, conversation state in `useState`, `onComplete` handler, `reset()` between turns
+- **Step 5** — Invoke (optional): `useServingInvoke` for single-shot queries
+- **Step 6** — Server-side proxy (optional): `server.extend()` for post-processing agent responses
+- **Step 8** — Build gate: `npm run build` must pass (do NOT run `npm run dev` — env vars not set yet)
+- **Step 9** — Deploy and test: `databricks apps deploy`, verify `/api/serving/invoke`, check frontend
+
+---
+
+### Build Gate
+
+```bash
+cd apps_lakebase/$APP_NAME
+npm run build
+```
+
+> **Do NOT run `npm run dev`.** The Serving plugin throws `ConfigurationError` when `DATABRICKS_SERVING_ENDPOINT_NAME` is not set. This env var is injected by the platform after deploy.
+
+---
+
+### Deploy
+
+Before `databricks apps deploy`, read `@apps_lakebase/skills/03-appkit-deploy/SKILL.md` Prerequisites — in particular the `package-lock.json` rule in `@apps_lakebase/skills/03-appkit-deploy/references/lockfile-and-recreation.md`. Do NOT run `rm -f package-lock.json && npm install` locally before deploying.
+
+Deploy using the `03-appkit-deploy` skill pattern:
+
+```bash
+cd apps_lakebase/$APP_NAME
+databricks apps deploy --profile $PROFILE
+```
+
+If deployment fails, check logs with `databricks apps logs $APP_NAME --tail-lines 100 --profile $PROFILE` and match against the Gotchas table in the `06-appkit-serving-wiring` skill. Fix and redeploy up to 3 times.
+
+---
+
+### Checklist
+
+- [ ] Plugin export verified via `node -e` one-liner BEFORE importing (skill 04 Step 1b)
+- [ ] If `serving` is undefined, Step 6c custom proxy used (not a guessed import)
+- [ ] Custom proxy (if used) calls `config.authenticate(headers)` — NOT `config.getToken()` (skill 06 Step 6c)
+- [ ] Custom proxy (if used) transforms `messages` → `input` before forwarding (skill 06 Step 6c)
+- [ ] Frontend parser handles BOTH Responses API and OpenAI chunk formats (skill 06 Step 4c)
+- [ ] `databricks.yml` serving_endpoint resource uses `name:` NOT `endpoint_name:` (skill 04 references/plugin-serving.md)
+- [ ] Domain question (e.g., "what are top bookings?") returns real data, not just a greeting (skill 06 Step 9d)
+- [ ] Serving plugin registered in `server/server.ts` (skill 04 plugin-add)
+- [ ] `DATABRICKS_SERVING_ENDPOINT_NAME` in `app.yaml` with `valueFrom: serving-endpoint`
+- [ ] Streaming chat component renders in the UI (skill 06 Step 4)
+- [ ] `npm run build` passes with zero errors (skill 06 Step 8)
+- [ ] `package-lock.json` not regenerated locally before deploy (skill 03 references/lockfile-and-recreation.md)
+- [ ] App redeployed and in RUNNING state (skill 06 Step 9)
+- [ ] `/api/serving/invoke` returns a valid agent response
+- [ ] Multi-turn conversation works (second message includes first exchange)
+- [ ] `.vibecoding-state.md` updated (see below)
+
+**Before finishing**, append to `apps_lakebase/$APP_NAME/.vibecoding-state.md`:
+- Step name (`## Wire Agent to AppKit UI (Step 17)`)
+- Serving plugin registered in `server/server.ts`
+- `DATABRICKS_SERVING_ENDPOINT_NAME` bound in `app.yaml`
+- Chat component added to UI
+- Streaming responses verified
+- Agent endpoint name (from Step 16)',
+'You are a senior AppKit engineer wiring a Databricks Model Serving endpoint into an existing AppKit application. You use the AppKit Serving plugin — not custom API routes, not direct fetch calls, not FastAPI middleware.
+
+Key requirements:
+
+- Use the `06-appkit-serving-wiring` skill for all wiring patterns
+- Use the `04-appkit-plugin-add` skill to register the Serving plugin
+- Do NOT improvise npm lifecycle hooks, platform-detection conditionals, or workarounds that skip the platform''s build pipeline
+- Use `npm run build` as the build gate — do NOT run `npm run dev` before the first deploy with the Serving plugin (env vars won''t be set)
+- Run from `apps_lakebase/` or use `apps_lakebase/$APP_NAME/` for app commands
+
+> **When in doubt, consult these authoritative sources before improvising:**
+> - Serving plugin docs: https://databricks.github.io/appkit/docs/plugins/serving
+> - AppKit deploy docs: https://databricks.github.io/appkit/docs/app-management
+> - In-terminal: `npx @databricks/appkit docs "serving"`
+
+This prompt is returned as-is for direct use in Cursor/Copilot. No LLM processing.',
+'Wire Agent to AppKit UI',
+'Connect the deployed Model Serving agent endpoint to the existing AppKit application using the Serving plugin with streaming chat hooks',
+17,
+'## How to Use
+
+1. Copy the **Input Template** section above
+2. Replace `{workspace_url}` with your workspace URL
+3. Paste into Cursor or Copilot
+4. The code assistant will:
+   - Read `.vibecoding-state.md` for the endpoint name from Step 16
+   - Register the Serving plugin via the `04-appkit-plugin-add` skill
+   - Wire the streaming chat UI via the `06-appkit-serving-wiring` skill
+   - Build, deploy, and verify the app with working agent chat
+
+**Note:** This step adds the Serving plugin to the already-deployed AppKit app. The agent endpoint (from Step 16) must be in `READY` state before starting.',
+'## Expected Output
+
+**App redeployed with agent chat:**
+
+```
+$ databricks apps get $APP_NAME --output json --profile $PROFILE | jq ''{status: .status.state}''
+{
+  "status": "RUNNING"
+}
+```
+
+**Agent endpoint responds via AppKit:**
+
+```
+$ TOKEN=$(databricks auth token --profile $PROFILE | jq -r ''.access_token'')
+$ curl -s -X POST "${APP_URL}/api/serving/invoke" \
+    -H "Content-Type: application/json" \
+    -H "Authorization: Bearer $TOKEN" \
+    -d ''{"messages": [{"role": "user", "content": "What were total sales last month?"}]}'' | jq .
+```
+
+**Browser:** The app shows a streaming chat interface where user messages get progressive responses from the agent.',
+true, 2, true, current_timestamp(), current_timestamp(), current_user());
 
 -- Iterate & Enhance App
 INSERT INTO ${catalog}.${schema}.section_input_prompts 
@@ -4314,7 +5005,7 @@ What areas could be improved?
 - [ ] Updated user guide
 - [ ] API documentation
 - [ ] Release notes',
-1, TRUE, current_timestamp(), current_timestamp(), current_user());
+1, true, current_timestamp(), current_timestamp(), current_user());
 
 -- Step 21: Redeploy & Test Application (Autonomous Operations + Repository Documentation) - bypass_LLM = TRUE
 INSERT INTO ${catalog}.${schema}.section_input_prompts 
@@ -4394,7 +5085,7 @@ databricks bundle deploy -t dev
 If you have Databricks Asset Bundles configured:
 ```bash
 # Authenticate if needed
-databricks auth login --host https://e2-demo-field-eng.cloud.databricks.com --profile DEFAULT
+databricks auth login --host https://{workspace_url} --profile DEFAULT
 
 # Validate and deploy
 databricks bundle validate
@@ -5001,182 +5692,208 @@ docs/{project-name}-design/
 - [ ] 43-item quality checklist passed',
 true, 1, true, current_timestamp(), current_timestamp(), current_user());
 
--- Setup Lakebase
+-- Setup Lakebase (Config Only — Package + Bundle Resources)
 INSERT INTO ${catalog}.${schema}.section_input_prompts 
 (input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
 VALUES
 (16, 'setup_lakebase',
-'## Create Lakebase Tables from UI Design
+'## Your Task
+
+Install the Lakebase (PostgreSQL) package and configure bundle resources so the platform auto-provisions Lakebase on deploy. This is a **config-only** step — install the npm package and configure YAML files. Do NOT modify `server.ts` — plugin registration and database code happen in the **Wire Lakebase Backend** step.
+
+**First:** Read `apps_lakebase/$APP_NAME/.vibecoding-state.md` if it exists — it contains resolved issues and variable values from prior phases.
 
 **Workspace:** `{workspace_url}`
-**Your Lakebase Project:** `{user_app_name}` (created in Step 0 below)
 
-**Working directory:** All app and Lakebase assets go under `apps_lakebase/`. Read the UI design from the parent `docs/` folder.
+**Working directory:** All app code and commands use the `apps_lakebase/` folder. The scaffolded AppKit app lives at `apps_lakebase/$APP_NAME/`.
 
-Read `@docs/ui_design.md` (parent folder at repo root) and create the database tables needed to power the UI under `apps_lakebase/`.
-
----
-
-**Step 0: Create Your Own Lakebase Project**
-
-> Each workshop participant creates their own Lakebase project. This gives you full database access with no permission issues.
-
-**0a. Create the project:**
-```bash
-databricks postgres create-project {user_app_name} --json ''''{"spec": {"display_name": "{user_app_name}"}}''''
-```
-
-**0b. Get your endpoint hostname:**
-```bash
-databricks postgres get-endpoint projects/{user_app_name}/branches/production/endpoints/primary --output json
-```
-From the JSON output, copy the value of `status.hosts.host` — this is your `LAKEBASE_HOST`.
-
-**0c. Optimize compute and enable scale-to-zero (saves cost):**
-```bash
-databricks postgres update-endpoint projects/{user_app_name}/branches/production/endpoints/primary "spec" --json ''''{"spec": {"endpoint_type": "ENDPOINT_TYPE_READ_WRITE", "autoscaling_limit_min_cu": 0.5, "autoscaling_limit_max_cu": 2.0, "suspend_timeout_duration": "300s"}}''''
-```
-
-Your project is now ready. Use these values in the steps below:
-- **Project name:** `{user_app_name}`
-- **ENDPOINT_NAME:** `projects/{user_app_name}/branches/production/endpoints/primary`
-- **LAKEBASE_HOST:** (the hostname from Step 0b)
+> **MANDATORY:** Read `.vibecoding-state.md` first to get the `PROFILE` value from prior phases. Use `--profile $PROFILE` on every `databricks` CLI command in this step. If the returned email doesn''t match the prior phase, stop and verify the profile.
 
 ---
 
-**Step 1: Authenticate to Databricks**
+### Step 1: Set Variables
 
 ```bash
-databricks auth login --host {workspace_url}
+PROFILE="<your-databricks-cli-profile>"  # Must match the profile from prior phases
+USER_JSON=$(databricks current-user me --profile $PROFILE --output json)
+EMAIL=$(echo "$USER_JSON" | jq -r ''.userName'')
+FIRSTNAME=$(echo "$EMAIL" | cut -d''@'' -f1 | cut -d''.'' -f1)
+LASTINITIAL=$(echo "$EMAIL" | cut -d''@'' -f1 | cut -d''.'' -f2 | cut -c1)
+APP_PREFIX="${FIRSTNAME}-${LASTINITIAL}"
+APP_NAME="${APP_PREFIX}-{use_case_slug}"
+DB_SCHEMA=$(echo "$APP_NAME" | tr ''-'' ''_'')
+echo "PROFILE=$PROFILE  APP_NAME=$APP_NAME  DB_SCHEMA=$DB_SCHEMA"
 ```
 
-**Step 2: Create the DDL file**
+---
 
-Create file `apps_lakebase/db/lakebase/ddl/05_app_tables.sql` with CREATE TABLE statements for ALL entities needed by the UI:
-- Use PostgreSQL syntax
-- Use `{user_schema_prefix}` as your schema name (e.g. varunrao_b_booking_app)
-- Include primary keys, foreign keys, indexes
-- Include created_at/updated_at timestamps
-
-**DDL Guidelines for Lakebase:**
-- Use `TEXT` instead of `TEXT[]` (ARRAY types) - the SQL parser may not handle ARRAY syntax correctly
-- Avoid complex PostgreSQL-specific types that may not be supported
-
-**Step 3: Create the DML seed file**
-
-Create file `apps_lakebase/db/lakebase/dml_seed/04_seed_app_data.sql` with INSERT statements:
-- 10-15 realistic records per table for {industry_name} industry
-- Use `{user_schema_prefix}` as your schema name (must match DDL files)
-- Insert parent tables before child tables (e.g., hosts before listings, listings before reviews)
-
-**DML Guidelines for Lakebase:**
-- Use double single quotes ('''') to escape apostrophes in SQL strings (e.g., ''''chef''''''''s kitchen'''')
-- Avoid semicolons (;) inside string values - use pipe (|) or comma as delimiters instead (e.g., ''''Rule 1 | Rule 2'''' not ''''Rule 1; Rule 2'''')
-- Ensure FK references match parent table row counts (if you have 10 hosts, listings.host_id must be 1-10, not 1-12)
-
-**Step 4: Get your schema name and instance info**
+### Step 2: Install the Lakebase Package
 
 ```bash
-# Your schema name (derived from your use case)
-SCHEMA_NAME="{user_schema_prefix}"
-echo "Your schema: $SCHEMA_NAME"
-
-# Check Lakebase connectivity and instance status (run from apps_lakebase/ or use path)
-cd apps_lakebase && python3 scripts/lakebase_manager.py --action check --instance-name {user_app_name}
+cd apps_lakebase/$APP_NAME
+npm install @databricks/lakebase
 ```
 
-**Step 5: Deploy to Lakebase**
+---
 
-> **Lakebase Mode:** `{lakebase_mode}`. If autoscaling, authentication uses OAuth credential generation (no LAKEBASE_USER_OVERRIDE needed). If provisioned, set LAKEBASE_USER_OVERRIDE to your email.
+### Step 3: Add Bundle Resources to `databricks.yml`
+
+> **MANDATORY: Before proceeding, read `@apps_lakebase/skills/04-appkit-plugin-add/references/plugin-lakebase.md` section "3. Declare Bundle Resources".** It contains critical Terraform state warnings. Key rule: **never remove `postgres_projects` from `databricks.yml` after the first deploy.**
+
+Lakebase Autoscaling uses a **two-phase** deploy process because the database ID is auto-generated and cannot be known until the project exists:
+
+- **Phase 1 (this step):** Declare `postgres_projects` only. The first deploy creates the project. Lakebase automatically creates a default `production` branch and `primary` endpoint.
+- **Phase 2 (Deploy and E2E Test step):** After the project exists, discover the database ID and add the `app.resources.postgres` binding so `valueFrom: postgres` resolves.
+
+> **The first deploy WILL show the app in CRASHED state.** This is expected — `valueFrom: postgres` cannot resolve until `app.resources.postgres` is configured in Phase 2. Proceed to database ID discovery; the second deploy will succeed.
+
+> **Do NOT declare `postgres_branches` or `postgres_endpoints`** in `databricks.yml`. Lakebase Autoscaling auto-creates these with the project. Declaring them causes Terraform errors: `branch already exists` / `read_write endpoint already exists`.
+
+**Pre-check — does the project already exist?**
 
 ```bash
-# Set environment overrides (replace <values> with your actual values from Step 4)
-export LAKEBASE_HOST_OVERRIDE="<instance-dns-from-step-4>"
-export LAKEBASE_DATABASE_OVERRIDE="databricks_postgres"
-export LAKEBASE_SCHEMA_OVERRIDE="{user_schema_prefix}"
-export LAKEBASE_PORT_OVERRIDE="5432"
-export LAKEBASE_MODE={lakebase_mode}
-# Autoscaling only — skip this line for provisioned:
-export ENDPOINT_NAME="projects/{user_app_name}/branches/production/endpoints/primary"
-# If app is already deployed, export the SP ID so setup-lakebase.sh grants sequence permissions:
-# export APP_SERVICE_PRINCIPAL_ID="<service-principal-id-from-app-info>"
-
-# Deploy tables (run from apps_lakebase/)
-cd apps_lakebase && ./scripts/setup-lakebase.sh --recreate --instance-name {user_app_name}
+databricks postgres get-project projects/$APP_NAME --profile $PROFILE --output json 2>&1
 ```
 
-Type `YES-PRODUCTION` when prompted.
+If this succeeds (project exists from a prior run), skip the `postgres_projects` declaration and note "Project already exists" in `.vibecoding-state.md`. If it fails with "not found", proceed normally.
 
-**Step 6: Verify deployment**
+Add the following to `databricks.yml`:
+
+```yaml
+resources:
+  postgres_projects:
+    my_db:
+      project_id: <APP_NAME>
+      display_name: ''<APP_NAME>''
+      pg_version: 17
+      default_endpoint_settings:
+        autoscaling_limit_min_cu: 0.5
+        autoscaling_limit_max_cu: 2.0
+        suspend_timeout_duration: "300s"
+```
+
+Replace `<APP_NAME>` with the actual `$APP_NAME` value. If `databricks.yml` already has a `resources:` section, merge the `postgres_projects` resource into it.
+
+> **Keep `postgres_projects` during Phase 2.** After Phase 1 creates the project, Terraform state tracks the resource. The Phase 2 redeploy is idempotent. Do NOT remove `postgres_projects` between Phase 1 and Phase 2.
+>
+> **Re-running the workshop?** If the project exists from a **prior run or manual CLI creation** (current bundle has no Terraform state for it), either delete the project first (`databricks postgres delete-project projects/$APP_NAME --profile $PROFILE`) and proceed normally, or remove `postgres_projects` from `databricks.yml` and skip to Phase 2. If `databricks bundle deploy` fails with `"project already exists"`, this is the case — use one of these two options.
+
+---
+
+### Step 4: Configure `app.yaml` Environment Variables
+
+Add to the `env:` section of `app.yaml`:
+
+```yaml
+  - name: LAKEBASE_ENDPOINT
+    valueFrom: postgres
+  - name: DB_SCHEMA
+    value: ''<value of $DB_SCHEMA from Step 1>''
+```
+
+The platform auto-injects `PGHOST`, `PGPORT`, `PGDATABASE`, `PGSSLMODE`, `PGUSER` from the bundle resource binding. Do NOT set these manually.
+
+---
+
+### Step 5: Configure `.env` for Local Development
+
+Add to `.env` in the app root:
+
+```env
+DB_SCHEMA=<value of $DB_SCHEMA from Step 1>
+```
+
+Local development uses mock fallback data before the first deploy.
+
+---
+
+### Step 6: Verify Package Installation
 
 ```bash
-cd apps_lakebase && ./scripts/setup-lakebase.sh --status --instance-name {user_app_name}
+cd apps_lakebase/$APP_NAME
+npm ls @databricks/lakebase
 ```
 
-All tables must show `✓ exists` with row counts before proceeding.
+Must show `@databricks/lakebase` in the dependency tree.
 
-**Step 7: Update app.yaml**
+---
 
-Update the env section in `apps_lakebase/app.yaml`:
+### Step 7: Validate Configuration
+
+```bash
+cd apps_lakebase/$APP_NAME
+databricks apps validate --profile $PROFILE
+```
+
+Must pass with no errors. Common issues: YAML indentation errors (use 2-space indent), missing `resources:` key. A warning about `valueFrom: postgres` not resolving is expected until Phase 2.
+
+---
+
+### Checklist
+
+- [ ] `@databricks/lakebase` installed in `package.json`
+- [ ] `server/server.ts` is **unchanged** (plugin registration happens in the Wire Lakebase Backend step)
+- [ ] `DB_SCHEMA` derived from `$APP_NAME` (hyphens to underscores)
+- [ ] `databricks.yml` has `postgres_projects` resource (no `postgres_branches` or `postgres_endpoints` — auto-created)
+- [ ] `app.yaml` has `LAKEBASE_ENDPOINT` with `valueFrom: postgres` and `DB_SCHEMA` as static value
+- [ ] `databricks apps validate` passes (warning about `valueFrom: postgres` is expected)
+- [ ] `.vibecoding-state.md` updated (see below)
+
+**Before finishing**, append to `apps_lakebase/$APP_NAME/.vibecoding-state.md` with:
+- Step name (`## Setup Lakebase`)
+- Key variable values (`DB_SCHEMA`, bundle resource project_id, `PROFILE`)
+- Any resolved issues or workarounds encountered during this phase
+- **Critical Notes for Next Phase:**
+  - DO NOT remove `postgres_projects` from `databricks.yml` after Phase 1 deploy — Terraform state tracks it
+  - Phase 2 redeploy is idempotent; Terraform sees no diff and skips the resource',
+'You are a full-stack developer adding the Lakebase (PostgreSQL) package to an existing AppKit application and configuring bundle resources for deployment. This is a **config-only** step — install the npm package and configure YAML files, but do NOT modify `server.ts`. Plugin registration happens in the **Wire Lakebase Backend** step.
+
+Key requirements:
+
+- Install `@databricks/lakebase` npm package (do NOT register the plugin in `server.ts` yet)
+- Declare `postgres_projects` resource in `databricks.yml` (do NOT declare `postgres_branches` or `postgres_endpoints` — Lakebase auto-creates these)
+- Configure `app.yaml` with `valueFrom: postgres` for `LAKEBASE_ENDPOINT` and a static `DB_SCHEMA`
+- Derive `DB_SCHEMA` from `$APP_NAME` (hyphens to underscores) for user-scoped database isolation
+- Do NOT deploy in this step — deployment happens in the **Deploy and E2E Test** step
+- Do NOT create a Lakebase project via CLI — the bundle creates it automatically on first deploy
+- Do NOT add `lakebase()` to `server.ts` — that happens in the **Wire Lakebase Backend** step
+
+This prompt is returned as-is for direct use in Cursor/Copilot. No LLM processing.',
+'Setup Lakebase',
+'Install Lakebase package, declare bundle resources in databricks.yml, configure valueFrom: postgres (config-only, no server.ts changes)',
+6,
+'## How to Use
+
+1. Copy the **Input Template** section above
+2. Replace `{workspace_url}` and `{use_case_slug}` with your values
+3. Paste into Cursor or Copilot
+4. The code assistant will:
+   - Install the `@databricks/lakebase` npm package
+   - Add bundle resources to `databricks.yml`
+   - Configure `app.yaml` with `valueFrom: postgres`
+   - Configure `.env` with `DB_SCHEMA`
+
+**Note:** This is a config-only step. `server.ts` is not modified — plugin registration (`lakebase()` in the plugins array) and database code happen in the **Wire Lakebase Backend** step. The Lakebase project is created automatically on first deploy (in the **Deploy and E2E Test** step).',
+'## Expected Output
+
+**Package verification:**
+
+```
+$ cd apps_lakebase/$APP_NAME && npm ls @databricks/lakebase
+└── @databricks/lakebase@x.x.x
+```
+
+**`app.yaml` env section after this step:**
 
 ```yaml
 env:
-  - name: LAKEBASE_HOST
-    value: "<your-instance-dns>"
-  - name: LAKEBASE_DATABASE
-    value: "databricks_postgres"
-  - name: LAKEBASE_SCHEMA
-    value: "{user_schema_prefix}"
-  - name: LAKEBASE_PORT
-    value: "5432"
-  # Autoscaling only — include ENDPOINT_NAME; omit for provisioned:
-  - name: ENDPOINT_NAME
-    value: "projects/{user_app_name}/branches/production/endpoints/primary"
-  - name: USE_LAKEBASE
-    value: "true"
-```
-
-> **Note on LAKEBASE_USER:** For **autoscaling**, do NOT set it — the identity is injected automatically. For **provisioned**, it is set via the Lakebase app resource link.
-
----
-
-**If deployment fails:** Fix the error in your DDL/DML files and re-run Step 5. Retry up to 3 times.
-**If auth fails:** Re-run `databricks auth login --host {workspace_url}`',
-'You are a database engineer setting up Lakebase (PostgreSQL) tables for a web application.
-
-Key requirements:
-1. Read the UI design to understand what data entities are needed
-2. Create DDL with proper PostgreSQL syntax, keys, and indexes
-3. Create realistic seed data that matches the industry context
-4. Deploy tables and verify they exist with data
-5. Configure apps_lakebase/app.yaml so the application can connect
-
-This prompt is returned as-is for direct use in Cursor/Copilot. No LLM processing.
-
-CLI Best Practices:
-- Run from apps_lakebase/ or use apps_lakebase/scripts/ for scripts
-- Run CLI commands outside the IDE sandbox to avoid SSL/TLS certificate errors',
-'Setup Lakebase',
-'Create and deploy Lakebase tables from UI Design',
-5,
-'## How to Use
-
-1. **Copy the generated prompt**
-2. **Paste into Cursor or Copilot**
-3. The code assistant will execute all steps:
-   - Authenticate to Databricks workspace
-   - Create DDL and DML files
-   - Run deployment commands
-   - Verify tables exist
-   - Update app.yaml',
-'## Expected Output
-
-- DDL file: `apps_lakebase/db/lakebase/ddl/05_app_tables.sql`
-- DML file: `apps_lakebase/db/lakebase/dml_seed/04_seed_app_data.sql`
-- Tables deployed to {user_app_name}
-- apps_lakebase/app.yaml updated with Lakebase config',
-TRUE,
-1, TRUE, current_timestamp(), current_timestamp(), current_user());
+  # ... existing env vars ...
+  - name: LAKEBASE_ENDPOINT
+    valueFrom: postgres
+  - name: DB_SCHEMA
+    value: ''{user_schema_prefix}_booking_app''
+```',
+true, 1, true, current_timestamp(), current_timestamp(), current_user());
 
 -- Default Section
 INSERT INTO ${catalog}.${schema}.section_input_prompts 
@@ -5197,548 +5914,323 @@ Generate a detailed, actionable prompt for {section_tag} in a {industry_name} {u
 99,
 '',
 '',
-1, TRUE, current_timestamp(), current_timestamp(), current_user());
+1, true, current_timestamp(), current_timestamp(), current_user());
 
--- Wire UI to Lakebase
+-- Wire AppKit App to Lakebase
 INSERT INTO ${catalog}.${schema}.section_input_prompts 
 (input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
 VALUES
 (108, 'wire_ui_lakebase',
-'## Task: Wire Frontend UI to Lakebase Backend
+'## Your Task
 
-Connect the web application to the Lakebase database so the UI displays real data. This step focuses on **local development and testing**.
+Wire the AppKit web application to a Lakebase database so the UI fetches data from Lakebase PostgreSQL via Express API routes. This step registers the `lakebase()` plugin in `server.ts` (moved here from Setup Lakebase to avoid runtime crashes in local dev) AND writes all database code. Lakebase is the sole data source — there is no SQL warehouse in this flow. Local validation is **`npm run build` only** — `npm run dev` will crash because Lakebase env vars (`LAKEBASE_ENDPOINT`, `PGHOST`) are not set until after the first deploy. Deployment and live data verification happen in the **Deploy and E2E Test** step.
 
-**Working directory:** All app code and commands use the `apps_lakebase/` folder.
+**First:** Read `apps_lakebase/$APP_NAME/.vibecoding-state.md` if it exists — it contains resolved issues and variable values from prior phases (including `DB_SCHEMA` from the **Setup Lakebase** step).
 
-**Your Lakebase Project:** `{user_app_name}` (from the setup_lakebase step)
+**Workspace:** `{workspace_url}`
 
-> Use the project name and LAKEBASE_HOST from the **setup_lakebase** step.
+**Working directory:** All app code and commands use the `apps_lakebase/` folder. The scaffolded AppKit app lives at `apps_lakebase/$APP_NAME/`.
 
-> **⚠️ IMPORTANT NOTE:** The Lakebase Instance/Project Name and Host Name above are configured in the Workshop Parameters. Ensure these match your Databricks workspace Lakebase setup before proceeding.
-
----
-
-## Part A: Install Dependencies (CRITICAL - Prevent driver import errors)
-
-**Both files must be updated in `apps_lakebase/`** - `apps_lakebase/pyproject.toml` is the source of truth and `apps_lakebase/requirements.txt` may be regenerated from it.
-
-> **Lakebase Mode:** `{lakebase_mode}`. Both `psycopg` (v3) and `psycopg2-binary` are required regardless of mode. Autoscaling uses psycopg3 ConnectionPool with OAuth token rotation; provisioned uses psycopg2 with resource-linked credentials.
-
-1. **Check if `apps_lakebase/pyproject.toml` exists** - if yes, add these to `[project.dependencies]`:
-   ```toml
-   [project]
-   dependencies = [
-       "psycopg[binary,pool]>=3.1.0",
-       "psycopg2-binary>=2.9.0",
-       "databricks-sdk>=0.81.0",
-       # ... other deps
-   ]
-   ```
-
-2. **Add to `apps_lakebase/requirements.txt`** - ensure these lines exist:
-   ```
-   psycopg[binary,pool]>=3.1.0
-   psycopg2-binary>=2.9.0
-   databricks-sdk>=0.81.0
-   ```
-
-3. **Verify both files have the dependencies (from apps_lakebase/):**
-   ```bash
-   cd apps_lakebase && grep -i psycopg pyproject.toml requirements.txt
-   cd apps_lakebase && grep -i databricks-sdk pyproject.toml requirements.txt
-   ```
-   You should see `psycopg[binary,pool]` and `databricks-sdk` in BOTH files.
-
-4. **Test locally** before proceeding (from apps_lakebase/):
-   ```bash
-   cd apps_lakebase && pip install -r requirements.txt
-   cd apps_lakebase && python3 -c "import psycopg; from psycopg_pool import ConnectionPool; print(''psycopg3 + pool OK'')"
-   cd apps_lakebase && python3 -c "from databricks.sdk import WorkspaceClient; print(''databricks-sdk OK'')"
-   ```
-
-5. **Ensure `requirements.txt` is NOT in `apps_lakebase/.gitignore`:**
-   ```bash
-   grep -q "requirements.txt" apps_lakebase/.gitignore && echo "WARNING: Remove requirements.txt from .gitignore!" || echo "OK"
-   ```
-   If ignored, Databricks sync will skip it and deployment will fail.
-
-**Why this matters:** The app uses `psycopg3` + `databricks-sdk` for autoscaling and `psycopg2` for provisioned mode. Both drivers must be available so the code can select the right one at runtime.
+**Prerequisite:** The **Setup Lakebase** step must be complete — the `@databricks/lakebase` package is installed, bundle resources are declared in `databricks.yml`, and `app.yaml` has `valueFrom: postgres`. Note: `server.ts` was NOT modified in that step — this step adds the `lakebase()` plugin registration along with all database code.
 
 ---
 
-## Part B: Configure App Permissions (CRITICAL)
+### Wire UI to Backend
 
-Your app runs as a **service principal**. It cannot connect to Lakebase until you grant permissions.
+Read `@apps_lakebase/skills/05-appkit-lakebase-wiring/SKILL.md` and follow **Steps 1-3**. Use your PRD to derive the specific tables, API routes, and seed data. Work incrementally: complete each skill step (DDL, routes, frontend) with a build gate between them. Do not design all tables, routes, and page changes in a single planning pass.
 
-**Step 1: Get service principal ID**
-```bash
-cd apps_lakebase && python scripts/lakebase_manager.py --action app-info --app-name $APP_NAME
-```
-Copy the Service Principal ID from the output.
+The skill covers:
 
-**Step 2: Grant Lakebase role**
-```bash
-cd apps_lakebase && python scripts/lakebase_manager.py --action add-lakebase-role --app-name $APP_NAME --instance-name {user_app_name} --mode {lakebase_mode} --branch "projects/{user_app_name}/branches/production"
-```
-> The `--branch` flag is used by autoscaling; provisioned mode ignores it.
+- **Step 1** — Database schema design: PRD-to-schema methodology, PostgreSQL type conventions, idempotent DDL, count-check seed pattern. Also read `@apps_lakebase/skills/05-appkit-lakebase-wiring/references/database-design-guide.md` for normalization rules and data type guidance.
+- **Step 2** — API routes: `server.extend()` pattern, `{ data, source }` response contract, mock fallback, health endpoint
+- **Step 3** — Frontend wiring: `useLakebaseData` hook, `ConnectionStatus` component, defensive data handling (DECIMAL coercion, DATE coercion, snake_case mapping). **Run `npm run build` after every 2-3 page rewrites** — do not rewrite all pages in a single pass. When removing a static data import, audit whether UI elements that depended on that data (e.g., property images from `PROPERTIES.find()`) are preserved via API or intentionally removed. Read `@apps_lakebase/skills/05-appkit-lakebase-wiring/references/multi-table-example.md` for cross-entity enrichment patterns (LEFT JOIN for lookup pages that need related entity data).
 
-Look for: `✓ Successfully added Lakebase role`
+When deployed in the **Deploy and E2E Test** step, the Service Principal will run this code on first boot to create database objects.
 
-> **Sequence permissions:** The `setup-lakebase.sh` script (run earlier in setup_lakebase) grants sequence permissions needed for SERIAL columns. If you later see `permission denied for sequence` errors, re-run: `cd apps_lakebase && ./scripts/setup-lakebase.sh --recreate`
+---
 
-**Step 3: Link Lakebase as App Resource (provisioned only)**
-> **Autoscaling mode ({lakebase_mode}):** Skip this step entirely. Autoscaling does not support App Resource linking (returns 404). The app authenticates via `generate_database_credential()` with the SQL-level role from Step 2.
+### Build Gate
+
+Before proceeding, verify the app builds cleanly:
 
 ```bash
-# Provisioned only — do NOT run for autoscaling:
-cd apps_lakebase && python scripts/lakebase_manager.py --action link-app-resource --app-name $APP_NAME --instance-name {user_app_name} --mode {lakebase_mode}
+cd apps_lakebase/$APP_NAME
+npm run build   # Must pass with zero errors
 ```
-Look for: `✓ Successfully linked Lakebase` (provisioned) or `ℹ️ Autoscaling mode` (autoscaling)
 
-**Step 4: Verify permissions were added**
-```bash
-cd apps_lakebase && python scripts/lakebase_manager.py --action list-lakebase-roles --instance-name {user_app_name} --mode {lakebase_mode} --branch "projects/{user_app_name}/branches/production"
-```
-Your service principal ID must appear with `DATABRICKS_SUPERUSER` role.
-
-**Step 5: Verify apps_lakebase/app.yaml env vars match your mode (`{lakebase_mode}`)**
-```yaml
-  - name: USE_LAKEBASE
-    value: "true"
-  # Autoscaling only — include ENDPOINT_NAME; omit for provisioned:
-  - name: ENDPOINT_NAME
-    value: "projects/{user_app_name}/branches/production/endpoints/primary"
-```
-> For autoscaling, do NOT set `LAKEBASE_USER`. For provisioned, `LAKEBASE_USER` is set via the app resource link.
-
-**⚠️ If you skip permission steps, you will see errors like:**
-```
-role "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" does not exist
-```
-or for cold-start timeouts:
-```
-Connection attempt 1/5 failed (scale-to-zero wake?), retrying...
-```
-Go back and run steps 2-4 again. Cold-start retries are normal for the first connection after scale-to-zero.
+Fix any TypeScript, ESM, or import errors now. Each deploy cycle takes 3-5 minutes — catching errors locally saves significant time.
 
 ---
 
-## Lakebase Authentication Pattern (CRITICAL)
+### Local Build Validation
 
-Databricks Apps inject these env vars for linked database resources:
-- `PGHOST`, `PGDATABASE`, `PGUSER`, `PGPORT`, `PGSSLMODE`
+Follow **Step 4** of the `05-appkit-lakebase-wiring` skill. In summary:
 
-**⚠️ PGPASSWORD is NOT injected!** Your mode is `{lakebase_mode}`. Authentication differs by mode:
+1. `npm run build` — must pass with zero errors
 
-1. **Autoscaling mode** (when `ENDPOINT_NAME` is set) - uses psycopg3 ConnectionPool with credential rotation:
-   ```python
-   from databricks.sdk import WorkspaceClient
-   import psycopg
-   from psycopg_pool import ConnectionPool
-
-   ws = WorkspaceClient()
-   endpoint_name = os.environ["ENDPOINT_NAME"]
-
-   class OAuthConnection(psycopg.Connection):
-       @classmethod
-       def connect(cls, conninfo='''', **kwargs):
-           credential = ws.postgres.generate_database_credential(endpoint=endpoint_name)
-           kwargs[''password''] = credential.token
-           return super().connect(conninfo, **kwargs)
-
-   pool = ConnectionPool(
-       conninfo=f"dbname={db} user={user} host={host} port={port} sslmode=require",
-       connection_class=OAuthConnection,
-       min_size=1, max_size=10, open=True,
-   )
-   ```
-
-2. **Provisioned mode** (when `ENDPOINT_NAME` is NOT set) - uses OAuth token directly:
-   ```python
-   from databricks.sdk import WorkspaceClient
-   ws = WorkspaceClient()
-   headers = ws.config.authenticate()
-   token = headers["Authorization"][7:]  # Remove "Bearer "
-   ```
-
-**When updating `@apps_lakebase/src/backend/services/lakebase.py`, ensure it detects `ENDPOINT_NAME` and uses the appropriate pattern.** The existing lakebase.py template already handles both modes.
+> **Do NOT run `npm run dev`.** The `lakebase()` plugin throws `ConfigurationError` when `LAKEBASE_ENDPOINT` and `PGHOST` are not set. These env vars are provisioned by the platform on first deploy. `npm run build` is sufficient — it validates all TypeScript, imports, and bundling without executing the code. Runtime testing happens in the **Deploy and E2E Test** step.
 
 ---
 
-## Part C: Wire UI to Backend
+### Checklist
 
-### Backend Changes
+- [ ] DDL and seed data are idempotent (skill Step 1)
+- [ ] API routes return `{ data, source }` with mock fallback (skill Step 2)
+- [ ] `useLakebaseData` hook and `ConnectionStatus` component created (skill Step 3)
+- [ ] All static mock data replaced with API calls
+- [ ] DECIMAL/DATE coercion and snake_case mapping handled
+- [ ] `npm run build` passes (do NOT run `npm run dev` — Lakebase env vars not set yet)
+- [ ] "Critical Notes for Next Phase" from prior step''s `.vibecoding-state.md` are preserved (especially: do NOT remove `postgres_projects` from `databricks.yml`)
+- [ ] `.vibecoding-state.md` updated (see below)
 
-1. **Review DDL and DML files** to understand the database structure (under apps_lakebase/)
-   - Open `@apps_lakebase/db/lakebase/ddl/` and review all table DDL files
-   - Open `@apps_lakebase/db/lakebase/dml_seed/` and review the seed data files
-   - Understand the table names, column names, data types, and relationships
-   - Note which tables power which UI pages/components
+**Before finishing**, append to `apps_lakebase/$APP_NAME/.vibecoding-state.md` with:
+- Step name (`## Wire Lakebase Backend`)
+- Key variable values (`DB_SCHEMA`, API endpoints created)
+- Any resolved issues or workarounds encountered during this phase
+- Carry forward any "Critical Notes for Next Phase" from the Setup Lakebase step',
+'You are a full-stack developer wiring a Lakebase PostgreSQL backend into an AppKit web application. Follow the `05-appkit-lakebase-wiring` skill for all reusable patterns (database design, API routes, frontend hooks, testing). Use the PRD to derive application-specific tables, routes, and seed data.
 
-2. **Update query functions** in `@apps_lakebase/src/backend/services/lakebase.py`
-   - Based on your understanding of the backend Lakebase tables, update the query functions
-   - Ensure queries match the actual table and column names from the DDL files
-   - Use existing connection code - do NOT create new database connections
-   - Ensure OAuth token authentication is used (see pattern above)
-   - Functions should return `None` if Lakebase connection fails (for fallback)
-   - **Check your work:** Run each query manually to verify it returns expected data without errors
-   - **Connection Resilience (CRITICAL for Autoscaling):** Lakebase autoscaling instances scale to zero after idle periods, which kills pooled connections. Your Lakebase service layer MUST: (1) Configure `psycopg_pool.ConnectionPool` with `check=ConnectionPool.check_connection` and `max_idle=300`. (2) Add retry-once logic in query helpers for "terminating connection" errors. (3) Log retries at WARNING level.
-
-3. **Add INFO logging** to all Lakebase connection code
-   - Log when connecting to Lakebase (host, database, schema)
-   - Log the query being executed and which page/endpoint triggered it
-   - Log success with row count or failure with error details
-   - Example:
-     ```python
-     import logging
-     logger = logging.getLogger(__name__)
-     
-     logger.info(f"[Lakebase] Connecting to {host}/{database}/{schema}")
-     logger.info(f"[Lakebase] Executing query for endpoint: /api/your-endpoint")
-     logger.info(f"[Lakebase] Query successful - returned {len(results)} rows")
-     ```
-
-4. **Add/update API endpoints** in `@apps_lakebase/src/backend/api/routes.py`
-   - Health endpoint: `/api/health/lakebase` - returns connection status and any errors
-   - Data endpoints should return both `data` AND `source` ("live" or "mock")
-   - When Lakebase fails, fall back to mock data
-
-### Frontend Changes
-
-5. **Create a ConnectionStatus indicator component**
-   - Shows "🔴 Live Data" when connected to Lakebase  
-   - Shows "📋 Mock Data" when using fallback data
-   - Displays error indicator (⚠️) with tooltip when connection fails
-   - **Place at the TOP center of the page** (header area) so users clearly see it immediately
-   - **Must appear on ALL pages** that fetch data from Lakebase
-   - Show the specific action/data being loaded for that page (e.g., "Loading listings...", "Fetching bookings...")
-
-6. **Update data-fetching components**
-   - Handle both live and mock data from backend
-   - Track the data source so UI can display it if needed
-
-**Important:** Users must clearly see whether they''re viewing live or mock data on every page.
-
----
-
-## Part D: Local Build and Test
-
-Run all commands from the `apps_lakebase/` folder.
-
-1. **Build the frontend:**
-   ```bash
-   cd apps_lakebase && npm install && npm run build
-   ls apps_lakebase/dist/index.html || echo "ERROR: Build failed!"
-   ```
-
-2. **Test the backend locally:**
-   ```bash
-   cd apps_lakebase && python3 app.py
-   ```
-
-3. **Open `http://localhost:8000` in your browser and verify:**
-   - The UI loads correctly
-   - Navigation works between pages
-   - ConnectionStatus indicator shows data source
-   - Backend API endpoints respond (check browser dev tools Network tab)
-   - No console errors
-
-4. **Test API endpoints locally:**
-   ```bash
-   curl -s "http://localhost:8000/api/health/lakebase" | jq .
-   ```
-
-**Only proceed to Step 8 (Deploy and Test) after local testing passes.**
-
----
-
-## Defensive Data Handling
-
-When wiring UI to backend, prevent runtime errors:
-- Initialize arrays with `[]`, not `undefined`
-- Use optional chaining: `data?.slice()`, `data?.map()`
-- Provide fallbacks: `(data ?? []).map(...)` or `data || []`
-- Check before rendering: `{data && data.map(...)}`
-
----
-
-## Route Prefix Reminder
-
-Health endpoints are mounted at root (`/health/*`), not under `/api`. Frontend calls to health checks should use `/health/lakebase`, not `/api/health/lakebase`.
-
----
-
-## Checklist
-
-- [ ] psycopg[binary,pool]>=3.1.0 AND psycopg2-binary AND databricks-sdk in BOTH pyproject.toml AND requirements.txt
-- [ ] requirements.txt NOT in .gitignore (will be skipped by sync!)
-- [ ] Tested locally: `python3 -c "import psycopg; from psycopg_pool import ConnectionPool"`
-- [ ] Service principal ID obtained
-- [ ] Lakebase database role granted (add-lakebase-role --mode {lakebase_mode})
-- [ ] Lakebase linked as App Resource (provisioned only; autoscaling skips this step)
-- [ ] apps_lakebase/app.yaml env vars match mode: ENDPOINT_NAME for autoscaling, LAKEBASE_USER via resource link for provisioned
-- [ ] INFO logging added to all Lakebase connection code
-- [ ] Backend APIs return data with source indicator (live/mock)
-- [ ] Backend falls back to mock data when Lakebase unavailable
-- [ ] ConnectionStatus component shows live vs mock indicator on ALL pages
-- [ ] Frontend built successfully: `npm run build` (from apps_lakebase/)
-- [ ] Local testing passed at localhost:8000',
-'You are a full-stack developer connecting a web app to Lakebase.
+Approach: Start coding after reading the skill. Do not plan the entire implementation in advance — follow the skill steps sequentially and make decisions using the Decision Defaults table in the skill. If a decision is not covered there, pick the simpler option and move on.
 
 Key requirements:
-1. Configure service principal permissions (apps don''t run as your user)
-2. Grant Lakebase database role (required for both modes) AND link as App Resource (provisioned only -- autoscaling skips this)
-3. Backend APIs must indicate data source (live/mock) and fall back gracefully
-4. UI must show a clear indicator: "Live Data" vs "Mock Data"
-5. Display connection errors so users understand any issues
-6. Test locally before deployment (deployment is done in the next step)
 
-This prompt is returned as-is for direct use in Cursor/Copilot. No LLM processing.
+- The `@databricks/lakebase` package is installed and YAML files are configured (from the **Setup Lakebase** step), but `server.ts` has NOT been modified yet
+- This step registers `lakebase()` in the plugins array AND writes all database code (DDL, routes, frontend hooks)
+- Follow the `05-appkit-lakebase-wiring` skill for DDL patterns, API route architecture, frontend hooks, and testing
+- Use `DB_SCHEMA` (from `.vibecoding-state.md` or `.env`) in all DDL, queries, and grants
+- Do NOT deploy in this step — deployment happens in the **Deploy and E2E Test** step
+- Local validation is `npm run build` only — `npm run dev` will crash because Lakebase env vars are not set until after the first deploy
 
-CLI Best Practices:
-- Run from apps_lakebase/ or use apps_lakebase/scripts/ for deploy and lakebase scripts
-- Run CLI commands outside the IDE sandbox to avoid SSL/TLS certificate errors',
-'Wire UI to Lakebase',
-'Connect frontend UI to Lakebase backend, test locally',
-6,
-'## Prerequisite
+This prompt is returned as-is for direct use in Cursor/Copilot. No LLM processing.',
+'Wire AppKit App to Lakebase',
+'Register lakebase() plugin and wire Lakebase backend via 05-appkit-lakebase-wiring skill, validate with npm run build only',
+7,
+'## How to Use
 
-Complete Step 6 (Setup Lakebase) first. Tables must exist.
+1. Copy the **Input Template** section above
+2. Replace `{workspace_url}` with your value
+3. Paste into Cursor or Copilot
+4. The code assistant will:
+   - Read the `05-appkit-lakebase-wiring` skill for patterns
+   - Register `lakebase()` in the plugins array
+   - Design database schema from the PRD
+   - Build API routes with live/mock fallback
+   - Replace all static mock data with API calls
+   - Verify with `npm run build` (not `npm run dev`)
 
----
+**Note:** This phase registers the `lakebase()` plugin and writes all Lakebase code. Local validation is `npm run build` only — `npm run dev` crashes without Lakebase env vars. Deployment and live data verification happen in the **Deploy and E2E Test** step.',
+'## Expected Output
 
-## Steps to Apply
+**Build validation:**
 
-1. Copy the generated prompt
-2. Paste into Cursor or Copilot
-3. Follow Parts A → B → C → D in order
-4. Test locally before proceeding to deployment
+```
+$ cd apps_lakebase/$APP_NAME && npm run build
+... (build output) ...
+Build completed successfully.
+```
 
-**CRITICAL:** The deployed app uses a service principal. Get its ID and grant Lakebase permissions.
+After the **Deploy and E2E Test** step, the ConnectionStatus switches from "Mock Data" to "Live Data" and all endpoints return `"source": "live"`.
 
-**Note:** This step focuses on local development. Deployment to Databricks is done in Step 8.',
-'## Expected Deliverables
+> **Why no `npm run dev`?** The `lakebase()` plugin throws `ConfigurationError` at startup when `LAKEBASE_ENDPOINT` and `PGHOST` are not set. These env vars are provisioned by the Databricks Apps platform after the first deploy creates the Lakebase project. `npm run build` validates all code without executing it. Runtime testing with live or mock data happens after deployment.',
+true, 1, true, current_timestamp(), current_timestamp(), current_user());
 
-- Service principal with Lakebase database role granted (autoscaling mode)
-- Lakebase linked as App Resource (enables PGHOST/PGUSER injection)
-- Backend APIs with fallback to mock data
-- ConnectionStatus indicator showing live/mock state
-- Frontend built successfully (`npm run build`)
-- Local testing passed at localhost:8000
-
-**Next Step:** Deploy to Databricks in Step 8',
-TRUE,
-1, TRUE, current_timestamp(), current_timestamp(), current_user());
-
--- Deploy to Databricks App
+-- Deploy to Databricks Apps
 INSERT INTO ${catalog}.${schema}.section_input_prompts 
 (input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
 VALUES
 (110, 'deploy_databricks_app',
 '## Your Task
 
-Deploy the locally-tested web application to Databricks Apps.
+Deploy the locally-tested AppKit web application to Databricks Apps.
+
+**First:** Read `apps_lakebase/$APP_NAME/.vibecoding-state.md` if it exists — it contains resolved issues and variable values from prior phases.
 
 **Workspace:** `{workspace_url}`
 
-**Working directory:** All app paths and commands use the `apps_lakebase/` folder.
+**Working directory:** All app paths and commands use the `apps_lakebase/` folder. The scaffolded AppKit app lives at `apps_lakebase/$APP_NAME/`.
 
 ---
 
-## Deployment Constraints
-- Databricks App names must use only lowercase letters, numbers, and dashes (no underscores).
-  Use hyphens: `my-app-name` not `my_app_name`.
-- The Databricks Apps runtime auto-runs `npm install` and `npm run build` when it
-  finds a `package.json`. Ensure `databricks.yml` sync config includes both `dist/**`
-  AND `src/**` so the platform build succeeds.
+### Deployment Constraints
+
+- Databricks App names must use only lowercase letters, numbers, and dashes (no underscores). Use hyphens: `my-app-name` not `my_app_name`.
+- App names are max 26 characters.
 
 ---
 
-### Step 0: Derive App Name (MUST match UI Design step)
+### Step 1: Derive App Name and Set Profile
 
 Derive your app name from your username + use case. This ensures the deployed app matches your `app.yaml` and `databricks.yml` configuration.
 
 ```bash
-FIRSTNAME=$(databricks current-user me --output json | jq -r ''.userName'' | cut -d''@'' -f1 | cut -d''.'' -f1)
-LASTINITIAL=$(databricks current-user me --output json | jq -r ''.userName'' | cut -d''@'' -f1 | cut -d''.'' -f2 | cut -c1)
-USERNAME="${FIRSTNAME}-${LASTINITIAL}"
-APP_NAME="${USERNAME}-{use_case_slug}"
+USER_JSON=$(databricks current-user me --output json)
+EMAIL=$(echo "$USER_JSON" | jq -r ''.userName'')
+FIRSTNAME=$(echo "$EMAIL" | cut -d''@'' -f1 | cut -d''.'' -f1)
+LASTINITIAL=$(echo "$EMAIL" | cut -d''@'' -f1 | cut -d''.'' -f2 | cut -c1)
+APP_PREFIX="${FIRSTNAME}-${LASTINITIAL}"
+APP_NAME="${APP_PREFIX}-{use_case_slug}"
 echo "Deploying app: $APP_NAME"
 ```
 
-**Validate** that your config files match this name:
+Detect (or create) a CLI profile for the target workspace:
+
 ```bash
-grep -E "^name:" apps_lakebase/app.yaml
-grep "name:" apps_lakebase/databricks.yml | head -1
+TARGET_HOST="{workspace_url}"
+PROFILE=$(databricks auth profiles --output json 2>/dev/null \
+  | jq -r --arg host "$TARGET_HOST" \
+    ''[.profiles[] | select(.host == $host)] | .[0].name // empty'')
+
+if [ -z "$PROFILE" ]; then
+  echo "No profile found for $TARGET_HOST — creating one..."
+  databricks auth login --host "$TARGET_HOST"
+  PROFILE=$(databricks auth profiles --output json 2>/dev/null \
+    | jq -r --arg host "$TARGET_HOST" \
+      ''[.profiles[] | select(.host == $host)] | .[0].name // empty'')
+fi
+
+echo "Using profile: $PROFILE"
 ```
-Both must show `$APP_NAME`. If they don''t match, update them before proceeding.
+
+Verify the app directory exists and `databricks.yml` points to the target workspace:
+
+```bash
+ls apps_lakebase/$APP_NAME/databricks.yml
+grep "host:" apps_lakebase/$APP_NAME/databricks.yml
+```
+
+If deploying to a different workspace than where you scaffolded in the **Scaffold, Build & Test** step, update `databricks.yml` to match your target workspace and clear old bundle state:
+
+```bash
+rm -rf apps_lakebase/$APP_NAME/.databricks
+```
 
 ---
 
-### Step 1: Verify Frontend Build (CRITICAL)
+### Step 1b: Pre-flight Build Check
 
-Before deploying, verify the `apps_lakebase/dist/` folder exists with the built frontend:
+Run a local build before deploying to surface code issues early:
 
 ```bash
-ls -la apps_lakebase/dist/index.html
+cd apps_lakebase/$APP_NAME
+npm run build
 ```
 
-**If missing or error, build the frontend first (from apps_lakebase/):**
-```bash
-cd apps_lakebase && npm run build
-ls -la apps_lakebase/dist/
-# Should show: index.html, assets/, vite.svg
-```
+If this fails with TypeScript errors (e.g., unused imports, type mismatches), fix them now. These are code quality issues from the **Scaffold, Build & Test** step, not deploy problems.
 
-**Why this matters:** The app serves the UI from the `dist/` folder inside apps_lakebase. If `dist/` is missing, you will see "No frontend deployed" instead of the web UI.
+> **Typegen errors are expected.** If you see `TABLE_OR_VIEW_NOT_FOUND` during the build, these come from SQL queries referencing tables that don''t exist in the target workspace yet. They are non-blocking — the app runs with mock data and these errors do not affect deployment.
 
 ---
 
-### Step 2: Deploy Application (USE SCRIPT ONLY)
+### Step 2: Deploy
 
-**CRITICAL:** Always use the deployment script from `apps_lakebase/`. Do NOT use ad-hoc `databricks apps` commands.
+Read and follow the `03-appkit-deploy` skill at `@apps_lakebase/skills/03-appkit-deploy/SKILL.md`. Run all skill commands from the `apps_lakebase/` directory.
 
-```bash
-cd apps_lakebase && ./scripts/deploy.sh --code-only -t production -p e2-demo-field-eng
-```
-
-This script automatically:
-1. Builds the frontend (`npm run build` in apps_lakebase)
-2. Syncs ALL files including `dist/` to workspace
-3. Triggers rolling deployment
-
-**WARNING:** Direct `databricks apps deploy` or `databricks workspace import` commands will SKIP the `dist/` folder because it''s in `.gitignore`. Only the deploy script in apps_lakebase syncs it correctly via `databricks bundle sync` (see apps_lakebase/databricks.yml).
-
----
-
-### Step 3: Verify UI Loads in Browser
-
-Get the deployed app URL and open it in a browser:
-
-```bash
-databricks apps get $APP_NAME --output json | jq -r ''.url''
-```
-
-**Expected:** You should see the **web UI with sidebar and content** (the React application).
-
-**If you see JSON with "No frontend deployed"** - see Troubleshooting below.
-
----
-
-### Step 4: Check Logs and Fix Errors (up to 3 iterations)
-
-1. **Get the app logs** and scan for errors:
-
-```bash
-databricks apps logs $APP_NAME --tail 100
-```
-
-2. **If errors exist:**
-   - Research the issue to understand the root cause
-   - Apply the fix to the code in apps_lakebase/
-   - Rebuild: `cd apps_lakebase && npm run build`
-   - Redeploy: `cd apps_lakebase && ./scripts/deploy.sh --code-only -t production -p e2-demo-field-eng`
-   - Check logs again
-
-3. **If no errors:** Deployment successful!
-
-4. **Repeat up to 3 times.** If errors persist after 3 attempts, report them for manual investigation.
-
-**Common errors:**
-- "Could not import module" → Check `apps_lakebase/app.yaml` command matches your file structure (e.g., `app:app` vs `server.app:app`)
-- "No module named ''psycopg''" → Ensure psycopg[binary,pool]>=3.1.0 is in requirements.txt
-- "Connection attempt failed" → Normal on first connect; check that Lakebase env vars in app.yaml match your mode ({lakebase_mode})
-- "password authentication failed" → For provisioned: verify app resource link and LAKEBASE_USER; for autoscaling: verify ENDPOINT_NAME is set
-- "permission denied for sequence" → Sequence GRANT missing; re-run: cd apps_lakebase && ./scripts/setup-lakebase.sh --recreate
-
----
-
-### Troubleshooting: "No frontend deployed"
-
-If you see this JSON response instead of the web UI:
-```json
-{"note": "No frontend deployed. Visit /docs for API documentation."}
-```
-
-**Cause:** The `apps_lakebase/dist/` folder (built frontend) was not synced to the workspace.
-
-**Fix:**
-1. Verify dist exists locally: `ls apps_lakebase/dist/index.html`
-2. If missing, build it: `cd apps_lakebase && npm run build`
-3. Redeploy using the script (NOT ad-hoc commands):
-   ```bash
-   cd apps_lakebase && ./scripts/deploy.sh --code-only -t production -p e2-demo-field-eng
-   ```
-
-**Root cause:** The `dist/` folder is in `.gitignore`. Only `databricks bundle sync` (used by deploy.sh in apps_lakebase) includes it via explicit config in apps_lakebase/databricks.yml.
-
----
-
-### If the Workspace App Limit Is Reached
-
-If deployment fails because the workspace has hit its app limit, do NOT rename your app. Instead, free up a slot by removing the oldest stopped app:
-
-1. Find stopped apps sorted by oldest first:
-   ```bash
-   databricks apps list -o json | jq -r ''[.[] | select(.compute_status.state == "STOPPED")] | sort_by(.update_time) | .[0] | .name''
-   ```
-2. Delete it and wait for cleanup to complete:
-   ```bash
-   databricks apps delete <name-from-above>
-   sleep 10
-   ```
-3. Retry the deployment.
-
-If the limit error persists, repeat with the next oldest stopped app -- but **stop after 3 total attempts** (increase the wait to 20s, then 40s between retries). If it still fails after 3 tries, stop and report the issue for manual workspace cleanup. Never delete apps in RUNNING state.
+The skill covers: config validation, build, deploy, UI verification, error diagnosis (3-iteration fix loop), and workspace app limit handling.
 
 ---
 
 ### Summary
 
 Your job is complete when:
-- The Databricks App is deployed and running
-- **The web UI loads in browser** (React app with sidebar, NOT JSON)
-- No "No frontend deployed" message
-- No errors in the app logs',
-'You are deploying a locally-tested web application to Databricks Apps. Focus on deployment, verification, and troubleshooting.
 
-Your approach:
-1. Use existing deployment scripts when available
-2. Deploy to Databricks Apps
-3. Verify the deployment by checking the app URL
-4. Debug and fix any deployment errors
+- [ ] The Databricks App is deployed and running
+- [ ] The web UI loads in browser (React application, not an error page)
+- [ ] No errors in the app logs
+- [ ] Mock data renders correctly in all components
+- [ ] `.vibecoding-state.md` updated (see below)
+
+**Before finishing**, append to `apps_lakebase/$APP_NAME/.vibecoding-state.md` with:
+- Step name (`## Deploy to Databricks Apps`)
+- Key variable values (`APP_NAME`, `PROFILE`, app URL, workspace URL)
+- Any resolved issues or workarounds encountered during this phase',
+'You are a DevOps engineer deploying an AppKit web application to Databricks Apps. Your goal is to deploy the locally-tested app so it is accessible via a public HTTPS URL.
+
+Key requirements:
+
+- Derive the app name from the user''s Databricks identity to match `app.yaml` and `databricks.yml`
+- Validate that the app directory and config files exist and point to the correct workspace
+- Deploy using the `03-appkit-deploy` skill (config validation, build, deploy, UI verification, error diagnosis)
+- Verify the app reaches `RUNNING` state and the UI loads in a browser
 
 CLI Best Practices:
-- Use the deployment script from apps_lakebase/scripts/ (run from apps_lakebase/)
+
+- Run from `apps_lakebase/` or use `apps_lakebase/scripts/` for scripts
 - Run CLI commands outside the IDE sandbox to avoid SSL/TLS certificate errors
 
 This prompt is returned as-is for direct use in Cursor/Copilot. No LLM processing.',
-'Deploy to Databricks App',
-'Deploy your locally-tested app to Databricks workspace',
-4,
+'Deploy to Databricks Apps',
+'Deploy the locally-tested AppKit app to Databricks Apps and verify it is running',
+5,
 '## How to Use
 
 1. **Copy the generated prompt**
-2. **Paste into Cursor or Copilot**
-3. The code assistant will:
-   - Use the deployment script from apps_lakebase/scripts/ folder
-   - Deploy your app to Databricks
-   - Get the app URL and verify it works
-   - Fix any deployment errors
+2. **Replace** `{workspace_url}` and `{use_case_slug}` with your values
+3. **Paste into Cursor or Copilot**
+4. The code assistant will:
+   - Derive your app name and validate config
+   - Deploy the app to Databricks Apps using the deploy skill
+   - Verify the app is running and accessible
 
-**Note:** Make sure local testing passed before running this step.',
+**Note:** This step deploys the mock-data app from the **Scaffold, Build & Test** step. For Lakebase integration (live data), continue to the **Setup Lakebase**, **Wire Lakebase Backend**, and **Deploy and E2E Test** steps.',
 '## Expected Output
 
-- Databricks App deployed and running
-- **Web UI loads in browser** (React app with sidebar and content, NOT JSON)
-- No "No frontend deployed" error message
-- No errors in the app logs',
-TRUE,
-1, TRUE, current_timestamp(), current_timestamp(), current_user());
+**Terminal output — deploy sequence:**
 
--- Register Lakebase in Unity Catalog
+```
+$ cd apps_lakebase/$APP_NAME
+$ databricks apps deploy --profile $PROFILE
+
+Deploying app ''{user_app_name}''...
+Building application... done
+Starting application... done
+
+App deployed successfully!
+  URL:    https://{user_app_name}.{workspace_url}
+  Status: RUNNING
+```
+
+**Architecture — Deployed on Databricks:**
+
+```mermaid
+graph LR
+    User["User Browser<br/>(HTTPS)"] --> DatabricksApps["Databricks Apps<br/>(Managed Hosting)"]
+    DatabricksApps --> AppKit["AppKit Server<br/>(Node.js)"]
+
+    subgraph cloud [Databricks Cloud]
+        DatabricksApps
+        AppKit
+    end
+```
+
+**App status — `databricks apps get`:**
+
+```json
+{
+  "name": "{user_app_name}",
+  "url": "https://{user_app_name}.{workspace_url}",
+  "status": {
+    "state": "RUNNING",
+    "message": "Application is running"
+  },
+  "service_principal_id": "12345678-abcd-1234-efgh-123456789012",
+  "create_time": "2026-04-10T14:30:00Z"
+}
+```
+
+> **Note:** You may see `"state": null` immediately after deploy. This is normal — verify with `compute_status.state: "ACTIVE"` and check logs for a healthy server startup.
+
+**App logs — healthy startup:**
+
+Log format varies by AppKit version. Look for messages confirming the server is listening on port 8000. Absence of ERROR-level messages indicates a healthy startup.
+
+**What you should see in the browser:**
+
+The same mock-data UI from the **Scaffold, Build & Test** step, now accessible at a public HTTPS URL — no local machine required.',
+true, 1, true, current_timestamp(), current_timestamp(), current_user());
+
+-- Register Lakebase in Unity Catalog - step_enabled = FALSE (hidden by default)
 INSERT INTO ${catalog}.${schema}.section_input_prompts 
-(input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
+(input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, bypass_llm, step_enabled, version, is_active, inserted_at, updated_at, created_by)
 VALUES
 (112, 'sync_from_lakebase',
 'Copy and paste this prompt to the AI:
@@ -5825,7 +6317,7 @@ This replaces the manual process of syncing individual tables and converting typ
 - Catalog `{lakebase_uc_catalog_name}` is registered in Unity Catalog with state ACTIVE
 - All schemas from the Lakebase PostgreSQL database are listed and displayed to the user
 - Tables are queryable via standard SQL (e.g., `SELECT * FROM {lakebase_uc_catalog_name}.<schema>.<table>`)',
-TRUE,
+TRUE, FALSE,
 1, TRUE, current_timestamp(), current_timestamp(), current_user());
 
 -- =============================================
@@ -5987,7 +6479,7 @@ This step extracts **comprehensive metadata** from your Silver layer — not jus
 true, 1, true, current_timestamp(), current_timestamp(), current_user());
 
 -- Step 22 (Generate Mode): Design Silver Schema from PRD - bypass_LLM = TRUE
-INSERT INTO ${catalog}.${schema}.section_input_prompts
+INSERT INTO ${catalog}.${schema}.section_input_prompts 
 (input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
 VALUES
 (136, 'genie_silver_metadata_generate',
@@ -6271,9 +6763,9 @@ Copy the prompt from the **Prompt** tab, start a **new Agent chat** in your IDE,
 **Run this in your cloned Template Repository** (see Prerequisites in Step 0).
 
 Ensure you have:
-- ✅ Bronze layer code generated (Step 10): `src/source_bronze/`, `resources/bronze/`
-- ✅ Silver layer code generated (Step 11): `src/source_silver/`, `resources/silver/`
-- ✅ Gold layer code generated (Step 12): `src/source_gold/`, `resources/gold/`, `gold_layer_design/yaml/`
+- ✅ Bronze layer code generated (Step 10): `src/{project}_bronze/`, `resources/bronze/`
+- ✅ Silver layer code generated (Step 11): `src/{project}_silver/`, `resources/silver/`
+- ✅ Gold layer code generated (Step 12): `src/{project}_gold/`, `resources/gold/`, `gold_layer_design/yaml/`
 - ✅ `databricks.yml` bundle configuration file (created/updated in Steps 10-12)
 - ✅ Databricks CLI installed and authenticated (`databricks auth login`)
 
@@ -6323,15 +6815,15 @@ This is a **deployment checkpoint** that validates the entire Lakehouse pipeline
 project_root/
 ├── databricks.yml                        # Bundle configuration (all layers)
 ├── src/
-│   ├── source_bronze/                    # Bronze notebooks (clone/generate)
+│   ├── {project}_bronze/                # Bronze notebooks (clone/generate)
 │   │   └── clone_samples.py
-│   ├── source_silver/                    # Silver notebooks (DLT + DQ)
+│   ├── {project}_silver/                # Silver notebooks (DLT + DQ)
 │   │   ├── setup_dq_rules_table.py
 │   │   ├── dq_rules_loader.py           # Pure Python (NO notebook header)
 │   │   ├── silver_dimensions.py
 │   │   ├── silver_facts.py
 │   │   └── data_quality_monitoring.py
-│   └── source_gold/                      # Gold notebooks (YAML-driven)
+│   └── {project}_gold/                   # Gold notebooks (YAML-driven)
 │       ├── setup_tables.py
 │       ├── add_fk_constraints.py
 │       └── merge_gold_tables.py
@@ -6446,7 +6938,16 @@ INSERT INTO ${catalog}.${schema}.section_input_prompts
 (input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
 VALUES
 (117, 'deploy_di_assets',
-'Deploy all Data Intelligence assets (TVFs, Metric Views, Genie Spaces, and AI/BI Dashboards) using @data_product_accelerator/skills/common/databricks-asset-bundles/SKILL.md and @data_product_accelerator/skills/semantic-layer/04-genie-space-export-import-api/SKILL.md
+'Deploy all Data Intelligence assets (TVFs, Metric Views, Genie Spaces, and AI/BI Dashboards). Follow this orchestrator first, then its referenced worker skills:
+
+- **Primary orchestrator (read first):** @data_product_accelerator/skills/semantic-layer/00-semantic-layer-setup/SKILL.md — owns Phase 0 (gold inventory check), phase gates, and template-first workflow. Any task touching 2+ semantic-layer asset types MUST route through this skill.
+- **Worker skills (referenced by the orchestrator):** @data_product_accelerator/skills/common/databricks-asset-bundles/SKILL.md and @data_product_accelerator/skills/semantic-layer/04-genie-space-export-import-api/SKILL.md
+
+Before starting:
+- **Verify Gold schema inventory.** Query `information_schema.tables` / `information_schema.columns` in the live catalog and only deploy artifacts whose target tables and columns exist on disk AND in the live Gold schema. Do NOT trust `semantic-layer-manifest.yaml` as ground truth.
+- **Use templates, don''t write from scratch.** Start `src/{project}_semantic/deploy_genie_spaces.py` from `data_product_accelerator/skills/semantic-layer/04-genie-space-export-import-api/assets/templates/deploy_genie_spaces.py`, and `resources/semantic/genie_deploy_job.yml` from `genie-deployment-job-template.yml` — then customize. Hand-written versions are the #1 source of multi-cycle deploy failures.
+- **Read `plans/deploy-checkpoint.md` for concrete values.** Template variables below (e.g. `{lakehouse_default_catalog}`, `{user_schema_prefix}_gold`, job names like `tvf_job`) are project-invariant placeholders; the concrete resolved values for THIS deployment — actual job names, metric-view names, `semantic_warehouse_id`, workspace paths — live in `plans/deploy-checkpoint.md`, emitted by the Asset Bundles skill immediately after `databricks bundle validate`. If that file is missing, run the checkpoint emitter first (see `data_product_accelerator/skills/common/databricks-asset-bundles/SKILL.md` → "Emit Deploy Checkpoint") — do NOT invent names.
+- **Run Phase 0.5 local pre-flight.** Before any `bundle deploy`, execute the four local checks in `data_product_accelerator/skills/semantic-layer/00-semantic-layer-setup/SKILL.md` → "Phase 0.5: Local Pre-Flight": variable enumeration, DDL smoke test, Genie `_assert_sql_arrays`, live-catalog intersection. Any STOP rule triggering here halts deployment.
 
 This is a **semantic layer deployment checkpoint** — it deploys and verifies all Data Intelligence assets in the correct order.
 
@@ -6484,22 +6985,27 @@ The Genie Space is deployed programmatically using the Export/Import API skill:
 - Data asset arrays sorted before submission (tables by `table_name`, TVFs by `function_name`)
 - Genie Space MUST use a **Serverless SQL Warehouse** (non-negotiable)
 
-## Verification
+## Verification (per-task, NOT end-of-flow)
+
+Run the **per-task verification** table in `data_product_accelerator/skills/semantic-layer/00-semantic-layer-setup/SKILL.md` → "Per-task verification (MANDATORY — run AFTER each task completes)". Each row lists pass criteria and a STOP rule. Do NOT defer verification to the end of the deploy — a failed TVF will silently break Metric Views, which will silently break the Genie Space.
+
+Concrete TVF / Metric View names for THIS deployment come from `plans/deploy-checkpoint.md` (emitted after `bundle validate`). The snippets below use placeholder names — replace with the concrete names from the checkpoint.
 
 ```sql
--- Verify TVFs are created
-SELECT * FROM get_revenue_by_period(''2024-01-01'', ''2024-12-31'');
+-- Verify TVFs are created (replace <tvf_name> / params with values from plans/deploy-checkpoint.md)
+SELECT * FROM {lakehouse_default_catalog}.{user_schema_prefix}_gold.<tvf_name>(<args>);
 
 -- Verify Metric Views exist
 SELECT table_name, table_type FROM {lakehouse_default_catalog}.information_schema.tables
 WHERE table_schema = ''{user_schema_prefix}_gold'' AND table_type = ''METRIC_VIEW'';
 
--- Test Metric View queries
-SELECT MEASURE(total_revenue) FROM {lakehouse_default_catalog}.{user_schema_prefix}_gold.revenue_analytics_metrics;
+-- Test a Metric View query (replace <metric_view_name> / <measure_name> with values from plans/deploy-checkpoint.md)
+SELECT MEASURE(<measure_name>) FROM {lakehouse_default_catalog}.{user_schema_prefix}_gold.<metric_view_name>;
 ```
 
 Target catalog: `{lakehouse_default_catalog}`
-Gold schema: `{user_schema_prefix}_gold`',
+Gold schema: `{user_schema_prefix}_gold`
+Concrete job names, metric-view names, TVF names, warehouse IDs, workspace paths: `plans/deploy-checkpoint.md`',
 '',
 'Deploy Semantic Layer Assets (TVFs → Metric Views → Genie → Dashboard)',
 'Deploy TVFs, Metric Views, Genie Spaces (via Export/Import API), and AI/BI Dashboards in dependency order',
@@ -6516,7 +7022,7 @@ Copy the prompt from the **Prompt** tab, start a **new Agent chat** in your IDE,
 
 Ensure you have:
 - ✅ Lakehouse Deployment Checkpoint passed (Step 23) — Bronze, Silver, Gold tables populated
-- ✅ Semantic layer code generated (Step 15): `src/source_gold/table_valued_functions.sql`, `src/source_gold/semantic/`, `src/source_gold/genie/`
+- ✅ Semantic layer code generated (Step 15): `src/{project}_semantic/table_valued_functions.sql`, `src/{project}_semantic/metric_views/`, `src/{project}_semantic/genie/` (or the actual directory names in `plans/deploy-checkpoint.md`)
 - ✅ AI/BI Dashboard generated (Step 14): `docs/dashboards/*.lvdash.json`, `scripts/deploy_dashboard.py`
 - ✅ Plan files: `plans/phase1-addendum-1.2-tvfs.md`, `plans/phase1-addendum-1.3-metric-views.md`, `plans/phase1-addendum-1.6-genie-spaces.md`
 - ✅ Serverless SQL Warehouse available in your workspace
@@ -6543,17 +7049,19 @@ Ensure you have:
 - ≥ 10 benchmark questions with exact expected SQL
 - Serverless SQL Warehouse (non-negotiable)
 
-**Step 7: Verify All Components**
+**Step 7: Verify All Components (per-task — run AFTER each step, not at the end)**
+
+Follow the per-task verification matrix in `data_product_accelerator/skills/semantic-layer/00-semantic-layer-setup/SKILL.md` — each of TVFs / Metric Views / Dashboard / Genie Space has its own pass criteria and STOP rule. Concrete names come from `plans/deploy-checkpoint.md` (never invent).
 
 ```sql
--- Test TVFs
-SELECT * FROM get_revenue_by_period(''2024-01-01'', ''2024-12-31'');
+-- Test TVFs (replace <tvf_name> / args with names from plans/deploy-checkpoint.md)
+SELECT * FROM {lakehouse_default_catalog}.{user_schema_prefix}_gold.<tvf_name>(<args>);
 
 -- Verify Metric Views
-SELECT table_name, table_type FROM information_schema.tables
+SELECT table_name, table_type FROM {lakehouse_default_catalog}.information_schema.tables
 WHERE table_schema = ''{user_schema_prefix}_gold'' AND table_type = ''METRIC_VIEW'';
 
--- Navigate to Genie Space in Databricks UI and ask a sample question
+-- Navigate to Genie Space in Databricks UI (Space ID from plans/deploy-checkpoint.md) and ask a benchmark question.
 ```
 
 ---
@@ -6594,11 +7102,11 @@ This deployment checkpoint verifies the complete **Data Intelligence layer** —
 ### Files Deployed
 
 ```
-src/source_gold/
+src/{project}_semantic/                     # actual directory name in plans/deploy-checkpoint.md
 ├── table_valued_functions.sql              # TVFs (STRING params, v3.0 comments)
 ├── semantic/
 │   └── metric_views/
-│       ├── revenue_analytics_metrics.yaml  # Metric View YAML definitions
+│       ├── <metric_view_name>.yaml         # Metric View YAML (one file per MV — names in checkpoint)
 │       └── create_metric_views.py          # Reads YAML → CREATE VIEW WITH METRICS
 ├── genie/
 │   └── genie_space_config.json             # Exported Genie Space (CI/CD)
@@ -6678,6 +7186,16 @@ The Genie Space deployment follows this protocol:
 - [ ] ≥ 10 benchmark questions with expected SQL
 - [ ] Natural language queries produce correct SQL
 - [ ] JSON export saved for CI/CD (`genie_space_config.json`)
+
+**Deploy Checkpoint (emitted by Asset Bundles skill):**
+- [ ] `plans/deploy-checkpoint.md` exists and lists every resolved job name, task name, warehouse ID, catalog, Gold schema, Metric View name, TVF name, dashboard path, and Genie Space ID for this deployment
+- [ ] Every concrete name in subsequent steps/prompts is sourced from the checkpoint (never invented)
+
+**Per-Task Verification (run AFTER each task, not at the end):**
+- [ ] TVF verification SQL passes (see semantic-layer orchestrator per-task table) — STOP if any TVF fails
+- [ ] Metric View `table_type = ''METRIC_VIEW''` check passes AND `MEASURE(...)` smoke query returns rows — STOP on failure
+- [ ] Dashboard opens in the AI/BI editor without parse errors — STOP on failure (usually means base64 encoding or a missing `${var}`)
+- [ ] Genie Space `_assert_sql_arrays` passed pre-POST AND GET API returns the new/updated Space — STOP on failure
 
 **End-to-End:**
 - [ ] All 4 components deployed and functional
@@ -7068,7 +7586,10 @@ Structure the strategy as a clear, actionable document with sections for each ar
 'You are an expert in Databricks data governance, Unity Catalog, and data quality best practices. Generate a comprehensive skill strategy based on the provided use case specification. The strategy should define measures as Unity Catalog tags, provide validation SQL for each measure, and specify success/certification criteria. The strategy should be practical, follow Databricks best practices, and be ready to implement as an Agent Skill following the agentskills.io standard.',
 'Define Skill Strategy',
 'Generate a comprehensive strategy for your Agent Skill based on your use case specification',
-27, '', '', false, 1, true, current_timestamp(), current_timestamp(), current_user());
+27,
+'',
+'',
+false, 1, true, current_timestamp(), current_timestamp(), current_user());
 
 -- Step 28: Create SKILL.md
 INSERT INTO ${catalog}.${schema}.section_input_prompts 
@@ -7120,7 +7641,10 @@ Generate all files with clear file path headers. Use proper markdown for SKILL.m
 'You are an expert Agent Skills author following the agentskills.io specification. Generate a complete, production-ready Agent Skill package based on the provided use case specification and skill strategy. The SKILL.md must be clear, actionable, and follow the standard structure. All patterns must use real Databricks SQL syntax where applicable. Config files must be valid YAML. Derive the skill name, folder structure, and all content from the use case specification.',
 'Create SKILL.md',
 'Generate the complete SKILL.md package with references and assets based on your skill strategy',
-28, '', '', false, 1, true, current_timestamp(), current_timestamp(), current_user());
+28,
+'',
+'',
+false, 1, true, current_timestamp(), current_timestamp(), current_user());
 
 -- Step 29: Apply & Test Skill
 INSERT INTO ${catalog}.${schema}.section_input_prompts 
@@ -7303,157 +7827,292 @@ VALUES
 ## Workspace Context
 
 - **Workspace URL**: {workspace_url}
-- **User App Name**: {user_app_name}
-- **Lakebase Project/Instance**: {lakebase_instance_name}
-- **Lakebase UC Catalog**: {lakebase_uc_catalog_name}
-- **Lakehouse Catalog**: {lakehouse_default_catalog}
-- **User Schema Prefix**: {user_schema_prefix}
 - **User Email**: {created_by}
+
+> **All other values must be discovered at runtime** — read `databricks.yml` (root and app-level) to extract catalog names, schema names, app names, Lakebase project IDs, and warehouse references. Do NOT hardcode resource names.
 
 ---
 
 ## IMPORTANT: Safety Rules
 
-1. **Inventory first** — before deleting anything, list every resource that will be affected and print a summary.
-2. **Confirm with the user** — after showing the inventory, ask for explicit confirmation before proceeding.
-3. **If-exists checks** — every delete operation must check existence first. If the resource is not found, print a skip message and continue.
-4. **Dependency order** — delete in the correct order to avoid dependency errors (children before parents, consumers before producers).
-5. **Never delete resources outside the workshop scope** — only target resources matching the naming patterns below.
-6. **Report results** — at the end, print a summary table showing each resource, whether it was deleted or skipped, and any errors.
+1. **Discover config first** — read `databricks.yml` at the repo root and any `apps_lakebase/*/databricks.yml` to extract actual resource names (catalog, schemas, app name, Lakebase project ID, warehouse).
+2. **Set the correct CLI profile** — match the workspace URL against `~/.databrickscfg` profiles and `export DATABRICKS_CONFIG_PROFILE=<matching_profile>` before any `databricks api` calls.
+3. **Inventory first** — before deleting anything, list every resource that will be affected and print a summary.
+4. **Confirm with the user** — after showing the inventory, ask for explicit confirmation before proceeding.
+5. **If-exists checks** — every delete operation must check existence first. If the resource is not found, print a skip message and continue.
+6. **Dependency order** — delete in the correct order to avoid dependency errors (children before parents, consumers before producers).
+7. **Never delete resources outside the workshop scope** — only target resources matching the discovered naming patterns.
+8. **Report results** — at the end, print a summary table showing each resource, whether it was deleted or skipped, and any errors.
+
+---
+
+## Step 0: Runtime Discovery (MANDATORY — run before any cleanup)
+
+### 0a. Resolve CLI Profile
+
+```bash
+# Find the profile in ~/.databrickscfg whose host matches the workspace URL
+# Export it so all subsequent `databricks api` calls authenticate correctly
+export DATABRICKS_CONFIG_PROFILE=<matched_profile>
+
+# Verify
+databricks current-user me --output json
+```
+
+### 0b. Read Bundle Configs
+
+Read `databricks.yml` at the repo root to extract:
+- `variables.catalog.default` → the **Lakehouse catalog** (e.g. `mkim_fevm_azure_classic`)
+- `variables.bronze_schema.default` → bronze schema name
+- `variables.silver_schema.default` → silver schema name
+- `variables.gold_schema.default` → gold schema name
+- `variables.source_schema.default` → **source/seed schema** (often different from the medallion schemas)
+- `variables.source_catalog.default` → source catalog (may equal the main catalog)
+- Warehouse lookup name → resolve to a warehouse ID
+
+Read `apps_lakebase/*/databricks.yml` to extract:
+- `resources.apps.app.name` → the **Databricks App name**
+- `resources.postgres_projects.*.project_id` → the **Lakebase project ID**
+- `resources.apps.app.resources[].postgres.branch` → confirms the Lakebase project path
+
+### 0c. Find a SQL Warehouse
+
+```bash
+databricks warehouses list --output json
+# Pick a running/startable warehouse, capture its ID as WAREHOUSE_ID
+```
+
+### 0d. Discover Lakebase UC Catalog
+
+The Lakebase UC catalog name is typically provided by the user or found via:
+```bash
+# Post via SQL Statements API (NOT `databricks sql execute` which doesn''t exist)
+databricks api post /api/2.0/sql/statements \
+  --json @<(cat <<''EOF''
+{"warehouse_id": "<WAREHOUSE_ID>", "statement": "SHOW CATALOGS LIKE ''%lakebase%''", "wait_timeout": "30s"}
+EOF
+)
+```
 
 ---
 
 ## Resources to Clean Up (in order)
 
-### Phase 1: Jobs and Pipelines
-Delete all Databricks jobs whose name contains `{user_schema_prefix}` or that are tagged with `project=vibe_coding_workshop`.
+### Phase 1: Jobs and DLT Pipelines
+
+**Jobs**: Use a broad search. Workshop jobs may NOT contain the schema prefix in their name. Search for jobs matching ANY of these patterns:
+- Job name contains the schema prefix (e.g. `minah_k_loyalty_rewards_analytics`)
+- Job name contains workshop-related keywords: `Loyalty Rewards`, `Bronze`, `Silver`, `Gold`, `Metric Views`, `TVF`, `Genie`, `Dashboard Deployment`
+- Job is tagged with `project=loyalty_rewards_analytics` or similar
+- Job is tagged with the user''s `dev` tag (e.g. `dev: minah_kim`)
+- Job creator matches the user email
 
 ```bash
-# List matching jobs
 databricks jobs list --output json | python3 -c "
 import sys, json
-jobs = json.load(sys.stdin).get(''jobs'', [])
+data = json.load(sys.stdin)
+jobs = data.get(''jobs'', []) if isinstance(data, dict) else data
+keywords = [''loyalty'', ''rewards'', ''bronze'', ''silver'', ''gold'', ''metric'', ''tvf'',
+            ''genie'', ''dashboard'', ''dlt'', ''dq'', ''clone'', ''merge'', ''setup'',
+            ''skill_validation'', ''{user_schema_prefix}'']
 for j in jobs:
-    name = j.get(''settings'', {}).get(''name'', '''')
-    tags = j.get(''settings'', {}).get(''tags'', {})
-    if ''{user_schema_prefix}'' in name or tags.get(''project'') == ''vibe_coding_workshop'':
-        print(f\"Job {j[''job_id'']}: {name}\")
+    settings = j.get(''settings'', {})
+    name = settings.get(''name'', '''').lower()
+    tags = settings.get(''tags'', {})
+    creator = j.get(''creator_user_name'', '''')
+    if (any(kw in name for kw in keywords)
+        or tags.get(''project'', '''') in [''loyalty_rewards_analytics'', ''vibe_coding_workshop'']
+        or creator == ''{created_by}''):
+        print(f\"Job {j[''job_id'']}: {settings.get(''name'', '''')} (creator: {creator})\")
+"
+```
+
+Delete each matching job (positional arg, NOT `--job-id`):
+```bash
+databricks jobs delete <JOB_ID>
+```
+
+**DLT Pipelines**: Also search for pipelines — these are separate from jobs.
+```bash
+databricks pipelines list-pipelines --output json | python3 -c "
+import sys, json
+pipelines = json.load(sys.stdin)
+if not isinstance(pipelines, list):
+    pipelines = pipelines.get(''statuses'', [])
+keywords = [''loyalty'', ''rewards'', ''silver'', ''bronze'', ''gold'', ''dlt'', ''{user_schema_prefix}'']
+for p in pipelines:
+    name = p.get(''name'', '''').lower()
+    creator = p.get(''creator_user_name'', '''')
+    if any(kw in name for kw in keywords) or creator == ''{created_by}'':
+        print(f\"Pipeline {p.get(''pipeline_id'','''')}: {p.get(''name'','''')} (creator: {creator})\")
 "
 
-# Delete each matching job
-databricks jobs delete --job-id <JOB_ID>
+# Delete each matching pipeline
+databricks pipelines delete <PIPELINE_ID>
 ```
 
 ### Phase 2: AI/BI Dashboards
-Delete Lakeview dashboards owned by `{created_by}` or whose name contains `{user_schema_prefix}`.
 
+Search by name patterns AND creator:
 ```bash
-# List dashboards
-databricks lakeview list --output json
+databricks lakeview list --output json | python3 -c "
+import sys, json
+data = json.load(sys.stdin)
+dashboards = data if isinstance(data, list) else data.get(''dashboards'', [])
+keywords = [''loyalty'', ''rewards'', ''{user_schema_prefix}'']
+for d in dashboards:
+    name = d.get(''display_name'', d.get(''name'', '''')).lower()
+    creator = d.get(''creator_user_name'', '''')
+    if any(kw in name for kw in keywords) or creator == ''{created_by}'':
+        print(f\"Dashboard {d.get(''dashboard_id'','''')}: {d.get(''display_name'','''')} (creator: {creator})\")
+"
+```
 
-# Delete matching dashboards
-databricks lakeview delete <DASHBOARD_ID>
+Delete via trash (the `delete` subcommand may not exist — use `trash` instead):
+```bash
+databricks lakeview trash <DASHBOARD_ID>
 ```
 
 ### Phase 3: Genie Spaces
-Delete Genie rooms created by the user. Use the Genie REST API:
+
+Genie spaces often have **human-readable names** (e.g. "Loyalty Rewards Intelligence"), not underscore-prefixed names. Search broadly:
 
 ```bash
-# List Genie rooms
-databricks api get /api/2.0/genie/spaces
+# Requires the correct CLI profile to be set
+databricks api get /api/2.0/genie/spaces | python3 -c "
+import sys, json
+data = json.load(sys.stdin)
+spaces = data.get(''spaces'', [])
+keywords = [''loyalty'', ''rewards'', ''{user_schema_prefix}'']
+for s in spaces:
+    title = s.get(''title'', '''').lower()
+    creator = s.get(''creator_user_name'', '''')
+    if any(kw in title for kw in keywords) or creator == ''{created_by}'':
+        print(f\"Genie Space {s.get(''space_id'','''')}: {s.get(''title'','''')} (creator: {creator})\")
+"
 
-# Delete matching Genie room
+# Delete each matching Genie space
 databricks api delete /api/2.0/genie/spaces/<SPACE_ID>
 ```
 
-### Phase 4: Model Serving Endpoints (Agents)
-Delete any model serving endpoints whose name contains `{user_schema_prefix}` or that were created for the workshop agent.
+### Phase 4: Model Serving Endpoints
 
 ```bash
-# List serving endpoints
-databricks serving-endpoints list --output json
+databricks serving-endpoints list --output json | python3 -c "
+import sys, json
+data = json.load(sys.stdin)
+endpoints = data.get(''endpoints'', []) if isinstance(data, dict) else data
+keywords = [''loyalty'', ''rewards'', ''{user_schema_prefix}'']
+for e in endpoints:
+    name = e.get(''name'', '''').lower()
+    if any(kw in name for kw in keywords):
+        print(f\"Endpoint: {e.get(''name'','''')} (state: {e.get(''state'',{}).get(''ready'',''?'')})\")
+"
 
-# Delete matching endpoint
+# Delete each matching endpoint
 databricks serving-endpoints delete <ENDPOINT_NAME>
 ```
 
-### Phase 5: Lakehouse Schemas (Bronze / Silver / Gold)
-Drop the three medallion schemas from Unity Catalog. Use CASCADE to remove all tables and views within them.
+### Phase 5: Lakehouse Schemas
 
-```sql
-DROP SCHEMA IF EXISTS `{lakehouse_default_catalog}`.`{user_schema_prefix}_bronze` CASCADE;
-DROP SCHEMA IF EXISTS `{lakehouse_default_catalog}`.`{user_schema_prefix}_silver` CASCADE;
-DROP SCHEMA IF EXISTS `{lakehouse_default_catalog}`.`{user_schema_prefix}_gold` CASCADE;
-```
+Drop ALL schemas discovered from `databricks.yml` — including the **source schema** which the original cleanup missed. Use the SQL Statements REST API (not `databricks sql execute`):
 
-Run via CLI:
 ```bash
-databricks sql execute --warehouse-id <WAREHOUSE_ID> --statement "DROP SCHEMA IF EXISTS \`{lakehouse_default_catalog}\`.\`{user_schema_prefix}_bronze\` CASCADE"
-databricks sql execute --warehouse-id <WAREHOUSE_ID> --statement "DROP SCHEMA IF EXISTS \`{lakehouse_default_catalog}\`.\`{user_schema_prefix}_silver\` CASCADE"
-databricks sql execute --warehouse-id <WAREHOUSE_ID> --statement "DROP SCHEMA IF EXISTS \`{lakehouse_default_catalog}\`.\`{user_schema_prefix}_gold\` CASCADE"
+WAREHOUSE_ID="<discovered_warehouse_id>"
+CATALOG="<from databricks.yml variables.catalog.default>"
+
+# Schemas to drop (all from databricks.yml):
+#   - variables.bronze_schema.default
+#   - variables.silver_schema.default
+#   - variables.gold_schema.default
+#   - variables.source_schema.default  ← IMPORTANT: often missed
+
+for SCHEMA in <bronze_schema> <silver_schema> <gold_schema> <source_schema>; do
+  cat > /tmp/sql_stmt.json << ENDJSON
+{"warehouse_id": "$WAREHOUSE_ID", "statement": "DROP SCHEMA IF EXISTS $CATALOG.$SCHEMA CASCADE", "wait_timeout": "50s"}
+ENDJSON
+  databricks api post /api/2.0/sql/statements --json @/tmp/sql_stmt.json
+done
 ```
+
+> **Note**: `wait_timeout` must be between 5s and 50s (not 60s). Write the JSON to a temp file to avoid shell quoting issues.
 
 ### Phase 6: Lakebase Unity Catalog Registration
-Drop the UC database catalog that was created when registering Lakebase in Unity Catalog (Step 9).
+
+Drop the UC catalog that was created when registering Lakebase (discovered in Step 0d):
 
 ```bash
-databricks sql execute --warehouse-id <WAREHOUSE_ID> --statement "DROP CATALOG IF EXISTS \`{lakebase_uc_catalog_name}\` CASCADE"
+cat > /tmp/sql_stmt.json << ''ENDJSON''
+{"warehouse_id": "<WAREHOUSE_ID>", "statement": "DROP CATALOG IF EXISTS <LAKEBASE_UC_CATALOG> CASCADE", "wait_timeout": "50s"}
+ENDJSON
+databricks api post /api/2.0/sql/statements --json @/tmp/sql_stmt.json
 ```
 
-Or via CLI:
+### Phase 7: Lakebase Project
+
+The project ID comes from `apps_lakebase/*/databricks.yml` → `resources.postgres_projects.*.project_id`.
+
+**Autoscaling mode** (dedicated project — safe to delete entirely):
 ```bash
-databricks unity-catalog catalogs delete {lakebase_uc_catalog_name} --force
+# The NAME argument must use the `projects/<project_id>` format
+databricks postgres delete-project projects/<PROJECT_ID> --no-wait
 ```
 
-### Phase 7: Lakebase Project / Schema
-
-**IMPORTANT**: The behavior here depends on the Lakebase mode.
-
-**Autoscaling mode** — the workshop created a dedicated Lakebase project, so it is safe to delete the entire project:
+**Provisioned mode** (shared instance — only drop the schema):
 ```bash
-databricks postgres delete-project --project-id {lakebase_instance_name}
+# DO NOT delete the instance. Only drop the workshop schema via psql.
+DROP SCHEMA IF EXISTS <user_schema> CASCADE;
 ```
 
-**Provisioned mode** — the workshop uses a **shared** Lakebase instance and only created a schema inside it. **DO NOT delete the instance** — other users may be sharing it. Only drop the workshop schema:
-```bash
-# Drop the workshop schema from the shared Lakebase instance (provisioned mode only)
-# Connect to the Lakebase PostgreSQL instance and run:
-DROP SCHEMA IF EXISTS {user_schema_prefix} CASCADE;
-```
-If unsure which mode was used, check `user-config.yaml` for `lakebase.mode` (`autoscaling` or `provisioned`). When in doubt, only drop the schema — never delete the instance.
+If unsure, check whether the project name matches the app name (autoscaling) or is a shared name like `donotdelete-*` (provisioned). When in doubt, only drop the schema.
 
 ### Phase 8: Databricks App
-Stop and delete the user''s deployed Databricks App.
+
+The app name comes from `apps_lakebase/*/databricks.yml` → `resources.apps.app.name`.
 
 ```bash
 # Stop the app first (ignore error if already stopped)
-databricks apps stop {user_app_name} || true
+databricks apps stop <APP_NAME> || true
+
+# Wait a few seconds for stop to propagate
+sleep 5
 
 # Delete the app
-databricks apps delete {user_app_name}
+databricks apps delete <APP_NAME>
 ```
 
-### Phase 9: Databricks Asset Bundle (DAB)
-If you are inside the user''s cloned template repository, destroy the DAB bundle to remove any remaining workspace files.
+> **Important**: The app name may be truncated (e.g. `minah-k-loyalty-rewards-an` instead of `minah-k-loyalty-rewards-analytics`). Always use the name from the bundle config, not an assumed full name.
+
+### Phase 9: Databricks Asset Bundles (DAB)
+
+Destroy bundles in **both** locations — the root data-product bundle and the app-level bundle:
 
 ```bash
+# Root bundle (data product jobs, pipelines, workspace files)
+cd <REPO_ROOT>
+databricks bundle destroy --auto-approve
+
+# App bundle (app deployment, Lakebase project)
+cd <REPO_ROOT>/apps_lakebase/<APP_DIR>
 databricks bundle destroy --auto-approve
 ```
 
 ### Phase 10: Skill Validation Assets (if Agent Skills track was used)
-Delete the skill validation job and notebook if they exist.
 
-```bash
-# Find and delete skill_validation_job
-databricks jobs list --output json | python3 -c "
-import sys, json
-jobs = json.load(sys.stdin).get(''jobs'', [])
-for j in jobs:
-    if ''skill_validation'' in j.get(''settings'', {}).get(''name'', '''').lower():
-        print(j[''job_id''])
-"
-# databricks jobs delete --job-id <JOB_ID>
-```
+Search for any `skill_validation` jobs (included in Phase 1 keyword search).
+
+---
+
+## CLI Syntax Reference (common pitfalls)
+
+| Operation | Correct Syntax | Common Mistake |
+|-----------|---------------|----------------|
+| Delete job | `databricks jobs delete <JOB_ID>` (positional) | ~~`--job-id <ID>`~~ (flag doesn''t exist) |
+| Delete dashboard | `databricks lakeview trash <ID>` | ~~`databricks lakeview delete <ID>`~~ (may not exist) |
+| Execute SQL | `databricks api post /api/2.0/sql/statements --json @file.json` | ~~`databricks sql execute`~~ (command doesn''t exist) |
+| Delete Lakebase project | `databricks postgres delete-project projects/<ID>` | ~~`--project-id <ID>`~~ (positional, needs `projects/` prefix) |
+| SQL wait_timeout | `"wait_timeout": "50s"` (max 50s) | ~~`"wait_timeout": "60s"`~~ (rejected) |
+| API with auth | Set `DATABRICKS_CONFIG_PROFILE` first | ~~Rely on default auth~~ (fails for `databricks api` calls) |
 
 ---
 
@@ -7465,22 +8124,21 @@ After running all phases, print a summary like this:
 ============================================================
                  WORKSHOP CLEANUP SUMMARY
 ============================================================
- Resource                        | Status
----------------------------------|---------------------------
- Jobs / Pipelines                | Deleted (3) / Skipped (0)
- AI/BI Dashboards                | Deleted (1) / Skipped (0)
- Genie Spaces                    | Deleted (1) / Skipped (0)
- Model Serving Endpoints         | Skipped (not found)
- Bronze Schema                   | Deleted
- Silver Schema                   | Deleted
- Gold Schema                     | Deleted
- Lakebase UC Catalog             | Deleted
- Lakebase Project                | Deleted
- Databricks App                  | Deleted
- DAB Bundle                      | Destroyed
- Skill Validation Assets         | Skipped (not found)
+ Phase | Resource                        | Status
+-------|---------------------------------|-------------------------
+   1   | Jobs                            | Deleted (N) / Skipped (M)
+   1   | DLT Pipelines                   | Deleted (N) / Skipped (M)
+   2   | AI/BI Dashboards                | Deleted (N) / Skipped (M)
+   3   | Genie Spaces                    | Deleted (N) / Skipped (M)
+   4   | Model Serving Endpoints         | Deleted (N) / Skipped (M)
+   5   | Lakehouse Schemas               | Dropped (N) / Skipped (M)
+   6   | Lakebase UC Catalog             | Deleted / Skipped
+   7   | Lakebase Project                | Deleted / Skipped
+   8   | Databricks App                  | Deleted / Skipped
+   9   | DAB Bundles                     | Destroyed (N)
+  10   | Skill Validation Assets         | Deleted (N) / Skipped (M)
 ============================================================
- Total: 10 deleted, 2 skipped, 0 errors
+ Total: X deleted, Y skipped, Z errors
 ============================================================
 ```
 
@@ -7488,64 +8146,72 @@ After running all phases, print a summary like this:
 
 ## Execution Approach
 
-Create a single cleanup shell script called `cleanup.sh` that:
-1. Accepts the workspace context variables above (or reads them from environment / `user-config.yaml`)
-2. Runs each phase in order
-3. Wraps every delete in a try/catch (bash: `|| true` with error capture)
-4. Prints the summary report at the end
-5. Returns exit code 0 even if some resources were not found (skip is not an error)
-
-Alternatively, execute the phases interactively one at a time using the Databricks CLI, confirming with the user between phases.',
+Execute the phases interactively one at a time using the Databricks CLI:
+1. Run Step 0 (discovery) to populate all variable values
+2. Run the inventory scan across all phases
+3. Present the full inventory and ask for user confirmation
+4. Execute each phase in order, wrapping every delete in `|| true` with error capture
+5. Print the summary report at the end
+6. Return exit code 0 even if some resources were not found (skip is not an error)',
 '',
 'Workspace Clean Up',
 'Safely delete all Databricks resources created during the workshop',
 31,
-'## How to Apply
-
-**Run this in your cloned Template Repository** (see Prerequisites in Step 0). These commands assume the Databricks CLI is authenticated and you are in the project root.
+'**Run this in your cloned Template Repository** (see Prerequisites in Step 0). These commands assume the Databricks CLI is installed and you have a profile in `~/.databrickscfg` whose `host` matches `{workspace_url}`.
 
 ---
 
-### Step 1: Copy the Generated Prompt
-Copy the cleanup prompt into your AI coding assistant (Cursor or Copilot).
-
-### Step 2: Review the Inventory
-The assistant will first list all resources it finds that match the workshop naming patterns. Review the list carefully.
-
-### Step 3: Confirm Deletion
-Once you are satisfied the list is correct, confirm to proceed. The assistant will delete resources in dependency order.
-
-### Step 4: Verify
-Use the verification links to confirm resources have been removed:
-- Check the **Apps** page — your app should no longer appear
-- Check **Catalog Explorer** — Bronze, Silver, Gold schemas should be gone
-- Check **Lakebase Projects** — your project should be removed
-- Check **Jobs** — workshop-related jobs should be deleted
-
-### Step 5: Optional — Destroy DAB Bundle
-If you want to remove workspace-synced files as well:
+### Step 1: Set the Correct Databricks CLI Profile
+Match `{workspace_url}` against `~/.databrickscfg` and export the profile before running any commands:
 ```bash
-databricks bundle destroy --auto-approve
-```',
-'## Expected Cleanup Results
+export DATABRICKS_CONFIG_PROFILE=<matched_profile>
+databricks current-user me --output json
+```
+This is required — `databricks api` calls will silently hit the wrong workspace without it.
 
-### Resources Removed
-- [ ] All workshop jobs and pipelines deleted
-- [ ] AI/BI dashboards deleted
+### Step 2: Copy the Generated Prompt
+Copy the cleanup prompt into your AI coding assistant (Cursor or Copilot) from the project root.
+
+### Step 3: Let the Assistant Run Discovery and Present the Inventory
+The assistant will execute Step 0 (discover the CLI profile, read `databricks.yml` at the repo root and under `apps_lakebase/<APP_DIR>/`, find a warehouse, resolve the Lakebase UC catalog), then sweep every phase and print a full inventory of resources that will be deleted.
+
+### Step 4: Review and Confirm
+Review the inventory carefully. If the list looks correct, confirm to proceed. The assistant will delete resources in dependency order (jobs/pipelines → dashboards → Genie → serving → schemas → Lakebase UC catalog → Lakebase project → app → DAB bundles).
+
+### Step 5: Verify
+Use these links to confirm resources have been removed:
+- **Apps** page — your app should no longer appear
+- **Catalog Explorer** — bronze, silver, gold, and **source** schemas should be gone; the Lakebase UC catalog should be gone
+- **Lakebase Projects** — autoscaling project should be removed (provisioned instances remain, but the workshop schema should be dropped)
+- **Jobs** page — workshop-related jobs should be deleted
+- **Pipelines** page — workshop DLT pipelines should be deleted
+- **Dashboards** page — workshop dashboards should be in Trash
+- **Genie** page — workshop Genie spaces should be deleted
+
+### Step 6: DAB Bundles
+Both bundles are destroyed automatically in Phase 9 — the root bundle (`databricks.yml` in the repo root) and the app bundle (`apps_lakebase/<APP_DIR>/databricks.yml`). No manual step is required.',
+'### Resources Removed
+- [ ] All workshop jobs deleted
+- [ ] All workshop DLT pipelines deleted
+- [ ] AI/BI dashboards deleted (moved to Trash)
 - [ ] Genie spaces deleted
-- [ ] Agent serving endpoints deleted (if created)
-- [ ] Bronze, Silver, Gold schemas dropped (CASCADE)
-- [ ] Lakebase UC catalog dropped
-- [ ] Lakebase project/instance deleted
+- [ ] Model serving endpoints deleted (if created)
+- [ ] Source, bronze, silver, gold schemas dropped (CASCADE)
+- [ ] Lakebase UC catalog dropped (CASCADE)
+- [ ] Lakebase project deleted (autoscaling) **or** workshop schema dropped (provisioned)
 - [ ] Databricks App stopped and deleted
-- [ ] DAB bundle destroyed (workspace files removed)
+- [ ] Root DAB bundle destroyed (`<REPO_ROOT>`)
+- [ ] App DAB bundle destroyed (`<REPO_ROOT>/apps_lakebase/<APP_DIR>`)
 - [ ] Skill validation assets deleted (if created)
 
 ### Verification
 - [ ] Apps page shows no workshop app
-- [ ] Catalog Explorer shows no workshop schemas
-- [ ] Lakebase Projects page shows no workshop project
-- [ ] Jobs page shows no workshop jobs',
+- [ ] Catalog Explorer shows no workshop schemas (source/bronze/silver/gold) and no Lakebase UC catalog
+- [ ] Lakebase Projects page shows no workshop project (autoscaling mode)
+- [ ] Jobs page shows no workshop jobs
+- [ ] Pipelines page shows no workshop DLT pipelines
+- [ ] Dashboards page shows no workshop dashboards (check Trash too)
+- [ ] Genie page shows no workshop Genie spaces',
 true, 1, true, current_timestamp(), current_timestamp(), current_user());
 
 -- Activation: Reverse ETL (Steps 32-36)

@@ -10,6 +10,7 @@ The system uses Lakebase as the primary source of truth with YAML fallback.
 """
 
 import os
+import re
 import json
 import logging
 import time
@@ -22,6 +23,16 @@ from fastapi.responses import StreamingResponse, FileResponse
 from pydantic import BaseModel, Field
 from typing import List, Dict, Optional, Any, AsyncGenerator
 from datetime import datetime, timezone
+
+SECTION_TAG_RE = re.compile(r"^[a-zA-Z0-9_-]{1,64}$")
+
+
+def _validate_section_tag(section_tag: str) -> None:
+    """Reject section_tag values that could enable path traversal in the uploads dir.
+    Allowed: letters, digits, underscore, hyphen; 1-64 chars. All real tags conform.
+    """
+    if not isinstance(section_tag, str) or not SECTION_TAG_RE.match(section_tag):
+        raise HTTPException(status_code=400, detail="invalid section_tag")
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -420,6 +431,7 @@ class PromptConfigCreate(BaseModel):
     use_case: str = Field(..., min_length=1, description="Use case identifier")
     use_case_label: str = Field(..., min_length=1, description="Display label for use case")
     prompt_template: str = Field(..., description="The prompt template text")
+    path_type: str = Field(default="use_case", description="Entry type: 'use_case' or 'skill'")
 
 
 class PromptConfigResponse(BaseModel):
@@ -435,6 +447,7 @@ class PromptConfigResponse(BaseModel):
     inserted_at: Optional[str] = None
     updated_at: Optional[str] = None
     created_by: Optional[str] = None
+    path_type: str = "use_case"
 
 
 class SectionInputCreate(BaseModel):
@@ -546,8 +559,14 @@ def get_industries() -> List[Dict]:
     logger.info("[YAML Fallback] Using industries from prompts_config.yaml")
     return get_config().get('industries', [])
 
+SKILL_USE_CASES = {"build_skill"}
+
+def _derive_path_type(row: Dict) -> str:
+    """Derive path_type from row data, falling back to convention if column missing."""
+    return row.get("path_type") or ("skill" if row.get("use_case") in SKILL_USE_CASES else "use_case")
+
 def get_use_cases_map() -> Dict[str, List[Dict]]:
-    """Get use cases map - from Lakebase or YAML fallback."""
+    """Get use cases map - from Lakebase or YAML fallback. Includes path_type per entry."""
     # Try Lakebase first
     lakebase_data = get_usecase_descriptions_from_lakebase()
     if lakebase_data:
@@ -561,13 +580,29 @@ def get_use_cases_map() -> Dict[str, List[Dict]]:
                     use_cases_map[industry] = [{"value": "", "label": "Select a use case..."}]
                 use_cases_map[industry].append({
                     "value": use_case,
-                    "label": row.get("use_case_label", use_case.title())
+                    "label": row.get("use_case_label", use_case.title()),
+                    "path_type": _derive_path_type(row)
                 })
         return use_cases_map
     
-    # Fallback to YAML
+    # Fallback to YAML (no path_type in YAML — default to 'use_case')
     logger.info("[YAML Fallback] Using use_cases from prompts_config.yaml")
-    return get_config().get('use_cases', {})
+    yaml_data = get_config().get('use_cases', {})
+    for industry_key, uc_list in yaml_data.items():
+        for uc in uc_list:
+            if uc.get("value"):
+                uc.setdefault("path_type", "skill" if uc["value"] in SKILL_USE_CASES else "use_case")
+    return yaml_data
+
+def get_skills_map() -> Dict[str, List[Dict]]:
+    """Get skills map (entries with path_type='skill') grouped by industry."""
+    all_use_cases = get_use_cases_map()
+    skills_map = {}
+    for industry, uc_list in all_use_cases.items():
+        skills = [uc for uc in uc_list if uc.get("path_type") == "skill"]
+        if skills:
+            skills_map[industry] = skills
+    return skills_map
 
 def get_prompt_templates_map() -> Dict[str, Dict[str, str]]:
     """Get prompt templates - from Lakebase database only (no YAML fallback)."""
@@ -905,8 +940,13 @@ def get_section_input_content(industry: str, use_case: str, section_tag: str, pr
         expected_output = expected_output.replace(key, str(value))
     
     # Conditional branding injection -- only when company_brand_url is specified
-    brand_url = workshop_params.get('company_brand_url', '').strip()
-    if brand_url and section_tag in ('figma_ui_design', 'cursor_copilot_ui_design'):
+    # Session overrides may store empty string for brand URL (e.g. from initial
+    # "Get Started" before URL was populated). Fall back to the global workshop
+    # parameter when the effective value is empty.
+    brand_url = (workshop_params.get('company_brand_url') or '').strip()
+    if not brand_url and session_id:
+        brand_url = (get_workshop_parameters_sync().get('company_brand_url') or '').strip()
+    if brand_url and section_tag in ('prd_generation', 'figma_ui_design', 'cursor_copilot_ui_design'):
         _company_display = ''
         try:
             from urllib.parse import urlparse
@@ -919,8 +959,36 @@ def get_section_input_content(industry: str, use_case: str, section_tag: str, pr
         except Exception:
             pass
 
-        if _company_display:
-            branding_section = f"""
+        if section_tag == 'prd_generation':
+            if _company_display:
+                branding_section = f"""
+
+---
+
+## Company Context and Branding
+
+This application is being built for **{_company_display}**.
+- Reference {brand_url} for the company's brand identity, colors, and visual assets
+- Contextualize all user personas, workflows, and terminology to align with {_company_display}'s business domain and customer base
+- Use {_company_display}-appropriate product naming, voice, and tone throughout the PRD
+- User journeys should reflect realistic scenarios within {_company_display}'s industry and operations
+- Include brand identity considerations (name, logo, color palette) in any UI-related requirements sections"""
+            else:
+                branding_section = f"""
+
+---
+
+## Company Context and Branding
+
+This application is being built for the company defined at the following URL.
+- Reference {brand_url} for the company's brand identity, colors, and visual assets
+- Contextualize all user personas, workflows, and terminology to align with the company's business domain and customer base
+- Use company-appropriate product naming, voice, and tone throughout the PRD
+- User journeys should reflect realistic scenarios within the company's industry and operations
+- Include brand identity considerations (name, logo, color palette) in any UI-related requirements sections"""
+        else:
+            if _company_display:
+                branding_section = f"""
 
 ---
 
@@ -931,8 +999,8 @@ Use **{_company_display}** as the brand for this application.
 - Apply the company's primary and secondary brand colors throughout the UI (theme, buttons, headers, accents)
 - Use the company's logo where appropriate (e.g., header/navbar, favicon)
 - Ensure all UI elements, buttons, and accents align with the brand's visual identity"""
-        else:
-            branding_section = f"""
+            else:
+                branding_section = f"""
 
 ---
 
@@ -968,7 +1036,8 @@ Generate a detailed, actionable prompt for {section_tag} in a {industry_name} {u
         "expected_output": expected_output,
         "how_to_apply_images": how_to_apply_images,
         "expected_output_images": expected_output_images,
-        "bypass_llm": bypass_llm
+        "bypass_llm": bypass_llm,
+        "_brand_url": brand_url,
     }
 
 
@@ -1978,11 +2047,36 @@ async def stream_llm_response(
         {"role": "user", "content": f"Generate a detailed prompt based on: {input_text}"}
     ]
 
-    async for event in _stream_with_retry(
-        messages, max_tokens=4000, temperature=0.5,
-        section_tag=section_tag, industry=industry, use_case=use_case,
-    ):
-        yield event
+    _brand_url = (section_content.get("_brand_url") or "").strip()
+    _needs_brand_appendix = bool(_brand_url) and section_tag == 'prd_generation'
+
+    if _needs_brand_appendix:
+        from urllib.parse import urlparse as _urlparse
+        _cd = ''
+        try:
+            _pp = _urlparse(_brand_url)
+            _seg = _pp.netloc.split('.')[0] if _pp.netloc else _pp.path.strip('/').split('/')[-1]
+            if _seg and any(c.isalpha() for c in _seg) and len(_seg) > 2:
+                _cd = _seg.replace('-', ' ').replace('_', ' ').title()
+        except Exception:
+            pass
+        _brand_label = f"**{_cd}**" if _cd else f"the company at {_brand_url}"
+        _brand_appendix = f"\n\n---\n\n## Company Branding Reference\n\nThe PRD above should be contextualized for {_brand_label}. Reference {_brand_url} for official brand colors, logo, and visual identity. Ensure personas, workflows, and terminology align with this company's business domain."
+        _done_sse = _sse_event({"type": "done"})
+
+        async for event in _stream_with_retry(
+            messages, max_tokens=4000, temperature=0.5,
+            section_tag=section_tag, industry=industry, use_case=use_case,
+        ):
+            if event == _done_sse:
+                yield _sse_event({"type": "content", "content": _brand_appendix})
+            yield event
+    else:
+        async for event in _stream_with_retry(
+            messages, max_tokens=4000, temperature=0.5,
+            section_tag=section_tag, industry=industry, use_case=use_case,
+        ):
+            yield event
 
 
 @router.post("/generate-prompt-stream", summary="Stream prompt generation (SSE)")
@@ -2267,6 +2361,7 @@ async def get_all_data(response: Response):
     return {
         "industries": get_industries(),
         "use_cases": get_use_cases_map(),
+        "skills": get_skills_map(),
         "prompt_templates": get_prompt_templates_map(),
         "workflow_steps": get_workflow_steps_list() or WORKFLOW_STEPS,
         "prerequisites": PREREQUISITES,
@@ -2486,10 +2581,14 @@ async def get_latest_prompt_configs(response: Response) -> List[PromptConfigResp
                     use_case_label=use_case_label,
                     prompt_template=template,
                     version=1,
-                    is_active=True
+                    is_active=True,
+                    path_type="skill" if use_case in SKILL_USE_CASES else "use_case"
                 ))
         return configs
     
+    # Derive path_type for rows that may not have the column yet (pre-migration)
+    for row in results:
+        row["path_type"] = _derive_path_type(row)
     return [PromptConfigResponse(**row) for row in results]
 
 
@@ -4477,6 +4576,7 @@ class SessionUpdateMetadataRequest(BaseModel):
     level_explicitly_selected: Optional[bool] = Field(None, description="Whether the user explicitly clicked a level button")
     company_brand_url: Optional[str] = Field(None, description="URL to company brand colors/assets page")
     direction: Optional[str] = Field(None, description="Workflow direction: forward or reverse")
+    coding_assistant: Optional[str] = Field(None, description="Selected coding assistant: cursor, copilot, or vscode")
 
 
 @router.post("/session/update-metadata")
@@ -4498,6 +4598,10 @@ async def update_session_metadata_endpoint(request_body: SessionUpdateMetadataRe
             'skipped_steps': request_body.skipped_steps,
         }.items() if v is not None]
         logger.info(f"[Session API] Updating metadata for session {request_body.session_id}: fields={_updating}")
+        
+        # Deduplicate step IDs to prevent score inflation from duplicate entries
+        if request_body.completed_steps is not None:
+            request_body.completed_steps = list(set(request_body.completed_steps))
         
         # Safety: warn if completed_steps is being explicitly set to empty
         if request_body.completed_steps is not None and len(request_body.completed_steps) == 0:
@@ -4535,6 +4639,8 @@ async def update_session_metadata_endpoint(request_body: SessionUpdateMetadataRe
             _session_param_patch['company_brand_url'] = request_body.company_brand_url
         if request_body.direction is not None:
             _session_param_patch['direction'] = request_body.direction
+        if request_body.coding_assistant is not None:
+            _session_param_patch['coding_assistant'] = request_body.coding_assistant
         
         # Derive user_schema_prefix from email + use case name (or source schema for accelerator)
         # Triggered when use case is selected, custom label is edited, or workshop_level changes
@@ -4731,6 +4837,7 @@ class LeaderboardEntry(BaseModel):
     """Leaderboard entry with user score and progress details"""
     rank: int = Field(..., description="Position in leaderboard (1-10)")
     user_id: str = Field(..., description="User identifier for tracking changes")
+    session_id: Optional[str] = Field(None, description="Session ID of the user's best session")
     display_name: str = Field(..., description="Formatted display name (e.g., 'John D.')")
     avatar: str = Field(..., description="Emoji avatar for the user")
     score: int = Field(..., description="Total score based on completed steps")
@@ -4807,6 +4914,17 @@ async def get_workshop_users_endpoint() -> Dict[str, Any]:
     except Exception as e:
         logger.error(f"[Workshop Users API] Error: {e}", exc_info=True)
         return {"total": 0, "users": []}
+
+
+@router.get("/workshop-users/sessions")
+async def get_user_sessions_by_email(email: str) -> List[SessionListItem]:
+    """Get all sessions (saved and unsaved) for a specific user by email."""
+    try:
+        sessions = get_user_sessions(email, saved_only=False)
+        return [SessionListItem(**s) for s in sessions]
+    except Exception as e:
+        logger.error(f"[Workshop Users API] Error fetching sessions for {email}: {e}", exc_info=True)
+        return []
 
 
 @router.post("/admin/cleanup-sessions")
@@ -4977,7 +5095,7 @@ async def upload_section_image(
     - Updates database JSON array with image metadata
     - Returns the uploaded image metadata
     """
-    # Validate field_type
+    _validate_section_tag(section_tag)
     if field_type not in ('how_to_apply', 'expected_output'):
         raise HTTPException(status_code=400, detail="field_type must be 'how_to_apply' or 'expected_output'")
     
@@ -5000,13 +5118,16 @@ async def upload_section_image(
     if len(current_images) >= 5:
         raise HTTPException(status_code=400, detail="Maximum 5 images per section field")
     
-    # Create unique filename
+    # Create unique filename (use only the basename to block embedded path separators)
     image_id = str(uuid.uuid4())[:8]
-    safe_filename = f"{image_id}_{filename.replace(' ', '_')}"
+    safe_filename = f"{image_id}_{Path(filename).name.replace(' ', '_')}"
     
     # Ensure directory exists
     ensure_uploads_dir()
-    section_dir = UPLOADS_DIR / section_tag
+    section_dir = (UPLOADS_DIR / section_tag).resolve()
+    # Defence in depth: confirm the resolved directory is inside UPLOADS_DIR.
+    if not str(section_dir).startswith(str(UPLOADS_DIR.resolve())):
+        raise HTTPException(status_code=400, detail="invalid section_tag")
     section_dir.mkdir(parents=True, exist_ok=True)
     
     # Save file
@@ -5057,7 +5178,7 @@ async def delete_section_image(
     - Removes file from workspace
     - Updates database JSON array
     """
-    # Validate field_type
+    _validate_section_tag(section_tag)
     if field_type not in ('how_to_apply', 'expected_output'):
         raise HTTPException(status_code=400, detail="field_type must be 'how_to_apply' or 'expected_output'")
     
@@ -5105,6 +5226,7 @@ async def list_section_images(section_tag: str, field_type: str):
     """
     Get all images for a section field.
     """
+    _validate_section_tag(section_tag)
     if field_type not in ('how_to_apply', 'expected_output'):
         raise HTTPException(status_code=400, detail="field_type must be 'how_to_apply' or 'expected_output'")
     

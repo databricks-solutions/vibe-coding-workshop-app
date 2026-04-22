@@ -20,8 +20,8 @@ export function CopyButton({
   size = 'md',
 }: CopyButtonProps) {
   const sizeClasses = size === 'sm' 
-    ? 'px-2 py-1 text-[11px] gap-1.5' 
-    : 'px-2 py-0.5 text-[11px] gap-2';
+    ? 'px-2 py-1 text-ui-xs gap-1.5' 
+    : 'px-2 py-0.5 text-ui-xs gap-2';
   
   const iconSize = size === 'sm' ? 'w-3 h-3' : 'w-4 h-4';
   

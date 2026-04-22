@@ -17,7 +17,7 @@ export function DiffView({ oldText, newText, compact = false }: DiffViewProps) {
   return (
     <div
       className={`font-mono leading-relaxed whitespace-pre-wrap ${
-        compact ? 'text-[11px]' : 'text-[13px]'
+        compact ? 'text-ui-xs' : 'text-ui-base'
       }`}
     >
       {changes.map((part, idx) => {

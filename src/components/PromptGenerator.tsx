@@ -1,13 +1,18 @@
 import { useState, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
-import { Sparkles, Loader2, ChevronDown, Maximize2, Minimize2, X, Copy, Check, Pencil, RotateCcw, Library, PenLine, Palette, Globe } from 'lucide-react';
+import { Sparkles, Loader2, ChevronDown, Maximize2, Minimize2, X, Check, RotateCcw, Library, PenLine, Palette, Globe } from 'lucide-react';
 import { apiClient, type SelectOption } from '../api/client';
-import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
 import { useUseCaseBuilder } from '../hooks/useUseCaseBuilder';
 import { useEscapeKey } from '../hooks/useEscapeKey';
 import { UseCaseBuilderPanel } from './UseCaseBuilderPanel';
 import { getLevelUIOverrides, type WorkshopLevel } from '../constants/workflowSections';
+import { IntentPathSelector, type IntentPath } from './IntentPathSelector';
+import { IndustryChips } from './IndustryChips';
+import { UseCaseCardGrid } from './UseCaseCardGrid';
+import { SkillPathPanel } from './SkillPathPanel';
+import { UseCaseDescriptionBox } from './UseCaseDescriptionBox';
+
+const SKILL_USE_CASES = new Set(['build_skill']);
 
 type DefineMode = 'library' | 'custom';
 
@@ -64,11 +69,19 @@ export function PromptGenerator({
   // State for fetched data
   const [industries, setIndustries] = useState<SelectOption[]>([]);
   const [useCases, setUseCases] = useState<Record<string, SelectOption[]>>({});
+  const [skills, setSkills] = useState<Record<string, SelectOption[]>>({});
   const [promptTemplates, setPromptTemplates] = useState<Record<string, Record<string, string>>>({});
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Mode: library (pick from dropdowns) or custom (define your own)
+  // Path selector: 'use_case' or 'skill' -- eagerly derived from props for instant render on session restore
+  const [selectedPath, setSelectedPath] = useState<IntentPath>(
+    initialIndustry && initialUseCase
+      ? (SKILL_USE_CASES.has(initialUseCase) ? 'skill' : 'use_case')
+      : null
+  );
+
+  // Mode: library (pick from cards) or custom (define your own)
   const [mode, setMode] = useState<DefineMode>(defaultMode);
 
   // Library mode state
@@ -114,13 +127,24 @@ export function PromptGenerator({
   const isEdited = (editedUseCaseLabel && editedUseCaseLabel !== defaultUseCaseLabel) || 
                    (editedDescription && editedDescription !== defaultDescription);
 
+  const handleEnterEditMode = () => {
+    builder.setOutputText(editedDescription || defaultDescription);
+    builder.setError(null);
+    setIsEditMode(true);
+  };
+
   const handleResetEdits = () => {
     setEditedUseCaseLabel(defaultUseCaseLabel);
     setEditedDescription(defaultDescription);
+    builder.setOutputText(defaultDescription);
     setIsEditMode(false);
   };
 
   const handleDoneEditing = () => {
+    const refinedText = builder.isEditing ? builder.editText : builder.outputText;
+    if (refinedText.trim()) {
+      setEditedDescription(refinedText);
+    }
     setIsEditMode(false);
   };
 
@@ -134,6 +158,7 @@ export function PromptGenerator({
   // Update state when initial props change (e.g., when loading a session or creating new session)
   useEffect(() => {
     if (!initialIndustry && !initialUseCase) {
+      setSelectedPath(null);
       setSelectedIndustry('');
       setSelectedUsecase('');
       setHasStarted(false);
@@ -146,7 +171,6 @@ export function PromptGenerator({
       setCustomIndustry('');
       setCustomUseCaseName('');
       setCustomUseCaseDescription('');
-      // Reset builder hook state
       builder.setIndustry('');
       builder.setUseCaseName('');
       builder.setHints('');
@@ -164,13 +188,24 @@ export function PromptGenerator({
     }
     if (initialIndustry && initialUseCase) {
       setHasStarted(true);
+      setSelectedPath(SKILL_USE_CASES.has(initialUseCase) ? 'skill' : 'use_case');
     }
   }, [initialIndustry, initialUseCase, initialPrompt]);
 
-  // Auto-detect custom use case on session restore:
-  // If industry/useCase don't match any known dropdown values, switch to custom mode
+  // Auto-detect path and custom use case on session restore
   useEffect(() => {
     if (!initialIndustry || !initialUseCase || industries.length === 0) return;
+
+    // Detect skill path from API skills data or convention
+    const isSkill = Object.values(skills).flat().some(s => s.value === initialUseCase)
+      || (useCases[initialIndustry] || []).some(u => u.value === initialUseCase && u.path_type === 'skill');
+    
+    if (isSkill) {
+      setSelectedPath('skill');
+      return;
+    }
+
+    setSelectedPath('use_case');
     
     const industryExists = industries.some(i => i.value === initialIndustry);
     const useCaseExists = industryExists && (useCases[initialIndustry] || []).some(u => u.value === initialUseCase);
@@ -184,12 +219,11 @@ export function PromptGenerator({
       setCustomIndustry(restoredIndustry);
       setCustomUseCaseName(restoredName);
       setCustomUseCaseDescription(restoredDesc);
-      // Sync builder hook state for session restore
       builder.setIndustry(restoredIndustry);
       builder.setUseCaseName(restoredName);
       if (restoredDesc) builder.setOutputText(restoredDesc);
     }
-  }, [industries, useCases, initialIndustry, initialUseCase, initialCustomUseCaseLabel, initialCustomDescription]);
+  }, [industries, useCases, skills, initialIndustry, initialUseCase, initialCustomUseCaseLabel, initialCustomDescription]);
 
   // Populate defaults when data loads and a use case is already selected (session restore)
   useEffect(() => {
@@ -203,13 +237,11 @@ export function PromptGenerator({
     }
   }, [promptTemplates, useCases, selectedIndustry, selectedUsecase]);
 
-  // Restore custom edits from session when loading (overrides defaults)
   useEffect(() => {
     if (initialCustomUseCaseLabel) setEditedUseCaseLabel(initialCustomUseCaseLabel);
     if (initialCustomDescription) setEditedDescription(initialCustomDescription);
   }, [initialCustomUseCaseLabel, initialCustomDescription]);
 
-  // Sync builder hook outputs -> PromptGenerator custom fields
   useEffect(() => {
     if (mode !== 'custom') return;
     if (builder.industry) setCustomIndustry(builder.industry);
@@ -217,7 +249,7 @@ export function PromptGenerator({
     if (builder.outputText) setCustomUseCaseDescription(builder.outputText);
   }, [mode, builder.industry, builder.useCaseName, builder.outputText]);
 
-  // Fetch all data on component mount or when dataRefreshKey changes
+  // Fetch all data on mount or refresh
   useEffect(() => {
     const fetchData = async () => {
       try {
@@ -226,6 +258,7 @@ export function PromptGenerator({
         const data = await apiClient.getAllData();
         setIndustries(data.industries);
         setUseCases(data.use_cases);
+        setSkills(data.skills || {});
         setPromptTemplates(data.prompt_templates);
       } catch (err) {
         console.error('Failed to fetch data:', err);
@@ -234,12 +267,20 @@ export function PromptGenerator({
         setIsLoading(false);
       }
     };
-
     fetchData();
   }, [dataRefreshKey]);
 
+  // Auto-select single industry
+  useEffect(() => {
+    if (hasStarted || selectedIndustry || mode !== 'library' || selectedPath !== 'use_case') return;
+    const filtered = industries.filter(i => i.value !== '');
+    if (filtered.length === 1) {
+      setSelectedIndustry(filtered[0].value);
+    }
+  }, [industries, hasStarted, selectedIndustry, mode, selectedPath]);
+
   const handleIndustryChange = (value: string) => {
-    setSelectedIndustry(value);
+    setSelectedIndustry(value === selectedIndustry ? '' : value);
     setSelectedUsecase('');
     setIsEditMode(false);
     setEditedUseCaseLabel('');
@@ -271,7 +312,6 @@ export function PromptGenerator({
     setMode(newMode);
   };
 
-  // Normalize a string to a slug-like value for storage
   const toSlug = (s: string) => s.trim().toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
 
   const handleGeneratePrompt = async () => {
@@ -294,7 +334,6 @@ export function PromptGenerator({
         setIsGenerating(false);
       }
     } else {
-      // Custom mode
       if (!customIndustry.trim() || !customUseCaseName.trim() || !customUseCaseDescription.trim()) return;
       setIsGenerating(true);
       setHasStarted(true);
@@ -302,8 +341,6 @@ export function PromptGenerator({
       try {
         const industrySlug = toSlug(customIndustry);
         const useCaseSlug = toSlug(customUseCaseName);
-        
-        // Set library state so downstream code has values
         setSelectedIndustry(industrySlug);
         setSelectedUsecase(useCaseSlug);
         
@@ -322,15 +359,21 @@ export function PromptGenerator({
       }
     }
 
-    // Persist brand URL as session parameter override (empty string clears it)
     if (onBrandUrlChange) {
       onBrandUrlChange(brandUrl.trim());
     }
   };
 
+  const handleSkillGetStarted = (industry: string, useCase: string, industryLabel: string, useCaseLabel: string, description: string) => {
+    setSelectedIndustry(industry);
+    setSelectedUsecase(useCase);
+    setHasStarted(true);
+    onPromptGenerated(description, industry, useCase, industryLabel, useCaseLabel);
+    if (onBrandUrlChange) onBrandUrlChange(brandUrl.trim());
+  };
+
   const availableUsecases = selectedIndustry ? (useCases[selectedIndustry] || []) : [];
 
-  // Determine if "Get Started" should be enabled
   const canStart = mode === 'library'
     ? prerequisitesCompleted && !!selectedIndustry && !!selectedUsecase && !hasStarted && !isGenerating
     : prerequisitesCompleted && !!customIndustry.trim() && !!customUseCaseName.trim() && !!customUseCaseDescription.trim() && !hasStarted && !isGenerating && !builder.isStreaming;
@@ -340,7 +383,7 @@ export function PromptGenerator({
       <div className="bg-card rounded-lg p-5 border border-border">
         <div className="flex items-center justify-center gap-2">
           <Loader2 className="w-4 h-4 text-primary animate-spin" />
-          <span className="text-muted-foreground text-[13px]">Loading industries and use cases...</span>
+          <span className="text-muted-foreground text-ui-base">Loading industries and use cases...</span>
         </div>
       </div>
     );
@@ -350,10 +393,10 @@ export function PromptGenerator({
     return (
       <div className="bg-card rounded-lg p-5 border border-red-700/30">
         <div className="text-center">
-          <p className="text-red-400 mb-3 text-[13px]">{error}</p>
+          <p className="text-red-400 mb-3 text-ui-base">{error}</p>
           <button
             onClick={() => window.location.reload()}
-            className="px-3 py-1.5 bg-red-900/30 text-red-300 rounded text-[13px] hover:bg-red-900/50"
+            className="px-3 py-1.5 bg-red-900/30 text-red-300 rounded text-ui-base hover:bg-red-900/50"
           >
             Retry
           </button>
@@ -364,7 +407,7 @@ export function PromptGenerator({
 
   return (
     <div className="bg-card rounded-lg border border-border overflow-hidden">
-      {/* Clickable Header - Always Visible */}
+      {/* Clickable Header */}
       <button
         onClick={onToggleExpand}
         className="group w-full p-4 flex items-center gap-3 hover:bg-secondary/30 transition-colors cursor-pointer"
@@ -374,18 +417,18 @@ export function PromptGenerator({
         </div>
         <div className="flex-1 text-left">
           <div className="flex items-center gap-2">
-            <h2 className={`text-[15px] font-semibold text-foreground ${hasStarted ? 'line-through opacity-50' : ''}`}>
+            <h2 className={`text-ui-lg font-semibold text-foreground ${hasStarted ? 'line-through opacity-50' : ''}`}>
               Define Your Intent
             </h2>
             {hasStarted && (
-              <span className="text-emerald-400 text-[11px] font-medium bg-emerald-900/30 px-1.5 py-0.5 rounded">Done</span>
+              <span className="text-emerald-400 text-ui-xs font-medium bg-emerald-900/30 px-1.5 py-0.5 rounded">Done</span>
             )}
           </div>
-          <p className={`text-muted-foreground text-[13px] ${hasStarted ? 'line-through opacity-50' : ''}`}>
-            Select your industry and use case to set the direction for your workshop
+          <p className={`text-muted-foreground text-ui-base ${hasStarted ? 'line-through opacity-50' : ''}`}>
+            Choose your path and set the direction for your workshop
           </p>
         </div>
-        <span className="inline-flex items-center gap-1 text-[11px] font-medium text-muted-foreground border border-border rounded-full px-2.5 py-1 bg-secondary/40 group-hover:bg-secondary group-hover:text-foreground transition-colors">
+        <span className="inline-flex items-center gap-1 text-ui-xs font-medium text-muted-foreground border border-border rounded-full px-2.5 py-1 bg-secondary/40 group-hover:bg-secondary group-hover:text-foreground transition-colors">
           <ChevronDown className={`w-3 h-3 transition-transform duration-200 ${isExpanded ? 'rotate-180' : ''}`} />
           {isExpanded ? 'Collapse' : 'Expand'}
         </span>
@@ -393,396 +436,289 @@ export function PromptGenerator({
 
       {/* Collapsible Content */}
       <div className={`transition-all duration-300 ease-in-out ${
-        isExpanded ? 'max-h-[2000px] opacity-100' : 'max-h-0 opacity-0 overflow-hidden'
+        isExpanded ? 'max-h-[3000px] opacity-100' : 'max-h-0 opacity-0 overflow-hidden'
       }`}>
         <div className="px-5 pb-5">
-          {/* Segmented Toggle */}
+          {/* Path Selector */}
           {!hasStarted && (
-            <div className="flex items-center gap-1 p-1 bg-secondary/50 rounded-lg mb-5">
-              <button
-                onClick={() => handleModeChange('library')}
-                className={`flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-md text-[12px] font-medium transition-all duration-200 ${
-                  mode === 'library'
-                    ? 'bg-primary text-primary-foreground shadow-sm'
-                    : 'text-muted-foreground hover:text-foreground hover:bg-secondary/80'
-                }`}
-              >
-                <Library className="w-3.5 h-3.5" />
-                Choose from Library
-              </button>
-              <button
-                onClick={() => handleModeChange('custom')}
-                className={`flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-md text-[12px] font-medium transition-all duration-200 ${
-                  mode === 'custom'
-                    ? 'bg-primary text-primary-foreground shadow-sm'
-                    : 'text-muted-foreground hover:text-foreground hover:bg-secondary/80'
-                }`}
-              >
-                <PenLine className="w-3.5 h-3.5" />
-                Create Your Own
-              </button>
-            </div>
+            <IntentPathSelector
+              selectedPath={selectedPath}
+              onSelectPath={setSelectedPath}
+              disabled={hasStarted}
+            />
           )}
 
-          {/* Show current mode badge when step is done */}
+          {/* Done badge with path info */}
           {hasStarted && (
             <div className="flex items-center gap-1.5 mb-4">
-              <span className="text-[11px] text-muted-foreground bg-secondary/50 px-2 py-0.5 rounded-full flex items-center gap-1">
-                {mode === 'library' ? <Library className="w-3 h-3" /> : <PenLine className="w-3 h-3" />}
-                {mode === 'library' ? 'From Library' : 'Custom Use Case'}
+              <span className="text-ui-xs text-muted-foreground bg-secondary/50 px-2 py-0.5 rounded-full flex items-center gap-1">
+                {selectedPath === 'skill' ? 'Skill' : mode === 'library' ? 'From Library' : 'Custom Use Case'}
               </span>
             </div>
           )}
 
-          {/* ====== LIBRARY MODE ====== */}
-          {mode === 'library' && (
+          {/* ====== USE CASE PATH ====== */}
+          {selectedPath === 'use_case' && (
             <>
-              {!hasStarted && !selectedIndustry && (
-                <div className="mb-4 px-3 py-2.5 rounded-md bg-primary/10 border border-primary/20 text-primary text-[12px] flex items-center gap-2 animate-in fade-in duration-500">
-                  <Sparkles className="w-4 h-4 flex-shrink-0 animate-pulse" />
-                  <span className="font-medium">Select an industry and use case below to get started</span>
+              {/* Mode Toggle */}
+              {!hasStarted && (
+                <div className="flex items-center gap-1 p-1 bg-secondary/30 rounded-lg border border-border/50 mb-5">
+                  <button
+                    onClick={() => handleModeChange('library')}
+                    className={`flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-md text-ui-sm font-medium transition-all duration-200 ${
+                      mode === 'library'
+                        ? 'bg-card text-foreground shadow-sm border border-border/50'
+                        : 'text-muted-foreground hover:text-foreground'
+                    }`}
+                  >
+                    <Library className="w-3.5 h-3.5" />
+                    Choose from Library
+                  </button>
+                  <button
+                    onClick={() => handleModeChange('custom')}
+                    className={`flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-md text-ui-sm font-medium transition-all duration-200 ${
+                      mode === 'custom'
+                        ? 'bg-card text-foreground shadow-sm border border-border/50'
+                        : 'text-muted-foreground hover:text-foreground'
+                    }`}
+                  >
+                    <PenLine className="w-3.5 h-3.5" />
+                    Create Your Own
+                  </button>
                 </div>
               )}
-              <div className="space-y-3 mb-5">
-                {/* Industry Dropdown */}
-                <div>
-                  <label className="block text-[13px] font-medium text-foreground mb-1.5">Industry</label>
-                  <select
-                    value={selectedIndustry}
-                    onChange={(e) => handleIndustryChange(e.target.value)}
-                    disabled={hasStarted}
-                    className="w-full px-3 py-2 text-[13px] border border-border rounded-md focus:ring-2 focus:ring-primary focus:border-primary outline-none transition-all bg-input text-foreground disabled:bg-muted disabled:cursor-not-allowed"
-                  >
-                    {industries.map((industry) => (
-                      <option key={industry.value} value={industry.value}>
-                        {industry.label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
 
-                {/* Use Case Dropdown */}
-                <div>
-                  <label className="block text-[13px] font-medium text-foreground mb-1.5">Use Case</label>
-                  <select
-                    value={selectedUsecase}
-                    onChange={(e) => handleUsecaseChange(e.target.value)}
-                    disabled={!selectedIndustry || hasStarted}
-                    className="w-full px-3 py-2 text-[13px] border border-border rounded-md focus:ring-2 focus:ring-primary focus:border-primary outline-none transition-all bg-input text-foreground disabled:bg-muted disabled:cursor-not-allowed"
-                  >
-                    {availableUsecases.length > 0 ? (
-                      availableUsecases.map((usecase) => (
-                        <option key={usecase.value} value={usecase.value}>
-                          {usecase.label}
-                        </option>
-                      ))
-                    ) : (
-                      <option value="">Select an industry first...</option>
-                    )}
-                  </select>
-                </div>
-              </div>
-
-              {/* Description of the Use Case - rendered markdown (default) or edit mode */}
-              {selectedIndustry && selectedUsecase && promptTemplates[selectedIndustry]?.[selectedUsecase] && (
-                isEditMode && !hasStarted ? (
-                  <div className="mb-5 space-y-3">
-                    <div>
-                      <label className="block text-[13px] font-medium text-foreground mb-1.5">Use Case Name</label>
-                      <input
-                        type="text"
-                        value={editedUseCaseLabel}
-                        maxLength={30}
-                        onChange={(e) => setEditedUseCaseLabel(e.target.value)}
-                        className={`w-full px-3 py-2 text-[13px] border rounded-md focus:ring-2 outline-none transition-all bg-input text-foreground ${
-                          editedUseCaseLabel.length >= 30
-                            ? 'border-red-400/70 focus:ring-red-400/50 focus:border-red-400/70'
-                            : editedUseCaseLabel.length >= 25
-                              ? 'border-amber-400/70 focus:ring-amber-400/50 focus:border-amber-400/70'
-                              : 'border-border focus:ring-primary focus:border-primary'
-                        }`}
-                        placeholder="Enter use case name..."
-                      />
-                      <div className="flex items-center justify-between mt-1 min-h-[18px]">
-                        <span className="text-[10px] text-muted-foreground/60">Short, descriptive name</span>
-                        {editedUseCaseLabel.length >= 20 && (
-                          <span className={`text-[10px] font-medium transition-colors ${
-                            editedUseCaseLabel.length >= 30 ? 'text-red-500' : editedUseCaseLabel.length >= 25 ? 'text-amber-500' : 'text-muted-foreground/60'
-                          }`}>
-                            {editedUseCaseLabel.length >= 30 ? '30/30 — Try a shorter name' : `${editedUseCaseLabel.length}/30`}
-                          </span>
-                        )}
+              {/* LIBRARY MODE */}
+              {mode === 'library' && (
+                <>
+                  {hasStarted && (
+                    <div className="space-y-3 mb-5">
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="block text-ui-xs font-medium text-muted-foreground mb-1 uppercase tracking-wider">Industry</label>
+                          <p className="text-ui-base text-foreground bg-muted/50 rounded-md px-3 py-1.5">
+                            {industries.find(i => i.value === selectedIndustry)?.label || selectedIndustry || '—'}
+                          </p>
+                        </div>
+                        <div>
+                          <label className="block text-ui-xs font-medium text-muted-foreground mb-1 uppercase tracking-wider">Use Case</label>
+                          <p className="text-ui-base text-foreground bg-muted/50 rounded-md px-3 py-1.5">
+                            {displayLabel || selectedUsecase || '—'}
+                          </p>
+                        </div>
                       </div>
                     </div>
-                    <div>
-                      <label className="block text-[13px] font-medium text-foreground mb-1.5">Description</label>
-                      <textarea
-                        value={editedDescription}
-                        onChange={(e) => setEditedDescription(e.target.value)}
-                        rows={10}
-                        className="w-full px-3 py-2 text-[13px] border border-border rounded-md focus:ring-2 focus:ring-primary focus:border-primary outline-none transition-all bg-input text-foreground font-mono leading-relaxed resize-y"
-                        placeholder="Enter use case description..."
-                      />
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <button
-                        onClick={handleDoneEditing}
-                        className="px-3 py-1.5 text-[12px] font-medium rounded bg-primary text-primary-foreground hover:bg-primary/90 transition-all"
-                      >
-                        Done
-                      </button>
-                      <button
-                        onClick={handleResetEdits}
-                        className="flex items-center gap-1 px-3 py-1.5 text-[12px] rounded text-muted-foreground hover:text-foreground hover:bg-secondary transition-all"
-                      >
-                        <RotateCcw className="w-3 h-3" />
-                        Reset to default
-                      </button>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="transition-opacity duration-300">
-                    <UseCaseDescriptionBox 
-                      content={displayContent}
-                      useCase={displayLabel}
-                      isEdited={!!isEdited}
-                      onEdit={!hasStarted ? () => setIsEditMode(true) : undefined}
-                    />
-                  </div>
-                )
-              )}
-            </>
-          )}
-
-          {/* ====== CUSTOM MODE ====== */}
-          {mode === 'custom' && (
-            <div className="mb-5">
-              {hasStarted ? (
-                /* When step is done, show a read-only summary with formatted markdown */
-                <div className="space-y-3">
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="block text-[11px] font-medium text-muted-foreground mb-1 uppercase tracking-wider">Industry</label>
-                      <p className="text-[13px] text-foreground bg-muted/50 rounded-md px-3 py-1.5">{customIndustry || '—'}</p>
-                    </div>
-                    <div>
-                      <label className="block text-[11px] font-medium text-muted-foreground mb-1 uppercase tracking-wider">Use Case</label>
-                      <p className="text-[13px] text-foreground bg-muted/50 rounded-md px-3 py-1.5">{customUseCaseName || '—'}</p>
-                    </div>
-                  </div>
-                  {customUseCaseDescription && (
-                    <UseCaseDescriptionBox
-                      content={customUseCaseDescription}
-                      useCase={customUseCaseName || 'Custom Use Case'}
-                    />
                   )}
-                </div>
-              ) : (
-                <>
-                  {/* Expand toolbar */}
-                  <div className="flex items-center justify-between mb-2">
-                    <p className="text-[11px] text-muted-foreground">
-                      Build your use case with AI assistance
-                    </p>
-                    <button
-                      onClick={() => setIsBuilderExpanded(true)}
-                      className="flex items-center gap-1 px-2 py-0.5 text-[11px] rounded border border-primary/30 text-primary hover:bg-primary/10 transition-all hover:scale-105"
-                      title="Expand to full screen for more space"
-                    >
-                      <Maximize2 className="w-3 h-3" />
-                      <span>Expand</span>
-                    </button>
-                  </div>
 
-                  <UseCaseBuilderPanel builder={builder} compact hideSave />
+                  {!hasStarted && (
+                    <>
+                      <IndustryChips
+                        industries={industries}
+                        selectedIndustry={selectedIndustry}
+                        onSelect={handleIndustryChange}
+                        disabled={hasStarted}
+                      />
+                      {selectedIndustry && (
+                        <UseCaseCardGrid
+                          useCases={availableUsecases}
+                          selectedUseCase={selectedUsecase}
+                          onSelect={handleUsecaseChange}
+                          disabled={hasStarted}
+                        />
+                      )}
+                    </>
+                  )}
 
-                  {/* Full-screen modal (portal) */}
-                  {isBuilderExpanded && createPortal(
-                    <div
-                      className="fixed inset-0 flex items-center justify-center p-4"
-                      style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 99999, width: '100vw', height: '100vh' }}
-                      onClick={() => setIsBuilderExpanded(false)}
-                    >
-                      <div className="absolute inset-0 bg-black/90" style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%' }} />
-
-                      <div
-                        className="relative bg-card border border-border rounded-lg shadow-2xl flex flex-col animate-fade-in"
-                        style={{ width: 'calc(100vw - 48px)', height: 'calc(100vh - 48px)', maxWidth: 'none', zIndex: 100000 }}
-                        onClick={(e) => e.stopPropagation()}
-                      >
-                        {/* Header */}
-                        <div className="flex items-center justify-between px-5 py-3 border-b border-border bg-secondary/30 rounded-t-lg">
-                          <div className="flex items-center gap-2">
-                            <PenLine className="w-4 h-4 text-primary" />
-                            <h3 className="text-[15px] font-semibold text-foreground">Create Your Own Use Case</h3>
+                  {selectedIndustry && selectedUsecase && promptTemplates[selectedIndustry]?.[selectedUsecase] && (
+                    isEditMode && !hasStarted ? (
+                      <div className="mb-5 space-y-3 animate-slide-up-fade">
+                        <div>
+                          <label className="block text-ui-base font-medium text-foreground mb-1.5">Use Case Name</label>
+                          <input
+                            type="text"
+                            value={editedUseCaseLabel}
+                            maxLength={30}
+                            onChange={(e) => setEditedUseCaseLabel(e.target.value)}
+                            className={`w-full px-3 py-2 text-ui-base border rounded-md focus:ring-2 outline-none transition-all bg-input text-foreground ${
+                              editedUseCaseLabel.length >= 30
+                                ? 'border-red-400/70 focus:ring-red-400/50 focus:border-red-400/70'
+                                : editedUseCaseLabel.length >= 25
+                                  ? 'border-amber-400/70 focus:ring-amber-400/50 focus:border-amber-400/70'
+                                  : 'border-border focus:ring-primary focus:border-primary'
+                            }`}
+                            placeholder="Enter use case name..."
+                          />
+                          <div className="flex items-center justify-between mt-1 min-h-[1.125rem]">
+                            <span className="text-ui-2xs text-muted-foreground/60">Short, descriptive name</span>
+                            {editedUseCaseLabel.length >= 20 && (
+                              <span className={`text-ui-2xs font-medium transition-colors ${
+                                editedUseCaseLabel.length >= 30 ? 'text-red-500' : editedUseCaseLabel.length >= 25 ? 'text-amber-500' : 'text-muted-foreground/60'
+                              }`}>
+                                {editedUseCaseLabel.length >= 30 ? '30/30 — Try a shorter name' : `${editedUseCaseLabel.length}/30`}
+                              </span>
+                            )}
                           </div>
-                          <button
-                            onClick={() => setIsBuilderExpanded(false)}
-                            className="flex items-center gap-1.5 p-1.5 rounded text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors"
-                            title="Close (Esc)"
-                          >
-                            <Minimize2 className="w-4 h-4" />
+                        </div>
+                        <UseCaseBuilderPanel builder={builder} compact hideInputs hideSave />
+                        <div className="flex items-center gap-2">
+                          <button onClick={handleDoneEditing} className="px-3 py-1.5 text-ui-sm font-medium rounded bg-primary text-primary-foreground hover:bg-primary/90 transition-all">Done</button>
+                          <button onClick={handleResetEdits} className="flex items-center gap-1 px-3 py-1.5 text-ui-sm rounded text-muted-foreground hover:text-foreground hover:bg-secondary transition-all">
+                            <RotateCcw className="w-3 h-3" />
+                            Reset to default
                           </button>
                         </div>
-
-                        {/* Builder panel at full size */}
-                        <div className="flex-1 overflow-y-auto px-5 py-4">
-                          <UseCaseBuilderPanel builder={builder} hideSave />
-                        </div>
-
-                        {/* Footer */}
-                        <div className="flex items-center justify-between px-5 py-2 border-t border-border bg-secondary/20 rounded-b-lg">
-                          <span className="text-[11px] text-muted-foreground">
-                            Press <kbd className="px-1.5 py-0.5 bg-secondary rounded text-[10px] font-mono">Esc</kbd> to close
-                          </span>
-                          <span className="text-[11px] text-muted-foreground">
-                            All changes are preserved when you close
-                          </span>
-                        </div>
                       </div>
-                    </div>,
-                    document.body
+                    ) : (
+                      <div className="transition-opacity duration-300 animate-slide-up-fade">
+                        <UseCaseDescriptionBox 
+                          content={displayContent}
+                          useCase={displayLabel}
+                          isEdited={!!isEdited}
+                          onEdit={!hasStarted ? handleEnterEditMode : undefined}
+                          onContentChange={!hasStarted ? (text) => setEditedDescription(text) : undefined}
+                        />
+                      </div>
+                    )
                   )}
                 </>
               )}
-            </div>
-          )}
 
-          {/* ====== BRANDING (Optional) — shared across both modes ====== */}
-          {(() => {
-            // After start: only show if a brand URL was provided
-            if (hasStarted && !brandUrl.trim()) return null;
-
-            const parsedName = brandUrl.trim() ? extractCompanyName(brandUrl.trim()) : null;
-
-            // Read-only summary after Get Started
-            if (hasStarted && brandUrl.trim()) {
-              return (
-                <div className="mb-4 flex items-center gap-2 px-3 py-2 bg-secondary/30 rounded-md border border-border/50">
-                  <Palette className="w-3.5 h-3.5 text-primary flex-shrink-0" />
-                  {parsedName ? (
-                    <span className="text-[12px] font-medium text-primary bg-primary/10 rounded-full px-2 py-0.5">{parsedName}</span>
-                  ) : (
-                    <span className="text-[12px] font-medium text-primary bg-primary/10 rounded-full px-2 py-0.5">Brand URL set</span>
-                  )}
-                  <span className="text-[11px] text-muted-foreground truncate flex-1" title={brandUrl}>{brandUrl}</span>
-                </div>
-              );
-            }
-
-            // Editable state (before Get Started)
-            return (
-              <div className="mb-4">
-                {/* Toggle row */}
-                <button
-                  type="button"
-                  onClick={() => setShowBranding(!showBranding)}
-                  className="w-full flex items-center gap-2 py-1.5 text-left group"
-                >
-                  <Palette className="w-3.5 h-3.5 text-muted-foreground group-hover:text-foreground transition-colors" />
-                  <span className="text-[12px] text-muted-foreground group-hover:text-foreground transition-colors">Branding</span>
-                  <span className="text-[10px] bg-secondary/50 text-muted-foreground/70 rounded-full px-1.5 py-0.5 leading-none">Optional</span>
-                  <ChevronDown className={`w-3 h-3 text-muted-foreground ml-auto transition-transform duration-200 ${showBranding ? 'rotate-180' : ''}`} />
-                </button>
-
-                {/* Expandable content */}
-                <div className={`transition-all duration-300 ease-in-out overflow-hidden ${showBranding ? 'max-h-[200px] opacity-100 mt-2' : 'max-h-0 opacity-0'}`}>
-                  <div className="border border-border/50 rounded-md bg-secondary/20 p-3">
-                    {/* URL input with Globe icon */}
-                    <div className="relative">
-                      <Globe className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground/60" />
-                      <input
-                        type="url"
-                        value={brandUrl}
-                        onChange={(e) => setBrandUrl(e.target.value)}
-                        placeholder="https://www.brandcolorcode.com/company-name"
-                        className="w-full pl-9 pr-8 py-2 text-[13px] border border-border rounded-md focus:ring-2 focus:ring-primary focus:border-primary outline-none transition-all bg-input text-foreground placeholder:text-muted-foreground/40"
-                      />
-                      {brandUrl && (
-                        <button
-                          type="button"
-                          onClick={() => setBrandUrl('')}
-                          className="absolute right-2.5 top-1/2 -translate-y-1/2 p-0.5 rounded text-muted-foreground/50 hover:text-foreground hover:bg-secondary transition-colors"
-                        >
-                          <X className="w-3 h-3" />
-                        </button>
+              {/* CUSTOM MODE */}
+              {mode === 'custom' && (
+                <div className="mb-5">
+                  {hasStarted ? (
+                    <div className="space-y-3">
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="block text-ui-xs font-medium text-muted-foreground mb-1 uppercase tracking-wider">Industry</label>
+                          <p className="text-ui-base text-foreground bg-muted/50 rounded-md px-3 py-1.5">{customIndustry || '—'}</p>
+                        </div>
+                        <div>
+                          <label className="block text-ui-xs font-medium text-muted-foreground mb-1 uppercase tracking-wider">Use Case</label>
+                          <p className="text-ui-base text-foreground bg-muted/50 rounded-md px-3 py-1.5">{customUseCaseName || '—'}</p>
+                        </div>
+                      </div>
+                      {customUseCaseDescription && (
+                        <UseCaseDescriptionBox content={customUseCaseDescription} useCase={customUseCaseName || 'Custom Use Case'} />
                       )}
                     </div>
-                    {/* Helper text */}
-                    <p className="text-[11px] text-muted-foreground/60 mt-1.5">
-                      Paste a URL with brand colors and assets. UI design prompts will apply these for styling.
-                    </p>
-                    {/* Live preview chip */}
-                    {brandUrl.trim() && (
-                      <div className="mt-2 animate-in fade-in duration-300">
-                        {parsedName ? (
-                          <span className="inline-flex items-center gap-1 text-[11px] font-medium text-primary bg-primary/10 rounded-full px-2 py-0.5">
-                            <Palette className="w-3 h-3" />
-                            {parsedName}
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center gap-1 text-[11px] font-medium text-primary bg-primary/10 rounded-full px-2 py-0.5">
-                            <Check className="w-3 h-3" />
-                            Brand URL set
-                          </span>
+                  ) : (
+                    <>
+                      <div className="flex items-center justify-between mb-2">
+                        <p className="text-ui-xs text-muted-foreground">Build your use case with AI assistance</p>
+                        <button
+                          onClick={() => setIsBuilderExpanded(true)}
+                          className="flex items-center gap-1 px-2 py-0.5 text-ui-xs rounded border border-primary/30 text-primary hover:bg-primary/10 transition-all hover:scale-105"
+                        >
+                          <Maximize2 className="w-3 h-3" />
+                          <span>Expand</span>
+                        </button>
+                      </div>
+                      <UseCaseBuilderPanel builder={builder} compact hideSave />
+                      {isBuilderExpanded && createPortal(
+                        <div
+                          className="fixed inset-0 flex items-center justify-center p-4"
+                          style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 99999, width: '100vw', height: '100vh' }}
+                          onClick={() => setIsBuilderExpanded(false)}
+                        >
+                          <div className="absolute inset-0 bg-black/90" style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%' }} />
+                          <div
+                            className="relative bg-card border border-border rounded-lg shadow-2xl flex flex-col animate-fade-in"
+                            style={{ width: 'calc(100vw - 48px)', height: 'calc(100vh - 48px)', maxWidth: 'none', zIndex: 100000 }}
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <div className="flex items-center justify-between px-5 py-3 border-b border-border bg-secondary/30 rounded-t-lg">
+                              <div className="flex items-center gap-2">
+                                <PenLine className="w-4 h-4 text-primary" />
+                                <h3 className="text-ui-lg font-semibold text-foreground">Create Your Own Use Case</h3>
+                              </div>
+                              <button onClick={() => setIsBuilderExpanded(false)} className="flex items-center gap-1.5 p-1.5 rounded text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors" title="Close (Esc)">
+                                <Minimize2 className="w-4 h-4" />
+                              </button>
+                            </div>
+                            <div className="flex-1 overflow-y-auto px-5 py-4">
+                              <UseCaseBuilderPanel builder={builder} hideSave />
+                            </div>
+                            <div className="flex items-center justify-between px-5 py-2 border-t border-border bg-secondary/20 rounded-b-lg">
+                              <span className="text-ui-xs text-muted-foreground">Press <kbd className="px-1.5 py-0.5 bg-secondary rounded text-ui-2xs font-mono">Esc</kbd> to close</span>
+                              <span className="text-ui-xs text-muted-foreground">All changes are preserved when you close</span>
+                            </div>
+                          </div>
+                        </div>,
+                        document.body
+                      )}
+                    </>
+                  )}
+                </div>
+              )}
+
+              {/* Branding (shared across library/custom) */}
+              {selectedPath === 'use_case' && (() => {
+                if (hasStarted && !brandUrl.trim()) return null;
+                const parsedName = brandUrl.trim() ? extractCompanyName(brandUrl.trim()) : null;
+                if (hasStarted && brandUrl.trim()) {
+                  return (
+                    <div className="mb-4 flex items-center gap-2 px-3 py-2 bg-secondary/30 rounded-md border border-border/50">
+                      <Palette className="w-3.5 h-3.5 text-primary flex-shrink-0" />
+                      <span className="text-ui-sm font-medium text-primary bg-primary/10 rounded-full px-2 py-0.5">{parsedName || 'Brand URL set'}</span>
+                      <span className="text-ui-xs text-muted-foreground truncate flex-1" title={brandUrl}>{brandUrl}</span>
+                    </div>
+                  );
+                }
+                return (
+                  <div className="mb-4">
+                    <button type="button" onClick={() => setShowBranding(!showBranding)} className="w-full flex items-center gap-2 py-1.5 text-left group">
+                      <Palette className="w-3.5 h-3.5 text-muted-foreground group-hover:text-foreground transition-colors" />
+                      <span className="text-ui-sm text-muted-foreground group-hover:text-foreground transition-colors">Branding</span>
+                      <span className="text-ui-2xs bg-secondary/50 text-muted-foreground/70 rounded-full px-1.5 py-0.5 leading-none">Optional</span>
+                      <ChevronDown className={`w-3 h-3 text-muted-foreground ml-auto transition-transform duration-200 ${showBranding ? 'rotate-180' : ''}`} />
+                    </button>
+                    <div className={`transition-all duration-300 ease-in-out overflow-hidden ${showBranding ? 'max-h-[200px] opacity-100 mt-2' : 'max-h-0 opacity-0'}`}>
+                      <div className="border border-border/50 rounded-md bg-secondary/20 p-3">
+                        <div className="relative">
+                          <Globe className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground/60" />
+                          <input type="url" value={brandUrl} onChange={(e) => setBrandUrl(e.target.value)} placeholder="https://www.brandcolorcode.com/company-name" className="w-full pl-9 pr-8 py-2 text-ui-base border border-border rounded-md focus:ring-2 focus:ring-primary focus:border-primary outline-none transition-all bg-input text-foreground placeholder:text-muted-foreground/40" />
+                          {brandUrl && (
+                            <button type="button" onClick={() => setBrandUrl('')} className="absolute right-2.5 top-1/2 -translate-y-1/2 p-0.5 rounded text-muted-foreground/50 hover:text-foreground hover:bg-secondary transition-colors">
+                              <X className="w-3 h-3" />
+                            </button>
+                          )}
+                        </div>
+                        <p className="text-ui-xs text-muted-foreground/60 mt-1.5">Paste a URL with brand colors and assets. UI design prompts will apply these for styling.</p>
+                        {brandUrl.trim() && (
+                          <div className="mt-2 animate-in fade-in duration-300">
+                            <span className="inline-flex items-center gap-1 text-ui-xs font-medium text-primary bg-primary/10 rounded-full px-2 py-0.5">
+                              {parsedName ? <><Palette className="w-3 h-3" />{parsedName}</> : <><Check className="w-3 h-3" />Brand URL set</>}
+                            </span>
+                          </div>
                         )}
                       </div>
-                    )}
+                    </div>
                   </div>
-                </div>
-              </div>
-            );
-          })()}
+                );
+              })()}
 
-          {/* Get Started Button */}
-          {(() => {
-            const baseClasses = 'w-full py-2.5 px-4 rounded-md transition-all flex items-center justify-center gap-2 text-[13px] font-medium';
+              {/* Get Started Button for Use Case path */}
+              {(() => {
+                const baseClasses = 'w-full py-2.5 px-4 rounded-md transition-all flex items-center justify-center gap-2 text-ui-base font-medium';
+                if (!prerequisitesCompleted) return <button disabled className={`${baseClasses} bg-muted text-muted-foreground cursor-not-allowed opacity-60`}><Sparkles className="w-4 h-4" />Complete Prerequisites First</button>;
+                if (isGenerating) return <button disabled className={`${baseClasses} bg-emerald-600 text-white`}><Loader2 className="w-4 h-4 animate-spin" />Starting...</button>;
+                if (hasStarted) return <button onClick={() => setHasStarted(false)} className={`${baseClasses} bg-emerald-900/40 text-emerald-300 border border-emerald-500/30 hover:bg-emerald-900/60`}><RotateCcw className="w-4 h-4" />Get Started</button>;
+                if (canStart) return <div className="border-beam-wrapper w-full"><button onClick={handleGeneratePrompt} className={`${baseClasses} relative z-10 rounded-[calc(0.5rem-2px)] bg-emerald-600 text-white hover:bg-emerald-500`}><Sparkles className="w-4 h-4" />Get Started</button></div>;
+                return <button disabled className={`${baseClasses} bg-muted text-muted-foreground cursor-not-allowed`}><Sparkles className="w-4 h-4" />Get Started</button>;
+              })()}
+            </>
+          )}
 
-            if (!prerequisitesCompleted) {
-              return (
-                <button disabled className={`${baseClasses} bg-muted text-muted-foreground cursor-not-allowed opacity-60`} title="Complete prerequisites first">
-                  <Sparkles className="w-4 h-4" />
-                  Complete Prerequisites First
-                </button>
-              );
-            }
-
-            if (isGenerating) {
-              return (
-                <button disabled className={`${baseClasses} bg-emerald-600 text-white`}>
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  Starting...
-                </button>
-              );
-            }
-
-            if (hasStarted) {
-              return (
-                <button onClick={() => setHasStarted(false)} className={`${baseClasses} bg-emerald-900/40 text-emerald-300 border border-emerald-500/30 hover:bg-emerald-900/60`}>
-                  <RotateCcw className="w-4 h-4" />
-                  Get Started
-                </button>
-              );
-            }
-
-            if (canStart) {
-              return (
-                <div className="border-beam-wrapper w-full">
-                  <button onClick={handleGeneratePrompt} className={`${baseClasses} relative z-10 rounded-[calc(0.5rem-2px)] bg-emerald-600 text-white hover:bg-emerald-500`}>
-                    <Sparkles className="w-4 h-4" />
-                    Get Started
-                  </button>
-                </div>
-              );
-            }
-
-            return (
-              <button disabled className={`${baseClasses} bg-muted text-muted-foreground cursor-not-allowed`}>
-                <Sparkles className="w-4 h-4" />
-                Get Started
-              </button>
-            );
-          })()}
+          {/* ====== SKILL PATH ====== */}
+          {selectedPath === 'skill' && (
+            <SkillPathPanel
+              skills={skills}
+              promptTemplates={promptTemplates}
+              onGetStarted={handleSkillGetStarted}
+              hasStarted={hasStarted}
+            />
+          )}
         </div>
       </div>
     </div>
@@ -796,189 +732,3 @@ function availableUsecasesRef(useCases: Record<string, SelectOption[]>, industry
   return list.find(u => u.value === useCase)?.label || '';
 }
 
-// Component for displaying use case description with expand functionality
-function UseCaseDescriptionBox({ content, useCase, isEdited, onEdit }: { 
-  content: string; 
-  useCase: string; 
-  isEdited?: boolean;
-  onEdit?: () => void;
-}) {
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [copied, setCopied] = useState(false);
-  const closeModal = useCallback(() => setIsModalOpen(false), []);
-  useEscapeKey(isModalOpen, closeModal);
-
-  const handleCopy = async (closeModal: boolean = false) => {
-    try {
-      await navigator.clipboard.writeText(content);
-      setCopied(true);
-      if (closeModal) {
-        setTimeout(() => {
-          setIsModalOpen(false);
-          setCopied(false);
-        }, 500);
-      } else {
-        setTimeout(() => setCopied(false), 2000);
-      }
-    } catch (err) {
-      console.error('Failed to copy:', err);
-    }
-  };
-
-  return (
-    <>
-      <div className="mb-5 p-3 bg-secondary/40 rounded-md border border-border">
-        <div className="flex items-center justify-between mb-2">
-          <span className="text-[13px] font-medium text-foreground flex items-center gap-1.5">
-            Description of the Use Case:
-            {isEdited && (
-              <span className="text-[10px] font-medium bg-amber-900/30 text-amber-400 px-1.5 py-0.5 rounded">Edited</span>
-            )}
-          </span>
-          <div className="flex items-center gap-1.5">
-            {onEdit && (
-              <button
-                onClick={onEdit}
-                className="flex items-center gap-1 px-2 py-0.5 text-[11px] rounded border border-border text-muted-foreground hover:text-foreground hover:border-primary/30 transition-all"
-                title="Edit use case name and description"
-              >
-                <Pencil className="w-3 h-3" />
-                <span>Edit</span>
-              </button>
-            )}
-            <button
-              onClick={() => setIsModalOpen(true)}
-              className="flex items-center gap-1 px-2 py-0.5 text-[11px] rounded border border-primary/30 text-primary hover:bg-primary/10 transition-all hover:scale-105"
-              title="Review in full view"
-            >
-              <Maximize2 className="w-3 h-3" />
-              <span>Review</span>
-            </button>
-          </div>
-        </div>
-        <div className="max-w-none max-h-[200px] overflow-y-auto pr-1 scrollbar-thin scrollbar-thumb-border scrollbar-track-transparent">
-          <ReactMarkdown 
-            remarkPlugins={[remarkGfm]}
-            components={{
-              h1: ({ children }) => <h1 className="text-[16px] font-bold text-foreground mt-3 mb-1.5">{children}</h1>,
-              h2: ({ children }) => <h2 className="text-[15px] font-bold text-foreground mt-3 mb-1.5">{children}</h2>,
-              h3: ({ children }) => <h3 className="text-[14px] font-semibold text-foreground mt-2.5 mb-1">{children}</h3>,
-              h4: ({ children }) => <h4 className="text-[13px] font-semibold text-foreground mt-2 mb-1">{children}</h4>,
-              h5: ({ children }) => <h5 className="text-[13px] font-medium text-foreground mt-2 mb-1">{children}</h5>,
-              p: ({ children }) => <p className="text-foreground text-[13px] mb-2 last:mb-0 leading-relaxed">{children}</p>,
-              strong: ({ children }) => <strong className="font-semibold text-foreground">{children}</strong>,
-              em: ({ children }) => <em className="text-primary not-italic font-medium">{children}</em>,
-              ul: ({ children }) => <ul className="list-disc list-inside space-y-0.5 my-1.5 text-foreground text-[13px]">{children}</ul>,
-              ol: ({ children }) => <ol className="list-decimal list-inside space-y-0.5 my-1.5 text-foreground text-[13px]">{children}</ol>,
-              li: ({ children }) => <li className="text-foreground">{children}</li>,
-            }}
-          >
-            {content}
-          </ReactMarkdown>
-        </div>
-      </div>
-
-      {/* Modal rendered via Portal to document.body */}
-      {isModalOpen && createPortal(
-        <div 
-          className="fixed inset-0 flex items-center justify-center p-4"
-          style={{ 
-            position: 'fixed', 
-            top: 0, 
-            left: 0, 
-            right: 0, 
-            bottom: 0, 
-            zIndex: 99999,
-            width: '100vw',
-            height: '100vh'
-          }}
-          onClick={() => setIsModalOpen(false)}
-        >
-          <div 
-            className="absolute inset-0 bg-black/90" 
-            style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%' }}
-          />
-          
-          <div 
-            className="relative bg-card border border-border rounded-lg shadow-2xl flex flex-col animate-fade-in"
-            style={{ 
-              width: 'calc(100vw - 48px)', 
-              height: 'calc(100vh - 48px)', 
-              maxWidth: 'none',
-              zIndex: 100000
-            }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex items-center justify-between px-4 py-3 border-b border-border bg-secondary/30">
-              <h3 className="text-[15px] font-semibold text-foreground">
-                Use Case: {useCase}
-              </h3>
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => handleCopy(true)}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 text-[12px] font-medium rounded transition-all ${
-                    copied
-                      ? 'bg-emerald-900/40 text-emerald-400'
-                      : 'bg-blue-600/20 text-blue-400 hover:bg-blue-600/30 animate-button-glow-copy'
-                  }`}
-                >
-                  {copied ? (
-                    <>
-                      <Check className="w-3.5 h-3.5" />
-                      Copied!
-                    </>
-                  ) : (
-                    <>
-                      <Copy className="w-3.5 h-3.5" />
-                      Copy All
-                    </>
-                  )}
-                </button>
-                <button
-                  onClick={() => setIsModalOpen(false)}
-                  className="p-1.5 rounded text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors"
-                  title="Close (Esc)"
-                >
-                  <X className="w-5 h-5" />
-                </button>
-              </div>
-            </div>
-
-            <div className="flex-1 overflow-y-auto px-6 py-5">
-              <div className="max-w-none">
-                <ReactMarkdown 
-                  remarkPlugins={[remarkGfm]}
-                  components={{
-                    p: ({ children }) => <p className="text-foreground text-[14px] mb-3 last:mb-0 leading-relaxed">{children}</p>,
-                    strong: ({ children }) => <strong className="font-semibold text-foreground">{children}</strong>,
-                    em: ({ children }) => <em className="text-primary not-italic font-medium">{children}</em>,
-                    ul: ({ children }) => <ul className="list-disc list-inside space-y-1 my-2 text-foreground text-[14px]">{children}</ul>,
-                    ol: ({ children }) => <ol className="list-decimal list-inside space-y-1 my-2 text-foreground text-[14px]">{children}</ol>,
-                    li: ({ children }) => <li className="text-foreground">{children}</li>,
-                    h1: ({ children }) => <h1 className="text-[18px] font-bold text-foreground mb-3 mt-4">{children}</h1>,
-                    h2: ({ children }) => <h2 className="text-[16px] font-semibold text-foreground mb-2 mt-3">{children}</h2>,
-                    h3: ({ children }) => <h3 className="text-[14px] font-semibold text-foreground mb-2 mt-2">{children}</h3>,
-                    code: ({ children }) => <code className="bg-background/80 px-1.5 py-0.5 rounded text-primary font-mono text-[12px]">{children}</code>,
-                    pre: ({ children }) => <pre className="bg-background/80 p-3 rounded-md overflow-x-auto my-2">{children}</pre>,
-                  }}
-                >
-                  {content}
-                </ReactMarkdown>
-              </div>
-            </div>
-
-            <div className="flex items-center justify-between px-4 py-2 border-t border-border bg-secondary/20">
-              <span className="text-[11px] text-muted-foreground">
-                Press <kbd className="px-1.5 py-0.5 bg-secondary rounded text-[10px] font-mono">Esc</kbd> to close
-              </span>
-              <span className="text-[11px] text-muted-foreground">
-                {(content ?? '').length.toLocaleString()} characters
-              </span>
-            </div>
-          </div>
-        </div>,
-        document.body
-      )}
-    </>
-  );
-}

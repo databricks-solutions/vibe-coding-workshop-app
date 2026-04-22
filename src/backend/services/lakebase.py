@@ -523,7 +523,8 @@ CREATE TABLE IF NOT EXISTS {schema}.usecase_descriptions (
     is_active BOOLEAN NOT NULL DEFAULT TRUE,
     inserted_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    created_by VARCHAR(255)
+    created_by VARCHAR(255),
+    path_type VARCHAR(50) NOT NULL DEFAULT 'use_case'
 );
 
 -- Indexes for usecase_descriptions
@@ -669,6 +670,9 @@ def save_session(
         
         # Serialize completed_steps and skipped_steps to JSON
         # Use SQL NULL (None) when not provided so COALESCE preserves existing DB values
+        # Deduplicate step IDs to prevent inflated scores from duplicate entries
+        if completed_steps is not None:
+            completed_steps = list(set(completed_steps))
         completed_steps_json = json.dumps(completed_steps) if completed_steps is not None else None
         skipped_steps_json = json.dumps(skipped_steps) if skipped_steps is not None else None
         
@@ -1346,7 +1350,8 @@ AVATAR_EMOJIS = ['🦊', '🐙', '🦄', '🐼', '🦉', '🐬', '🦁', '🐸',
 def _calculate_score(completed_steps: List[int], skipped_steps: List[int] = None) -> int:
     """Calculate total score from completed steps. Skipped steps earn 0."""
     skipped = set(skipped_steps) if skipped_steps else set()
-    return sum(STEP_SCORES.get(step, 0) for step in completed_steps if step not in skipped)
+    unique_steps = set(completed_steps)
+    return sum(STEP_SCORES.get(step, 0) for step in unique_steps if step not in skipped)
 
 
 def _get_chapter_status(completed_steps: List[int], skipped_steps: List[int] = None) -> tuple:
@@ -1446,6 +1451,7 @@ def get_leaderboard(limit: int = 10) -> List[Dict]:
             # We'll process scoring in Python for flexibility
             query = f"""
             SELECT 
+                session_id,
                 created_by,
                 completed_steps,
                 skipped_steps,
@@ -1499,9 +1505,12 @@ def get_leaderboard(limit: int = 10) -> List[Dict]:
                 
                 workshop_level = row.get('workshop_level')
                 
+                session_id = row.get('session_id')
+
                 # Keep the best session for each user
                 if email not in user_scores or score > user_scores[email]['score']:
                     user_scores[email] = {
+                        'session_id': session_id,
                         'score': score,
                         'completed_steps': completed_steps,
                         'skipped_steps': skipped_steps,
@@ -1512,6 +1521,7 @@ def get_leaderboard(limit: int = 10) -> List[Dict]:
                     if updated_at and user_scores[email]['updated_at']:
                         if updated_at < user_scores[email]['updated_at']:
                             user_scores[email] = {
+                                'session_id': session_id,
                                 'score': score,
                                 'completed_steps': completed_steps,
                                 'skipped_steps': skipped_steps,
@@ -1540,10 +1550,11 @@ def get_leaderboard(limit: int = 10) -> List[Dict]:
                 leaderboard.append({
                     'rank': rank,
                     'user_id': email,  # Used for tracking movement
+                    'session_id': data.get('session_id'),
                     'display_name': _format_display_name(email),
                     'avatar': _get_avatar_for_user(email),
                     'score': data['score'],
-                    'completed_steps': sorted(data['completed_steps']),
+                    'completed_steps': sorted(set(data['completed_steps'])),
                     'skipped_steps': sorted(data.get('skipped_steps', [])),
                     'completed_chapters': completed_chapters,
                     'in_progress_chapters': in_progress_chapters,
@@ -1595,7 +1606,8 @@ def get_workshop_users() -> Dict:
                     workshop_level,
                     updated_at,
                     session_id,
-                    session_name
+                    session_name,
+                    COUNT(*) OVER (PARTITION BY created_by) as session_count
                 FROM {table_name}
                 WHERE created_by IS NOT NULL AND created_by != ''
                 ORDER BY created_by, updated_at DESC
@@ -1623,6 +1635,7 @@ def get_workshop_users() -> Dict:
                     'updated_at': updated_at,
                     'last_session_id': row.get('session_id') or '',
                     'is_saved': bool(session_name and session_name != 'New Session'),
+                    'session_count': row.get('session_count', 1),
                 })
             
             return {'total': len(users), 'users': users}
@@ -1885,7 +1898,7 @@ def get_analytics() -> Dict[str, Any]:
                 sk = json.loads(sk_raw) if isinstance(sk_raw, str) else (sk_raw or [])
             except Exception:
                 cs, sk = [], []
-            user_agg[email]["total_steps"] += len(cs)
+            user_agg[email]["total_steps"] += len(set(cs))
             score = _calculate_score(cs, sk)
             if score > user_agg[email]["best_score"]:
                 user_agg[email]["best_score"] = score

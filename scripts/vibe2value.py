@@ -22,6 +22,9 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 CONFIG_PATH = PROJECT_ROOT / "user-config.yaml"
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from brand_extractor import extract_brand_assets, hex_to_hsl
+
 # Tag all Databricks CLI calls with the workshop identity for centralized tracking
 _version_file = PROJECT_ROOT / "VERSION"
 os.environ.setdefault(
@@ -134,6 +137,7 @@ def get_placeholder_map(config: dict) -> dict:
     user = config.get("user", {})
     tags = config.get("tags", {})
     meta = config.get("_metadata", {})
+    branding = config.get("branding", {})
     target = meta.get("target", "development")
     return {
         "__WORKSPACE_HOST__": ws.get("host", ""),
@@ -156,6 +160,7 @@ def get_placeholder_map(config: dict) -> dict:
         "__TAG_CUSTOM__": tags.get("custom_tags", ""),
         "__DEPLOYER_EMAIL__": user.get("email", ""),
         "__INSTALLER_VERSION__": meta.get("installer_version", "1.0.0"),
+        "__COMPANY_BRAND_URL__": branding.get("customer_url", ""),
     }
 
 
@@ -255,7 +260,11 @@ def check_auth(profile: str = "") -> dict:
 
 
 def discover_profile(host: str) -> str:
-    """Find the Databricks CLI profile that matches a workspace host URL."""
+    """Find the Databricks CLI profile that matches a workspace host URL.
+
+    When multiple profiles point to the same host, prefer a named profile
+    over the generic 'DEFAULT' profile.
+    """
     try:
         result = subprocess.run(
             ["databricks", "auth", "profiles", "--output", "json"],
@@ -265,10 +274,14 @@ def discover_profile(host: str) -> str:
             data = json.loads(result.stdout)
             profiles = data.get("profiles", data) if isinstance(data, dict) else data
             host_clean = host.rstrip("/").lower()
+            matches = []
             for p in profiles:
                 p_host = (p.get("host", "") or "").rstrip("/").lower()
                 if p_host == host_clean:
-                    return p.get("name", "")
+                    matches.append(p.get("name", ""))
+            if matches:
+                named = [m for m in matches if m.upper() != "DEFAULT"]
+                return named[0] if named else matches[0]
     except Exception:
         pass
     return ""
@@ -360,6 +373,7 @@ def cmd_install(args):
         "lakebase_mode": existing_config.get("lakebase", {}).get("mode", "autoscaling"),
         "min_cu": existing_config.get("lakebase", {}).get("min_cu", "0.5"),
         "max_cu": existing_config.get("lakebase", {}).get("max_cu", "2"),
+        "brand_url": existing_config.get("branding", {}).get("customer_url", ""),
     }
 
     while True:
@@ -397,6 +411,32 @@ def cmd_install(args):
     create_catalog = existing_config.get("lakebase", {}).get("create_catalog", "false").lower() == "true"
     endpoint = input(f"  Model endpoint [{defaults['endpoint']}]: ").strip() or defaults["endpoint"]
 
+    # Optional: customer website URL for branding
+    brand_url_input = (
+        input(f"  Customer website URL for branding, e.g. www.databricks.com (optional) [{defaults['brand_url']}]: ").strip()
+        or defaults["brand_url"]
+    )
+    brand_url = ""
+    brand_extracted = {}
+    if brand_url_input:
+        url_candidate = brand_url_input if brand_url_input.startswith("http") else "https://" + brand_url_input
+        info(f"Extracting brand assets from {url_candidate}...")
+        try:
+            brand_extracted = extract_brand_assets(url_candidate)
+            if brand_extracted.get("company_name") or brand_extracted.get("logo_url") or brand_extracted.get("primary_color"):
+                brand_url = url_candidate
+                success(
+                    f"Brand extracted: {brand_extracted.get('company_name', 'Unknown')} "
+                    f"(logo: {'yes' if brand_extracted.get('logo_url') else 'no'}, "
+                    f"colors: {'yes' if brand_extracted.get('primary_color') else 'no'})"
+                )
+            else:
+                warn("Could not extract brand information from that URL. Skipping branding, using defaults.")
+                brand_extracted = {}
+        except Exception:
+            warn("Could not reach or parse the website. Skipping branding, using defaults.")
+            brand_extracted = {}
+
     # ── Step 5: Save configuration ────────────────────────────────────
     step(5, TOTAL, "Saving configuration & generating files")
     target = existing_config.get("_metadata", {}).get("target", "user")
@@ -430,6 +470,14 @@ def cmd_install(args):
             "environment": "",
             "managed_by": "vibe2value",
             "custom_tags": existing_config.get("tags", {}).get("custom_tags", ""),
+        },
+        "branding": {
+            "customer_url": brand_url,
+            "company_name": brand_extracted.get("company_name", ""),
+            "logo_url": brand_extracted.get("logo_url", ""),
+            "primary_color": brand_extracted.get("primary_color", ""),
+            "secondary_color": brand_extracted.get("secondary_color", ""),
+            "accent_color": brand_extracted.get("accent_color", ""),
         },
         "_metadata": {
             "installed_at": datetime.now(timezone.utc).isoformat(),
@@ -508,6 +556,23 @@ def cmd_configure(args, config=None):
 
     for r in rendered:
         success(f"Generated {r}")
+
+    # Generate public/brand-config.json for frontend branding
+    branding = config.get("branding", {})
+    brand_config_path = PROJECT_ROOT / "public" / "brand-config.json"
+    brand_config_path.parent.mkdir(parents=True, exist_ok=True)
+    brand_json = {
+        "company_name": branding.get("company_name", ""),
+        "logo_url": branding.get("logo_url", ""),
+        "primary_color": branding.get("primary_color", ""),
+        "primary_color_hsl": hex_to_hsl(branding.get("primary_color", "")) if branding.get("primary_color") else "",
+        "secondary_color": branding.get("secondary_color", ""),
+        "secondary_color_hsl": hex_to_hsl(branding.get("secondary_color", "")) if branding.get("secondary_color") else "",
+        "accent_color": branding.get("accent_color", ""),
+        "accent_color_hsl": hex_to_hsl(branding.get("accent_color", "")) if branding.get("accent_color") else "",
+    }
+    brand_config_path.write_text(json.dumps(brand_json, indent=2) + "\n")
+    success(f"Generated public/brand-config.json")
     print()
 
 
@@ -683,6 +748,7 @@ def cmd_uninstall(args):
         PROJECT_ROOT / "databricks.yml",
         PROJECT_ROOT / "app.yaml",
         PROJECT_ROOT / "db" / "lakebase" / "dml_seed" / "03_seed_workshop_parameters.sql",
+        PROJECT_ROOT / "public" / "brand-config.json",
     ]
     for f in generated_files:
         if f.exists():

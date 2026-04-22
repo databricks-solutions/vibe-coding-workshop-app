@@ -7,32 +7,32 @@ const REMARK_PLUGINS = [remarkGfm];
 
 const MARKDOWN_COMPONENTS = {
   h1: ({ children }: any) => (
-    <h1 className="text-[15px] font-semibold text-foreground border-b border-border pb-2 mb-3 mt-1">
+    <h1 className="text-ui-md2 font-semibold text-foreground border-b border-border pb-2 mb-3 mt-1">
       {children}
     </h1>
   ),
   h2: ({ children }: any) => (
-    <h2 className="text-[14px] font-semibold text-foreground mt-4 mb-2">
+    <h2 className="text-ui-md font-semibold text-foreground mt-4 mb-2">
       {children}
     </h2>
   ),
   h3: ({ children }: any) => (
-    <h3 className="text-[13px] font-medium text-foreground mt-3 mb-1.5">
+    <h3 className="text-ui-base font-medium text-foreground mt-3 mb-1.5">
       {children}
     </h3>
   ),
   p: ({ children }: any) => (
-    <p className="text-muted-foreground text-[13px] leading-relaxed mb-2">
+    <p className="text-muted-foreground text-ui-base leading-relaxed mb-2">
       {children}
     </p>
   ),
   ul: ({ children }: any) => (
-    <ul className="list-disc my-2 space-y-1 text-muted-foreground text-[13px] pl-5">
+    <ul className="list-disc my-2 space-y-1 text-muted-foreground text-ui-base pl-5">
       {children}
     </ul>
   ),
   ol: ({ children }: any) => (
-    <ol className="list-decimal my-2 space-y-1 text-muted-foreground text-[13px] pl-5">
+    <ol className="list-decimal my-2 space-y-1 text-muted-foreground text-ui-base pl-5">
       {children}
     </ol>
   ),
@@ -45,13 +45,13 @@ const MARKDOWN_COMPONENTS = {
     const isInline = !className;
     if (isInline) {
       return (
-        <code className="bg-secondary text-primary px-1 py-0.5 rounded text-[12px] font-mono">
+        <code className="bg-secondary text-primary px-1 py-0.5 rounded text-ui-sm font-mono">
           {children}
         </code>
       );
     }
     return (
-      <code className="block bg-background text-foreground p-3 rounded overflow-x-auto text-[12px] font-mono my-2 border border-border">
+      <code className="block bg-background text-foreground p-3 rounded overflow-x-auto text-ui-sm font-mono my-2 border border-border">
         {children}
       </code>
     );
@@ -62,7 +62,7 @@ const MARKDOWN_COMPONENTS = {
     </pre>
   ),
   blockquote: ({ children }: any) => (
-    <blockquote className="border-l-3 border-primary bg-primary/10 pl-3 py-1.5 my-2 text-[13px] italic text-muted-foreground">
+    <blockquote className="border-l-3 border-primary bg-primary/10 pl-3 py-1.5 my-2 text-ui-base italic text-muted-foreground">
       {children}
     </blockquote>
   ),
@@ -82,7 +82,7 @@ const MARKDOWN_COMPONENTS = {
   a: ({ href, children }: any) => (
     <a
       href={href}
-      className="text-primary hover:text-primary/80 underline text-[13px]"
+      className="text-primary hover:text-primary/80 underline text-ui-base"
       target="_blank"
       rel="noopener noreferrer"
     >
@@ -91,7 +91,7 @@ const MARKDOWN_COMPONENTS = {
   ),
   table: ({ children }: any) => (
     <div className="overflow-x-auto my-2">
-      <table className="min-w-full border border-border rounded text-[12px]">
+      <table className="min-w-full border border-border rounded text-ui-sm">
         {children}
       </table>
     </div>
@@ -230,11 +230,11 @@ export const MarkdownContent = forwardRef<MarkdownContentRef, MarkdownContentPro
               onClick={handleShowAll}
               className="group flex items-center gap-2 px-4 py-1.5 bg-primary/10 border border-primary/30 rounded-full 
                          hover:bg-primary/20 hover:border-primary/50 transition-all duration-200 
-                         text-[12px] font-medium text-primary"
+                         text-ui-sm font-medium text-primary"
             >
               <Maximize2 className="w-3.5 h-3.5 transition-transform group-hover:scale-110" />
               <span>Show All</span>
-              <span className="text-[10px] text-primary/70 ml-0.5">
+              <span className="text-ui-2xs text-primary/70 ml-0.5">
                 (+{hiddenLines} lines{isStreaming && <span className="animate-pulse">...</span>})
               </span>
             </button>
@@ -243,12 +243,12 @@ export const MarkdownContent = forwardRef<MarkdownContentRef, MarkdownContentPro
               onClick={handleCollapse}
               className="group flex items-center gap-2 px-4 py-1.5 bg-muted border border-border rounded-full 
                          hover:bg-muted/80 hover:border-border/80 transition-all duration-200 
-                         text-[12px] font-medium text-muted-foreground"
+                         text-ui-sm font-medium text-muted-foreground"
             >
               <Minimize2 className="w-3.5 h-3.5 transition-transform group-hover:scale-90" />
               <span>Collapse</span>
               {isStreaming && (
-                <span className="ml-1 text-[10px] text-emerald-400 animate-pulse">
+                <span className="ml-1 text-ui-2xs text-emerald-400 animate-pulse">
                   streaming...
                 </span>
               )}

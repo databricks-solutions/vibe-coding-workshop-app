@@ -160,7 +160,7 @@ export function SessionListDialog({
                           {session.session_name || 'Untitled Session'}
                         </h3>
                         {isCurrent && (
-                          <span className="px-1.5 py-0.5 text-[10px] font-medium bg-primary/20 text-primary rounded">
+                          <span className="px-1.5 py-0.5 text-ui-2xs font-medium bg-primary/20 text-primary rounded">
                             Current
                           </span>
                         )}

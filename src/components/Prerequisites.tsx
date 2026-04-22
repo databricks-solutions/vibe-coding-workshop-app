@@ -59,7 +59,7 @@ function renderDescription(text: string): React.ReactNode {
             return codeParts.map((codePart, codeIdx) => {
               if (codePart.startsWith('`') && codePart.endsWith('`')) {
                 return (
-                  <code key={`${partIdx}-${codeIdx}`} className="bg-background/80 px-1 py-0.5 rounded text-primary font-mono text-[11px]">
+                  <code key={`${partIdx}-${codeIdx}`} className="bg-background/80 px-1 py-0.5 rounded text-primary font-mono text-ui-xs">
                     {codePart.slice(1, -1)}
                   </code>
                 );
@@ -214,12 +214,12 @@ export function Prerequisites({ isComplete = false, onMarkComplete, highlightMar
   ) => (
     <div 
       key={uniqueKey}
-      className={`bg-background rounded p-2 font-mono text-[11px] text-foreground border transition-colors ${
+      className={`bg-background rounded p-2 font-mono text-ui-xs text-foreground border transition-colors ${
         isCompleted ? 'opacity-50 border-border' : selectable && isSelected ? 'border-primary/40' : 'border-border'
       }`}
     >
       {label && (
-        <div className={`text-muted-foreground text-[10px] mb-1 font-sans ${selectable ? 'ml-6' : ''}`}>{label}</div>
+        <div className={`text-muted-foreground text-ui-2xs mb-1 font-sans ${selectable ? 'ml-6' : ''}`}>{label}</div>
       )}
       <div className="flex items-center justify-between gap-2">
         {selectable && (
@@ -295,7 +295,7 @@ export function Prerequisites({ isComplete = false, onMarkComplete, highlightMar
       <div className="bg-card rounded-lg p-5 border border-border">
         <div className="flex items-center justify-center gap-2">
           <Loader2 className="w-4 h-4 text-primary animate-spin" />
-          <span className="text-muted-foreground text-[13px]">Loading prerequisites...</span>
+          <span className="text-muted-foreground text-ui-base">Loading prerequisites...</span>
         </div>
       </div>
     );
@@ -305,10 +305,10 @@ export function Prerequisites({ isComplete = false, onMarkComplete, highlightMar
     return (
       <div className="bg-card rounded-lg p-5 border border-red-700/30">
         <div className="text-center">
-          <p className="text-red-400 mb-3 text-[13px]">{error}</p>
+          <p className="text-red-400 mb-3 text-ui-base">{error}</p>
           <button
             onClick={() => window.location.reload()}
-            className="px-3 py-1.5 bg-red-900/30 text-red-300 rounded text-[13px] hover:bg-red-900/50"
+            className="px-3 py-1.5 bg-red-900/30 text-red-300 rounded text-ui-base hover:bg-red-900/50"
           >
             Retry
           </button>
@@ -332,22 +332,22 @@ export function Prerequisites({ isComplete = false, onMarkComplete, highlightMar
           </div>
           <div className="flex-1 text-left">
             <div className="flex items-center gap-2">
-              <h2 className={`text-[15px] font-semibold text-foreground ${isComplete ? 'line-through opacity-60' : ''}`}>
+              <h2 className={`text-ui-md2 font-semibold text-foreground ${isComplete ? 'line-through opacity-60' : ''}`}>
                 Prerequisites to Get Started
               </h2>
               {isComplete && (
-                <span className="text-emerald-400 text-[11px] font-medium bg-emerald-900/30 px-1.5 py-0.5 rounded">✓ Done</span>
+                <span className="text-emerald-400 text-ui-xs font-medium bg-emerald-900/30 px-1.5 py-0.5 rounded">✓ Done</span>
               )}
             </div>
-            <p className={`text-muted-foreground text-[13px] ${isComplete ? 'line-through opacity-60' : ''}`}>
+            <p className={`text-muted-foreground text-ui-base ${isComplete ? 'line-through opacity-60' : ''}`}>
               Complete these steps before beginning the workflow
             </p>
           </div>
           <div className="flex items-center gap-2">
             {/* Steps count */}
             {totalCount > 0 && !isComplete && (
-              <span className="text-[11px] font-medium px-2.5 py-1 rounded-full bg-slate-800/60 text-slate-300">
-                {totalCount} steps
+              <span className="text-ui-xs font-medium px-2.5 py-1 rounded-full bg-slate-800/60 text-slate-300">
+                {totalCount === 1 ? '1 step' : `${totalCount} steps`}
               </span>
             )}
             {/* Chevron */}
@@ -362,7 +362,7 @@ export function Prerequisites({ isComplete = false, onMarkComplete, highlightMar
         {/* Mark Complete Button in Header -- hidden before "Get Started", disabled until 3s after expand */}
         {onMarkComplete && !hideMarkDone && (
           isComplete ? (
-            <div className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 text-[12px] font-medium animate-fade-in">
+            <div className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 text-ui-sm font-medium animate-fade-in">
               <CheckCircle className="w-3.5 h-3.5" /> Completed
             </div>
           ) : (
@@ -370,7 +370,7 @@ export function Prerequisites({ isComplete = false, onMarkComplete, highlightMar
               active={readyToComplete && highlightMarkDone}
               onClick={handleMarkComplete}
               disabled={!readyToComplete}
-              className="text-[12px] font-medium px-4 py-2"
+              className="text-ui-sm font-medium px-4 py-2"
             >
               All Done
             </BorderBeamButton>
@@ -385,11 +385,11 @@ export function Prerequisites({ isComplete = false, onMarkComplete, highlightMar
         <div className="px-4 pb-4 space-y-2 max-h-[460px] overflow-y-auto">
           {/* OS Toggle */}
           <div className="flex items-center justify-center gap-4 pb-2 mb-1 border-b border-border/50">
-            <span className="text-[11px] text-muted-foreground font-medium">Select your operating system:</span>
+            <span className="text-ui-xs text-muted-foreground font-medium">Select your operating system:</span>
             <div className="flex rounded-lg border border-border overflow-hidden">
               <button
                 onClick={() => setSelectedOS('macos')}
-                className={`flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-medium transition-all ${
+                className={`flex items-center gap-1.5 px-3 py-1.5 text-ui-xs font-medium transition-all ${
                   selectedOS === 'macos'
                     ? 'bg-primary text-primary-foreground'
                     : 'bg-secondary/30 text-muted-foreground hover:text-foreground hover:bg-secondary/60'
@@ -400,7 +400,7 @@ export function Prerequisites({ isComplete = false, onMarkComplete, highlightMar
               </button>
               <button
                 onClick={() => setSelectedOS('windows')}
-                className={`flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-medium transition-all border-l border-border ${
+                className={`flex items-center gap-1.5 px-3 py-1.5 text-ui-xs font-medium transition-all border-l border-border ${
                   selectedOS === 'windows'
                     ? 'bg-primary text-primary-foreground'
                     : 'bg-secondary/30 text-muted-foreground hover:text-foreground hover:bg-secondary/60'
@@ -415,31 +415,30 @@ export function Prerequisites({ isComplete = false, onMarkComplete, highlightMar
           {prerequisites.map((prereq) => {
             const IconComponent = iconMap[prereq.icon] || Terminal;
             const iconColorClass = iconColorMap[prereq.icon_color] || iconColorMap.slate;
-            const isCodeAssistantStep = prereq.id === 1;
 
             return (
               <div 
                 key={prereq.id}
                 className="bg-secondary/30 rounded-md p-3 border border-border/50 hover:border-border transition-colors"
               >
-                <div className={`flex gap-2.5 ${isCodeAssistantStep ? 'flex-col md:flex-row' : 'items-start'}`}>
+                <div className="flex gap-2.5 items-start">
                   {/* Main content */}
-                  <div className={`flex items-start gap-2.5 ${isCodeAssistantStep ? 'flex-1' : ''}`}>
+                  <div className="flex items-start gap-2.5">
                     <div className={`p-1.5 rounded ${iconColorClass}`}>
                       <IconComponent className="w-3.5 h-3.5" />
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 mb-0.5">
-                        <h3 className="text-[13px] font-medium text-foreground">
+                        <h3 className="text-ui-base font-medium text-foreground">
                           {prereq.id}. {prereq.title}
                         </h3>
                         {prereq.is_optional && (
-                          <span className="text-[10px] px-1.5 py-0.5 bg-secondary text-muted-foreground rounded">
+                          <span className="text-ui-2xs px-1.5 py-0.5 bg-secondary text-muted-foreground rounded">
                             Optional
                           </span>
                         )}
                       </div>
-                      <div className="text-muted-foreground text-[12px] leading-relaxed mb-2">
+                      <div className="text-muted-foreground text-ui-sm leading-relaxed mb-2">
                         {renderDescription(prereq.description)}
                       </div>
                       
@@ -462,7 +461,7 @@ export function Prerequisites({ isComplete = false, onMarkComplete, highlightMar
                                 <div className="flex items-center justify-between gap-2 mb-1">
                                   <button
                                     onClick={() => toggleSelectAll(prereq.id, filteredCmds.length)}
-                                    className="text-[10px] text-muted-foreground hover:text-foreground transition-colors font-sans"
+                                    className="text-ui-2xs text-muted-foreground hover:text-foreground transition-colors font-sans"
                                   >
                                     {selectedCommands[prereq.id]?.size === filteredCmds.length
                                       ? 'Deselect all'
@@ -471,7 +470,7 @@ export function Prerequisites({ isComplete = false, onMarkComplete, highlightMar
                                   <button
                                     onClick={() => handleCopyAllCommands(prereq.id, filteredCmds)}
                                     disabled={!selectedCommands[prereq.id] || selectedCommands[prereq.id].size === 0}
-                                    className={`flex items-center gap-1.5 px-2 py-1 rounded text-[10px] font-sans font-medium transition-all ${
+                                    className={`flex items-center gap-1.5 px-2 py-1 rounded text-ui-2xs font-sans font-medium transition-all ${
                                       copiedCommand === `${prereq.id}-all`
                                         ? 'bg-emerald-900/40 text-emerald-400'
                                         : !selectedCommands[prereq.id] || selectedCommands[prereq.id].size === 0
@@ -531,7 +530,7 @@ export function Prerequisites({ isComplete = false, onMarkComplete, highlightMar
                                 href={link.url}
                                 target="_blank"
                                 rel="noopener noreferrer"
-                                className={`text-[11px] px-2 py-0.5 rounded transition-colors ${linkColorClass}`}
+                                className={`text-ui-xs px-2 py-0.5 rounded transition-colors ${linkColorClass}`}
                               >
                                 {link.label}
                               </a>
@@ -541,24 +540,6 @@ export function Prerequisites({ isComplete = false, onMarkComplete, highlightMar
                       )}
                     </div>
                   </div>
-                  
-                  {/* Video embed for Install Code Assistant (Step 1) */}
-                  {isCodeAssistantStep && (
-                    <div className="md:w-[280px] flex-shrink-0">
-                      <div className="rounded-lg overflow-hidden border border-border bg-slate-900/50">
-                        <iframe
-                          src="https://www.youtube.com/embed/LR04bU_yV5k"
-                          title="How to use Cursor - AI Code Assistant Tutorial"
-                          className="w-full aspect-video"
-                          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                          allowFullScreen
-                        />
-                        <div className="px-2 py-1.5 bg-slate-800/50 text-[10px] text-slate-400">
-                          📺 Watch: How to use Cursor
-                        </div>
-                      </div>
-                    </div>
-                  )}
                 </div>
               </div>
             );
@@ -569,12 +550,12 @@ export function Prerequisites({ isComplete = false, onMarkComplete, highlightMar
             <div className="mt-4 pt-4 border-t border-border flex items-center justify-between">
               <div className="flex items-center gap-2 text-emerald-400">
                 <CheckCircle2 className="w-3.5 h-3.5" />
-                <span className="text-[12px]">Move to the Workshop steps below.</span>
+                <span className="text-ui-sm">Move to the Workshop steps below.</span>
               </div>
               <BorderBeamButton
                 active={highlightMarkDone}
                 onClick={handleMarkComplete}
-                className="text-[12px] font-medium px-5 py-2"
+                className="text-ui-sm font-medium px-5 py-2"
               >
                 All Done
               </BorderBeamButton>

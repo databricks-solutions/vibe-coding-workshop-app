@@ -39,7 +39,7 @@ export function SectionDetailPanel({
             Select a section from the sidebar to see details about each phase of the workshop. 
             Click on the section header to view its focus and description.
           </p>
-          <div className="flex items-center justify-center gap-2 text-[12px] text-muted-foreground">
+          <div className="flex items-center justify-center gap-2 text-ui-sm text-muted-foreground">
             <ChevronRight className="w-4 h-4" />
             <span>Click any section to get started</span>
           </div>
@@ -72,7 +72,7 @@ export function SectionDetailPanel({
           
           <div className="flex-1 min-w-0">
             {/* Chapter Label */}
-            <span className={`text-[11px] font-semibold uppercase tracking-wider ${section.color}`}>
+            <span className={`text-ui-xs font-semibold uppercase tracking-wider ${section.color}`}>
               {section.chapter}
             </span>
             
@@ -93,7 +93,7 @@ export function SectionDetailPanel({
                   style={{ width: `${progressPercent}%` }}
                 />
               </div>
-              <span className={`text-[12px] font-semibold ${
+              <span className={`text-ui-sm font-semibold ${
                 isSectionComplete ? 'text-emerald-400' : 'text-foreground'
               }`}>
                 {completedCount}/{totalSteps} complete
@@ -114,9 +114,9 @@ export function SectionDetailPanel({
         <div className="bg-card rounded-lg border border-border p-4">
           <div className="flex items-center gap-2 mb-2">
             <Target className={`w-4 h-4 ${section.color}`} />
-            <h3 className="text-[13px] font-semibold text-foreground">Focus</h3>
+            <h3 className="text-ui-base font-semibold text-foreground">Focus</h3>
           </div>
-          <p className="text-[14px] text-foreground leading-relaxed">
+          <p className="text-ui-md text-foreground leading-relaxed">
             {section.focus}
           </p>
         </div>
@@ -125,9 +125,9 @@ export function SectionDetailPanel({
         <div className="bg-card rounded-lg border border-border p-4">
           <div className="flex items-center gap-2 mb-2">
             <FileText className={`w-4 h-4 ${section.color}`} />
-            <h3 className="text-[13px] font-semibold text-foreground">Description</h3>
+            <h3 className="text-ui-base font-semibold text-foreground">Description</h3>
           </div>
-          <p className="text-[14px] text-muted-foreground leading-relaxed">
+          <p className="text-ui-md text-muted-foreground leading-relaxed">
             {section.description}
           </p>
         </div>
@@ -135,7 +135,7 @@ export function SectionDetailPanel({
         {/* Steps Overview */}
         <div className="bg-card rounded-lg border border-border overflow-hidden">
           <div className="px-4 py-3 border-b border-border bg-secondary/30">
-            <h3 className="text-[13px] font-semibold text-foreground">Steps in this Section</h3>
+            <h3 className="text-ui-base font-semibold text-foreground">Steps in this Section</h3>
           </div>
           <div className="divide-y divide-border">
             {section.steps.map((step) => {
@@ -155,7 +155,7 @@ export function SectionDetailPanel({
                   }`}
                 >
                   {/* Step Number */}
-                  <div className={`w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 text-[11px] font-bold ${
+                  <div className={`w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 text-ui-xs font-bold ${
                     isComplete
                       ? 'bg-emerald-500 text-white'
                       : isNext
@@ -171,7 +171,7 @@ export function SectionDetailPanel({
 
                   {/* Step Info */}
                   <div className="flex-1 min-w-0">
-                    <p className={`text-[13px] font-medium ${
+                    <p className={`text-ui-base font-medium ${
                       isComplete 
                         ? 'text-emerald-400 line-through' 
                         : isNext
@@ -184,12 +184,12 @@ export function SectionDetailPanel({
 
                   {/* Status / Action */}
                   {isNext && (
-                    <span className={`text-[10px] font-semibold uppercase px-2 py-0.5 rounded ${section.bgColor} ${section.color}`}>
+                    <span className={`text-ui-2xs font-semibold uppercase px-2 py-0.5 rounded ${section.bgColor} ${section.color}`}>
                       Up Next
                     </span>
                   )}
                   {isComplete && (
-                    <span className="text-[10px] font-medium text-emerald-400">
+                    <span className="text-ui-2xs font-medium text-emerald-400">
                       ✓ Done
                     </span>
                   )}
@@ -209,7 +209,7 @@ export function SectionDetailPanel({
         <div className="p-4 border-t border-border bg-card">
           <button
             onClick={onStartSection}
-            className={`w-full flex items-center justify-center gap-2 px-4 py-3 rounded-lg font-medium text-[13px] transition-all ${
+            className={`w-full flex items-center justify-center gap-2 px-4 py-3 rounded-lg font-medium text-ui-base transition-all ${
               section.bgColor
             } ${section.color} border ${section.borderColor} hover:opacity-90`}
           >
@@ -223,7 +223,7 @@ export function SectionDetailPanel({
         <div className="p-4 border-t border-border bg-emerald-500/10">
           <div className="flex items-center justify-center gap-2 text-emerald-400">
             <Check className="w-5 h-5" />
-            <span className="font-semibold text-[13px]">Section Complete!</span>
+            <span className="font-semibold text-ui-base">Section Complete!</span>
           </div>
         </div>
       )}

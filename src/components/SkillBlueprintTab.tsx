@@ -121,26 +121,26 @@ function SkillCard({ skill, compact, shouldAnimate, animDelay, onView }: {
         </div>
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-1.5 mb-0.5">
-            <span className={`${compact ? 'text-[11px]' : 'text-[12px]'} font-semibold ${styles.text} truncate`}>
+            <span className={`${compact ? 'text-ui-xs' : 'text-ui-sm'} font-semibold ${styles.text} truncate`}>
               {skill.name}
             </span>
-            <span className={`text-[9px] font-medium px-1.5 py-0.5 rounded-full ${styles.badge} flex-shrink-0 leading-tight`}>
+            <span className={`text-ui-3xs font-medium px-1.5 py-0.5 rounded-full ${styles.badge} flex-shrink-0 leading-tight`}>
               {styles.label}
             </span>
             {viewable && (
               <Eye className={`w-3 h-3 ${styles.text} opacity-0 group-hover:opacity-60 transition-opacity flex-shrink-0`} />
             )}
           </div>
-          <div className={`${compact ? 'text-[9px]' : 'text-[10px]'} text-muted-foreground/50 font-mono truncate`}>
+          <div className={`${compact ? 'text-ui-3xs' : 'text-ui-2xs'} text-muted-foreground/50 font-mono truncate`}>
             {skill.shortPath}
           </div>
           {skill.description && !compact && (
-            <p className="text-[11px] text-muted-foreground/80 mt-1.5 leading-relaxed">
+            <p className="text-ui-xs text-muted-foreground/80 mt-1.5 leading-relaxed">
               {skill.description}
             </p>
           )}
           {skill.description && compact && (
-            <p className={`text-[11px] text-muted-foreground/70 mt-1 leading-relaxed ${
+            <p className={`text-ui-xs text-muted-foreground/70 mt-1 leading-relaxed ${
               skill.type === 'common'
                 ? ''
                 : 'opacity-0 max-h-0 group-hover:opacity-100 group-hover:max-h-20 transition-all duration-200 overflow-hidden'
@@ -199,19 +199,19 @@ function SectionBlock({ section, sectionIndex, shouldAnimate, baseDelay, onViewS
       <div className={`px-3 py-2 ${accent.headerBg}`}>
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <span className={`text-[11px] font-semibold uppercase tracking-wider ${accent.text}`}>
+            <span className={`text-ui-xs font-semibold uppercase tracking-wider ${accent.text}`}>
               {section.label}
             </span>
-            <span className="text-[10px] text-muted-foreground/40">
+            <span className="text-ui-2xs text-muted-foreground/40">
               {section.skills.length} {section.skills.length === 1 ? 'skill' : 'skills'}
             </span>
           </div>
-          <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full border ${tierBadge.color}`}>
+          <span className={`text-ui-3xs font-bold px-1.5 py-0.5 rounded-full border ${tierBadge.color}`}>
             {tierBadge.label}
           </span>
         </div>
         {section.description && (
-          <p className="text-[10px] text-muted-foreground/50 italic mt-1 leading-relaxed">
+          <p className="text-ui-2xs text-muted-foreground/50 italic mt-1 leading-relaxed">
             {section.description}
           </p>
         )}
@@ -251,7 +251,7 @@ function SectionBlock({ section, sectionIndex, shouldAnimate, baseDelay, onViewS
             onClick={() => setIsExpanded(!isExpanded)}
             className={`
               mt-2 w-full flex items-center justify-center gap-1
-              text-[11px] font-medium py-1.5 rounded-md
+              text-ui-xs font-medium py-1.5 rounded-md
               ${accent.text} hover:bg-white/5 transition-colors
             `}
           >
@@ -284,13 +284,13 @@ function FoundationBar({ shouldAnimate, onViewSkill }: { shouldAnimate: boolean;
         className="w-full px-3 py-2.5 bg-cyan-500/5 hover:bg-cyan-500/8 transition-colors flex items-center justify-between"
       >
         <div className="flex items-center gap-2">
-          <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full border bg-cyan-500/15 text-cyan-400 border-cyan-500/25`}>
+          <span className={`text-ui-3xs font-bold px-1.5 py-0.5 rounded-full border bg-cyan-500/15 text-cyan-400 border-cyan-500/25`}>
             Tier 1
           </span>
-          <span className="text-[11px] font-semibold text-cyan-400 uppercase tracking-wider">
+          <span className="text-ui-xs font-semibold text-cyan-400 uppercase tracking-wider">
             Foundation — Always Loaded
           </span>
-          <span className="text-[10px] text-muted-foreground/40">
+          <span className="text-ui-2xs text-muted-foreground/40">
             {foundation.skills.length} skills
           </span>
         </div>
@@ -300,7 +300,7 @@ function FoundationBar({ shouldAnimate, onViewSkill }: { shouldAnimate: boolean;
               <span
                 key={i}
                 className={`
-                  text-[9px] px-1.5 py-0.5 rounded-full
+                  text-ui-3xs px-1.5 py-0.5 rounded-full
                   ${TYPE_STYLES[s.type].badge}
                   ${shouldAnimate ? 'animate-skill-node-pop' : ''}
                 `}
@@ -346,7 +346,7 @@ function ManifestBadge({ type, path, shouldAnimate, delay }: {
   return (
     <div
       className={`
-        flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-[10px] font-medium
+        flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-ui-2xs font-medium
         ${isConsumes
           ? 'bg-blue-500/8 text-blue-400 border border-blue-500/20'
           : 'bg-emerald-500/8 text-emerald-400 border border-emerald-500/20'
@@ -386,17 +386,17 @@ export function SkillBlueprintTab({ config, shouldAnimate, onMounted }: SkillBlu
         style={shouldAnimate ? { animationDelay: '0ms' } : undefined}
       >
         <div className="flex items-center gap-2 mb-1.5">
-          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-purple-500/15 text-purple-400 border border-purple-500/20">
+          <span className="text-ui-2xs font-bold px-2 py-0.5 rounded-full bg-purple-500/15 text-purple-400 border border-purple-500/20">
             {config.stageLabel}
           </span>
-          <span className="text-[10px] text-muted-foreground/40">
+          <span className="text-ui-2xs text-muted-foreground/40">
             {totalSkills} skills in traversal
           </span>
         </div>
-        <p className="text-[12px] text-muted-foreground leading-relaxed">
+        <p className="text-ui-sm text-muted-foreground leading-relaxed">
           {config.summary}
         </p>
-        <p className="text-[10px] text-muted-foreground/40 mt-1 italic">
+        <p className="text-ui-2xs text-muted-foreground/40 mt-1 italic">
           Click any skill card to view its full content
         </p>
       </div>
@@ -497,7 +497,7 @@ export function SkillBlueprintFullScreenModal({
     <>
       <button
         onClick={() => setIsOpen(true)}
-        className="flex items-center gap-1 px-2 py-0.5 text-[11px] rounded border transition-all hover:scale-105 text-cyan-400 hover:bg-cyan-900/30 border-cyan-500/30"
+        className="flex items-center gap-1 px-2 py-0.5 text-ui-xs rounded border transition-all hover:scale-105 text-cyan-400 hover:bg-cyan-900/30 border-cyan-500/30"
         title="View in full screen"
       >
         <Maximize2 className="w-3 h-3" />
@@ -521,7 +521,7 @@ export function SkillBlueprintFullScreenModal({
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between px-6 py-4 border-b border-border bg-secondary/30">
-              <h3 className="text-[15px] font-semibold text-foreground flex items-center gap-2">
+              <h3 className="text-ui-md2 font-semibold text-foreground flex items-center gap-2">
                 {title}
               </h3>
               <button
@@ -540,10 +540,10 @@ export function SkillBlueprintFullScreenModal({
             </div>
 
             <div className="flex items-center justify-between px-4 py-2 border-t border-border bg-secondary/20">
-              <span className="text-[11px] text-muted-foreground">
-                Press <kbd className="px-1.5 py-0.5 bg-secondary rounded text-[10px] font-mono">Esc</kbd> to close
+              <span className="text-ui-xs text-muted-foreground">
+                Press <kbd className="px-1.5 py-0.5 bg-secondary rounded text-ui-2xs font-mono">Esc</kbd> to close
               </span>
-              <span className="text-[11px] text-muted-foreground">
+              <span className="text-ui-xs text-muted-foreground">
                 {totalSkills} skills • {config.sections.length} tiers
               </span>
             </div>

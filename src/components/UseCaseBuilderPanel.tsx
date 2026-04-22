@@ -6,7 +6,7 @@
  * Supports a `compact` mode for embedding inside Step 1's "Create Your Own".
  */
 
-import { useCallback } from 'react';
+import { useCallback, useEffect } from 'react';
 import {
   Sparkles,
   Send,
@@ -39,6 +39,8 @@ interface UseCaseBuilderPanelProps {
   hideSave?: boolean;
   /** When true, hide the industry dropdown (e.g. when industry is pre-determined by config page) */
   hideIndustry?: boolean;
+  /** When true, hide the input section entirely — show only output + refine bar */
+  hideInputs?: boolean;
   /** Callback fired after a successful save, so the parent can refresh lists */
   onSaved?: () => void;
 }
@@ -63,35 +65,35 @@ const INDUSTRY_OPTIONS = [
 
 const markdownComponents = (compact: boolean) => ({
   h1: ({ children }: any) => (
-    <h1 className={`${compact ? 'text-[13px]' : 'text-[15px]'} font-semibold text-foreground border-b border-border pb-2 mb-3 mt-1`}>
+    <h1 className={`${compact ? 'text-ui-base' : 'text-ui-md2'} font-semibold text-foreground border-b border-border pb-2 mb-3 mt-1`}>
       {children}
     </h1>
   ),
   h2: ({ children }: any) => (
-    <h2 className={`${compact ? 'text-[12px]' : 'text-[14px]'} font-semibold text-foreground mt-4 mb-2`}>
+    <h2 className={`${compact ? 'text-ui-sm' : 'text-ui-md'} font-semibold text-foreground mt-4 mb-2`}>
       {children}
     </h2>
   ),
   h3: ({ children }: any) => (
-    <h3 className={`${compact ? 'text-[11px]' : 'text-[13px]'} font-medium text-foreground mt-3 mb-1.5`}>
+    <h3 className={`${compact ? 'text-ui-xs' : 'text-ui-base'} font-medium text-foreground mt-3 mb-1.5`}>
       {children}
     </h3>
   ),
   h4: ({ children }: any) => (
-    <h4 className="text-[12px] font-medium text-foreground mt-2 mb-1">{children}</h4>
+    <h4 className="text-ui-sm font-medium text-foreground mt-2 mb-1">{children}</h4>
   ),
   p: ({ children }: any) => (
-    <p className={`text-muted-foreground ${compact ? 'text-[12px]' : 'text-[13px]'} leading-relaxed mb-2`}>
+    <p className={`text-muted-foreground ${compact ? 'text-ui-sm' : 'text-ui-base'} leading-relaxed mb-2`}>
       {children}
     </p>
   ),
   ul: ({ children }: any) => (
-    <ul className={`list-disc my-2 space-y-1 text-muted-foreground ${compact ? 'text-[12px] pl-4' : 'text-[13px] pl-5'}`}>
+    <ul className={`list-disc my-2 space-y-1 text-muted-foreground ${compact ? 'text-ui-sm pl-4' : 'text-ui-base pl-5'}`}>
       {children}
     </ul>
   ),
   ol: ({ children }: any) => (
-    <ol className={`list-decimal my-2 space-y-1 text-muted-foreground ${compact ? 'text-[12px] pl-4' : 'text-[13px] pl-5'}`}>
+    <ol className={`list-decimal my-2 space-y-1 text-muted-foreground ${compact ? 'text-ui-sm pl-4' : 'text-ui-base pl-5'}`}>
       {children}
     </ol>
   ),
@@ -102,13 +104,13 @@ const markdownComponents = (compact: boolean) => ({
     const isInline = !className;
     if (isInline) {
       return (
-        <code className="bg-secondary text-primary px-1 py-0.5 rounded text-[12px] font-mono">
+        <code className="bg-secondary text-primary px-1 py-0.5 rounded text-ui-sm font-mono">
           {children}
         </code>
       );
     }
     return (
-      <code className="block bg-background text-foreground p-3 rounded overflow-x-auto text-[12px] font-mono my-2 border border-border">
+      <code className="block bg-background text-foreground p-3 rounded overflow-x-auto text-ui-sm font-mono my-2 border border-border">
         {children}
       </code>
     );
@@ -119,7 +121,7 @@ const markdownComponents = (compact: boolean) => ({
     </pre>
   ),
   blockquote: ({ children }: any) => (
-    <blockquote className="border-l-3 border-primary bg-primary/10 pl-3 py-1.5 my-2 text-[13px] italic text-muted-foreground">
+    <blockquote className="border-l-3 border-primary bg-primary/10 pl-3 py-1.5 my-2 text-ui-base italic text-muted-foreground">
       {children}
     </blockquote>
   ),
@@ -133,7 +135,7 @@ const markdownComponents = (compact: boolean) => ({
   a: ({ href, children }: any) => (
     <a
       href={href}
-      className="text-primary hover:text-primary/80 underline text-[13px]"
+      className="text-primary hover:text-primary/80 underline text-ui-base"
       target="_blank"
       rel="noopener noreferrer"
     >
@@ -147,6 +149,7 @@ export function UseCaseBuilderPanel({
   compact = false,
   hideSave = false,
   hideIndustry = false,
+  hideInputs = false,
   onSaved,
 }: UseCaseBuilderPanelProps) {
   const imgSize = compact ? 'w-10 h-10' : 'w-16 h-16';
@@ -160,17 +163,30 @@ export function UseCaseBuilderPanel({
   );
   const speech = useSpeechToText({ onFinalTranscript: handleAppendTranscript });
 
+  const handleAppendRefineTranscript = useCallback(
+    (text: string) => b.setRefineFeedback((prev: string) => (prev ? `${prev} ${text}` : text)),
+    [b],
+  );
+  const refineSpeech = useSpeechToText({ onFinalTranscript: handleAppendRefineTranscript });
+
+  useEffect(() => {
+    if (b.isStreaming && b.outputContainerRef.current) {
+      b.outputContainerRef.current.scrollTop = b.outputContainerRef.current.scrollHeight;
+    }
+  }, [b.outputText, b.isStreaming]);
+
   const handleSaveWithCallback = async () => {
     await b.handleSave();
     onSaved?.();
   };
 
   return (
-    <div className={compact ? 'space-y-3' : 'grid grid-cols-1 lg:grid-cols-5 gap-6'}>
+    <div className={hideInputs ? '' : (compact ? 'space-y-3' : 'grid grid-cols-1 lg:grid-cols-5 gap-6')}>
       {/* =============== INPUT SECTION =============== */}
+      {!hideInputs && (
       <div className={compact ? '' : 'lg:col-span-2 space-y-4'}>
         <div className={`bg-card border border-border rounded-xl ${compact ? 'p-3 space-y-3' : 'p-5 space-y-4'}`}>
-          <h2 className={`${compact ? 'text-[12px]' : 'text-sm'} font-semibold text-foreground flex items-center gap-2`}>
+          <h2 className={`${compact ? 'text-ui-sm' : 'text-sm'} font-semibold text-foreground flex items-center gap-2`}>
             <Sparkles className={`${compact ? 'w-3.5 h-3.5' : 'w-4 h-4'} text-primary`} />
             Describe Your Use Case
           </h2>
@@ -178,13 +194,13 @@ export function UseCaseBuilderPanel({
           {/* Industry dropdown (hidden when industry is pre-determined by parent) */}
           {!hideIndustry && (
             <div>
-              <label className="block text-[11px] font-medium text-muted-foreground mb-1.5 uppercase tracking-wider">
+              <label className="block text-ui-xs font-medium text-muted-foreground mb-1.5 uppercase tracking-wider">
                 Industry
               </label>
               <select
                 value={b.industry}
                 onChange={(e) => b.setIndustry(e.target.value)}
-                className={`w-full bg-background border border-border rounded-lg px-3 ${compact ? 'py-1.5 text-[12px]' : 'py-2 text-[13px]'} text-foreground focus:outline-none focus:ring-1 focus:ring-primary/50 focus:border-primary/50 transition-colors`}
+                className={`w-full bg-background border border-border rounded-lg px-3 ${compact ? 'py-1.5 text-ui-sm' : 'py-2 text-ui-base'} text-foreground focus:outline-none focus:ring-1 focus:ring-primary/50 focus:border-primary/50 transition-colors`}
               >
                 <option value="">Select an industry...</option>
                 {INDUSTRY_OPTIONS.map((opt) => (
@@ -196,7 +212,7 @@ export function UseCaseBuilderPanel({
 
           {/* Use case name */}
           <div>
-            <label className="block text-[11px] font-medium text-muted-foreground mb-1.5 uppercase tracking-wider">
+            <label className="block text-ui-xs font-medium text-muted-foreground mb-1.5 uppercase tracking-wider">
               Use Case Name
             </label>
             <input
@@ -205,7 +221,7 @@ export function UseCaseBuilderPanel({
               maxLength={30}
               onChange={(e) => b.setUseCaseName(e.target.value)}
               placeholder="e.g., Customer 360, Fleet Mgmt..."
-              className={`w-full bg-background border rounded-lg px-3 ${compact ? 'py-1.5 text-[12px]' : 'py-2 text-[13px]'} text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-1 transition-colors ${
+              className={`w-full bg-background border rounded-lg px-3 ${compact ? 'py-1.5 text-ui-sm' : 'py-2 text-ui-base'} text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-1 transition-colors ${
                 b.useCaseName.length >= 30
                   ? 'border-red-400/70 focus:ring-red-400/50 focus:border-red-400/70'
                   : b.useCaseName.length >= 25
@@ -213,10 +229,10 @@ export function UseCaseBuilderPanel({
                     : 'border-border focus:ring-primary/50 focus:border-primary/50'
               }`}
             />
-            <div className="flex items-center justify-between mt-1 min-h-[18px]">
-              <span className="text-[10px] text-muted-foreground/60">Short, descriptive name</span>
+            <div className="flex items-center justify-between mt-1 min-h-[1.125rem]">
+              <span className="text-ui-2xs text-muted-foreground/60">Short, descriptive name</span>
               {b.useCaseName.length >= 20 && (
-                <span className={`text-[10px] font-medium transition-colors ${
+                <span className={`text-ui-2xs font-medium transition-colors ${
                   b.useCaseName.length >= 30 ? 'text-red-500' : b.useCaseName.length >= 25 ? 'text-amber-500' : 'text-muted-foreground/60'
                 }`}>
                   {b.useCaseName.length >= 30 ? '30/30 — Try a shorter name' : `${b.useCaseName.length}/30`}
@@ -227,7 +243,7 @@ export function UseCaseBuilderPanel({
 
           {/* Reference file upload (images, PDFs, text) */}
           <div>
-            <label className="block text-[11px] font-medium text-muted-foreground mb-1.5 uppercase tracking-wider">
+            <label className="block text-ui-xs font-medium text-muted-foreground mb-1.5 uppercase tracking-wider">
               Reference Files <span className="text-muted-foreground/60">(images, PDFs, text — up to 5)</span>
             </label>
             <input
@@ -241,7 +257,7 @@ export function UseCaseBuilderPanel({
             <button
               onClick={() => b.fileInputRef.current?.click()}
               disabled={b.attachments.length >= 5}
-              className={`w-full flex items-center justify-center gap-2 px-3 ${compact ? 'py-2' : 'py-3'} border-2 border-dashed border-border rounded-lg text-muted-foreground text-[12px] hover:border-primary/40 hover:text-primary/80 transition-colors disabled:opacity-50 disabled:cursor-not-allowed`}
+              className={`w-full flex items-center justify-center gap-2 px-3 ${compact ? 'py-2' : 'py-3'} border-2 border-dashed border-border rounded-lg text-muted-foreground text-ui-sm hover:border-primary/40 hover:text-primary/80 transition-colors disabled:opacity-50 disabled:cursor-not-allowed`}
             >
               <Upload className={compact ? 'w-3.5 h-3.5' : 'w-4 h-4'} />
               {b.attachments.length >= 5 ? 'Max 5 files' : 'Upload images, PDFs, or text files'}
@@ -265,7 +281,7 @@ export function UseCaseBuilderPanel({
                         ) : (
                           <FileText className="w-5 h-5 text-blue-400" />
                         )}
-                        <span className="text-[7px] text-muted-foreground/70 mt-0.5 uppercase font-medium">
+                        <span className="text-ui-3xs text-muted-foreground/70 mt-0.5 uppercase font-medium">
                           {att.type === 'pdf' ? 'PDF' : att.name.split('.').pop()?.toUpperCase() || 'TXT'}
                         </span>
                       </div>
@@ -277,7 +293,7 @@ export function UseCaseBuilderPanel({
                       <X className="w-3 h-3" />
                     </button>
                     {!compact && (
-                      <span className="block text-[9px] text-muted-foreground/60 truncate max-w-[64px] mt-0.5">
+                      <span className="block text-ui-3xs text-muted-foreground/60 truncate max-w-[4rem] mt-0.5">
                         {att.name}
                       </span>
                     )}
@@ -290,11 +306,11 @@ export function UseCaseBuilderPanel({
           {/* Description of the use case (voice-enabled) */}
           <div>
             <div className="flex items-center justify-between mb-1.5">
-              <label className="block text-[11px] font-medium text-muted-foreground uppercase tracking-wider">
+              <label className="block text-ui-xs font-medium text-muted-foreground uppercase tracking-wider">
                 Description of the Use Case
               </label>
               {speech.isSupported && !speech.isListening && (
-                <span className="text-[10px] text-muted-foreground/50 flex items-center gap-1">
+                <span className="text-ui-2xs text-muted-foreground/50 flex items-center gap-1">
                   <Mic className="w-3 h-3" />
                   or use voice
                 </span>
@@ -306,7 +322,7 @@ export function UseCaseBuilderPanel({
                 onChange={(e) => b.setHints(e.target.value)}
                 placeholder="Describe the use case in detail — features, personas, data sources, or technical requirements..."
                 rows={textareaRows}
-                className={`flex-1 bg-background border rounded-lg px-3 py-2 ${compact ? 'text-[12px]' : 'text-[13px]'} text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-1 transition-colors resize-none ${
+                className={`flex-1 bg-background border rounded-lg px-3 py-2 ${compact ? 'text-ui-sm' : 'text-ui-base'} text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-1 transition-colors resize-none ${
                   speech.isListening
                     ? 'border-red-400/70 focus:ring-red-400/50 focus:border-red-400/70'
                     : 'border-border focus:ring-primary/50 focus:border-primary/50'
@@ -332,24 +348,24 @@ export function UseCaseBuilderPanel({
                       title={speech.isListening ? 'Stop recording' : 'Speak your use case description'}
                     >
                       {speech.isListening
-                        ? <MicOff className={compact ? 'w-4 h-4' : 'w-[18px] h-[18px]'} />
-                        : <Mic className={compact ? 'w-4 h-4' : 'w-[18px] h-[18px]'} />
+                        ? <MicOff className={compact ? 'w-4 h-4' : 'w-[1.125rem] h-[1.125rem]'} />
+                        : <Mic className={compact ? 'w-4 h-4' : 'w-[1.125rem] h-[1.125rem]'} />
                       }
                     </button>
                   </div>
-                  <span className={`text-[9px] font-medium ${speech.isListening ? 'text-red-400' : 'text-muted-foreground/50'}`}>
+                  <span className={`text-ui-3xs font-medium ${speech.isListening ? 'text-red-400' : 'text-muted-foreground/50'}`}>
                     {speech.isListening ? 'Stop' : 'Speak'}
                   </span>
                 </div>
               )}
             </div>
             {speech.isListening && speech.interimTranscript && (
-              <p className={`mt-1.5 ${compact ? 'text-[10px]' : 'text-[11px]'} text-red-400/80 italic truncate`}>
+              <p className={`mt-1.5 ${compact ? 'text-ui-2xs' : 'text-ui-xs'} text-red-400/80 italic truncate`}>
                 {speech.interimTranscript}
               </p>
             )}
             {speech.isListening && !speech.interimTranscript && (
-              <div className={`mt-1.5 flex items-center gap-1.5 ${compact ? 'text-[10px]' : 'text-[11px]'} text-red-400/70`}>
+              <div className={`mt-1.5 flex items-center gap-1.5 ${compact ? 'text-ui-2xs' : 'text-ui-xs'} text-red-400/70`}>
                 <span className="flex gap-0.5">
                   <span className="inline-block w-1 h-3 rounded-full bg-red-400/80 animate-pulse" style={{ animationDelay: '0ms' }} />
                   <span className="inline-block w-1 h-2 rounded-full bg-red-400/60 animate-pulse" style={{ animationDelay: '150ms' }} />
@@ -368,7 +384,7 @@ export function UseCaseBuilderPanel({
               <button
                 onClick={b.handleGenerate}
                 disabled={!b.hasInput || b.isStreaming}
-                className={`w-full flex items-center justify-center gap-2 px-4 ${compact ? 'py-2' : 'py-2.5'} text-[13px] font-medium transition-colors ${
+                className={`w-full flex items-center justify-center gap-2 px-4 ${compact ? 'py-2' : 'py-2.5'} text-ui-base font-medium transition-colors ${
                   isActive
                     ? 'relative z-10 rounded-[calc(0.5rem-2px)] bg-emerald-600 text-white hover:bg-emerald-500'
                     : 'bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed'
@@ -391,28 +407,29 @@ export function UseCaseBuilderPanel({
           })()}
 
           {!b.hasInput && (
-            <p className="text-[11px] text-muted-foreground/60 text-center">
+            <p className="text-ui-xs text-muted-foreground/60 text-center">
               Fill in at least one field to generate a use case description
             </p>
           )}
         </div>
       </div>
+      )}
 
       {/* =============== OUTPUT SECTION =============== */}
-      <div className={compact ? '' : 'lg:col-span-3 space-y-4'}>
+      <div className={hideInputs ? '' : (compact ? '' : 'lg:col-span-3 space-y-4')}>
         <div className={`bg-card border border-border rounded-xl ${compact ? 'p-3' : 'p-5'}`}>
           {/* Header */}
           <div className="flex items-center justify-between mb-3">
-            <h2 className={`${compact ? 'text-[12px]' : 'text-sm'} font-semibold text-foreground flex items-center gap-2`}>
+            <h2 className={`${compact ? 'text-ui-sm' : 'text-sm'} font-semibold text-foreground flex items-center gap-2`}>
               <ImageIcon className={`${compact ? 'w-3.5 h-3.5' : 'w-4 h-4'} text-primary`} />
               Generated Description
               {b.iterationCount > 0 && (
-                <span className="px-1.5 py-0.5 bg-primary/10 text-primary text-[9px] font-medium rounded-full">
+                <span className="px-1.5 py-0.5 bg-primary/10 text-primary text-ui-3xs font-medium rounded-full">
                   v{b.iterationCount + 1}
                 </span>
               )}
               {b.streamModel && (
-                <span className="text-[10px] text-muted-foreground/60 font-normal">
+                <span className="text-ui-2xs text-muted-foreground/60 font-normal">
                   via {b.streamModel}
                 </span>
               )}
@@ -424,7 +441,7 @@ export function UseCaseBuilderPanel({
                 {b.isStreaming && (
                   <button
                     onClick={b.handleStopStreaming}
-                    className="flex items-center gap-1 px-2.5 py-1 bg-destructive/10 text-destructive rounded-md text-[11px] font-medium hover:bg-destructive/20 transition-colors"
+                    className="flex items-center gap-1 px-2.5 py-1 bg-destructive/10 text-destructive rounded-md text-ui-xs font-medium hover:bg-destructive/20 transition-colors"
                   >
                     <X className="w-3 h-3" />
                     Stop
@@ -436,7 +453,7 @@ export function UseCaseBuilderPanel({
                     {b.previousDraft && (
                       <button
                         onClick={b.toggleDiff}
-                        className={`flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-medium transition-colors ${
+                        className={`flex items-center gap-1 px-2.5 py-1 rounded-md text-ui-xs font-medium transition-colors ${
                           b.showDiff
                             ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
                             : 'bg-secondary text-muted-foreground hover:text-foreground'
@@ -449,7 +466,7 @@ export function UseCaseBuilderPanel({
                     )}
                     <button
                       onClick={b.handleToggleEdit}
-                      className={`flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-medium transition-colors ${
+                      className={`flex items-center gap-1 px-2.5 py-1 rounded-md text-ui-xs font-medium transition-colors ${
                         b.isEditing
                           ? 'bg-primary/20 text-primary border border-primary/30'
                           : 'bg-secondary text-muted-foreground hover:text-foreground'
@@ -460,7 +477,7 @@ export function UseCaseBuilderPanel({
                     </button>
                     <button
                       onClick={() => b.handleCopy(b.isEditing ? b.editText : b.outputText)}
-                      className="flex items-center gap-1 px-2.5 py-1 bg-secondary text-muted-foreground rounded-md text-[11px] font-medium hover:text-foreground transition-colors"
+                      className="flex items-center gap-1 px-2.5 py-1 bg-secondary text-muted-foreground rounded-md text-ui-xs font-medium hover:text-foreground transition-colors"
                     >
                       {b.copied ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
                       {b.copied ? 'Copied' : 'Copy'}
@@ -469,7 +486,7 @@ export function UseCaseBuilderPanel({
                       <button
                         onClick={handleSaveWithCallback}
                         disabled={b.isSaving}
-                        className="flex items-center gap-1 px-2.5 py-1 bg-emerald-500/10 text-emerald-400 rounded-md text-[11px] font-medium hover:bg-emerald-500/20 transition-colors disabled:opacity-50"
+                        className="flex items-center gap-1 px-2.5 py-1 bg-emerald-500/10 text-emerald-400 rounded-md text-ui-xs font-medium hover:bg-emerald-500/20 transition-colors disabled:opacity-50"
                       >
                         {b.saveSuccess ? (
                           <><Check className="w-3 h-3" /> Saved!</>
@@ -488,7 +505,7 @@ export function UseCaseBuilderPanel({
 
           {/* Retry status indicator */}
           {b.isStreaming && b.retryStatus && (
-            <div className="flex items-center gap-2 mb-3 px-3 py-2.5 bg-amber-500/10 border border-amber-500/20 rounded-lg text-amber-300 text-[12px]">
+            <div className="flex items-center gap-2 mb-3 px-3 py-2.5 bg-amber-500/10 border border-amber-500/20 rounded-lg text-amber-300 text-ui-sm">
               <div className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse shrink-0" />
               Retrying ({b.retryStatus.attempt} of {b.retryStatus.maxAttempts}) &mdash; {b.retryStatus.reason}...
             </div>
@@ -508,7 +525,7 @@ export function UseCaseBuilderPanel({
               <textarea
                 value={b.editText}
                 onChange={(e) => b.setEditText(e.target.value)}
-                className={`w-full bg-background border border-primary/30 rounded-lg px-4 py-3 text-[13px] text-foreground font-mono focus:outline-none focus:ring-1 focus:ring-primary/50 transition-colors resize-none ${editMinH}`}
+                className={`w-full bg-background border border-primary/30 rounded-lg px-4 py-3 text-ui-base text-foreground font-mono focus:outline-none focus:ring-1 focus:ring-primary/50 transition-colors resize-none ${editMinH}`}
                 style={compact ? undefined : { height: 'calc(60vh - 100px)' }}
               />
             ) : b.showDiff && b.previousDraft ? (
@@ -538,10 +555,10 @@ export function UseCaseBuilderPanel({
               <div className={`${compact ? 'p-3' : 'p-4'} bg-muted/50 rounded-2xl mb-4`}>
                 <Lightbulb className={`${compact ? 'w-6 h-6' : 'w-8 h-8'} text-muted-foreground/40`} />
               </div>
-              <p className={`text-muted-foreground ${compact ? 'text-[12px]' : 'text-[13px]'} mb-1`}>
+              <p className={`text-muted-foreground ${compact ? 'text-ui-sm' : 'text-ui-base'} mb-1`}>
                 Your generated use case will appear here
               </p>
-              <p className="text-muted-foreground/50 text-[11px]">
+              <p className="text-muted-foreground/50 text-ui-xs">
                 Fill in the inputs {compact ? 'above' : 'on the left'} and click <strong>Generate</strong>
               </p>
             </div>
@@ -550,16 +567,28 @@ export function UseCaseBuilderPanel({
           {/* Refinement feedback bar */}
           {b.outputText && !b.isStreaming && !b.isEditing && (
             <div className={`${compact ? 'mt-3 pt-3' : 'mt-4 pt-4'} border-t border-border`}>
-              <label className="block text-[10px] font-medium text-muted-foreground mb-1.5 uppercase tracking-wider">
-                Refine this description
-              </label>
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="block text-ui-2xs font-medium text-muted-foreground uppercase tracking-wider">
+                  Refine this description
+                </label>
+                {refineSpeech.isSupported && !refineSpeech.isListening && (
+                  <span className="text-ui-2xs text-muted-foreground/50 flex items-center gap-1">
+                    <Mic className="w-3 h-3" />
+                    or use voice
+                  </span>
+                )}
+              </div>
               <div className="flex gap-2 items-start">
                 <textarea
                   value={b.refineFeedback}
                   onChange={(e) => b.setRefineFeedback(e.target.value)}
                   placeholder="Tell the AI how to improve this... e.g., 'Add more technical details', 'Focus on healthcare regulations'"
                   rows={compact ? 1 : 2}
-                  className={`flex-1 bg-background border border-border rounded-lg px-3 py-2 ${compact ? 'text-[11px]' : 'text-[12px]'} text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-1 focus:ring-primary/50 focus:border-primary/50 transition-colors resize-none`}
+                  className={`flex-1 bg-background border rounded-lg px-3 py-2 ${compact ? 'text-ui-xs' : 'text-ui-sm'} text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-1 transition-colors resize-none ${
+                    refineSpeech.isListening
+                      ? 'border-red-400/70 focus:ring-red-400/50 focus:border-red-400/70'
+                      : 'border-border focus:ring-primary/50 focus:border-primary/50'
+                  }`}
                   onKeyDown={(e) => {
                     if (e.key === 'Enter' && !e.shiftKey) {
                       e.preventDefault();
@@ -567,13 +596,43 @@ export function UseCaseBuilderPanel({
                     }
                   }}
                 />
+                {refineSpeech.isSupported && (
+                  <div className="flex flex-col items-center gap-1 pt-1 shrink-0">
+                    <div className="relative">
+                      {refineSpeech.isListening && (
+                        <>
+                          <span className="absolute inset-0 rounded-full bg-red-500/20 animate-ping" />
+                          <span className="absolute -inset-1 rounded-full border-2 border-red-400/40 animate-pulse" />
+                        </>
+                      )}
+                      <button
+                        type="button"
+                        onClick={refineSpeech.isListening ? refineSpeech.stopListening : refineSpeech.startListening}
+                        className={`relative w-9 h-9 rounded-full flex items-center justify-center transition-all duration-200 shadow-sm ${
+                          refineSpeech.isListening
+                            ? 'bg-red-500 text-white hover:bg-red-600 shadow-red-500/30 shadow-md scale-110'
+                            : 'bg-gradient-to-br from-primary to-emerald-500 text-white hover:shadow-md hover:shadow-primary/30 hover:scale-105'
+                        }`}
+                        title={refineSpeech.isListening ? 'Stop recording' : 'Speak your refinement feedback'}
+                      >
+                        {refineSpeech.isListening
+                          ? <MicOff className="w-4 h-4" />
+                          : <Mic className="w-4 h-4" />
+                        }
+                      </button>
+                    </div>
+                    <span className={`text-ui-3xs font-medium ${refineSpeech.isListening ? 'text-red-400' : 'text-muted-foreground/50'}`}>
+                      {refineSpeech.isListening ? 'Stop' : 'Speak'}
+                    </span>
+                  </div>
+                )}
                 {(() => {
                   const refineActive = !!b.refineFeedback.trim();
                   const refineBtn = (
                     <button
                       onClick={b.handleRefine}
                       disabled={!refineActive}
-                      className={`flex items-center gap-1.5 px-4 ${compact ? 'py-2' : 'py-2.5'} text-[12px] font-medium transition-colors shrink-0 ${
+                      className={`flex items-center gap-1.5 px-4 ${compact ? 'py-2' : 'py-2.5'} text-ui-sm font-medium transition-colors shrink-0 ${
                         refineActive
                           ? 'relative z-10 rounded-[calc(0.5rem-2px)] bg-emerald-600 text-white hover:bg-emerald-500'
                           : 'bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 disabled:opacity-40 disabled:cursor-not-allowed'
@@ -586,9 +645,27 @@ export function UseCaseBuilderPanel({
                   return refineActive ? <div className="border-beam-wrapper shrink-0">{refineBtn}</div> : refineBtn;
                 })()}
               </div>
-              <p className="text-[10px] text-muted-foreground/50 mt-1.5">
-                Describe what to change and press Enter or click Refine.
-              </p>
+              {refineSpeech.isListening && refineSpeech.interimTranscript && (
+                <p className={`mt-1.5 ${compact ? 'text-ui-2xs' : 'text-ui-xs'} text-red-400/80 italic truncate`}>
+                  {refineSpeech.interimTranscript}
+                </p>
+              )}
+              {refineSpeech.isListening && !refineSpeech.interimTranscript && (
+                <div className={`mt-1.5 flex items-center gap-1.5 ${compact ? 'text-ui-2xs' : 'text-ui-xs'} text-red-400/70`}>
+                  <span className="flex gap-0.5">
+                    <span className="inline-block w-1 h-3 rounded-full bg-red-400/80 animate-pulse" style={{ animationDelay: '0ms' }} />
+                    <span className="inline-block w-1 h-2 rounded-full bg-red-400/60 animate-pulse" style={{ animationDelay: '150ms' }} />
+                    <span className="inline-block w-1 h-3.5 rounded-full bg-red-400/80 animate-pulse" style={{ animationDelay: '300ms' }} />
+                    <span className="inline-block w-1 h-2 rounded-full bg-red-400/60 animate-pulse" style={{ animationDelay: '450ms' }} />
+                  </span>
+                  Listening — speak now...
+                </div>
+              )}
+              {!refineSpeech.isListening && (
+                <p className="text-ui-2xs text-muted-foreground/50 mt-1.5">
+                  Describe what to change and press Enter or click Refine.
+                </p>
+              )}
             </div>
           )}
         </div>

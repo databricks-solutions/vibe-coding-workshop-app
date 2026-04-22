@@ -454,7 +454,7 @@ function MilestoneCelebration({
                       <span className="text-sm font-medium text-foreground/80 group-hover:text-foreground transition-colors">
                         {service.name}
                       </span>
-                      <span className="ml-auto text-[10px] text-muted-foreground/50 group-hover:text-muted-foreground transition-colors">
+                      <span className="ml-auto text-ui-2xs text-muted-foreground/50 group-hover:text-muted-foreground transition-colors">
                         Click for details
                       </span>
                     </div>

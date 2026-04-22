@@ -23,7 +23,7 @@ export function BorderBeamButton({ active, onClick, disabled = false, children, 
       <div className="border-beam-wrapper">
         <button
           onClick={onClick}
-          className={`relative z-10 rounded-[calc(0.5rem-2px)] bg-emerald-600 text-white hover:bg-emerald-500 text-[12px] font-medium px-4 py-2 transition-colors ${className}`}
+          className={`relative z-10 rounded-[calc(0.5rem-2px)] bg-emerald-600 text-white hover:bg-emerald-500 text-ui-sm font-medium px-4 py-2 transition-colors ${className}`}
         >
           {children}
         </button>
@@ -35,7 +35,7 @@ export function BorderBeamButton({ active, onClick, disabled = false, children, 
     <button
       onClick={onClick}
       disabled={disabled}
-      className={`text-[12px] font-medium px-4 py-2 rounded-lg transition-all ${
+      className={`text-ui-sm font-medium px-4 py-2 rounded-lg transition-all ${
         disabled
           ? 'bg-secondary/50 text-muted-foreground/50 cursor-not-allowed opacity-50'
           : 'bg-emerald-600 text-white hover:bg-emerald-500'

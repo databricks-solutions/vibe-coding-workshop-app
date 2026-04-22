@@ -310,7 +310,7 @@ const markdownComponentsSmall = {
   ol: ({children}: {children?: React.ReactNode}) => <ol className="my-1 space-y-0.5 list-decimal list-inside">{children}</ol>,
   li: ({children}: {children?: React.ReactNode}) => <li className="flex items-start gap-1"><span className="text-blue-400 shrink-0">•</span><span>{children}</span></li>,
   strong: ({children}: {children?: React.ReactNode}) => <strong className="text-foreground font-semibold">{children}</strong>,
-  code: ({children}: {children?: React.ReactNode}) => <code className="bg-secondary px-1 rounded text-[9px]">{children}</code>,
+  code: ({children}: {children?: React.ReactNode}) => <code className="bg-secondary px-1 rounded text-ui-3xs">{children}</code>,
 };
 
 // =============================================================================
@@ -532,7 +532,7 @@ function ServiceChatModal({
 
         {/* Sticky Documentation Link */}
         <div className="sticky top-0 z-10 px-4 py-2 bg-slate-800/95 backdrop-blur-sm border-b border-slate-700 flex items-center justify-between">
-          <span className="text-[11px] text-slate-400">📚 Official Documentation</span>
+          <span className="text-ui-xs text-slate-400">📚 Official Documentation</span>
           <a
             href={docUrl}
             target="_blank"
@@ -555,7 +555,7 @@ function ServiceChatModal({
               </div>
               
               <div className="max-w-md mx-auto">
-                <p className="text-[11px] text-slate-500 uppercase tracking-wide mb-3 text-center">Quick Questions</p>
+                <p className="text-ui-xs text-slate-500 uppercase tracking-wide mb-3 text-center">Quick Questions</p>
                 <div className="space-y-2">
                   {DEFAULT_QUICK_QUESTIONS.map((qq, idx) => (
                     <button
@@ -569,7 +569,7 @@ function ServiceChatModal({
                     </button>
                   ))}
                 </div>
-                <p className="text-center text-[11px] text-slate-600 mt-4">
+                <p className="text-center text-ui-xs text-slate-600 mt-4">
                   Or type your own question below
                 </p>
               </div>
@@ -734,11 +734,11 @@ function ServiceChat({ serviceName, serviceDescription, docUrl }: ServiceChatPro
         <div className="px-3 py-2 bg-slate-800/80 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <MessageCircle className="w-3 h-3 text-blue-400" />
-            <span className="text-[10px] font-medium text-slate-300">Ask about {serviceName}</span>
+            <span className="text-ui-2xs font-medium text-slate-300">Ask about {serviceName}</span>
           </div>
           <button
             onClick={handleExpand}
-            className="flex items-center gap-1 px-2 py-0.5 text-[9px] bg-blue-600/80 hover:bg-blue-500 text-white rounded transition-colors"
+            className="flex items-center gap-1 px-2 py-0.5 text-ui-3xs bg-blue-600/80 hover:bg-blue-500 text-white rounded transition-colors"
             title="Open full chat window"
           >
             <svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -755,7 +755,7 @@ function ServiceChat({ serviceName, serviceDescription, docUrl }: ServiceChatPro
               <button
                 key={idx}
                 onClick={() => handleQuickQuestion(qq.question)}
-                className="w-full text-left px-2.5 py-1.5 text-[10px] bg-slate-700/60 hover:bg-slate-600 text-slate-300 rounded-lg transition-colors flex items-center gap-2 border border-slate-600/50"
+                className="w-full text-left px-2.5 py-1.5 text-ui-2xs bg-slate-700/60 hover:bg-slate-600 text-slate-300 rounded-lg transition-colors flex items-center gap-2 border border-slate-600/50"
               >
                 {qq.label}
               </button>
@@ -770,17 +770,17 @@ function ServiceChat({ serviceName, serviceDescription, docUrl }: ServiceChatPro
             className="px-3 py-2 max-h-28 overflow-y-auto bg-slate-900/50 relative"
           >
             {isLoading && !response && (
-              <div className="flex items-center gap-2 text-[10px] text-slate-400">
+              <div className="flex items-center gap-2 text-ui-2xs text-slate-400">
                 <Loader2 className="w-3 h-3 animate-spin" />
                 <span>Thinking...</span>
               </div>
             )}
             {response && (
               <>
-                <div className="text-[9px] text-blue-400 mb-1.5 italic">Q: {currentQuestion.slice(0, 50)}...</div>
-                <div className="text-[10px] text-slate-300 leading-relaxed whitespace-pre-line
+                <div className="text-ui-3xs text-blue-400 mb-1.5 italic">Q: {currentQuestion.slice(0, 50)}...</div>
+                <div className="text-ui-2xs text-slate-300 leading-relaxed whitespace-pre-line
                   [&_strong]:text-foreground [&_strong]:font-semibold
-                  [&_code]:bg-secondary [&_code]:px-1 [&_code]:rounded [&_code]:text-[9px]">
+                  [&_code]:bg-secondary [&_code]:px-1 [&_code]:rounded [&_code]:text-ui-3xs">
                   <ReactMarkdown components={markdownComponentsSmall}>
                     {response}
                   </ReactMarkdown>
@@ -796,7 +796,7 @@ function ServiceChat({ serviceName, serviceDescription, docUrl }: ServiceChatPro
           <div className="px-3 py-2 bg-slate-900/30 flex items-center justify-center">
             <button
               onClick={handleExpand}
-              className="flex items-center gap-2 px-3 py-1.5 text-[10px] bg-blue-600 hover:bg-blue-500 text-white rounded-lg transition-colors"
+              className="flex items-center gap-2 px-3 py-1.5 text-ui-2xs bg-blue-600 hover:bg-blue-500 text-white rounded-lg transition-colors"
             >
               <MessageCircle className="w-3 h-3" />
               Open full chat for follow-up questions
@@ -812,7 +812,7 @@ function ServiceChat({ serviceName, serviceDescription, docUrl }: ServiceChatPro
                 onChange={(e) => setQuestion(e.target.value)}
                 placeholder="Or type your own question..."
                 disabled={isLoading}
-                className="flex-1 px-2 py-1.5 text-[10px] bg-slate-800 border border-slate-600 rounded-lg text-foreground placeholder-muted-foreground focus:outline-none focus:border-blue-500 disabled:opacity-50"
+                className="flex-1 px-2 py-1.5 text-ui-2xs bg-slate-800 border border-slate-600 rounded-lg text-foreground placeholder-muted-foreground focus:outline-none focus:border-blue-500 disabled:opacity-50"
                 onClick={(e) => e.stopPropagation()}
               />
               <button
@@ -998,20 +998,20 @@ export function ServicePopover({
         
         {/* Description */}
         <div className="px-4 py-2.5 border-b border-slate-700">
-          <p className="text-[11px] text-slate-300 leading-relaxed">
+          <p className="text-ui-xs text-slate-300 leading-relaxed">
             {service.description}
           </p>
         </div>
         
         {/* Benefits */}
         <div className="px-4 py-2.5 border-b border-slate-700">
-          <h5 className="text-[10px] font-semibold text-emerald-400 uppercase tracking-wide mb-1.5 flex items-center gap-1.5">
+          <h5 className="text-ui-2xs font-semibold text-emerald-400 uppercase tracking-wide mb-1.5 flex items-center gap-1.5">
             <CheckCircle2 className="w-3 h-3" />
             Key Benefits
           </h5>
           <ul className="space-y-0.5">
             {service.benefits.slice(0, 4).map((benefit, idx) => (
-              <li key={idx} className="text-[10px] text-slate-300 flex items-start gap-1.5">
+              <li key={idx} className="text-ui-2xs text-slate-300 flex items-start gap-1.5">
                 <span className="text-emerald-400 mt-0.5">•</span>
                 <span>{benefit}</span>
               </li>
@@ -1026,12 +1026,12 @@ export function ServicePopover({
             target="_blank"
             rel="noopener noreferrer"
             onClick={(e) => e.stopPropagation()}
-            className="flex items-center gap-2 text-[10px] font-medium text-blue-400 hover:text-blue-300 transition-colors"
+            className="flex items-center gap-2 text-ui-2xs font-medium text-blue-400 hover:text-blue-300 transition-colors"
           >
             <ExternalLink className="w-3 h-3" />
             {service.docLabel}
           </a>
-          <span className="text-[9px] text-slate-500 flex items-center gap-1">
+          <span className="text-ui-3xs text-slate-500 flex items-center gap-1">
             <HelpCircle className="w-2.5 h-2.5" />
             Ask a question below
           </span>

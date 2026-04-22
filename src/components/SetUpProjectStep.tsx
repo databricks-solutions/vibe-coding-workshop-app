@@ -11,6 +11,7 @@
 import { useState, useEffect } from 'react';
 import { GitBranch, Copy, Check, CheckCircle, ChevronDown, ChevronUp, ExternalLink, RefreshCw } from 'lucide-react';
 import { BorderBeamButton } from './BorderBeamButton';
+import { useReadOnly } from '../contexts/ReadOnlyContext';
 
 interface SetUpProjectStepProps {
   isComplete: boolean;
@@ -58,7 +59,7 @@ function renderDescription(text: string): React.ReactNode {
             return codeParts.map((codePart, codeIdx) => {
               if (codePart.startsWith('`') && codePart.endsWith('`')) {
                 return (
-                  <code key={`${partIdx}-${codeIdx}`} className="bg-background/80 px-1 py-0.5 rounded text-primary font-mono text-[11px]">
+                  <code key={`${partIdx}-${codeIdx}`} className="bg-background/80 px-1 py-0.5 rounded text-primary font-mono text-ui-xs">
                     {codePart.slice(1, -1)}
                   </code>
                 );
@@ -142,6 +143,7 @@ export function SetUpProjectStep({
   sessionId,
   useCaseLabel,
 }: SetUpProjectStepProps) {
+  const readOnly = useReadOnly();
   const folderName = deriveFolderName(useCaseLabel);
   const cloneCmd = `git clone ${REPO_URL} ${folderName}`;
 
@@ -220,26 +222,27 @@ export function SetUpProjectStep({
         </div>
         
         <div className="flex items-center gap-3">
-          {/* Reload button */}
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              handleReload();
-            }}
-            disabled={isReloading}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-[12px] font-medium rounded bg-emerald-900/40 text-emerald-300 hover:bg-emerald-900/60 transition-all group"
-            title="Reload with latest parameters"
-          >
-            <RefreshCw className={`w-3 h-3 ${isReloading ? 'animate-spin' : 'group-hover:rotate-180 transition-transform duration-300'}`} />
-            Reload
-          </button>
+          {!readOnly && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                handleReload();
+              }}
+              disabled={isReloading}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-ui-sm font-medium rounded bg-emerald-900/40 text-emerald-300 hover:bg-emerald-900/60 transition-all group"
+              title="Reload with latest parameters"
+            >
+              <RefreshCw className={`w-3 h-3 ${isReloading ? 'animate-spin' : 'group-hover:rotate-180 transition-transform duration-300'}`} />
+              Reload
+            </button>
+          )}
 
           {isComplete ? (
             <span className="flex items-center gap-1.5 text-emerald-400 text-sm font-medium bg-emerald-500/15 border border-emerald-500/30 px-3 py-1 rounded-lg animate-fade-in">
               <CheckCircle className="w-3.5 h-3.5" />
               Done
             </span>
-          ) : (
+          ) : !readOnly ? (
             <BorderBeamButton
               active={isPreviousStepComplete}
               onClick={(e) => {
@@ -251,7 +254,7 @@ export function SetUpProjectStep({
             >
               Done
             </BorderBeamButton>
-          )}
+          ) : null}
           
           {isExpanded ? (
             <ChevronUp className="w-5 h-5 text-muted-foreground" />
@@ -266,7 +269,7 @@ export function SetUpProjectStep({
         <div className="px-4 pb-4 space-y-6 border-t border-border pt-4">
           {/* Prerequisite hint */}
           {!isPreviousStepComplete && !isComplete && (
-            <div className="px-3 py-2.5 rounded-md bg-amber-500/10 border border-amber-500/20 text-amber-300 text-[12px] flex items-center gap-2">
+            <div className="px-3 py-2.5 rounded-md bg-amber-500/10 border border-amber-500/20 text-amber-300 text-ui-sm flex items-center gap-2">
               <svg className="w-4 h-4 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
               </svg>
@@ -380,7 +383,7 @@ In **Cursor**, click on the model selector in the Agent panel and choose the lat
                     <div className="mt-4 rounded-lg overflow-hidden border border-slate-600/50 bg-slate-900/80 max-w-sm">
                       <div className="px-3 py-2 border-b border-slate-700/50">
                         <p className="text-xs text-red-400 font-medium">Use latest Claude model</p>
-                        <p className="text-[10px] text-slate-500">Plan context, / for commands</p>
+                        <p className="text-ui-2xs text-slate-500">Plan context, / for commands</p>
                       </div>
                       <div className="px-3 py-2 flex items-center gap-2">
                         <span className="text-slate-400 text-xs">∞ Agent</span>
@@ -462,7 +465,7 @@ In **Cursor**, click on the model selector in the Agent panel and choose the lat
           
           {/* Bottom Mark Done Button */}
           <div className="flex justify-end pt-4 border-t border-border/50">
-            {!isComplete && (
+            {!isComplete && !readOnly && (
               <BorderBeamButton
                 active={isPreviousStepComplete}
                 onClick={onMarkComplete}
