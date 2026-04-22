@@ -347,7 +347,7 @@ export function Prerequisites({ isComplete = false, onMarkComplete, highlightMar
             {/* Steps count */}
             {totalCount > 0 && !isComplete && (
               <span className="text-ui-xs font-medium px-2.5 py-1 rounded-full bg-slate-800/60 text-slate-300">
-                {totalCount} steps
+                {totalCount === 1 ? '1 step' : `${totalCount} steps`}
               </span>
             )}
             {/* Chevron */}
