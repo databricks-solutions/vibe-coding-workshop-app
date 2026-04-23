@@ -158,6 +158,7 @@ export function WorkflowStep({
           expected_output: meta.expected_output || '',
           how_to_apply_images: meta.how_to_apply_images || [],
           expected_output_images: meta.expected_output_images || [],
+          coding_assistant_variant: meta.coding_assistant_variant,
         }));
         setIsLoadingMetadata(false);
       })
@@ -283,6 +284,7 @@ export function WorkflowStep({
           expected_output: meta.expected_output || '',
           how_to_apply_images: meta.how_to_apply_images || [],
           expected_output_images: meta.expected_output_images || [],
+          coding_assistant_variant: meta.coding_assistant_variant,
         }));
         setIsLoadingMetadata(false);
       })
@@ -354,6 +356,26 @@ export function WorkflowStep({
             {isStreaming && !isExpanded && !retryStatus && (
               <span className="text-ui-2xs font-medium px-2 py-0.5 rounded-full bg-primary/20 text-primary animate-pulse inline-flex items-center gap-1">
                 <Loader2 className="w-3 h-3 animate-spin" /> Generating...
+              </span>
+            )}
+            {generatedContent?.coding_assistant_variant
+              && generatedContent.coding_assistant_variant !== '__default__' && (
+              <span
+                className="text-ui-2xs font-medium px-2 py-0.5 rounded-full bg-violet-500/15 text-violet-300 border border-violet-500/30"
+                title={`This step is using a prompt variant for ${
+                  generatedContent.coding_assistant_variant === 'genie-code'
+                    ? 'Genie Code'
+                    : generatedContent.coding_assistant_variant === 'coda'
+                    ? 'CoDA'
+                    : generatedContent.coding_assistant_variant
+                }.`}
+              >
+                Prompt variant:{' '}
+                {generatedContent.coding_assistant_variant === 'genie-code'
+                  ? 'Genie Code'
+                  : generatedContent.coding_assistant_variant === 'coda'
+                  ? 'CoDA'
+                  : generatedContent.coding_assistant_variant}
               </span>
             )}
             {onToggleExpand && (

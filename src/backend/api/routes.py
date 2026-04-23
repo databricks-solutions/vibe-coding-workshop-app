@@ -153,14 +153,17 @@ def _refresh_lakebase_cache():
             _lakebase_cache["usecase_descriptions"] = usecase_descriptions
             
             # Fetch latest section_input_prompts (PostgreSQL syntax with DISTINCT ON)
+            # Keyed by (section_tag, coding_assistant) so we cache the latest active row
+            # for both the Default and any per-assistant forks.
             section_prompts_sql = f"""
-                SELECT DISTINCT ON (section_tag)
-                    section_tag, input_template, system_prompt, section_title, section_description, 
+                SELECT DISTINCT ON (section_tag, coding_assistant)
+                    section_tag, coding_assistant, input_template, system_prompt,
+                    section_title, section_description,
                     order_number, version, how_to_apply, expected_output, bypass_llm,
                     how_to_apply_images, expected_output_images
                 FROM {schema}.section_input_prompts
                 WHERE is_active = TRUE
-                ORDER BY section_tag, version DESC
+                ORDER BY section_tag, coding_assistant, version DESC
             """
             section_prompts = execute_query(section_prompts_sql)
             
@@ -196,6 +199,158 @@ def get_section_input_prompts_from_lakebase() -> List[Dict]:
             logger.info(f"[Lakebase] Loaded {len(_lakebase_cache['section_input_prompts'])} section input prompts from database")
             return _lakebase_cache["section_input_prompts"]
     return None  # Fallback to YAML
+
+
+# =============================================================================
+# CODING-ASSISTANT PROMPT FORKS
+# =============================================================================
+# Each section_input_prompts row carries a coding_assistant key:
+#   '__default__' (shared prompt) | 'genie-code' | 'coda'.
+# Forks override only the prompt content fields (input_template, system_prompt,
+# bypass_llm); shared fields (title, description, how_to_apply, expected_output,
+# images, order_number, step_enabled) remain authoritative on the '__default__'
+# row. Runtime resolution prefers the fork row for the session's assistant and
+# falls back to the '__default__' row when no fork exists.
+
+DEFAULT_CODING_ASSISTANT_KEY = "__default__"
+FORKABLE_CODING_ASSISTANTS = ("genie-code", "coda")
+ALLOWED_CODING_ASSISTANT_KEYS = (DEFAULT_CODING_ASSISTANT_KEY,) + FORKABLE_CODING_ASSISTANTS
+
+
+def _normalize_coding_assistant(value: Optional[str]) -> str:
+    """Collapse any non-forkable id (or None/empty) to DEFAULT_CODING_ASSISTANT_KEY."""
+    if value in FORKABLE_CODING_ASSISTANTS:
+        return value  # type: ignore[return-value]
+    return DEFAULT_CODING_ASSISTANT_KEY
+
+
+def _validate_coding_assistant_key(value: Optional[str]) -> str:
+    """Validate explicit coding_assistant input from API callers.
+    Empty/None → DEFAULT_CODING_ASSISTANT_KEY. Unknown values → HTTP 400.
+    """
+    if value is None or value == "":
+        return DEFAULT_CODING_ASSISTANT_KEY
+    if value not in ALLOWED_CODING_ASSISTANT_KEYS:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"invalid coding_assistant '{value}'. "
+                f"Allowed: {', '.join(ALLOWED_CODING_ASSISTANT_KEYS)}"
+            ),
+        )
+    return value
+
+
+def _get_session_coding_assistant(session_id: Optional[str]) -> str:
+    """Read the selected coding_assistant from session_parameters.
+    Returns DEFAULT_CODING_ASSISTANT_KEY when no session, no row, or a
+    non-forkable selection is present.
+    """
+    if not session_id:
+        return DEFAULT_CODING_ASSISTANT_KEY
+    if not LAKEBASE_SERVICE_AVAILABLE or not is_lakebase_configured():
+        return DEFAULT_CODING_ASSISTANT_KEY
+    try:
+        schema = get_schema()
+        sql = f"""
+            SELECT COALESCE(session_parameters, '{{}}') as session_parameters
+            FROM {schema}.sessions
+            WHERE session_id = %s
+        """
+        rows = execute_query(sql, (session_id,))
+        if not rows:
+            return DEFAULT_CODING_ASSISTANT_KEY
+        params = rows[0].get("session_parameters") or {}
+        if isinstance(params, str):
+            try:
+                params = json.loads(params)
+            except json.JSONDecodeError:
+                params = {}
+        return _normalize_coding_assistant(params.get("coding_assistant"))
+    except Exception as e:  # pragma: no cover - defensive: never break runtime on session read
+        logger.warning(f"[Session] Failed to read coding_assistant for {session_id}: {e}")
+        return DEFAULT_CODING_ASSISTANT_KEY
+
+
+def _parse_image_field(value: Any) -> List[Any]:
+    """Normalize a possibly-JSON-encoded images field into a list."""
+    if not value:
+        return []
+    if isinstance(value, str):
+        try:
+            parsed = json.loads(value)
+            return parsed if isinstance(parsed, list) else []
+        except json.JSONDecodeError:
+            return []
+    return value if isinstance(value, list) else []
+
+
+def _section_row_to_template(row: Dict[str, Any]) -> Dict[str, Any]:
+    """Convert a section_input_prompts row into the legacy template dict shape."""
+    return {
+        "input": row.get("input_template", ""),
+        "system_prompt": row.get("system_prompt", ""),
+        "how_to_apply": row.get("how_to_apply", ""),
+        "expected_output": row.get("expected_output", ""),
+        "how_to_apply_images": _parse_image_field(row.get("how_to_apply_images")),
+        "expected_output_images": _parse_image_field(row.get("expected_output_images")),
+        "section_title": row.get("section_title", ""),
+        "section_description": row.get("section_description", ""),
+        "order_number": row.get("order_number", 99),
+        "bypass_llm": row.get("bypass_llm", False),
+    }
+
+
+def get_section_input_template(
+    section_tag: str, coding_assistant: Optional[str]
+) -> Dict[str, Any]:
+    """Fork-aware resolver for a single section's template.
+
+    Prompt content (input_template, system_prompt, bypass_llm) is taken from the
+    fork row when one exists for (section_tag, coding_assistant); otherwise from
+    the Default row. Shared fields (title, description, how_to_apply,
+    expected_output, images, order_number) are ALWAYS taken from the Default row
+    — fork rows may carry stale snapshots of shared fields that the UI
+    deliberately renders read-only.
+    """
+    assistant = _normalize_coding_assistant(coding_assistant)
+    rows = get_section_input_prompts_from_lakebase() or []
+    by_key: Dict[tuple, Dict[str, Any]] = {}
+    for r in rows:
+        key = (r.get("section_tag"), r.get("coding_assistant") or DEFAULT_CODING_ASSISTANT_KEY)
+        by_key[key] = r
+
+    default_row = by_key.get((section_tag, DEFAULT_CODING_ASSISTANT_KEY))
+    fork_row = (
+        by_key.get((section_tag, assistant))
+        if assistant != DEFAULT_CODING_ASSISTANT_KEY
+        else None
+    )
+
+    if not default_row and not fork_row:
+        return {}
+
+    # Prompt content: fork wins if present, otherwise default.
+    content_source = fork_row or default_row
+    # Shared fields: always default when available, fallback to content source.
+    shared_source = default_row or content_source
+
+    template = _section_row_to_template(content_source or {})
+    if shared_source is not None and shared_source is not content_source:
+        shared = _section_row_to_template(shared_source)
+        # Carry shared fields from the Default row regardless of fork content.
+        for key in (
+            "section_title",
+            "section_description",
+            "how_to_apply",
+            "expected_output",
+            "how_to_apply_images",
+            "expected_output_images",
+            "order_number",
+        ):
+            template[key] = shared.get(key, template.get(key))
+    return template
+
 
 # =============================================================================
 # UNIFIED CONFIG ACCESS (Lakebase with YAML fallback)
@@ -369,6 +524,7 @@ class TestPromptRequest(BaseModel):
     system_prompt: str  # Custom system prompt to test
     input_template: str  # Custom input template to test
     bypass_llm: bool = False  # If True, return input_template as-is without LLM processing
+    coding_assistant: Optional[str] = None  # Informational only: which fork is being tested
 
 class MetadataCsvRequest(BaseModel):
     """Request model for processing uploaded schema metadata CSV"""
@@ -461,6 +617,10 @@ class SectionInputCreate(BaseModel):
     how_to_apply: Optional[str] = Field(None, description="Instructions on how to apply the generated prompt")
     expected_output: Optional[str] = Field(None, description="Sample expected output with links/images")
     bypass_llm: Optional[bool] = Field(None, description="If True, return input_template as-is without LLM processing. None = inherit from previous version.")
+    coding_assistant: Optional[str] = Field(
+        None,
+        description="Coding assistant key. Defaults to '__default__' (shared prompt). Allowed: '__default__', 'genie-code', 'coda'.",
+    )
 
 
 class SectionInputResponse(BaseModel):
@@ -477,6 +637,7 @@ class SectionInputResponse(BaseModel):
     how_to_apply_images: List[ImageMetadata] = []
     expected_output_images: List[ImageMetadata] = []
     bypass_llm: bool = False  # If True, return input_template as-is without LLM processing
+    coding_assistant: Optional[str] = "__default__"
     step_enabled: bool = True
     version: int
     is_active: bool = True
@@ -633,42 +794,26 @@ def get_prerequisites_list() -> List[Dict]:
     return get_config().get('prerequisites', [])
 
 def get_section_input_prompts_map() -> Dict[str, Dict[str, Any]]:
-    """Get section input prompts - from Lakebase database only (no YAML fallback)."""
+    """Get section input prompts keyed by section_tag - Default rows only.
+
+    Fork rows (coding_assistant != '__default__') are excluded so this map's
+    contract is preserved for all existing callers. Use
+    get_section_input_template(section_tag, coding_assistant) for fork-aware
+    resolution.
+    """
     lakebase_data = get_section_input_prompts_from_lakebase()
     if lakebase_data:
-        # Convert list to map by section_tag
-        prompts_map = {}
+        prompts_map: Dict[str, Dict[str, Any]] = {}
         for row in lakebase_data:
             section_tag = row.get("section_tag")
-            if section_tag:
-                # Parse image fields if they're strings
-                how_to_apply_images = row.get("how_to_apply_images", [])
-                expected_output_images = row.get("expected_output_images", [])
-                if isinstance(how_to_apply_images, str):
-                    try:
-                        how_to_apply_images = json.loads(how_to_apply_images)
-                    except json.JSONDecodeError:
-                        how_to_apply_images = []
-                if isinstance(expected_output_images, str):
-                    try:
-                        expected_output_images = json.loads(expected_output_images)
-                    except json.JSONDecodeError:
-                        expected_output_images = []
-                
-                prompts_map[section_tag] = {
-                    "input": row.get("input_template", ""),
-                    "system_prompt": row.get("system_prompt", ""),
-                    "how_to_apply": row.get("how_to_apply", ""),
-                    "expected_output": row.get("expected_output", ""),
-                    "how_to_apply_images": how_to_apply_images or [],
-                    "expected_output_images": expected_output_images or [],
-                    "section_title": row.get("section_title", ""),
-                    "section_description": row.get("section_description", ""),
-                    "order_number": row.get("order_number", 99),
-                    "bypass_llm": row.get("bypass_llm", False)
-                }
+            if not section_tag:
+                continue
+            assistant = row.get("coding_assistant") or DEFAULT_CODING_ASSISTANT_KEY
+            if assistant != DEFAULT_CODING_ASSISTANT_KEY:
+                continue  # Skip fork rows - callers expect shared/default content.
+            prompts_map[section_tag] = _section_row_to_template(row)
         return prompts_map
-    
+
     # No YAML fallback - database is required
     logger.warning("[Database Required] No section_input_prompts found in Lakebase. Run setup-lakebase.sh --recreate to seed data.")
     return {}
@@ -945,9 +1090,34 @@ def get_section_input_content(industry: str, use_case: str, section_tag: str, pr
     
     # Load section inputs from config
     section_input_prompts_config = get_section_input_prompts_map()
-    
-    # Get template for this section (or default)
-    template = section_input_prompts_config.get(section_tag, section_input_prompts_config.get('default', {}))
+
+    # Resolve the correct prompt for the session's coding assistant.
+    # Falls back to the legacy 'default' section_tag entry if the requested tag
+    # has no row in the database at all (preserves pre-existing behavior).
+    assistant_key = _get_session_coding_assistant(session_id)
+    fork_template = get_section_input_template(section_tag, assistant_key)
+    template = (
+        fork_template
+        or section_input_prompts_config.get(section_tag)
+        or section_input_prompts_config.get('default', {})
+    )
+    # Resolve which assistant variant actually provided the prompt content.
+    # If a fork row exists for (section_tag, assistant_key), the fork wins;
+    # otherwise the Default row is used (even when a non-default assistant is
+    # selected). This value is returned to the UI so it can render a pill.
+    resolved_variant = DEFAULT_CODING_ASSISTANT_KEY
+    if assistant_key != DEFAULT_CODING_ASSISTANT_KEY:
+        _rows = get_section_input_prompts_from_lakebase() or []
+        _has_fork = any(
+            r.get("section_tag") == section_tag and r.get("coding_assistant") == assistant_key
+            for r in _rows
+        )
+        if _has_fork:
+            resolved_variant = assistant_key
+        logger.info(
+            f"[Prompt Resolver] section_tag={section_tag} assistant={assistant_key} "
+            f"variant={'fork' if _has_fork else 'default'}"
+        )
     
     # Replace parameters in templates
     input_text = template.get('input', '')
@@ -1085,6 +1255,7 @@ Generate a detailed, actionable prompt for {section_tag} in a {industry_name} {u
         "expected_output_images": expected_output_images,
         "bypass_llm": bypass_llm,
         "_brand_url": brand_url,
+        "coding_assistant_variant": resolved_variant,
     }
 
 
@@ -1834,6 +2005,9 @@ async def get_section_metadata_endpoint(
         "expected_output": section_content.get("expected_output", ""),
         "how_to_apply_images": section_content.get("how_to_apply_images", []),
         "expected_output_images": section_content.get("expected_output_images", []),
+        "coding_assistant_variant": section_content.get(
+            "coding_assistant_variant", DEFAULT_CODING_ASSISTANT_KEY
+        ),
     }
 
 
@@ -2360,6 +2534,19 @@ async def test_prompt_stream(request: TestPromptRequest):
     - {type: 'done'} - Stream complete
     - {type: 'error', error: '...'} - Error occurred
     """
+    # Diagnostic log: confirm which variant/content the Config page actually sent.
+    # This is purely informational — the endpoint uses the request body verbatim.
+    _it_preview = (request.input_template or "")[:120].replace("\n", "\\n")
+    _sp_preview = (request.system_prompt or "")[:120].replace("\n", "\\n")
+    logger.info(
+        f"[Test-Prompt] section_tag={request.section_tag} "
+        f"coding_assistant={request.coding_assistant or '__default__'} "
+        f"bypass_llm={request.bypass_llm} "
+        f"input_len={len(request.input_template or '')} "
+        f"system_len={len(request.system_prompt or '')} "
+        f"input_preview={_it_preview!r} "
+        f"system_preview={_sp_preview!r}"
+    )
     return StreamingResponse(
         stream_test_prompt_response(
             request.industry,
@@ -2988,37 +3175,44 @@ async def delete_industry(industry: str) -> Dict[str, Any]:
 # ---------- Section Input Endpoints ----------
 
 @router.get("/config/section-inputs/latest")
-async def get_latest_section_inputs(response: Response) -> List[SectionInputResponse]:
+async def get_latest_section_inputs(
+    response: Response,
+    coding_assistant: Optional[str] = None,
+) -> List[SectionInputResponse]:
     """
-    Get the latest version of all section inputs.
-    Returns one row per section_tag with the highest version.
+    Get the latest version of all section inputs for a coding assistant.
+
+    Returns one row per section_tag with the highest version, scoped to the
+    requested coding_assistant (defaults to the shared '__default__' row).
     Ordered by order_number ascending.
     """
-    logger.info("[Config API] Fetching latest section inputs")
-    
+    assistant_key = _validate_coding_assistant_key(coding_assistant)
+    logger.info(f"[Config API] Fetching latest section inputs (assistant={assistant_key})")
+
     # Prevent browser caching and clear backend cache for fresh data
     response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
     response.headers["Pragma"] = "no-cache"
     response.headers["Expires"] = "0"
     clear_lakebase_cache()
-    
+
     schema = get_schema()
     sql = f"""
         SELECT DISTINCT ON (section_tag)
             input_id, section_tag, section_title, section_description,
             input_template, system_prompt, order_number, how_to_apply, expected_output,
             how_to_apply_images, expected_output_images,
-            bypass_llm, step_enabled,
+            bypass_llm, coding_assistant, step_enabled,
             version, is_active,
             TO_CHAR(inserted_at, 'YYYY-MM-DD HH24:MI:SS') as inserted_at,
             TO_CHAR(updated_at, 'YYYY-MM-DD HH24:MI:SS') as updated_at,
             created_by
         FROM {schema}.section_input_prompts
         WHERE is_active = TRUE
+          AND coding_assistant = %s
         ORDER BY section_tag, version DESC
     """
-    
-    results = execute_query(sql)
+
+    results = execute_query(sql, (assistant_key,))
     # Sort by order_number after fetching (since DISTINCT ON doesn't allow different ORDER BY)
     if results:
         results = sorted(results, key=lambda x: (x.get('order_number') or 999, x.get('section_tag', '')))
@@ -3044,55 +3238,74 @@ async def get_latest_section_inputs(response: Response) -> List[SectionInputResp
 
 
 @router.get("/config/section-inputs/versions")
-async def get_section_input_versions(section_tag: str) -> List[ConfigVersionInfo]:
+async def get_section_input_versions(
+    section_tag: str,
+    coding_assistant: Optional[str] = None,
+) -> List[ConfigVersionInfo]:
     """
-    Get versions of a specific section input.
-    Returns only the 5 most recent versions (sorted by version descending).
+    Get versions of a specific section input for a coding assistant.
+    Returns only the 5 most recent ACTIVE versions (sorted by version
+    descending). Inactive rows are hidden so re-forking after a delete does
+    not leave dangling entries in the history dropdown.
     """
-    logger.info(f"[Config API] Fetching versions for section: {section_tag}")
-    
+    assistant_key = _validate_coding_assistant_key(coding_assistant)
+    logger.info(
+        f"[Config API] Fetching versions for section: {section_tag} (assistant={assistant_key})"
+    )
+
     schema = get_schema()
     sql = f"""
-        SELECT version, 
-               TO_CHAR(inserted_at, 'YYYY-MM-DD HH24:MI:SS') as inserted_at, 
-               TO_CHAR(updated_at, 'YYYY-MM-DD HH24:MI:SS') as updated_at, 
+        SELECT version,
+               TO_CHAR(inserted_at, 'YYYY-MM-DD HH24:MI:SS') as inserted_at,
+               TO_CHAR(updated_at, 'YYYY-MM-DD HH24:MI:SS') as updated_at,
                created_by, is_active
         FROM {schema}.section_input_prompts
         WHERE section_tag = %s
+          AND coding_assistant = %s
+          AND is_active = TRUE
         ORDER BY version DESC
         LIMIT 5
     """
-    
-    results = execute_query(sql, (section_tag,))
-    
+
+    results = execute_query(sql, (section_tag, assistant_key))
+
     if not results:
         return [ConfigVersionInfo(version=1, is_active=True)]
-    
+
     return [ConfigVersionInfo(**row) for row in results]
 
 
 @router.get("/config/section-inputs/version/{section_tag}/{version}")
-async def get_section_input_by_version(section_tag: str, version: int) -> SectionInputResponse:
+async def get_section_input_by_version(
+    section_tag: str,
+    version: int,
+    coding_assistant: Optional[str] = None,
+) -> SectionInputResponse:
     """
-    Get a specific version of a section input.
+    Get a specific version of a section input for a coding assistant.
     """
-    logger.info(f"[Config API] Fetching {section_tag} version {version}")
-    
+    assistant_key = _validate_coding_assistant_key(coding_assistant)
+    logger.info(
+        f"[Config API] Fetching {section_tag} version {version} (assistant={assistant_key})"
+    )
+
     schema = get_schema()
     sql = f"""
         SELECT input_id, section_tag, section_title, section_description,
                input_template, system_prompt, order_number, how_to_apply, expected_output,
                how_to_apply_images, expected_output_images,
-               bypass_llm,
+               bypass_llm, coding_assistant,
                version, is_active,
                TO_CHAR(inserted_at, 'YYYY-MM-DD HH24:MI:SS') as inserted_at,
                TO_CHAR(updated_at, 'YYYY-MM-DD HH24:MI:SS') as updated_at,
                created_by
         FROM {schema}.section_input_prompts
-        WHERE section_tag = %s AND version = %s
+        WHERE section_tag = %s
+          AND version = %s
+          AND coding_assistant = %s
     """
-    
-    results = execute_query(sql, (section_tag, version))
+
+    results = execute_query(sql, (section_tag, version, assistant_key))
     
     if not results:
         raise HTTPException(status_code=404, detail=f"Version {version} not found for section {section_tag}")
@@ -3115,60 +3328,105 @@ async def get_section_input_by_version(section_tag: str, version: int) -> Sectio
 @router.post("/config/section-inputs")
 async def create_section_input(request: SectionInputCreate) -> SectionInputResponse:
     """
-    Create a new version of a section input.
-    Computes next version automatically (max + 1).
-    Never updates existing rows - always appends.
+    Create a new version of a section input for a coding assistant.
+
+    Computes next version automatically (max + 1) scoped to (section_tag,
+    coding_assistant). Never updates existing rows - always appends. For fork
+    assistants (genie-code, coda), an active Default row for the same
+    section_tag must already exist.
     """
-    logger.info(f"[Config API] Creating new section input version for {request.section_tag}")
-    
+    assistant_key = _validate_coding_assistant_key(request.coding_assistant)
+    logger.info(
+        f"[Config API] Creating new section input version for {request.section_tag} "
+        f"(assistant={assistant_key})"
+    )
+
     schema = get_schema()
     order_number = request.order_number
     current_user = _get_current_user()
-    
-    # Get current max version, existing order_number, and bypass_llm for this section_tag
+
+    # Forks require an existing active Default row (that's where shared fields live).
+    if assistant_key != DEFAULT_CODING_ASSISTANT_KEY:
+        default_exists = execute_query(
+            f"""
+                SELECT 1 FROM {schema}.section_input_prompts
+                WHERE section_tag = %s AND coding_assistant = %s AND is_active = TRUE
+                LIMIT 1
+            """,
+            (request.section_tag, DEFAULT_CODING_ASSISTANT_KEY),
+        )
+        if not default_exists:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f"Cannot save fork '{assistant_key}' for section_tag "
+                    f"'{request.section_tag}' because no Default row exists. "
+                    f"Create a Default prompt first."
+                ),
+            )
+
+    # Get current max version + default order_number scoped to (section_tag, coding_assistant).
+    # order_number falls back to the Default row if this fork has no rows yet.
     version_sql = f"""
         SELECT COALESCE(MAX(version), 0) as max_version,
                MAX(order_number) as existing_order
         FROM {schema}.section_input_prompts
-        WHERE section_tag = %s
+        WHERE section_tag = %s AND coding_assistant = %s
     """
-    version_result = execute_query(version_sql, (request.section_tag,))
+    version_result = execute_query(version_sql, (request.section_tag, assistant_key))
     next_version = int(version_result[0].get('max_version', 0)) + 1 if version_result else 1
-    
-    # Use existing order_number if not provided
+
     if order_number is None and version_result and version_result[0].get('existing_order'):
         order_number = int(version_result[0]['existing_order'])
-    
-    # Resolve bypass_llm: inherit from previous version when not explicitly provided
+    if order_number is None and assistant_key != DEFAULT_CODING_ASSISTANT_KEY:
+        # New fork with no prior rows: inherit order_number from the Default row.
+        default_order = execute_query(
+            f"""
+                SELECT MAX(order_number) as existing_order
+                FROM {schema}.section_input_prompts
+                WHERE section_tag = %s AND coding_assistant = %s
+            """,
+            (request.section_tag, DEFAULT_CODING_ASSISTANT_KEY),
+        )
+        if default_order and default_order[0].get('existing_order') is not None:
+            order_number = int(default_order[0]['existing_order'])
+
+    # Resolve bypass_llm: inherit from previous version of this (tag, assistant).
     resolved_bypass_llm = request.bypass_llm
     if resolved_bypass_llm is None:
         prev_bypass_sql = f"""
             SELECT bypass_llm FROM {schema}.section_input_prompts
-            WHERE section_tag = %s AND is_active = TRUE
+            WHERE section_tag = %s AND coding_assistant = %s AND is_active = TRUE
             ORDER BY version DESC LIMIT 1
         """
-        prev_result = execute_query(prev_bypass_sql, (request.section_tag,))
+        prev_result = execute_query(prev_bypass_sql, (request.section_tag, assistant_key))
         resolved_bypass_llm = prev_result[0].get('bypass_llm', False) if prev_result else False
-        logger.info(f"[Config API] bypass_llm not provided for {request.section_tag}, inheriting previous value: {resolved_bypass_llm}")
+        logger.info(
+            f"[Config API] bypass_llm not provided for {request.section_tag} "
+            f"(assistant={assistant_key}), inheriting previous value: {resolved_bypass_llm}"
+        )
     else:
-        # Warn if bypass_llm is being changed from TRUE to FALSE
         prev_bypass_sql = f"""
             SELECT bypass_llm FROM {schema}.section_input_prompts
-            WHERE section_tag = %s AND is_active = TRUE
+            WHERE section_tag = %s AND coding_assistant = %s AND is_active = TRUE
             ORDER BY version DESC LIMIT 1
         """
-        prev_result = execute_query(prev_bypass_sql, (request.section_tag,))
+        prev_result = execute_query(prev_bypass_sql, (request.section_tag, assistant_key))
         if prev_result and prev_result[0].get('bypass_llm') is True and resolved_bypass_llm is False:
-            logger.warning(f"[Config API] bypass_llm changing from TRUE to FALSE for {request.section_tag} — was this intentional?")
-    
+            logger.warning(
+                f"[Config API] bypass_llm changing from TRUE to FALSE for "
+                f"{request.section_tag} (assistant={assistant_key}) — was this intentional?"
+            )
+
     # Insert new row with computed version
     insert_sql = f"""
-        INSERT INTO {schema}.section_input_prompts 
+        INSERT INTO {schema}.section_input_prompts
         (section_tag, section_title, section_description, input_template, system_prompt,
-         order_number, how_to_apply, expected_output, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
-        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, %s)
+         order_number, how_to_apply, expected_output, bypass_llm, coding_assistant,
+         version, is_active, inserted_at, updated_at, created_by)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, %s)
     """
-    
+
     success = execute_insert(insert_sql, (
         request.section_tag,
         request.section_title or '',
@@ -3179,18 +3437,39 @@ async def create_section_input(request: SectionInputCreate) -> SectionInputRespo
         request.how_to_apply or '',
         request.expected_output or '',
         resolved_bypass_llm,
+        assistant_key,
         next_version,
-        current_user
+        current_user,
     ))
-    
+
     if not success:
+        # A concurrent save could have claimed the same (section_tag,
+        # coding_assistant, version) slot. The partial unique index rejects
+        # the duplicate; surface 409 so the admin knows to reload and retry.
+        race_sql = f"""
+            SELECT 1 FROM {schema}.section_input_prompts
+            WHERE section_tag = %s AND coding_assistant = %s
+              AND version = %s AND is_active = TRUE
+            LIMIT 1
+        """
+        if execute_query(race_sql, (request.section_tag, assistant_key, next_version)):
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    f"Version {next_version} for {request.section_tag} "
+                    f"(assistant={assistant_key}) was created by a concurrent "
+                    f"save. Reload to pick up the latest version and retry."
+                ),
+            )
         raise HTTPException(status_code=500, detail="Failed to create section input")
-    
-    # Invalidate cache so next read gets fresh data
+
     _invalidate_cache()
-    
-    logger.info(f"[Config API] Created section input version {next_version} for {request.section_tag}")
-    
+
+    logger.info(
+        f"[Config API] Created section input version {next_version} for "
+        f"{request.section_tag} (assistant={assistant_key})"
+    )
+
     return SectionInputResponse(
         section_tag=request.section_tag,
         section_title=request.section_title,
@@ -3200,10 +3479,209 @@ async def create_section_input(request: SectionInputCreate) -> SectionInputRespo
         order_number=order_number,
         how_to_apply=request.how_to_apply,
         expected_output=request.expected_output,
+        bypass_llm=bool(resolved_bypass_llm),
+        coding_assistant=assistant_key,
         version=next_version,
         is_active=True,
-        created_by=current_user
+        created_by=current_user,
     )
+
+
+class SectionInputForkRequest(BaseModel):
+    """Request body for creating a prompt fork seeded from the current Default row."""
+    section_tag: str = Field(..., min_length=1, description="Section identifier")
+    coding_assistant: str = Field(
+        ...,
+        description="Target fork assistant. Must be one of: 'genie-code', 'coda'.",
+    )
+
+
+@router.post("/config/section-inputs/fork")
+async def fork_section_input(request: SectionInputForkRequest) -> SectionInputResponse:
+    """
+    Create a brand-new fork for (section_tag, coding_assistant), seeded from the
+    current active Default row. Version starts at 1 for the new fork.
+
+    - 400 if coding_assistant is not one of the forkable ids.
+    - 400 if no active Default row exists for the section_tag.
+    - 409 if an active fork already exists for (section_tag, coding_assistant).
+    """
+    _validate_section_tag(request.section_tag)
+    assistant_key = _validate_coding_assistant_key(request.coding_assistant)
+    if assistant_key == DEFAULT_CODING_ASSISTANT_KEY:
+        raise HTTPException(
+            status_code=400,
+            detail="coding_assistant must be a forkable id (e.g. 'genie-code' or 'coda')",
+        )
+
+    logger.info(
+        f"[Config API] Forking {request.section_tag} for assistant={assistant_key}"
+    )
+
+    schema = get_schema()
+    current_user = _get_current_user()
+
+    # Reject duplicate forks (any existing active row for (tag, assistant)).
+    existing_fork_sql = f"""
+        SELECT 1 FROM {schema}.section_input_prompts
+        WHERE section_tag = %s AND coding_assistant = %s AND is_active = TRUE
+        LIMIT 1
+    """
+    if execute_query(existing_fork_sql, (request.section_tag, assistant_key)):
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"A fork for '{assistant_key}' already exists on section_tag "
+                f"'{request.section_tag}'. Delete it first or edit the existing fork."
+            ),
+        )
+
+    # Read latest active Default row to seed the fork.
+    default_sql = f"""
+        SELECT section_title, section_description, input_template, system_prompt,
+               order_number, how_to_apply, expected_output, bypass_llm, step_enabled
+        FROM {schema}.section_input_prompts
+        WHERE section_tag = %s AND coding_assistant = %s AND is_active = TRUE
+        ORDER BY version DESC
+        LIMIT 1
+    """
+    default_rows = execute_query(
+        default_sql, (request.section_tag, DEFAULT_CODING_ASSISTANT_KEY)
+    )
+    if not default_rows:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"No active Default row for section_tag '{request.section_tag}'. "
+                f"Create a Default prompt before forking."
+            ),
+        )
+
+    seed = default_rows[0]
+
+    insert_sql = f"""
+        INSERT INTO {schema}.section_input_prompts
+        (section_tag, section_title, section_description, input_template, system_prompt,
+         order_number, how_to_apply, expected_output, bypass_llm, step_enabled,
+         coding_assistant, version, is_active, inserted_at, updated_at, created_by)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 1, TRUE,
+                CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, %s)
+    """
+    success = execute_insert(insert_sql, (
+        request.section_tag,
+        seed.get('section_title') or '',
+        seed.get('section_description') or '',
+        seed.get('input_template') or '',
+        seed.get('system_prompt') or '',
+        seed.get('order_number'),
+        seed.get('how_to_apply') or '',
+        seed.get('expected_output') or '',
+        bool(seed.get('bypass_llm', False)),
+        bool(seed.get('step_enabled', True)),
+        assistant_key,
+        current_user,
+    ))
+
+    if not success:
+        # The partial unique index (uq_section_assistant_version_active) may
+        # have rejected a concurrent-fork race. Re-check for an existing active
+        # row and surface 409 instead of 500 so the admin UI can explain it.
+        race_check = execute_query(existing_fork_sql, (request.section_tag, assistant_key))
+        if race_check:
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    f"A fork for '{assistant_key}' on section_tag "
+                    f"'{request.section_tag}' was created by a concurrent request. "
+                    f"Reload the page to see it."
+                ),
+            )
+        raise HTTPException(status_code=500, detail="Failed to create fork")
+
+    _invalidate_cache()
+
+    logger.info(
+        f"[Config API] Fork created: section_tag={request.section_tag} "
+        f"assistant={assistant_key} version=1"
+    )
+
+    return SectionInputResponse(
+        section_tag=request.section_tag,
+        section_title=seed.get('section_title'),
+        section_description=seed.get('section_description'),
+        input_template=seed.get('input_template') or '',
+        system_prompt=seed.get('system_prompt') or '',
+        order_number=seed.get('order_number'),
+        how_to_apply=seed.get('how_to_apply'),
+        expected_output=seed.get('expected_output'),
+        bypass_llm=bool(seed.get('bypass_llm', False)),
+        coding_assistant=assistant_key,
+        step_enabled=bool(seed.get('step_enabled', True)),
+        version=1,
+        is_active=True,
+        created_by=current_user,
+    )
+
+
+@router.delete("/config/section-inputs/fork")
+async def delete_section_input_fork(
+    section_tag: str,
+    coding_assistant: str,
+) -> Dict[str, Any]:
+    """
+    Soft-delete every version of a specific (section_tag, coding_assistant)
+    fork by setting is_active=FALSE. Users on that assistant will fall back to
+    the Default row immediately. The Default row itself cannot be deleted
+    through this endpoint.
+    """
+    _validate_section_tag(section_tag)
+    assistant_key = _validate_coding_assistant_key(coding_assistant)
+    if assistant_key == DEFAULT_CODING_ASSISTANT_KEY:
+        raise HTTPException(
+            status_code=400,
+            detail="Cannot delete the Default prompt via the fork delete endpoint.",
+        )
+
+    logger.info(
+        f"[Config API] Soft-deleting fork section_tag={section_tag} "
+        f"assistant={assistant_key}"
+    )
+
+    schema = get_schema()
+    check_sql = f"""
+        SELECT COUNT(*) as count FROM {schema}.section_input_prompts
+        WHERE section_tag = %s AND coding_assistant = %s AND is_active = TRUE
+    """
+    existing = execute_query(check_sql, (section_tag, assistant_key))
+    if not existing or existing[0].get('count', 0) == 0:
+        raise HTTPException(
+            status_code=404,
+            detail=(
+                f"No active fork found for (section_tag='{section_tag}', "
+                f"coding_assistant='{assistant_key}')."
+            ),
+        )
+
+    update_sql = f"""
+        UPDATE {schema}.section_input_prompts
+        SET is_active = FALSE, updated_at = CURRENT_TIMESTAMP
+        WHERE section_tag = %s AND coding_assistant = %s
+    """
+    success = execute_insert(update_sql, (section_tag, assistant_key))
+    if not success:
+        raise HTTPException(status_code=500, detail="Failed to delete fork")
+
+    _invalidate_cache()
+
+    return {
+        "success": True,
+        "message": (
+            f"Fork '{assistant_key}' for section '{section_tag}' deactivated. "
+            f"Users on {assistant_key} will now use the Default prompt."
+        ),
+        "section_tag": section_tag,
+        "coding_assistant": assistant_key,
+    }
 
 
 @router.get("/config/section-tags")
@@ -3214,15 +3692,18 @@ async def get_section_tags() -> List[Dict[str, str]]:
     logger.info("[Config API] Fetching section tags")
     
     schema = get_schema()
+    # Only Default rows contribute section titles - fork rows may carry stale
+    # snapshots that would otherwise produce duplicate or mismatched entries.
     sql = f"""
         SELECT DISTINCT section_tag, section_title
         FROM {schema}.section_input_prompts
         WHERE is_active = TRUE
+          AND coding_assistant = %s
         ORDER BY section_tag
     """
-    
-    results = execute_query(sql)
-    
+
+    results = execute_query(sql, (DEFAULT_CODING_ASSISTANT_KEY,))
+
     if not results:
         # No YAML fallback - return empty list
         logger.warning("[Database Required] No section tags found in Lakebase. Run setup-lakebase.sh --recreate to seed data.")
@@ -3281,13 +3762,15 @@ async def delete_section_input(section_tag: str) -> Dict[str, Any]:
 # =============================================================================
 
 def get_disabled_step_tags() -> List[str]:
-    """Return section_tags where step_enabled=FALSE among active rows."""
+    """Return section_tags where step_enabled=FALSE among active Default rows."""
     schema = get_schema()
     sql = f"""
         SELECT DISTINCT section_tag FROM {schema}.section_input_prompts
-        WHERE step_enabled = FALSE AND is_active = TRUE
+        WHERE step_enabled = FALSE
+          AND is_active = TRUE
+          AND coding_assistant = %s
     """
-    rows = execute_query(sql)
+    rows = execute_query(sql, (DEFAULT_CODING_ASSISTANT_KEY,))
     return [r['section_tag'] for r in rows]
 
 
@@ -3303,13 +3786,21 @@ async def toggle_step_visibility(section_tag: str, body: StepVisibilityUpdate):
     logger.info(f"[Config API] Setting step_enabled={body.enabled} for section_tag={section_tag}")
 
     schema = get_schema()
-    check_sql = f"SELECT COUNT(*) as count FROM {schema}.section_input_prompts WHERE section_tag = %s"
-    existing = execute_query(check_sql, (section_tag,))
+    # Existence check + update both scoped to Default rows so step_enabled stays
+    # authoritative on the Default row and fork rows are never toggled here.
+    check_sql = (
+        f"SELECT COUNT(*) as count FROM {schema}.section_input_prompts "
+        f"WHERE section_tag = %s AND coding_assistant = %s"
+    )
+    existing = execute_query(check_sql, (section_tag, DEFAULT_CODING_ASSISTANT_KEY))
     if not existing or existing[0].get('count', 0) == 0:
         raise HTTPException(status_code=404, detail=f"Section tag '{section_tag}' not found")
 
-    sql = f"UPDATE {schema}.section_input_prompts SET step_enabled = %s WHERE section_tag = %s"
-    execute_insert(sql, (body.enabled, section_tag))
+    sql = (
+        f"UPDATE {schema}.section_input_prompts SET step_enabled = %s "
+        f"WHERE section_tag = %s AND coding_assistant = %s"
+    )
+    execute_insert(sql, (body.enabled, section_tag, DEFAULT_CODING_ASSISTANT_KEY))
     _invalidate_cache()
 
     return {"success": True, "section_tag": section_tag, "step_enabled": body.enabled}
@@ -5131,12 +5622,14 @@ def get_section_images(section_tag: str, field_type: str) -> List[Dict]:
     sql = f"""
         SELECT {column}
         FROM {schema}.section_input_prompts
-        WHERE section_tag = %s AND is_active = TRUE
+        WHERE section_tag = %s
+          AND is_active = TRUE
+          AND coding_assistant = %s
         ORDER BY version DESC
         LIMIT 1
     """
-    
-    result = execute_query(sql, (section_tag,))
+
+    result = execute_query(sql, (section_tag, DEFAULT_CODING_ASSISTANT_KEY))
     if result and result[0].get(column):
         images = result[0][column]
         # Handle both string (JSON) and already-parsed dict/list
@@ -5157,14 +5650,17 @@ def update_section_images(section_tag: str, field_type: str, images: List[Dict])
     schema = get_schema()
     column = f"{field_type}_images"
     
-    # Update all active versions (they share the same images)
+    # Update all active Default versions (they share the same images).
+    # Fork rows are excluded so shared fields stay authoritative on the Default row.
     sql = f"""
         UPDATE {schema}.section_input_prompts
         SET {column} = %s::jsonb, updated_at = CURRENT_TIMESTAMP
-        WHERE section_tag = %s AND is_active = TRUE
+        WHERE section_tag = %s
+          AND is_active = TRUE
+          AND coding_assistant = %s
     """
-    
-    return execute_insert(sql, (json.dumps(images), section_tag))
+
+    return execute_insert(sql, (json.dumps(images), section_tag, DEFAULT_CODING_ASSISTANT_KEY))
 
 
 @router.post("/uploads/section-image", summary="Upload image for section")

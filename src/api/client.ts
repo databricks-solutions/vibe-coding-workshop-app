@@ -21,6 +21,8 @@ export interface GeneratedContent {
   expected_output?: string;
   how_to_apply_images?: ImageMetadata[];
   expected_output_images?: ImageMetadata[];
+  /** Which assistant variant supplied the prompt for this step ('__default__', 'genie-code', 'coda'). */
+  coding_assistant_variant?: string;
   source?: 'llm_generated' | 'mock_llm' | 'input_only_no_llm' | 'fallback_due_to_error';
   model?: string;
   usage?: {
@@ -107,6 +109,8 @@ export interface SectionMetadata {
   expected_output: string;
   how_to_apply_images: ImageMetadata[];
   expected_output_images: ImageMetadata[];
+  /** Which assistant variant supplied the prompt for this step ('__default__', 'genie-code', 'coda'). */
+  coding_assistant_variant?: string;
 }
 
 export interface SectionInput {
@@ -122,6 +126,8 @@ export interface SectionInput {
   how_to_apply_images?: ImageMetadata[];
   expected_output_images?: ImageMetadata[];
   bypass_llm: boolean;  // If true, return input_template as-is without LLM processing
+  /** Which coding-assistant slot this row belongs to. Defaults to '__default__' (shared). */
+  coding_assistant?: string;
   step_enabled: boolean;
   version: number;
   is_active: boolean;
@@ -170,6 +176,8 @@ export interface SectionInputCreateRequest {
   how_to_apply?: string;
   expected_output?: string;
   bypass_llm?: boolean;  // If true, return input_template as-is without LLM processing
+  /** Coding-assistant key this version belongs to. Defaults to '__default__' on the server. */
+  coding_assistant?: string;
 }
 
 export interface SectionTagInfo {
@@ -722,23 +730,27 @@ class ApiClient {
     onError: (error: string) => void,
     industry: string = 'sample',
     useCase: string = 'booking_app',
-    onRetry?: (attempt: number, maxAttempts: number, reason: string) => void
+    onRetry?: (attempt: number, maxAttempts: number, reason: string) => void,
+    codingAssistant?: string,
   ): AbortController {
     const controller = new AbortController();
 
     (async () => {
       try {
+        const body: Record<string, unknown> = {
+          industry,
+          use_case: useCase,
+          section_tag: sectionTag,
+          system_prompt: systemPrompt,
+          input_template: inputTemplate,
+          bypass_llm: bypassLlm,
+        };
+        if (codingAssistant) body.coding_assistant = codingAssistant;
+
         const response = await fetch(`${this.baseUrl}/test-prompt-stream`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            industry,
-            use_case: useCase,
-            section_tag: sectionTag,
-            system_prompt: systemPrompt,
-            input_template: inputTemplate,
-            bypass_llm: bypassLlm,
-          }),
+          body: JSON.stringify(body),
           signal: controller.signal,
         });
 
@@ -868,22 +880,37 @@ class ApiClient {
     });
   }
 
-  /** Get latest section inputs */
-  async getLatestSectionInputs(): Promise<SectionInput[]> {
-    return this.fetch<SectionInput[]>('/config/section-inputs/latest');
+  /** Get latest section inputs for a given coding assistant (defaults to '__default__'). */
+  async getLatestSectionInputs(codingAssistant?: string): Promise<SectionInput[]> {
+    const qs = codingAssistant
+      ? `?coding_assistant=${encodeURIComponent(codingAssistant)}`
+      : '';
+    return this.fetch<SectionInput[]>(`/config/section-inputs/latest${qs}`);
   }
 
-  /** Get versions of a specific section input */
-  async getSectionInputVersions(sectionTag: string): Promise<ConfigVersionInfo[]> {
+  /** Get versions of a specific section input for a coding assistant. */
+  async getSectionInputVersions(
+    sectionTag: string,
+    codingAssistant?: string,
+  ): Promise<ConfigVersionInfo[]> {
+    const params = new URLSearchParams({ section_tag: sectionTag });
+    if (codingAssistant) params.set('coding_assistant', codingAssistant);
     return this.fetch<ConfigVersionInfo[]>(
-      `/config/section-inputs/versions?section_tag=${encodeURIComponent(sectionTag)}`
+      `/config/section-inputs/versions?${params.toString()}`,
     );
   }
 
-  /** Get a specific version of a section input */
-  async getSectionInputByVersion(sectionTag: string, version: number): Promise<SectionInput> {
+  /** Get a specific version of a section input for a coding assistant. */
+  async getSectionInputByVersion(
+    sectionTag: string,
+    version: number,
+    codingAssistant?: string,
+  ): Promise<SectionInput> {
+    const qs = codingAssistant
+      ? `?coding_assistant=${encodeURIComponent(codingAssistant)}`
+      : '';
     return this.fetch<SectionInput>(
-      `/config/section-inputs/version/${encodeURIComponent(sectionTag)}/${version}`
+      `/config/section-inputs/version/${encodeURIComponent(sectionTag)}/${version}${qs}`,
     );
   }
 
@@ -892,6 +919,37 @@ class ApiClient {
     return this.fetch<SectionInput>('/config/section-inputs', {
       method: 'POST',
       body: JSON.stringify(request),
+    });
+  }
+
+  /**
+   * Create a brand-new fork for (section_tag, coding_assistant), seeded from
+   * the current active Default row. Version starts at 1 for the new fork.
+   */
+  async forkSectionInput(
+    sectionTag: string,
+    codingAssistant: 'genie-code' | 'coda',
+  ): Promise<SectionInput> {
+    return this.fetch<SectionInput>('/config/section-inputs/fork', {
+      method: 'POST',
+      body: JSON.stringify({ section_tag: sectionTag, coding_assistant: codingAssistant }),
+    });
+  }
+
+  /**
+   * Soft-delete every version of a specific (section_tag, coding_assistant)
+   * fork. Users on that assistant fall back to the Default row immediately.
+   */
+  async deleteSectionInputFork(
+    sectionTag: string,
+    codingAssistant: 'genie-code' | 'coda',
+  ): Promise<{ success: boolean; message: string }> {
+    const params = new URLSearchParams({
+      section_tag: sectionTag,
+      coding_assistant: codingAssistant,
+    });
+    return this.fetch(`/config/section-inputs/fork?${params.toString()}`, {
+      method: 'DELETE',
     });
   }
 

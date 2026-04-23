@@ -9,12 +9,18 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { Sparkles, Loader2, Play, ChevronDown, ChevronUp, Copy, Check } from 'lucide-react';
+import { Sparkles, Loader2, Play, ChevronDown, ChevronUp, Copy, Check, Plus, X, Lock } from 'lucide-react';
 import { apiClient } from '../../api/client';
 import type { SectionInput, ConfigVersionInfo, ImageMetadata } from '../../api/client';
 import { ImageGallery } from '../ImageGallery';
 import { WORKFLOW_SECTIONS } from '../../constants/workflowSections';
 import { ExpandableErrorBanner } from '../ExpandableErrorBanner';
+import {
+  DEFAULT_ASSISTANT_KEY,
+  FORKABLE_ASSISTANTS,
+  labelForAssistantKey,
+  type ForkableAssistantId,
+} from '../../constants/codingAssistantForks';
 
 // Styled markdown components for nice rendering (dark theme)
 const markdownComponents = {
@@ -137,10 +143,23 @@ interface SectionInputsConfigProps {
 }
 
 export function SectionInputsConfig({ onToast }: SectionInputsConfigProps) {
-  // Data state
+  // Data state - Default rows drive the sidebar + shared fields. Fork rows are
+  // loaded alongside so the assistant tab bar can render fork existence + content.
   const [sectionInputs, setSectionInputs] = useState<SectionInput[]>([]);
+  const [forkRowsByAssistant, setForkRowsByAssistant] = useState<
+    Record<ForkableAssistantId, SectionInput[]>
+  >({ 'genie-code': [], coda: [] });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+
+  // Which assistant tab is currently being edited/viewed for the selected step.
+  // '__default__' is the shared prompt; forkable ids render per-assistant overrides.
+  const [selectedAssistant, setSelectedAssistant] = useState<string>(DEFAULT_ASSISTANT_KEY);
+
+  // UI state for fork actions
+  const [isAddForkMenuOpen, setIsAddForkMenuOpen] = useState(false);
+  const [forkActionInProgress, setForkActionInProgress] = useState(false);
+  const [pendingForkDelete, setPendingForkDelete] = useState<ForkableAssistantId | null>(null);
 
   // Selection state
   const [selectedTag, setSelectedTag] = useState<string>('');
@@ -211,39 +230,88 @@ export function SectionInputsConfig({ onToast }: SectionInputsConfigProps) {
     }
   }, [loading, sectionInputs]);
 
-  // Load versions when selection changes
+  // Load versions whenever the (section_tag, assistant) pair changes
   useEffect(() => {
     if (selectedTag) {
       loadVersions();
       setIsEditMode(false); // Reset to view mode when changing selection
     }
+  }, [selectedTag, selectedAssistant]);
+
+  // Reset assistant tab to Default when switching sections (avoids sticky fork tab
+  // that may not exist for the newly selected step).
+  useEffect(() => {
+    setSelectedAssistant(DEFAULT_ASSISTANT_KEY);
+    setIsAddForkMenuOpen(false);
+    setPendingForkDelete(null);
   }, [selectedTag]);
 
-  // Update editor when selection changes
-  useEffect(() => {
-    const section = sectionInputs.find(s => s.section_tag === selectedTag);
-    if (section) {
-      setEditingInputTemplate(section.input_template);
-      setEditingSystemPrompt(section.system_prompt);
-      setEditingTitle(section.section_title || '');
-      setEditingDescription(section.section_description || '');
-      setEditingHowToApply(section.how_to_apply || '');
-      setEditingExpectedOutput(section.expected_output || '');
-      setEditingBypassLlm(section.bypass_llm || false);
-      setHowToApplyImages(section.how_to_apply_images || []);
-      setExpectedOutputImages(section.expected_output_images || []);
-      setSelectedVersion(section.version);
-      setIsViewingOldVersion(false);
-      setIsDraft(false);
-      setIsBypassDraft(false);
+  const existingForksForTag = useMemo<ForkableAssistantId[]>(() => {
+    const result: ForkableAssistantId[] = [];
+    for (const a of FORKABLE_ASSISTANTS) {
+      const rows = forkRowsByAssistant[a.id] || [];
+      if (rows.some(r => r.section_tag === selectedTag)) result.push(a.id);
     }
-  }, [selectedTag, sectionInputs]);
+    return result;
+  }, [forkRowsByAssistant, selectedTag]);
+
+  const missingForkAssistants = useMemo<ForkableAssistantId[]>(
+    () => FORKABLE_ASSISTANTS.map(a => a.id).filter(id => !existingForksForTag.includes(id)),
+    [existingForksForTag],
+  );
+
+  const isForkTab = selectedAssistant !== DEFAULT_ASSISTANT_KEY;
+
+  // Update editor when the (section, assistant) pair changes
+  useEffect(() => {
+    if (!selectedTag) return;
+
+    // Shared fields always come from the Default row (authoritative).
+    const defaultRow = sectionInputs.find(s => s.section_tag === selectedTag);
+    // Prompt content may come from a fork row if we're on a fork tab.
+    let contentRow: SectionInput | undefined = defaultRow;
+    if (isForkTab) {
+      const forkRow = (forkRowsByAssistant[selectedAssistant as ForkableAssistantId] || [])
+        .find(r => r.section_tag === selectedTag);
+      if (forkRow) contentRow = forkRow;
+    }
+
+    if (!defaultRow && !contentRow) return;
+
+    const sharedSrc = defaultRow || contentRow;
+    const promptSrc = contentRow || defaultRow;
+    if (!sharedSrc || !promptSrc) return;
+
+    setEditingInputTemplate(promptSrc.input_template || '');
+    setEditingSystemPrompt(promptSrc.system_prompt || '');
+    setEditingBypassLlm(promptSrc.bypass_llm || false);
+
+    setEditingTitle(sharedSrc.section_title || '');
+    setEditingDescription(sharedSrc.section_description || '');
+    setEditingHowToApply(sharedSrc.how_to_apply || '');
+    setEditingExpectedOutput(sharedSrc.expected_output || '');
+    setHowToApplyImages(sharedSrc.how_to_apply_images || []);
+    setExpectedOutputImages(sharedSrc.expected_output_images || []);
+
+    setSelectedVersion(promptSrc.version);
+    setIsViewingOldVersion(false);
+    setIsDraft(false);
+    setIsBypassDraft(false);
+  }, [selectedTag, selectedAssistant, sectionInputs, forkRowsByAssistant, isForkTab]);
 
   async function loadData() {
     try {
       setLoading(true);
-      const inputs = await apiClient.getLatestSectionInputs();
-      setSectionInputs(inputs);
+      // Load Default rows + both fork sets in parallel. The sidebar catalog is
+      // driven by Default rows; fork rows are used only to (a) detect fork
+      // existence per section and (b) render the fork tab's prompt content.
+      const [defaultInputs, genieInputs, codaInputs] = await Promise.all([
+        apiClient.getLatestSectionInputs(DEFAULT_ASSISTANT_KEY),
+        apiClient.getLatestSectionInputs('genie-code').catch(() => [] as SectionInput[]),
+        apiClient.getLatestSectionInputs('coda').catch(() => [] as SectionInput[]),
+      ]);
+      setSectionInputs(defaultInputs);
+      setForkRowsByAssistant({ 'genie-code': genieInputs, coda: codaInputs });
     } catch (error) {
       onToast('Failed to load section inputs', 'error');
     } finally {
@@ -253,7 +321,7 @@ export function SectionInputsConfig({ onToast }: SectionInputsConfigProps) {
 
   async function loadVersions() {
     try {
-      const data = await apiClient.getSectionInputVersions(selectedTag);
+      const data = await apiClient.getSectionInputVersions(selectedTag, selectedAssistant);
       setVersions(data);
     } catch {
       setVersions([]);
@@ -301,10 +369,18 @@ export function SectionInputsConfig({ onToast }: SectionInputsConfigProps) {
     return groups;
   }, [sectionInputs, searchQuery]);
 
-  // Current section input
+  // Current section input — reflects the row being viewed in the active
+  // assistant tab. For Default tab this is the '__default__' row; for a fork
+  // tab we prefer the fork row but fall back to default (the UI still renders
+  // shared fields from the default row regardless).
   const currentSection = useMemo(() => {
-    return sectionInputs.find(s => s.section_tag === selectedTag);
-  }, [sectionInputs, selectedTag]);
+    if (!selectedTag) return undefined;
+    const defaultRow = sectionInputs.find(s => s.section_tag === selectedTag);
+    if (selectedAssistant === DEFAULT_ASSISTANT_KEY) return defaultRow;
+    const forkRow = (forkRowsByAssistant[selectedAssistant as ForkableAssistantId] || [])
+      .find(r => r.section_tag === selectedTag);
+    return forkRow || defaultRow;
+  }, [sectionInputs, forkRowsByAssistant, selectedTag, selectedAssistant]);
 
   async function handleSelectVersion(version: number) {
     if (version === currentSection?.version) {
@@ -323,7 +399,11 @@ export function SectionInputsConfig({ onToast }: SectionInputsConfigProps) {
     }
 
     try {
-      const oldSection = await apiClient.getSectionInputByVersion(selectedTag, version);
+      const oldSection = await apiClient.getSectionInputByVersion(
+        selectedTag,
+        version,
+        selectedAssistant,
+      );
       setEditingInputTemplate(oldSection.input_template);
       setEditingSystemPrompt(oldSection.system_prompt);
       setEditingTitle(oldSection.section_title || '');
@@ -402,6 +482,7 @@ export function SectionInputsConfig({ onToast }: SectionInputsConfigProps) {
         how_to_apply: currentSection.how_to_apply,
         expected_output: currentSection.expected_output,
         bypass_llm: editingBypassLlm,
+        coding_assistant: selectedAssistant,
       });
       
       onToast(editingBypassLlm ? 'Bypass LLM enabled - template will be returned as-is' : 'LLM processing enabled', 'success');
@@ -491,6 +572,7 @@ export function SectionInputsConfig({ onToast }: SectionInputsConfigProps) {
         how_to_apply: editingHowToApply,
         expected_output: editingExpectedOutput,
         bypass_llm: editingBypassLlm,
+        coding_assistant: selectedAssistant,
       });
 
       onToast(`Saved version ${result.version}`, 'success');
@@ -580,7 +662,8 @@ export function SectionInputsConfig({ onToast }: SectionInputsConfigProps) {
       // onRetry
       (attempt: number, maxAttempts: number, reason: string) => {
         setTestRetryStatus({ attempt, maxAttempts, reason });
-      }
+      },
+      selectedAssistant,
     );
   }
   
@@ -610,7 +693,46 @@ export function SectionInputsConfig({ onToast }: SectionInputsConfigProps) {
     }
   }
 
-  // Reset test panel when section changes
+  // ---------------- Fork actions ----------------
+
+  async function handleAddFork(assistant: ForkableAssistantId) {
+    if (!selectedTag) return;
+    setIsAddForkMenuOpen(false);
+    try {
+      setForkActionInProgress(true);
+      await apiClient.forkSectionInput(selectedTag, assistant);
+      onToast(`Forked ${labelForAssistantKey(assistant)} for this step`, 'success');
+      await loadData();
+      setSelectedAssistant(assistant);
+    } catch (err: any) {
+      const msg = err?.message || 'Failed to create fork';
+      onToast(msg, 'error');
+    } finally {
+      setForkActionInProgress(false);
+    }
+  }
+
+  async function handleDeleteForkConfirm() {
+    if (!selectedTag || !pendingForkDelete) return;
+    const assistant = pendingForkDelete;
+    try {
+      setForkActionInProgress(true);
+      await apiClient.deleteSectionInputFork(selectedTag, assistant);
+      onToast(`Removed ${labelForAssistantKey(assistant)} fork`, 'success');
+      setPendingForkDelete(null);
+      // If we were editing the removed fork, fall back to Default.
+      if (selectedAssistant === assistant) setSelectedAssistant(DEFAULT_ASSISTANT_KEY);
+      await loadData();
+    } catch (err: any) {
+      const msg = err?.message || 'Failed to remove fork';
+      onToast(msg, 'error');
+    } finally {
+      setForkActionInProgress(false);
+    }
+  }
+
+  // Reset test panel when section OR assistant tab changes so a prior tab's
+  // output doesn't appear to belong to the newly-selected (default vs fork) tab.
   useEffect(() => {
     setIsTestPanelOpen(false);
     setTestOutput('');
@@ -621,7 +743,7 @@ export function SectionInputsConfig({ onToast }: SectionInputsConfigProps) {
       testAbortRef.current.abort();
       testAbortRef.current = null;
     }
-  }, [selectedTag]);
+  }, [selectedTag, selectedAssistant]);
 
   if (loading) {
     return (
@@ -809,9 +931,109 @@ export function SectionInputsConfig({ onToast }: SectionInputsConfigProps) {
               </div>
             </div>
 
+            {/* Assistant Tab Bar — Default + forks + "+ Add fork for" */}
+            <div className="px-4 py-2 border-b border-border bg-secondary/20">
+              <div className="flex items-center flex-wrap gap-2">
+                {/* Default tab — always present */}
+                <button
+                  type="button"
+                  onClick={() => setSelectedAssistant(DEFAULT_ASSISTANT_KEY)}
+                  className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium border transition-colors ${
+                    selectedAssistant === DEFAULT_ASSISTANT_KEY
+                      ? 'bg-primary text-primary-foreground border-primary'
+                      : 'bg-card text-muted-foreground border-border hover:border-primary'
+                  }`}
+                  title="Default prompt — used for all coding assistants unless a fork exists"
+                >
+                  Default
+                  {existingForksForTag.length === 0 && (
+                    <span className="text-[10px] opacity-70">(shared)</span>
+                  )}
+                </button>
+
+                {/* Fork tabs — only render if a fork exists for this section */}
+                {existingForksForTag.map(id => {
+                  const row = (forkRowsByAssistant[id] || []).find(r => r.section_tag === selectedTag);
+                  const isActive = selectedAssistant === id;
+                  return (
+                    <span
+                      key={id}
+                      className={`inline-flex items-center rounded-full border text-xs font-medium transition-colors ${
+                        isActive
+                          ? 'bg-primary text-primary-foreground border-primary'
+                          : 'bg-card text-muted-foreground border-border hover:border-primary'
+                      }`}
+                    >
+                      <button
+                        type="button"
+                        onClick={() => setSelectedAssistant(id)}
+                        className="pl-3 pr-1.5 py-1"
+                      >
+                        {labelForAssistantKey(id)}
+                        {row?.version ? (
+                          <span className="ml-1 opacity-80">(v{row.version})</span>
+                        ) : null}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setPendingForkDelete(id)}
+                        className="pl-1 pr-2 py-1 hover:text-red-400"
+                        title={`Remove ${labelForAssistantKey(id)} fork`}
+                        disabled={forkActionInProgress}
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    </span>
+                  );
+                })}
+
+                {/* + Add fork for ▾ */}
+                {missingForkAssistants.length > 0 && (
+                  <div className="relative">
+                    <button
+                      type="button"
+                      onClick={() => setIsAddForkMenuOpen(o => !o)}
+                      disabled={forkActionInProgress}
+                      className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium border border-dashed border-border text-muted-foreground hover:border-primary hover:text-primary transition-colors"
+                    >
+                      <Plus className="w-3 h-3" />
+                      Add fork for
+                      <ChevronDown className="w-3 h-3" />
+                    </button>
+                    {isAddForkMenuOpen && (
+                      <div
+                        className="absolute left-0 top-full mt-1 z-20 min-w-[160px] rounded-md border border-border bg-card shadow-lg py-1"
+                        onMouseLeave={() => setIsAddForkMenuOpen(false)}
+                      >
+                        {missingForkAssistants.map(id => (
+                          <button
+                            key={id}
+                            type="button"
+                            onClick={() => handleAddFork(id)}
+                            className="w-full text-left px-3 py-1.5 text-xs text-foreground hover:bg-secondary transition-colors"
+                          >
+                            {labelForAssistantKey(id)}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Empty-state hint */}
+                {existingForksForTag.length === 0 && (
+                  <span className="text-xs text-muted-foreground ml-2">
+                    This step uses the Default prompt for every coding assistant.
+                  </span>
+                )}
+              </div>
+            </div>
+
             {/* Version History - Top */}
             <div className="px-4 py-2 border-b border-border bg-secondary/30">
-              <h4 className="text-sm font-medium text-foreground mb-2">Version History (last 5)</h4>
+              <h4 className="text-sm font-medium text-foreground mb-2">
+                Version History — {labelForAssistantKey(selectedAssistant)} (last 5)
+              </h4>
               <div className="flex flex-wrap gap-2">
                 {versions.map(v => (
                   <button
@@ -1172,6 +1394,25 @@ export function SectionInputsConfig({ onToast }: SectionInputsConfigProps) {
             {/* Content - Edit Mode (Tabbed Interface) */}
             {isEditMode && (
               <div className="flex-1 flex flex-col overflow-hidden">
+                {/* Shared-across-assistants banner (fork tabs only) */}
+                {isForkTab && (
+                  <div className="px-4 py-2 border-b border-border bg-amber-500/10 text-amber-300 text-xs flex items-center gap-2">
+                    <Lock className="w-3.5 h-3.5 flex-shrink-0" />
+                    <span>
+                      <span className="font-medium">Shared across assistants</span> — Title,
+                      description, How to Apply, Expected Output and images are edited on the{' '}
+                      <button
+                        type="button"
+                        onClick={() => setSelectedAssistant(DEFAULT_ASSISTANT_KEY)}
+                        className="underline hover:text-amber-200"
+                      >
+                        Default
+                      </button>{' '}
+                      tab. This fork only overrides the System Prompt and Input Template.
+                    </span>
+                  </div>
+                )}
+
                 {/* Title & Description - Always visible in edit mode */}
                 <div className="p-4 border-b border-border bg-secondary/20">
                   <div className="grid grid-cols-2 gap-4">
@@ -1181,7 +1422,8 @@ export function SectionInputsConfig({ onToast }: SectionInputsConfigProps) {
                         type="text"
                         value={editingTitle}
                         onChange={e => handleFieldChange('title', e.target.value)}
-                        className="w-full px-3 py-2 border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary bg-background text-foreground"
+                        disabled={isForkTab}
+                        className={`w-full px-3 py-2 border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary bg-background text-foreground ${isForkTab ? 'opacity-60 cursor-not-allowed' : ''}`}
                         placeholder="Display title..."
                       />
                     </div>
@@ -1191,7 +1433,8 @@ export function SectionInputsConfig({ onToast }: SectionInputsConfigProps) {
                         type="text"
                         value={editingDescription}
                         onChange={e => handleFieldChange('description', e.target.value)}
-                        className="w-full px-3 py-2 border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary bg-background text-foreground"
+                        disabled={isForkTab}
+                        className={`w-full px-3 py-2 border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary bg-background text-foreground ${isForkTab ? 'opacity-60 cursor-not-allowed' : ''}`}
                         placeholder="Brief description..."
                       />
                     </div>
@@ -1332,7 +1575,7 @@ export function SectionInputsConfig({ onToast }: SectionInputsConfigProps) {
                       {/* Image Gallery for How to Apply */}
                       <ImageGallery
                         images={howToApplyImages}
-                        editable={true}
+                        editable={!isForkTab}
                         onUpload={(file) => handleImageUpload(file, 'how_to_apply')}
                         onDelete={(id) => handleImageDelete(id, 'how_to_apply')}
                         isLoading={imageUploading}
@@ -1343,7 +1586,8 @@ export function SectionInputsConfig({ onToast }: SectionInputsConfigProps) {
                         value={editingHowToApply}
                         onChange={e => handleFieldChange('how_to_apply', e.target.value)}
                         rows={14}
-                        className="w-full p-3 font-mono text-sm border border-emerald-500/30 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-background text-foreground"
+                        readOnly={isForkTab}
+                        className={`w-full p-3 font-mono text-sm border border-emerald-500/30 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-background text-foreground ${isForkTab ? 'opacity-60 cursor-not-allowed' : ''}`}
                         placeholder="Steps for applying the generated prompt...&#10;&#10;## Steps&#10;1. Copy the generated prompt&#10;2. Open your AI assistant&#10;3. Paste and run..."
                       />
                       <p className="text-xs text-muted-foreground">
@@ -1366,7 +1610,7 @@ export function SectionInputsConfig({ onToast }: SectionInputsConfigProps) {
                       {/* Image Gallery for Expected Output */}
                       <ImageGallery
                         images={expectedOutputImages}
-                        editable={true}
+                        editable={!isForkTab}
                         onUpload={(file) => handleImageUpload(file, 'expected_output')}
                         onDelete={(id) => handleImageDelete(id, 'expected_output')}
                         isLoading={imageUploading}
@@ -1377,7 +1621,8 @@ export function SectionInputsConfig({ onToast }: SectionInputsConfigProps) {
                         value={editingExpectedOutput}
                         onChange={e => handleFieldChange('expected_output', e.target.value)}
                         rows={14}
-                        className="w-full p-3 font-mono text-sm border border-amber-500/30 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-amber-500 bg-background text-foreground"
+                        readOnly={isForkTab}
+                        className={`w-full p-3 font-mono text-sm border border-amber-500/30 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-amber-500 bg-background text-foreground ${isForkTab ? 'opacity-60 cursor-not-allowed' : ''}`}
                         placeholder="Expected results after following the steps...&#10;&#10;## Expected Results&#10;- Feature A working&#10;- Dashboard visible&#10;&#10;### Reference Links&#10;- [Documentation](https://...)&#10;&#10;![Screenshot](https://...)"
                       />
                       <p className="text-xs text-muted-foreground">
@@ -1493,6 +1738,39 @@ export function SectionInputsConfig({ onToast }: SectionInputsConfigProps) {
                 className="px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 disabled:opacity-50"
               >
                 {saving ? 'Saving...' : 'Save New Version'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Confirm Delete Fork Modal */}
+      {pendingForkDelete && (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
+          <div className="bg-card rounded-lg shadow-xl w-[420px] p-6 border border-border">
+            <h3 className="text-lg font-semibold text-foreground mb-3">
+              Remove {labelForAssistantKey(pendingForkDelete)} fork?
+            </h3>
+            <p className="text-sm text-muted-foreground mb-4">
+              This deactivates the <span className="font-medium text-foreground">{labelForAssistantKey(pendingForkDelete)}</span>{' '}
+              prompt variant for <code className="bg-secondary px-1 rounded text-primary">{selectedTag}</code>.
+              Users on {labelForAssistantKey(pendingForkDelete)} will fall back to the Default prompt.
+              Version history for this fork is preserved and can be re-forked later.
+            </p>
+            <div className="flex justify-end gap-3">
+              <button
+                onClick={() => setPendingForkDelete(null)}
+                disabled={forkActionInProgress}
+                className="px-4 py-2 text-muted-foreground hover:text-foreground"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleDeleteForkConfirm}
+                disabled={forkActionInProgress}
+                className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-500 disabled:opacity-50"
+              >
+                {forkActionInProgress ? 'Removing...' : 'Remove fork'}
               </button>
             </div>
           </div>
