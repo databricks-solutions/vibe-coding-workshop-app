@@ -19,13 +19,16 @@ CREATE TABLE IF NOT EXISTS ${schema}.section_input_prompts (
     how_to_apply_images JSONB DEFAULT '[]'::jsonb,
     expected_output_images JSONB DEFAULT '[]'::jsonb,
     bypass_llm BOOLEAN NOT NULL DEFAULT FALSE,
-    coding_assistant VARCHAR(40) NOT NULL DEFAULT '__default__' CHECK (coding_assistant IN ('__default__', 'genie-code', 'coda')),
+    coding_assistant VARCHAR(40) NOT NULL DEFAULT '__default__',
     step_enabled BOOLEAN NOT NULL DEFAULT TRUE,
     version INTEGER NOT NULL DEFAULT 1,
     is_active BOOLEAN NOT NULL DEFAULT TRUE,
     inserted_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    created_by VARCHAR(255)
+    created_by VARCHAR(255),
+    -- Named CHECK so fresh installs and migrated installs (DDL 07) share the
+    -- same constraint name. DDL 07 is then a strict no-op on fresh installs.
+    CONSTRAINT chk_coding_assistant CHECK (coding_assistant IN ('__default__', 'genie-code', 'coda'))
 );
 
 -- Indexes
