@@ -56,6 +56,53 @@
 -- Clean Up (Step 31)
 --   Step 31 = Workspace Clean Up
 -- =============================================================================
+--
+-- CODING-ASSISTANT FORKS (seeding Genie Code / CoDA prompts directly)
+-- -----------------------------------------------------------------------------
+-- Every INSERT below is a DEFAULT prompt (the `coding_assistant` column is
+-- omitted from the column list, so it takes the table DEFAULT '__default__').
+-- You can *also* ship pre-populated forks for 'genie-code' and 'coda' right
+-- here in the seed, so a fresh deployment already has those variants live
+-- without anyone needing to click "+ Add fork" in the Config UI.
+--
+-- Fork-row rules:
+--   1. `section_tag` MUST match an existing DEFAULT row above.
+--      (There is no FK, but the backend will not resolve a fork without a
+--      default partner — seed the default first.)
+--   2. `coding_assistant` MUST be 'genie-code' or 'coda' (CHECK constraint
+--      chk_coding_assistant rejects anything else).
+--   3. `(section_tag, coding_assistant, version)` must be unique among
+--      is_active = TRUE rows (partial unique index
+--      uq_section_assistant_version_active). Use version=1, is_active=TRUE.
+--   4. Only `input_template`, `system_prompt`, and `bypass_llm` are used from
+--      a fork row at runtime. Shared fields (section_title, section_description,
+--      order_number, how_to_apply, expected_output, images) are ALWAYS read
+--      from the Default row by the resolver — setting them on a fork row has
+--      no effect. Omit them, or leave them at column defaults.
+--   5. Use a distinct `input_id` range for forks to keep diffs tidy
+--      (convention: 1000+ for genie-code forks, 2000+ for coda forks;
+--      top of the default range is currently 146).
+--   6. Re-running the seed is safe: setup-lakebase.sh (`execute_sql_file`,
+--      ignore_errors=True) silently skips any INSERT that hits a duplicate
+--      PK or the partial unique index, so admin-edited content from the UI
+--      is never overwritten by a redeploy.
+--
+-- A minimal template (copy, uncomment, customize):
+--
+--   INSERT INTO ${catalog}.${schema}.section_input_prompts
+--   (input_id, section_tag, coding_assistant, input_template, system_prompt,
+--    bypass_llm, version, is_active, inserted_at, updated_at, created_by)
+--   VALUES
+--   (1001, 'prd_generation', 'genie-code',
+--    'Genie-Code specific instructions for prd_generation...',
+--    'System prompt tuned for Genie Code.',
+--    false, 1, true, current_timestamp, current_timestamp, current_user);
+--
+-- A worked example for both assistants lives at the bottom of this file
+-- (search for "SEED FORK EXAMPLES"). It is commented out by default — uncomment
+-- whichever blocks you want to ship and rerun setup-lakebase.sh --recreate
+-- (or just apply on a fresh schema).
+-- =============================================================================
 
 -- Product Requirements Document (PRD)
 INSERT INTO ${catalog}.${schema}.section_input_prompts 
@@ -9062,3 +9109,63 @@ Complete **Wire to Lakebase** (Step 36). Local testing must pass at `http://loca
 - [ ] No debug/diagnostic routes remain mounted in the deployed app
 - [ ] No keep-alive/warmup cron in place; endpoint is allowed to scale-to-zero when idle',
 true, 1, true, current_timestamp(), current_timestamp(), current_user());
+
+-- =============================================================================
+-- SEED FORK EXAMPLES (Genie Code / CoDA)
+-- =============================================================================
+-- These are intentionally commented out. Uncomment the block(s) you want to
+-- ship, edit the prompt text, and rerun `scripts/setup-lakebase.sh --recreate`
+-- (fresh install) or just apply the DML on a freshly-created schema.
+--
+-- Shape check (before uncommenting):
+--   * `section_tag` matches one of the DEFAULT rows above.
+--   * `coding_assistant` is 'genie-code' or 'coda' (CHECK constraint).
+--   * `input_id` does NOT collide with any existing PK in this file.
+--   * Only input_template / system_prompt / bypass_llm carry runtime content;
+--     shared fields (title, how_to_apply, expected_output, images, order_number)
+--     are ignored on forks and always read from the Default row at runtime.
+-- -----------------------------------------------------------------------------
+
+-- Example 1 — Genie Code fork for PRD Generation
+-- INSERT INTO ${catalog}.${schema}.section_input_prompts
+-- (input_id, section_tag, coding_assistant, input_template, system_prompt,
+--  bypass_llm, version, is_active, inserted_at, updated_at, created_by)
+-- VALUES
+-- (1001, 'prd_generation', 'genie-code',
+-- 'Generate a Genie-Code-optimised PRD prompt for {industry_name} / {use_case_title}.
+--
+-- (Put the Genie-Code-specific instructions here. Same {template_variables}
+-- as the default prompt are available at runtime.)',
+-- 'You are an expert assistant drafting a PRD for a Genie Code workflow.
+-- Follow the user''s instructions verbatim and produce a clean, copy-pasteable
+-- prompt tailored to Genie Code''s idioms.',
+-- false, 1, true, current_timestamp(), current_timestamp(), current_user());
+
+-- Example 2 — Genie Code fork for Setup Lakebase
+-- INSERT INTO ${catalog}.${schema}.section_input_prompts
+-- (input_id, section_tag, coding_assistant, input_template, system_prompt,
+--  bypass_llm, version, is_active, inserted_at, updated_at, created_by)
+-- VALUES
+-- (1002, 'setup_lakebase', 'genie-code',
+-- 'Genie-Code-optimised Lakebase setup prompt for {use_case_title}.
+--
+-- Use {lakebase_instance_name} and {user_schema_prefix}; prefer Genie
+-- Code-friendly SQL patterns.',
+-- 'You are an expert assistant bootstrapping a Lakebase schema using Genie Code.',
+-- false, 1, true, current_timestamp(), current_timestamp(), current_user());
+
+-- Example 3 — CoDA fork for Deploy Databricks App (bypass_llm=true: copy-as-is)
+-- INSERT INTO ${catalog}.${schema}.section_input_prompts
+-- (input_id, section_tag, coding_assistant, input_template, system_prompt,
+--  bypass_llm, version, is_active, inserted_at, updated_at, created_by)
+-- VALUES
+-- (2001, 'deploy_databricks_app', 'coda',
+-- 'CoDA-specific copy-paste instructions for deploying the app.
+-- (Because bypass_llm=true, this text is returned verbatim at runtime —
+-- no LLM call is made. Use placeholders like {user_app_name} as needed.)',
+-- '',  -- system_prompt unused when bypass_llm=true, but column is NOT NULL
+-- true, 1, true, current_timestamp(), current_timestamp(), current_user());
+
+-- =============================================================================
+-- END OF SEED FORK EXAMPLES
+-- =============================================================================
