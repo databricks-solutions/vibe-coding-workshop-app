@@ -35,17 +35,17 @@ CREATE TABLE IF NOT EXISTS ${schema}.section_input_prompts (
 CREATE INDEX IF NOT EXISTS idx_section_tag ON ${schema}.section_input_prompts(section_tag);
 CREATE INDEX IF NOT EXISTS idx_section_active_version ON ${schema}.section_input_prompts(is_active, version DESC);
 CREATE INDEX IF NOT EXISTS idx_section_order ON ${schema}.section_input_prompts(order_number);
-CREATE INDEX IF NOT EXISTS idx_section_assistant_version ON ${schema}.section_input_prompts(section_tag, coding_assistant, version DESC);
 
--- Prevents a concurrent-fork race: the /config/section-inputs/fork endpoint
--- guards against duplicates at the application layer, but two simultaneous
--- requests could both pass the SELECT check and both INSERT. This partial
--- unique index is the DB-level belt-and-suspenders that guarantees at most one
--- active row per (section_tag, coding_assistant, version). Soft-deleted rows
--- (is_active=FALSE) are excluded so re-forking after a delete still works.
-CREATE UNIQUE INDEX IF NOT EXISTS uq_section_assistant_version_active
-    ON ${schema}.section_input_prompts(section_tag, coding_assistant, version)
-    WHERE is_active = TRUE;
+-- NOTE: The two indexes referencing `coding_assistant`
+-- (idx_section_assistant_version and the partial unique
+-- uq_section_assistant_version_active) are created by DDL 07
+-- (07_add_coding_assistant_column.sql). Keeping them there — and out of this
+-- file — means a legacy upgrade (where CREATE TABLE IF NOT EXISTS is a no-op
+-- on a pre-existing table without the coding_assistant column) does not emit
+-- any silently-swallowed "column does not exist" errors. On a fresh install,
+-- DDL 07 runs immediately after this file and creates them on the freshly
+-- created table; on a legacy install, DDL 07 first adds the column and then
+-- creates the indexes. Either way the final schema is identical.
 
 COMMENT ON TABLE ${schema}.section_input_prompts IS 
 'Versioned section input prompts for LLM prompt generation. bypass_llm=TRUE means return input_template as-is without LLM processing.';

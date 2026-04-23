@@ -1,11 +1,24 @@
 -- =============================================================================
 -- ADD coding_assistant COLUMN (PostgreSQL/Lakebase) - IDEMPOTENT MIGRATION
 -- =============================================================================
--- Adds the coding_assistant column to section_input_prompts for existing
--- deployments. Safe to re-run: every statement is idempotent.
+-- Adds the coding_assistant column + its CHECK constraint + the two
+-- coding_assistant-dependent indexes (idx_section_assistant_version and the
+-- partial unique uq_section_assistant_version_active) to
+-- section_input_prompts.
+--
+-- This file is authoritative for all coding_assistant-dependent schema
+-- objects on BOTH paths:
+--   * Fresh install: DDL 02 creates the table (including the column + CHECK
+--     inline so INSERTs immediately satisfy NOT NULL / the CHECK); DDL 07
+--     then adds the two indexes. ADD COLUMN / DROP/ADD CONSTRAINT are
+--     effectively no-ops here.
+--   * Legacy upgrade: DDL 02 is a no-op on the pre-existing table; DDL 07
+--     adds the column (NOT NULL DEFAULT '__default__' stamps every existing
+--     row), re-adds the named CHECK, and creates the indexes.
+-- Safe to re-run: every statement is idempotent (IF NOT EXISTS, DROP IF
+-- EXISTS + ADD CONSTRAINT).
 --
 -- Values: '__default__' (shared prompt), 'genie-code', 'coda' (forks).
--- All pre-existing rows are stamped '__default__' via the column default.
 -- No fork rows are ever created by this migration.
 --
 -- Variable: ${schema} - replaced at runtime

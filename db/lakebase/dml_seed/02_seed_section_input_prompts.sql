@@ -96,7 +96,7 @@
 --   (1001, 'prd_generation', 'genie-code',
 --    'Genie-Code specific instructions for prd_generation...',
 --    'System prompt tuned for Genie Code.',
---    false, 1, true, current_timestamp, current_timestamp, current_user);
+--    false, 1, true, current_timestamp(), current_timestamp(), current_user());
 --
 -- A worked example for both assistants lives at the bottom of this file
 -- (search for "SEED FORK EXAMPLES"). It is commented out by default — uncomment
