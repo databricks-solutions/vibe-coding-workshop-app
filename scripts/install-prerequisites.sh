@@ -1,19 +1,4 @@
 #!/usr/bin/env bash
-# -----------------------------------------------------------------------------
-# install-prerequisites.sh
-#
-# Installs / upgrades the tools needed for the Vibe Coding Workshop on macOS:
-#   - Homebrew
-#   - git
-#   - python3
-#   - node (includes npm)
-#   - Databricks CLI (via databricks/tap)
-#
-# Adapted from:
-#   https://github.com/databricks-solutions/vibe-coding-workshop-template/blob/main/install.sh
-#
-# Safe to re-run: every tool is installed OR upgraded idempotently.
-# -----------------------------------------------------------------------------
 set -euo pipefail
 
 GREEN='\033[0;32m'
@@ -23,69 +8,157 @@ NC='\033[0m'
 
 info()  { echo -e "${GREEN}[INFO]${NC}  $*"; }
 warn()  { echo -e "${YELLOW}[WARN]${NC}  $*"; }
-error() { echo -e "${RED}[ERROR]${NC} $*"; exit 1; }
+error() { echo -e "${RED}[ERROR]${NC} $*" >&2; exit 1; }
 
 # ---------------------------------------------------------------------------
-# Homebrew
+# Usage
 # ---------------------------------------------------------------------------
-if command -v brew &>/dev/null; then
-    info "Homebrew already installed ($(brew --version | head -1))"
-else
-    info "Installing Homebrew..."
-    /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+print_help() {
+    cat <<'EOF'
+Usage: install.sh [options]
 
-    if [[ -f /opt/homebrew/bin/brew ]]; then
-        eval "$(/opt/homebrew/bin/brew shellenv)"
-    fi
+Verifies required dependencies (git, python3, node, databricks) and installs
+any that are missing. By default, the script will NOT install Homebrew, will
+NOT upgrade unrelated packages on your system, and will NOT touch tools you
+already have on PATH.
+
+Options:
+  --no-brew      Never use Homebrew. Missing tools must be installed by you,
+                 or (for the Databricks CLI) via the official installer.
+  --use-brew     Allow Homebrew for installing missing tools on macOS. Will
+                 NOT install Homebrew itself and will NOT run `brew upgrade`
+                 on unrelated packages.
+  --dry-run      Print what would happen without installing anything.
+  -h, --help     Show this help and exit.
+
+Default behavior: --no-brew on Linux, prompt-free detect-only on macOS unless
+--use-brew is passed. The Databricks CLI falls back to the official installer
+script when Homebrew is unavailable or disabled.
+EOF
+}
+
+# ---------------------------------------------------------------------------
+# Args
+# ---------------------------------------------------------------------------
+USE_BREW=0
+NO_BREW=0
+DRY_RUN=0
+
+for arg in "$@"; do
+    case "$arg" in
+        --no-brew)  NO_BREW=1 ;;
+        --use-brew) USE_BREW=1 ;;
+        --dry-run)  DRY_RUN=1 ;;
+        -h|--help)  print_help; exit 0 ;;
+        *) error "Unknown option: $arg (try --help)" ;;
+    esac
+done
+
+if [[ $USE_BREW -eq 1 && $NO_BREW -eq 1 ]]; then
+    error "--use-brew and --no-brew are mutually exclusive."
 fi
 
-info "Updating Homebrew..."
-brew update && brew upgrade
+# Default: do not use brew unless the caller explicitly opts in.
+if [[ $USE_BREW -eq 0 ]]; then
+    NO_BREW=1
+fi
 
-brew_install_or_upgrade() {
-    local formula="$1"
-    if brew list --formula | grep -q "^${formula}\$"; then
-        info "${formula} already installed — upgrading..."
-        brew upgrade "$formula" 2>/dev/null || info "${formula} already at latest version"
+run() {
+    if [[ $DRY_RUN -eq 1 ]]; then
+        echo "  + $*"
     else
-        info "Installing ${formula}..."
-        brew install "$formula"
+        eval "$@"
     fi
 }
 
 # ---------------------------------------------------------------------------
-# Core tools
+# Homebrew (optional, opt-in only)
 # ---------------------------------------------------------------------------
-brew_install_or_upgrade git
-brew_install_or_upgrade python3
-brew_install_or_upgrade node
+BREW_AVAILABLE=0
+if [[ $NO_BREW -eq 0 ]]; then
+    if command -v brew &>/dev/null; then
+        BREW_AVAILABLE=1
+        info "Homebrew detected ($(brew --version | head -1)). Will use it for missing tools."
+    else
+        warn "--use-brew was set but Homebrew is not installed."
+        warn "This script will NOT install Homebrew for you. Install it from https://brew.sh"
+        warn "Falling back to vendor installers / detect-only behavior."
+    fi
+fi
 
 # ---------------------------------------------------------------------------
-# Databricks CLI (custom tap)
+# Helpers
 # ---------------------------------------------------------------------------
-if ! brew tap | grep -q "^databricks/tap\$"; then
-    info "Tapping databricks/tap..."
-    brew tap databricks/tap
+brew_install_if_missing() {
+    local formula="$1"
+    if brew list --formula 2>/dev/null | grep -q "^${formula}\$"; then
+        info "${formula} already installed via brew."
+    else
+        info "Installing ${formula} via brew..."
+        run "brew install \"$formula\""
+    fi
+}
+
+require_tool() {
+    # require_tool <command> <friendly-name> <install-hint>
+    local cmd="$1" name="$2" hint="$3"
+    if command -v "$cmd" &>/dev/null; then
+        info "${name} found: $($cmd --version 2>&1 | head -1)"
+        return 0
+    fi
+    error "${name} is required but was not found on PATH.
+  How to install:
+${hint}
+  Re-run this script after installing."
+}
+
+# ---------------------------------------------------------------------------
+# Core tools — detect first, never silently replace
+# ---------------------------------------------------------------------------
+require_tool git "git" "    - macOS:  xcode-select --install
+    - Linux:  use your package manager (apt/yum/dnf/pacman)
+    - Other:  https://git-scm.com/downloads"
+
+require_tool python3 "Python 3" "    - macOS:  brew install python@3.12  OR  https://www.python.org/downloads/
+    - Linux:  use your package manager (e.g. apt install python3)
+    - Recommended: pyenv (https://github.com/pyenv/pyenv) for version management"
+
+require_tool node "Node.js" "    - Recommended: nvm (https://github.com/nvm-sh/nvm)
+                  fnm (https://github.com/Schniz/fnm)
+                  volta (https://volta.sh)
+    - Direct:      https://nodejs.org/en/download"
+
+# ---------------------------------------------------------------------------
+# Databricks CLI — install only if missing
+# ---------------------------------------------------------------------------
+if command -v databricks &>/dev/null; then
+    info "Databricks CLI found: $(databricks --version 2>&1 | head -1)"
+else
+    info "Databricks CLI not found — installing..."
+    if [[ $BREW_AVAILABLE -eq 1 ]]; then
+        if ! brew tap 2>/dev/null | grep -q "^databricks/tap\$"; then
+            run "brew tap databricks/tap"
+        fi
+        brew_install_if_missing databricks
+    else
+        info "Using the official Databricks CLI installer (no Homebrew required)."
+        run "curl -fsSL https://raw.githubusercontent.com/databricks/setup-cli/main/install.sh | sh"
+    fi
 fi
-brew_install_or_upgrade databricks
 
 # ---------------------------------------------------------------------------
 # Summary
 # ---------------------------------------------------------------------------
 echo ""
-info "Installation complete. Versions installed:"
-echo "  git        : $(git --version)"
-echo "  python3    : $(python3 --version)"
-echo "  node       : $(node --version)"
-echo "  databricks : $(databricks --version 2>/dev/null || echo 'check manually')"
+info "Setup complete. Detected versions:"
+echo "  git        : $(git --version 2>/dev/null || echo 'missing')"
+echo "  python3    : $(python3 --version 2>/dev/null || echo 'missing')"
+echo "  node       : $(node --version 2>/dev/null || echo 'missing')"
+echo "  databricks : $(databricks --version 2>/dev/null || echo 'check your PATH')"
 echo ""
 
-if [[ -f /opt/homebrew/bin/brew ]]; then
-    SHELL_RC="${HOME}/.zshrc"
-    if ! grep -q '/opt/homebrew/bin/brew' "$SHELL_RC" 2>/dev/null; then
-        warn "Add this line to ${SHELL_RC} so brew is on your PATH in new shells:"
-        echo '  eval "$(/opt/homebrew/bin/brew shellenv)"'
-    fi
+if [[ $DRY_RUN -eq 1 ]]; then
+    warn "Dry-run mode: no changes were made."
 fi
 
 info "Done."
