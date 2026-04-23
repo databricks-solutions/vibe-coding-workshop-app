@@ -703,6 +703,48 @@ def format_use_case_name(use_case: str) -> str:
     """Convert snake_case or kebab-case to Title Case"""
     return ' '.join(word.capitalize() for word in use_case.replace('_', ' ').replace('-', ' ').split())
 
+# Default value for the coding_assistants_config parameter. Mirrors the
+# frontend's DEFAULT_CODING_ASSISTANTS_CONFIG (src/constants/codingAssistants.ts)
+# so backend bootstrap and frontend fallback stay in sync.
+DEFAULT_CODING_ASSISTANTS_CONFIG_JSON = json.dumps([
+    {"id": "cursor", "recommended": True},
+    {"id": "coda", "recommended": True},
+    {"id": "ai-gateway", "recommended": True},
+    {"id": "genie-code", "recommended": False},
+    {"id": "copilot", "recommended": False},
+    {"id": "vscode", "recommended": False},
+])
+
+
+def _bootstrap_coding_assistants_config_if_missing() -> None:
+    """
+    Self-healing: on existing deployments that were seeded before this param
+    existed, insert the default row so admins see it without rerunning
+    `vibe2value configure`. Idempotent via ON CONFLICT on param_key.
+    """
+    schema = get_schema()
+    sql = f"""
+        INSERT INTO {schema}.workshop_parameters
+            (param_key, param_label, param_value, param_description, param_type,
+             display_order, is_required, is_active, allow_session_override,
+             inserted_at, updated_at, created_by)
+        VALUES
+            ('coding_assistants_config',
+             'Coding Assistants (visibility, order, recommended)',
+             %s,
+             'Ordered array of coding assistants to show on the workflow page. Controls which assistants are visible, their order, and which are flagged as recommended.',
+             'assistant_config',
+             13, FALSE, TRUE, FALSE,
+             CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 'system-bootstrap')
+        ON CONFLICT (param_key) DO NOTHING
+    """
+    try:
+        execute_insert(sql, (DEFAULT_CODING_ASSISTANTS_CONFIG_JSON,))
+    except Exception as e:
+        # Never fail the parent request if bootstrap hits a transient error.
+        logger.warning(f"[Config API] coding_assistants_config bootstrap skipped: {e}")
+
+
 def get_workshop_parameters_sync() -> Dict[str, str]:
     """
     Get all workshop parameters as a dictionary (sync version for template substitution).
@@ -732,9 +774,14 @@ def get_workshop_parameters_sync() -> Dict[str, str]:
             'lakebase_uc_catalog_name': os.getenv('LAKEBASE_UC_CATALOG', ''),
             'app_name': os.getenv('APP_NAME', ''),
             'lakebase_mode': os.getenv('LAKEBASE_MODE', 'autoscaling'),
+            'coding_assistants_config': DEFAULT_CODING_ASSISTANTS_CONFIG_JSON,
         }
     
-    return {row['param_key']: row['param_value'] for row in results}
+    out = {row['param_key']: row['param_value'] for row in results}
+    # Backfill for template substitution so callers can safely read this key
+    # even before the GET endpoint has had a chance to bootstrap.
+    out.setdefault('coding_assistants_config', DEFAULT_CODING_ASSISTANTS_CONFIG_JSON)
+    return out
 
 
 def get_effective_workshop_parameters(session_id: Optional[str] = None) -> Dict[str, str]:
@@ -3467,8 +3514,26 @@ async def get_workshop_parameters(response: Response) -> List[WorkshopParameter]
                 is_required=True,
                 is_active=True,
                 allow_session_override=False
+            ),
+            WorkshopParameter(
+                param_key="coding_assistants_config",
+                param_label="Coding Assistants (visibility, order, recommended)",
+                param_value=DEFAULT_CODING_ASSISTANTS_CONFIG_JSON,
+                param_description="Ordered array of coding assistants shown on the workflow page. Controls visibility, order, and which are flagged recommended. First recommended becomes Most Recommended.",
+                param_type="assistant_config",
+                display_order=13,
+                is_required=False,
+                is_active=True,
+                allow_session_override=False
             )
         ]
+    
+    # Self-heal: existing deployments that were seeded before this param
+    # existed won't have the row yet. Insert the default and re-read so the
+    # admin UI immediately sees it. Idempotent (ON CONFLICT DO NOTHING).
+    if not any(row.get('param_key') == 'coding_assistants_config' for row in results):
+        _bootstrap_coding_assistants_config_if_missing()
+        results = execute_query(sql)
     
     return [WorkshopParameter(**row) for row in results]
 
@@ -3503,6 +3568,28 @@ async def update_workshop_parameter(param_key: str, update: WorkshopParameterUpd
     Update a workshop parameter value.
     """
     logger.info(f"[Config API] Updating workshop parameter: {param_key} = {update.param_value[:50]}...")
+    
+    # Shape validation for structured params. Catalog membership is intentionally
+    # NOT validated here so the frontend catalog can evolve without backend
+    # changes. Unknown ids are filtered out silently by the frontend.
+    if param_key == 'coding_assistants_config':
+        try:
+            parsed = json.loads(update.param_value)
+        except (ValueError, TypeError):
+            raise HTTPException(status_code=400, detail="coding_assistants_config must be valid JSON")
+        if not isinstance(parsed, list):
+            raise HTTPException(status_code=400, detail="coding_assistants_config must be a JSON array")
+        seen_ids: set = set()
+        for i, entry in enumerate(parsed):
+            if not isinstance(entry, dict):
+                raise HTTPException(status_code=400, detail=f"coding_assistants_config[{i}] must be an object")
+            if not isinstance(entry.get('id'), str):
+                raise HTTPException(status_code=400, detail=f"coding_assistants_config[{i}].id must be a string")
+            if 'recommended' in entry and not isinstance(entry.get('recommended'), bool):
+                raise HTTPException(status_code=400, detail=f"coding_assistants_config[{i}].recommended must be a boolean")
+            if entry['id'] in seen_ids:
+                raise HTTPException(status_code=400, detail=f"coding_assistants_config has duplicate id '{entry['id']}'")
+            seen_ids.add(entry['id'])
     
     schema = get_schema()
     

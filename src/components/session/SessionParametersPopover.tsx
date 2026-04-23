@@ -263,6 +263,9 @@ export function SessionParametersPopover({ sessionId, onParametersChanged }: Ses
           ) : (
             <div className="space-y-4">
               {parameters.map((param) => {
+                // Admin-only structured params (e.g. coding_assistants_config)
+                // are not human-editable as raw JSON in the session popover.
+                if (param.param_type === 'assistant_config') return null;
                 const Icon = paramIcons[param.param_type] || Settings;
                 const isModified = editedValues[param.param_key] !== param.global_value;
                 const isDisabled = !param.allow_session_override;

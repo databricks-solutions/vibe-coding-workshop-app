@@ -7,8 +7,10 @@
  */
 
 import { useState, useEffect } from 'react';
-import { Settings, Save, RefreshCw, Globe, Database, Server, AlertCircle, Check, Info, Layers, Bot, Trash2, Lock, Unlock, Building2 } from 'lucide-react';
+import { Settings, Save, RefreshCw, Globe, Database, Server, AlertCircle, Check, Info, Layers, Bot, Trash2, Lock, Unlock, Building2, ListChecks } from 'lucide-react';
 import { apiClient } from '../../api/client';
+import { CodingAssistantsConfigEditor } from './CodingAssistantsConfigEditor';
+import { parseCodingAssistantsConfig } from '../../constants/codingAssistants';
 
 interface WorkshopParameter {
   param_id?: number;
@@ -35,6 +37,7 @@ const paramIcons: Record<string, React.ElementType> = {
   lakebase: Server,
   catalog: Layers,
   endpoint: Bot,
+  assistant_config: ListChecks,
 };
 
 export function WorkshopParametersConfig({ onToast }: WorkshopParametersConfigProps) {
@@ -303,57 +306,110 @@ export function WorkshopParametersConfig({ onToast }: WorkshopParametersConfigPr
                       <span className="text-xs text-muted-foreground">← Use this in templates</span>
                     </div>
                     
-                    {/* Input */}
-                    <div className="flex items-center gap-2">
-                      <input
-                        type={param.param_type === 'url' ? 'url' : 'text'}
-                        value={editedValues[param.param_key] || ''}
-                        onChange={(e) => handleValueChange(param.param_key, e.target.value)}
-                        placeholder={`Enter ${param.param_label.toLowerCase()}`}
-                        className={`flex-1 px-3 py-2 bg-secondary/50 border rounded-lg text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary ${
-                          param.param_type === 'url' ? 'font-mono text-xs' : ''
-                        }`}
-                      />
-                      
-                      {isChanged && (
-                        <>
+                    {/* Input — rich editor for assistant_config, plain input otherwise */}
+                    {param.param_type === 'assistant_config' ? (
+                      <>
+                        <CodingAssistantsConfigEditor
+                          value={editedValues[param.param_key] || ''}
+                          onChange={(next) => handleValueChange(param.param_key, next)}
+                        />
+                        <div className="flex items-center gap-2 mt-3">
+                          {isChanged && (
+                            <>
+                              <button
+                                onClick={() => handleSave(param.param_key)}
+                                disabled={
+                                  isSaving ||
+                                  (parseCodingAssistantsConfig(editedValues[param.param_key])?.length ?? 0) === 0
+                                }
+                                title={
+                                  (parseCodingAssistantsConfig(editedValues[param.param_key])?.length ?? 0) === 0
+                                    ? 'At least one assistant must be visible before saving'
+                                    : undefined
+                                }
+                                className="px-3 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5"
+                              >
+                                {isSaving ? (
+                                  <RefreshCw className="w-4 h-4 animate-spin" />
+                                ) : (
+                                  <Save className="w-4 h-4" />
+                                )}
+                                Save
+                              </button>
+                              <button
+                                onClick={() => handleReset(param.param_key)}
+                                className="px-3 py-2 bg-secondary text-muted-foreground rounded-lg text-sm font-medium hover:bg-secondary/80 transition-colors"
+                              >
+                                Reset
+                              </button>
+                            </>
+                          )}
+                          {!isChanged && param.param_value && (
+                            <div className="flex items-center gap-1.5 text-emerald-400 text-sm">
+                              <Check className="w-4 h-4" />
+                              <span>Saved</span>
+                            </div>
+                          )}
                           <button
-                            onClick={() => handleSave(param.param_key)}
-                            disabled={isSaving}
-                            className="px-3 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:bg-primary/90 transition-colors disabled:opacity-50 flex items-center gap-1.5"
+                            onClick={() => setShowDeleteConfirmModal(param.param_key)}
+                            className="ml-auto px-2 py-2 text-muted-foreground hover:text-red-400 transition-colors"
+                            title="Delete parameter"
                           >
-                            {isSaving ? (
-                              <RefreshCw className="w-4 h-4 animate-spin" />
-                            ) : (
-                              <Save className="w-4 h-4" />
-                            )}
-                            Save
+                            <Trash2 className="w-4 h-4" />
                           </button>
-                          <button
-                            onClick={() => handleReset(param.param_key)}
-                            className="px-3 py-2 bg-secondary text-muted-foreground rounded-lg text-sm font-medium hover:bg-secondary/80 transition-colors"
-                          >
-                            Reset
-                          </button>
-                        </>
-                      )}
-                      
-                      {!isChanged && param.param_value && (
-                        <div className="flex items-center gap-1.5 text-emerald-400 text-sm">
-                          <Check className="w-4 h-4" />
-                          <span>Saved</span>
                         </div>
-                      )}
-                      
-                      {/* Delete button */}
-                      <button
-                        onClick={() => setShowDeleteConfirmModal(param.param_key)}
-                        className="px-2 py-2 text-muted-foreground hover:text-red-400 transition-colors"
-                        title="Delete parameter"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    </div>
+                      </>
+                    ) : (
+                      <div className="flex items-center gap-2">
+                        <input
+                          type={param.param_type === 'url' ? 'url' : 'text'}
+                          value={editedValues[param.param_key] || ''}
+                          onChange={(e) => handleValueChange(param.param_key, e.target.value)}
+                          placeholder={`Enter ${param.param_label.toLowerCase()}`}
+                          className={`flex-1 px-3 py-2 bg-secondary/50 border rounded-lg text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary ${
+                            param.param_type === 'url' ? 'font-mono text-xs' : ''
+                          }`}
+                        />
+
+                        {isChanged && (
+                          <>
+                            <button
+                              onClick={() => handleSave(param.param_key)}
+                              disabled={isSaving}
+                              className="px-3 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:bg-primary/90 transition-colors disabled:opacity-50 flex items-center gap-1.5"
+                            >
+                              {isSaving ? (
+                                <RefreshCw className="w-4 h-4 animate-spin" />
+                              ) : (
+                                <Save className="w-4 h-4" />
+                              )}
+                              Save
+                            </button>
+                            <button
+                              onClick={() => handleReset(param.param_key)}
+                              className="px-3 py-2 bg-secondary text-muted-foreground rounded-lg text-sm font-medium hover:bg-secondary/80 transition-colors"
+                            >
+                              Reset
+                            </button>
+                          </>
+                        )}
+
+                        {!isChanged && param.param_value && (
+                          <div className="flex items-center gap-1.5 text-emerald-400 text-sm">
+                            <Check className="w-4 h-4" />
+                            <span>Saved</span>
+                          </div>
+                        )}
+
+                        <button
+                          onClick={() => setShowDeleteConfirmModal(param.param_key)}
+                          className="px-2 py-2 text-muted-foreground hover:text-red-400 transition-colors"
+                          title="Delete parameter"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>

@@ -8,7 +8,7 @@
 -- =============================================================================
 
 -- Clear existing data (for recreate scenarios)
-DELETE FROM ${schema}.workshop_parameters WHERE param_key IN ('workspace_url', 'workspace_org_id', 'default_warehouse', 'lakebase_instance_name', 'lakebase_host_name', 'lakehouse_default_catalog', 'model_serving_endpoint', 'chapter_3_lakehouse_catalog', 'chapter_3_lakehouse_schema', 'company_brand_url', 'lakebase_uc_catalog_name', 'app_name', 'lakebase_mode');
+DELETE FROM ${schema}.workshop_parameters WHERE param_key IN ('workspace_url', 'workspace_org_id', 'default_warehouse', 'lakebase_instance_name', 'lakebase_host_name', 'lakehouse_default_catalog', 'model_serving_endpoint', 'chapter_3_lakehouse_catalog', 'chapter_3_lakehouse_schema', 'company_brand_url', 'lakebase_uc_catalog_name', 'app_name', 'lakebase_mode', 'coding_assistants_config');
 
 -- Parameter 1: Databricks Workspace URL
 INSERT INTO ${schema}.workshop_parameters 
@@ -225,6 +225,23 @@ VALUES
  'text',
  12,
  TRUE,
+ TRUE,
+ FALSE,
+ CURRENT_TIMESTAMP,
+ CURRENT_TIMESTAMP,
+ CURRENT_USER);
+
+-- Parameter 13: Coding Assistants Config (visibility, order, recommended)
+INSERT INTO ${schema}.workshop_parameters 
+(param_key, param_label, param_value, param_description, param_type, display_order, is_required, is_active, allow_session_override, inserted_at, updated_at, created_by)
+VALUES
+('coding_assistants_config', 
+ 'Coding Assistants (visibility, order, recommended)', 
+ '[{"id":"cursor","recommended":true},{"id":"coda","recommended":true},{"id":"ai-gateway","recommended":true},{"id":"genie-code","recommended":false},{"id":"copilot","recommended":false},{"id":"vscode","recommended":false}]',
+ 'Ordered array of coding assistants shown on the workflow page. Controls which are visible, their display order, and which are flagged recommended.',
+ 'assistant_config',
+ 13,
+ FALSE,
  TRUE,
  FALSE,
  CURRENT_TIMESTAMP,

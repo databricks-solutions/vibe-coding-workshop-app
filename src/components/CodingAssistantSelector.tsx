@@ -1,7 +1,13 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { ChevronDown, CheckCircle, ExternalLink, Download, Sparkles, Terminal, Lock } from 'lucide-react';
 import { BorderBeamButton } from './BorderBeamButton';
 import { AiGatewaySetupGuide } from './AiGatewaySetupGuide';
+import {
+  parseCodingAssistantsConfig,
+  type AssistantId,
+  type CodingAssistantConfigEntry,
+} from '../constants/codingAssistants';
+import { apiClient } from '../api/client';
 
 // ---------------------------------------------------------------------------
 // Brand SVG icons
@@ -43,8 +49,6 @@ function DatabricksIcon({ className }: { className?: string }) {
 // ---------------------------------------------------------------------------
 // Assistant data with richer detail
 // ---------------------------------------------------------------------------
-
-type AssistantId = 'cursor' | 'copilot' | 'vscode' | 'ai-gateway' | 'coda' | 'genie-code';
 
 interface AssistantOption {
   id: AssistantId;
@@ -135,12 +139,17 @@ const ASSISTANTS: AssistantOption[] = [
   {
     id: 'coda',
     name: 'CoDA',
-    tagline: 'Coding agents on Databricks Apps',
-    detail: 'Run Claude Code, Codex, Gemini CLI, and OpenCode in your browser — zero setup, wired to your Databricks workspace with AI Gateway integration.',
-    features: ['Browser-based coding agents', 'Databricks AI Gateway integration', 'MLflow session tracing'],
-    url: 'https://github.com/datasciencemonkey/coding-agents-databricks-apps',
-    downloadLabel: 'Learn More',
-    comingSoon: true,
+    tagline: 'Coding agents in your browser on Databricks Apps',
+    detail:
+      'CoDA (Coding agents on Databricks Apps) runs Claude Code, Codex, Gemini CLI, and OpenCode directly in your browser — no local install required. Deploy once to your Databricks workspace and every agent comes wired to the AI Gateway with governed model access, MLflow session tracing, and Unity Catalog-scoped permissions out of the box.',
+    features: [
+      'Claude Code, Codex, Gemini CLI & OpenCode in one browser terminal',
+      'Databricks AI Gateway with auto-rotating PAT (10-min cycle)',
+      '39 pre-installed skills + automatic MLflow tracing per session',
+    ],
+    url: 'https://github.com/datasciencemonkey/coding-agents-databricks-apps/blob/main/docs/deployment.md',
+    downloadLabel: 'Deploy to Databricks Apps',
+    comingSoon: false,
     iconColor: 'text-orange-400',
     iconBg: 'bg-orange-500/15',
     selectedBorder: 'border-orange-500/60',
@@ -207,6 +216,58 @@ export function CodingAssistantSelector({
     if (forceCollapsed && !prevForceCollapsed.current) setUserOverride(null);
     prevForceCollapsed.current = forceCollapsed;
   }, [forceCollapsed]);
+
+  // ------------------------------------------------------------------------
+  // Admin-configured visibility / order / recommended state.
+  // `null` means "not yet loaded" — we render the full hardcoded catalog with
+  // no badges in that case (matches today's UX; no flicker).
+  // ------------------------------------------------------------------------
+  const [config, setConfig] = useState<CodingAssistantConfigEntry[] | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    apiClient
+      .getWorkshopParametersDict()
+      .then(dict => {
+        if (cancelled) return;
+        const parsed = parseCodingAssistantsConfig(dict?.coding_assistants_config);
+        // Any parse failure / missing key -> empty array, which triggers the
+        // "fallback to full catalog" branch below.
+        setConfig(parsed ?? []);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setConfig([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const orderedAssistants = useMemo(() => {
+    type OrderedEntry = { assistant: AssistantOption; recommended: boolean };
+    // Fallback: nothing configured yet OR empty/invalid config -> full catalog, no badges.
+    if (!config || config.length === 0) {
+      return ASSISTANTS.map<OrderedEntry>(a => ({ assistant: a, recommended: false }));
+    }
+    const byId = new Map(ASSISTANTS.map(a => [a.id, a] as const));
+    const ordered: OrderedEntry[] = [];
+    for (const entry of config) {
+      const assistant = byId.get(entry.id as AssistantId);
+      if (!assistant) continue;
+      ordered.push({ assistant, recommended: !!entry.recommended });
+    }
+    // Safety net: if the user has an assistant selected that the admin has
+    // since hidden, append it so saved / shared sessions don't show a broken
+    // "nothing selected" state. No badge — it's a grandfathered card.
+    if (selectedAssistant && !ordered.some(o => o.assistant.id === selectedAssistant)) {
+      const extra = byId.get(selectedAssistant as AssistantId);
+      if (extra) {
+        ordered.push({ assistant: extra, recommended: false });
+      }
+    }
+    return ordered;
+  }, [config, selectedAssistant]);
 
   const isExpanded = forceExpanded ? true : (userOverride ?? false);
   const isComplete = !!selectedAssistant;
@@ -285,7 +346,7 @@ export function CodingAssistantSelector({
         <div className="px-4 pb-4 space-y-3">
           {/* Option cards */}
           <div className="flex flex-wrap gap-2">
-            {ASSISTANTS.map((assistant) => {
+            {orderedAssistants.map(({ assistant, recommended }) => {
               const isSelected = selectedAssistant === assistant.id;
               const isDisabled = assistant.comingSoon || isLocked;
               const Icon = assistant.icon;
@@ -309,11 +370,20 @@ export function CodingAssistantSelector({
                     <Icon className={`w-4 h-4 ${isSelected ? assistant.iconColor : 'text-muted-foreground'}`} />
                   </div>
                   <div className="text-left">
-                    <div className="flex items-center gap-1.5">
+                    <div className="flex items-center gap-1.5 flex-wrap">
                       <span className={`text-ui-base font-medium ${isSelected ? 'text-foreground' : 'text-foreground/80'}`}>
                         {assistant.name}
                       </span>
                       {isSelected && <CheckCircle className={`w-3.5 h-3.5 ${assistant.iconColor}`} />}
+                      {recommended && (
+                        <span
+                          className="inline-flex items-center gap-1 text-ui-3xs font-semibold uppercase tracking-[0.08em] px-2 py-0.5 rounded-full bg-gradient-to-r from-amber-500/15 to-amber-400/10 text-amber-200 border border-amber-400/30 whitespace-nowrap shadow-[inset_0_0_0_1px_rgba(251,191,36,0.05)]"
+                          title="Recommended"
+                        >
+                          <Sparkles className="w-2.5 h-2.5" />
+                          Recommended
+                        </span>
+                      )}
                     </div>
                     <span className="text-ui-2xs text-muted-foreground">{assistant.tagline}</span>
                   </div>
