@@ -50,13 +50,11 @@ export default function App() {
     if (isConfigPage) {
       setWasOnConfigPage(true);
     } else if (wasOnConfigPage) {
-      // Just left config page - increment refresh key to force data re-fetch
+      // Just left config page - increment refresh key to force data re-fetch.
+      // Visibility (disabled steps + prerequisites_visible) is refreshed by the
+      // codingAssistant/dataRefreshKey effect below.
       setDataRefreshKey(prev => prev + 1);
       setWasOnConfigPage(false);
-      // Re-fetch disabled steps so step visibility changes take effect immediately
-      apiClient.getDisabledSteps()
-        .then(tags => setDisabledSectionTags(new Set(tags)))
-        .catch(err => console.error('Error fetching disabled steps:', err));
     }
   }, [isConfigPage, wasOnConfigPage]);
 
@@ -83,8 +81,11 @@ export default function App() {
   const [defaultCatalog, setDefaultCatalog] = useState('');
   const [initialExpandedStep, setInitialExpandedStep] = useState<number>(1);
 
-  // Disabled steps (fetched once on mount from backend)
+  // Visibility state (fetched per coding_assistant from backend). The Set is
+  // the list of disabled section_tags. `prerequisitesVisible` controls whether
+  // the Prerequisites block renders in the wizard.
   const [disabledSectionTags, setDisabledSectionTags] = useState<Set<string>>(new Set());
+  const [prerequisitesVisible, setPrerequisitesVisible] = useState<boolean>(true);
 
   // Selected options
   const [selectedIndustry, setSelectedIndustry] = useState<string>('');
@@ -150,10 +151,9 @@ export default function App() {
       .then(param => { if (param?.param_value) setDefaultCatalog(param.param_value); })
       .catch(() => {});
 
-    // Fetch disabled steps
-    apiClient.getDisabledSteps()
-      .then(tags => setDisabledSectionTags(new Set(tags)))
-      .catch(err => console.error('Error fetching disabled steps:', err));
+    // Visibility (disabled steps + prerequisites) is fetched by the dedicated
+    // codingAssistant/dataRefreshKey effect further down — keeping a single
+    // authority avoids the double-fetch + race window that existed before.
 
     // Load build-time brand config (generated during install from customer website)
     fetch('/brand-config.json')
@@ -596,6 +596,28 @@ export default function App() {
     createNewSession();
   };
 
+  // Visibility fetch: runs on mount, whenever the active coding assistant
+  // changes, and after every Config->Workflow navigation (dataRefreshKey bump).
+  // A local `cancelled` flag drops stale responses so a quick assistant swap
+  // never leaves a stale result applied.
+  useEffect(() => {
+    let cancelled = false;
+    apiClient
+      .getVisibility(codingAssistant ?? undefined)
+      .then(v => {
+        if (cancelled) return;
+        setDisabledSectionTags(new Set(v.disabled_steps));
+        setPrerequisitesVisible(v.prerequisites_visible);
+      })
+      .catch(err => {
+        if (cancelled) return;
+        console.error('Error fetching visibility:', err);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [codingAssistant, dataRefreshKey]);
+
   // Show config hint after scrolling past step 3
   useEffect(() => {
     if (isConfigPage || hintDismissed) return;
@@ -1010,6 +1032,7 @@ export default function App() {
                     onWorkshopLevelChange={handleWorkshopLevelChange}
                     levelExplicitlySelected={levelExplicitlySelected}
                     disabledSectionTags={disabledSectionTags}
+                    prerequisitesVisible={prerequisitesVisible}
                     useCaseLockedLevel={useCaseLockedLevel}
                     direction={direction}
                     directionLocked={directionLocked}

@@ -609,13 +609,27 @@ try:
             count = execute_sql_file(cursor, ddl_file, SCHEMA, ignore_errors=True)
             print(f"({count} statements)")
         
-        # Check if tables need seeding
+        # Check if tables need seeding. We also probe any new
+        # "overrides/lookup" tables (added in later DDL revs) so that their
+        # seed files run on an existing install where the original two tables
+        # are already populated but the new table is empty. All seed files in
+        # this project use ON CONFLICT DO NOTHING, so re-running the full seed
+        # batch is safe and admin-edited content is preserved.
         cursor.execute(f"SELECT COUNT(*) FROM {SCHEMA}.usecase_descriptions")
         uc_count = cursor.fetchone()[0]
         cursor.execute(f"SELECT COUNT(*) FROM {SCHEMA}.section_input_prompts")
         sip_count = cursor.fetchone()[0]
-        
-        if uc_count == 0 or sip_count == 0:
+
+        # New overrides tables added by later DDLs. Missing table -> treat as
+        # empty (no extra guard needed because DDL just ran above).
+        svo_count = 0
+        try:
+            cursor.execute(f"SELECT COUNT(*) FROM {SCHEMA}.step_visibility_overrides")
+            svo_count = cursor.fetchone()[0]
+        except Exception:
+            pass
+
+        if uc_count == 0 or sip_count == 0 or svo_count == 0:
             print(f"  Executing DML seed from {DML_SEED_DIR}/...")
             dml_files = get_dml_seed_files()
             for dml_file in dml_files:
@@ -637,7 +651,24 @@ try:
                     print(f"    (sequence for {table}.{col} not found or already correct)")
         else:
             print(f"  Tables already have data (usecase: {uc_count}, section_prompts: {sip_count})")
-        
+
+            # Existing install: the bulk-seed gate above did NOT fire, so any
+            # new product-default values landing in a seed file would be stuck
+            # on fresh installs only. The files listed below are designed to be
+            # safe on every invocation (ON CONFLICT DO NOTHING for INSERTs;
+            # updated_by='seed' guards on UPDATEs so admin-made changes are
+            # never clobbered). Re-running them here is how product-default
+            # tweaks reach existing installs without a disruptive --recreate.
+            POST_SEED_MIGRATIONS = ['08_seed_step_visibility_overrides.sql']
+            print(f"  Applying idempotent post-seed migrations...")
+            for mig in POST_SEED_MIGRATIONS:
+                mig_path = os.path.join(DML_SEED_DIR, mig)
+                if not os.path.exists(mig_path):
+                    continue
+                print(f"    {mig}...", end=" ")
+                count = execute_sql_file(cursor, mig_path, SCHEMA, ignore_errors=True)
+                print(f"({count} statements)")
+
         print()
         print("✓ Tables ready")
 

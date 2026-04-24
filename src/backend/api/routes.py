@@ -647,8 +647,20 @@ class SectionInputResponse(BaseModel):
 
 
 class StepVisibilityUpdate(BaseModel):
-    """Request to toggle a step's visibility"""
+    """Request to toggle a step's visibility.
+
+    When `coding_assistant` is omitted or equals the Default sentinel, the
+    update lands on the Default source of truth:
+      * real section_tags -> section_input_prompts.step_enabled (unchanged path)
+      * '__prerequisites__' -> step_visibility_overrides with coding_assistant='__default__'
+    When `coding_assistant` is 'coda' or 'genie-code', the update is an UPSERT
+    into step_visibility_overrides for that assistant.
+    """
     enabled: bool = Field(..., description="Whether the step should be enabled")
+    coding_assistant: Optional[str] = Field(
+        None,
+        description="Coding assistant key. Defaults to '__default__'. Allowed: '__default__', 'genie-code', 'coda'.",
+    )
 
 
 class IndustryCreate(BaseModel):
@@ -3465,6 +3477,13 @@ async def create_section_input(request: SectionInputCreate) -> SectionInputRespo
 
     _invalidate_cache()
 
+    # Seed CoDA + Genie Code visibility rows the first time a brand-new
+    # section_tag lands as a Default row. ON CONFLICT DO NOTHING keeps this a
+    # no-op for every subsequent version bump and for sections that already
+    # have per-assistant override rows.
+    if assistant_key == DEFAULT_CODING_ASSISTANT_KEY and next_version == 1:
+        _seed_visibility_overrides_for_new_section(request.section_tag)
+
     logger.info(
         f"[Config API] Created section input version {next_version} for "
         f"{request.section_tag} (assistant={assistant_key})"
@@ -3760,9 +3779,25 @@ async def delete_section_input(section_tag: str) -> Dict[str, Any]:
 # =============================================================================
 # STEP VISIBILITY API ENDPOINTS
 # =============================================================================
+# Visibility model (per-coding-assistant, three always-explicit values):
+#   * Real steps:
+#       - Default value lives on section_input_prompts.step_enabled (unchanged).
+#       - CoDA / Genie Code rows live in step_visibility_overrides.
+#   * Prerequisites (section_key = '__prerequisites__'):
+#       - All three values live in step_visibility_overrides.
+# Seeding (db/lakebase/dml_seed/08_*.sql) mirrors current Default into CoDA and
+# Genie at install time. The admin matrix is then fully independent: flipping
+# Default later does NOT cascade to CoDA/Genie.
 
-def get_disabled_step_tags() -> List[str]:
-    """Return section_tags where step_enabled=FALSE among active Default rows."""
+PREREQUISITES_KEY = "__prerequisites__"
+
+
+def _default_disabled_step_tags() -> List[str]:
+    """Return section_tags where step_enabled=FALSE among active Default rows.
+
+    Byte-for-byte equivalent to the pre-change get_disabled_step_tags body so
+    the Default-only code path is untouched by the new resolver.
+    """
     schema = get_schema()
     sql = f"""
         SELECT DISTINCT section_tag FROM {schema}.section_input_prompts
@@ -3774,36 +3809,252 @@ def get_disabled_step_tags() -> List[str]:
     return [r['section_tag'] for r in rows]
 
 
+def _load_visibility_overrides() -> Dict[tuple, bool]:
+    """Load the full step_visibility_overrides table as {(section_key, coding_assistant): enabled}."""
+    schema = get_schema()
+    try:
+        rows = execute_query(
+            f"SELECT section_key, coding_assistant, enabled FROM {schema}.step_visibility_overrides"
+        )
+    except Exception as e:
+        # Defensive: if the overrides table hasn't been created yet (upgrade
+        # partially applied), fall back to an empty override set so Default
+        # behavior is preserved.
+        logger.warning(f"[Visibility] Failed to load step_visibility_overrides (returning empty): {e}")
+        return {}
+    return {
+        (r["section_key"], r["coding_assistant"]): bool(r["enabled"])
+        for r in rows
+    }
+
+
+def get_disabled_step_tags(coding_assistant: str = DEFAULT_CODING_ASSISTANT_KEY) -> List[str]:
+    """Resolve disabled section_tags for a given coding_assistant.
+
+    Semantics:
+      * Default: unchanged — reads section_input_prompts step_enabled=FALSE set.
+      * CoDA / Genie Code: start from Default's disabled set, then apply the
+        assistant's explicit override rows (an override can reveal a
+        default-disabled step or hide a default-enabled step).
+    """
+    coding_assistant = _normalize_coding_assistant(coding_assistant)
+    default_disabled = set(_default_disabled_step_tags())
+    if coding_assistant == DEFAULT_CODING_ASSISTANT_KEY:
+        return sorted(default_disabled)
+
+    overrides = _load_visibility_overrides()
+    disabled = set(default_disabled)
+    for (key, asst), enabled in overrides.items():
+        if asst != coding_assistant or key == PREREQUISITES_KEY:
+            continue
+        if enabled:
+            disabled.discard(key)
+        else:
+            disabled.add(key)
+    return sorted(disabled)
+
+
+def get_prerequisites_visible(coding_assistant: str = DEFAULT_CODING_ASSISTANT_KEY) -> bool:
+    """Resolve Prerequisites visibility for a given coding_assistant.
+
+    Override row wins when present; else fall back to the Default row; else TRUE
+    (visible) when nothing is stored at all.
+    """
+    coding_assistant = _normalize_coding_assistant(coding_assistant)
+    overrides = _load_visibility_overrides()
+    if coding_assistant != DEFAULT_CODING_ASSISTANT_KEY:
+        v = overrides.get((PREREQUISITES_KEY, coding_assistant))
+        if v is not None:
+            return v
+    return overrides.get((PREREQUISITES_KEY, DEFAULT_CODING_ASSISTANT_KEY), True)
+
+
+def _default_step_enabled_map() -> Dict[str, bool]:
+    """Map of section_tag -> step_enabled across ALL distinct Default rows
+    (active or not). Used by the admin matrix so soft-deleted tags don't
+    disappear mid-edit.
+    """
+    schema = get_schema()
+    sql = f"""
+        SELECT section_tag, BOOL_AND(step_enabled) AS step_enabled
+        FROM {schema}.section_input_prompts
+        WHERE coding_assistant = %s AND is_active = TRUE
+        GROUP BY section_tag
+    """
+    rows = execute_query(sql, (DEFAULT_CODING_ASSISTANT_KEY,))
+    return {r["section_tag"]: bool(r["step_enabled"]) for r in rows}
+
+
 @router.get("/config/disabled-steps", summary="Get disabled step section tags")
-async def get_disabled_steps():
-    """Returns a list of section_tag values where step_enabled is FALSE."""
-    return get_disabled_step_tags()
+async def get_disabled_steps(coding_assistant: Optional[str] = None):
+    """Returns a list of section_tag values where visibility is FALSE for the
+    given coding_assistant. Response shape is unchanged (List[str]); adding the
+    optional query param is fully backward-compatible.
+    """
+    asst = _validate_coding_assistant_key(coding_assistant)
+    return get_disabled_step_tags(asst)
 
 
-@router.put("/config/step-visibility/{section_tag}", summary="Toggle step visibility")
-async def toggle_step_visibility(section_tag: str, body: StepVisibilityUpdate):
-    """Enable or disable a step across all its versions."""
-    logger.info(f"[Config API] Setting step_enabled={body.enabled} for section_tag={section_tag}")
+@router.get("/config/visibility", summary="Get effective visibility for an assistant")
+async def get_visibility(coding_assistant: Optional[str] = None):
+    """Runtime combined fetch: returns disabled_steps + prerequisites_visible
+    for the given coding_assistant in one call.
+    """
+    asst = _validate_coding_assistant_key(coding_assistant)
+    return {
+        "coding_assistant": asst,
+        "disabled_steps": get_disabled_step_tags(asst),
+        "prerequisites_visible": get_prerequisites_visible(asst),
+    }
+
+
+@router.get("/config/step-visibility-matrix", summary="Admin: three-column visibility matrix")
+async def get_step_visibility_matrix():
+    """Returns one entry per known section_key with all three assistant values.
+
+    Default values come from section_input_prompts for real steps and from
+    step_visibility_overrides for '__prerequisites__'. CoDA and Genie values
+    come from step_visibility_overrides; if any override row is missing (e.g.
+    a fresh section created outside the seed hook), we fall back to the
+    Default value so the admin sees a sensible cell.
+    """
+    default_map = _default_step_enabled_map()
+    overrides = _load_visibility_overrides()
+
+    items: List[Dict[str, Any]] = []
+
+    # Prerequisites row first.
+    prereq_default = overrides.get((PREREQUISITES_KEY, DEFAULT_CODING_ASSISTANT_KEY), True)
+    items.append({
+        "section_key": PREREQUISITES_KEY,
+        "kind": "prerequisites",
+        "default_enabled": bool(prereq_default),
+        "coda_enabled": bool(overrides.get((PREREQUISITES_KEY, "coda"), prereq_default)),
+        "genie_code_enabled": bool(overrides.get((PREREQUISITES_KEY, "genie-code"), prereq_default)),
+    })
+
+    for section_tag in sorted(default_map.keys()):
+        default_value = bool(default_map[section_tag])
+        items.append({
+            "section_key": section_tag,
+            "kind": "step",
+            "default_enabled": default_value,
+            "coda_enabled": bool(overrides.get((section_tag, "coda"), default_value)),
+            "genie_code_enabled": bool(overrides.get((section_tag, "genie-code"), default_value)),
+        })
+
+    return {"items": items}
+
+
+def _upsert_override(section_key: str, coding_assistant: str, enabled: bool) -> None:
+    """UPSERT a row into step_visibility_overrides."""
+    schema = get_schema()
+    sql = f"""
+        INSERT INTO {schema}.step_visibility_overrides
+            (section_key, coding_assistant, enabled, updated_at, updated_by)
+        VALUES (%s, %s, %s, CURRENT_TIMESTAMP, %s)
+        ON CONFLICT (section_key, coding_assistant) DO UPDATE
+            SET enabled    = EXCLUDED.enabled,
+                updated_at = EXCLUDED.updated_at,
+                updated_by = EXCLUDED.updated_by
+    """
+    try:
+        current_user = _get_current_user()
+    except Exception:
+        current_user = "api"
+    execute_insert(sql, (section_key, coding_assistant, bool(enabled), current_user))
+
+
+@router.put("/config/step-visibility/{section_key}", summary="Toggle step visibility (per-assistant)")
+async def toggle_step_visibility(section_key: str, body: StepVisibilityUpdate):
+    """Enable or disable a step for the given coding_assistant.
+
+    Routing:
+      * Default + real section_tag  -> UPDATE section_input_prompts (existing path, unchanged).
+      * Default + '__prerequisites__' -> UPSERT step_visibility_overrides.
+      * CoDA / Genie Code (any key) -> UPSERT step_visibility_overrides.
+    """
+    assistant_key = _validate_coding_assistant_key(body.coding_assistant)
+    logger.info(
+        f"[Config API] Setting visibility enabled={body.enabled} for section_key={section_key} "
+        f"(assistant={assistant_key})"
+    )
 
     schema = get_schema()
-    # Existence check + update both scoped to Default rows so step_enabled stays
-    # authoritative on the Default row and fork rows are never toggled here.
-    check_sql = (
-        f"SELECT COUNT(*) as count FROM {schema}.section_input_prompts "
-        f"WHERE section_tag = %s AND coding_assistant = %s"
-    )
-    existing = execute_query(check_sql, (section_tag, DEFAULT_CODING_ASSISTANT_KEY))
-    if not existing or existing[0].get('count', 0) == 0:
-        raise HTTPException(status_code=404, detail=f"Section tag '{section_tag}' not found")
 
-    sql = (
-        f"UPDATE {schema}.section_input_prompts SET step_enabled = %s "
-        f"WHERE section_tag = %s AND coding_assistant = %s"
-    )
-    execute_insert(sql, (body.enabled, section_tag, DEFAULT_CODING_ASSISTANT_KEY))
-    _invalidate_cache()
+    if section_key == PREREQUISITES_KEY:
+        # Prerequisites: all three keys stored in overrides table.
+        _upsert_override(PREREQUISITES_KEY, assistant_key, body.enabled)
+        return {
+            "success": True,
+            "section_key": PREREQUISITES_KEY,
+            "coding_assistant": assistant_key,
+            "enabled": bool(body.enabled),
+        }
 
-    return {"success": True, "section_tag": section_tag, "step_enabled": body.enabled}
+    if assistant_key == DEFAULT_CODING_ASSISTANT_KEY:
+        # Real step, Default: existing path — update section_input_prompts. The
+        # existence check is intentionally identical to the pre-change body so
+        # this route stays byte-compatible for callers that omit coding_assistant.
+        check_sql = (
+            f"SELECT COUNT(*) as count FROM {schema}.section_input_prompts "
+            f"WHERE section_tag = %s AND coding_assistant = %s"
+        )
+        existing = execute_query(check_sql, (section_key, DEFAULT_CODING_ASSISTANT_KEY))
+        if not existing or existing[0].get('count', 0) == 0:
+            raise HTTPException(status_code=404, detail=f"Section tag '{section_key}' not found")
+
+        sql = (
+            f"UPDATE {schema}.section_input_prompts SET step_enabled = %s "
+            f"WHERE section_tag = %s AND coding_assistant = %s"
+        )
+        execute_insert(sql, (body.enabled, section_key, DEFAULT_CODING_ASSISTANT_KEY))
+        _invalidate_cache()
+        return {
+            "success": True,
+            "section_key": section_key,
+            "section_tag": section_key,  # back-compat field for older SPA builds
+            "coding_assistant": DEFAULT_CODING_ASSISTANT_KEY,
+            "enabled": bool(body.enabled),
+            "step_enabled": bool(body.enabled),  # back-compat field
+        }
+
+    # Real step, CoDA / Genie: UPSERT override.
+    _upsert_override(section_key, assistant_key, body.enabled)
+    return {
+        "success": True,
+        "section_key": section_key,
+        "coding_assistant": assistant_key,
+        "enabled": bool(body.enabled),
+    }
+
+
+def _seed_visibility_overrides_for_new_section(section_tag: str) -> None:
+    """Seed CoDA + Genie Code visibility rows for a brand-new section_tag.
+
+    Called from the POST /config/section-inputs success path when a new Default
+    row at version 1 is created. ON CONFLICT DO NOTHING means existing override
+    values are never clobbered.
+    """
+    schema = get_schema()
+    sql = f"""
+        INSERT INTO {schema}.step_visibility_overrides
+            (section_key, coding_assistant, enabled, updated_at, updated_by)
+        VALUES
+            (%s, 'coda',       TRUE, CURRENT_TIMESTAMP, %s),
+            (%s, 'genie-code', TRUE, CURRENT_TIMESTAMP, %s)
+        ON CONFLICT (section_key, coding_assistant) DO NOTHING
+    """
+    try:
+        current_user = _get_current_user()
+    except Exception:
+        current_user = "api"
+    try:
+        execute_insert(sql, (section_tag, current_user, section_tag, current_user))
+    except Exception as e:
+        # Non-fatal: the resolver falls back to Default when a row is missing,
+        # so a failed seed doesn't break visibility for the new section.
+        logger.warning(f"[Visibility] Failed to seed overrides for new section '{section_tag}': {e}")
 
 
 # =============================================================================

@@ -82,6 +82,7 @@ interface WorkflowDiagramProps {
   onWorkshopLevelChange?: (level: WorkshopLevel) => void;
   levelExplicitlySelected?: boolean;
   disabledSectionTags?: Set<string>;
+  prerequisitesVisible?: boolean;
   onStepPromptGenerated: (stepNumber: number, promptText: string) => void;
   onIndustryChange: (value: string, label: string) => void;
   onUseCaseChange: (value: string, label: string) => void;
@@ -155,6 +156,7 @@ export function WorkflowDiagram({
   onWorkshopLevelChange,
   levelExplicitlySelected = false,
   disabledSectionTags = new Set<string>(),
+  prerequisitesVisible = true,
   onStepPromptGenerated,
   onIndustryChange,
   onUseCaseChange,
@@ -419,14 +421,16 @@ export function WorkflowDiagram({
     if (intentDefined && pathAcknowledged) return 5;
     // Intent defined → Stage 4 (Path & Architecture)
     if (intentDefined) return 4;
-    // Prerequisites completed → Stage 3 (Define Intent)
-    if (prerequisitesCompleted) return 3;
+    // Prerequisites completed -- OR hidden by admin visibility config, in which
+    // case there is nothing for the user to complete and we must auto-advance
+    // onto the next visible stage (Define Intent) instead of stranding them.
+    if (prerequisitesCompleted || !prerequisitesVisible) return 3;
     // Coding assistant confirmed → Stage 2 (Prerequisites)
     if (codingAssistantConfirmed) return 2;
     // Welcome acknowledged → Stage 1 (Coding Assistant)
     if (welcomeAcknowledged) return 1;
     return 0;
-  }, [completedSteps, prerequisitesCompleted, codingAssistantConfirmed, selectedIndustry, selectedUseCase, welcomeAcknowledged, pathAcknowledged]);
+  }, [completedSteps, prerequisitesCompleted, prerequisitesVisible, codingAssistantConfirmed, selectedIndustry, selectedUseCase, welcomeAcknowledged, pathAcknowledged]);
 
   const wizardStage = deriveWizardStage();
   const prevWizardStage = useRef(wizardStage);
@@ -2529,23 +2533,27 @@ export function WorkflowDiagram({
         isLocked={codingAssistantConfirmed || readOnly}
       />
 
-      {/* Stage 2: Prerequisites */}
-      <Prerequisites
-        key={`prereq-${sessionId}`}
-        isComplete={prerequisitesCompleted}
-        onMarkComplete={() => {
-          onPrerequisitesComplete?.();
-          setForcePrereqExpanded(false);
-          setTimeout(() => {
-            const el = document.getElementById('define-intent-section');
-            if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-          }, 400);
-        }}
-        highlightMarkDone={!prerequisitesCompleted && wizardStage === 2 && !readOnly}
-        forceExpanded={forcePrereqExpanded || (wizardStage === 2 && !stageTransitioning)}
-        forceCollapsed={wizardStage < 2}
-        hideMarkDone={wizardStage < 2 || readOnly}
-      />
+      {/* Stage 2: Prerequisites -- visibility per coding_assistant (admin toggle).
+          When hidden, deriveWizardStage() auto-advances past Stage 2 so the
+          Define Intent section force-expands and the user is never stranded. */}
+      {prerequisitesVisible && (
+        <Prerequisites
+          key={`prereq-${sessionId}`}
+          isComplete={prerequisitesCompleted}
+          onMarkComplete={() => {
+            onPrerequisitesComplete?.();
+            setForcePrereqExpanded(false);
+            setTimeout(() => {
+              const el = document.getElementById('define-intent-section');
+              if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }, 400);
+          }}
+          highlightMarkDone={!prerequisitesCompleted && wizardStage === 2 && !readOnly}
+          forceExpanded={forcePrereqExpanded || (wizardStage === 2 && !stageTransitioning)}
+          forceCollapsed={wizardStage < 2}
+          hideMarkDone={wizardStage < 2 || readOnly}
+        />
+      )}
 
       {/* Stage 3: Define Your Intent */}
       <DefineIntentSection

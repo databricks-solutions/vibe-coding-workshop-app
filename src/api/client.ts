@@ -967,13 +967,65 @@ class ApiClient {
 
   // ============== Step Visibility API ==============
 
-  /** Get list of disabled step section_tags */
-  async getDisabledSteps(): Promise<string[]> {
-    return this.fetch<string[]>('/config/disabled-steps');
+  /** Get list of disabled step section_tags for the given coding assistant
+   * (omit for Default). Response shape is a plain string[] — unchanged. */
+  async getDisabledSteps(codingAssistant?: string): Promise<string[]> {
+    const qs = codingAssistant
+      ? `?coding_assistant=${encodeURIComponent(codingAssistant)}`
+      : '';
+    return this.fetch<string[]>(`/config/disabled-steps${qs}`);
   }
 
-  /** Toggle a step's visibility (enable/disable) */
-  async toggleStepVisibility(sectionTag: string, enabled: boolean): Promise<{ success: boolean; section_tag: string; step_enabled: boolean }> {
+  /** Combined runtime visibility fetch: disabled steps + prerequisites visible
+   * for the session's active coding assistant. */
+  async getVisibility(
+    codingAssistant?: string,
+  ): Promise<{ coding_assistant: string; disabled_steps: string[]; prerequisites_visible: boolean }> {
+    const qs = codingAssistant
+      ? `?coding_assistant=${encodeURIComponent(codingAssistant)}`
+      : '';
+    return this.fetch(`/config/visibility${qs}`);
+  }
+
+  /** Admin: full three-column visibility matrix (Default / CoDA / Genie Code). */
+  async getStepVisibilityMatrix(): Promise<{
+    items: Array<{
+      section_key: string;
+      kind: 'step' | 'prerequisites';
+      default_enabled: boolean;
+      coda_enabled: boolean;
+      genie_code_enabled: boolean;
+    }>;
+  }> {
+    return this.fetch('/config/step-visibility-matrix');
+  }
+
+  /** Set a step's visibility for a specific coding assistant.
+   * Omit codingAssistant (or pass '__default__') to update the Default value. */
+  async setStepVisibility(
+    sectionKey: string,
+    enabled: boolean,
+    codingAssistant?: string,
+  ): Promise<{
+    success: boolean;
+    section_key: string;
+    coding_assistant: string;
+    enabled: boolean;
+  }> {
+    const body: { enabled: boolean; coding_assistant?: string } = { enabled };
+    if (codingAssistant) body.coding_assistant = codingAssistant;
+    return this.fetch(`/config/step-visibility/${encodeURIComponent(sectionKey)}`, {
+      method: 'PUT',
+      body: JSON.stringify(body),
+    });
+  }
+
+  /** Backward-compatible alias used by older call sites. Updates the Default
+   * value (equivalent to setStepVisibility(tag, enabled) with no assistant). */
+  async toggleStepVisibility(
+    sectionTag: string,
+    enabled: boolean,
+  ): Promise<{ success: boolean; section_tag: string; step_enabled: boolean }> {
     return this.fetch(`/config/step-visibility/${encodeURIComponent(sectionTag)}`, {
       method: 'PUT',
       body: JSON.stringify({ enabled }),
