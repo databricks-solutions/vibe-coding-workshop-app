@@ -69,7 +69,7 @@ export interface WorkflowSection {
 }
 
 // Workshop Level Types - 4-column structure
-export type WorkshopLevel = 'app-only' | 'app-database' | 'lakehouse' | 'lakehouse-di' | 'end-to-end' | 'accelerator' | 'genie-accelerator' | 'data-engineering-accelerator' | 'skills-accelerator' | 'reverse-lakehouse' | 'reverse-lakehouse-di' | 'reverse-lakebase' | 'reverse-app';
+export type WorkshopLevel = 'app-only' | 'app-database' | 'lakehouse' | 'lakehouse-di' | 'end-to-end' | 'accelerator' | 'genie-accelerator' | 'data-engineering-accelerator' | 'skills-accelerator' | 'agents-accelerator' | 'reverse-lakehouse' | 'reverse-lakehouse-di' | 'reverse-lakebase' | 'reverse-app';
 
 export type WorkflowDirection = 'forward' | 'reverse';
 
@@ -213,6 +213,7 @@ export const SKILLS_ACCELERATOR_STATUS: AcceleratorStatus = 'enabled';
 // ---------------------------------------------------------------------------
 export const USE_CASE_LEVEL_LOCK: Partial<Record<string, WorkshopLevel>> = {
   build_skill: 'skills-accelerator',
+  build_agents_app: 'agents-accelerator',
 };
 
 // Level configuration with descriptions
@@ -277,6 +278,12 @@ export const WORKSHOP_LEVELS: Record<WorkshopLevel, LevelConfig> = {
     tooltip: 'Build a custom Agent Skill guided by your use case',
     description: 'Learn to build an Agent Skill following the agentskills.io standard — explore existing skills, define a strategy, generate SKILL.md, apply it, and validate.',
     sectionIds: ['define-usecase', 'agent-skills', 'iterate-enhance', 'cleanup'],
+  },
+  'agents-accelerator': {
+    label: 'Agents Accelerator',
+    tooltip: 'Build, evaluate, and deploy a production agent app',
+    description: 'Build a production-ready agent app — Databricks App + Lakebase + Bronze data + Mosaic AI Agent Framework + MLflow for Gen-AI lifecycle.',
+    sectionIds: ['define-usecase', 'databricks-app', 'lakebase', 'lakehouse', 'agents-on-apps', 'mlflow-genai', 'iterate-enhance', 'cleanup'],
   },
   'reverse-lakehouse': {
     label: 'Lakehouse',
@@ -366,6 +373,17 @@ export const ALL_STEPS: Record<number, WorkflowStep> = {
   35: { number: 35, title: 'Build Analytics App', icon: Plug, color: 'text-emerald-500', sectionTag: 'activation_build_wire' },
   36: { number: 36, title: 'Wire to Lakebase', icon: Link2, color: 'text-emerald-500', sectionTag: 'activation_wire_lakebase' },
   37: { number: 37, title: 'Deploy & Validate', icon: Rocket, color: 'text-emerald-400', sectionTag: 'activation_deploy_validate' },
+
+  // Agents Accelerator — Agents on Apps (Steps 38-45)
+  // Section titles deliberately match the tracks/A-custom-agent-apps/ folder labels
+  38: { number: 38, title: '01 - Clone and Run', icon: GitBranch, color: 'text-blue-400', sectionTag: 'agents_clone_and_run' },
+  39: { number: 39, title: '02 - Agent Framework', icon: Bot, color: 'text-blue-500', sectionTag: 'agents_agent_framework' },
+  40: { number: 40, title: '03 - Tools and MCP', icon: Plug, color: 'text-blue-400', sectionTag: 'agents_tools_and_mcp' },
+  41: { number: 41, title: '04 - Authentication', icon: Shield, color: 'text-blue-500', sectionTag: 'agents_authentication' },
+  42: { number: 42, title: '05 - Lakebase Memory', icon: Brain, color: 'text-violet-400', sectionTag: 'agents_lakebase_memory' },
+  43: { number: 43, title: '06 - Evaluation', icon: FlaskConical, color: 'text-blue-400', sectionTag: 'agents_evaluation' },
+  44: { number: 44, title: '07 - Deploy and Query', icon: Rocket, color: 'text-blue-500', sectionTag: 'agents_deploy_and_query' },
+  45: { number: 45, title: '08 - Debugging', icon: Search, color: 'text-blue-400', sectionTag: 'agents_debugging' },
 };
 
 // The logical sections with their step groupings (4-chapter structure + activation + skills)
@@ -467,6 +485,31 @@ export const WORKFLOW_SECTIONS: WorkflowSection[] = [
     steps: [20, 21].map(n => ALL_STEPS[n]),
   },
   {
+    id: 'agents-on-apps',
+    chapter: 'Agents Accelerator',
+    title: 'Agents on Apps',
+    focus: 'Build a production-grade agent on top of your Databricks App + Lakebase',
+    description: 'Stand up a Mosaic AI Agent Framework agent (ResponsesAgent) inside your existing Databricks App. Wire MCP tools, on-behalf-of-user authentication, Lakebase-backed conversation memory, evaluation, deployment, and tracing.',
+    icon: Bot,
+    color: 'text-blue-400',
+    bgColor: 'bg-blue-500/15',
+    borderColor: 'border-blue-500/30',
+    steps: [38, 39, 40, 41, 42, 43, 44, 45].map(n => ALL_STEPS[n]),
+  },
+  {
+    id: 'mlflow-genai',
+    chapter: 'Agents Accelerator',
+    title: 'MLflow for Gen-AI',
+    focus: 'Manage the agent lifecycle: prompts, evaluation, registry, deployment, monitoring',
+    description: 'Bring the MLflow 3 GenAI lifecycle to your agent — Prompt Registry, evaluation datasets, scorers and judges, evaluation runs, stakeholder sign-off, UC model registration, deployment automation, production monitoring, and prompt optimization.',
+    icon: FlaskConical,
+    color: 'text-violet-400',
+    bgColor: 'bg-violet-500/15',
+    borderColor: 'border-violet-500/30',
+    // Phase 2 will populate steps 46–54.
+    steps: [],
+  },
+  {
     id: 'cleanup',
     chapter: 'Clean Up',
     title: 'Clean Up',
@@ -522,6 +565,7 @@ export function getFilteredSections(
   
   const isGenie = normalizedLevel === 'genie-accelerator';
   const isSkillsAccelerator = normalizedLevel === 'skills-accelerator';
+  const isAgentsAccelerator = normalizedLevel === 'agents-accelerator';
 
   let filtered = WORKFLOW_SECTIONS
     .filter(section => sectionIds.includes(section.id))
@@ -531,6 +575,14 @@ export function getFilteredSections(
         return {
           ...section,
           steps: section.steps.filter(step => step.number !== 3),
+        };
+      }
+      // Agents Accelerator: lakehouse section shows only Bronze-relevant steps
+      // (must be evaluated BEFORE the !isGenie branch, since the agents path also satisfies !isGenie)
+      if (section.id === 'lakehouse' && isAgentsAccelerator) {
+        return {
+          ...section,
+          steps: section.steps.filter(step => [9, 10, 12, 23].includes(step.number)),
         };
       }
       // Genie Accelerator: lakehouse section shows only steps 22, 11, 14, 23
@@ -635,6 +687,7 @@ export const CHAPTER_VISIBILITY: Record<WorkshopLevel, Set<'ch1' | 'ch2' | 'ch3'
   'genie-accelerator': new Set(['ch3', 'ch4']),
   'data-engineering-accelerator': new Set(['ch3']),
   'skills-accelerator': new Set([]),
+  'agents-accelerator': new Set(['ch1', 'ch2', 'ch3', 'ch4']),
   'reverse-lakehouse': new Set(['ch3']),
   'reverse-lakehouse-di': new Set(['ch3', 'ch4']),
   'reverse-lakebase': new Set(['ch2', 'ch3', 'ch4']),
@@ -652,6 +705,7 @@ export const ARCH_VISIBILITY: Record<WorkshopLevel, { ch1: boolean; ch2: boolean
   'genie-accelerator': { ch1: false, ch2: false, ch3: true, ch4: true },
   'data-engineering-accelerator': { ch1: false, ch2: false, ch3: true, ch4: false },
   'skills-accelerator': { ch1: false, ch2: false, ch3: false, ch4: false },
+  'agents-accelerator': { ch1: true, ch2: true, ch3: true, ch4: true },
   'reverse-lakehouse': { ch1: false, ch2: false, ch3: true, ch4: false },
   'reverse-lakehouse-di': { ch1: false, ch2: false, ch3: true, ch4: true },
   'reverse-lakebase': { ch1: false, ch2: true, ch3: true, ch4: true },
@@ -672,6 +726,9 @@ export const LEVEL_UI_OVERRIDES: Partial<Record<WorkshopLevel, LevelUIOverrides>
     defaultUseCaseMode: 'custom',
   },
   'skills-accelerator': {
+    defaultUseCaseMode: 'library',
+  },
+  'agents-accelerator': {
     defaultUseCaseMode: 'library',
   },
 };
