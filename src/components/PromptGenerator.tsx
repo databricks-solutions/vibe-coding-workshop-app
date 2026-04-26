@@ -13,10 +13,10 @@ import { SkillPathPanel } from './SkillPathPanel';
 import { UseCaseDescriptionBox } from './UseCaseDescriptionBox';
 
 const SKILL_USE_CASES = new Set(['build_skill']);
-// Agent-app library use cases — selected from the regular use-case grid (so
-// the IntentPath UI treats them as 'use_case'), but they auto-lock the
-// workshop path via USE_CASE_LEVEL_LOCK['build_agents_app'].
-const AGENT_USE_CASES = new Set(['build_agents_app']);
+// Note: 'build_agents_app' is also a library use case but is intentionally NOT
+// in SKILL_USE_CASES — the IntentPath UI treats it as a regular 'use_case'
+// (selected from the sample-industry grid), and the workshop path auto-locks
+// via USE_CASE_LEVEL_LOCK['build_agents_app'] in workflowSections.ts.
 
 type DefineMode = 'library' | 'custom';
 
