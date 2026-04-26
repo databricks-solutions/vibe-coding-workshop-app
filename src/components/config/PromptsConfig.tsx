@@ -18,11 +18,9 @@ import { UseCaseBuilderPanel } from '../UseCaseBuilderPanel';
 type PathFilter = 'use_case' | 'skill';
 
 const SKILL_USE_CASES = new Set(['build_skill']);
-// Agent-app library use cases share the path-lock semantics of skills, but use
-// path_type='agent' on the backend. For the admin UI tab filter we group
-// agents under the 'use_case' tab (they appear alongside regular library use
-// cases). Add 'build_agents_app' here if you decide to surface a separate tab.
-const AGENT_USE_CASES = new Set(['build_agents_app']);
+// Note: 'build_agents_app' uses path_type='agent' on the backend but is grouped
+// under the 'use_case' admin tab via getPathType below. If you want a dedicated
+// 'agent' tab, extend PathFilter to include 'agent' and update the tab UI.
 
 // Styled markdown components for nice rendering (dark theme)
 const markdownComponents = {
