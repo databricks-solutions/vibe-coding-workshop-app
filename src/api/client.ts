@@ -10,7 +10,7 @@ const API_BASE_URL = '/api';
 export interface SelectOption {
   value: string;
   label: string;
-  path_type?: 'use_case' | 'skill';
+  path_type?: 'use_case' | 'skill' | 'agent';
 }
 
 export interface GeneratedContent {
@@ -93,7 +93,7 @@ export interface PromptConfig {
   inserted_at?: string;
   updated_at?: string;
   created_by?: string;
-  path_type?: 'use_case' | 'skill';
+  path_type?: 'use_case' | 'skill' | 'agent';
 }
 
 export interface ImageMetadata {
@@ -154,7 +154,7 @@ export interface UseCaseCreateRequest {
   use_case: string;
   use_case_label: string;
   prompt_template?: string;
-  path_type?: 'use_case' | 'skill';
+  path_type?: 'use_case' | 'skill' | 'agent';
 }
 
 export interface PromptConfigCreateRequest {
@@ -163,7 +163,7 @@ export interface PromptConfigCreateRequest {
   use_case: string;
   use_case_label: string;
   prompt_template: string;
-  path_type?: 'use_case' | 'skill';
+  path_type?: 'use_case' | 'skill' | 'agent';
 }
 
 export interface SectionInputCreateRequest {
