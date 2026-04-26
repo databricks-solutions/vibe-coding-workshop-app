@@ -212,7 +212,9 @@ function LevelSelectorGrid({
   const isButtonDisabled = (level: WorkshopLevel): boolean => {
     if (useCaseLockedLevel && level !== useCaseLockedLevel) return true;
     if (level === 'skills-accelerator' && !useCaseLockedLevel && hasUseCaseSelected) return true;
-    if (level === 'agents-accelerator' && !useCaseLockedLevel && hasUseCaseSelected) return true;
+    // Agents Accelerator intentionally does NOT require a specific use case:
+    // the user picks any sample use case (e.g. "Booking App"), then clicking
+    // this button locks the flow to the Agents path.
     if (!hasStartedWorkflow) return false;
 
     if (activeChain) {
@@ -570,7 +572,7 @@ function LevelSelectorGrid({
               </div>
             )}
 
-            {/* Agents Accelerator - locked to build_agents_app use case */}
+            {/* Agents Accelerator — works with any sample use case; clicking it locks the flow */}
             <div className={isButtonDisabled('agents-accelerator') ? 'relative group' : undefined}>
               <button
                 onClick={() => handleLevelClick('agents-accelerator')}

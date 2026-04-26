@@ -18,9 +18,6 @@ import { UseCaseBuilderPanel } from '../UseCaseBuilderPanel';
 type PathFilter = 'use_case' | 'skill';
 
 const SKILL_USE_CASES = new Set(['build_skill']);
-// Note: 'build_agents_app' uses path_type='agent' on the backend but is grouped
-// under the 'use_case' admin tab via getPathType below. If you want a dedicated
-// 'agent' tab, extend PathFilter to include 'agent' and update the tab UI.
 
 // Styled markdown components for nice rendering (dark theme)
 const markdownComponents = {
@@ -214,10 +211,7 @@ export function PromptsConfig({ onToast }: PromptsConfigProps) {
   }
 
   const getPathType = useCallback((c: PromptConfig): PathFilter => {
-    // 'agent' path_type is grouped under 'use_case' for the admin UI tab.
-    if (c.path_type === 'skill') return 'skill';
-    if (c.path_type === 'use_case' || c.path_type === 'agent') return 'use_case';
-    return SKILL_USE_CASES.has(c.use_case) ? 'skill' : 'use_case';
+    return (c.path_type as PathFilter) || (SKILL_USE_CASES.has(c.use_case) ? 'skill' : 'use_case');
   }, []);
 
   // Derive unique industries from configs, filtered by path type

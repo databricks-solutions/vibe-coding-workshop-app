@@ -171,16 +171,6 @@ function AgentsAcceleratorPanel({ mlflowFaded }: AgentsAcceleratorPanelProps) {
 
   return (
     <div className="flex flex-col gap-3">
-      {/* Agent tile */}
-      <ServicePopover serviceKey="agents" position="top" block>
-        <div className="bg-gradient-to-br from-blue-500 to-blue-600 rounded-lg p-2.5 shadow-lg hover:shadow-blue-500/30 hover:shadow-xl transition-all duration-200 hover:scale-105">
-          <div className="flex flex-col items-center gap-1">
-            <Bot className="w-5 h-5 text-white" />
-            <p className="text-ui-sm font-bold text-white text-center">Agent</p>
-          </div>
-        </div>
-      </ServicePopover>
-
       {/* Agents on Apps sub-container — 3 chips matching folder labels 02/03/05 */}
       <div className="bg-slate-800 border-2 border-blue-500/60 rounded-lg p-3 shadow-lg">
         <p className="text-ui-xs font-bold text-blue-300 mb-2 text-center">Agents on Apps</p>
