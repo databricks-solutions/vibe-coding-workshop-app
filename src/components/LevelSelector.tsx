@@ -80,6 +80,7 @@ const BUTTON_LABELS: Record<WorkshopLevel, string> = {
   'genie-accelerator': 'Genie Accelerator',
   'data-engineering-accelerator': 'Data Engineering Accelerator',
   'skills-accelerator': 'Agent Skills Accelerator',
+  'agents-accelerator': 'Agents Accelerator',
   'reverse-lakehouse': 'Lakehouse',
   'reverse-lakehouse-di': '+ AI and Agents',
   'reverse-lakebase': '+ Lakebase (Synced)',
@@ -96,6 +97,7 @@ const LEVEL_DESCRIPTIONS: Record<WorkshopLevel, string> = {
   'genie-accelerator': 'Analyze silver metadata, design Gold layer, and build Genie Spaces with Metric Views and TVFs',
   'data-engineering-accelerator': 'Build production-ready Bronze, Silver, and Gold data pipelines using Databricks Lakehouse best practices',
   'skills-accelerator': 'Build a Data Contract Governance Skill that tags gold-layer tables and validates compliance for certification',
+  'agents-accelerator': 'Build, evaluate, and deploy a production-ready agent app — Databricks App + Lakebase + Bronze data + Mosaic AI Agent Framework + MLflow for Gen-AI lifecycle.',
   'reverse-lakehouse': 'Start with Lakehouse data engineering, then sync analytics into Lakebase.',
   'reverse-lakehouse-di': 'Build Gold layer analytics and Genie Spaces, then sync into Lakebase.',
   'reverse-lakebase': 'Push curated analytics data into Lakebase PostgreSQL using Databricks Synced Tables.',
@@ -140,6 +142,8 @@ function getHighlightedButtons(selectedLevel: WorkshopLevel, completedSteps: Set
       return new Set<WorkshopLevel>(['data-engineering-accelerator']);
     case 'skills-accelerator':
       return new Set<WorkshopLevel>(['skills-accelerator']);
+    case 'agents-accelerator':
+      return new Set<WorkshopLevel>(['agents-accelerator']);
     default:
       return new Set<WorkshopLevel>([selectedLevel]);
   }
@@ -208,6 +212,7 @@ function LevelSelectorGrid({
   const isButtonDisabled = (level: WorkshopLevel): boolean => {
     if (useCaseLockedLevel && level !== useCaseLockedLevel) return true;
     if (level === 'skills-accelerator' && !useCaseLockedLevel && hasUseCaseSelected) return true;
+    if (level === 'agents-accelerator' && !useCaseLockedLevel && hasUseCaseSelected) return true;
     if (!hasStartedWorkflow) return false;
 
     if (activeChain) {
@@ -261,7 +266,7 @@ function LevelSelectorGrid({
   const isAppSelected = appHasHighlight && (selectedLevel === 'app-only' || selectedLevel === 'app-database' || selectedLevel === 'reverse-lakebase' || selectedLevel === 'reverse-app');
   const isAnalyticsSelected = analyticsHasHighlight && (selectedLevel === 'lakehouse' || selectedLevel === 'lakehouse-di' || selectedLevel === 'reverse-lakehouse' || selectedLevel === 'reverse-lakehouse-di');
   const isEndToEndSelected = selectedLevel === 'end-to-end';
-  const isAcceleratorSelected = selectedLevel === 'accelerator' || selectedLevel === 'genie-accelerator' || selectedLevel === 'data-engineering-accelerator' || selectedLevel === 'skills-accelerator';
+  const isAcceleratorSelected = selectedLevel === 'accelerator' || selectedLevel === 'genie-accelerator' || selectedLevel === 'data-engineering-accelerator' || selectedLevel === 'skills-accelerator' || selectedLevel === 'agents-accelerator';
 
   const isColumnLocked = (track: Track) => {
     if (!isPathLocked) return false;
@@ -565,6 +570,29 @@ function LevelSelectorGrid({
               </div>
             )}
 
+            {/* Agents Accelerator - locked to build_agents_app use case */}
+            <div className={isButtonDisabled('agents-accelerator') ? 'relative group' : undefined}>
+              <button
+                onClick={() => handleLevelClick('agents-accelerator')}
+                disabled={isButtonDisabled('agents-accelerator')}
+                className={getButtonClass('agents-accelerator')}
+              >
+                <div className="flex items-center gap-2.5">
+                  <Bot className="w-4 h-4 flex-shrink-0" />
+                  <span className="flex-1 text-left">{BUTTON_LABELS['agents-accelerator']}</span>
+                  <span className={`text-ui-3xs px-1.5 py-0.5 rounded font-medium ${
+                    selectedLevel === 'agents-accelerator'
+                      ? 'bg-white/20 text-primary-foreground/80 border border-white/20'
+                      : 'bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30'
+                  }`}>New</span>
+                  {!isButtonDisabled('agents-accelerator') && (selectedLevel === 'agents-accelerator' || isHighlighted('agents-accelerator')) && (
+                    <Check className={`w-3.5 h-3.5 flex-shrink-0 ${selectedLevel === 'agents-accelerator' ? '' : 'opacity-60'}`} />
+                  )}
+                </div>
+              </button>
+              {isButtonDisabled('agents-accelerator') && <LockedTooltip />}
+            </div>
+
             {/* Lakebase Accelerator - Coming Soon */}
             <button
               disabled
@@ -854,7 +882,7 @@ export function LevelSelector({
     const isAppSelected = selectedLevel === 'app-only' || selectedLevel === 'app-database' || selectedLevel === 'reverse-lakebase' || selectedLevel === 'reverse-app';
     const isAnalyticsSelected = selectedLevel === 'lakehouse' || selectedLevel === 'lakehouse-di' || selectedLevel === 'reverse-lakehouse' || selectedLevel === 'reverse-lakehouse-di';
     const isEndToEndSelected = selectedLevel === 'end-to-end';
-    const isAcceleratorSelected = selectedLevel === 'accelerator' || selectedLevel === 'genie-accelerator' || selectedLevel === 'data-engineering-accelerator' || selectedLevel === 'skills-accelerator';
+    const isAcceleratorSelected = selectedLevel === 'accelerator' || selectedLevel === 'genie-accelerator' || selectedLevel === 'data-engineering-accelerator' || selectedLevel === 'skills-accelerator' || selectedLevel === 'agents-accelerator';
     if (isAppSelected) return `Web App + Database — ${BUTTON_LABELS[selectedLevel]}`;
     if (isAnalyticsSelected) return `Analytics + AI — ${BUTTON_LABELS[selectedLevel]}`;
     if (isEndToEndSelected) return 'End to End — Complete Workshop';
@@ -878,6 +906,7 @@ export function LevelSelector({
       case 'genie-accelerator': return 'Foundation → Silver Metadata → Gold Layer → Use-Case Plan → Genie Space → Refinement';
       case 'data-engineering-accelerator': return 'Foundation → Lakehouse (Bronze → Silver → Gold) → Refinement';
       case 'skills-accelerator': return 'Foundation → Build Agent Skill (Explore, Strategy, SKILL.md, Apply & Test, Validate) → Refinement';
+      case 'agents-accelerator': return 'Foundation → Databricks App → Lakebase → Lakehouse (Bronze) → Agents on Apps → MLflow for Gen-AI → Refinement';
       case 'reverse-lakehouse': return 'Foundation → Lakehouse → Refinement';
       case 'reverse-lakehouse-di': return 'Foundation → Lakehouse → AI and Agents → Refinement';
       case 'reverse-lakebase': return 'Foundation → Lakehouse → AI and Agents → Reverse ETL (Synced Tables) → Refinement';
