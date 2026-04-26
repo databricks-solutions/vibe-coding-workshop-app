@@ -2496,6 +2496,272 @@ export function WorkflowDiagram({
                 </div>
               );
 
+            // ----------------------------------------------------------------
+            // Agents Accelerator — MLflow for Gen-AI (Steps 46–54)
+            // Section titles match the sdlc/ folder labels
+            // ----------------------------------------------------------------
+
+            // Step 46: 01 - Prompt Registry
+            case 46:
+              return (
+                <div key={46} className="relative mt-5" data-step-number="46">
+                  <WorkflowStep
+                    stepNumber={46}
+                    title="01 - Prompt Registry"
+                    description="Register the agent's prompts in MLflow Prompt Registry with git-style versioning and aliases (@production, @staging) for safe promotion"
+                    icon={<BookOpen className="w-5 h-5" />}
+                    color="violet"
+                    isComplete={completedSteps.has(46)}
+                    isSkipped={skippedSteps.has(46)}
+                    onToggleComplete={() => toggleStepComplete(46)}
+                    onToggleSkip={() => toggleStepSkip(46)}
+                    onNavigateNext={() => navigateToNextStep(46)}
+                    sectionTag="mlflow_prompt_registry"
+                    industry={selectedIndustry}
+                    useCase={selectedUseCase}
+                    onPromptGenerated={onStepPromptGenerated}
+                    initialPrompt={stepPrompts[46]}
+                    previousOutputs={stepPrompts[45] ? { debugging: stepPrompts[45] } : undefined}
+                    isPreviousStepComplete={isPreviousStepComplete(46)}
+                    isExpanded={expandedStep === 46}
+                    onToggleExpand={() => toggleExpand(46)}
+                    sessionId={sessionId}
+                  />
+                </div>
+              );
+
+            // Step 47: 02 - Evaluation Datasets
+            case 47:
+              return (
+                <div key={47} className="relative mt-5" data-step-number="47">
+                  <WorkflowStep
+                    stepNumber={47}
+                    title="02 - Evaluation Datasets"
+                    description="Curate an evaluation dataset (Unity Catalog table) from real or synthetic traffic for repeatable agent evaluation"
+                    icon={<Table2 className="w-5 h-5" />}
+                    color="violet"
+                    isComplete={completedSteps.has(47)}
+                    isSkipped={skippedSteps.has(47)}
+                    onToggleComplete={() => toggleStepComplete(47)}
+                    onToggleSkip={() => toggleStepSkip(47)}
+                    onNavigateNext={() => navigateToNextStep(47)}
+                    sectionTag="mlflow_evaluation_datasets"
+                    industry={selectedIndustry}
+                    useCase={selectedUseCase}
+                    onPromptGenerated={onStepPromptGenerated}
+                    initialPrompt={stepPrompts[47]}
+                    previousOutputs={stepPrompts[46] ? { prompt_registry: stepPrompts[46] } : undefined}
+                    isPreviousStepComplete={isPreviousStepComplete(47)}
+                    isExpanded={expandedStep === 47}
+                    onToggleExpand={() => toggleExpand(47)}
+                    sessionId={sessionId}
+                  />
+                </div>
+              );
+
+            // Step 48: 03 - Scorers and Judges
+            case 48:
+              return (
+                <div key={48} className="relative mt-5" data-step-number="48">
+                  <WorkflowStep
+                    stepNumber={48}
+                    title="03 - Scorers and Judges"
+                    description="Define LLM-as-judge scorers (Correctness, RetrievalGroundedness, Guidelines, Custom, Code-based) plus heuristic scorers"
+                    icon={<ShieldCheck className="w-5 h-5" />}
+                    color="violet"
+                    isComplete={completedSteps.has(48)}
+                    isSkipped={skippedSteps.has(48)}
+                    onToggleComplete={() => toggleStepComplete(48)}
+                    onToggleSkip={() => toggleStepSkip(48)}
+                    onNavigateNext={() => navigateToNextStep(48)}
+                    sectionTag="mlflow_scorers_and_judges"
+                    industry={selectedIndustry}
+                    useCase={selectedUseCase}
+                    onPromptGenerated={onStepPromptGenerated}
+                    initialPrompt={stepPrompts[48]}
+                    previousOutputs={stepPrompts[47] ? { evaluation_datasets: stepPrompts[47] } : undefined}
+                    isPreviousStepComplete={isPreviousStepComplete(48)}
+                    isExpanded={expandedStep === 48}
+                    onToggleExpand={() => toggleExpand(48)}
+                    sessionId={sessionId}
+                  />
+                </div>
+              );
+
+            // Step 49: 04 - Evaluation Runs
+            case 49:
+              return (
+                <div key={49} className="relative mt-5" data-step-number="49">
+                  <WorkflowStep
+                    stepNumber={49}
+                    title="04 - Evaluation Runs"
+                    description="Execute mlflow.genai.evaluate() runs across prompt and model variants; compare results in the MLflow UI"
+                    icon={<FlaskConical className="w-5 h-5" />}
+                    color="violet"
+                    isComplete={completedSteps.has(49)}
+                    isSkipped={skippedSteps.has(49)}
+                    onToggleComplete={() => toggleStepComplete(49)}
+                    onToggleSkip={() => toggleStepSkip(49)}
+                    onNavigateNext={() => navigateToNextStep(49)}
+                    sectionTag="mlflow_evaluation_runs"
+                    industry={selectedIndustry}
+                    useCase={selectedUseCase}
+                    onPromptGenerated={onStepPromptGenerated}
+                    initialPrompt={stepPrompts[49]}
+                    previousOutputs={stepPrompts[48] ? { scorers_and_judges: stepPrompts[48] } : undefined}
+                    isPreviousStepComplete={isPreviousStepComplete(49)}
+                    isExpanded={expandedStep === 49}
+                    onToggleExpand={() => toggleExpand(49)}
+                    sessionId={sessionId}
+                  />
+                </div>
+              );
+
+            // Step 50: 04b - Stakeholder Sign-off
+            case 50:
+              return (
+                <div key={50} className="relative mt-5" data-step-number="50">
+                  <WorkflowStep
+                    stepNumber={50}
+                    title="04b - Stakeholder Sign-off"
+                    description="Workflow practice: share the Review App + eval dashboard with reviewers, capture human ratings, and record final approval before promotion"
+                    icon={<Tag className="w-5 h-5" />}
+                    color="violet"
+                    isComplete={completedSteps.has(50)}
+                    isSkipped={skippedSteps.has(50)}
+                    onToggleComplete={() => toggleStepComplete(50)}
+                    onToggleSkip={() => toggleStepSkip(50)}
+                    onNavigateNext={() => navigateToNextStep(50)}
+                    sectionTag="mlflow_stakeholder_signoff"
+                    industry={selectedIndustry}
+                    useCase={selectedUseCase}
+                    onPromptGenerated={onStepPromptGenerated}
+                    initialPrompt={stepPrompts[50]}
+                    previousOutputs={stepPrompts[49] ? { evaluation_runs: stepPrompts[49] } : undefined}
+                    isPreviousStepComplete={isPreviousStepComplete(50)}
+                    isExpanded={expandedStep === 50}
+                    onToggleExpand={() => toggleExpand(50)}
+                    sessionId={sessionId}
+                  />
+                </div>
+              );
+
+            // Step 51: 05 - Logged Model & UC Registration
+            case 51:
+              return (
+                <div key={51} className="relative mt-5" data-step-number="51">
+                  <WorkflowStep
+                    stepNumber={51}
+                    title="05 - Logged Model & UC Registration"
+                    description="Log the approved ResponsesAgent via mlflow.models.log_model (auto-infers signature) and register the model version in Unity Catalog"
+                    icon={<Database className="w-5 h-5" />}
+                    color="violet"
+                    isComplete={completedSteps.has(51)}
+                    isSkipped={skippedSteps.has(51)}
+                    onToggleComplete={() => toggleStepComplete(51)}
+                    onToggleSkip={() => toggleStepSkip(51)}
+                    onNavigateNext={() => navigateToNextStep(51)}
+                    sectionTag="mlflow_logged_model_uc"
+                    industry={selectedIndustry}
+                    useCase={selectedUseCase}
+                    onPromptGenerated={onStepPromptGenerated}
+                    initialPrompt={stepPrompts[51]}
+                    previousOutputs={stepPrompts[50] ? { stakeholder_signoff: stepPrompts[50] } : undefined}
+                    isPreviousStepComplete={isPreviousStepComplete(51)}
+                    isExpanded={expandedStep === 51}
+                    onToggleExpand={() => toggleExpand(51)}
+                    sessionId={sessionId}
+                  />
+                </div>
+              );
+
+            // Step 52: 06 - Deployment & Automation
+            case 52:
+              return (
+                <div key={52} className="relative mt-5" data-step-number="52">
+                  <WorkflowStep
+                    stepNumber={52}
+                    title="06 - Deployment & Automation"
+                    description="Wrap the deploy + smoke-test flow in a Databricks Asset Bundle job for repeatable, auditable promotion"
+                    icon={<Rocket className="w-5 h-5" />}
+                    color="violet"
+                    isComplete={completedSteps.has(52)}
+                    isSkipped={skippedSteps.has(52)}
+                    onToggleComplete={() => toggleStepComplete(52)}
+                    onToggleSkip={() => toggleStepSkip(52)}
+                    onNavigateNext={() => navigateToNextStep(52)}
+                    sectionTag="mlflow_deployment_automation"
+                    industry={selectedIndustry}
+                    useCase={selectedUseCase}
+                    onPromptGenerated={onStepPromptGenerated}
+                    initialPrompt={stepPrompts[52]}
+                    previousOutputs={stepPrompts[51] ? { logged_model_uc: stepPrompts[51] } : undefined}
+                    isPreviousStepComplete={isPreviousStepComplete(52)}
+                    isExpanded={expandedStep === 52}
+                    onToggleExpand={() => toggleExpand(52)}
+                    sessionId={sessionId}
+                  />
+                </div>
+              );
+
+            // Step 53: 07 - Production Monitoring
+            case 53:
+              return (
+                <div key={53} className="relative mt-5" data-step-number="53">
+                  <WorkflowStep
+                    stepNumber={53}
+                    title="07 - Production Monitoring"
+                    description="Enable AI Gateway-enabled inference tables (legacy tables deprecated 2026-04-30) and MLflow 3 scheduled scorers; surface drift in an AI/BI dashboard"
+                    icon={<BarChart3 className="w-5 h-5" />}
+                    color="violet"
+                    isComplete={completedSteps.has(53)}
+                    isSkipped={skippedSteps.has(53)}
+                    onToggleComplete={() => toggleStepComplete(53)}
+                    onToggleSkip={() => toggleStepSkip(53)}
+                    onNavigateNext={() => navigateToNextStep(53)}
+                    sectionTag="mlflow_production_monitoring"
+                    industry={selectedIndustry}
+                    useCase={selectedUseCase}
+                    onPromptGenerated={onStepPromptGenerated}
+                    initialPrompt={stepPrompts[53]}
+                    previousOutputs={stepPrompts[52] ? { deployment_automation: stepPrompts[52] } : undefined}
+                    isPreviousStepComplete={isPreviousStepComplete(53)}
+                    isExpanded={expandedStep === 53}
+                    onToggleExpand={() => toggleExpand(53)}
+                    sessionId={sessionId}
+                  />
+                </div>
+              );
+
+            // Step 54: 08 - Prompt Optimization
+            case 54:
+              return (
+                <div key={54} className="relative mt-5" data-step-number="54">
+                  <WorkflowStep
+                    stepNumber={54}
+                    title="08 - Prompt Optimization"
+                    description="Run automated prompt tuning (e.g. DSPy / optimize_prompt) against the eval dataset; write the winning version back to the Prompt Registry"
+                    icon={<Sparkles className="w-5 h-5" />}
+                    color="violet"
+                    isComplete={completedSteps.has(54)}
+                    isSkipped={skippedSteps.has(54)}
+                    onToggleComplete={() => toggleStepComplete(54)}
+                    onToggleSkip={() => toggleStepSkip(54)}
+                    onNavigateNext={() => navigateToNextStep(54)}
+                    sectionTag="mlflow_prompt_optimization"
+                    industry={selectedIndustry}
+                    useCase={selectedUseCase}
+                    onPromptGenerated={onStepPromptGenerated}
+                    initialPrompt={stepPrompts[54]}
+                    previousOutputs={stepPrompts[53] ? { production_monitoring: stepPrompts[53] } : undefined}
+                    isPreviousStepComplete={isPreviousStepComplete(54)}
+                    isExpanded={expandedStep === 54}
+                    onToggleExpand={() => toggleExpand(54)}
+                    sessionId={sessionId}
+                  />
+                </div>
+              );
+
             // Step 21: Redeploy & Test (Refinement)
             case 21:
               return (

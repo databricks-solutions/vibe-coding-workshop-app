@@ -384,6 +384,18 @@ export const ALL_STEPS: Record<number, WorkflowStep> = {
   43: { number: 43, title: '06 - Evaluation', icon: FlaskConical, color: 'text-blue-400', sectionTag: 'agents_evaluation' },
   44: { number: 44, title: '07 - Deploy and Query', icon: Rocket, color: 'text-blue-500', sectionTag: 'agents_deploy_and_query' },
   45: { number: 45, title: '08 - Debugging', icon: Search, color: 'text-blue-400', sectionTag: 'agents_debugging' },
+
+  // Agents Accelerator — MLflow for Gen-AI (Steps 46-54)
+  // Section titles deliberately match the sdlc/ folder labels
+  46: { number: 46, title: '01 - Prompt Registry', icon: BookOpen, color: 'text-violet-400', sectionTag: 'mlflow_prompt_registry' },
+  47: { number: 47, title: '02 - Evaluation Datasets', icon: Table2, color: 'text-violet-500', sectionTag: 'mlflow_evaluation_datasets' },
+  48: { number: 48, title: '03 - Scorers and Judges', icon: ShieldCheck, color: 'text-violet-400', sectionTag: 'mlflow_scorers_and_judges' },
+  49: { number: 49, title: '04 - Evaluation Runs', icon: FlaskConical, color: 'text-violet-500', sectionTag: 'mlflow_evaluation_runs' },
+  50: { number: 50, title: '04b - Stakeholder Sign-off', icon: Tag, color: 'text-violet-400', sectionTag: 'mlflow_stakeholder_signoff' },
+  51: { number: 51, title: '05 - Logged Model & UC Registration', icon: Database, color: 'text-violet-500', sectionTag: 'mlflow_logged_model_uc' },
+  52: { number: 52, title: '06 - Deployment & Automation', icon: Rocket, color: 'text-violet-400', sectionTag: 'mlflow_deployment_automation' },
+  53: { number: 53, title: '07 - Production Monitoring', icon: BarChart3, color: 'text-violet-500', sectionTag: 'mlflow_production_monitoring' },
+  54: { number: 54, title: '08 - Prompt Optimization', icon: Sparkles, color: 'text-violet-400', sectionTag: 'mlflow_prompt_optimization' },
 };
 
 // The logical sections with their step groupings (4-chapter structure + activation + skills)
@@ -506,8 +518,7 @@ export const WORKFLOW_SECTIONS: WorkflowSection[] = [
     color: 'text-violet-400',
     bgColor: 'bg-violet-500/15',
     borderColor: 'border-violet-500/30',
-    // Phase 2 will populate steps 46–54.
-    steps: [],
+    steps: [46, 47, 48, 49, 50, 51, 52, 53, 54].map(n => ALL_STEPS[n]),
   },
   {
     id: 'cleanup',
