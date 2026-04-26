@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { Routes, Route, Link, useLocation, Navigate } from 'react-router-dom';
 import { WorkflowDiagram } from './components/WorkflowDiagram';
 import { ThemeToggle } from './components/ThemeToggle';
@@ -13,7 +13,7 @@ import {
 } from './components/session';
 import { apiClient } from './api/client';
 import { Zap, MessageSquare, Trophy, Plus, PanelLeftClose, PanelLeft, Menu, X, BarChart3, Eye } from 'lucide-react';
-import { normalizeLevel, getFilteredSections, getCumulativeOverrides, USE_CASE_LEVEL_LOCK, isForwardProgression, type WorkshopLevel, type WorkflowDirection } from './constants/workflowSections';
+import { normalizeLevel, getFilteredSections, getCumulativeOverrides, USE_CASE_LEVEL_LOCK, isForwardProgression, getDisabledTagsForAIModules, ALL_AI_MODULES, getDisabledTagsForMedallionLayers, normalizeMedallionLayers, ALL_MEDALLION_LAYERS, type WorkshopLevel, type WorkflowDirection, type AIAgentModule, type MedallionLayer } from './constants/workflowSections';
 
 export default function App() {
   const location = useLocation();
@@ -86,6 +86,34 @@ export default function App() {
   // the Prerequisites block renders in the wizard.
   const [disabledSectionTags, setDisabledSectionTags] = useState<Set<string>>(new Set());
   const [prerequisitesVisible, setPrerequisitesVisible] = useState<boolean>(true);
+
+  // Client-side AI sub-module selection (Genie / Agent / Dashboard chips).
+  // Kept SEPARATE from `disabledSectionTags` so the per-coding-assistant visibility
+  // refresh cannot clobber user toggles. Both sets are unioned via `effectiveDisabledTags`.
+  const [aiAgentsModules, setAiAgentsModules] = useState<Set<AIAgentModule>>(
+    () => new Set(ALL_AI_MODULES),
+  );
+
+  // Client-side Bronze/Silver/Gold medallion layer chips. Same separation rationale
+  // as `aiAgentsModules`. Cascading invariant (Gold->Silver->Bronze) is enforced by
+  // `normalizeMedallionLayers` at the setter level.
+  const [medallionLayersRaw, setMedallionLayersRaw] = useState<Set<MedallionLayer>>(
+    () => new Set(ALL_MEDALLION_LAYERS),
+  );
+  const medallionLayers = useMemo(() => normalizeMedallionLayers(medallionLayersRaw), [medallionLayersRaw]);
+  const setMedallionLayers = useCallback((next: Set<MedallionLayer>) => {
+    setMedallionLayersRaw(normalizeMedallionLayers(next));
+  }, []);
+
+  // Combined disabled-tag set used everywhere downstream. The backend visibility
+  // set is unioned with tags derived from chip state; this keeps both sources of
+  // truth independent and idempotent.
+  const effectiveDisabledTags = useMemo(() => {
+    const aiTags = getDisabledTagsForAIModules(workshopLevel, aiAgentsModules);
+    const medTags = getDisabledTagsForMedallionLayers(workshopLevel, medallionLayers);
+    if (aiTags.length === 0 && medTags.length === 0) return disabledSectionTags;
+    return new Set<string>([...disabledSectionTags, ...aiTags, ...medTags]);
+  }, [workshopLevel, aiAgentsModules, medallionLayers, disabledSectionTags]);
 
   // Selected options
   const [selectedIndustry, setSelectedIndustry] = useState<string>('');
@@ -292,6 +320,8 @@ export default function App() {
       setLevelExplicitlySelected(false);
       setUseCaseLockedLevel(null);
       setWorkshopLevel('end-to-end');
+      setAiAgentsModules(new Set(ALL_AI_MODULES));
+      setMedallionLayers(new Set(ALL_MEDALLION_LAYERS));
       setInitialExpandedStep(1);
       setSelectedIndustry('');
       setSelectedIndustryLabel('');
@@ -324,7 +354,7 @@ export default function App() {
     const cumOverrides = getCumulativeOverrides(effectiveLevel, completedSet);
     const sections = getFilteredSections(
       effectiveLevel,
-      disabledSectionTags,
+      effectiveDisabledTags,
       cumOverrides ?? undefined,
       direction,
     );
@@ -412,6 +442,12 @@ export default function App() {
       }
     }
     setWorkshopLevel(level);
+    // Whenever the user changes paths, reset the AI sub-module chips back to
+    // the inclusive default. Keeps re-entering AI predictable ("all on by default").
+    if (level !== workshopLevel) {
+      setAiAgentsModules(new Set(ALL_AI_MODULES));
+      setMedallionLayers(new Set(ALL_MEDALLION_LAYERS));
+    }
     if (!levelExplicitlySelected) {
       setLevelExplicitlySelected(true);
       if (sessionId) {
@@ -427,7 +463,7 @@ export default function App() {
         workshop_level: level,
       }).catch(err => console.error('Error saving workshop level:', err));
     }
-  }, [sessionId, levelExplicitlySelected, completedSteps, workshopLevel, readOnly]);
+  }, [sessionId, levelExplicitlySelected, completedSteps, workshopLevel, readOnly, setMedallionLayers]);
 
   const handleStepPromptGenerated = useCallback((stepNumber: number, promptText: string) => {
     if (readOnly) return;
@@ -1031,12 +1067,16 @@ export default function App() {
                     workshopLevel={workshopLevel}
                     onWorkshopLevelChange={handleWorkshopLevelChange}
                     levelExplicitlySelected={levelExplicitlySelected}
-                    disabledSectionTags={disabledSectionTags}
+                    disabledSectionTags={effectiveDisabledTags}
                     prerequisitesVisible={prerequisitesVisible}
                     useCaseLockedLevel={useCaseLockedLevel}
                     direction={direction}
                     directionLocked={directionLocked}
                     onDirectionChange={handleDirectionChange}
+                    aiAgentsModules={aiAgentsModules}
+                    onAIModulesChange={setAiAgentsModules}
+                    medallionLayers={medallionLayers}
+                    onMedallionLayersChange={setMedallionLayers}
                     dataRefreshKey={dataRefreshKey}
                     onStepPromptGenerated={handleStepPromptGenerated}
                     onIndustryChange={(val, label) => { 

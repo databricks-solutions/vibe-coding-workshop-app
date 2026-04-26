@@ -17,7 +17,9 @@ import {
   getCumulativeOverrides,
   ALL_STEPS,
   type WorkshopLevel,
-  type WorkflowDirection
+  type WorkflowDirection,
+  type AIAgentModule,
+  type MedallionLayer
 } from '../constants/workflowSections';
 import { 
   getStepPoints, 
@@ -104,6 +106,10 @@ interface WorkflowDiagramProps {
   direction?: WorkflowDirection;
   directionLocked?: boolean;
   onDirectionChange?: (direction: WorkflowDirection) => void;
+  aiAgentsModules?: Set<AIAgentModule>;
+  onAIModulesChange?: (modules: Set<AIAgentModule>) => void;
+  medallionLayers?: Set<MedallionLayer>;
+  onMedallionLayersChange?: (layers: Set<MedallionLayer>) => void;
   readOnly?: boolean;
 }
 
@@ -178,6 +184,10 @@ export function WorkflowDiagram({
   direction = 'forward',
   directionLocked = false,
   onDirectionChange,
+  aiAgentsModules,
+  onAIModulesChange,
+  medallionLayers,
+  onMedallionLayersChange,
   readOnly = false,
 }: WorkflowDiagramProps) {
   // UI option is now always cursor (Figma option removed from UI)
@@ -552,6 +562,22 @@ export function WorkflowDiagram({
       setShowSectionDetail(false);
     }
   }, [expandedStep]);
+
+  // Clamp `expandedStep` to a visible step when AI module toggles (or any other
+  // visibility change) hide the currently-expanded one. Lands on the next visible
+  // step >= expandedStep, falling back to the previous one. The effect above
+  // syncs the section id once `expandedStep` is updated.
+  useEffect(() => {
+    if (expandedStep == null) return;
+    const visible: number[] = [];
+    for (const section of visibleSections) {
+      for (const step of section.steps) visible.push(step.number);
+    }
+    if (visible.includes(expandedStep)) return;
+    const after  = visible.find(n => n > expandedStep);
+    const before = [...visible].reverse().find(n => n < expandedStep);
+    setExpandedStep(after ?? before ?? null);
+  }, [visibleSections, expandedStep]);
 
   const scrollToStep = useCallback((stepNumber: number) => {
     setTimeout(() => {
@@ -1906,7 +1932,7 @@ export function WorkflowDiagram({
                   />
                 </div>
               );
-            // Step 24: Deploy Data Intelligence Assets (Chapter 4)
+            // Step 24: Deploy AI and Agents Assets (Chapter 4)
             case 24:
               return (
                 <div key={24} className="relative mt-5" data-step-number="24">
@@ -2592,6 +2618,10 @@ export function WorkflowDiagram({
           direction={direction}
           directionLocked={directionLocked}
           onDirectionChange={onDirectionChange}
+          aiAgentsModules={aiAgentsModules}
+          onAIModulesChange={onAIModulesChange}
+          medallionLayers={medallionLayers}
+          onMedallionLayersChange={onMedallionLayersChange}
         />
       )}
 

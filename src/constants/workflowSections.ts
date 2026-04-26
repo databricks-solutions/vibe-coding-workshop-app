@@ -8,7 +8,7 @@
  * - Ch1: Databricks App (UI Design, Deploy App)
  * - Ch2: Lakebase (Setup Lakebase, Wire UI, Deploy and Test)
  * - Ch3: Lakehouse (Bronze/Silver/Gold pipelines)
- * - Ch4: Data Intelligence (Dashboards, Genie, Agents, Wire UI to Agent)
+ * - Ch4: AI and Agents (Dashboards, Genie, Agents, Wire UI to Agent)
  * 
  * Build: 2026-01-31T08:30:00Z
  */
@@ -74,6 +74,134 @@ export type WorkshopLevel = 'app-only' | 'app-database' | 'lakehouse' | 'lakehou
 export type WorkflowDirection = 'forward' | 'reverse';
 
 // ---------------------------------------------------------------------------
+// AI and Agents sub-modules — three toggleable chips that compose the AI section.
+// Use-Case Plan (15) and Deploy Assets (24) remain common (always included).
+// ---------------------------------------------------------------------------
+export type AIAgentModule = 'genie' | 'agent' | 'dashboard';
+
+export const ALL_AI_MODULES: AIAgentModule[] = ['genie', 'agent', 'dashboard'];
+
+// Levels where the AI module chips should be rendered.
+export const LEVELS_WITH_AI_MODULES: ReadonlySet<WorkshopLevel> = new Set<WorkshopLevel>([
+  'lakehouse-di',
+  'end-to-end',
+  'accelerator',
+  'reverse-lakehouse-di',
+  'reverse-lakebase',
+  'reverse-app',
+]);
+
+// Auto-revert mapping when the user turns off the last AI module on a path that
+// has a clean non-AI sibling. Available pre-workflow-start only (the started-
+// workflow guard in App.handleWorkshopLevelChange would silently reject mid-flow).
+export const NON_AI_FALLBACK: Partial<Record<WorkshopLevel, WorkshopLevel>> = {
+  'lakehouse-di': 'lakehouse',
+  'reverse-lakehouse-di': 'reverse-lakehouse',
+};
+
+// Some paths pre-remove specific AI steps regardless of toggles (e.g. reverse-
+// lakebase already strips Build Agent and Wire UI). Showing an Agent chip there
+// would be a no-op, so we narrow the visible chips to those that actually change
+// the visible step list.
+export const APPLICABLE_AI_MODULES: Partial<Record<WorkshopLevel, ReadonlySet<AIAgentModule>>> = {
+  'lakehouse-di':         new Set<AIAgentModule>(['genie', 'agent', 'dashboard']),
+  'end-to-end':           new Set<AIAgentModule>(['genie', 'agent', 'dashboard']),
+  'accelerator':          new Set<AIAgentModule>(['genie', 'agent', 'dashboard']),
+  'reverse-lakehouse-di': new Set<AIAgentModule>(['genie', 'agent', 'dashboard']),
+  'reverse-lakebase':     new Set<AIAgentModule>(['genie', 'dashboard']), // Agent pre-removed by getFilteredSections
+  'reverse-app':          new Set<AIAgentModule>(['genie', 'agent', 'dashboard']),
+};
+
+export function levelSupportsAIModuleToggles(level: WorkshopLevel): boolean {
+  return LEVELS_WITH_AI_MODULES.has(level);
+}
+
+export function getApplicableAIModules(level: WorkshopLevel): ReadonlySet<AIAgentModule> {
+  return APPLICABLE_AI_MODULES[level] ?? new Set<AIAgentModule>();
+}
+
+// Translate the user's chip selection into section_tag strings to disable.
+// Only modules that are *applicable* on this level can disable steps — turning
+// off a non-applicable module never adds tags.
+export function getDisabledTagsForAIModules(
+  level: WorkshopLevel,
+  modules: Set<AIAgentModule>,
+): string[] {
+  if (!levelSupportsAIModuleToggles(level)) return [];
+  const applicable = getApplicableAIModules(level);
+  const tags: string[] = [];
+  if (applicable.has('genie')     && !modules.has('genie'))     tags.push('genie_space', 'optimize_genie');
+  if (applicable.has('agent')     && !modules.has('agent'))     tags.push('agent_framework', 'wire_ui_agent');
+  if (applicable.has('dashboard') && !modules.has('dashboard')) tags.push('aibi_dashboard');
+  return tags;
+}
+
+// ---------------------------------------------------------------------------
+// Medallion layer toggles (Bronze / Silver / Gold).
+// Mirrors the AI module pattern but cascades by data-flow dependency: Gold
+// requires Silver, Silver requires Bronze. The chips appear on every level
+// that includes the Lakehouse chapter except `genie-accelerator`, which only
+// consumes Silver+Gold metadata via its own (different) section tags.
+// ---------------------------------------------------------------------------
+export type MedallionLayer = 'bronze' | 'silver' | 'gold';
+export const ALL_MEDALLION_LAYERS: MedallionLayer[] = ['bronze', 'silver', 'gold'];
+
+export const LEVELS_WITH_MEDALLION_TOGGLES: ReadonlySet<WorkshopLevel> = new Set<WorkshopLevel>([
+  'lakehouse', 'lakehouse-di', 'end-to-end', 'accelerator',
+  'data-engineering-accelerator',
+  'reverse-lakehouse', 'reverse-lakehouse-di', 'reverse-lakebase', 'reverse-app',
+]);
+
+// When the user deselects the last medallion chip, drop down to a non-lakehouse
+// path where one cleanly exists. Levels not listed here block the last-chip
+// deselect with a shake animation instead.
+export const NON_LAKEHOUSE_FALLBACK: Partial<Record<WorkshopLevel, WorkshopLevel>> = {
+  'end-to-end': 'app-database',
+};
+
+// Reserved for future per-level narrowing (parity with APPLICABLE_AI_MODULES).
+// Empty entry == default to all three layers.
+export const APPLICABLE_MEDALLION_LAYERS: Partial<Record<WorkshopLevel, ReadonlySet<MedallionLayer>>> = {};
+
+export function levelSupportsMedallionToggles(level: WorkshopLevel): boolean {
+  return LEVELS_WITH_MEDALLION_TOGGLES.has(level);
+}
+
+export function getApplicableMedallionLayers(level: WorkshopLevel): ReadonlySet<MedallionLayer> {
+  return APPLICABLE_MEDALLION_LAYERS[level] ?? new Set<MedallionLayer>(ALL_MEDALLION_LAYERS);
+}
+
+// Cascading invariant: Gold requires Silver, Silver requires Bronze.
+// Also clamps an empty set back to all-on so the architecture diagram never
+// renders an empty Lakehouse box (last-chip behavior is enforced in the UI,
+// but this is a safety net for stale/restored state).
+export function normalizeMedallionLayers(s: Set<MedallionLayer>): Set<MedallionLayer> {
+  if (s.size === 0) return new Set<MedallionLayer>(ALL_MEDALLION_LAYERS);
+  const out = new Set<MedallionLayer>(s);
+  if (!out.has('bronze')) { out.delete('silver'); out.delete('gold'); }
+  if (!out.has('silver')) { out.delete('gold'); }
+  // After clamping, an originally-Silver-only or Gold-only selection can collapse
+  // to empty. Restore to all-on rather than leave a dead UI state.
+  if (out.size === 0) return new Set<MedallionLayer>(ALL_MEDALLION_LAYERS);
+  return out;
+}
+
+// Translate the user's medallion chip selection into section_tag strings to
+// disable. Only layers applicable to the current level can disable steps.
+export function getDisabledTagsForMedallionLayers(
+  level: WorkshopLevel,
+  layers: Set<MedallionLayer>,
+): string[] {
+  if (!levelSupportsMedallionToggles(level)) return [];
+  const applicable = getApplicableMedallionLayers(level);
+  const tags: string[] = [];
+  if (applicable.has('bronze') && !layers.has('bronze')) tags.push('bronze_table_metadata', 'bronze_layer_creation');
+  if (applicable.has('silver') && !layers.has('silver')) tags.push('silver_layer_sdp');
+  if (applicable.has('gold')   && !layers.has('gold'))   tags.push('gold_layer_design', 'gold_layer_pipeline');
+  return tags;
+}
+
+// ---------------------------------------------------------------------------
 // Feature flag for the Agent Skills Accelerator
 // ---------------------------------------------------------------------------
 export type AcceleratorStatus = 'enabled' | 'beta' | 'coming-soon';
@@ -115,21 +243,21 @@ export const WORKSHOP_LEVELS: Record<WorkshopLevel, LevelConfig> = {
     sectionIds: ['define-usecase', 'lakehouse', 'iterate-enhance', 'cleanup'],
   },
   'lakehouse-di': {
-    label: '+ Data Intelligence',
+    label: '+ AI and Agents',
     tooltip: 'Add Genie Spaces, Agents & AI/BI Dashboards',
     description: 'Add AI capabilities with Genie Spaces, Agents & AI/BI Dashboards on top of your Lakehouse.',
     sectionIds: ['define-usecase', 'lakehouse', 'data-intelligence', 'iterate-enhance', 'cleanup'],
   },
   'end-to-end': {
     label: 'Complete Workshop',
-    tooltip: 'All chapters: App, Database, Lakehouse & Data Intelligence',
-    description: 'The full end-to-end workshop covering every chapter — from Databricks App to Data Intelligence.',
+    tooltip: 'All chapters: App, Database, Lakehouse & AI and Agents',
+    description: 'The full end-to-end workshop covering every chapter — from Databricks App to AI and Agents.',
     sectionIds: ['define-usecase', 'databricks-app', 'lakebase', 'lakehouse', 'data-intelligence', 'activation', 'iterate-enhance', 'cleanup'],
   },
   'accelerator': {
     label: 'Data Product Accelerator',
-    tooltip: 'Focus on Lakehouse + Data Intelligence',
-    description: 'Start with table metadata and build end-to-end Bronze/Silver/Gold layers that power your data intelligence.',
+    tooltip: 'Focus on Lakehouse + AI and Agents',
+    description: 'Start with table metadata and build end-to-end Bronze/Silver/Gold layers that power your AI and agents.',
     sectionIds: ['define-usecase', 'lakehouse', 'data-intelligence', 'iterate-enhance', 'cleanup'],
   },
   'genie-accelerator': {
@@ -157,7 +285,7 @@ export const WORKSHOP_LEVELS: Record<WorkshopLevel, LevelConfig> = {
     sectionIds: ['define-usecase', 'lakehouse', 'iterate-enhance', 'cleanup'],
   },
   'reverse-lakehouse-di': {
-    label: '+ Data Intelligence',
+    label: '+ AI and Agents',
     tooltip: 'Add DI outputs on top of your Lakehouse (reverse ETL)',
     description: 'Build Gold layer analytics and Genie Spaces, then sync into Lakebase.',
     sectionIds: ['define-usecase', 'lakehouse', 'data-intelligence', 'iterate-enhance', 'cleanup'],
@@ -202,7 +330,7 @@ export const ALL_STEPS: Record<number, WorkflowStep> = {
   13: { number: 13, title: 'Silver Layer', icon: Shield, color: 'text-slate-400', sectionTag: 'silver_layer_sdp' },
   14: { number: 14, title: 'Gold Pipeline', icon: Merge, color: 'text-amber-500', sectionTag: 'gold_layer_pipeline' },
   
-  // Section: Chapter 4 - Data Intelligence (Steps 15-19)
+  // Section: Chapter 4 - AI and Agents (Steps 15-19)
   15: { number: 15, title: 'Use-Case Plan', icon: BarChart3, color: 'text-violet-400', sectionTag: 'usecase_plan' },
   16: { number: 16, title: 'AI/BI Dashboard', icon: LayoutDashboard, color: 'text-emerald-400', sectionTag: 'aibi_dashboard' },
   17: { number: 17, title: 'Genie Space', icon: MessageSquareText, color: 'text-cyan-400', sectionTag: 'genie_space' },
@@ -292,8 +420,8 @@ export const WORKFLOW_SECTIONS: WorkflowSection[] = [
   },
   {
     id: 'data-intelligence',
-    chapter: 'Data Intelligence',
-    title: 'Data Intelligence',
+    chapter: 'AI and Agents',
+    title: 'AI and Agents',
     focus: 'Translating data into insights, logic, and decisions',
     description: 'Convert raw data into actionable intelligence. You\'ll build Genie Spaces with Metric Views and TVFs, create AI agents using the Databricks Agent Framework, and build AI/BI dashboards.',
     icon: Brain,

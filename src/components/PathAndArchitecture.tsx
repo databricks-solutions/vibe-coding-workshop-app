@@ -5,7 +5,7 @@ import { LevelSelectorContent, BUTTON_LABELS } from './LevelSelector';
 import { ArchitectureDiagramContent } from './ArchitectureDiagram';
 import { BorderBeamButton } from './BorderBeamButton';
 import { CopyLinkButton } from './CopyLinkButton';
-import type { WorkshopLevel, WorkflowDirection } from '../constants/workflowSections';
+import type { WorkshopLevel, WorkflowDirection, AIAgentModule, MedallionLayer } from '../constants/workflowSections';
 
 interface PathAndArchitectureProps {
   selectedLevel: WorkshopLevel;
@@ -20,6 +20,10 @@ interface PathAndArchitectureProps {
   direction?: WorkflowDirection;
   directionLocked?: boolean;
   onDirectionChange?: (direction: WorkflowDirection) => void;
+  aiAgentsModules?: Set<AIAgentModule>;
+  onAIModulesChange?: (modules: Set<AIAgentModule>) => void;
+  medallionLayers?: Set<MedallionLayer>;
+  onMedallionLayersChange?: (layers: Set<MedallionLayer>) => void;
 }
 
 export function PathAndArchitecture({
@@ -34,6 +38,10 @@ export function PathAndArchitecture({
   direction = 'forward',
   directionLocked = false,
   onDirectionChange,
+  aiAgentsModules,
+  onAIModulesChange,
+  medallionLayers,
+  onMedallionLayersChange,
 }: PathAndArchitectureProps) {
   const [userOverride, setUserOverride] = useState<boolean | null>(null);
   const prevForceCollapsed = useRef(forceCollapsed);
@@ -171,6 +179,10 @@ export function PathAndArchitecture({
             useCaseLockedLevel={useCaseLockedLevel}
             hasUseCaseSelected={hasUseCaseSelected}
             direction={direction}
+            aiAgentsModules={aiAgentsModules}
+            onAIModulesChange={onAIModulesChange}
+            medallionLayers={medallionLayers}
+            onMedallionLayersChange={onMedallionLayersChange}
           />
 
           {/* Divider */}
@@ -181,6 +193,8 @@ export function PathAndArchitecture({
             workshopLevel={selectedLevel}
             completedSteps={completedSteps}
             direction={direction}
+            aiAgentsModules={aiAgentsModules}
+            medallionLayers={medallionLayers}
           />
 
           {/* Continue CTA */}

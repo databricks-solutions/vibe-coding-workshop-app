@@ -2,7 +2,7 @@
  * ArchitectureDiagram Component
  * 
  * A self-contained, collapsible section that displays the Databricks end-to-end architecture.
- * Layout: Left side has App + Lakebase stacked vertically, right side has large Lakehouse and Data Intelligence.
+ * Layout: Left side has App + Lakebase stacked vertically, right side has large Lakehouse and AI and Agents.
  * 
  * Features:
  * - Per-column fade in/out when workshop level changes (transparent-to-solid transitions)
@@ -37,7 +37,13 @@ import {
   ARCH_VISIBILITY,
   CHAPTER_VISIBILITY,
   getCumulativeOverrides,
+  levelSupportsAIModuleToggles,
+  getApplicableAIModules,
+  levelSupportsMedallionToggles,
+  getApplicableMedallionLayers,
   type WorkshopLevel,
+  type AIAgentModule,
+  type MedallionLayer,
 } from '../constants/workflowSections';
 import { ServicePopover } from './ServicePopover';
 
@@ -546,6 +552,36 @@ interface ArchitectureDiagramContentProps {
   workshopLevel?: WorkshopLevel;
   completedSteps?: Set<number>;
   direction?: 'forward' | 'reverse';
+  aiAgentsModules?: Set<AIAgentModule>;
+  medallionLayers?: Set<MedallionLayer>;
+}
+
+/**
+ * Whether a given AI module's tile/group should render in the architecture
+ * diagram. Modules are only gated on levels that actually support toggles AND
+ * for modules that are actually applicable on that level — otherwise we fall
+ * back to default visibility so non-AI levels and partially-applicable levels
+ * (e.g. reverse-lakebase) keep their existing behavior.
+ */
+function shouldShowAIModule(
+  level: WorkshopLevel,
+  module: AIAgentModule,
+  modules: Set<AIAgentModule> | undefined,
+): boolean {
+  if (!levelSupportsAIModuleToggles(level)) return true;
+  if (!getApplicableAIModules(level).has(module)) return true;
+  return modules?.has(module) ?? true;
+}
+
+/** Same gating semantics as shouldShowAIModule, but for Bronze/Silver/Gold. */
+function shouldShowMedallionLayer(
+  level: WorkshopLevel,
+  layer: MedallionLayer,
+  layers: Set<MedallionLayer> | undefined,
+): boolean {
+  if (!levelSupportsMedallionToggles(level)) return true;
+  if (!getApplicableMedallionLayers(level).has(layer)) return true;
+  return layers?.has(layer) ?? true;
 }
 
 /**
@@ -556,7 +592,15 @@ export function ArchitectureDiagramContent({
   workshopLevel = 'end-to-end',
   completedSteps,
   direction = 'forward',
+  aiAgentsModules,
+  medallionLayers,
 }: ArchitectureDiagramContentProps) {
+  const showGenieModule = shouldShowAIModule(workshopLevel, 'genie', aiAgentsModules);
+  const showAgentModule = shouldShowAIModule(workshopLevel, 'agent', aiAgentsModules);
+  const showDashboardModule = shouldShowAIModule(workshopLevel, 'dashboard', aiAgentsModules);
+  const showBronze = shouldShowMedallionLayer(workshopLevel, 'bronze', medallionLayers);
+  const showSilver = shouldShowMedallionLayer(workshopLevel, 'silver', medallionLayers);
+  const showGold = shouldShowMedallionLayer(workshopLevel, 'gold', medallionLayers);
   const [bulletsRevealed, setBulletsRevealed] = useState(false);
 
   useEffect(() => {
@@ -718,7 +762,7 @@ export function ArchitectureDiagramContent({
                   <p className="text-ui-base font-bold text-white">Lakehouse</p>
                 </div>
                 <div className="flex flex-col gap-2">
-                  {!isGenie && (<>
+                  {!isGenie && showBronze && (<>
                     <ServicePopover serviceKey="dataIngestion" position="top" block>
                       <div className="bg-teal-900/40 rounded-lg px-3 py-2.5 border border-teal-400 hover:bg-teal-900/60 hover:border-teal-300 transition-all duration-200 hover:scale-105">
                         <p className="text-ui-sm font-semibold text-teal-200 text-center">Data Ingestion Pipeline</p>
@@ -734,7 +778,11 @@ export function ArchitectureDiagramContent({
                         <p className="text-ui-xs text-orange-200">Raw data</p>
                       </div>
                     </ServicePopover>
+                  </>)}
+                  {!isGenie && showBronze && showSilver && (
                     <ArrowDown className="w-4 h-4 text-slate-400 mx-auto" />
+                  )}
+                  {!isGenie && showSilver && (<>
                     <ServicePopover serviceKey="sdp" position="left" block>
                       <div className="bg-teal-800/60 border border-teal-600/50 rounded px-2.5 py-1.5 hover:bg-teal-800/80 transition-all duration-200 hover:scale-105">
                         <p className="text-ui-xs font-semibold text-teal-200 text-center">SDP + Quality</p>
@@ -742,29 +790,33 @@ export function ArchitectureDiagramContent({
                     </ServicePopover>
                     <ArrowDown className="w-4 h-4 text-slate-400 mx-auto" />
                   </>)}
-                  <ServicePopover serviceKey="silver" position="left" block>
-                    <div className="bg-gradient-to-br from-slate-400 to-slate-500 rounded-lg p-3.5 shadow-lg hover:shadow-slate-300/30 hover:shadow-xl transition-all duration-200 hover:scale-105">
-                      <div className="flex items-center gap-2 mb-1">
-                        <Sparkles className="w-5 h-5 text-white" />
-                        <p className="text-ui-base font-bold text-white">Silver</p>
+                  {showSilver && (
+                    <ServicePopover serviceKey="silver" position="left" block>
+                      <div className="bg-gradient-to-br from-slate-400 to-slate-500 rounded-lg p-3.5 shadow-lg hover:shadow-slate-300/30 hover:shadow-xl transition-all duration-200 hover:scale-105">
+                        <div className="flex items-center gap-2 mb-1">
+                          <Sparkles className="w-5 h-5 text-white" />
+                          <p className="text-ui-base font-bold text-white">Silver</p>
+                        </div>
+                        <p className="text-ui-xs text-slate-100">Cleaned data</p>
                       </div>
-                      <p className="text-ui-xs text-slate-100">Cleaned data</p>
+                    </ServicePopover>
+                  )}
+                  {showGold && (<>
+                    {showSilver && <ArrowDown className="w-4 h-4 text-slate-400 mx-auto" />}
+                    <div className="bg-teal-800/60 border border-teal-600/50 rounded px-2.5 py-1.5">
+                      <p className="text-ui-xs font-semibold text-teal-200 text-center">SDP Transform</p>
                     </div>
-                  </ServicePopover>
-                  <ArrowDown className="w-4 h-4 text-slate-400 mx-auto" />
-                  <div className="bg-teal-800/60 border border-teal-600/50 rounded px-2.5 py-1.5">
-                    <p className="text-ui-xs font-semibold text-teal-200 text-center">SDP Transform</p>
-                  </div>
-                  <ArrowDown className="w-4 h-4 text-slate-400 mx-auto" />
-                  <ServicePopover serviceKey="gold" position="left" block>
-                    <div className="bg-gradient-to-br from-yellow-500 to-amber-600 rounded-lg p-3.5 shadow-lg hover:shadow-yellow-400/30 hover:shadow-xl transition-all duration-200 hover:scale-105">
-                      <div className="flex items-center gap-2 mb-1">
-                        <Zap className="w-5 h-5 text-yellow-100" />
-                        <p className="text-ui-base font-bold text-white">Gold</p>
+                    <ArrowDown className="w-4 h-4 text-slate-400 mx-auto" />
+                    <ServicePopover serviceKey="gold" position="left" block>
+                      <div className="bg-gradient-to-br from-yellow-500 to-amber-600 rounded-lg p-3.5 shadow-lg hover:shadow-yellow-400/30 hover:shadow-xl transition-all duration-200 hover:scale-105">
+                        <div className="flex items-center gap-2 mb-1">
+                          <Zap className="w-5 h-5 text-yellow-100" />
+                          <p className="text-ui-base font-bold text-white">Gold</p>
+                        </div>
+                        <p className="text-ui-xs text-yellow-100">Business ready</p>
                       </div>
-                      <p className="text-ui-xs text-yellow-100">Business ready</p>
-                    </div>
-                  </ServicePopover>
+                    </ServicePopover>
+                  </>)}
                 </div>
               </div>
             )}
@@ -779,51 +831,59 @@ export function ArchitectureDiagramContent({
                   <div className="flex items-center justify-center gap-2 mb-1">
                     <Brain className="w-4 h-4 text-white" />
                   </div>
-                  <p className="text-ui-base font-bold text-white">Data Intelligence</p>
+                  <p className="text-ui-base font-bold text-white">AI and Agents</p>
                 </div>
                 <div className="flex flex-col gap-3">
-                  <div className="bg-slate-800 border-2 border-amber-500/60 rounded-lg p-3.5 shadow-lg">
-                    <p className="text-ui-base font-bold text-amber-300 mb-2">Gold Outputs</p>
-                    <div className="space-y-1.5">
-                      <ServicePopover serviceKey="tvf" position="left" block>
-                        <div className="bg-amber-900/30 rounded px-2.5 py-1.5 border border-amber-500/30 hover:bg-amber-900/50 hover:border-amber-400 transition-all duration-200 hover:scale-105">
-                          <p className="text-ui-xs font-semibold text-amber-200">Table Value Functions</p>
-                        </div>
-                      </ServicePopover>
-                      <ServicePopover serviceKey="metricViews" position="left" block>
-                        <div className="bg-amber-900/30 rounded px-2.5 py-1.5 border border-amber-500/30 hover:bg-amber-900/50 hover:border-amber-400 transition-all duration-200 hover:scale-105">
-                          <p className="text-ui-xs font-semibold text-amber-200">Metric Views</p>
-                        </div>
-                      </ServicePopover>
-                      <ServicePopover serviceKey="genieSpaces" position="left" block>
-                        <div className="bg-amber-900/30 rounded px-2.5 py-1.5 border border-amber-500/30 hover:bg-amber-900/50 hover:border-amber-400 transition-all duration-200 hover:scale-105">
-                          <p className="text-ui-xs font-semibold text-amber-200">Genie Spaces</p>
-                        </div>
-                      </ServicePopover>
-                    </div>
-                  </div>
-                  {!isGenie && (<>
-                    <div className="flex justify-center gap-2">
-                      <ArrowDown className="w-4 h-4 text-green-400" />
-                      <ArrowDown className="w-4 h-4 text-blue-400" />
-                    </div>
-                    <div className="grid grid-cols-2 gap-2.5">
-                      <ServicePopover serviceKey="aiBIDashboards" position="top" block>
-                        <div className="bg-gradient-to-br from-green-500 to-green-600 rounded-lg p-2.5 shadow-lg hover:shadow-green-500/30 hover:shadow-xl transition-all duration-200 hover:scale-105">
-                          <div className="flex flex-col items-center gap-1">
-                            <LayoutDashboard className="w-5 h-5 text-white" />
-                            <p className="text-ui-sm font-bold text-white text-center">AI/BI Dashboards</p>
+                  {showGenieModule && (
+                    <div className="bg-slate-800 border-2 border-amber-500/60 rounded-lg p-3.5 shadow-lg">
+                      <p className="text-ui-base font-bold text-amber-300 mb-2">Genie</p>
+                      <div className="space-y-1.5">
+                        <ServicePopover serviceKey="tvf" position="left" block>
+                          <div className="bg-amber-900/30 rounded px-2.5 py-1.5 border border-amber-500/30 hover:bg-amber-900/50 hover:border-amber-400 transition-all duration-200 hover:scale-105">
+                            <p className="text-ui-xs font-semibold text-amber-200">Table Value Functions</p>
                           </div>
-                        </div>
-                      </ServicePopover>
-                      <ServicePopover serviceKey="agents" position="top" block>
-                        <div className="bg-gradient-to-br from-blue-500 to-blue-600 rounded-lg p-2.5 shadow-lg hover:shadow-blue-500/30 hover:shadow-xl transition-all duration-200 hover:scale-105">
-                          <div className="flex flex-col items-center gap-1">
-                            <Bot className="w-5 h-5 text-white" />
-                            <p className="text-ui-sm font-bold text-white text-center">Agentbricks</p>
+                        </ServicePopover>
+                        <ServicePopover serviceKey="metricViews" position="left" block>
+                          <div className="bg-amber-900/30 rounded px-2.5 py-1.5 border border-amber-500/30 hover:bg-amber-900/50 hover:border-amber-400 transition-all duration-200 hover:scale-105">
+                            <p className="text-ui-xs font-semibold text-amber-200">Metric Views</p>
                           </div>
-                        </div>
-                      </ServicePopover>
+                        </ServicePopover>
+                        <ServicePopover serviceKey="genieSpaces" position="left" block>
+                          <div className="bg-amber-900/30 rounded px-2.5 py-1.5 border border-amber-500/30 hover:bg-amber-900/50 hover:border-amber-400 transition-all duration-200 hover:scale-105">
+                            <p className="text-ui-xs font-semibold text-amber-200">Genie Spaces</p>
+                          </div>
+                        </ServicePopover>
+                      </div>
+                    </div>
+                  )}
+                  {!isGenie && (showDashboardModule || showAgentModule) && (<>
+                    {showGenieModule && (
+                      <div className="flex justify-center gap-2">
+                        {showDashboardModule && <ArrowDown className="w-4 h-4 text-green-400" />}
+                        {showAgentModule && <ArrowDown className="w-4 h-4 text-blue-400" />}
+                      </div>
+                    )}
+                    <div className={`grid gap-2.5 ${showDashboardModule && showAgentModule ? 'grid-cols-2' : 'grid-cols-1'}`}>
+                      {showDashboardModule && (
+                        <ServicePopover serviceKey="aiBIDashboards" position="top" block>
+                          <div className="bg-gradient-to-br from-green-500 to-green-600 rounded-lg p-2.5 shadow-lg hover:shadow-green-500/30 hover:shadow-xl transition-all duration-200 hover:scale-105">
+                            <div className="flex flex-col items-center gap-1">
+                              <LayoutDashboard className="w-5 h-5 text-white" />
+                              <p className="text-ui-sm font-bold text-white text-center">AI/BI Dashboards</p>
+                            </div>
+                          </div>
+                        </ServicePopover>
+                      )}
+                      {showAgentModule && (
+                        <ServicePopover serviceKey="agents" position="top" block>
+                          <div className="bg-gradient-to-br from-blue-500 to-blue-600 rounded-lg p-2.5 shadow-lg hover:shadow-blue-500/30 hover:shadow-xl transition-all duration-200 hover:scale-105">
+                            <div className="flex flex-col items-center gap-1">
+                              <Bot className="w-5 h-5 text-white" />
+                              <p className="text-ui-sm font-bold text-white text-center">Agent</p>
+                            </div>
+                          </div>
+                        </ServicePopover>
+                      )}
                     </div>
                   </>)}
                 </div>
@@ -847,7 +907,7 @@ export function ArchitectureDiagramContent({
             </div>
             <div className="flex items-center gap-2">
               <Brain className="w-4 h-4 text-blue-500" />
-              <p className="text-ui-xs text-slate-400">Data Intelligence</p>
+              <p className="text-ui-xs text-slate-400">AI and Agents</p>
             </div>
             <div className="flex items-center gap-2">
               <div className="w-2 h-2 rounded-full bg-blue-500 animate-pulse" />
@@ -927,35 +987,41 @@ export function ArchitectureDiagramContent({
                       <p className="text-[13px] font-bold text-white">Lakehouse</p>
                     </div>
                     <div className="flex flex-col gap-2">
-                      <ServicePopover serviceKey="bronze" position="left" block>
-                        <div className="bg-gradient-to-br from-orange-700 to-amber-800 rounded-lg p-3.5 shadow-lg hover:shadow-orange-500/30 hover:shadow-xl transition-all duration-200 hover:scale-105">
-                          <div className="flex items-center gap-2 mb-1">
-                            <Layers className="w-5 h-5 text-orange-100" />
-                            <p className="text-[13px] font-bold text-white">Bronze</p>
+                      {showBronze && (
+                        <ServicePopover serviceKey="bronze" position="left" block>
+                          <div className="bg-gradient-to-br from-orange-700 to-amber-800 rounded-lg p-3.5 shadow-lg hover:shadow-orange-500/30 hover:shadow-xl transition-all duration-200 hover:scale-105">
+                            <div className="flex items-center gap-2 mb-1">
+                              <Layers className="w-5 h-5 text-orange-100" />
+                              <p className="text-[13px] font-bold text-white">Bronze</p>
+                            </div>
+                            <p className="text-[11px] text-orange-200">Raw data</p>
                           </div>
-                          <p className="text-[11px] text-orange-200">Raw data</p>
-                        </div>
-                      </ServicePopover>
-                      <ArrowDown className="w-4 h-4 text-slate-400 mx-auto" />
-                      <ServicePopover serviceKey="silver" position="left" block>
-                        <div className="bg-gradient-to-br from-slate-400 to-slate-500 rounded-lg p-3.5 shadow-lg hover:shadow-slate-300/30 hover:shadow-xl transition-all duration-200 hover:scale-105">
-                          <div className="flex items-center gap-2 mb-1">
-                            <Sparkles className="w-5 h-5 text-white" />
-                            <p className="text-[13px] font-bold text-white">Silver</p>
+                        </ServicePopover>
+                      )}
+                      {showBronze && showSilver && <ArrowDown className="w-4 h-4 text-slate-400 mx-auto" />}
+                      {showSilver && (
+                        <ServicePopover serviceKey="silver" position="left" block>
+                          <div className="bg-gradient-to-br from-slate-400 to-slate-500 rounded-lg p-3.5 shadow-lg hover:shadow-slate-300/30 hover:shadow-xl transition-all duration-200 hover:scale-105">
+                            <div className="flex items-center gap-2 mb-1">
+                              <Sparkles className="w-5 h-5 text-white" />
+                              <p className="text-[13px] font-bold text-white">Silver</p>
+                            </div>
+                            <p className="text-[11px] text-slate-100">Cleaned data</p>
                           </div>
-                          <p className="text-[11px] text-slate-100">Cleaned data</p>
-                        </div>
-                      </ServicePopover>
-                      <ArrowDown className="w-4 h-4 text-slate-400 mx-auto" />
-                      <ServicePopover serviceKey="gold" position="left" block>
-                        <div className="bg-gradient-to-br from-yellow-500 to-amber-600 rounded-lg p-3.5 shadow-lg hover:shadow-yellow-400/30 hover:shadow-xl transition-all duration-200 hover:scale-105">
-                          <div className="flex items-center gap-2 mb-1">
-                            <Zap className="w-5 h-5 text-yellow-100" />
-                            <p className="text-[13px] font-bold text-white">Gold</p>
+                        </ServicePopover>
+                      )}
+                      {showSilver && showGold && <ArrowDown className="w-4 h-4 text-slate-400 mx-auto" />}
+                      {showGold && (
+                        <ServicePopover serviceKey="gold" position="left" block>
+                          <div className="bg-gradient-to-br from-yellow-500 to-amber-600 rounded-lg p-3.5 shadow-lg hover:shadow-yellow-400/30 hover:shadow-xl transition-all duration-200 hover:scale-105">
+                            <div className="flex items-center gap-2 mb-1">
+                              <Zap className="w-5 h-5 text-yellow-100" />
+                              <p className="text-[13px] font-bold text-white">Gold</p>
+                            </div>
+                            <p className="text-[11px] text-yellow-100">Business ready</p>
                           </div>
-                          <p className="text-[11px] text-yellow-100">Business ready</p>
-                        </div>
-                      </ServicePopover>
+                        </ServicePopover>
+                      )}
                     </div>
                   </div>
                 )}
@@ -967,36 +1033,68 @@ export function ArchitectureDiagramContent({
                   </div>
                 )}
 
-                {/* MIDDLE: Data Intelligence */}
+                {/* MIDDLE: AI and Agents */}
                 {dataIntelFade.shouldRender && (
                   <div className={`border-2 border-blue-500/60 rounded-xl p-4 bg-slate-800/50 flex-1 duration-300 ${fadeClass(dataIntelFade.isVisible)}`}>
                     <div className="bg-blue-600 text-center py-2 px-3 rounded-lg mb-4">
                       <div className="flex items-center justify-center gap-2 mb-1">
                         <Brain className="w-4 h-4 text-white" />
                       </div>
-                      <p className="text-[13px] font-bold text-white">Data Intelligence</p>
+                      <p className="text-[13px] font-bold text-white">AI and Agents</p>
                     </div>
                     <div className="flex flex-col gap-3">
-                      <div className="bg-slate-800 border-2 border-amber-500/60 rounded-lg p-3.5 shadow-lg">
-                        <p className="text-[13px] font-bold text-amber-300 mb-2">Gold Outputs</p>
-                        <div className="space-y-1.5">
-                          <ServicePopover serviceKey="tvf" position="left" block>
-                            <div className="bg-amber-900/30 rounded px-2.5 py-1.5 border border-amber-500/30 hover:bg-amber-900/50 hover:border-amber-400 transition-all duration-200 hover:scale-105">
-                              <p className="text-[11px] font-semibold text-amber-200">Table Value Functions</p>
-                            </div>
-                          </ServicePopover>
-                          <ServicePopover serviceKey="metricViews" position="left" block>
-                            <div className="bg-amber-900/30 rounded px-2.5 py-1.5 border border-amber-500/30 hover:bg-amber-900/50 hover:border-amber-400 transition-all duration-200 hover:scale-105">
-                              <p className="text-[11px] font-semibold text-amber-200">Metric Views</p>
-                            </div>
-                          </ServicePopover>
-                          <ServicePopover serviceKey="genieSpaces" position="left" block>
-                            <div className="bg-amber-900/30 rounded px-2.5 py-1.5 border border-amber-500/30 hover:bg-amber-900/50 hover:border-amber-400 transition-all duration-200 hover:scale-105">
-                              <p className="text-[11px] font-semibold text-amber-200">Genie Spaces</p>
-                            </div>
-                          </ServicePopover>
+                      {showGenieModule && (
+                        <div className="bg-slate-800 border-2 border-amber-500/60 rounded-lg p-3.5 shadow-lg">
+                          <p className="text-[13px] font-bold text-amber-300 mb-2">Genie</p>
+                          <div className="space-y-1.5">
+                            <ServicePopover serviceKey="tvf" position="left" block>
+                              <div className="bg-amber-900/30 rounded px-2.5 py-1.5 border border-amber-500/30 hover:bg-amber-900/50 hover:border-amber-400 transition-all duration-200 hover:scale-105">
+                                <p className="text-[11px] font-semibold text-amber-200">Table Value Functions</p>
+                              </div>
+                            </ServicePopover>
+                            <ServicePopover serviceKey="metricViews" position="left" block>
+                              <div className="bg-amber-900/30 rounded px-2.5 py-1.5 border border-amber-500/30 hover:bg-amber-900/50 hover:border-amber-400 transition-all duration-200 hover:scale-105">
+                                <p className="text-[11px] font-semibold text-amber-200">Metric Views</p>
+                              </div>
+                            </ServicePopover>
+                            <ServicePopover serviceKey="genieSpaces" position="left" block>
+                              <div className="bg-amber-900/30 rounded px-2.5 py-1.5 border border-amber-500/30 hover:bg-amber-900/50 hover:border-amber-400 transition-all duration-200 hover:scale-105">
+                                <p className="text-[11px] font-semibold text-amber-200">Genie Spaces</p>
+                              </div>
+                            </ServicePopover>
+                          </div>
                         </div>
-                      </div>
+                      )}
+                      {!isGenie && (showDashboardModule || showAgentModule) && (<>
+                        {showGenieModule && (
+                          <div className="flex justify-center gap-2">
+                            {showDashboardModule && <ArrowDown className="w-4 h-4 text-green-400" />}
+                            {showAgentModule && <ArrowDown className="w-4 h-4 text-blue-400" />}
+                          </div>
+                        )}
+                        <div className={`grid gap-2.5 ${showDashboardModule && showAgentModule ? 'grid-cols-2' : 'grid-cols-1'}`}>
+                          {showDashboardModule && (
+                            <ServicePopover serviceKey="aiBIDashboards" position="top" block>
+                              <div className="bg-gradient-to-br from-green-500 to-green-600 rounded-lg p-2.5 shadow-lg hover:shadow-green-500/30 hover:shadow-xl transition-all duration-200 hover:scale-105">
+                                <div className="flex flex-col items-center gap-1">
+                                  <LayoutDashboard className="w-5 h-5 text-white" />
+                                  <p className="text-[11px] font-bold text-white text-center">AI/BI Dashboards</p>
+                                </div>
+                              </div>
+                            </ServicePopover>
+                          )}
+                          {showAgentModule && (
+                            <ServicePopover serviceKey="agents" position="top" block>
+                              <div className="bg-gradient-to-br from-blue-500 to-blue-600 rounded-lg p-2.5 shadow-lg hover:shadow-blue-500/30 hover:shadow-xl transition-all duration-200 hover:scale-105">
+                                <div className="flex flex-col items-center gap-1">
+                                  <Bot className="w-5 h-5 text-white" />
+                                  <p className="text-[11px] font-bold text-white text-center">Agent</p>
+                                </div>
+                              </div>
+                            </ServicePopover>
+                          )}
+                        </div>
+                      </>)}
                     </div>
                   </div>
                 )}
@@ -1076,7 +1174,7 @@ export function ArchitectureDiagramContent({
                 </div>
                 <div className="flex items-center gap-2">
                   <Brain className="w-4 h-4 text-blue-500" />
-                  <p className="text-[11px] text-slate-400">Data Intelligence</p>
+                  <p className="text-[11px] text-slate-400">AI and Agents</p>
                 </div>
                 <div className="flex items-center gap-2">
                   <Sparkles className="w-4 h-4 text-amber-400" />
@@ -1125,7 +1223,7 @@ export function ArchitectureDiagramContent({
                   <div className="w-12 flex-shrink-0" />
                 )}
 
-                {/* Middle: Data Intelligence objectives */}
+                {/* Middle: AI and Agents objectives */}
                 {dataIntelFade.shouldRender && REVERSE_DI_OBJECTIVES.length > 0 && (
                   <div className={`flex-1 duration-300 ${fadeClass(dataIntelFade.isVisible)}`}>
                     <div className="rounded-lg bg-slate-800/40 border border-blue-500/20 p-3">
@@ -1230,6 +1328,14 @@ export function ArchitectureDiagram({ forceCollapsed = false, workshopLevel = 'e
   const showLakehouse = visibility.ch3;
   const showDataIntel = visibility.ch4;
   const isGenie = workshopLevel === 'genie-accelerator';
+  // Standalone ArchitectureDiagram has no aiAgentsModules / medallionLayers prop
+  // wiring; default to all-on so existing callers render unchanged.
+  const showGenieModule = true;
+  const showAgentModule = true;
+  const showDashboardModule = true;
+  const showBronze = true;
+  const showSilver = true;
+  const showGold = true;
 
   // Per-column fade transitions (transparent ↔ solid)
   const appLakebaseFade = useFadeTransition(showAppLakebase);
@@ -1362,7 +1468,7 @@ export function ArchitectureDiagram({ forceCollapsed = false, workshopLevel = 'e
                   </div>
                 )}
 
-                {/* Arrow from App/Lakebase to Data Intelligence (when no Lakehouse) */}
+                {/* Arrow from App/Lakebase to AI and Agents (when no Lakehouse) */}
                 {showAppLakebase && !showLakehouse && showDataIntel && (
                   <div className="flex flex-col items-center justify-center">
                     <ChevronRight className="w-12 h-12 text-violet-400" strokeWidth={3} />
@@ -1382,8 +1488,8 @@ export function ArchitectureDiagram({ forceCollapsed = false, workshopLevel = 'e
                     </div>
                     
                     <div className="flex flex-col gap-2">
-                      {/* Data Ingestion, Bronze, SDP + Quality -- hidden for Genie Accelerator */}
-                      {!isGenie && (<>
+                      {/* Data Ingestion + Bronze tile -- hidden for Genie Accelerator and Bronze chip */}
+                      {!isGenie && showBronze && (<>
                         <ServicePopover serviceKey="dataIngestion" position="top" block>
                           <div className="bg-teal-900/40 rounded-lg px-3 py-2.5 border border-teal-400 hover:bg-teal-900/60 hover:border-teal-300 transition-all duration-200 hover:scale-105">
                             <p className="text-ui-sm font-semibold text-teal-200 text-center">Data Ingestion Pipeline</p>
@@ -1401,9 +1507,15 @@ export function ArchitectureDiagram({ forceCollapsed = false, workshopLevel = 'e
                             <p className="text-ui-xs text-orange-200">Raw data</p>
                           </div>
                         </ServicePopover>
-                        
+                      </>)}
+
+                      {/* Bronze -> Silver connector arrow */}
+                      {!isGenie && showBronze && showSilver && (
                         <ArrowDown className="w-4 h-4 text-slate-400 mx-auto" />
-                        
+                      )}
+
+                      {/* SDP + Quality (Silver-owned, but skipped on Genie Accelerator) */}
+                      {!isGenie && showSilver && (<>
                         <ServicePopover serviceKey="sdp" position="left" block>
                           <div className="bg-teal-800/60 border border-teal-600/50 rounded px-2.5 py-1.5 hover:bg-teal-800/80 transition-all duration-200 hover:scale-105">
                             <p className="text-ui-xs font-semibold text-teal-200 text-center">SDP + Quality</p>
@@ -1413,48 +1525,51 @@ export function ArchitectureDiagram({ forceCollapsed = false, workshopLevel = 'e
                         <ArrowDown className="w-4 h-4 text-slate-400 mx-auto" />
                       </>)}
                       
-                      {/* Silver */}
-                      <ServicePopover serviceKey="silver" position="left" block>
-                        <div className="bg-gradient-to-br from-slate-400 to-slate-500 rounded-lg p-3.5 shadow-lg hover:shadow-slate-300/30 hover:shadow-xl transition-all duration-200 hover:scale-105">
-                          <div className="flex items-center gap-2 mb-1">
-                            <Sparkles className="w-5 h-5 text-white" />
-                            <p className="text-ui-base font-bold text-white">Silver</p>
+                      {/* Silver tile */}
+                      {showSilver && (
+                        <ServicePopover serviceKey="silver" position="left" block>
+                          <div className="bg-gradient-to-br from-slate-400 to-slate-500 rounded-lg p-3.5 shadow-lg hover:shadow-slate-300/30 hover:shadow-xl transition-all duration-200 hover:scale-105">
+                            <div className="flex items-center gap-2 mb-1">
+                              <Sparkles className="w-5 h-5 text-white" />
+                              <p className="text-ui-base font-bold text-white">Silver</p>
+                            </div>
+                            <p className="text-ui-xs text-slate-100">Cleaned data</p>
                           </div>
-                          <p className="text-ui-xs text-slate-100">Cleaned data</p>
+                        </ServicePopover>
+                      )}
+                      
+                      {/* SDP Transform + Gold tile (Gold-owned) */}
+                      {showGold && (<>
+                        {showSilver && <ArrowDown className="w-4 h-4 text-slate-400 mx-auto" />}
+
+                        <div className="bg-teal-800/60 border border-teal-600/50 rounded px-2.5 py-1.5">
+                          <p className="text-ui-xs font-semibold text-teal-200 text-center">SDP Transform</p>
                         </div>
-                      </ServicePopover>
-                      
-                      <ArrowDown className="w-4 h-4 text-slate-400 mx-auto" />
-                      
-                      {/* SDP Transform */}
-                      <div className="bg-teal-800/60 border border-teal-600/50 rounded px-2.5 py-1.5">
-                        <p className="text-ui-xs font-semibold text-teal-200 text-center">SDP Transform</p>
-                      </div>
-                      
-                      <ArrowDown className="w-4 h-4 text-slate-400 mx-auto" />
-                      
-                      {/* Gold */}
-                      <ServicePopover serviceKey="gold" position="left" block>
-                        <div className="bg-gradient-to-br from-yellow-500 to-amber-600 rounded-lg p-3.5 shadow-lg hover:shadow-yellow-400/30 hover:shadow-xl transition-all duration-200 hover:scale-105">
-                          <div className="flex items-center gap-2 mb-1">
-                            <Zap className="w-5 h-5 text-yellow-100" />
-                            <p className="text-ui-base font-bold text-white">Gold</p>
+                        
+                        <ArrowDown className="w-4 h-4 text-slate-400 mx-auto" />
+                        
+                        <ServicePopover serviceKey="gold" position="left" block>
+                          <div className="bg-gradient-to-br from-yellow-500 to-amber-600 rounded-lg p-3.5 shadow-lg hover:shadow-yellow-400/30 hover:shadow-xl transition-all duration-200 hover:scale-105">
+                            <div className="flex items-center gap-2 mb-1">
+                              <Zap className="w-5 h-5 text-yellow-100" />
+                              <p className="text-ui-base font-bold text-white">Gold</p>
+                            </div>
+                            <p className="text-ui-xs text-yellow-100">Business ready</p>
                           </div>
-                          <p className="text-ui-xs text-yellow-100">Business ready</p>
-                        </div>
-                      </ServicePopover>
+                        </ServicePopover>
+                      </>)}
                     </div>
                   </div>
                 )}
 
-                {/* Large Arrow from Lakehouse to Data Intelligence */}
+                {/* Large Arrow from Lakehouse to AI and Agents */}
                 {showLakehouse && showDataIntel && (
                   <div className="flex flex-col items-center justify-center">
                     <ChevronRight className="w-12 h-12 text-amber-400" strokeWidth={3} />
                   </div>
                 )}
 
-                {/* RIGHT SECTION: Data Intelligence - Full height */}
+                {/* RIGHT SECTION: AI and Agents - Full height */}
                 {dataIntelFade.shouldRender && (
                   <div
                     className={`border-2 border-blue-500/60 rounded-xl p-4 bg-slate-800/50 flex-1 duration-300 ${fadeClass(dataIntelFade.isVisible)}`}
@@ -1463,62 +1578,65 @@ export function ArchitectureDiagram({ forceCollapsed = false, workshopLevel = 'e
                       <div className="flex items-center justify-center gap-2 mb-1">
                         <Brain className="w-4 h-4 text-white" />
                       </div>
-                      <p className="text-ui-base font-bold text-white">Data Intelligence</p>
+                      <p className="text-ui-base font-bold text-white">AI and Agents</p>
                     </div>
                     
                     <div className="flex flex-col gap-3">
-                      {/* Gold Outputs */}
-                      <div className="bg-slate-800 border-2 border-amber-500/60 rounded-lg p-3.5 shadow-lg">
-                        <p className="text-ui-base font-bold text-amber-300 mb-2">Gold Outputs</p>
-                        <div className="space-y-1.5">
-                          {/* TVF */}
-                          <ServicePopover serviceKey="tvf" position="left" block>
-                            <div className="bg-amber-900/30 rounded px-2.5 py-1.5 border border-amber-500/30 hover:bg-amber-900/50 hover:border-amber-400 transition-all duration-200 hover:scale-105">
-                              <p className="text-ui-xs font-semibold text-amber-200">Table Value Functions</p>
-                            </div>
-                          </ServicePopover>
-                          
-                          {/* Metric Views */}
-                          <ServicePopover serviceKey="metricViews" position="left" block>
-                            <div className="bg-amber-900/30 rounded px-2.5 py-1.5 border border-amber-500/30 hover:bg-amber-900/50 hover:border-amber-400 transition-all duration-200 hover:scale-105">
-                              <p className="text-ui-xs font-semibold text-amber-200">Metric Views</p>
-                            </div>
-                          </ServicePopover>
-                          
-                          {/* Genie Spaces */}
-                          <ServicePopover serviceKey="genieSpaces" position="left" block>
-                            <div className="bg-amber-900/30 rounded px-2.5 py-1.5 border border-amber-500/30 hover:bg-amber-900/50 hover:border-amber-400 transition-all duration-200 hover:scale-105">
-                              <p className="text-ui-xs font-semibold text-amber-200">Genie Spaces</p>
-                            </div>
-                          </ServicePopover>
-                        </div>
-                      </div>
-
-                      {/* AI/BI Dashboards + Agents -- hidden for Genie Accelerator */}
-                      {!isGenie && (<>
-                        <div className="flex justify-center gap-2">
-                          <ArrowDown className="w-4 h-4 text-green-400" />
-                          <ArrowDown className="w-4 h-4 text-blue-400" />
-                        </div>
-
-                        <div className="grid grid-cols-2 gap-2.5">
-                          <ServicePopover serviceKey="aiBIDashboards" position="top" block>
-                            <div className="bg-gradient-to-br from-green-500 to-green-600 rounded-lg p-2.5 shadow-lg hover:shadow-green-500/30 hover:shadow-xl transition-all duration-200 hover:scale-105">
-                              <div className="flex flex-col items-center gap-1">
-                                <LayoutDashboard className="w-5 h-5 text-white" />
-                                <p className="text-ui-sm font-bold text-white text-center">AI/BI Dashboards</p>
+                      {/* Genie module (TVF / Metric Views / Genie Spaces) */}
+                      {showGenieModule && (
+                        <div className="bg-slate-800 border-2 border-amber-500/60 rounded-lg p-3.5 shadow-lg">
+                          <p className="text-ui-base font-bold text-amber-300 mb-2">Genie</p>
+                          <div className="space-y-1.5">
+                            <ServicePopover serviceKey="tvf" position="left" block>
+                              <div className="bg-amber-900/30 rounded px-2.5 py-1.5 border border-amber-500/30 hover:bg-amber-900/50 hover:border-amber-400 transition-all duration-200 hover:scale-105">
+                                <p className="text-ui-xs font-semibold text-amber-200">Table Value Functions</p>
                               </div>
-                            </div>
-                          </ServicePopover>
-
-                          <ServicePopover serviceKey="agents" position="top" block>
-                            <div className="bg-gradient-to-br from-blue-500 to-blue-600 rounded-lg p-2.5 shadow-lg hover:shadow-blue-500/30 hover:shadow-xl transition-all duration-200 hover:scale-105">
-                              <div className="flex flex-col items-center gap-1">
-                                <Bot className="w-5 h-5 text-white" />
-                                <p className="text-ui-sm font-bold text-white text-center">Agentbricks</p>
+                            </ServicePopover>
+                            <ServicePopover serviceKey="metricViews" position="left" block>
+                              <div className="bg-amber-900/30 rounded px-2.5 py-1.5 border border-amber-500/30 hover:bg-amber-900/50 hover:border-amber-400 transition-all duration-200 hover:scale-105">
+                                <p className="text-ui-xs font-semibold text-amber-200">Metric Views</p>
                               </div>
-                            </div>
-                          </ServicePopover>
+                            </ServicePopover>
+                            <ServicePopover serviceKey="genieSpaces" position="left" block>
+                              <div className="bg-amber-900/30 rounded px-2.5 py-1.5 border border-amber-500/30 hover:bg-amber-900/50 hover:border-amber-400 transition-all duration-200 hover:scale-105">
+                                <p className="text-ui-xs font-semibold text-amber-200">Genie Spaces</p>
+                              </div>
+                            </ServicePopover>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* AI/BI Dashboards + Agent -- hidden for Genie Accelerator and gated by chips */}
+                      {!isGenie && (showDashboardModule || showAgentModule) && (<>
+                        {showGenieModule && (
+                          <div className="flex justify-center gap-2">
+                            {showDashboardModule && <ArrowDown className="w-4 h-4 text-green-400" />}
+                            {showAgentModule && <ArrowDown className="w-4 h-4 text-blue-400" />}
+                          </div>
+                        )}
+
+                        <div className={`grid gap-2.5 ${showDashboardModule && showAgentModule ? 'grid-cols-2' : 'grid-cols-1'}`}>
+                          {showDashboardModule && (
+                            <ServicePopover serviceKey="aiBIDashboards" position="top" block>
+                              <div className="bg-gradient-to-br from-green-500 to-green-600 rounded-lg p-2.5 shadow-lg hover:shadow-green-500/30 hover:shadow-xl transition-all duration-200 hover:scale-105">
+                                <div className="flex flex-col items-center gap-1">
+                                  <LayoutDashboard className="w-5 h-5 text-white" />
+                                  <p className="text-ui-sm font-bold text-white text-center">AI/BI Dashboards</p>
+                                </div>
+                              </div>
+                            </ServicePopover>
+                          )}
+
+                          {showAgentModule && (
+                            <ServicePopover serviceKey="agents" position="top" block>
+                              <div className="bg-gradient-to-br from-blue-500 to-blue-600 rounded-lg p-2.5 shadow-lg hover:shadow-blue-500/30 hover:shadow-xl transition-all duration-200 hover:scale-105">
+                                <div className="flex flex-col items-center gap-1">
+                                  <Bot className="w-5 h-5 text-white" />
+                                  <p className="text-ui-sm font-bold text-white text-center">Agent</p>
+                                </div>
+                              </div>
+                            </ServicePopover>
+                          )}
                         </div>
                       </>)}
                     </div>
@@ -1542,7 +1660,7 @@ export function ArchitectureDiagram({ forceCollapsed = false, workshopLevel = 'e
                 </div>
                 <div className="flex items-center gap-2">
                   <Brain className="w-4 h-4 text-blue-500" />
-                  <p className="text-ui-xs text-slate-400">Data Intelligence</p>
+                  <p className="text-ui-xs text-slate-400">AI and Agents</p>
                 </div>
                 <div className="flex items-center gap-2">
                   <div className="w-2 h-2 rounded-full bg-blue-500 animate-pulse" />
@@ -1607,7 +1725,7 @@ export function ArchitectureDiagram({ forceCollapsed = false, workshopLevel = 'e
                     <div className="w-12 flex-shrink-0" />
                   )}
 
-                  {/* Right: Data Intelligence objectives */}
+                  {/* Right: AI and Agents objectives */}
                   {dataIntelFade.shouldRender && rightObjectives.length > 0 && (
                     <div className={`flex-1 duration-300 ${fadeClass(dataIntelFade.isVisible)}`}>
                       <div className="rounded-lg bg-slate-800/40 border border-blue-500/20 p-3">

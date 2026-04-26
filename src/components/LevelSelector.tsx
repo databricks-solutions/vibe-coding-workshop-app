@@ -18,8 +18,24 @@
  */
 
 import { motion, LayoutGroup } from 'framer-motion';
-import { WORKSHOP_LEVELS, SKILLS_ACCELERATOR_STATUS, getActiveChain, type WorkshopLevel, type WorkflowDirection } from '../constants/workflowSections';
-import { Check, Info, Globe, HardDrive, Brain, Database, Rocket, Lock, Layers, MessageSquareText, BookOpen } from 'lucide-react';
+import { useState } from 'react';
+import {
+  WORKSHOP_LEVELS,
+  SKILLS_ACCELERATOR_STATUS,
+  getActiveChain,
+  levelSupportsAIModuleToggles,
+  getApplicableAIModules,
+  ALL_AI_MODULES,
+  NON_AI_FALLBACK,
+  levelSupportsMedallionToggles,
+  getApplicableMedallionLayers,
+  NON_LAKEHOUSE_FALLBACK,
+  type WorkshopLevel,
+  type WorkflowDirection,
+  type AIAgentModule,
+  type MedallionLayer,
+} from '../constants/workflowSections';
+import { Check, Info, Globe, HardDrive, Brain, Database, Rocket, Lock, Layers, MessageSquareText, BookOpen, Bot, LayoutDashboard } from 'lucide-react';
 
 function LockedTooltip() {
   return (
@@ -48,20 +64,24 @@ interface LevelSelectorProps {
   useCaseLockedLevel?: WorkshopLevel | null;
   hasUseCaseSelected?: boolean;
   direction?: WorkflowDirection;
+  aiAgentsModules?: Set<AIAgentModule>;
+  onAIModulesChange?: (modules: Set<AIAgentModule>) => void;
+  medallionLayers?: Set<MedallionLayer>;
+  onMedallionLayersChange?: (layers: Set<MedallionLayer>) => void;
 }
 
 const BUTTON_LABELS: Record<WorkshopLevel, string> = {
   'app-only': 'Databricks Apps',
   'app-database': '+ Lakebase',
   'lakehouse': 'Lakehouse',
-  'lakehouse-di': '+ Data Intelligence',
+  'lakehouse-di': '+ AI and Agents',
   'end-to-end': 'Complete Workshop',
   'accelerator': 'Data Product Accelerator',
   'genie-accelerator': 'Genie Accelerator',
   'data-engineering-accelerator': 'Data Engineering Accelerator',
   'skills-accelerator': 'Agent Skills Accelerator',
   'reverse-lakehouse': 'Lakehouse',
-  'reverse-lakehouse-di': '+ Data Intelligence',
+  'reverse-lakehouse-di': '+ AI and Agents',
   'reverse-lakebase': '+ Lakebase (Synced)',
   'reverse-app': '+ Analytics App',
 };
@@ -72,7 +92,7 @@ const LEVEL_DESCRIPTIONS: Record<WorkshopLevel, string> = {
   'lakehouse': 'Build Bronze/Silver/Gold data pipelines',
   'lakehouse-di': 'Add Genie Spaces, Agents & AI/BI Dashboards on top of your Lakehouse',
   'end-to-end': 'The complete end-to-end workshop covering all chapters',
-  'accelerator': 'Start with table metadata and build end-to-end Bronze/Silver/Gold layers that power your data intelligence',
+  'accelerator': 'Start with table metadata and build end-to-end Bronze/Silver/Gold layers that power your AI and agents',
   'genie-accelerator': 'Analyze silver metadata, design Gold layer, and build Genie Spaces with Metric Views and TVFs',
   'data-engineering-accelerator': 'Build production-ready Bronze, Silver, and Gold data pipelines using Databricks Lakehouse best practices',
   'skills-accelerator': 'Build a Data Contract Governance Skill that tags gold-layer tables and validates compliance for certification',
@@ -104,7 +124,14 @@ function getHighlightedButtons(selectedLevel: WorkshopLevel, completedSteps: Set
   }
   switch (selectedLevel) {
     case 'end-to-end':
-      return new Set<WorkshopLevel>(['app-only', 'app-database', 'lakehouse', 'lakehouse-di', 'end-to-end']);
+      // End-to-End is direction-agnostic: highlight every level on both forward
+      // and reverse chains so the buttons in whichever column layout is currently
+      // rendered (forward or reverse) all show the included/checkmark style.
+      return new Set<WorkshopLevel>([
+        'app-only', 'app-database', 'lakehouse', 'lakehouse-di',
+        'reverse-lakehouse', 'reverse-lakehouse-di', 'reverse-lakebase', 'reverse-app',
+        'end-to-end',
+      ]);
     case 'accelerator':
       return new Set<WorkshopLevel>(['accelerator']);
     case 'genie-accelerator':
@@ -138,6 +165,10 @@ export function LevelSelectorContent({
   useCaseLockedLevel,
   hasUseCaseSelected,
   direction,
+  aiAgentsModules,
+  onAIModulesChange,
+  medallionLayers,
+  onMedallionLayersChange,
 }: LevelSelectorProps) {
   return (
     <LevelSelectorGrid
@@ -147,6 +178,10 @@ export function LevelSelectorContent({
       useCaseLockedLevel={useCaseLockedLevel}
       hasUseCaseSelected={hasUseCaseSelected}
       direction={direction}
+      aiAgentsModules={aiAgentsModules}
+      onAIModulesChange={onAIModulesChange}
+      medallionLayers={medallionLayers}
+      onMedallionLayersChange={onMedallionLayersChange}
     />
   );
 }
@@ -158,6 +193,10 @@ function LevelSelectorGrid({
   useCaseLockedLevel,
   hasUseCaseSelected = false,
   direction = 'forward',
+  aiAgentsModules,
+  onAIModulesChange,
+  medallionLayers,
+  onMedallionLayersChange,
 }: LevelSelectorProps) {
   const highlightedButtons = getHighlightedButtons(selectedLevel, completedSteps);
 
@@ -315,8 +354,35 @@ function LevelSelectorGrid({
                 transition={{ type: 'spring', stiffness: 250, damping: 22, mass: 0.9 }}>
                 {columnHeader('analytics')}
                 <div className="space-y-2">
-                  {renderButton('reverse-lakehouse', <Database className="w-4 h-4 flex-shrink-0" />)}
-                  {renderButton('reverse-lakehouse-di', <Brain className="w-4 h-4 flex-shrink-0" />)}
+                  {levelSupportsMedallionToggles(selectedLevel) && medallionLayers && onMedallionLayersChange ? (
+                    <div className="rounded-lg border border-teal-500/30 bg-teal-500/[0.05] p-1.5 space-y-1.5">
+                      {renderButton('reverse-lakehouse', <Database className="w-4 h-4 flex-shrink-0" />)}
+                      <MedallionLayerSelector
+                        level={selectedLevel}
+                        layers={medallionLayers}
+                        onChange={onMedallionLayersChange}
+                        onLevelChange={onLevelChange}
+                        hasStartedWorkflow={hasStartedWorkflow}
+                        useCaseLockedLevel={useCaseLockedLevel ?? null}
+                      />
+                    </div>
+                  ) : (
+                    renderButton('reverse-lakehouse', <Database className="w-4 h-4 flex-shrink-0" />)
+                  )}
+                  {levelSupportsAIModuleToggles(selectedLevel) && aiAgentsModules && onAIModulesChange ? (
+                    <div className="rounded-lg border border-cyan-500/30 bg-cyan-500/[0.05] p-1.5 space-y-1.5">
+                      {renderButton('reverse-lakehouse-di', <Brain className="w-4 h-4 flex-shrink-0" />)}
+                      <AIAgentsModuleSelector
+                        level={selectedLevel}
+                        modules={aiAgentsModules}
+                        onChange={onAIModulesChange}
+                        onLevelChange={onLevelChange}
+                        hasStartedWorkflow={hasStartedWorkflow}
+                      />
+                    </div>
+                  ) : (
+                    renderButton('reverse-lakehouse-di', <Brain className="w-4 h-4 flex-shrink-0" />)
+                  )}
                 </div>
               </motion.div>
 
@@ -347,8 +413,35 @@ function LevelSelectorGrid({
                 transition={{ type: 'spring', stiffness: 250, damping: 22, mass: 0.9 }}>
                 {columnHeader('analytics')}
                 <div className="space-y-2">
-                  {renderButton('lakehouse', <Database className="w-4 h-4 flex-shrink-0" />)}
-                  {renderButton('lakehouse-di', <Brain className="w-4 h-4 flex-shrink-0" />)}
+                  {levelSupportsMedallionToggles(selectedLevel) && medallionLayers && onMedallionLayersChange ? (
+                    <div className="rounded-lg border border-teal-500/30 bg-teal-500/[0.05] p-1.5 space-y-1.5">
+                      {renderButton('lakehouse', <Database className="w-4 h-4 flex-shrink-0" />)}
+                      <MedallionLayerSelector
+                        level={selectedLevel}
+                        layers={medallionLayers}
+                        onChange={onMedallionLayersChange}
+                        onLevelChange={onLevelChange}
+                        hasStartedWorkflow={hasStartedWorkflow}
+                        useCaseLockedLevel={useCaseLockedLevel ?? null}
+                      />
+                    </div>
+                  ) : (
+                    renderButton('lakehouse', <Database className="w-4 h-4 flex-shrink-0" />)
+                  )}
+                  {levelSupportsAIModuleToggles(selectedLevel) && aiAgentsModules && onAIModulesChange ? (
+                    <div className="rounded-lg border border-cyan-500/30 bg-cyan-500/[0.05] p-1.5 space-y-1.5">
+                      {renderButton('lakehouse-di', <Brain className="w-4 h-4 flex-shrink-0" />)}
+                      <AIAgentsModuleSelector
+                        level={selectedLevel}
+                        modules={aiAgentsModules}
+                        onChange={onAIModulesChange}
+                        onLevelChange={onLevelChange}
+                        hasStartedWorkflow={hasStartedWorkflow}
+                      />
+                    </div>
+                  ) : (
+                    renderButton('lakehouse-di', <Brain className="w-4 h-4 flex-shrink-0" />)
+                  )}
                 </div>
               </motion.div>
             </>
@@ -492,6 +585,257 @@ function LevelSelectorGrid({
   );
 }
 
+// ---------------------------------------------------------------------------
+// AI and Agents sub-module selector (Genie / Agent / Dashboard chips)
+// ---------------------------------------------------------------------------
+
+interface AIAgentsModuleSelectorProps {
+  level: WorkshopLevel;
+  modules: Set<AIAgentModule>;
+  onChange: (modules: Set<AIAgentModule>) => void;
+  onLevelChange: (level: WorkshopLevel) => void;
+  hasStartedWorkflow: boolean;
+}
+
+const AI_MODULE_ITEMS: { id: AIAgentModule; label: string; icon: React.ComponentType<{ className?: string }> }[] = [
+  { id: 'genie',     label: 'Genie',     icon: MessageSquareText },
+  { id: 'agent',     label: 'Agent',     icon: Bot               },
+  { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard   },
+];
+
+function AIAgentsModuleSelector({
+  level,
+  modules,
+  onChange,
+  onLevelChange,
+  hasStartedWorkflow,
+}: AIAgentsModuleSelectorProps) {
+  const applicable = getApplicableAIModules(level);
+  const items = AI_MODULE_ITEMS.filter(i => applicable.has(i.id));
+
+  // Effective selection (intersect stored state with what applies on this level).
+  const effective = new Set<AIAgentModule>([...modules].filter(m => applicable.has(m)));
+
+  // Track which chip is "blocked" right now to drive the shake animation.
+  const [shakeId, setShakeId] = useState<AIAgentModule | null>(null);
+
+  const triggerShake = (id: AIAgentModule) => {
+    setShakeId(id);
+    window.setTimeout(() => setShakeId(prev => (prev === id ? null : prev)), 450);
+  };
+
+  const handleToggle = (id: AIAgentModule) => {
+    const next = new Set(effective);
+    if (next.has(id)) next.delete(id); else next.add(id);
+
+    if (next.size === 0) {
+      const fallback = NON_AI_FALLBACK[level];
+      // Auto-revert only when (a) a clean fallback exists and (b) the workflow
+      // hasn't started yet. Once started, App.handleWorkshopLevelChange would
+      // silently reject the backward move — so we block here for a clear UX.
+      if (fallback && !hasStartedWorkflow) {
+        onLevelChange(fallback);
+        onChange(new Set(ALL_AI_MODULES));
+        return;
+      }
+      triggerShake(id);
+      return;
+    }
+
+    // Preserve flags for non-applicable modules so they persist if the user
+    // switches to a level where they apply again.
+    const stored = new Set(modules);
+    items.forEach(i => {
+      if (next.has(i.id)) stored.add(i.id); else stored.delete(i.id);
+    });
+    onChange(stored);
+  };
+
+  const onlyOneActive = effective.size === 1;
+  const willBlockOnLastOff = !NON_AI_FALLBACK[level] || hasStartedWorkflow;
+
+  return (
+    <motion.div
+      layout
+      initial={{ opacity: 0, y: -4 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ type: 'spring', stiffness: 280, damping: 26, mass: 0.8 }}
+      className="grid grid-cols-3 gap-1"
+      title="Customize the AI section. Use-Case Plan and Deploy Assets are always included."
+    >
+      {items.map(item => {
+        const Icon = item.icon;
+        const isOn = effective.has(item.id);
+        const isShaking = shakeId === item.id;
+        const wouldBlockClick = isOn && onlyOneActive && willBlockOnLastOff;
+
+        return (
+          <motion.button
+            key={item.id}
+            type="button"
+            layout
+            onClick={() => handleToggle(item.id)}
+            whileTap={{ scale: 0.94 }}
+            animate={isShaking ? { x: [0, -2, 2, -2, 2, 0] } : { x: 0 }}
+            transition={{ duration: 0.32 }}
+            title={
+              wouldBlockClick
+                ? 'At least one module required for this path'
+                : isOn
+                ? `Click to remove ${item.label}`
+                : `Click to add ${item.label}`
+            }
+            className={`group flex flex-col items-center justify-center gap-0.5 rounded-md border px-1 py-1.5 transition-colors duration-150 ${
+              isOn
+                ? 'bg-cyan-500/15 border-cyan-500/50 text-foreground shadow-sm'
+                : 'bg-secondary/40 border-border/40 text-muted-foreground hover:bg-secondary/70 hover:border-border/70 hover:text-foreground'
+            }`}
+          >
+            <Icon className={`w-3.5 h-3.5 flex-shrink-0 ${isOn ? 'text-cyan-400' : ''}`} />
+            <span className="text-ui-3xs font-medium leading-tight">{item.label}</span>
+          </motion.button>
+        );
+      })}
+    </motion.div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Medallion layer selector (Bronze / Silver / Gold chips).
+// Cascading semantics: Gold requires Silver, Silver requires Bronze.
+// Last-chip behavior:
+//  - If a clean fallback path exists in NON_LAKEHOUSE_FALLBACK *and* the
+//    workflow has not started *and* the level isn't pinned by a use-case lock,
+//    auto-revert to the fallback (matches the AI selector's pattern).
+//  - Otherwise block the deselect with a shake animation.
+// ---------------------------------------------------------------------------
+
+interface MedallionLayerSelectorProps {
+  level: WorkshopLevel;
+  layers: Set<MedallionLayer>;
+  onChange: (layers: Set<MedallionLayer>) => void;
+  onLevelChange: (level: WorkshopLevel) => void;
+  hasStartedWorkflow: boolean;
+  useCaseLockedLevel: WorkshopLevel | null;
+}
+
+const MEDALLION_ITEMS: { id: MedallionLayer; label: string; activeClass: string; iconActiveClass: string }[] = [
+  { id: 'bronze', label: 'Bronze', activeClass: 'bg-orange-500/15 border-orange-500/50',  iconActiveClass: 'text-orange-400' },
+  { id: 'silver', label: 'Silver', activeClass: 'bg-slate-300/15 border-slate-300/50',    iconActiveClass: 'text-slate-200' },
+  { id: 'gold',   label: 'Gold',   activeClass: 'bg-amber-400/15 border-amber-400/50',    iconActiveClass: 'text-amber-300' },
+];
+
+function MedallionLayerSelector({
+  level,
+  layers,
+  onChange,
+  onLevelChange,
+  hasStartedWorkflow,
+  useCaseLockedLevel,
+}: MedallionLayerSelectorProps) {
+  const applicable = getApplicableMedallionLayers(level);
+  const items = MEDALLION_ITEMS.filter(i => applicable.has(i.id));
+
+  // Effective on-state respects per-level applicability without mutating storage.
+  const effective = new Set<MedallionLayer>([...layers].filter(l => applicable.has(l)));
+
+  const [shakeId, setShakeId] = useState<MedallionLayer | null>(null);
+  const triggerShake = (id: MedallionLayer) => {
+    setShakeId(id);
+    window.setTimeout(() => setShakeId(prev => (prev === id ? null : prev)), 450);
+  };
+
+  // A fallback is only *viable* when:
+  //   1. NON_LAKEHOUSE_FALLBACK has an entry for this level,
+  //   2. the workflow hasn't started (handleWorkshopLevelChange would silently
+  //      reject backward moves once steps are complete), and
+  //   3. the use-case lock isn't pinning a different level.
+  const fallback = NON_LAKEHOUSE_FALLBACK[level];
+  const fallbackViable =
+    !!fallback && !hasStartedWorkflow && (!useCaseLockedLevel || useCaseLockedLevel === fallback);
+
+  const handleToggle = (id: MedallionLayer) => {
+    // Cascading: deselecting Bronze drops Silver+Gold; deselecting Silver drops Gold.
+    // Selecting Silver pulls in Bronze; selecting Gold pulls in Silver+Bronze.
+    const cascaded = new Set(effective);
+    if (cascaded.has(id)) {
+      cascaded.delete(id);
+      if (id === 'bronze') { cascaded.delete('silver'); cascaded.delete('gold'); }
+      if (id === 'silver') { cascaded.delete('gold'); }
+    } else {
+      cascaded.add(id);
+      if (id === 'silver') cascaded.add('bronze');
+      if (id === 'gold')   { cascaded.add('silver'); cascaded.add('bronze'); }
+    }
+
+    // Detect last-chip deselect *before* normalizeMedallionLayers re-fills empty.
+    if (cascaded.size === 0) {
+      if (fallbackViable && fallback) {
+        // App.handleWorkshopLevelChange resets medallionLayers to all-on on
+        // level change, so we don't need to reset here.
+        onLevelChange(fallback);
+        return;
+      }
+      triggerShake(id);
+      return;
+    }
+
+    // Persist into the parent store; only update bits applicable on this level.
+    const stored = new Set(layers);
+    items.forEach(i => {
+      if (cascaded.has(i.id)) stored.add(i.id); else stored.delete(i.id);
+    });
+    onChange(stored);
+  };
+
+  const onlyOneActive = effective.size === 1;
+  const willBlockOnLastOff = !fallbackViable;
+
+  return (
+    <motion.div
+      layout
+      initial={{ opacity: 0, y: -4 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ type: 'spring', stiffness: 280, damping: 26, mass: 0.8 }}
+      className="grid grid-cols-3 gap-1"
+      title="Customize the Lakehouse layers. Bronze→Silver→Gold cascade automatically."
+    >
+      {items.map(item => {
+        const isOn = effective.has(item.id);
+        const isShaking = shakeId === item.id;
+        const wouldBlockClick = isOn && onlyOneActive && willBlockOnLastOff;
+
+        return (
+          <motion.button
+            key={item.id}
+            type="button"
+            layout
+            onClick={() => handleToggle(item.id)}
+            whileTap={{ scale: 0.94 }}
+            animate={isShaking ? { x: [0, -2, 2, -2, 2, 0] } : { x: 0 }}
+            transition={{ duration: 0.32 }}
+            title={
+              wouldBlockClick
+                ? 'At least one medallion layer required for this path'
+                : isOn
+                ? `Click to remove ${item.label}`
+                : `Click to add ${item.label}`
+            }
+            className={`group flex flex-col items-center justify-center gap-0.5 rounded-md border px-1 py-1.5 transition-colors duration-150 ${
+              isOn
+                ? `${item.activeClass} text-foreground shadow-sm`
+                : 'bg-secondary/40 border-border/40 text-muted-foreground hover:bg-secondary/70 hover:border-border/70 hover:text-foreground'
+            }`}
+          >
+            <Layers className={`w-3.5 h-3.5 flex-shrink-0 ${isOn ? item.iconActiveClass : ''}`} />
+            <span className="text-ui-3xs font-medium leading-tight">{item.label}</span>
+          </motion.button>
+        );
+      })}
+    </motion.div>
+  );
+}
+
 export function LevelSelector({
   selectedLevel,
   onLevelChange,
@@ -505,7 +849,7 @@ export function LevelSelector({
     if (isAppChainCrossColumn) {
       return selectedLevel === 'lakehouse'
         ? 'Progressive — App + Lakebase + Lakehouse'
-        : 'Progressive — App + Lakebase + Lakehouse + Data Intelligence';
+        : 'Progressive — App + Lakebase + Lakehouse + AI and Agents';
     }
     const isAppSelected = selectedLevel === 'app-only' || selectedLevel === 'app-database' || selectedLevel === 'reverse-lakebase' || selectedLevel === 'reverse-app';
     const isAnalyticsSelected = selectedLevel === 'lakehouse' || selectedLevel === 'lakehouse-di' || selectedLevel === 'reverse-lakehouse' || selectedLevel === 'reverse-lakehouse-di';
@@ -522,22 +866,22 @@ export function LevelSelector({
     if (isAppChainCrossColumn) {
       return selectedLevel === 'lakehouse'
         ? 'Foundation → Databricks App → Lakebase → Lakehouse → Refinement'
-        : 'Foundation → Databricks App → Lakebase → Lakehouse → Data Intelligence → Refinement';
+        : 'Foundation → Databricks App → Lakebase → Lakehouse → AI and Agents → Refinement';
     }
     switch (selectedLevel) {
       case 'app-only': return 'Foundation → Databricks App → Refinement';
       case 'app-database': return 'Foundation → Databricks App → Lakebase → Refinement';
       case 'lakehouse': return 'Foundation → Lakehouse → Refinement';
-      case 'lakehouse-di': return 'Foundation → Lakehouse → Data Intelligence → Refinement';
-      case 'end-to-end': return 'Foundation → All Sections (App, Lakebase, Lakehouse, Data Intelligence) → Refinement';
-      case 'accelerator': return 'Foundation → Lakehouse → Data Intelligence → Refinement';
+      case 'lakehouse-di': return 'Foundation → Lakehouse → AI and Agents → Refinement';
+      case 'end-to-end': return 'Foundation → All Sections (App, Lakebase, Lakehouse, AI and Agents) → Refinement';
+      case 'accelerator': return 'Foundation → Lakehouse → AI and Agents → Refinement';
       case 'genie-accelerator': return 'Foundation → Silver Metadata → Gold Layer → Use-Case Plan → Genie Space → Refinement';
       case 'data-engineering-accelerator': return 'Foundation → Lakehouse (Bronze → Silver → Gold) → Refinement';
       case 'skills-accelerator': return 'Foundation → Build Agent Skill (Explore, Strategy, SKILL.md, Apply & Test, Validate) → Refinement';
       case 'reverse-lakehouse': return 'Foundation → Lakehouse → Refinement';
-      case 'reverse-lakehouse-di': return 'Foundation → Lakehouse → Data Intelligence → Refinement';
-      case 'reverse-lakebase': return 'Foundation → Lakehouse → Data Intelligence → Reverse ETL (Synced Tables) → Refinement';
-      case 'reverse-app': return 'Foundation → Lakehouse → Data Intelligence → Reverse ETL (Analytics App) → Refinement';
+      case 'reverse-lakehouse-di': return 'Foundation → Lakehouse → AI and Agents → Refinement';
+      case 'reverse-lakebase': return 'Foundation → Lakehouse → AI and Agents → Reverse ETL (Synced Tables) → Refinement';
+      case 'reverse-app': return 'Foundation → Lakehouse → AI and Agents → Reverse ETL (Analytics App) → Refinement';
       default: return '';
     }
   })();
