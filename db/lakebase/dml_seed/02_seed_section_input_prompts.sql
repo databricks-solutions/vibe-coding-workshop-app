@@ -9112,8 +9112,9 @@ true, 1, true, current_timestamp(), current_timestamp(), current_user());
 
 -- =============================================================================
 -- AGENTS ACCELERATOR — Agents on Apps (Steps 38-45)
--- Locked to use case 'build_agents_app' / level 'agents-accelerator'.
--- Section titles match the tracks/A-custom-agent-apps/ folder labels.
+-- Rendered when the user is on workshop level 'agents-accelerator'. The level
+-- is NOT tied to a specific use case — the user picks a regular sample use
+-- case (e.g. Booking App) and then selects the Agents Accelerator button.
 --
 -- Step 38: 01 - Clone and Run         (bypass_llm = true)
 -- Step 39: 02 - Agent Framework       (bypass_llm = false)
@@ -9167,7 +9168,7 @@ python -m agents.starter_agent --prompt "Hello from {use_case_title}"
 - [ ] Starter agent runs locally and returns a response.
 - [ ] Existing Databricks App still runs unchanged.',
 '',
-'01 - Clone and Run',
+'Clone and Run',
 'Clone the custom-agent-apps template, install deps, and run the starter agent locally inside your Databricks App',
 38,
 '## How to Apply
@@ -9234,7 +9235,7 @@ Reference docs:
 - https://docs.databricks.com/aws/en/generative-ai/agent-framework/log-agent
 
 Do NOT include MCP tool wiring (Step 40), authentication (Step 41), or Lakebase memory (Step 42) — leave them as documented extension points.',
-'02 - Agent Framework',
+'Agent Framework',
 'Build a Mosaic AI Agent Framework module using the ResponsesAgent interface (with optional ChatAgent UI)',
 39,
 '## How to Apply
@@ -9314,7 +9315,7 @@ Reference docs:
 - https://docs.databricks.com/aws/en/generative-ai/mcp/managed-mcp
 
 Leave External and Custom MCP servers as documented placeholders — do not implement them. Tool calls in this step run as the app service principal; OBO auth comes in the next step.',
-'03 - Tools and MCP',
+'Tools and MCP',
 'Register tools via Managed (UC Functions, Vector Search, Genie, SQL), External, and Custom MCP servers',
 40,
 '## How to Apply
@@ -9397,7 +9398,7 @@ async def chat(req: ChatRequest, ws: WorkspaceClient = Depends(get_obo_client)):
 - [ ] Local dev fallback in place.
 - [ ] Manual test confirms different users see different data.',
 '',
-'04 - Authentication',
+'Authentication',
 'Wire on-behalf-of-user auth via Databricks Apps user-token forwarding (X-Forwarded-Access-Token header) so tool calls run with the caller''s permissions',
 41,
 '## How to Apply
@@ -9475,7 +9476,7 @@ Reference docs:
 - https://langchain-ai.github.io/langgraph/concepts/persistence/
 
 Bootstrap the necessary Postgres tables idempotently on app startup. Honour Lakebase autoscaling/suspend semantics — do not add keep-alive workarounds.',
-'05 - Lakebase Memory',
+'Lakebase Memory',
 'Add short-term (LangGraph checkpointer + thread_id) and long-term (Vector Search–extracted insights) memory backed by Lakebase Postgres',
 42,
 '## How to Apply
@@ -9541,7 +9542,7 @@ Reference docs:
 - https://www.mlflow.org/docs/3.3.0/genai/eval/
 
 This is a baseline — the full MLflow for Gen-AI section will expand the dataset, add custom scorers, and add stakeholder sign-off.',
-'06 - Evaluation',
+'Evaluation',
 'Build a baseline offline eval harness using mlflow.genai.evaluate with Correctness + RetrievalGroundedness scorers',
 43,
 '## How to Apply
@@ -9624,7 +9625,7 @@ You now have a working `ResponsesAgent` with tools, OBO auth, Lakebase memory, a
 - [ ] Curl smoke test returns a coherent response.
 - [ ] AI Gateway-enabled inference table populated with at least one row.',
 '',
-'07 - Deploy and Query',
+'Deploy and Query',
 'Log the agent as an MLflow model, register to Unity Catalog, deploy via agents.deploy, and query the serving endpoint',
 44,
 '## How to Apply
@@ -9703,7 +9704,7 @@ Try these and observe the traces:
 - [ ] At least one Review App submission with a rating.
 - [ ] At least one tool-error trace inspected (and you understand why).',
 '',
-'08 - Debugging',
+'Debugging',
 'Use MLflow Traces, the Tracing UI, and the Review App to debug agent tool calls and prompts',
 45,
 '## How to Apply
@@ -9731,8 +9732,8 @@ true, 1, true, current_timestamp(), current_timestamp(), current_user());
 
 -- =============================================================================
 -- AGENTS ACCELERATOR — MLflow for Gen-AI (Steps 46-54)
--- Locked to use case 'build_agents_app' / level 'agents-accelerator'.
--- Section titles match the sdlc/ folder labels.
+-- Rendered when the user is on workshop level 'agents-accelerator'. The level
+-- is NOT tied to a specific use case.
 --
 -- Step 46: 01 - Prompt Registry                  (bypass_llm = false)
 -- Step 47: 02 - Evaluation Datasets              (bypass_llm = false)
@@ -9773,7 +9774,7 @@ VALUES
 - The agent boots successfully with the registry-fetched prompts.
 - Registering a new prompt version + moving the alias triggers the new behaviour without a redeploy.',
 'You are a senior Databricks engineer migrating an agent''s inline prompts into MLflow 3 Prompt Registry. Use git-style versioning + aliases (e.g. @production, @staging) for safe promotion. Load prompts once at agent boot via mlflow.genai.load_prompt and provide an offline fallback for tests. Reference https://docs.databricks.com/aws/en/mlflow3/genai/prompt-version-mgmt/prompt-registry/evaluate-prompts and https://www.mlflow.org/docs/3.3.0/genai/prompt-registry/.',
-'01 - Prompt Registry',
+'Prompt Registry',
 'Move agent prompts into MLflow 3 Prompt Registry with git-style versioning and @production aliases',
 46,
 '## How to Apply
@@ -9827,7 +9828,7 @@ VALUES
 - Dataset is registered as an MLflow eval dataset (`mlflow.genai.datasets.create()`).
 - A reviewer can add a new row via the notebook and have it appear in the active set.',
 'You are a senior Databricks engineer building a Unity Catalog–backed evaluation dataset for a Mosaic AI agent. Schema, versioning, seed examples, and a reviewer-friendly authoring path are required. Treat this as a long-lived artifact: the dataset will get expanded weekly from inference-table conversations.',
-'02 - Evaluation Datasets',
+'Evaluation Datasets',
 'Curate a versioned Unity Catalog evaluation dataset for the agent (25+ representative examples)',
 47,
 '## How to Apply
@@ -9895,7 +9896,7 @@ Update `{user_app_name}/agents/eval_offline.py` (and add `agents/scorers.py`) to
 - Running the eval prints per-row scores from each scorer.
 - Toggling the `EVAL_USE_LLM_JUDGES=false` env var skips the LLM-judge scorers and returns only built-in + heuristic results.',
 'You are a senior Databricks engineer wiring MLflow 3 GenAI scorers and judges. Implement all five categories: built-in (Correctness, RetrievalGroundedness), Guidelines, Custom Python, Code-based SQL, and one optional third-party reference. Reference https://docs.databricks.com/aws/en/mlflow3/genai/eval-monitor/concepts/judges and the MLflow 3 GenAI eval docs. Make LLM-judge scorers togglable so CI runs stay fast and cheap.',
-'03 - Scorers and Judges',
+'Scorers and Judges',
 'Define LLM-as-judge scorers (Correctness, RetrievalGroundedness, Guidelines, Custom, Code-based) and an optional third-party reference',
 48,
 '## How to Apply
@@ -9953,7 +9954,7 @@ A small driver script `{user_app_name}/agents/eval_compare.py` that:
 - Comparison view in MLflow shows side-by-side runs.
 - Summary table identifies a clear winner (or surfaces "all within noise" honestly).',
 'You are a senior Databricks engineer running systematic prompt/model comparisons via mlflow.genai.evaluate. Make the variants matrix explicit and reproducible (YAML or in-code config). Cost-guardrail expensive scorers — only run them on variants that already pass cheap scorer thresholds.',
-'04 - Evaluation Runs',
+'Evaluation Runs',
 'Execute mlflow.genai.evaluate across prompt + model variants and compare results in the MLflow UI',
 49,
 '## How to Apply
@@ -10023,7 +10024,7 @@ LLM-judge scorers are a great proxy, but they don''t replace a human reading 5-1
 - [ ] Decision recorded in the project tracker.
 - [ ] Rollback plan documented.',
 '',
-'04b - Stakeholder Sign-off',
+'Stakeholder Sign-off',
 'Workflow practice: share Review App + eval dashboard, capture human ratings, record final approval before promotion',
 50,
 '## How to Apply
@@ -10090,7 +10091,7 @@ VALUES
 - `mlflow.MlflowClient().get_model_version_by_alias(uc_full_name, "production")` returns the new version.
 - The previous version is reachable via `@previous`.',
 'You are a senior Databricks engineer registering a Mosaic AI agent in Unity Catalog. Use mlflow.models.log_model with the ResponsesAgent (auto-signature inference). Move @production and @previous aliases atomically; tag the version with the variant ID, eval-run URI, and sign-off decision URL. Reference https://docs.databricks.com/generative-ai/agent-framework/log-agent.',
-'05 - Logged Model & UC Registration',
+'Logged Model & UC Registration',
 'Log the approved agent via mlflow.models.log_model and register the version in Unity Catalog with @production alias',
 51,
 '## How to Apply
@@ -10146,7 +10147,7 @@ VALUES
 - A deliberately-broken model version triggers the rollback path.
 - The CI workflow runs successfully on a sample PR.',
 'You are a senior Databricks engineer building a Databricks Asset Bundle for agent promotion. The bundle MUST cover register + deploy + smoke-test + automatic rollback on smoke-test failure. Reference https://docs.databricks.com/aws/en/dev-tools/bundles. Pin all secrets via Databricks secret scopes; do not put credentials in YAML.',
-'06 - Deployment & Automation',
+'Deployment & Automation',
 'Wrap deploy + smoke-test + rollback in a Databricks Asset Bundle job for repeatable, auditable promotion',
 52,
 '## How to Apply
@@ -10219,7 +10220,7 @@ VALUES
 - Manually corrupting the agent (e.g. deploying a broken variant) triggers an alert within one scoring window.
 - The dashboard is shareable and shows the same data to non-engineers.',
 'You are a senior Databricks engineer setting up production monitoring for a Mosaic AI agent. Use AI Gateway-enabled inference tables (legacy tables deprecated 2026-04-30) and MLflow 3 scheduled scorers (`scorer.register()` / `.start()`, sampling rate 0.0-1.0, max 20 scorers per experiment). Wire results into an AI/BI dashboard with alert thresholds. Reference https://docs.databricks.com/aws/en/mlflow3/genai/eval-monitor/run-scorer-in-prod and https://docs.databricks.com/en/machine-learning/model-serving/inference-tables.html.',
-'07 - Production Monitoring',
+'Production Monitoring',
 'Enable AI Gateway-enabled inference tables + MLflow 3 scheduled scorers; surface drift in an AI/BI dashboard',
 53,
 '## How to Apply
@@ -10276,7 +10277,7 @@ VALUES
 - A new prompt version exists in the Prompt Registry under `@candidate`.
 - Sign-off + promotion happens only after the workflow practice from Step 50.',
 'You are a senior Databricks engineer running automated prompt optimization for a production agent. Pick DSPy or mlflow.genai.optimize_prompt (preview) as the optimizer. Maximise Correctness on the dataset from Step 47, with Guidelines compliance as a hard constraint. Token budget caps. Promote ONLY after re-running the Step 50 sign-off workflow.',
-'08 - Prompt Optimization',
+'Prompt Optimization',
 'Run automated prompt tuning against the eval dataset; write the winner back to the Prompt Registry under @candidate',
 54,
 '## How to Apply

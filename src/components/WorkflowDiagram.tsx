@@ -2271,7 +2271,7 @@ export function WorkflowDiagram({
                 <div key={38} className="relative mt-5" data-step-number="38">
                   <WorkflowStep
                     stepNumber={38}
-                    title="01 - Clone and Run"
+                    title="Clone and Run"
                     description="Clone the custom-agent-apps template, install dependencies, and run the starter agent locally inside your Databricks App"
                     icon={<GitBranch className="w-5 h-5" />}
                     color="blue"
@@ -2299,7 +2299,7 @@ export function WorkflowDiagram({
                 <div key={39} className="relative mt-5" data-step-number="39">
                   <WorkflowStep
                     stepNumber={39}
-                    title="02 - Agent Framework"
+                    title="Agent Framework"
                     description="Build an agent module using the Mosaic AI Agent Framework with the ResponsesAgent interface (auto MLflow signature inference, native Playground/Eval/Apps integration)"
                     icon={<Bot className="w-5 h-5" />}
                     color="blue"
@@ -2328,7 +2328,7 @@ export function WorkflowDiagram({
                 <div key={40} className="relative mt-5" data-step-number="40">
                   <WorkflowStep
                     stepNumber={40}
-                    title="03 - Tools and MCP"
+                    title="Tools and MCP"
                     description="Register tools via Managed (UC Functions, Vector Search, Genie, Databricks SQL), External, and Custom MCP servers"
                     icon={<Plug className="w-5 h-5" />}
                     color="blue"
@@ -2357,7 +2357,7 @@ export function WorkflowDiagram({
                 <div key={41} className="relative mt-5" data-step-number="41">
                   <WorkflowStep
                     stepNumber={41}
-                    title="04 - Authentication"
+                    title="Authentication"
                     description="Wire on-behalf-of-user auth via Databricks Apps user-token forwarding (X-Forwarded-Access-Token header) so tool calls run with the caller's permissions"
                     icon={<Shield className="w-5 h-5" />}
                     color="blue"
@@ -2386,7 +2386,7 @@ export function WorkflowDiagram({
                 <div key={42} className="relative mt-5" data-step-number="42">
                   <WorkflowStep
                     stepNumber={42}
-                    title="05 - Lakebase Memory"
+                    title="Lakebase Memory"
                     description="Add short-term memory via a LangGraph checkpointer keyed by thread_id and long-term memory via Vector Search–extracted insights — both backed by Lakebase Postgres"
                     icon={<Brain className="w-5 h-5" />}
                     color="violet"
@@ -2415,7 +2415,7 @@ export function WorkflowDiagram({
                 <div key={43} className="relative mt-5" data-step-number="43">
                   <WorkflowStep
                     stepNumber={43}
-                    title="06 - Evaluation"
+                    title="Evaluation"
                     description="Build an offline evaluation harness using mlflow.genai.evaluate against an initial dataset (foreshadows the MLflow for Gen-AI section)"
                     icon={<FlaskConical className="w-5 h-5" />}
                     color="blue"
@@ -2444,7 +2444,7 @@ export function WorkflowDiagram({
                 <div key={44} className="relative mt-5" data-step-number="44">
                   <WorkflowStep
                     stepNumber={44}
-                    title="07 - Deploy and Query"
+                    title="Deploy and Query"
                     description="Log the agent as an MLflow model, register it to Unity Catalog, deploy via agents.deploy, and query the serving endpoint"
                     icon={<Rocket className="w-5 h-5" />}
                     color="blue"
@@ -2473,7 +2473,7 @@ export function WorkflowDiagram({
                 <div key={45} className="relative mt-5" data-step-number="45">
                   <WorkflowStep
                     stepNumber={45}
-                    title="08 - Debugging"
+                    title="Debugging"
                     description="Use MLflow Traces, the Tracing UI, and the Review App to debug the agent's tool calls and prompts"
                     icon={<Search className="w-5 h-5" />}
                     color="blue"
@@ -2507,7 +2507,7 @@ export function WorkflowDiagram({
                 <div key={46} className="relative mt-5" data-step-number="46">
                   <WorkflowStep
                     stepNumber={46}
-                    title="01 - Prompt Registry"
+                    title="Prompt Registry"
                     description="Register the agent's prompts in MLflow Prompt Registry with git-style versioning and aliases (@production, @staging) for safe promotion"
                     icon={<BookOpen className="w-5 h-5" />}
                     color="violet"
@@ -2536,7 +2536,7 @@ export function WorkflowDiagram({
                 <div key={47} className="relative mt-5" data-step-number="47">
                   <WorkflowStep
                     stepNumber={47}
-                    title="02 - Evaluation Datasets"
+                    title="Evaluation Datasets"
                     description="Curate an evaluation dataset (Unity Catalog table) from real or synthetic traffic for repeatable agent evaluation"
                     icon={<Table2 className="w-5 h-5" />}
                     color="violet"
@@ -2565,7 +2565,7 @@ export function WorkflowDiagram({
                 <div key={48} className="relative mt-5" data-step-number="48">
                   <WorkflowStep
                     stepNumber={48}
-                    title="03 - Scorers and Judges"
+                    title="Scorers and Judges"
                     description="Define LLM-as-judge scorers (Correctness, RetrievalGroundedness, Guidelines, Custom, Code-based) plus heuristic scorers"
                     icon={<ShieldCheck className="w-5 h-5" />}
                     color="violet"
@@ -2594,7 +2594,7 @@ export function WorkflowDiagram({
                 <div key={49} className="relative mt-5" data-step-number="49">
                   <WorkflowStep
                     stepNumber={49}
-                    title="04 - Evaluation Runs"
+                    title="Evaluation Runs"
                     description="Execute mlflow.genai.evaluate() runs across prompt and model variants; compare results in the MLflow UI"
                     icon={<FlaskConical className="w-5 h-5" />}
                     color="violet"
@@ -2623,7 +2623,7 @@ export function WorkflowDiagram({
                 <div key={50} className="relative mt-5" data-step-number="50">
                   <WorkflowStep
                     stepNumber={50}
-                    title="04b - Stakeholder Sign-off"
+                    title="Stakeholder Sign-off"
                     description="Workflow practice: share the Review App + eval dashboard with reviewers, capture human ratings, and record final approval before promotion"
                     icon={<Tag className="w-5 h-5" />}
                     color="violet"
@@ -2652,7 +2652,7 @@ export function WorkflowDiagram({
                 <div key={51} className="relative mt-5" data-step-number="51">
                   <WorkflowStep
                     stepNumber={51}
-                    title="05 - Logged Model & UC Registration"
+                    title="Logged Model & UC Registration"
                     description="Log the approved ResponsesAgent via mlflow.models.log_model (auto-infers signature) and register the model version in Unity Catalog"
                     icon={<Database className="w-5 h-5" />}
                     color="violet"
@@ -2681,7 +2681,7 @@ export function WorkflowDiagram({
                 <div key={52} className="relative mt-5" data-step-number="52">
                   <WorkflowStep
                     stepNumber={52}
-                    title="06 - Deployment & Automation"
+                    title="Deployment & Automation"
                     description="Wrap the deploy + smoke-test flow in a Databricks Asset Bundle job for repeatable, auditable promotion"
                     icon={<Rocket className="w-5 h-5" />}
                     color="violet"
@@ -2710,7 +2710,7 @@ export function WorkflowDiagram({
                 <div key={53} className="relative mt-5" data-step-number="53">
                   <WorkflowStep
                     stepNumber={53}
-                    title="07 - Production Monitoring"
+                    title="Production Monitoring"
                     description="Enable AI Gateway-enabled inference tables (legacy tables deprecated 2026-04-30) and MLflow 3 scheduled scorers; surface drift in an AI/BI dashboard"
                     icon={<BarChart3 className="w-5 h-5" />}
                     color="violet"
@@ -2739,7 +2739,7 @@ export function WorkflowDiagram({
                 <div key={54} className="relative mt-5" data-step-number="54">
                   <WorkflowStep
                     stepNumber={54}
-                    title="08 - Prompt Optimization"
+                    title="Prompt Optimization"
                     description="Run automated prompt tuning (e.g. DSPy / optimize_prompt) against the eval dataset; write the winning version back to the Prompt Registry"
                     icon={<Sparkles className="w-5 h-5" />}
                     color="violet"

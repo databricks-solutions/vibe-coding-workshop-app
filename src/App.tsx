@@ -252,14 +252,7 @@ export default function App() {
 
         // Restore workshop level — use-case lock takes precedence over saved value
         const restoredLevel = restoredLock ?? normalizeLevel(response.workshop_level || 'end-to-end');
-        // Locked accelerators (skills-accelerator, agents-accelerator) require
-        // their corresponding use-case lock; without it, fall back to end-to-end
-        // so the user doesn't land on an orphaned path.
-        setWorkshopLevel(
-          !restoredLock && (restoredLevel === 'skills-accelerator' || restoredLevel === 'agents-accelerator')
-            ? 'end-to-end'
-            : restoredLevel
-        );
+        setWorkshopLevel(!restoredLock && restoredLevel === 'skills-accelerator' ? 'end-to-end' : restoredLevel);
         
         // Restore completed steps and skipped steps
         const completedStepsArray: number[] = response.completed_steps || [];
@@ -407,12 +400,7 @@ export default function App() {
 
         // Restore workshop level — use-case lock takes precedence over saved value
         const loadedLevel = loadedLock ?? normalizeLevel(response.workshop_level || 'end-to-end');
-        // Same orphan-path guard as the default-session restore above.
-        setWorkshopLevel(
-          !loadedLock && (loadedLevel === 'skills-accelerator' || loadedLevel === 'agents-accelerator')
-            ? 'end-to-end'
-            : loadedLevel
-        );
+        setWorkshopLevel(!loadedLock && loadedLevel === 'skills-accelerator' ? 'end-to-end' : loadedLevel);
         
         // Restore custom use case overrides from session_parameters
         const sessionParams = response.session_parameters || {};
@@ -1113,7 +1101,7 @@ export default function App() {
                         handleWorkshopLevelChange(lockLevel, true);
                       } else {
                         setUseCaseLockedLevel(null);
-                        if (workshopLevel === 'skills-accelerator' || workshopLevel === 'agents-accelerator') handleWorkshopLevelChange('end-to-end', true);
+                        if (workshopLevel === 'skills-accelerator') handleWorkshopLevelChange('end-to-end', true);
                       }
                       if (sessionId) {
                         apiClient.updateSessionMetadata({

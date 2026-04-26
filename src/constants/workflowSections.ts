@@ -213,7 +213,6 @@ export const SKILLS_ACCELERATOR_STATUS: AcceleratorStatus = 'enabled';
 // ---------------------------------------------------------------------------
 export const USE_CASE_LEVEL_LOCK: Partial<Record<string, WorkshopLevel>> = {
   build_skill: 'skills-accelerator',
-  build_agents_app: 'agents-accelerator',
 };
 
 // Level configuration with descriptions
@@ -375,27 +374,25 @@ export const ALL_STEPS: Record<number, WorkflowStep> = {
   37: { number: 37, title: 'Deploy & Validate', icon: Rocket, color: 'text-emerald-400', sectionTag: 'activation_deploy_validate' },
 
   // Agents Accelerator — Agents on Apps (Steps 38-45)
-  // Section titles deliberately match the tracks/A-custom-agent-apps/ folder labels
-  38: { number: 38, title: '01 - Clone and Run', icon: GitBranch, color: 'text-blue-400', sectionTag: 'agents_clone_and_run' },
-  39: { number: 39, title: '02 - Agent Framework', icon: Bot, color: 'text-blue-500', sectionTag: 'agents_agent_framework' },
-  40: { number: 40, title: '03 - Tools and MCP', icon: Plug, color: 'text-blue-400', sectionTag: 'agents_tools_and_mcp' },
-  41: { number: 41, title: '04 - Authentication', icon: Shield, color: 'text-blue-500', sectionTag: 'agents_authentication' },
-  42: { number: 42, title: '05 - Lakebase Memory', icon: Brain, color: 'text-violet-400', sectionTag: 'agents_lakebase_memory' },
-  43: { number: 43, title: '06 - Evaluation', icon: FlaskConical, color: 'text-blue-400', sectionTag: 'agents_evaluation' },
-  44: { number: 44, title: '07 - Deploy and Query', icon: Rocket, color: 'text-blue-500', sectionTag: 'agents_deploy_and_query' },
-  45: { number: 45, title: '08 - Debugging', icon: Search, color: 'text-blue-400', sectionTag: 'agents_debugging' },
+  38: { number: 38, title: 'Clone and Run', icon: GitBranch, color: 'text-blue-400', sectionTag: 'agents_clone_and_run' },
+  39: { number: 39, title: 'Agent Framework', icon: Bot, color: 'text-blue-500', sectionTag: 'agents_agent_framework' },
+  40: { number: 40, title: 'Tools and MCP', icon: Plug, color: 'text-blue-400', sectionTag: 'agents_tools_and_mcp' },
+  41: { number: 41, title: 'Authentication', icon: Shield, color: 'text-blue-500', sectionTag: 'agents_authentication' },
+  42: { number: 42, title: 'Lakebase Memory', icon: Brain, color: 'text-violet-400', sectionTag: 'agents_lakebase_memory' },
+  43: { number: 43, title: 'Evaluation', icon: FlaskConical, color: 'text-blue-400', sectionTag: 'agents_evaluation' },
+  44: { number: 44, title: 'Deploy and Query', icon: Rocket, color: 'text-blue-500', sectionTag: 'agents_deploy_and_query' },
+  45: { number: 45, title: 'Debugging', icon: Search, color: 'text-blue-400', sectionTag: 'agents_debugging' },
 
   // Agents Accelerator — MLflow for Gen-AI (Steps 46-54)
-  // Section titles deliberately match the sdlc/ folder labels
-  46: { number: 46, title: '01 - Prompt Registry', icon: BookOpen, color: 'text-violet-400', sectionTag: 'mlflow_prompt_registry' },
-  47: { number: 47, title: '02 - Evaluation Datasets', icon: Table2, color: 'text-violet-500', sectionTag: 'mlflow_evaluation_datasets' },
-  48: { number: 48, title: '03 - Scorers and Judges', icon: ShieldCheck, color: 'text-violet-400', sectionTag: 'mlflow_scorers_and_judges' },
-  49: { number: 49, title: '04 - Evaluation Runs', icon: FlaskConical, color: 'text-violet-500', sectionTag: 'mlflow_evaluation_runs' },
-  50: { number: 50, title: '04b - Stakeholder Sign-off', icon: Tag, color: 'text-violet-400', sectionTag: 'mlflow_stakeholder_signoff' },
-  51: { number: 51, title: '05 - Logged Model & UC Registration', icon: Database, color: 'text-violet-500', sectionTag: 'mlflow_logged_model_uc' },
-  52: { number: 52, title: '06 - Deployment & Automation', icon: Rocket, color: 'text-violet-400', sectionTag: 'mlflow_deployment_automation' },
-  53: { number: 53, title: '07 - Production Monitoring', icon: BarChart3, color: 'text-violet-500', sectionTag: 'mlflow_production_monitoring' },
-  54: { number: 54, title: '08 - Prompt Optimization', icon: Sparkles, color: 'text-violet-400', sectionTag: 'mlflow_prompt_optimization' },
+  46: { number: 46, title: 'Prompt Registry', icon: BookOpen, color: 'text-violet-400', sectionTag: 'mlflow_prompt_registry' },
+  47: { number: 47, title: 'Evaluation Datasets', icon: Table2, color: 'text-violet-500', sectionTag: 'mlflow_evaluation_datasets' },
+  48: { number: 48, title: 'Scorers and Judges', icon: ShieldCheck, color: 'text-violet-400', sectionTag: 'mlflow_scorers_and_judges' },
+  49: { number: 49, title: 'Evaluation Runs', icon: FlaskConical, color: 'text-violet-500', sectionTag: 'mlflow_evaluation_runs' },
+  50: { number: 50, title: 'Stakeholder Sign-off', icon: Tag, color: 'text-violet-400', sectionTag: 'mlflow_stakeholder_signoff' },
+  51: { number: 51, title: 'Logged Model & UC Registration', icon: Database, color: 'text-violet-500', sectionTag: 'mlflow_logged_model_uc' },
+  52: { number: 52, title: 'Deployment & Automation', icon: Rocket, color: 'text-violet-400', sectionTag: 'mlflow_deployment_automation' },
+  53: { number: 53, title: 'Production Monitoring', icon: BarChart3, color: 'text-violet-500', sectionTag: 'mlflow_production_monitoring' },
+  54: { number: 54, title: 'Prompt Optimization', icon: Sparkles, color: 'text-violet-400', sectionTag: 'mlflow_prompt_optimization' },
 };
 
 // The logical sections with their step groupings (4-chapter structure + activation + skills)
