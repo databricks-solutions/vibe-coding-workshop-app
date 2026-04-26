@@ -316,8 +316,8 @@ export const SKILL_BLUEPRINTS: Record<string, SkillBlueprintConfig> = {
   // Step 24: Deploy DI Assets
   deploy_di_assets: {
     variant: 'direct-skills',
-    stageLabel: 'Data Intelligence Deployment',
-    summary: 'The agent reads 2 skills to deploy all Data Intelligence assets (TVFs, Metric Views, Genie Spaces, Dashboards) in mandatory order with Genie API integration.',
+    stageLabel: 'AI and Agents Deployment',
+    summary: 'The agent reads 2 skills to deploy all AI and Agents assets (TVFs, Metric Views, Genie Spaces, Dashboards) in mandatory order with Genie API integration.',
     sections: [
       { tier: 2, label: 'Deployment Skills', accent: 'cyan', skills: [
         { ...C_DAB, description: 'Bundle validation, serverless environments, and proper task types' },

@@ -63,7 +63,7 @@
 ## What It Does
 
 - **AI-Generated Prompts** — Customized, copy-ready prompts for every development step, tailored to your industry and use case
-- **Guided Workflow** — 30+ steps covering Foundation, Databricks App, Lakebase, Lakehouse, Data Intelligence, Refinement, Agent Skills, and Workspace Clean Up
+- **Guided Workflow** — 30+ steps covering Foundation, Databricks App, Lakebase, Lakehouse, AI and Agents, Refinement, Agent Skills, and Workspace Clean Up
 - **Real-Time Streaming** — LLM responses rendered live with markdown formatting
 - **Voice Input** — Describe your use case by speaking; speech-to-text captures your intent
 - **Gamified Experience** — Progress tracking, leaderboard, and completion badges

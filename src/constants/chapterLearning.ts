@@ -65,7 +65,7 @@ export const CHAPTER_LEARNING: Record<string, ChapterLearning> = {
     services: ['dataIngestion', 'bronze', 'silver', 'gold', 'sdp'],
   },
   'Chapter 4': {
-    congratsTitle: 'Data Intelligence Complete!',
+    congratsTitle: 'AI and Agents Complete!',
     summary: 'You turned raw data into actionable intelligence.',
     bullets: [
       'Created a use-case plan for data products',

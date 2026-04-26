@@ -1318,7 +1318,7 @@ STEP_SCORES = {
     6: 30, 7: 30, 8: 30,
     # Chapter 3 - Lakehouse (steps 9-14, 22-23): 40 points each
     9: 40, 10: 40, 11: 40, 12: 40, 13: 40, 14: 40, 22: 40, 23: 40,
-    # Chapter 4 - Data Intelligence (steps 15-19, 24-25): 50 points each
+    # Chapter 4 - AI and Agents (steps 15-19, 24-25): 50 points each
     15: 50, 16: 50, 17: 50, 18: 50, 19: 50, 24: 50, 25: 50,
     # Refinement (steps 20-21): 60 points each
     20: 60, 21: 60,
@@ -1336,7 +1336,7 @@ CHAPTERS = {
     'Chapter 1': {'steps': {4, 5}, 'display': 'Databricks App'},
     'Chapter 2': {'steps': {6, 7, 8}, 'display': 'Lakebase'},
     'Chapter 3': {'steps': {9, 10, 11, 12, 13, 14, 22, 23}, 'display': 'Lakehouse'},
-    'Chapter 4': {'steps': {15, 16, 17, 18, 19, 24, 25}, 'display': 'Data Intelligence'},
+    'Chapter 4': {'steps': {15, 16, 17, 18, 19, 24, 25}, 'display': 'AI and Agents'},
     'Activation': {'steps': {32, 33, 34, 35, 36, 37}, 'display': 'Reverse ETL'},
     'Refinement': {'steps': {20, 21}, 'display': 'Refinement'},
     'Agent Skills': {'steps': {26, 27, 28, 29, 30}, 'display': 'Agent Skills'},
@@ -1574,7 +1574,7 @@ _WORKSHOP_LEVEL_LABELS: Dict[str, str] = {
     'app-only': 'Databricks Apps',
     'app-database': '+ Lakebase',
     'lakehouse': 'Lakehouse',
-    'lakehouse-di': '+ Data Intelligence',
+    'lakehouse-di': '+ AI and Agents',
     'end-to-end': 'Complete Workshop',
     'accelerator': 'Data Product Accelerator',
     'genie-accelerator': 'Genie Accelerator',
