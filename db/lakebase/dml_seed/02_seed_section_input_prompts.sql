@@ -9111,6 +9111,625 @@ Complete **Wire to Lakebase** (Step 36). Local testing must pass at `http://loca
 true, 1, true, current_timestamp(), current_timestamp(), current_user());
 
 -- =============================================================================
+-- AGENTS ACCELERATOR — Agents on Apps (Steps 38-45)
+-- Locked to use case 'build_agents_app' / level 'agents-accelerator'.
+-- Section titles match the tracks/A-custom-agent-apps/ folder labels.
+--
+-- Step 38: 01 - Clone and Run         (bypass_llm = true)
+-- Step 39: 02 - Agent Framework       (bypass_llm = false)
+-- Step 40: 03 - Tools and MCP         (bypass_llm = false)
+-- Step 41: 04 - Authentication        (bypass_llm = true)
+-- Step 42: 05 - Lakebase Memory       (bypass_llm = false)
+-- Step 43: 06 - Evaluation            (bypass_llm = false)
+-- Step 44: 07 - Deploy and Query      (bypass_llm = true)
+-- Step 45: 08 - Debugging             (bypass_llm = true)
+-- =============================================================================
+
+-- Step 38: 01 - Clone and Run
+INSERT INTO ${catalog}.${schema}.section_input_prompts
+(input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
+VALUES
+(150, 'agents_clone_and_run',
+'## Step 1: Clone the Custom Agent Apps Template and Run Locally
+
+You already have a working Databricks App and a Lakebase instance from the earlier sections. Now we layer the agent runtime on top.
+
+### Your Use Case: {use_case_title}
+{use_case_description}
+
+### What You Will Do
+1. Clone the `tracks/A-custom-agent-apps/` template into your project.
+2. Install Python deps (`databricks-agents`, `mlflow>=3.3.0`, `langgraph`, plus any LLM SDK like `openai`).
+3. Run the starter agent **locally** alongside your existing Databricks App so you can iterate fast before deploying.
+
+### Commands
+
+```bash
+# From the repo root
+cp -R tracks/A-custom-agent-apps/* {user_app_name}/agents/
+
+# Install dependencies inside your app environment
+cd {user_app_name}
+pip install -U databricks-agents "mlflow>=3.3.0" langgraph
+
+# Smoke-test the starter agent locally
+python -m agents.starter_agent --prompt "Hello from {use_case_title}"
+```
+
+### Verify
+- The starter agent prints a response.
+- Your Databricks App still runs (`databricks apps run-local` or `npm run dev`).
+- The agent module is importable from your app backend (`from agents.starter_agent import build_agent`).
+
+### Deliverables
+- [ ] `tracks/A-custom-agent-apps/` cloned into `{user_app_name}/agents/`.
+- [ ] Python dependencies installed.
+- [ ] Starter agent runs locally and returns a response.
+- [ ] Existing Databricks App still runs unchanged.',
+'',
+'01 - Clone and Run',
+'Clone the custom-agent-apps template, install deps, and run the starter agent locally inside your Databricks App',
+38,
+'## How to Apply
+
+1. Open your existing Databricks App project (`{user_app_name}`) in Cursor/VS Code.
+2. Copy the `tracks/A-custom-agent-apps/` template into your app at `{user_app_name}/agents/`.
+3. Install the agent dependencies: `pip install -U databricks-agents mlflow>=3.3.0 langgraph`.
+4. Run the starter agent locally: `python -m agents.starter_agent --prompt "Hello from {use_case_title}"`.
+5. Confirm the existing app still runs by starting it locally as before.',
+'## Expected Output
+
+After this step:
+
+### Project Structure
+- `{user_app_name}/agents/starter_agent.py` (and supporting files) present.
+- `requirements.txt` updated with `databricks-agents`, `mlflow>=3.3.0`, `langgraph`.
+
+### Smoke Test
+- Local invocation prints a coherent response.
+- Existing UI + Lakebase wiring untouched and still working.',
+true, 1, true, current_timestamp(), current_timestamp(), current_user());
+
+-- Step 39: 02 - Agent Framework
+INSERT INTO ${catalog}.${schema}.section_input_prompts
+(input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
+VALUES
+(151, 'agents_agent_framework',
+'Build an agent module for **{use_case_title}** in a {industry_name} context using the Mosaic AI Agent Framework.
+
+## Use Case Specification
+{use_case_description}
+
+## Required Output
+
+Generate a Python module at `{user_app_name}/agents/{use_case_title}_agent.py` that:
+
+1. **Defines a `ResponsesAgent`** (the recommended primary interface — framework-agnostic, automatic MLflow signature inference, native compatibility with Playground / Agent Evaluation / Apps).
+   - Subclass `mlflow.pyfunc.ResponsesAgent`.
+   - Implement `predict(self, request: ResponsesAgentRequest) -> ResponsesAgentResponse`.
+   - The agent should reason over the user query, call any registered tools, and return a structured response.
+
+2. **Wraps the agent with a `ChatAgent`** for the chat UI (optional but recommended for streaming + markdown + persistent history). Use `mlflow.pyfunc.ChatAgent` from `databricks-agents`.
+
+3. **Uses a foundation model endpoint** — default to `databricks-meta-llama-3-3-70b-instruct` (configurable via env var `AGENT_LLM_ENDPOINT`).
+
+4. **Logs every reasoning step via MLflow Tracing** (`mlflow.start_span`) so the trace is visible in the MLflow UI when the agent is run.
+
+5. **Exposes a `build_agent()` factory** that returns the configured `ResponsesAgent` instance, and a `build_chat_agent()` factory that returns the `ChatAgent`.
+
+## Constraints
+- Keep prompts concise; we will register them in MLflow Prompt Registry in the MLflow section, so leave a clear extension point (e.g. `SYSTEM_PROMPT_VERSION` constant).
+- Do NOT call any tools yet — Step 40 wires those in via MCP.
+- Do NOT add memory yet — Step 42 adds Lakebase memory.
+
+## Validation
+The user should be able to:
+- `python -c "from agents.{use_case_title}_agent import build_agent; a = build_agent(); print(a.predict({{...}}))"`
+- See an MLflow trace in the local MLflow UI showing the LLM call.',
+'You are a senior Databricks GenAI engineer drafting a production-ready Mosaic AI Agent Framework module. Output a single Python file with clear sections, type hints, and inline comments. Use `mlflow.pyfunc.ResponsesAgent` as the primary interface and `mlflow.pyfunc.ChatAgent` as the optional chat wrapper. Include `mlflow.start_span` instrumentation and a configurable foundation-model endpoint.
+
+Reference docs:
+- https://docs.databricks.com/aws/en/generative-ai/agent-framework/create-agent
+- https://docs.databricks.com/aws/en/generative-ai/agent-framework/create-chat-model
+- https://docs.databricks.com/aws/en/generative-ai/agent-framework/log-agent
+
+Do NOT include MCP tool wiring (Step 40), authentication (Step 41), or Lakebase memory (Step 42) — leave them as documented extension points.',
+'02 - Agent Framework',
+'Build a Mosaic AI Agent Framework module using the ResponsesAgent interface (with optional ChatAgent UI)',
+39,
+'## How to Apply
+
+1. Generate the prompt below in your IDE.
+2. Save the resulting Python module at `{user_app_name}/agents/{use_case_title}_agent.py`.
+3. Run a local smoke test: `python -c "from agents.{use_case_title}_agent import build_agent; a = build_agent(); print(a.predict({{\"input\": \"Hello\"}}))"`.
+4. Open the local MLflow UI (`mlflow ui`) and confirm a trace was logged.',
+'## Expected Output
+
+A single Python module containing:
+
+### Imports
+- `mlflow`, `mlflow.pyfunc.ResponsesAgent`, `mlflow.pyfunc.ChatAgent`
+- Foundation model client (Databricks-hosted via `databricks-sdk` or OpenAI-compatible)
+
+### Classes
+- `class {UseCaseTitle}ResponsesAgent(ResponsesAgent)` with `predict()` implemented.
+- Optional `class {UseCaseTitle}ChatAgent(ChatAgent)` wrapping the responses agent.
+
+### Factories
+- `def build_agent() -> ResponsesAgent`
+- `def build_chat_agent() -> ChatAgent`
+
+### Tracing
+- Every LLM call wrapped in `with mlflow.start_span(...)` with span attributes for prompt + response.
+
+### Extension Points
+- Clear comments marking where Tools & MCP (Step 40), Authentication (Step 41), and Lakebase Memory (Step 42) will be added.',
+false, 1, true, current_timestamp(), current_timestamp(), current_user());
+
+-- Step 40: 03 - Tools and MCP
+INSERT INTO ${catalog}.${schema}.section_input_prompts
+(input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
+VALUES
+(152, 'agents_tools_and_mcp',
+'Wire **Model Context Protocol (MCP) tools** into the agent module from Step 39 so it can call governed Databricks capabilities and external services.
+
+## Use Case Specification
+{use_case_description}
+
+## Three MCP Server Types You Will Use
+
+### 1. Managed MCP servers (Databricks-hosted)
+Pre-built, fully-managed MCP servers. Enable as needed:
+- **Unity Catalog Functions** — call governed Python/SQL functions registered as UC functions.
+- **Mosaic AI Vector Search** — semantic retrieval over UC-registered tables.
+- **Genie Spaces** — natural-language SQL over governed datasets.
+- **Databricks SQL** — direct SQL execution against `{default_warehouse}`.
+
+### 2. External MCP servers
+OAuth-connected third-party MCP servers (e.g. internal API gateways).
+
+### 3. Custom MCP servers
+Proprietary tools you host as a separate Databricks App — full control over auth, business logic, and rate limits.
+
+## Required Output
+
+Update `{user_app_name}/agents/{use_case_title}_agent.py` to:
+
+1. **Register at least one Managed MCP tool** appropriate for the use case (e.g. UC Function for `{lakehouse_default_catalog}.{user_schema_prefix}.lookup_orders`, or Vector Search index over a Bronze table).
+2. **Inject the tool list into the `ResponsesAgent`** so the LLM can call them via tool-use protocol.
+3. **Document where to add External and Custom MCP servers** (placeholders + comments — do NOT implement them yet).
+4. **Add tracing** for every tool call (`mlflow.start_span(name="tool:<name>", ...)`).
+
+## Constraints
+- Tool calls run as the **app service principal** for now; on-behalf-of-user comes in Step 41.
+- Stay grounded — the agent should refuse to answer without calling at least one tool when the question requires real data.
+
+## Validation
+- `python -m agents.{use_case_title}_agent --prompt "What was order #12345?"` triggers a tool call.
+- The MLflow trace shows nested `tool:<name>` spans inside the agent span.',
+'You are a senior Databricks engineer wiring Mosaic AI agent tools via the Model Context Protocol (MCP). Use the three documented server types (Managed, External, Custom). Register at least one Managed MCP tool grounded in {lakehouse_default_catalog}.{user_schema_prefix} (UC Function or Vector Search index). Add `mlflow.start_span` around every tool call.
+
+Reference docs:
+- https://docs.databricks.com/aws/en/generative-ai/agent-framework/mcp
+- https://docs.databricks.com/aws/en/generative-ai/mcp/managed-mcp
+
+Leave External and Custom MCP servers as documented placeholders — do not implement them. Tool calls in this step run as the app service principal; OBO auth comes in the next step.',
+'03 - Tools and MCP',
+'Register tools via Managed (UC Functions, Vector Search, Genie, SQL), External, and Custom MCP servers',
+40,
+'## How to Apply
+
+1. Generate the prompt below in your IDE.
+2. Apply the resulting changes to `{user_app_name}/agents/{use_case_title}_agent.py`.
+3. Re-run the smoke test with a question that requires a tool call.
+4. Open the MLflow UI and confirm nested `tool:<name>` spans appear inside the agent trace.',
+'## Expected Output
+
+The agent module now:
+
+### Tool Registration
+- At least one Managed MCP tool registered (UC Function or Vector Search) over `{lakehouse_default_catalog}.{user_schema_prefix}`.
+- Tools surfaced to the `ResponsesAgent` via `tools=[...]` argument or equivalent.
+
+### Tool Call Tracing
+- Each tool call wrapped in `mlflow.start_span(name="tool:<name>")` with input/output attributes.
+
+### Extension Points
+- Inline comments + stub functions for adding External MCP servers (OAuth) and Custom MCP servers (Databricks App-hosted).
+
+### Smoke Test
+- Asking a question that requires a tool triggers the tool call.
+- The MLflow trace shows the tool call as a nested span.',
+false, 1, true, current_timestamp(), current_timestamp(), current_user());
+
+-- Step 41: 04 - Authentication
+INSERT INTO ${catalog}.${schema}.section_input_prompts
+(input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
+VALUES
+(153, 'agents_authentication',
+'## Step 4: Wire On-Behalf-Of-User Authentication
+
+Right now your agent calls tools as the **app service principal**. For a customer-facing assistant, you want every tool call to inherit the **caller''s** permissions so users only see data they''re entitled to. This is **on-behalf-of-user (OBO) auth** via Databricks Apps user-token forwarding.
+
+### Use Case Context
+{use_case_description}
+
+### How OBO Works on Databricks Apps
+1. The end user authenticates to the Databricks App via SSO.
+2. Databricks Apps forwards the user''s OAuth token to your backend in the `X-Forwarded-Access-Token` HTTP header.
+3. Your backend extracts that token and uses it as the credential for downstream Databricks API / SQL / Vector Search calls.
+4. Databricks evaluates permissions as the *caller* (not the app SP).
+
+### What You Will Do
+
+1. Open your existing FastAPI/Node backend in `{user_app_name}` and locate the chat endpoint that calls the agent.
+2. Read the `X-Forwarded-Access-Token` header on every request.
+3. Pass that token into a request-scoped Databricks SDK client / SQL connection / Vector Search client.
+4. Update the MCP tool registration from Step 40 so each tool uses the per-request client (not the global app-SP client).
+5. Add a fallback for **local development** (no header) — use the dev SP token from `.env`.
+
+### Code Sketch (Python / FastAPI)
+
+```python
+from fastapi import Request, Depends
+from databricks.sdk import WorkspaceClient
+
+def get_obo_client(request: Request) -> WorkspaceClient:
+    token = request.headers.get("X-Forwarded-Access-Token")
+    if token:
+        return WorkspaceClient(token=token)
+    # Local dev fallback
+    return WorkspaceClient()
+
+@app.post("/api/chat")
+async def chat(req: ChatRequest, ws: WorkspaceClient = Depends(get_obo_client)):
+    agent = build_agent(ws=ws)  # tools use the per-request client
+    return agent.predict(...)
+```
+
+### Verify
+- Locally: agent works as before (using the dev SP token).
+- Deployed: when User A queries, only User A''s data comes back; same query as User B returns User B''s data.
+
+### Deliverables
+- [ ] Backend reads `X-Forwarded-Access-Token` on every request.
+- [ ] Agent + tools accept a per-request `WorkspaceClient` / token.
+- [ ] Local dev fallback in place.
+- [ ] Manual test confirms different users see different data.',
+'',
+'04 - Authentication',
+'Wire on-behalf-of-user auth via Databricks Apps user-token forwarding (X-Forwarded-Access-Token header) so tool calls run with the caller''s permissions',
+41,
+'## How to Apply
+
+1. Locate the chat endpoint in your existing FastAPI/Node backend (`{user_app_name}`).
+2. Add a dependency / middleware that reads `X-Forwarded-Access-Token` and constructs a per-request `WorkspaceClient` (or equivalent SQL / Vector Search client).
+3. Refactor the agent factory and MCP tool registration to accept the per-request client.
+4. Add a local-dev fallback that uses the existing SP token when the header is absent.
+5. Test with two different users: each should see only their own data.',
+'## Expected Output
+
+After this step:
+
+### Code Changes
+- `get_obo_client(request)` (or equivalent) reads `X-Forwarded-Access-Token`.
+- Agent and tools use the per-request client; the global app-SP client is reserved for tasks that legitimately require the SP identity.
+- Local dev fallback documented.
+
+### Manual Verification
+- Different users querying the agent get permission-scoped results.
+- Logs show the OBO token being forwarded (without leaking the token itself).',
+true, 1, true, current_timestamp(), current_timestamp(), current_user());
+
+-- Step 42: 05 - Lakebase Memory
+INSERT INTO ${catalog}.${schema}.section_input_prompts
+(input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
+VALUES
+(154, 'agents_lakebase_memory',
+'Add **conversation memory** to the agent using the Lakebase instance from Step 6.
+
+## Use Case Specification
+{use_case_description}
+
+## Lakebase Connection Details (re-used from earlier section)
+- Instance name: `{lakebase_instance_name}`
+- Hostname: `{lakebase_host_name}`
+- Database: `databricks_postgres` (default)
+- Schema: `{user_schema_prefix}_agent_memory`
+
+## What to Build
+
+### A) Short-term memory (per-conversation state)
+- Use a **LangGraph checkpointer** (or OpenAI Agents SDK equivalent) keyed by `thread_id`.
+- Persist the checkpointer state to a Postgres table in `{user_schema_prefix}_agent_memory.langgraph_checkpoints` (or whichever LangGraph default schema works).
+- Every chat request includes a `thread_id`; the agent loads prior turns from Postgres and appends new turns automatically.
+
+### B) Long-term memory (cross-session knowledge)
+- After every conversation, extract key insights via a small LLM call (e.g. summarisation prompt).
+- Write the insights to a Lakebase table `{user_schema_prefix}_agent_memory.insights` with columns `(insight_id UUID PK, user_email TEXT, summary TEXT, embedding VECTOR, created_at TIMESTAMPTZ DEFAULT now())`.
+- At the start of every new conversation, query the most relevant past insights via Mosaic AI Vector Search (over a UC index sourced from `insights`).
+- Inject the top-K insights as additional system context for the agent.
+
+## Required Output
+
+Update `{user_app_name}/agents/{use_case_title}_agent.py` (and add a memory module if needed) to:
+1. Bootstrap the Postgres tables (idempotent DDL run on app startup).
+2. Implement the LangGraph checkpointer wiring.
+3. Implement the insight-extraction + recall flow with Vector Search.
+4. Add `mlflow.start_span` traces for memory load + insight write.
+
+## Constraints
+- Memory writes/reads MUST use the OBO client from Step 41 (so they''re scoped per user).
+- Vector Search index over `insights` should be created via Databricks SDK; it can be auto-sync to keep up with new rows.
+- Honour the Lakebase autoscaling / suspend semantics from the earlier Lakebase section — no keep-alive workarounds.
+
+## Validation
+- Two consecutive chat requests with the same `thread_id` show the agent recalling earlier context.
+- After 3-4 conversations on different topics, a new conversation surfaces a relevant past insight.
+- Lakebase tables are queryable via the Databricks SQL editor.',
+'You are a senior Databricks engineer adding stateful memory to a Mosaic AI agent using Lakebase Postgres. Implement BOTH short-term memory (LangGraph checkpointer keyed by thread_id) AND long-term memory (insight extraction + Mosaic AI Vector Search recall). All Postgres reads/writes must use the OBO client from the previous step.
+
+Reference docs:
+- https://docs.databricks.com/aws/en/oltp/projects/state-management
+- https://docs.databricks.com/aws/en/generative-ai/agent-framework/stateful-agents
+- https://langchain-ai.github.io/langgraph/concepts/persistence/
+
+Bootstrap the necessary Postgres tables idempotently on app startup. Honour Lakebase autoscaling/suspend semantics — do not add keep-alive workarounds.',
+'05 - Lakebase Memory',
+'Add short-term (LangGraph checkpointer + thread_id) and long-term (Vector Search–extracted insights) memory backed by Lakebase Postgres',
+42,
+'## How to Apply
+
+1. Generate the prompt below in your IDE.
+2. Apply the resulting changes to the agent module + a new `agents/memory.py`.
+3. Re-run the local agent twice with the same thread_id — confirm the agent recalls earlier turns.
+4. Run a few conversations on different topics; start a new one and confirm the agent recalls a relevant insight.
+5. Inspect the Lakebase tables (`langgraph_checkpoints`, `insights`) via the Databricks SQL editor.',
+'## Expected Output
+
+After this step:
+
+### Code Changes
+- `agents/memory.py` (or equivalent) with checkpointer + insight-extraction logic.
+- `agents/{use_case_title}_agent.py` updated to load/save state per `thread_id`.
+- Idempotent Postgres DDL run on app startup.
+- Vector Search index over `{user_schema_prefix}_agent_memory.insights` created.
+
+### Verification
+- Multi-turn conversation with same `thread_id` recalls prior context.
+- New conversation on a familiar topic surfaces a relevant past insight.
+- Lakebase tables visible and queryable in the SQL editor.
+
+### Tracing
+- `memory:load`, `memory:save`, `insight:extract`, `insight:recall` spans in the MLflow trace.',
+false, 1, true, current_timestamp(), current_timestamp(), current_user());
+
+-- Step 43: 06 - Evaluation
+INSERT INTO ${catalog}.${schema}.section_input_prompts
+(input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
+VALUES
+(155, 'agents_evaluation',
+'Build a small offline-evaluation harness for the agent using **`mlflow.genai.evaluate`**. This is a foreshadowing of the full MLflow for Gen-AI lifecycle (next section) — here we just want a working baseline.
+
+## Use Case Specification
+{use_case_description}
+
+## What to Build
+
+1. **Eval dataset** — a tiny in-code list (or seed Postgres table at `{user_schema_prefix}_agent_memory.eval_seed`) of 5-10 representative `(input, expected_response)` pairs grounded in the Bronze tables from your data sections.
+
+2. **Eval script** — `{user_app_name}/agents/eval_offline.py` that:
+   - Loads the dataset.
+   - Calls `mlflow.genai.evaluate(model=build_agent(), data=eval_dataset, ...)`.
+   - Uses two built-in scorers as a baseline: `Correctness` and `RetrievalGroundedness`.
+   - Prints a summary table and writes results to MLflow.
+
+3. **Run target** — `pytest -k offline_eval` or `python -m agents.eval_offline`.
+
+## Constraints
+- Use the OBO client / dev SP fallback so the agent has the same privileges as in production.
+- Keep the dataset small and committable (we expand it formally in the MLflow section).
+
+## Validation
+- Run prints per-row scores and an aggregate (mean Correctness, mean Groundedness).
+- An MLflow run appears under the `agents-{use_case_title}-eval` experiment.
+- Re-running with a tweaked system prompt visibly changes the aggregate score.',
+'You are a senior Databricks engineer scaffolding a baseline offline-evaluation harness using mlflow.genai.evaluate. Use Correctness and RetrievalGroundedness as the two built-in scorers. Keep the eval dataset small (5-10 rows) and grounded in the Bronze tables from earlier sections. Surface results in MLflow under a dedicated experiment.
+
+Reference docs:
+- https://docs.databricks.com/aws/en/mlflow3/genai/eval-monitor/concepts/judges
+- https://www.mlflow.org/docs/3.3.0/genai/eval/
+
+This is a baseline — the full MLflow for Gen-AI section will expand the dataset, add custom scorers, and add stakeholder sign-off.',
+'06 - Evaluation',
+'Build a baseline offline eval harness using mlflow.genai.evaluate with Correctness + RetrievalGroundedness scorers',
+43,
+'## How to Apply
+
+1. Generate the prompt below in your IDE.
+2. Apply the resulting changes to create `{user_app_name}/agents/eval_offline.py` and the seed dataset.
+3. Run `python -m agents.eval_offline` and confirm an MLflow run appears.
+4. Tweak the system prompt and re-run — the aggregate scores should change.',
+'## Expected Output
+
+After this step:
+
+### Files
+- `{user_app_name}/agents/eval_offline.py`
+- Eval dataset (in-code or `{user_schema_prefix}_agent_memory.eval_seed`)
+
+### MLflow
+- Experiment `agents-{use_case_title}-eval` exists.
+- Each run shows per-row Correctness + RetrievalGroundedness + aggregate metrics.
+
+### Verification
+- Re-running with a tweaked prompt produces a different aggregate score in MLflow UI.',
+false, 1, true, current_timestamp(), current_timestamp(), current_user());
+
+-- Step 44: 07 - Deploy and Query
+INSERT INTO ${catalog}.${schema}.section_input_prompts
+(input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
+VALUES
+(156, 'agents_deploy_and_query',
+'## Step 7: Log, Register, and Deploy the Agent
+
+You now have a working `ResponsesAgent` with tools, OBO auth, Lakebase memory, and a baseline eval. Time to deploy it as a real Model Serving endpoint.
+
+### What You Will Do
+
+1. **Log the agent to MLflow** using the Agent Framework helper:
+   ```python
+   import mlflow
+   from agents.{use_case_title}_agent import build_agent
+
+   with mlflow.start_run() as run:
+       mlflow.models.log_model(
+           python_model=build_agent(),
+           artifact_path="agent",
+           # ResponsesAgent auto-infers the signature — no manual pyfunc wrapper needed
+       )
+       run_uri = run.info.artifact_uri + "/agent"
+   ```
+
+2. **Register to Unity Catalog**:
+   ```python
+   model_uri = f"runs:/{run.info.run_id}/agent"
+   uc_full_name = f"{lakehouse_default_catalog}.{user_schema_prefix}.{use_case_title}_agent"
+   model_version = mlflow.register_model(model_uri, uc_full_name)
+   ```
+
+3. **Deploy via `agents.deploy`**:
+   ```python
+   from databricks.agents import deploy
+   deploy(uc_full_name, model_version.version)
+   ```
+   `agents.deploy` creates the Model Serving endpoint, wires up Review App + Playground + AI Gateway-enabled inference tables, and applies sensible defaults.
+
+4. **Query the endpoint** from your Databricks App backend (or via curl) and confirm responses come back.
+
+### Key Notes
+- `ResponsesAgent` + `mlflow.models.log_model` auto-infer the model signature; no manual `pyfunc` wrapper is needed.
+- `agents.deploy` enables AI Gateway-enabled inference tables out of the box (this is what we''ll use for monitoring in the MLflow section).
+- Endpoint name pattern: `agents_{use_case_title}_<version>`.
+
+### Verify
+- The endpoint reaches `READY` state in Model Serving.
+- A test query via curl returns a coherent response.
+- Inference table rows appear in `system.serving.endpoint_usage_logs` (or the configured AI Gateway table).
+
+### Deliverables
+- [ ] MLflow run logged with the agent artifact.
+- [ ] UC model registered at `{lakehouse_default_catalog}.{user_schema_prefix}.{use_case_title}_agent`.
+- [ ] Model Serving endpoint deployed via `agents.deploy`.
+- [ ] Curl smoke test returns a coherent response.
+- [ ] AI Gateway-enabled inference table populated with at least one row.',
+'',
+'07 - Deploy and Query',
+'Log the agent as an MLflow model, register to Unity Catalog, deploy via agents.deploy, and query the serving endpoint',
+44,
+'## How to Apply
+
+1. Open `{user_app_name}/agents/{use_case_title}_agent.py` in Cursor/VS Code.
+2. Create or update `agents/deploy.py` with the log + register + deploy block above.
+3. Run `python -m agents.deploy` and watch the endpoint reach `READY` state.
+4. Query the endpoint via curl or the Databricks Playground.
+5. Confirm AI Gateway-enabled inference table rows appear.',
+'## Expected Output
+
+After this step:
+
+### Artifacts
+- MLflow run with the logged ResponsesAgent.
+- UC model `{lakehouse_default_catalog}.{user_schema_prefix}.{use_case_title}_agent` (version 1+).
+- Model Serving endpoint in `READY` state.
+
+### Verification
+- Curl returns a coherent response from the endpoint.
+- AI Gateway-enabled inference table contains the request/response rows.
+- Endpoint visible under "Serving" in the workspace.',
+true, 1, true, current_timestamp(), current_timestamp(), current_user());
+
+-- Step 45: 08 - Debugging
+INSERT INTO ${catalog}.${schema}.section_input_prompts
+(input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
+VALUES
+(157, 'agents_debugging',
+'## Step 8: Debug Your Agent with MLflow Traces and the Review App
+
+Now that the agent is deployed, when something goes wrong (wrong answer, wrong tool, hung response, hallucination), you want a rich audit trail. MLflow Tracing + the Review App give you both.
+
+### Use Case Context
+{use_case_description}
+
+### Three Tools You Will Learn
+
+#### 1. MLflow Tracing UI
+Every agent invocation produced spans (we added them in Steps 39, 40, 42). They show up in the **Traces** tab of the agent''s MLflow experiment:
+- Each row = one request.
+- Click into a row to see the nested spans (LLM call, tool calls, memory load/save).
+- Filter by status (`OK` / `ERROR`) and latency.
+
+#### 2. Tracing UI in Cursor / VS Code (optional)
+The MLflow Python SDK can stream traces to your local IDE for live debugging during development:
+```python
+import mlflow
+mlflow.set_tracing_uri("databricks")
+mlflow.start_trace_streaming()
+```
+
+#### 3. Review App
+The Review App is the human-in-the-loop UI that comes free with `agents.deploy`:
+- Open the app from the Model Serving endpoint page.
+- Submit prompts as a reviewer; the response appears alongside the trace.
+- Reviewers leave 👍/👎 ratings + free-text feedback that lands in `inference_table_human_feedback`.
+- Use this for stakeholder sign-off (we formalize this in the MLflow section).
+
+### Practice Scenarios
+Try these and observe the traces:
+1. Ask a question that requires a tool call → expect a `tool:<name>` span with a clean response.
+2. Ask a question that requires data the user doesn''t have permission to read → expect a tool error span (OBO scoping working).
+3. Ask the same question twice with the same `thread_id` → expect a `memory:load` span on the second request.
+4. Ask a deliberately-wrong-context question → expect the agent to refuse / clarify.
+
+### Debug Checklist
+- [ ] Open the agent experiment in MLflow UI; confirm traces are landing.
+- [ ] Click into a trace and inspect the nested spans.
+- [ ] Open the Review App; submit a prompt and rate the response.
+- [ ] Confirm the rating appears in the inference table.
+- [ ] (Optional) Stream traces locally via `mlflow.start_trace_streaming()` while iterating in Cursor.
+
+### Deliverables
+- [ ] Familiarity with the Traces UI (filter, drill-down).
+- [ ] At least one Review App submission with a rating.
+- [ ] At least one tool-error trace inspected (and you understand why).',
+'',
+'08 - Debugging',
+'Use MLflow Traces, the Tracing UI, and the Review App to debug agent tool calls and prompts',
+45,
+'## How to Apply
+
+1. Open the MLflow experiment for your agent (linked from the Model Serving endpoint page).
+2. Click **Traces** and inspect the most recent invocations.
+3. Drill into a trace; expand the nested spans (agent → tool → memory).
+4. Open the Review App; submit a prompt; leave a rating.
+5. Inspect the AI Gateway-enabled inference table; confirm the rating row landed.
+6. (Optional) Run `mlflow.start_trace_streaming()` locally while iterating in Cursor.',
+'## Expected Output
+
+After this step:
+
+### Familiarity
+- You know how to open Traces, filter by status, and drill into nested spans.
+- You can submit prompts in the Review App and read back ratings.
+- You understand which span shows the LLM call, which shows tool calls, which shows memory ops.
+
+### Concrete Artifacts
+- At least one Review App rating submitted.
+- At least one tool-error trace inspected.
+- Inference table row for a rated request, including the rating column.',
+true, 1, true, current_timestamp(), current_timestamp(), current_user());
+
+-- =============================================================================
 -- SEED FORK EXAMPLES (Genie Code / CoDA)
 -- =============================================================================
 -- These are intentionally commented out. Uncomment the block(s) you want to
