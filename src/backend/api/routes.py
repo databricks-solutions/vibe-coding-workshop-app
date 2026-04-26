@@ -733,10 +733,18 @@ def get_industries() -> List[Dict]:
     return get_config().get('industries', [])
 
 SKILL_USE_CASES = {"build_skill"}
+AGENT_USE_CASES = {"build_agents_app"}
 
 def _derive_path_type(row: Dict) -> str:
     """Derive path_type from row data, falling back to convention if column missing."""
-    return row.get("path_type") or ("skill" if row.get("use_case") in SKILL_USE_CASES else "use_case")
+    if row.get("path_type"):
+        return row["path_type"]
+    use_case = row.get("use_case")
+    if use_case in SKILL_USE_CASES:
+        return "skill"
+    if use_case in AGENT_USE_CASES:
+        return "agent"
+    return "use_case"
 
 def get_use_cases_map() -> Dict[str, List[Dict]]:
     """Get use cases map - from Lakebase or YAML fallback. Includes path_type per entry."""
@@ -764,7 +772,13 @@ def get_use_cases_map() -> Dict[str, List[Dict]]:
     for industry_key, uc_list in yaml_data.items():
         for uc in uc_list:
             if uc.get("value"):
-                uc.setdefault("path_type", "skill" if uc["value"] in SKILL_USE_CASES else "use_case")
+                value = uc["value"]
+                if value in SKILL_USE_CASES:
+                    uc.setdefault("path_type", "skill")
+                elif value in AGENT_USE_CASES:
+                    uc.setdefault("path_type", "agent")
+                else:
+                    uc.setdefault("path_type", "use_case")
     return yaml_data
 
 def get_skills_map() -> Dict[str, List[Dict]]:
@@ -776,6 +790,16 @@ def get_skills_map() -> Dict[str, List[Dict]]:
         if skills:
             skills_map[industry] = skills
     return skills_map
+
+def get_agents_map() -> Dict[str, List[Dict]]:
+    """Get agents map (entries with path_type='agent') grouped by industry."""
+    all_use_cases = get_use_cases_map()
+    agents_map = {}
+    for industry, uc_list in all_use_cases.items():
+        agents = [uc for uc in uc_list if uc.get("path_type") == "agent"]
+        if agents:
+            agents_map[industry] = agents
+    return agents_map
 
 def get_prompt_templates_map() -> Dict[str, Dict[str, str]]:
     """Get prompt templates - from Lakebase database only (no YAML fallback)."""
@@ -2608,6 +2632,7 @@ async def get_all_data(response: Response):
         "industries": get_industries(),
         "use_cases": get_use_cases_map(),
         "skills": get_skills_map(),
+        "agents": get_agents_map(),
         "prompt_templates": get_prompt_templates_map(),
         "workflow_steps": get_workflow_steps_list() or WORKFLOW_STEPS,
         "prerequisites": PREREQUISITES,
@@ -2820,6 +2845,12 @@ async def get_latest_prompt_configs(response: Response) -> List[PromptConfigResp
                 use_case_label = uc['label']
                 template = yaml_templates.get(industry, {}).get(use_case, '')
                 
+                if use_case in SKILL_USE_CASES:
+                    derived_path_type = "skill"
+                elif use_case in AGENT_USE_CASES:
+                    derived_path_type = "agent"
+                else:
+                    derived_path_type = "use_case"
                 configs.append(PromptConfigResponse(
                     industry=industry,
                     industry_label=industry_label,
@@ -2828,7 +2859,7 @@ async def get_latest_prompt_configs(response: Response) -> List[PromptConfigResp
                     prompt_template=template,
                     version=1,
                     is_active=True,
-                    path_type="skill" if use_case in SKILL_USE_CASES else "use_case"
+                    path_type=derived_path_type
                 ))
         return configs
     

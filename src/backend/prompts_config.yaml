@@ -37,6 +37,8 @@ use_cases:
       label: "Booking App"
     - value: "build_skill"
       label: "Build an Agent Skill"
+    - value: "build_agents_app"
+      label: "Build a Custom Agent App"
 
   retail:
     - value: ""
