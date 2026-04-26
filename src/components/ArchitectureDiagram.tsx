@@ -93,6 +93,24 @@ const REVERSE_ACTIVATION_OBJECTIVES: ReverseObjective[] = [
   { id: 'r11', content: <>Deploy and validate the <strong className="text-foreground">reverse ETL pipeline</strong></> },
 ];
 
+// Agents Accelerator — replaces the right (ch4) and middle (ch3) column bullets
+// with agent-specific copy. Phase 1 ships with the Agents-on-Apps bullets active;
+// the MLflow lifecycle bullet stays in the list with a "Phase 2" tag (still
+// faded in the diagram chips themselves).
+const AGENTS_RIGHT_OBJECTIVES: LearningObjective[] = [
+  { id: 'a1', chapters: ['ch4'], content: <>Build a <strong className="text-foreground">Mosaic AI Agent Framework</strong> agent (ResponsesAgent + ChatAgent UI)</> },
+  { id: 'a2', chapters: ['ch4'], content: <>Wire <strong className="text-foreground">Tools & MCP</strong> — Managed (UC Functions, Vector Search, Genie, SQL), External, Custom</> },
+  { id: 'a3', chapters: ['ch4'], content: <>Persist conversation state with <strong className="text-foreground">Lakebase Memory</strong> (LangGraph checkpointer + long-term insights)</> },
+  { id: 'a4', chapters: ['ch4'], content: <>Forward user identity via <strong className="text-foreground">on-behalf-of-user auth</strong> (X-Forwarded-Access-Token)</> },
+  { id: 'a5', chapters: ['ch4'], content: <>Manage the lifecycle with <strong className="text-foreground">MLflow for Gen-AI</strong>: prompts, evaluation, monitoring</> },
+];
+
+// Replaces the middle (ch3) column bullets — just the Bronze layer for agents.
+const AGENTS_MIDDLE_OBJECTIVES: LearningObjective[] = [
+  { id: 'am1', chapters: ['ch3'], content: <>Sync operational data into the <strong className="text-foreground">Lakehouse</strong></> },
+  { id: 'am2', chapters: ['ch3'], content: <>Build the <strong className="text-foreground">Bronze layer</strong> — UC-registered tables that the agent calls as tools</> },
+];
+
 // Animation timing constants
 const FADE_MS = 300;
 const BULLET_STAGGER_MS = 100;
@@ -132,6 +150,84 @@ function useFadeTransition(visible: boolean) {
   }, [visible]);
 
   return { shouldRender, isVisible };
+}
+
+// ---------------------------------------------------------------------------
+// AgentsAcceleratorPanel — custom ch4 contents for the Agents Accelerator.
+// Replaces the standard "AI and Agents" stack (Genie / Dashboard / Agent grid)
+// with: Agent tile + two sub-containers ("Agents on Apps" and "MLflow for
+// Gen-AI"), each with 3 horizontal chips. Phase 1 ships with the MLflow chips
+// rendered faded; Phase 2 un-fades them.
+// ---------------------------------------------------------------------------
+interface AgentsAcceleratorPanelProps {
+  /** When true, the MLflow for Gen-AI sub-container chips render faded with a
+   *  "Coming in Phase 2" tooltip. Set to false once Phase 2 lights them up. */
+  mlflowFaded: boolean;
+}
+
+function AgentsAcceleratorPanel({ mlflowFaded }: AgentsAcceleratorPanelProps) {
+  const mlflowFadedClass = mlflowFaded ? 'opacity-50 pointer-events-none' : '';
+  const mlflowFadedTitle = mlflowFaded ? 'Coming in Phase 2' : undefined;
+
+  return (
+    <div className="flex flex-col gap-3">
+      {/* Agent tile */}
+      <ServicePopover serviceKey="agents" position="top" block>
+        <div className="bg-gradient-to-br from-blue-500 to-blue-600 rounded-lg p-2.5 shadow-lg hover:shadow-blue-500/30 hover:shadow-xl transition-all duration-200 hover:scale-105">
+          <div className="flex flex-col items-center gap-1">
+            <Bot className="w-5 h-5 text-white" />
+            <p className="text-ui-sm font-bold text-white text-center">Agent</p>
+          </div>
+        </div>
+      </ServicePopover>
+
+      {/* Agents on Apps sub-container — 3 chips matching folder labels 02/03/05 */}
+      <div className="bg-slate-800 border-2 border-blue-500/60 rounded-lg p-3 shadow-lg">
+        <p className="text-ui-xs font-bold text-blue-300 mb-2 text-center">Agents on Apps</p>
+        <div className="grid grid-cols-3 gap-1.5">
+          <ServicePopover serviceKey="agentFramework" position="left" block>
+            <div className="bg-blue-900/30 rounded px-1.5 py-1.5 border border-blue-500/30 hover:bg-blue-900/50 hover:border-blue-400 transition-all duration-200 hover:scale-105">
+              <p className="text-ui-3xs font-semibold text-blue-200 text-center leading-tight">Agent Framework</p>
+            </div>
+          </ServicePopover>
+          <ServicePopover serviceKey="toolsMcp" position="top" block>
+            <div className="bg-blue-900/30 rounded px-1.5 py-1.5 border border-blue-500/30 hover:bg-blue-900/50 hover:border-blue-400 transition-all duration-200 hover:scale-105">
+              <p className="text-ui-3xs font-semibold text-blue-200 text-center leading-tight">Tools &amp; MCP</p>
+            </div>
+          </ServicePopover>
+          <ServicePopover serviceKey="lakebaseMemory" position="right" block>
+            <div className="bg-blue-900/30 rounded px-1.5 py-1.5 border border-blue-500/30 hover:bg-blue-900/50 hover:border-blue-400 transition-all duration-200 hover:scale-105">
+              <p className="text-ui-3xs font-semibold text-blue-200 text-center leading-tight">Lakebase Memory</p>
+            </div>
+          </ServicePopover>
+        </div>
+      </div>
+
+      {/* MLflow for Gen-AI sub-container — 3 chips matching folder labels 01/02-04/07 */}
+      <div className={`bg-slate-800 border-2 border-violet-500/60 rounded-lg p-3 shadow-lg ${mlflowFadedClass}`} title={mlflowFadedTitle}>
+        <p className="text-ui-xs font-bold text-violet-300 mb-2 text-center">
+          MLflow for Gen-AI{mlflowFaded && <span className="ml-1 text-ui-3xs font-normal text-violet-400/70">(Phase 2)</span>}
+        </p>
+        <div className="grid grid-cols-3 gap-1.5">
+          <ServicePopover serviceKey="mlflowPromptRegistry" position="left" block>
+            <div className="bg-violet-900/30 rounded px-1.5 py-1.5 border border-violet-500/30 hover:bg-violet-900/50 hover:border-violet-400 transition-all duration-200 hover:scale-105">
+              <p className="text-ui-3xs font-semibold text-violet-200 text-center leading-tight">Prompt Registry</p>
+            </div>
+          </ServicePopover>
+          <ServicePopover serviceKey="mlflowEval" position="top" block>
+            <div className="bg-violet-900/30 rounded px-1.5 py-1.5 border border-violet-500/30 hover:bg-violet-900/50 hover:border-violet-400 transition-all duration-200 hover:scale-105">
+              <p className="text-ui-3xs font-semibold text-violet-200 text-center leading-tight">Evaluation</p>
+            </div>
+          </ServicePopover>
+          <ServicePopover serviceKey="mlflowMonitoring" position="right" block>
+            <div className="bg-violet-900/30 rounded px-1.5 py-1.5 border border-violet-500/30 hover:bg-violet-900/50 hover:border-violet-400 transition-all duration-200 hover:scale-105">
+              <p className="text-ui-3xs font-semibold text-violet-200 text-center leading-tight">Monitoring</p>
+            </div>
+          </ServicePopover>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 interface ArchitectureDiagramProps {
@@ -598,9 +694,12 @@ export function ArchitectureDiagramContent({
   const showGenieModule = shouldShowAIModule(workshopLevel, 'genie', aiAgentsModules);
   const showAgentModule = shouldShowAIModule(workshopLevel, 'agent', aiAgentsModules);
   const showDashboardModule = shouldShowAIModule(workshopLevel, 'dashboard', aiAgentsModules);
-  const showBronze = shouldShowMedallionLayer(workshopLevel, 'bronze', medallionLayers);
-  const showSilver = shouldShowMedallionLayer(workshopLevel, 'silver', medallionLayers);
-  const showGold = shouldShowMedallionLayer(workshopLevel, 'gold', medallionLayers);
+  // Agents Accelerator forces Bronze-only and a custom ch4 layout. Acts like
+  // Genie (no chip toggles exposed), but anchored on Bronze instead of Gold.
+  const isAgentsAccelerator = workshopLevel === 'agents-accelerator';
+  const showBronze = isAgentsAccelerator || shouldShowMedallionLayer(workshopLevel, 'bronze', medallionLayers);
+  const showSilver = !isAgentsAccelerator && shouldShowMedallionLayer(workshopLevel, 'silver', medallionLayers);
+  const showGold = !isAgentsAccelerator && shouldShowMedallionLayer(workshopLevel, 'gold', medallionLayers);
   const [bulletsRevealed, setBulletsRevealed] = useState(false);
 
   useEffect(() => {
@@ -664,12 +763,19 @@ export function ArchitectureDiagramContent({
   const leftObjectives = LEARNING_OBJECTIVES.filter(obj =>
     obj.chapters.some(ch => (ch === 'ch1' || ch === 'ch2') && visibleChapters.has(ch))
   );
-  const middleObjectives = LEARNING_OBJECTIVES.filter(obj =>
-    obj.chapters.some(ch => ch === 'ch3' && visibleChapters.has(ch))
-  );
-  const rightObjectives = LEARNING_OBJECTIVES.filter(obj =>
-    obj.chapters.some(ch => ch === 'ch4' && visibleChapters.has(ch))
-  );
+  // Agents Accelerator swaps in agent-specific bullets for ch3 (Bronze-only)
+  // and ch4 (Agent Framework + MCP + Lakebase Memory + MLflow). The default
+  // bullets describe Bronze/Silver/Gold + Genie/Dashboards which is wrong here.
+  const middleObjectives = isAgentsAccelerator
+    ? (visibleChapters.has('ch3') ? AGENTS_MIDDLE_OBJECTIVES : [])
+    : LEARNING_OBJECTIVES.filter(obj =>
+        obj.chapters.some(ch => ch === 'ch3' && visibleChapters.has(ch))
+      );
+  const rightObjectives = isAgentsAccelerator
+    ? (visibleChapters.has('ch4') ? AGENTS_RIGHT_OBJECTIVES : [])
+    : LEARNING_OBJECTIVES.filter(obj =>
+        obj.chapters.some(ch => ch === 'ch4' && visibleChapters.has(ch))
+      );
   const middleStaggerOffset = leftObjectives.length;
   const rightStaggerOffset = leftObjectives.length + middleObjectives.length;
   const hasAnyObjectives = leftObjectives.length > 0 || middleObjectives.length > 0 || rightObjectives.length > 0;
@@ -829,64 +935,72 @@ export function ArchitectureDiagramContent({
               <div className={`border-2 border-blue-500/60 rounded-xl p-4 bg-slate-800/50 flex-1 duration-300 ${fadeClass(dataIntelFade.isVisible)}`}>
                 <div className="bg-blue-600 text-center py-2 px-3 rounded-lg mb-4">
                   <div className="flex items-center justify-center gap-2 mb-1">
-                    <Brain className="w-4 h-4 text-white" />
+                    {isAgentsAccelerator ? (
+                      <Bot className="w-4 h-4 text-white" />
+                    ) : (
+                      <Brain className="w-4 h-4 text-white" />
+                    )}
                   </div>
-                  <p className="text-ui-base font-bold text-white">AI and Agents</p>
+                  <p className="text-ui-base font-bold text-white">{isAgentsAccelerator ? 'Agent' : 'AI and Agents'}</p>
                 </div>
-                <div className="flex flex-col gap-3">
-                  {showGenieModule && (
-                    <div className="bg-slate-800 border-2 border-amber-500/60 rounded-lg p-3.5 shadow-lg">
-                      <p className="text-ui-base font-bold text-amber-300 mb-2">Genie</p>
-                      <div className="space-y-1.5">
-                        <ServicePopover serviceKey="tvf" position="left" block>
-                          <div className="bg-amber-900/30 rounded px-2.5 py-1.5 border border-amber-500/30 hover:bg-amber-900/50 hover:border-amber-400 transition-all duration-200 hover:scale-105">
-                            <p className="text-ui-xs font-semibold text-amber-200">Table Value Functions</p>
-                          </div>
-                        </ServicePopover>
-                        <ServicePopover serviceKey="metricViews" position="left" block>
-                          <div className="bg-amber-900/30 rounded px-2.5 py-1.5 border border-amber-500/30 hover:bg-amber-900/50 hover:border-amber-400 transition-all duration-200 hover:scale-105">
-                            <p className="text-ui-xs font-semibold text-amber-200">Metric Views</p>
-                          </div>
-                        </ServicePopover>
-                        <ServicePopover serviceKey="genieSpaces" position="left" block>
-                          <div className="bg-amber-900/30 rounded px-2.5 py-1.5 border border-amber-500/30 hover:bg-amber-900/50 hover:border-amber-400 transition-all duration-200 hover:scale-105">
-                            <p className="text-ui-xs font-semibold text-amber-200">Genie Spaces</p>
-                          </div>
-                        </ServicePopover>
-                      </div>
-                    </div>
-                  )}
-                  {!isGenie && (showDashboardModule || showAgentModule) && (<>
+                {isAgentsAccelerator ? (
+                  <AgentsAcceleratorPanel mlflowFaded={true} />
+                ) : (
+                  <div className="flex flex-col gap-3">
                     {showGenieModule && (
-                      <div className="flex justify-center gap-2">
-                        {showDashboardModule && <ArrowDown className="w-4 h-4 text-green-400" />}
-                        {showAgentModule && <ArrowDown className="w-4 h-4 text-blue-400" />}
+                      <div className="bg-slate-800 border-2 border-amber-500/60 rounded-lg p-3.5 shadow-lg">
+                        <p className="text-ui-base font-bold text-amber-300 mb-2">Genie</p>
+                        <div className="space-y-1.5">
+                          <ServicePopover serviceKey="tvf" position="left" block>
+                            <div className="bg-amber-900/30 rounded px-2.5 py-1.5 border border-amber-500/30 hover:bg-amber-900/50 hover:border-amber-400 transition-all duration-200 hover:scale-105">
+                              <p className="text-ui-xs font-semibold text-amber-200">Table Value Functions</p>
+                            </div>
+                          </ServicePopover>
+                          <ServicePopover serviceKey="metricViews" position="left" block>
+                            <div className="bg-amber-900/30 rounded px-2.5 py-1.5 border border-amber-500/30 hover:bg-amber-900/50 hover:border-amber-400 transition-all duration-200 hover:scale-105">
+                              <p className="text-ui-xs font-semibold text-amber-200">Metric Views</p>
+                            </div>
+                          </ServicePopover>
+                          <ServicePopover serviceKey="genieSpaces" position="left" block>
+                            <div className="bg-amber-900/30 rounded px-2.5 py-1.5 border border-amber-500/30 hover:bg-amber-900/50 hover:border-amber-400 transition-all duration-200 hover:scale-105">
+                              <p className="text-ui-xs font-semibold text-amber-200">Genie Spaces</p>
+                            </div>
+                          </ServicePopover>
+                        </div>
                       </div>
                     )}
-                    <div className={`grid gap-2.5 ${showDashboardModule && showAgentModule ? 'grid-cols-2' : 'grid-cols-1'}`}>
-                      {showDashboardModule && (
-                        <ServicePopover serviceKey="aiBIDashboards" position="top" block>
-                          <div className="bg-gradient-to-br from-green-500 to-green-600 rounded-lg p-2.5 shadow-lg hover:shadow-green-500/30 hover:shadow-xl transition-all duration-200 hover:scale-105">
-                            <div className="flex flex-col items-center gap-1">
-                              <LayoutDashboard className="w-5 h-5 text-white" />
-                              <p className="text-ui-sm font-bold text-white text-center">AI/BI Dashboards</p>
-                            </div>
-                          </div>
-                        </ServicePopover>
+                    {!isGenie && (showDashboardModule || showAgentModule) && (<>
+                      {showGenieModule && (
+                        <div className="flex justify-center gap-2">
+                          {showDashboardModule && <ArrowDown className="w-4 h-4 text-green-400" />}
+                          {showAgentModule && <ArrowDown className="w-4 h-4 text-blue-400" />}
+                        </div>
                       )}
-                      {showAgentModule && (
-                        <ServicePopover serviceKey="agents" position="top" block>
-                          <div className="bg-gradient-to-br from-blue-500 to-blue-600 rounded-lg p-2.5 shadow-lg hover:shadow-blue-500/30 hover:shadow-xl transition-all duration-200 hover:scale-105">
-                            <div className="flex flex-col items-center gap-1">
-                              <Bot className="w-5 h-5 text-white" />
-                              <p className="text-ui-sm font-bold text-white text-center">Agent</p>
+                      <div className={`grid gap-2.5 ${showDashboardModule && showAgentModule ? 'grid-cols-2' : 'grid-cols-1'}`}>
+                        {showDashboardModule && (
+                          <ServicePopover serviceKey="aiBIDashboards" position="top" block>
+                            <div className="bg-gradient-to-br from-green-500 to-green-600 rounded-lg p-2.5 shadow-lg hover:shadow-green-500/30 hover:shadow-xl transition-all duration-200 hover:scale-105">
+                              <div className="flex flex-col items-center gap-1">
+                                <LayoutDashboard className="w-5 h-5 text-white" />
+                                <p className="text-ui-sm font-bold text-white text-center">AI/BI Dashboards</p>
+                              </div>
                             </div>
-                          </div>
-                        </ServicePopover>
-                      )}
-                    </div>
-                  </>)}
-                </div>
+                          </ServicePopover>
+                        )}
+                        {showAgentModule && (
+                          <ServicePopover serviceKey="agents" position="top" block>
+                            <div className="bg-gradient-to-br from-blue-500 to-blue-600 rounded-lg p-2.5 shadow-lg hover:shadow-blue-500/30 hover:shadow-xl transition-all duration-200 hover:scale-105">
+                              <div className="flex flex-col items-center gap-1">
+                                <Bot className="w-5 h-5 text-white" />
+                                <p className="text-ui-sm font-bold text-white text-center">Agent</p>
+                              </div>
+                            </div>
+                          </ServicePopover>
+                        )}
+                      </div>
+                    </>)}
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -1328,14 +1442,16 @@ export function ArchitectureDiagram({ forceCollapsed = false, workshopLevel = 'e
   const showLakehouse = visibility.ch3;
   const showDataIntel = visibility.ch4;
   const isGenie = workshopLevel === 'genie-accelerator';
+  const isAgentsAccelerator = workshopLevel === 'agents-accelerator';
   // Standalone ArchitectureDiagram has no aiAgentsModules / medallionLayers prop
-  // wiring; default to all-on so existing callers render unchanged.
+  // wiring; default to all-on so existing callers render unchanged. Agents
+  // Accelerator forces Bronze-only and a custom ch4 layout.
   const showGenieModule = true;
   const showAgentModule = true;
   const showDashboardModule = true;
   const showBronze = true;
-  const showSilver = true;
-  const showGold = true;
+  const showSilver = !isAgentsAccelerator;
+  const showGold = !isAgentsAccelerator;
 
   // Per-column fade transitions (transparent ↔ solid)
   const appLakebaseFade = useFadeTransition(showAppLakebase);
@@ -1347,12 +1463,16 @@ export function ArchitectureDiagram({ forceCollapsed = false, workshopLevel = 'e
   const leftObjectives = LEARNING_OBJECTIVES.filter(obj =>
     obj.chapters.some(ch => (ch === 'ch1' || ch === 'ch2') && visibleChapters.has(ch))
   );
-  const middleObjectives = LEARNING_OBJECTIVES.filter(obj =>
-    obj.chapters.some(ch => ch === 'ch3' && visibleChapters.has(ch))
-  );
-  const rightObjectives = LEARNING_OBJECTIVES.filter(obj =>
-    obj.chapters.some(ch => ch === 'ch4' && visibleChapters.has(ch))
-  );
+  const middleObjectives = isAgentsAccelerator
+    ? (visibleChapters.has('ch3') ? AGENTS_MIDDLE_OBJECTIVES : [])
+    : LEARNING_OBJECTIVES.filter(obj =>
+        obj.chapters.some(ch => ch === 'ch3' && visibleChapters.has(ch))
+      );
+  const rightObjectives = isAgentsAccelerator
+    ? (visibleChapters.has('ch4') ? AGENTS_RIGHT_OBJECTIVES : [])
+    : LEARNING_OBJECTIVES.filter(obj =>
+        obj.chapters.some(ch => ch === 'ch4' && visibleChapters.has(ch))
+      );
   const middleStaggerOffset = leftObjectives.length;
   const rightStaggerOffset = leftObjectives.length + middleObjectives.length;
   const hasAnyObjectives = leftObjectives.length > 0 || middleObjectives.length > 0 || rightObjectives.length > 0;
@@ -1569,77 +1689,85 @@ export function ArchitectureDiagram({ forceCollapsed = false, workshopLevel = 'e
                   </div>
                 )}
 
-                {/* RIGHT SECTION: AI and Agents - Full height */}
+                {/* RIGHT SECTION: AI and Agents (or "Agent" for the Agents Accelerator) - Full height */}
                 {dataIntelFade.shouldRender && (
                   <div
                     className={`border-2 border-blue-500/60 rounded-xl p-4 bg-slate-800/50 flex-1 duration-300 ${fadeClass(dataIntelFade.isVisible)}`}
                   >
                     <div className="bg-blue-600 text-center py-2 px-3 rounded-lg mb-4">
                       <div className="flex items-center justify-center gap-2 mb-1">
-                        <Brain className="w-4 h-4 text-white" />
+                        {isAgentsAccelerator ? (
+                          <Bot className="w-4 h-4 text-white" />
+                        ) : (
+                          <Brain className="w-4 h-4 text-white" />
+                        )}
                       </div>
-                      <p className="text-ui-base font-bold text-white">AI and Agents</p>
+                      <p className="text-ui-base font-bold text-white">{isAgentsAccelerator ? 'Agent' : 'AI and Agents'}</p>
                     </div>
-                    
-                    <div className="flex flex-col gap-3">
-                      {/* Genie module (TVF / Metric Views / Genie Spaces) */}
-                      {showGenieModule && (
-                        <div className="bg-slate-800 border-2 border-amber-500/60 rounded-lg p-3.5 shadow-lg">
-                          <p className="text-ui-base font-bold text-amber-300 mb-2">Genie</p>
-                          <div className="space-y-1.5">
-                            <ServicePopover serviceKey="tvf" position="left" block>
-                              <div className="bg-amber-900/30 rounded px-2.5 py-1.5 border border-amber-500/30 hover:bg-amber-900/50 hover:border-amber-400 transition-all duration-200 hover:scale-105">
-                                <p className="text-ui-xs font-semibold text-amber-200">Table Value Functions</p>
-                              </div>
-                            </ServicePopover>
-                            <ServicePopover serviceKey="metricViews" position="left" block>
-                              <div className="bg-amber-900/30 rounded px-2.5 py-1.5 border border-amber-500/30 hover:bg-amber-900/50 hover:border-amber-400 transition-all duration-200 hover:scale-105">
-                                <p className="text-ui-xs font-semibold text-amber-200">Metric Views</p>
-                              </div>
-                            </ServicePopover>
-                            <ServicePopover serviceKey="genieSpaces" position="left" block>
-                              <div className="bg-amber-900/30 rounded px-2.5 py-1.5 border border-amber-500/30 hover:bg-amber-900/50 hover:border-amber-400 transition-all duration-200 hover:scale-105">
-                                <p className="text-ui-xs font-semibold text-amber-200">Genie Spaces</p>
-                              </div>
-                            </ServicePopover>
-                          </div>
-                        </div>
-                      )}
 
-                      {/* AI/BI Dashboards + Agent -- hidden for Genie Accelerator and gated by chips */}
-                      {!isGenie && (showDashboardModule || showAgentModule) && (<>
+                    {isAgentsAccelerator ? (
+                      <AgentsAcceleratorPanel mlflowFaded={true} />
+                    ) : (
+                      <div className="flex flex-col gap-3">
+                        {/* Genie module (TVF / Metric Views / Genie Spaces) */}
                         {showGenieModule && (
-                          <div className="flex justify-center gap-2">
-                            {showDashboardModule && <ArrowDown className="w-4 h-4 text-green-400" />}
-                            {showAgentModule && <ArrowDown className="w-4 h-4 text-blue-400" />}
+                          <div className="bg-slate-800 border-2 border-amber-500/60 rounded-lg p-3.5 shadow-lg">
+                            <p className="text-ui-base font-bold text-amber-300 mb-2">Genie</p>
+                            <div className="space-y-1.5">
+                              <ServicePopover serviceKey="tvf" position="left" block>
+                                <div className="bg-amber-900/30 rounded px-2.5 py-1.5 border border-amber-500/30 hover:bg-amber-900/50 hover:border-amber-400 transition-all duration-200 hover:scale-105">
+                                  <p className="text-ui-xs font-semibold text-amber-200">Table Value Functions</p>
+                                </div>
+                              </ServicePopover>
+                              <ServicePopover serviceKey="metricViews" position="left" block>
+                                <div className="bg-amber-900/30 rounded px-2.5 py-1.5 border border-amber-500/30 hover:bg-amber-900/50 hover:border-amber-400 transition-all duration-200 hover:scale-105">
+                                  <p className="text-ui-xs font-semibold text-amber-200">Metric Views</p>
+                                </div>
+                              </ServicePopover>
+                              <ServicePopover serviceKey="genieSpaces" position="left" block>
+                                <div className="bg-amber-900/30 rounded px-2.5 py-1.5 border border-amber-500/30 hover:bg-amber-900/50 hover:border-amber-400 transition-all duration-200 hover:scale-105">
+                                  <p className="text-ui-xs font-semibold text-amber-200">Genie Spaces</p>
+                                </div>
+                              </ServicePopover>
+                            </div>
                           </div>
                         )}
 
-                        <div className={`grid gap-2.5 ${showDashboardModule && showAgentModule ? 'grid-cols-2' : 'grid-cols-1'}`}>
-                          {showDashboardModule && (
-                            <ServicePopover serviceKey="aiBIDashboards" position="top" block>
-                              <div className="bg-gradient-to-br from-green-500 to-green-600 rounded-lg p-2.5 shadow-lg hover:shadow-green-500/30 hover:shadow-xl transition-all duration-200 hover:scale-105">
-                                <div className="flex flex-col items-center gap-1">
-                                  <LayoutDashboard className="w-5 h-5 text-white" />
-                                  <p className="text-ui-sm font-bold text-white text-center">AI/BI Dashboards</p>
-                                </div>
-                              </div>
-                            </ServicePopover>
+                        {/* AI/BI Dashboards + Agent -- hidden for Genie Accelerator and gated by chips */}
+                        {!isGenie && (showDashboardModule || showAgentModule) && (<>
+                          {showGenieModule && (
+                            <div className="flex justify-center gap-2">
+                              {showDashboardModule && <ArrowDown className="w-4 h-4 text-green-400" />}
+                              {showAgentModule && <ArrowDown className="w-4 h-4 text-blue-400" />}
+                            </div>
                           )}
 
-                          {showAgentModule && (
-                            <ServicePopover serviceKey="agents" position="top" block>
-                              <div className="bg-gradient-to-br from-blue-500 to-blue-600 rounded-lg p-2.5 shadow-lg hover:shadow-blue-500/30 hover:shadow-xl transition-all duration-200 hover:scale-105">
-                                <div className="flex flex-col items-center gap-1">
-                                  <Bot className="w-5 h-5 text-white" />
-                                  <p className="text-ui-sm font-bold text-white text-center">Agent</p>
+                          <div className={`grid gap-2.5 ${showDashboardModule && showAgentModule ? 'grid-cols-2' : 'grid-cols-1'}`}>
+                            {showDashboardModule && (
+                              <ServicePopover serviceKey="aiBIDashboards" position="top" block>
+                                <div className="bg-gradient-to-br from-green-500 to-green-600 rounded-lg p-2.5 shadow-lg hover:shadow-green-500/30 hover:shadow-xl transition-all duration-200 hover:scale-105">
+                                  <div className="flex flex-col items-center gap-1">
+                                    <LayoutDashboard className="w-5 h-5 text-white" />
+                                    <p className="text-ui-sm font-bold text-white text-center">AI/BI Dashboards</p>
+                                  </div>
                                 </div>
-                              </div>
-                            </ServicePopover>
-                          )}
-                        </div>
-                      </>)}
-                    </div>
+                              </ServicePopover>
+                            )}
+
+                            {showAgentModule && (
+                              <ServicePopover serviceKey="agents" position="top" block>
+                                <div className="bg-gradient-to-br from-blue-500 to-blue-600 rounded-lg p-2.5 shadow-lg hover:shadow-blue-500/30 hover:shadow-xl transition-all duration-200 hover:scale-105">
+                                  <div className="flex flex-col items-center gap-1">
+                                    <Bot className="w-5 h-5 text-white" />
+                                    <p className="text-ui-sm font-bold text-white text-center">Agent</p>
+                                  </div>
+                                </div>
+                              </ServicePopover>
+                            )}
+                          </div>
+                        </>)}
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
