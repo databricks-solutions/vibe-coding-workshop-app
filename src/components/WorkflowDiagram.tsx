@@ -57,6 +57,7 @@ import {
   FileCode,
   Tag,
   ShieldCheck,
+  Brain,
   Trash2
 } from 'lucide-react';
 import { apiClient } from '../api/client';
@@ -2254,6 +2255,242 @@ export function WorkflowDiagram({
                     isPreviousStepComplete={isPreviousStepComplete(30)}
                     isExpanded={expandedStep === 30}
                     onToggleExpand={() => toggleExpand(30)}
+                    sessionId={sessionId}
+                  />
+                </div>
+              );
+
+            // ----------------------------------------------------------------
+            // Agents Accelerator — Agents on Apps (Steps 38–45)
+            // Section titles match the tracks/A-custom-agent-apps/ folder labels
+            // ----------------------------------------------------------------
+
+            // Step 38: 01 - Clone and Run
+            case 38:
+              return (
+                <div key={38} className="relative mt-5" data-step-number="38">
+                  <WorkflowStep
+                    stepNumber={38}
+                    title="01 - Clone and Run"
+                    description="Clone the custom-agent-apps template, install dependencies, and run the starter agent locally inside your Databricks App"
+                    icon={<GitBranch className="w-5 h-5" />}
+                    color="blue"
+                    isComplete={completedSteps.has(38)}
+                    isSkipped={skippedSteps.has(38)}
+                    onToggleComplete={() => toggleStepComplete(38)}
+                    onToggleSkip={() => toggleStepSkip(38)}
+                    onNavigateNext={() => navigateToNextStep(38)}
+                    sectionTag="agents_clone_and_run"
+                    industry={selectedIndustry}
+                    useCase={selectedUseCase}
+                    onPromptGenerated={onStepPromptGenerated}
+                    initialPrompt={stepPrompts[38]}
+                    isPreviousStepComplete={isPreviousStepComplete(38)}
+                    isExpanded={expandedStep === 38}
+                    onToggleExpand={() => toggleExpand(38)}
+                    sessionId={sessionId}
+                  />
+                </div>
+              );
+
+            // Step 39: 02 - Agent Framework
+            case 39:
+              return (
+                <div key={39} className="relative mt-5" data-step-number="39">
+                  <WorkflowStep
+                    stepNumber={39}
+                    title="02 - Agent Framework"
+                    description="Build an agent module using the Mosaic AI Agent Framework with the ResponsesAgent interface (auto MLflow signature inference, native Playground/Eval/Apps integration)"
+                    icon={<Bot className="w-5 h-5" />}
+                    color="blue"
+                    isComplete={completedSteps.has(39)}
+                    isSkipped={skippedSteps.has(39)}
+                    onToggleComplete={() => toggleStepComplete(39)}
+                    onToggleSkip={() => toggleStepSkip(39)}
+                    onNavigateNext={() => navigateToNextStep(39)}
+                    sectionTag="agents_agent_framework"
+                    industry={selectedIndustry}
+                    useCase={selectedUseCase}
+                    onPromptGenerated={onStepPromptGenerated}
+                    initialPrompt={stepPrompts[39]}
+                    previousOutputs={stepPrompts[38] ? { clone_and_run: stepPrompts[38] } : undefined}
+                    isPreviousStepComplete={isPreviousStepComplete(39)}
+                    isExpanded={expandedStep === 39}
+                    onToggleExpand={() => toggleExpand(39)}
+                    sessionId={sessionId}
+                  />
+                </div>
+              );
+
+            // Step 40: 03 - Tools and MCP
+            case 40:
+              return (
+                <div key={40} className="relative mt-5" data-step-number="40">
+                  <WorkflowStep
+                    stepNumber={40}
+                    title="03 - Tools and MCP"
+                    description="Register tools via Managed (UC Functions, Vector Search, Genie, Databricks SQL), External, and Custom MCP servers"
+                    icon={<Plug className="w-5 h-5" />}
+                    color="blue"
+                    isComplete={completedSteps.has(40)}
+                    isSkipped={skippedSteps.has(40)}
+                    onToggleComplete={() => toggleStepComplete(40)}
+                    onToggleSkip={() => toggleStepSkip(40)}
+                    onNavigateNext={() => navigateToNextStep(40)}
+                    sectionTag="agents_tools_and_mcp"
+                    industry={selectedIndustry}
+                    useCase={selectedUseCase}
+                    onPromptGenerated={onStepPromptGenerated}
+                    initialPrompt={stepPrompts[40]}
+                    previousOutputs={stepPrompts[39] ? { agent_framework: stepPrompts[39] } : undefined}
+                    isPreviousStepComplete={isPreviousStepComplete(40)}
+                    isExpanded={expandedStep === 40}
+                    onToggleExpand={() => toggleExpand(40)}
+                    sessionId={sessionId}
+                  />
+                </div>
+              );
+
+            // Step 41: 04 - Authentication
+            case 41:
+              return (
+                <div key={41} className="relative mt-5" data-step-number="41">
+                  <WorkflowStep
+                    stepNumber={41}
+                    title="04 - Authentication"
+                    description="Wire on-behalf-of-user auth via Databricks Apps user-token forwarding (X-Forwarded-Access-Token header) so tool calls run with the caller's permissions"
+                    icon={<Shield className="w-5 h-5" />}
+                    color="blue"
+                    isComplete={completedSteps.has(41)}
+                    isSkipped={skippedSteps.has(41)}
+                    onToggleComplete={() => toggleStepComplete(41)}
+                    onToggleSkip={() => toggleStepSkip(41)}
+                    onNavigateNext={() => navigateToNextStep(41)}
+                    sectionTag="agents_authentication"
+                    industry={selectedIndustry}
+                    useCase={selectedUseCase}
+                    onPromptGenerated={onStepPromptGenerated}
+                    initialPrompt={stepPrompts[41]}
+                    previousOutputs={stepPrompts[40] ? { tools_and_mcp: stepPrompts[40] } : undefined}
+                    isPreviousStepComplete={isPreviousStepComplete(41)}
+                    isExpanded={expandedStep === 41}
+                    onToggleExpand={() => toggleExpand(41)}
+                    sessionId={sessionId}
+                  />
+                </div>
+              );
+
+            // Step 42: 05 - Lakebase Memory
+            case 42:
+              return (
+                <div key={42} className="relative mt-5" data-step-number="42">
+                  <WorkflowStep
+                    stepNumber={42}
+                    title="05 - Lakebase Memory"
+                    description="Add short-term memory via a LangGraph checkpointer keyed by thread_id and long-term memory via Vector Search–extracted insights — both backed by Lakebase Postgres"
+                    icon={<Brain className="w-5 h-5" />}
+                    color="violet"
+                    isComplete={completedSteps.has(42)}
+                    isSkipped={skippedSteps.has(42)}
+                    onToggleComplete={() => toggleStepComplete(42)}
+                    onToggleSkip={() => toggleStepSkip(42)}
+                    onNavigateNext={() => navigateToNextStep(42)}
+                    sectionTag="agents_lakebase_memory"
+                    industry={selectedIndustry}
+                    useCase={selectedUseCase}
+                    onPromptGenerated={onStepPromptGenerated}
+                    initialPrompt={stepPrompts[42]}
+                    previousOutputs={stepPrompts[41] ? { authentication: stepPrompts[41] } : undefined}
+                    isPreviousStepComplete={isPreviousStepComplete(42)}
+                    isExpanded={expandedStep === 42}
+                    onToggleExpand={() => toggleExpand(42)}
+                    sessionId={sessionId}
+                  />
+                </div>
+              );
+
+            // Step 43: 06 - Evaluation
+            case 43:
+              return (
+                <div key={43} className="relative mt-5" data-step-number="43">
+                  <WorkflowStep
+                    stepNumber={43}
+                    title="06 - Evaluation"
+                    description="Build an offline evaluation harness using mlflow.genai.evaluate against an initial dataset (foreshadows the MLflow for Gen-AI section)"
+                    icon={<FlaskConical className="w-5 h-5" />}
+                    color="blue"
+                    isComplete={completedSteps.has(43)}
+                    isSkipped={skippedSteps.has(43)}
+                    onToggleComplete={() => toggleStepComplete(43)}
+                    onToggleSkip={() => toggleStepSkip(43)}
+                    onNavigateNext={() => navigateToNextStep(43)}
+                    sectionTag="agents_evaluation"
+                    industry={selectedIndustry}
+                    useCase={selectedUseCase}
+                    onPromptGenerated={onStepPromptGenerated}
+                    initialPrompt={stepPrompts[43]}
+                    previousOutputs={stepPrompts[42] ? { lakebase_memory: stepPrompts[42] } : undefined}
+                    isPreviousStepComplete={isPreviousStepComplete(43)}
+                    isExpanded={expandedStep === 43}
+                    onToggleExpand={() => toggleExpand(43)}
+                    sessionId={sessionId}
+                  />
+                </div>
+              );
+
+            // Step 44: 07 - Deploy and Query
+            case 44:
+              return (
+                <div key={44} className="relative mt-5" data-step-number="44">
+                  <WorkflowStep
+                    stepNumber={44}
+                    title="07 - Deploy and Query"
+                    description="Log the agent as an MLflow model, register it to Unity Catalog, deploy via agents.deploy, and query the serving endpoint"
+                    icon={<Rocket className="w-5 h-5" />}
+                    color="blue"
+                    isComplete={completedSteps.has(44)}
+                    isSkipped={skippedSteps.has(44)}
+                    onToggleComplete={() => toggleStepComplete(44)}
+                    onToggleSkip={() => toggleStepSkip(44)}
+                    onNavigateNext={() => navigateToNextStep(44)}
+                    sectionTag="agents_deploy_and_query"
+                    industry={selectedIndustry}
+                    useCase={selectedUseCase}
+                    onPromptGenerated={onStepPromptGenerated}
+                    initialPrompt={stepPrompts[44]}
+                    previousOutputs={stepPrompts[43] ? { evaluation: stepPrompts[43] } : undefined}
+                    isPreviousStepComplete={isPreviousStepComplete(44)}
+                    isExpanded={expandedStep === 44}
+                    onToggleExpand={() => toggleExpand(44)}
+                    sessionId={sessionId}
+                  />
+                </div>
+              );
+
+            // Step 45: 08 - Debugging
+            case 45:
+              return (
+                <div key={45} className="relative mt-5" data-step-number="45">
+                  <WorkflowStep
+                    stepNumber={45}
+                    title="08 - Debugging"
+                    description="Use MLflow Traces, the Tracing UI, and the Review App to debug the agent's tool calls and prompts"
+                    icon={<Search className="w-5 h-5" />}
+                    color="blue"
+                    isComplete={completedSteps.has(45)}
+                    isSkipped={skippedSteps.has(45)}
+                    onToggleComplete={() => toggleStepComplete(45)}
+                    onToggleSkip={() => toggleStepSkip(45)}
+                    onNavigateNext={() => navigateToNextStep(45)}
+                    sectionTag="agents_debugging"
+                    industry={selectedIndustry}
+                    useCase={selectedUseCase}
+                    onPromptGenerated={onStepPromptGenerated}
+                    initialPrompt={stepPrompts[45]}
+                    previousOutputs={stepPrompts[44] ? { deploy_and_query: stepPrompts[44] } : undefined}
+                    isPreviousStepComplete={isPreviousStepComplete(45)}
+                    isExpanded={expandedStep === 45}
+                    onToggleExpand={() => toggleExpand(45)}
                     sessionId={sessionId}
                   />
                 </div>

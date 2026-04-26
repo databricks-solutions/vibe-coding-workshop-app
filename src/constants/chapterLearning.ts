@@ -98,6 +98,18 @@ export const CHAPTER_LEARNING: Record<string, ChapterLearning> = {
     ],
     services: ['databricksApp'],
   },
+  'Agents Accelerator': {
+    congratsTitle: 'Agents Accelerator Complete!',
+    summary: 'You built, evaluated, and deployed a production-ready agent app on Databricks.',
+    bullets: [
+      'Built a Mosaic AI Agent Framework agent (ResponsesAgent) inside your Databricks App',
+      'Wired Tools & MCP — Managed (UC Functions, Vector Search, Genie, SQL), External, and Custom servers',
+      'Forwarded user identity through on-behalf-of-user auth (X-Forwarded-Access-Token)',
+      'Persisted conversation state with Lakebase Memory (LangGraph checkpointer + long-term insights)',
+      'Logged the agent to Unity Catalog, deployed it via agents.deploy, and inspected MLflow Traces',
+    ],
+    services: ['agents', 'agentFramework', 'toolsMcp', 'lakebaseMemory'],
+  },
   'Clean Up': {
     congratsTitle: 'Clean Up Complete!',
     summary: 'You safely removed all workshop resources from your workspace.',
