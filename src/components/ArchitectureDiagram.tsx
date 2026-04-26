@@ -944,7 +944,7 @@ export function ArchitectureDiagramContent({
                   <p className="text-ui-base font-bold text-white">{isAgentsAccelerator ? 'Agent' : 'AI and Agents'}</p>
                 </div>
                 {isAgentsAccelerator ? (
-                  <AgentsAcceleratorPanel mlflowFaded={true} />
+                  <AgentsAcceleratorPanel mlflowFaded={false} />
                 ) : (
                   <div className="flex flex-col gap-3">
                     {showGenieModule && (
@@ -1706,7 +1706,7 @@ export function ArchitectureDiagram({ forceCollapsed = false, workshopLevel = 'e
                     </div>
 
                     {isAgentsAccelerator ? (
-                      <AgentsAcceleratorPanel mlflowFaded={true} />
+                      <AgentsAcceleratorPanel mlflowFaded={false} />
                     ) : (
                       <div className="flex flex-col gap-3">
                         {/* Genie module (TVF / Metric Views / Genie Spaces) */}

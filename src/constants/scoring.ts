@@ -28,6 +28,8 @@ export const STEP_SCORES: Record<number, number> = {
   31: 10,
   // Agents Accelerator — Agents on Apps (steps 38-45): 50 points each
   38: 50, 39: 50, 40: 50, 41: 50, 42: 50, 43: 50, 44: 50, 45: 50,
+  // Agents Accelerator — MLflow for Gen-AI (steps 46-54): 50 points each
+  46: 50, 47: 50, 48: 50, 49: 50, 50: 50, 51: 50, 52: 50, 53: 50, 54: 50,
 };
 
 // Chapter definitions for milestone detection
@@ -40,7 +42,7 @@ export const CHAPTERS: Record<string, { steps: Set<number>; display: string }> =
   'Activation': { steps: new Set([32, 33, 34, 35, 36, 37]), display: 'Reverse ETL' },
   'Refinement': { steps: new Set([20, 21]), display: 'Refinement' },
   'Agent Skills': { steps: new Set([26, 27, 28, 29, 30]), display: 'Agent Skills' },
-  'Agents Accelerator': { steps: new Set([38, 39, 40, 41, 42, 43, 44, 45]), display: 'Agents Accelerator' },
+  'Agents Accelerator': { steps: new Set([38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54]), display: 'Agents Accelerator' },
   'Clean Up': { steps: new Set([31]), display: 'Clean Up' },
 };
 

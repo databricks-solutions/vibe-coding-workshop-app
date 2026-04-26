@@ -100,15 +100,19 @@ export const CHAPTER_LEARNING: Record<string, ChapterLearning> = {
   },
   'Agents Accelerator': {
     congratsTitle: 'Agents Accelerator Complete!',
-    summary: 'You built, evaluated, and deployed a production-ready agent app on Databricks.',
+    summary: 'You built, evaluated, deployed, and monitored a production-ready agent app on Databricks.',
     bullets: [
       'Built a Mosaic AI Agent Framework agent (ResponsesAgent) inside your Databricks App',
       'Wired Tools & MCP — Managed (UC Functions, Vector Search, Genie, SQL), External, and Custom servers',
       'Forwarded user identity through on-behalf-of-user auth (X-Forwarded-Access-Token)',
       'Persisted conversation state with Lakebase Memory (LangGraph checkpointer + long-term insights)',
-      'Logged the agent to Unity Catalog, deployed it via agents.deploy, and inspected MLflow Traces',
+      'Versioned prompts in MLflow Prompt Registry with @production aliases',
+      'Curated evaluation datasets and ran mlflow.genai.evaluate with LLM-as-judge scorers',
+      'Captured stakeholder sign-off via the Review App before promotion',
+      'Logged + UC-registered the agent and automated deploys with Databricks Asset Bundles',
+      'Monitored production with AI Gateway-enabled inference tables and MLflow 3 scheduled scorers',
     ],
-    services: ['agents', 'agentFramework', 'toolsMcp', 'lakebaseMemory'],
+    services: ['agents', 'agentFramework', 'toolsMcp', 'lakebaseMemory', 'mlflowPromptRegistry', 'mlflowEval', 'mlflowMonitoring'],
   },
   'Clean Up': {
     congratsTitle: 'Clean Up Complete!',
