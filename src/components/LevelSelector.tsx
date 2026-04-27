@@ -37,7 +37,10 @@ import {
 } from '../constants/workflowSections';
 import { Check, Info, Globe, HardDrive, Brain, Database, Rocket, Lock, Layers, MessageSquareText, BookOpen, Bot, LayoutDashboard } from 'lucide-react';
 
-function LockedTooltip() {
+function LockedTooltip({
+  title = 'Path is locked',
+  body = 'Start a new session to switch tracks.',
+}: { title?: string; body?: string } = {}) {
   return (
     <div className="absolute left-1/2 -translate-x-1/2 top-full mt-2 z-50
       opacity-0 scale-95 translate-y-1 group-hover:opacity-100 group-hover:scale-100 group-hover:translate-y-0
@@ -46,10 +49,10 @@ function LockedTooltip() {
       <div className="relative bg-popover/95 backdrop-blur-md border border-border/50 shadow-xl rounded-lg px-3.5 py-2.5 whitespace-nowrap">
         <div className="flex items-center gap-2">
           <Lock className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-          <span className="text-ui-sm font-semibold text-foreground">Path is locked</span>
+          <span className="text-ui-sm font-semibold text-foreground">{title}</span>
         </div>
         <p className="text-ui-xs text-muted-foreground mt-1 ml-[22px]">
-          Start a new session to switch tracks.
+          {body}
         </p>
       </div>
     </div>
@@ -212,6 +215,10 @@ function LevelSelectorGrid({
   const isButtonDisabled = (level: WorkshopLevel): boolean => {
     if (useCaseLockedLevel && level !== useCaseLockedLevel) return true;
     if (level === 'skills-accelerator' && !useCaseLockedLevel && hasUseCaseSelected) return true;
+    // Agents Accelerator is a strictly forward-direction flow (App → Lakebase →
+    // Bronze → Agents → MLflow). Disable it when the user toggles to Reverse ETL
+    // so the button state matches the architecture diagram direction.
+    if (level === 'agents-accelerator' && direction === 'reverse') return true;
     // Agents Accelerator intentionally does NOT require a specific use case:
     // the user picks any sample use case (e.g. "Booking App"), then clicking
     // this button locks the flow to the Agents path.
@@ -394,7 +401,12 @@ function LevelSelectorGrid({
                 transition={{ type: 'spring', stiffness: 250, damping: 22, mass: 0.9 }}>
                 {columnHeader('analytics')}
                 <div className="space-y-2">
-                  {levelSupportsMedallionToggles(selectedLevel) && medallionLayers && onMedallionLayersChange ? (
+                  {/* Chip sub-panels render ONLY when the user is on a
+                      progression-chain level (lakehouse, reverse-lakehouse,
+                      etc.). When an accelerator is selected, all 5 accelerators
+                      present an identical Analytics column — plain buttons,
+                      no chips — regardless of which one is selected. */}
+                  {!isAcceleratorSelected && levelSupportsMedallionToggles(selectedLevel) && medallionLayers && onMedallionLayersChange ? (
                     <div className="rounded-lg border border-teal-500/30 bg-teal-500/[0.05] p-1.5 space-y-1.5">
                       {renderButton('reverse-lakehouse', <Database className="w-4 h-4 flex-shrink-0" />)}
                       <MedallionLayerSelector
@@ -409,7 +421,7 @@ function LevelSelectorGrid({
                   ) : (
                     renderButton('reverse-lakehouse', <Database className="w-4 h-4 flex-shrink-0" />)
                   )}
-                  {levelSupportsAIModuleToggles(selectedLevel) && aiAgentsModules && onAIModulesChange ? (
+                  {!isAcceleratorSelected && levelSupportsAIModuleToggles(selectedLevel) && aiAgentsModules && onAIModulesChange ? (
                     <div className="rounded-lg border border-cyan-500/30 bg-cyan-500/[0.05] p-1.5 space-y-1.5">
                       {renderButton('reverse-lakehouse-di', <Brain className="w-4 h-4 flex-shrink-0" />)}
                       <AIAgentsModuleSelector
@@ -453,7 +465,11 @@ function LevelSelectorGrid({
                 transition={{ type: 'spring', stiffness: 250, damping: 22, mass: 0.9 }}>
                 {columnHeader('analytics')}
                 <div className="space-y-2">
-                  {levelSupportsMedallionToggles(selectedLevel) && medallionLayers && onMedallionLayersChange ? (
+                  {/* See note in the reverse-direction column: chip panels
+                      only render when the user is on a progression-chain level.
+                      When an accelerator is selected, this column shows plain
+                      buttons for all 5 accelerators. */}
+                  {!isAcceleratorSelected && levelSupportsMedallionToggles(selectedLevel) && medallionLayers && onMedallionLayersChange ? (
                     <div className="rounded-lg border border-teal-500/30 bg-teal-500/[0.05] p-1.5 space-y-1.5">
                       {renderButton('lakehouse', <Database className="w-4 h-4 flex-shrink-0" />)}
                       <MedallionLayerSelector
@@ -468,7 +484,7 @@ function LevelSelectorGrid({
                   ) : (
                     renderButton('lakehouse', <Database className="w-4 h-4 flex-shrink-0" />)
                   )}
-                  {levelSupportsAIModuleToggles(selectedLevel) && aiAgentsModules && onAIModulesChange ? (
+                  {!isAcceleratorSelected && levelSupportsAIModuleToggles(selectedLevel) && aiAgentsModules && onAIModulesChange ? (
                     <div className="rounded-lg border border-cyan-500/30 bg-cyan-500/[0.05] p-1.5 space-y-1.5">
                       {renderButton('lakehouse-di', <Brain className="w-4 h-4 flex-shrink-0" />)}
                       <AIAgentsModuleSelector
@@ -523,7 +539,16 @@ function LevelSelectorGrid({
                   )}
                 </div>
               </button>
-              {isButtonDisabled('agents-accelerator') && <LockedTooltip />}
+              {isButtonDisabled('agents-accelerator') && (
+                direction === 'reverse' ? (
+                  <LockedTooltip
+                    title="Not available in Reverse ETL"
+                    body="Agents Accelerator is a forward-direction flow. Switch direction to enable."
+                  />
+                ) : (
+                  <LockedTooltip />
+                )
+              )}
             </div>
 
             {/* Data Product Accelerator (New) */}

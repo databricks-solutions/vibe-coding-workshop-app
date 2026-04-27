@@ -540,13 +540,20 @@ export default function App() {
   const handleDirectionChange = useCallback((newDirection: WorkflowDirection) => {
     if (directionLocked) return;
     setDirection(newDirection);
+    // Agents Accelerator is a strictly forward-direction flow. If the user
+    // flips to reverse while that level is selected, fall back to the
+    // Apps + Lakebase baseline so the UI doesn't leave a disabled level
+    // visually "selected".
+    if (newDirection === 'reverse' && workshopLevel === 'agents-accelerator') {
+      setWorkshopLevel('app-database');
+    }
     if (sessionId) {
       apiClient.updateSessionMetadata({
         session_id: sessionId,
         direction: newDirection,
       }).catch(err => console.error('Error persisting direction:', err));
     }
-  }, [directionLocked, sessionId]);
+  }, [directionLocked, sessionId, workshopLevel]);
 
   const handleSaveSession = async (name: string, description: string, rating?: 'thumbs_up' | 'thumbs_down', comment?: string) => {
     if (!sessionId || readOnly) return;
