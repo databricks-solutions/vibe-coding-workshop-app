@@ -811,6 +811,25 @@
   animation: button-glow-green 2s ease-in-out infinite;
 }
 
+/* Reverse ETL hint glow — emerald pulse drawn over the Reverse ETL tab while
+   the user is on Forward direction, to surface the existence of the other
+   flow. Intentionally gentle so it doesn't look alarming. */
+@keyframes reverse-etl-hint-glow {
+  0%, 100% {
+    box-shadow: 0 0 0 0 hsla(160, 84%, 45%, 0.00), inset 0 0 0 0 hsla(160, 84%, 45%, 0.0);
+    background-color: hsla(160, 84%, 45%, 0.02);
+  }
+  50% {
+    box-shadow: 0 0 10px 2px hsla(160, 84%, 45%, 0.35), inset 0 0 6px hsla(160, 84%, 45%, 0.15);
+    background-color: hsla(160, 84%, 45%, 0.10);
+  }
+}
+
+.animate-reverse-etl-hint-glow {
+  animation: reverse-etl-hint-glow 2.6s ease-in-out infinite;
+  border-radius: 9999px;
+}
+
 /* Border beam -- orbiting light around "Complete Step" / "Mark Done" buttons */
 @keyframes borderBeam {
   from { transform: rotate(0deg); }
