@@ -215,13 +215,11 @@ function LevelSelectorGrid({
   const isButtonDisabled = (level: WorkshopLevel): boolean => {
     if (useCaseLockedLevel && level !== useCaseLockedLevel) return true;
     if (level === 'skills-accelerator' && !useCaseLockedLevel && hasUseCaseSelected) return true;
-    // Agents Accelerator is a strictly forward-direction flow (App → Lakebase →
-    // Bronze → Agents → MLflow). Disable it when the user toggles to Reverse ETL
-    // so the button state matches the architecture diagram direction.
-    if (level === 'agents-accelerator' && direction === 'reverse') return true;
     // Agents Accelerator intentionally does NOT require a specific use case:
     // the user picks any sample use case (e.g. "Booking App"), then clicking
-    // this button locks the flow to the Agents path.
+    // this button locks the flow to the Agents path. The entire Accelerators
+    // column is hidden in Reverse ETL direction (see Column 4 wrapper below),
+    // so no direction-based disable is needed here.
     if (!hasStartedWorkflow) return false;
 
     if (activeChain) {
@@ -511,7 +509,11 @@ function LevelSelectorGrid({
           </div>
         </div>
 
-        {/* Column 4: Accelerators */}
+        {/* Column 4: Accelerators — hidden in Reverse ETL direction. The
+            accelerators are forward-progression flows; they have no meaningful
+            reverse counterpart. Showing only 3 columns in reverse avoids
+            confusing users with disabled/mismatched options. */}
+        {direction !== 'reverse' && (
         <div className={getBoxClass(isAcceleratorSelected, false, isColumnLocked('accelerator'))}>
           {columnHeader('accelerator')}
           <div className="space-y-2">
@@ -539,16 +541,7 @@ function LevelSelectorGrid({
                   )}
                 </div>
               </button>
-              {isButtonDisabled('agents-accelerator') && (
-                direction === 'reverse' ? (
-                  <LockedTooltip
-                    title="Not available in Reverse ETL"
-                    body="Agents Accelerator is a forward-direction flow. Switch direction to enable."
-                  />
-                ) : (
-                  <LockedTooltip />
-                )
-              )}
+              {isButtonDisabled('agents-accelerator') && <LockedTooltip />}
             </div>
 
             {/* Data Product Accelerator (New) */}
@@ -675,6 +668,7 @@ function LevelSelectorGrid({
             </button>
           </div>
         </div>
+        )}
         </div>
       </LayoutGroup>
     </>
