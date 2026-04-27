@@ -856,52 +856,80 @@
   );
 }
 
-/* Pill variant — same orbiting conic gradient as .border-beam-wrapper, but
-   with a fully-rounded pill shape. Used for direction-toggle hints where the
-   host button is already pill-shaped. No padding (flush) so the wrapper
-   doesn't shift the button's horizontal position inside its parent flex row;
-   the beam visibly extends a few pixels beyond the button edges courtesy of
-   the `inset: -50%` ::before. */
-.border-beam-wrapper-pill {
+
+
+/* Animated "New" badge — emerald glow pulse + diagonal shimmer sweep.
+   Used by <NewBadge animated /> to draw attention without being noisy. */
+@keyframes new-badge-glow {
+  0%, 100% {
+    box-shadow:
+      0 0 0 0 hsla(160, 84%, 50%, 0),
+      0 0 6px 0 hsla(160, 84%, 60%, 0.25);
+  }
+  50% {
+    box-shadow:
+      0 0 0 3px hsla(160, 84%, 50%, 0.18),
+      0 0 12px 2px hsla(160, 84%, 60%, 0.45);
+  }
+}
+
+@keyframes new-badge-shimmer {
+  0% { transform: translateX(-120%) skewX(-18deg); }
+  60%, 100% { transform: translateX(220%) skewX(-18deg); }
+}
+
+.animate-new-badge {
   position: relative;
-  border-radius: 9999px;
-  display: inline-flex;
+  animation: new-badge-glow 2.4s ease-in-out infinite;
   overflow: hidden;
 }
 
-.border-beam-wrapper-pill::before {
+.animate-new-badge::after {
   content: '';
   position: absolute;
-  inset: -50%;
-  aspect-ratio: 1;
-  background: conic-gradient(
-    from 0deg,
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 35%;
+  background: linear-gradient(
+    110deg,
     transparent 0%,
-    transparent 25%,
-    hsla(160, 84%, 50%, 0.85) 30%,
-    hsla(160, 84%, 60%, 1) 35%,
-    hsla(160, 84%, 50%, 0.85) 40%,
-    transparent 45%,
+    hsla(0, 0%, 100%, 0.0) 30%,
+    hsla(0, 0%, 100%, 0.45) 50%,
+    hsla(0, 0%, 100%, 0.0) 70%,
     transparent 100%
   );
-  animation: borderBeam 3s linear infinite;
   pointer-events: none;
-  z-index: 0;
+  animation: new-badge-shimmer 3.2s ease-in-out infinite;
+  animation-delay: 0.6s;
 }
 
-.light .border-beam-wrapper-pill::before {
-  background: conic-gradient(
-    from 0deg,
-    transparent 0%,
-    transparent 25%,
-    hsla(160, 84%, 39%, 0.95) 30%,
-    hsla(160, 84%, 35%, 1) 35%,
-    hsla(160, 84%, 39%, 0.95) 40%,
-    transparent 45%,
-    transparent 100%
-  );
+.light .animate-new-badge {
+  animation-name: new-badge-glow-light;
 }
 
+@keyframes new-badge-glow-light {
+  0%, 100% {
+    box-shadow:
+      0 0 0 0 hsla(160, 84%, 35%, 0),
+      0 0 6px 0 hsla(160, 84%, 35%, 0.2);
+  }
+  50% {
+    box-shadow:
+      0 0 0 3px hsla(160, 84%, 35%, 0.18),
+      0 0 12px 2px hsla(160, 84%, 35%, 0.4);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-new-badge {
+    animation: none;
+    box-shadow: 0 0 0 1px hsla(160, 84%, 50%, 0.35);
+  }
+  .animate-new-badge::after {
+    display: none;
+  }
+}
 
 /* Copy button glow - blue accent */
 @keyframes button-glow-copy {

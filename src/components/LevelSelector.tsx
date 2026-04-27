@@ -36,6 +36,7 @@ import {
   type MedallionLayer,
 } from '../constants/workflowSections';
 import { Check, Info, Globe, HardDrive, Brain, Database, Rocket, Lock, Layers, MessageSquareText, BookOpen, Bot, LayoutDashboard } from 'lucide-react';
+import { NewBadge } from './NewBadge';
 
 function LockedTooltip({
   title = 'Path is locked',
@@ -528,6 +529,7 @@ function LevelSelectorGrid({
                 <div className="flex items-center gap-2.5">
                   <Bot className="w-4 h-4 flex-shrink-0" />
                   <span className="flex-1 text-left">{BUTTON_LABELS['agents-accelerator']}</span>
+                  <NewBadge tone={selectedLevel === 'agents-accelerator' ? 'inverted' : 'emerald'} />
                   <span
                     title="Beta — feature is available but still being tested"
                     className={`text-ui-3xs px-1.5 py-0.5 rounded font-medium ${
@@ -555,11 +557,6 @@ function LevelSelectorGrid({
                 <div className="flex items-center gap-2.5">
                   <Rocket className="w-4 h-4 flex-shrink-0" />
                   <span className="flex-1 text-left">{BUTTON_LABELS['accelerator']}</span>
-                  <span className={`text-ui-3xs px-1.5 py-0.5 rounded font-medium ${
-                    selectedLevel === 'accelerator'
-                      ? 'bg-white/20 text-primary-foreground/80 border border-white/20'
-                      : 'bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30'
-                  }`}>New</span>
                   {!isButtonDisabled('accelerator') && (selectedLevel === 'accelerator' || isHighlighted('accelerator')) && (
                     <Check className={`w-3.5 h-3.5 flex-shrink-0 ${selectedLevel === 'accelerator' ? '' : 'opacity-60'}`} />
                   )}
@@ -579,11 +576,6 @@ function LevelSelectorGrid({
                 <div className="flex items-center gap-2.5">
                   <MessageSquareText className="w-4 h-4 flex-shrink-0" />
                   <span className="flex-1 text-left">{BUTTON_LABELS['genie-accelerator']}</span>
-                  <span className={`text-ui-3xs px-1.5 py-0.5 rounded font-medium ${
-                    selectedLevel === 'genie-accelerator'
-                      ? 'bg-white/20 text-primary-foreground/80 border border-white/20'
-                      : 'bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30'
-                  }`}>New</span>
                   {!isButtonDisabled('genie-accelerator') && (selectedLevel === 'genie-accelerator' || isHighlighted('genie-accelerator')) && (
                     <Check className={`w-3.5 h-3.5 flex-shrink-0 ${selectedLevel === 'genie-accelerator' ? '' : 'opacity-60'}`} />
                   )}
@@ -603,11 +595,6 @@ function LevelSelectorGrid({
                 <div className="flex items-center gap-2.5">
                   <Database className="w-4 h-4 flex-shrink-0" />
                   <span className="flex-1 text-left">{BUTTON_LABELS['data-engineering-accelerator']}</span>
-                  <span className={`text-ui-3xs px-1.5 py-0.5 rounded font-medium ${
-                    selectedLevel === 'data-engineering-accelerator'
-                      ? 'bg-white/20 text-primary-foreground/80 border border-white/20'
-                      : 'bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30'
-                  }`}>New</span>
                   {!isButtonDisabled('data-engineering-accelerator') && (selectedLevel === 'data-engineering-accelerator' || isHighlighted('data-engineering-accelerator')) && (
                     <Check className={`w-3.5 h-3.5 flex-shrink-0 ${selectedLevel === 'data-engineering-accelerator' ? '' : 'opacity-60'}`} />
                   )}
@@ -640,11 +627,6 @@ function LevelSelectorGrid({
                   <div className="flex items-center gap-2.5">
                     <BookOpen className="w-4 h-4 flex-shrink-0" />
                     <span className="flex-1 text-left">{BUTTON_LABELS['skills-accelerator']}</span>
-                    <span className={`text-ui-3xs px-1.5 py-0.5 rounded font-medium ${
-                      selectedLevel === 'skills-accelerator'
-                        ? 'bg-white/20 text-primary-foreground/80 border border-white/20'
-                        : 'bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30'
-                    }`}>New</span>
                     {!isButtonDisabled('skills-accelerator') && (selectedLevel === 'skills-accelerator' || isHighlighted('skills-accelerator')) && (
                       <Check className={`w-3.5 h-3.5 flex-shrink-0 ${selectedLevel === 'skills-accelerator' ? '' : 'opacity-60'}`} />
                     )}

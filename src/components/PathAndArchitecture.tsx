@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { motion } from 'framer-motion';
 import { ChevronDown, ChevronRight, ChevronLeft, Lock, Map, ArrowRight } from 'lucide-react';
 import { LevelSelectorContent, BUTTON_LABELS } from './LevelSelector';
 import { ArchitectureDiagramContent } from './ArchitectureDiagram';
 import { BorderBeamButton } from './BorderBeamButton';
+import { NewBadge } from './NewBadge';
 import { CopyLinkButton } from './CopyLinkButton';
 import type { WorkshopLevel, WorkflowDirection, AIAgentModule, MedallionLayer } from '../constants/workflowSections';
 
@@ -108,31 +108,23 @@ export function PathAndArchitecture({
                 } as React.CSSProperties
               }
             >
-              {/* Sliding Indicator */}
-              <motion.div
-                layoutId="direction-indicator"
-                className={`absolute top-1 bottom-1 rounded-full transition-colors duration-200 ${
-                  direction === 'forward'
-                    ? 'bg-violet-500/15 border border-violet-500/40 shadow-lg shadow-violet-500/10'
-                    : 'bg-emerald-500/15 border border-emerald-500/40 shadow-lg shadow-emerald-500/10'
-                }`}
-                style={{ width: 'calc(50% - 2px)', left: direction === 'forward' ? '4px' : 'calc(50% + 2px)' }}
-                transition={{ type: 'spring', stiffness: 500, damping: 30, mass: 0.8 }}
-              />
-
-              {/* Forward Tab */}
+              {/* Forward Tab — selected styling lives directly on the
+                  button (no separate sliding indicator) so each button
+                  can be any width without breaking layout math. */}
               <button
                 type="button"
                 onClick={() => {
                   if (directionLocked && direction !== 'forward') return;
                   onDirectionChange?.('forward');
                 }}
-                className={`relative z-10 flex items-center gap-1.5 px-4 py-1.5 rounded-full text-[12px] font-medium transition-colors duration-200 ${
+                className={`relative z-10 flex items-center gap-1.5 px-4 py-1.5 rounded-full text-[12px] font-medium transition-all duration-200 ${
                   direction === 'forward'
-                    ? 'text-foreground font-semibold'
-                    : directionLocked
-                      ? 'text-muted-foreground/40 cursor-not-allowed'
-                      : 'text-muted-foreground hover:text-foreground/70'
+                    ? 'bg-violet-500/15 border border-violet-500/40 shadow-lg shadow-violet-500/10 text-foreground font-semibold'
+                    : `border border-transparent ${
+                        directionLocked
+                          ? 'text-muted-foreground/40 cursor-not-allowed'
+                          : 'text-muted-foreground hover:text-foreground/70'
+                      }`
                 }`}
               >
                 <ChevronRight
@@ -141,46 +133,43 @@ export function PathAndArchitecture({
                 <span>Build Forward</span>
               </button>
 
-              {/* Reverse Tab — when the user is on Forward direction, wrap
-                  the button in the same orbiting conic-gradient border beam
-                  used by the Get Started / Mark Done primary buttons so the
-                  Reverse ETL flow feels discoverable. Beam stops the moment
-                  the user flips to reverse, and is suppressed when the
-                  direction is locked. */}
-              {(() => {
-                const reverseBtn = (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (directionLocked && direction !== 'reverse') return;
-                      onDirectionChange?.('reverse');
-                    }}
-                    title={
-                      direction === 'forward' && !directionLocked
-                        ? 'Try Reverse ETL — flip the flow to start from Lakehouse Gold and sync into a Lakebase-powered analytics app.'
-                        : undefined
-                    }
-                    className={`relative z-10 flex items-center gap-1.5 px-4 py-1.5 rounded-full text-[12px] font-medium transition-colors duration-200 ${
-                      direction === 'reverse'
-                        ? 'text-foreground font-semibold'
-                        : directionLocked
+              {/* Reverse Tab — same shape as Build Forward, plus an inline
+                  <NewBadge /> matching the Agents Accelerator pattern. The
+                  badge animates while still fresh (Forward direction) and
+                  switches to inverted tone + static state once the user
+                  has clicked into Reverse. */}
+              <button
+                type="button"
+                onClick={() => {
+                  if (directionLocked && direction !== 'reverse') return;
+                  onDirectionChange?.('reverse');
+                }}
+                title={
+                  direction === 'forward' && !directionLocked
+                    ? 'Try Reverse ETL — flip the flow to start from Lakehouse Gold and sync into a Lakebase-powered analytics app.'
+                    : undefined
+                }
+                className={`relative z-10 flex items-center gap-1.5 px-4 py-1.5 rounded-full text-[12px] font-medium transition-all duration-200 ${
+                  direction === 'reverse'
+                    ? 'bg-emerald-500/15 border border-emerald-500/40 shadow-lg shadow-emerald-500/10 text-foreground font-semibold'
+                    : `border border-transparent ${
+                        directionLocked
                           ? 'text-muted-foreground/40 cursor-not-allowed'
                           : 'text-muted-foreground hover:text-foreground/70'
-                    }`}
-                  >
-                    <ChevronLeft
-                      className={`w-3.5 h-3.5 transition-transform duration-300 ${direction === 'reverse' ? '' : 'rotate-180'}`}
-                    />
-                    <span>Reverse ETL</span>
-                  </button>
-                );
-                const shouldBeam = direction === 'forward' && !directionLocked;
-                return shouldBeam ? (
-                  <span className="border-beam-wrapper-pill">{reverseBtn}</span>
-                ) : (
-                  reverseBtn
-                );
-              })()}
+                      }`
+                }`}
+              >
+                <ChevronLeft
+                  className={`w-3.5 h-3.5 transition-transform duration-300 ${direction === 'reverse' ? '' : 'rotate-180'}`}
+                />
+                <span>Reverse ETL</span>
+                {!directionLocked && (
+                  <NewBadge
+                    tone={direction === 'reverse' ? 'inverted' : 'emerald'}
+                    animated={direction === 'forward'}
+                  />
+                )}
+              </button>
 
               {/* Lock Icon */}
               {directionLocked && (
