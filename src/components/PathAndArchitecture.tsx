@@ -141,19 +141,27 @@ export function PathAndArchitecture({
                 <span>Build Forward</span>
               </button>
 
-              {/* Reverse Tab */}
+              {/* Reverse Tab — glows gently while the user is on Forward
+                  direction so they notice the alternate flow exists. Glow
+                  stops as soon as the user flips to reverse, and is suppressed
+                  entirely when the direction is locked. */}
               <button
                 type="button"
                 onClick={() => {
                   if (directionLocked && direction !== 'reverse') return;
                   onDirectionChange?.('reverse');
                 }}
+                title={
+                  direction === 'forward' && !directionLocked
+                    ? 'Try Reverse ETL — flip the flow to start from Lakehouse Gold and sync into a Lakebase-powered analytics app.'
+                    : undefined
+                }
                 className={`relative z-10 flex items-center gap-1.5 px-4 py-1.5 rounded-full text-[12px] font-medium transition-colors duration-200 ${
                   direction === 'reverse'
                     ? 'text-foreground font-semibold'
                     : directionLocked
                       ? 'text-muted-foreground/40 cursor-not-allowed'
-                      : 'text-muted-foreground hover:text-foreground/70'
+                      : 'text-muted-foreground hover:text-foreground/70 animate-reverse-etl-hint-glow'
                 }`}
               >
                 <ChevronLeft
@@ -168,6 +176,43 @@ export function PathAndArchitecture({
                   <Lock className="w-3.5 h-3.5 text-muted-foreground/60" />
                 </div>
               )}
+            </div>
+          </div>
+
+          {/* Direction description — short write-up so users understand what
+              each mode means before picking one. The currently-selected mode's
+              description is highlighted; the other is dimmed to signal it's
+              the alternate option. */}
+          <div className="grid grid-cols-2 gap-3 max-w-2xl mx-auto -mt-2 mb-2 text-center">
+            <div
+              className={`rounded-lg px-3 py-2 border transition-all duration-200 ${
+                direction === 'forward'
+                  ? 'border-violet-500/40 bg-violet-500/[0.06] text-foreground'
+                  : 'border-border/40 bg-slate-800/30 text-muted-foreground opacity-70'
+              }`}
+            >
+              <p className="text-ui-xs font-semibold mb-0.5 flex items-center justify-center gap-1.5">
+                <ChevronRight className="w-3 h-3" /> Build Forward
+              </p>
+              <p className="text-ui-3xs leading-snug">
+                Start with a Databricks App + Lakebase, layer in Bronze → Silver → Gold in the Lakehouse,
+                and activate AI/BI dashboards, Genie Spaces, and agents on top.
+              </p>
+            </div>
+            <div
+              className={`rounded-lg px-3 py-2 border transition-all duration-200 ${
+                direction === 'reverse'
+                  ? 'border-emerald-500/40 bg-emerald-500/[0.06] text-foreground'
+                  : 'border-emerald-500/20 bg-emerald-500/[0.02] text-muted-foreground'
+              }`}
+            >
+              <p className="text-ui-xs font-semibold mb-0.5 flex items-center justify-center gap-1.5">
+                <ChevronLeft className="w-3 h-3" /> Reverse ETL
+              </p>
+              <p className="text-ui-3xs leading-snug">
+                Start with curated Gold data in the Lakehouse, sync it back into Lakebase via Synced Tables,
+                and build an analytics-serving app powered by that data.
+              </p>
             </div>
           </div>
 
