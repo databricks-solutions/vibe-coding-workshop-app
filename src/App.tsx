@@ -540,11 +540,19 @@ export default function App() {
   const handleDirectionChange = useCallback((newDirection: WorkflowDirection) => {
     if (directionLocked) return;
     setDirection(newDirection);
-    // Agents Accelerator is a strictly forward-direction flow. If the user
-    // flips to reverse while that level is selected, fall back to the
-    // Apps + Lakebase baseline so the UI doesn't leave a disabled level
-    // visually "selected".
-    if (newDirection === 'reverse' && workshopLevel === 'agents-accelerator') {
+    // Accelerators are forward-progression flows and the whole Accelerators
+    // column is hidden in Reverse ETL direction. If the user flips to reverse
+    // while any accelerator level is currently selected, fall back to the
+    // Apps + Lakebase baseline so the path selection doesn't silently point
+    // to a no-longer-visible column.
+    const ACCELERATOR_LEVELS: WorkshopLevel[] = [
+      'accelerator',
+      'genie-accelerator',
+      'data-engineering-accelerator',
+      'skills-accelerator',
+      'agents-accelerator',
+    ];
+    if (newDirection === 'reverse' && ACCELERATOR_LEVELS.includes(workshopLevel)) {
       setWorkshopLevel('app-database');
     }
     if (sessionId) {
