@@ -289,7 +289,39 @@ function LevelSelectorGrid({
 
   const handleLevelClick = (level: WorkshopLevel) => {
     if (isButtonDisabled(level)) return;
+    // Toggle-off: clicking the currently-selected level deselects it and falls
+    // back to the Apps + Lakebase baseline. Mirrors the Bronze/Silver/Gold chip
+    // click-to-deselect pattern. Disabled when:
+    //   - the clicked level IS the baseline (app-only / app-database) — nothing
+    //     to fall back to.
+    //   - the workflow has already started (cannot move backward across a chain).
+    //   - a use-case lock is pinning the current level.
+    //   - direction is reverse (app-database is a forward-direction level;
+    //     a reverse-level deselect would cross directions and confuse state).
+    const isBaselineLevel = level === 'app-only' || level === 'app-database';
+    const isReverse = direction === 'reverse';
+    if (
+      level === selectedLevel &&
+      !isBaselineLevel &&
+      !hasStartedWorkflow &&
+      !useCaseLockedLevel &&
+      !isReverse
+    ) {
+      onLevelChange('app-database');
+      return;
+    }
     onLevelChange(level);
+  };
+
+  // Tooltip hint when a level is currently selected and deselect-to-baseline
+  // would be allowed on next click. Mirrors the Bronze/Silver/Gold chip UX.
+  const getToggleHint = (level: WorkshopLevel): string | undefined => {
+    if (level !== selectedLevel) return undefined;
+    const isBaselineLevel = level === 'app-only' || level === 'app-database';
+    if (isBaselineLevel || hasStartedWorkflow || useCaseLockedLevel || direction === 'reverse') {
+      return undefined;
+    }
+    return 'Click again to deselect and return to Apps + Lakebase';
   };
 
   const renderButton = (level: WorkshopLevel, icon: React.ReactNode) => {
@@ -299,6 +331,7 @@ function LevelSelectorGrid({
         onClick={() => handleLevelClick(level)}
         disabled={disabled}
         className={getButtonClass(level)}
+        title={getToggleHint(level)}
       >
         <div className="flex items-center gap-2.5">
           {icon}
@@ -472,15 +505,19 @@ function LevelSelectorGrid({
                 onClick={() => handleLevelClick('agents-accelerator')}
                 disabled={isButtonDisabled('agents-accelerator')}
                 className={getButtonClass('agents-accelerator')}
+                title={getToggleHint('agents-accelerator')}
               >
                 <div className="flex items-center gap-2.5">
                   <Bot className="w-4 h-4 flex-shrink-0" />
                   <span className="flex-1 text-left">{BUTTON_LABELS['agents-accelerator']}</span>
-                  <span className={`text-ui-3xs px-1.5 py-0.5 rounded font-medium ${
-                    selectedLevel === 'agents-accelerator'
-                      ? 'bg-white/20 text-primary-foreground/80 border border-white/20'
-                      : 'bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30'
-                  }`}>New</span>
+                  <span
+                    title="Beta — feature is available but still being tested"
+                    className={`text-ui-3xs px-1.5 py-0.5 rounded font-medium ${
+                      selectedLevel === 'agents-accelerator'
+                        ? 'bg-white/20 text-primary-foreground/80 border border-white/20'
+                        : 'bg-amber-500/20 text-amber-600 dark:text-amber-400 border border-amber-500/30'
+                    }`}
+                  >Beta</span>
                   {!isButtonDisabled('agents-accelerator') && (selectedLevel === 'agents-accelerator' || isHighlighted('agents-accelerator')) && (
                     <Check className={`w-3.5 h-3.5 flex-shrink-0 ${selectedLevel === 'agents-accelerator' ? '' : 'opacity-60'}`} />
                   )}
@@ -495,6 +532,7 @@ function LevelSelectorGrid({
                 onClick={() => handleLevelClick('accelerator')}
                 disabled={isButtonDisabled('accelerator')}
                 className={getButtonClass('accelerator')}
+                title={getToggleHint('accelerator')}
               >
                 <div className="flex items-center gap-2.5">
                   <Rocket className="w-4 h-4 flex-shrink-0" />
@@ -518,6 +556,7 @@ function LevelSelectorGrid({
                 onClick={() => handleLevelClick('genie-accelerator')}
                 disabled={isButtonDisabled('genie-accelerator')}
                 className={getButtonClass('genie-accelerator')}
+                title={getToggleHint('genie-accelerator')}
               >
                 <div className="flex items-center gap-2.5">
                   <MessageSquareText className="w-4 h-4 flex-shrink-0" />
@@ -541,6 +580,7 @@ function LevelSelectorGrid({
                 onClick={() => handleLevelClick('data-engineering-accelerator')}
                 disabled={isButtonDisabled('data-engineering-accelerator')}
                 className={getButtonClass('data-engineering-accelerator')}
+                title={getToggleHint('data-engineering-accelerator')}
               >
                 <div className="flex items-center gap-2.5">
                   <Database className="w-4 h-4 flex-shrink-0" />
@@ -577,6 +617,7 @@ function LevelSelectorGrid({
                   onClick={() => handleLevelClick('skills-accelerator')}
                   disabled={isButtonDisabled('skills-accelerator')}
                   className={getButtonClass('skills-accelerator')}
+                  title={getToggleHint('skills-accelerator')}
                 >
                   <div className="flex items-center gap-2.5">
                     <BookOpen className="w-4 h-4 flex-shrink-0" />
