@@ -57,7 +57,6 @@ import {
   FileCode,
   Tag,
   ShieldCheck,
-  Brain,
   Trash2
 } from 'lucide-react';
 import { apiClient } from '../api/client';
@@ -1925,7 +1924,14 @@ export function WorkflowDiagram({
                     stepNumber={17}
                     onPromptGenerated={onStepPromptGenerated}
                     initialPrompt={stepPrompts[17]}
-                    previousOutputs={stepPrompts[15] ? { usecase_plan: stepPrompts[15] } : undefined}
+                    previousOutputs={
+                      workshopLevel === 'agents-accelerator'
+                        ? {
+                            ...(stepPrompts[3]  ? { prd_document: stepPrompts[3] } : {}),
+                            ...(stepPrompts[10] ? { table_metadata: stepPrompts[10] } : {}),
+                          }
+                        : (stepPrompts[15] ? { usecase_plan: stepPrompts[15] } : undefined)
+                    }
                     isPreviousStepComplete={isPreviousStepComplete(17)}
                     isExpanded={expandedStep === 17}
                     onToggleExpand={() => toggleExpand(17)}
@@ -2261,26 +2267,26 @@ export function WorkflowDiagram({
               );
 
             // ----------------------------------------------------------------
-            // Agents Accelerator — Agents on Apps (Steps 38–45)
+            // Agents Accelerator — Agents on Apps (Steps 38–46)
             // Section titles match the tracks/A-custom-agent-apps/ folder labels
             // ----------------------------------------------------------------
 
-            // Step 38: 01 - Clone and Run
+            // Step 38: 01 - UC Resources Foundation
             case 38:
               return (
                 <div key={38} className="relative mt-5" data-step-number="38">
                   <WorkflowStep
                     stepNumber={38}
-                    title="Clone and Run"
-                    description="Clone the custom-agent-apps template, install dependencies, and run the starter agent locally inside your Databricks App"
-                    icon={<GitBranch className="w-5 h-5" />}
+                    title="UC Resources Foundation"
+                    description="Create the agent and ops Unity Catalog schemas plus managed volumes that downstream agent, tracing, memory, and monitoring steps depend on"
+                    icon={<Database className="w-5 h-5" />}
                     color="blue"
                     isComplete={completedSteps.has(38)}
                     isSkipped={skippedSteps.has(38)}
                     onToggleComplete={() => toggleStepComplete(38)}
                     onToggleSkip={() => toggleStepSkip(38)}
                     onNavigateNext={() => navigateToNextStep(38)}
-                    sectionTag="agents_clone_and_run"
+                    sectionTag="uc_resources_foundation"
                     industry={selectedIndustry}
                     useCase={selectedUseCase}
                     onPromptGenerated={onStepPromptGenerated}
@@ -2293,27 +2299,27 @@ export function WorkflowDiagram({
                 </div>
               );
 
-            // Step 39: 02 - Agent Framework
+            // Step 39: 02 - MLflow Tracing + UC OTel
             case 39:
               return (
                 <div key={39} className="relative mt-5" data-step-number="39">
                   <WorkflowStep
                     stepNumber={39}
-                    title="Agent Framework"
-                    description="Build an agent module using the Mosaic AI Agent Framework with the ResponsesAgent interface (auto MLflow signature inference, native Playground/Eval/Apps integration)"
-                    icon={<Bot className="w-5 h-5" />}
+                    title="MLflow Tracing + UC OTel"
+                    description="Install MLflow tracing, create the experiment, and route GenAI trace data into governed Unity Catalog OTel tables"
+                    icon={<FlaskConical className="w-5 h-5" />}
                     color="blue"
                     isComplete={completedSteps.has(39)}
                     isSkipped={skippedSteps.has(39)}
                     onToggleComplete={() => toggleStepComplete(39)}
                     onToggleSkip={() => toggleStepSkip(39)}
                     onNavigateNext={() => navigateToNextStep(39)}
-                    sectionTag="agents_agent_framework"
+                    sectionTag="mlflow_agent_tracing_uc"
                     industry={selectedIndustry}
                     useCase={selectedUseCase}
                     onPromptGenerated={onStepPromptGenerated}
                     initialPrompt={stepPrompts[39]}
-                    previousOutputs={stepPrompts[38] ? { clone_and_run: stepPrompts[38] } : undefined}
+                    previousOutputs={stepPrompts[38] ? { uc_resources_foundation: stepPrompts[38] } : undefined}
                     isPreviousStepComplete={isPreviousStepComplete(39)}
                     isExpanded={expandedStep === 39}
                     onToggleExpand={() => toggleExpand(39)}
@@ -2322,27 +2328,27 @@ export function WorkflowDiagram({
                 </div>
               );
 
-            // Step 40: 03 - Tools and MCP
+            // Step 40: 03 - Knowledge Assistant
             case 40:
               return (
                 <div key={40} className="relative mt-5" data-step-number="40">
                   <WorkflowStep
                     stepNumber={40}
-                    title="Tools and MCP"
-                    description="Register tools via Managed (UC Functions, Vector Search, Genie, Databricks SQL), External, and Custom MCP servers"
-                    icon={<Plug className="w-5 h-5" />}
+                    title="Knowledge Assistant"
+                    description="Create or sync a Databricks Knowledge Assistant so the agent has a governed document Q&A backend with citations"
+                    icon={<BookOpen className="w-5 h-5" />}
                     color="blue"
                     isComplete={completedSteps.has(40)}
                     isSkipped={skippedSteps.has(40)}
                     onToggleComplete={() => toggleStepComplete(40)}
                     onToggleSkip={() => toggleStepSkip(40)}
                     onNavigateNext={() => navigateToNextStep(40)}
-                    sectionTag="agents_tools_and_mcp"
+                    sectionTag="knowledge_assistant_create"
                     industry={selectedIndustry}
                     useCase={selectedUseCase}
                     onPromptGenerated={onStepPromptGenerated}
                     initialPrompt={stepPrompts[40]}
-                    previousOutputs={stepPrompts[39] ? { agent_framework: stepPrompts[39] } : undefined}
+                    previousOutputs={stepPrompts[39] ? { mlflow_agent_tracing_uc: stepPrompts[39] } : undefined}
                     isPreviousStepComplete={isPreviousStepComplete(40)}
                     isExpanded={expandedStep === 40}
                     onToggleExpand={() => toggleExpand(40)}
@@ -2351,27 +2357,27 @@ export function WorkflowDiagram({
                 </div>
               );
 
-            // Step 41: 04 - Authentication
+            // Step 41: 04 - Clone + Framework
             case 41:
               return (
                 <div key={41} className="relative mt-5" data-step-number="41">
                   <WorkflowStep
                     stepNumber={41}
-                    title="Authentication"
-                    description="Wire on-behalf-of-user auth via Databricks Apps user-token forwarding (X-Forwarded-Access-Token header) so tool calls run with the caller's permissions"
-                    icon={<Shield className="w-5 h-5" />}
+                    title="Clone + Framework"
+                    description="Clone the canonical agent app template, install dependencies, run the local app, and wire module-level invoke and stream handlers"
+                    icon={<GitBranch className="w-5 h-5" />}
                     color="blue"
                     isComplete={completedSteps.has(41)}
                     isSkipped={skippedSteps.has(41)}
                     onToggleComplete={() => toggleStepComplete(41)}
                     onToggleSkip={() => toggleStepSkip(41)}
                     onNavigateNext={() => navigateToNextStep(41)}
-                    sectionTag="agents_authentication"
+                    sectionTag="track_a_agent_app_clone_framework"
                     industry={selectedIndustry}
                     useCase={selectedUseCase}
                     onPromptGenerated={onStepPromptGenerated}
                     initialPrompt={stepPrompts[41]}
-                    previousOutputs={stepPrompts[40] ? { tools_and_mcp: stepPrompts[40] } : undefined}
+                    previousOutputs={stepPrompts[40] ? { knowledge_assistant_create: stepPrompts[40] } : undefined}
                     isPreviousStepComplete={isPreviousStepComplete(41)}
                     isExpanded={expandedStep === 41}
                     onToggleExpand={() => toggleExpand(41)}
@@ -2380,27 +2386,27 @@ export function WorkflowDiagram({
                 </div>
               );
 
-            // Step 42: 05 - Lakebase Memory
+            // Step 42: 05 - Tools and MCP
             case 42:
               return (
                 <div key={42} className="relative mt-5" data-step-number="42">
                   <WorkflowStep
                     stepNumber={42}
-                    title="Lakebase Memory"
-                    description="Add short-term memory via a LangGraph checkpointer keyed by thread_id and long-term memory via Vector Search–extracted insights — both backed by Lakebase Postgres"
-                    icon={<Brain className="w-5 h-5" />}
-                    color="violet"
+                    title="Tools and MCP"
+                    description="Wire Knowledge Assistant, Genie Space, UC functions, and Lakebase domain tools as agent tools with the required app resource grants"
+                    icon={<Plug className="w-5 h-5" />}
+                    color="blue"
                     isComplete={completedSteps.has(42)}
                     isSkipped={skippedSteps.has(42)}
                     onToggleComplete={() => toggleStepComplete(42)}
                     onToggleSkip={() => toggleStepSkip(42)}
                     onNavigateNext={() => navigateToNextStep(42)}
-                    sectionTag="agents_lakebase_memory"
+                    sectionTag="track_a_agent_ka_genie_tools"
                     industry={selectedIndustry}
                     useCase={selectedUseCase}
                     onPromptGenerated={onStepPromptGenerated}
                     initialPrompt={stepPrompts[42]}
-                    previousOutputs={stepPrompts[41] ? { authentication: stepPrompts[41] } : undefined}
+                    previousOutputs={stepPrompts[41] ? { track_a_agent_app_clone_framework: stepPrompts[41] } : undefined}
                     isPreviousStepComplete={isPreviousStepComplete(42)}
                     isExpanded={expandedStep === 42}
                     onToggleExpand={() => toggleExpand(42)}
@@ -2409,27 +2415,27 @@ export function WorkflowDiagram({
                 </div>
               );
 
-            // Step 43: 06 - Evaluation
+            // Step 43: 06 - Auth + Memory
             case 43:
               return (
                 <div key={43} className="relative mt-5" data-step-number="43">
                   <WorkflowStep
                     stepNumber={43}
-                    title="Evaluation"
-                    description="Build an offline evaluation harness using mlflow.genai.evaluate against an initial dataset (foreshadows the MLflow for Gen-AI section)"
-                    icon={<FlaskConical className="w-5 h-5" />}
+                    title="Auth + Memory"
+                    description="Add service-principal and on-behalf-of-user authentication plus short-term and long-term Lakebase-backed agent memory"
+                    icon={<Shield className="w-5 h-5" />}
                     color="blue"
                     isComplete={completedSteps.has(43)}
                     isSkipped={skippedSteps.has(43)}
                     onToggleComplete={() => toggleStepComplete(43)}
                     onToggleSkip={() => toggleStepSkip(43)}
                     onNavigateNext={() => navigateToNextStep(43)}
-                    sectionTag="agents_evaluation"
+                    sectionTag="track_a_agent_auth_memory"
                     industry={selectedIndustry}
                     useCase={selectedUseCase}
                     onPromptGenerated={onStepPromptGenerated}
                     initialPrompt={stepPrompts[43]}
-                    previousOutputs={stepPrompts[42] ? { lakebase_memory: stepPrompts[42] } : undefined}
+                    previousOutputs={stepPrompts[42] ? { track_a_agent_ka_genie_tools: stepPrompts[42] } : undefined}
                     isPreviousStepComplete={isPreviousStepComplete(43)}
                     isExpanded={expandedStep === 43}
                     onToggleExpand={() => toggleExpand(43)}
@@ -2438,14 +2444,14 @@ export function WorkflowDiagram({
                 </div>
               );
 
-            // Step 44: 07 - Deploy and Query
+            // Step 44: 07 - Smoke Eval + Deploy
             case 44:
               return (
                 <div key={44} className="relative mt-5" data-step-number="44">
                   <WorkflowStep
                     stepNumber={44}
-                    title="Deploy and Query"
-                    description="Log the agent as an MLflow model, register it to Unity Catalog, deploy via agents.deploy, and query the serving endpoint"
+                    title="Smoke Eval + Deploy"
+                    description="Run developer-loop smoke evaluations, deploy the agent to Databricks Apps, and verify it is queryable end-to-end"
                     icon={<Rocket className="w-5 h-5" />}
                     color="blue"
                     isComplete={completedSteps.has(44)}
@@ -2453,12 +2459,12 @@ export function WorkflowDiagram({
                     onToggleComplete={() => toggleStepComplete(44)}
                     onToggleSkip={() => toggleStepSkip(44)}
                     onNavigateNext={() => navigateToNextStep(44)}
-                    sectionTag="agents_deploy_and_query"
+                    sectionTag="track_a_agent_eval_deploy"
                     industry={selectedIndustry}
                     useCase={selectedUseCase}
                     onPromptGenerated={onStepPromptGenerated}
                     initialPrompt={stepPrompts[44]}
-                    previousOutputs={stepPrompts[43] ? { evaluation: stepPrompts[43] } : undefined}
+                    previousOutputs={stepPrompts[43] ? { track_a_agent_auth_memory: stepPrompts[43] } : undefined}
                     isPreviousStepComplete={isPreviousStepComplete(44)}
                     isExpanded={expandedStep === 44}
                     onToggleExpand={() => toggleExpand(44)}
@@ -2467,27 +2473,27 @@ export function WorkflowDiagram({
                 </div>
               );
 
-            // Step 45: 08 - Debugging
+            // Step 45: 08 - AppKit Agent Proxy
             case 45:
               return (
                 <div key={45} className="relative mt-5" data-step-number="45">
                   <WorkflowStep
                     stepNumber={45}
-                    title="Debugging"
-                    description="Use MLflow Traces, the Tracing UI, and the Review App to debug the agent's tool calls and prompts"
-                    icon={<Search className="w-5 h-5" />}
+                    title="AppKit Agent Proxy"
+                    description="Wire the AppKit dashboard to the deployed Agent App through a streaming proxy with service-principal and OBO auth"
+                    icon={<Link2 className="w-5 h-5" />}
                     color="blue"
                     isComplete={completedSteps.has(45)}
                     isSkipped={skippedSteps.has(45)}
                     onToggleComplete={() => toggleStepComplete(45)}
                     onToggleSkip={() => toggleStepSkip(45)}
                     onNavigateNext={() => navigateToNextStep(45)}
-                    sectionTag="agents_debugging"
+                    sectionTag="appkit_agent_app_proxy_chat"
                     industry={selectedIndustry}
                     useCase={selectedUseCase}
                     onPromptGenerated={onStepPromptGenerated}
                     initialPrompt={stepPrompts[45]}
-                    previousOutputs={stepPrompts[44] ? { deploy_and_query: stepPrompts[44] } : undefined}
+                    previousOutputs={stepPrompts[44] ? { track_a_agent_eval_deploy: stepPrompts[44] } : undefined}
                     isPreviousStepComplete={isPreviousStepComplete(45)}
                     isExpanded={expandedStep === 45}
                     onToggleExpand={() => toggleExpand(45)}
@@ -2497,31 +2503,28 @@ export function WorkflowDiagram({
               );
 
             // ----------------------------------------------------------------
-            // Agents Accelerator — MLflow for Gen-AI (Steps 46–54)
-            // Section titles match the sdlc/ folder labels
+            // Step 46: 09 - Chat Feedback to MLflow
             // ----------------------------------------------------------------
-
-            // Step 46: 01 - Prompt Registry
             case 46:
               return (
                 <div key={46} className="relative mt-5" data-step-number="46">
                   <WorkflowStep
                     stepNumber={46}
-                    title="Prompt Registry"
-                    description="Register the agent's prompts in MLflow Prompt Registry with git-style versioning and aliases (@production, @staging) for safe promotion"
-                    icon={<BookOpen className="w-5 h-5" />}
-                    color="violet"
+                    title="Chat Feedback to MLflow"
+                    description="Add chat history and thumbs feedback so end-user ratings are captured as MLflow trace assessments"
+                    icon={<MessageSquareText className="w-5 h-5" />}
+                    color="blue"
                     isComplete={completedSteps.has(46)}
                     isSkipped={skippedSteps.has(46)}
                     onToggleComplete={() => toggleStepComplete(46)}
                     onToggleSkip={() => toggleStepSkip(46)}
                     onNavigateNext={() => navigateToNextStep(46)}
-                    sectionTag="mlflow_prompt_registry"
+                    sectionTag="appkit_chat_feedback_mlflow"
                     industry={selectedIndustry}
                     useCase={selectedUseCase}
                     onPromptGenerated={onStepPromptGenerated}
                     initialPrompt={stepPrompts[46]}
-                    previousOutputs={stepPrompts[45] ? { debugging: stepPrompts[45] } : undefined}
+                    previousOutputs={stepPrompts[45] ? { appkit_agent_app_proxy_chat: stepPrompts[45] } : undefined}
                     isPreviousStepComplete={isPreviousStepComplete(46)}
                     isExpanded={expandedStep === 46}
                     onToggleExpand={() => toggleExpand(46)}
@@ -2530,27 +2533,32 @@ export function WorkflowDiagram({
                 </div>
               );
 
-            // Step 47: 02 - Evaluation Datasets
+            // ----------------------------------------------------------------
+            // Agents Accelerator — MLflow for Gen-AI (Steps 47-54)
+            // Section titles match the sdlc/ folder labels
+            // ----------------------------------------------------------------
+
+            // Step 47: 01 - Prompt Registry
             case 47:
               return (
                 <div key={47} className="relative mt-5" data-step-number="47">
                   <WorkflowStep
                     stepNumber={47}
-                    title="Evaluation Datasets"
-                    description="Curate an evaluation dataset (Unity Catalog table) from real or synthetic traffic for repeatable agent evaluation"
-                    icon={<Table2 className="w-5 h-5" />}
+                    title="Prompt Registry"
+                    description="Register the agent's prompts in Unity Catalog with git-style aliases (@production, @staging) for safe evaluation and promotion"
+                    icon={<BookOpen className="w-5 h-5" />}
                     color="violet"
                     isComplete={completedSteps.has(47)}
                     isSkipped={skippedSteps.has(47)}
                     onToggleComplete={() => toggleStepComplete(47)}
                     onToggleSkip={() => toggleStepSkip(47)}
                     onNavigateNext={() => navigateToNextStep(47)}
-                    sectionTag="mlflow_evaluation_datasets"
+                    sectionTag="mlflow_prompt_registry"
                     industry={selectedIndustry}
                     useCase={selectedUseCase}
                     onPromptGenerated={onStepPromptGenerated}
                     initialPrompt={stepPrompts[47]}
-                    previousOutputs={stepPrompts[46] ? { prompt_registry: stepPrompts[46] } : undefined}
+                    previousOutputs={stepPrompts[46] ? { appkit_chat_feedback_mlflow: stepPrompts[46] } : undefined}
                     isPreviousStepComplete={isPreviousStepComplete(47)}
                     isExpanded={expandedStep === 47}
                     onToggleExpand={() => toggleExpand(47)}
@@ -2559,27 +2567,27 @@ export function WorkflowDiagram({
                 </div>
               );
 
-            // Step 48: 03 - Scorers and Judges
+            // Step 48: 02 - Evaluation Datasets
             case 48:
               return (
                 <div key={48} className="relative mt-5" data-step-number="48">
                   <WorkflowStep
                     stepNumber={48}
-                    title="Scorers and Judges"
-                    description="Define LLM-as-judge scorers (Correctness, RetrievalGroundedness, Guidelines, Custom, Code-based) plus heuristic scorers"
-                    icon={<ShieldCheck className="w-5 h-5" />}
+                    title="Evaluation Datasets"
+                    description="Generate a benchmark table with coverage across agent journeys, seed examples, and expected outputs for repeatable evaluation"
+                    icon={<Table2 className="w-5 h-5" />}
                     color="violet"
                     isComplete={completedSteps.has(48)}
                     isSkipped={skippedSteps.has(48)}
                     onToggleComplete={() => toggleStepComplete(48)}
                     onToggleSkip={() => toggleStepSkip(48)}
                     onNavigateNext={() => navigateToNextStep(48)}
-                    sectionTag="mlflow_scorers_and_judges"
+                    sectionTag="mlflow_evaluation_datasets"
                     industry={selectedIndustry}
                     useCase={selectedUseCase}
                     onPromptGenerated={onStepPromptGenerated}
                     initialPrompt={stepPrompts[48]}
-                    previousOutputs={stepPrompts[47] ? { evaluation_datasets: stepPrompts[47] } : undefined}
+                    previousOutputs={stepPrompts[47] ? { mlflow_prompt_registry: stepPrompts[47] } : undefined}
                     isPreviousStepComplete={isPreviousStepComplete(48)}
                     isExpanded={expandedStep === 48}
                     onToggleExpand={() => toggleExpand(48)}
@@ -2588,27 +2596,27 @@ export function WorkflowDiagram({
                 </div>
               );
 
-            // Step 49: 04 - Evaluation Runs
+            // Step 49: 03 - Scorers and Judges
             case 49:
               return (
                 <div key={49} className="relative mt-5" data-step-number="49">
                   <WorkflowStep
                     stepNumber={49}
-                    title="Evaluation Runs"
-                    description="Execute mlflow.genai.evaluate() runs across prompt and model variants; compare results in the MLflow UI"
-                    icon={<FlaskConical className="w-5 h-5" />}
+                    title="Scorers and Judges"
+                    description="Register built-in scorers, Guidelines, custom code scorers, and LLM judges with thresholds for the benchmark suite"
+                    icon={<ShieldCheck className="w-5 h-5" />}
                     color="violet"
                     isComplete={completedSteps.has(49)}
                     isSkipped={skippedSteps.has(49)}
                     onToggleComplete={() => toggleStepComplete(49)}
                     onToggleSkip={() => toggleStepSkip(49)}
                     onNavigateNext={() => navigateToNextStep(49)}
-                    sectionTag="mlflow_evaluation_runs"
+                    sectionTag="mlflow_scorers_and_judges"
                     industry={selectedIndustry}
                     useCase={selectedUseCase}
                     onPromptGenerated={onStepPromptGenerated}
                     initialPrompt={stepPrompts[49]}
-                    previousOutputs={stepPrompts[48] ? { scorers_and_judges: stepPrompts[48] } : undefined}
+                    previousOutputs={stepPrompts[48] ? { mlflow_evaluation_datasets: stepPrompts[48] } : undefined}
                     isPreviousStepComplete={isPreviousStepComplete(49)}
                     isExpanded={expandedStep === 49}
                     onToggleExpand={() => toggleExpand(49)}
@@ -2617,27 +2625,27 @@ export function WorkflowDiagram({
                 </div>
               );
 
-            // Step 50: 04b - Stakeholder Sign-off
+            // Step 50: 04 - Evaluation Runs + Iteration
             case 50:
               return (
                 <div key={50} className="relative mt-5" data-step-number="50">
                   <WorkflowStep
                     stepNumber={50}
-                    title="Stakeholder Sign-off"
-                    description="Workflow practice: share the Review App + eval dashboard with reviewers, capture human ratings, and record final approval before promotion"
-                    icon={<Tag className="w-5 h-5" />}
+                    title="Evaluation Runs + Iteration"
+                    description="Run the first scored eval, capture failure-shape classification, and route regressions to the right iteration path"
+                    icon={<FlaskConical className="w-5 h-5" />}
                     color="violet"
                     isComplete={completedSteps.has(50)}
                     isSkipped={skippedSteps.has(50)}
                     onToggleComplete={() => toggleStepComplete(50)}
                     onToggleSkip={() => toggleStepSkip(50)}
                     onNavigateNext={() => navigateToNextStep(50)}
-                    sectionTag="mlflow_stakeholder_signoff"
+                    sectionTag="mlflow_evaluation_runs_and_iteration"
                     industry={selectedIndustry}
                     useCase={selectedUseCase}
                     onPromptGenerated={onStepPromptGenerated}
                     initialPrompt={stepPrompts[50]}
-                    previousOutputs={stepPrompts[49] ? { evaluation_runs: stepPrompts[49] } : undefined}
+                    previousOutputs={stepPrompts[49] ? { mlflow_scorers_and_judges: stepPrompts[49] } : undefined}
                     isPreviousStepComplete={isPreviousStepComplete(50)}
                     isExpanded={expandedStep === 50}
                     onToggleExpand={() => toggleExpand(50)}
@@ -2646,27 +2654,27 @@ export function WorkflowDiagram({
                 </div>
               );
 
-            // Step 51: 05 - Logged Model & UC Registration
+            // Step 51: 05 - Human Review + Sign-off
             case 51:
               return (
                 <div key={51} className="relative mt-5" data-step-number="51">
                   <WorkflowStep
                     stepNumber={51}
-                    title="Logged Model & UC Registration"
-                    description="Log the approved ResponsesAgent via mlflow.models.log_model (auto-infers signature) and register the model version in Unity Catalog"
-                    icon={<Database className="w-5 h-5" />}
+                    title="Human Review + Sign-off"
+                    description="Run SME labeling, sync human assessments into benchmarks, and capture the stakeholder approval decision for promotion"
+                    icon={<Tag className="w-5 h-5" />}
                     color="violet"
                     isComplete={completedSteps.has(51)}
                     isSkipped={skippedSteps.has(51)}
                     onToggleComplete={() => toggleStepComplete(51)}
                     onToggleSkip={() => toggleStepSkip(51)}
                     onNavigateNext={() => navigateToNextStep(51)}
-                    sectionTag="mlflow_logged_model_uc"
+                    sectionTag="mlflow_human_review_and_signoff"
                     industry={selectedIndustry}
                     useCase={selectedUseCase}
                     onPromptGenerated={onStepPromptGenerated}
                     initialPrompt={stepPrompts[51]}
-                    previousOutputs={stepPrompts[50] ? { stakeholder_signoff: stepPrompts[50] } : undefined}
+                    previousOutputs={stepPrompts[50] ? { mlflow_evaluation_runs_and_iteration: stepPrompts[50] } : undefined}
                     isPreviousStepComplete={isPreviousStepComplete(51)}
                     isExpanded={expandedStep === 51}
                     onToggleExpand={() => toggleExpand(51)}
@@ -2675,27 +2683,27 @@ export function WorkflowDiagram({
                 </div>
               );
 
-            // Step 52: 06 - Deployment & Automation
+            // Step 52: 06 - Logged Model & UC Registration
             case 52:
               return (
                 <div key={52} className="relative mt-5" data-step-number="52">
                   <WorkflowStep
                     stepNumber={52}
-                    title="Deployment & Automation"
-                    description="Wrap the deploy + smoke-test flow in a Databricks Asset Bundle job for repeatable, auditable promotion"
-                    icon={<Rocket className="w-5 h-5" />}
+                    title="Logged Model & UC Registration"
+                    description="Optionally hand-author prompt improvements, then log and register the approved agent model in Unity Catalog"
+                    icon={<Database className="w-5 h-5" />}
                     color="violet"
                     isComplete={completedSteps.has(52)}
                     isSkipped={skippedSteps.has(52)}
                     onToggleComplete={() => toggleStepComplete(52)}
                     onToggleSkip={() => toggleStepSkip(52)}
                     onNavigateNext={() => navigateToNextStep(52)}
-                    sectionTag="mlflow_deployment_automation"
+                    sectionTag="mlflow_logged_model_uc_registration"
                     industry={selectedIndustry}
                     useCase={selectedUseCase}
                     onPromptGenerated={onStepPromptGenerated}
                     initialPrompt={stepPrompts[52]}
-                    previousOutputs={stepPrompts[51] ? { logged_model_uc: stepPrompts[51] } : undefined}
+                    previousOutputs={stepPrompts[51] ? { mlflow_human_review_and_signoff: stepPrompts[51] } : undefined}
                     isPreviousStepComplete={isPreviousStepComplete(52)}
                     isExpanded={expandedStep === 52}
                     onToggleExpand={() => toggleExpand(52)}
@@ -2704,27 +2712,27 @@ export function WorkflowDiagram({
                 </div>
               );
 
-            // Step 53: 07 - Production Monitoring
+            // Step 53: 07 - AI Gateway + Deployment
             case 53:
               return (
                 <div key={53} className="relative mt-5" data-step-number="53">
                   <WorkflowStep
                     stepNumber={53}
-                    title="Production Monitoring"
-                    description="Enable AI Gateway-enabled inference tables (legacy tables deprecated 2026-04-30) and MLflow 3 scheduled scorers; surface drift in an AI/BI dashboard"
-                    icon={<BarChart3 className="w-5 h-5" />}
+                    title="AI Gateway + Deployment"
+                    description="Govern the registered agent behind AI Gateway, wire guardrails and rate limits, and automate promotion through Asset Bundles"
+                    icon={<Rocket className="w-5 h-5" />}
                     color="violet"
                     isComplete={completedSteps.has(53)}
                     isSkipped={skippedSteps.has(53)}
                     onToggleComplete={() => toggleStepComplete(53)}
                     onToggleSkip={() => toggleStepSkip(53)}
                     onNavigateNext={() => navigateToNextStep(53)}
-                    sectionTag="mlflow_production_monitoring"
+                    sectionTag="mlflow_gateway_and_deployment"
                     industry={selectedIndustry}
                     useCase={selectedUseCase}
                     onPromptGenerated={onStepPromptGenerated}
                     initialPrompt={stepPrompts[53]}
-                    previousOutputs={stepPrompts[52] ? { deployment_automation: stepPrompts[52] } : undefined}
+                    previousOutputs={stepPrompts[52] ? { mlflow_logged_model_uc_registration: stepPrompts[52] } : undefined}
                     isPreviousStepComplete={isPreviousStepComplete(53)}
                     isExpanded={expandedStep === 53}
                     onToggleExpand={() => toggleExpand(53)}
@@ -2733,27 +2741,27 @@ export function WorkflowDiagram({
                 </div>
               );
 
-            // Step 54: 08 - Prompt Optimization
+            // Step 54: 08 - Production Monitoring + Debugging
             case 54:
               return (
                 <div key={54} className="relative mt-5" data-step-number="54">
                   <WorkflowStep
                     stepNumber={54}
-                    title="Prompt Optimization"
-                    description="Run automated prompt tuning (e.g. DSPy / optimize_prompt) against the eval dataset; write the winning version back to the Prompt Registry"
-                    icon={<Sparkles className="w-5 h-5" />}
+                    title="Production Monitoring + Debugging"
+                    description="Configure continuous evaluation, SQL alerts, and agent-as-judge debugging that routes production failures to the right follow-up track"
+                    icon={<BarChart3 className="w-5 h-5" />}
                     color="violet"
                     isComplete={completedSteps.has(54)}
                     isSkipped={skippedSteps.has(54)}
                     onToggleComplete={() => toggleStepComplete(54)}
                     onToggleSkip={() => toggleStepSkip(54)}
                     onNavigateNext={() => navigateToNextStep(54)}
-                    sectionTag="mlflow_prompt_optimization"
+                    sectionTag="mlflow_production_monitoring_and_debugging"
                     industry={selectedIndustry}
                     useCase={selectedUseCase}
                     onPromptGenerated={onStepPromptGenerated}
                     initialPrompt={stepPrompts[54]}
-                    previousOutputs={stepPrompts[53] ? { production_monitoring: stepPrompts[53] } : undefined}
+                    previousOutputs={stepPrompts[53] ? { mlflow_gateway_and_deployment: stepPrompts[53] } : undefined}
                     isPreviousStepComplete={isPreviousStepComplete(54)}
                     isExpanded={expandedStep === 54}
                     onToggleExpand={() => toggleExpand(54)}
