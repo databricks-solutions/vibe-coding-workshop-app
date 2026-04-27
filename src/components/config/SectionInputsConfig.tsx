@@ -125,17 +125,19 @@ if (SECTION_TAG_TO_GROUP['bronze_table_metadata']) {
   SECTION_TAG_TO_GROUP['bronze_table_metadata_generate'] = SECTION_TAG_TO_GROUP['bronze_table_metadata'];
 }
 
-const GROUP_ORDER = ['Foundation', 'Databricks App', 'Lakebase', 'Lakehouse', 'AI and Agents', 'Activation', 'Workshop', 'Refinement'];
+const GROUP_ORDER = ['Foundation', 'Databricks App', 'Lakebase', 'Lakehouse', 'AI and Agents', 'Agents Accelerator', 'Activation', 'Workshop', 'Refinement', 'Clean Up'];
 
 const GROUP_STYLES: Record<string, { label: string; bg: string; border: string; text: string; dot: string }> = {
-  'Foundation':        { label: 'Foundation',        bg: 'bg-blue-500/8',   border: 'border-blue-500/20',   text: 'text-blue-400',   dot: 'bg-blue-500' },
-  'Databricks App':    { label: 'Databricks App',    bg: 'bg-red-500/8',    border: 'border-red-500/20',    text: 'text-red-400',    dot: 'bg-red-500' },
-  'Lakebase':          { label: 'Lakebase',          bg: 'bg-violet-500/8', border: 'border-violet-500/20', text: 'text-violet-400', dot: 'bg-violet-500' },
-  'Lakehouse':         { label: 'Lakehouse',         bg: 'bg-amber-500/8',  border: 'border-amber-500/20',  text: 'text-amber-400',  dot: 'bg-amber-500' },
-  'AI and Agents':     { label: 'AI and Agents',     bg: 'bg-cyan-500/8',   border: 'border-cyan-500/20',   text: 'text-cyan-400',   dot: 'bg-cyan-500' },
-  'Activation':        { label: 'Activation',        bg: 'bg-emerald-500/8', border: 'border-emerald-500/20', text: 'text-emerald-400', dot: 'bg-emerald-500' },
-  'Workshop':          { label: 'Agent Skills',      bg: 'bg-purple-500/8', border: 'border-purple-500/20', text: 'text-purple-400', dot: 'bg-purple-500' },
-  'Refinement':        { label: 'Refinement',        bg: 'bg-pink-500/8',   border: 'border-pink-500/20',   text: 'text-pink-400',   dot: 'bg-pink-500' },
+  'Foundation':         { label: 'Foundation',          bg: 'bg-blue-500/8',    border: 'border-blue-500/20',    text: 'text-blue-400',    dot: 'bg-blue-500' },
+  'Databricks App':     { label: 'Databricks App',      bg: 'bg-red-500/8',     border: 'border-red-500/20',     text: 'text-red-400',     dot: 'bg-red-500' },
+  'Lakebase':           { label: 'Lakebase',            bg: 'bg-violet-500/8',  border: 'border-violet-500/20',  text: 'text-violet-400',  dot: 'bg-violet-500' },
+  'Lakehouse':          { label: 'Lakehouse',           bg: 'bg-amber-500/8',   border: 'border-amber-500/20',   text: 'text-amber-400',   dot: 'bg-amber-500' },
+  'AI and Agents':      { label: 'AI and Agents',       bg: 'bg-cyan-500/8',    border: 'border-cyan-500/20',    text: 'text-cyan-400',    dot: 'bg-cyan-500' },
+  'Agents Accelerator': { label: 'Agents Accelerator',  bg: 'bg-blue-500/8',    border: 'border-blue-500/20',    text: 'text-blue-400',    dot: 'bg-blue-500' },
+  'Activation':         { label: 'Activation',          bg: 'bg-emerald-500/8', border: 'border-emerald-500/20', text: 'text-emerald-400', dot: 'bg-emerald-500' },
+  'Workshop':           { label: 'Agent Skills',        bg: 'bg-purple-500/8',  border: 'border-purple-500/20',  text: 'text-purple-400',  dot: 'bg-purple-500' },
+  'Refinement':         { label: 'Refinement',          bg: 'bg-pink-500/8',    border: 'border-pink-500/20',    text: 'text-pink-400',    dot: 'bg-pink-500' },
+  'Clean Up':           { label: 'Clean Up',            bg: 'bg-rose-500/8',    border: 'border-rose-500/20',    text: 'text-rose-400',    dot: 'bg-rose-500' },
 };
 
 interface SectionInputsConfigProps {
