@@ -7,6 +7,7 @@
  */
 
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import type { ReactNode } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { Sparkles, Loader2, Play, ChevronDown, ChevronUp, Copy, Check, Plus, X, Lock } from 'lucide-react';
@@ -22,32 +23,42 @@ import {
   type ForkableAssistantId,
 } from '../../constants/codingAssistantForks';
 
+type MarkdownComponentProps = {
+  children?: ReactNode;
+  href?: string;
+  inline?: boolean;
+};
+
+function getErrorMessage(error: unknown, fallback: string): string {
+  return error instanceof Error ? error.message : fallback;
+}
+
 // Styled markdown components for nice rendering (dark theme)
 const markdownComponents = {
-  h1: ({ children }: any) => (
+  h1: ({ children }: MarkdownComponentProps) => (
     <h1 className="text-xl font-bold text-foreground border-b border-border pb-2 mb-4 mt-2">
       {children}
     </h1>
   ),
-  h2: ({ children }: any) => (
+  h2: ({ children }: MarkdownComponentProps) => (
     <h2 className="text-lg font-semibold text-foreground mt-4 mb-2">{children}</h2>
   ),
-  h3: ({ children }: any) => (
+  h3: ({ children }: MarkdownComponentProps) => (
     <h3 className="text-base font-semibold text-foreground mt-3 mb-2">{children}</h3>
   ),
-  p: ({ children }: any) => (
+  p: ({ children }: MarkdownComponentProps) => (
     <p className="text-muted-foreground mb-3 leading-relaxed">{children}</p>
   ),
-  ul: ({ children }: any) => (
+  ul: ({ children }: MarkdownComponentProps) => (
     <ul className="list-disc list-outside space-y-1 mb-3 text-muted-foreground ml-6">{children}</ul>
   ),
-  ol: ({ children }: any) => (
+  ol: ({ children }: MarkdownComponentProps) => (
     <ol className="list-decimal list-outside space-y-1 mb-3 text-muted-foreground ml-6">{children}</ol>
   ),
-  li: ({ children }: any) => (
+  li: ({ children }: MarkdownComponentProps) => (
     <li className="text-muted-foreground pl-1">{children}</li>
   ),
-  code: ({ inline, children }: any) => 
+  code: ({ inline, children }: MarkdownComponentProps) => 
     inline ? (
       <code className="bg-secondary text-primary px-1.5 py-0.5 rounded text-sm font-mono">
         {children}
@@ -57,39 +68,39 @@ const markdownComponents = {
         {children}
       </code>
     ),
-  pre: ({ children }: any) => (
+  pre: ({ children }: MarkdownComponentProps) => (
     <pre className="bg-slate-900 text-emerald-400 p-4 rounded-lg overflow-x-auto my-3 text-sm">
       {children}
     </pre>
   ),
-  blockquote: ({ children }: any) => (
+  blockquote: ({ children }: MarkdownComponentProps) => (
     <blockquote className="border-l-4 border-primary pl-4 my-3 text-muted-foreground italic">
       {children}
     </blockquote>
   ),
-  strong: ({ children }: any) => (
+  strong: ({ children }: MarkdownComponentProps) => (
     <strong className="font-semibold text-foreground">{children}</strong>
   ),
-  em: ({ children }: any) => (
+  em: ({ children }: MarkdownComponentProps) => (
     <em className="italic text-muted-foreground">{children}</em>
   ),
   hr: () => <hr className="my-4 border-border" />,
-  a: ({ href, children }: any) => (
+  a: ({ href, children }: MarkdownComponentProps) => (
     <a href={href} className="text-primary hover:underline" target="_blank" rel="noopener noreferrer">
       {children}
     </a>
   ),
-  table: ({ children }: any) => (
+  table: ({ children }: MarkdownComponentProps) => (
     <div className="overflow-x-auto my-3">
       <table className="min-w-full border border-border rounded">{children}</table>
     </div>
   ),
-  th: ({ children }: any) => (
+  th: ({ children }: MarkdownComponentProps) => (
     <th className="bg-secondary border border-border px-3 py-2 text-left text-sm font-semibold text-foreground">
       {children}
     </th>
   ),
-  td: ({ children }: any) => (
+  td: ({ children }: MarkdownComponentProps) => (
     <td className="border border-border px-3 py-2 text-sm text-muted-foreground">{children}</td>
   ),
 };
@@ -314,7 +325,7 @@ export function SectionInputsConfig({ onToast }: SectionInputsConfigProps) {
       ]);
       setSectionInputs(defaultInputs);
       setForkRowsByAssistant({ 'genie-code': genieInputs, coda: codaInputs });
-    } catch (error) {
+    } catch {
       onToast('Failed to load section inputs', 'error');
     } finally {
       setLoading(false);
@@ -491,7 +502,7 @@ export function SectionInputsConfig({ onToast }: SectionInputsConfigProps) {
       setIsBypassDraft(false);
       await loadData();
       await loadVersions();
-    } catch (error) {
+    } catch {
       onToast('Failed to update bypass setting', 'error');
     } finally {
       setSaving(false);
@@ -584,7 +595,7 @@ export function SectionInputsConfig({ onToast }: SectionInputsConfigProps) {
       setIsEditMode(false); // Return to view mode after save
       await loadData();
       await loadVersions();
-    } catch (error) {
+    } catch {
       onToast('Failed to save section input', 'error');
     } finally {
       setSaving(false);
@@ -609,8 +620,8 @@ export function SectionInputsConfig({ onToast }: SectionInputsConfigProps) {
       setNewSectionTag('');
       setNewSectionTitle('');
       await loadData();
-    } catch (error: any) {
-      onToast(error?.message || 'Failed to add section', 'error');
+    } catch (error: unknown) {
+      onToast(getErrorMessage(error, 'Failed to add section'), 'error');
     } finally {
       setSaving(false);
     }
@@ -706,9 +717,8 @@ export function SectionInputsConfig({ onToast }: SectionInputsConfigProps) {
       onToast(`Forked ${labelForAssistantKey(assistant)} for this step`, 'success');
       await loadData();
       setSelectedAssistant(assistant);
-    } catch (err: any) {
-      const msg = err?.message || 'Failed to create fork';
-      onToast(msg, 'error');
+    } catch (err: unknown) {
+      onToast(getErrorMessage(err, 'Failed to create fork'), 'error');
     } finally {
       setForkActionInProgress(false);
     }
@@ -725,9 +735,8 @@ export function SectionInputsConfig({ onToast }: SectionInputsConfigProps) {
       // If we were editing the removed fork, fall back to Default.
       if (selectedAssistant === assistant) setSelectedAssistant(DEFAULT_ASSISTANT_KEY);
       await loadData();
-    } catch (err: any) {
-      const msg = err?.message || 'Failed to remove fork';
-      onToast(msg, 'error');
+    } catch (err: unknown) {
+      onToast(getErrorMessage(err, 'Failed to remove fork'), 'error');
     } finally {
       setForkActionInProgress(false);
     }

@@ -3,7 +3,7 @@
 -- =============================================================================
 -- order_number determines display order on Configuration UI (ascending)
 -- how_to_apply and expected_output are user-facing content shown after prompt generation
--- Updated for 30-step workflow (Steps 1 & 2 are handled elsewhere: usecase selection & project setup)
+-- Updated for 54-step workflow (Steps 1 & 2 are handled elsewhere: usecase selection & project setup)
 --
 -- TEMPLATE VARIABLES (automatically substituted at runtime):
 --   {industry_name}           - Formatted industry name
@@ -53,8 +53,50 @@
 --   Step 20 = Iterate & Enhance
 --   Step 21 = Redeploy & Test
 --
+-- Genie Accelerator / Deployment (Steps 22-25)
+--   Step 22 = Analyze Silver Metadata
+--   Step 23 = Deploy Lakehouse Assets
+--   Step 24 = Deploy Data Intelligence Assets
+--   Step 25 = Optimize Genie
+--
+-- Agent Skills Accelerator (Steps 26-30)
+--   Step 26 = Explore Existing Skills
+--   Step 27 = Define Skill Strategy
+--   Step 28 = Create SKILL.md
+--   Step 29 = Apply & Test Skill
+--   Step 30 = Validate & Automate
+--
 -- Clean Up (Step 31)
 --   Step 31 = Workspace Clean Up
+--
+-- Activation / Reverse ETL (Steps 32-37)
+--   Step 32 = Plan Synced Tables
+--   Step 33 = Create Synced Tables
+--   Step 34 = Design Analytics App
+--   Step 35 = Build Analytics App
+--   Step 36 = Wire to Lakebase
+--   Step 37 = Deploy & Validate
+--
+-- Agents Accelerator: Agents on Apps (Steps 38-46)
+--   Step 38 = UC Resources Foundation
+--   Step 39 = MLflow Tracing + UC OTel
+--   Step 40 = Knowledge Assistant
+--   Step 41 = Clone + Framework
+--   Step 42 = Tools and MCP
+--   Step 43 = Auth + Memory
+--   Step 44 = Smoke Eval + Deploy
+--   Step 45 = AppKit Agent Proxy
+--   Step 46 = Chat Feedback to MLflow
+--
+-- Agents Accelerator: MLflow for Gen-AI (Steps 47-54)
+--   Step 47 = Prompt Registry
+--   Step 48 = Evaluation Datasets
+--   Step 49 = Scorers and Judges
+--   Step 50 = Evaluation Runs + Iteration
+--   Step 51 = Human Review + Sign-off
+--   Step 52 = Logged Model & UC Registration
+--   Step 53 = AI Gateway + Deployment
+--   Step 54 = Production Monitoring + Debugging
 -- =============================================================================
 --
 -- CODING-ASSISTANT FORKS (seeding Genie Code / CoDA prompts directly)
@@ -81,7 +123,7 @@
 --      no effect. Omit them, or leave them at column defaults.
 --   5. Use a distinct `input_id` range for forks to keep diffs tidy
 --      (convention: 1000+ for genie-code forks, 2000+ for coda forks;
---      top of the default range is currently 146).
+--      top of the default range is currently 216).
 --   6. Re-running the seed is safe: setup-lakebase.sh (`execute_sql_file`,
 --      ignore_errors=True) silently skips any INSERT that hits a duplicate
 --      PK or the partial unique index, so admin-edited content from the UI
@@ -9111,1197 +9153,1153 @@ Complete **Wire to Lakebase** (Step 36). Local testing must pass at `http://loca
 true, 1, true, current_timestamp(), current_timestamp(), current_user());
 
 -- =============================================================================
--- AGENTS ACCELERATOR — Agents on Apps (Steps 38-45)
+-- AGENTS ACCELERATOR — Trailing Modules Refresh (Sections 1 + 2)
+-- Refresh date: 2026-04-26.
+-- Source: genericized example/skyloyalty/WALKTHROUGH.md (Module 4+).
+-- Mirrored from the live DDL (docs/02_seed_section_input_prompts.sql input_ids
+--   152, 146, 141, 142, 143, 144, 145, 150, 151 for Section 1 and 147, 148, 149
+--   split for Section 2). Scaffold input_ids here use the fresh 200-216 range
+--   to avoid colliding with the activation section (141-146).
+--
+-- Replaces the legacy 17 trailing rows (input_ids 150-166) with a re-grained
+-- 17-row block (input_ids 200-216) organized into 7 pedagogical phases
+-- spanning two sections:
+--
+--   Section 1 — Agents on Apps (input_ids 200-208, 3 phases):
+--     Phase 1: Agent Foundation        (input_ids 200, 201, 202)
+--     Phase 2: Agent Build             (input_ids 203, 204, 205, 206)
+--     Phase 3: AppKit Integration      (input_ids 207, 208)
+--
+--   Section 2 — MLflow for Gen-AI (input_ids 209-216, 4 phases):
+--     Phase 1: Build the Quality Suite (input_ids 209, 210, 211, 212)
+--     Phase 2: Human Review            (input_id  213)
+--     Phase 3: Promote with Governance (input_ids 214, 215)
+--     Phase 4: Operate in Production   (input_id  216)
+--
+-- Deprecated rows removed in this refresh:
+--   * mlflow_prompt_optimization (legacy GEPA-default path) — Skill 08 is
+--     retained only as an opt-in advanced path via prompt_iteration_strategy.
+--     The default iteration flow now routes to hand-authored prompt iteration
+--     (Skill 08b) on instruction-shaped failures only.
+-- =============================================================================
+
+-- =============================================================================
+-- AGENTS ACCELERATOR — Section 1: Agents on Apps (Steps 38-46)
+-- Refreshed from genericized example/skyloyalty/WALKTHROUGH.md (Module 4+) and
+-- mirrored from the live DDL (docs/02_seed_section_input_prompts.sql input_ids
+-- 152, 146, 141, 142, 143, 144, 145, 150, 151). Scaffold input_ids here
+-- (200-208) avoid colliding with the activation section (141-146).
+--
 -- Rendered when the user is on workshop level 'agents-accelerator'. The level
 -- is NOT tied to a specific use case — the user picks a regular sample use
--- case (e.g. Booking App) and then selects the Agents Accelerator button.
+-- case and then selects the Agents Accelerator button.
 --
--- Step 38: 01 - Clone and Run         (bypass_llm = true)
--- Step 39: 02 - Agent Framework       (bypass_llm = false)
--- Step 40: 03 - Tools and MCP         (bypass_llm = false)
--- Step 41: 04 - Authentication        (bypass_llm = true)
--- Step 42: 05 - Lakebase Memory       (bypass_llm = false)
--- Step 43: 06 - Evaluation            (bypass_llm = false)
--- Step 44: 07 - Deploy and Query      (bypass_llm = true)
--- Step 45: 08 - Debugging             (bypass_llm = true)
+-- Pedagogical phase taxonomy:
+--   Phase 1: Agent Foundation       (input_ids 200, 201, 202)
+--     "Prepare the agent's home and observability before tools or build."
+--   Phase 2: Agent Build            (input_ids 203, 204, 205, 206)
+--     "Stand up the agent shell, wire tools, deploy to Databricks Apps."
+--   Phase 3: AppKit Integration     (input_ids 207, 208)
+--     "Hand the agent off to the dashboard with proxy + feedback round-trip."
+--
+-- Upstream foundation rows in earlier chapters that this section consumes:
+--   Step 8  / bronze_table_metadata   (input_id 5)   -- CSV data dictionary
+--   Step 10 / bronze_layer_creation   (input_id 7)   -- Bronze tables (cloned from
+--                                                       a published source schema)
+--   Step 14 / aibi_dashboard          (input_id 12)  -- Dashboard, anchor for AppKit
+--   Step 15 / genie_space             (input_id 11)  -- Genie Space (consumed by
+--                                                       row 204 as a tool backend)
+--
+-- Step 38: 01 - Phase 1 / Agent Foundation   - UC Resources Foundation     (bypass_llm = true)
+-- Step 39: 02 - Phase 1 / Agent Foundation   - MLflow Tracing + UC OTel    (bypass_llm = true)
+-- Step 40: 03 - Phase 1 / Agent Foundation   - Create Knowledge Assistant  (bypass_llm = true)
+-- Step 41: 04 - Phase 2 / Agent Build        - Clone + Framework           (bypass_llm = true)
+-- Step 42: 05 - Phase 2 / Agent Build        - Wire Tools and MCP          (bypass_llm = true)
+-- Step 43: 06 - Phase 2 / Agent Build        - Auth + Lakebase Memory      (bypass_llm = true)
+-- Step 44: 07 - Phase 2 / Agent Build        - Smoke Eval + Deploy         (bypass_llm = true)
+-- Step 45: 08 - Phase 3 / AppKit Integration - AppKit ↔ Agent App Proxy    (bypass_llm = true)
+-- Step 46: 09 - Phase 3 / AppKit Integration - Chatbot Feedback → MLflow   (bypass_llm = true)
 -- =============================================================================
 
--- Step 38: 01 - Clone and Run
+-- Step 38 / order 38: Phase 1 / Agent Foundation - UC Resources Foundation
 INSERT INTO ${catalog}.${schema}.section_input_prompts
 (input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
 VALUES
-(150, 'agents_clone_and_run',
-'## Step 1: Clone the Custom Agent Apps Template and Run Locally
+(200, 'uc_resources_foundation',
+'Provision Unity Catalog schemas and managed volumes for the **{use_case_slug}** agent before any consuming skill (MLflow tracing, Knowledge Assistant, agent memory, benchmark persistence, monitoring) runs.
 
-You already have a working Databricks App and a Lakebase instance from the earlier sections. Now we layer the agent runtime on top.
+**Invoke skills (in order):**
 
-### Your Use Case: {use_case_title}
-{use_case_description}
+1. `genai-agents/vibecoding-state` op `enter` — params: `prompt_id: "uc_resources_foundation"`, `require_prior_gate: {prompt_id: "workspace_setup_deploy", gate: "Infrastructure healthy"}` (accepts `"Infrastructure healthy with warnings"`).
+2. @genai-agents/foundation/00-uc-resources-foundation/SKILL.md — params:
+   - `uc_catalog: $(state://Resources.uc.catalog)`
+   - `agent_schema: "{user_schema_prefix}_agent"`
+   - `ops_schema: "{user_schema_prefix}_ops"`
+   - `warehouse_id: $(state://Resources.warehouse_id)`
+   - `required_volumes:` (default list, extended by `state://AgentSpec.required_volumes[]`)
+     - `{ name: "knowledge_sources", schema: "agent", comment: "KA + retrieval source files" }`
+     - `{ name: "agent_outputs",     schema: "agent", comment: "Tool-generated artifacts (CSV, charts)" }`
+   - **Returns:** `agent_schema`, `ops_schema`, `uc_volumes` (map of name → `/Volumes/...` path), and convenience aliases `knowledge_source_path` (= `uc_volumes.knowledge_sources`) and `agent_outputs_path` (= `uc_volumes.agent_outputs`).
+   - **Idempotency contract:** every operation is idempotent — `CREATE SCHEMA IF NOT EXISTS`, and `WorkspaceClient.volumes.create(...)` wrapped to treat `databricks.sdk.errors.AlreadyExists` as success. Pre-existing schemas/volumes (whether created by a prior run, by a use-case asset bundle, or by another user) MUST NOT cause a failure. The skill MUST always emit the captured map even on a warm workspace where every resource already exists.
+3. `genai-agents/vibecoding-state` op `exit` — params: `prompt_id: "uc_resources_foundation"`, `gate: "UC resources ready"`, `captured: {agent_schema, ops_schema, uc_volumes, knowledge_source_path, agent_outputs_path}`.
 
-### What You Will Do
-1. Clone the `tracks/A-custom-agent-apps/` template into your project.
-2. Install Python deps (`databricks-agents`, `mlflow>=3.3.0`, `langgraph`, plus any LLM SDK like `openai`).
-3. Run the starter agent **locally** alongside your existing Databricks App so you can iterate fast before deploying.
+**Gate:** `UC resources ready` — both schemas exist (`SHOW SCHEMAS IN {uc_catalog}` lists them), every entry in `uc_volumes` is reachable via `WorkspaceClient.volumes.read(...)`, and `state://Resources.uc_volumes.knowledge_sources` is set so F5 can find it. Pre-existing resources are explicitly acceptable — the gate proves *existence*, not *first-time creation*.
 
-### Commands
-
-```bash
-# From the repo root
-cp -R tracks/A-custom-agent-apps/* {user_app_name}/agents/
-
-# Install dependencies inside your app environment
-cd {user_app_name}
-pip install -U databricks-agents "mlflow>=3.3.0" langgraph
-
-# Smoke-test the starter agent locally
-python -m agents.starter_agent --prompt "Hello from {use_case_title}"
-```
-
-### Verify
-- The starter agent prints a response.
-- Your Databricks App still runs (`databricks apps run-local` or `npm run dev`).
-- The agent module is importable from your app backend (`from agents.starter_agent import build_agent`).
-
-### Deliverables
-- [ ] `tracks/A-custom-agent-apps/` cloned into `{user_app_name}/agents/`.
-- [ ] Python dependencies installed.
-- [ ] Starter agent runs locally and returns a response.
-- [ ] Existing Databricks App still runs unchanged.',
+PRD context:
+{prd_document}',
 '',
-'Clone and Run',
-'Clone the custom-agent-apps template, install deps, and run the starter agent locally inside your Databricks App',
+'Phase 1 / Agent Foundation — UC Resources Foundation',
+'Create the agent + ops UC schemas and managed volumes once for any downstream skill (MLflow OTeL, KA, memory, benchmarks, monitoring)',
 38,
-'## How to Apply
+'## How To Apply
 
-1. Open your existing Databricks App project (`{user_app_name}`) in Cursor/VS Code.
-2. Copy the `tracks/A-custom-agent-apps/` template into your app at `{user_app_name}/agents/`.
-3. Install the agent dependencies: `pip install -U databricks-agents mlflow>=3.3.0 langgraph`.
-4. Run the starter agent locally: `python -m agents.starter_agent --prompt "Hello from {use_case_title}"`.
-5. Confirm the existing app still runs by starting it locally as before.',
-'## Expected Output
+Copy the prompt above, start a **new Agent thread** in your Coding Assistant, and paste it. The agent will load `genai-agents/foundation/00-uc-resources-foundation/SKILL.md` and create the agent + ops schemas plus the canonical managed volumes for this `{use_case_slug}`.
 
-After this step:
+### Upstream Prerequisites
 
-### Project Structure
-- `{user_app_name}/agents/starter_agent.py` (and supporting files) present.
-- `requirements.txt` updated with `databricks-agents`, `mlflow>=3.3.0`, `langgraph`.
+This is the first prompt in the **Agent Foundation** phase. It depends ONLY on rows from earlier chapters of the workshop, not on anything inside this Agents on Apps section. Confirm each is complete before pasting:
 
-### Smoke Test
-- Local invocation prints a coherent response.
-- Existing UI + Lakebase wiring untouched and still working.',
-true, 1, true, current_timestamp(), current_timestamp(), current_user());
+- [ ] `workspace_setup_deploy` (input_id 4) — catalog + warehouse resolved, `state://Resources.uc.catalog` and `state://Resources.warehouse_id` populated. The `Infrastructure healthy` gate (or `Infrastructure healthy with warnings`) is the explicit prior-gate this prompt requires.
+- [ ] `bronze_table_metadata` (input_id 5) — CSV data dictionary materialized for the chosen sample dataset; subsequent rows expect this metadata under the user agent schema.
+- [ ] `bronze_layer_creation` (input_id 7) — Bronze tables exist in the published source schema; downstream rows clone these into the user agent schema for the agent to query.
+- [ ] `genie_space` (input_id 11) — Genie Space exists over the Bronze tables; row 204 (Wire Tools and MCP) consumes the captured `genie_space_id` as a tool backend.
 
--- Step 39: 02 - Agent Framework
+### Prerequisite
+
+`workspace_setup_deploy` (input_id 4) completed: catalog + warehouse resolved, `state://Resources.uc.catalog` and `state://Resources.warehouse_id` populated. Do **not** run this prompt before the workspace preflight.
+
+### Steps to Apply
+
+**Step 1: Start New Agent Thread** — open your Coding Assistant, start a new Agent thread.
+
+**Step 2: Paste the Prompt** — paste this entire prompt; the AI will invoke the foundation 00 skill and create resources idempotently.
+
+**Step 3: Verify** — `databricks volumes list {uc_catalog} {user_schema_prefix}_agent --output json | jq ''.volumes[].full_name''` should list `knowledge_sources` and `agent_outputs`. `databricks unity-catalog schemas list --catalog-name {uc_catalog} --output json | jq ''.schemas[] | select(.name | endswith("_agent") or endswith("_ops")) | .full_name''` should list both schemas.',
+'### Resources Created (or Pre-existing — Both Acceptable)
+- [ ] UC schema `{uc_catalog}.{user_schema_prefix}_agent` exists (created or already there)
+- [ ] UC schema `{uc_catalog}.{user_schema_prefix}_ops` exists (created or already there)
+- [ ] MANAGED volume `/Volumes/{uc_catalog}/{user_schema_prefix}_agent/knowledge_sources` exists (empty is OK — F5 stages content later; an already-populated volume is also OK)
+- [ ] MANAGED volume `/Volumes/{uc_catalog}/{user_schema_prefix}_agent/agent_outputs` exists
+- [ ] `state://Resources.agent_schema`, `state://Resources.ops_schema`, `state://Resources.uc_volumes` all captured
+- [ ] All consuming skills (F2, F5, Track A 05, SDLC 02/04/07) can now assume these resources exist
+- [ ] **Idempotency check:** running this prompt a second time produces zero new schemas, zero new volumes, and zero errors',
+TRUE, 1, true, current_timestamp(), current_timestamp(), current_user());
+
+-- Step 39 / order 39: Phase 1 / Agent Foundation - MLflow Tracing + UC OTel Storage
 INSERT INTO ${catalog}.${schema}.section_input_prompts
 (input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
 VALUES
-(151, 'agents_agent_framework',
-'Build an agent module for **{use_case_title}** in a {industry_name} context using the Mosaic AI Agent Framework.
+(201, 'mlflow_agent_tracing_uc',
+'Open the **tracing foundation phase** of the agent SDLC story arc — your locally-working GenAI app gets observability that survives across deploy targets. Add MLflow tracing with one line, then route traces into Unity Catalog OTel Delta tables for governed long-term storage so every downstream phase (quality and scoring suite, iteration, production hardening + monitoring, expert-in-the-loop) can join against a Delta-queryable trace history.
 
-## Use Case Specification
-{use_case_description}
+**Invoke skills (in order):**
 
-## Required Output
+1. `genai-agents/vibecoding-state` op `enter` — params: `prompt_id: "mlflow_agent_tracing_uc"`, `require_prior_gate: {prompt_id: "track_a_agent_eval_deploy", gate: "Agent App RUNNING"}`.
+2. @genai-agents/foundation/01-mlflow-genai-foundation/SKILL.md — params:
+   - `agent_name: "{user_prefix}-{use_case_slug}-agent"`
+   - `mlflow_min_version: "3.10.1"`
+   - `enable_openai_autolog: true`
+   - `workspace_client_pool: true`
+   - `detect_environment_helper: true`
+   - `environments: ["local_dev", "databricks_apps", "model_serving", "notebook"]`
+3. @genai-agents/foundation/02-experiment-tracing-and-uc-storage/SKILL.md — params:
+   - `agent_name: "{user_prefix}-{use_case_slug}-agent"`
+   - `experiment_path: "{mlflow_experiment_path}"`
+   - `uc_catalog: "{uc_catalog}"`
+   - `uc_schema: "{user_schema_prefix}_agent"`
+   - `warehouse_id: {default_warehouse}`
+   - `otel_table_prefix: "{use_case_slug}_agent"`
+   - `enable_trace_decorator: true`
+   - `experiment_tags: ["mlflow.promptRegistryLocation"]`
+   - `emit_grant_sql: true`
+   - `verification: {test_trace_visible_in_uc: true, otel_tables_count: 4}`
+4. `genai-agents/vibecoding-state` op `exit` — params: `prompt_id: "mlflow_agent_tracing_uc"`, `gate: "Tracing live; UC OTel tables ready"`, `captured: {mlflow_experiment_path}`.
 
-Generate a Python module at `{user_app_name}/agents/{use_case_title}_agent.py` that:
-
-1. **Defines a `ResponsesAgent`** (the recommended primary interface — framework-agnostic, automatic MLflow signature inference, native compatibility with Playground / Agent Evaluation / Apps).
-   - Subclass `mlflow.pyfunc.ResponsesAgent`.
-   - Implement `predict(self, request: ResponsesAgentRequest) -> ResponsesAgentResponse`.
-   - The agent should reason over the user query, call any registered tools, and return a structured response.
-
-2. **Wraps the agent with a `ChatAgent`** for the chat UI (optional but recommended for streaming + markdown + persistent history). Use `mlflow.pyfunc.ChatAgent` from `databricks-agents`.
-
-3. **Uses a foundation model endpoint** — default to `databricks-meta-llama-3-3-70b-instruct` (configurable via env var `AGENT_LLM_ENDPOINT`).
-
-4. **Logs every reasoning step via MLflow Tracing** (`mlflow.start_span`) so the trace is visible in the MLflow UI when the agent is run.
-
-5. **Exposes a `build_agent()` factory** that returns the configured `ResponsesAgent` instance, and a `build_chat_agent()` factory that returns the `ChatAgent`.
-
-## Constraints
-- Keep prompts concise; we will register them in MLflow Prompt Registry in the MLflow section, so leave a clear extension point (e.g. `SYSTEM_PROMPT_VERSION` constant).
-- Do NOT call any tools yet — Step 40 wires those in via MCP.
-- Do NOT add memory yet — Step 42 adds Lakebase memory.
-
-## Validation
-The user should be able to:
-- `python -c "from agents.{use_case_title}_agent import build_agent; a = build_agent(); print(a.predict({{...}}))"`
-- See an MLflow trace in the local MLflow UI showing the LLM call.',
-'You are a senior Databricks GenAI engineer drafting a production-ready Mosaic AI Agent Framework module. Output a single Python file with clear sections, type hints, and inline comments. Use `mlflow.pyfunc.ResponsesAgent` as the primary interface and `mlflow.pyfunc.ChatAgent` as the optional chat wrapper. Include `mlflow.start_span` instrumentation and a configurable foundation-model endpoint.
-
-Reference docs:
-- https://docs.databricks.com/aws/en/generative-ai/agent-framework/create-agent
-- https://docs.databricks.com/aws/en/generative-ai/agent-framework/create-chat-model
-- https://docs.databricks.com/aws/en/generative-ai/agent-framework/log-agent
-
-Do NOT include MCP tool wiring (Step 40), authentication (Step 41), or Lakebase memory (Step 42) — leave them as documented extension points.',
-'Agent Framework',
-'Build a Mosaic AI Agent Framework module using the ResponsesAgent interface (with optional ChatAgent UI)',
+**Gate:** `Tracing live; UC OTel tables ready` — `mlflow[databricks] >= 3.10.1` installed, autolog enabled, experiment visible at `{mlflow_experiment_path}`, 4 UC OTel Delta tables created in `{uc_catalog}.{user_schema_prefix}_agent`, test trace visible in UC.',
+'',
+'Phase 1 / Agent Foundation — MLflow Tracing + UC OTel Storage',
+'Install MLflow, enable autolog, create experiment, route traces into UC OTel Delta tables',
 39,
-'## How to Apply
+'## How To Apply
 
-1. Generate the prompt below in your IDE.
-2. Save the resulting Python module at `{user_app_name}/agents/{use_case_title}_agent.py`.
-3. Run a local smoke test: `python -c "from agents.{use_case_title}_agent import build_agent; a = build_agent(); print(a.predict({{\"input\": \"Hello\"}}))"`.
-4. Open the local MLflow UI (`mlflow ui`) and confirm a trace was logged.',
-'## Expected Output
+Open a **new Agent thread in your Coding Assistant** and paste the prompt above. This is the **tracing foundation phase** of the SDLC story arc — the moment your locally-working GenAI app gets observability that survives across deploy targets and into governed UC storage.
 
-A single Python module containing:
+### Prerequisite
+- `Agent App RUNNING` gate captured in state
+- `{uc_catalog}` and `{user_schema_prefix}_agent` UC schema usable
+- A SQL warehouse (`{default_warehouse}`) for OTel ingest
 
-### Imports
-- `mlflow`, `mlflow.pyfunc.ResponsesAgent`, `mlflow.pyfunc.ChatAgent`
-- Foundation model client (Databricks-hosted via `databricks-sdk` or OpenAI-compatible)
+### Steps to Apply
+1. New thread in your Coding Assistant, paste prompt.
+2. AI installs/upgrades `mlflow[databricks] >= 3.10.1`, enables autolog, exports a `detect_environment()` helper.
+3. AI creates the experiment at `{mlflow_experiment_path}` and the 4 UC OTel Delta tables under `{uc_catalog}.{user_schema_prefix}_agent`.
+4. AI emits a quick test trace and verifies it lands in both the MLflow UI and the UC tables.',
+'### Resources Created
+- [ ] `mlflow[databricks] >= 3.10.1` installed
+- [ ] `mlflow.openai.autolog()` (or framework-equivalent) enabled
+- [ ] `detect_environment()` helper exported
+- [ ] MLflow experiment at `{mlflow_experiment_path}` created
+- [ ] 4 UC OTel Delta tables in `{uc_catalog}.{user_schema_prefix}_agent`
+- [ ] Test trace visible in both MLflow UI and UC',
+TRUE, 1, true, current_timestamp(), current_timestamp(), current_user());
 
-### Classes
-- `class {UseCaseTitle}ResponsesAgent(ResponsesAgent)` with `predict()` implemented.
-- Optional `class {UseCaseTitle}ChatAgent(ChatAgent)` wrapping the responses agent.
-
-### Factories
-- `def build_agent() -> ResponsesAgent`
-- `def build_chat_agent() -> ChatAgent`
-
-### Tracing
-- Every LLM call wrapped in `with mlflow.start_span(...)` with span attributes for prompt + response.
-
-### Extension Points
-- Clear comments marking where Tools & MCP (Step 40), Authentication (Step 41), and Lakebase Memory (Step 42) will be added.',
-false, 1, true, current_timestamp(), current_timestamp(), current_user());
-
--- Step 40: 03 - Tools and MCP
+-- Step 40 / order 40: Phase 1 / Agent Foundation - Create Knowledge Assistant
 INSERT INTO ${catalog}.${schema}.section_input_prompts
 (input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
 VALUES
-(152, 'agents_tools_and_mcp',
-'Wire **Model Context Protocol (MCP) tools** into the agent module from Step 39 so it can call governed Databricks capabilities and external services.
+(202, 'knowledge_assistant_create',
+'Create a Databricks Knowledge Assistant for the **{use_case_slug}** agent so the Track A agent has a managed document-Q&A backend with citations.
 
-## Use Case Specification
-{use_case_description}
+**Invoke skills (in order):**
 
-## Three MCP Server Types You Will Use
+1. `genai-agents/vibecoding-state` op `enter` — params: `prompt_id: "knowledge_assistant_create"`, `require_prior_gate: [{prompt_id: "uc_resources_foundation", gate: "UC resources ready"}, {prompt_id: "genie_space", gate: "Genie Space ready"}]`. The first gate guarantees the agent schema + `knowledge_sources` volume already exist (F0 owned them); this prompt **does not** create schemas or volumes.
+2. @genai-agents/foundation/05-knowledge-assistant/SKILL.md — execute Step 5_0 (source-markdown staging only) → 5a–5d. Params:
+   - `ka_display_name: "{user_prefix}-{use_case_slug}-knowledge"`  -- **idempotency key** for Step 5a get-or-create
+   - `volume_path: $(state://Resources.uc_volumes.knowledge_sources)`  -- set by F0
+   - `ka_source: $(state://AgentSpec.knowledge_base_backend.ka_source — optional local directory of pre-authored .md files)`
+   - `poll_until_ready: true`
+   - **Idempotency contract (whole skill):** every step must succeed cleanly on a second run with no input changes. Step 5_0 uses `overwrite=True` on file uploads. Step 5a does **get-or-create** on `ka_display_name` (re-uses the matching KA from `list_knowledge_assistants` instead of creating a duplicate). Step 5b does **get-or-create** on each knowledge source `display_name` (re-uses matching sources from `list_knowledge_sources`). Step 5c (`sync_knowledge_sources`) is incremental and safe to re-call. A second run must produce zero new KAs and zero new knowledge sources.
+   - **Step 5_0 responsibility (KA-specific):** stage source markdown into the F0-provisioned volume — branch (A) skip if the volume is already non-empty; branch (B) upload the contents of `ka_source` if it points to a local `.md` directory; branch (C) auto-generate a minimal corpus from `state://DataSpec.glossary` + `state://AgentSpec.capabilities` and upload. **No schema or volume DDL** — if `volume_path` is unreachable, fail with a pointer to F0 (input_id 200).
+   - **Steps 5a–5d:** get-or-create KA → get-or-create `files` source at `volume_path` → sync → poll → capture handoff values.
+   - **Returns:** `knowledge_source_path`, `knowledge_source_file_count`, `knowledge_source_origin` (`pre_staged` | `local_dir` | `prd_generated`), `ka_endpoint_name`, `knowledge_assistant_id`, `knowledge_source_type`, `sync_status`. (`agent_schema` and `knowledge_source_volume` come from F0''s state, not from this prompt.)
+3. `genai-agents/vibecoding-state` op `exit` — params: `prompt_id: "knowledge_assistant_create"`, `gate: "KA READY"`, `captured: {doc_qa_backend: "knowledge_assistant", knowledge_source_path, knowledge_source_file_count, knowledge_source_origin, ka_endpoint_name, knowledge_assistant_id, knowledge_source_type, sync_status}`.
 
-### 1. Managed MCP servers (Databricks-hosted)
-Pre-built, fully-managed MCP servers. Enable as needed:
-- **Unity Catalog Functions** — call governed Python/SQL functions registered as UC functions.
-- **Mosaic AI Vector Search** — semantic retrieval over UC-registered tables.
-- **Genie Spaces** — natural-language SQL over governed datasets.
-- **Databricks SQL** — direct SQL execution against `{default_warehouse}`.
+**Gate:** `KA READY` — `sync_status = READY`, `knowledge_source_file_count >= 1`, `ka_endpoint_name` and `knowledge_assistant_id` captured into state, KA reachable from a quick `WorkspaceClient.serving_endpoints.get()` smoke call.
 
-### 2. External MCP servers
-OAuth-connected third-party MCP servers (e.g. internal API gateways).
-
-### 3. Custom MCP servers
-Proprietary tools you host as a separate Databricks App — full control over auth, business logic, and rate limits.
-
-## Required Output
-
-Update `{user_app_name}/agents/{use_case_title}_agent.py` to:
-
-1. **Register at least one Managed MCP tool** appropriate for the use case (e.g. UC Function for `{lakehouse_default_catalog}.{user_schema_prefix}.lookup_orders`, or Vector Search index over a Bronze table).
-2. **Inject the tool list into the `ResponsesAgent`** so the LLM can call them via tool-use protocol.
-3. **Document where to add External and Custom MCP servers** (placeholders + comments — do NOT implement them yet).
-4. **Add tracing** for every tool call (`mlflow.start_span(name="tool:<name>", ...)`).
-
-## Constraints
-- Tool calls run as the **app service principal** for now; on-behalf-of-user comes in Step 41.
-- Stay grounded — the agent should refuse to answer without calling at least one tool when the question requires real data.
-
-## Validation
-- `python -m agents.{use_case_title}_agent --prompt "What was order #12345?"` triggers a tool call.
-- The MLflow trace shows nested `tool:<name>` spans inside the agent span.',
-'You are a senior Databricks engineer wiring Mosaic AI agent tools via the Model Context Protocol (MCP). Use the three documented server types (Managed, External, Custom). Register at least one Managed MCP tool grounded in {lakehouse_default_catalog}.{user_schema_prefix} (UC Function or Vector Search index). Add `mlflow.start_span` around every tool call.
-
-Reference docs:
-- https://docs.databricks.com/aws/en/generative-ai/agent-framework/mcp
-- https://docs.databricks.com/aws/en/generative-ai/mcp/managed-mcp
-
-Leave External and Custom MCP servers as documented placeholders — do not implement them. Tool calls in this step run as the app service principal; OBO auth comes in the next step.',
-'Tools and MCP',
-'Register tools via Managed (UC Functions, Vector Search, Genie, SQL), External, and Custom MCP servers',
+PRD context:
+{prd_document}',
+'',
+'Phase 1 / Agent Foundation — Create Knowledge Assistant',
+'Create or sync a user-scoped Databricks Knowledge Assistant for the agent doc-Q&A tool',
 40,
-'## How to Apply
+'## How To Apply
 
-1. Generate the prompt below in your IDE.
-2. Apply the resulting changes to `{user_app_name}/agents/{use_case_title}_agent.py`.
-3. Re-run the smoke test with a question that requires a tool call.
-4. Open the MLflow UI and confirm nested `tool:<name>` spans appear inside the agent trace.',
-'## Expected Output
+Copy the prompt above, start a **new Agent thread** in your Coding Assistant, and paste it. The agent will load `genai-agents/foundation/05-knowledge-assistant/SKILL.md` and create a user-scoped KA that the Track A agent will wire as a tool in the next prompt.
 
-The agent module now:
+### Prerequisite
 
-### Tool Registration
-- At least one Managed MCP tool registered (UC Function or Vector Search) over `{lakehouse_default_catalog}.{user_schema_prefix}`.
-- Tools surfaced to the `ResponsesAgent` via `tools=[...]` argument or equivalent.
+`uc_resources_foundation` (input_id 200) **must** have completed — it owns the agent UC schema (`{user_schema_prefix}_agent`) and the `knowledge_sources` MANAGED volume. Bronze + Genie Space prompts also completed for this `{use_case_slug}`. PRD must declare `agent.knowledge_base_backend.kind: knowledge_assistant`. If a use-case bundle pre-staged markdown into the volume, Step 5_0 detects the existing files and skips re-uploading; if `ka_source` points at a local directory, Step 5_0 uploads it; otherwise the skill auto-generates KA documents from PRD glossary + agent capabilities before sync. **This prompt does not run any `CREATE SCHEMA` or `CREATE VOLUME` DDL** — that responsibility belongs to F0.
 
-### Tool Call Tracing
-- Each tool call wrapped in `mlflow.start_span(name="tool:<name>")` with input/output attributes.
+### Steps to Apply
 
-### Extension Points
-- Inline comments + stub functions for adding External MCP servers (OAuth) and Custom MCP servers (Databricks App-hosted).
+**Step 1: Start New Agent Thread** — open your Coding Assistant, start a new Agent thread.
 
-### Smoke Test
-- Asking a question that requires a tool triggers the tool call.
-- The MLflow trace shows the tool call as a nested span.',
-false, 1, true, current_timestamp(), current_timestamp(), current_user());
+**Step 2: Paste the Prompt** — paste this entire prompt; the AI will invoke the foundation 05-knowledge-assistant skill end-to-end.
 
--- Step 41: 04 - Authentication
+**Step 3: Verify** — `databricks serving-endpoints list --output json | jq ''.endpoints[] | select(.name | startswith("ka-"))''` should show the KA endpoint in `READY` state.',
+'### Resources Created
+- [ ] UC Volume `/Volumes/{uc_catalog}/{user_schema_prefix}_agent/knowledge_sources/` populated with at least one `.md` file (`knowledge_source_file_count >= 1`) — schema + volume themselves were created by `uc_resources_foundation` (input_id 200)
+- [ ] `knowledge_source_origin` recorded (`pre_staged` | `local_dir` | `prd_generated`) — proves Step 5_0 took a deterministic branch
+- [ ] User-scoped Knowledge Assistant `{user_prefix}-{use_case_slug}-knowledge` created **or reused** via get-or-create on `display_name` (idempotent)
+- [ ] Knowledge source attached **or reused** via get-or-create on `display_name` (idempotent)
+- [ ] `ka_endpoint_name`, `knowledge_assistant_id`, `sync_status: READY` captured in state
+- [ ] `doc_qa_backend = knowledge_assistant` recorded in state for the next tool-wiring prompt
+- [ ] **Idempotency check:** running this prompt a second time with the same `ka_display_name` produces zero new KAs and zero new knowledge sources',
+TRUE, 1, true, current_timestamp(), current_timestamp(), current_user());
+
+-- Step 41 / order 41: Phase 2 / Agent Build - Clone + Framework
 INSERT INTO ${catalog}.${schema}.section_input_prompts
 (input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
 VALUES
-(153, 'agents_authentication',
-'## Step 4: Wire On-Behalf-Of-User Authentication
+(203, 'track_a_agent_app_clone_framework',
+'Bootstrap the Track A custom agent for **{use_case_slug}** as a Databricks App: clone the canonical OpenAI Agents SDK template, install dependencies, run the dev server, and wire the agent framework with module-level invoke/stream handlers.
 
-Right now your agent calls tools as the **app service principal**. For a customer-facing assistant, you want every tool call to inherit the **caller''s** permissions so users only see data they''re entitled to. This is **on-behalf-of-user (OBO) auth** via Databricks Apps user-token forwarding.
+**Invoke skills (in order):**
 
-### Use Case Context
-{use_case_description}
+1. `genai-agents/vibecoding-state` op `enter` — params: `prompt_id: "track_a_agent_app_clone_framework"`, `require_prior_gate: {prompt_id: "knowledge_assistant_create", gate: "KA READY"}`.
+2. @genai-agents/tracks/A-custom-agent-apps/01-clone-and-run/SKILL.md — params:
+   - `template: "agent-openai-advanced"` (canonical: short-term + long-term Lakebase memory built in)
+   - `agent_name: "{user_prefix}-{use_case_slug}-agent"`
+   - `install_deps: true`
+   - `start_dev_server: true`
+   - `walkthrough_project_structure: true`
+   - `smoke_test_prompt: "Hello"`
+3. @genai-agents/tracks/A-custom-agent-apps/02-agent-framework/SKILL.md — params:
+   - `agent_name: "{user_prefix}-{use_case_slug}-agent"`
+   - `agent_spec_ref: "state://AgentSpec"`
+   - `sdk: "openai-agents-sdk"`
+   - `option: "B"` (canonical for Databricks Apps: module-level `@mlflow.genai.agent_server.invoke` + `@stream` handlers; **not** `mlflow.pyfunc.ResponsesAgent`)
+   - `mlflow_experiment_path: "{mlflow_experiment_path}"`
+   - `streaming_runner: true`
+   - `verification: {mlflow_agent_spans_visible: true, invoke_handler_present: true, stream_handler_present: true}`
+   - The skill reads `agent.system_prompt` (paste verbatim into `Agent(instructions=...)`) and `agent.capabilities[]` (chat-panel capability list).
+4. `genai-agents/vibecoding-state` op `exit` — params: `prompt_id: "track_a_agent_app_clone_framework"`, `gate: "Agent framework live"`.
 
-### How OBO Works on Databricks Apps
-1. The end user authenticates to the Databricks App via SSO.
-2. Databricks Apps forwards the user''s OAuth token to your backend in the `X-Forwarded-Access-Token` HTTP header.
-3. Your backend extracts that token and uses it as the credential for downstream Databricks API / SQL / Vector Search calls.
-4. Databricks evaluates permissions as the *caller* (not the app SP).
+**Gate:** `Agent framework live` — template chat UI responds to "Hello" locally; MLflow AGENT spans visible for `{user_prefix}-{use_case_slug}-agent` at `{mlflow_experiment_path}`.
 
-### What You Will Do
-
-1. Open your existing FastAPI/Node backend in `{user_app_name}` and locate the chat endpoint that calls the agent.
-2. Read the `X-Forwarded-Access-Token` header on every request.
-3. Pass that token into a request-scoped Databricks SDK client / SQL connection / Vector Search client.
-4. Update the MCP tool registration from Step 40 so each tool uses the per-request client (not the global app-SP client).
-5. Add a fallback for **local development** (no header) — use the dev SP token from `.env`.
-
-### Code Sketch (Python / FastAPI)
-
-```python
-from fastapi import Request, Depends
-from databricks.sdk import WorkspaceClient
-
-def get_obo_client(request: Request) -> WorkspaceClient:
-    token = request.headers.get("X-Forwarded-Access-Token")
-    if token:
-        return WorkspaceClient(token=token)
-    # Local dev fallback
-    return WorkspaceClient()
-
-@app.post("/api/chat")
-async def chat(req: ChatRequest, ws: WorkspaceClient = Depends(get_obo_client)):
-    agent = build_agent(ws=ws)  # tools use the per-request client
-    return agent.predict(...)
-```
-
-### Verify
-- Locally: agent works as before (using the dev SP token).
-- Deployed: when User A queries, only User A''s data comes back; same query as User B returns User B''s data.
-
-### Deliverables
-- [ ] Backend reads `X-Forwarded-Access-Token` on every request.
-- [ ] Agent + tools accept a per-request `WorkspaceClient` / token.
-- [ ] Local dev fallback in place.
-- [ ] Manual test confirms different users see different data.',
+PRD context:
+{prd_document}',
 '',
-'Authentication',
-'Wire on-behalf-of-user auth via Databricks Apps user-token forwarding (X-Forwarded-Access-Token header) so tool calls run with the caller''s permissions',
+'Phase 2 / Agent Build — Clone + Framework',
+'Clone the agent-openai-advanced template, install deps, run dev server, wire module-level invoke/stream handlers (Option B)',
 41,
-'## How to Apply
+'## How To Apply
 
-1. Locate the chat endpoint in your existing FastAPI/Node backend (`{user_app_name}`).
-2. Add a dependency / middleware that reads `X-Forwarded-Access-Token` and constructs a per-request `WorkspaceClient` (or equivalent SQL / Vector Search client).
-3. Refactor the agent factory and MCP tool registration to accept the per-request client.
-4. Add a local-dev fallback that uses the existing SP token when the header is absent.
-5. Test with two different users: each should see only their own data.',
-'## Expected Output
+**Run this in your cloned Template Repository.** Copy the prompt above into a new Agent thread in your Coding Assistant. The AI will execute `01-clone-and-run` then `02-agent-framework` in order, leaving you with a running local Agent App that emits MLflow AGENT spans.
 
-After this step:
+### Prerequisite
+- Knowledge Assistant prompt completed (`KA READY` gate captured in state)
+- Lakebase project provisioned (from earlier Lakebase prompt)
+- MLflow experiment at `{mlflow_experiment_path}` already created
 
-### Code Changes
-- `get_obo_client(request)` (or equivalent) reads `X-Forwarded-Access-Token`.
-- Agent and tools use the per-request client; the global app-SP client is reserved for tasks that legitimately require the SP identity.
-- Local dev fallback documented.
+### Steps to Apply
+1. Start a new Agent thread in your Coding Assistant.
+2. Paste this prompt verbatim.
+3. The AI will (a) clone the `agent-openai-advanced` template into your repo, (b) install deps via `uv`, (c) start the local dev server, (d) wire Option B module-level handlers, (e) verify MLflow AGENT spans appear at `{mlflow_experiment_path}`.
+4. Confirm "Hello" returns a streaming response in the local chat UI before exit.',
+'### Resources Created
+- [ ] Local Track A agent app cloned from `agent-openai-advanced` template
+- [ ] `uv` dependencies installed
+- [ ] Local dev server running and responding to `Hello`
+- [ ] Module-level `@mlflow.genai.agent_server.invoke` and `@stream` handlers present
+- [ ] MLflow AGENT spans visible at `{mlflow_experiment_path}`',
+TRUE, 1, true, current_timestamp(), current_timestamp(), current_user());
 
-### Manual Verification
-- Different users querying the agent get permission-scoped results.
-- Logs show the OBO token being forwarded (without leaking the token itself).',
-true, 1, true, current_timestamp(), current_timestamp(), current_user());
-
--- Step 42: 05 - Lakebase Memory
+-- Step 42 / order 42: Phase 2 / Agent Build - Wire Tools and MCP
 INSERT INTO ${catalog}.${schema}.section_input_prompts
 (input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
 VALUES
-(154, 'agents_lakebase_memory',
-'Add **conversation memory** to the agent using the Lakebase instance from Step 6.
+(204, 'track_a_agent_ka_genie_tools',
+'Wire Knowledge Assistant, Genie Space, UC functions and Lakebase domain tools as `@function_tool`s on the **{use_case_slug}** Track A agent and emit `databricks.yml` + `app.yaml` resource grants.
 
-## Use Case Specification
-{use_case_description}
+**Invoke skills (in order):**
 
-## Lakebase Connection Details (re-used from earlier section)
-- Instance name: `{lakebase_instance_name}`
-- Hostname: `{lakebase_host_name}`
-- Database: `databricks_postgres` (default)
-- Schema: `{user_schema_prefix}_agent_memory`
+1. `genai-agents/vibecoding-state` op `enter` — params: `prompt_id: "track_a_agent_ka_genie_tools"`, `require_prior_gate: {prompt_id: "track_a_agent_app_clone_framework", gate: "Agent framework live"}`.
+2. @genai-agents/tracks/A-custom-agent-apps/03-tools-and-mcp/SKILL.md — params:
+   - `agent_name: "{user_prefix}-{use_case_slug}-agent"`
+   - `agent_spec_ref: "state://AgentSpec"`
+   - `data_spec_ref: "state://DataSpec"`
+   - `doc_qa_backend: $doc_qa_backend`            -- "knowledge_assistant"
+   - `ka_endpoint_name: $ka_endpoint_name`
+   - `genie_space_id: $genie_space_id`
+   - `warehouse_id: {default_warehouse}`
+   - `lakebase_host: $lakebase_host`
+   - `resource_grants: ["databricks.yml", "app.yaml"]`
+   - `ka_grant: "CAN_QUERY"`
+   - `genie_grant: "CAN_RUN"`
+   - `warehouse_grant: "CAN_USE"`
+   - The skill reads `agent.mcp_servers[]`, `agent.tools[]` (tool name, type, target, params, readonly) and `agent.knowledge_base_backend` to wire KA + Genie + UC functions as `@function_tool`s and emit `databricks.yml` + `app.yaml` resource grants. Verification expectation (number of tool spans) is read from `agent.tools[]` length.
+3. `genai-agents/vibecoding-state` op `exit` — params: `prompt_id: "track_a_agent_ka_genie_tools"`, `gate: "Tools wired"`.
 
-## What to Build
+**Gate:** `Tools wired` — MLflow traces show TOOL spans for KA, Genie and every custom tool declared in `agent.tools[]`; `databricks.yml` and `app.yaml` declare `CAN_QUERY` on the KA serving endpoint, `CAN_RUN` on the Genie Space, and `CAN_USE` on the SQL warehouse.
 
-### A) Short-term memory (per-conversation state)
-- Use a **LangGraph checkpointer** (or OpenAI Agents SDK equivalent) keyed by `thread_id`.
-- Persist the checkpointer state to a Postgres table in `{user_schema_prefix}_agent_memory.langgraph_checkpoints` (or whichever LangGraph default schema works).
-- Every chat request includes a `thread_id`; the agent loads prior turns from Postgres and appends new turns automatically.
-
-### B) Long-term memory (cross-session knowledge)
-- After every conversation, extract key insights via a small LLM call (e.g. summarisation prompt).
-- Write the insights to a Lakebase table `{user_schema_prefix}_agent_memory.insights` with columns `(insight_id UUID PK, user_email TEXT, summary TEXT, embedding VECTOR, created_at TIMESTAMPTZ DEFAULT now())`.
-- At the start of every new conversation, query the most relevant past insights via Mosaic AI Vector Search (over a UC index sourced from `insights`).
-- Inject the top-K insights as additional system context for the agent.
-
-## Required Output
-
-Update `{user_app_name}/agents/{use_case_title}_agent.py` (and add a memory module if needed) to:
-1. Bootstrap the Postgres tables (idempotent DDL run on app startup).
-2. Implement the LangGraph checkpointer wiring.
-3. Implement the insight-extraction + recall flow with Vector Search.
-4. Add `mlflow.start_span` traces for memory load + insight write.
-
-## Constraints
-- Memory writes/reads MUST use the OBO client from Step 41 (so they''re scoped per user).
-- Vector Search index over `insights` should be created via Databricks SDK; it can be auto-sync to keep up with new rows.
-- Honour the Lakebase autoscaling / suspend semantics from the earlier Lakebase section — no keep-alive workarounds.
-
-## Validation
-- Two consecutive chat requests with the same `thread_id` show the agent recalling earlier context.
-- After 3-4 conversations on different topics, a new conversation surfaces a relevant past insight.
-- Lakebase tables are queryable via the Databricks SQL editor.',
-'You are a senior Databricks engineer adding stateful memory to a Mosaic AI agent using Lakebase Postgres. Implement BOTH short-term memory (LangGraph checkpointer keyed by thread_id) AND long-term memory (insight extraction + Mosaic AI Vector Search recall). All Postgres reads/writes must use the OBO client from the previous step.
-
-Reference docs:
-- https://docs.databricks.com/aws/en/oltp/projects/state-management
-- https://docs.databricks.com/aws/en/generative-ai/agent-framework/stateful-agents
-- https://langchain-ai.github.io/langgraph/concepts/persistence/
-
-Bootstrap the necessary Postgres tables idempotently on app startup. Honour Lakebase autoscaling/suspend semantics — do not add keep-alive workarounds.',
-'Lakebase Memory',
-'Add short-term (LangGraph checkpointer + thread_id) and long-term (Vector Search–extracted insights) memory backed by Lakebase Postgres',
-42,
-'## How to Apply
-
-1. Generate the prompt below in your IDE.
-2. Apply the resulting changes to the agent module + a new `agents/memory.py`.
-3. Re-run the local agent twice with the same thread_id — confirm the agent recalls earlier turns.
-4. Run a few conversations on different topics; start a new one and confirm the agent recalls a relevant insight.
-5. Inspect the Lakebase tables (`langgraph_checkpoints`, `insights`) via the Databricks SQL editor.',
-'## Expected Output
-
-After this step:
-
-### Code Changes
-- `agents/memory.py` (or equivalent) with checkpointer + insight-extraction logic.
-- `agents/{use_case_title}_agent.py` updated to load/save state per `thread_id`.
-- Idempotent Postgres DDL run on app startup.
-- Vector Search index over `{user_schema_prefix}_agent_memory.insights` created.
-
-### Verification
-- Multi-turn conversation with same `thread_id` recalls prior context.
-- New conversation on a familiar topic surfaces a relevant past insight.
-- Lakebase tables visible and queryable in the SQL editor.
-
-### Tracing
-- `memory:load`, `memory:save`, `insight:extract`, `insight:recall` spans in the MLflow trace.',
-false, 1, true, current_timestamp(), current_timestamp(), current_user());
-
--- Step 43: 06 - Evaluation
-INSERT INTO ${catalog}.${schema}.section_input_prompts
-(input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
-VALUES
-(155, 'agents_evaluation',
-'Build a small offline-evaluation harness for the agent using **`mlflow.genai.evaluate`**. This is a foreshadowing of the full MLflow for Gen-AI lifecycle (next section) — here we just want a working baseline.
-
-## Use Case Specification
-{use_case_description}
-
-## What to Build
-
-1. **Eval dataset** — a tiny in-code list (or seed Postgres table at `{user_schema_prefix}_agent_memory.eval_seed`) of 5-10 representative `(input, expected_response)` pairs grounded in the Bronze tables from your data sections.
-
-2. **Eval script** — `{user_app_name}/agents/eval_offline.py` that:
-   - Loads the dataset.
-   - Calls `mlflow.genai.evaluate(model=build_agent(), data=eval_dataset, ...)`.
-   - Uses two built-in scorers as a baseline: `Correctness` and `RetrievalGroundedness`.
-   - Prints a summary table and writes results to MLflow.
-
-3. **Run target** — `pytest -k offline_eval` or `python -m agents.eval_offline`.
-
-## Constraints
-- Use the OBO client / dev SP fallback so the agent has the same privileges as in production.
-- Keep the dataset small and committable (we expand it formally in the MLflow section).
-
-## Validation
-- Run prints per-row scores and an aggregate (mean Correctness, mean Groundedness).
-- An MLflow run appears under the `agents-{use_case_title}-eval` experiment.
-- Re-running with a tweaked system prompt visibly changes the aggregate score.',
-'You are a senior Databricks engineer scaffolding a baseline offline-evaluation harness using mlflow.genai.evaluate. Use Correctness and RetrievalGroundedness as the two built-in scorers. Keep the eval dataset small (5-10 rows) and grounded in the Bronze tables from earlier sections. Surface results in MLflow under a dedicated experiment.
-
-Reference docs:
-- https://docs.databricks.com/aws/en/mlflow3/genai/eval-monitor/concepts/judges
-- https://www.mlflow.org/docs/3.3.0/genai/eval/
-
-This is a baseline — the full MLflow for Gen-AI section will expand the dataset, add custom scorers, and add stakeholder sign-off.',
-'Evaluation',
-'Build a baseline offline eval harness using mlflow.genai.evaluate with Correctness + RetrievalGroundedness scorers',
-43,
-'## How to Apply
-
-1. Generate the prompt below in your IDE.
-2. Apply the resulting changes to create `{user_app_name}/agents/eval_offline.py` and the seed dataset.
-3. Run `python -m agents.eval_offline` and confirm an MLflow run appears.
-4. Tweak the system prompt and re-run — the aggregate scores should change.',
-'## Expected Output
-
-After this step:
-
-### Files
-- `{user_app_name}/agents/eval_offline.py`
-- Eval dataset (in-code or `{user_schema_prefix}_agent_memory.eval_seed`)
-
-### MLflow
-- Experiment `agents-{use_case_title}-eval` exists.
-- Each run shows per-row Correctness + RetrievalGroundedness + aggregate metrics.
-
-### Verification
-- Re-running with a tweaked prompt produces a different aggregate score in MLflow UI.',
-false, 1, true, current_timestamp(), current_timestamp(), current_user());
-
--- Step 44: 07 - Deploy and Query
-INSERT INTO ${catalog}.${schema}.section_input_prompts
-(input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
-VALUES
-(156, 'agents_deploy_and_query',
-'## Step 7: Log, Register, and Deploy the Agent
-
-You now have a working `ResponsesAgent` with tools, OBO auth, Lakebase memory, and a baseline eval. Time to deploy it as a real Model Serving endpoint.
-
-### What You Will Do
-
-1. **Log the agent to MLflow** using the Agent Framework helper:
-   ```python
-   import mlflow
-   from agents.{use_case_title}_agent import build_agent
-
-   with mlflow.start_run() as run:
-       mlflow.models.log_model(
-           python_model=build_agent(),
-           artifact_path="agent",
-           # ResponsesAgent auto-infers the signature — no manual pyfunc wrapper needed
-       )
-       run_uri = run.info.artifact_uri + "/agent"
-   ```
-
-2. **Register to Unity Catalog**:
-   ```python
-   model_uri = f"runs:/{run.info.run_id}/agent"
-   uc_full_name = f"{lakehouse_default_catalog}.{user_schema_prefix}.{use_case_title}_agent"
-   model_version = mlflow.register_model(model_uri, uc_full_name)
-   ```
-
-3. **Deploy via `agents.deploy`**:
-   ```python
-   from databricks.agents import deploy
-   deploy(uc_full_name, model_version.version)
-   ```
-   `agents.deploy` creates the Model Serving endpoint, wires up Review App + Playground + AI Gateway-enabled inference tables, and applies sensible defaults.
-
-4. **Query the endpoint** from your Databricks App backend (or via curl) and confirm responses come back.
-
-### Key Notes
-- `ResponsesAgent` + `mlflow.models.log_model` auto-infer the model signature; no manual `pyfunc` wrapper is needed.
-- `agents.deploy` enables AI Gateway-enabled inference tables out of the box (this is what we''ll use for monitoring in the MLflow section).
-- Endpoint name pattern: `agents_{use_case_title}_<version>`.
-
-### Verify
-- The endpoint reaches `READY` state in Model Serving.
-- A test query via curl returns a coherent response.
-- Inference table rows appear in `system.serving.endpoint_usage_logs` (or the configured AI Gateway table).
-
-### Deliverables
-- [ ] MLflow run logged with the agent artifact.
-- [ ] UC model registered at `{lakehouse_default_catalog}.{user_schema_prefix}.{use_case_title}_agent`.
-- [ ] Model Serving endpoint deployed via `agents.deploy`.
-- [ ] Curl smoke test returns a coherent response.
-- [ ] AI Gateway-enabled inference table populated with at least one row.',
+PRD context:
+{prd_document}',
 '',
-'Deploy and Query',
-'Log the agent as an MLflow model, register to Unity Catalog, deploy via agents.deploy, and query the serving endpoint',
-44,
-'## How to Apply
+'Phase 2 / Agent Build — Wire KA, Genie, UC Functions and Lakebase Tools',
+'Wire KA, Genie, UC functions and Lakebase tools as @function_tool with resource grants',
+42,
+'## How To Apply
 
-1. Open `{user_app_name}/agents/{use_case_title}_agent.py` in Cursor/VS Code.
-2. Create or update `agents/deploy.py` with the log + register + deploy block above.
-3. Run `python -m agents.deploy` and watch the endpoint reach `READY` state.
-4. Query the endpoint via curl or the Databricks Playground.
-5. Confirm AI Gateway-enabled inference table rows appear.',
-'## Expected Output
+Open a **new Agent thread in your Coding Assistant** and paste the prompt above. The AI invokes `03-tools-and-mcp` which reads the resolved `state://AgentSpec` and `state://DataSpec` to materialize every tool declared there.
 
-After this step:
+### Upstream Tool Backend Prerequisites
 
-### Artifacts
-- MLflow run with the logged ResponsesAgent.
-- UC model `{lakehouse_default_catalog}.{user_schema_prefix}.{use_case_title}_agent` (version 1+).
-- Model Serving endpoint in `READY` state.
+This row is the **integration handshake**. Each tool the agent wires up depends on a backend that another row already provisioned. Before pasting, confirm every backend is captured into state — the skill reads these IDs to compose tool calls:
 
-### Verification
-- Curl returns a coherent response from the endpoint.
-- AI Gateway-enabled inference table contains the request/response rows.
-- Endpoint visible under "Serving" in the workspace.',
-true, 1, true, current_timestamp(), current_timestamp(), current_user());
+| Tool Backend | Provisioned By | State Keys Consumed | Grant |
+|---|---|---|---|
+| Knowledge Assistant | `knowledge_assistant_create` (input_id 202) | `state://Resources.ka_endpoint_name`, `state://Resources.knowledge_assistant_id`, `state://Resources.doc_qa_backend = "knowledge_assistant"` | `CAN_QUERY` on the KA serving endpoint |
+| Genie Space | `genie_space` (input_id 11) | `state://Resources.genie_space_id` (captured upstream when the Genie Space was created over the Bronze tables) | `CAN_RUN` on the Genie Space |
+| UC Functions | `uc_resources_foundation` (input_id 200) + use-case bundle | `state://Resources.uc.catalog`, `state://Resources.agent_schema`, plus any `agent.tools[].target` paths | `EXECUTE` on each UC function (covered by the agent schema grant) |
+| Lakebase Memory | earlier Lakebase prompts | `state://Resources.lakebase_host`, `state://Resources.lakebase_instance`, `state://Resources.lakebase_database` | `CAN_USE` on the SQL warehouse for tool queries |
+| SQL Warehouse | `workspace_setup_deploy` (input_id 4) | `state://Resources.warehouse_id` | `CAN_USE` (declared in `databricks.yml`) |
 
--- Step 45: 08 - Debugging
+### Prerequisite
+- `Agent framework live` gate captured in state
+- `ka_endpoint_name`, `genie_space_id`, `warehouse_id`, `lakebase_host` all captured in state
+- `agent.tools[]` populated in `state://AgentSpec`
+
+### Steps to Apply
+1. New thread in your Coding Assistant, paste prompt.
+2. AI generates `tools/ka.py`, `tools/genie.py`, plus one file per UC-function tool, registers each as `@function_tool` on the canonical `Agent(...)`.
+3. AI patches `databricks.yml` and `app.yaml` with the three resource grants (KA `CAN_QUERY`, Genie `CAN_RUN`, warehouse `CAN_USE`).
+4. AI runs a smoke test against every tool declared in `state://AgentSpec.agent.tools[]` in the local dev server and confirms TOOL spans show up in MLflow.',
+'### Resources Created
+- [ ] One `@function_tool` per entry in `state://AgentSpec.agent.tools[]`
+- [ ] KA tool wired against `$ka_endpoint_name`
+- [ ] Genie tool wired against `$genie_space_id`
+- [ ] `databricks.yml` declares serving_endpoint + genie_space + sql_warehouse resources with correct permissions
+- [ ] `app.yaml` references those resources via `valueFrom`
+- [ ] MLflow traces show TOOL spans for every wired tool',
+TRUE, 1, true, current_timestamp(), current_timestamp(), current_user());
+
+-- Step 43 / order 43: Phase 2 / Agent Build - Auth + Lakebase Memory
 INSERT INTO ${catalog}.${schema}.section_input_prompts
 (input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
 VALUES
-(157, 'agents_debugging',
-'## Step 8: Debug Your Agent with MLflow Traces and the Review App
+(205, 'track_a_agent_auth_memory',
+'Add service-principal + on-behalf-of (OBO) authentication AND short-term + long-term Lakebase memory to the **{use_case_slug}** Track A agent.
 
-Now that the agent is deployed, when something goes wrong (wrong answer, wrong tool, hung response, hallucination), you want a rich audit trail. MLflow Tracing + the Review App give you both.
+**Invoke skills (in order):**
 
-### Use Case Context
-{use_case_description}
+1. `genai-agents/vibecoding-state` op `enter` — params: `prompt_id: "track_a_agent_auth_memory"`, `require_prior_gate: {prompt_id: "track_a_agent_ka_genie_tools", gate: "Tools wired"}`.
+2. @genai-agents/tracks/A-custom-agent-apps/04-authentication/SKILL.md — params:
+   - `agent_name: "{user_prefix}-{use_case_slug}-agent"`
+   - `app_level_auth: "service_principal"`
+   - `user_level_auth: "obo"`
+   - `obo_helper: "databricks_app.utils.get_user_workspace_client"` (called inside `@invoke` / `@stream` handlers)
+   - `user_api_scopes: ["serving.serving-endpoints", "dashboards.genie", "sql.statement-execution", "catalog.connections"]`
+   - `reuse_detect_environment_helper: true`
+   - `verification: ["obo_local", "sp_local", "user_api_scopes_in_app_yaml"]`
+3. @genai-agents/tracks/A-custom-agent-apps/05-lakebase-memory/SKILL.md — params:
+   - `agent_name: "{user_prefix}-{use_case_slug}-agent"`
+   - `agent_spec_ref: "state://AgentSpec"`
+   - `lakebase_instance: $lakebase_instance`
+   - `lakebase_database: $lakebase_database`
+   - `pattern: "agent-openai-advanced"` (canonical: two-layer memory — `AsyncDatabricksSession` for short-term, `LongTermMemory` for long-term)
+   - `embedding_endpoint: "databricks-gte-large-en"`
+   - `embedding_dims: 1024`
+   - `obo_scoped: true` (sessions instantiated inside `@invoke` via `get_user_workspace_client(http_request)`)
+   - `thread_id_resolver: "request.custom_inputs.thread_id || request.conversation_id"`
+   - `pre_llm_search_long_term: true`
+   - `post_llm_persist_facts: true`
+   - `graceful_degradation: true`
+   - `verification: {memory_persists_across_turns: true, long_term_recall_after_new_thread: true}`
+4. `genai-agents/vibecoding-state` op `exit` — params: `prompt_id: "track_a_agent_auth_memory"`, `gate: "Auth + Memory verified"`, `captured: {lakebase_instance, lakebase_database, embedding_endpoint, thread_id_strategy}`.
 
-### Three Tools You Will Learn
+**Gate:** `Auth + Memory verified` — both OBO and SP flows pass the local verification probes; same-thread turn 2 references turn 1 (short-term); a fact stated in thread A is recalled when starting a fresh thread B for the same user (long-term).',
+'',
+'Phase 2 / Agent Build — Auth + Lakebase Memory',
+'Add SP + OBO auth and short-term + long-term Lakebase memory to the agent',
+43,
+'## How To Apply
 
-#### 1. MLflow Tracing UI
-Every agent invocation produced spans (we added them in Steps 39, 40, 42). They show up in the **Traces** tab of the agent''s MLflow experiment:
-- Each row = one request.
-- Click into a row to see the nested spans (LLM call, tool calls, memory load/save).
-- Filter by status (`OK` / `ERROR`) and latency.
+Open a **new Agent thread in your Coding Assistant** and paste the prompt above. The AI runs `04-authentication` then `05-lakebase-memory` end-to-end in one pass.
 
-#### 2. Tracing UI in Cursor / VS Code (optional)
-The MLflow Python SDK can stream traces to your local IDE for live debugging during development:
-```python
-import mlflow
-mlflow.set_tracing_uri("databricks")
-mlflow.start_trace_streaming()
+### Prerequisite
+- `Tools wired` gate captured in state
+- Lakebase project + database already provisioned (earlier Lakebase prompt)
+
+### Steps to Apply
+1. New thread in your Coding Assistant, paste prompt.
+2. The AI implements OBO via `get_user_workspace_client(http_request)` inside `@invoke`/`@stream`, declares `user_api_scopes` in `app.yaml`, and verifies both OBO + SP locally.
+3. The AI then adds the two-layer Lakebase memory: short-term `AsyncDatabricksSession` per-thread + long-term `LongTermMemory` with `databricks-gte-large-en` embeddings.
+4. Runs a multi-turn local smoke test that proves persistence both within and across threads.',
+'### Resources Created
+- [ ] `user_api_scopes` declared in `app.yaml`
+- [ ] OBO + SP both verified locally
+- [ ] Short-term memory persists across turns within a thread
+- [ ] Long-term memory recalls user-stated facts across threads
+- [ ] `lakebase_instance`, `lakebase_database`, `embedding_endpoint`, `thread_id_strategy` captured in state',
+TRUE, 1, true, current_timestamp(), current_timestamp(), current_user());
+
+-- Step 44 / order 44: Phase 2 / Agent Build - Smoke Eval + Deploy
+INSERT INTO ${catalog}.${schema}.section_input_prompts
+(input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
+VALUES
+(206, 'track_a_agent_eval_deploy',
+'Run developer-loop smoke evaluations, then deploy the **{use_case_slug}** Track A agent to Databricks Apps and verify it is queryable end-to-end.
+
+This prompt maps to the canonical `local_eval_smoke` role. The smoke Gate **fails closed** — `exit` MUST refuse to write `Agent App RUNNING` (and instead emit `Smoke regressed — block`) if any of the following hold:
+
+- Any L1 scorer mean (e.g. `safety/mean`, `relevance/mean`, `guideline_adherence/mean`) is below its registered floor.
+- `correctness/mean` is below its registered floor.
+- Any tool call in the smoke run produces `UNRESOLVED_COLUMN`, `TABLE_OR_VIEW_NOT_FOUND`, a permission denied error, or empty tool output.
+- `mlflow_eval_known_quality_issues[]` contains an open item targeting `first_scored_eval` (i.e. a known regression that the smoke run is expected to surface but currently masks).
+
+**Invoke skills (in order):**
+
+1. `genai-agents/vibecoding-state` op `enter` — params: `prompt_id: "track_a_agent_eval_deploy"`, `require_prior_gate: {prompt_id: "track_a_agent_auth_memory", gate: "Auth + Memory verified"}`.
+2. @genai-agents/tracks/A-custom-agent-apps/06-evaluation/SKILL.md — params:
+   - `agent_name: "{user_prefix}-{use_case_slug}-agent"`
+   - `agent_spec_ref: "state://AgentSpec"`
+   - `mlflow_experiment_path: "{mlflow_experiment_path}"`
+   - `runner_cmd: "uv run agent-evaluate"`
+   - `dataset_path: "tests/eval_dataset.json"`
+   - The skill reads `governance.verification.smoke_test_cases[]` for the developer-loop test cases.
+3. @genai-agents/tracks/A-custom-agent-apps/07-deploy-and-query/SKILL.md — params:
+   - `agent_name: "{user_prefix}-{use_case_slug}-agent"`
+   - `target: "databricks_apps"`
+   - `post_deploy_checks: ["curl_query", "python_sdk_query", "traces_visible_in_mlflow"]`
+4. **Inline verification:** `databricks apps get "$agent_app_name" --output json | jq -r ''.status.state''` must return `RUNNING` before exit.
+5. `genai-agents/vibecoding-state` op `exit` — params: `prompt_id: "track_a_agent_eval_deploy"`, `gate: "Agent App RUNNING"`, `captured: {agent_app_url, agent_app_name}`. `exit` re-evaluates the four fail-closed conditions above; any positive condition flips the Gate to `Smoke regressed — block` and refuses to advance.
+
+**Gate:** `Agent App RUNNING` — smoke eval pass/fail visible in MLflow AND none of the four fail-closed conditions above are tripped (no L1 scorer below floor, `correctness/mean` at or above floor, no `UNRESOLVED_COLUMN` / `TABLE_OR_VIEW_NOT_FOUND` / permission denied / empty tool output, no open `mlflow_eval_known_quality_issues[]` targeting `first_scored_eval`); agent app deployed; curl + Python SDK calls against `<agent_app_url>/invocations` succeed; traces from the deployed app show up at `{mlflow_experiment_path}`.',
+'',
+'Phase 2 / Agent Build — Smoke Eval + Deploy',
+'Run developer-loop smoke evaluation, deploy the agent to Databricks Apps, verify queryable end-to-end',
+44,
+'## How To Apply
+
+Open a **new Agent thread in your Coding Assistant** and paste the prompt above. The AI runs `06-evaluation` then `07-deploy-and-query` and finishes with the explicit `databricks apps get` health check before exiting state.
+
+### Prerequisite
+- `Auth + Memory verified` gate captured in state
+- `governance.verification.smoke_test_cases[]` populated in `state://AgentSpec`
+
+### Steps to Apply
+1. New thread in your Coding Assistant, paste prompt.
+2. AI executes `uv run agent-evaluate` against `tests/eval_dataset.json` and writes per-test pass/fail to MLflow.
+3. AI builds + uploads the app via Databricks Asset Bundles, redeploys, then runs the three post-deploy probes (curl, SDK, traces).
+4. Final inline check: `databricks apps get` reports `RUNNING`.',
+'### Resources Created
+- [ ] Smoke evaluation results in MLflow (pass/fail per test case)
+- [ ] Agent App deployed to Databricks Apps
+- [ ] `databricks apps get` reports `RUNNING`
+- [ ] curl + Python SDK queries succeed against `<agent_app_url>/invocations`
+- [ ] Production traces show up at `{mlflow_experiment_path}`
+- [ ] `agent_app_url`, `agent_app_name` captured in state',
+TRUE, 1, true, current_timestamp(), current_timestamp(), current_user());
+
+-- Step 45 / order 45: Phase 3 / AppKit Integration - AppKit <-> Agent App Proxy
+INSERT INTO ${catalog}.${schema}.section_input_prompts
+(input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
+VALUES
+(207, 'appkit_agent_app_proxy_chat',
+'Add a streaming chat page to the AppKit dashboard that proxies through to the Track A Agent App backend (NOT a Model Serving endpoint), preserving OBO via `x-forwarded-access-token` and dual-format streaming.
+
+**Invoke skills (in order):**
+
+1. `genai-agents/vibecoding-state` op `enter` — params: `prompt_id: "appkit_agent_app_proxy_chat"`, `require_prior_gate: {prompt_id: "track_a_agent_eval_deploy", gate: "Agent App RUNNING"}`.
+2. @apps_lakebase/skills/06d-appkit-agent-app-proxy/SKILL.md — params:
+   - `app_dir: "apps_lakebase/{user_prefix}-{use_case_slug}"`
+   - `agent_app_name: $agent_app_name`
+   - `agent_app_url: $agent_app_url`
+   - `chat_route: "/api/chat"`
+   - `chat_page: "/chat"`
+   - `databricks_yml_resource: {type: "app", name: "agent-backend", permission: "CAN_USE"}`
+   - `app_yaml_env: {AGENT_APP_URL: {valueFrom: "agent-backend"}}`
+   - `streaming: "dual-format"`
+   - `obo_forwarding: true` (verbatim `x-forwarded-access-token`)
+   - `verification: {cmd: "bash apps_lakebase/skills/06d-appkit-agent-app-proxy/scripts/test-agent-app-proxy.sh --appkit-app {user_prefix}-{use_case_slug} --agent-app $agent_app_name", behavior: "3 probes pass"}`
+   - Wires the AppKit frontend to the Agent App backend via a vanilla `server.extend()` proxy with SP + OBO auth layers. Does **not** use the Serving plugin — the backend is a Databricks App, not a Model Serving endpoint.
+3. `genai-agents/vibecoding-state` op `exit` — params: `prompt_id: "appkit_agent_app_proxy_chat"`, `gate: "AppKit ↔ Agent App proxy live"`.
+
+**Gate:** `AppKit ↔ Agent App proxy live` — streaming chat works on `/chat` against the Agent App; the 3-probe e2e test (direct agent, AppKit SP-only, AppKit with forwarded OBO) passes.',
+'',
+'Phase 3 / AppKit Integration — AppKit ↔ Agent App Proxy (streaming chat)',
+'Wire AppKit dashboard to a Databricks Agent App via server.extend() proxy with SP + OBO and dual-format streaming',
+45,
+'## How To Apply
+
+Open a **new Agent thread in your Coding Assistant** and paste the prompt above. This installs the new `06d-appkit-agent-app-proxy` skill which is purpose-built for Agent App backends — distinct from the legacy Serving plugin which only targets Model Serving endpoints.
+
+### Prerequisite
+- `Agent App RUNNING` gate captured in state with `agent_app_url`, `agent_app_name`
+- AppKit dashboard from earlier prompts already deployed
+
+### Steps to Apply
+1. New thread in your Coding Assistant, paste prompt.
+2. AI patches `apps_lakebase/{user_prefix}-{use_case_slug}/databricks.yml` to declare the Agent App as a `CAN_USE` resource named `agent-backend`.
+3. AI patches `app.yaml` to expose `AGENT_APP_URL` via `valueFrom`.
+4. AI generates the `server.extend()` proxy at `/api/chat` that forwards `x-forwarded-access-token` and bridges the dual-format SSE stream to the AppKit chat page at `/chat`.
+5. AI runs the 3-probe e2e script to confirm the proxy works end-to-end.',
+'### Resources Created
+- [ ] `apps_lakebase/{user_prefix}-{use_case_slug}/databricks.yml` declares the Agent App as `agent-backend` resource
+- [ ] `app.yaml` exposes `AGENT_APP_URL` via `valueFrom: agent-backend`
+- [ ] `/api/chat` proxy route streams against the Agent App with OBO header forwarding
+- [ ] `/chat` AppKit page renders streaming chat
+- [ ] 3-probe e2e test passes (direct agent, AppKit SP-only, AppKit with forwarded OBO)',
+TRUE, 1, true, current_timestamp(), current_timestamp(), current_user());
+
+-- Step 46 / order 46: Phase 3 / AppKit Integration - Chatbot Feedback -> MLflow Trace Assessments
+INSERT INTO ${catalog}.${schema}.section_input_prompts
+(input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
+VALUES
+(208, 'appkit_chat_feedback_mlflow',
+'Open the **expert-in-the-loop phase at the end-user level** of the agent SDLC story arc — "how do I involve experts?" — by routing every end-user click into the same monitoring + dataset pipeline that SME labels feed.
+Add chat history sidebar plus thumbs-up/down feedback controls to the AppKit dashboard. Capture every click as an MLflow trace assessment (`user_feedback`, `source_type=HUMAN`) so end-user signal flows back into the same monitoring + dataset pipeline as SME labels.
+
+**Invoke skills (in order):**
+
+1. `genai-agents/vibecoding-state` op `enter` — params: `prompt_id: "appkit_chat_feedback_mlflow"`, `require_prior_gate: {prompt_id: "appkit_agent_app_proxy_chat", gate: "AppKit ↔ Agent App proxy live"}`.
+2. @apps_lakebase/skills/07-appkit-chat-history/SKILL.md — params:
+   - `app_dir: "apps_lakebase/{user_prefix}-{use_case_slug}"`
+   - `lakebase_host: $lakebase_host`
+   - `sidebar_enabled: true`
+   - `navigation: "by_conversation"`
+   - `identity: "OBO"`
+   - `auto_title: true`
+   - `ephemeral_fallback: true`
+   - `streaming_proxy: "AppKit-native"` (proxy route streams via `AppKit.serving("agent").asUser(req).stream()` while persisting messages and capturing MLflow `trace_id` for feedback linking)
+3. @genai-agents/sdlc/04c-end-user-feedback/SKILL.md — params:
+   - `agent_app_dir: "$agent_app_name"`
+   - `feedback_route: "/feedback"`
+   - `trace_id_source: "invoke_response_field"` (return `trace_id` from `@invoke`; for `@stream` send a final `{type: "done", trace_id}` SSE event)
+   - `assessment_name: "user_feedback"`
+   - `source_type: "HUMAN"`
+   - `user_id_resolver: "OBO"`
+   - `dimensions: ["accuracy", "helpfulness", "relevance"]`
+   - `support_update_delete: true`
+   - Owns the **Python `mlflow.log_feedback(...)` write-path** in the Track A Agent App.
+4. @apps_lakebase/skills/08-appkit-feedback/SKILL.md — params:
+   - `app_dir: "apps_lakebase/{user_prefix}-{use_case_slug}"`
+   - `mlflow_feedback_experiment_name: "{mlflow_feedback_experiment_path}"`
+   - `mlflow_api: "Assessments"`
+   - `auth: "client.config.authenticate()"`
+   - `controls: ["thumbs_up", "thumbs_down"]`
+   - `link_to_mlflow_traces: true`
+   - `python_contract: "genai-agents/sdlc/04c-end-user-feedback"`
+   - `capture_into_state: ["mlflow_feedback_experiment_path"]`
+5. **Inline steps:** `databricks experiments create --name "{mlflow_feedback_experiment_path}"` (capture path), then deploy and run E2E including idle resilience (wait 3–5 min then re-test). Verify the round-trip: send a chat turn, click 👎, refresh the trace in the MLflow UI and confirm the `user_feedback=false` assessment with `source_type=HUMAN, source_id=<your email>` is attached.
+6. `genai-agents/vibecoding-state` op `exit` — params: `prompt_id: "appkit_chat_feedback_mlflow"`, `gate: "Deployed + idle resilience passed + 04c round-trip verified"`, `captured: {mlflow_feedback_experiment_path}`.
+
+**Gate:** `Deployed + idle resilience passed + 04c round-trip verified` — sidebar + history works; thumbs-up/down linked to MLflow traces via `mlflow.log_feedback(...)` from the Track A Agent App; an end-to-end 👎 round-trip shows up in the MLflow trace UI; the app survives 3–5 min idle.',
+'',
+'Phase 3 / AppKit Integration — Chatbot Feedback → MLflow Trace Assessments (Expert-in-the-Loop, End-User)',
+'Chat history sidebar + thumbs up/down captured as MLflow user_feedback assessments (HUMAN source)',
+46,
+'## How To Apply
+
+Open a **new Agent thread in your Coding Assistant** and paste the prompt above. This is the user-facing landing of the **expert-in-the-loop phase** — every end-user thumbs click becomes a `user_feedback` assessment (`source_type=HUMAN`) on the underlying MLflow trace, feeding the same monitoring + dataset pipeline as SME labels from `mlflow_agent_human_review`.
+
+### Prerequisite
+- `AppKit ↔ Agent App proxy live` gate captured in state
+- Lakebase project provisioned (chat history persistence)
+- `agent_app_name` captured in state
+
+### Steps to Apply
+1. New thread in your Coding Assistant, paste prompt.
+2. AI installs `07-appkit-chat-history` (sidebar + per-conversation navigation + OBO identity + ephemeral fallback).
+3. AI installs `04c-end-user-feedback` on the Agent App side: returns `trace_id` from `@invoke`, emits a final `{type: "done", trace_id}` SSE event from `@stream`, exposes `/feedback` REST endpoint that calls `mlflow.log_feedback(...)`.
+4. AI installs `08-appkit-feedback` on the AppKit side: thumbs up/down controls bound to the `/feedback` REST endpoint with the matching contract.
+5. AI creates the `{mlflow_feedback_experiment_path}` experiment and runs the 👎 round-trip verification.',
+'### Resources Created
+- [ ] Chat history sidebar live; conversations persisted in Lakebase
+- [ ] `/feedback` REST endpoint on the Agent App invokes `mlflow.log_feedback(...)`
+- [ ] AppKit thumbs-up/down controls wired to `/feedback`
+- [ ] MLflow experiment at `{mlflow_feedback_experiment_path}` created
+- [ ] At least one `user_feedback` assessment visible in the MLflow trace UI with `source_type=HUMAN`
+- [ ] App passes 3–5 minute idle resilience re-test',
+TRUE, 1, true, current_timestamp(), current_timestamp(), current_user());
+
+-- =============================================================================
+-- AGENTS ACCELERATOR — MLflow for Gen-AI (Steps 47-54)
+-- Refreshed from genericized example/skyloyalty/WALKTHROUGH.md (Module 5+) and
+-- split from the live DDL (docs/02_seed_section_input_prompts.sql input_ids
+-- 147, 148, 149) into 8 atomic rows organised into 4 pedagogical phases.
+-- Scaffold input_ids here (209-216) avoid colliding with the activation
+-- section (141-146) and the Agents on Apps section (200-208).
+--
+-- Rendered when the user is on workshop level 'agents-accelerator'. The level
+-- is NOT tied to a specific use case — the user picks a regular sample use
+-- case and then selects the Agents Accelerator button.
+--
+-- Pedagogical phase taxonomy:
+--   Phase 1: Build the Quality Suite      (input_ids 209, 210, 211, 212)
+--     "Prompt registry, eval datasets, scorers/judges, first scored eval +
+--      iteration entry. Owns the System Prompt Review preflight contract."
+--   Phase 2: Human Review                  (input_ids 213)
+--     "SME labeling + stakeholder sign-off gate. Decision: APPROVED hard-asserts
+--      promotion downstream."
+--   Phase 3: Promote with Governance       (input_ids 214, 215)
+--     "Register logged model at @champion in UC, then govern via AI Gateway and
+--      automate deployment via Asset Bundles."
+--   Phase 4: Operate in Production         (input_ids 216)
+--     "Production monitoring, SQL alerts, agent-as-judge debugging on failing
+--      production traces."
+--
+-- Hard-asserts preserved verbatim from live DDL:
+--   * 212 / mlflow_evaluation_runs_and_iteration:
+--       System Prompt Review preflight contract (must_do/must_not_do worked
+--       examples; halt unless overridden via state_overrides[]).
+--   * 213 / mlflow_human_review_and_signoff:
+--       Decision: APPROVED path at
+--       /Volumes/{uc_catalog}/{user_schema_prefix}_ops/signoffs/v1/decision.md.
+--   * 214 / mlflow_logged_model_uc_registration:
+--       hard_assert {var: signoff_decision, equals: APPROVED} BEFORE logged
+--       model registration runs.
+--
+-- Step 47: 01 - Phase 1 / Build the Quality Suite - Prompt Registry            (bypass_llm = true)
+-- Step 48: 02 - Phase 1 / Build the Quality Suite - Evaluation Datasets        (bypass_llm = true)
+-- Step 49: 03 - Phase 1 / Build the Quality Suite - Scorers and Judges         (bypass_llm = true)
+-- Step 50: 04 - Phase 1 / Build the Quality Suite - Eval Runs + Iteration      (bypass_llm = true)
+-- Step 51: 05 - Phase 2 / Human Review              - Labeling + Sign-Off      (bypass_llm = true)
+-- Step 52: 06 - Phase 3 / Promote with Governance   - Logged Model + UC        (bypass_llm = true)
+-- Step 53: 07 - Phase 3 / Promote with Governance   - AI Gateway + DAB Deploy  (bypass_llm = true)
+-- Step 54: 08 - Phase 4 / Operate in Production     - Monitoring + Debugging   (bypass_llm = true)
+-- =============================================================================
+
+-- Step 47 / order 47: Phase 1 / Build the Quality Suite - Prompt Registry
+-- Split from live DDL row 147 (Skill 01: prompt registry).
+INSERT INTO ${catalog}.${schema}.section_input_prompts
+(input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
+VALUES
+(209, 'mlflow_prompt_registry',
+'Open the **quality and scoring suite phase** of the agent SDLC story arc — "how do I test quality?" — by registering the agent''s prompts as governed Unity Catalog assets with git-style aliases. This is the upstream gate for evaluation datasets, scorers, and the first scored eval (input_ids 210, 211, 212).
+
+**Invoke skills (in order):**
+
+1. `genai-agents/vibecoding-state` op `enter` — params: `prompt_id: "mlflow_prompt_registry"`, `require_prior_gate: {prompt_id: "mlflow_agent_tracing_uc", gate: "Tracing live; UC OTel tables ready"}`.
+2. @genai-agents/sdlc/01-prompt-registry/SKILL.md — params:
+   - `agent_name: "{user_prefix}-{use_case_slug}-agent"`
+   - `uc_catalog: "{uc_catalog}"`
+   - `uc_schema: "{user_schema_prefix}_agent"`
+   - `aliases: ["@production", "@staging"]`
+   - `verify_loader: "prompts://"`
+3. `genai-agents/vibecoding-state` op `exit` — params: `prompt_id: "mlflow_prompt_registry"`, `gate: "Prompts registered in UC; @production and @staging aliases set"`.
+
+**Gate:** `Prompts registered in UC; @production and @staging aliases set` — every prompt the agent loads is now governed in UC and addressable via `prompts://...@alias` instead of inline strings.',
+'',
+'Phase 1 / Build the Quality Suite — Register Prompts in Unity Catalog',
+'Register the agent''s prompts as UC-governed assets with @production / @staging aliases (upstream of eval datasets and scorers)',
+47,
+'## How To Apply
+
+Open a **new Agent thread in your Coding Assistant** and paste the prompt above. This is the entry point for the quality and scoring suite phase — every downstream step (datasets, scorers, eval runs, sign-off, promotion) reads prompts back via `prompts://...@alias`.
+
+### Prerequisite
+- `Tracing live; UC OTel tables ready` gate captured in state (input_id 201)
+- UC catalog `{uc_catalog}` and schema `{user_schema_prefix}_agent` already exist
+
+### Steps to Apply
+1. New Coding Assistant thread, paste prompt.
+2. AI registers each prompt the agent loads into UC under `{uc_catalog}.{user_schema_prefix}_agent.*`.
+3. AI sets the `@production` and `@staging` aliases on the current versions.
+4. AI verifies the agent boots cleanly when reading prompts via `prompts://...@production`.',
+'### Resources Created
+- [ ] All agent prompts registered at `{uc_catalog}.{user_schema_prefix}_agent.*`
+- [ ] `@production` alias pinned on the current versions
+- [ ] `@staging` alias available for future promotion
+- [ ] Agent loader confirmed working against `prompts://...@production`',
+TRUE, 1, true, current_timestamp(), current_timestamp(), current_user());
+
+-- Step 48 / order 48: Phase 1 / Build the Quality Suite - Evaluation Datasets
+-- Split from live DDL row 147 (Skill 02: evaluation datasets).
+INSERT INTO ${catalog}.${schema}.section_input_prompts
+(input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
+VALUES
+(210, 'mlflow_evaluation_datasets',
+'Build the **evaluation dataset** (≥ 20 benchmark rows) that every downstream prompt / model / agent change is graded against. Pulls coverage buckets and seed examples from the AgentSpec to guarantee every user journey has at least one benchmark row.
+
+**Invoke skills (in order):**
+
+1. `genai-agents/vibecoding-state` op `enter` — params: `prompt_id: "mlflow_evaluation_datasets"`, `require_prior_gate: {prompt_id: "mlflow_prompt_registry", gate: "Prompts registered in UC; @production and @staging aliases set"}`.
+2. @genai-agents/sdlc/02-evaluation-datasets/SKILL.md — params:
+   - `agent_name: "{user_prefix}-{use_case_slug}-agent"`
+   - `agent_spec_ref: "state://AgentSpec"`
+   - `app_spec_ref: "state://AppSpec"`
+   - `target_table: "{uc_catalog}.{user_schema_prefix}_agent.{use_case_slug}_agent_benchmarks"`
+   - `min_rows: 20`
+   - The skill reads `agent.benchmark_seeds.coverage_buckets[]`, `agent.benchmark_seeds.seed_examples[]`, and `ui.user_journeys[]` (every journey must have at least one benchmark row).
+3. `genai-agents/vibecoding-state` op `exit` — params: `prompt_id: "mlflow_evaluation_datasets"`, `gate: "≥ 20 benchmark rows; every user journey covered"`.
+
+**Gate:** `≥ 20 benchmark rows; every user journey covered` — the benchmark table at `{uc_catalog}.{user_schema_prefix}_agent.{use_case_slug}_agent_benchmarks` is the single source of truth for scorers (input_id 211) and eval runs (input_id 212).',
+'',
+'Phase 1 / Build the Quality Suite — Evaluation Dataset',
+'Generate ≥ 20 benchmark rows that cover every coverage bucket and user journey from the AgentSpec',
+48,
+'## How To Apply
+
+Open a **new Agent thread in your Coding Assistant** and paste the prompt above. The benchmark table populated here is the substrate the scorers (input_id 211) and the first scored eval (input_id 212) read against.
+
+### Prerequisite
+- `Prompts registered in UC; @production and @staging aliases set` gate captured in state (input_id 209)
+- `state://AgentSpec.agent.benchmark_seeds.coverage_buckets[]` populated
+- `state://AgentSpec.agent.benchmark_seeds.seed_examples[]` populated
+- `state://AppSpec.ui.user_journeys[]` populated
+
+### Steps to Apply
+1. New Coding Assistant thread, paste prompt.
+2. AI generates ≥ 20 benchmark rows into `{uc_catalog}.{user_schema_prefix}_agent.{use_case_slug}_agent_benchmarks`.
+3. AI verifies every coverage bucket has at least one row AND every user journey has at least one benchmark.',
+'### Resources Created
+- [ ] Table `{uc_catalog}.{user_schema_prefix}_agent.{use_case_slug}_agent_benchmarks` with ≥ 20 rows
+- [ ] Every `agent.benchmark_seeds.coverage_buckets[]` value covered
+- [ ] Every `ui.user_journeys[]` covered by ≥ 1 benchmark row
+- [ ] Schema includes `expectations` and `human_assessments` columns ready for sync-back from labeling sessions',
+TRUE, 1, true, current_timestamp(), current_timestamp(), current_user());
+
+-- Step 49 / order 49: Phase 1 / Build the Quality Suite - Scorers and Judges
+-- Split from live DDL row 147 (Skill 03: scorers and judges).
+INSERT INTO ${catalog}.${schema}.section_input_prompts
+(input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
+VALUES
+(211, 'mlflow_scorers_and_judges',
+'Define the scorer suite — built-in scorers, Guidelines, custom code-level scorers, and LLM judges — that will grade every benchmark row from input_id 210. Every `make_judge` call routes through the resolved `llm_judge_default` role binding, never the raw `{llm_endpoint}`.
+
+**Invoke skills (in order):**
+
+1. `genai-agents/vibecoding-state` op `enter` — params: `prompt_id: "mlflow_scorers_and_judges"`, `require_prior_gate: {prompt_id: "mlflow_evaluation_datasets", gate: "≥ 20 benchmark rows; every user journey covered"}`.
+2. @genai-agents/sdlc/03-scorers-and-judges/SKILL.md — params:
+   - `agent_name: "{user_prefix}-{use_case_slug}-agent"`
+   - `agent_spec_ref: "state://AgentSpec"`
+   - `mlflow_experiment_path: "{mlflow_experiment_path}"`
+   - `judge_endpoint: "{llm_role_endpoints.llm_judge_default.endpoint}"` (every `make_judge` call routes through the resolved `llm_judge_default` role binding — never the raw `{llm_endpoint}`)
+   - `builtins: [{name: "safety", sampling: 1.0, threshold: 0.95}, {name: "relevance", threshold: 0.8}]`
+   - The skill reads `governance.scorer_suite.guidelines[]`, `governance.scorer_suite.custom_scorer_rules[]`, `governance.scorer_suite.judge_questions[]` for the use-case judges.
+3. `genai-agents/vibecoding-state` op `exit` — params: `prompt_id: "mlflow_scorers_and_judges"`, `gate: "Scorer suite registered with thresholds"`.
+
+**Gate:** `Scorer suite registered with thresholds` — every scorer the use case needs (builtins + Guidelines + custom code scorers + LLM judges) is registered against `{mlflow_experiment_path}` with explicit thresholds, ready for the first scored eval (input_id 212).',
+'',
+'Phase 1 / Build the Quality Suite — Scorers and Judges',
+'Register builtin scorers, Guidelines, custom code scorers, and LLM judges with thresholds (judge calls route via llm_judge_default role)',
+49,
+'## How To Apply
+
+Open a **new Agent thread in your Coding Assistant** and paste the prompt above. The scorer suite registered here is what input_id 212''s first scored eval grades against.
+
+### Prerequisite
+- `≥ 20 benchmark rows; every user journey covered` gate captured in state (input_id 210)
+- `state://AgentSpec.governance.scorer_suite.guidelines[]` populated
+- `state://AgentSpec.governance.scorer_suite.custom_scorer_rules[]` populated
+- `state://AgentSpec.governance.scorer_suite.judge_questions[]` populated
+- `{llm_role_endpoints.llm_judge_default.endpoint}` resolved
+
+### Steps to Apply
+1. New Coding Assistant thread, paste prompt.
+2. AI registers builtin scorers (`safety`, `relevance`) with thresholds.
+3. AI registers Guidelines from `governance.scorer_suite.guidelines[]`.
+4. AI registers custom code-level scorers from `governance.scorer_suite.custom_scorer_rules[]`.
+5. AI registers LLM judges from `governance.scorer_suite.judge_questions[]` — every `make_judge` call routes through the resolved `llm_judge_default` role binding.',
+'### Resources Created
+- [ ] All scorers from `governance.scorer_suite.*` registered against `{mlflow_experiment_path}` with thresholds
+- [ ] Builtin `safety` scorer registered with threshold 0.95 and 100% sampling
+- [ ] Builtin `relevance` scorer registered with threshold 0.8
+- [ ] Every LLM judge call routes through the `llm_judge_default` role binding (NOT raw `{llm_endpoint}`)
+- [ ] Scorers ready for the first scored eval at input_id 212',
+TRUE, 1, true, current_timestamp(), current_timestamp(), current_user());
+
+-- Step 50 / order 50: Phase 1 / Build the Quality Suite - First Scored Eval + Iteration Entry
+-- Split from live DDL row 147 (Skill 04: evaluation runs) and combined with the
+-- iteration routing decision tree + System Prompt Review preflight contract
+-- from live DDL row 147. Closes the quality suite phase and opens the iteration
+-- phase entry point. Hard-asserts preserved verbatim from live DDL.
+INSERT INTO ${catalog}.${schema}.section_input_prompts
+(input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
+VALUES
+(212, 'mlflow_evaluation_runs_and_iteration',
+'Run the **first scored eval** that grades the agent against the benchmark table (input_id 210) using the scorer suite (input_id 211), and end this thread by entering the **iteration phase** with a captured failure-shape classification and a routing decision.
+
+**Invoke skills (in order):**
+
+1. `genai-agents/vibecoding-state` op `enter` — params: `prompt_id: "mlflow_evaluation_runs_and_iteration"`, `require_prior_gate: {prompt_id: "mlflow_scorers_and_judges", gate: "Scorer suite registered with thresholds"}`.
+   This prompt maps to the canonical `first_scored_eval` role. Before any benchmark run, `enter` MUST evaluate the following preflight checks (a halt unblocks only via a `state_overrides[]` entry with `gate_type: preflight_check` whose `affected_state_field` matches the failing clause):
+   ```yaml
+   preflight_checks:
+     - system_prompt_review.complete == true
+     - count(system_prompt_review.must_do_worked_examples) >= count(agent.must_do)
+     - count(system_prompt_review.must_not_do_worked_examples) >= count(agent.must_not_do)
+   ```
+   The `## System Prompt Review` block in the live state file is populated by THIS prompt: read every `agent.must_do[]` clause and append a `must_do_worked_examples[]` entry with `rule`, `positive_example`, and `expected_behavior`; do the same for every `agent.must_not_do[]` clause into `must_not_do_worked_examples[]` with `rule`, `negative_example`, and `refusal_or_correction`. Set `complete: true`, stamp `reviewed_at` (ISO8601 UTC), and write `reviewed_by` (operator email). The audit MUST happen BEFORE step 2 (`@genai-agents/sdlc/04-evaluation-runs/SKILL.md`) runs.
+2. @genai-agents/sdlc/04-evaluation-runs/SKILL.md — params:
+   - `agent_name: "{user_prefix}-{use_case_slug}-agent"`
+   - `mlflow_experiment_path: "{mlflow_experiment_path}"`
+   - `benchmarks_table: "{uc_catalog}.{user_schema_prefix}_agent.{use_case_slug}_agent_benchmarks"`
+   - `predict_fn_from_prompt: "track_a_agent_auth_memory"`
+   - `scorer_suite_from_prompt: "mlflow_scorers_and_judges"`
+   - `record_per_scorer_table: true`
+3. `genai-agents/vibecoding-state` op `exit` — params: `prompt_id: "mlflow_evaluation_runs_and_iteration"`, `gate: "<Eval thresholds met | Eval regressed — iterate>"`, `captured: {per_scorer_pass_fail_table, failing_scorers_if_regressed, failure_shape_classification, safety_buffer, predict_fn_exception_count, predict_fn_sentinel_count_per_run, judges_with_silent_aggregation_dropouts, mlflow_eval_predict_fn_signature}`.
+
+**Captured failure-shape schema (mandatory in `captured` at `exit`):**
+
+```yaml
+failure_shape_classification:
+  primary_shape: enum                # one of: instruction | tool_call_empty | retrieval | safety | other
+  failing_scorers_if_regressed: [string]
+  l1_failures: [string]              # L1 scorer names below floor (e.g. safety, relevance, correctness)
+  failing_trace_ids:
+    - trace_id: string
+      failing_scorers: [string]
+      predict_fn_status: string      # ok | exception | sentinel | dropout
+safety_buffer:
+  <scorer_name>: float               # mean - threshold (signed; negative = below floor)
+predict_fn_exception_count: integer
+predict_fn_sentinel_count_per_run: integer
+judges_with_silent_aggregation_dropouts: [string]
+mlflow_eval_predict_fn_signature: string
 ```
 
-#### 3. Review App
-The Review App is the human-in-the-loop UI that comes free with `agents.deploy`:
-- Open the app from the Model Serving endpoint page.
-- Submit prompts as a reviewer; the response appears alongside the trace.
-- Reviewers leave 👍/👎 ratings + free-text feedback that lands in `inference_table_human_feedback`.
-- Use this for stakeholder sign-off (we formalize this in the MLflow section).
+**Iteration routing (decision tree at `exit` when Gate is `Eval regressed — iterate`):**
 
-### Practice Scenarios
-Try these and observe the traces:
-1. Ask a question that requires a tool call → expect a `tool:<name>` span with a clean response.
-2. Ask a question that requires data the user doesn''t have permission to read → expect a tool error span (OBO scoping working).
-3. Ask the same question twice with the same `thread_id` → expect a `memory:load` span on the second request.
-4. Ask a deliberately-wrong-context question → expect the agent to refuse / clarify.
+1. If `l1_failures` is non-empty → route to **architecture / system-prompt redesign** (do NOT route to Skill 08b — instruction-only iteration cannot recover an L1 scorer that is below floor). Open the failure-shape redesign loop instead.
+2. Else if `primary_shape == "instruction"` AND `l1_failures` is empty → route to @genai-agents/sdlc/08b-prompt-handauthoring/SKILL.md (the next prompt, `mlflow_logged_model_uc_registration`, gates step 2 on exactly this branch).
+3. Else if `primary_shape == "tool_call_empty"` → route to @genai-agents/sdlc/06-direct-trace-debug/SKILL.md (forward-reference; resolved by Phase 4 monitoring + debugging).
+4. Else if `primary_shape == "retrieval"` → route to **retrieval tuning** (chunking / embedding / top-k / filters in the KA tool or vector index).
+5. Else (`safety`, `other`) → escalate to the agent owner; do NOT auto-iterate.
 
-### Debug Checklist
-- [ ] Open the agent experiment in MLflow UI; confirm traces are landing.
-- [ ] Click into a trace and inspect the nested spans.
-- [ ] Open the Review App; submit a prompt and rate the response.
-- [ ] Confirm the rating appears in the inference table.
-- [ ] (Optional) Stream traces locally via `mlflow.start_trace_streaming()` while iterating in Cursor.
-
-### Deliverables
-- [ ] Familiarity with the Traces UI (filter, drill-down).
-- [ ] At least one Review App submission with a rating.
-- [ ] At least one tool-error trace inspected (and you understand why).',
+**Gate:** either `Eval thresholds met` OR `Eval regressed — iterate` — record which scorers failed AND the routing branch fired (via `failure_shape_classification.primary_shape` and `l1_failures`); the next prompt (`mlflow_logged_model_uc_registration`) gates only the instruction-shaped, no-L1-failure branch via Skill 08b — direct tool/retrieval debugging or architecture redesign handles the rest.',
 '',
-'Debugging',
-'Use MLflow Traces, the Tracing UI, and the Review App to debug agent tool calls and prompts',
-45,
-'## How to Apply
-
-1. Open the MLflow experiment for your agent (linked from the Model Serving endpoint page).
-2. Click **Traces** and inspect the most recent invocations.
-3. Drill into a trace; expand the nested spans (agent → tool → memory).
-4. Open the Review App; submit a prompt; leave a rating.
-5. Inspect the AI Gateway-enabled inference table; confirm the rating row landed.
-6. (Optional) Run `mlflow.start_trace_streaming()` locally while iterating in Cursor.',
-'## Expected Output
-
-After this step:
-
-### Familiarity
-- You know how to open Traces, filter by status, and drill into nested spans.
-- You can submit prompts in the Review App and read back ratings.
-- You understand which span shows the LLM call, which shows tool calls, which shows memory ops.
-
-### Concrete Artifacts
-- At least one Review App rating submitted.
-- At least one tool-error trace inspected.
-- Inference table row for a rated request, including the rating column.',
-true, 1, true, current_timestamp(), current_timestamp(), current_user());
-
--- =============================================================================
--- AGENTS ACCELERATOR — MLflow for Gen-AI (Steps 46-54)
--- Rendered when the user is on workshop level 'agents-accelerator'. The level
--- is NOT tied to a specific use case.
---
--- Step 46: 01 - Prompt Registry                  (bypass_llm = false)
--- Step 47: 02 - Evaluation Datasets              (bypass_llm = false)
--- Step 48: 03 - Scorers and Judges               (bypass_llm = false)
--- Step 49: 04 - Evaluation Runs                  (bypass_llm = false)
--- Step 50: 04b - Stakeholder Sign-off            (bypass_llm = true)
--- Step 51: 05 - Logged Model & UC Registration   (bypass_llm = false)
--- Step 52: 06 - Deployment & Automation          (bypass_llm = false)
--- Step 53: 07 - Production Monitoring            (bypass_llm = false)
--- Step 54: 08 - Prompt Optimization              (bypass_llm = false)
--- =============================================================================
-
--- Step 46: 01 - Prompt Registry
-INSERT INTO ${catalog}.${schema}.section_input_prompts
-(input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
-VALUES
-(158, 'mlflow_prompt_registry',
-'Move the agent''s prompts out of code and into the **MLflow 3 Prompt Registry** so you can version, alias, and roll back prompts independently of the agent build.
-
-## Use Case Specification
-{use_case_description}
-
-## What to Build
-
-1. Identify the prompt strings currently embedded in `{user_app_name}/agents/{use_case_title}_agent.py` (system prompt, summarisation prompt for memory extraction, any tool-routing prompts).
-2. Register each prompt in MLflow Prompt Registry with a stable name, e.g. `agents/{use_case_title}/system`, `agents/{use_case_title}/insight_summary`.
-3. Set the `@production` alias on the current versions; the agent fetches by alias at runtime so swapping versions doesn''t require a redeploy.
-4. Update the agent to load prompts via `mlflow.genai.load_prompt("name@production")` (or equivalent SDK call) instead of inlining string literals.
-5. Add a fallback for offline/test runs where the registry may not be reachable.
-
-## Constraints
-- Use `mlflow.genai` registry helpers (MLflow 3+).
-- Prompts MUST stay editable by humans; avoid f-string mangling in registry text. Use Jinja or named placeholders the runtime resolves.
-- Registry calls happen ONCE at agent boot, not per request, to avoid latency.
-
-## Validation
-- `mlflow.genai.list_prompts()` shows the new entries with `@production` aliases.
-- The agent boots successfully with the registry-fetched prompts.
-- Registering a new prompt version + moving the alias triggers the new behaviour without a redeploy.',
-'You are a senior Databricks engineer migrating an agent''s inline prompts into MLflow 3 Prompt Registry. Use git-style versioning + aliases (e.g. @production, @staging) for safe promotion. Load prompts once at agent boot via mlflow.genai.load_prompt and provide an offline fallback for tests. Reference https://docs.databricks.com/aws/en/mlflow3/genai/prompt-version-mgmt/prompt-registry/evaluate-prompts and https://www.mlflow.org/docs/3.3.0/genai/prompt-registry/.',
-'Prompt Registry',
-'Move agent prompts into MLflow 3 Prompt Registry with git-style versioning and @production aliases',
-46,
-'## How to Apply
-
-1. Generate the prompt below in your IDE.
-2. Apply the resulting code changes to the agent module + a new `agents/prompts.py`.
-3. Register the prompts via the MLflow CLI / SDK and pin the @production alias.
-4. Restart the agent; confirm it boots and uses the registry-fetched prompts.
-5. Bump a prompt version, move the alias, and watch the agent pick it up on next boot (or hot-reload).',
-'## Expected Output
-
-After this step:
-
-### Files
-- `agents/prompts.py` (or equivalent) loads each prompt by `name@alias`.
-- Agent module imports prompts from this module instead of inlining strings.
-
-### Registry State
-- At least 2 prompts registered (e.g. system + insight_summary) with version 1 and `@production` alias set.
-
-### Verification
-- `mlflow.genai.list_prompts()` enumerates the new entries.
-- Updating the alias to a new version takes effect on the next agent boot.',
-false, 1, true, current_timestamp(), current_timestamp(), current_user());
-
--- Step 47: 02 - Evaluation Datasets
-INSERT INTO ${catalog}.${schema}.section_input_prompts
-(input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
-VALUES
-(159, 'mlflow_evaluation_datasets',
-'Curate a **Unity Catalog evaluation dataset** for **{use_case_title}** so every prompt / model / agent change is benchmarked against the same questions.
-
-## Use Case Specification
-{use_case_description}
-
-## What to Build
-
-1. Define a dataset schema: `(eval_id UUID, prompt STRING, expected_response STRING, expected_tools ARRAY<STRING>, ground_truth_facts ARRAY<STRING>, persona STRING, difficulty STRING, created_at TIMESTAMP)`.
-2. Create the table at `{lakehouse_default_catalog}.{user_schema_prefix}.agent_eval_dataset_v1` (versioned name so future revs land alongside).
-3. Seed at least 25 representative examples grounded in your Bronze tables (mix easy/medium/hard, multiple personas, both happy-path and edge cases).
-4. Build a small Databricks notebook or Python script that lets non-engineers add rows via the UI; require reviewer sign-off before rows are marked `is_active=true`.
-5. Document a refresh cadence (e.g. weekly snapshot of inference-table conversations becomes new candidate eval rows).
-
-## Constraints
-- Dataset table MUST live in Unity Catalog (not Lakebase) so MLflow eval can read it via SQL.
-- Versioned table names — avoid mutating the active dataset; add new versions instead.
-- PII redaction step before any inference-table conversation lands in the eval dataset.
-
-## Validation
-- `SELECT * FROM {lakehouse_default_catalog}.{user_schema_prefix}.agent_eval_dataset_v1 LIMIT 5` returns 5 rows.
-- Dataset is registered as an MLflow eval dataset (`mlflow.genai.datasets.create()`).
-- A reviewer can add a new row via the notebook and have it appear in the active set.',
-'You are a senior Databricks engineer building a Unity Catalog–backed evaluation dataset for a Mosaic AI agent. Schema, versioning, seed examples, and a reviewer-friendly authoring path are required. Treat this as a long-lived artifact: the dataset will get expanded weekly from inference-table conversations.',
-'Evaluation Datasets',
-'Curate a versioned Unity Catalog evaluation dataset for the agent (25+ representative examples)',
-47,
-'## How to Apply
-
-1. Generate the prompt below in your IDE.
-2. Run the resulting DDL to create `{lakehouse_default_catalog}.{user_schema_prefix}.agent_eval_dataset_v1`.
-3. Seed the table with 25+ representative examples (mix of personas, difficulties, edge cases).
-4. Register the dataset with MLflow eval (`mlflow.genai.datasets.create()`).
-5. Document the refresh cadence in the project README.',
-'## Expected Output
-
-### Schema + Data
-- Table `{lakehouse_default_catalog}.{user_schema_prefix}.agent_eval_dataset_v1` with the prescribed schema.
-- 25+ rows covering happy-path + edge cases.
-
-### MLflow Registration
-- Dataset registered with MLflow eval; visible in the experiment UI.
-
-### Authoring Path
-- Notebook or Python script for adding new rows with reviewer sign-off.
-
-### Refresh Plan
-- Documented weekly cadence for promoting inference-table conversations to the eval dataset.',
-false, 1, true, current_timestamp(), current_timestamp(), current_user());
-
--- Step 48: 03 - Scorers and Judges
-INSERT INTO ${catalog}.${schema}.section_input_prompts
-(input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
-VALUES
-(160, 'mlflow_scorers_and_judges',
-'Define the **scorers** that grade every agent response. Cover all five MLflow 3 judge categories so the eval signal is robust:
-
-## Use Case Specification
-{use_case_description}
-
-## Scorers to Implement
-
-### 1. Built-in (no code)
-- `Correctness` — does the response correctly answer the question given `expected_response`?
-- `RetrievalGroundedness` — are the cited tool outputs / sources sufficient to support the claim?
-
-### 2. Guidelines (LLM-as-judge with policy text)
-Author 3-5 plain-English guidelines, e.g.:
-- *Responses must NOT speculate when the tool output is empty — reply "I don''t have that information" instead.*
-- *Responses must include the citation `[Order #<id>]` whenever an order lookup tool is used.*
-- *Responses must NOT reveal data the tool refused to return (permission errors).*
-
-### 3. Custom (Python)
-A heuristic scorer for `tool_call_match`: did the agent call the tools in `expected_tools` exactly once each, with no extras?
-
-### 4. Code-based
-A SQL/UDF scorer that joins the response against the Bronze tables and returns 1.0 if the cited entities exist, 0.0 otherwise (cheap groundedness check independent of any LLM).
-
-### 5. Optional third-party
-Wire one of DeepEval / RAGAS / Phoenix / TruLens as a comparative reference — useful when stakeholders ask "but what does <tool X> say".
-
-## Required Output
-
-Update `{user_app_name}/agents/eval_offline.py` (and add `agents/scorers.py`) to:
-- Register all five scorers with MLflow.
-- Pass them to `mlflow.genai.evaluate()` from the previous step.
-- Make scorers configurable via env var (so cheap CI runs skip the expensive LLM judges).
-
-## Validation
-- Running the eval prints per-row scores from each scorer.
-- Toggling the `EVAL_USE_LLM_JUDGES=false` env var skips the LLM-judge scorers and returns only built-in + heuristic results.',
-'You are a senior Databricks engineer wiring MLflow 3 GenAI scorers and judges. Implement all five categories: built-in (Correctness, RetrievalGroundedness), Guidelines, Custom Python, Code-based SQL, and one optional third-party reference. Reference https://docs.databricks.com/aws/en/mlflow3/genai/eval-monitor/concepts/judges and the MLflow 3 GenAI eval docs. Make LLM-judge scorers togglable so CI runs stay fast and cheap.',
-'Scorers and Judges',
-'Define LLM-as-judge scorers (Correctness, RetrievalGroundedness, Guidelines, Custom, Code-based) and an optional third-party reference',
-48,
-'## How to Apply
-
-1. Generate the prompt below in your IDE.
-2. Apply the resulting changes to `agents/scorers.py` + `agents/eval_offline.py`.
-3. Re-run the eval and confirm all scorer columns appear in the MLflow run.
-4. Toggle `EVAL_USE_LLM_JUDGES=false` and confirm only the cheap scorers run.',
-'## Expected Output
-
-### Code
-- `agents/scorers.py` exporting all 5 scorers.
-- `agents/eval_offline.py` updated to register them with MLflow.
-
-### MLflow Run
-- Each row shows scores from: Correctness, RetrievalGroundedness, Guidelines, Custom (tool_call_match), Code-based (groundedness_sql).
-- Aggregate metrics computed per scorer.
-
-### Toggle
-- `EVAL_USE_LLM_JUDGES=false` env var skips LLM judges.',
-false, 1, true, current_timestamp(), current_timestamp(), current_user());
-
--- Step 49: 04 - Evaluation Runs
-INSERT INTO ${catalog}.${schema}.section_input_prompts
-(input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
-VALUES
-(161, 'mlflow_evaluation_runs',
-'Run **systematic eval comparisons** across prompt + model variants for **{use_case_title}** so prompt changes are decided by data, not gut feel.
-
-## Use Case Specification
-{use_case_description}
-
-## What to Run
-
-1. **Baseline** — current `@production` prompt + foundation model. Anchor for all comparisons.
-2. **Prompt variants** — at least 2 alternate prompt versions in the registry (e.g. shorter system prompt, more explicit refusal rules).
-3. **Model variants** — same prompt, two different LLM endpoints (e.g. `databricks-meta-llama-3-3-70b-instruct` vs a smaller / cheaper option).
-4. **Tool-call variants** (optional) — same prompt + model, agent with vs. without long-term memory.
-
-For each variant, call `mlflow.genai.evaluate(model=..., data=..., scorers=...)` against the dataset from Step 47 with the scorers from Step 48. Tag each MLflow run with the variant identifier so the comparison is easy to filter.
-
-## Required Output
-
-A small driver script `{user_app_name}/agents/eval_compare.py` that:
-- Loads the dataset.
-- Iterates over the variants matrix.
-- Runs eval for each.
-- Prints a summary table (mean Correctness, mean Groundedness, cost-per-eval-row) and the link to the MLflow comparison view.
-
-## Constraints
-- Eval runs MUST be reproducible; pin all variants in code or a YAML config.
-- Cost guardrail: skip LLM-judge scorers on variants that fail the baseline cheap-scorer threshold.
-
-## Validation
-- Comparison view in MLflow shows side-by-side runs.
-- Summary table identifies a clear winner (or surfaces "all within noise" honestly).',
-'You are a senior Databricks engineer running systematic prompt/model comparisons via mlflow.genai.evaluate. Make the variants matrix explicit and reproducible (YAML or in-code config). Cost-guardrail expensive scorers — only run them on variants that already pass cheap scorer thresholds.',
-'Evaluation Runs',
-'Execute mlflow.genai.evaluate across prompt + model variants and compare results in the MLflow UI',
-49,
-'## How to Apply
-
-1. Generate the prompt below in your IDE.
-2. Save the resulting `agents/eval_compare.py`.
-3. Run `python -m agents.eval_compare`; wait for all variants to finish.
-4. Open the MLflow comparison view from the printed link.
-5. Pick a winner (or document why no variant beats baseline).',
-'## Expected Output
-
-### Driver
-- `agents/eval_compare.py` runs all variants and prints a summary table.
-
-### MLflow
-- One run per variant tagged with `variant=<name>`.
-- Comparison view shows side-by-side metrics.
-
-### Decision
-- A documented winner (or honest "no clear winner" finding).',
-false, 1, true, current_timestamp(), current_timestamp(), current_user());
-
--- Step 50: 04b - Stakeholder Sign-off
-INSERT INTO ${catalog}.${schema}.section_input_prompts
-(input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
-VALUES
-(162, 'mlflow_stakeholder_signoff',
-'## Step 4b: Capture Stakeholder Sign-off
-
-This is a **workflow practice**, not a Databricks product feature. Before promoting a winning variant from Step 49, get human approval and capture it in writing.
-
-### Use Case Context
-{use_case_description}
-
-### Why This Step Exists
-LLM-judge scorers are a great proxy, but they don''t replace a human reading 5-10 representative outputs and saying "ship it". Skipping this step is the most common reason agents misbehave in production.
-
-### What You Will Do
-
-1. **Share the Review App link** with 2-3 stakeholders (PM, domain SME, customer-success lead).
-2. **Pre-load 5-10 high-stakes examples** into the Review App so reviewers can see the agent''s answers without typing prompts.
-3. **Ask each reviewer to rate** every example (👍 / 👎 + free-text feedback) — the Review App writes ratings to the inference table.
-4. **Aggregate ratings** in a small notebook (`{user_app_name}/agents/signoff_summary.py`):
-   - Count 👍 vs 👎 per reviewer.
-   - Surface examples where reviewers disagreed.
-   - Print an overall pass/fail recommendation.
-5. **Document the decision** in your project tracker (Jira / Linear / GitHub Issue) with:
-   - Variant identifier (matches the MLflow run tag).
-   - Reviewers + their ratings.
-   - The chosen `@production` alias target.
-   - Rollback plan (which version becomes `@previous`).
-
-### Tools to Reference
-- **Review App** — auto-deployed by `agents.deploy` from Step 44; URL is on the Model Serving endpoint page.
-- **Eval dashboard** — the MLflow comparison view from Step 49.
-- **Inference table** — the AI Gateway-enabled table that captures ratings (column `human_feedback` or similar).
-
-### Verify
-- Each reviewer has submitted at least 5 ratings.
-- Disagreements are documented (not silently averaged away).
-- Sign-off decision is captured in your tracker, linked to the MLflow run.
-
-### Deliverables
-- [ ] Review App pre-loaded with high-stakes examples.
-- [ ] At least 2 reviewers have rated all examples.
-- [ ] Aggregation notebook prints a clear pass/fail recommendation.
-- [ ] Decision recorded in the project tracker.
-- [ ] Rollback plan documented.',
-'',
-'Stakeholder Sign-off',
-'Workflow practice: share Review App + eval dashboard, capture human ratings, record final approval before promotion',
+'Phase 1 / Build the Quality Suite — First Scored Eval + Iteration Entry',
+'Run mlflow.genai.evaluate against the benchmark table; capture failure-shape classification + routing decision (owns System Prompt Review preflight contract)',
 50,
-'## How to Apply
+'## How To Apply
 
-1. Open the Review App (linked from the Model Serving endpoint page).
-2. Pre-load 5-10 high-stakes examples for stakeholders to rate.
-3. Send the Review App link to 2-3 reviewers (PM + domain SME + CS lead).
-4. After all ratings are in, run `python -m agents.signoff_summary` to aggregate.
-5. Document the sign-off decision in your project tracker (Jira / Linear / GitHub Issue) with the MLflow run tag and rollback plan.',
-'## Expected Output
+Open a **new Agent thread in your Coding Assistant** and paste the prompt above. This is the entry point to the **iteration phase** of the SDLC arc — it grades the agent against the benchmark table, then either green-lights human review or hands off to the right iteration loop based on the captured `failure_shape_classification`.
 
-After this step:
+### Prerequisite
+- `Scorer suite registered with thresholds` gate captured in state (input_id 211)
+- `## System Prompt Review` block in the state file ready to be populated (this prompt populates it)
+- `state://AgentSpec.agent.must_do[]` and `state://AgentSpec.agent.must_not_do[]` populated
 
-### Captured Artifacts
-- 2+ reviewers'' ratings on at least 5 examples each, persisted in the inference table.
-- Aggregation summary (pass/fail per reviewer + disagreement examples).
-- Project-tracker entry with variant ID, reviewers, decision, and rollback plan.
+### Steps to Apply
+1. New Coding Assistant thread, paste prompt.
+2. AI populates the `## System Prompt Review` block with worked examples for every `agent.must_do[]` and `agent.must_not_do[]` clause, sets `complete: true`, stamps `reviewed_at` and `reviewed_by`.
+3. Preflight checks gate the run: `system_prompt_review.complete == true` AND `count(must_do_worked_examples) >= count(agent.must_do)` AND `count(must_not_do_worked_examples) >= count(agent.must_not_do)`.
+4. AI runs `mlflow.genai.evaluate` against `{uc_catalog}.{user_schema_prefix}_agent.{use_case_slug}_agent_benchmarks` with the scorers from input_id 211; writes per-scorer pass/fail results.
+5. AI captures `failure_shape_classification` + `safety_buffer` + `predict_fn_exception_count` + the rest of the failure-shape schema into state.
+6. AI fires either `Eval thresholds met` (proceed to human review at input_id 213) OR `Eval regressed — iterate` (route via decision tree).',
+'### Resources Created
+- [ ] `## System Prompt Review` block in state populated (`complete: true`, worked examples for every must_do / must_not_do clause)
+- [ ] Per-scorer pass/fail table written under `{mlflow_experiment_path}`
+- [ ] `failure_shape_classification.primary_shape` captured (`instruction | tool_call_empty | retrieval | safety | other`)
+- [ ] `safety_buffer` map captured per scorer (mean − threshold, signed)
+- [ ] `predict_fn_exception_count`, `predict_fn_sentinel_count_per_run`, `judges_with_silent_aggregation_dropouts` captured
+- [ ] Gate fired: either `Eval thresholds met` OR `Eval regressed — iterate` with the routing branch recorded',
+TRUE, 1, true, current_timestamp(), current_timestamp(), current_user());
 
-### Decision
-- Clear go/no-go on promoting the winning variant from Step 49.',
-true, 1, true, current_timestamp(), current_timestamp(), current_user());
-
--- Step 51: 05 - Logged Model & UC Registration
+-- Step 51 / order 51: Phase 2 / Human Review - Labeling + Stakeholder Sign-Off
+-- Verbatim from live DDL row 148 (mlflow_agent_human_review). The
+-- `Decision: APPROVED` path at
+--   /Volumes/{uc_catalog}/{user_schema_prefix}_ops/signoffs/v1/decision.md
+-- is preserved verbatim and is the hard-asserted prerequisite for input_id 214.
 INSERT INTO ${catalog}.${schema}.section_input_prompts
 (input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
 VALUES
-(163, 'mlflow_logged_model_uc',
-'Formalize the agent as a **versioned, UC-registered MLflow model** so deploys are reproducible and rollback is one CLI call.
+(213, 'mlflow_human_review_and_signoff',
+'Open the **expert-in-the-loop phase** of the agent SDLC story arc — "how do I involve experts?" — by routing predictions to SMEs and converting their judgment into a stakeholder-signed gate artifact.
+Run an SME labeling session that turns ≥ 10 production traces into pinned regression rows, then run the stakeholder sign-off gate that decides whether the agent can promote to `@champion`.
 
-## Use Case Specification
-{use_case_description}
+**Invoke skills (in order):**
 
-## What to Build
+1. `genai-agents/vibecoding-state` op `enter` — params: `prompt_id: "mlflow_human_review_and_signoff"`, `require_prior_gate: {prompt_id: "mlflow_evaluation_runs_and_iteration", gate: "Eval thresholds met | Eval regressed — iterate"}`.
+2. @genai-agents/sdlc/04-evaluation-runs/SKILL.md op `labeling_session` — params:
+   - `agent_name: "{user_prefix}-{use_case_slug}-agent"`
+   - `agent_spec_ref: "state://AgentSpec"`
+   - `mlflow_experiment_path: "{mlflow_experiment_path}"`
+   - `trace_sample_size: 15`
+   - `sync_back_into: "{uc_catalog}.{user_schema_prefix}_agent.{use_case_slug}_agent_benchmarks"`
+   - `sync_fields: ["expectations", "human_assessments"]`
+   - The skill reads `agent.reviewer_role` to pre-fill the labeling-session reviewer-role field.
+3. @genai-agents/sdlc/02-evaluation-datasets/references/benchmark-generation.md section `11-issue-focused-subset` — params:
+   - `source: "negative_feedback_traces"`
+   - `tag: {provenance: "issue_failing_trace"}`
+   - `regression_pass_rate: 1.0`
+4. @genai-agents/sdlc/04b-stakeholder-signoff/SKILL.md — params:
+   - `agent_name: "{user_prefix}-{use_case_slug}-agent"`
+   - `agent_spec_ref: "state://AgentSpec"`
+   - `one_page_metrics_report: true`
+   - `walkthrough_rows: {failing: 5, passing: 5, source: "latest_eval_run"}`
+   - `compliance_checklist: true`
+   - `decision_record_path: "/Volumes/{uc_catalog}/{user_schema_prefix}_ops/signoffs/v1/decision.md"`
+   - `required_fields: ["Decision: APPROVED", "rollback_trigger"]`
+   - `capture_into_state: ["signoff_decision"]`
+   - The skill reads `governance.monitoring.rollback_trigger_example` for the hint wording.
+5. `genai-agents/vibecoding-state` op `exit` — params: `prompt_id: "mlflow_human_review_and_signoff"`, `gate: "<Signoff APPROVED | Signoff REJECTED — block promotion>"`, `captured: {signoff_decision}`.
 
-1. **Log the approved variant** (winner from Step 49 + sign-off from Step 50) using the Agent Framework''s `mlflow.models.log_model` flow:
-   ```python
-   import mlflow
-   from agents.{use_case_title}_agent import build_agent
-
-   with mlflow.start_run() as run:
-       mlflow.models.log_model(
-           python_model=build_agent(),
-           artifact_path="agent",
-           # ResponsesAgent auto-infers signature — no manual pyfunc wrapper.
-       )
-   ```
-2. **Register to Unity Catalog**:
-   ```python
-   uc_full_name = f"{lakehouse_default_catalog}.{user_schema_prefix}.{use_case_title}_agent"
-   mv = mlflow.register_model(f"runs:/{{run.info.run_id}}/agent", uc_full_name)
-   ```
-3. **Move aliases**:
-   - Move `@production` → new model version.
-   - Move the previous version to `@previous` for rollback.
-4. **Tag the version** with metadata: variant identifier, eval-run URI, sign-off decision URL.
-
-## Constraints
-- Use the Agent Framework helpers (`mlflow.models.log_model`) — do NOT hand-roll `pyfunc.PythonModel`.
-- Aliases MUST be moved atomically (use `client.set_registered_model_alias`).
-- Do NOT delete the previous version; rollback requires it to remain in UC.
-
-## Validation
-- `databricks unity-catalog tags get` shows the new version with all metadata tags.
-- `mlflow.MlflowClient().get_model_version_by_alias(uc_full_name, "production")` returns the new version.
-- The previous version is reachable via `@previous`.',
-'You are a senior Databricks engineer registering a Mosaic AI agent in Unity Catalog. Use mlflow.models.log_model with the ResponsesAgent (auto-signature inference). Move @production and @previous aliases atomically; tag the version with the variant ID, eval-run URI, and sign-off decision URL. Reference https://docs.databricks.com/generative-ai/agent-framework/log-agent.',
-'Logged Model & UC Registration',
-'Log the approved agent via mlflow.models.log_model and register the version in Unity Catalog with @production alias',
+**Gate:** `Signoff APPROVED` (or `Signoff REJECTED — block promotion`) — decision markdown committed to the UC volume; CI promotion gates on `Decision: APPROVED`.',
+'',
+'Phase 2 / Human Review — Labeling + Stakeholder Sign-Off (Expert-in-the-Loop)',
+'SME labeling session syncs into benchmarks; stakeholder sign-off gate decides promotion (Decision: APPROVED hard-asserts downstream)',
 51,
-'## How to Apply
+'## How To Apply
 
-1. Generate the prompt below in your IDE.
-2. Apply the resulting code changes to `agents/register.py`.
-3. Run `python -m agents.register --variant <winner_id>` and confirm the model version is created.
-4. Verify aliases via `mlflow.MlflowClient().get_model_version_by_alias(uc_full_name, "production")`.
-5. Confirm the previous version is reachable via `@previous` for rollback.',
-'## Expected Output
+Open a **new Agent thread in your Coding Assistant** and paste the prompt above. The **expert-in-the-loop phase** of the SDLC story arc lands as two passes in one thread: SME labeling first, then the sign-off gate.
 
-### Artifacts
-- New MLflow run with the logged ResponsesAgent.
-- New UC model version under `{lakehouse_default_catalog}.{user_schema_prefix}.{use_case_title}_agent`.
+### Prerequisite
+- `mlflow_evaluation_runs_and_iteration` gate captured in state (thresholds met or regression logged)
+- ≥ 15 production traces accumulated at `{mlflow_experiment_path}`
+- UC volume `/Volumes/{uc_catalog}/{user_schema_prefix}_ops/signoffs/v1/` created (writable)
 
-### Aliases
-- `@production` → new version.
-- `@previous` → previous version (preserved for rollback).
+### Steps to Apply
+1. New Coding Assistant thread, paste prompt.
+2. AI launches the labeling session UI, samples 15 traces, hands off to the SME for labels.
+3. AI syncs labels back into the benchmark table, materializes the issue-focused regression subset (`provenance: issue_failing_trace`).
+4. AI generates the one-page metrics report + 10 walkthrough rows + compliance checklist; opens a review session.
+5. Stakeholder writes the decision markdown to `/Volumes/{uc_catalog}/{user_schema_prefix}_ops/signoffs/v1/decision.md` with `Decision: APPROVED` or `Decision: REJECTED`.',
+'### Resources Created
+- [ ] ≥ 10 traces SME-labeled; labels synced into benchmark table
+- [ ] Regression subset created with `provenance: issue_failing_trace`
+- [ ] One-page metrics report generated
+- [ ] 5 failing + 5 passing walkthrough rows captured
+- [ ] Sign-off decision markdown at `/Volumes/{uc_catalog}/{user_schema_prefix}_ops/signoffs/v1/decision.md`
+- [ ] `signoff_decision` captured in state',
+TRUE, 1, true, current_timestamp(), current_timestamp(), current_user());
 
-### Tags
-- variant_id, eval_run_uri, signoff_url all set on the new version.',
-false, 1, true, current_timestamp(), current_timestamp(), current_user());
-
--- Step 52: 06 - Deployment & Automation
+-- Step 52 / order 52: Phase 3 / Promote with Governance - Logged Model + UC Registration
+-- Split from live DDL row 149 (Skill 08b conditional + Skill 05). The
+-- hard_assert {var: signoff_decision, equals: APPROVED} is preserved verbatim
+-- so promotion to @champion gates on the input_id 213 sign-off artifact.
 INSERT INTO ${catalog}.${schema}.section_input_prompts
 (input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
 VALUES
-(164, 'mlflow_deployment_automation',
-'Wrap the deploy + smoke-test flow in a **Databricks Asset Bundle (DAB) job** so promotion is one CLI command.
+(214, 'mlflow_logged_model_uc_registration',
+'Close out the **iteration phase** of the agent SDLC story arc — "how do I improve it?" — and open the **production hardening phase** — "how do I promote it safely?" — by (optionally) running the hand-authored prompt iteration loop on instruction-shaped failures, then logging and registering the agent at `@champion` in Unity Catalog. Promotion is hard-gated on the captured stakeholder sign-off from input_id 213.
 
-## Use Case Specification
-{use_case_description}
+If the prior scored eval (input_id 212) produced `Eval regressed — iterate` and the failure shape is *instruction-shaped*, run hand-authored prompt iteration first (Skill 08b against the full eval dataset). The default flow no longer routes to GEPA — Skill 08 (`08-prompt-optimization`) is an optional/advanced path retained only for operators who explicitly declare `prompt_iteration_strategy: gepa`.
 
-## What to Build
+**Invoke skills (in order):**
 
-1. **Asset Bundle** at `{user_app_name}/databricks.yml` (extend existing if you already have one):
-   - Job `agents_{use_case_title}_promote` with two tasks:
-     - `register` — runs the Step 51 registration logic.
-     - `deploy` — runs `databricks.agents.deploy(uc_full_name, version)`.
-     - `smoke_test` — runs a curl-equivalent against the new endpoint and asserts a 200 + non-empty response.
-   - Variables: `variant_id`, `model_version`, `endpoint_name`, `target_workspace`.
-   - Targets: `dev`, `staging`, `prod` (each with their own UC catalog + workspace).
-2. **GitHub Actions workflow** (or equivalent) that runs `databricks bundle deploy && databricks bundle run agents_{use_case_title}_promote --target prod` after the Step 50 sign-off PR is merged.
-3. **Rollback bundle target** — `agents_{use_case_title}_rollback` job that swaps the `@production` and `@previous` aliases and re-runs `agents.deploy` against the rolled-back version.
+1. `genai-agents/vibecoding-state` op `enter` — params: `prompt_id: "mlflow_logged_model_uc_registration"`, `require_prior_gate: {prompt_id: "mlflow_human_review_and_signoff", gate: "Signoff APPROVED"}`, `hard_assert: {var: "signoff_decision", equals: "APPROVED"}`.
 
-## Constraints
-- Bundle MUST be runnable from a clean checkout (no manual setup).
-- All secrets via Databricks secret scopes, not env vars in the YAML.
-- Smoke test failure MUST roll back automatically.
+2. **(Optional, only if `failing_scorers_if_regressed` is non-empty AND `failure_shape == instruction` AND no L1 scorer failure)** @genai-agents/sdlc/08b-prompt-handauthoring/SKILL.md — params:
+   - `agent_spec_ref: "state://AgentSpec"`
+   - `prompt_ref: "prompts:/{uc_catalog}.{uc_agent_schema}.system_instructions@production"`
+   - `target_scorers: <from first_scored_eval failing_scorers_if_regressed>`
+   - `rerun_prompt_role: "first_scored_eval"`
+   - `write_alias: "@staging"`
+   - `promote_if: "all_target_scorers_meet_or_beat_baseline_on_full_dataset"`
+   - `promote_from: "@staging"`
+   - `promote_to: "@production"`
+   - `reflection_lm_role: "reflection_lm"`
+   - `reflection_lm_endpoint: "{llm_role_endpoints.reflection_lm.endpoint}"` (the diff-summary helper routes through the resolved `reflection_lm` role binding — never the raw `{llm_endpoint}`)
+   - `preflight_checks: ["reflection_lm_large_context_probe"]`
+   - `capture_into_state: ["prompt_iteration_ran", "prompt_handauthoring_iterations", "prompt_handauthoring_template_diff_summaries"]`
 
-## Validation
-- `databricks bundle deploy --target staging && databricks bundle run agents_{use_case_title}_promote --target staging` succeeds end-to-end.
-- A deliberately-broken model version triggers the rollback path.
-- The CI workflow runs successfully on a sample PR.',
-'You are a senior Databricks engineer building a Databricks Asset Bundle for agent promotion. The bundle MUST cover register + deploy + smoke-test + automatic rollback on smoke-test failure. Reference https://docs.databricks.com/aws/en/dev-tools/bundles. Pin all secrets via Databricks secret scopes; do not put credentials in YAML.',
-'Deployment & Automation',
-'Wrap deploy + smoke-test + rollback in a Databricks Asset Bundle job for repeatable, auditable promotion',
+3. @genai-agents/sdlc/05-logged-model-and-uc-registration/SKILL.md — params:
+   - `agent_name: "{user_prefix}-{use_case_slug}-agent"`
+   - `uc_model: "{uc_catalog}.{user_schema_prefix}_agent.{use_case_slug}_agent"`
+   - `promotion_alias: "@champion"`
+   - `promote_if: "eval_scores_ge_prior_champion"`
+
+4. `genai-agents/vibecoding-state` op `exit` — params: `prompt_id: "mlflow_logged_model_uc_registration"`, `gate: "@champion set"`, `captured: {prompt_iteration_ran}`.
+
+**Gate:** `@champion set` — the agent is logged via `mlflow.models.log_model`, registered at `{uc_catalog}.{user_schema_prefix}_agent.{use_case_slug}_agent`, and the `@champion` alias is moved to the new version IFF eval scores are ≥ the prior champion. Promotion is hard-asserted on `signoff_decision == APPROVED` from input_id 213.',
+'',
+'Phase 3 / Promote with Governance — Logged Model + UC Registration',
+'Optional 08b hand-author iteration on instruction-shaped failures, then log + register the agent at @champion in UC (gated on signoff_decision == APPROVED)',
 52,
-'## How to Apply
+'## How To Apply
 
-1. Generate the prompt below in your IDE.
-2. Apply the resulting changes to `{user_app_name}/databricks.yml` (and any task scripts).
-3. Run `databricks bundle deploy --target staging && databricks bundle run agents_{use_case_title}_promote --target staging`.
-4. Test the rollback target with a deliberately-broken version.
-5. Wire the workflow into CI so merging a sign-off PR triggers `target prod` automatically.',
-'## Expected Output
+Open a **new Agent thread in your Coding Assistant** and paste the prompt above. This carries the **iteration phase conclusion** (optional Skill 08b for instruction-shaped failures) plus the **logged model registration** at `@champion`. Hard-gated on `signoff_decision == APPROVED` from input_id 213.
 
-### Bundle
-- `{user_app_name}/databricks.yml` defines:
-  - `agents_{use_case_title}_promote` (register + deploy + smoke-test).
-  - `agents_{use_case_title}_rollback` (alias swap + redeploy).
-  - dev / staging / prod targets.
+### Prerequisite
+- `Signoff APPROVED` gate captured in state from `mlflow_human_review_and_signoff` (input_id 213)
+- `signoff_decision == APPROVED` populated in state (hard-asserted)
+- UC volume `/Volumes/{uc_catalog}/{user_schema_prefix}_ops/signoffs/v1/decision.md` exists with `Decision: APPROVED`
+- `failure_shape_classification` captured from input_id 212 (drives the conditional Skill 08b branch)
 
-### CI
-- Workflow runs `databricks bundle deploy && databricks bundle run` on merge.
+### Steps to Apply
+1. New Coding Assistant thread, paste prompt.
+2. **(Conditional)** AI invokes hand-authored prompt iteration (Skill 08b) only if the prior scored eval left `failing_scorers_if_regressed` non-empty, the failure is instruction-shaped, and no L1 scorer failures are present; promotes from `@staging` to `@production` only if a full-dataset re-eval shows all target scorer means meet or beat baseline.
+3. AI logs the model via `mlflow.models.log_model` and registers it at `@champion` in UC.
+4. AI moves `@champion` alias only if eval scores meet or exceed the prior champion.',
+'### Resources Created
+- [ ] (If applicable) Hand-authored prompt iteration run (Skill 08b) with full-dataset re-eval; `@staging` promoted to `@production` only if all target scorer means meet or beat baseline
+- [ ] `prompt_iteration_ran` captured in state
+- [ ] `prompt_handauthoring_iterations` and `prompt_handauthoring_template_diff_summaries` captured (if Skill 08b ran)
+- [ ] Model registered at `{uc_catalog}.{user_schema_prefix}_agent.{use_case_slug}_agent@champion`
+- [ ] `@champion` alias moved IFF eval scores meet or exceed prior champion',
+TRUE, 1, true, current_timestamp(), current_timestamp(), current_user());
 
-### Verification
-- Bundle promotes a new version end-to-end.
-- Smoke-test failure triggers rollback automatically.',
-false, 1, true, current_timestamp(), current_timestamp(), current_user());
-
--- Step 53: 07 - Production Monitoring
+-- Step 53 / order 53: Phase 3 / Promote with Governance - AI Gateway + Asset-Bundle Deployment
+-- Split from live DDL row 149 (Skill 04 AI Gateway + Skill 06 Deployment &
+-- Automation). Promotion is blocked unless the captured signoff_decision is
+-- APPROVED, matching the live DDL contract.
 INSERT INTO ${catalog}.${schema}.section_input_prompts
 (input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
 VALUES
-(165, 'mlflow_production_monitoring',
-'Stand up **production monitoring** for the deployed agent using **AI Gateway-enabled inference tables** and **MLflow 3 scheduled scorers**. The legacy inference-tables experience is deprecated 2026-04-30 — use the AI Gateway path.
+(215, 'mlflow_gateway_and_deployment',
+'Govern the registered agent behind an **AI Gateway** (PII + safety guardrails, rate limits, inference tables) and automate promotion via **Databricks Asset Bundles**, with promotion hard-blocked unless the captured stakeholder sign-off (input_id 213) is `APPROVED`.
 
-## Use Case Specification
-{use_case_description}
+**Invoke skills (in order):**
 
-## What to Build
+1. `genai-agents/vibecoding-state` op `enter` — params: `prompt_id: "mlflow_gateway_and_deployment"`, `require_prior_gate: {prompt_id: "mlflow_logged_model_uc_registration", gate: "@champion set"}`, `hard_assert: {var: "signoff_decision", equals: "APPROVED"}`.
 
-1. **AI Gateway-enabled inference table** — already auto-enabled by `agents.deploy` from Step 44. Confirm with:
-   ```python
-   from databricks.sdk import WorkspaceClient
-   ws = WorkspaceClient()
-   endpoint = ws.serving_endpoints.get(name="agents_{use_case_title}_<version>")
-   print(endpoint.config.auto_capture_config)  # should show ai_gateway_inference_table=True
-   ```
-2. **Schedule MLflow 3 scorers** to run on the captured rows:
-   ```python
-   from mlflow.genai.scorers import scorer  # MLflow 3 API
-   correctness = scorer.register(name="prod_correctness", ...)
-   correctness.start(
-       experiment_id="<your_experiment_id>",
-       data_source_endpoint="agents_{use_case_title}_<version>",
-       sampling_rate=0.05,  # 5% of prod traffic; max 20 scheduled scorers per experiment
-   )
-   ```
-   Repeat for groundedness + your top 1-2 Guidelines from Step 48 (mind the 20-scorer cap).
-3. **AI/BI Dashboard** (`{lakehouse_default_catalog}.{user_schema_prefix}.agent_monitoring`) wired to:
-   - Per-day mean Correctness + RetrievalGroundedness.
-   - Tool-call error rate.
-   - p50 / p95 / p99 latency.
-   - Alert thresholds (red/amber/green) for each metric.
-4. **Slack/email alerts** when a metric falls below threshold for 3 consecutive scoring windows.
+2. @genai-agents/foundation/04-ai-gateway/SKILL.md — params:
+   - `gateway_name: "{user_prefix}-{use_case_slug}-ai-gateway"`
+   - `backing_model: "{llm_role_endpoints.agent_chat.endpoint}"`
+   - `inference_tables_prefix: "{uc_catalog}.{user_schema_prefix}_ops.gw_"`
+   - `usage_tracking: true`
+   - `guardrails: {pii: "both", safety: "both"}`
+   - `rate_limits: {endpoint: "120/min", per_user: "20/min"}`
+   - `capture_into_state: ["ai_gateway_endpoint"]`
 
-## Constraints
-- Sampling rate stays low (1-5%) to keep scoring cost bounded.
-- Maximum 20 scheduled scorers per MLflow experiment (MLflow 3 limit).
-- Dashboard reads MUST go through the AI Gateway-enabled inference table, not the deprecated legacy tables.
+3. @genai-agents/sdlc/06-deployment-and-automation/SKILL.md — params:
+   - `agent_name: "{user_prefix}-{use_case_slug}-agent"`
+   - `tool: "databricks_asset_bundles"`
+   - `customize: ["databricks.yml", "app.yaml"]`
+   - `env: {MLFLOW_ACTIVE_MODEL_ID: "auto", LLM_GATEWAY_BASE_URL: "$ai_gateway_endpoint", LLM_GATEWAY_MODEL: "{user_prefix}-{use_case_slug}-ai-gateway"}`
+   - `propagate_header: {name: "databricks_request_id", source: "mlflow_trace_request_id"}`
+   - `block_promotion_if_missing: "/Volumes/{uc_catalog}/{user_schema_prefix}_ops/signoffs/v1/decision.md :: ''Decision: APPROVED''"`
+   - `warehouse_id: {default_warehouse}`
 
-## Validation
-- After a few hours of traffic, the dashboard shows non-trivial values for every metric.
-- Manually corrupting the agent (e.g. deploying a broken variant) triggers an alert within one scoring window.
-- The dashboard is shareable and shows the same data to non-engineers.',
-'You are a senior Databricks engineer setting up production monitoring for a Mosaic AI agent. Use AI Gateway-enabled inference tables (legacy tables deprecated 2026-04-30) and MLflow 3 scheduled scorers (`scorer.register()` / `.start()`, sampling rate 0.0-1.0, max 20 scorers per experiment). Wire results into an AI/BI dashboard with alert thresholds. Reference https://docs.databricks.com/aws/en/mlflow3/genai/eval-monitor/run-scorer-in-prod and https://docs.databricks.com/en/machine-learning/model-serving/inference-tables.html.',
-'Production Monitoring',
-'Enable AI Gateway-enabled inference tables + MLflow 3 scheduled scorers; surface drift in an AI/BI dashboard',
+4. `genai-agents/vibecoding-state` op `exit` — params: `prompt_id: "mlflow_gateway_and_deployment"`, `gate: "gateway live; DAB-deployed"`, `captured: {ai_gateway_endpoint, agent_app_url, agent_app_name}`.
+
+**Gate:** `gateway live; DAB-deployed` — the AI Gateway is provisioned with PII + safety guardrails and per-user rate limits, the gateway is wired into the agent app via `databricks.yml` + `app.yaml`, the `databricks_request_id` header is propagated for trace ↔ gateway correlation, and the Asset-Bundle promotion is hard-blocked unless `decision.md` reads `Decision: APPROVED`.',
+'',
+'Phase 3 / Promote with Governance — AI Gateway + Asset-Bundle Deployment',
+'Provision the AI Gateway with PII + safety guardrails and rate limits, wire it via Asset Bundles, and propagate databricks_request_id for trace ↔ gateway correlation',
 53,
-'## How to Apply
+'## How To Apply
 
-1. Generate the prompt below in your IDE.
-2. Apply the resulting code changes (scorer registration + dashboard creation script).
-3. Run the registration script and confirm scorers are listed under your MLflow experiment.
-4. Wait for traffic to flow; open the dashboard and confirm non-trivial values appear.
-5. Test the alert path by deploying a deliberately-broken variant and watching for the alert.',
-'## Expected Output
+Open a **new Agent thread in your Coding Assistant** and paste the prompt above. This wraps the registered agent in an AI Gateway and automates promotion via Databricks Asset Bundles. Promotion is hard-blocked unless the captured `signoff_decision` is `APPROVED`.
 
-### Inference Table
-- AI Gateway-enabled inference table populated with request/response/rating rows.
+### Prerequisite
+- `@champion set` gate captured in state from `mlflow_logged_model_uc_registration` (input_id 214)
+- `signoff_decision == APPROVED` populated in state (hard-asserted)
+- UC volume `/Volumes/{uc_catalog}/{user_schema_prefix}_ops/signoffs/v1/decision.md` exists with `Decision: APPROVED`
+- Default SQL warehouse ID resolved into `{default_warehouse}`
 
-### Scheduled Scorers
-- 3-5 scorers registered + started under the agent''s MLflow experiment.
-- Sampling rate 1-5%; well under the 20-scorer / experiment cap.
+### Steps to Apply
+1. New Coding Assistant thread, paste prompt.
+2. AI provisions the AI Gateway endpoint with PII + safety guardrails and per-user rate limits.
+3. AI customizes `databricks.yml` + `app.yaml` to point the agent at the gateway and propagate `databricks_request_id` for trace correlation.
+4. AI verifies the deployment promotion is gated on the sign-off `decision.md`.',
+'### Resources Created
+- [ ] AI Gateway `{user_prefix}-{use_case_slug}-ai-gateway` live with inference-table rows under `{uc_catalog}.{user_schema_prefix}_ops.gw_*`
+- [ ] PII + safety guardrails enabled (`both`); rate limits 120/min endpoint, 20/min per-user
+- [ ] DAB-driven deployment with `LLM_GATEWAY_BASE_URL` env wired
+- [ ] `databricks_request_id` header propagated for trace ↔ gateway correlation
+- [ ] Promotion hard-blocked unless `decision.md` reads `Decision: APPROVED`
+- [ ] `ai_gateway_endpoint`, `agent_app_url`, `agent_app_name` captured in state',
+TRUE, 1, true, current_timestamp(), current_timestamp(), current_user());
 
-### Dashboard + Alerts
-- AI/BI dashboard `{lakehouse_default_catalog}.{user_schema_prefix}.agent_monitoring` with quality + latency tiles.
-- Slack/email alert fires when a metric crosses threshold for 3 consecutive windows.',
-false, 1, true, current_timestamp(), current_timestamp(), current_user());
-
--- Step 54: 08 - Prompt Optimization
+-- Step 54 / order 54: Phase 4 / Operate in Production - Monitoring + Agent-as-Judge Debugging
+-- Split from live DDL row 149 (Skill 07 Production Monitoring + Track A
+-- Skill 08 agent-as-judge debugging). Replaces the deprecated standalone
+-- prompt-optimization row entirely (default flow no longer routes to GEPA;
+-- Skill 08 is opt-in via prompt_iteration_strategy: gepa).
 INSERT INTO ${catalog}.${schema}.section_input_prompts
 (input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
 VALUES
-(166, 'mlflow_prompt_optimization',
-'Run **automated prompt optimization** against the eval dataset and write the winning prompt back to the registry.
+(216, 'mlflow_production_monitoring_and_debugging',
+'Open the **Operate in Production** phase of the agent SDLC story arc — "how do I keep this healthy in production?" — by configuring continuous evaluation against production traces, wiring SQL alerts on the production scorers, and standing up agent-as-judge debugging that auto-categorizes low-scoring traces and routes follow-ups to the right iteration track.
 
-## Use Case Specification
-{use_case_description}
+**Invoke skills (in order):**
 
-## What to Build
+1. `genai-agents/vibecoding-state` op `enter` — params: `prompt_id: "mlflow_production_monitoring_and_debugging"`, `require_prior_gate: {prompt_id: "mlflow_gateway_and_deployment", gate: "gateway live; DAB-deployed"}`.
 
-1. Pick an optimizer:
-   - **DSPy** — declarative prompt programming with built-in compilation.
-   - **`mlflow.genai.optimize_prompt`** — Databricks-managed prompt optimization (preview).
-   - **OpenAI Evals / Promptfoo** — third-party fallbacks.
-2. Define the optimization target: maximise mean Correctness on the dataset from Step 47, with Guidelines compliance as a hard constraint.
-3. Run the optimizer for a bounded number of iterations (e.g. 50-100 candidate prompts, capped by token budget).
-4. Compare the winning candidate against the current `@production` prompt using the exact same eval harness from Step 49.
-5. If the winner beats `@production` by a statistically meaningful margin (>5% on Correctness, no Guidelines regression), register the new prompt version and move `@candidate` alias.
-6. Run the **full sign-off flow from Step 50** before promoting `@candidate` → `@production`.
+2. @genai-agents/sdlc/07-production-monitoring/SKILL.md — params:
+   - `agent_name: "{user_prefix}-{use_case_slug}-agent"`
+   - `agent_spec_ref: "state://AgentSpec"`
+   - `otel_prefix: "{uc_catalog}.{user_schema_prefix}_ops.{use_case_slug}_agent_otel_"`
+   - `alerts_from_reference: {path: "references/monitoring-dashboard-queries.md", section: "6b"}`
+   - The skill reads `governance.scorer_suite.production_scorers[]` for continuous-eval sampling and `governance.monitoring.required_alerts[]` for the alert set.
 
-## Constraints
-- Optimization runs MUST be reproducible — pin random seeds + dataset version.
-- Token budget cap so a runaway optimizer can''t cost more than a fixed limit.
-- The optimizer''s scoring MUST use the same scorers as Step 48 — no shortcuts.
+3. @genai-agents/tracks/A-custom-agent-apps/08-debugging/SKILL.md section `agent-as-judge-debugging` — params:
+   - `agent_name: "{user_prefix}-{use_case_slug}-agent"`
+   - `agent_spec_ref: "state://AgentSpec"`
+   - `categorizer_endpoint: "{llm_role_endpoints.failure_categorizer.endpoint}"` (the `make_judge` failure-categorizer call routes through the resolved `failure_categorizer` role binding — never the raw `{llm_endpoint}`)
+   - `otel_annotations_table: "{uc_catalog}.{user_schema_prefix}_ops.{use_case_slug}_agent_otel_annotations"`
+   - `filter: {value_lt: 0.7, window: "7d"}`
+   - `write_assessment: "agent_failure_root_cause"`
+   - `cluster_top_n: 5`
+   - `action_routing: {instruction: "queue_prompt_optimization", retrieval: "queue_retrieval_tuning", tool: "queue_tool_fix"}`
+   - The skill reads `governance.scorer_suite.primary_scorer` to set `filter.assessment_name`.
 
-## Validation
-- Optimization run produces N candidate prompts with full eval scores each.
-- The winning candidate is logged in MLflow with its full lineage (parent prompt version, optimization config, dataset version).
-- A new prompt version exists in the Prompt Registry under `@candidate`.
-- Sign-off + promotion happens only after the workflow practice from Step 50.',
-'You are a senior Databricks engineer running automated prompt optimization for a production agent. Pick DSPy or mlflow.genai.optimize_prompt (preview) as the optimizer. Maximise Correctness on the dataset from Step 47, with Guidelines compliance as a hard constraint. Token budget caps. Promote ONLY after re-running the Step 50 sign-off workflow.',
-'Prompt Optimization',
-'Run automated prompt tuning against the eval dataset; write the winner back to the Prompt Registry under @candidate',
+4. `genai-agents/vibecoding-state` op `exit` — params: `prompt_id: "mlflow_production_monitoring_and_debugging"`, `gate: "alerts wired; agent-as-judge running"`, `captured: {production_alerts_configured, agent_failure_root_cause_writes_observed}`.
+
+**Gate:** `alerts wired; agent-as-judge running` — continuous-eval scorers sampling production traces against `governance.scorer_suite.production_scorers[]`, ≥ 4 SQL alerts configured (drawn from `governance.monitoring.required_alerts[]` and the `references/monitoring-dashboard-queries.md` section `6b` recipes), and `agent_failure_root_cause` rows being written to `{uc_catalog}.{user_schema_prefix}_ops.{use_case_slug}_agent_otel_annotations` on low-scoring traces, with each cluster dispatched to the correct follow-up track (instruction → prompt iteration; retrieval → retrieval tuning; tool → tool fix).',
+'',
+'Phase 4 / Operate in Production — Monitoring and Agent-as-Judge Debugging',
+'Configure continuous-eval sampling, ≥ 4 SQL alerts, and agent-as-judge auto-categorization that routes failure clusters to the right iteration track',
 54,
-'## How to Apply
+'## How To Apply
 
-1. Generate the prompt below in your IDE.
-2. Apply the resulting code changes (`agents/optimize_prompt.py`).
-3. Run the optimizer with a bounded iteration + token budget.
-4. Inspect the winning candidate''s scores; confirm it beats `@production` meaningfully.
-5. Register the new prompt version under `@candidate`.
-6. Re-run the Step 50 sign-off flow before promoting `@candidate` → `@production`.',
-'## Expected Output
+Open a **new Agent thread in your Coding Assistant** and paste the prompt above. This stands up production monitoring and agent-as-judge debugging on the deployed agent. The agent SDLC story arc loops back from here — debugging clusters route directly into the iteration track that fits the failure shape (prompt iteration, retrieval tuning, or tool fix).
 
-### Run Artifacts
-- N candidate prompts with full eval scores in MLflow.
-- Winning candidate registered under `@candidate` alias.
-- Lineage: parent prompt version, optimization config, dataset version, random seed all logged.
+### Prerequisite
+- `gateway live; DAB-deployed` gate captured in state from `mlflow_gateway_and_deployment` (input_id 215)
+- `state://AgentSpec.governance.scorer_suite.production_scorers[]` populated
+- `state://AgentSpec.governance.scorer_suite.primary_scorer` populated
+- `state://AgentSpec.governance.monitoring.required_alerts[]` populated
+- `references/monitoring-dashboard-queries.md` section `6b` available for SQL alert recipes
+- Production traffic flowing through the gateway-fronted endpoint (so OTel tables have rows to score)
 
-### Decision
-- Either: meaningful win → sign-off → promote to `@production`.
-- Or: no meaningful win → stay on current `@production`, document findings.
-
-### Cost
-- Total optimization cost stays under the documented token budget.',
-false, 1, true, current_timestamp(), current_timestamp(), current_user());
+### Steps to Apply
+1. New Coding Assistant thread, paste prompt.
+2. AI configures continuous-eval sampling against `production_scorers[]`.
+3. AI generates ≥ 4 SQL alerts from the `required_alerts[]` list and the section `6b` recipes.
+4. AI stands up agent-as-judge debugging that writes `agent_failure_root_cause` rows to OTel annotations on failing production traces and dispatches each cluster to the right follow-up track.',
+'### Resources Created
+- [ ] Continuous-eval scorers sampling production traces against `production_scorers[]`
+- [ ] ≥ 4 SQL alerts configured for production scorers (from `required_alerts[]` and section `6b` recipes)
+- [ ] `agent_failure_root_cause` rows being written to `{uc_catalog}.{user_schema_prefix}_ops.{use_case_slug}_agent_otel_annotations`
+- [ ] Failure clusters routed: instruction → queue_prompt_optimization, retrieval → queue_retrieval_tuning, tool → queue_tool_fix
+- [ ] `production_alerts_configured`, `agent_failure_root_cause_writes_observed` captured in state',
+TRUE, 1, true, current_timestamp(), current_timestamp(), current_user());
 
 -- =============================================================================
 -- SEED FORK EXAMPLES (Genie Code / CoDA)
