@@ -466,6 +466,29 @@ function LevelSelectorGrid({
         <div className={getBoxClass(isAcceleratorSelected, false, isColumnLocked('accelerator'))}>
           {columnHeader('accelerator')}
           <div className="space-y-2">
+            {/* Agents Accelerator — first in the list; works with any sample use case; clicking it locks the flow */}
+            <div className={isButtonDisabled('agents-accelerator') ? 'relative group' : undefined}>
+              <button
+                onClick={() => handleLevelClick('agents-accelerator')}
+                disabled={isButtonDisabled('agents-accelerator')}
+                className={getButtonClass('agents-accelerator')}
+              >
+                <div className="flex items-center gap-2.5">
+                  <Bot className="w-4 h-4 flex-shrink-0" />
+                  <span className="flex-1 text-left">{BUTTON_LABELS['agents-accelerator']}</span>
+                  <span className={`text-ui-3xs px-1.5 py-0.5 rounded font-medium ${
+                    selectedLevel === 'agents-accelerator'
+                      ? 'bg-white/20 text-primary-foreground/80 border border-white/20'
+                      : 'bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30'
+                  }`}>New</span>
+                  {!isButtonDisabled('agents-accelerator') && (selectedLevel === 'agents-accelerator' || isHighlighted('agents-accelerator')) && (
+                    <Check className={`w-3.5 h-3.5 flex-shrink-0 ${selectedLevel === 'agents-accelerator' ? '' : 'opacity-60'}`} />
+                  )}
+                </div>
+              </button>
+              {isButtonDisabled('agents-accelerator') && <LockedTooltip />}
+            </div>
+
             {/* Data Product Accelerator (New) */}
             <div className={isButtonDisabled('accelerator') ? 'relative group' : undefined}>
               <button
@@ -571,29 +594,6 @@ function LevelSelectorGrid({
                 {isButtonDisabled('skills-accelerator') && <LockedTooltip />}
               </div>
             )}
-
-            {/* Agents Accelerator — works with any sample use case; clicking it locks the flow */}
-            <div className={isButtonDisabled('agents-accelerator') ? 'relative group' : undefined}>
-              <button
-                onClick={() => handleLevelClick('agents-accelerator')}
-                disabled={isButtonDisabled('agents-accelerator')}
-                className={getButtonClass('agents-accelerator')}
-              >
-                <div className="flex items-center gap-2.5">
-                  <Bot className="w-4 h-4 flex-shrink-0" />
-                  <span className="flex-1 text-left">{BUTTON_LABELS['agents-accelerator']}</span>
-                  <span className={`text-ui-3xs px-1.5 py-0.5 rounded font-medium ${
-                    selectedLevel === 'agents-accelerator'
-                      ? 'bg-white/20 text-primary-foreground/80 border border-white/20'
-                      : 'bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30'
-                  }`}>New</span>
-                  {!isButtonDisabled('agents-accelerator') && (selectedLevel === 'agents-accelerator' || isHighlighted('agents-accelerator')) && (
-                    <Check className={`w-3.5 h-3.5 flex-shrink-0 ${selectedLevel === 'agents-accelerator' ? '' : 'opacity-60'}`} />
-                  )}
-                </div>
-              </button>
-              {isButtonDisabled('agents-accelerator') && <LockedTooltip />}
-            </div>
 
             {/* Lakebase Accelerator - Coming Soon */}
             <button
