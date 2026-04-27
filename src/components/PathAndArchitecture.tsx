@@ -141,34 +141,46 @@ export function PathAndArchitecture({
                 <span>Build Forward</span>
               </button>
 
-              {/* Reverse Tab — glows gently while the user is on Forward
-                  direction so they notice the alternate flow exists. Glow
-                  stops as soon as the user flips to reverse, and is suppressed
-                  entirely when the direction is locked. */}
-              <button
-                type="button"
-                onClick={() => {
-                  if (directionLocked && direction !== 'reverse') return;
-                  onDirectionChange?.('reverse');
-                }}
-                title={
-                  direction === 'forward' && !directionLocked
-                    ? 'Try Reverse ETL — flip the flow to start from Lakehouse Gold and sync into a Lakebase-powered analytics app.'
-                    : undefined
-                }
-                className={`relative z-10 flex items-center gap-1.5 px-4 py-1.5 rounded-full text-[12px] font-medium transition-colors duration-200 ${
-                  direction === 'reverse'
-                    ? 'text-foreground font-semibold'
-                    : directionLocked
-                      ? 'text-muted-foreground/40 cursor-not-allowed'
-                      : 'text-muted-foreground hover:text-foreground/70 animate-reverse-etl-hint-glow'
-                }`}
-              >
-                <ChevronLeft
-                  className={`w-3.5 h-3.5 transition-transform duration-300 ${direction === 'reverse' ? '' : 'rotate-180'}`}
-                />
-                <span>Reverse ETL</span>
-              </button>
+              {/* Reverse Tab — when the user is on Forward direction, wrap
+                  the button in the same orbiting conic-gradient border beam
+                  used by the Get Started / Mark Done primary buttons so the
+                  Reverse ETL flow feels discoverable. Beam stops the moment
+                  the user flips to reverse, and is suppressed when the
+                  direction is locked. */}
+              {(() => {
+                const reverseBtn = (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (directionLocked && direction !== 'reverse') return;
+                      onDirectionChange?.('reverse');
+                    }}
+                    title={
+                      direction === 'forward' && !directionLocked
+                        ? 'Try Reverse ETL — flip the flow to start from Lakehouse Gold and sync into a Lakebase-powered analytics app.'
+                        : undefined
+                    }
+                    className={`relative z-10 flex items-center gap-1.5 px-4 py-1.5 rounded-full text-[12px] font-medium transition-colors duration-200 ${
+                      direction === 'reverse'
+                        ? 'text-foreground font-semibold'
+                        : directionLocked
+                          ? 'text-muted-foreground/40 cursor-not-allowed'
+                          : 'text-muted-foreground hover:text-foreground/70'
+                    }`}
+                  >
+                    <ChevronLeft
+                      className={`w-3.5 h-3.5 transition-transform duration-300 ${direction === 'reverse' ? '' : 'rotate-180'}`}
+                    />
+                    <span>Reverse ETL</span>
+                  </button>
+                );
+                const shouldBeam = direction === 'forward' && !directionLocked;
+                return shouldBeam ? (
+                  <span className="border-beam-wrapper-pill">{reverseBtn}</span>
+                ) : (
+                  reverseBtn
+                );
+              })()}
 
               {/* Lock Icon */}
               {directionLocked && (
