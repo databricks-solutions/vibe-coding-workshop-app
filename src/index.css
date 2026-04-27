@@ -811,25 +811,6 @@
   animation: button-glow-green 2s ease-in-out infinite;
 }
 
-/* Reverse ETL hint glow — emerald pulse drawn over the Reverse ETL tab while
-   the user is on Forward direction, to surface the existence of the other
-   flow. Intentionally gentle so it doesn't look alarming. */
-@keyframes reverse-etl-hint-glow {
-  0%, 100% {
-    box-shadow: 0 0 0 0 hsla(160, 84%, 45%, 0.00), inset 0 0 0 0 hsla(160, 84%, 45%, 0.0);
-    background-color: hsla(160, 84%, 45%, 0.02);
-  }
-  50% {
-    box-shadow: 0 0 10px 2px hsla(160, 84%, 45%, 0.35), inset 0 0 6px hsla(160, 84%, 45%, 0.15);
-    background-color: hsla(160, 84%, 45%, 0.10);
-  }
-}
-
-.animate-reverse-etl-hint-glow {
-  animation: reverse-etl-hint-glow 2.6s ease-in-out infinite;
-  border-radius: 9999px;
-}
-
 /* Border beam -- orbiting light around "Complete Step" / "Mark Done" buttons */
 @keyframes borderBeam {
   from { transform: rotate(0deg); }
@@ -863,6 +844,52 @@
 }
 
 .light .border-beam-wrapper::before {
+  background: conic-gradient(
+    from 0deg,
+    transparent 0%,
+    transparent 25%,
+    hsla(160, 84%, 39%, 0.95) 30%,
+    hsla(160, 84%, 35%, 1) 35%,
+    hsla(160, 84%, 39%, 0.95) 40%,
+    transparent 45%,
+    transparent 100%
+  );
+}
+
+/* Pill variant — same orbiting conic gradient as .border-beam-wrapper, but
+   with a fully-rounded pill shape. Used for direction-toggle hints where the
+   host button is already pill-shaped. No padding (flush) so the wrapper
+   doesn't shift the button's horizontal position inside its parent flex row;
+   the beam visibly extends a few pixels beyond the button edges courtesy of
+   the `inset: -50%` ::before. */
+.border-beam-wrapper-pill {
+  position: relative;
+  border-radius: 9999px;
+  display: inline-flex;
+  overflow: hidden;
+}
+
+.border-beam-wrapper-pill::before {
+  content: '';
+  position: absolute;
+  inset: -50%;
+  aspect-ratio: 1;
+  background: conic-gradient(
+    from 0deg,
+    transparent 0%,
+    transparent 25%,
+    hsla(160, 84%, 50%, 0.85) 30%,
+    hsla(160, 84%, 60%, 1) 35%,
+    hsla(160, 84%, 50%, 0.85) 40%,
+    transparent 45%,
+    transparent 100%
+  );
+  animation: borderBeam 3s linear infinite;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.light .border-beam-wrapper-pill::before {
   background: conic-gradient(
     from 0deg,
     transparent 0%,
