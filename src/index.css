@@ -820,9 +820,32 @@
 .border-beam-wrapper {
   position: relative;
   overflow: hidden;
-  border-radius: 0.5rem;
+  /* Outer radius = inner card radius (rounded-2xl = 1rem) + 2px padding so the
+     wrapper and inner card are perfectly concentric — no clipped corners on
+     the right/bottom edges where the beam meets the card. */
+  border-radius: calc(1rem + 2px);
   padding: 2px;
   display: inline-flex;
+  /* Default beam colour (emerald). Theme variants override these vars below. */
+  --beam-h: 160;
+  --beam-s: 84%;
+  --beam-l: 50%;
+  --beam-l-bright: 60%;
+}
+
+/* Outcome-map theme variants — override the HSL channels so the existing
+   conic-gradient rule re-tints itself per column. */
+.border-beam-wrapper.theme-cyan {
+  --beam-h: 189;
+  --beam-s: 92%;
+}
+.border-beam-wrapper.theme-emerald {
+  --beam-h: 160;
+  --beam-s: 84%;
+}
+.border-beam-wrapper.theme-amber {
+  --beam-h: 38;
+  --beam-s: 92%;
 }
 
 .border-beam-wrapper::before {
@@ -834,23 +857,27 @@
     from 0deg,
     transparent 0%,
     transparent 25%,
-    hsla(160, 84%, 50%, 0.9) 30%,
-    hsla(160, 84%, 60%, 1) 35%,
-    hsla(160, 84%, 50%, 0.9) 40%,
+    hsla(var(--beam-h), var(--beam-s), var(--beam-l), 0.9) 30%,
+    hsla(var(--beam-h), var(--beam-s), var(--beam-l-bright), 1) 35%,
+    hsla(var(--beam-h), var(--beam-s), var(--beam-l), 0.9) 40%,
     transparent 45%,
     transparent 100%
   );
   animation: borderBeam 3s linear infinite;
 }
 
+.light .border-beam-wrapper {
+  --beam-l: 39%;
+  --beam-l-bright: 35%;
+}
 .light .border-beam-wrapper::before {
   background: conic-gradient(
     from 0deg,
     transparent 0%,
     transparent 25%,
-    hsla(160, 84%, 39%, 0.95) 30%,
-    hsla(160, 84%, 35%, 1) 35%,
-    hsla(160, 84%, 39%, 0.95) 40%,
+    hsla(var(--beam-h), var(--beam-s), var(--beam-l), 0.95) 30%,
+    hsla(var(--beam-h), var(--beam-s), var(--beam-l-bright), 1) 35%,
+    hsla(var(--beam-h), var(--beam-s), var(--beam-l), 0.95) 40%,
     transparent 45%,
     transparent 100%
   );
@@ -1078,6 +1105,51 @@
 .animate-slide-up-fade {
   animation: slide-up-fade 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
   opacity: 0;
+}
+
+/* Outcome-map grid animations.
+   - cascade-in:    leaf-item pills fan in on hover/selected
+   - theme-shimmer: one-time diagonal sweep across coloured header bands
+   - count-up-fade: pop-in for the "N use cases" chip on the header band
+
+   All transitions use Apple-style easing — soft entrances, gentle settles, and
+   subtle overshoot on selection-y states (cubic-bezier(0.34, 1.56, 0.64, 1)). */
+@keyframes cascade-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.animate-cascade-in {
+  animation: cascade-in 280ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes theme-shimmer {
+  0%   { transform: translateX(-100%) skewX(-12deg); opacity: 0; }
+  40%  { opacity: 0.7; }
+  100% { transform: translateX(100%) skewX(-12deg); opacity: 0; }
+}
+.animate-theme-shimmer {
+  animation: theme-shimmer 1100ms ease-out 200ms both;
+}
+
+@keyframes count-up-fade {
+  from { opacity: 0; transform: scale(0.85); }
+  to   { opacity: 1; transform: scale(1); }
+}
+.animate-count-up-fade {
+  animation: count-up-fade 700ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
+  opacity: 0;
+}
+
+/* Reduced-motion: disable all custom outcome-map animations and the magnetic
+   hover, leaving content static and accessible. */
+@media (prefers-reduced-motion: reduce) {
+  .animate-cascade-in,
+  .animate-theme-shimmer,
+  .animate-count-up-fade {
+    animation: none !important;
+    opacity: 1 !important;
+    transform: none !important;
+  }
 }
 
 /* Number input styling */

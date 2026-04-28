@@ -18,13 +18,20 @@ CREATE TABLE IF NOT EXISTS ${schema}.usecase_descriptions (
     inserted_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
     created_by VARCHAR(255),
-    path_type VARCHAR(50) NOT NULL DEFAULT 'use_case'
+    path_type VARCHAR(50) NOT NULL DEFAULT 'use_case',
+    -- Outcome-map grouping (NULL for Sample / legacy rows; populated for Travel cards)
+    category VARCHAR(100),
+    category_order INTEGER,
+    display_order INTEGER
 );
 
 -- Indexes
 CREATE INDEX IF NOT EXISTS idx_usecase_industry_usecase ON ${schema}.usecase_descriptions(industry, use_case);
 CREATE INDEX IF NOT EXISTS idx_usecase_active_version ON ${schema}.usecase_descriptions(is_active, version DESC);
 CREATE INDEX IF NOT EXISTS idx_usecase_path_type ON ${schema}.usecase_descriptions(path_type) WHERE is_active = TRUE;
+CREATE INDEX IF NOT EXISTS idx_usecase_industry_category
+    ON ${schema}.usecase_descriptions(industry, category, category_order, display_order)
+    WHERE is_active = TRUE;
 
 COMMENT ON TABLE ${schema}.usecase_descriptions IS 
-'Versioned use case descriptions for industries and their use cases. path_type distinguishes use_case from skill entries.';
+'Versioned use case descriptions for industries and their use cases. path_type distinguishes use_case from skill entries. category/category_order/display_order drive the outcome-map grid layout (Travel & Hospitality).';

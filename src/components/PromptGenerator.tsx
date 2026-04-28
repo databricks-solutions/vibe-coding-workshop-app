@@ -9,6 +9,7 @@ import { getLevelUIOverrides, type WorkshopLevel } from '../constants/workflowSe
 import { IntentPathSelector, type IntentPath } from './IntentPathSelector';
 import { IndustryChips } from './IndustryChips';
 import { UseCaseCardGrid } from './UseCaseCardGrid';
+import { OutcomeMapGrid } from './OutcomeMapGrid';
 import { SkillPathPanel } from './SkillPathPanel';
 import { UseCaseDescriptionBox } from './UseCaseDescriptionBox';
 
@@ -279,6 +280,21 @@ export function PromptGenerator({
     }
   }, [industries, hasStarted, selectedIndustry, mode, selectedPath]);
 
+  // Default to Sample / Booking App on first visit so the Library lands with
+  // the canonical use case pre-selected. Only fires when there's no
+  // session-restored selection AND the user hasn't started yet AND the data
+  // confirms the row exists.
+  useEffect(() => {
+    if (initialIndustry || initialUseCase) return;            // session restore wins
+    if (hasStarted) return;                                   // user already moved on
+    if (selectedIndustry || selectedUsecase) return;          // something else already set
+    if (mode !== 'library' || selectedPath !== 'use_case') return;
+    const sampleHasBooking = (useCases['sample'] || []).some(u => u.value === 'booking');
+    if (!sampleHasBooking) return;
+    setSelectedIndustry('sample');
+    setSelectedUsecase('booking');
+  }, [useCases, initialIndustry, initialUseCase, hasStarted, selectedIndustry, selectedUsecase, mode, selectedPath]);
+
   const handleIndustryChange = (value: string) => {
     setSelectedIndustry(value === selectedIndustry ? '' : value);
     setSelectedUsecase('');
@@ -519,12 +535,22 @@ export function PromptGenerator({
                         disabled={hasStarted}
                       />
                       {selectedIndustry && (
-                        <UseCaseCardGrid
-                          useCases={availableUsecases}
-                          selectedUseCase={selectedUsecase}
-                          onSelect={handleUsecaseChange}
-                          disabled={hasStarted}
-                        />
+                        availableUsecases.some(uc => uc.category) ? (
+                          <OutcomeMapGrid
+                            useCases={availableUsecases}
+                            selectedUseCase={selectedUsecase}
+                            onSelect={handleUsecaseChange}
+                            disabled={hasStarted}
+                            promptTemplates={promptTemplates[selectedIndustry] || {}}
+                          />
+                        ) : (
+                          <UseCaseCardGrid
+                            useCases={availableUsecases}
+                            selectedUseCase={selectedUsecase}
+                            onSelect={handleUsecaseChange}
+                            disabled={hasStarted}
+                          />
+                        )
                       )}
                     </>
                   )}

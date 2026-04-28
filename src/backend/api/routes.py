@@ -139,15 +139,31 @@ def _refresh_lakebase_cache():
     schema = get_schema()
     
     try:
-        # Fetch latest usecase_descriptions (PostgreSQL syntax with DISTINCT ON)
-        usecase_desc_sql = f"""
+        # Fetch latest usecase_descriptions (PostgreSQL syntax with DISTINCT ON).
+        # Includes optional outcome-map grouping fields (category, category_order,
+        # display_order). On legacy databases that haven't run the
+        # 09_add_category_columns.sql migration yet, retry without those columns
+        # so existing deployments don't break.
+        usecase_desc_sql_with_category = f"""
             SELECT DISTINCT ON (industry, use_case)
-                industry, industry_label, use_case, use_case_label, prompt_template, version
+                industry, industry_label, use_case, use_case_label, prompt_template, version,
+                category, category_order, display_order
             FROM {schema}.usecase_descriptions
             WHERE is_active = TRUE
             ORDER BY industry, use_case, version DESC
         """
-        usecase_descriptions = execute_query(usecase_desc_sql)
+        try:
+            usecase_descriptions = execute_query(usecase_desc_sql_with_category)
+        except Exception as col_err:
+            logger.info(f"Category columns not yet present ({col_err}); falling back to legacy SELECT. Run 09_add_category_columns.sql to enable outcome-map grouping.")
+            usecase_desc_sql_legacy = f"""
+                SELECT DISTINCT ON (industry, use_case)
+                    industry, industry_label, use_case, use_case_label, prompt_template, version
+                FROM {schema}.usecase_descriptions
+                WHERE is_active = TRUE
+                ORDER BY industry, use_case, version DESC
+            """
+            usecase_descriptions = execute_query(usecase_desc_sql_legacy)
         
         if usecase_descriptions:
             _lakebase_cache["usecase_descriptions"] = usecase_descriptions
@@ -588,6 +604,9 @@ class PromptConfigCreate(BaseModel):
     use_case_label: str = Field(..., min_length=1, description="Display label for use case")
     prompt_template: str = Field(..., description="The prompt template text")
     path_type: str = Field(default="use_case", description="Entry type: 'use_case' or 'skill'")
+    category: Optional[str] = Field(default=None, description="Outcome-map column title (e.g. 'Agentic AI Operations'). NULL for Sample / legacy.")
+    category_order: Optional[int] = Field(default=None, description="Outcome-map column position (1, 2, 3) within the industry.")
+    display_order: Optional[int] = Field(default=None, description="Card order within the column.")
 
 
 class PromptConfigResponse(BaseModel):
@@ -604,6 +623,9 @@ class PromptConfigResponse(BaseModel):
     updated_at: Optional[str] = None
     created_by: Optional[str] = None
     path_type: str = "use_case"
+    category: Optional[str] = None
+    category_order: Optional[int] = None
+    display_order: Optional[int] = None
 
 
 class SectionInputCreate(BaseModel):
@@ -696,7 +718,7 @@ def get_industries() -> List[Dict]:
     """
     # Custom label overrides (value -> label)
     label_overrides = {
-        "sample": "sample [for enablement]"
+        "sample": "Sample"
     }
     
     # Priority order for industries (first in list = first in dropdown)
@@ -739,7 +761,10 @@ def _derive_path_type(row: Dict) -> str:
     return row.get("path_type") or ("skill" if row.get("use_case") in SKILL_USE_CASES else "use_case")
 
 def get_use_cases_map() -> Dict[str, List[Dict]]:
-    """Get use cases map - from Lakebase or YAML fallback. Includes path_type per entry."""
+    """Get use cases map - from Lakebase or YAML fallback. Includes path_type
+    plus optional outcome-map grouping (category, category_order, display_order)
+    per entry so the frontend OutcomeMapGrid can render data-driven columns.
+    """
     # Try Lakebase first
     lakebase_data = get_usecase_descriptions_from_lakebase()
     if lakebase_data:
@@ -751,11 +776,20 @@ def get_use_cases_map() -> Dict[str, List[Dict]]:
             if industry and use_case:
                 if industry not in use_cases_map:
                     use_cases_map[industry] = [{"value": "", "label": "Select a use case..."}]
-                use_cases_map[industry].append({
+                entry = {
                     "value": use_case,
                     "label": row.get("use_case_label", use_case.title()),
-                    "path_type": _derive_path_type(row)
-                })
+                    "path_type": _derive_path_type(row),
+                }
+                # Outcome-map grouping (Travel & Hospitality). NULL/missing for
+                # Sample, legacy rows, and any database that hasn't run the
+                # 09_add_category_columns.sql migration yet.
+                category = row.get("category")
+                if category:
+                    entry["category"] = category
+                    entry["category_order"] = row.get("category_order")
+                    entry["display_order"] = row.get("display_order")
+                use_cases_map[industry].append(entry)
         return use_cases_map
     
     # Fallback to YAML (no path_type in YAML — default to 'use_case')
@@ -834,7 +868,7 @@ def get_section_input_prompts_map() -> Dict[str, Dict[str, Any]]:
 # Note: Only "sample" is enabled for now. Other industries are hidden.
 INDUSTRIES: List[Dict] = get_industries() or [
     {"value": "", "label": "Select an industry..."},
-    {"value": "sample", "label": "sample [for enablement]"},
+    {"value": "sample", "label": "Sample"},
 ]
 
 USE_CASES: Dict[str, List[Dict]] = get_use_cases_map() or {}
@@ -849,10 +883,10 @@ PREREQUISITES: List[Dict] = get_prerequisites_list() or []
 
 def format_industry_name(industry: str) -> str:
     industry_map = {
-        "sample": "Sample for Enablement",
+        "sample": "Sample",
         "retail": "Retail",
         "cpg": "CPG",
-        "travel": "Travel"
+        "travel": "Travel & Hospitality"
     }
     return industry_map.get(industry.lower(), industry)
 
