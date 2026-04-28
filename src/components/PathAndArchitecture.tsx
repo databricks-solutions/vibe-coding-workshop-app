@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { ChevronDown, ChevronRight, ChevronLeft, Lock, Map, ArrowRight } from 'lucide-react';
 import { LevelSelectorContent, BUTTON_LABELS } from './LevelSelector';
 import { ArchitectureDiagramContent } from './ArchitectureDiagram';
+import { PathDescriptionPanel } from './PathDescriptionPanel';
 import { BorderBeamButton } from './BorderBeamButton';
 import { NewBadge } from './NewBadge';
 import { CopyLinkButton } from './CopyLinkButton';
@@ -230,6 +231,9 @@ export function PathAndArchitecture({
             medallionLayers={medallionLayers}
             onMedallionLayersChange={onMedallionLayersChange}
           />
+
+          {/* What You'll Build — path description panel */}
+          <PathDescriptionPanel selectedLevel={selectedLevel} direction={direction} />
 
           {/* Divider */}
           <div className="border-t border-border/50" />
