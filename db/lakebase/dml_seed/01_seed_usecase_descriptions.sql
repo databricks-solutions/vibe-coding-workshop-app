@@ -409,100 +409,12 @@ Practically, it helps teams *prioritize R&D and commercial investment* toward op
 -- =============================================================================
 -- TRAVEL & HOSPITALITY INDUSTRY
 -- =============================================================================
-
-INSERT INTO ${catalog}.${schema}.usecase_descriptions 
-(config_id, industry, industry_label, use_case, use_case_label, prompt_template, version, is_active, inserted_at, updated_at, created_by)
-VALUES
-(23, 'travel', 'Travel & Hospitality', 'travel_customer_data', 'Customer Data Management', 
-'Unify **guest and traveler profiles** across booking, loyalty, property systems, digital interactions, and service history to create a governed customer record.
-
-This enables:
-- **Consistent personalization** across every touchpoint
-- **Continuity of service** regardless of channel
-- **Privacy controls** and preference management
-
-With a trusted profile foundation, teams can improve **experience quality** while maintaining operational consistency.
-
-**Know your guests—and make them feel known.**', 
-1, FALSE, current_timestamp(), current_timestamp(), current_user());
-
-INSERT INTO ${catalog}.${schema}.usecase_descriptions 
-(config_id, industry, industry_label, use_case, use_case_label, prompt_template, version, is_active, inserted_at, updated_at, created_by)
-VALUES
-(24, 'travel', 'Travel & Hospitality', 'customer_insights_activation', 'Customer Insights & Activation', 
-'Analyze **traveler behavior** to identify trends and deliver experiences that increase loyalty and conversions.
-
-Key capabilities:
-- **Next-best-offer** recommendations
-- **Churn risk** identification and prevention
-- **Personalized journey orchestration** across touchpoints
-
-The focus is on turning insight into action across *pre-trip, in-stay/in-trip, and post-trip* moments.
-
-This drives **more direct bookings**, stronger loyalty engagement, and better lifetime value through *relevant, timely activation*.', 
-1, FALSE, current_timestamp(), current_timestamp(), current_user());
-
-INSERT INTO ${catalog}.${schema}.usecase_descriptions 
-(config_id, industry, industry_label, use_case, use_case_label, prompt_template, version, is_active, inserted_at, updated_at, created_by)
-VALUES
-(25, 'travel', 'Travel & Hospitality', 'travel_employee_360', 'Employee 360', 
-'Track **employee performance and engagement** across properties, operations, and service teams by integrating scheduling, training, service metrics, and operational KPIs.
-
-This supports:
-- **Staffing decisions** and schedule optimization
-- **Coaching** and skill development
-- **Service quality improvement** across locations
-
-The outcome is *more consistent delivery* and better workforce outcomes through **data-driven operational management**.
-
-**Happy employees, happy guests.**', 
-1, FALSE, current_timestamp(), current_timestamp(), current_user());
-
-INSERT INTO ${catalog}.${schema}.usecase_descriptions 
-(config_id, industry, industry_label, use_case, use_case_label, prompt_template, version, is_active, inserted_at, updated_at, created_by)
-VALUES
-(26, 'travel', 'Travel & Hospitality', 'travel_agentic_workforce', 'Agentic Workforce', 
-'Empower employees to make **informed decisions faster** using AI agents for:
-- *Knowledge retrieval* from policies and procedures
-- *Workflow guidance* for complex processes
-- *Summarization* of guest history and preferences
-- *Exception handling* for disruptions and special requests
-
-This reduces **time-to-resolution** and improves service consistency.
-
-Agents are most valuable when they combine governed data with clear workflows—helping staff *act quickly* while maintaining **control and brand standards**.', 
-1, FALSE, current_timestamp(), current_timestamp(), current_user());
-
-INSERT INTO ${catalog}.${schema}.usecase_descriptions 
-(config_id, industry, industry_label, use_case, use_case_label, prompt_template, version, is_active, inserted_at, updated_at, created_by)
-VALUES
-(27, 'travel', 'Travel & Hospitality', 'call_center_ops', 'Call Center Operations', 
-'Provide **real-time insights** to help agents resolve issues faster with:
-- *Intelligent routing* to the right agent
-- *Agent assist* with suggested responses
-- *Knowledge search* for instant answers
-- *Automated summaries* after each contact
-
-This improves **first-contact resolution** and reduces handle time and cost.
-
-Operationally, it turns the contact center into a **learning system**—capturing intent and outcomes to continuously improve policies, self-service, and *customer experience*.', 
-1, FALSE, current_timestamp(), current_timestamp(), current_user());
-
-INSERT INTO ${catalog}.${schema}.usecase_descriptions 
-(config_id, industry, industry_label, use_case, use_case_label, prompt_template, version, is_active, inserted_at, updated_at, created_by)
-VALUES
-(28, 'travel', 'Travel & Hospitality', 'dynamic_pricing', 'Dynamic Pricing & Promotion', 
-'Adjust **prices and promotions** based on demand signals, inventory/capacity, seasonality, and market conditions to *maximize revenue* and respond quickly to change.
-
-This use case blends:
-- **Forecasting** to predict demand patterns
-- **Experimentation** to determine what drives incremental value
-- **Optimization** to find the right price point
-
-The outcome is stronger revenue performance through *smarter rate/offer decisions*, improved load/occupancy management, and **more targeted promotions**.
-
-**Capture every revenue opportunity.**', 
-1, FALSE, current_timestamp(), current_timestamp(), current_user());
+-- Legacy rows 23-28 (Customer Data Management, Customer Insights & Activation,
+-- Employee 360, Agentic Workforce, Call Center Operations, Dynamic Pricing &
+-- Promotion) have been replaced by the 10 outcome-map-aligned use cases below
+-- (config_ids 200-209). The legacy slugs are no longer seeded; if any session
+-- references them, the frontend gracefully falls back to custom mode.
+-- =============================================================================
 
 -- =============================================================================
 -- SAMPLE INDUSTRY: BUILD A DATA CONTRACT SKILL
@@ -851,6 +763,672 @@ The outcome is **better crew quality of life** (higher preference satisfaction, 
 
 **Take care of the crew, and the crew takes care of the operation.**',
 1, TRUE, current_timestamp(), current_timestamp(), current_user());
+
+-- =============================================================================
+-- DEACTIVATE LEGACY AIRLINE DEEP-DIVE ROWS
+-- =============================================================================
+-- The 12 airline-specific deep-dive rows above (config_ids 100-111) are kept in
+-- this seed file for content preservation but flipped to is_active=FALSE so
+-- they don't render in the new outcome-map grid alongside the 10 column-level
+-- use cases below (config_ids 200-209). Re-activate selectively in the future
+-- via the admin UI or a follow-up migration.
+-- =============================================================================
+
+UPDATE ${catalog}.${schema}.usecase_descriptions
+SET is_active = FALSE
+WHERE industry = 'travel'
+  AND use_case IN (
+    'airline_mro_control_tower',
+    'airline_safety_management',
+    'airline_loyalty_rewards',
+    'airline_revenue_management',
+    'airline_flight_ops',
+    'airline_customer_360',
+    'airline_cargo_ops',
+    'airline_airport_ops',
+    'airline_network_planning',
+    'airline_sustainability_esg',
+    'airline_finance_cost',
+    'airline_crew_workforce'
+  );
+
+-- =============================================================================
+-- TRAVEL & HOSPITALITY OUTCOME-MAP USE CASES (10 cards in 3 themed columns)
+-- =============================================================================
+-- These 10 rows back the OutcomeMapGrid frontend component. They are grouped
+-- into three columns via category + category_order, and ordered within each
+-- column by display_order. Every row's prompt_template follows the Booking App
+-- spec format (Application Type / Personas / Core Features / Data Entities /
+-- Technical Considerations / Scope Constraints).
+-- =============================================================================
+
+-- Column 1: Agentic AI Operations -- 4 cards
+
+INSERT INTO ${catalog}.${schema}.usecase_descriptions
+(config_id, industry, industry_label, use_case, use_case_label,
+ category, category_order, display_order,
+ prompt_template, version, is_active, inserted_at, updated_at, created_by)
+VALUES
+(200, 'travel', 'Travel & Hospitality', 'autonomous_disruption_response', 'Autonomous Disruption Response',
+ 'Agentic AI Operations', 1, 1,
+'Create a simple **autonomous travel disruption response platform** similar to Airbnb''s automated re-accommodation flow, applied to travelers whose flights cancel, delay, or get re-routed by weather.
+
+## Application Type
+Operations + traveler-facing hybrid app that connects **Travelers** with an **AI Recovery Agent** to detect, predict, and resolve disruptions (delays, cancellations, weather, equipment) without human intervention.
+
+## Key Personas
+- **Traveler**: End users who receive proactive notifications and accept or modify recovery options on their device
+- **Operations Controller**: Internal staff who monitor fleet-wide disruptions, tune agent guardrails, and intervene on high-risk cases
+
+## Core Features Required
+
+### Disruption Recovery Workflow (4 Recovery Capabilities)
+
+The application must support **four distinct recovery experiences**:
+
+#### 1. Automated Rebooking & Accommodation
+Cancelled or heavily-delayed itineraries are detected and the traveler is offered ranked recovery options:
+- Alternate same-airline flights, partner-airline flights, ground transport, or hotel rooms
+- Ranked by total travel time, fare-class continuity, and loyalty tier
+- One-tap accept that reissues tickets and pushes new boarding passes
+- Side-by-side comparison of the top 3 options
+
+#### 2. Proactive Weather Notifications
+Pre-disruption alerts that move travelers before the flight cancels:
+- Example: *"We''re moving you to the 9:40 AM before your 11:15 cancels"*
+- Correlates weather, ATC, and equipment feeds with affected itineraries
+- Confidence score and reason shown alongside each notification
+- Channels: in-app push and email
+
+#### 3. Delay/Cancellation Auto-Resolution
+Policy-driven agent loop that closes the recovery without human touch:
+- Rebook → reissue ticket → notify traveler → repath checked baggage
+- Trigger compensation eligibility check with reasoning logged for audit
+- Human-in-the-loop override available for high-risk or VIP cases
+
+#### 4. Automated Voucher / Compensation
+Calculates entitlements and issues compensation directly to the traveler:
+- Regulatory rules (EU261, DOT) plus airline goodwill policy
+- Issues vouchers, refunds, or miles to the traveler''s wallet
+- Audit log of every decision with rule citations
+
+### Operations War-Room
+- Live map of disruptions and agent actions across the fleet
+- Exception queue with severity sort and override controls
+- Audit trail of every agent decision
+
+## Data Entities
+Core entities: Travelers, Itineraries, Flights, Aircraft, Crews, Weather Events, Disruption Records, Recovery Plans, Compensation Ledger, Notifications, Audit Trail
+
+## Technical Considerations
+- Streaming ingest of OPS, weather, and ATC feeds (Kafka or DLT)
+- Multi-agent recovery loop with human-in-the-loop guardrails
+- Idempotent ticket-reissue calls to PSS / GDS
+- Per-region compensation rule engine (EU261, DOT, etc.)
+
+## Scope Constraints
+**Keep it simple** and focus only on the bare minimum required to support the core recovery features for **a single airline, US flights, and USD compensation only**. We do not need real PSS integration, real payment processing, hotel or ground-transport booking, or user authentication. This will be an **open, public demo** where anyone can replay simulated disruption scenarios and watch the agent rebook, notify, and compensate affected travelers.',
+ 1, TRUE, current_timestamp(), current_timestamp(), current_user());
+
+INSERT INTO ${catalog}.${schema}.usecase_descriptions
+(config_id, industry, industry_label, use_case, use_case_label,
+ category, category_order, display_order,
+ prompt_template, version, is_active, inserted_at, updated_at, created_by)
+VALUES
+(201, 'travel', 'Travel & Hospitality', 'predictive_maintenance', 'Predictive Maintenance',
+ 'Agentic AI Operations', 1, 2,
+'Create a simple **predictive maintenance intelligence platform** similar to Tesla''s over-the-air diagnostic and service-prediction system, applied to commercial aircraft fleets.
+
+## Application Type
+Back-office MRO operations app that connects **Maintenance Controllers** with a **Predictive Health Engine** to forecast component failures, optimize shop visits, and prevent Aircraft-on-Ground (AOG) events before they happen.
+
+## Key Personas
+- **Maintenance Controller**: Internal staff who watch the fleet, route mechanics, and defer or clear MEL items based on predicted health
+- **Reliability Engineer**: Internal staff who tune models, investigate emerging failure patterns, and own the MSG-3 reliability program
+
+## Core Features Required
+
+### Health & Maintenance Forecasting (3 Optimization Modes)
+
+The application must support **three distinct maintenance forecasting modes**:
+
+#### 1. AOG Prevention
+Real-time component health scoring identifies which aircraft are likely to ground in the next 72 hours:
+- Example: *"Tail N123AB has 0.78 risk-of-AOG-in-72h driven by APU EGT margin trend"*
+- Combines ACARS sensor telemetry, pilot reports, and recent work-order history
+- Ranks aircraft by predicted risk with recommended interventions (defer, swap, schedule overnight check)
+- Surfaces the top 3 contributing signals so the engineer can validate
+
+#### 2. Equipment Maintenance Optimization
+Optimal time-to-maintain models for high-value rotables (engines, APUs, landing gear):
+- When to remove a component for shop visit vs run-on-wing for one more cycle
+- Cost-benefit projections including parts, labor, and reliability impact
+- Side-by-side comparison of "remove now" vs "defer 30 days" scenarios
+
+#### 3. Expedited Maintenance Optimization
+For unplanned defects, the platform produces a shortest-path repair plan:
+- Locates the nearest available part across the network
+- Matches mechanic skill to defect type
+- Coordinates gate or hangar slot timing with the flight schedule
+- Auto-notifies affected stations of the repair plan
+
+### Reliability Trend Detection
+- SPC charts that surface emerging fleet-wide reliability issues
+- Clustering of similar defects across tails and stations
+- One-click drill-down from trend to underlying work orders
+
+## Data Entities
+Core entities: Aircraft, Engines, Components, Sensors, ACARS Messages, Pilot Reports, Work Orders, Parts Inventory, Mechanics, Stations, MEL Items, Maintenance History
+
+## Technical Considerations
+- Streaming sensor telemetry via DLT at 1–10 second resolution per tail
+- ML failure-prediction models served via Model Serving with shadow scoring
+- Unity Catalog lineage from raw telemetry through engineering features to predictions
+- Constraint solver for shortest-path repair planning
+
+## Scope Constraints
+**Keep it simple** and focus only on the bare minimum required to support the core forecasting features for **a single fleet type (e.g. A320 family) with three component classes (engine, APU, brakes) and 5–10 simulated tails**. We do not need real-time ACARS integration, real parts-inventory integration, native mobile apps, or user authentication. This will be an **open, public demo** where anyone can replay a CSV of telemetry and watch the platform predict, prioritize, and plan maintenance for the simulated fleet.',
+ 1, TRUE, current_timestamp(), current_timestamp(), current_user());
+
+INSERT INTO ${catalog}.${schema}.usecase_descriptions
+(config_id, industry, industry_label, use_case, use_case_label,
+ category, category_order, display_order,
+ prompt_template, version, is_active, inserted_at, updated_at, created_by)
+VALUES
+(202, 'travel', 'Travel & Hospitality', 'smarter_scheduling', 'Smarter Scheduling',
+ 'Agentic AI Operations', 1, 3,
+'Create a simple **AI-coordinated scheduling platform** similar to Uber''s driver-dispatch and capacity-balancing system, but applied to airline gates, schedules, crews, and maintenance windows.
+
+## Application Type
+Planning + operations app that connects **Network Planners** with a **Multi-Objective Optimizer** to align gates, flight times, crew assignments, and maintenance windows in a single coordinated decision surface.
+
+## Key Personas
+- **Network Planner**: Internal staff who build seasonal schedules, evaluate new routes, and balance frequency vs profitability
+- **Hub Coordinator**: Internal staff who own gate assignments, turn times, and connection feasibility at a hub
+
+## Core Features Required
+
+### Multi-Objective Schedule Optimization (4 Optimization Targets)
+
+The application must support **four distinct optimization targets** that share data and constraints:
+
+#### 1. Gate Assignment Optimization
+The solver allocates flights to gates each day considering multiple factors:
+- Aircraft type, passenger connection flows, walking distances, and towing cost
+- Real-time re-allocation during IROPS (irregular operations)
+- Conflict detection and gate-swap recommendations
+- Example: *"Swap A12 → B7 at 14:30 to save 200 connecting walk-minutes"*
+
+#### 2. Flight Schedule Optimization
+Departure-time tuning across markets that:
+- Maximizes connecting-bank revenue at the hub
+- Respects slot constraints at slot-controlled airports
+- Minimizes crew and aircraft idle time
+- Compares "Schedule A vs B" with revenue, OTP, and connection-loss deltas
+
+#### 3. Workforce Optimization
+Crew-pairing optimizer that:
+- Respects union contractual rules and fatigue thresholds
+- Honors base preferences and seniority-fair bid awards
+- Surfaces utilization vs contractual-limit dashboards
+
+#### 4. Window Optimization
+Pairs the schedule with required maintenance touches so:
+- Heavy checks land at the right base, at the right time
+- Required parts are pre-staged at the hangar before the tail arrives
+- Out-of-service windows fit between scheduled flights
+
+### Scenario Comparison
+- Versioned schedule snapshots with diff highlighting
+- Side-by-side what-if scenarios with revenue, OTP, crew cost, and connection-loss deltas
+- Approve-and-publish flow for the chosen scenario
+
+## Data Entities
+Core entities: Flights, Gates, Aircraft, Crews, Stations, Slots, Maintenance Events, Connection Itineraries, Revenue Accounting, Union Rules
+
+## Technical Considerations
+- Mixed-Integer Programming (Pyomo or OR-Tools) on Spark for large instances
+- Pre-computed connection-loss matrix per O&D
+- Genie space for natural-language what-if questions
+- Versioned schedule snapshots stored in Lakebase
+
+## Scope Constraints
+**Keep it simple** and focus only on the bare minimum required to support the core gate-assignment optimizer for **one hub airport, one fleet type, and 50–100 daily flights**. We do not need real PSS integration, full implementations of the schedule / workforce / window optimizers, a real union-rule engine, or user authentication. This will be an **open, public demo** where anyone can load a CSV of flights and watch the optimizer assign gates, flag conflicts, and propose swaps in seconds.',
+ 1, TRUE, current_timestamp(), current_timestamp(), current_user());
+
+INSERT INTO ${catalog}.${schema}.usecase_descriptions
+(config_id, industry, industry_label, use_case, use_case_label,
+ category, category_order, display_order,
+ prompt_template, version, is_active, inserted_at, updated_at, created_by)
+VALUES
+(203, 'travel', 'Travel & Hospitality', 'realtime_operations_view', 'Real-Time Operations View',
+ 'Agentic AI Operations', 1, 4,
+'Create a simple **real-time airline operations command center** similar to a Bloomberg Terminal for an airline''s operations team, fusing flights, crews, weather, baggage, supply chain, and customer experience into one screen.
+
+## Application Type
+Wall-mounted plus desktop dashboard that connects **Operations Directors** with a **Live-Signal Aggregator** to surface the airline''s pulse, flag exceptions, and answer ad-hoc questions in seconds.
+
+## Key Personas
+- **Operations Director**: Internal leadership who want the one number that says "are we okay?" and the three levers that fix it if not
+- **Station Manager**: Internal staff who drill into a station''s performance vs the network and flag resource gaps
+
+## Core Features Required
+
+### Operations Intelligence Tiles (4 Real-Time Views)
+
+The application must support **four distinct live operational views**:
+
+#### 1. End-to-End Supply Chain Visibility
+Live position of high-value rotables, ULDs, fuel inventory, and catering carts:
+- Imbalance alerts when stations are over- or under-stocked
+- Auto-rebalancing recommendations with cost projections
+- Drill-down to specific component or station inventory
+
+#### 2. Unified Operations Dashboard
+One screen showing the airline''s pulse:
+- OTP, completion factor, baggage performance, crew on-time, customer NPS proxy
+- Real-time exception stream with severity sort
+- Today vs same-day-last-year comparison
+
+#### 3. Real-Time Availability Insights
+Live seat, cargo, and cabin-class availability across the network:
+- Example: *"DEN-LAX next 7 days at 95% load — surge demand for ski week"*
+- Flags markets with surge demand or empty capacity
+- Recommended actions for the revenue desk
+
+#### 4. New Product Enablement
+A/B-experimentation surface for ops-relevant launches:
+- Launch a new ancillary, route, or service tier and see live adoption
+- Financial impact projection in the same view
+- Toggle holdouts and view causal-impact estimates
+
+### Conversational Intelligence
+- Embedded Genie space lets any role ask "Why is DFW running 9 minutes late on average today?"
+- Returns charted answers grounded in the operational tables
+- Role-based slicing (network / station / fleet / region) with link-back to dashboard tiles
+
+## Data Entities
+Core entities: Flights, Stations, Crews, Aircraft, Supply-Chain Items, Bookings, Customer Sentiment Events, Experiments, Exception Records
+
+## Technical Considerations
+- Streaming aggregations into a Gold serving layer (DLT + materialized views)
+- Lakeview dashboards with auto-refresh
+- Genie AI/BI for ad-hoc Q&A
+- Role-based slicing across network, station, fleet, and region
+
+## Scope Constraints
+**Keep it simple** and focus only on the bare minimum required to support **six core tiles, one drill-down depth, and a single airline in a single timezone**. We do not need real streaming integration, alert delivery via email or Slack or SMS, multi-region support, or user authentication. This will be an **open, public demo** where anyone can replay a Python-generated stream and watch the tiles update, exceptions flow, and the embedded AI answer ad-hoc questions.',
+ 1, TRUE, current_timestamp(), current_timestamp(), current_user());
+
+-- Column 2: Diversified Revenue Growth -- 3 cards
+
+INSERT INTO ${catalog}.${schema}.usecase_descriptions
+(config_id, industry, industry_label, use_case, use_case_label,
+ category, category_order, display_order,
+ prompt_template, version, is_active, inserted_at, updated_at, created_by)
+VALUES
+(204, 'travel', 'Travel & Hospitality', 'dynamic_pricing', 'Dynamic Pricing',
+ 'Diversified Revenue Growth', 2, 1,
+'Create a simple **AI-driven dynamic pricing engine** similar to Uber''s surge-pricing algorithm, but applied to airline fares, ancillaries, and promotional offers.
+
+## Application Type
+Back-office revenue-desk app plus real-time pricing API that connects **Revenue Analysts** with a **Continuous Pricing Engine** to adjust fares per shopper, per market, per minute based on demand, competition, and inventory signals.
+
+## Key Personas
+- **Revenue Analyst**: Internal staff who review demand forecasts, approve pricing rule changes, and monitor realized yield vs forecast
+- **Pricing Engineer**: Internal staff who own the models, manage experiments, and set guardrails against price flapping
+
+## Core Features Required
+
+### Continuous Pricing Engine (3 Pricing Modes)
+
+The application must support **three distinct pricing modes**:
+
+#### 1. AI-Driven Revenue Management
+Demand forecasting per O&D × fare class × DCP (days-before-departure):
+- Example: *"BOS-LHR Y class 21 days out: forecast 78 bookings, current pace 65"*
+- Bid-price optimization that improves on classic EMSR-b on real bookings
+- Confidence intervals and per-feature attribution shown alongside each forecast
+- Daily forecast refresh with intraday adjustments for high-volatility markets
+
+#### 2. Demand-Based Pricing
+Real-time price adjustment using signals beyond the booking curve:
+- Booking-curve deviation vs forecast (pace ahead or behind)
+- Competitor fare changes detected via the shop feed
+- Event-driven demand spikes (concerts, sports, conferences)
+- Re-prices within 60 seconds of signal arrival
+
+#### 3. Open Pricing
+Continuous price space — every seat priced individually based on shopper context:
+- Willingness-to-pay model per traveler segment
+- Elasticity-aware adjustments rather than discrete fare buckets
+- Guardrails against price flapping and price-discrimination violations
+
+### Experiment Console
+- A/B test pricing strategies on a controlled traffic slice
+- Significance tracking and auto-rollback on revenue regression
+- Shadow scoring of new models against the live model before promotion
+
+## Data Entities
+Core entities: Markets, Flights, Fare Classes, Bookings, Searches, Competitor Fares, Events, Customer Profiles, Pricing Rules, Experiment Cohorts
+
+## Technical Considerations
+- Sub-200 ms pricing API on Model Serving with feature-store lookup
+- Streaming demand signals through the search → cart → book funnel
+- ML model versioning with shadow scoring before promotion
+- Compliance guardrails so price never varies by protected attributes
+
+## Scope Constraints
+**Keep it simple** and focus only on the bare minimum required to support the core pricing modes for **one O&D market, three fare classes, and one booking curve**. We do not need live competitor scraping, real PSS integration, real payment processing, or user authentication. This will be an **open, public demo** where anyone can replay a static booking-curve CSV and watch the pricing engine adjust prices, run a shadow experiment, and explain its reasoning in real time.',
+ 1, TRUE, current_timestamp(), current_timestamp(), current_user());
+
+INSERT INTO ${catalog}.${schema}.usecase_descriptions
+(config_id, industry, industry_label, use_case, use_case_label,
+ category, category_order, display_order,
+ prompt_template, version, is_active, inserted_at, updated_at, created_by)
+VALUES
+(205, 'travel', 'Travel & Hospitality', 'intelligent_offers_management', 'Intelligent Offers Management',
+ 'Diversified Revenue Growth', 2, 2,
+'Create a simple **intelligent offers management platform** similar to Amazon''s "frequently bought together" recommendation engine, but applied to travel ancillaries, loyalty perks, and upgrades.
+
+## Application Type
+Marketing + revenue hybrid app that connects **Offer Managers** with a **Real-Time Offer Decision API** to surface the right ancillary, loyalty perk, or upsell at the right moment for every traveler.
+
+## Key Personas
+- **Offer Manager**: Internal staff who design offer templates, set eligibility rules, and track conversion and realized margin
+- **Loyalty Manager**: Internal staff who define tier-based perks and points-pricing for redemptions
+
+## Core Features Required
+
+### Personalized Offer Decisioning (3 Personalization Lenses)
+
+The application must support **three distinct personalization lenses**:
+
+#### 1. Personalized Ancillaries
+For each shopper, every ancillary (bag, seat, meal, lounge, fast-track) is scored:
+- Likelihood-to-buy × margin per ancillary type
+- Top 3 surfaced in-flow during the booking funnel
+- Per-channel guardrails so mobile shows fewer options than email
+- Example: *"Surface ''priority bag drop'' to a frequent flyer 24 h before departure"*
+
+#### 2. Loyalty-Based Offer Customization
+Tier-aware offers that match the member''s status:
+- Gold members see complimentary upgrade probability + paid upgrade fallback
+- Silver members see paid upgrade with points discount
+- Non-members see standard paid upsell
+- Points-pricing tuned to keep redemption value within target band
+
+#### 3. Cross-Sell / Upsell Optimization
+Bandit-driven decisions on when to push attaches:
+- Fare upgrade, hotel attach, car attach, or do-nothing
+- Per-channel and per-frequency-cap guardrails
+- Closed-loop attribution from impression to purchase to refund
+
+### Offer Composer & Attribution
+- Drag-and-drop offer builder with eligibility rules, price ladders, and expiry
+- Channel preview (web, mobile, email) for each offer before publish
+- Realized-margin attribution by traveler segment and offer type
+
+## Data Entities
+Core entities: Travelers, Loyalty Members, Bookings, Offers, Channels, Impressions, Conversions, Margin Records, Eligibility Rules
+
+## Technical Considerations
+- Real-time offer-decision API under 100 ms on Model Serving
+- Multi-armed bandit with Thompson sampling for offer selection
+- Feature store with traveler-360 features
+- Streaming attribution pipeline from impression to conversion
+
+## Scope Constraints
+**Keep it simple** and focus only on the bare minimum required to support **three ancillary types (bag, seat upgrade, lounge), one channel (web booking flow), and one airline**. We do not need real payment processing, email or push channels, partner revenue-share, or user authentication. This will be an **open, public demo** where anyone can search a flight and watch the platform decide which top-3 offers to surface for a sample traveler segment.',
+ 1, TRUE, current_timestamp(), current_timestamp(), current_user());
+
+INSERT INTO ${catalog}.${schema}.usecase_descriptions
+(config_id, industry, industry_label, use_case, use_case_label,
+ category, category_order, display_order,
+ prompt_template, version, is_active, inserted_at, updated_at, created_by)
+VALUES
+(206, 'travel', 'Travel & Hospitality', 'product_channel_development', 'Product & Channel Development',
+ 'Diversified Revenue Growth', 2, 3,
+'Create a simple **product and channel development platform** similar to Shopify''s multichannel commerce platform, but applied to travel products distributed across direct, partner, and marketplace channels.
+
+## Application Type
+B2B + commercial back-office app that connects **Product Managers** with **Channel Partners** to launch new travel products (routes, fares, experiences) and distribute them consistently across direct, partner, and marketplace channels.
+
+## Key Personas
+- **Product Manager**: Internal staff who define products, prices, eligibility, and effective dates
+- **Channel Manager**: Internal staff who onboard new partners, set distribution policies, and monitor channel mix
+
+## Core Features Required
+
+### Distribution Platform (3 Channel Strategies)
+
+The application must support **three distinct distribution strategies**:
+
+#### 1. Omnichannel Booking Experience
+A single product catalog rendered consistently across every channel:
+- Web, mobile app, partner OTAs, GDS, NDC partner stacks
+- Same prices, same policies, same imagery on every surface
+- Effective-dating so a price change in the catalog propagates everywhere
+- Channel-specific layout templates without forking the catalog
+
+#### 2. Partnership & Marketplace Integration
+Self-serve partner onboarding pipeline:
+- API key issuance and sandbox provisioning
+- Certification checklist with automated test cases
+- Production cutover with traffic ramp and rollback controls
+- Example: *"OTA partner XYZ is 7 of 10 certifications passed and ready for staging traffic"*
+
+#### 3. Direct Booking Optimization
+Conversion-rate analytics for direct channel vs partner cost-of-distribution:
+- Member-only fares and loyalty bonuses to win share back to direct
+- Cost-per-acquisition comparison by channel
+- Recommended channel-mix shifts with revenue impact projection
+
+### Product Lifecycle
+- Versioned products with effective dating and audit trail
+- A/B testing on offer variants with conversion attribution
+- Retirement policies that auto-sunset products after a configured date
+
+## Data Entities
+Core entities: Products, Channels, Partners, Distribution Rules, Bookings, API Keys, Certification Tests, Channel Performance, Effective-Dated Prices
+
+## Technical Considerations
+- API-first design with versioned schemas (OpenAPI plus NDC mappings)
+- Effective-dated tables in Lakebase for product and price history
+- Partner sandbox isolated by tenancy
+- Streaming channel-performance aggregations
+
+## Scope Constraints
+**Keep it simple** and focus only on the bare minimum required to support **one product type (one-way flight + bag), three channels (direct web, one OTA partner, one GDS), and one partner onboarding flow**. We do not need real NDC integration, real partner settlement, real payment splits, or user authentication. This will be an **open, public demo** where anyone can browse the catalog, walk through partner certification, and see channel mix update in real time.',
+ 1, TRUE, current_timestamp(), current_timestamp(), current_user());
+
+-- Column 3: Consumer at the Center of Every Decision -- 3 cards
+
+INSERT INTO ${catalog}.${schema}.usecase_descriptions
+(config_id, industry, industry_label, use_case, use_case_label,
+ category, category_order, display_order,
+ prompt_template, version, is_active, inserted_at, updated_at, created_by)
+VALUES
+(207, 'travel', 'Travel & Hospitality', 'ai_driven_booking', 'AI-Driven Booking',
+ 'Consumer at the Center of Every Decision', 3, 1,
+'Create a simple **AI-driven booking experience** similar to ChatGPT''s natural-language interface, but applied to travel search, hold, and book actions.
+
+## Application Type
+Consumer-facing web + mobile + voice app that connects **Travelers** with an **LLM Booking Agent** to take a fuzzy intent and return a confirmed booking in 60 seconds rather than 60 minutes of filtering.
+
+## Key Personas
+- **Traveler**: End users who describe what they want in plain language and expect the system to handle ambiguity
+- **Booking Engineer**: Internal staff who tune agent prompts, register tools, and set safety guardrails
+
+## Core Features Required
+
+### Conversational Booking Experiences (3 Interaction Modes)
+
+The application must support **three distinct interaction modes**:
+
+#### 1. Conversational Booking
+Multi-turn chat that handles ambiguity and asks clarifying questions:
+- Example: *"Cheapest 1-stop flight to my brother''s wedding in Austin in May"*
+- Structured trip card shown for confirmation before any payment is taken
+- Tool-aware reasoning: search → fare-quote → hold → book → notify
+- Graceful fallback to a structured form if confidence is low
+
+#### 2. Intent Booking & Discovery
+Higher-level intent that does not specify a destination:
+- Example: *"I want a beach somewhere warm next weekend under $600"*
+- Agent fans out across destinations, filters by dates and budget
+- Ranks results by traveler past behavior and preference signals
+- Returns a curated 3–5 trip card list rather than 100 raw results
+
+#### 3. Voice-Activated Booking
+Phone-call or in-app voice that mirrors the chat agent:
+- Verbal confirmations with explicit dollar-amount read-back
+- SMS fallback for visual confirmation of itinerary and price
+- Same tool-aware reasoning loop as the chat surface
+
+### Confirmation, Recovery & Audit
+- Stateful agent that can modify a booking ("change my Austin flight to Sunday")
+- Full conversation log with tool calls and reasoning for replay
+- Support-side override panel to correct mistakes the agent made
+
+## Data Entities
+Core entities: Travelers, Conversations, Tool Calls, Searches, Holds, Bookings, Payment Tokens, Replay Logs
+
+## Technical Considerations
+- Agentic framework (LangGraph or Mosaic AI Agent) on Foundation Model API
+- Tool registry with strongly-typed schemas for search, fare-quote, hold, book, cancel
+- Real-time streaming responses for conversational latency
+- PII redaction enforced in conversation logs
+
+## Scope Constraints
+**Keep it simple** and focus only on the bare minimum required to support **text chat (no voice), one airline, USD only, and US domestic flights**. We do not need real payment processing, voice integration, cross-session memory, or user authentication. This will be an **open, public demo** where anyone can chat with the agent, watch tool calls stream, and see a confirmed (mock) booking with reasoning attached.',
+ 1, TRUE, current_timestamp(), current_timestamp(), current_user());
+
+INSERT INTO ${catalog}.${schema}.usecase_descriptions
+(config_id, industry, industry_label, use_case, use_case_label,
+ category, category_order, display_order,
+ prompt_template, version, is_active, inserted_at, updated_at, created_by)
+VALUES
+(208, 'travel', 'Travel & Hospitality', 'hyper_personalized_marketing', 'Hyper-Personalized Marketing',
+ 'Consumer at the Center of Every Decision', 3, 2,
+'Create a simple **hyper-personalized marketing platform** similar to Salesforce Marketing Cloud, with a Customer 360 view, generative content studio, and real-time next-best-offer decisioning, applied to travel.
+
+## Application Type
+Marketing operations app that connects **Marketers** with a **Personalization Engine** to build a real-time Customer 360, generate on-brand creative, and serve the next best action to every traveler at every touchpoint.
+
+## Key Personas
+- **Marketer**: Internal staff who build journeys, approve AI-generated creative, and monitor campaign ROI
+- **Brand Manager**: Internal staff who define creative guardrails (tone, colors, imagery rules) and approve content before send
+
+## Core Features Required
+
+### Personalization Engine (3 Personalization Pillars)
+
+The application must support **three distinct personalization pillars**:
+
+#### 1. Customer 360
+An identity-resolved profile fused from every traveler signal:
+- Booking, loyalty, web, app, search, and service interactions stitched to a single ID
+- Consent-aware privacy controls that gate which features unlock
+- Lifetime value, churn risk, and segment membership precomputed
+- Example: *"Top 3 segments for traveler 12345: business commuter, weekend beach, family reunion"*
+
+#### 2. Generative Content Creation
+LLM- and image-gen-driven creative that respects brand guardrails:
+- Email subject lines, body copy, push notifications, and hero imagery
+- Brand-guideline prompt engineering enforces tone and visual consistency
+- Human approval flow before any send
+- Variant generation for A/B tests in a single click
+
+#### 3. Next Best Offer
+Real-time decisioning service for any traveler in any channel:
+- Returns the single best action (fare offer, loyalty nudge, content piece, do-nothing)
+- Bandit-based exploration with frequency caps and cool-down windows
+- Closed-loop measurement with holdouts for causal-impact estimation
+
+### Journey Orchestration
+- Visual journey builder with conditional branches and frequency caps
+- Trigger library (booking, status change, milestone) with arbitrary fan-out
+- Live monitoring of journey performance with cohort-level dashboards
+
+## Data Entities
+Core entities: Travelers, Identities, Consents, Profiles, Journeys, Creatives, Sends, Engagements, Conversions, Holdouts
+
+## Technical Considerations
+- Identity resolution on Lakehouse (Splink or rules-based)
+- Foundation Model API for copy and image generation with brand-guideline prompts
+- Bandit-based NBO decisioning with Thompson sampling
+- Consent ledger in Lakebase with immutable audit trail
+
+## Scope Constraints
+**Keep it simple** and focus only on the bare minimum required to support **one channel (email), one journey ("welcome a new loyalty member"), and three creative variants**. We do not need real ESP integration, image generation, multi-channel orchestration, or user authentication. This will be an **open, public demo** where anyone can pick a sample traveler and watch the platform build their 360 view, generate three on-brand email variants, and pick the next best offer.',
+ 1, TRUE, current_timestamp(), current_timestamp(), current_user());
+
+INSERT INTO ${catalog}.${schema}.usecase_descriptions
+(config_id, industry, industry_label, use_case, use_case_label,
+ category, category_order, display_order,
+ prompt_template, version, is_active, inserted_at, updated_at, created_by)
+VALUES
+(209, 'travel', 'Travel & Hospitality', 'agentic_customer_service', 'Agentic Customer Service',
+ 'Consumer at the Center of Every Decision', 3, 3,
+'Create a simple **agentic customer service platform** similar to Intercom''s Fin AI, with a swarm of specialized agents, sentiment-aware escalation, and proactive issue prevention, applied to travel.
+
+## Application Type
+Consumer-facing chat surface plus back-office agent-monitoring console that connects **Travelers** with an **Agent Orchestration Layer** to resolve issues 24/7 across chat, voice, and email — with humans in the loop only when needed.
+
+## Key Personas
+- **Traveler**: End users who ask "where''s my bag" or "I need a refund" and expect a real answer immediately
+- **Customer Care Lead**: Internal staff who watch the agent fleet, spot regressions, and intervene on hot escalations
+
+## Core Features Required
+
+### Agentic Service Capabilities (4 Agent Functions)
+
+The application must support **four distinct agent functions**:
+
+#### 1. 24/7 AI-Powered Assistant
+Always-on first-touch agent that authenticates and triages every contact:
+- Authenticates the traveler via PNR + last name or loyalty number
+- Classifies intent (rebooking, refund, baggage, status, generic)
+- Resolves directly or routes to a specialist sub-agent
+- Channels: in-app chat, web chat, future voice and email
+
+#### 2. Multi-Agent Issue Resolution
+Specialist sub-agents coordinated by a router agent with shared context:
+- Rebooking agent for schedule changes and cancellations
+- Refund-eligibility agent for fare-rule and entitlement checks
+- Lost-baggage agent for tracing and reimbursement workflows
+- Schedule-change agent for proactive itinerary adjustments
+
+#### 3. Sentiment Analysis & Escalation
+Real-time sentiment and intent scoring on the live conversation:
+- Example: *"Sentiment dropped to -0.7; auto-escalate to human with full context attached"*
+- Auto-routes angry, vulnerable, or VIP travelers to humans
+- Human picks up the case with the agent''s reasoning prepopulated
+
+#### 4. Behavioral Targeting
+Predicts traveler issues *before* they contact the airline:
+- Mishandled-bag prediction triggers a proactive update before complaint
+- Connection-risk model triggers proactive rebooking offer
+- Reduces inbound contact volume by deflecting predictable issues
+
+### Quality & Compliance Monitor
+- Auto-scores every interaction on tone, accuracy, and regulatory phrases
+- Flags low-scoring sessions for coaching
+- Audit trail with timestamped citations of policy used in answers
+
+## Data Entities
+Core entities: Travelers, Conversations, Intents, Tools, Sub-Agent Runs, Sentiment Events, Escalations, QA Scores, Knowledge Articles
+
+## Technical Considerations
+- Multi-agent framework (Mosaic AI Agent + LangGraph) on Foundation Model API
+- RAG over policy + knowledge base with citation in every answer
+- Streaming sentiment classifier on conversation tokens
+- Recorded transcripts encrypted at rest with retention policies
+
+## Scope Constraints
+**Keep it simple** and focus only on the bare minimum required to support **chat channel only, three specialist sub-agents (rebooking, baggage status, refund-eligibility check), and one language (English)**. We do not need voice integration, real human-handoff workflow, real booking-system integration, or user authentication. This will be an **open, public demo** where anyone can chat with the agent fleet, watch sub-agents pass context to each other, and see sentiment-driven escalation indicators in real time.',
+ 1, TRUE, current_timestamp(), current_timestamp(), current_user());
 
 -- =============================================================================
 -- SET path_type FOR SKILL ENTRIES
