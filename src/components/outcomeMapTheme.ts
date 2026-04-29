@@ -169,16 +169,19 @@ export const getIconForSlug = (slug: string): LucideIcon =>
  * frontend-side to avoid bloating the DB row.
  */
 export const LEAF_PILLS_BY_SLUG: Record<string, string[]> = {
-  autonomous_disruption_response: ['Rebooking', 'Weather alerts', 'Auto-resolution', 'Vouchers'],
-  predictive_maintenance: ['AOG prevention', 'Equipment optimization', 'Expedited repair'],
-  smarter_scheduling: ['Gate assignment', 'Schedule', 'Workforce', 'Window'],
-  realtime_operations_view: ['Supply chain', 'Ops dashboard', 'Availability', 'New product'],
-  dynamic_pricing: ['Revenue mgmt', 'Demand-based', 'Open pricing'],
-  intelligent_offers_management: ['Personalized', 'Loyalty-based', 'Cross-sell'],
-  product_channel_development: ['Omnichannel', 'Marketplace', 'Direct booking'],
-  ai_driven_booking: ['Conversational', 'Intent', 'Voice'],
-  hyper_personalized_marketing: ['Customer 360', 'Generative', 'Next best offer'],
-  agentic_customer_service: ['24/7 assistant', 'Multi-agent', 'Sentiment', 'Behavioral'],
+  // Column 1: Agentic AI Operations (C1-C4) — pills name the YAML sub-use-cases
+  autonomous_disruption_response: ['Weather rebooking', 'Staffing response', 'Complaint triage', 'Cascading incidents'],
+  predictive_maintenance: ['HVAC failures', 'Fleet components', 'Kitchen equipment'],
+  smarter_scheduling: ['Crew rostering', 'Housekeeping', 'Front-of-house', 'Event reallocation'],
+  realtime_operations_view: ['Property ops', 'NOC view', 'Flight ops', 'Guest journey'],
+  // Column 2: Diversified Revenue Growth (C5-C7)
+  dynamic_pricing: ['Room rates', 'Seat revenue', 'Event surge', 'Ancillary upsell'],
+  intelligent_offers_management: ['Next-best-offer', 'Loyalty perks', 'Cross-sell', 'Pre-arrival'],
+  product_channel_development: ['New routes', 'Channel economics', 'Competitive intel', 'Partnerships'],
+  // Column 3: Consumer at the Center of Every Decision (C8-C10)
+  ai_driven_booking: ['Filter search', 'Natural language', 'Agent intent', 'Cart recovery'],
+  hyper_personalized_marketing: ['Guest identity', 'Churn & retention', 'Generative content', 'Attribution'],
+  agentic_customer_service: ['Autonomous agent', 'Proactive recovery', 'Voice AI', 'Post-stay'],
 };
 
 /**
