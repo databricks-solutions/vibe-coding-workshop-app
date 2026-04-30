@@ -17,6 +17,7 @@
 --   {use_case_slug}            - Derived per-session: e.g. booking-app (hyphens)
 --   {user_schema_prefix}      - Derived per-session: e.g. varunrao_b_booking_app
 --   {user_app_name}           - Derived per-session: Lakebase project / app name
+--   {databricks_cli_profile}  - From Workshop Parameters config (Databricks CLI profile name; default DEFAULT)
 --   {prd_document}            - PRD from previous step
 --   {table_metadata}          - Table metadata from previous step
 --
@@ -337,11 +338,12 @@ All file paths below are relative to `apps_lakebase/$APP_NAME/` unless explicitl
 ### Step 1: Authenticate and Set Up Variables
 
 ```bash
-# Authenticate to Databricks
-databricks auth login --host {workspace_url}
+# Authenticate to Databricks (creates / refreshes the named profile)
+PROFILE="{databricks_cli_profile}"
+databricks auth login --host {workspace_url} --profile $PROFILE
 
 # Derive app name from your username + use case
-USER_JSON=$(databricks current-user me --output json)
+USER_JSON=$(databricks current-user me --profile $PROFILE --output json)
 EMAIL=$(echo "$USER_JSON" | jq -r ''.userName'')
 FIRSTNAME=$(echo "$EMAIL" | cut -d''@'' -f1 | cut -d''.'' -f1)
 LASTINITIAL=$(echo "$EMAIL" | cut -d''@'' -f1 | cut -d''.'' -f2 | cut -c1)
@@ -630,18 +632,17 @@ Deploy the Lakebase-wired web application to Databricks Apps and run comprehensi
 Derive your app name and auto-detect a CLI profile for the target workspace:
 
 ```bash
-USER_JSON=$(databricks current-user me --output json)
-EMAIL=$(echo "$USER_JSON" | jq -r ''.userName'')
-FIRSTNAME=$(echo "$EMAIL" | cut -d''@'' -f1 | cut -d''.'' -f1)
-LASTINITIAL=$(echo "$EMAIL" | cut -d''@'' -f1 | cut -d''.'' -f2 | cut -c1)
-APP_PREFIX="${FIRSTNAME}-${LASTINITIAL}"
-APP_NAME="${APP_PREFIX}-{use_case_slug}"
-
+PROFILE="{databricks_cli_profile}"
 TARGET_HOST="{workspace_url}"
-PROFILE=$(databricks auth profiles --output json 2>/dev/null \
-  | jq -r --arg host "$TARGET_HOST" \
-    ''[.profiles[] | select(.host == $host)] | .[0].name // empty'')
 
+# Fallback: if the session-level profile is empty, auto-detect from the workspace URL.
+if [ -z "$PROFILE" ]; then
+  PROFILE=$(databricks auth profiles --output json 2>/dev/null \
+    | jq -r --arg host "$TARGET_HOST" \
+      ''[.profiles[] | select(.host == $host)] | .[0].name // empty'')
+fi
+
+# Fallback: if still empty, prompt the user to authenticate and re-detect.
 if [ -z "$PROFILE" ]; then
   echo "No profile found for $TARGET_HOST — creating one..."
   databricks auth login --host "$TARGET_HOST"
@@ -651,6 +652,13 @@ if [ -z "$PROFILE" ]; then
 fi
 
 echo "Using profile: $PROFILE"
+
+USER_JSON=$(databricks current-user me --profile $PROFILE --output json)
+EMAIL=$(echo "$USER_JSON" | jq -r ''.userName'')
+FIRSTNAME=$(echo "$EMAIL" | cut -d''@'' -f1 | cut -d''.'' -f1)
+LASTINITIAL=$(echo "$EMAIL" | cut -d''@'' -f1 | cut -d''.'' -f2 | cut -c1)
+APP_PREFIX="${FIRSTNAME}-${LASTINITIAL}"
+APP_NAME="${APP_PREFIX}-{use_case_slug}"
 ```
 
 Verify `app.yaml` has the Lakebase-specific environment variables (in addition to the generic checks the deploy skill performs):
@@ -5761,7 +5769,7 @@ Install the Lakebase (PostgreSQL) package and configure bundle resources so the 
 ### Step 1: Set Variables
 
 ```bash
-PROFILE="<your-databricks-cli-profile>"  # Must match the profile from prior phases
+PROFILE="{databricks_cli_profile}"  # From Session Settings → Profile (default DEFAULT)
 USER_JSON=$(databricks current-user me --profile $PROFILE --output json)
 EMAIL=$(echo "$USER_JSON" | jq -r ''.userName'')
 FIRSTNAME=$(echo "$EMAIL" | cut -d''@'' -f1 | cut -d''.'' -f1)
@@ -6110,7 +6118,9 @@ Deploy the locally-tested AppKit web application to Databricks Apps.
 Derive your app name from your username + use case. This ensures the deployed app matches your `app.yaml` and `databricks.yml` configuration.
 
 ```bash
-USER_JSON=$(databricks current-user me --output json)
+PROFILE="{databricks_cli_profile}"
+USER_JSON=$(databricks current-user me --profile $PROFILE --output json 2>/dev/null \
+  || databricks current-user me --output json)
 EMAIL=$(echo "$USER_JSON" | jq -r ''.userName'')
 FIRSTNAME=$(echo "$EMAIL" | cut -d''@'' -f1 | cut -d''.'' -f1)
 LASTINITIAL=$(echo "$EMAIL" | cut -d''@'' -f1 | cut -d''.'' -f2 | cut -c1)
@@ -6119,14 +6129,20 @@ APP_NAME="${APP_PREFIX}-{use_case_slug}"
 echo "Deploying app: $APP_NAME"
 ```
 
-Detect (or create) a CLI profile for the target workspace:
+Confirm (or create) a CLI profile for the target workspace. Re-derives `PROFILE` if the configured one is empty/invalid:
 
 ```bash
+PROFILE="{databricks_cli_profile}"
 TARGET_HOST="{workspace_url}"
-PROFILE=$(databricks auth profiles --output json 2>/dev/null \
-  | jq -r --arg host "$TARGET_HOST" \
-    ''[.profiles[] | select(.host == $host)] | .[0].name // empty'')
 
+# Fallback: if the session-level profile is empty, auto-detect from the workspace URL.
+if [ -z "$PROFILE" ]; then
+  PROFILE=$(databricks auth profiles --output json 2>/dev/null \
+    | jq -r --arg host "$TARGET_HOST" \
+      ''[.profiles[] | select(.host == $host)] | .[0].name // empty'')
+fi
+
+# Fallback: if still empty, prompt the user to authenticate and re-detect.
 if [ -z "$PROFILE" ]; then
   echo "No profile found for $TARGET_HOST — creating one..."
   databricks auth login --host "$TARGET_HOST"
@@ -7897,12 +7913,12 @@ VALUES
 ### 0a. Resolve CLI Profile
 
 ```bash
-# Find the profile in ~/.databrickscfg whose host matches the workspace URL
+# Use the configured Databricks CLI profile (defaults to DEFAULT — change in Session Settings → Profile if your ~/.databrickscfg uses a different name)
 # Export it so all subsequent `databricks api` calls authenticate correctly
-export DATABRICKS_CONFIG_PROFILE=<matched_profile>
+export DATABRICKS_CONFIG_PROFILE={databricks_cli_profile}
 
 # Verify
-databricks current-user me --output json
+databricks current-user me --profile {databricks_cli_profile} --output json
 ```
 
 ### 0b. Read Bundle Configs
@@ -8208,10 +8224,10 @@ Execute the phases interactively one at a time using the Databricks CLI:
 ---
 
 ### Step 1: Set the Correct Databricks CLI Profile
-Match `{workspace_url}` against `~/.databrickscfg` and export the profile before running any commands:
+Use the configured Databricks CLI profile (default `DEFAULT` — override in **Session Settings → Profile** if your `~/.databrickscfg` uses a different profile name for `{workspace_url}`):
 ```bash
-export DATABRICKS_CONFIG_PROFILE=<matched_profile>
-databricks current-user me --output json
+export DATABRICKS_CONFIG_PROFILE={databricks_cli_profile}
+databricks current-user me --profile {databricks_cli_profile} --output json
 ```
 This is required — `databricks api` calls will silently hit the wrong workspace without it.
 
@@ -9644,7 +9660,7 @@ This will involve the following steps:
 Use the same identity-derived naming pattern as the AppKit and Lakebase prompts. These values keep AppKit apps, Lakebase schemas, UC schemas, volumes, and the Track A Agent App isolated per user and use case.
 
 ```bash
-PROFILE="<your-databricks-cli-profile>"  # Must match the profile from prior phases
+PROFILE="{databricks_cli_profile}"  # From Session Settings → Profile (default DEFAULT)
 USER_JSON=$(databricks current-user me --profile $PROFILE --output json)
 EMAIL=$(echo "$USER_JSON" | jq -r ''.userName'')
 FIRSTNAME=$(echo "$EMAIL" | cut -d''@'' -f1 | cut -d''.'' -f1)

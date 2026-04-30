@@ -907,6 +907,42 @@ DEFAULT_CODING_ASSISTANTS_CONFIG_JSON = json.dumps([
 ])
 
 
+# Default value for the databricks_cli_profile parameter. Used by both the
+# empty-DB fallback path and the self-healing bootstrap so that prompt
+# substitution always has a usable value, even on existing deployments that
+# were seeded before this parameter existed.
+DEFAULT_DATABRICKS_CLI_PROFILE = 'DEFAULT'
+
+
+def _bootstrap_databricks_cli_profile_if_missing() -> None:
+    """
+    Self-healing: on existing deployments that were seeded before this param
+    existed, insert the default row so admins see it without rerunning
+    `vibe2value configure`. Idempotent via ON CONFLICT on param_key.
+    """
+    schema = get_schema()
+    sql = f"""
+        INSERT INTO {schema}.workshop_parameters
+            (param_key, param_label, param_value, param_description, param_type,
+             display_order, is_required, is_active, allow_session_override,
+             inserted_at, updated_at, created_by)
+        VALUES
+            ('databricks_cli_profile',
+             'Profile',
+             %s,
+             'Databricks CLI profile name (from ~/.databrickscfg) used for `--profile` flags in generated workflow prompts. Defaults to DEFAULT. Override per-session if you authenticated under a different profile name.',
+             'text',
+             28, FALSE, TRUE, TRUE,
+             CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 'system-bootstrap')
+        ON CONFLICT (param_key) DO NOTHING
+    """
+    try:
+        execute_insert(sql, (DEFAULT_DATABRICKS_CLI_PROFILE,))
+    except Exception as e:
+        # Never fail the parent request if bootstrap hits a transient error.
+        logger.warning(f"[Config API] databricks_cli_profile bootstrap skipped: {e}")
+
+
 def _bootstrap_coding_assistants_config_if_missing() -> None:
     """
     Self-healing: on existing deployments that were seeded before this param
@@ -981,12 +1017,14 @@ def get_workshop_parameters_sync() -> Dict[str, str]:
             'uc_function_targets': '',
             'agent_tool_external_mcp_enabled': 'false',
             'external_mcp_connection': '',
+            'databricks_cli_profile': DEFAULT_DATABRICKS_CLI_PROFILE,
         }
     
     out = {row['param_key']: row['param_value'] for row in results}
     # Backfill for template substitution so callers can safely read this key
     # even before the GET endpoint has had a chance to bootstrap.
     out.setdefault('coding_assistants_config', DEFAULT_CODING_ASSISTANTS_CONFIG_JSON)
+    out.setdefault('databricks_cli_profile', DEFAULT_DATABRICKS_CLI_PROFILE)
     return out
 
 
@@ -4472,13 +4510,30 @@ async def get_workshop_parameters(response: Response) -> List[WorkshopParameter]
                 is_active=True,
                 allow_session_override=True
             ),
+            WorkshopParameter(
+                param_key="databricks_cli_profile",
+                param_label="Profile",
+                param_value=DEFAULT_DATABRICKS_CLI_PROFILE,
+                param_description="Databricks CLI profile name (from ~/.databrickscfg) used for `--profile` flags in generated workflow prompts. Defaults to DEFAULT. Override per-session if you authenticated under a different profile name.",
+                param_type="text",
+                display_order=28,
+                is_required=False,
+                is_active=True,
+                allow_session_override=True
+            ),
         ]
     
-    # Self-heal: existing deployments that were seeded before this param
-    # existed won't have the row yet. Insert the default and re-read so the
-    # admin UI immediately sees it. Idempotent (ON CONFLICT DO NOTHING).
+    # Self-heal: existing deployments that were seeded before these params
+    # existed won't have the rows yet. Insert defaults and re-read so the
+    # admin UI immediately sees them. Idempotent (ON CONFLICT DO NOTHING).
+    needs_reread = False
     if not any(row.get('param_key') == 'coding_assistants_config' for row in results):
         _bootstrap_coding_assistants_config_if_missing()
+        needs_reread = True
+    if not any(row.get('param_key') == 'databricks_cli_profile' for row in results):
+        _bootstrap_databricks_cli_profile_if_missing()
+        needs_reread = True
+    if needs_reread:
         results = execute_query(sql)
     
     return [WorkshopParameter(**row) for row in results]

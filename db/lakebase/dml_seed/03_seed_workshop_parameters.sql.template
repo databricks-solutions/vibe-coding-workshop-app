@@ -8,7 +8,7 @@
 -- =============================================================================
 
 -- Clear existing data (for recreate scenarios)
-DELETE FROM ${schema}.workshop_parameters WHERE param_key IN ('workspace_url', 'workspace_org_id', 'default_warehouse', 'lakebase_instance_name', 'lakebase_host_name', 'lakehouse_default_catalog', 'model_serving_endpoint', 'chapter_3_lakehouse_catalog', 'chapter_3_lakehouse_schema', 'company_brand_url', 'lakebase_uc_catalog_name', 'app_name', 'lakebase_mode', 'coding_assistants_config', 'agent_tool_sql_mcp_enabled', 'agent_sql_catalog', 'agent_sql_schema', 'agent_sql_warehouse_id', 'agent_sql_table_scope', 'agent_tool_genie_enabled', 'genie_space_id', 'agent_tool_vector_search_enabled', 'vs_endpoint', 'vs_index', 'agent_tool_uc_functions_enabled', 'uc_function_targets', 'agent_tool_external_mcp_enabled', 'external_mcp_connection');
+DELETE FROM ${schema}.workshop_parameters WHERE param_key IN ('workspace_url', 'workspace_org_id', 'default_warehouse', 'lakebase_instance_name', 'lakebase_host_name', 'lakehouse_default_catalog', 'model_serving_endpoint', 'chapter_3_lakehouse_catalog', 'chapter_3_lakehouse_schema', 'company_brand_url', 'lakebase_uc_catalog_name', 'app_name', 'lakebase_mode', 'coding_assistants_config', 'agent_tool_sql_mcp_enabled', 'agent_sql_catalog', 'agent_sql_schema', 'agent_sql_warehouse_id', 'agent_sql_table_scope', 'agent_tool_genie_enabled', 'genie_space_id', 'agent_tool_vector_search_enabled', 'vs_endpoint', 'vs_index', 'agent_tool_uc_functions_enabled', 'uc_function_targets', 'agent_tool_external_mcp_enabled', 'external_mcp_connection', 'databricks_cli_profile');
 
 -- Parameter 1: Databricks Workspace URL
 INSERT INTO ${schema}.workshop_parameters 
@@ -492,6 +492,23 @@ VALUES
  'Name of the Unity Catalog connection backing an external MCP server (or a registry-backed candidate name).',
  'text',
  27,
+ FALSE,
+ TRUE,
+ TRUE,
+ CURRENT_TIMESTAMP,
+ CURRENT_TIMESTAMP,
+ CURRENT_USER);
+
+-- Parameter 28: Databricks CLI Profile
+INSERT INTO ${schema}.workshop_parameters
+(param_key, param_label, param_value, param_description, param_type, display_order, is_required, is_active, allow_session_override, inserted_at, updated_at, created_by)
+VALUES
+('databricks_cli_profile',
+ 'Profile',
+ 'DEFAULT',
+ 'Databricks CLI profile name (from ~/.databrickscfg) used for `--profile` flags in generated workflow prompts. Defaults to DEFAULT. Override per-session if you authenticated under a different profile name.',
+ 'text',
+ 28,
  FALSE,
  TRUE,
  TRUE,
