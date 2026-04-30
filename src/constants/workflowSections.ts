@@ -384,6 +384,13 @@ export const ALL_STEPS: Record<number, WorkflowStep> = {
   45: { number: 45, title: 'AppKit Agent Proxy', icon: Link2, color: 'text-blue-500', sectionTag: 'appkit_agent_app_proxy_chat' },
   46: { number: 46, title: 'Chat Feedback to MLflow', icon: MessageSquareText, color: 'text-blue-400', sectionTag: 'appkit_chat_feedback_mlflow' },
 
+  // Agents Accelerator — Agent Design (Steps 55-56)
+  // These prepend to the 'agents-on-apps' section so docs/agent_spec.yaml and
+  // docs/agent_tool_plan.yaml are produced before uc_resources_foundation runs
+  // (which require_prior_gate's "Agent tool plan ready").
+  55: { number: 55, title: 'Agent Spec Design', icon: FileText, color: 'text-sky-400', sectionTag: 'agent_spec_design' },
+  56: { number: 56, title: 'Agent Tool Selection', icon: Tag, color: 'text-sky-500', sectionTag: 'agent_tool_selection' },
+
   // Agents Accelerator — MLflow for Gen-AI (Steps 47-54)
   47: { number: 47, title: 'Prompt Registry', icon: BookOpen, color: 'text-violet-400', sectionTag: 'mlflow_prompt_registry' },
   48: { number: 48, title: 'Evaluation Datasets', icon: Table2, color: 'text-violet-500', sectionTag: 'mlflow_evaluation_datasets' },
@@ -497,13 +504,13 @@ export const WORKFLOW_SECTIONS: WorkflowSection[] = [
     id: 'agents-on-apps',
     chapter: 'Agents Accelerator',
     title: 'Agents on Apps',
-    focus: 'Build a production-grade agent on top of your Databricks App + Lakebase',
-    description: 'Stand up a production-grade agent on top of your Databricks App and Lakebase foundation. Create UC resources, tracing, Knowledge Assistant, tools, OBO auth, Lakebase memory, deployment, AppKit proxying, and feedback capture.',
+    focus: 'Design the agent, then build it on top of your Databricks App + Lakebase',
+    description: "Design the agent's intent and tool plan, then stand up a production-grade agent on top of your Databricks App and Lakebase foundation. Author docs/agent_spec.yaml and docs/agent_tool_plan.yaml, then create UC resources, tracing, Knowledge Assistant, tools, OBO auth, Lakebase memory, deployment, AppKit proxying, and feedback capture.",
     icon: Bot,
     color: 'text-blue-400',
     bgColor: 'bg-blue-500/15',
     borderColor: 'border-blue-500/30',
-    steps: [38, 39, 40, 41, 42, 43, 44, 45, 46].map(n => ALL_STEPS[n]),
+    steps: [55, 56, 38, 39, 40, 41, 42, 43, 44, 45, 46].map(n => ALL_STEPS[n]),
   },
   {
     id: 'mlflow-genai',
