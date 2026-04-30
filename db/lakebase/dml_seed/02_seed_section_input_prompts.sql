@@ -6364,8 +6364,7 @@ This replaces the manual process of syncing individual tables and converting typ
 - Catalog `{lakebase_uc_catalog_name}` is registered in Unity Catalog with state ACTIVE
 - All schemas from the Lakebase PostgreSQL database are listed and displayed to the user
 - Tables are queryable via standard SQL (e.g., `SELECT * FROM {lakebase_uc_catalog_name}.<schema>.<table>`)',
-TRUE, FALSE,
-1, TRUE, current_timestamp(), current_timestamp(), current_user());
+true, false, 1, true, current_timestamp(), current_timestamp(), current_user());
 
 -- =============================================
 -- GENIE ACCELERATOR PROMPTS
@@ -8408,6 +8407,7 @@ The allowed sync modes (SNAPSHOT / TRIGGERED; CONTINUOUS is banned) and the UC �
   - [ ] Ordered creation checklist',
 true, 1, true, current_timestamp(), current_timestamp(), current_user());
 
+-- Create Synced Tables
 INSERT INTO ${catalog}.${schema}.section_input_prompts 
 (input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
 VALUES
@@ -8562,6 +8562,7 @@ After initial sync, Snapshot and Triggered modes need explicit triggers via REST
 - [ ] Row counts verified in Lakebase',
 true, 1, true, current_timestamp(), current_timestamp(), current_user());
 
+-- Design Analytics App
 INSERT INTO ${catalog}.${schema}.section_input_prompts 
 (input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
 VALUES
@@ -8641,6 +8642,7 @@ Complete **Create Synced Tables** (Step 33) so data is available in Lakebase.
   - [ ] Clear note of extensions to existing app vs greenfield',
 true, 1, true, current_timestamp(), current_timestamp(), current_user());
 
+-- Build Analytics App
 INSERT INTO ${catalog}.${schema}.section_input_prompts 
 (input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
 VALUES
@@ -8783,6 +8785,7 @@ Complete **Design Analytics App** (Step 34). The design document at `@docs/analy
 - [ ] Local testing passes at `http://localhost:8000`',
 true, 1, true, current_timestamp(), current_timestamp(), current_user());
 
+-- Wire to Lakebase
 INSERT INTO ${catalog}.${schema}.section_input_prompts 
 (input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
 VALUES
@@ -8921,6 +8924,7 @@ Complete **Build Analytics App** (Step 35). The app must be running locally with
 - [ ] App still functions with placeholder data if Lakebase is unreachable',
 true, 1, true, current_timestamp(), current_timestamp(), current_user());
 
+-- Deploy & Validate
 INSERT INTO ${catalog}.${schema}.section_input_prompts 
 (input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
 VALUES
@@ -9142,15 +9146,23 @@ true, 1, true, current_timestamp(), current_timestamp(), current_user());
 -- =============================================================================
 
 -- =============================================================================
--- AGENTS ACCELERATOR — Section 1: Agents on Apps (Steps 38-46)
+-- AGENTS ACCELERATOR — Section 0: Agent Design (Steps 38-39)
+-- Section 1: Agents on Apps (Steps 40-48)
 -- Refreshed from genericized example/skyloyalty/WALKTHROUGH.md (Module 4+) and
 -- mirrored from the live DDL (docs/02_seed_section_input_prompts.sql input_ids
 -- 152, 146, 141, 142, 143, 144, 145, 150, 151). Scaffold input_ids here
--- (200-208) avoid colliding with the activation section (141-146).
+-- (200-208) avoid colliding with the activation section (141-146). Design
+-- artifacts use input_ids 217-218.
 --
 -- Rendered when the user is on workshop level 'agents-accelerator'. The level
 -- is NOT tied to a specific use case — the user picks a regular sample use
 -- case and then selects the Agents Accelerator button.
+--
+--   Section 0 - Agent Design (input_ids 217-218)
+--     Agent Spec Design and Agent Tool Selection
+--
+--   Section 1 - Agents on Apps (input_ids 200-208)
+--     Phase 1 starts at order 40 after the design artifacts are ready.
 --
 -- Pedagogical phase taxonomy:
 --   Phase 1: Agent Foundation       (input_ids 200, 201, 202)
@@ -9160,33 +9172,527 @@ true, 1, true, current_timestamp(), current_timestamp(), current_user());
 --   Phase 3: AppKit Integration     (input_ids 207, 208)
 --     "Hand the agent off to the dashboard with proxy + feedback round-trip."
 --
--- Upstream foundation rows in earlier chapters that this section consumes:
---   Step 8  / bronze_table_metadata   (input_id 5)   -- CSV data dictionary
---   Step 10 / bronze_layer_creation   (input_id 7)   -- Bronze tables (cloned from
---                                                       a published source schema)
---   Step 14 / aibi_dashboard          (input_id 12)  -- Dashboard, anchor for AppKit
---   Step 15 / genie_space             (input_id 11)  -- Genie Space (consumed by
---                                                       row 204 as a tool backend)
+-- Upstream rows this section consumes (visible Agents Accelerator path):
+--   prd_generation              (input_id 1)    -- docs/design_prd.md
+--   cursor_copilot_ui_design    (input_id 3)    -- docs/ui_design.md
+--   workspace_setup_deploy      (input_id 4)    -- catalog + warehouse
+--   setup_lakebase              (input_id 16)   -- DB_SCHEMA, lakebase wiring
+--   wire_ui_lakebase            (input_id 108)  -- frontend Lakebase API surface
+--   deploy_databricks_app       (input_id 110)  -- APP_NAME, app URL, workspace URL
 --
--- Step 38: 01 - Phase 1 / Agent Foundation   - UC Resources Foundation     (bypass_llm = true)
--- Step 39: 02 - Phase 1 / Agent Foundation   - MLflow Tracing + UC OTel    (bypass_llm = true)
--- Step 40: 03 - Phase 1 / Agent Foundation   - Create Knowledge Assistant  (bypass_llm = true)
--- Step 41: 04 - Phase 2 / Agent Build        - Clone + Framework           (bypass_llm = true)
--- Step 42: 05 - Phase 2 / Agent Build        - Wire Tools and MCP          (bypass_llm = true)
--- Step 43: 06 - Phase 2 / Agent Build        - Auth + Lakebase Memory      (bypass_llm = true)
--- Step 44: 07 - Phase 2 / Agent Build        - Smoke Eval + Deploy         (bypass_llm = true)
--- Step 45: 08 - Phase 3 / AppKit Integration - AppKit ↔ Agent App Proxy    (bypass_llm = true)
--- Step 46: 09 - Phase 3 / AppKit Integration - Chatbot Feedback → MLflow   (bypass_llm = true)
+-- Optional bring-your-own tool backends (referenced ONLY when selected in
+-- docs/agent_tool_plan.yaml.selected_tools[] / selected_mcp_servers[]):
+--   genie_space_id              -- existing Genie Space, BYO
+--   agent_sql_catalog/schema    -- SQL MCP scope, BYO
+--   vs_endpoint / vs_index      -- existing Vector Search, BYO
+--   uc_function names           -- existing UC Functions, BYO
+--   external MCP UC connection  -- registry-backed external MCP, BYO
+--
+-- Bronze, Gold, Genie, and AIBI Dashboard rows are NOT prerequisites of this section.
+--
+-- Step 38: 00 - Section 0 / Agent Design          - Agent Spec Design          (bypass_llm = false)
+-- Step 39: 01 - Section 0 / Agent Design          - Agent Tool Selection       (bypass_llm = false)
+-- Step 40: 02 - Phase 1 / Agent Foundation        - UC Resources Foundation    (bypass_llm = true)
+-- Step 41: 03 - Phase 1 / Agent Foundation        - MLflow Tracing + UC OTel   (bypass_llm = true)
+-- Step 42: 04 - Phase 1 / Agent Foundation        - Create Knowledge Assistant (bypass_llm = true)
+-- Step 43: 05 - Phase 2 / Agent Build             - Clone + Framework          (bypass_llm = true)
+-- Step 44: 06 - Phase 2 / Agent Build             - Wire Selected Tools + MCP  (bypass_llm = true)
+-- Step 45: 07 - Phase 2 / Agent Build             - Auth + Lakebase Memory     (bypass_llm = true)
+-- Step 46: 08 - Phase 2 / Agent Build             - Smoke Eval + Deploy        (bypass_llm = true)
+-- Step 47: 09 - Phase 3 / AppKit Integration      - AppKit ↔ Agent App Proxy   (bypass_llm = true)
+-- Step 48: 10 - Phase 3 / AppKit Integration      - Chatbot Feedback → MLflow  (bypass_llm = true)
 -- =============================================================================
 
--- Step 38 / order 38: Phase 1 / Agent Foundation - UC Resources Foundation
+-- Step 38 / order 38: Agent Spec Design
+INSERT INTO ${catalog}.${schema}.section_input_prompts 
+(input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, version, is_active, inserted_at, updated_at, created_by)
+VALUES
+(217, 'agent_spec_design',
+'Generate a prompt that I can copy into my AI coding assistant (Cursor/Copilot) to create the **Agent Spec** for the **{use_case_slug}** agent. The Agent Spec is the first design artifact of the Track A "Agents 101" arc — a YAML file (`docs/agent_spec.yaml`) that captures *intent* (purpose, personas, capabilities, model endpoint, MCP recommendations, eval seeds, governance) before any code or Databricks resource is created. Do NOT create code, Databricks resources, MCP installs, or tool wiring during spec generation.
+
+This will involve the following steps:
+
+- **Read the PRD** — load `docs/design_prd.md` (created by step 03) and record its path + sha256 as `source_prd` so the spec is reproducible from a known PRD revision
+- **Read the UI design** — load `docs/ui_design.md` (created by step 04) for pages, personas, navigation, and user journeys; mirror the personas + flows here so the agent fits the same UX
+- **Read the deployed AppKit + Lakebase context** — load `apps_lakebase/$APP_NAME/.vibecoding-state.md` (populated by steps 04-07) for `APP_NAME`, app URL, workspace URL, `DB_SCHEMA`, app API routes, frontend pages, and any live/mock endpoint notes; reference these as the agent''s host application context
+- **Draft the agent''s intent** — write `purpose`, `personas[]`, `capabilities[]`, and a first-pass `system_prompt`
+- **Confirm the model endpoint** — set `agent.model` to the user-confirmed Databricks Model Serving endpoint (default `databricks-claude-sonnet-4-6`); never use vague labels like "Claude" or "best model"
+- **Recommend managed MCPs** — propose Genie, SQL, Vector Search, and UC Functions as managed Databricks MCPs, plus an optional Knowledge Assistant
+- **(Optional) Research external MCPs** — if `mcp_research_mode: web_research` is enabled, search the official MCP Registry first and record candidates with registry status, version, source URL, and confidence
+- **Author eval and governance seeds** — write smoke + benchmark eval cases and `must_do` / `must_not_do` / scorer-guideline seeds so the spec is review-ready
+
+The generated prompt MUST include this exact instruction block at the very beginning:
+
+```
+## IMPORTANT - READ FIRST
+
+Your ONLY task is to create the Agent Spec document. Do NOT:
+- Generate application code
+- Create Databricks resources
+- Install MCP servers
+- Create UC connections
+- Wire tools into an agent
+- Deploy anything
+- Modify app code
+- Modify SQL seed files
+- Create or configure AI Gateway endpoints
+
+You MUST:
+- Read docs/design_prd.md (step 03 — business intent)
+- Read docs/ui_design.md (step 04 — pages, personas, navigation, user journeys)
+- Read apps_lakebase/$APP_NAME/.vibecoding-state.md (steps 04-07 — APP_NAME, app URL, workspace URL, DB_SCHEMA, Lakebase wiring, frontend pages, API routes)
+- Use those prior artifacts as the only required context — do NOT require Bronze, Gold, Genie, or Data Intelligence artifacts. If the user wants external structured data, record it as optional tool candidates under mcp_research and let the Tool Plan (step 39) decide.
+- Create ONLY docs/agent_spec.yaml
+- Use genai-agents/foundation/00b-agent-spec-and-tool-plan/SKILL.md as the contract
+- If web search is available and I ask for MCP research, start with the official MCP Registry (`https://registry.modelcontextprotocol.io`) and its REST API (`https://modelcontextprotocol.io/registry/registry-aggregators#consuming-the-mcp-registry-rest-api`), then use broader web search only to enrich registry candidates
+- Record MCP recommendations under mcp_research with registry metadata, version/status, source URLs, and confidence
+- STOP after saving docs/agent_spec.yaml
+```
+
+After those instructions, the generated prompt should describe the {industry_name} application focused on {use_case_title} and request a complete Agent Spec.
+
+## Use Case Context to Include
+{use_case_description}
+
+## Application Context to Include
+- **Industry**: {industry_name}
+- **Use Case**: {use_case_title}
+- Use the same neutral product naming conventions used in the PRD
+
+## Prior App Context to Inherit (from steps 03-07)
+
+The Agent Spec must inherit context from the visible upstream Agents Accelerator path, not from Lakehouse or Data Intelligence steps:
+
+- **PRD (step 03)** — `docs/design_prd.md` is the source of business intent, personas, and goals; record it as `source_prd` (path + sha256).
+- **UI design (step 04)** — `docs/ui_design.md` defines the pages, personas, navigation, and user journeys. The Agent Spec personas and capabilities must align with this UI; do not invent personas that contradict it.
+- **Deployed AppKit app (step 05)** — `apps_lakebase/$APP_NAME/.vibecoding-state.md` carries `APP_NAME`, the app URL, and the workspace URL. Reference these as the agent''s host application; do not duplicate values, just point at the state file.
+- **Lakebase setup + wiring (steps 06-07)** — the same state file carries `DB_SCHEMA`, app API routes, frontend pages, and any live/mock endpoint notes. The agent''s data entities and tool surface should map to these, not to a Bronze/Genie pipeline.
+
+Bronze, Gold, Genie, and Data Intelligence outputs are NOT prerequisites. If the user wants external structured data, record it later in `docs/agent_tool_plan.yaml` as an optional bring-your-own tool input (e.g. `genie_space_id`, `agent_sql_catalog`, `agent_sql_schema`, an existing Vector Search index, or UC Functions).
+
+## Model Selection
+
+Ask the user to confirm the underlying Databricks model serving endpoint for this agent.
+
+Use this input name:
+- agent_model: {agent_model}
+
+If `agent_model` is missing, empty, or still a placeholder, default to:
+
+```yaml
+agent:
+  model: "databricks-claude-sonnet-4-6"
+```
+
+Record the final endpoint name as `agent.model` in `docs/agent_spec.yaml`.
+Do not record vague model family labels such as `Claude`, `GPT`, or `best model`.
+
+`agent.model` is the raw/backing Databricks model serving endpoint for the core workshop route. Do not record an AI Gateway endpoint here. AI Gateway, if used later, is introduced through the Tool Plan runtime route and deployment config, not through the Agent Spec.
+
+## Agent Spec Contents
+
+The Agent Spec must include:
+- source_prd path and sha256
+- agent purpose, personas, capabilities, `agent.model`, auth mode, and memory
+- `agent.model` set to the user-provided `agent_model` endpoint or `databricks-claude-sonnet-4-6` by default
+- system_prompt draft
+- managed Databricks MCP recommendations: sql, genie, vector_search, uc_functions
+- optional Knowledge Assistant recommendation
+- external MCP research candidates with official MCP Registry metadata, version/status, source URLs, and confidence when web search is enabled
+- evaluation smoke cases and benchmark seeds
+- governance must_do, must_not_do, and scorer guideline seeds
+
+## Optional MCP Web Research
+
+If the user explicitly enables `mcp_research_mode: web_research`:
+1. Search the official MCP Registry first (`https://registry.modelcontextprotocol.io`) using the documented REST API.
+2. Record candidates under `mcp_research.candidates[]` with name, provider, registry_name, registry_status, registry_version, source_url, registry_url, integration_method, auth_model, required_scopes, databricks_compatibility, and confidence.
+3. Skip `status: deleted` entries; mark `status: deprecated` as `confidence: low`.
+4. Use broader web search only to enrich registry candidates with vendor docs and Databricks compatibility notes.
+5. NEVER install or configure any MCP connection during spec creation.
+
+The prompt MUST end with:
+
+```
+Save it to: docs/agent_spec.yaml
+STOP after saving. Do not generate any code, install MCPs, create UC connections, or proceed with other tasks.
+```',
+'You are generating a prompt that users will copy into their AI coding assistant.
+
+Your output should be a complete, ready-to-use prompt that when pasted into Cursor or Copilot will:
+1. Read the prior app design context: `docs/design_prd.md` (step 03), `docs/ui_design.md` (step 04), and `apps_lakebase/$APP_NAME/.vibecoding-state.md` (steps 04-07 deployed AppKit + Lakebase context)
+2. Create ONLY docs/agent_spec.yaml, including the selected model endpoint at `agent.model`
+3. Optionally use IDE web search to research relevant MCP servers when requested, starting with the official MCP Registry at https://registry.modelcontextprotocol.io and the REST API documented at https://modelcontextprotocol.io/registry/registry-aggregators#consuming-the-mcp-registry-rest-api
+4. NOT generate code, create Databricks resources, install MCPs, or wire tools
+5. NOT require Bronze, Gold, Genie, or Data Intelligence artifacts — those are optional bring-your-own tool backends, recorded later in `docs/agent_tool_plan.yaml`, never preconditions for the spec
+
+CRITICAL: Your generated prompt MUST start with instructions telling the AI to only create docs/agent_spec.yaml and stop.
+
+**OUTPUT FORMAT RULES:**
+- Output the prompt directly as plain markdown text - do NOT wrap the entire output in code blocks or backticks
+- Use proper markdown formatting: ## for headers, - for bullet points, **text** for bold
+- For code blocks within your output (like file paths or specific instructions to include verbatim), use triple backticks on their own lines
+- Do NOT use single backticks for multi-line content
+- The output should render properly when displayed as markdown',
+'Agent Spec Design',
+'Generate docs/agent_spec.yaml from docs/design_prd.md with optional MCP web research',
+38,
+'## 1️⃣ How To Apply
+
+### Prerequisite
+
+The Agents Accelerator visible path runs steps 03-07 first; this prompt inherits their outputs.
+
+Required upstream artifacts:
+
+- [ ] `docs/design_prd.md` exists (step 03 — PRD generation).
+- [ ] `docs/ui_design.md` exists (step 04 — AppKit UI design).
+- [ ] AppKit app deployed (step 05) — `APP_NAME`, app URL, and workspace URL recorded in `apps_lakebase/$APP_NAME/.vibecoding-state.md`.
+- [ ] Lakebase set up and wired (steps 06-07) — `DB_SCHEMA`, app API routes, frontend pages, and live/mock endpoint notes recorded in the same state file.
+
+Bronze layer, Gold layer, Genie Space, and any other Data Intelligence artifacts are NOT required for the Agent Spec. They can be selected later as optional bring-your-own tool backends in `docs/agent_tool_plan.yaml`.
+
+### Steps to Apply
+
+1. **Copy the generated prompt** using the copy button.
+2. **Paste it into a new Agent thread** in your Coding Assistant (Cursor or VS Code with Copilot).
+3. **Optionally request MCP web research** - if you want the assistant to suggest relevant external MCP servers, tell it to set `mcp_research_mode: web_research` before searching.
+4. **Let the AI generate the Agent Spec** - it will create `docs/agent_spec.yaml` and stop.
+5. **Review the generated spec** - confirm tool recommendations match your use case before moving to Tool Selection.
+
+**IMPORTANT:** This step ONLY creates `docs/agent_spec.yaml`. No code, MCP installs, or Databricks resources are produced.
+
+---
+
+## 2️⃣ What Are We Building?
+
+We are writing the **first design artifact** of the Track A "Agents 101" arc — `docs/agent_spec.yaml`. The Agent Spec is the head of a 9-step pipeline; every later prompt reads from it (or from the Tool Plan it spawns) and extends the captured state along the chain.
+
+```
+PHASE 1: FOUNDATION                      PHASE 2: BUILD              PHASE 3: APPKIT
+┌─────────────────────────┐              ┌────────────────────┐      ┌────────────────┐
+│ 38 Agent Spec   ◀─here  │              │ 43 Clone+Framework │      │ 47 Proxy chat  │
+│ 39 Tool Plan            │  state ───►  │ 44 Wire tools      │ ───► │ 48 Feedback    │
+│ 40 UC Foundation        │              │ 45 Auth+Memory     │      │                │
+│ 41 MLflow Tracing       │              │ 46 Eval+Deploy     │      │                │
+│ 42 Knowledge Assistant  │              └────────────────────┘      └────────────────┘
+└─────────────────────────┘
+        gates chained via apps_lakebase/$APP_NAME/.vibecoding-state.md
+```
+
+### Key Concepts
+
+| Concept | What It Means | Why It Matters |
+|---------|---------------|----------------|
+| **Agent Spec** | YAML design artifact (`docs/agent_spec.yaml`) describing purpose, personas, capabilities, model endpoint, MCP recommendations, eval seeds, governance | Decouples *intent* from *implementation*; the same spec drives Tool Plan, UC Foundation, KA, and the Track A build |
+| **`source_prd`** | Path + `sha256` of `docs/design_prd.md` recorded at the time of spec authoring | Makes the spec reproducible — a future spec regen against the same PRD revision must produce equivalent intent |
+| **`agent.model`** | Raw Databricks Model Serving endpoint name (e.g. `databricks-claude-sonnet-4-6`) — never a vague label like "Claude" or "best model" | Endpoint name is the contract that 39 lifts into `runtime_config.llm` and 44 grants `CAN_QUERY` on |
+| **`mcp_research`** | Optional web-research record of external MCP candidates sourced from the official MCP Registry | Captures provenance (registry URL, version/status, confidence) so 39 can ground tool selection in real, current servers |
+| **Coding-assistant-only step** | `bypass_llm: false`; the prompt is rendered for a human, who pastes it into Cursor/Copilot | This step never touches Databricks — no schemas, no installs, no deploy. Pure design. |
+
+---
+
+## 3️⃣ Why Are We Building It This Way? (Databricks Best Practices)
+
+| Practice | How It''s Used Here |
+|----------|--------------------|
+| **Spec before code** | The Agent Spec is a design artifact (`docs/agent_spec.yaml`), not implementation. It precedes the Tool Plan and any Databricks resource creation, so the team aligns on intent before anyone writes Python or runs `bundle deploy`. |
+| **PRD as ground truth** | `source_prd.path + sha256` is recorded in the spec. The spec is reproducible from a known PRD revision — a future regen can confirm the same input produced equivalent intent. |
+| **Model endpoint, not vague labels** | `agent.model` records the raw Databricks Model Serving endpoint name (e.g. `databricks-claude-sonnet-4-6`), never `Claude` or `best model`. Vague labels would break the 39 → 44 grant chain. |
+| **Gateway-ready by deferral** | `agent.model` records the *backing* model endpoint. AI Gateway is introduced later via the Tool Plan''s `runtime_config.llm`, never by replacing `agent.model` here. The core Track A path stays Gateway-optional. |
+| **MCP Registry first** | When `mcp_research_mode: web_research` is enabled, candidate MCPs are sourced from the official MCP Registry (`https://registry.modelcontextprotocol.io`) before vendor docs. Registry metadata (`status`, `version`, `confidence`) is captured per candidate. |
+
+---
+
+## 4️⃣ What Happens Behind the Scenes?
+
+The generated prompt drives the coding assistant through a deterministic 7-phase walk that ends with a single saved YAML file:
+
+| Phase | What Happens | Key Output |
+|-------|--------------|------------|
+| **Phase 0** | Read `docs/design_prd.md`, compute `sha256`, capture as `source_prd` | PRD reference |
+| **Phase 1** | Draft `purpose`, `personas[]`, `capabilities[]`, `system_prompt` | Spec head |
+| **Phase 2** | Confirm or default `agent.model` to `databricks-claude-sonnet-4-6` | Model endpoint |
+| **Phase 3** | Recommend managed MCPs (Genie, SQL, Vector Search, UC Functions) + optional KA | `mcp_recommendations` |
+| **Phase 4** | (Optional) MCP Registry research — record candidates with `registry_status`, `registry_version`, `confidence` | `mcp_research.candidates[]` |
+| **Phase 5** | Author eval seeds (smoke + benchmark) and governance rules (`must_do`, `must_not_do`, scorer guideline seeds) | Eval + governance |
+| **Phase 6** | Save `docs/agent_spec.yaml`, STOP | Design artifact ready |
+
+### Gate Contract
+
+| Reads gate | Produces gate | Captured state |
+|------------|---------------|----------------|
+| (none — first prompt in the Track A arc; coding-assistant-side only) | (no state hand-off; `bypass_llm: false`) | `docs/agent_spec.yaml` (consumed by 39) |',
+'- [ ] `docs/agent_spec.yaml` exists
+- [ ] Agent purpose, personas, capabilities, system prompt, tool recommendations, MCP research, KA recommendation, eval seeds, and governance rules are populated
+- [ ] `docs/agent_spec.yaml.agent.model` is populated with a Databricks serving endpoint name
+- [ ] No code or Databricks resources are created',
+1, true, current_timestamp(), current_timestamp(), current_user());
+
+-- Step 39 / order 39: Agent Tool Selection
+INSERT INTO ${catalog}.${schema}.section_input_prompts 
+(input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, version, is_active, inserted_at, updated_at, created_by)
+VALUES
+(218, 'agent_tool_selection',
+'Generate a prompt that I can copy into my AI coding assistant (Cursor/Copilot) to create the final **Agent Tool Plan** for the **{use_case_slug}** agent. The Tool Plan is the second design artifact of the Track A "Agents 101" arc — it pins the user-confirmed tool backends (managed MCPs, optional Knowledge Assistant, dynamic SQL MCP) and preserves the Agent Spec''s `agent.model` under a Gateway-ready runtime route. The output is `docs/agent_tool_plan.yaml`.
+
+This will involve the following steps:
+
+- **Read the Agent Spec** — load `docs/agent_spec.yaml` to inherit the agent''s purpose, model endpoint, and recommended tools
+- **Confirm the tool backends** — ask me to lock in which managed MCPs to use (Genie, SQL, Vector Search, UC Functions) and whether to include Knowledge Assistant
+- **Bind dynamic SQL MCP inputs** — record `agent_sql_catalog`, `agent_sql_schema`, `agent_sql_warehouse_id`, and `agent_sql_table_scope` (the literal `all` for full-schema access governed by Unity Catalog, or a comma-separated allowlist) with the readonly SELECT/DESCRIBE/EXPLAIN policy
+- **Preserve `agent.model` Gateway-ready** — write `runtime_config.llm` so the same model endpoint can be fronted by AI Gateway later without changing the Agent Spec
+- **Confirm only — do not deploy** — the prompt only writes the YAML; no MCP installs, UC connections, or resource creation happens at this step
+
+The generated prompt MUST include this exact instruction block at the very beginning:
+
+```
+## IMPORTANT - READ FIRST
+
+Your ONLY task is to create the final Agent Tool Plan. Do NOT:
+- Generate application code
+- Create Databricks resources
+- Install MCP servers
+- Create UC connections
+- Wire tools into an agent
+- Deploy anything
+
+You MUST:
+- Read docs/agent_spec.yaml
+- Use genai-agents/foundation/00b-agent-spec-and-tool-plan/SKILL.md
+- Ask me for missing values only if they are not already provided
+- If any value is blank, missing, or still wrapped in `{...}` (for example `{agent_sql_catalog}`, `{agent_sql_schema}`), ASK ME for the value before writing the Tool Plan. Do NOT write placeholder literals like `{agent_sql_catalog}` into docs/agent_tool_plan.yaml under any circumstance.
+- If SQL MCP is not selected (`agent_tool_sql_mcp_enabled` is `false`), omit `selected_mcp_servers[].scope.catalog/schema/allowed_tables` entirely instead of writing placeholder strings.
+- Copy the SCALAR value of `docs/agent_spec.yaml.agent.model` into `runtime_config.llm.endpoint` and into every `resource_grants.databricks_yml.serving_endpoints[].name`. Do NOT write the YAML-path string `docs/agent_spec.yaml.agent.model` as the endpoint value — that is a documentation reference, never the value itself.
+- Create ONLY docs/agent_tool_plan.yaml
+- STOP after saving docs/agent_tool_plan.yaml
+```
+
+After those instructions, the generated prompt should ask me to confirm the final tool backends for the {industry_name} use case ({use_case_title}) and produce the Tool Plan.
+
+## UI-Selected Tool Inputs
+
+The user picked which tool families to include and supplied their IDs in the Tools and MCP step UI. Treat these as the source of truth for which `selected_tools[]` and `selected_mcp_servers[]` entries to write. Only write entries for families whose `_enabled` flag is `true`.
+
+| Family | Enabled flag | UI-supplied values |
+|--------|--------------|---------------------|
+| SQL MCP | `{agent_tool_sql_mcp_enabled}` | catalog `{agent_sql_catalog}`, schema `{agent_sql_schema}`, warehouse `{agent_sql_warehouse_id}`, table scope `{agent_sql_table_scope}` |
+| Genie | `{agent_tool_genie_enabled}` | `genie_space_id` `{genie_space_id}` |
+| Vector Search | `{agent_tool_vector_search_enabled}` | endpoint `{vs_endpoint}`, index `{vs_index}` |
+| UC Functions | `{agent_tool_uc_functions_enabled}` | targets `{uc_function_targets}` |
+| External MCP | `{agent_tool_external_mcp_enabled}` | UC connection `{external_mcp_connection}` |
+
+## Placeholder Handling
+
+The Tool Plan MUST NEVER contain placeholder literals. Treat any value that is blank, the literal string `{...}` token, or matches `^\{[a-z_]+\}$` as missing.
+
+Rules:
+- If a tool family''s `_enabled` flag is `false`, OMIT its entries from `selected_mcp_servers[]` and `selected_tools[]` entirely. Do not write placeholder strings or `"n/a"` markers.
+- If a family is enabled but a required ID is blank (e.g. Genie is enabled but `genie_space_id` is empty), ASK ME for the value before writing the Tool Plan.
+- Do NOT write placeholder literals (anything matching `^\{[a-z_]+\}$`) into `docs/agent_tool_plan.yaml` under any circumstance.
+- The model endpoint value must be copied as a scalar from `docs/agent_spec.yaml.agent.model`; never write the YAML-path string itself into `runtime_config.llm.endpoint` or `serving_endpoints[].name`.
+
+## SQL MCP Scope and Guardrails
+
+If `agent_tool_sql_mcp_enabled` is `true`:
+- `selected_mcp_servers[].meta.warehouse_id` = `{agent_sql_warehouse_id}` (falls back to `{default_warehouse}` if empty)
+- `selected_mcp_servers[].scope.catalog` = `{agent_sql_catalog}`
+- `selected_mcp_servers[].scope.schema` = `{agent_sql_schema}`
+- `selected_mcp_servers[].scope.allowed_tables`:
+  - If `{agent_sql_table_scope}` is the literal string `all` (the default), write `allowed_tables: []`. The agent reads every table in the schema; Unity Catalog permissions on the agent service principal still govern real access.
+  - Otherwise, parse `{agent_sql_table_scope}` as a comma-separated list of fully qualified `catalog.schema.table` names and use that list verbatim.
+
+Default SQL MCP guardrails (always applied when SQL MCP is selected):
+- `readonly: true`
+- allowed statements: `SELECT`, `DESCRIBE`, `EXPLAIN`
+- forbidden statements: `INSERT`, `UPDATE`, `DELETE`, `DROP`, `ALTER`, `CREATE`, `MERGE`, `TRUNCATE`
+- require fully qualified table names as `catalog.schema.table`
+
+## Runtime Model Route
+
+COPY the SCALAR value of `docs/agent_spec.yaml.agent.model` into:
+- `runtime_config.llm.endpoint`
+- every entry in `resource_grants.databricks_yml.serving_endpoints[].name` that represents the model route
+
+Do NOT write the YAML-path string `docs/agent_spec.yaml.agent.model` as the endpoint or as a `serving_endpoints[].name`. That string is a documentation reference describing where the value comes from; it is never the value itself. Writing it verbatim would cause DAB to attempt CAN_QUERY against a serving endpoint with that literal name and fail.
+
+Concrete example, assuming `docs/agent_spec.yaml` has `agent.model: "databricks-claude-sonnet-4-6"`:
+
+```yaml
+runtime_config:
+  llm:
+    provider: "databricks"
+    endpoint: "databricks-claude-sonnet-4-6"   # copied from agent.model
+    api_base_url: null
+    api_mode: "databricks_openai_compatible"
+    model_config:
+      endpoint_key: "llm_endpoint"
+      api_base_url_key: "llm_api_base_url"
+      api_mode_key: "llm_api_mode"
+resource_grants:
+  databricks_yml:
+    serving_endpoints:
+      - name: "databricks-claude-sonnet-4-6"   # same scalar value as runtime_config.llm.endpoint
+        permission: "CAN_QUERY"
+```
+
+If `docs/agent_spec.yaml.agent.model` is empty, missing, or still wrapped in `{...}`, ASK ME for the endpoint name before writing the Tool Plan. Do not invent a default here — the Agent Spec already defaulted it to `databricks-claude-sonnet-4-6` if it was unset.
+
+Do not replace the endpoint with a hardcoded value chosen by you. Do not create or configure AI Gateway in this step. The nested route is intentionally Gateway-ready so a future pre-provisioned Gateway endpoint can be introduced by changing `provider`, `endpoint`, and `api_base_url` without changing agent code.
+
+## Tool Plan Decisions
+
+The Tool Plan must record explicit selections for:
+
+- Managed Databricks MCPs: Genie, Vector Search, SQL, UC Functions
+- Optional external MCPs from `docs/agent_spec.yaml.mcp_research.candidates[]`
+- Knowledge Assistant - either selected with creation_required and ka_source, or skipped with `selected: false`
+- Resource grants for `databricks.yml` and `app.yaml` OAuth scopes
+- Runtime guardrails (SQL read-only default, citation requirements)
+- Smoke tests for each selected tool
+- Runtime model route from `docs/agent_spec.yaml.agent.model` into `runtime_config.llm`
+
+For SQL MCP, ensure the plan includes (only when `agent_tool_sql_mcp_enabled` is `true`):
+- `selected_mcp_servers[].meta.warehouse_id` set to `{agent_sql_warehouse_id}` (or `{default_warehouse}` when blank)
+- `selected_mcp_servers[].scope.catalog` set to `{agent_sql_catalog}`
+- `selected_mcp_servers[].scope.schema` set to `{agent_sql_schema}`
+- `selected_mcp_servers[].scope.allowed_tables`: emit `[]` when `{agent_sql_table_scope}` is `all` (default — full schema, governed by Unity Catalog); otherwise emit the parsed list from `{agent_sql_table_scope}`.
+- `selected_tools[].guardrails.allowed_statements` = `["SELECT", "DESCRIBE", "EXPLAIN"]`
+- `selected_tools[].guardrails.forbidden_statements` = `["INSERT", "UPDATE", "DELETE", "DROP", "ALTER", "CREATE", "MERGE", "TRUNCATE"]`
+- `selected_tools[].guardrails.require_fully_qualified_names` = `true`
+
+The prompt MUST end with:
+
+```
+Save it to: docs/agent_tool_plan.yaml
+STOP after saving. Do not generate any code, install MCPs, create UC connections, or proceed with other tasks.
+```',
+'You are generating a prompt that users will copy into their AI coding assistant.
+
+Your output should be a complete, ready-to-use prompt that when pasted into Cursor or Copilot will:
+1. Read docs/agent_spec.yaml
+2. Confirm the user-selected tool backends, preserve `docs/agent_spec.yaml.agent.model`, and include optional Knowledge Assistant plus dynamic SQL MCP
+3. Create ONLY docs/agent_tool_plan.yaml
+4. NOT generate code, create Databricks resources, install MCPs, or wire tools
+
+CRITICAL: Your generated prompt MUST start with instructions telling the AI to only create docs/agent_tool_plan.yaml and stop.
+
+**OUTPUT FORMAT RULES:**
+- Output the prompt directly as plain markdown text - do NOT wrap the entire output in code blocks or backticks
+- Use proper markdown formatting: ## for headers, - for bullet points, **text** for bold
+- For code blocks within your output (like file paths or specific instructions to include verbatim), use triple backticks on their own lines
+- Do NOT use single backticks for multi-line content
+- The output should render properly when displayed as markdown',
+'Agent Tool Selection',
+'Select final MCPs and tool backends, including dynamic SQL MCP catalog/schema, and save docs/agent_tool_plan.yaml',
+39,
+'## 1️⃣ How To Apply
+
+### Prerequisite
+
+`docs/agent_spec.yaml` must already exist (created by the Agent Spec Design prompt). Tool Selection turns the spec''s recommendations into the final selected runtime contract.
+
+### Steps to Apply
+
+1. **Decide tool inputs** - if you want SQL MCP over an existing Unity Catalog schema, gather your `agent_sql_catalog`, `agent_sql_schema`, warehouse id, and (optionally) `agent_sql_table_scope` (defaults to `all` — the agent reads every table in the schema, governed by Unity Catalog permissions).
+2. **Copy the generated prompt** using the copy button.
+3. **Paste it into a new Agent thread** in your Coding Assistant.
+4. **Answer the assistant''s clarifying questions** about which managed and external MCPs to wire, and whether KA is required.
+5. **Review `docs/agent_tool_plan.yaml`** - confirm SQL MCP guardrails, KA selection, and smoke tests before continuing to UC Resources Foundation.
+
+**IMPORTANT:** This step ONLY creates `docs/agent_tool_plan.yaml`. No code or Databricks resources are produced.
+
+---
+
+## 2️⃣ What Are We Building?
+
+We are turning the Agent Spec''s *recommendations* into a final, runtime-shaped contract: `docs/agent_tool_plan.yaml`. The Tool Plan is what every later prompt actually executes against — it carries selected MCPs, resource grants, runtime LLM route, and per-tool smoke tests.
+
+```
+docs/agent_spec.yaml                                docs/agent_tool_plan.yaml
+┌─────────────────────┐                            ┌──────────────────────────┐
+│ Recommended MCPs    │                            │ selected_mcp_servers[]   │
+│  - Genie            │   confirm + ground         │  - Genie (with id)       │
+│  - Vector Search    │  ────────────────────►     │  - SQL (catalog/schema)  │
+│  - SQL              │                            │ selected_tools[]         │
+│  - UC Functions     │                            │ resource_grants          │
+│ Recommended KA      │                            │ runtime_config.llm       │
+│ External MCPs       │                            │ smoke_tests              │
+└─────────────────────┘                            └──────────────────────────┘
+```
+
+### Key Concepts
+
+| Concept | What It Means | Why It Matters |
+|---------|---------------|----------------|
+| **`selected_mcp_servers[]`** | The concrete MCP servers the agent will call (Genie, SQL, Vector Search, UC Functions, plus optional external) — each with the IDs/scope/warehouse needed at runtime | The Agent Spec''s MCP *recommendations* become *bindings* here; 44 walks this list to generate `@function_tool` decorators |
+| **`selected_tools[]`** | One row per tool surfaced to the agent, each pointing at a `mcp_server_ref` plus per-tool guardrails | Closes the loop between Agent Spec capabilities and runtime SDK calls; the smoke-test list is keyed off this collection |
+| **`resource_grants`** | The `databricks.yml` resources + `app.yaml` OAuth scopes the agent needs (serving endpoints, Genie space, SQL warehouse, UC connections) | DAB-driven deploy is non-negotiable on Databricks Apps; declaring grants here means 43/44 never inline-create resources |
+| **`runtime_config.llm`** | Gateway-ready route carrying `provider`, `endpoint`, `api_base_url`, `api_mode` — backed by `docs/agent_spec.yaml.agent.model` | Switching to AI Gateway later changes only those four fields; 43 lifts them into `config.yml` so Python never hardcodes the endpoint |
+| **Skip vs. fail** | Tool families not chosen (e.g. KA when `selected: false`) are recorded with explicit `selected: false`, not silently dropped | 42, 44, and 46 read these flags so "Skipped — KA not selected" is a clean state, not a missing-key error |
+
+---
+
+## 3️⃣ Why Are We Building It This Way? (Databricks Best Practices)
+
+| Practice | How It''s Used Here |
+|----------|--------------------|
+| **Read-only SQL by default** | Every SQL MCP entry pins `allowed_statements: SELECT, DESCRIBE, EXPLAIN` and `forbidden: INSERT, UPDATE, DELETE, DROP, ALTER, CREATE, MERGE, TRUNCATE`. Fully-qualified `catalog.schema.table` names are required so an agent prompt cannot exfil-write to the wrong namespace. |
+| **Resource grants are part of the contract** | `databricks.yml` resources + `app.yaml` OAuth scopes are written by the Tool Plan, not invented by the Agent Build phase. The build prompts (43–46) inherit these grants via `valueFrom` and never call `WorkspaceClient.create_*` directly. |
+| **Runtime model route is Gateway-ready** | `runtime_config.llm` carries `provider`, `endpoint`, `api_base_url`, `api_mode`. Switching to AI Gateway later changes only those four fields — the Tool Plan stays valid, and no Python edits are needed. |
+| **Smoke tests per tool** | Every selected tool ships with at least one smoke query the agent must pass during the eval phase. Smoke gaps are detected before deploy, not in production. |
+| **Skip ≠ fail** | Tool families not selected (KA when `selected: false`, Genie when not chosen) are explicitly skipped during the wire-tools phase, not silently absent. The wire-tools prompt logs the skip and the gate accepts it as a valid terminal state. |
+
+---
+
+## 4️⃣ What Happens Behind the Scenes?
+
+The generated prompt walks the coding assistant through 7 ordered decisions before saving the Tool Plan:
+
+| Phase | What Happens | Key Output |
+|-------|--------------|------------|
+| **Phase 0** | Read `docs/agent_spec.yaml` (preserve `agent.model`) and any `mcp_research.candidates[]` | Spec context |
+| **Phase 1** | Confirm managed MCPs (Genie, Vector Search, SQL, UC Functions) | `selected_mcp_servers[]` |
+| **Phase 2** | If SQL MCP, attach `meta.warehouse_id`, `scope.catalog`, `scope.schema`, `scope.allowed_tables` from inputs | SQL MCP scope |
+| **Phase 3** | Confirm Knowledge Assistant: either select with `creation_required: true` + `ka_source`, or skip with `selected: false` | KA decision |
+| **Phase 4** | (Optional) Promote external MCP candidates that passed registry research | External MCPs |
+| **Phase 5** | Author per-tool guardrails + smoke_tests (read-only SQL, citation requirements, fully-qualified names) | `selected_tools[]` |
+| **Phase 6** | Compose `runtime_config.llm` (provider/endpoint/api_base_url/api_mode) by COPYING the scalar value of `docs/agent_spec.yaml.agent.model` into `endpoint`, plus mirror that same scalar into every `resource_grants.databricks_yml.serving_endpoints[].name` granting `CAN_QUERY` | Gateway-ready route |
+| **Phase 7** | Save `docs/agent_tool_plan.yaml`, STOP | Tool plan ready |
+
+### Gate Contract
+
+| Reads gate | Produces gate | Captured state |
+|------------|---------------|----------------|
+| (none — coding-assistant-side, preceded by 38) | `Agent tool plan ready` (consumed by 40, 42, 43, 44) | `docs/agent_tool_plan.yaml` |',
+'- [ ] docs/agent_tool_plan.yaml exists
+- [ ] Every selected_tools[].mcp_server_ref resolves to selected_mcp_servers[].name
+- [ ] SQL MCP includes catalog, schema, warehouse_id, readonly guardrails
+- [ ] Knowledge Assistant is either selected with creation_required: true or skipped with selected: false
+- [ ] Tool smoke tests are listed for every selected tool
+- [ ] runtime_config.llm uses provider `databricks`, `endpoint` set to the SCALAR value copied from `docs/agent_spec.yaml.agent.model` (never the literal YAML-path string), `api_base_url: null`, and `api_mode: databricks_openai_compatible`
+- [ ] resource_grants.databricks_yml.serving_endpoints grants CAN_QUERY on the same scalar endpoint name (never the literal YAML-path string)
+- [ ] No value in docs/agent_tool_plan.yaml is a placeholder literal of the form `{some_name}`',
+1, true, current_timestamp(), current_timestamp(), current_user());
+
+-- Step 40 / order 40: Phase 1 / Agent Foundation - UC Resources Foundation
 INSERT INTO ${catalog}.${schema}.section_input_prompts 
 (input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
 VALUES
 (200, 'uc_resources_foundation',
-'Provision Unity Catalog schemas and managed volumes for the **{use_case_slug}** agent before any consuming skill (MLflow tracing, Knowledge Assistant, agent memory, benchmark persistence, monitoring) runs.
+'Provision the Unity Catalog **schemas + managed volumes** that every downstream agent skill assumes (MLflow OTel tables, Knowledge Assistant, agent memory, benchmark persistence, monitoring) for the **{use_case_slug}** agent. Today the workspace has no agent-scoped UC homes; after this prompt runs, two schemas (`{db_schema}_agent` and `{db_schema}_ops`) and the canonical managed volumes exist and are ready to consume.
+
+This will involve the following steps:
+
+- **Derive user-scoped names** — compute `APP_NAME`, `DB_SCHEMA`, `AGENT_APP_NAME`, and `AGENT_RESOURCE_PREFIX` from your Databricks identity so multiple workshop attendees never collide
+- **Create the agent + ops schemas** — `CREATE SCHEMA IF NOT EXISTS` for `{lakehouse_default_catalog}.{db_schema}_agent` and `{lakehouse_default_catalog}.{db_schema}_ops`
+- **Provision managed volumes** — create the canonical `knowledge_sources` and `agent_outputs` volumes in the agent schema, plus any extras from `docs/agent_tool_plan.yaml.resource_grants.required_volumes[]`
+- **Stay idempotent** — every operation tolerates pre-existing schemas/volumes (warm workspaces from earlier runs are fine)
+- **Capture state for downstream skills** — emit the volume map + convenience paths (`knowledge_source_path`, `agent_outputs_path`) so MLflow tracing, KA, memory, benchmarks, and monitoring can resolve them
 
 **First:** Read `apps_lakebase/$APP_NAME/.vibecoding-state.md` if it exists — it contains resolved issues and variable values from prior phases.
+
+**How this prompt chains with the prior step (skill invocations):**
 
 ### Step 1: Derive User-Scoped Names
 
@@ -9222,18 +9728,19 @@ Use the resolved values as `{app_name}`, `{db_schema}`, `{agent_app_name}`, and 
 
 **Invoke skills (in order):**
 
-1. `genai-agents/vibecoding-state` op `enter` — params: `prompt_id: "uc_resources_foundation"`, `require_prior_gate: {prompt_id: "workspace_setup_deploy", gate: "Infrastructure healthy"}` (accepts `"Infrastructure healthy with warnings"`).
-2. @genai-agents/foundation/00-uc-resources-foundation/SKILL.md — params:
+1. `genai-agents/vibecoding-state` op `enter` — params: `prompt_id: "uc_resources_foundation"`, `require_prior_gate: [{prompt_id: "workspace_setup_deploy", gate: "Infrastructure healthy"}, {prompt_id: "agent_tool_selection", gate: "Agent tool plan ready"}]` (accepts `"Infrastructure healthy with warnings"`).
+2. `genai-agents/vibecoding-state` op `hydrate_from_files` — params: `agent_spec_yaml: "docs/agent_spec.yaml"`, `agent_tool_plan_yaml: "docs/agent_tool_plan.yaml"`, `ui_design_md: "docs/ui_design.md"`, `prd_path: "docs/design_prd.md"`, `state_path: "apps_lakebase/$APP_NAME/.vibecoding-state.md"`. This populates `state://AgentSpec`, `state://AppSpec` (UI), and `state://Spec Provenance` from the design pair so downstream MLflow SDLC prompts (50–56) can keep reading `state://AgentSpec.*` / `state://AppSpec.*` without rewrites. `state://DataSpec` is stamped `optional: true` when no Lakehouse track has populated it. The operation is idempotent: re-running with the same YAML files is a no-op (the `resolved_at` timestamp may drift). It halts only if a required input file is missing, if `agent_spec.yaml.agent.model` is empty, or if any value in the design pair is still wrapped in `{...}` — in those cases re-run prompts 38 / 39 with real values.
+3. @genai-agents/foundation/00-uc-resources-foundation/SKILL.md — params:
    - `uc_catalog: "{lakehouse_default_catalog}"`
    - `agent_schema: "{db_schema}_agent"`
    - `ops_schema: "{db_schema}_ops"`
    - `warehouse_id: "{default_warehouse}"`
-   - `required_volumes:` (default list, extended by `state://AgentSpec.required_volumes[]` after applying the same `{db_schema}_` prefix to each extra volume name)
+   - `required_volumes:` default list, extended by `docs/agent_tool_plan.yaml.resource_grants.required_volumes[]` after applying the same `{db_schema}_` prefix to each extra volume name.
      - `{ name: "{db_schema}_knowledge_sources", schema: "agent", comment: "KA + retrieval source files" }`
      - `{ name: "{db_schema}_agent_outputs",     schema: "agent", comment: "Tool-generated artifacts (CSV, charts)" }`
    - **Returns:** `agent_schema`, `ops_schema`, `uc_volumes` (map of actual volume name → `/Volumes/...` path), and convenience aliases `knowledge_source_path` (= `/Volumes/{lakehouse_default_catalog}/{db_schema}_agent/{db_schema}_knowledge_sources`) and `agent_outputs_path` (= `/Volumes/{lakehouse_default_catalog}/{db_schema}_agent/{db_schema}_agent_outputs`).
    - **Idempotency contract:** every operation is idempotent — `CREATE SCHEMA IF NOT EXISTS`, and `WorkspaceClient.volumes.create(...)` wrapped to treat `databricks.sdk.errors.AlreadyExists` as success. Pre-existing schemas/volumes (whether created by a prior run, by a use-case asset bundle, or by another user) MUST NOT cause a failure. The skill MUST always emit the captured map even on a warm workspace where every resource already exists.
-3. `genai-agents/vibecoding-state` op `exit` — params: `prompt_id: "uc_resources_foundation"`, `gate: "UC resources ready"`, `captured: {app_name, db_schema, agent_app_name, agent_resource_prefix, agent_schema, ops_schema, uc_volumes, knowledge_source_path, agent_outputs_path}`.
+4. `genai-agents/vibecoding-state` op `exit` — params: `prompt_id: "uc_resources_foundation"`, `gate: "UC resources ready"`, `captured: {app_name, db_schema, agent_app_name, agent_resource_prefix, agent_schema, ops_schema, uc_volumes, knowledge_source_path, agent_outputs_path, hydrated_from_files: true, resolver_version: "3.0"}`.
 
 **Gate:** `UC resources ready` — both schemas exist (`SHOW SCHEMAS IN {lakehouse_default_catalog}` lists them), every entry in `uc_volumes` is reachable via `WorkspaceClient.volumes.read(...)`, and `knowledge_source_path` points to `/Volumes/{lakehouse_default_catalog}/{db_schema}_agent/{db_schema}_knowledge_sources`. Pre-existing resources are explicitly acceptable — the gate proves *existence*, not *first-time creation*.
 
@@ -9241,23 +9748,32 @@ If a PRD exists at @docs/design_prd.md, reference it for business requirements, 
 '',
 'Phase 1 / Agent Foundation — UC Resources Foundation',
 'Create the agent + ops UC schemas and managed volumes once for any downstream skill (MLflow OTeL, KA, memory, benchmarks, monitoring)',
-38,
-'## How To Apply
+40,
+'## 1️⃣ How To Apply
 
 Copy the prompt above, start a **new Agent thread** in your Coding Assistant, and paste it. The agent will load `genai-agents/foundation/00-uc-resources-foundation/SKILL.md` and create the agent + ops schemas plus the canonical managed volumes for this `{use_case_slug}`.
 
 ### Upstream Prerequisites
 
-This is the first prompt in the **Agent Foundation** phase. It depends ONLY on rows from earlier chapters of the workshop, not on anything inside this Agents on Apps section. Confirm each is complete before pasting:
+This is the first prompt in the **Agent Foundation** phase. It depends only on the workspace preflight, the Agent Spec / Tool Plan design pair, and the AppKit + Lakebase steps that precede this section. Confirm each is complete before pasting:
 
+Required:
 - [ ] `workspace_setup_deploy` (input_id 4) — `{lakehouse_default_catalog}` and `{default_warehouse}` resolved. The `Infrastructure healthy` gate (or `Infrastructure healthy with warnings`) is the explicit prior-gate this prompt requires.
-- [ ] `bronze_table_metadata` (input_id 5) — CSV data dictionary materialized for the chosen sample dataset; subsequent rows expect this metadata under the user agent schema.
-- [ ] `bronze_layer_creation` (input_id 7) — Bronze tables exist in the published source schema; downstream rows clone these into the user agent schema for the agent to query.
-- [ ] `genie_space` (input_id 11) — Genie Space exists over the Bronze tables; row 204 (Wire Tools and MCP) consumes the captured `genie_space_id` as a tool backend.
+- [ ] `agent_spec_design` (input_id 217) — `docs/agent_spec.yaml` exists (the Agent Spec drives Tool Plan selection).
+- [ ] `agent_tool_selection` (input_id 218) — `docs/agent_tool_plan.yaml` exists with the gate `Agent tool plan ready`.
+- [ ] AppKit + Lakebase context from steps 04-07 — `apps_lakebase/$APP_NAME/.vibecoding-state.md` carries `APP_NAME`, `DB_SCHEMA`, app URL, workspace URL, app API routes, and Lakebase wiring notes.
+
+Optional bring-your-own tool inputs (only required when the corresponding tool family is selected in `docs/agent_tool_plan.yaml.selected_tools[]`):
+- SQL MCP — provide `agent_sql_catalog`, `agent_sql_schema`, optional table allowlist, and a SQL warehouse the agent can read with read-only guardrails.
+- Genie — provide an existing `genie_space_id` if you want the agent to call Genie; this prompt does not provision a Genie Space.
+- Vector Search — provide an existing endpoint + index name.
+- UC Functions — provide fully qualified function names the agent should call.
+
+Bronze metadata, Bronze layer creation, and Genie Space creation are **not** prerequisites for this prompt. They are optional backends, not gates.
 
 ### Prerequisite
 
-`workspace_setup_deploy` (input_id 4) completed: catalog + warehouse resolved as `{lakehouse_default_catalog}` and `{default_warehouse}`. Do **not** run this prompt before the workspace preflight.
+`workspace_setup_deploy` (input_id 4) completed: catalog + warehouse resolved as `{lakehouse_default_catalog}` and `{default_warehouse}`. `agent_tool_selection` (input_id 218) completed so `docs/agent_tool_plan.yaml` is available. Do **not** run this prompt before the workspace preflight or before the Tool Plan exists.
 
 ### Steps to Apply
 
@@ -9265,7 +9781,70 @@ This is the first prompt in the **Agent Foundation** phase. It depends ONLY on r
 
 **Step 2: Paste the Prompt** — paste this entire prompt; the AI will invoke the foundation 00 skill and create resources idempotently.
 
-**Step 3: Verify** — `databricks volumes list {lakehouse_default_catalog} {db_schema}_agent --output json | jq ''.volumes[].full_name''` should list `{db_schema}_knowledge_sources` and `{db_schema}_agent_outputs`. `databricks unity-catalog schemas list --catalog-name {lakehouse_default_catalog} --output json | jq ''.schemas[] | select(.name | endswith("_agent") or endswith("_ops")) | .full_name''` should list both schemas.',
+**Step 3: Verify** — `databricks volumes list {lakehouse_default_catalog} {db_schema}_agent --output json | jq ''.volumes[].full_name''` should list `{db_schema}_knowledge_sources` and `{db_schema}_agent_outputs`. `databricks unity-catalog schemas list --catalog-name {lakehouse_default_catalog} --output json | jq ''.schemas[] | select(.name | endswith("_agent") or endswith("_ops")) | .full_name''` should list both schemas.
+
+---
+
+## 2️⃣ What Are We Building?
+
+We are provisioning the **two UC schemas + canonical managed volumes** that every later Track A and SDLC prompt assumes already exists. This is the foundation-of-foundations: idempotent, user-scoped, and consumed by KA, MLflow tracing, agent runtime, sign-off, monitoring, and benchmarks.
+
+```
+{lakehouse_default_catalog}
+├── {db_schema}_agent                    (consumed by KA, MLflow tracing, agent runtime)
+│   ├── {db_schema}_knowledge_sources    (volume — KA source files)
+│   └── {db_schema}_agent_outputs        (volume — tool-generated artifacts)
+└── {db_schema}_ops                      (consumed by sign-off, monitoring, alerts)
+    ├── otel_*  (4 Delta tables — written by 41 MLflow Tracing)
+    ├── signoffs/v1/decision.md          (written by 53 Human Review)
+    └── benchmarks                       (written by 50 Eval Datasets)
+```
+
+### Key Concepts
+
+| Concept | What It Means | Why It Matters |
+|---------|---------------|----------------|
+| **`{db_schema}_agent`** | Runtime-resource schema: Knowledge Assistant source volume, agent_outputs volume, MLflow OTel tables | One namespace for everything the running agent reads/writes |
+| **`{db_schema}_ops`** | Governance/observability schema: sign-offs, benchmarks, monitoring artifacts | RBAC differs from runtime — operators can grant `_ops` access without exposing live tools |
+| **MANAGED volumes** | UC-managed storage paths (`/Volumes/{catalog}/{schema}/{volume}`) | Agent code never sees a raw cloud path; UC handles encryption, lineage, retention |
+| **`AGENT_RESOURCE_PREFIX`** | Identity-derived prefix (`{firstname}_{lastinitial}_{slug}`) used for all agent-scoped names | Keeps every learner''s agent isolated; the 26-char Databricks Apps name limit is enforced via truncation |
+| **Idempotency contract** | Every `CREATE` is `IF NOT EXISTS`; `volumes.create()` treats `AlreadyExists` as success | Running this prompt twice produces zero new resources and zero errors — a warm workspace is a valid terminal state |
+
+---
+
+## 3️⃣ Why Are We Building It This Way? (Databricks Best Practices)
+
+| Practice | How It''s Used Here |
+|----------|--------------------|
+| **User-scoped naming** | `{firstname}-{lastinitial}-{use_case_slug}` keeps every learner''s agent isolated; truncated to ≤26 chars (Databricks Apps limit) before being lowercased and underscored into `{db_schema}`. |
+| **Two schemas, not one** | `_agent` (runtime resources) is separated from `_ops` (governance/observability) so RBAC differs cleanly — operators get `_ops` without seeing live KA/agent tool storage. |
+| **MANAGED volumes** | UC manages storage; the agent never sees a raw cloud path. Encryption, lineage, and retention are inherited from the catalog policy. |
+| **Idempotency contract** | Every `CREATE` is `IF NOT EXISTS` and the skill treats `AlreadyExists` as success. Running this prompt twice produces zero new resources — pre-existing schemas/volumes are explicitly acceptable. |
+| **Foundation-of-foundations** | Every later skill reads the captured `agent_schema`, `ops_schema`, `knowledge_source_path`, `agent_outputs_path` from state instead of recomputing them — there is exactly one source of truth for these values. |
+
+---
+
+## 4️⃣ What Happens Behind the Scenes?
+
+The skill executes a deterministic 8-phase walk with idempotent guards at every step:
+
+| Phase | What Happens | Key Output |
+|-------|--------------|------------|
+| **Phase 0** | Read `apps_lakebase/$APP_NAME/.vibecoding-state.md`; pull captured values from earlier phases | Prior state |
+| **Phase 0.5 (hydrate)** | `vibecoding-state` op `hydrate_from_files` reads `docs/agent_spec.yaml`, `docs/agent_tool_plan.yaml`, `docs/ui_design.md`, and `docs/design_prd.md` and writes `## Agent`, `## UI`, `## Spec Provenance` (and `## Resources` as `optional: true` if no Lakehouse track ran). Stamps `resolver_version: "3.0"` and `hydrated_from_files: true`. Idempotent on rerun. | Hydrated state objects |
+| **Phase 1** | Resolve identity from `databricks current-user me` → derive `APP_NAME`, `DB_SCHEMA`, `AGENT_APP_NAME`, `AGENT_RESOURCE_PREFIX` | Identity-scoped names |
+| **Phase 2** | `CREATE SCHEMA IF NOT EXISTS {catalog}.{db_schema}_agent` | Agent schema |
+| **Phase 3** | `CREATE SCHEMA IF NOT EXISTS {catalog}.{db_schema}_ops` | Ops schema |
+| **Phase 4** | `volumes.create(...)` for `{db_schema}_knowledge_sources` (KA source files) — wrap `AlreadyExists` as success | KA volume |
+| **Phase 5** | `volumes.create(...)` for `{db_schema}_agent_outputs` (tool-generated artifacts) — same idempotent wrap | Outputs volume |
+| **Phase 6** | Plus any extra volumes from `docs/agent_tool_plan.yaml.resource_grants.required_volumes[]`, prefixed with `{db_schema}_` | Optional volumes |
+| **Phase 7** | `vibecoding-state` op `exit` captures `app_name`, `db_schema`, `agent_app_name`, `agent_resource_prefix`, `agent_schema`, `ops_schema`, `uc_volumes`, `knowledge_source_path`, `agent_outputs_path`, `hydrated_from_files: true`, and `resolver_version: "3.0"` | State hand-off |
+
+### Gate Contract
+
+| Reads gate | Produces gate | Captured state |
+|------------|---------------|----------------|
+| `Infrastructure healthy` (from `workspace_setup_deploy`, accepts `Infrastructure healthy with warnings`) AND `Agent tool plan ready` (from `agent_tool_selection`) | `UC resources ready` (consumed by 41, 42, 43, 44, 45, 46) | `app_name`, `db_schema`, `agent_app_name`, `agent_resource_prefix`, `agent_schema`, `ops_schema`, `uc_volumes`, `knowledge_source_path`, `agent_outputs_path` |',
 '### Resources Created (or Pre-existing — Both Acceptable)
 - [ ] UC schema `{lakehouse_default_catalog}.{db_schema}_agent` exists (created or already there)
 - [ ] UC schema `{lakehouse_default_catalog}.{db_schema}_ops` exists (created or already there)
@@ -9273,15 +9852,27 @@ This is the first prompt in the **Agent Foundation** phase. It depends ONLY on r
 - [ ] MANAGED volume `/Volumes/{lakehouse_default_catalog}/{db_schema}_agent/{db_schema}_agent_outputs` exists
 - [ ] `app_name`, `db_schema`, `agent_app_name`, `agent_schema`, `ops_schema`, `uc_volumes`, `knowledge_source_path`, and `agent_outputs_path` all captured
 - [ ] All consuming skills (F2, F5, Track A 05, SDLC 02/04/07) can now assume these resources exist
-- [ ] **Idempotency check:** running this prompt a second time produces zero new schemas, zero new volumes, and zero errors',
+- [ ] **State hydration:** `apps_lakebase/$APP_NAME/.vibecoding-state.md` now contains populated `## Agent`, `## UI`, and `## Spec Provenance` sections sourced from `docs/agent_spec.yaml`, `docs/agent_tool_plan.yaml`, `docs/ui_design.md`, and `docs/design_prd.md`. `## Spec Provenance.resolver_version` reads `"3.0"` and `## Spec Provenance.hydrated_from_files` reads `true`. `## Resources` is either populated (Lakehouse track present) or stamped `optional: true` (Agents-only path).
+- [ ] **Downstream contract:** every prompt that reads `state://AgentSpec.*`, `state://AppSpec.*`, or `state://Spec Provenance.*` resolves to the file-derived values. SDLC quality-suite prompts (50–56) can run without an additional resolve step.
+- [ ] **Idempotency check:** running this prompt a second time produces zero new schemas, zero new volumes, zero changed sections in the state file (modulo `resolved_at`), and zero errors.',
 true, 1, true, current_timestamp(), current_timestamp(), current_user());
 
--- Step 39 / order 39: Phase 1 / Agent Foundation - MLflow Tracing + UC OTel Storage
+-- Step 41 / order 41: Phase 1 / Agent Foundation - MLflow Tracing + UC OTel Storage
 INSERT INTO ${catalog}.${schema}.section_input_prompts 
 (input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
 VALUES
 (201, 'mlflow_agent_tracing_uc',
-'Open the **tracing foundation phase** of the agent SDLC story arc — your locally-working GenAI app gets observability that survives across deploy targets. Add MLflow tracing with one line, then route traces into Unity Catalog OTel Delta tables for governed long-term storage so every downstream phase (quality and scoring suite, iteration, production hardening + monitoring, expert-in-the-loop) can join against a Delta-queryable trace history.
+'Stand up MLflow tracing and the Unity Catalog OTel sink for the **{use_case_slug}** agent so every agent run, tool call, LLM span, and retrieval is observable in MLflow and queryable in UC Delta tables. Today the agent runs without any trace plumbing; after this prompt runs, autolog is on, the experiment exists at `{mlflow_experiment_path}`, and 4 OTel Delta tables are landing spans under `{lakehouse_default_catalog}.{db_schema}_agent`.
+
+This will involve the following steps:
+
+- **Install MLflow + autolog** — install `mlflow[databricks] >= 3.10.1` and enable `mlflow.openai.autolog()` so every LLM/Tool/Retriever span is captured without per-call decorators
+- **Detect the environment** — export a `detect_environment()` helper so the same instrumentation code runs in local dev, notebooks, Databricks Apps, and Model Serving without branching
+- **Create the experiment** — provision `{mlflow_experiment_path}` with the required experiment tags (e.g. `mlflow.promptRegistryLocation`) so the prompt-registry phase can attach
+- **Wire the UC OTel sink** — provision 4 OTel Delta tables prefixed with `{agent_resource_prefix}_otel` in `{lakehouse_default_catalog}.{db_schema}_agent` and emit grant SQL
+- **Smoke-test the trace pipe** — emit a test trace and verify it lands in BOTH the MLflow UI and the UC OTel tables, then capture `mlflow_experiment_path` as state
+
+**How this prompt chains with the prior step (skill invocations):**
 
 **Invoke skills (in order):**
 
@@ -9310,8 +9901,8 @@ VALUES
 '',
 'Phase 1 / Agent Foundation — MLflow Tracing + UC OTel Storage',
 'Install MLflow, enable autolog, create experiment, route traces into UC OTel Delta tables',
-39,
-'## How To Apply
+41,
+'## 1️⃣ How To Apply
 
 Open a **new Agent thread in your Coding Assistant** and paste the prompt above. This is the **tracing foundation phase** of the SDLC story arc — the moment your locally-working GenAI app gets observability that survives across deploy targets and into governed UC storage.
 
@@ -9325,7 +9916,73 @@ Open a **new Agent thread in your Coding Assistant** and paste the prompt above.
 1. New thread in your Coding Assistant, paste prompt.
 2. AI installs/upgrades `mlflow[databricks] >= 3.10.1`, enables autolog, exports a `detect_environment()` helper.
 3. AI creates the experiment at `{mlflow_experiment_path}` and the 4 UC OTel Delta tables under `{lakehouse_default_catalog}.{db_schema}_agent`.
-4. AI emits a quick test trace and verifies it lands in both the MLflow UI and the UC tables.',
+4. AI emits a quick test trace and verifies it lands in both the MLflow UI and the UC tables.
+
+---
+
+## 2️⃣ What Are We Building?
+
+We are wiring **MLflow tracing** into the agent code and routing every trace into **4 UC Delta tables** so production traces inherit catalog RBAC, retention, and lineage — not an opaque MLflow blob store.
+
+```
+Agent code (@invoke / @stream)
+        │
+        ▼
+mlflow.openai.autolog()    ◀── 1-line activation
+        │
+        ▼
+MLflow experiment at {mlflow_experiment_path}    ─────► MLflow UI (interactive)
+        │
+        ▼ OTel exporter
+{lakehouse_default_catalog}.{db_schema}_agent.<otel_*> (4 Delta tables)
+        │
+        ▼ joinable, governable, retained
+   Genie / SQL / Dashboards / Continuous-eval / agent-as-judge debug
+```
+
+### Key Concepts
+
+| Concept | What It Means | Why It Matters |
+|---------|---------------|----------------|
+| **`mlflow.openai.autolog()`** | One-line activation that instruments the OpenAI SDK (or framework-equivalent) so every chat completion is traced | No per-call decorators; the agent code stays clean and traces are uniform across local + serving |
+| **MLflow experiment** | Logical container at `{mlflow_experiment_path}` where MLflow UI surfaces traces interactively | Developer-loop introspection; MLflow tags (e.g. `mlflow.promptRegistryLocation`) attach here |
+| **UC OTel Delta tables** | 4 Delta tables in `{lakehouse_default_catalog}.{db_schema}_agent` populated by an OpenTelemetry exporter | Traces become first-class queryable artifacts under UC governance — joinable with benchmarks, scorers, sign-off |
+| **`detect_environment()`** | Helper that picks the right tracking URI for local dev, notebooks, Databricks Apps, or Model Serving | Same instrumentation code runs in every deploy target; no env-specific branching in agent logic |
+| **Span hierarchy** | `AGENT` (root) → `LLM` → `TOOL` → `RETRIEVER` spans, each auto-capturing inputs/outputs/latency/tokens | Continuous-eval, agent-as-judge, and the 50–53 quality suite all join on this hierarchy |
+
+---
+
+## 3️⃣ Why Are We Building It This Way? (Databricks Best Practices)
+
+| Practice | How It''s Used Here |
+|----------|--------------------|
+| **One line of autolog** | `mlflow.openai.autolog()` (or framework-equivalent) instruments the SDK once at module import; no per-call decorators are needed and every LLM/Tool/Retriever span is captured automatically. |
+| **`detect_environment()` helper** | The same agent code runs locally, in notebooks, in Databricks Apps, and in Model Serving — the helper picks the right tracking URI per environment so the developer never branches on `os.environ`. |
+| **UC OTel for governance** | Traces land as Delta tables under UC, so they inherit RBAC, retention policies, and lineage — not just an opaque MLflow store. The 4 OTel tables are queryable from Genie/SQL/Dashboards out of the box. |
+| **Joinable history** | Production traces (in OTel tables) join against benchmark tables and assessment tables for continuous eval (Phase 6). The OTel `trace_id` is the join key the entire SDLC stack uses. |
+| **Workspace client pool** | Long-running agents reuse a pooled `WorkspaceClient` instead of constructing one per request — avoiding token-refresh storms under load. |
+
+---
+
+## 4️⃣ What Happens Behind the Scenes?
+
+The two skills (`01-mlflow-genai-foundation` then `02-experiment-tracing-and-uc-storage`) walk a 7-phase activation:
+
+| Phase | What Happens | Key Output |
+|-------|--------------|------------|
+| **Phase 0** | `vibecoding-state` op `enter` confirms the prior `UC resources ready` gate | Foundation context |
+| **Phase 1** | Install/upgrade `mlflow[databricks] >= 3.10.1`; export pooled `WorkspaceClient` | MLflow installed |
+| **Phase 2** | Wire `mlflow.openai.autolog()` and the `detect_environment()` helper | Autolog active |
+| **Phase 3** | Create the MLflow experiment at `{mlflow_experiment_path}` with required tags (e.g. `mlflow.promptRegistryLocation`) | Experiment ready |
+| **Phase 4** | Provision the 4 UC OTel Delta tables in `{lakehouse_default_catalog}.{db_schema}_agent` with prefix `{agent_resource_prefix}_otel` | OTel tables created |
+| **Phase 5** | Emit grant SQL for `_otel*` tables; verify a test trace appears in both MLflow UI and UC | Trace round-trip verified |
+| **Phase 6** | Span hierarchy lights up: `AGENT span` (root) → `LLM spans` → `TOOL spans` → `RETRIEVER spans`, each auto-capturing inputs/outputs/latency/token counts | Hierarchy live |
+
+### Gate Contract
+
+| Reads gate | Produces gate | Captured state |
+|------------|---------------|----------------|
+| `UC resources ready` (from `uc_resources_foundation`) | `Tracing live; UC OTel tables ready` (consumed by 43 and the entire SDLC quality suite) | `mlflow_experiment_path` |',
 '### Resources Created
 - [ ] `mlflow[databricks] >= 3.10.1` installed
 - [ ] `mlflow.openai.autolog()` (or framework-equivalent) enabled
@@ -9335,23 +9992,38 @@ Open a **new Agent thread in your Coding Assistant** and paste the prompt above.
 - [ ] Test trace visible in both MLflow UI and UC',
 true, 1, true, current_timestamp(), current_timestamp(), current_user());
 
--- Step 40 / order 40: Phase 1 / Agent Foundation - Create Knowledge Assistant
+-- Step 42 / order 42: Phase 1 / Agent Foundation - Create Knowledge Assistant
 INSERT INTO ${catalog}.${schema}.section_input_prompts 
 (input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
 VALUES
 (202, 'knowledge_assistant_create',
-'Create a Databricks Knowledge Assistant for the **{use_case_slug}** agent so the Track A agent has a managed document-Q&A backend with citations.
+'Create a Databricks **Knowledge Assistant** (Agent Bricks KA) seeded with the **{use_case_slug}** agent''s domain documents and expose it as a managed RAG endpoint the agent can call as a single `@function_tool`. Today the agent has no doc-Q&A surface; after this prompt runs, source markdown is staged into the `{db_schema}_knowledge_sources` UC volume, a user-scoped KA exists on `{agent_app_name}-knowledge`, and the endpoint is `READY` with `knowledge_source_file_count >= 1`.
+
+This will involve the following steps:
+
+- **Stage source documents** — populate the F0-provisioned `/Volumes/{lakehouse_default_catalog}/{db_schema}_agent/{db_schema}_knowledge_sources` volume from `ka_source` (or auto-generate a minimal corpus from `docs/design_prd.md` glossary/business-context plus `docs/agent_spec.yaml.agent.capabilities`)
+- **Get-or-create the KA** — idempotent get-or-create on `ka_display_name = {agent_app_name}-knowledge` so a second run never duplicates the endpoint
+- **Attach the knowledge source** — bind a `files` knowledge source to the staged volume path, reusing any pre-existing matching source
+- **Sync and poll** — call `sync_knowledge_sources` (incremental) and poll until `sync_status = READY`
+- **Smoke-test the endpoint** — confirm the KA serving endpoint responds and capture `ka_endpoint_name`, `knowledge_assistant_id`, `sync_status` as state for the wire-tools prompt
+- **Skip cleanly when not selected** — if `agent_tool_plan.knowledge_assistant.selected: false`, exit with gate `Skipped - KA not selected` and no resources are touched
+
+If `docs/agent_tool_plan.yaml` has `knowledge_assistant.selected: false`, do not create or sync a KA. Instead, call `genai-agents/vibecoding-state` op `exit` with gate `Skipped - KA not selected` and captured `{doc_qa_backend: "n/a", ka_endpoint_name: "n/a", knowledge_assistant_id: "n/a"}`.
+
+**How this prompt chains with the prior step (skill invocations):**
 
 **Invoke skills (in order):**
 
-1. `genai-agents/vibecoding-state` op `enter` — params: `prompt_id: "knowledge_assistant_create"`, `require_prior_gate: [{prompt_id: "uc_resources_foundation", gate: "UC resources ready"}, {prompt_id: "genie_space", gate: "Genie Space ready"}]`. The first gate guarantees the agent schema + `knowledge_sources` volume already exist (F0 owned them); this prompt **does not** create schemas or volumes.
+1. `genai-agents/vibecoding-state` op `enter` — params: `prompt_id: "knowledge_assistant_create"`, `require_prior_gate: [{prompt_id: "uc_resources_foundation", gate: "UC resources ready"}, {prompt_id: "agent_tool_selection", gate: "Agent tool plan ready"}]`.
 2. @genai-agents/foundation/05-knowledge-assistant/SKILL.md — execute Step 5_0 (source-markdown staging only) → 5a–5d. Params:
+   - `agent_tool_plan_ref: "docs/agent_tool_plan.yaml"`
+   - `ka_source: docs/agent_tool_plan.yaml.knowledge_assistant.ka_source`
+   - `run_only_if: docs/agent_tool_plan.yaml.knowledge_assistant.selected == true`
    - `ka_display_name: "{agent_app_name}-knowledge"`  -- **idempotency key** for Step 5a get-or-create
    - `volume_path: "/Volumes/{lakehouse_default_catalog}/{db_schema}_agent/{db_schema}_knowledge_sources"`  -- set by F0
-   - `ka_source: "docs/knowledge_sources/{use_case_slug}"`  -- optional local directory of pre-authored `.md` files; if absent, generate from PRD/AgentSpec
    - `poll_until_ready: true`
    - **Idempotency contract (whole skill):** every step must succeed cleanly on a second run with no input changes. Step 5_0 uses `overwrite=True` on file uploads. Step 5a does **get-or-create** on `ka_display_name` (re-uses the matching KA from `list_knowledge_assistants` instead of creating a duplicate). Step 5b does **get-or-create** on each knowledge source `display_name` (re-uses matching sources from `list_knowledge_sources`). Step 5c (`sync_knowledge_sources`) is incremental and safe to re-call. A second run must produce zero new KAs and zero new knowledge sources.
-   - **Step 5_0 responsibility (KA-specific):** stage source markdown into the F0-provisioned volume — branch (A) skip if the volume is already non-empty; branch (B) upload the contents of `ka_source` if it points to a local `.md` directory; branch (C) auto-generate a minimal corpus from `state://DataSpec.glossary` + `state://AgentSpec.capabilities` and upload. **No schema or volume DDL** — if `volume_path` is unreachable, fail with a pointer to F0 (input_id 200).
+   - **Step 5_0 responsibility (KA-specific):** stage source markdown into the F0-provisioned volume — branch (A) skip if the volume is already non-empty; branch (B) upload the contents of `ka_source` if it points to a local `.md` directory; branch (C) auto-generate a minimal corpus from `docs/design_prd.md` (extract any glossary, key-terms, or business-context sections — fall back to the PRD''s executive summary if none are explicitly marked) plus `docs/agent_spec.yaml.agent.capabilities` and upload. Do **not** consult `state://DataSpec.*`: the Agents Accelerator visible path may not have run a Lakehouse track, so `## Resources` will be `optional: true` (set by `vibecoding-state.hydrate_from_files` in step 40). The `docs/*` files are the single source of truth for branch (C). **No schema or volume DDL** — if `volume_path` is unreachable, fail with a pointer to F0 (input_id 200).
    - **Steps 5a–5d:** get-or-create KA → get-or-create `files` source at `volume_path` → sync → poll → capture handoff values.
    - **Returns:** `knowledge_source_path`, `knowledge_source_file_count`, `knowledge_source_origin` (`pre_staged` | `local_dir` | `prd_generated`), `ka_endpoint_name`, `knowledge_assistant_id`, `knowledge_source_type`, `sync_status`. (`agent_schema` and `knowledge_source_volume` come from F0''s state, not from this prompt.)
 3. `genai-agents/vibecoding-state` op `exit` — params: `prompt_id: "knowledge_assistant_create"`, `gate: "KA READY"`, `captured: {doc_qa_backend: "knowledge_assistant", knowledge_source_path, knowledge_source_file_count, knowledge_source_origin, ka_endpoint_name, knowledge_assistant_id, knowledge_source_type, sync_status}`.
@@ -9362,14 +10034,26 @@ If a PRD exists at @docs/design_prd.md, reference it for business requirements, 
 '',
 'Phase 1 / Agent Foundation — Create Knowledge Assistant',
 'Create or sync a user-scoped Databricks Knowledge Assistant for the agent doc-Q&A tool',
-40,
-'## How To Apply
+42,
+'## 1️⃣ How To Apply
 
 Copy the prompt above, start a **new Agent thread** in your Coding Assistant, and paste it. The agent will load `genai-agents/foundation/05-knowledge-assistant/SKILL.md` and create a user-scoped KA that the Track A agent will wire as a tool in the next prompt.
 
 ### Prerequisite
 
-`uc_resources_foundation` (input_id 200) **must** have completed — it owns the agent UC schema (`{db_schema}_agent`) and the `{db_schema}_knowledge_sources` MANAGED volume. Bronze + Genie Space prompts also completed for this `{use_case_slug}`. PRD must declare `agent.knowledge_base_backend.kind: knowledge_assistant`. If a use-case bundle pre-staged markdown into the volume, Step 5_0 detects the existing files and skips re-uploading; if `ka_source` points at a local directory, Step 5_0 uploads it; otherwise the skill auto-generates KA documents from PRD glossary + agent capabilities before sync. **This prompt does not run any `CREATE SCHEMA` or `CREATE VOLUME` DDL** — that responsibility belongs to F0.
+Required:
+- [ ] `uc_resources_foundation` (input_id 200) — owns the agent UC schema (`{db_schema}_agent`) and the `{db_schema}_knowledge_sources` MANAGED volume.
+- [ ] `agent_tool_selection` (input_id 218) — `docs/agent_tool_plan.yaml` exists.
+
+Conditional execution:
+- This prompt runs only when `docs/agent_tool_plan.yaml.knowledge_assistant.selected == true`. If KA is not selected, the prompt exits cleanly with gate `Skipped - KA not selected` and creates no resources.
+
+Source document modes (any one is acceptable; no Bronze/Genie dependency):
+- **Pre-staged** — the `{db_schema}_knowledge_sources` volume already contains `.md` files (Step 5_0 detects this and skips re-uploading).
+- **Local directory** — `ka_source` points at a local `.md` directory and Step 5_0 uploads its contents.
+- **PRD/spec-generated** — Step 5_0 auto-generates a minimal corpus from `docs/design_prd.md` (glossary, key-terms, or business-context sections; falls back to the executive summary) plus `docs/agent_spec.yaml.agent.capabilities`, then uploads. Branch (C) does **not** read `state://DataSpec.*` — `## Resources` may be stamped `optional: true` by step 40''s `hydrate_from_files`.
+
+Bronze tables, Genie Spaces, and Data Intelligence outputs are **not** required for this prompt. The KA reads only from the UC volume that step 40 provisioned. **This prompt does not run any `CREATE SCHEMA` or `CREATE VOLUME` DDL** — that responsibility belongs to step 40.
 
 ### Steps to Apply
 
@@ -9377,27 +10061,109 @@ Copy the prompt above, start a **new Agent thread** in your Coding Assistant, an
 
 **Step 2: Paste the Prompt** — paste this entire prompt; the AI will invoke the foundation 05-knowledge-assistant skill end-to-end.
 
-**Step 3: Verify** — `databricks serving-endpoints list --output json | jq ''.endpoints[] | select(.name | startswith("ka-"))''` should show the KA endpoint in `READY` state.',
+**Step 3: Verify** — `databricks serving-endpoints list --output json | jq ''.endpoints[] | select(.name | startswith("ka-"))''` should show the KA endpoint in `READY` state.
+
+---
+
+## 2️⃣ What Are We Building?
+
+We are creating (or reusing) a **Databricks Knowledge Assistant** — a managed RAG endpoint that wraps document parsing + chunking + embedding + retrieval + serving. The agent calls KA as a single `@function_tool` instead of building any of that plumbing itself.
+
+```
+Documents (.md files)             Knowledge Assistant (Databricks-managed)
+in UC Volume                      ┌───────────────────────────────────────┐
+┌───────────┐                     │ Parse → Chunk → Embed (Vector Search) │
+│ doc1.md   │                     │   ↓                                   │
+│ doc2.md   │  ──── sync ────►    │ Hybrid search + reranker              │
+│ doc3.md   │                     │   ↓                                   │
+└───────────┘                     │ Serving endpoint (READY)              │
+                                  └───────────────┬───────────────────────┘
+                                                  │ ka_endpoint_name
+                                                  ▼
+                                  Agent calls as a single @function_tool
+```
+
+### Key Concepts
+
+| Concept | What It Means | Why It Matters |
+|---------|---------------|----------------|
+| **Knowledge Assistant** | Managed Databricks service that bundles parsing, chunking, embedding (Vector Search), hybrid retrieval, and reranking behind a single serving endpoint | The agent never owns RAG plumbing; one tool call replaces a hand-built pipeline |
+| **`ka_display_name`** | Idempotency key for KA get-or-create (`{agent_app_name}-knowledge`) | Second runs reuse the existing KA; the prompt never silently creates duplicates |
+| **`knowledge_source_path`** | UC volume path `/Volumes/{catalog}/{db_schema}_agent/{db_schema}_knowledge_sources` provisioned by 40 | The KA reads source docs from a governed UC volume — never DBFS or raw cloud paths |
+| **Three staging modes** | `pre_staged` (volume already populated), `local_dir` (upload from `ka_source`), `prd_generated` (auto-generate from `docs/design_prd.md` glossary/business-context + `docs/agent_spec.yaml.agent.capabilities`) | Adapts to how the use-case bundle ships content; recorded as `knowledge_source_origin` for downstream traceability. Branch `prd_generated` reads only the `docs/*` files — never `state://DataSpec.*`, which may be `optional: true` on the Agents-only path. |
+| **Skip-on-not-selected** | If `agent_tool_plan.knowledge_assistant.selected: false`, exit with gate `Skipped — KA not selected` and no resources are touched | Tool families the use case doesn''t need leave clean state, not orphaned KAs |
+
+---
+
+## 3️⃣ Why Are We Building It This Way? (Databricks Best Practices)
+
+| Practice | How It''s Used Here |
+|----------|--------------------|
+| **Managed RAG** | KA hides the RAG plumbing (chunking, embeddings, retrieval, reranking) behind a serving endpoint; the agent calls it like any other tool. The build phase (44) wires KA in 5 lines, not 50. |
+| **Get-or-create idempotency** | `display_name` is the idempotency key; the second run reuses the existing KA via `list_knowledge_assistants`, never creates a duplicate. The same is true for each knowledge source attached to it. |
+| **Source files in UC volumes** | The knowledge corpus lives in a UC managed volume created by 40, never in DBFS or cloud storage paths. KA reads through governance — RBAC and retention come for free. |
+| **Three source-staging modes** | Pre-staged (volume already populated), local directory upload, or auto-generated from `docs/design_prd.md` (glossary / key-terms / business-context with executive-summary fallback) plus `docs/agent_spec.yaml.agent.capabilities`. The chosen branch is recorded in state as `knowledge_source_origin`. Branch (C) does **not** consult `state://DataSpec.*`. |
+| **Skip-on-not-selected** | If `agent_tool_plan.knowledge_assistant.selected: false`, this prompt records `Skipped — KA not selected` and exits without creating anything. The downstream wire-tools prompt then registers no KA tool. |
+
+---
+
+## 4️⃣ What Happens Behind the Scenes?
+
+The skill executes 5 ordered sub-steps (5_0 → 5d) with idempotency guards at every step:
+
+| Phase | What Happens | Key Output |
+|-------|--------------|------------|
+| **5_0** | Stage source markdown into the F0-provisioned volume — branch (A) skip if non-empty, (B) upload from `ka_source` directory, or (C) auto-generate from `docs/design_prd.md` (glossary / key-terms / business-context, executive-summary fallback) plus `docs/agent_spec.yaml.agent.capabilities`. Branch (C) MUST NOT read `state://DataSpec.*`. | `knowledge_source_origin`, `knowledge_source_file_count` |
+| **5a** | Get-or-create KA on `ka_display_name` (= `{agent_app_name}-knowledge`); reuse matching from `list_knowledge_assistants` instead of creating duplicate | `ka_endpoint_name`, `knowledge_assistant_id` |
+| **5b** | Get-or-create `files` knowledge source bound to `volume_path`; reuse via `list_knowledge_sources` | `knowledge_source_type` |
+| **5c** | `sync_knowledge_sources` — incremental, safe to re-call | Synced |
+| **5d** | Poll until `sync_status = READY`; capture all hand-off values into state | `sync_status: READY` |
+
+### Gate Contract
+
+| Reads gate | Produces gate | Captured state |
+|------------|---------------|----------------|
+| `UC resources ready` (from `uc_resources_foundation`) AND `Agent tool plan ready` (from `agent_tool_selection`) | `KA READY` OR `Skipped - KA not selected` | `doc_qa_backend`, `knowledge_source_path`, `knowledge_source_file_count`, `knowledge_source_origin`, `ka_endpoint_name`, `knowledge_assistant_id`, `knowledge_source_type`, `sync_status` |',
 '### Resources Created
+
+The bullets below are conditional on the `docs/agent_tool_plan.yaml.knowledge_assistant.selected` flag. When KA is not selected, the prompt explicitly creates no resources and exits with gate `Skipped - KA not selected`; the only Expected Output is the captured-state stub below.
+
+**If `docs/agent_tool_plan.yaml.knowledge_assistant.selected == true` (gate `KA READY`):**
 - [ ] UC Volume `/Volumes/{lakehouse_default_catalog}/{db_schema}_agent/{db_schema}_knowledge_sources/` populated with at least one `.md` file (`knowledge_source_file_count >= 1`) — schema + volume themselves were created by `uc_resources_foundation` (input_id 200)
 - [ ] `knowledge_source_origin` recorded (`pre_staged` | `local_dir` | `prd_generated`) — proves Step 5_0 took a deterministic branch
 - [ ] User-scoped Knowledge Assistant `{agent_app_name}-knowledge` created **or reused** via get-or-create on `display_name` (idempotent)
 - [ ] Knowledge source attached **or reused** via get-or-create on `display_name` (idempotent)
 - [ ] `ka_endpoint_name`, `knowledge_assistant_id`, `sync_status: READY` captured in state
 - [ ] `doc_qa_backend = knowledge_assistant` recorded in state for the next tool-wiring prompt
-- [ ] **Idempotency check:** running this prompt a second time with the same `ka_display_name` produces zero new KAs and zero new knowledge sources',
+- [ ] **Idempotency check:** running this prompt a second time with the same `ka_display_name` produces zero new KAs and zero new knowledge sources
+
+**If `docs/agent_tool_plan.yaml.knowledge_assistant.selected == false` (gate `Skipped - KA not selected`):**
+- [ ] No UC volumes are populated, no KA endpoint is created, no knowledge source is attached, and no sync is invoked. Step 5_0 through 5d do **not** run.
+- [ ] State captures the explicit skip stub: `doc_qa_backend: "n/a"`, `ka_endpoint_name: "n/a"`, `knowledge_assistant_id: "n/a"`. The remaining handoff fields (`knowledge_source_path`, `knowledge_source_file_count`, `knowledge_source_origin`, `knowledge_source_type`, `sync_status`) are absent or `"n/a"` — never `READY` or a real path.
+- [ ] Step 44 reads `knowledge_assistant.selected == false` and skips the KA tool family cleanly (no `tools/ka.py` is generated, no KA serving-endpoint grant is added to `databricks.yml`, no KA TOOL span appears in MLflow).',
 true, 1, true, current_timestamp(), current_timestamp(), current_user());
 
--- Step 41 / order 41: Phase 2 / Agent Build - Clone + Framework
+-- Step 43 / order 43: Phase 2 / Agent Build - Clone + Framework
 INSERT INTO ${catalog}.${schema}.section_input_prompts 
 (input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
 VALUES
 (203, 'track_a_agent_app_clone_framework',
-'Bootstrap the Track A custom agent for **{use_case_slug}** as a Databricks App: clone the canonical OpenAI Agents SDK template, install dependencies, run the dev server, and wire the agent framework with module-level invoke/stream handlers.
+'Clone the Track A agent-app framework template (FastAPI host + OpenAI Agents SDK + MLflow tracing + two-layer Lakebase memory) into `apps_lakebase/{agent_app_name}/` and stand up the **{use_case_slug}** agent''s runtime shell. Today there is no agent app code; after this prompt runs, the cloned app boots locally with `uv run dev`, responds to a "Hello" smoke test, emits MLflow AGENT spans at `{mlflow_experiment_path}`, and is registered in `databricks.yml`.
+
+This will involve the following steps:
+
+- **Clone the framework template** — `git clone` the `agent-openai-advanced` template into `{agent_app_name}/` so the canonical scaffold (Option B handlers + Lakebase memory pre-wired) becomes the starting point
+- **Install dependencies with `uv`** — run `uv pip install -e .` against the template''s `pyproject.toml` so local + deployed runtimes share the same dependency tree
+- **Wire Option B module-level handlers** — wire `@mlflow.genai.agent_server.invoke` and `@stream` async handlers (canonical for Databricks Apps; not the rejected `mlflow.pyfunc.ResponsesAgent` path)
+- **Drive the model from `config.yml`** — write `llm_endpoint`, `llm_api_base_url`, `llm_api_mode` from `runtime_config.llm` into `config.yml` so Python never hardcodes the model endpoint
+- **Smoke-test the framework** — start `uv run dev`, send "Hello", and confirm an MLflow AGENT span appears at `{mlflow_experiment_path}` before any tools are wired
+- **Register the app in `databricks.yml`** — declare the new agent app so the bundle deploy phase later can lift it as a Databricks App resource
+
+**How this prompt chains with the prior step (skill invocations):**
 
 **Invoke skills (in order):**
 
-1. `genai-agents/vibecoding-state` op `enter` — params: `prompt_id: "track_a_agent_app_clone_framework"`, `require_prior_gate: [{prompt_id: "mlflow_agent_tracing_uc", gate: "Tracing live; UC OTel tables ready"}, {prompt_id: "knowledge_assistant_create", gate: "KA READY"}]`.
+1. `genai-agents/vibecoding-state` op `enter` — params: `prompt_id: "track_a_agent_app_clone_framework"`, `require_prior_gate: [{prompt_id: "mlflow_agent_tracing_uc", gate: "Tracing live; UC OTel tables ready"}, {prompt_id: "agent_tool_selection", gate: "Agent tool plan ready"}]`.
 2. @genai-agents/tracks/A-custom-agent-apps/01-clone-and-run/SKILL.md — params:
    - `template: "agent-openai-advanced"` (canonical: short-term + long-term Lakebase memory built in)
    - `agent_name: "{agent_app_name}"`
@@ -9407,29 +10173,34 @@ VALUES
    - `smoke_test_prompt: "Hello"`
 3. @genai-agents/tracks/A-custom-agent-apps/02-agent-framework/SKILL.md — params:
    - `agent_name: "{agent_app_name}"`
-   - `agent_spec_ref: "state://AgentSpec"`
+   - `agent_spec_ref: "docs/agent_spec.yaml"`
+   - `agent_tool_plan_ref: "docs/agent_tool_plan.yaml"`
+   - `runtime_model_ref: "docs/agent_tool_plan.yaml.runtime_config.llm"`
+   - `config_file: "config.yml"`
+   - `model_config_keys: ["llm_endpoint", "llm_api_base_url", "llm_api_mode"]`
    - `sdk: "openai-agents-sdk"`
    - `option: "B"` (canonical for Databricks Apps: module-level `@mlflow.genai.agent_server.invoke` + `@stream` handlers; **not** `mlflow.pyfunc.ResponsesAgent`)
    - `mlflow_experiment_path: "{mlflow_experiment_path}"`
    - `streaming_runner: true`
    - `verification: {mlflow_agent_spans_visible: true, invoke_handler_present: true, stream_handler_present: true}`
-   - The skill reads `agent.system_prompt` (paste verbatim into `Agent(instructions=...)`) and `agent.capabilities[]` (chat-panel capability list).
+   - The skill reads `agent.system_prompt` (paste verbatim into `Agent(instructions=...)`), `agent.capabilities[]` (chat-panel capability list), and `docs/agent_tool_plan.yaml.runtime_config.llm` (write `endpoint`, `api_base_url`, and `api_mode` into `config.yml` as `llm_endpoint`, `llm_api_base_url`, and `llm_api_mode`). No model endpoint may be hardcoded in Python.
 4. `genai-agents/vibecoding-state` op `exit` — params: `prompt_id: "track_a_agent_app_clone_framework"`, `gate: "Agent framework live"`.
 
-**Gate:** `Agent framework live` — template chat UI responds to "Hello" locally; MLflow AGENT spans visible for `{agent_app_name}` at `{mlflow_experiment_path}`.
+**Gate:** `Agent framework live` — template chat UI responds to "Hello" locally; `config.yml` contains `llm_endpoint`, `llm_api_base_url`, and `llm_api_mode` from `docs/agent_tool_plan.yaml.runtime_config.llm`; the agent uses `ModelConfig(development_config="config.yml")` and `model=config.get("llm_endpoint")`; MLflow AGENT spans are visible for `{agent_app_name}` at `{mlflow_experiment_path}`.
 
 If a PRD exists at @docs/design_prd.md, reference it for business requirements, user personas, and workflows.',
 '',
 'Phase 2 / Agent Build — Clone + Framework',
 'Clone the agent-openai-advanced template, install deps, run dev server, wire module-level invoke/stream handlers (Option B)',
-41,
-'## How To Apply
+43,
+'## 1️⃣ How To Apply
 
 **Run this in your cloned Template Repository.** Copy the prompt above into a new Agent thread in your Coding Assistant. The AI will execute `01-clone-and-run` then `02-agent-framework` in order, leaving you with a running local Agent App that emits MLflow AGENT spans.
 
 ### Prerequisite
 - MLflow tracing prompt completed (`Tracing live; UC OTel tables ready` gate captured in state)
-- Knowledge Assistant prompt completed (`KA READY` gate captured in state)
+- Agent Tool Selection prompt completed (`Agent tool plan ready` gate captured in state)
+- Knowledge Assistant prompt only required when `docs/agent_tool_plan.yaml.knowledge_assistant.selected == true`
 - Lakebase project provisioned (from earlier Lakebase prompt)
 - MLflow experiment at `{mlflow_experiment_path}` already created
 
@@ -9437,89 +10208,293 @@ If a PRD exists at @docs/design_prd.md, reference it for business requirements, 
 1. Start a new Agent thread in your Coding Assistant.
 2. Paste this prompt verbatim.
 3. The AI will (a) clone the `agent-openai-advanced` template into your repo, (b) install deps via `uv`, (c) start the local dev server, (d) wire Option B module-level handlers, (e) verify MLflow AGENT spans appear at `{mlflow_experiment_path}`.
-4. Confirm "Hello" returns a streaming response in the local chat UI before exit.',
+4. Confirm "Hello" returns a streaming response in the local chat UI before exit.
+
+---
+
+## 2️⃣ What Are We Building?
+
+We are bootstrapping the **Track A custom agent** as a Databricks App: cloning the canonical `agent-openai-advanced` template, installing deps with `uv`, and wiring **Option B** module-level `@invoke` / `@stream` handlers (canonical for Apps; not the rejected `mlflow.pyfunc.ResponsesAgent` path used for Model-Serving deployments).
+
+```
+Databricks App (FastAPI host)                    Option B (canonical for Apps)
+┌────────────────────────────────────────────────────────────────────────────┐
+│  app.py                                                                    │
+│  ┌──────────────────────────────────────────────────────────────────────┐  │
+│  │ @mlflow.genai.agent_server.invoke                                    │  │
+│  │ async def invoke(request) -> response:                               │  │
+│  │     agent = build_agent(config)                                      │  │
+│  │     return await agent.run(request.input)                            │  │
+│  │                                                                      │  │
+│  │ @mlflow.genai.agent_server.stream                                    │  │
+│  │ async def stream(request) -> AsyncIterator[event]:                   │  │
+│  │     agent = build_agent(config)                                      │  │
+│  │     async for ev in agent.run_streamed(request.input): yield ev      │  │
+│  └──────────────────────────────────────────────────────────────────────┘  │
+│                                                                            │
+│  config.yml ──► ModelConfig(development_config="config.yml")               │
+│  llm_endpoint, llm_api_base_url, llm_api_mode (no hardcoded model in .py)  │
+└────────────────────────────────────────────────────────────────────────────┘
+```
+
+### Key Concepts
+
+| Concept | What It Means | Why It Matters |
+|---------|---------------|----------------|
+| **Option B handlers** | Module-level `@mlflow.genai.agent_server.invoke` and `@stream` decorated async functions | Integrates cleanly with the FastAPI host that Databricks Apps runs; no class-based ResponsesAgent boilerplate |
+| **`agent-openai-advanced` template** | Canonical Databricks scaffold with two-layer Lakebase memory pre-wired | 45 just configures memory rather than building it from scratch |
+| **`config.yml` + `ModelConfig`** | Runtime settings (`llm_endpoint`, `llm_api_base_url`, `llm_api_mode`) loaded via `ModelConfig(development_config="config.yml")` | Python never hardcodes endpoint or base URL — 55 can swap to AI Gateway by changing config alone |
+| **`uv`** | Fast, lockfile-based package manager (`uv pip install`, `uv run`) | Reproducible installs across local, CI, and Databricks Apps; no per-machine drift |
+| **Smoke = "Hello"** | First verification is a single chat round-trip showing MLflow AGENT spans appear | Defers all tool wiring to 44; failure is on the framework, not on a tool |
+
+---
+
+## 3️⃣ Why Are We Building It This Way? (Databricks Best Practices)
+
+| Practice | How It''s Used Here |
+|----------|--------------------|
+| **Option B over ResponsesAgent** | Module-level `@invoke` / `@stream` handlers integrate cleanly with FastAPI/Databricks Apps; `mlflow.pyfunc.ResponsesAgent` is for Model-Serving deployments and would force class-based plumbing for no benefit. |
+| **`agent-openai-advanced` template** | The canonical scaffold ships with two-layer Lakebase memory pre-wired so 45 just *configures* it rather than implementing a session store from scratch. |
+| **`config.yml` + `ModelConfig`** | Model endpoint, base URL, and API mode load from config — never hardcoded — so 55 can swap to AI Gateway without editing Python. The agent uses `ModelConfig(development_config="config.yml")` and `model=config.get("llm_endpoint")`. |
+| **`uv` for deps** | Fast, reproducible lockfile-based installs; `uv run` matches the dev server entry point Databricks Apps uses, so local dev and deployed runtime share the same dependency tree. |
+| **Smoke = "Hello"** | The first verification is a single chat round-trip showing MLflow AGENT spans appear at `{mlflow_experiment_path}`; tool wiring is deferred to 44, so framework failures are isolated. |
+
+---
+
+## 4️⃣ What Happens Behind the Scenes?
+
+Two skills run end-to-end in this prompt: `01-clone-and-run` then `02-agent-framework`.
+
+| Phase | What Happens | Key Output |
+|-------|--------------|------------|
+| **Phase 0** | `vibecoding-state` op `enter` confirms `Tracing live; UC OTel tables ready` AND `Agent tool plan ready` | Foundation context |
+| **Phase 1** | `git clone` the `agent-openai-advanced` template into `{agent_app_name}/` | Template cloned |
+| **Phase 2** | `uv pip install -e .` installs dependencies from the template''s `pyproject.toml` | Deps installed |
+| **Phase 3** | `uv run dev` starts the local dev server; smoke test "Hello" returns | Dev server up |
+| **Phase 4** | Walk project structure: `app.py`, `config.yml`, `tools/`, `tests/` | Layout understood |
+| **Phase 5** | Wire Option B `@invoke` and `@stream` handlers; paste `agent.system_prompt` into `Agent(instructions=...)`; expose `agent.capabilities[]` to the chat UI | Handlers live |
+| **Phase 6** | Write `llm_endpoint`, `llm_api_base_url`, `llm_api_mode` from `runtime_config.llm` into `config.yml`; agent constructs via `ModelConfig` and `model=config.get("llm_endpoint")` | Config-driven model route |
+| **Phase 7** | Verify MLflow AGENT spans appear at `{mlflow_experiment_path}` for the smoke run | Spans visible |
+
+### Gate Contract
+
+| Reads gate | Produces gate | Captured state |
+|------------|---------------|----------------|
+| `Tracing live; UC OTel tables ready` (from `mlflow_agent_tracing_uc`) AND `Agent tool plan ready` (from `agent_tool_selection`) | `Agent framework live` (consumed by 44) | (no new state captured; state from prior gates flows through) |',
 '### Resources Created
 - [ ] Local Track A agent app cloned from `agent-openai-advanced` template
 - [ ] `uv` dependencies installed
 - [ ] Local dev server running and responding to `Hello`
 - [ ] Module-level `@mlflow.genai.agent_server.invoke` and `@stream` handlers present
-- [ ] MLflow AGENT spans visible at `{mlflow_experiment_path}`',
+- [ ] MLflow AGENT spans visible at `{mlflow_experiment_path}`
+- [ ] `config.yml` contains `llm_endpoint`, `llm_api_base_url`, and `llm_api_mode` from `docs/agent_tool_plan.yaml.runtime_config.llm`
+- [ ] Agent construction uses `ModelConfig` and `model=config.get("llm_endpoint")`',
 true, 1, true, current_timestamp(), current_timestamp(), current_user());
 
--- Step 42 / order 42: Phase 2 / Agent Build - Wire Tools and MCP
+-- Step 44 / order 44: Phase 2 / Agent Build - Wire Tools and MCP
 INSERT INTO ${catalog}.${schema}.section_input_prompts 
 (input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
 VALUES
 (204, 'track_a_agent_ka_genie_tools',
-'Wire Knowledge Assistant, Genie Space, UC functions and Lakebase domain tools as `@function_tool`s on the **{use_case_slug}** Track A agent and emit `databricks.yml` + `app.yaml` resource grants.
+'## UI-Selected Tool Inputs (from the Tools and MCP step)
+
+The user picked these tool families and IDs in the workshop UI. They are the ground truth for what should appear in `docs/agent_tool_plan.yaml.selected_tools[]` and `selected_mcp_servers[]`. If `docs/agent_tool_plan.yaml` already exists and disagrees with the table below, ASK the user which one to honor before wiring tools.
+
+| Family | Enabled | UI-supplied values |
+|--------|---------|---------------------|
+| SQL MCP | `{agent_tool_sql_mcp_enabled}` | catalog `{agent_sql_catalog}`, schema `{agent_sql_schema}`, warehouse `{agent_sql_warehouse_id}`, table scope `{agent_sql_table_scope}` |
+| Genie | `{agent_tool_genie_enabled}` | `genie_space_id` `{genie_space_id}` |
+| Vector Search | `{agent_tool_vector_search_enabled}` | endpoint `{vs_endpoint}`, index `{vs_index}` |
+| UC Functions | `{agent_tool_uc_functions_enabled}` | targets `{uc_function_targets}` |
+| External MCP | `{agent_tool_external_mcp_enabled}` | UC connection `{external_mcp_connection}` |
+
+Wire the **selected** tools and MCP servers from `docs/agent_tool_plan.yaml` into the cloned **{use_case_slug}** agent app as `@function_tool` definitions, and emit the matching `databricks.yml` + `app.yaml` resource grants. Selected families may include any combination of Knowledge Assistant (only if KA was created in step 42), Genie (bring your own `genie_space_id`), SQL MCP (bring your own catalog/schema/warehouse/allowed tables), Vector Search (bring your own endpoint/index), UC Functions (bring your own fully qualified function names), and external MCP servers (bring your own UC connection or registry-backed candidate). Today the cloned `{agent_app_name}` agent has zero tool surface; after this prompt runs, every entry in `docs/agent_tool_plan.yaml.selected_tools[]` is materialized as a `@function_tool`, families absent from the plan are skipped (not failed), the bundle declares the right `CAN_QUERY` / `CAN_RUN` / `CAN_USE` grants, and MLflow shows TOOL spans for each tool the agent calls.
+
+This will involve the following steps:
+
+- **Wire each managed tool** — generate one `@function_tool` per entry in `selected_tools[]` (KA, Genie, SQL MCP against `{default_warehouse}`, UC Functions, Vector Search) using the IDs captured by upstream prompts
+- **Declare resource grants in `databricks.yml`** — declare serving endpoints, Genie space, SQL warehouse, UC functions, and UC connections with the correct permissions so DAB applies them once
+- **Wire `app.yaml` `valueFrom` refs** — point `app.yaml` resources at the bundle entries and add the OAuth scopes the SDK requires at runtime
+- **Pin the SQL read-only guardrails** — every SQL tool enforces `SELECT/DESCRIBE/EXPLAIN` only and requires fully-qualified `catalog.schema.table` names from `selected_tools[].guardrails`
+- **Skip cleanly when a family is not selected** — KA, Genie, or external MCPs absent from `selected_tools[]` are recorded as skipped (not failed) so the gate stays clean
+- **Smoke-test every tool** — exercise each tool in the local dev server and verify TOOL spans appear in MLflow before producing the gate
+
+**How this prompt chains with the prior step (skill invocations):**
 
 **Invoke skills (in order):**
 
 1. `genai-agents/vibecoding-state` op `enter` — params: `prompt_id: "track_a_agent_ka_genie_tools"`, `require_prior_gate: {prompt_id: "track_a_agent_app_clone_framework", gate: "Agent framework live"}`.
 2. @genai-agents/tracks/A-custom-agent-apps/03-tools-and-mcp/SKILL.md — params:
    - `agent_name: "{agent_app_name}"`
-   - `agent_spec_ref: "state://AgentSpec"`
-   - `data_spec_ref: "state://DataSpec"`
-   - `doc_qa_backend: "{doc_qa_backend}"`            -- "knowledge_assistant"
-   - `ka_endpoint_name: "{ka_endpoint_name}"`
-   - `genie_space_id: "{genie_space_id}"`
+   - `agent_spec_ref: "docs/agent_spec.yaml"`
+   - `agent_tool_plan_ref: "docs/agent_tool_plan.yaml"`
+   - `selected_tools: "docs/agent_tool_plan.yaml.selected_tools"`
+   - `selected_mcp_servers: "docs/agent_tool_plan.yaml.selected_mcp_servers"`
+   - `resource_grants: "docs/agent_tool_plan.yaml.resource_grants"`
+   - `runtime_model_ref: "docs/agent_tool_plan.yaml.runtime_config.llm"`
+   - `model_grant_policy: "Read the SCALAR value at docs/agent_tool_plan.yaml.runtime_config.llm.endpoint (e.g. ''databricks-claude-sonnet-4-6'') and grant CAN_QUERY on THAT endpoint name when runtime_config.llm.provider == ''databricks''. NEVER grant on the literal YAML path string ''docs/agent_tool_plan.yaml.runtime_config.llm.endpoint'' or ''docs/agent_spec.yaml.agent.model'' — those are paths, not endpoint names. If the resolved value is empty or still wrapped in {...}, STOP and re-run prompt 39 (agent_tool_selection). Skip Gateway provisioning when provider == ''ai_gateway''."`
+   - `ka_endpoint_name`: read from state captured by `knowledge_assistant_create` (input_id 202) when `docs/agent_tool_plan.yaml.knowledge_assistant.selected == true`; otherwise `"n/a"`. KA is the only tool family whose ID flows through workshop state — every other family below is bring-your-own from the Tool Plan.
+   - `genie_space_id`: read from `docs/agent_tool_plan.yaml.selected_tools[? type == "genie"].meta.genie_space_id` when Genie was selected; otherwise `"n/a"`. Do NOT consume `{genie_space_id}` from a rendered global — Genie is bring-your-own at this point and no upstream Agents Accelerator step provisions it.
+   - Vector Search: read endpoint + index from `docs/agent_tool_plan.yaml.selected_tools[? type == "vector_search"].meta` (`endpoint`, `index`) when selected; otherwise skip the Vector Search tool family.
+   - UC Functions: read fully qualified function names from `docs/agent_tool_plan.yaml.selected_tools[? type == "uc_function"].target` when selected; otherwise skip.
+   - External MCP: read UC connection name and registry-backed candidate from `docs/agent_tool_plan.yaml.selected_mcp_servers[? type == "external"]` when selected; otherwise skip.
+   - If a required BYO field for a selected family is blank, missing, or still wrapped in `{...}`, STOP and ask the user — do not proceed with placeholder literals.
    - `warehouse_id: "{default_warehouse}"`
-   - `lakebase_host: "{lakebase_host}"`
-   - `resource_grants: ["databricks.yml", "app.yaml"]`
-   - `ka_grant: "CAN_QUERY"`
-   - `genie_grant: "CAN_RUN"`
-   - `warehouse_grant: "CAN_USE"`
-   - The skill reads `agent.mcp_servers[]`, `agent.tools[]` (tool name, type, target, params, readonly) and `agent.knowledge_base_backend` to wire KA + Genie + UC functions as `@function_tool`s and emit `databricks.yml` + `app.yaml` resource grants. Verification expectation (number of tool spans) is read from `agent.tools[]` length.
+   - SQL MCP wiring uses `selected_mcp_servers[].meta.warehouse_id` and the read-only guardrails from `selected_tools[].guardrails`. Default policy: `readonly: true`; allowed statements `SELECT, DESCRIBE, EXPLAIN`; require fully qualified `catalog.schema.table` names; `CAN_USE` on the warehouse plus `USE_CATALOG`, `USE_SCHEMA`, and `SELECT` on each table in `selected_mcp_servers[].scope.allowed_tables`. Tool families not present in `selected_tools[]` (e.g. KA when `knowledge_assistant.selected: false`, Genie when not selected) are skipped, not failed.
+   - The configured model route is also a runtime resource. Include the entries from `docs/agent_tool_plan.yaml.resource_grants.databricks_yml.serving_endpoints[]` verbatim — those entries already carry the scalar endpoint name (e.g. `name: "databricks-claude-sonnet-4-6"`, `permission: "CAN_QUERY"`). Do NOT substitute the YAML-path string `docs/agent_spec.yaml.agent.model` or `docs/agent_tool_plan.yaml.runtime_config.llm.endpoint` for the endpoint name; those are file paths, not Databricks serving-endpoint names. The model route must be exposed to the app runtime through `config.yml` / `ModelConfig` keys (`llm_endpoint`, `llm_api_base_url`, `llm_api_mode`), again populated from the SCALAR `runtime_config.llm.endpoint` value, not by hardcoding the endpoint or base URL in Python.
 3. `genai-agents/vibecoding-state` op `exit` — params: `prompt_id: "track_a_agent_ka_genie_tools"`, `gate: "Tools wired"`.
 
-**Gate:** `Tools wired` — MLflow traces show TOOL spans for KA, Genie and every custom tool declared in `agent.tools[]`; `databricks.yml` and `app.yaml` declare `CAN_QUERY` on the KA serving endpoint, `CAN_RUN` on the Genie Space, and `CAN_USE` on the SQL warehouse.
+**Gate:** `Tools wired` - MLflow traces show TOOL spans for every selected tool in `docs/agent_tool_plan.yaml.selected_tools[]`; skipped tool families are marked skipped, not failed; SQL MCP smoke tests use read-only queries with fully qualified table names.
 
 If a PRD exists at @docs/design_prd.md, reference it for business requirements, user personas, and workflows.',
 '',
-'Phase 2 / Agent Build — Wire KA, Genie, UC Functions and Lakebase Tools',
-'Wire KA, Genie, UC functions and Lakebase tools as @function_tool with resource grants',
-42,
-'## How To Apply
+'Phase 2 / Agent Build - Wire Selected Tools and MCP',
+'Wire the tools selected in docs/agent_tool_plan.yaml, including optional KA, Genie, Vector Search, SQL MCP, UC Functions, and external MCPs',
+44,
+'## 1️⃣ How To Apply
 
-Open a **new Agent thread in your Coding Assistant** and paste the prompt above. The AI invokes `03-tools-and-mcp` which reads the resolved `state://AgentSpec` and `state://DataSpec` to materialize every tool declared there.
+Open a **new Agent thread in your Coding Assistant** and paste the prompt above. The AI invokes `03-tools-and-mcp` which reads `docs/agent_spec.yaml`, `docs/agent_tool_plan.yaml`, and `apps_lakebase/$APP_NAME/.vibecoding-state.md` (AppKit + Lakebase context from steps 04-07) to materialize every tool declared in the Tool Plan. `state://DataSpec` is optional — only consulted when the Lakehouse track has produced one and is not a prerequisite for this prompt.
 
-### Upstream Tool Backend Prerequisites
+### Selected Backend Sources
 
-This row is the **integration handshake**. Each tool the agent wires up depends on a backend that another row already provisioned. Before pasting, confirm every backend is captured into state — the skill reads these IDs to compose tool calls:
+This row is the **integration handshake**. Each tool family is wired only when the user explicitly selected it in `docs/agent_tool_plan.yaml.selected_tools[]`. Tool families that are absent are recorded as skipped, not failed. The agent never assumes a fixed KA + Genie path — every backend below is conditional and bring-your-own where applicable.
 
-| Tool Backend | Provisioned By | State Keys Consumed | Grant |
+| Tool Family | Source / Provisioning | State Keys Consumed | Grant |
 |---|---|---|---|
-| Knowledge Assistant | `knowledge_assistant_create` (input_id 202) | `{ka_endpoint_name}`, `{knowledge_assistant_id}`, `{doc_qa_backend} = "knowledge_assistant"` | `CAN_QUERY` on the KA serving endpoint |
-| Genie Space | `genie_space` (input_id 11) | `{genie_space_id}` (captured upstream when the Genie Space was created over the Bronze tables) | `CAN_RUN` on the Genie Space |
-| UC Functions | `uc_resources_foundation` (input_id 200) + use-case bundle | `{lakehouse_default_catalog}`, `{db_schema}_agent`, plus any `agent.tools[].target` paths | `EXECUTE` on each UC function (covered by the agent schema grant) |
-| Lakebase Memory | earlier Lakebase prompts | `{lakebase_host}`, `{lakebase_instance}`, `{lakebase_database}` | `CAN_USE` on the SQL warehouse for tool queries |
+| Knowledge Assistant | `knowledge_assistant_create` (input_id 202) — runs only when `docs/agent_tool_plan.yaml.knowledge_assistant.selected == true` | `{ka_endpoint_name}`, `{knowledge_assistant_id}`, `{doc_qa_backend} = "knowledge_assistant"` | `CAN_QUERY` on the KA serving endpoint |
+| Genie | Bring your own `genie_space_id` declared in `docs/agent_tool_plan.yaml.selected_tools[]`; if absent, the Genie tool is skipped (no Bronze/Genie pipeline is required) | `{genie_space_id}` from the Tool Plan | `CAN_RUN` on the Genie Space |
+| SQL MCP | Bring your own catalog, schema, warehouse, and table allowlist declared in `docs/agent_tool_plan.yaml.selected_mcp_servers[]` (read-only guardrails: `SELECT, DESCRIBE, EXPLAIN`; fully qualified `catalog.schema.table` names) | `{agent_sql_catalog}`, `{agent_sql_schema}`, `{warehouse_id}`, allowed tables | `CAN_USE` on the warehouse + `USE_CATALOG`, `USE_SCHEMA`, `SELECT` on each allowed table |
+| Vector Search | Bring your own endpoint + index name declared in `docs/agent_tool_plan.yaml.selected_tools[]`; if absent, skipped | `{vs_endpoint}`, `{vs_index}` | `CAN_USE` on the Vector Search endpoint |
+| UC Functions | Bring your own fully qualified function names declared in `docs/agent_tool_plan.yaml.selected_tools[]` (the agent schema grant from `uc_resources_foundation` covers `EXECUTE`) | `selected_tools[? type == "uc_function"].target` paths | `EXECUTE` on each UC function |
+| External MCP | Bring your own UC connection or registry-backed candidate declared in `docs/agent_tool_plan.yaml.selected_mcp_servers[]`; if absent, skipped | UC connection name + scopes | `CAN_USE` on the UC connection |
+| Lakebase Memory | Earlier Lakebase prompts (steps 06-07) | `{lakebase_host}`, `{lakebase_instance}`, `{lakebase_database}` | `CAN_USE` on the SQL warehouse for tool queries |
 | SQL Warehouse | `workspace_setup_deploy` (input_id 4) | `{default_warehouse}` | `CAN_USE` (declared in `databricks.yml`) |
+
+Bronze tables, Bronze metadata, and Data Intelligence outputs are **not** required by this prompt. They can appear only as optional bring-your-own backends in the Tool Plan.
 
 ### Prerequisite
 - `Agent framework live` gate captured in state
-- `ka_endpoint_name`, `genie_space_id`, `warehouse_id`, `lakebase_host` all captured in state
-- `agent.tools[]` populated in `state://AgentSpec`
+- `docs/agent_tool_plan.yaml` exists with `selected_tools[]` populated. Entries that need BYO IDs — Genie (`meta.genie_space_id`), Vector Search (`meta.endpoint`, `meta.index`), SQL MCP (`scope.catalog`, `scope.schema`, `meta.warehouse_id`, `scope.allowed_tables`), UC Functions (`target`), External MCP (`selected_mcp_servers[].uc_connection`) — must carry those IDs inside the Tool Plan itself. Entries the user omitted are skipped, not failed.
+- `ka_endpoint_name` is captured in state ONLY when `knowledge_assistant_create` (input_id 202) ran (i.e. KA was selected); otherwise the KA tool family is skipped.
+- `warehouse_id` and `lakebase_host` captured in state from earlier prompts (`workspace_setup_deploy` and the Lakebase steps).
+- `docs/agent_spec.yaml` exists with `tool_recommendations` populated (loose recommendations from step 38; not a binding selection). Final binding selections live in `docs/agent_tool_plan.yaml.selected_tools[]` — that is the canonical source consumed by this prompt. `agent.tools[]` is NOT a required field of the Agent Spec; it is a state-projection field populated by `vibecoding-state.hydrate_from_files` from `tool_recommendations` overlaid by `selected_tools` (see `genai-agents/vibecoding-state/SKILL.md` § *Operation: hydrate_from_files*).
+- BYO tool IDs (`genie_space_id`, Vector Search endpoint/index, UC Function names, external MCP UC connection) come from `docs/agent_tool_plan.yaml`, NOT from rendered globals like `{genie_space_id}`.
 
 ### Steps to Apply
 1. New thread in your Coding Assistant, paste prompt.
 2. AI generates `tools/ka.py`, `tools/genie.py`, plus one file per UC-function tool, registers each as `@function_tool` on the canonical `Agent(...)`.
 3. AI patches `databricks.yml` and `app.yaml` with the three resource grants (KA `CAN_QUERY`, Genie `CAN_RUN`, warehouse `CAN_USE`).
-4. AI runs a smoke test against every tool declared in `state://AgentSpec.agent.tools[]` in the local dev server and confirms TOOL spans show up in MLflow.',
+4. AI runs a smoke test against every tool declared in `docs/agent_tool_plan.yaml.selected_tools[]` (the canonical, binding tool list — `agent.tools[]` is a state-projection field, not the source of truth) in the local dev server and confirms TOOL spans show up in MLflow.
+
+---
+
+## 2️⃣ What Are We Building?
+
+We are wiring the agent''s **5 tool families** as `@function_tool`-decorated Python functions, each backed by a Databricks-managed resource. The grant chain (`databricks.yml` + `app.yaml`) is declared once and the App inherits it via `valueFrom`.
+
+```
+                        Agent (OpenAI Agents SDK)
+                                  │
+        ┌──────────┬──────────────┼──────────────┬──────────────┐
+        ▼          ▼              ▼              ▼              ▼
+   @function     @function    @function      @function      @function
+     _tool         _tool        _tool          _tool          _tool
+        │          │              │              │              │
+        ▼          ▼              ▼              ▼              ▼
+   KA endpoint  Genie Space  UC Function   SQL MCP       External MCP
+   (CAN_QUERY)  (CAN_RUN)   (EXECUTE)      (CAN_USE      (UC connection)
+                                            warehouse)
+        │          │              │              │              │
+        └──────────┴──────────────┼──────────────┴──────────────┘
+                                  ▼
+                    databricks.yml: serving_endpoints, genie_space,
+                    sql_warehouse, uc_functions, uc_connections
+                    app.yaml: valueFrom: <resource_name>
+```
+
+### Key Concepts
+
+| Concept | What It Means | Why It Matters |
+|---------|---------------|----------------|
+| **`@function_tool`** | OpenAI Agents SDK decorator that registers a Python function as a callable tool the agent can choose | One decorator per declared tool; the SDK handles JSON schema and dispatch |
+| **Resource grants in `databricks.yml`** | Bundle resources (`serving_endpoints`, `genie_space`, `sql_warehouse`, `uc_functions`, `uc_connections`) declared with permission (`CAN_QUERY`, `CAN_RUN`, `EXECUTE`, `CAN_USE`) | DAB applies the grants once; the App picks them up via `valueFrom` |
+| **`app.yaml` `valueFrom`** | Resource references in `app.yaml` that resolve at deploy time to the bundled grant | The agent code never embeds endpoint names or credentials — the platform injects them |
+| **SQL MCP read-only guardrails** | Each SQL MCP tool enforces `SELECT/DESCRIBE/EXPLAIN` only and requires fully-qualified `catalog.schema.table` references | An agent prompt cannot exfil-write or wander into the wrong namespace |
+| **Skipped vs. failed** | Tool families absent from `selected_tools[]` (e.g. KA when not selected) are explicitly marked skipped; the agent code conditionally registers tools | `Skipped — KA not selected` is a clean state the gate accepts |
+
+---
+
+## 3️⃣ Why Are We Building It This Way? (Databricks Best Practices)
+
+| Practice | How It''s Used Here |
+|----------|--------------------|
+| **One `@function_tool` per declared tool** | Every entry in `docs/agent_tool_plan.yaml.selected_tools[]` (the canonical, binding tool list) materializes as a Python decorator the SDK can call. The 1:1 mapping makes it trivial to verify nothing is missing — count entries in `selected_tools[]`, count `@function_tool` definitions, count TOOL spans in the smoke run. `agent.tools[]` is a state-projection field populated by `vibecoding-state.hydrate_from_files`; do NOT count or smoke-test against it. |
+| **Resource grants live in `databricks.yml`** | Never inline-create resources from Python. The bundle declares `CAN_QUERY` / `CAN_RUN` / `CAN_USE` once and the app inherits via `valueFrom`. Permissions become part of the deploy contract, not a runtime side-effect. |
+| **Read-only SQL guardrails** | Every SQL MCP tool enforces `SELECT/DESCRIBE/EXPLAIN` only and requires fully-qualified `catalog.schema.table` references. Guardrails are pinned in `selected_tools[].guardrails`, so the wire-tools skill cannot accidentally relax them. |
+| **Skipped ≠ failed** | Tool families absent from `selected_tools[]` (e.g. KA when not selected) are explicitly marked skipped; the agent code conditionally registers tools so a missing KA never breaks startup. |
+| **Verify by trace** | TOOL spans for every wired tool must appear in MLflow before exiting the gate. The verification is end-to-end: if the trace is missing, the wiring failed even when no Python error was raised. |
+
+---
+
+## 4️⃣ What Happens Behind the Scenes?
+
+The skill (`03-tools-and-mcp`) walks 6 ordered phases against `docs/agent_spec.yaml`, `docs/agent_tool_plan.yaml`, and the AppKit + Lakebase state from steps 04-07. `state://DataSpec` is optional — only consulted when the Lakehouse track has produced one:
+
+| Phase | What Happens | Key Output |
+|-------|--------------|------------|
+| **Phase 0** | `vibecoding-state` op `enter` confirms `Agent framework live` | Build context |
+| **Phase 1** | Read `docs/agent_tool_plan.yaml` `selected_tools[]`, `selected_mcp_servers[]`, `resource_grants` | Tool list |
+| **Phase 2** | Generate `tools/{ka,genie,sql,uc_functions,external_mcp}.py` — one `@function_tool` per declared tool; conditional skip for unselected families | Tool modules |
+| **Phase 3** | Patch `databricks.yml`: declare `serving_endpoints` (KA + model `CAN_QUERY`), `genie_space` (`CAN_RUN`), `sql_warehouse` (`CAN_USE`), `uc_functions` (`EXECUTE`), `uc_connections` (external MCP) | Bundle resources |
+| **Phase 4** | Patch `app.yaml`: `valueFrom` references to each declared resource; OAuth scopes from `resource_grants.app_yaml_oauth_scopes` | App resource refs |
+| **Phase 5** | Smoke each tool in the local dev server (read-only SQL, KA query, Genie ask, UC function call) | Smoke pass |
+| **Phase 6** | Verify MLflow trace shows TOOL spans for every wired tool; skipped families recorded as skipped, not failed | TOOL spans visible |
+
+### Gate Contract
+
+| Reads gate | Produces gate | Captured state |
+|------------|---------------|----------------|
+| `Agent framework live` (from `track_a_agent_app_clone_framework`) | `Tools wired` (consumed by 45) | (no new state captured beyond the wired tool inventory in MLflow) |',
 '### Resources Created
-- [ ] One `@function_tool` per entry in `state://AgentSpec.agent.tools[]`
-- [ ] KA tool wired against `{ka_endpoint_name}`
-- [ ] Genie tool wired against `{genie_space_id}`
-- [ ] `databricks.yml` declares serving_endpoint + genie_space + sql_warehouse resources with correct permissions
-- [ ] `app.yaml` references those resources via `valueFrom`
-- [ ] MLflow traces show TOOL spans for every wired tool',
+
+The bullets below are conditional — each one applies **only** when the matching family is present in `docs/agent_tool_plan.yaml`. Families that are absent (or whose `selected: false`) are recorded as skipped, not failed. The model-route bullets are unconditional because every agent has a model route.
+
+Always-applicable:
+- [ ] One `@function_tool` per entry in `docs/agent_tool_plan.yaml.selected_tools[]`; one tool module file per family that has at least one selected entry (e.g. `tools/genie.py` only when Genie was selected). Skipped families are recorded as skipped, not failed (no empty-stub modules).
+- [ ] `databricks.yml` carries the union of `docs/agent_tool_plan.yaml.resource_grants.databricks_yml.*` entries verbatim — no extra grants, no missing grants.
+- [ ] `app.yaml` references each declared bundle resource via `valueFrom` and includes the OAuth scopes from `docs/agent_tool_plan.yaml.resource_grants.app_yaml_oauth_scopes`.
+- [ ] MLflow traces show one TOOL span per wired tool family. The skipped-vs-failed distinction is observable: skipped families produce zero TOOL spans and are absent from the trace; failed families produce error spans.
+
+Conditional on Tool Plan selection:
+- [ ] **If `docs/agent_tool_plan.yaml.knowledge_assistant.selected == true`**: KA tool wired against the `ka_endpoint_name` captured by step 42; `databricks.yml` grants `CAN_QUERY` on that endpoint; KA TOOL span visible in the smoke trace.
+- [ ] **If any `selected_tools[].type == "genie"`**: Genie tool wired against the `meta.genie_space_id` declared in that entry; `databricks.yml` grants `CAN_RUN` on the Genie Space; Genie TOOL span visible.
+- [ ] **If any `selected_mcp_servers[].type == "sql"` or any `selected_tools[].type == "sql_mcp"`**: SQL MCP tool wired with read-only guardrails (`SELECT, DESCRIBE, EXPLAIN` only; fully qualified `catalog.schema.table` references); `databricks.yml` grants `CAN_USE` on the warehouse and `USE_CATALOG` / `USE_SCHEMA` / `SELECT` on each table in `selected_mcp_servers[].scope.allowed_tables`; SQL TOOL span visible.
+- [ ] **If any `selected_tools[].type == "vector_search"`**: Vector Search tool wired against `meta.endpoint` + `meta.index`; `databricks.yml` grants `CAN_USE` on the Vector Search endpoint; Vector Search TOOL span visible.
+- [ ] **If any `selected_tools[].type == "uc_function"`**: One `@function_tool` per declared UC function with `target` matching the fully qualified function name; `databricks.yml` grants `EXECUTE` on each (or relies on the agent-schema grant from step 40); UC Function TOOL spans visible.
+- [ ] **If any `selected_mcp_servers[].type == "external"`**: External MCP tool wired against the declared UC connection or registry-backed candidate; `databricks.yml` grants `CAN_USE` on the UC connection; external MCP TOOL span visible.
+
+Model route (always applicable):
+- [ ] `databricks.yml` declares one `serving_endpoints[]` entry whose `name` is the SCALAR value at `docs/agent_tool_plan.yaml.runtime_config.llm.endpoint` (e.g. `"databricks-claude-sonnet-4-6"`) with `permission: "CAN_QUERY"`. The endpoint name MUST NOT be the literal YAML-path string `docs/agent_spec.yaml.agent.model` or `docs/agent_tool_plan.yaml.runtime_config.llm.endpoint`.
+- [ ] The selected model endpoint is exposed to the Agent App as the `llm_endpoint` key in `config.yml` / `ModelConfig`, again populated from the scalar value (not the YAML path).',
 true, 1, true, current_timestamp(), current_timestamp(), current_user());
 
--- Step 43 / order 43: Phase 2 / Agent Build - Auth + Lakebase Memory
+-- Step 45 / order 45: Phase 2 / Agent Build - Auth + Lakebase Memory
 INSERT INTO ${catalog}.${schema}.section_input_prompts 
 (input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
 VALUES
 (205, 'track_a_agent_auth_memory',
-'Add service-principal + on-behalf-of (OBO) authentication AND short-term + long-term Lakebase memory to the **{use_case_slug}** Track A agent.
+'Configure on-behalf-of (OBO) auth via `x-forwarded-access-token` plus persistent two-layer memory backed by `{lakebase_instance}` / `{lakebase_database}` for the **{use_case_slug}** agent. Today the cloned `{agent_app_name}` runs as service-principal only with no per-request memory; after this prompt runs, OBO is wired inside the `@invoke`/`@stream` handlers (with SP fallback for background paths), `user_api_scopes` is declared in `app.yaml`, short-term memory keeps multi-turn coherence, and long-term memory recalls user-stated facts across new threads.
+
+This will involve the following steps:
+
+- **Wire OBO in the handlers** — call `get_user_workspace_client(http_request)` inside `@invoke` / `@stream` so each user request gets its own scoped Databricks client
+- **Declare `user_api_scopes`** — write the OAuth scopes the agent needs (`serving.serving-endpoints`, `sql`, `unity-catalog`, plus `dashboards.genie` / `catalog.connections` if selected) into `app.yaml`
+- **Provision short-term memory** — use `AsyncDatabricksSession` against `{lakebase_database}` keyed on `thread_id` for last-N message coherence
+- **Provision long-term memory** — use `LongTermMemory` with `databricks-gte-large-en` (1024 dims) keyed on `user_id` so facts recall across new threads
+- **Pre-LLM search + post-LLM persist** — search long-term memory before the LLM call and persist extracted facts after, so the agent never re-asks for facts the user already shared
+- **Smoke-test memory** — verify same-thread turn 2 references turn 1, and a fact stated in thread A is recalled in a fresh thread B for the same user
+
+**How this prompt chains with the prior step (skill invocations):**
 
 **Invoke skills (in order):**
 
@@ -9529,7 +10504,7 @@ VALUES
    - `app_level_auth: "service_principal"`
    - `user_level_auth: "obo"`
    - `obo_helper: "databricks_app.utils.get_user_workspace_client"` (called inside `@invoke` / `@stream` handlers)
-   - `user_api_scopes: ["serving.serving-endpoints", "dashboards.genie", "sql.statement-execution", "catalog.connections"]`
+   - `user_api_scopes:` derived from `docs/agent_tool_plan.yaml.resource_grants.app_yaml_oauth_scopes`, with default fallback `["serving.serving-endpoints", "sql", "unity-catalog"]`. If Genie is selected, include `dashboards.genie`. If external MCP UC connections are selected, include `catalog.connections`.
    - `reuse_detect_environment_helper: true`
    - `verification: ["obo_local", "sp_local", "user_api_scopes_in_app_yaml"]`
 3. @genai-agents/tracks/A-custom-agent-apps/05-lakebase-memory/SKILL.md — params:
@@ -9552,8 +10527,8 @@ VALUES
 '',
 'Phase 2 / Agent Build — Auth + Lakebase Memory',
 'Add SP + OBO auth and short-term + long-term Lakebase memory to the agent',
-43,
-'## How To Apply
+45,
+'## 1️⃣ How To Apply
 
 Open a **new Agent thread in your Coding Assistant** and paste the prompt above. The AI runs `04-authentication` then `05-lakebase-memory` end-to-end in one pass.
 
@@ -9565,7 +10540,81 @@ Open a **new Agent thread in your Coding Assistant** and paste the prompt above.
 1. New thread in your Coding Assistant, paste prompt.
 2. The AI implements OBO via `get_user_workspace_client(http_request)` inside `@invoke`/`@stream`, declares `user_api_scopes` in `app.yaml`, and verifies both OBO + SP locally.
 3. The AI then adds the two-layer Lakebase memory: short-term `AsyncDatabricksSession` per-thread + long-term `LongTermMemory` with `databricks-gte-large-en` embeddings.
-4. Runs a multi-turn local smoke test that proves persistence both within and across threads.',
+4. Runs a multi-turn local smoke test that proves persistence both within and across threads.
+
+---
+
+## 2️⃣ What Are We Building?
+
+We are wiring **on-behalf-of (OBO) authentication** so the agent acts as the calling user, with **service-principal (SP) fallback** for background paths — and adding **two-layer Lakebase memory** so multi-turn coherence and cross-thread recall both work.
+
+```
+HTTP request                                    Two-layer Lakebase memory
+┌─────────────────────────────┐                ┌──────────────────────────────┐
+│ x-forwarded-access-token    │                │ Short-term (per-thread)      │
+│   (OBO — end-user identity) │                │  AsyncDatabricksSession      │
+│                             │                │  Last N messages, current    │
+│ @invoke / @stream handler   │  ──────────►   │  chain-of-thought            │
+│   ↓                         │                │                              │
+│ get_user_workspace_client(  │                │ Long-term (cross-thread)     │
+│   http_request)             │                │  LongTermMemory              │
+│   ↓                         │                │  databricks-gte-large-en     │
+│ user_api_scopes (app.yaml): │                │  embeddings (1024 dims)      │
+│  serving.serving-endpoints, │                │  Recall by semantic search   │
+│  sql, unity-catalog,        │                │                              │
+│  dashboards.genie (if Genie)│                │ Both keyed on thread_id +    │
+└─────────────────────────────┘                │  user_id (OBO-derived)       │
+            │                                  └──────────────────────────────┘
+            ▼ falls back to                              ▲
+    Service-Principal (SP)                               │
+    (background tasks, no user)                          │
+                                                  Pre-LLM search +
+                                                  Post-LLM persist facts
+```
+
+### Key Concepts
+
+| Concept | What It Means | Why It Matters |
+|---------|---------------|----------------|
+| **OBO** | On-behalf-of auth — the agent uses `x-forwarded-access-token` to act as the calling end-user | Tools (KA, Genie, SQL) enforce the user''s UC permissions; the agent cannot escalate beyond them |
+| **SP fallback** | Module-level `WorkspaceClient` is service-principal-backed for non-user paths (background, healthcheck) | Module-level construction has no `http_request`; SP keeps non-user code paths working |
+| **`user_api_scopes`** | OAuth scopes declared in `app.yaml` (`serving.serving-endpoints`, `sql`, `unity-catalog`, optionally `dashboards.genie`, `catalog.connections`) | The platform issues a user token with exactly the scopes the agent needs |
+| **`AsyncDatabricksSession`** | Short-term memory primitive bound to `thread_id` — last N messages + current chain-of-thought | Same-thread turn 2 references turn 1; per-request OBO scoping means memory respects user identity |
+| **`LongTermMemory`** | Cross-thread store using `databricks-gte-large-en` embeddings (1024 dims), keyed on `user_id` | Recalls user-stated facts across new threads; pre-LLM search injects relevant memory into context, post-LLM persist writes new facts back |
+
+---
+
+## 3️⃣ Why Are We Building It This Way? (Databricks Best Practices)
+
+| Practice | How It''s Used Here |
+|----------|--------------------|
+| **OBO inside handlers, SP at module level** | `get_user_workspace_client(http_request)` is called *inside* `@invoke` / `@stream` so each user request gets its own scoped client; module-level `WorkspaceClient` is SP-backed for non-user paths (background tasks, health probes). |
+| **Declared `user_api_scopes`** | Every OAuth scope the agent needs at user level is declared in `app.yaml` so the platform issues the right token. Genie selects `dashboards.genie`; external MCP UC connections add `catalog.connections`. |
+| **Two-layer memory by default** | Short-term gives turn-to-turn coherence; long-term gives cross-conversation recall. Both layers live in Lakebase, so identity, encryption, and backup come for free. |
+| **Pre-LLM search, post-LLM persist** | Long-term memory is searched *before* the LLM call (results inserted into context) and persisted *after* (extracted facts written back). The agent never re-asks for facts the user already shared. |
+| **Graceful degradation** | A Lakebase outage does not crash the agent; the memory layer logs the error and the agent continues with empty memory. Availability is preserved over recall. |
+
+---
+
+## 4️⃣ What Happens Behind the Scenes?
+
+Two skills run end-to-end (`04-authentication` then `05-lakebase-memory`) over 7 phases:
+
+| Phase | What Happens | Key Output |
+|-------|--------------|------------|
+| **Phase 0** | `vibecoding-state` op `enter` confirms `Tools wired` | Auth context |
+| **Phase 1** | Install `get_user_workspace_client(http_request)` helper inside `@invoke` / `@stream` | OBO helper wired |
+| **Phase 2** | Declare `user_api_scopes` in `app.yaml` from `agent_tool_plan.resource_grants.app_yaml_oauth_scopes` (default `["serving.serving-endpoints", "sql", "unity-catalog"]`; +`dashboards.genie` if Genie selected; +`catalog.connections` if external MCP UC connections selected) | Scopes declared |
+| **Phase 3** | Verify both OBO + SP flows pass local probes (`obo_local`, `sp_local`, `user_api_scopes_in_app_yaml`) | Auth verified |
+| **Phase 4** | Wire short-term `AsyncDatabricksSession` per-thread; `thread_id_resolver: "request.custom_inputs.thread_id || request.conversation_id"` | Short-term store live |
+| **Phase 5** | Wire long-term `LongTermMemory` with `databricks-gte-large-en` (1024 dims); pre-LLM search, post-LLM persist; OBO-scoped sessions instantiated inside `@invoke` | Long-term store live |
+| **Phase 6** | Multi-turn smoke test (turn 2 references turn 1) + cross-thread recall test (fact stated in thread A is recalled in thread B for same user) | Memory verified |
+
+### Gate Contract
+
+| Reads gate | Produces gate | Captured state |
+|------------|---------------|----------------|
+| `Tools wired` (from `track_a_agent_ka_genie_tools`) | `Auth + Memory verified` (consumed by 46) | `lakebase_instance`, `lakebase_database`, `embedding_endpoint`, `thread_id_strategy` |',
 '### Resources Created
 - [ ] `user_api_scopes` declared in `app.yaml`
 - [ ] OBO + SP both verified locally
@@ -9574,12 +10623,21 @@ Open a **new Agent thread in your Coding Assistant** and paste the prompt above.
 - [ ] `lakebase_instance`, `lakebase_database`, `embedding_endpoint`, `thread_id_strategy` captured in state',
 true, 1, true, current_timestamp(), current_timestamp(), current_user());
 
--- Step 44 / order 44: Phase 2 / Agent Build - Smoke Eval + Deploy
+-- Step 46 / order 46: Phase 2 / Agent Build - Smoke Eval + Deploy
 INSERT INTO ${catalog}.${schema}.section_input_prompts 
 (input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
 VALUES
 (206, 'track_a_agent_eval_deploy',
-'Run developer-loop smoke evaluations, then deploy the **{use_case_slug}** Track A agent to Databricks Apps and verify it is queryable end-to-end.
+'Run the smoke eval suite against the wired **{use_case_slug}** agent and deploy `{agent_app_name}` to Databricks Apps. Today the agent runs only locally; after this prompt runs, the smoke gate has either passed or fail-closed-blocked, the agent is deployed via `databricks bundle deploy`, three post-deploy probes (curl, Python SDK, MLflow trace at `{mlflow_experiment_path}`) succeed, and `databricks apps get` reports `RUNNING`.
+
+This will involve the following steps:
+
+- **Load smoke cases** — read `governance.verification.smoke_test_cases[]` from the agent spec into `tests/eval_dataset.json`
+- **Run the smoke eval** — execute `uv run agent-evaluate` against the configured `runtime_config.llm` route and write per-case pass/fail to MLflow
+- **Apply fail-closed conditions** — refuse to advance if any L1 scorer is below floor, `correctness/mean` is below floor, any tool returns `UNRESOLVED_COLUMN` / `TABLE_OR_VIEW_NOT_FOUND` / permission-denied / empty output, or any open known issue targets `first_scored_eval`
+- **Bundle-deploy the agent app** — run `databricks bundle deploy` then `databricks apps deploy {agent_app_name}` so app code and resource grants from the Tool Plan deploy together
+- **Run three post-deploy probes** — curl `/invocations`, Python SDK invoke, and confirm production traces appear at `{mlflow_experiment_path}`
+- **Verify platform health** — confirm `databricks apps get "{agent_app_name}"` reports `RUNNING` before producing the gate
 
 This prompt maps to the canonical `local_eval_smoke` role. The smoke Gate **fails closed** — `exit` MUST refuse to write `Agent App RUNNING` (and instead emit `Smoke regressed — block`) if any of the following hold:
 
@@ -9588,6 +10646,8 @@ This prompt maps to the canonical `local_eval_smoke` role. The smoke Gate **fail
 - Any tool call in the smoke run produces `UNRESOLVED_COLUMN`, `TABLE_OR_VIEW_NOT_FOUND`, a permission denied error, or empty tool output.
 - `mlflow_eval_known_quality_issues[]` contains an open item targeting `first_scored_eval` (i.e. a known regression that the smoke run is expected to surface but currently masks).
 
+**How this prompt chains with the prior step (skill invocations):**
+
 **Invoke skills (in order):**
 
 1. `genai-agents/vibecoding-state` op `enter` — params: `prompt_id: "track_a_agent_eval_deploy"`, `require_prior_gate: {prompt_id: "track_a_agent_auth_memory", gate: "Auth + Memory verified"}`.
@@ -9595,22 +10655,25 @@ This prompt maps to the canonical `local_eval_smoke` role. The smoke Gate **fail
    - `agent_name: "{agent_app_name}"`
    - `agent_spec_ref: "state://AgentSpec"`
    - `mlflow_experiment_path: "{mlflow_experiment_path}"`
+   - `runtime_model_ref: "docs/agent_tool_plan.yaml.runtime_config.llm"`
    - `runner_cmd: "uv run agent-evaluate"`
    - `dataset_path: "tests/eval_dataset.json"`
    - The skill reads `governance.verification.smoke_test_cases[]` for the developer-loop test cases.
 3. @genai-agents/tracks/A-custom-agent-apps/07-deploy-and-query/SKILL.md — params:
    - `agent_name: "{agent_app_name}"`
    - `target: "databricks_apps"`
+   - `runtime_model_ref: "docs/agent_tool_plan.yaml.runtime_config.llm"`
+   - `ai_gateway_required: false`
    - `post_deploy_checks: ["curl_query", "python_sdk_query", "traces_visible_in_mlflow"]`
 4. **Inline verification:** `databricks apps get "{agent_app_name}" --output json | jq -r ''.status.state''` must return `RUNNING` before exit.
 5. `genai-agents/vibecoding-state` op `exit` — params: `prompt_id: "track_a_agent_eval_deploy"`, `gate: "Agent App RUNNING"`, `captured: {agent_app_url, agent_app_name}`. `exit` re-evaluates the four fail-closed conditions above; any positive condition flips the Gate to `Smoke regressed — block` and refuses to advance.
 
-**Gate:** `Agent App RUNNING` — smoke eval pass/fail visible in MLflow AND none of the four fail-closed conditions above are tripped (no L1 scorer below floor, `correctness/mean` at or above floor, no `UNRESOLVED_COLUMN` / `TABLE_OR_VIEW_NOT_FOUND` / permission denied / empty tool output, no open `mlflow_eval_known_quality_issues[]` targeting `first_scored_eval`); agent app deployed; curl + Python SDK calls against `<agent_app_url>/invocations` succeed; traces from the deployed app show up at `{mlflow_experiment_path}`.',
+**Gate:** `Agent App RUNNING` — smoke eval pass/fail visible in MLflow AND none of the four fail-closed conditions above are tripped (no L1 scorer below floor, `correctness/mean` at or above floor, no `UNRESOLVED_COLUMN` / `TABLE_OR_VIEW_NOT_FOUND` / permission denied / empty tool output, no open `mlflow_eval_known_quality_issues[]` targeting `first_scored_eval`); agent app deployed; curl + Python SDK calls against `<agent_app_url>/invocations` succeed; traces from the deployed app show up at `{mlflow_experiment_path}`. The deployed app uses the configured model route from `runtime_config.llm`; the core gate does not create, configure, or require AI Gateway.',
 '',
 'Phase 2 / Agent Build — Smoke Eval + Deploy',
 'Run developer-loop smoke evaluation, deploy the agent to Databricks Apps, verify queryable end-to-end',
-44,
-'## How To Apply
+46,
+'## 1️⃣ How To Apply
 
 Open a **new Agent thread in your Coding Assistant** and paste the prompt above. The AI runs `06-evaluation` then `07-deploy-and-query` and finishes with the explicit `databricks apps get` health check before exiting state.
 
@@ -9622,7 +10685,88 @@ Open a **new Agent thread in your Coding Assistant** and paste the prompt above.
 1. New thread in your Coding Assistant, paste prompt.
 2. AI executes `uv run agent-evaluate` against `tests/eval_dataset.json` and writes per-test pass/fail to MLflow.
 3. AI builds + uploads the app via Databricks Asset Bundles, redeploys, then runs the three post-deploy probes (curl, SDK, traces).
-4. Final inline check: `databricks apps get` reports `RUNNING`.',
+4. Final inline check: `databricks apps get` reports `RUNNING`.
+
+---
+
+## 2️⃣ What Are We Building?
+
+We are running the **fail-closed smoke eval + deploy gate** that closes Track A. The smoke run refuses to advance on **any** of four conditions; the deploy then proves the running app is reachable through three probes before the gate fires `Agent App RUNNING`.
+
+```
+Smoke run (uv run agent-evaluate, tests/eval_dataset.json)
+                │
+                ▼
+   ┌────────────────────────────┐
+   │ Fail-closed conditions:    │
+   │  1. L1 scorer below floor? │   ANY YES ──► Gate: Smoke regressed - block
+   │  2. correctness < floor?   │              (refuse to deploy)
+   │  3. UNRESOLVED_COLUMN /    │
+   │     TABLE_NOT_FOUND /      │
+   │     permission denied /    │
+   │     empty tool output?     │
+   │  4. open known issue       │
+   │     targeting first_eval?  │   ALL NO  ──► proceed
+   └────────────────────────────┘                │
+                                                 ▼
+                                  databricks bundle deploy + apps deploy
+                                                 │
+                                                 ▼
+                              Three post-deploy probes:
+                                curl <agent_app_url>/invocations
+                                Python SDK invoke
+                                traces visible at {mlflow_experiment_path}
+                                                 │
+                                                 ▼
+                              databricks apps get reports RUNNING
+                                                 │
+                                                 ▼
+                                Gate: Agent App RUNNING
+```
+
+### Key Concepts
+
+| Concept | What It Means | Why It Matters |
+|---------|---------------|----------------|
+| **Smoke eval** | `uv run agent-evaluate` against `tests/eval_dataset.json`, reading `governance.verification.smoke_test_cases[]` from the spec | Developer-loop signal; the real scored eval happens in 50 |
+| **Fail-closed gate** | The gate refuses to advance on ANY of 4 conditions: L1 scorer below floor, `correctness/mean` below floor, tool errors (`UNRESOLVED_COLUMN`, `TABLE_OR_VIEW_NOT_FOUND`, permission denied, empty output), or open known issue targeting `first_scored_eval` | Quality regressions cannot ride a successful deploy into production |
+| **DAB-driven deploy** | `databricks bundle deploy` packages app + resources; nothing is deployed by hand | Bundle resources from 39 (`serving_endpoints`, `genie_space`, `sql_warehouse`, etc.) deploy together with the app code |
+| **Three post-deploy probes** | curl `/invocations`, Python SDK `invoke`, MLflow trace appears at `{mlflow_experiment_path}` | Independent paths verify the deployed app reaches users, automation, and observability |
+| **`databricks apps get` health check** | Final gate refuses to write `Agent App RUNNING` until the platform reports `RUNNING` | The platform''s own state is the source of truth, not local return codes |
+
+---
+
+## 3️⃣ Why Are We Building It This Way? (Databricks Best Practices)
+
+| Practice | How It''s Used Here |
+|----------|--------------------|
+| **Fail-closed by design** | The smoke gate refuses to advance on ANY of four conditions. Quality regressions cannot ride a successful deploy into production — the gate is built to refuse, not to negotiate. |
+| **Smoke ≠ full eval** | Smoke uses developer-loop test cases (`governance.verification.smoke_test_cases[]`); the real scored eval happens in 50. Smoke is fast and surfaces obvious regressions; it is not a quality bar. |
+| **Three deploy probes** | curl `/invocations`, Python SDK invoke, MLflow trace visible at `{mlflow_experiment_path}`. All three must pass before the gate fires — independent paths verify reachability for end-users, automation, and observability. |
+| **DAB-driven deploy** | `databricks bundle deploy` packages app + resources together; nothing is deployed by hand. Resource grants from the Tool Plan (39) are applied in the same bundle action as the app code. |
+| **`databricks apps get` health check** | The final gate refuses to write `Agent App RUNNING` until the platform reports `RUNNING`. The platform''s own state machine is the truth, not the local return code of `apps deploy`. |
+
+---
+
+## 4️⃣ What Happens Behind the Scenes?
+
+Two skills run sequentially (`06-evaluation` then `07-deploy-and-query`) plus an inline platform health check, across 7 phases:
+
+| Phase | What Happens | Key Output |
+|-------|--------------|------------|
+| **Phase 0** | `vibecoding-state` op `enter` confirms `Auth + Memory verified` | Smoke context |
+| **Phase 1** | `uv run agent-evaluate --dataset tests/eval_dataset.json` against the configured `runtime_config.llm` route | Per-case pass/fail in MLflow |
+| **Phase 2** | Evaluate fail-closed conditions: L1 scorer floor, `correctness/mean` floor, tool errors, open known issues — ANY YES => `Smoke regressed - block` | Gate decision |
+| **Phase 3** | `databricks bundle deploy` packages app + resources from 39''s `databricks.yml` | Bundle deployed |
+| **Phase 4** | `databricks apps deploy {agent_app_name}` rolls the app to Databricks Apps | App rolling |
+| **Phase 5** | Three probes: `curl <agent_app_url>/invocations`, Python SDK `invoke`, MLflow trace appears at `{mlflow_experiment_path}` | Reachability verified |
+| **Phase 6** | Inline `databricks apps get "{agent_app_name}" --output json | jq -r ''.status.state''` must return `RUNNING` before exit | Platform health |
+
+### Gate Contract
+
+| Reads gate | Produces gate | Captured state |
+|------------|---------------|----------------|
+| `Auth + Memory verified` (from `track_a_agent_auth_memory`) | `Agent App RUNNING` OR `Smoke regressed - block` | `agent_app_url`, `agent_app_name` |',
 '### Resources Created
 - [ ] Smoke evaluation results in MLflow (pass/fail per test case)
 - [ ] Agent App deployed to Databricks Apps
@@ -9632,14 +10776,24 @@ Open a **new Agent thread in your Coding Assistant** and paste the prompt above.
 - [ ] `agent_app_url`, `agent_app_name` captured in state',
 true, 1, true, current_timestamp(), current_timestamp(), current_user());
 
--- Step 45 / order 45: Phase 3 / AppKit Integration - AppKit <-> Agent App Proxy
+-- Step 47 / order 47: Phase 3 / AppKit Integration - AppKit <-> Agent App Proxy
 INSERT INTO ${catalog}.${schema}.section_input_prompts 
 (input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
 VALUES
 (207, 'appkit_agent_app_proxy_chat',
-'Add a streaming chat page to the AppKit dashboard that proxies through to the Track A Agent App backend (NOT a Model Serving endpoint), preserving OBO via `x-forwarded-access-token` and dual-format streaming.
+'Wire the existing AppKit dashboard `{app_name}` to the separately-deployed Track A Agent App `{agent_app_name}` (running at `{agent_app_url}`) through an in-app `/api/chat` proxy. The Agent App is a Databricks App (FastAPI host with `/invocations`), not a Model Serving endpoint, so this uses a vanilla `server.extend()` proxy with OBO forwarding instead of the AppKit Serving plugin. Today the AppKit dashboard has no chat surface; after this prompt runs, `/chat` streams chat against the Agent App with the user''s OBO token forwarded byte-for-byte.
+
+This will involve the following steps:
+
+- **Declare the Agent App as `CAN_USE` resource** — patch `apps_lakebase/{app_name}/databricks.yml` to declare the Agent App as a bundle resource named `agent-backend`
+- **Expose `AGENT_APP_URL` in `app.yaml`** — bind `AGENT_APP_URL` via `valueFrom: agent-backend` so swapping environments (dev/staging/prod) requires no code change
+- **Write the `server.extend()` proxy** — add `POST /api/chat` that forwards `x-forwarded-access-token` verbatim and bridges Agent-App SSE into the format the AppKit chat page understands
+- **Mount the chat page** — wire the AppKit chat React page at `/chat` to consume the proxy stream
+- **Run the 3-probe e2e test** — direct agent / AppKit SP-only / AppKit with forwarded OBO must all pass to prove the auth wiring is correct
 
 **First:** Read `apps_lakebase/$APP_NAME/.vibecoding-state.md` if it exists — it contains the AppKit app identity (`APP_NAME`) and Lakebase values from prior phases.
+
+**How this prompt chains with the prior step (skill invocations):**
 
 **Invoke skills (in order):**
 
@@ -9662,8 +10816,8 @@ VALUES
 '',
 'Phase 3 / AppKit Integration — AppKit ↔ Agent App Proxy (streaming chat)',
 'Wire AppKit dashboard to a Databricks Agent App via server.extend() proxy with SP + OBO and dual-format streaming',
-45,
-'## How To Apply
+47,
+'## 1️⃣ How To Apply
 
 Open a **new Agent thread in your Coding Assistant** and paste the prompt above. This installs the new `06d-appkit-agent-app-proxy` skill which is purpose-built for Agent App backends — distinct from the legacy Serving plugin which only targets Model Serving endpoints.
 
@@ -9676,7 +10830,74 @@ Open a **new Agent thread in your Coding Assistant** and paste the prompt above.
 2. AI patches `apps_lakebase/{app_name}/databricks.yml` to declare the Agent App as a `CAN_USE` resource named `agent-backend`.
 3. AI patches `app.yaml` to expose `AGENT_APP_URL` via `valueFrom`.
 4. AI generates the `server.extend()` proxy at `/api/chat` that forwards `x-forwarded-access-token` and bridges the dual-format SSE stream to the AppKit chat page at `/chat`.
-5. AI runs the 3-probe e2e script to confirm the proxy works end-to-end.',
+5. AI runs the 3-probe e2e script to confirm the proxy works end-to-end.
+
+---
+
+## 2️⃣ What Are We Building?
+
+We are wiring an existing AppKit dashboard to a separately-deployed **Track A Agent App** through an in-app proxy route. The Agent App is a Databricks App (FastAPI host with `/invocations`), not a Model Serving endpoint, so we do **not** use the AppKit Serving plugin. Instead, the AppKit backend extends its FastAPI server with a `/api/chat` route that forwards the user''s OBO token and bridges Agent-App SSE into the format the AppKit chat page understands.
+
+```
+Browser (user)                    AppKit App                  Agent App (Track A)
+┌──────────┐    /chat            ┌──────────────────┐       ┌────────────────────┐
+│ Chat UI  │ ─────────────────►  │ React page +     │       │ FastAPI host       │
+│          │                     │  /api/chat route │       │  /invocations      │
+│          │  SSE stream         │   (server.extend)│       │  @invoke / @stream │
+│          │ ◀─────────────────  │  ┌────────────┐  │       │                    │
+└──────────┘                     │  │ proxy      │  │       └────────────────────┘
+                                 │  │ x-forwarded│  │ ───►  databricks.yml:
+                                 │  │ -access-   │  │       resources:
+                                 │  │   token    │  │         agent-backend:
+                                 │  │ verbatim   │  │           type: app
+                                 │  └────────────┘  │           permission: CAN_USE
+                                 └──────────────────┘       app.yaml:
+                                                              AGENT_APP_URL:
+                                                                valueFrom: agent-backend
+```
+
+### Key Concepts
+
+| Concept | What It Means | Why It Matters |
+|---------|---------------|----------------|
+| **server.extend() proxy** | Vanilla FastAPI route added by AppKit''s extension hook | Only path that supports an Agent App backend; the Serving plugin only targets Model Serving |
+| **`x-forwarded-access-token`** | Header AppKit injects with the end user''s OBO token | Verbatim forwarding lets the Agent App act as the user, not the AppKit SP |
+| **`agent-backend` resource** | A `databricks.yml` `app` resource with `CAN_USE` permission | Materializes the trust relationship in the bundle; `databricks bundle deploy` provisions the grant |
+| **`valueFrom: agent-backend`** | `app.yaml` env binding that resolves to the resource''s URL | Swap dev/staging/prod by changing the bundle target — no code edit |
+| **Dual-format streaming** | Agent App emits one SSE shape; AppKit chat expects another | Proxy translates per-event so the existing chat UI renders without a rewrite |
+| **3-probe e2e** | Direct agent / AppKit-SP-only / AppKit-with-OBO | All three must pass to prove auth wiring; the SP-only probe catches missing-OBO bugs |
+
+---
+
+## 3️⃣ Why Are We Building It This Way? (Databricks Best Practices)
+
+| Practice | How It''s Used Here |
+|----------|--------------------|
+| **Vanilla `server.extend()` proxy** | The AppKit Serving plugin only targets Model Serving endpoints. The Agent App is a Databricks App, so we proxy app-to-app via a custom FastAPI route — no plugin shortcut. |
+| **Verbatim OBO forwarding** | `x-forwarded-access-token` is forwarded byte-for-byte; the Agent App reuses the end-user''s identity for tool calls, preserving UC RLS and audit trails. |
+| **Dual-format streaming bridge** | The proxy translates Agent-App SSE events into AppKit chat-page SSE events on the fly so the existing chat UI works without modification. |
+| **`valueFrom` indirection** | `AGENT_APP_URL` resolves through the `agent-backend` resource in `app.yaml`, so swapping deploy targets (dev/staging/prod) requires no code change — only a bundle target switch. |
+| **Three-probe smoke test** | Direct agent, AppKit-with-SP-only, AppKit-with-OBO; all three must pass before the gate fires. The SP-only probe catches the "forgot to forward the user token" failure mode. |
+
+---
+
+## 4️⃣ What Happens Behind the Scenes?
+
+When you paste the prompt, the AI walks the proxy install in five phases:
+
+| Phase | What the AI Does | Where It Writes |
+|-------|------------------|-----------------|
+| 1. Declare resource | Add `agent-backend` `app` resource with `CAN_USE` | `apps_lakebase/{app_name}/databricks.yml` |
+| 2. Expose env var | Bind `AGENT_APP_URL` via `valueFrom: agent-backend` | `apps_lakebase/{app_name}/app.yaml` |
+| 3. Write proxy route | `server.extend()` adds `POST /api/chat` that forwards `x-forwarded-access-token` and bridges SSE | AppKit backend extension module |
+| 4. Wire chat page | React chat page hits `/api/chat`; consumes proxy SSE | AppKit frontend route at `/chat` |
+| 5. Run 3-probe e2e | `test-agent-app-proxy.sh` hits direct agent, AppKit SP-only, AppKit-with-OBO | Smoke output captured before gate exit |
+
+### Gate Contract
+
+| Reads gate | Produces gate | Captured state |
+|------------|---------------|----------------|
+| `Agent App RUNNING` (from `track_a_agent_eval_deploy`, with `agent_app_url`, `agent_app_name`) | `AppKit ↔ Agent App proxy live` | `/chat` page renders streaming chat against the Agent App with OBO; 3-probe e2e green |',
 '### Resources Created
 - [ ] `apps_lakebase/{app_name}/databricks.yml` declares the Agent App as `agent-backend` resource
 - [ ] `app.yaml` exposes `AGENT_APP_URL` via `valueFrom: agent-backend`
@@ -9685,15 +10906,27 @@ Open a **new Agent thread in your Coding Assistant** and paste the prompt above.
 - [ ] 3-probe e2e test passes (direct agent, AppKit SP-only, AppKit with forwarded OBO)',
 true, 1, true, current_timestamp(), current_timestamp(), current_user());
 
--- Step 46 / order 46: Phase 3 / AppKit Integration - Chatbot Feedback -> MLflow Trace Assessments
+-- Step 48 / order 48: Phase 3 / AppKit Integration - Chatbot Feedback -> MLflow Trace Assessments
 INSERT INTO ${catalog}.${schema}.section_input_prompts 
 (input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
 VALUES
 (208, 'appkit_chat_feedback_mlflow',
-'Open the **expert-in-the-loop phase at the end-user level** of the agent SDLC story arc — "how do I involve experts?" — by routing every end-user click into the same monitoring + dataset pipeline that SME labels feed.
-Add chat history sidebar plus thumbs-up/down feedback controls to the AppKit dashboard. Capture every click as an MLflow trace assessment (`user_feedback`, `source_type=HUMAN`) so end-user signal flows back into the same monitoring + dataset pipeline as SME labels.
+'Add end-user feedback (👍 / 👎 + optional comment) on each chat response in the AppKit dashboard `{app_name}`, persisting every click as an MLflow trace `Assessment` (`user_feedback`, `source_type=HUMAN`) on the originating Agent App `{agent_app_name}` trace. This is the end-user EITL (Evaluator In The Loop) entry point: today there is no thumb / comment surface; after this prompt runs, chat history is persisted in Lakebase (`{lakebase_host}`), the AppKit chat page exposes thumb controls, the Agent App''s `/feedback` endpoint calls `mlflow.log_feedback(...)`, and the new feedback experiment lives at `{mlflow_feedback_experiment_path}`.
+
+This will involve the following steps:
+
+- **Add the chat history sidebar** — install OBO-scoped Lakebase chat persistence + sidebar navigation with ephemeral fallback when Lakebase is unreachable
+- **Plumb the `trace_id`** — return `trace_id` from `@invoke` and emit a final `{type: "done", trace_id}` SSE event from `@stream` so the chat page can anchor feedback to the right trace
+- **Expose `/feedback` on the Agent App** — wire the route that calls `mlflow.log_feedback(...)` with `Assessment(name="user_feedback", source_type="HUMAN", source_id=<user email via OBO>)`
+- **Wire the thumb controls** — add 👍 / 👎 buttons to the AppKit chat page that POST `{trace_id, value, dimension}` through the existing `/api/chat` proxy
+- **Persist feedback as MLflow assessments** — write to `{mlflow_feedback_experiment_path}` so end-user signal joins the same monitoring + dataset pipeline as SME labels and continuous-eval scorers
+- **Smoke-test the round-trip + idle** — send a turn, click 👎, refresh the trace, then wait 3–5 min idle and re-test to confirm wake-up resilience
+
+This prompt assumes the canonical two-app path: AppKit `/api/chat` → Agent App `/invocations` → MLflow trace. Do not switch to the legacy Serving plugin path.
 
 **First:** Read `apps_lakebase/$APP_NAME/.vibecoding-state.md` if it exists — it contains the AppKit app identity (`APP_NAME`) and Lakebase values from prior phases.
+
+**How this prompt chains with the prior step (skill invocations):**
 
 **Invoke skills (in order):**
 
@@ -9706,7 +10939,7 @@ Add chat history sidebar plus thumbs-up/down feedback controls to the AppKit das
    - `identity: "OBO"`
    - `auto_title: true`
    - `ephemeral_fallback: true`
-   - `streaming_proxy: "AppKit-native"` (proxy route streams via `AppKit.serving("agent").asUser(req).stream()` while persisting messages and capturing MLflow `trace_id` for feedback linking)
+   - `streaming_proxy: "two-app-agent-proxy"` (proxy route streams via `/api/chat` from `06d-appkit-agent-app-proxy`, forwards OBO to the Agent App, persists messages, and captures MLflow `trace_id` for feedback linking)
 3. @genai-agents/sdlc/04c-end-user-feedback/SKILL.md — params:
    - `agent_app_dir: "{agent_app_name}"`
    - `feedback_route: "/feedback"`
@@ -9733,8 +10966,8 @@ Add chat history sidebar plus thumbs-up/down feedback controls to the AppKit das
 '',
 'Phase 3 / AppKit Integration — Chatbot Feedback → MLflow Trace Assessments (Expert-in-the-Loop, End-User)',
 'Chat history sidebar + thumbs up/down captured as MLflow user_feedback assessments (HUMAN source)',
-46,
-'## How To Apply
+48,
+'## 1️⃣ How To Apply
 
 Open a **new Agent thread in your Coding Assistant** and paste the prompt above. This is the user-facing landing of the **expert-in-the-loop phase** — every end-user thumbs click becomes a `user_feedback` assessment (`source_type=HUMAN`) on the underlying MLflow trace, feeding the same monitoring + dataset pipeline as SME labels from `mlflow_agent_human_review`.
 
@@ -9748,7 +10981,88 @@ Open a **new Agent thread in your Coding Assistant** and paste the prompt above.
 2. AI installs `07-appkit-chat-history` (sidebar + per-conversation navigation + OBO identity + ephemeral fallback).
 3. AI installs `04c-end-user-feedback` on the Agent App side: returns `trace_id` from `@invoke`, emits a final `{type: "done", trace_id}` SSE event from `@stream`, exposes `/feedback` REST endpoint that calls `mlflow.log_feedback(...)`.
 4. AI installs `08-appkit-feedback` on the AppKit side: thumbs up/down controls bound to the `/feedback` REST endpoint with the matching contract.
-5. AI creates the `{mlflow_feedback_experiment_path}` experiment and runs the 👎 round-trip verification.',
+5. AI creates the `{mlflow_feedback_experiment_path}` experiment and runs the 👎 round-trip verification.
+
+---
+
+## 2️⃣ What Are We Building?
+
+We are turning every end-user thumbs click in the AppKit chat into an MLflow trace assessment so end-user signal lands in the **same** dataset pipeline that SME labels (Skill 53) and continuous-eval (Skill 56) feed off. The key plumbing is the `trace_id`: `@invoke` returns it in the response body; `@stream` emits a final `{type: "done", trace_id}` SSE event. The chat page captures it per turn and attaches it to the feedback POST. The proxy forwards OBO; the Agent App calls `mlflow.log_feedback(...)`.
+
+```
+@invoke returns trace_id        @stream emits {type:"done", trace_id} as final SSE event
+            │                                          │
+            └────────────────────┬─────────────────────┘
+                                 ▼
+            AppKit chat page captures trace_id per turn
+                                 │
+        User clicks thumbs-down  ▼
+            │            POST /api/feedback
+            ▼              { trace_id, value: false,
+                             dimension: "accuracy" | "helpfulness" | "relevance" }
+            │                    │
+            ▼                    ▼
+            Proxy forwards x-forwarded-access-token
+                                 │
+                                 ▼
+                  Agent App /feedback endpoint
+                                 │
+                                 ▼
+                  mlflow.log_feedback(
+                      trace_id=trace_id,
+                      assessment=Assessment(name="user_feedback",
+                                           value=False,
+                                           source=AssessmentSource(
+                                               source_type="HUMAN",
+                                               source_id=user_email)))
+                                 │
+                                 ▼
+                  MLflow trace UI shows assessment
+                  (joins benchmark + monitoring pipelines)
+```
+
+### Key Concepts
+
+| Concept | What It Means | Why It Matters |
+|---------|---------------|----------------|
+| **`user_feedback` assessment** | An MLflow `Assessment` named `user_feedback` with a boolean value | Same schema as SME labels; both sources roll up in dataset / monitoring queries |
+| **`source_type=HUMAN`** | Provenance flag that distinguishes humans from judges | End-user clicks are weighted alongside SME labels, not against scorer means |
+| **`trace_id` plumbing** | Returned from `@invoke`, emitted in the final `done` SSE event from `@stream` | Without it the feedback row has no anchor — it cannot join MLflow trace tables |
+| **Lakebase chat history** | OBO-scoped conversation persistence with ephemeral fallback | Survives app restarts; falls back to in-memory if Lakebase is unreachable |
+| **`mlflow.log_feedback(...)`** | Python API that writes an `Assessment` to a trace | Owned by Skill `04c-end-user-feedback` on the **agent-app side**; AppKit only POSTs |
+| **Idle resilience** | App survives 3-5 min idle and re-tests cleanly | Databricks Apps spin down when idle; the round-trip test must wake them and re-pass |
+
+---
+
+## 3️⃣ Why Are We Building It This Way? (Databricks Best Practices)
+
+| Practice | How It''s Used Here |
+|----------|--------------------|
+| **`source_type=HUMAN` for end-user signal** | End-user feedback joins SME labels in the same MLflow trace-assessment schema; both feed continuous-eval and dataset growth — there is no second pipeline to maintain. |
+| **`trace_id` plumbing** | `@invoke` returns `trace_id` in the response; `@stream` emits a final `{type: "done", trace_id}` SSE event so the front-end can attach feedback to the right trace. No magic correlation. |
+| **Idle resilience matters** | Databricks Apps idle after 3-5 min; the round-trip test must include an idle period and re-test to catch wake-up bugs that only manifest after cold start. |
+| **Lakebase for chat history** | Conversations persist OBO-scoped in Lakebase; ephemeral fallback if Lakebase is unreachable so the chat does not hard-fail on a dependency hiccup. |
+| **Two endpoints, one contract** | `04c-end-user-feedback` owns the Python `mlflow.log_feedback(...)` write; `08-appkit-feedback` owns the AppKit-side wiring; both bind to the same dimension list (`accuracy / helpfulness / relevance`). |
+
+---
+
+## 4️⃣ What Happens Behind the Scenes?
+
+When you paste the prompt, the AI walks five sub-installs across two apps:
+
+| Phase | What the AI Does | Where It Writes |
+|-------|------------------|-----------------|
+| 1. Chat history | Install `07-appkit-chat-history`: Lakebase persistence, OBO scoping, sidebar UI | AppKit app dir (`apps_lakebase/{app_name}`) |
+| 2. Agent feedback | Install `04c-end-user-feedback`: `/feedback` REST + `mlflow.log_feedback(...)` on every POST; emit final `done` SSE with `trace_id` | Agent app dir |
+| 3. AppKit feedback | Install `08-appkit-feedback`: thumbs up/down controls bound to the `/feedback` route; capture `trace_id` per turn | AppKit chat page |
+| 4. Experiment | Create `{mlflow_feedback_experiment_path}` and capture path into state | MLflow experiment + state file |
+| 5. Round-trip + idle | Send a turn, click thumbs-down, refresh trace, wait 3-5 min idle, re-test | Verification log before gate exit |
+
+### Gate Contract
+
+| Reads gate | Produces gate | Captured state |
+|------------|---------------|----------------|
+| `AppKit ↔ Agent App proxy live` (from `appkit_agent_app_proxy_chat`) | `Deployed + idle resilience passed + 04c round-trip verified` | `mlflow_feedback_experiment_path`; one `user_feedback` assessment with `source_type=HUMAN` visible on a trace |',
 '### Resources Created
 - [ ] Chat history sidebar live; conversations persisted in Lakebase
 - [ ] `/feedback` REST endpoint on the Agent App invokes `mlflow.log_feedback(...)`
@@ -9805,13 +11119,24 @@ true, 1, true, current_timestamp(), current_timestamp(), current_user());
 -- Step 54: 08 - Phase 4 / Operate in Production     - Monitoring + Debugging   (bypass_llm = true)
 -- =============================================================================
 
--- Step 47 / order 47: Phase 1 / Build the Quality Suite - Prompt Registry
+-- Step 49 / order 49: Phase 1 / Build the Quality Suite - Prompt Registry
 -- Split from live DDL row 147 (Skill 01: prompt registry).
 INSERT INTO ${catalog}.${schema}.section_input_prompts 
 (input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
 VALUES
 (209, 'mlflow_prompt_registry',
-'Open the **quality and scoring suite phase** of the agent SDLC story arc — "how do I test quality?" — by registering the agent''s prompts as governed Unity Catalog assets with git-style aliases. This is the upstream gate for evaluation datasets, scorers, and the first scored eval (input_ids 210, 211, 212).
+'Register every prompt the **{agent_app_name}** agent loads as a governed Unity Catalog asset with git-style aliases. Today the agent uses inline prompt strings; after this prompt runs, the agent loads via `prompts://...@production` and a release becomes an alias move (no code change). This step opens the MLflow SDLC ("Agents 201") arc — every later step (eval datasets at 50, scorers at 51, eval runs at 52, sign-off at 53, promotion at 54) reads prompts back through `prompts://...@alias`.
+
+This will involve the following steps:
+
+- **Enumerate inline prompts** — find every prompt the agent loads (`agent.system_prompt`, `must_do[]`, `must_not_do[]`) by reading `docs/agent_spec.yaml`
+- **Register each as a UC asset** — create `{lakehouse_default_catalog}.{db_schema}_agent.<prompt_name>` for each one, version 1
+- **Pin `@production` alias** — alias the current versions so the agent''s runtime loader resolves them
+- **Reserve `@staging` alias** — leave it free for the next iteration''s candidate version
+- **Verify the loader** — boot the agent against `prompts://...@production` and assert it loads cleanly (no silent fallback to inline strings)
+- **Tag the experiment** — record `mlflow.promptRegistryLocation` so future eval runs trace back to the exact prompt versions
+
+**How this prompt chains with the prior step (skill invocations):**
 
 **Invoke skills (in order):**
 
@@ -9828,8 +11153,8 @@ VALUES
 '',
 'Phase 1 / Build the Quality Suite — Register Prompts in Unity Catalog',
 'Register the agent''s prompts as UC-governed assets with @production / @staging aliases (upstream of eval datasets and scorers)',
-47,
-'## How To Apply
+49,
+'## 1️⃣ How To Apply
 
 Open a **new Agent thread in your Coding Assistant** and paste the prompt above. This is the entry point for the quality and scoring suite phase — every downstream step (datasets, scorers, eval runs, sign-off, promotion) reads prompts back via `prompts://...@alias`.
 
@@ -9841,7 +11166,84 @@ Open a **new Agent thread in your Coding Assistant** and paste the prompt above.
 1. New Coding Assistant thread, paste prompt.
 2. AI registers each prompt the agent loads into UC under `{lakehouse_default_catalog}.{db_schema}_agent.*`.
 3. AI sets the `@production` and `@staging` aliases on the current versions.
-4. AI verifies the agent boots cleanly when reading prompts via `prompts://...@production`.',
+4. AI verifies the agent boots cleanly when reading prompts via `prompts://...@production`.
+
+---
+
+## 2️⃣ What Are We Building?
+
+This prompt opens the MLflow SDLC ("Agents 201") arc. The arc has four phases — **Build the Quality Suite** (49–52), **Human Review** (53), **Promote** (54–55), **Operate** (56) — and every later prompt references back to this arc as its mental map.
+
+### MLflow SDLC Arc
+
+```
+PHASE 1: Build the Quality Suite      PHASE 2: Human Review     PHASE 3: Promote      PHASE 4: Operate
+┌────────────────────────────────┐    ┌────────────────────┐    ┌────────────────┐    ┌────────────────────┐
+│ 49 Prompt registry  ◀── here   │    │ 53 Labeling +      │    │ 54 Logged model│    │ 56 Continuous-eval │
+│ 50 Evaluation datasets         │ ─► │    stakeholder     │ ─► │  + UC @champion│ ─► │    + ≥4 SQL        │
+│ 51 Scorers + judges            │    │    sign-off        │    │ 55 (opt) AI    │    │    alerts +        │
+│ 52 First scored eval +         │    │   (Decision:       │    │    Gateway     │    │    agent-as-judge  │
+│    iteration routing           │    │    APPROVED)       │    │    + DAB       │    │    debug           │
+└────────────────────────────────┘    └────────────────────┘    └────────────────┘    └────────────────────┘
+```
+
+### Prompt-Alias Diagram (this prompt''s specific output)
+
+The prompt registry stores each prompt as a UC asset with **git-style aliases** (`@production`, `@staging`). The agent loads via `prompts://catalog.schema.name@alias`, so a release becomes an alias move — no code change.
+
+```
+docs/agent_spec.yaml                    UC: {lakehouse_default_catalog}.{db_schema}_agent
+  agent.system_prompt        ─────►     ┌────────────────────────────────────────┐
+  agent.must_do[]                       │ system_instructions (prompt asset)     │
+  agent.must_not_do[]                   │   v1 ─────────── @production           │
+                                        │   v2 ─────────── @staging              │
+                                        │                                        │
+                                        │ Loaded via: prompts://...@production   │
+                                        │ Updated via: alias move (no code chg)  │
+                                        └────────────────────────────────────────┘
+```
+
+### Key Concepts
+
+| Concept | What It Means | Why It Matters |
+|---------|---------------|----------------|
+| **Prompt as UC asset** | Each prompt is a versioned, RBAC''d Unity Catalog object | Lineage, audit, governance — same controls as Delta tables and registered models |
+| **`prompts://` URI** | The loader URI used by the agent at runtime | Decouples the agent from inline strings; release = alias move |
+| **`@production` alias** | Pointer to the version users are running today | The single canonical answer to "what prompt is in prod right now?" |
+| **`@staging` alias** | Pointer to the next candidate version | Lets eval runs compare candidates without affecting prod traffic |
+| **Loader verification** | Agent boots against `prompts://...@production` and fails fast if missing | Prevents silent fallback to inline strings — registry must be the source of truth |
+| **Experiment tag** | `mlflow.promptRegistryLocation` tagged on every eval run | Audit trail joins eval scores to the exact prompt version that produced them |
+
+---
+
+## 3️⃣ Why Are We Building It This Way? (Databricks Best Practices)
+
+| Practice | How It''s Used Here |
+|----------|--------------------|
+| **Prompts as UC assets** | Versioned, RBAC''d, lineage-tracked, addressable via `prompts://catalog.schema.name@alias` — the same governance surface as Delta tables and registered models. |
+| **Git-style aliases** | `@production` (live) and `@staging` (next release) decouple deploy timing from prompt iteration; promotion is an alias move, not a redeploy. |
+| **Loader verification** | Agent boots with `prompts://...@production`; if the alias is missing, boot fails fast — no silent fallback to inline strings. |
+| **Foundation for iteration** | Every later step (eval datasets at 50, scorers at 51, eval runs at 52, hand-authored iteration in Skill 08b) assumes prompts are addressable through the registry. |
+| **Audit by experiment tag** | `mlflow.promptRegistryLocation` experiment tag links each evaluation back to the exact prompt versions it scored — provenance for any post-hoc investigation. |
+
+---
+
+## 4️⃣ What Happens Behind the Scenes?
+
+When you paste the prompt, the AI walks four phases against UC:
+
+| Phase | What the AI Does | Where It Writes |
+|-------|------------------|-----------------|
+| 1. Enumerate | Find every inline prompt the agent loads (`agent.system_prompt`, `must_do[]`, `must_not_do[]`) | Reads from `docs/agent_spec.yaml` |
+| 2. Register | Create each as a UC prompt asset under `{lakehouse_default_catalog}.{db_schema}_agent.*` | UC schema |
+| 3. Alias | Pin the new versions as `@production`; reserve `@staging` for next release | UC alias table |
+| 4. Verify loader | Boot agent against `prompts://...@production`; assert it loads cleanly | Agent runtime |
+
+### Gate Contract
+
+| Reads gate | Produces gate | Captured state |
+|------------|---------------|----------------|
+| `Tracing live; UC OTel tables ready` (from `mlflow_agent_tracing_uc`) | `Prompts registered in UC; @production and @staging aliases set` | UC prompt assets at `{lakehouse_default_catalog}.{db_schema}_agent.*` |',
 '### Resources Created
 - [ ] All agent prompts registered at `{lakehouse_default_catalog}.{db_schema}_agent.*`
 - [ ] `@production` alias pinned on the current versions
@@ -9849,13 +11251,24 @@ Open a **new Agent thread in your Coding Assistant** and paste the prompt above.
 - [ ] Agent loader confirmed working against `prompts://...@production`',
 true, 1, true, current_timestamp(), current_timestamp(), current_user());
 
--- Step 48 / order 48: Phase 1 / Build the Quality Suite - Evaluation Datasets
+-- Step 50 / order 50: Phase 1 / Build the Quality Suite - Evaluation Datasets
 -- Split from live DDL row 147 (Skill 02: evaluation datasets).
 INSERT INTO ${catalog}.${schema}.section_input_prompts 
 (input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
 VALUES
 (210, 'mlflow_evaluation_datasets',
-'Build the **evaluation dataset** (≥ 20 benchmark rows) that every downstream prompt / model / agent change is graded against. Pulls coverage buckets and seed examples from the AgentSpec to guarantee every user journey has at least one benchmark row.
+'Build the **{agent_app_name}** agent''s evaluation dataset — the canonical question-set every downstream prompt / model / agent change is graded against. Today there is no benchmark table; after this prompt runs, `{lakehouse_default_catalog}.{db_schema}_agent.{agent_resource_prefix}_benchmarks` exists with ≥ 20 rows, every coverage bucket and user journey is covered, and `expectations` + `human_assessments` columns are ready for sync-back from labeling sessions.
+
+This will involve the following steps:
+
+- **Pull seed cases from the spec** — read `agent.benchmark_seeds.coverage_buckets[]`, `agent.benchmark_seeds.seed_examples[]`, and `ui.user_journeys[]` from state
+- **Sample real production traces** — optionally mine the OTel trace tables for representative real-world inputs to add to the seed set
+- **Expand into ≥ 20 benchmark rows** — synthesize across seeds × buckets × journeys, LLM-augmented where the seed set is thin
+- **Author expected outputs** — populate the `expectations` column with per-row reference behavior so judges and scorers have ground truth to grade against
+- **Enforce the coverage contract** — assert every coverage bucket has ≥ 1 row AND every UI user journey has ≥ 1 row before writing
+- **Register the dataset table** — write to `{lakehouse_default_catalog}.{db_schema}_agent.{agent_resource_prefix}_benchmarks` with `expectations` + `human_assessments` columns ready for the labeling sessions in 53
+
+**How this prompt chains with the prior step (skill invocations):**
 
 **Invoke skills (in order):**
 
@@ -9873,8 +11286,8 @@ VALUES
 '',
 'Phase 1 / Build the Quality Suite — Evaluation Dataset',
 'Generate ≥ 20 benchmark rows that cover every coverage bucket and user journey from the AgentSpec',
-48,
-'## How To Apply
+50,
+'## 1️⃣ How To Apply
 
 Open a **new Agent thread in your Coding Assistant** and paste the prompt above. The benchmark table populated here is the substrate the scorers (input_id 211) and the first scored eval (input_id 212) read against.
 
@@ -9887,7 +11300,77 @@ Open a **new Agent thread in your Coding Assistant** and paste the prompt above.
 ### Steps to Apply
 1. New Coding Assistant thread, paste prompt.
 2. AI generates ≥ 20 benchmark rows into `{lakehouse_default_catalog}.{db_schema}_agent.{agent_resource_prefix}_benchmarks`.
-3. AI verifies every coverage bucket has at least one row AND every user journey has at least one benchmark.',
+3. AI verifies every coverage bucket has at least one row AND every user journey has at least one benchmark.
+
+---
+
+## 2️⃣ What Are We Building?
+
+This is the second step of the **Build the Quality Suite** phase of the MLflow SDLC arc (introduced in 49). We are generating the benchmark dataset — the single source of truth that scorers (51) and eval runs (52) grade against. The dataset is the **product** of three inputs from the AgentSpec/AppSpec: coverage buckets (product semantics), user journeys (UI flows), and seed examples (concrete I/O pairs).
+
+```
+state://AgentSpec.agent.benchmark_seeds.coverage_buckets[]
+   - "trip planning"
+   - "policy compliance"
+   - "edge case: empty input"
+        │
+        ▼
+state://AgentSpec.agent.benchmark_seeds.seed_examples[]   ──┐
+   - {input, expectations}                                  │
+        │                                                   ▼
+        ▼                                                ≥ 20 rows
+state://AppSpec.ui.user_journeys[]                       ┌────────────────────────────────┐
+   - "first-time user signup → first booking"            │ {lakehouse_default_catalog}    │
+   - "agent host responds to support escalation"         │ .{db_schema}_agent             │
+        │                                                │ .{agent_resource_prefix}_      │
+        └─────► every journey × ≥1 row covered  ──────►  │   benchmarks                   │
+                every coverage bucket × ≥1 row covered   │  (expectations,                │
+                                                         │   human_assessments columns    │
+                                                         │   ready for sync-back)         │
+                                                         └────────────────────────────────┘
+```
+
+### Key Concepts
+
+| Concept | What It Means | Why It Matters |
+|---------|---------------|----------------|
+| **Coverage bucket** | A product-semantics label (e.g. "policy compliance", "edge case") | Anchors the dataset to the use case, not generic NLP categories |
+| **User journey** | A UI flow from `state://AppSpec.ui.user_journeys[]` | Every journey **must** have ≥1 benchmark row — that is the coverage contract |
+| **Seed example** | An `{input, expectations}` pair authored ahead of time | Concrete starting points before LLM-augmented synthesis |
+| **`expectations` column** | Per-row reference behavior the agent should produce | Read by judges and SME labels; the column is created empty if needed |
+| **`human_assessments` column** | Sync-back target for SME labels in 53 | Means the dataset is built ready for ground-truth growth on day one |
+| **≥ 20 row floor** | Minimum benchmark size before scorer means become trustworthy | Below this, run-to-run variance dominates; iteration loops can''t tell signal from noise |
+
+---
+
+## 3️⃣ Why Are We Building It This Way? (Databricks Best Practices)
+
+| Practice | How It''s Used Here |
+|----------|--------------------|
+| **Coverage buckets are product semantics** | Buckets come from the use-case spec (e.g. "policy compliance", "edge case"), not from generic NLP categories — the dataset is graded against the product, not abstract benchmarks. |
+| **User-journey coverage is non-negotiable** | Every journey in `state://AppSpec.ui.user_journeys[]` must have ≥ 1 benchmark row; any uncovered journey is a coverage gap, not a bug-class to defer. |
+| **Schema includes `expectations` + `human_assessments`** | Columns the SME labeling session writes back into during 53; the dataset is built ready for ground-truth growth without a future schema migration. |
+| **≥ 20 rows minimum** | Below this, scorer-mean variance dominates trend analysis; growth is expected during 53 (issue-focused subsets), but the floor must hold from day one. |
+| **Dataset is the gate** | Scorers (51) and eval runs (52) read from this single table; changes to this table propagate to all downstream eval — there is no second benchmark set to drift. |
+
+---
+
+## 4️⃣ What Happens Behind the Scenes?
+
+When you paste the prompt, the AI walks four phases:
+
+| Phase | What the AI Does | Where It Writes |
+|-------|------------------|-----------------|
+| 1. Read inputs | Pull coverage buckets, seed examples, and user journeys from state | Reads `state://AgentSpec.agent.benchmark_seeds.*` and `state://AppSpec.ui.user_journeys[]` |
+| 2. Generate rows | Expand seeds × buckets × journeys into ≥ 20 rows | Synthesizer pipeline (LLM-augmented) |
+| 3. Enforce coverage | Assert every bucket has ≥ 1 row AND every journey has ≥ 1 row | Validation step before write |
+| 4. Emit table | Write to `{lakehouse_default_catalog}.{db_schema}_agent.{agent_resource_prefix}_benchmarks` with `expectations` + `human_assessments` columns | UC table |
+
+### Gate Contract
+
+| Reads gate | Produces gate | Captured state |
+|------------|---------------|----------------|
+| `Prompts registered in UC; @production and @staging aliases set` (from `mlflow_prompt_registry`) | `≥ 20 benchmark rows; every user journey covered` | Benchmark table at `{lakehouse_default_catalog}.{db_schema}_agent.{agent_resource_prefix}_benchmarks` |',
 '### Resources Created
 - [ ] Table `{lakehouse_default_catalog}.{db_schema}_agent.{agent_resource_prefix}_benchmarks` with ≥ 20 rows
 - [ ] Every `agent.benchmark_seeds.coverage_buckets[]` value covered
@@ -9895,13 +11378,24 @@ Open a **new Agent thread in your Coding Assistant** and paste the prompt above.
 - [ ] Schema includes `expectations` and `human_assessments` columns ready for sync-back from labeling sessions',
 true, 1, true, current_timestamp(), current_timestamp(), current_user());
 
--- Step 49 / order 49: Phase 1 / Build the Quality Suite - Scorers and Judges
+-- Step 51 / order 51: Phase 1 / Build the Quality Suite - Scorers and Judges
 -- Split from live DDL row 147 (Skill 03: scorers and judges).
 INSERT INTO ${catalog}.${schema}.section_input_prompts 
 (input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
 VALUES
 (211, 'mlflow_scorers_and_judges',
-'Define the scorer suite — built-in scorers, Guidelines, custom code-level scorers, and LLM judges — that will grade every benchmark row from input_id 210. Every `make_judge` call routes through the resolved `llm_judge_default` role binding, never the raw `{llm_endpoint}`.
+'Define the scorer suite for the **{agent_app_name}** agent — built-in scorers (Correctness, Safety, Guidelines, RetrievalGroundedness) plus custom `@scorer` functions and LLM judges aligned to the governance rules captured in the Agent Spec. Today there is no scoring stack; after this prompt runs, every scorer needed to grade a benchmark row is registered against `{mlflow_experiment_path}` with explicit thresholds, and every `make_judge` call routes through the resolved `llm_judge_default` role binding (never the raw `{llm_endpoint}`).
+
+This will involve the following steps:
+
+- **Import built-in scorers** — register `safety` (threshold 0.95, 100% sampling), `relevance` (threshold 0.8), and any other first-party scorers the use case needs
+- **Author custom `@scorer` functions** — materialize deterministic checks (schema validation, regex, currency-code matching) from `governance.must_do[]` and `governance.must_not_do[]` rules
+- **Convert Guidelines into judges** — turn each free-text guideline in `governance.scorer_suite.guidelines[]` into a Guidelines scorer
+- **Configure LLM judges** — convert `governance.scorer_suite.judge_questions[]` into `make_judge` scorers routed through `{llm_role_endpoints.llm_judge_default.endpoint}` (per `runtime_config.llm_role_endpoints`)
+- **Bind scorers to the eval dataset** — attach the registered scorer suite to the benchmark dataset from prompt 50 so the first scored eval can pick it up
+- **Smoke-test each scorer** — run each scorer against a known-good and known-bad example to confirm thresholds fire as expected
+
+**How this prompt chains with the prior step (skill invocations):**
 
 **Invoke skills (in order):**
 
@@ -9919,8 +11413,8 @@ VALUES
 '',
 'Phase 1 / Build the Quality Suite — Scorers and Judges',
 'Register builtin scorers, Guidelines, custom code scorers, and LLM judges with thresholds (judge calls route via llm_judge_default role)',
-49,
-'## How To Apply
+51,
+'## 1️⃣ How To Apply
 
 Open a **new Agent thread in your Coding Assistant** and paste the prompt above. The scorer suite registered here is what input_id 212''s first scored eval grades against.
 
@@ -9936,7 +11430,81 @@ Open a **new Agent thread in your Coding Assistant** and paste the prompt above.
 2. AI registers builtin scorers (`safety`, `relevance`) with thresholds.
 3. AI registers Guidelines from `governance.scorer_suite.guidelines[]`.
 4. AI registers custom code-level scorers from `governance.scorer_suite.custom_scorer_rules[]`.
-5. AI registers LLM judges from `governance.scorer_suite.judge_questions[]` — every `make_judge` call routes through the resolved `llm_judge_default` role binding.',
+5. AI registers LLM judges from `governance.scorer_suite.judge_questions[]` — every `make_judge` call routes through the resolved `llm_judge_default` role binding.
+
+---
+
+## 2️⃣ What Are We Building?
+
+This is the third step of the **Build the Quality Suite** phase of the MLflow SDLC arc (introduced in 49). We are registering the **scorer suite** — four families of scorers, each with explicit thresholds — that will grade every benchmark row produced in 50. Each family answers a different question and is implemented differently.
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                     SCORER SUITE                                            │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  1) Builtin (Safety, Relevance, RetrievalGroundedness, Correctness)         │
+│      │  fixed implementation, configurable threshold + sampling rate        │
+│      │  e.g. safety: threshold 0.95, sampling 1.0                           │
+│                                                                             │
+│  2) Guidelines (free-text rules → judge prompt under the hood)              │
+│      │  governance.scorer_suite.guidelines[] strings                        │
+│      │  e.g. "Always include a citation when answering policy questions"    │
+│                                                                             │
+│  3) Custom code-level (deterministic Python @scorer)                        │
+│      │  governance.scorer_suite.custom_scorer_rules[]                       │
+│      │  e.g. assert response contains valid_currency_code                   │
+│                                                                             │
+│  4) LLM judges (make_judge -> routed via llm_judge_default role)            │
+│      │  governance.scorer_suite.judge_questions[]                           │
+│      │  e.g. "Does the response correctly resolve the user''s intent?"       │
+│      │  ALWAYS routed via {llm_role_endpoints.llm_judge_default.endpoint}   │
+│      │   - NEVER raw {llm_endpoint}                                         │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+### Key Concepts
+
+| Concept | What It Means | Why It Matters |
+|---------|---------------|----------------|
+| **Builtin scorer** | First-party MLflow scorer (Safety, Relevance, RetrievalGroundedness, Correctness) | Battle-tested implementation; you only configure threshold + sampling |
+| **Guidelines scorer** | Free-text English rule that becomes a judge prompt under the hood | Fastest path from a product policy to an enforced check |
+| **Custom code scorer** | Deterministic Python `@scorer` function | Best for schema validation, regex, numeric ranges — no LLM needed |
+| **LLM judge** | `make_judge` over a use-case-specific question | Best for nuanced quality questions ("did this resolve the user''s intent?") |
+| **`llm_judge_default` role** | Endpoint role binding that all judges route through | Lets you swap the judge model without touching any scorer code |
+| **Threshold** | Numeric floor a scorer mean must clear | The first scored eval (52) compares means to thresholds to fire pass/regress gates |
+
+---
+
+## 3️⃣ Why Are We Building It This Way? (Databricks Best Practices)
+
+| Practice | How It''s Used Here |
+|----------|--------------------|
+| **Builtin first** | Start with `safety` (threshold 0.95, 100% sampling) and `relevance` (threshold 0.8) before any custom work — they cover the L1 quality floor with zero implementation cost. |
+| **Judge endpoint is a role, not a model** | `make_judge` routes via the `llm_judge_default` role binding; the actual model can change without rewriting scorers — same swap-without-redeploy story as `@production` aliases. |
+| **Guidelines for fast wins** | Free-text rules from `governance.scorer_suite.guidelines[]` become judges automatically; faster than hand-coding a judge prompt for every product policy. |
+| **Custom code for deterministic checks** | Schema validations, string matching, numeric ranges live as Python `@scorer` functions — never as LLM judges, where they would be slower and non-deterministic. |
+| **Thresholds are gates** | Every scorer registers with an explicit threshold; the first scored eval (52) compares means against thresholds to fire pass/regress gates. |
+
+---
+
+## 4️⃣ What Happens Behind the Scenes?
+
+When you paste the prompt, the AI walks five phases against `{mlflow_experiment_path}`:
+
+| Phase | What the AI Does | Where It Writes |
+|-------|------------------|-----------------|
+| 1. Builtins | Register `safety` (0.95, 100% sampling) and `relevance` (0.8) | MLflow experiment scorer registry |
+| 2. Guidelines | Convert `governance.scorer_suite.guidelines[]` strings into Guideline scorers | MLflow experiment scorer registry |
+| 3. Custom code | Materialize `governance.scorer_suite.custom_scorer_rules[]` as `@scorer` functions | Agent codebase + scorer registry |
+| 4. LLM judges | Convert `governance.scorer_suite.judge_questions[]` into `make_judge` scorers routed via `llm_judge_default` | MLflow experiment scorer registry |
+| 5. Verify | Confirm every scorer is attached to `{mlflow_experiment_path}` with a threshold | Lint pass before gate exit |
+
+### Gate Contract
+
+| Reads gate | Produces gate | Captured state |
+|------------|---------------|----------------|
+| `≥ 20 benchmark rows; every user journey covered` (from `mlflow_evaluation_datasets`) | `Scorer suite registered with thresholds` | Scorers registered against `{mlflow_experiment_path}`; judges routed through `llm_judge_default` role |',
 '### Resources Created
 - [ ] All scorers from `governance.scorer_suite.*` registered against `{mlflow_experiment_path}` with thresholds
 - [ ] Builtin `safety` scorer registered with threshold 0.95 and 100% sampling
@@ -9945,7 +11513,7 @@ Open a **new Agent thread in your Coding Assistant** and paste the prompt above.
 - [ ] Scorers ready for the first scored eval at input_id 212',
 true, 1, true, current_timestamp(), current_timestamp(), current_user());
 
--- Step 50 / order 50: Phase 1 / Build the Quality Suite - First Scored Eval + Iteration Entry
+-- Step 52 / order 52: Phase 1 / Build the Quality Suite - First Scored Eval + Iteration Entry
 -- Split from live DDL row 147 (Skill 04: evaluation runs) and combined with the
 -- iteration routing decision tree + System Prompt Review preflight contract
 -- from live DDL row 147. Closes the quality suite phase and opens the iteration
@@ -9954,7 +11522,18 @@ INSERT INTO ${catalog}.${schema}.section_input_prompts
 (input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
 VALUES
 (212, 'mlflow_evaluation_runs_and_iteration',
-'Run the **first scored eval** that grades the agent against the benchmark table (input_id 210) using the scorer suite (input_id 211), and end this thread by entering the **iteration phase** with a captured failure-shape classification and a routing decision.
+'Run the first scored eval for the **{agent_app_name}** agent against the registered prompts + dataset + scorer suite, then route failures to the right iteration track (instruction → prompt iteration; retrieval → retrieval tuning; tool → fix). Today the agent has no scored eval signal; after this prompt runs, `mlflow.genai.evaluate()` has scored every benchmark row at `{lakehouse_default_catalog}.{db_schema}_agent.{agent_resource_prefix}_benchmarks`, the run is logged at `{mlflow_experiment_path}` with `mlflow.promptRegistryLocation` tagged, the per-scorer pass/fail table is captured, and the failure-shape classification routes the next iteration cycle.
+
+This will involve the following steps:
+
+- **Populate the System Prompt Review preflight** — author a worked example for every `must_do[]` / `must_not_do[]` clause and stamp `complete: true` BEFORE any benchmark runs
+- **Run the scored eval** — call `mlflow.genai.evaluate()` against the benchmark table using the registered scorer suite from prompt 51
+- **Tag the run for traceability** — log the run under `{mlflow_experiment_path}` with `mlflow.promptRegistryLocation` so the eval can be tied back to the exact prompt versions
+- **Classify the failure shape** — compute `failure_shape_classification.primary_shape` (instruction / tool_call_empty / retrieval / safety / other) and `safety_buffer` per scorer
+- **Route the next iteration** — instruction-shape (no L1 failure) → Skill 08b prompt hand-authoring; tool-call-empty → Skill 06 direct trace debug; retrieval → retrieval tuning; L1 floor breach → architecture redesign
+- **Fire the either-or gate** — emit `Eval thresholds met` OR `Eval regressed — iterate` with the routing branch and full failure-shape schema captured into state
+
+**How this prompt chains with the prior step (skill invocations):**
 
 **Invoke skills (in order):**
 
@@ -10007,8 +11586,8 @@ mlflow_eval_predict_fn_signature: string
 '',
 'Phase 1 / Build the Quality Suite — First Scored Eval + Iteration Entry',
 'Run mlflow.genai.evaluate against the benchmark table; capture failure-shape classification + routing decision (owns System Prompt Review preflight contract)',
-50,
-'## How To Apply
+52,
+'## 1️⃣ How To Apply
 
 Open a **new Agent thread in your Coding Assistant** and paste the prompt above. This is the entry point to the **iteration phase** of the SDLC arc — it grades the agent against the benchmark table, then either green-lights human review or hands off to the right iteration loop based on the captured `failure_shape_classification`.
 
@@ -10023,7 +11602,92 @@ Open a **new Agent thread in your Coding Assistant** and paste the prompt above.
 3. Preflight checks gate the run: `system_prompt_review.complete == true` AND `count(must_do_worked_examples) >= count(agent.must_do)` AND `count(must_not_do_worked_examples) >= count(agent.must_not_do)`.
 4. AI runs `mlflow.genai.evaluate` against `{lakehouse_default_catalog}.{db_schema}_agent.{agent_resource_prefix}_benchmarks` with the scorers from input_id 211; writes per-scorer pass/fail results.
 5. AI captures `failure_shape_classification` + `safety_buffer` + `predict_fn_exception_count` + the rest of the failure-shape schema into state.
-6. AI fires either `Eval thresholds met` (proceed to human review at input_id 213) OR `Eval regressed — iterate` (route via decision tree).',
+6. AI fires either `Eval thresholds met` (proceed to human review at input_id 213) OR `Eval regressed — iterate` (route via decision tree).
+
+---
+
+## 2️⃣ What Are We Building?
+
+This is the closing step of the **Build the Quality Suite** phase of the MLflow SDLC arc (introduced in 49) and the entry to the iteration phase. We are running the first scored eval, then **classifying the failure shape** so the team enters the right iteration loop. Different shapes need different fixes — the routing decision tree below prevents wasted effort on the wrong loop.
+
+```
+First scored eval (mlflow.genai.evaluate vs benchmarks_table)
+                     │
+                     ▼
+   ┌──────────────────────────────────────┐
+   │ Per-scorer pass/fail table           │
+   │ failure_shape_classification:        │
+   │   primary_shape: instruction|        │
+   │     tool_call_empty|retrieval|safety │
+   │   l1_failures: [...]                 │
+   │   safety_buffer: {scorer: mean - thr}│
+   └────────────────────┬─────────────────┘
+                        ▼
+   ┌──────────────────────────────────────┐
+   │ Routing decision tree (at exit):     │
+   │                                      │
+   │ if l1_failures non-empty:            │
+   │   -> architecture / system-prompt    │
+   │      redesign  (NOT 08b!)            │
+   │                                      │
+   │ elif primary_shape == instruction    │
+   │   AND no L1 failure:                 │
+   │   -> 08b prompt hand-authoring       │
+   │                                      │
+   │ elif primary_shape == tool_call_empty│
+   │   -> 06 direct trace debug           │
+   │                                      │
+   │ elif primary_shape == retrieval:     │
+   │   -> retrieval tuning (chunking,     │
+   │      embeddings, top-k, filters)     │
+   │                                      │
+   │ else (safety/other):                 │
+   │   -> escalate to agent owner         │
+   └──────────────────────────────────────┘
+```
+
+### Key Concepts
+
+| Concept | What It Means | Why It Matters |
+|---------|---------------|----------------|
+| **System Prompt Review** | Preflight contract: every `must_do` / `must_not_do` clause has a worked example | Fails closed if missing — eval can''t run on a half-specified system prompt |
+| **`failure_shape_classification`** | Captured enum (`instruction / tool_call_empty / retrieval / safety / other`) | Routes the team to the loop that can actually fix the failure |
+| **L1 failure** | Any L1 scorer (Safety / Relevance / Correctness) below its registered floor | Cannot be fixed by prompt iteration alone — escapes the 08b loop |
+| **`safety_buffer`** | Map of `mean - threshold` per scorer (signed) | Negative values = below floor; positive values = headroom |
+| **`predict_fn_exception_count`** | Hard exceptions raised by the agent during eval | Must be zero before drawing any quality conclusions |
+| **Either-or gate** | `Eval thresholds met` OR `Eval regressed — iterate` | Only the first feeds promotion (54); the second loops via the decision tree |
+
+---
+
+## 3️⃣ Why Are We Building It This Way? (Databricks Best Practices)
+
+| Practice | How It''s Used Here |
+|----------|--------------------|
+| **System-Prompt Review preflight** | Before any benchmark run, every `must_do[]` and `must_not_do[]` clause must have a worked example; preflight fails closed if missing — no benchmark on undertested intent. |
+| **Failure shape determines the loop** | Instruction-shaped, tool-empty, retrieval, and safety failures need different fixes; routing prevents wasted iteration on the wrong loop. |
+| **L1 failures escape 08b** | No amount of prompt hand-authoring fixes a Safety/Relevance/Correctness scorer that''s *below* its registered floor; redesign is required, and the routing tree forces it. |
+| **Captured failure-shape schema** | `failure_shape_classification`, `safety_buffer`, `predict_fn_exception_count` all land in state; later promotion gates read them rather than re-deriving. |
+| **Either-or gate** | `Eval thresholds met` OR `Eval regressed — iterate`; the next prompt (54) gates promotion only on the first, so a regression cannot quietly slip into `@champion`. |
+
+---
+
+## 4️⃣ What Happens Behind the Scenes?
+
+When you paste the prompt, the AI walks five phases:
+
+| Phase | What the AI Does | Where It Writes |
+|-------|------------------|-----------------|
+| 1. System Prompt Review | Author worked examples for every `must_do[]` / `must_not_do[]` clause | `## System Prompt Review` block in `.vibecoding-state.md` |
+| 2. Preflight checks | Assert `complete: true` AND example counts cover both lists | Hard halt if missing |
+| 3. Scored eval | Run `mlflow.genai.evaluate` against `{benchmarks_table}` with scorers from 51 | `{mlflow_experiment_path}` per-scorer pass/fail table |
+| 4. Capture shape | Compute `failure_shape_classification`, `safety_buffer`, exception counts | Captured state |
+| 5. Fire gate | Emit `Eval thresholds met` OR `Eval regressed — iterate` (with route) | State exit + routing branch recorded |
+
+### Gate Contract
+
+| Reads gate | Produces gate | Captured state |
+|------------|---------------|----------------|
+| `Scorer suite registered with thresholds` (from `mlflow_scorers_and_judges`) | `Eval thresholds met` OR `Eval regressed — iterate` (with routing branch recorded) | `failure_shape_classification`, `safety_buffer`, `predict_fn_exception_count`, per-scorer pass/fail table |',
 '### Resources Created
 - [ ] `## System Prompt Review` block in state populated (`complete: true`, worked examples for every must_do / must_not_do clause)
 - [ ] Per-scorer pass/fail table written under `{mlflow_experiment_path}`
@@ -10033,7 +11697,7 @@ Open a **new Agent thread in your Coding Assistant** and paste the prompt above.
 - [ ] Gate fired: either `Eval thresholds met` OR `Eval regressed — iterate` with the routing branch recorded',
 true, 1, true, current_timestamp(), current_timestamp(), current_user());
 
--- Step 51 / order 51: Phase 2 / Human Review - Labeling + Stakeholder Sign-Off
+-- Step 53 / order 53: Phase 2 / Human Review - Labeling + Stakeholder Sign-Off
 -- Verbatim from live DDL row 148 (mlflow_agent_human_review). The
 -- `Decision: APPROVED` path at
 --   /Volumes/{lakehouse_default_catalog}/{db_schema}_ops/signoffs/v1/decision.md
@@ -10042,8 +11706,19 @@ INSERT INTO ${catalog}.${schema}.section_input_prompts
 (input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
 VALUES
 (213, 'mlflow_human_review_and_signoff',
-'Open the **expert-in-the-loop phase** of the agent SDLC story arc — "how do I involve experts?" — by routing predictions to SMEs and converting their judgment into a stakeholder-signed gate artifact.
-Run an SME labeling session that turns ≥ 10 production traces into pinned regression rows, then run the stakeholder sign-off gate that decides whether the agent can promote to `@champion`.
+'Open the Human Review phase for the **{agent_app_name}** agent: stakeholders label/grade traces in MLflow''s review UI, the sign-off `Decision: APPROVED` (or `REJECTED`) tag is set on the eval run at `{mlflow_experiment_path}`, and that decision becomes the gate to promote the candidate prompt versions. Today there is no human-graded signal beyond automated scorers; after this prompt runs, ≥ 10 production traces are SME-labeled, the labels sync back into `{lakehouse_default_catalog}.{db_schema}_agent.{agent_resource_prefix}_benchmarks`, and `{signoff_decision}` is captured into state from a stakeholder-signed `decision.md` at the ops volume.
+
+This will involve the following steps:
+
+- **Configure the labeling schema** — pre-fill reviewer role from `agent.reviewer_role` and bind the labeling session to `{mlflow_experiment_path}`
+- **Send traces to stakeholders** — sample 15 production traces and route them through the MLflow labeling-session UI for SME pass/fail + `expectations` + `human_assessments`
+- **Sync labels back into benchmarks** — write the SME labels into the benchmark table at `{lakehouse_default_catalog}.{db_schema}_agent.{agent_resource_prefix}_benchmarks` so the dataset grows
+- **Materialize the regression subset** — tag the failing-trace subset `provenance: issue_failing_trace`, `regression_pass_rate: 1.0` so future evals never re-regress
+- **Run the stakeholder sign-off gate** — generate the one-page metrics report + 5 failing / 5 passing walkthrough rows + compliance checklist
+- **Aggregate into a `Decision: APPROVED | REJECTED` tag** — write `/Volumes/{lakehouse_default_catalog}/{db_schema}_ops/signoffs/v1/decision.md` with `rollback_trigger`
+- **Capture sign-off as state** — persist `{signoff_decision}` for the promotion hard-assert in 54
+
+**How this prompt chains with the prior step (skill invocations):**
 
 **Invoke skills (in order):**
 
@@ -10076,8 +11751,8 @@ Run an SME labeling session that turns ≥ 10 production traces into pinned regr
 '',
 'Phase 2 / Human Review — Labeling + Stakeholder Sign-Off (Expert-in-the-Loop)',
 'SME labeling session syncs into benchmarks; stakeholder sign-off gate decides promotion (Decision: APPROVED hard-asserts downstream)',
-51,
-'## How To Apply
+53,
+'## 1️⃣ How To Apply
 
 Open a **new Agent thread in your Coding Assistant** and paste the prompt above. The **expert-in-the-loop phase** of the SDLC story arc lands as two passes in one thread: SME labeling first, then the sign-off gate.
 
@@ -10091,7 +11766,93 @@ Open a **new Agent thread in your Coding Assistant** and paste the prompt above.
 2. AI launches the labeling session UI, samples 15 traces, hands off to the SME for labels.
 3. AI syncs labels back into the benchmark table, materializes the issue-focused regression subset (`provenance: issue_failing_trace`).
 4. AI generates the one-page metrics report + 10 walkthrough rows + compliance checklist; opens a review session.
-5. Stakeholder writes the decision markdown to `/Volumes/{lakehouse_default_catalog}/{db_schema}_ops/signoffs/v1/decision.md` with `Decision: APPROVED` or `Decision: REJECTED`.',
+5. Stakeholder writes the decision markdown to `/Volumes/{lakehouse_default_catalog}/{db_schema}_ops/signoffs/v1/decision.md` with `Decision: APPROVED` or `Decision: REJECTED`.
+
+---
+
+## 2️⃣ What Are We Building?
+
+This is the **Human Review** phase of the MLflow SDLC arc (introduced in 49). One thread carries two sequential passes: the SME labeling session (which **grows the benchmark dataset**) and the stakeholder review (which **issues a sign-off artifact** that downstream promotion hard-asserts on).
+
+```
+Production traces from {mlflow_experiment_path}                 SME (labeling session UI)
+       │                                                        ┌────────────────────┐
+       ▼  sample 15                                             │ pass/fail          │
+   ┌──────────────────────┐                                     │ expectations       │
+   │ Labeling Session     │ ◀──── reviewer_role from spec ────  │ human_assessments  │
+   └──────────────────────┘                                     └────────────────────┘
+       │                                                                  │
+       │ sync labels back into                                            │
+       ▼                                                                  │
+{lakehouse_default_catalog}.{db_schema}_agent.<benchmarks>                 │
+   (expectations, human_assessments columns)                              │
+       │                                                                  │
+       │ + materialize regression subset                                  │
+       ▼   (provenance: issue_failing_trace, regression_pass_rate: 1.0)   │
+                                                                          │
+                                                                          ▼
+                                                            ┌────────────────────────────────┐
+                                                            │ Stakeholder Review             │
+                                                            │  - One-page metrics report     │
+                                                            │  - 5 failing + 5 passing       │
+                                                            │    walkthrough rows            │
+                                                            │  - Compliance checklist        │
+                                                            └────────────────────────────────┘
+                                                                          │
+                                                                          ▼
+                                          /Volumes/{...}_ops/signoffs/v1/decision.md
+                                          required:  Decision: APPROVED | REJECTED
+                                                     rollback_trigger: <one line>
+                                                                          │
+                                                                          ▼
+                                            Promotion (54) hard-asserts on
+                                            Decision: APPROVED
+```
+
+### Key Concepts
+
+| Concept | What It Means | Why It Matters |
+|---------|---------------|----------------|
+| **Labeling session** | SME-facing UI where 15 sampled traces are labeled with pass/fail + expectations | Labels write back into the benchmark table — the dataset grows automatically |
+| **Regression subset** | Rows tagged `provenance: issue_failing_trace`, `regression_pass_rate: 1.0` | The "do not regress" contract — these must always pass on every future eval |
+| **Stakeholder review** | One-page metrics + 10 walkthrough rows + compliance checklist | Forces a structured decision instead of a hallway "looks fine" |
+| **`decision.md`** | Markdown artifact at `/Volumes/{...}_ops/signoffs/v1/decision.md` | CI hard-asserts on `Decision: APPROVED`; meeting notes don''t gate prod |
+| **`rollback_trigger`** | One-line condition (e.g. "safety < 0.90 for 3 evals") | Becomes a SQL alert in 56 — sign-off and monitoring share the same trigger language |
+| **Two roles, one thread** | SME labels first, stakeholder signs second | Sequential passes in a single thread keep context tight |
+
+---
+
+## 3️⃣ Why Are We Building It This Way? (Databricks Best Practices)
+
+| Practice | How It''s Used Here |
+|----------|--------------------|
+| **Labels grow the dataset** | SME labels write back into the same benchmark table from 50; the next eval run grades on the enriched dataset — no second labels store. |
+| **Regression subset = "do not regress"** | Rows tagged `provenance: issue_failing_trace` must always pass (`regression_pass_rate: 1.0`); this is the contract that the team will never re-introduce known issues. |
+| **Stakeholder sign-off is an artifact, not a meeting** | `decision.md` is committed to UC volume so CI can hard-assert on `Decision: APPROVED` — a meeting doesn''t gate promotion. |
+| **Rollback trigger is mandatory** | `rollback_trigger` is a one-line condition (e.g. "safety scorer mean drops below 0.90 for 3 consecutive evaluations") that the monitoring phase (56) wires as a SQL alert. |
+| **Two roles, one thread** | SME labels first, stakeholder signs second; same prompt, sequential passes — the thread keeps the labels and the sign-off context together. |
+
+---
+
+## 4️⃣ What Happens Behind the Scenes?
+
+When you paste the prompt, the AI walks seven phases across two roles:
+
+| Phase | What the AI Does | Where It Writes |
+|-------|------------------|-----------------|
+| 1. Sample traces | Pull 15 traces from `{mlflow_experiment_path}` | Labeling session input |
+| 2. SME labels | Run the labeling UI; SME applies pass/fail + expectations | Labels captured in MLflow |
+| 3. Sync benchmarks | Write `expectations` + `human_assessments` back into benchmark table | `{...}_agent.{...}_benchmarks` |
+| 4. Regression subset | Materialize rows with `provenance: issue_failing_trace` | Same benchmark table, tagged |
+| 5. Stakeholder review | Generate one-page metrics + 5 failing + 5 passing rows + compliance checklist | Review session UI |
+| 6. Write `decision.md` | Stakeholder commits `Decision: APPROVED|REJECTED` + `rollback_trigger` | `/Volumes/{lakehouse_default_catalog}/{db_schema}_ops/signoffs/v1/decision.md` |
+| 7. Capture state | Persist `signoff_decision` for the promotion hard-assert in 54 | State file |
+
+### Gate Contract
+
+| Reads gate | Produces gate | Captured state |
+|------------|---------------|----------------|
+| `Eval thresholds met` OR `Eval regressed — iterate` (from `mlflow_evaluation_runs_and_iteration`) | `Signoff APPROVED` OR `Signoff REJECTED — block promotion` | `signoff_decision`; `decision.md` at the UC volume; regression subset tagged in benchmarks |',
 '### Resources Created
 - [ ] ≥ 10 traces SME-labeled; labels synced into benchmark table
 - [ ] Regression subset created with `provenance: issue_failing_trace`
@@ -10101,7 +11862,7 @@ Open a **new Agent thread in your Coding Assistant** and paste the prompt above.
 - [ ] `signoff_decision` captured in state',
 true, 1, true, current_timestamp(), current_timestamp(), current_user());
 
--- Step 52 / order 52: Phase 3 / Promote with Governance - Logged Model + UC Registration
+-- Step 54 / order 54: Phase 3 / Promote with Governance - Logged Model + UC Registration
 -- Split from live DDL row 149 (Skill 08b conditional + Skill 05). The
 -- hard_assert {var: signoff_decision, equals: APPROVED} is preserved verbatim
 -- so promotion to @champion gates on the input_id 213 sign-off artifact.
@@ -10109,9 +11870,21 @@ INSERT INTO ${catalog}.${schema}.section_input_prompts
 (input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
 VALUES
 (214, 'mlflow_logged_model_uc_registration',
-'Close out the **iteration phase** of the agent SDLC story arc — "how do I improve it?" — and open the **production hardening phase** — "how do I promote it safely?" — by (optionally) running the hand-authored prompt iteration loop on instruction-shaped failures, then logging and registering the agent at `@champion` in Unity Catalog. Promotion is hard-gated on the captured stakeholder sign-off from input_id 213.
+'Log the approved **{agent_app_name}** agent (binding of registered prompts + scorer suite + tool plan) as an MLflow model in Unity Catalog and pin the `@champion` alias. The logged model is the unit of promotion — every later environment promotes by alias move, not by re-deploying code. Today there is no UC-registered agent; after this prompt runs, `{lakehouse_default_catalog}.{db_schema}_agent.{agent_resource_prefix}` is registered, the `@champion` alias is set IFF eval scores match-or-beat the prior champion, and `{prompt_iteration_ran}` is captured (if the conditional Skill 08b hand-authoring branch fired).
+
+This will involve the following steps:
+
+- **Hard-assert sign-off** — refuse to advance unless `signoff_decision == APPROVED` from the prior human-review gate
+- **(Optional) Run hand-authored prompt iteration** — if the prior eval was instruction-shaped with no L1 failure, run Skill 08b against the full eval dataset and promote `@staging` → `@production` IFF all target scorer means meet-or-beat baseline
+- **Snapshot the agent code + dependencies** — capture the current code state (prompts, tools, scorer bindings) for reproducible logging
+- **Log via `mlflow.pyfunc.log_model`** — log the agent with prompt-registry references and tool-plan refs in `metadata` so the model is self-describing
+- **Register to UC** — register at `{lakehouse_default_catalog}.{db_schema}_agent.{agent_resource_prefix}` with `{llm_endpoint}` recorded in `metadata`
+- **Pin `@champion` alias** — move the alias to the new version only when eval scores meet-or-beat the prior champion (promote-if-better, never blind)
+- **Smoke-load from UC** — load the UC-registered model in a fresh thread to confirm the alias resolves and the model boots cleanly
 
 If the prior scored eval (input_id 212) produced `Eval regressed — iterate` and the failure shape is *instruction-shaped*, run hand-authored prompt iteration first (Skill 08b against the full eval dataset). The default flow no longer routes to GEPA — Skill 08 (`08-prompt-optimization`) is an optional/advanced path retained only for operators who explicitly declare `prompt_iteration_strategy: gepa`.
+
+**How this prompt chains with the prior step (skill invocations):**
 
 **Invoke skills (in order):**
 
@@ -10143,8 +11916,8 @@ If the prior scored eval (input_id 212) produced `Eval regressed — iterate` an
 '',
 'Phase 3 / Promote with Governance — Logged Model + UC Registration',
 'Optional 08b hand-author iteration on instruction-shaped failures, then log + register the agent at @champion in UC (gated on signoff_decision == APPROVED)',
-52,
-'## How To Apply
+54,
+'## 1️⃣ How To Apply
 
 Open a **new Agent thread in your Coding Assistant** and paste the prompt above. This carries the **iteration phase conclusion** (optional Skill 08b for instruction-shaped failures) plus the **logged model registration** at `@champion`. Hard-gated on `signoff_decision == APPROVED` from input_id 213.
 
@@ -10158,7 +11931,91 @@ Open a **new Agent thread in your Coding Assistant** and paste the prompt above.
 1. New Coding Assistant thread, paste prompt.
 2. **(Conditional)** AI invokes hand-authored prompt iteration (Skill 08b) only if the prior scored eval left `failing_scorers_if_regressed` non-empty, the failure is instruction-shaped, and no L1 scorer failures are present; promotes from `@staging` to `@production` only if a full-dataset re-eval shows all target scorer means meet or beat baseline.
 3. AI logs the model via `mlflow.models.log_model` and registers it at `@champion` in UC.
-4. AI moves `@champion` alias only if eval scores meet or exceed the prior champion.',
+4. AI moves `@champion` alias only if eval scores meet or exceed the prior champion.
+
+---
+
+## 2️⃣ What Are We Building?
+
+This is the opening step of the **Promote** phase of the MLflow SDLC arc (introduced in 49). Two things happen in one thread: (1) **conditional Skill 08b** prompt hand-authoring, only when the prior eval was instruction-shaped AND no L1 scorer failed, and (2) **UC `@champion` promotion**, hard-gated on `signoff_decision == APPROVED` from 53. Promotion is automatic when conditions hold but never blind — `@champion` only moves if eval scores match-or-beat the prior champion.
+
+```
+                       Eval regressed?
+                              │
+              ┌───────────────┴────────────────┐
+              ▼ YES                            ▼ NO (Eval thresholds met)
+      failure_shape == instruction
+      AND no L1 failure?
+              │
+      ┌───────┴────────┐
+      ▼ YES            ▼ NO
+   Run Skill 08b   Skip 08b
+   (hand-author    (architecture
+    prompt iter,    redesign /
+    promote          retrieval tuning /
+    @staging ->      escalate per 52
+    @production      decision tree)
+    if all target
+    scorers >=
+    baseline)
+      │                  │
+      └──────────┬───────┘
+                 ▼
+   hard_assert: signoff_decision == APPROVED  (from 53)
+                 │
+                 ▼
+   mlflow.models.log_model(...)
+                 │
+                 ▼
+   register at {lakehouse_default_catalog}.{db_schema}_agent.{agent_resource_prefix}
+                 │
+                 ▼
+   Move @champion alias IFF eval scores >= prior champion
+```
+
+### Key Concepts
+
+| Concept | What It Means | Why It Matters |
+|---------|---------------|----------------|
+| **Conditional Skill 08b** | Prompt hand-authoring iteration, only on instruction-shaped failure with no L1 failure | Default iteration path; explainable diffs the team can review |
+| **`signoff_decision == APPROVED`** | Hard-asserted gate value from 53''s decision.md | Promotion refuses to advance on any other value, regardless of scorer means |
+| **`mlflow.models.log_model(...)`** | Standard MLflow logging call, this time on the agent | Logged model is the artifact UC registers, the same surface as classical ML |
+| **UC registration path** | `{lakehouse_default_catalog}.{db_schema}_agent.{agent_resource_prefix}` | Single canonical name across dev / staging / prod — version is what changes |
+| **`@champion` alias** | Movable pointer to "the version live in production" | Promotion = alias move; rollback is one alias move back |
+| **Promote-if-better** | `@champion` only moves when new version''s eval scores ≥ prior champion''s | Even after sign-off, no regression slips into prod |
+| **`reflection_lm` role** | Endpoint role for the diff-summary helper used inside 08b | Same role-binding pattern as the eval judge; model swap is transparent |
+
+---
+
+## 3️⃣ Why Are We Building It This Way? (Databricks Best Practices)
+
+| Practice | How It''s Used Here |
+|----------|--------------------|
+| **Sign-off hard-asserted** | `signoff_decision == APPROVED` is checked at gate enter; any other value blocks promotion regardless of scorer means — sign-off is the law, not a suggestion. |
+| **08b is opt-in, not default** | Only fires when the prior eval was instruction-shaped AND no L1 scorer failed; otherwise the failure routes elsewhere (architecture, retrieval, escalate). |
+| **Promote-if-better** | `@champion` only moves when new version''s eval scores ≥ prior champion''s; promotion is automatic when conditions are met but never blind. |
+| **GEPA is opt-in only** | Skill 08 (`08-prompt-optimization`) is retained for advanced use; default flow uses hand-authoring (Skill 08b) for explainable diffs the team can read in review. |
+| **`reflection_lm` role** | Diff-summary helper routes through the resolved `reflection_lm` role binding, never the raw `{llm_endpoint}` — same swap-without-redeploy story as judges. |
+
+---
+
+## 4️⃣ What Happens Behind the Scenes?
+
+When you paste the prompt, the AI walks five phases:
+
+| Phase | What the AI Does | Where It Writes |
+|-------|------------------|-----------------|
+| 1. Gate enter | Hard-assert `signoff_decision == APPROVED`; refuse if not | State entry check |
+| 2. Conditional 08b | If instruction-shaped + no L1 failure: run prompt hand-authoring, promote `@staging` → `@production` IFF all target scorer means ≥ baseline on full dataset | UC prompt aliases |
+| 3. Log model | `mlflow.models.log_model(...)` on the current agent | MLflow logged-model artifact |
+| 4. Register at UC path | Register at `{lakehouse_default_catalog}.{db_schema}_agent.{agent_resource_prefix}` | UC model registry |
+| 5. Move `@champion` | Move alias IFF new eval scores ≥ prior champion | UC model alias |
+
+### Gate Contract
+
+| Reads gate | Produces gate | Captured state |
+|------------|---------------|----------------|
+| `Signoff APPROVED` (hard-asserted; from `mlflow_human_review_and_signoff`) | `@champion set` | `prompt_iteration_ran`, `prompt_handauthoring_iterations`, `prompt_handauthoring_template_diff_summaries` (if 08b ran); UC `@champion` alias on the new version |',
 '### Resources Created
 - [ ] (If applicable) Hand-authored prompt iteration run (Skill 08b) with full-dataset re-eval; `@staging` promoted to `@production` only if all target scorer means meet or beat baseline
 - [ ] `prompt_iteration_ran` captured in state
@@ -10167,7 +12024,7 @@ Open a **new Agent thread in your Coding Assistant** and paste the prompt above.
 - [ ] `@champion` alias moved IFF eval scores meet or exceed prior champion',
 true, 1, true, current_timestamp(), current_timestamp(), current_user());
 
--- Step 53 / order 53: Phase 3 / Promote with Governance - AI Gateway + Asset-Bundle Deployment
+-- Step 55 / order 55: Phase 3 / Promote with Governance - AI Gateway + Asset-Bundle Deployment
 -- Split from live DDL row 149 (Skill 04 AI Gateway + Skill 06 Deployment &
 -- Automation). Promotion is blocked unless the captured signoff_decision is
 -- APPROVED, matching the live DDL contract.
@@ -10175,20 +12032,30 @@ INSERT INTO ${catalog}.${schema}.section_input_prompts
 (input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
 VALUES
 (215, 'mlflow_gateway_and_deployment',
-'Govern the registered agent behind an **AI Gateway** (PII + safety guardrails, rate limits, inference tables) and automate promotion via **Databricks Asset Bundles**, with promotion hard-blocked unless the captured stakeholder sign-off (input_id 213) is `APPROVED`.
+'Front the **{agent_app_name}** agent''s model endpoint with a pre-provisioned **AI Gateway** (PII + safety guardrails, rate limits, inference tables under `{lakehouse_default_catalog}.{db_schema}_ops.gw_*`) and deploy the whole agent app via Databricks Asset Bundles in one shot — `databricks bundle validate` + `databricks bundle deploy`. **This step is optional. Core Track A does not depend on this step** — run it only when a Gateway endpoint has been pre-provisioned by an admin or when public AI Gateway admin APIs are available. Today the agent calls the backing model endpoint directly via `runtime_config.llm`; after this prompt runs (when a Gateway is available), the agent routes through `{ai_gateway_endpoint}`, gateway inference tables capture every call joinable to MLflow traces via `databricks_request_id`, and DAB has materialized the deploy. If no Gateway is available, this prompt cleanly records `skipped_unavailable` and Track A continues on the raw model route.
+
+This will involve the following steps:
+
+- **Hard-assert sign-off** — refuse to deploy unless `decision.md` reads `Decision: APPROVED` from the human-review gate
+- **Define the Gateway endpoint configuration** — set guardrails (PII + safety), per-user / per-endpoint rate limits, and inference-table targets under `{db_schema}_ops.gw_*`
+- **Point `runtime_config.llm` at the Gateway** — update the agent''s model route to `{ai_gateway_endpoint}` so no agent code changes are needed
+- **Update `databricks.yml` resources** — declare the Gateway resource and the `{default_warehouse}` SQL warehouse needed for inference-table queries
+- **Propagate the request-id header** — wire `databricks_request_id` from MLflow trace through Gateway inference tables for correlation
+- **Validate + bundle-deploy** — run `databricks bundle validate` then `bundle deploy`; smoke-test the deployed endpoint behind the Gateway
+
+**How this prompt chains with the prior step (skill invocations):**
 
 **Invoke skills (in order):**
 
 1. `genai-agents/vibecoding-state` op `enter` — params: `prompt_id: "mlflow_gateway_and_deployment"`, `require_prior_gate: {prompt_id: "mlflow_logged_model_uc_registration", gate: "@champion set"}`, `hard_assert: {var: "signoff_decision", equals: "APPROVED"}`.
 
 2. @genai-agents/foundation/04-ai-gateway/SKILL.md — params:
+   - `mode: "preprovisioned_or_skip"`
    - `gateway_name: "{agent_app_name}-gateway"`
    - `backing_model: "{llm_role_endpoints.agent_chat.endpoint}"`
-   - `inference_tables_prefix: "{lakehouse_default_catalog}.{db_schema}_ops.gw_"`
-   - `usage_tracking: true`
-   - `guardrails: {pii: "both", safety: "both"}`
-   - `rate_limits: {endpoint: "120/min", per_user: "20/min"}`
-   - `capture_into_state: ["ai_gateway_endpoint"]`
+   - `required_precondition: "AI Gateway endpoint already exists OR public admin API is available"`
+   - `skip_if_unavailable: true`
+   - `capture_into_state: ["ai_gateway_endpoint", "ai_gateway_status"]`
 
 3. @genai-agents/sdlc/06-deployment-and-automation/SKILL.md — params:
    - `agent_name: "{agent_app_name}"`
@@ -10199,14 +12066,14 @@ VALUES
    - `block_promotion_if_missing: "/Volumes/{lakehouse_default_catalog}/{db_schema}_ops/signoffs/v1/decision.md :: ''Decision: APPROVED''"`
    - `warehouse_id: "{default_warehouse}"`
 
-4. `genai-agents/vibecoding-state` op `exit` — params: `prompt_id: "mlflow_gateway_and_deployment"`, `gate: "gateway live; DAB-deployed"`, `captured: {ai_gateway_endpoint, agent_app_url, agent_app_name}`.
+4. `genai-agents/vibecoding-state` op `exit` — params: `prompt_id: "mlflow_gateway_and_deployment"`, `gate: "Optional gateway route configured or skipped"`, `captured: {ai_gateway_endpoint, ai_gateway_status, agent_app_url, agent_app_name}`.
 
-**Gate:** `gateway live; DAB-deployed` — the AI Gateway is provisioned with PII + safety guardrails and per-user rate limits, the gateway is wired into the agent app via `databricks.yml` + `app.yaml`, the `databricks_request_id` header is propagated for trace ↔ gateway correlation, and the Asset-Bundle promotion is hard-blocked unless `decision.md` reads `Decision: APPROVED`.',
+**Gate:** `Optional gateway route configured or skipped` — if a pre-provisioned AI Gateway endpoint exists, the agent app is configured to use it and `ai_gateway_endpoint` is captured. If no endpoint or public admin API is available, the prompt records `ai_gateway_status: "skipped_unavailable"` and leaves the core Track A raw model route intact.',
 '',
-'Phase 3 / Promote with Governance — AI Gateway + Asset-Bundle Deployment',
-'Provision the AI Gateway with PII + safety guardrails and rate limits, wire it via Asset Bundles, and propagate databricks_request_id for trace ↔ gateway correlation',
-53,
-'## How To Apply
+'Optional Hardening — Pre-Provisioned AI Gateway + Asset-Bundle Deployment',
+'Optional future governance layer: use a pre-provisioned AI Gateway endpoint or public admin APIs when available; core Track A does not depend on this step',
+55,
+'## 1️⃣ How To Apply
 
 Open a **new Agent thread in your Coding Assistant** and paste the prompt above. This wraps the registered agent in an AI Gateway and automates promotion via Databricks Asset Bundles. Promotion is hard-blocked unless the captured `signoff_decision` is `APPROVED`.
 
@@ -10220,7 +12087,86 @@ Open a **new Agent thread in your Coding Assistant** and paste the prompt above.
 1. New Coding Assistant thread, paste prompt.
 2. AI provisions the AI Gateway endpoint with PII + safety guardrails and per-user rate limits.
 3. AI customizes `databricks.yml` + `app.yaml` to point the agent at the gateway and propagate `databricks_request_id` for trace correlation.
-4. AI verifies the deployment promotion is gated on the sign-off `decision.md`.',
+4. AI verifies the deployment promotion is gated on the sign-off `decision.md`.
+
+---
+
+## 2️⃣ What Are We Building?
+
+This is the **optional / future-facing** half of the **Promote** phase of the MLflow SDLC arc (introduced in 49). Core Track A works **without** AI Gateway — the agent calls the configured Model Serving endpoint directly. This prompt layers Gateway in only when an admin-provisioned endpoint or public admin APIs are available; otherwise it records `skipped_unavailable` and Track A continues unchanged.
+
+```
+                           Without AI Gateway (core Track A path)
+                           ┌──────────────────────────────────────┐
+                           │ Agent App                            │
+                           │   config.yml: llm_endpoint =         │
+                           │     databricks-claude-sonnet-4-6     │
+                           │   ->  Direct Model Serving call      │
+                           └──────────────────────────────────────┘
+
+                           With AI Gateway (this prompt - optional)
+                           ┌──────────────────────────────────────┐
+                           │ Agent App                            │
+                           │   config.yml: llm_endpoint =         │
+                           │     {agent_app_name}-gateway         │
+                           │   ->  AI Gateway endpoint            │
+                           │              |                       │
+                           │   Guardrails  (PII, safety = both)   │
+                           │   Rate limits (120/min, 20/min/user) │
+                           │   Inference tables under             │
+                           │     {db_schema}_ops.gw_*             │
+                           │              |                       │
+                           │   ->  Backing model serving endpoint │
+                           └──────────────────────────────────────┘
+
+                           Switching: change runtime_config.llm.provider /
+                                      endpoint / api_base_url; no agent code change.
+```
+
+### Key Concepts
+
+| Concept | What It Means | Why It Matters |
+|---------|---------------|----------------|
+| **Optional / pre-provisioned** | Step runs only if Gateway endpoint or public admin API exists | Core Track A is unaffected — the gate emits `skipped_unavailable` and continues |
+| **PII + safety guardrails** | Gateway-side filters (`mode: both`) on input and output | Pre-trained protections without re-implementing them in the agent |
+| **Rate limits** | Endpoint cap (120/min) + per-user cap (20/min) | Bounds blast radius if a tool loops; protects backing model from runaway costs |
+| **Inference tables** | Delta tables `{db_schema}_ops.gw_*` recording every request/response | Joinable to MLflow traces for governance and audit |
+| **`databricks_request_id`** | Header propagated from MLflow trace through the Gateway | Single request id joins traces and gateway logs without custom plumbing |
+| **DAB deploy** | Databricks Asset Bundles promote the app + gateway as one bundle | `databricks.yml` + `app.yaml` is the deploy contract — no inline edits |
+| **Sign-off enforcement** | Bundle deploy step refuses unless `decision.md` reads `Decision: APPROVED` | Same hard-assert as 54 — sign-off enforces twice on the way to prod |
+
+---
+
+## 3️⃣ Why Are We Building It This Way? (Databricks Best Practices)
+
+| Practice | How It''s Used Here |
+|----------|--------------------|
+| **Optional / pre-provisioned** | This prompt requires either an admin-provisioned Gateway endpoint or public admin APIs; if neither exists, it records `skipped_unavailable` and core Track A continues unchanged. |
+| **Promotion blocked by sign-off** | DAB deploy step hard-blocks unless `decision.md` reads `Decision: APPROVED` — the same hard-assert as 54 enforces twice on the way to prod. |
+| **Trace correlation header** | `databricks_request_id` propagates from the MLflow trace through Gateway inference tables, so a single request id joins traces and gateway logs. |
+| **`databricks.yml` + `app.yaml` are the deploy contract** | Env vars, resources, and gateway URL all flow from the bundle; no inline edits in the deployed app — config drift can''t sneak in. |
+| **Inference tables for governance** | Every Gateway request lands in `{db_schema}_ops.gw_*` Delta tables, joinable to MLflow traces and benchmark labels for full auditability. |
+
+---
+
+## 4️⃣ What Happens Behind the Scenes?
+
+When you paste the prompt, the AI walks six phases (with a short-circuit if Gateway is unavailable):
+
+| Phase | What the AI Does | Where It Writes |
+|-------|------------------|-----------------|
+| 1. Gate enter | Hard-assert `signoff_decision == APPROVED`; refuse otherwise | State entry check |
+| 2. Provision or skip | Use pre-provisioned Gateway OR record `ai_gateway_status: skipped_unavailable` | State capture |
+| 3. Patch `databricks.yml` | Add Gateway resource, env, permissions | `apps_lakebase/{app_name}/databricks.yml` |
+| 4. Patch `app.yaml` | Inject `LLM_GATEWAY_BASE_URL`, `LLM_GATEWAY_MODEL` | `apps_lakebase/{app_name}/app.yaml` |
+| 5. Propagate request id | Wire `databricks_request_id` header from MLflow trace through Gateway | Agent-side header forwarding |
+| 6. DAB deploy + verify | `databricks bundle deploy`; verify trace ↔ gateway correlation | Bundle deploy log |
+
+### Gate Contract
+
+| Reads gate | Produces gate | Captured state |
+|------------|---------------|----------------|
+| `@champion set` (from `mlflow_logged_model_uc_registration`) AND `signoff_decision == APPROVED` (hard-asserted) | `Optional gateway route configured or skipped` | `ai_gateway_endpoint`, `ai_gateway_status`, `agent_app_url`, `agent_app_name` |',
 '### Resources Created
 - [ ] AI Gateway `{agent_app_name}-gateway` live with inference-table rows under `{lakehouse_default_catalog}.{db_schema}_ops.gw_*`
 - [ ] PII + safety guardrails enabled (`both`); rate limits 120/min endpoint, 20/min per-user
@@ -10230,7 +12176,7 @@ Open a **new Agent thread in your Coding Assistant** and paste the prompt above.
 - [ ] `ai_gateway_endpoint`, `agent_app_url`, `agent_app_name` captured in state',
 true, 1, true, current_timestamp(), current_timestamp(), current_user());
 
--- Step 54 / order 54: Phase 4 / Operate in Production - Monitoring + Agent-as-Judge Debugging
+-- Step 56 / order 56: Phase 4 / Operate in Production - Monitoring + Agent-as-Judge Debugging
 -- Split from live DDL row 149 (Skill 07 Production Monitoring + Track A
 -- Skill 08 agent-as-judge debugging). Replaces the deprecated standalone
 -- prompt-optimization row entirely (default flow no longer routes to GEPA;
@@ -10239,7 +12185,18 @@ INSERT INTO ${catalog}.${schema}.section_input_prompts
 (input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
 VALUES
 (216, 'mlflow_production_monitoring_and_debugging',
-'Open the **Operate in Production** phase of the agent SDLC story arc — "how do I keep this healthy in production?" — by configuring continuous evaluation against production traces, wiring SQL alerts on the production scorers, and standing up agent-as-judge debugging that auto-categorizes low-scoring traces and routes follow-ups to the right iteration track.
+'Stand up production monitoring + agent-as-judge debugging for the deployed **{agent_app_name}** agent. After this prompt runs, continuous-eval scorers sample production traces against the production scorer suite, ≥ 4 SQL alerts watch quality drift, and `agent_failure_root_cause` annotations are written automatically on low-scoring traces — closing the SDLC arc by routing each failure cluster to the right iteration track.
+
+This will involve the following steps:
+
+- **Configure continuous-eval sampling** — sample production OTel traces under `{lakehouse_default_catalog}.{db_schema}_ops.{agent_resource_prefix}_otel_*` against the `production_scorers[]` from `governance.scorer_suite`
+- **Wire ≥ 4 SQL alerts** — materialize alerts from `governance.monitoring.required_alerts[]` plus the section 6b recipes in `references/monitoring-dashboard-queries.md` so quality drift surfaces within minutes
+- **Run the agent-as-judge categorizer** — filter trace assessments at `value < 0.7` over a 7d window, write `agent_failure_root_cause` annotations through the `failure_categorizer` role (never raw `{llm_endpoint}`)
+- **Cluster the top 5 failure shapes** — group annotations into clusters and pick the top 5 by frequency
+- **Route each cluster to its follow-up track** — instruction → queue_prompt_optimization; retrieval → queue_retrieval_tuning; tool → queue_tool_fix
+- **Capture observed alert + annotation state** — record `production_alerts_configured` and `agent_failure_root_cause_writes_observed` so the SDLC arc closes with verifiable monitoring on
+
+**How this prompt chains with the prior step (skill invocations):**
 
 **Invoke skills (in order):**
 
@@ -10269,8 +12226,8 @@ VALUES
 '',
 'Phase 4 / Operate in Production — Monitoring and Agent-as-Judge Debugging',
 'Configure continuous-eval sampling, ≥ 4 SQL alerts, and agent-as-judge auto-categorization that routes failure clusters to the right iteration track',
-54,
-'## How To Apply
+56,
+'## 1️⃣ How To Apply
 
 Open a **new Agent thread in your Coding Assistant** and paste the prompt above. This stands up production monitoring and agent-as-judge debugging on the deployed agent. The agent SDLC story arc loops back from here — debugging clusters route directly into the iteration track that fits the failure shape (prompt iteration, retrieval tuning, or tool fix).
 
@@ -10286,7 +12243,88 @@ Open a **new Agent thread in your Coding Assistant** and paste the prompt above.
 1. New Coding Assistant thread, paste prompt.
 2. AI configures continuous-eval sampling against `production_scorers[]`.
 3. AI generates ≥ 4 SQL alerts from the `required_alerts[]` list and the section `6b` recipes.
-4. AI stands up agent-as-judge debugging that writes `agent_failure_root_cause` rows to OTel annotations on failing production traces and dispatches each cluster to the right follow-up track.',
+4. AI stands up agent-as-judge debugging that writes `agent_failure_root_cause` rows to OTel annotations on failing production traces and dispatches each cluster to the right follow-up track.
+
+---
+
+## 2️⃣ What Are We Building?
+
+This is the **Operate in Production** phase of the MLflow SDLC arc (introduced in 49) — and it loops back to the iteration phase. Production traffic flows into OTel tables; three things consume those tables in parallel: continuous-eval scorer sampling, ≥ 4 SQL alerts, and **agent-as-judge** debugging that auto-classifies low-scoring traces into clusters and routes each cluster back into the right iteration track.
+
+```
+Production traffic ──> OTel tables in {db_schema}_ops.<otel_*>
+                              │
+              ┌───────────────┼───────────────────┐
+              ▼               ▼                   ▼
+   Continuous-eval    SQL Alerts (>=4)    Agent-as-judge debug
+   sampling against   from required_      (filter: value < 0.7,
+   production_        alerts[] +          window: 7d)
+   scorers[]          section 6b recipes         │
+              │               │                   ▼
+              │               │         Categorizer judge
+              │               │         (failure_categorizer role)
+              │               │                   │
+              │               │                   ▼
+              │               │         agent_failure_root_cause
+              │               │         rows in <otel_*_annotations>
+              │               │                   │
+              │               │                   ▼
+              │               │         Cluster top N + route:
+              │               │           instruction -> queue prompt iter
+              │               │           retrieval   -> queue retrieval tuning
+              │               │           tool        -> queue tool fix
+              ▼               ▼                   │
+        MLflow trace UI / dashboards / alerts <───┘
+                          │
+                          ▼ on regression
+                Trigger rollback per
+                rollback_trigger from 53
+```
+
+### Key Concepts
+
+| Concept | What It Means | Why It Matters |
+|---------|---------------|----------------|
+| **Continuous-eval sampling** | Production traces sampled against `production_scorers[]` on a rolling basis | Same scorer suite as 51, now grading prod — alerts fire on rolling means |
+| **`required_alerts[]`** | List of mandatory SQL alerts from the AgentSpec | Source of truth for "what must be alerted on" — not optional |
+| **Section 6b recipes** | Reference SQL templates from `monitoring-dashboard-queries.md` | Battle-tested alert queries — copy-paste, don''t invent |
+| **Agent-as-judge** | A judge that categorizes the *cause* of a failing trace | Replaces human-triages-everything with auto-clustering + routing |
+| **`failure_categorizer` role** | Endpoint role binding the categorizer judge resolves through | Same model-swap discipline as eval judges; no raw `{llm_endpoint}` |
+| **`agent_failure_root_cause`** | Annotation rows written to OTel annotation table | Cluster + route input; queryable like any other Delta table |
+| **`rollback_trigger`** | One-line condition from 53''s `decision.md` | Wired here as a SQL alert; if it fires, deployment auto-rolls back |
+
+---
+
+## 3️⃣ Why Are We Building It This Way? (Databricks Best Practices)
+
+| Practice | How It''s Used Here |
+|----------|--------------------|
+| **Continuous eval ≠ one-shot** | Production traces are sampled against `production_scorers[]` continuously, not in batches; alerts fire on rolling means so regressions surface within minutes, not days. |
+| **≥ 4 SQL alerts mandatory** | Drawn from `governance.monitoring.required_alerts[]` plus the section 6b recipes in `monitoring-dashboard-queries.md` — every prod agent gets the same minimum coverage. |
+| **Agent-as-judge for triage** | Instead of humans triaging every low-score trace, a categorizer judge auto-classifies failure clusters and routes each cluster to the right loop (instruction / retrieval / tool). |
+| **Categorizer is a role binding** | `failure_categorizer` role, NEVER raw `{llm_endpoint}`; same model-swap discipline as the eval judges in 51. |
+| **Rollback trigger is real** | The `rollback_trigger` line from the 53 sign-off becomes a configured SQL alert; if it fires, deployment auto-rolls back to the prior `@champion`. |
+
+---
+
+## 4️⃣ What Happens Behind the Scenes?
+
+When you paste the prompt, the AI walks six phases:
+
+| Phase | What the AI Does | Where It Writes |
+|-------|------------------|-----------------|
+| 1. Sample production scorers | Configure continuous-eval sampling against `production_scorers[]` | MLflow scorer scheduler |
+| 2. Configure ≥ 4 SQL alerts | Materialize alerts from `required_alerts[]` + section 6b recipes | Databricks SQL alerts |
+| 3. Stand up agent-as-judge | Wire `failure_categorizer` role with filter `value < 0.7` over 7d window | OTel annotation pipeline |
+| 4. Write `agent_failure_root_cause` | Categorizer writes rows to `{...}_ops.{...}_otel_annotations` on failing traces | OTel annotation table |
+| 5. Cluster top N | Group annotations into clusters, pick top 5 | Cluster summary table |
+| 6. Dispatch | Route per cluster: instruction → queue_prompt_optimization, retrieval → queue_retrieval_tuning, tool → queue_tool_fix | Iteration queues |
+
+### Gate Contract
+
+| Reads gate | Produces gate | Captured state |
+|------------|---------------|----------------|
+| `gateway live; DAB-deployed` (from `mlflow_gateway_and_deployment`) | `alerts wired; agent-as-judge running` | `production_alerts_configured`, `agent_failure_root_cause_writes_observed` |',
 '### Resources Created
 - [ ] Continuous-eval scorers sampling production traces against `production_scorers[]`
 - [ ] ≥ 4 SQL alerts configured for production scorers (from `required_alerts[]` and section `6b` recipes)

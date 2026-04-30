@@ -62,6 +62,7 @@ import {
 import { apiClient } from '../api/client';
 
 import { LakehouseParamsEditor } from './LakehouseParamsEditor';
+import { AgentToolInputsEditor } from './AgentToolInputsEditor';
 import { CsvUploadPanel } from './CsvUploadPanel';
 import { GoldTableTargetEditor, type GoldTableTarget } from './GoldTableTargetEditor';
 import { deriveSchemaName } from '../utils/naming';
@@ -2411,6 +2412,14 @@ export function WorkflowDiagram({
                     isExpanded={expandedStep === 42}
                     onToggleExpand={() => toggleExpand(42)}
                     sessionId={sessionId}
+                    customHeaderContent={
+                      <div onClick={(e) => e.stopPropagation()}>
+                        <AgentToolInputsEditor
+                          sessionId={sessionId}
+                          isExpanded={expandedStep === 42}
+                        />
+                      </div>
+                    }
                   />
                 </div>
               );

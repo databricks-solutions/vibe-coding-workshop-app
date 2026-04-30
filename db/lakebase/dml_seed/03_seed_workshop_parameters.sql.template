@@ -8,7 +8,7 @@
 -- =============================================================================
 
 -- Clear existing data (for recreate scenarios)
-DELETE FROM ${schema}.workshop_parameters WHERE param_key IN ('workspace_url', 'workspace_org_id', 'default_warehouse', 'lakebase_instance_name', 'lakebase_host_name', 'lakehouse_default_catalog', 'model_serving_endpoint', 'chapter_3_lakehouse_catalog', 'chapter_3_lakehouse_schema', 'company_brand_url', 'lakebase_uc_catalog_name', 'app_name', 'lakebase_mode', 'coding_assistants_config');
+DELETE FROM ${schema}.workshop_parameters WHERE param_key IN ('workspace_url', 'workspace_org_id', 'default_warehouse', 'lakebase_instance_name', 'lakebase_host_name', 'lakehouse_default_catalog', 'model_serving_endpoint', 'chapter_3_lakehouse_catalog', 'chapter_3_lakehouse_schema', 'company_brand_url', 'lakebase_uc_catalog_name', 'app_name', 'lakebase_mode', 'coding_assistants_config', 'agent_tool_sql_mcp_enabled', 'agent_sql_catalog', 'agent_sql_schema', 'agent_sql_warehouse_id', 'agent_sql_table_scope', 'agent_tool_genie_enabled', 'genie_space_id', 'agent_tool_vector_search_enabled', 'vs_endpoint', 'vs_index', 'agent_tool_uc_functions_enabled', 'uc_function_targets', 'agent_tool_external_mcp_enabled', 'external_mcp_connection');
 
 -- Parameter 1: Databricks Workspace URL
 INSERT INTO ${schema}.workshop_parameters 
@@ -244,6 +244,253 @@ VALUES
  FALSE,
  TRUE,
  FALSE,
+ CURRENT_TIMESTAMP,
+ CURRENT_TIMESTAMP,
+ CURRENT_USER);
+
+-- =============================================================================
+-- AGENT TOOL INPUTS (Step 42 Tools and MCP / agent_tool_selection Tool Plan)
+-- =============================================================================
+-- These parameters back the AgentToolInputsEditor inline UI on the Tools and
+-- MCP step. SQL MCP is the only family enabled by default (samples.wanderbricks
+-- with all-tables scope, governed by Unity Catalog permissions). Genie, Vector
+-- Search, UC Functions, and External MCP are opt-in via per-family checkboxes
+-- so users only fill in IDs for the tools they actually want.
+
+-- Parameter 14: Agent Tool - SQL MCP enabled
+INSERT INTO ${schema}.workshop_parameters 
+(param_key, param_label, param_value, param_description, param_type, display_order, is_required, is_active, allow_session_override, inserted_at, updated_at, created_by)
+VALUES
+('agent_tool_sql_mcp_enabled', 
+ 'Agent Tool: SQL MCP Enabled', 
+ 'true',
+ 'Whether to include the SQL MCP tool when generating the agent Tool Plan. Defaults to true so the agent can read from a Unity Catalog schema with read-only guardrails.',
+ 'text',
+ 14,
+ FALSE,
+ TRUE,
+ TRUE,
+ CURRENT_TIMESTAMP,
+ CURRENT_TIMESTAMP,
+ CURRENT_USER);
+
+-- Parameter 15: Agent SQL MCP - Catalog
+INSERT INTO ${schema}.workshop_parameters 
+(param_key, param_label, param_value, param_description, param_type, display_order, is_required, is_active, allow_session_override, inserted_at, updated_at, created_by)
+VALUES
+('agent_sql_catalog', 
+ 'Agent SQL MCP Catalog', 
+ 'samples',
+ 'Unity Catalog catalog the agent SQL MCP tool will read from. Defaults to the workshop sample catalog.',
+ 'catalog',
+ 15,
+ FALSE,
+ TRUE,
+ TRUE,
+ CURRENT_TIMESTAMP,
+ CURRENT_TIMESTAMP,
+ CURRENT_USER);
+
+-- Parameter 16: Agent SQL MCP - Schema
+INSERT INTO ${schema}.workshop_parameters 
+(param_key, param_label, param_value, param_description, param_type, display_order, is_required, is_active, allow_session_override, inserted_at, updated_at, created_by)
+VALUES
+('agent_sql_schema', 
+ 'Agent SQL MCP Schema', 
+ 'wanderbricks',
+ 'Unity Catalog schema (within agent_sql_catalog) the agent SQL MCP tool will read from.',
+ 'text',
+ 16,
+ FALSE,
+ TRUE,
+ TRUE,
+ CURRENT_TIMESTAMP,
+ CURRENT_TIMESTAMP,
+ CURRENT_USER);
+
+-- Parameter 17: Agent SQL MCP - Warehouse ID
+INSERT INTO ${schema}.workshop_parameters 
+(param_key, param_label, param_value, param_description, param_type, display_order, is_required, is_active, allow_session_override, inserted_at, updated_at, created_by)
+VALUES
+('agent_sql_warehouse_id', 
+ 'Agent SQL MCP Warehouse ID', 
+ '__DEFAULT_WAREHOUSE__',
+ 'SQL warehouse the agent SQL MCP tool will issue read-only queries against. Defaults to the workshop default warehouse.',
+ 'text',
+ 17,
+ FALSE,
+ TRUE,
+ TRUE,
+ CURRENT_TIMESTAMP,
+ CURRENT_TIMESTAMP,
+ CURRENT_USER);
+
+-- Parameter 18: Agent SQL MCP - Table Scope
+INSERT INTO ${schema}.workshop_parameters 
+(param_key, param_label, param_value, param_description, param_type, display_order, is_required, is_active, allow_session_override, inserted_at, updated_at, created_by)
+VALUES
+('agent_sql_table_scope', 
+ 'Agent SQL MCP Table Scope', 
+ 'all',
+ 'Either "all" (the default — the agent can read every table in the schema, governed by Unity Catalog permissions) or a comma-separated list of fully qualified table names to allowlist.',
+ 'text',
+ 18,
+ FALSE,
+ TRUE,
+ TRUE,
+ CURRENT_TIMESTAMP,
+ CURRENT_TIMESTAMP,
+ CURRENT_USER);
+
+-- Parameter 19: Agent Tool - Genie enabled
+INSERT INTO ${schema}.workshop_parameters 
+(param_key, param_label, param_value, param_description, param_type, display_order, is_required, is_active, allow_session_override, inserted_at, updated_at, created_by)
+VALUES
+('agent_tool_genie_enabled', 
+ 'Agent Tool: Genie Enabled', 
+ 'false',
+ 'Whether to include a Genie tool in the agent Tool Plan. When true, supply the Genie Space ID below.',
+ 'text',
+ 19,
+ FALSE,
+ TRUE,
+ TRUE,
+ CURRENT_TIMESTAMP,
+ CURRENT_TIMESTAMP,
+ CURRENT_USER);
+
+-- Parameter 20: Genie Space ID
+INSERT INTO ${schema}.workshop_parameters 
+(param_key, param_label, param_value, param_description, param_type, display_order, is_required, is_active, allow_session_override, inserted_at, updated_at, created_by)
+VALUES
+('genie_space_id', 
+ 'Genie Space ID', 
+ '',
+ 'ID of an existing Genie Space the agent should call. Bring your own — no upstream step provisions this.',
+ 'text',
+ 20,
+ FALSE,
+ TRUE,
+ TRUE,
+ CURRENT_TIMESTAMP,
+ CURRENT_TIMESTAMP,
+ CURRENT_USER);
+
+-- Parameter 21: Agent Tool - Vector Search enabled
+INSERT INTO ${schema}.workshop_parameters 
+(param_key, param_label, param_value, param_description, param_type, display_order, is_required, is_active, allow_session_override, inserted_at, updated_at, created_by)
+VALUES
+('agent_tool_vector_search_enabled', 
+ 'Agent Tool: Vector Search Enabled', 
+ 'false',
+ 'Whether to include a Vector Search tool in the agent Tool Plan. When true, supply the endpoint and index below.',
+ 'text',
+ 21,
+ FALSE,
+ TRUE,
+ TRUE,
+ CURRENT_TIMESTAMP,
+ CURRENT_TIMESTAMP,
+ CURRENT_USER);
+
+-- Parameter 22: Vector Search Endpoint
+INSERT INTO ${schema}.workshop_parameters 
+(param_key, param_label, param_value, param_description, param_type, display_order, is_required, is_active, allow_session_override, inserted_at, updated_at, created_by)
+VALUES
+('vs_endpoint', 
+ 'Vector Search Endpoint', 
+ '',
+ 'Name of an existing Vector Search endpoint. Bring your own.',
+ 'text',
+ 22,
+ FALSE,
+ TRUE,
+ TRUE,
+ CURRENT_TIMESTAMP,
+ CURRENT_TIMESTAMP,
+ CURRENT_USER);
+
+-- Parameter 23: Vector Search Index
+INSERT INTO ${schema}.workshop_parameters 
+(param_key, param_label, param_value, param_description, param_type, display_order, is_required, is_active, allow_session_override, inserted_at, updated_at, created_by)
+VALUES
+('vs_index', 
+ 'Vector Search Index', 
+ '',
+ 'Fully qualified name of the Vector Search index (e.g. catalog.schema.index).',
+ 'text',
+ 23,
+ FALSE,
+ TRUE,
+ TRUE,
+ CURRENT_TIMESTAMP,
+ CURRENT_TIMESTAMP,
+ CURRENT_USER);
+
+-- Parameter 24: Agent Tool - UC Functions enabled
+INSERT INTO ${schema}.workshop_parameters 
+(param_key, param_label, param_value, param_description, param_type, display_order, is_required, is_active, allow_session_override, inserted_at, updated_at, created_by)
+VALUES
+('agent_tool_uc_functions_enabled', 
+ 'Agent Tool: UC Functions Enabled', 
+ 'false',
+ 'Whether to include UC Function tools in the agent Tool Plan. When true, supply fully qualified function names below.',
+ 'text',
+ 24,
+ FALSE,
+ TRUE,
+ TRUE,
+ CURRENT_TIMESTAMP,
+ CURRENT_TIMESTAMP,
+ CURRENT_USER);
+
+-- Parameter 25: UC Function Targets
+INSERT INTO ${schema}.workshop_parameters 
+(param_key, param_label, param_value, param_description, param_type, display_order, is_required, is_active, allow_session_override, inserted_at, updated_at, created_by)
+VALUES
+('uc_function_targets', 
+ 'UC Function Targets', 
+ '',
+ 'Comma- or newline-separated list of fully qualified UC function names (catalog.schema.function) the agent can EXECUTE.',
+ 'text',
+ 25,
+ FALSE,
+ TRUE,
+ TRUE,
+ CURRENT_TIMESTAMP,
+ CURRENT_TIMESTAMP,
+ CURRENT_USER);
+
+-- Parameter 26: Agent Tool - External MCP enabled
+INSERT INTO ${schema}.workshop_parameters 
+(param_key, param_label, param_value, param_description, param_type, display_order, is_required, is_active, allow_session_override, inserted_at, updated_at, created_by)
+VALUES
+('agent_tool_external_mcp_enabled', 
+ 'Agent Tool: External MCP Enabled', 
+ 'false',
+ 'Whether to include an external MCP server in the agent Tool Plan. When true, supply the UC connection name below.',
+ 'text',
+ 26,
+ FALSE,
+ TRUE,
+ TRUE,
+ CURRENT_TIMESTAMP,
+ CURRENT_TIMESTAMP,
+ CURRENT_USER);
+
+-- Parameter 27: External MCP Connection
+INSERT INTO ${schema}.workshop_parameters 
+(param_key, param_label, param_value, param_description, param_type, display_order, is_required, is_active, allow_session_override, inserted_at, updated_at, created_by)
+VALUES
+('external_mcp_connection', 
+ 'External MCP Connection', 
+ '',
+ 'Name of the Unity Catalog connection backing an external MCP server (or a registry-backed candidate name).',
+ 'text',
+ 27,
+ FALSE,
+ TRUE,
+ TRUE,
  CURRENT_TIMESTAMP,
  CURRENT_TIMESTAMP,
  CURRENT_USER);

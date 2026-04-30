@@ -966,6 +966,21 @@ def get_workshop_parameters_sync() -> Dict[str, str]:
             'app_name': os.getenv('APP_NAME', ''),
             'lakebase_mode': os.getenv('LAKEBASE_MODE', 'autoscaling'),
             'coding_assistants_config': DEFAULT_CODING_ASSISTANTS_CONFIG_JSON,
+            # Agent Tool Inputs (Step 42 Tools and MCP / agent_tool_selection)
+            'agent_tool_sql_mcp_enabled': 'true',
+            'agent_sql_catalog': 'samples',
+            'agent_sql_schema': 'wanderbricks',
+            'agent_sql_warehouse_id': os.getenv('DEFAULT_WAREHOUSE', ''),
+            'agent_sql_table_scope': 'all',
+            'agent_tool_genie_enabled': 'false',
+            'genie_space_id': '',
+            'agent_tool_vector_search_enabled': 'false',
+            'vs_endpoint': '',
+            'vs_index': '',
+            'agent_tool_uc_functions_enabled': 'false',
+            'uc_function_targets': '',
+            'agent_tool_external_mcp_enabled': 'false',
+            'external_mcp_connection': '',
         }
     
     out = {row['param_key']: row['param_value'] for row in results}
@@ -4301,7 +4316,162 @@ async def get_workshop_parameters(response: Response) -> List[WorkshopParameter]
                 is_required=False,
                 is_active=True,
                 allow_session_override=False
-            )
+            ),
+            # Agent Tool Inputs (Step 42 Tools and MCP / agent_tool_selection Tool Plan)
+            WorkshopParameter(
+                param_key="agent_tool_sql_mcp_enabled",
+                param_label="Agent Tool: SQL MCP Enabled",
+                param_value="true",
+                param_description="Whether to include the SQL MCP tool when generating the agent Tool Plan.",
+                param_type="text",
+                display_order=14,
+                is_required=False,
+                is_active=True,
+                allow_session_override=True
+            ),
+            WorkshopParameter(
+                param_key="agent_sql_catalog",
+                param_label="Agent SQL MCP Catalog",
+                param_value="samples",
+                param_description="Unity Catalog catalog the agent SQL MCP tool will read from.",
+                param_type="catalog",
+                display_order=15,
+                is_required=False,
+                is_active=True,
+                allow_session_override=True
+            ),
+            WorkshopParameter(
+                param_key="agent_sql_schema",
+                param_label="Agent SQL MCP Schema",
+                param_value="wanderbricks",
+                param_description="Unity Catalog schema (within agent_sql_catalog) the agent SQL MCP tool will read from.",
+                param_type="text",
+                display_order=16,
+                is_required=False,
+                is_active=True,
+                allow_session_override=True
+            ),
+            WorkshopParameter(
+                param_key="agent_sql_warehouse_id",
+                param_label="Agent SQL MCP Warehouse ID",
+                param_value=os.getenv('DEFAULT_WAREHOUSE', ''),
+                param_description="SQL warehouse the agent SQL MCP tool will issue read-only queries against.",
+                param_type="text",
+                display_order=17,
+                is_required=False,
+                is_active=True,
+                allow_session_override=True
+            ),
+            WorkshopParameter(
+                param_key="agent_sql_table_scope",
+                param_label="Agent SQL MCP Table Scope",
+                param_value="all",
+                param_description='Either "all" (the default — every table in the schema, governed by Unity Catalog permissions) or a comma-separated allowlist of fully qualified table names.',
+                param_type="text",
+                display_order=18,
+                is_required=False,
+                is_active=True,
+                allow_session_override=True
+            ),
+            WorkshopParameter(
+                param_key="agent_tool_genie_enabled",
+                param_label="Agent Tool: Genie Enabled",
+                param_value="false",
+                param_description="Whether to include a Genie tool in the agent Tool Plan.",
+                param_type="text",
+                display_order=19,
+                is_required=False,
+                is_active=True,
+                allow_session_override=True
+            ),
+            WorkshopParameter(
+                param_key="genie_space_id",
+                param_label="Genie Space ID",
+                param_value="",
+                param_description="ID of an existing Genie Space the agent should call.",
+                param_type="text",
+                display_order=20,
+                is_required=False,
+                is_active=True,
+                allow_session_override=True
+            ),
+            WorkshopParameter(
+                param_key="agent_tool_vector_search_enabled",
+                param_label="Agent Tool: Vector Search Enabled",
+                param_value="false",
+                param_description="Whether to include a Vector Search tool in the agent Tool Plan.",
+                param_type="text",
+                display_order=21,
+                is_required=False,
+                is_active=True,
+                allow_session_override=True
+            ),
+            WorkshopParameter(
+                param_key="vs_endpoint",
+                param_label="Vector Search Endpoint",
+                param_value="",
+                param_description="Name of an existing Vector Search endpoint.",
+                param_type="text",
+                display_order=22,
+                is_required=False,
+                is_active=True,
+                allow_session_override=True
+            ),
+            WorkshopParameter(
+                param_key="vs_index",
+                param_label="Vector Search Index",
+                param_value="",
+                param_description="Fully qualified Vector Search index name (catalog.schema.index).",
+                param_type="text",
+                display_order=23,
+                is_required=False,
+                is_active=True,
+                allow_session_override=True
+            ),
+            WorkshopParameter(
+                param_key="agent_tool_uc_functions_enabled",
+                param_label="Agent Tool: UC Functions Enabled",
+                param_value="false",
+                param_description="Whether to include UC Function tools in the agent Tool Plan.",
+                param_type="text",
+                display_order=24,
+                is_required=False,
+                is_active=True,
+                allow_session_override=True
+            ),
+            WorkshopParameter(
+                param_key="uc_function_targets",
+                param_label="UC Function Targets",
+                param_value="",
+                param_description="Comma- or newline-separated list of fully qualified UC function names (catalog.schema.function).",
+                param_type="text",
+                display_order=25,
+                is_required=False,
+                is_active=True,
+                allow_session_override=True
+            ),
+            WorkshopParameter(
+                param_key="agent_tool_external_mcp_enabled",
+                param_label="Agent Tool: External MCP Enabled",
+                param_value="false",
+                param_description="Whether to include an external MCP server in the agent Tool Plan.",
+                param_type="text",
+                display_order=26,
+                is_required=False,
+                is_active=True,
+                allow_session_override=True
+            ),
+            WorkshopParameter(
+                param_key="external_mcp_connection",
+                param_label="External MCP Connection",
+                param_value="",
+                param_description="Name of the Unity Catalog connection backing an external MCP server.",
+                param_type="text",
+                display_order=27,
+                is_required=False,
+                is_active=True,
+                allow_session_override=True
+            ),
         ]
     
     # Self-heal: existing deployments that were seeded before this param

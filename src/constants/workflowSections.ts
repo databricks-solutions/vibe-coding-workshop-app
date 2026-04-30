@@ -281,8 +281,8 @@ export const WORKSHOP_LEVELS: Record<WorkshopLevel, LevelConfig> = {
   'agents-accelerator': {
     label: 'Agents Accelerator',
     tooltip: 'Build, evaluate, and deploy a production agent app',
-    description: 'Build a production-ready agent app — Databricks App + Lakebase + Bronze data + Mosaic AI Agent Framework + MLflow for Gen-AI lifecycle.',
-    sectionIds: ['define-usecase', 'databricks-app', 'lakebase', 'lakehouse', 'data-intelligence', 'agents-on-apps', 'mlflow-genai', 'iterate-enhance', 'cleanup'],
+    description: 'Build a production-ready agent app — Databricks App + Lakebase + Mosaic AI Agent Framework + MLflow for Gen-AI lifecycle.',
+    sectionIds: ['define-usecase', 'databricks-app', 'lakebase', 'agents-on-apps', 'mlflow-genai', 'iterate-enhance', 'cleanup'],
   },
   'reverse-lakehouse': {
     label: 'Lakehouse',
@@ -573,7 +573,6 @@ export function getFilteredSections(
   
   const isGenie = normalizedLevel === 'genie-accelerator';
   const isSkillsAccelerator = normalizedLevel === 'skills-accelerator';
-  const isAgentsAccelerator = normalizedLevel === 'agents-accelerator';
 
   let filtered = WORKFLOW_SECTIONS
     .filter(section => sectionIds.includes(section.id))
@@ -583,22 +582,6 @@ export function getFilteredSections(
         return {
           ...section,
           steps: section.steps.filter(step => step.number !== 3),
-        };
-      }
-      // Agents Accelerator: lakehouse section shows only Bronze-relevant steps
-      // (must be evaluated BEFORE the !isGenie branch, since the agents path also satisfies !isGenie)
-      if (section.id === 'lakehouse' && isAgentsAccelerator) {
-        return {
-          ...section,
-          steps: section.steps.filter(step => [10, 12, 23].includes(step.number)),
-        };
-      }
-      // Agents Accelerator: data-intelligence section is reduced to a Genie + Deploy bridge
-      // (must run BEFORE the generic data-intelligence step-19 filter below)
-      if (section.id === 'data-intelligence' && isAgentsAccelerator) {
-        return {
-          ...section,
-          steps: section.steps.filter(step => [17, 24].includes(step.number)),
         };
       }
       // Genie Accelerator: lakehouse section shows only steps 22, 11, 14, 23
@@ -703,7 +686,7 @@ export const CHAPTER_VISIBILITY: Record<WorkshopLevel, Set<'ch1' | 'ch2' | 'ch3'
   'genie-accelerator': new Set(['ch3', 'ch4']),
   'data-engineering-accelerator': new Set(['ch3']),
   'skills-accelerator': new Set([]),
-  'agents-accelerator': new Set(['ch1', 'ch2', 'ch3', 'ch4']),
+  'agents-accelerator': new Set(['ch1', 'ch2', 'ch4']),
   'reverse-lakehouse': new Set(['ch3']),
   'reverse-lakehouse-di': new Set(['ch3', 'ch4']),
   'reverse-lakebase': new Set(['ch2', 'ch3', 'ch4']),
@@ -721,7 +704,7 @@ export const ARCH_VISIBILITY: Record<WorkshopLevel, { ch1: boolean; ch2: boolean
   'genie-accelerator': { ch1: false, ch2: false, ch3: true, ch4: true },
   'data-engineering-accelerator': { ch1: false, ch2: false, ch3: true, ch4: false },
   'skills-accelerator': { ch1: false, ch2: false, ch3: false, ch4: false },
-  'agents-accelerator': { ch1: true, ch2: true, ch3: true, ch4: true },
+  'agents-accelerator': { ch1: true, ch2: true, ch3: false, ch4: true },
   'reverse-lakehouse': { ch1: false, ch2: false, ch3: true, ch4: false },
   'reverse-lakehouse-di': { ch1: false, ch2: false, ch3: true, ch4: true },
   'reverse-lakebase': { ch1: false, ch2: true, ch3: true, ch4: true },

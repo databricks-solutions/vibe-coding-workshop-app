@@ -101,7 +101,7 @@ const LEVEL_DESCRIPTIONS: Record<WorkshopLevel, string> = {
   'genie-accelerator': 'Analyze silver metadata, design Gold layer, and build Genie Spaces with Metric Views and TVFs',
   'data-engineering-accelerator': 'Build production-ready Bronze, Silver, and Gold data pipelines using Databricks Lakehouse best practices',
   'skills-accelerator': 'Build a Data Contract Governance Skill that tags gold-layer tables and validates compliance for certification',
-  'agents-accelerator': 'Build, evaluate, and deploy a production-ready agent app — Databricks App + Lakebase + Bronze data + Mosaic AI Agent Framework + MLflow for Gen-AI lifecycle.',
+  'agents-accelerator': 'Build, evaluate, and deploy a production-ready agent app — Databricks App + Lakebase + Mosaic AI Agent Framework + MLflow for Gen-AI lifecycle.',
   'reverse-lakehouse': 'Start with Lakehouse data engineering, then sync analytics into Lakebase.',
   'reverse-lakehouse-di': 'Build Gold layer analytics and Genie Spaces, then sync into Lakebase.',
   'reverse-lakebase': 'Push curated analytics data into Lakebase PostgreSQL using Databricks Synced Tables.',
@@ -950,7 +950,7 @@ export function LevelSelector({
       case 'genie-accelerator': return 'Foundation → Silver Metadata → Gold Layer → Use-Case Plan → Genie Space → Refinement';
       case 'data-engineering-accelerator': return 'Foundation → Lakehouse (Bronze → Silver → Gold) → Refinement';
       case 'skills-accelerator': return 'Foundation → Build Agent Skill (Explore, Strategy, SKILL.md, Apply & Test, Validate) → Refinement';
-      case 'agents-accelerator': return 'Foundation → Databricks App → Lakebase → Lakehouse (Bronze) → Agents on Apps → MLflow for Gen-AI → Refinement';
+      case 'agents-accelerator': return 'Foundation → Databricks App → Lakebase → Agents on Apps → MLflow for Gen-AI → Refinement';
       case 'reverse-lakehouse': return 'Foundation → Lakehouse → Refinement';
       case 'reverse-lakehouse-di': return 'Foundation → Lakehouse → AI and Agents → Refinement';
       case 'reverse-lakebase': return 'Foundation → Lakehouse → AI and Agents → Reverse ETL (Synced Tables) → Refinement';
