@@ -9205,135 +9205,65 @@ true, 1, true, current_timestamp(), current_timestamp(), current_user());
 
 -- Step 38 / order 38: Agent Spec Design
 INSERT INTO ${catalog}.${schema}.section_input_prompts 
-(input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, version, is_active, inserted_at, updated_at, created_by)
+(input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
 VALUES
 (217, 'agent_spec_design',
-'Generate a prompt that I can copy into my AI coding assistant (Cursor/Copilot) to create the **Agent Spec** for the **{use_case_slug}** agent. The Agent Spec is the first design artifact of the Track A "Agents 101" arc — a YAML file (`docs/agent_spec.yaml`) that captures *intent* (purpose, personas, capabilities, model endpoint, MCP recommendations, eval seeds, governance) before any code or Databricks resource is created. Do NOT create code, Databricks resources, MCP installs, or tool wiring during spec generation.
+'## Your Task
 
-This will involve the following steps:
+You are a Databricks GenAI agent designer. Author the **Agent Spec** for the **{use_case_slug}** agent — a YAML design artifact at `docs/agent_spec.yaml` that captures intent (purpose, personas, capabilities, model endpoint, MCPs, eval seeds, governance) before any code is written.
 
-- **Read the PRD** — load `docs/design_prd.md` (created by step 03) and record its path + sha256 as `source_prd` so the spec is reproducible from a known PRD revision
-- **Read the UI design** — load `docs/ui_design.md` (created by step 04) for pages, personas, navigation, and user journeys; mirror the personas + flows here so the agent fits the same UX
-- **Read the deployed AppKit + Lakebase context** — load `apps_lakebase/$APP_NAME/.vibecoding-state.md` (populated by steps 04-07) for `APP_NAME`, app URL, workspace URL, `DB_SCHEMA`, app API routes, frontend pages, and any live/mock endpoint notes; reference these as the agent''s host application context
-- **Draft the agent''s intent** — write `purpose`, `personas[]`, `capabilities[]`, and a first-pass `system_prompt`
-- **Confirm the model endpoint** — set `agent.model` to the user-confirmed Databricks Model Serving endpoint (default `databricks-claude-sonnet-4-6`); never use vague labels like "Claude" or "best model"
-- **Recommend managed MCPs** — propose Genie, SQL, Vector Search, and UC Functions as managed Databricks MCPs, plus an optional Knowledge Assistant
-- **(Optional) Research external MCPs** — if `mcp_research_mode: web_research` is enabled, search the official MCP Registry first and record candidates with registry status, version, source URL, and confidence
-- **Author eval and governance seeds** — write smoke + benchmark eval cases and `must_do` / `must_not_do` / scorer-guideline seeds so the spec is review-ready
+**First:** Read `apps_lakebase/$APP_NAME/.vibecoding-state.md` if it exists — it contains resolved issues and variable values from prior phases.
 
-The generated prompt MUST include this exact instruction block at the very beginning:
-
-```
 ## IMPORTANT - READ FIRST
 
-Your ONLY task is to create the Agent Spec document. Do NOT:
-- Generate application code
-- Create Databricks resources
-- Install MCP servers
-- Create UC connections
-- Wire tools into an agent
-- Deploy anything
-- Modify app code
-- Modify SQL seed files
-- Create or configure AI Gateway endpoints
+Your ONLY task is to create `docs/agent_spec.yaml`. Do NOT generate application code, create Databricks resources, install MCP servers, create UC connections, wire tools into an agent, deploy anything, modify app code, modify SQL seed files, or create/configure AI Gateway endpoints.
 
 You MUST:
-- Read docs/design_prd.md (step 03 — business intent)
-- Read docs/ui_design.md (step 04 — pages, personas, navigation, user journeys)
-- Read apps_lakebase/$APP_NAME/.vibecoding-state.md (steps 04-07 — APP_NAME, app URL, workspace URL, DB_SCHEMA, Lakebase wiring, frontend pages, API routes)
-- Use those prior artifacts as the only required context — do NOT require Bronze, Gold, Genie, or Data Intelligence artifacts. If the user wants external structured data, record it as optional tool candidates under mcp_research and let the Tool Plan (step 39) decide.
-- Create ONLY docs/agent_spec.yaml
-- Use genai-agents/foundation/00b-agent-spec-and-tool-plan/SKILL.md as the contract
-- If web search is available and I ask for MCP research, start with the official MCP Registry (`https://registry.modelcontextprotocol.io`) and its REST API (`https://modelcontextprotocol.io/registry/registry-aggregators#consuming-the-mcp-registry-rest-api`), then use broader web search only to enrich registry candidates
-- Record MCP recommendations under mcp_research with registry metadata, version/status, source URLs, and confidence
-- STOP after saving docs/agent_spec.yaml
-```
+- Read `docs/design_prd.md` (step 03 — business intent); compute its sha256 and record both path and digest as `source_prd`
+- Read `docs/ui_design.md` (step 04 — pages, personas, navigation, user journeys); align Agent Spec personas with this UI
+- Read `apps_lakebase/$APP_NAME/.vibecoding-state.md` (steps 04-07 — APP_NAME, app URL, workspace URL, DB_SCHEMA, API routes, frontend pages)
+- Use `genai-agents/foundation/00b-agent-spec-and-tool-plan/SKILL.md` as the contract
+- Set `agent.model` to `{agent_model}`. If `{agent_model}` is blank, missing, or still a literal `{agent_model}` placeholder, default to `databricks-claude-sonnet-4-6`. Never record vague labels like "Claude" or "best model".
+- Bronze, Gold, Genie, and Data Intelligence artifacts are NOT prerequisites. If external structured data is needed, record it as optional `mcp_research` candidates and let the Tool Plan (step 39) decide.
+- Create ONLY `docs/agent_spec.yaml` and STOP
 
-After those instructions, the generated prompt should describe the {industry_name} application focused on {use_case_title} and request a complete Agent Spec.
+## Use Case Context
 
-## Use Case Context to Include
-{use_case_description}
+- **Industry:** {industry_name}
+- **Use Case:** {use_case_title}
+- **Description:** {use_case_description}
 
-## Application Context to Include
-- **Industry**: {industry_name}
-- **Use Case**: {use_case_title}
-- Use the same neutral product naming conventions used in the PRD
+Use the same neutral product naming conventions used in `docs/design_prd.md`.
 
-## Prior App Context to Inherit (from steps 03-07)
+## Required `docs/agent_spec.yaml` Sections
 
-The Agent Spec must inherit context from the visible upstream Agents Accelerator path, not from Lakehouse or Data Intelligence steps:
-
-- **PRD (step 03)** — `docs/design_prd.md` is the source of business intent, personas, and goals; record it as `source_prd` (path + sha256).
-- **UI design (step 04)** — `docs/ui_design.md` defines the pages, personas, navigation, and user journeys. The Agent Spec personas and capabilities must align with this UI; do not invent personas that contradict it.
-- **Deployed AppKit app (step 05)** — `apps_lakebase/$APP_NAME/.vibecoding-state.md` carries `APP_NAME`, the app URL, and the workspace URL. Reference these as the agent''s host application; do not duplicate values, just point at the state file.
-- **Lakebase setup + wiring (steps 06-07)** — the same state file carries `DB_SCHEMA`, app API routes, frontend pages, and any live/mock endpoint notes. The agent''s data entities and tool surface should map to these, not to a Bronze/Genie pipeline.
-
-Bronze, Gold, Genie, and Data Intelligence outputs are NOT prerequisites. If the user wants external structured data, record it later in `docs/agent_tool_plan.yaml` as an optional bring-your-own tool input (e.g. `genie_space_id`, `agent_sql_catalog`, `agent_sql_schema`, an existing Vector Search index, or UC Functions).
-
-## Model Selection
-
-Ask the user to confirm the underlying Databricks model serving endpoint for this agent.
-
-Use this input name:
-- agent_model: {agent_model}
-
-If `agent_model` is missing, empty, or still a placeholder, default to:
-
-```yaml
-agent:
-  model: "databricks-claude-sonnet-4-6"
-```
-
-Record the final endpoint name as `agent.model` in `docs/agent_spec.yaml`.
-Do not record vague model family labels such as `Claude`, `GPT`, or `best model`.
-
-`agent.model` is the raw/backing Databricks model serving endpoint for the core workshop route. Do not record an AI Gateway endpoint here. AI Gateway, if used later, is introduced through the Tool Plan runtime route and deployment config, not through the Agent Spec.
-
-## Agent Spec Contents
-
-The Agent Spec must include:
-- source_prd path and sha256
-- agent purpose, personas, capabilities, `agent.model`, auth mode, and memory
-- `agent.model` set to the user-provided `agent_model` endpoint or `databricks-claude-sonnet-4-6` by default
-- system_prompt draft
-- managed Databricks MCP recommendations: sql, genie, vector_search, uc_functions
-- optional Knowledge Assistant recommendation
-- external MCP research candidates with official MCP Registry metadata, version/status, source URLs, and confidence when web search is enabled
-- evaluation smoke cases and benchmark seeds
-- governance must_do, must_not_do, and scorer guideline seeds
+- `source_prd` — `path` + `sha256` of `docs/design_prd.md`
+- `agent.purpose`, `agent.personas[]`, `agent.capabilities[]`, `agent.system_prompt` (first-pass draft)
+- `agent.model` — raw Databricks Model Serving endpoint name (see MUST rule above); also record `agent.auth_mode` and `agent.memory`
+- `mcp_recommendations` — managed Databricks MCPs: `sql`, `genie`, `vector_search`, `uc_functions`, plus optional Knowledge Assistant
+- `mcp_research.candidates[]` — only if you enable web research (see below); each candidate needs `name`, `provider`, `registry_name`, `registry_status`, `registry_version`, `source_url`, `registry_url`, `integration_method`, `auth_model`, `required_scopes`, `databricks_compatibility`, `confidence`
+- `evals.smoke_cases[]`, `evals.benchmarks[]`
+- `governance.must_do[]`, `governance.must_not_do[]`, `governance.scorer_guidelines[]`
 
 ## Optional MCP Web Research
 
-If the user explicitly enables `mcp_research_mode: web_research`:
-1. Search the official MCP Registry first (`https://registry.modelcontextprotocol.io`) using the documented REST API.
-2. Record candidates under `mcp_research.candidates[]` with name, provider, registry_name, registry_status, registry_version, source_url, registry_url, integration_method, auth_model, required_scopes, databricks_compatibility, and confidence.
-3. Skip `status: deleted` entries; mark `status: deprecated` as `confidence: low`.
-4. Use broader web search only to enrich registry candidates with vendor docs and Databricks compatibility notes.
-5. NEVER install or configure any MCP connection during spec creation.
+If you want external MCP suggestions, set `mcp_research_mode: web_research` and query the official MCP Registry first (`https://registry.modelcontextprotocol.io`, REST API at `https://modelcontextprotocol.io/registry/registry-aggregators#consuming-the-mcp-registry-rest-api`). Skip `status: deleted` entries; mark `status: deprecated` as `confidence: low`. Use broader web search only to enrich registry candidates. NEVER install or configure any MCP connection during spec creation.
 
-The prompt MUST end with:
-
-```
 Save it to: docs/agent_spec.yaml
-STOP after saving. Do not generate any code, install MCPs, create UC connections, or proceed with other tasks.
-```',
-'You are generating a prompt that users will copy into their AI coding assistant.
+STOP after saving. Do NOT create code, install MCPs, create UC connections, or proceed with other tasks.',
+'You are a Databricks GenAI agent designer. Your task is to author the Agent Spec — a YAML design artifact at `docs/agent_spec.yaml` — that captures the agent''s intent before any code or Databricks resource is created.
 
-Your output should be a complete, ready-to-use prompt that when pasted into Cursor or Copilot will:
-1. Read the prior app design context: `docs/design_prd.md` (step 03), `docs/ui_design.md` (step 04), and `apps_lakebase/$APP_NAME/.vibecoding-state.md` (steps 04-07 deployed AppKit + Lakebase context)
-2. Create ONLY docs/agent_spec.yaml, including the selected model endpoint at `agent.model`
-3. Optionally use IDE web search to research relevant MCP servers when requested, starting with the official MCP Registry at https://registry.modelcontextprotocol.io and the REST API documented at https://modelcontextprotocol.io/registry/registry-aggregators#consuming-the-mcp-registry-rest-api
-4. NOT generate code, create Databricks resources, install MCPs, or wire tools
-5. NOT require Bronze, Gold, Genie, or Data Intelligence artifacts — those are optional bring-your-own tool backends, recorded later in `docs/agent_tool_plan.yaml`, never preconditions for the spec
+Key requirements:
 
-CRITICAL: Your generated prompt MUST start with instructions telling the AI to only create docs/agent_spec.yaml and stop.
+- Read `docs/design_prd.md`, `docs/ui_design.md`, and `apps_lakebase/$APP_NAME/.vibecoding-state.md` for context
+- Use `genai-agents/foundation/00b-agent-spec-and-tool-plan/SKILL.md` as the spec contract
+- Set `agent.model` to a raw Databricks Model Serving endpoint name (default `databricks-claude-sonnet-4-6`) — never a vague label like "Claude" or "best model"
+- Recommend managed Databricks MCPs (Genie, SQL, Vector Search, UC Functions) plus an optional Knowledge Assistant
+- Author smoke + benchmark eval seeds and `must_do` / `must_not_do` / scorer-guideline governance seeds
+- Do NOT generate application code, create Databricks resources, install MCPs, create UC connections, wire tools, or deploy
+- Bronze, Gold, Genie, and Data Intelligence artifacts are NOT prerequisites — they become optional tool backends in the Tool Plan (step 39)
 
-**OUTPUT FORMAT RULES:**
-- Output the prompt directly as plain markdown text - do NOT wrap the entire output in code blocks or backticks
-- Use proper markdown formatting: ## for headers, - for bullet points, **text** for bold
-- For code blocks within your output (like file paths or specific instructions to include verbatim), use triple backticks on their own lines
-- Do NOT use single backticks for multi-line content
-- The output should render properly when displayed as markdown',
+This prompt is returned as-is for direct use in Cursor/Copilot. No LLM processing.',
 'Agent Spec Design',
 'Generate docs/agent_spec.yaml from docs/design_prd.md with optional MCP web research',
 38,
@@ -9342,6 +9272,15 @@ CRITICAL: Your generated prompt MUST start with instructions telling the AI to o
 ### Prerequisite
 
 The Agents Accelerator visible path runs steps 03-07 first; this prompt inherits their outputs.
+
+#### Prior App Context to Inherit (from steps 03-07)
+
+The Agent Spec inherits context from the visible upstream Agents Accelerator path, not from Lakehouse or Data Intelligence steps:
+
+- **PRD (step 03)** — `docs/design_prd.md` is the source of business intent, personas, and goals; recorded as `source_prd` (path + sha256).
+- **UI design (step 04)** — `docs/ui_design.md` defines pages, personas, navigation, and user journeys. The Agent Spec personas align with this UI.
+- **Deployed AppKit app (step 05)** — `apps_lakebase/$APP_NAME/.vibecoding-state.md` carries `APP_NAME`, app URL, and workspace URL.
+- **Lakebase setup + wiring (steps 06-07)** — the same state file carries `DB_SCHEMA`, app API routes, frontend pages, and any live/mock endpoint notes.
 
 Required upstream artifacts:
 
@@ -9388,7 +9327,7 @@ PHASE 1: FOUNDATION                      PHASE 2: BUILD              PHASE 3: AP
 | **`source_prd`** | Path + `sha256` of `docs/design_prd.md` recorded at the time of spec authoring | Makes the spec reproducible — a future spec regen against the same PRD revision must produce equivalent intent |
 | **`agent.model`** | Raw Databricks Model Serving endpoint name (e.g. `databricks-claude-sonnet-4-6`) — never a vague label like "Claude" or "best model" | Endpoint name is the contract that 39 lifts into `runtime_config.llm` and 44 grants `CAN_QUERY` on |
 | **`mcp_research`** | Optional web-research record of external MCP candidates sourced from the official MCP Registry | Captures provenance (registry URL, version/status, confidence) so 39 can ground tool selection in real, current servers |
-| **Coding-assistant-only step** | `bypass_llm: false`; the prompt is rendered for a human, who pastes it into Cursor/Copilot | This step never touches Databricks — no schemas, no installs, no deploy. Pure design. |
+| **Coding-assistant-only step** | `bypass_llm: true`; the Input Template is the literal prompt the user pastes into Cursor/Copilot — no meta-LLM rewriting | This step never touches Databricks — no schemas, no installs, no deploy. Pure design. |
 
 ---
 
@@ -9422,99 +9361,71 @@ The generated prompt drives the coding assistant through a deterministic 7-phase
 
 | Reads gate | Produces gate | Captured state |
 |------------|---------------|----------------|
-| (none — first prompt in the Track A arc; coding-assistant-side only) | (no state hand-off; `bypass_llm: false`) | `docs/agent_spec.yaml` (consumed by 39) |',
+| (none — first prompt in the Track A arc; coding-assistant-side only) | (no state hand-off; `bypass_llm: true`) | `docs/agent_spec.yaml` (consumed by 39) |',
 '- [ ] `docs/agent_spec.yaml` exists
 - [ ] Agent purpose, personas, capabilities, system prompt, tool recommendations, MCP research, KA recommendation, eval seeds, and governance rules are populated
 - [ ] `docs/agent_spec.yaml.agent.model` is populated with a Databricks serving endpoint name
 - [ ] No code or Databricks resources are created',
-1, true, current_timestamp(), current_timestamp(), current_user());
+true, 1, true, current_timestamp(), current_timestamp(), current_user());
 
 -- Step 39 / order 39: Agent Tool Selection
 INSERT INTO ${catalog}.${schema}.section_input_prompts 
-(input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, version, is_active, inserted_at, updated_at, created_by)
+(input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
 VALUES
 (218, 'agent_tool_selection',
-'Generate a prompt that I can copy into my AI coding assistant (Cursor/Copilot) to create the final **Agent Tool Plan** for the **{use_case_slug}** agent. The Tool Plan is the second design artifact of the Track A "Agents 101" arc — it pins the user-confirmed tool backends (managed MCPs, optional Knowledge Assistant, dynamic SQL MCP) and preserves the Agent Spec''s `agent.model` under a Gateway-ready runtime route. The output is `docs/agent_tool_plan.yaml`.
+'## Your Task
 
-This will involve the following steps:
+You are a Databricks GenAI agent designer. Author the **Agent Tool Plan** for the **{use_case_slug}** agent — a YAML design artifact at `docs/agent_tool_plan.yaml` that pins the user-confirmed tool backends (managed MCPs, optional Knowledge Assistant, dynamic SQL MCP) and preserves the Agent Spec''s `agent.model` under a Gateway-ready runtime route.
 
-- **Read the Agent Spec** — load `docs/agent_spec.yaml` to inherit the agent''s purpose, model endpoint, and recommended tools
-- **Confirm the tool backends** — ask me to lock in which managed MCPs to use (Genie, SQL, Vector Search, UC Functions) and whether to include Knowledge Assistant
-- **Bind dynamic SQL MCP inputs** — record `agent_sql_catalog`, `agent_sql_schema`, `agent_sql_warehouse_id`, and `agent_sql_table_scope` (the literal `all` for full-schema access governed by Unity Catalog, or a comma-separated allowlist) with the readonly SELECT/DESCRIBE/EXPLAIN policy
-- **Preserve `agent.model` Gateway-ready** — write `runtime_config.llm` so the same model endpoint can be fronted by AI Gateway later without changing the Agent Spec
-- **Confirm only — do not deploy** — the prompt only writes the YAML; no MCP installs, UC connections, or resource creation happens at this step
+**First:** Read `apps_lakebase/$APP_NAME/.vibecoding-state.md` if it exists — it contains resolved issues and variable values from prior phases.
 
-The generated prompt MUST include this exact instruction block at the very beginning:
-
-```
 ## IMPORTANT - READ FIRST
 
-Your ONLY task is to create the final Agent Tool Plan. Do NOT:
-- Generate application code
-- Create Databricks resources
-- Install MCP servers
-- Create UC connections
-- Wire tools into an agent
-- Deploy anything
+Your ONLY task is to create `docs/agent_tool_plan.yaml`. Do NOT generate application code, create Databricks resources, install MCP servers, create UC connections, wire tools into an agent, or deploy anything.
+
+### Placeholder Handling
+
+The Tool Plan MUST NEVER contain placeholder literals (anything matching `^\{[a-z_]+\}$`). The names `agent_sql_catalog`, `agent_sql_schema`, `agent_sql_table_allowlist`, `genie_space_id`, `vs_endpoint`, and `vs_index` may arrive still wrapped in `{...}`. Treat any value that is blank, missing, or still wrapped in `{...}` as a question for the user.
 
 You MUST:
-- Read docs/agent_spec.yaml
-- Use genai-agents/foundation/00b-agent-spec-and-tool-plan/SKILL.md
-- Ask me for missing values only if they are not already provided
-- If any value is blank, missing, or still wrapped in `{...}` (for example `{agent_sql_catalog}`, `{agent_sql_schema}`), ASK ME for the value before writing the Tool Plan. Do NOT write placeholder literals like `{agent_sql_catalog}` into docs/agent_tool_plan.yaml under any circumstance.
-- If SQL MCP is not selected (`agent_tool_sql_mcp_enabled` is `false`), omit `selected_mcp_servers[].scope.catalog/schema/allowed_tables` entirely instead of writing placeholder strings.
-- Copy the SCALAR value of `docs/agent_spec.yaml.agent.model` into `runtime_config.llm.endpoint` and into every `resource_grants.databricks_yml.serving_endpoints[].name`. Do NOT write the YAML-path string `docs/agent_spec.yaml.agent.model` as the endpoint value — that is a documentation reference, never the value itself.
-- Create ONLY docs/agent_tool_plan.yaml
-- STOP after saving docs/agent_tool_plan.yaml
-```
+- Read `docs/agent_spec.yaml` — inherit the agent''s purpose, model endpoint, and recommended tools
+- Use `genai-agents/foundation/00b-agent-spec-and-tool-plan/SKILL.md` as the contract
+- ASK ME for any value that is blank, missing, or still wrapped in `{...}` (for example `{agent_sql_catalog}`, `{agent_sql_schema}`, `{agent_sql_table_allowlist}`, `{genie_space_id}`, `{vs_endpoint}`, `{vs_index}`) before writing the Tool Plan. NEVER write a placeholder literal (regex `^\{[a-z_]+\}$`) into `docs/agent_tool_plan.yaml` under any circumstance.
+- If a tool family is not selected, OMIT its keys from `selected_mcp_servers[]` and `selected_tools[]` entirely instead of writing placeholder strings, `"n/a"`, or empty scope fields.
+- Copy the SCALAR value of `docs/agent_spec.yaml.agent.model` into `runtime_config.llm.endpoint` AND into every `resource_grants.databricks_yml.serving_endpoints[].name`. NEVER write the YAML-path string `docs/agent_spec.yaml.agent.model` as the endpoint value — that string is a documentation reference, never the value itself. Writing it verbatim would cause DAB to attempt `CAN_QUERY` against a serving endpoint with that literal name and fail.
+- If `docs/agent_spec.yaml.agent.model` is empty, missing, or still wrapped in `{...}`, ASK ME for the endpoint name before writing the Tool Plan. Do not invent a default here — the Agent Spec already defaulted it to `databricks-claude-sonnet-4-6` if it was unset.
+- Do NOT create or configure AI Gateway in this step. The runtime route is intentionally Gateway-ready so a future pre-provisioned Gateway endpoint can be introduced by changing only `provider`, `endpoint`, and `api_base_url` without changing agent code.
+- Create ONLY `docs/agent_tool_plan.yaml` and STOP
 
-After those instructions, the generated prompt should ask me to confirm the final tool backends for the {industry_name} use case ({use_case_title}) and produce the Tool Plan.
+## Use Case Context
 
-## UI-Selected Tool Inputs
+- **Industry:** {industry_name}
+- **Use Case:** {use_case_title}
 
-The user picked which tool families to include and supplied their IDs in the Tools and MCP step UI. Treat these as the source of truth for which `selected_tools[]` and `selected_mcp_servers[]` entries to write. Only write entries for families whose `_enabled` flag is `true`.
+## Dynamic SQL MCP Inputs
 
-| Family | Enabled flag | UI-supplied values |
-|--------|--------------|---------------------|
-| SQL MCP | `{agent_tool_sql_mcp_enabled}` | catalog `{agent_sql_catalog}`, schema `{agent_sql_schema}`, warehouse `{agent_sql_warehouse_id}`, table scope `{agent_sql_table_scope}` |
-| Genie | `{agent_tool_genie_enabled}` | `genie_space_id` `{genie_space_id}` |
-| Vector Search | `{agent_tool_vector_search_enabled}` | endpoint `{vs_endpoint}`, index `{vs_index}` |
-| UC Functions | `{agent_tool_uc_functions_enabled}` | targets `{uc_function_targets}` |
-| External MCP | `{agent_tool_external_mcp_enabled}` | UC connection `{external_mcp_connection}` |
+If SQL MCP is selected, use these values:
 
-## Placeholder Handling
+- `agent_sql_catalog`: {agent_sql_catalog}
+- `agent_sql_schema`: {agent_sql_schema}
+- `agent_sql_warehouse_id`: {default_warehouse}
+- `agent_sql_table_allowlist`: {agent_sql_table_allowlist}
 
-The Tool Plan MUST NEVER contain placeholder literals. Treat any value that is blank, the literal string `{...}` token, or matches `^\{[a-z_]+\}$` as missing.
+If `agent_sql_catalog`, `agent_sql_schema`, or `agent_sql_table_allowlist` arrive as literal `{...}` tokens, ASK ME for the values before proceeding. Do NOT write `{agent_sql_catalog}` or any other placeholder literal into the Tool Plan.
 
-Rules:
-- If a tool family''s `_enabled` flag is `false`, OMIT its entries from `selected_mcp_servers[]` and `selected_tools[]` entirely. Do not write placeholder strings or `"n/a"` markers.
-- If a family is enabled but a required ID is blank (e.g. Genie is enabled but `genie_space_id` is empty), ASK ME for the value before writing the Tool Plan.
-- Do NOT write placeholder literals (anything matching `^\{[a-z_]+\}$`) into `docs/agent_tool_plan.yaml` under any circumstance.
-- The model endpoint value must be copied as a scalar from `docs/agent_spec.yaml.agent.model`; never write the YAML-path string itself into `runtime_config.llm.endpoint` or `serving_endpoints[].name`.
+Default SQL MCP policy:
 
-## SQL MCP Scope and Guardrails
-
-If `agent_tool_sql_mcp_enabled` is `true`:
-- `selected_mcp_servers[].meta.warehouse_id` = `{agent_sql_warehouse_id}` (falls back to `{default_warehouse}` if empty)
-- `selected_mcp_servers[].scope.catalog` = `{agent_sql_catalog}`
-- `selected_mcp_servers[].scope.schema` = `{agent_sql_schema}`
-- `selected_mcp_servers[].scope.allowed_tables`:
-  - If `{agent_sql_table_scope}` is the literal string `all` (the default), write `allowed_tables: []`. The agent reads every table in the schema; Unity Catalog permissions on the agent service principal still govern real access.
-  - Otherwise, parse `{agent_sql_table_scope}` as a comma-separated list of fully qualified `catalog.schema.table` names and use that list verbatim.
-
-Default SQL MCP guardrails (always applied when SQL MCP is selected):
 - `readonly: true`
 - allowed statements: `SELECT`, `DESCRIBE`, `EXPLAIN`
 - forbidden statements: `INSERT`, `UPDATE`, `DELETE`, `DROP`, `ALTER`, `CREATE`, `MERGE`, `TRUNCATE`
 - require fully qualified table names as `catalog.schema.table`
 
-## Runtime Model Route
+## Runtime Model Route (Gateway-Ready)
 
 COPY the SCALAR value of `docs/agent_spec.yaml.agent.model` into:
+
 - `runtime_config.llm.endpoint`
 - every entry in `resource_grants.databricks_yml.serving_endpoints[].name` that represents the model route
-
-Do NOT write the YAML-path string `docs/agent_spec.yaml.agent.model` as the endpoint or as a `serving_endpoints[].name`. That string is a documentation reference describing where the value comes from; it is never the value itself. Writing it verbatim would cause DAB to attempt CAN_QUERY against a serving endpoint with that literal name and fail.
 
 Concrete example, assuming `docs/agent_spec.yaml` has `agent.model: "databricks-claude-sonnet-4-6"`:
 
@@ -9536,53 +9447,40 @@ resource_grants:
         permission: "CAN_QUERY"
 ```
 
-If `docs/agent_spec.yaml.agent.model` is empty, missing, or still wrapped in `{...}`, ASK ME for the endpoint name before writing the Tool Plan. Do not invent a default here — the Agent Spec already defaulted it to `databricks-claude-sonnet-4-6` if it was unset.
+## Tool Plan Decisions to Record
 
-Do not replace the endpoint with a hardcoded value chosen by you. Do not create or configure AI Gateway in this step. The nested route is intentionally Gateway-ready so a future pre-provisioned Gateway endpoint can be introduced by changing `provider`, `endpoint`, and `api_base_url` without changing agent code.
-
-## Tool Plan Decisions
-
-The Tool Plan must record explicit selections for:
-
-- Managed Databricks MCPs: Genie, Vector Search, SQL, UC Functions
+- Managed Databricks MCPs: Genie, Vector Search, SQL, UC Functions (each with explicit `selected: true|false`)
 - Optional external MCPs from `docs/agent_spec.yaml.mcp_research.candidates[]`
-- Knowledge Assistant - either selected with creation_required and ka_source, or skipped with `selected: false`
+- Knowledge Assistant — either selected with `creation_required: true` and `ka_source`, or skipped with `selected: false`
 - Resource grants for `databricks.yml` and `app.yaml` OAuth scopes
 - Runtime guardrails (SQL read-only default, citation requirements)
-- Smoke tests for each selected tool
+- Smoke tests for every selected tool
 - Runtime model route from `docs/agent_spec.yaml.agent.model` into `runtime_config.llm`
 
-For SQL MCP, ensure the plan includes (only when `agent_tool_sql_mcp_enabled` is `true`):
-- `selected_mcp_servers[].meta.warehouse_id` set to `{agent_sql_warehouse_id}` (or `{default_warehouse}` when blank)
+For SQL MCP specifically, ensure the plan includes:
+
+- `selected_mcp_servers[].meta.warehouse_id` set to `{default_warehouse}`
 - `selected_mcp_servers[].scope.catalog` set to `{agent_sql_catalog}`
 - `selected_mcp_servers[].scope.schema` set to `{agent_sql_schema}`
-- `selected_mcp_servers[].scope.allowed_tables`: emit `[]` when `{agent_sql_table_scope}` is `all` (default — full schema, governed by Unity Catalog); otherwise emit the parsed list from `{agent_sql_table_scope}`.
+- `selected_mcp_servers[].scope.allowed_tables` populated from `{agent_sql_table_allowlist}` (empty list = full schema with read-only guardrails)
 - `selected_tools[].guardrails.allowed_statements` = `["SELECT", "DESCRIBE", "EXPLAIN"]`
 - `selected_tools[].guardrails.forbidden_statements` = `["INSERT", "UPDATE", "DELETE", "DROP", "ALTER", "CREATE", "MERGE", "TRUNCATE"]`
 - `selected_tools[].guardrails.require_fully_qualified_names` = `true`
 
-The prompt MUST end with:
-
-```
 Save it to: docs/agent_tool_plan.yaml
-STOP after saving. Do not generate any code, install MCPs, create UC connections, or proceed with other tasks.
-```',
-'You are generating a prompt that users will copy into their AI coding assistant.
+STOP after saving. Do not generate any code, install MCPs, create UC connections, or proceed with other tasks.',
+'You are a Databricks GenAI agent designer. Your task is to author the Agent Tool Plan — a YAML design artifact at `docs/agent_tool_plan.yaml` — that pins the user-confirmed tool backends and preserves the Agent Spec''s `agent.model` under a Gateway-ready runtime route.
 
-Your output should be a complete, ready-to-use prompt that when pasted into Cursor or Copilot will:
-1. Read docs/agent_spec.yaml
-2. Confirm the user-selected tool backends, preserve `docs/agent_spec.yaml.agent.model`, and include optional Knowledge Assistant plus dynamic SQL MCP
-3. Create ONLY docs/agent_tool_plan.yaml
-4. NOT generate code, create Databricks resources, install MCPs, or wire tools
+Key requirements:
 
-CRITICAL: Your generated prompt MUST start with instructions telling the AI to only create docs/agent_tool_plan.yaml and stop.
+- Read `docs/agent_spec.yaml` and use it (plus `genai-agents/foundation/00b-agent-spec-and-tool-plan/SKILL.md`) as the contract
+- Confirm managed Databricks MCPs (Genie, SQL, Vector Search, UC Functions) and the optional Knowledge Assistant
+- Bind dynamic SQL MCP inputs (`agent_sql_catalog`, `agent_sql_schema`, `agent_sql_warehouse_id`, `agent_sql_table_allowlist`) with the readonly SELECT/DESCRIBE/EXPLAIN policy
+- Copy the SCALAR value of `docs/agent_spec.yaml.agent.model` into `runtime_config.llm.endpoint` AND every `resource_grants.databricks_yml.serving_endpoints[].name` — never the literal YAML-path string
+- ASK the user for any value that arrives blank, missing, or still wrapped in `{...}`; never write placeholder literals into the Tool Plan
+- Do NOT generate code, create Databricks resources, install MCPs, create UC connections, wire tools, or deploy
 
-**OUTPUT FORMAT RULES:**
-- Output the prompt directly as plain markdown text - do NOT wrap the entire output in code blocks or backticks
-- Use proper markdown formatting: ## for headers, - for bullet points, **text** for bold
-- For code blocks within your output (like file paths or specific instructions to include verbatim), use triple backticks on their own lines
-- Do NOT use single backticks for multi-line content
-- The output should render properly when displayed as markdown',
+This prompt is returned as-is for direct use in Cursor/Copilot. No LLM processing.',
 'Agent Tool Selection',
 'Select final MCPs and tool backends, including dynamic SQL MCP catalog/schema, and save docs/agent_tool_plan.yaml',
 39,
@@ -9594,7 +9492,7 @@ CRITICAL: Your generated prompt MUST start with instructions telling the AI to o
 
 ### Steps to Apply
 
-1. **Decide tool inputs** - if you want SQL MCP over an existing Unity Catalog schema, gather your `agent_sql_catalog`, `agent_sql_schema`, warehouse id, and (optionally) `agent_sql_table_scope` (defaults to `all` — the agent reads every table in the schema, governed by Unity Catalog permissions).
+1. **Decide tool inputs** - if you want SQL MCP over an existing Unity Catalog schema, gather your `agent_sql_catalog`, `agent_sql_schema`, warehouse id, and (optionally) `agent_sql_table_allowlist`.
 2. **Copy the generated prompt** using the copy button.
 3. **Paste it into a new Agent thread** in your Coding Assistant.
 4. **Answer the assistant''s clarifying questions** about which managed and external MCPs to wire, and whether KA is required.
@@ -9673,7 +9571,7 @@ The generated prompt walks the coding assistant through 7 ordered decisions befo
 - [ ] runtime_config.llm uses provider `databricks`, `endpoint` set to the SCALAR value copied from `docs/agent_spec.yaml.agent.model` (never the literal YAML-path string), `api_base_url: null`, and `api_mode: databricks_openai_compatible`
 - [ ] resource_grants.databricks_yml.serving_endpoints grants CAN_QUERY on the same scalar endpoint name (never the literal YAML-path string)
 - [ ] No value in docs/agent_tool_plan.yaml is a placeholder literal of the form `{some_name}`',
-1, true, current_timestamp(), current_timestamp(), current_user());
+true, 1, true, current_timestamp(), current_timestamp(), current_user());
 
 -- Step 40 / order 40: Phase 1 / Agent Foundation - UC Resources Foundation
 INSERT INTO ${catalog}.${schema}.section_input_prompts 
@@ -10296,19 +10194,7 @@ INSERT INTO ${catalog}.${schema}.section_input_prompts
 (input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
 VALUES
 (204, 'track_a_agent_ka_genie_tools',
-'## UI-Selected Tool Inputs (from the Tools and MCP step)
-
-The user picked these tool families and IDs in the workshop UI. They are the ground truth for what should appear in `docs/agent_tool_plan.yaml.selected_tools[]` and `selected_mcp_servers[]`. If `docs/agent_tool_plan.yaml` already exists and disagrees with the table below, ASK the user which one to honor before wiring tools.
-
-| Family | Enabled | UI-supplied values |
-|--------|---------|---------------------|
-| SQL MCP | `{agent_tool_sql_mcp_enabled}` | catalog `{agent_sql_catalog}`, schema `{agent_sql_schema}`, warehouse `{agent_sql_warehouse_id}`, table scope `{agent_sql_table_scope}` |
-| Genie | `{agent_tool_genie_enabled}` | `genie_space_id` `{genie_space_id}` |
-| Vector Search | `{agent_tool_vector_search_enabled}` | endpoint `{vs_endpoint}`, index `{vs_index}` |
-| UC Functions | `{agent_tool_uc_functions_enabled}` | targets `{uc_function_targets}` |
-| External MCP | `{agent_tool_external_mcp_enabled}` | UC connection `{external_mcp_connection}` |
-
-Wire the **selected** tools and MCP servers from `docs/agent_tool_plan.yaml` into the cloned **{use_case_slug}** agent app as `@function_tool` definitions, and emit the matching `databricks.yml` + `app.yaml` resource grants. Selected families may include any combination of Knowledge Assistant (only if KA was created in step 42), Genie (bring your own `genie_space_id`), SQL MCP (bring your own catalog/schema/warehouse/allowed tables), Vector Search (bring your own endpoint/index), UC Functions (bring your own fully qualified function names), and external MCP servers (bring your own UC connection or registry-backed candidate). Today the cloned `{agent_app_name}` agent has zero tool surface; after this prompt runs, every entry in `docs/agent_tool_plan.yaml.selected_tools[]` is materialized as a `@function_tool`, families absent from the plan are skipped (not failed), the bundle declares the right `CAN_QUERY` / `CAN_RUN` / `CAN_USE` grants, and MLflow shows TOOL spans for each tool the agent calls.
+'Wire the **selected** tools and MCP servers from `docs/agent_tool_plan.yaml` into the cloned **{use_case_slug}** agent app as `@function_tool` definitions, and emit the matching `databricks.yml` + `app.yaml` resource grants. Selected families may include any combination of Knowledge Assistant (only if KA was created in step 42), Genie (bring your own `genie_space_id`), SQL MCP (bring your own catalog/schema/warehouse/allowed tables), Vector Search (bring your own endpoint/index), UC Functions (bring your own fully qualified function names), and external MCP servers (bring your own UC connection or registry-backed candidate). Today the cloned `{agent_app_name}` agent has zero tool surface; after this prompt runs, every entry in `docs/agent_tool_plan.yaml.selected_tools[]` is materialized as a `@function_tool`, families absent from the plan are skipped (not failed), the bundle declares the right `CAN_QUERY` / `CAN_RUN` / `CAN_USE` grants, and MLflow shows TOOL spans for each tool the agent calls.
 
 This will involve the following steps:
 
