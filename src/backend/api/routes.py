@@ -966,7 +966,7 @@ def get_workshop_parameters_sync() -> Dict[str, str]:
             'app_name': os.getenv('APP_NAME', ''),
             'lakebase_mode': os.getenv('LAKEBASE_MODE', 'autoscaling'),
             'coding_assistants_config': DEFAULT_CODING_ASSISTANTS_CONFIG_JSON,
-            # Agent Tool Inputs (Step 44 Tools and MCP / agent_tool_selection)
+            # Agent Tool Inputs (Step 39 Agent Tool Selection / agent_tool_selection)
             'agent_tool_sql_mcp_enabled': 'true',
             'agent_sql_catalog': 'samples',
             'agent_sql_schema': 'wanderbricks',
@@ -4317,7 +4317,7 @@ async def get_workshop_parameters(response: Response) -> List[WorkshopParameter]
                 is_active=True,
                 allow_session_override=False
             ),
-            # Agent Tool Inputs (Step 44 Tools and MCP / agent_tool_selection Tool Plan)
+            # Agent Tool Inputs (Step 39 Agent Tool Selection / agent_tool_selection Tool Plan)
             WorkshopParameter(
                 param_key="agent_tool_sql_mcp_enabled",
                 param_label="Agent Tool: SQL MCP Enabled",

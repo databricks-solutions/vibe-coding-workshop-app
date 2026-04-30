@@ -2327,6 +2327,14 @@ export function WorkflowDiagram({
                     isExpanded={expandedStep === 39}
                     onToggleExpand={() => toggleExpand(39)}
                     sessionId={sessionId}
+                    customHeaderContent={
+                      <div onClick={(e) => e.stopPropagation()}>
+                        <AgentToolInputsEditor
+                          sessionId={sessionId}
+                          isExpanded={expandedStep === 39}
+                        />
+                      </div>
+                    }
                   />
                 </div>
               );
@@ -2472,14 +2480,6 @@ export function WorkflowDiagram({
                     isExpanded={expandedStep === 44}
                     onToggleExpand={() => toggleExpand(44)}
                     sessionId={sessionId}
-                    customHeaderContent={
-                      <div onClick={(e) => e.stopPropagation()}>
-                        <AgentToolInputsEditor
-                          sessionId={sessionId}
-                          isExpanded={expandedStep === 44}
-                        />
-                      </div>
-                    }
                   />
                 </div>
               );
