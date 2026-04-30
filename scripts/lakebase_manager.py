@@ -41,9 +41,22 @@ import os
 import sys
 import json
 import argparse
+import shutil
 import subprocess
 import re
 from typing import Optional, Dict, Any, Tuple
+
+
+def _run_cmd(argv, **kwargs):
+    """subprocess.run wrapper that resolves argv[0] via shutil.which.
+
+    This is required on Windows for .cmd / .bat shims because CreateProcessW
+    only auto-appends .exe (not PATHEXT). Functionally equivalent to
+    subprocess.run on POSIX.
+    """
+    resolved = shutil.which(argv[0]) or argv[0]
+    return subprocess.run([resolved, *argv[1:]], **kwargs)
+
 
 # =============================================================================
 # CONFIGURATION
@@ -90,8 +103,7 @@ class Config:
         # Get current authenticated user from Databricks CLI (not from app.yaml)
         # lakebase_manager.py runs during deployment as the deployer, not as the app
         try:
-            import subprocess
-            result = subprocess.run(
+            result = _run_cmd(
                 ['databricks', 'current-user', 'me', '--output', 'json'],
                 capture_output=True, text=True, timeout=15
             )
@@ -125,7 +137,7 @@ class Config:
 def get_databricks_token(host: str) -> Optional[str]:
     """Get OAuth token from Databricks CLI."""
     try:
-        result = subprocess.run(
+        result = _run_cmd(
             ['databricks', 'auth', 'token', '--host', host],
             capture_output=True, text=True, check=True
         )

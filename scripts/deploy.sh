@@ -61,6 +61,19 @@ CYAN='\033[0;36m'
 BOLD='\033[1m'
 NC='\033[0m'
 
+# Cross-platform Python detection.
+# POSIX systems ship `python3`; the Python.org / winget Python installer on
+# Windows ships only `python.exe`. Probe in that order so behavior on macOS/Linux
+# is unchanged (`PYTHON_BIN=python3`) while Windows under Git Bash still works.
+if command -v python3 >/dev/null 2>&1; then
+    PYTHON_BIN="python3"
+elif command -v python >/dev/null 2>&1; then
+    PYTHON_BIN="python"
+else
+    echo "Error: Python 3 not found on PATH (looked for python3, python)." >&2
+    exit 1
+fi
+
 PROJECT_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 SCRIPT_DIR="$PROJECT_ROOT/scripts"
 cd "$PROJECT_ROOT"
@@ -193,7 +206,7 @@ print_error() {
 # Get values from databricks.yml based on target using Python for reliable YAML parsing
 get_target_var() {
     local var_name=$1
-    python3 -c "
+    $PYTHON_BIN -c "
 import re
 import sys
 
@@ -225,7 +238,7 @@ if var_match:
 
 # Get workspace host from databricks.yml for the current target
 get_workspace_host() {
-    python3 -c "
+    $PYTHON_BIN -c "
 import re
 target = '$TARGET'
 with open('databricks.yml', 'r') as f:
@@ -264,7 +277,7 @@ cleanup_stale_apps() {
     local current_app=$1
     print_step "Scanning workspace for stale apps to free OAuth integration slots..."
     local stale_apps
-    stale_apps=$(databricks apps list --output json $PROFILE_FLAG 2>/dev/null | python3 -c "
+    stale_apps=$(databricks apps list --output json $PROFILE_FLAG 2>/dev/null | $PYTHON_BIN -c "
 import sys, json
 try:
     data = json.load(sys.stdin)
@@ -300,7 +313,7 @@ except Exception:
 # Get workspace source code path from bundle summary
 get_source_path() {
     local path
-    path=$(databricks bundle summary -t "$TARGET" $PROFILE_FLAG --output json 2>/dev/null | python3 -c "
+    path=$(databricks bundle summary -t "$TARGET" $PROFILE_FLAG --output json 2>/dev/null | $PYTHON_BIN -c "
 import sys, json
 try:
     data = json.load(sys.stdin)
@@ -315,7 +328,7 @@ except: pass
 # Get current app state as a single string
 get_app_state() {
     databricks apps get "$APP_NAME" $PROFILE_FLAG --output json 2>/dev/null \
-      | python3 -c "import sys,json; print(json.load(sys.stdin).get('app_status',{}).get('state','UNKNOWN'))" 2>/dev/null || echo "UNKNOWN"
+      | $PYTHON_BIN -c "import sys,json; print(json.load(sys.stdin).get('app_status',{}).get('state','UNKNOWN'))" 2>/dev/null || echo "UNKNOWN"
 }
 
 # Start the app if not running and wait for RUNNING state (up to 120s)
@@ -390,7 +403,7 @@ WORKSPACE_URL=$(get_workspace_host)
 # Detect Lakebase mode from user-config.yaml (autoscaling or provisioned)
 LAKEBASE_MODE="autoscaling"
 if [[ -f "$PROJECT_ROOT/user-config.yaml" ]]; then
-    DETECTED_MODE=$(python3 -c "
+    DETECTED_MODE=$($PYTHON_BIN -c "
 in_lakebase = False
 for line in open('$PROJECT_ROOT/user-config.yaml'):
     stripped = line.strip()
@@ -450,7 +463,7 @@ if ! databricks $PROFILE_FLAG current-user me &>/dev/null; then
     echo "Run: databricks auth login --host <workspace-url>"
     exit 1
 fi
-CURRENT_USER=$(databricks $PROFILE_FLAG current-user me --output json 2>/dev/null | python3 -c "import sys,json; print(json.load(sys.stdin).get('userName',''))")
+CURRENT_USER=$(databricks $PROFILE_FLAG current-user me --output json 2>/dev/null | $PYTHON_BIN -c "import sys,json; print(json.load(sys.stdin).get('userName',''))")
 print_success "Authenticated as: $CURRENT_USER"
 
 # =============================================================================
@@ -558,8 +571,8 @@ if [[ "$CODE_ONLY" == true ]]; then
         # Get app URL for convenience
         APP_INFO=$(databricks apps get "$APP_NAME" $PROFILE_FLAG --output json 2>/dev/null) || true
         if [[ -n "$APP_INFO" ]]; then
-            APP_URL=$(echo "$APP_INFO" | python3 -c "import sys,json; print(json.load(sys.stdin).get('url',''))" 2>/dev/null) || true
-            APP_STATE=$(echo "$APP_INFO" | python3 -c "import sys,json; print(json.load(sys.stdin).get('app_status',{}).get('state',''))" 2>/dev/null) || true
+            APP_URL=$(echo "$APP_INFO" | $PYTHON_BIN -c "import sys,json; print(json.load(sys.stdin).get('url',''))" 2>/dev/null) || true
+            APP_STATE=$(echo "$APP_INFO" | $PYTHON_BIN -c "import sys,json; print(json.load(sys.stdin).get('app_status',{}).get('state',''))" 2>/dev/null) || true
             if [[ -n "$APP_URL" ]]; then
                 echo -e "${BOLD}${GREEN}🚀 App URL: $APP_URL${NC}"
                 echo -e "   Status:  ${CYAN}$APP_STATE${NC}"
@@ -591,7 +604,7 @@ discover_lakebase_host() {
     if [[ "$LAKEBASE_MODE" == "autoscaling" ]]; then
         # Step 1: Find the project by name (format: projects/{project_id})
         local project_resource=""
-        project_resource=$(databricks postgres list-projects $PROFILE_FLAG --output json 2>/dev/null | python3 -c "
+        project_resource=$(databricks postgres list-projects $PROFILE_FLAG --output json 2>/dev/null | $PYTHON_BIN -c "
 import sys, json
 try:
     data = json.load(sys.stdin)
@@ -613,7 +626,7 @@ except Exception:
 
         # Step 2: List branches - prefer "main", fall back to first available
         local branch_resource=""
-        branch_resource=$(databricks postgres list-branches "$project_resource" $PROFILE_FLAG --output json 2>/dev/null | python3 -c "
+        branch_resource=$(databricks postgres list-branches "$project_resource" $PROFILE_FLAG --output json 2>/dev/null | $PYTHON_BIN -c "
 import sys, json
 try:
     data = json.load(sys.stdin)
@@ -639,7 +652,7 @@ except Exception:
         AUTOSCALING_BRANCH="$branch_resource"
 
         # Step 3: List endpoints - hostname is at status.hosts.host
-        read -r TARGET_LAKEBASE_HOST ENDPOINT_NAME <<< "$(databricks postgres list-endpoints "$branch_resource" $PROFILE_FLAG --output json 2>/dev/null | python3 -c "
+        read -r TARGET_LAKEBASE_HOST ENDPOINT_NAME <<< "$(databricks postgres list-endpoints "$branch_resource" $PROFILE_FLAG --output json 2>/dev/null | $PYTHON_BIN -c "
 import sys, json
 try:
     data = json.load(sys.stdin)
@@ -657,7 +670,7 @@ except Exception:
         local details
         details=$(databricks api get "/api/2.0/database/instances/$LAKEBASE_INSTANCE" $PROFILE_FLAG 2>/dev/null) || true
         if [[ -n "$details" ]]; then
-            TARGET_LAKEBASE_HOST=$(echo "$details" | python3 -c "import sys,json; print(json.load(sys.stdin).get('read_write_dns',''))")
+            TARGET_LAKEBASE_HOST=$(echo "$details" | $PYTHON_BIN -c "import sys,json; print(json.load(sys.stdin).get('read_write_dns',''))")
         fi
     fi
 }
@@ -670,7 +683,7 @@ discover_all_branches() {
     json=$(databricks postgres list-branches "projects/$LAKEBASE_INSTANCE" $PROFILE_FLAG --output json 2>/dev/null) || return 0
     while IFS= read -r name; do
         [[ -n "$name" ]] && ALL_BRANCHES+=("$name")
-    done < <(echo "$json" | python3 -c "
+    done < <(echo "$json" | $PYTHON_BIN -c "
 import sys, json
 for b in json.load(sys.stdin):
     n = b.get('name','')
@@ -821,7 +834,7 @@ if [[ "$TABLES_ONLY" != true && "$PERMISSIONS_ONLY" != true ]]; then
 
         # Update autoscaling limits on the auto-created endpoint (if autoscaling mode)
         if [[ "$LAKEBASE_MODE" == "autoscaling" && -n "$ENDPOINT_NAME" ]]; then
-            LAKEBASE_MIN_CU=$(python3 -c "
+            LAKEBASE_MIN_CU=$($PYTHON_BIN -c "
 try:
     import yaml
     c = yaml.safe_load(open('user-config.yaml'))
@@ -835,7 +848,7 @@ except Exception:
     except Exception:
         print('0.5')
 " 2>/dev/null) || LAKEBASE_MIN_CU="0.5"
-            LAKEBASE_MAX_CU=$(python3 -c "
+            LAKEBASE_MAX_CU=$($PYTHON_BIN -c "
 try:
     import yaml
     c = yaml.safe_load(open('user-config.yaml'))
@@ -881,7 +894,7 @@ if [[ "$TABLES_ONLY" != true && "$PERMISSIONS_ONLY" != true ]]; then
     print_step "Verifying app was created..."
     APP_CHECK=$(databricks apps get "$APP_NAME" $PROFILE_FLAG --output json 2>/dev/null) || true
     if [[ -n "$APP_CHECK" ]] && echo "$APP_CHECK" | grep -q '"name"'; then
-        APP_STATE=$(echo "$APP_CHECK" | python3 -c "
+        APP_STATE=$(echo "$APP_CHECK" | $PYTHON_BIN -c "
 import sys, json
 data = json.load(sys.stdin)
 state = data.get('app_status', {}).get('state', 'UNKNOWN')
@@ -923,10 +936,10 @@ if [[ "$TABLES_ONLY" != true && "$SKIP_PERMISSIONS" != true ]]; then
     APP_INFO=$(databricks apps get "$APP_NAME" $PROFILE_FLAG --output json 2>/dev/null) || true
     
     if [[ -n "$APP_INFO" ]]; then
-        SERVICE_PRINCIPAL_ID=$(echo "$APP_INFO" | python3 -c "import sys,json; print(json.load(sys.stdin).get('service_principal_client_id',''))")
-        SERVICE_PRINCIPAL_NAME=$(echo "$APP_INFO" | python3 -c "import sys,json; print(json.load(sys.stdin).get('service_principal_name',''))")
-        APP_URL=$(echo "$APP_INFO" | python3 -c "import sys,json; print(json.load(sys.stdin).get('url',''))")
-        APP_STATE=$(echo "$APP_INFO" | python3 -c "import sys,json; print(json.load(sys.stdin).get('app_status',{}).get('state',''))")
+        SERVICE_PRINCIPAL_ID=$(echo "$APP_INFO" | $PYTHON_BIN -c "import sys,json; print(json.load(sys.stdin).get('service_principal_client_id',''))")
+        SERVICE_PRINCIPAL_NAME=$(echo "$APP_INFO" | $PYTHON_BIN -c "import sys,json; print(json.load(sys.stdin).get('service_principal_name',''))")
+        APP_URL=$(echo "$APP_INFO" | $PYTHON_BIN -c "import sys,json; print(json.load(sys.stdin).get('url',''))")
+        APP_STATE=$(echo "$APP_INFO" | $PYTHON_BIN -c "import sys,json; print(json.load(sys.stdin).get('app_status',{}).get('state',''))")
         
         print_success "App Name: $APP_NAME"
         print_success "Service Principal ID: $SERVICE_PRINCIPAL_ID"
@@ -1129,7 +1142,7 @@ if [[ "$SKIP_TABLES" != true ]]; then
     if [[ -z "$SERVICE_PRINCIPAL_ID" ]]; then
         _APP_INFO=$(databricks apps get "$APP_NAME" $PROFILE_FLAG --output json 2>/dev/null) || true
         if [[ -n "$_APP_INFO" ]]; then
-            SERVICE_PRINCIPAL_ID=$(echo "$_APP_INFO" | python3 -c "import sys,json; print(json.load(sys.stdin).get('service_principal_client_id',''))" 2>/dev/null) || true
+            SERVICE_PRINCIPAL_ID=$(echo "$_APP_INFO" | $PYTHON_BIN -c "import sys,json; print(json.load(sys.stdin).get('service_principal_client_id',''))" 2>/dev/null) || true
         fi
     fi
 
@@ -1290,7 +1303,7 @@ if [[ "$TABLES_ONLY" != true && "$PERMISSIONS_ONLY" != true && "$CODE_ONLY" != t
     if [[ -n "$LAKEBASE_INSTANCE" ]]; then
         if [[ "$LAKEBASE_MODE" == "provisioned" ]]; then
             print_step "  Linking Lakebase instance as app resource..."
-            python3 "$SCRIPT_DIR/lakebase_manager.py" \
+            $PYTHON_BIN "$SCRIPT_DIR/lakebase_manager.py" \
                 --action link-app-resource \
                 --app-name "$APP_NAME" \
                 --instance-name "$LAKEBASE_INSTANCE" \
@@ -1351,7 +1364,7 @@ if [[ "$TABLES_ONLY" != true && "$PERMISSIONS_ONLY" != true && "$CODE_ONLY" != t
         sleep 15
         FINAL_STATE=$(get_app_state)
         APP_URL=$(databricks apps get "$APP_NAME" $PROFILE_FLAG --output json 2>/dev/null \
-          | python3 -c "import sys,json; print(json.load(sys.stdin).get('url',''))" 2>/dev/null) || true
+          | $PYTHON_BIN -c "import sys,json; print(json.load(sys.stdin).get('url',''))" 2>/dev/null) || true
         if [[ "$FINAL_STATE" == "RUNNING" ]]; then
             print_success "App is RUNNING!"
             APP_RUNNING=true
@@ -1430,7 +1443,7 @@ if [[ "$TABLES_ONLY" != true && "$PERMISSIONS_ONLY" != true && "$CODE_ONLY" != t
     # Re-fetch app info for service principal ID (may have changed after restart)
     VERIFY_APP_INFO=$(databricks apps get "$APP_NAME" $PROFILE_FLAG --output json 2>/dev/null) || true
     if [[ -n "$VERIFY_APP_INFO" ]]; then
-        SERVICE_PRINCIPAL_ID=$(echo "$VERIFY_APP_INFO" | python3 -c "import sys,json; print(json.load(sys.stdin).get('service_principal_client_id',''))" 2>/dev/null) || true
+        SERVICE_PRINCIPAL_ID=$(echo "$VERIFY_APP_INFO" | $PYTHON_BIN -c "import sys,json; print(json.load(sys.stdin).get('service_principal_client_id',''))" 2>/dev/null) || true
     fi
 
     # Determine API paths based on mode (roles are branch-level for autoscaling)
@@ -1456,7 +1469,7 @@ if [[ "$TABLES_ONLY" != true && "$PERMISSIONS_ONLY" != true && "$CODE_ONLY" != t
     if [[ "$LAKEBASE_MODE" == "autoscaling" ]]; then
         print_success "Autoscaling mode: resource link not needed (uses env vars + OAuth)"
     else
-        HAS_RESOURCE=$(echo "$VERIFY_APP_INFO" | python3 -c "
+        HAS_RESOURCE=$(echo "$VERIFY_APP_INFO" | $PYTHON_BIN -c "
 import sys, json
 try:
     data = json.load(sys.stdin)
@@ -1475,7 +1488,7 @@ except: print('no')
             print_warning "App resource link MISSING -- re-applying..."
             VERIFY_ISSUES=$((VERIFY_ISSUES + 1))
             RESOURCE_LINK_FIXED=true
-            python3 "$SCRIPT_DIR/lakebase_manager.py" \
+            $PYTHON_BIN "$SCRIPT_DIR/lakebase_manager.py" \
                 --action link-app-resource \
                 --app-name "$APP_NAME" \
                 --instance-name "$LAKEBASE_INSTANCE" \
@@ -1574,7 +1587,7 @@ except: print('no')
     VERIFY_INST_PERMS=$(databricks api get "/api/2.0/permissions/$VERIFY_PERM_TYPE/$LAKEBASE_INSTANCE" $PROFILE_FLAG 2>/dev/null) || true
 
     # Check for explicit CAN_USE grant on the 'users' group (not just inherited)
-    if echo "$VERIFY_INST_PERMS" | python3 -c "
+    if echo "$VERIFY_INST_PERMS" | $PYTHON_BIN -c "
 import sys, json
 try:
     data = json.load(sys.stdin)
@@ -1600,7 +1613,7 @@ except: sys.exit(1)
     VERIFY_APP_PERMS=$(databricks api get "/api/2.0/permissions/apps/$APP_NAME" $PROFILE_FLAG 2>/dev/null) || true
 
     # Check for explicit CAN_USE grant on the 'users' group
-    if echo "$VERIFY_APP_PERMS" | python3 -c "
+    if echo "$VERIFY_APP_PERMS" | $PYTHON_BIN -c "
 import sys, json
 try:
     data = json.load(sys.stdin)
