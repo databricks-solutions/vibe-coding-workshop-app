@@ -9218,6 +9218,13 @@ You are a Databricks GenAI agent designer. Author the **Agent Spec** for the **{
 
 Your ONLY task is to create `docs/agent_spec.yaml`. Do NOT generate application code, create Databricks resources, install MCP servers, create UC connections, wire tools into an agent, deploy anything, modify app code, modify SQL seed files, or create/configure AI Gateway endpoints.
 
+**DO NOT predict tool selections.** Tools are not chosen at this step — that''s prompt 39. Therefore:
+
+- ❌ DO NOT author tool-shaped scorers (`ka_citation_present`, `RetrievalGroundedness`, `genie_sql_correctness`, `sql_readonly_compliance`, `genie_response_grounded_in_table`, `uc_function_signature_match`).
+- ❌ DO NOT add tool-specific assertions to `agent.benchmark_seeds.seed_examples[]` or `governance.verification.smoke_test_cases[]` (no "use Genie to look up X", no "expect a KA citation").
+- ❌ DO NOT add Genie-shaped, KA-shaped, Vector-Search-shaped, or SQL-shaped buckets to `agent.benchmark_seeds.coverage_buckets[]`. Buckets are use-case categories ("policy compliance", "edge case: empty input"), not tool categories.
+- ✅ Author only domain-shaped content from the use-case context (`{industry_name}`, `{use_case_title}`, personas, journeys, capabilities). Tool-shaped content lives in `docs/agent_tool_plan.yaml` and is appended by prompt 39.
+
 You MUST:
 - Read `docs/design_prd.md` (step 03 — business intent); compute its sha256 and record both path and digest as `source_prd`
 - Read `docs/ui_design.md` (step 04 — pages, personas, navigation, user journeys); align Agent Spec personas with this UI
@@ -9237,13 +9244,22 @@ Use the same neutral product naming conventions used in `docs/design_prd.md`.
 
 ## Required `docs/agent_spec.yaml` Sections
 
+All field paths below are tool-agnostic — shaped only by the use case (industry, capabilities, personas, journeys). Tool-shaped extensions are added later by prompt 39 into `docs/agent_tool_plan.yaml`.
+
 - `source_prd` — `path` + `sha256` of `docs/design_prd.md`
-- `agent.purpose`, `agent.personas[]`, `agent.capabilities[]`, `agent.system_prompt` (first-pass draft)
-- `agent.model` — raw Databricks Model Serving endpoint name (see MUST rule above); also record `agent.auth_mode` and `agent.memory`
-- `mcp_recommendations` — managed Databricks MCPs: `sql`, `genie`, `vector_search`, `uc_functions`, plus optional Knowledge Assistant
+- `agent.purpose`, `agent.target_personas[]`, `agent.capabilities[]`, `agent.system_prompt` (first-pass draft), `agent.auth_mode`, `agent.memory`
+- `agent.model` — raw Databricks Model Serving endpoint name (see MUST rule above)
+- `agent.must_do[]` — domain rules the agent must follow (free-text strings, use-case shaped)
+- `agent.must_not_do[]` — domain rules the agent must refuse (free-text strings, use-case shaped)
+- `agent.benchmark_seeds.coverage_buckets[]` — domain coverage labels (e.g. "policy compliance", "edge case: empty input"). NOT tool-shaped.
+- `agent.benchmark_seeds.seed_examples[]` — `{input, expectations}` per persona × user-journey crossing. The `input` is a natural-language prompt; the `expectations` describes the reference behavior. NO tool-specific assertions here.
+- `mcp_recommendations` — managed Databricks MCPs: `sql`, `genie`, `vector_search`, `uc_functions`, plus optional Knowledge Assistant. These are *recommendations*, not selections.
 - `mcp_research.candidates[]` — only if you enable web research (see below); each candidate needs `name`, `provider`, `registry_name`, `registry_status`, `registry_version`, `source_url`, `registry_url`, `integration_method`, `auth_model`, `required_scopes`, `databricks_compatibility`, `confidence`
-- `evals.smoke_cases[]`, `evals.benchmarks[]`
-- `governance.must_do[]`, `governance.must_not_do[]`, `governance.scorer_guidelines[]`
+- `governance.scorer_suite.guidelines[]` — domain rules → become Guidelines scorers in 51 (each entry: `{name, text, threshold}`)
+- `governance.scorer_suite.custom_scorer_rules[]` — deterministic Python `@scorer` checks (regex / numeric / schema validations) — each entry: `{name, rule}`
+- `governance.scorer_suite.judge_questions[]` — domain quality questions evaluated by LLM judges (each entry: `{name, question, threshold}`). Reference the use-case domain — NOT generic NLP.
+- `governance.verification.smoke_test_cases[]` — 3–5 domain smoke flows consumed by section 46''s smoke gate. Each entry: `{input, expectations}`. NO tool-specific assertions.
+- `governance.llm_role_endpoints.llm_judge_default.endpoint` — the Databricks serving endpoint role binding judges route through (default `databricks-claude-sonnet-4-6`).
 
 ## Optional MCP Web Research
 
@@ -9259,7 +9275,8 @@ Key requirements:
 - Use `genai-agents/foundation/00b-agent-spec-and-tool-plan/SKILL.md` as the spec contract
 - Set `agent.model` to a raw Databricks Model Serving endpoint name (default `databricks-claude-sonnet-4-6`) — never a vague label like "Claude" or "best model"
 - Recommend managed Databricks MCPs (Genie, SQL, Vector Search, UC Functions) plus an optional Knowledge Assistant
-- Author smoke + benchmark eval seeds and `must_do` / `must_not_do` / scorer-guideline governance seeds
+- Author tool-AGNOSTIC eval + governance: `agent.benchmark_seeds.{coverage_buckets, seed_examples}`, `governance.scorer_suite.{guidelines, custom_scorer_rules, judge_questions}`, `governance.verification.smoke_test_cases[]`, `agent.must_do[]`, `agent.must_not_do[]`
+- DO NOT predict tool selections — no `ka_citation_present`, `RetrievalGroundedness`, `genie_*`, `sql_*` scorers; no tool-shaped buckets or assertions. Tool-shaped content lives in `docs/agent_tool_plan.yaml` and is appended by prompt 39
 - Do NOT generate application code, create Databricks resources, install MCPs, create UC connections, wire tools, or deploy
 - Bronze, Gold, Genie, and Data Intelligence artifacts are NOT prerequisites — they become optional tool backends in the Tool Plan (step 39)
 
@@ -9327,6 +9344,9 @@ PHASE 1: FOUNDATION                      PHASE 2: BUILD              PHASE 3: AP
 | **`source_prd`** | Path + `sha256` of `docs/design_prd.md` recorded at the time of spec authoring | Makes the spec reproducible — a future spec regen against the same PRD revision must produce equivalent intent |
 | **`agent.model`** | Raw Databricks Model Serving endpoint name (e.g. `databricks-claude-sonnet-4-6`) — never a vague label like "Claude" or "best model" | Endpoint name is the contract that 39 lifts into `runtime_config.llm` and 44 grants `CAN_QUERY` on |
 | **`mcp_research`** | Optional web-research record of external MCP candidates sourced from the official MCP Registry | Captures provenance (registry URL, version/status, confidence) so 39 can ground tool selection in real, current servers |
+| **`agent.benchmark_seeds`** | `coverage_buckets[]` (domain labels) + `seed_examples[]` (`{input, expectations}` per persona × journey) | Section 50 expands these into ≥20 benchmark rows. Both fields are use-case-shaped — never tool-shaped. |
+| **`governance.scorer_suite`** | `guidelines[]` + `custom_scorer_rules[]` + `judge_questions[]` — three families of scorers, all domain-shaped | Section 51 registers these as the GENERIC scorer suite. Tool-shaped scorers (KA citation, RetrievalGroundedness, etc.) are added separately by 39 from the Tool Plan. |
+| **Tool-agnostic at this step** | The Spec contains no tool predictions. Tool families with `selected: false` in the Plan contribute zero downstream artifacts. | Lets the same Spec drive different Tool Plans — KA-only, SQL-only, full stack — without needing a re-author. |
 | **Coding-assistant-only step** | `bypass_llm: true`; the Input Template is the literal prompt the user pastes into Cursor/Copilot — no meta-LLM rewriting | This step never touches Databricks — no schemas, no installs, no deploy. Pure design. |
 
 ---
@@ -9354,7 +9374,7 @@ The generated prompt drives the coding assistant through a deterministic 7-phase
 | **Phase 2** | Confirm or default `agent.model` to `databricks-claude-sonnet-4-6` | Model endpoint |
 | **Phase 3** | Recommend managed MCPs (Genie, SQL, Vector Search, UC Functions) + optional KA | `mcp_recommendations` |
 | **Phase 4** | (Optional) MCP Registry research — record candidates with `registry_status`, `registry_version`, `confidence` | `mcp_research.candidates[]` |
-| **Phase 5** | Author eval seeds (smoke + benchmark) and governance rules (`must_do`, `must_not_do`, scorer guideline seeds) | Eval + governance |
+| **Phase 5** | Author tool-agnostic eval + governance: `agent.must_do[]`, `agent.must_not_do[]`, `agent.benchmark_seeds.{coverage_buckets, seed_examples}`, `governance.scorer_suite.{guidelines, custom_scorer_rules, judge_questions}`, `governance.verification.smoke_test_cases[]` | Eval + governance (use-case shaped) |
 | **Phase 6** | Save `docs/agent_spec.yaml`, STOP | Design artifact ready |
 
 ### Gate Contract
@@ -9447,14 +9467,37 @@ resource_grants:
         permission: "CAN_QUERY"
 ```
 
+## Tool-Shaped Derivation (mechanical)
+
+The Tool Plan adds **tool-shaped** content that the Spec deliberately omits (the Spec is tool-agnostic — tools are not selected until this step). For every entry in `selected_tools[]`, walk the table below and emit the corresponding `verification.tool_smoke_tests[]` entry and `runtime_guardrails.tool_shaped_scorers[]` hints. Tool families absent from `selected_tools[]` (or with `selected: false`) contribute zero entries.
+
+| Selected tool family | `runtime_guardrails.tool_shaped_scorers[]` to add (deduped) | `verification.tool_smoke_tests[]` prompt shape |
+|---|---|---|
+| Knowledge Assistant (`ka_endpoint_name` present) | `ka_citation_present`, `RetrievalGroundedness` | "What does the {use_case_title} policy say about <X>?" — `expected_signal`: KA span + cited document |
+| Vector Search (managed MCP) | `RetrievalGroundedness` (dedup if KA already added it) | "Find similar past <case> in the corpus" — `expected_signal`: VS span + ≥1 hit returned |
+| Genie | `genie_sql_correctness`, `genie_response_grounded_in_table` | "Show me <metric> for <segment> over the last quarter" — `expected_signal`: Genie span + SQL referencing an allowed table |
+| SQL MCP | `sql_readonly_compliance`, `sql_fully_qualified_names` | "Run a SELECT on `{agent_sql_catalog}.{agent_sql_schema}.<table>` for the top 5 rows" — `expected_signal`: SELECT-only SQL with fully-qualified table names |
+| UC Functions | `uc_function_signature_match` | "Call `<uc_function_name>` with arguments <args>" — `expected_signal`: function call signature matches |
+| External MCP (per high-confidence descriptor) | one entry per `mcp_research.candidates[].confidence == high` selected | use-case query that exercises the specific external MCP — `expected_signal` from descriptor |
+
+Each emitted `verification.tool_smoke_tests[]` entry has the shape `{tool_name, prompt, expected_signal}`. Use the use-case context (`{industry_name}`, `{use_case_title}`, capabilities, schema names) to keep prompts domain-relevant — never write generic placeholders like "list 5 rows from a table".
+
+**Worked example.** If `selected_tools[]` contains only SQL MCP (Knowledge Assistant `selected: false`, Genie not selected, Vector Search not selected), then:
+
+- `verification.tool_smoke_tests[]` has exactly ONE entry (the SQL one).
+- `runtime_guardrails.tool_shaped_scorers[]` is `["sql_readonly_compliance", "sql_fully_qualified_names"]`.
+- No `ka_citation_present`, no `RetrievalGroundedness`, no `genie_*`, no `uc_function_signature_match`.
+
+The downstream prompts (50/51/52/46) read these arrays directly — there is no defaulting or fallback for tools the user didn''t select.
+
 ## Tool Plan Decisions to Record
 
 - Managed Databricks MCPs: Genie, Vector Search, SQL, UC Functions (each with explicit `selected: true|false`)
 - Optional external MCPs from `docs/agent_spec.yaml.mcp_research.candidates[]`
 - Knowledge Assistant — either selected with `creation_required: true` and `ka_source`, or skipped with `selected: false`
 - Resource grants for `databricks.yml` and `app.yaml` OAuth scopes
-- Runtime guardrails (SQL read-only default, citation requirements)
-- Smoke tests for every selected tool
+- Runtime guardrails (SQL read-only default, citation requirements) PLUS `runtime_guardrails.tool_shaped_scorers[]` derived from `selected_tools[]`
+- `verification.tool_smoke_tests[]` — one entry per `selected_tools[]` entry, prompt + expected_signal use-case shaped (no entries for unselected tool families)
 - Runtime model route from `docs/agent_spec.yaml.agent.model` into `runtime_config.llm`
 
 For SQL MCP specifically, ensure the plan includes:
@@ -9477,6 +9520,8 @@ Key requirements:
 - Confirm managed Databricks MCPs (Genie, SQL, Vector Search, UC Functions) and the optional Knowledge Assistant
 - Bind dynamic SQL MCP inputs (`agent_sql_catalog`, `agent_sql_schema`, `agent_sql_warehouse_id`, `agent_sql_table_allowlist`) with the readonly SELECT/DESCRIBE/EXPLAIN policy
 - Copy the SCALAR value of `docs/agent_spec.yaml.agent.model` into `runtime_config.llm.endpoint` AND every `resource_grants.databricks_yml.serving_endpoints[].name` — never the literal YAML-path string
+- Derive `verification.tool_smoke_tests[]` mechanically from `selected_tools[]` — one entry per selected tool, prompt + expected_signal use-case shaped
+- Derive `runtime_guardrails.tool_shaped_scorers[]` mechanically from `selected_tools[]` per the Tool-shaped Derivation Rules in `references/tool-plan-schema.md`. Tool families with `selected: false` contribute nothing
 - ASK the user for any value that arrives blank, missing, or still wrapped in `{...}`; never write placeholder literals into the Tool Plan
 - Do NOT generate code, create Databricks resources, install MCPs, create UC connections, wire tools, or deploy
 
@@ -9567,7 +9612,9 @@ The generated prompt walks the coding assistant through 7 ordered decisions befo
 - [ ] Every selected_tools[].mcp_server_ref resolves to selected_mcp_servers[].name
 - [ ] SQL MCP includes catalog, schema, warehouse_id, readonly guardrails
 - [ ] Knowledge Assistant is either selected with creation_required: true or skipped with selected: false
-- [ ] Tool smoke tests are listed for every selected tool
+- [ ] `verification.tool_smoke_tests[]` has exactly one entry per `selected_tools[]` entry; each `prompt` is use-case-shaped, each `expected_signal` is observable (TOOL span / citation / SQL shape)
+- [ ] `runtime_guardrails.tool_shaped_scorers[]` is derived mechanically from `selected_tools[]` per the Tool-shaped Derivation table; tool families with `selected: false` contributed zero entries
+- [ ] No `RetrievalGroundedness` / `ka_citation_present` / `genie_*` / `uc_function_*` entries appear unless the corresponding tool family is in `selected_tools[]`
 - [ ] runtime_config.llm uses provider `databricks`, `endpoint` set to the SCALAR value copied from `docs/agent_spec.yaml.agent.model` (never the literal YAML-path string), `api_base_url: null`, and `api_mode: databricks_openai_compatible`
 - [ ] resource_grants.databricks_yml.serving_endpoints grants CAN_QUERY on the same scalar endpoint name (never the literal YAML-path string)
 - [ ] No value in docs/agent_tool_plan.yaml is a placeholder literal of the form `{some_name}`',
@@ -10518,9 +10565,9 @@ VALUES
 
 This will involve the following steps:
 
-- **Load smoke cases** — read `governance.verification.smoke_test_cases[]` from the agent spec into `tests/eval_dataset.json`
+- **Load smoke cases (union)** — UNION `governance.verification.smoke_test_cases[]` from the agent spec (use-case shaped) WITH `verification.tool_smoke_tests[]` from the tool plan (one per `selected_tools[]` entry — KA absent ⇒ no KA smoke test, Genie absent ⇒ no Genie smoke test). Write the union into `tests/eval_dataset.json`.
 - **Run the smoke eval** — execute `uv run agent-evaluate` against the configured `runtime_config.llm` route and write per-case pass/fail to MLflow
-- **Apply fail-closed conditions** — refuse to advance if any L1 scorer is below floor, `correctness/mean` is below floor, any tool returns `UNRESOLVED_COLUMN` / `TABLE_OR_VIEW_NOT_FOUND` / permission-denied / empty output, or any open known issue targets `first_scored_eval`
+- **Apply fail-closed conditions** — refuse to advance if any L1 scorer is below floor, `correctness/mean` is below floor, any tool LISTED IN `docs/agent_tool_plan.yaml.selected_tools[]` returns `UNRESOLVED_COLUMN` / `TABLE_OR_VIEW_NOT_FOUND` / permission-denied / empty output, any selected tool is missing a TOOL span in the trace, or any open known issue targets `first_scored_eval`. Tools absent from `selected_tools[]` cannot trip this condition (they were never wired).
 - **Bundle-deploy the agent app** — run `databricks bundle deploy` then `databricks apps deploy {agent_app_name}` so app code and resource grants from the Tool Plan deploy together
 - **Run three post-deploy probes** — curl `/invocations`, Python SDK invoke, and confirm production traces appear at `{mlflow_experiment_path}`
 - **Verify platform health** — confirm `databricks apps get "{agent_app_name}"` reports `RUNNING` before producing the gate
@@ -10540,11 +10587,12 @@ This prompt maps to the canonical `local_eval_smoke` role. The smoke Gate **fail
 2. @genai-agents/tracks/A-custom-agent-apps/06-evaluation/SKILL.md — params:
    - `agent_name: "{agent_app_name}"`
    - `agent_spec_ref: "state://AgentSpec"`
+   - `agent_tool_plan_ref: "docs/agent_tool_plan.yaml"`
    - `mlflow_experiment_path: "{mlflow_experiment_path}"`
    - `runtime_model_ref: "docs/agent_tool_plan.yaml.runtime_config.llm"`
    - `runner_cmd: "uv run agent-evaluate"`
    - `dataset_path: "tests/eval_dataset.json"`
-   - The skill reads `governance.verification.smoke_test_cases[]` for the developer-loop test cases.
+   - The skill reads `governance.verification.smoke_test_cases[]` (Spec, use-case shaped) UNIONED with `docs/agent_tool_plan.yaml.verification.tool_smoke_tests[]` (Plan, one per `selected_tools[]` entry) for the developer-loop test cases. Tool families absent from `selected_tools[]` contribute zero smoke tests.
 3. @genai-agents/tracks/A-custom-agent-apps/07-deploy-and-query/SKILL.md — params:
    - `agent_name: "{agent_app_name}"`
    - `target: "databricks_apps"`
@@ -11015,7 +11063,7 @@ VALUES
 
 This will involve the following steps:
 
-- **Enumerate inline prompts** — find every prompt the agent loads (`agent.system_prompt`, `must_do[]`, `must_not_do[]`) by reading `docs/agent_spec.yaml`
+- **Enumerate inline prompts** — find every prompt the agent loads (`agent.system_prompt`, `agent.must_do[]`, `agent.must_not_do[]`) by reading `docs/agent_spec.yaml`
 - **Register each as a UC asset** — create `{lakehouse_default_catalog}.{db_schema}_agent.<prompt_name>` for each one, version 1
 - **Pin `@production` alias** — alias the current versions so the agent''s runtime loader resolves them
 - **Reserve `@staging` alias** — leave it free for the next iteration''s candidate version
@@ -11120,7 +11168,7 @@ When you paste the prompt, the AI walks four phases against UC:
 
 | Phase | What the AI Does | Where It Writes |
 |-------|------------------|-----------------|
-| 1. Enumerate | Find every inline prompt the agent loads (`agent.system_prompt`, `must_do[]`, `must_not_do[]`) | Reads from `docs/agent_spec.yaml` |
+| 1. Enumerate | Find every inline prompt the agent loads (`agent.system_prompt`, `agent.must_do[]`, `agent.must_not_do[]`) | Reads from `docs/agent_spec.yaml` |
 | 2. Register | Create each as a UC prompt asset under `{lakehouse_default_catalog}.{db_schema}_agent.*` | UC schema |
 | 3. Alias | Pin the new versions as `@production`; reserve `@staging` for next release | UC alias table |
 | 4. Verify loader | Boot agent against `prompts://...@production`; assert it loads cleanly | Agent runtime |
@@ -11147,11 +11195,12 @@ VALUES
 
 This will involve the following steps:
 
-- **Pull seed cases from the spec** — read `agent.benchmark_seeds.coverage_buckets[]`, `agent.benchmark_seeds.seed_examples[]`, and `ui.user_journeys[]` from state
+- **Pull seed cases from the Spec (generic)** — read `agent.benchmark_seeds.coverage_buckets[]`, `agent.benchmark_seeds.seed_examples[]`, and `ui.user_journeys[]` from state. These are use-case shaped, NOT tool-shaped.
 - **Sample real production traces** — optionally mine the OTel trace tables for representative real-world inputs to add to the seed set
 - **Expand into ≥ 20 benchmark rows** — synthesize across seeds × buckets × journeys, LLM-augmented where the seed set is thin
+- **Append tool-shaped rows from the Plan** — read `docs/agent_tool_plan.yaml.verification.tool_smoke_tests[]` and APPEND ≥1 row per entry. KA absent in `selected_tools[]` ⇒ no KA-shaped rows; Genie absent ⇒ no Genie-shaped rows; SQL MCP absent ⇒ no SQL rows. The append is mechanical — no defaulting.
 - **Author expected outputs** — populate the `expectations` column with per-row reference behavior so judges and scorers have ground truth to grade against
-- **Enforce the coverage contract** — assert every coverage bucket has ≥ 1 row AND every UI user journey has ≥ 1 row before writing
+- **Enforce the coverage contract** — assert every coverage bucket has ≥ 1 row, every UI user journey has ≥ 1 row, AND every entry in `verification.tool_smoke_tests[]` has ≥ 1 row before writing
 - **Register the dataset table** — write to `{lakehouse_default_catalog}.{db_schema}_agent.{agent_resource_prefix}_benchmarks` with `expectations` + `human_assessments` columns ready for the labeling sessions in 53
 
 **How this prompt chains with the prior step (skill invocations):**
@@ -11162,13 +11211,14 @@ This will involve the following steps:
 2. @genai-agents/sdlc/02-evaluation-datasets/SKILL.md — params:
    - `agent_name: "{agent_app_name}"`
    - `agent_spec_ref: "state://AgentSpec"`
+   - `agent_tool_plan_ref: "docs/agent_tool_plan.yaml"`
    - `app_spec_ref: "state://AppSpec"`
    - `target_table: "{lakehouse_default_catalog}.{db_schema}_agent.{agent_resource_prefix}_benchmarks"`
    - `min_rows: 20`
-   - The skill reads `agent.benchmark_seeds.coverage_buckets[]`, `agent.benchmark_seeds.seed_examples[]`, and `ui.user_journeys[]` (every journey must have at least one benchmark row).
+   - The skill reads `agent.benchmark_seeds.coverage_buckets[]`, `agent.benchmark_seeds.seed_examples[]`, and `ui.user_journeys[]` (every journey must have at least one benchmark row), AND `docs/agent_tool_plan.yaml.verification.tool_smoke_tests[]` (one tool-shaped row appended per entry; tool families with `selected: false` contribute zero rows).
 3. `genai-agents/vibecoding-state` op `exit` — params: `prompt_id: "mlflow_evaluation_datasets"`, `gate: "≥ 20 benchmark rows; every user journey covered"`.
 
-**Gate:** `≥ 20 benchmark rows; every user journey covered` — the benchmark table at `{lakehouse_default_catalog}.{db_schema}_agent.{agent_resource_prefix}_benchmarks` is the single source of truth for scorers (input_id 211) and eval runs (input_id 212).',
+**Gate:** `≥ 20 benchmark rows; every user journey covered` — the benchmark table at `{lakehouse_default_catalog}.{db_schema}_agent.{agent_resource_prefix}_benchmarks` is the single source of truth for scorers (input_id 211) and eval runs (input_id 212). Coverage assertion holds across THREE axes: every `agent.benchmark_seeds.coverage_buckets[]`, every `ui.user_journeys[]`, AND every `verification.tool_smoke_tests[]` entry from the Tool Plan has ≥ 1 row.',
 '',
 'Phase 1 / Build the Quality Suite — Evaluation Dataset',
 'Generate ≥ 20 benchmark rows that cover every coverage bucket and user journey from the AgentSpec',
@@ -11261,6 +11311,7 @@ When you paste the prompt, the AI walks four phases:
 - [ ] Table `{lakehouse_default_catalog}.{db_schema}_agent.{agent_resource_prefix}_benchmarks` with ≥ 20 rows
 - [ ] Every `agent.benchmark_seeds.coverage_buckets[]` value covered
 - [ ] Every `ui.user_journeys[]` covered by ≥ 1 benchmark row
+- [ ] Every `docs/agent_tool_plan.yaml.verification.tool_smoke_tests[]` entry has ≥ 1 corresponding tool-shaped benchmark row (KA-shaped only if KA selected, Genie-shaped only if Genie selected, SQL-shaped only if SQL MCP selected)
 - [ ] Schema includes `expectations` and `human_assessments` columns ready for sync-back from labeling sessions',
 true, 1, true, current_timestamp(), current_timestamp(), current_user());
 
@@ -11275,10 +11326,11 @@ VALUES
 This will involve the following steps:
 
 - **Import built-in scorers** — register `safety` (threshold 0.95, 100% sampling), `relevance` (threshold 0.8), and any other first-party scorers the use case needs
-- **Author custom `@scorer` functions** — materialize deterministic checks (schema validation, regex, currency-code matching) from `governance.must_do[]` and `governance.must_not_do[]` rules
+- **Author custom `@scorer` functions** — materialize deterministic checks (schema validation, regex, currency-code matching) from `agent.must_do[]` and `agent.must_not_do[]` rules and `governance.scorer_suite.custom_scorer_rules[]`
 - **Convert Guidelines into judges** — turn each free-text guideline in `governance.scorer_suite.guidelines[]` into a Guidelines scorer
 - **Configure LLM judges** — convert `governance.scorer_suite.judge_questions[]` into `make_judge` scorers routed through `{llm_role_endpoints.llm_judge_default.endpoint}` (per `runtime_config.llm_role_endpoints`)
-- **Bind scorers to the eval dataset** — attach the registered scorer suite to the benchmark dataset from prompt 50 so the first scored eval can pick it up
+- **Register tool-shaped scorers from the Plan** — read `docs/agent_tool_plan.yaml.runtime_guardrails.tool_shaped_scorers[]` and register each entry as an additional scorer. KA absent in `selected_tools[]` ⇒ no `ka_citation_present`, no `RetrievalGroundedness`. Genie absent ⇒ no `genie_sql_correctness`. SQL MCP absent ⇒ no `sql_readonly_compliance`. The union is deduped — `RetrievalGroundedness` only registers once even if both KA and Vector Search are selected.
+- **Bind scorers to the eval dataset** — attach the unioned scorer suite (Spec generic ∪ Plan tool-shaped) to the benchmark dataset from prompt 50 so the first scored eval can pick it up
 - **Smoke-test each scorer** — run each scorer against a known-good and known-bad example to confirm thresholds fire as expected
 
 **How this prompt chains with the prior step (skill invocations):**
@@ -11289,13 +11341,15 @@ This will involve the following steps:
 2. @genai-agents/sdlc/03-scorers-and-judges/SKILL.md — params:
    - `agent_name: "{agent_app_name}"`
    - `agent_spec_ref: "state://AgentSpec"`
+   - `agent_tool_plan_ref: "docs/agent_tool_plan.yaml"`
    - `mlflow_experiment_path: "{mlflow_experiment_path}"`
    - `judge_endpoint: "{llm_role_endpoints.llm_judge_default.endpoint}"` (every `make_judge` call routes through the resolved `llm_judge_default` role binding — never the raw `{llm_endpoint}`)
    - `builtins: [{name: "safety", sampling: 1.0, threshold: 0.95}, {name: "relevance", threshold: 0.8}]`
-   - The skill reads `governance.scorer_suite.guidelines[]`, `governance.scorer_suite.custom_scorer_rules[]`, `governance.scorer_suite.judge_questions[]` for the use-case judges.
+   - The skill reads the GENERIC suite from `governance.scorer_suite.guidelines[]`, `governance.scorer_suite.custom_scorer_rules[]`, `governance.scorer_suite.judge_questions[]` (use-case shaped, tool-agnostic) AND the TOOL-SHAPED suite from `docs/agent_tool_plan.yaml.runtime_guardrails.tool_shaped_scorers[]` (derived mechanically from `selected_tools[]`). The two are unioned and deduped.
+   - `RetrievalGroundedness` is registered ONLY if KA or Vector Search appears in `selected_tools[]`. `ka_citation_present` only if KA selected. `genie_sql_correctness` and `genie_response_grounded_in_table` only if Genie selected. `sql_readonly_compliance` and `sql_fully_qualified_names` only if SQL MCP selected. `uc_function_signature_match` only if UC Functions selected. There is NO defaulting for tool families absent from `selected_tools[]`.
 3. `genai-agents/vibecoding-state` op `exit` — params: `prompt_id: "mlflow_scorers_and_judges"`, `gate: "Scorer suite registered with thresholds"`.
 
-**Gate:** `Scorer suite registered with thresholds` — every scorer the use case needs (builtins + Guidelines + custom code scorers + LLM judges) is registered against `{mlflow_experiment_path}` with explicit thresholds, ready for the first scored eval (input_id 212).',
+**Gate:** `Scorer suite registered with thresholds` — every scorer the use case needs (builtins + Guidelines + custom code scorers + LLM judges from the Spec) UNIONED with every tool-shaped scorer hint from `docs/agent_tool_plan.yaml.runtime_guardrails.tool_shaped_scorers[]` is registered against `{mlflow_experiment_path}` with explicit thresholds. No `RetrievalGroundedness` / `ka_citation_present` / `genie_*` / `sql_*` scorer registers unless its tool family is in `selected_tools[]`. Ready for the first scored eval (input_id 212).',
 '',
 'Phase 1 / Build the Quality Suite — Scorers and Judges',
 'Register builtin scorers, Guidelines, custom code scorers, and LLM judges with thresholds (judge calls route via llm_judge_default role)',
@@ -11396,6 +11450,8 @@ When you paste the prompt, the AI walks five phases against `{mlflow_experiment_
 - [ ] Builtin `safety` scorer registered with threshold 0.95 and 100% sampling
 - [ ] Builtin `relevance` scorer registered with threshold 0.8
 - [ ] Every LLM judge call routes through the `llm_judge_default` role binding (NOT raw `{llm_endpoint}`)
+- [ ] Tool-shaped scorers from `docs/agent_tool_plan.yaml.runtime_guardrails.tool_shaped_scorers[]` are registered conditionally — `RetrievalGroundedness` only with KA or Vector Search selected; `ka_citation_present` only with KA selected; `genie_*` only with Genie selected; `sql_*` only with SQL MCP selected; `uc_function_signature_match` only with UC Functions selected
+- [ ] No tool-shaped scorer is registered for a tool family absent from `selected_tools[]`
 - [ ] Scorers ready for the first scored eval at input_id 212',
 true, 1, true, current_timestamp(), current_timestamp(), current_user());
 
@@ -11412,11 +11468,11 @@ VALUES
 
 This will involve the following steps:
 
-- **Populate the System Prompt Review preflight** — author a worked example for every `must_do[]` / `must_not_do[]` clause and stamp `complete: true` BEFORE any benchmark runs
-- **Run the scored eval** — call `mlflow.genai.evaluate()` against the benchmark table using the registered scorer suite from prompt 51
+- **Populate the System Prompt Review preflight** — author a worked example for every `agent.must_do[]` / `agent.must_not_do[]` clause and stamp `complete: true` BEFORE any benchmark runs
+- **Run the scored eval** — call `mlflow.genai.evaluate()` against the benchmark table using the registered scorer suite from prompt 51 (which is itself the union of generic Spec scorers + tool-shaped Plan scorers — KA absent ⇒ no KA scorer ran)
 - **Tag the run for traceability** — log the run under `{mlflow_experiment_path}` with `mlflow.promptRegistryLocation` so the eval can be tied back to the exact prompt versions
-- **Classify the failure shape** — compute `failure_shape_classification.primary_shape` (instruction / tool_call_empty / retrieval / safety / other) and `safety_buffer` per scorer
-- **Route the next iteration** — instruction-shape (no L1 failure) → Skill 08b prompt hand-authoring; tool-call-empty → Skill 06 direct trace debug; retrieval → retrieval tuning; L1 floor breach → architecture redesign
+- **Classify the failure shape** — compute `failure_shape_classification.primary_shape` (instruction / tool_call_empty / retrieval / safety / other) and `safety_buffer` per scorer. `tool_call_empty` ONLY fires for tools present in `docs/agent_tool_plan.yaml.selected_tools[]`; tools absent from `selected_tools[]` cannot be the cause of a `tool_call_empty` failure (they were never wired)
+- **Route the next iteration** — instruction-shape (no L1 failure) → Skill 08b prompt hand-authoring; tool-call-empty → Skill 06 direct trace debug, scoped to the SPECIFIC selected tool that returned empty (not generic "tool failed"); retrieval → retrieval tuning ONLY if KA or Vector Search is in `selected_tools[]`; L1 floor breach → architecture redesign
 - **Fire the either-or gate** — emit `Eval thresholds met` OR `Eval regressed — iterate` with the routing branch and full failure-shape schema captured into state
 
 **How this prompt chains with the prior step (skill invocations):**
@@ -11434,11 +11490,13 @@ This will involve the following steps:
    The `## System Prompt Review` block in the live state file is populated by THIS prompt: read every `agent.must_do[]` clause and append a `must_do_worked_examples[]` entry with `rule`, `positive_example`, and `expected_behavior`; do the same for every `agent.must_not_do[]` clause into `must_not_do_worked_examples[]` with `rule`, `negative_example`, and `refusal_or_correction`. Set `complete: true`, stamp `reviewed_at` (ISO8601 UTC), and write `reviewed_by` (operator email). The audit MUST happen BEFORE step 2 (`@genai-agents/sdlc/04-evaluation-runs/SKILL.md`) runs.
 2. @genai-agents/sdlc/04-evaluation-runs/SKILL.md — params:
    - `agent_name: "{agent_app_name}"`
+   - `agent_tool_plan_ref: "docs/agent_tool_plan.yaml"`
    - `mlflow_experiment_path: "{mlflow_experiment_path}"`
    - `benchmarks_table: "{lakehouse_default_catalog}.{db_schema}_agent.{agent_resource_prefix}_benchmarks"`
    - `predict_fn_from_prompt: "track_a_agent_auth_memory"`
    - `scorer_suite_from_prompt: "mlflow_scorers_and_judges"`
    - `record_per_scorer_table: true`
+   - The skill reads `docs/agent_tool_plan.yaml.selected_tools[]` to scope failure-shape classification — `primary_shape: tool_call_empty` and the `tool_call_empty` routing branch only fire for tools present in `selected_tools[]`. Tools that were never wired cannot fail.
 3. `genai-agents/vibecoding-state` op `exit` — params: `prompt_id: "mlflow_evaluation_runs_and_iteration"`, `gate: "<Eval thresholds met | Eval regressed — iterate>"`, `captured: {per_scorer_pass_fail_table, failing_scorers_if_regressed, failure_shape_classification, safety_buffer, predict_fn_exception_count, predict_fn_sentinel_count_per_run, judges_with_silent_aggregation_dropouts, mlflow_eval_predict_fn_signature}`.
 
 **Captured failure-shape schema (mandatory in `captured` at `exit`):**
@@ -11464,8 +11522,8 @@ mlflow_eval_predict_fn_signature: string
 
 1. If `l1_failures` is non-empty → route to **architecture / system-prompt redesign** (do NOT route to Skill 08b — instruction-only iteration cannot recover an L1 scorer that is below floor). Open the failure-shape redesign loop instead.
 2. Else if `primary_shape == "instruction"` AND `l1_failures` is empty → route to @genai-agents/sdlc/08b-prompt-handauthoring/SKILL.md (the next prompt, `mlflow_logged_model_uc_registration`, gates step 2 on exactly this branch).
-3. Else if `primary_shape == "tool_call_empty"` → route to @genai-agents/sdlc/06-direct-trace-debug/SKILL.md (forward-reference; resolved by Phase 4 monitoring + debugging).
-4. Else if `primary_shape == "retrieval"` → route to **retrieval tuning** (chunking / embedding / top-k / filters in the KA tool or vector index).
+3. Else if `primary_shape == "tool_call_empty"` → route to @genai-agents/sdlc/06-direct-trace-debug/SKILL.md, scoped to the specific tool from `selected_tools[]` that returned empty (the `failing_trace_ids[].failing_scorers` and `selected_tools[]` together identify which tool to debug — never "tool failed" in the generic).
+4. Else if `primary_shape == "retrieval"` → route to **retrieval tuning** (chunking / embedding / top-k / filters in the KA tool or vector index). This route ONLY exists when KA or Vector Search is in `selected_tools[]`; if neither retrieval tool was selected, `primary_shape` cannot be `retrieval` and this branch never fires.
 5. Else (`safety`, `other`) → escalate to the agent owner; do NOT auto-iterate.
 
 **Gate:** either `Eval thresholds met` OR `Eval regressed — iterate` — record which scorers failed AND the routing branch fired (via `failure_shape_classification.primary_shape` and `l1_failures`); the next prompt (`mlflow_logged_model_uc_registration`) gates only the instruction-shaped, no-L1-failure branch via Skill 08b — direct tool/retrieval debugging or architecture redesign handles the rest.',
