@@ -132,12 +132,11 @@ export const PATH_DESCRIPTIONS: Record<WorkshopLevel, PathDescription> = {
 
   'agents-accelerator': {
     tagline: 'Ship a production AI agent — from app scaffold to MLflow lifecycle',
-    techStack: ['Databricks Apps', 'Lakebase', 'OpenAI Agents SDK', 'Agent Framework', 'Knowledge Assistant', 'Genie', 'MLflow 3', 'Unity Catalog'],
+    techStack: ['Databricks Apps', 'Lakebase', 'OpenAI Agents SDK', 'Agent Framework', 'MLflow 3', 'Unity Catalog'],
     bullets: [
       'Deploy a Databricks App + Lakebase foundation with UC resources and volumes',
       'Enable MLflow tracing with UC OTel Delta tables for observability',
-      'Create a Knowledge Assistant and clone the OpenAI Agents SDK template',
-      'Wire tools (Genie, Knowledge Assistant, UC Functions, MCP) with OBO auth and Lakebase memory',
+      'Clone the OpenAI Agents SDK template and wire selected tools (optionally Genie, Knowledge Assistant, UC Functions, MCP) with OBO auth and Lakebase memory',
       'Evaluate with scorers and judges, deploy via AI Gateway, and capture chat feedback through AppKit',
     ],
     estimatedMinutes: 90,
