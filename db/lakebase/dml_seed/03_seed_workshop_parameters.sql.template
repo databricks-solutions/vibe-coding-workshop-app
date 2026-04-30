@@ -249,11 +249,15 @@ VALUES
  CURRENT_USER);
 
 -- =============================================================================
--- AGENT TOOL INPUTS (Step 42 Tools and MCP / agent_tool_selection Tool Plan)
+-- AGENT TOOL INPUTS (Step 39 Agent Tool Selection / agent_tool_selection)
 -- =============================================================================
--- These parameters back the AgentToolInputsEditor inline UI on the Tools and
--- MCP step. SQL MCP is the only family enabled by default (samples.wanderbricks
--- with all-tables scope, governed by Unity Catalog permissions). Genie, Vector
+-- These parameters back the AgentToolInputsEditor inline UI on the Agent Tool
+-- Selection step (Step 39). The editor's values feed Step 39's prompt template
+-- placeholders ({agent_sql_catalog}, {agent_tool_sql_mcp_enabled}, etc.) so the
+-- generated prompt produces docs/agent_tool_plan.yaml with user-confirmed tool
+-- backends. Step 44 (Tools and MCP) then reads that plan to wire the tools.
+-- SQL MCP is the only family enabled by default (samples.wanderbricks with
+-- all-tables scope, governed by Unity Catalog permissions). Genie, Vector
 -- Search, UC Functions, and External MCP are opt-in via per-family checkboxes
 -- so users only fill in IDs for the tools they actually want.
 
