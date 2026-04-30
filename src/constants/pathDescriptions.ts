@@ -134,6 +134,7 @@ export const PATH_DESCRIPTIONS: Record<WorkshopLevel, PathDescription> = {
     tagline: 'Ship a production AI agent — from app scaffold to MLflow lifecycle',
     techStack: ['Databricks Apps', 'Lakebase', 'OpenAI Agents SDK', 'Agent Framework', 'MLflow 3', 'Unity Catalog'],
     bullets: [
+      'Author docs/agent_spec.yaml and docs/agent_tool_plan.yaml to capture agent intent and tool backends',
       'Deploy a Databricks App + Lakebase foundation with UC resources and volumes',
       'Enable MLflow tracing with UC OTel Delta tables for observability',
       'Clone the OpenAI Agents SDK template and wire selected tools (optionally Genie, Knowledge Assistant, UC Functions, MCP) with OBO auth and Lakebase memory',
