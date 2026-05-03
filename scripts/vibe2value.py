@@ -25,6 +25,69 @@ CONFIG_PATH = PROJECT_ROOT / "user-config.yaml"
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from brand_extractor import extract_brand_assets, hex_to_hsl
 
+# ---------------------------------------------------------------------------
+# Cross-platform subprocess helpers
+# ---------------------------------------------------------------------------
+# On Windows, `subprocess.run(["npm", ...], shell=False)` raises FileNotFoundError
+# because `npm` is `npm.cmd` and CreateProcessW does not consult PATHEXT.
+# Resolving the command via `shutil.which()` returns the full path including the
+# real extension, which CreateProcessW accepts.
+#
+# Bash scripts cannot be executed natively by Windows; we explicitly invoke them
+# through bash (Git Bash on Windows, /bin/bash on POSIX) so the shebang doesn't
+# matter to the OS loader.
+
+IS_WINDOWS = os.name == "nt"
+
+
+def _resolve_exe(name: str):
+    """Return the full path of `name` on PATH, honoring Windows PATHEXT."""
+    return shutil.which(name)
+
+
+def _find_bash():
+    """Return the path to bash for invoking .sh scripts, or None.
+
+    On POSIX we prefer /bin/bash to mirror the existing `#!/bin/bash` shebang
+    behavior exactly, falling back to PATH lookup only if /bin/bash is absent
+    (e.g. NixOS-style installs). On Windows we use shutil.which("bash") which
+    finds Git Bash via PATH.
+    """
+    if not IS_WINDOWS:
+        if Path("/bin/bash").exists():
+            return "/bin/bash"
+        return shutil.which("bash")
+    return shutil.which("bash")
+
+
+def _run_cmd(argv, **kwargs):
+    """subprocess.run wrapper that resolves argv[0] to a full path.
+
+    On POSIX this is functionally equivalent to subprocess.run(argv, ...) since
+    execvp does its own PATH lookup. On Windows it makes .cmd / .bat shims like
+    npm.cmd executable through CreateProcessW (which does not search PATHEXT).
+    """
+    resolved = _resolve_exe(argv[0]) or argv[0]
+    return subprocess.run([resolved, *argv[1:]], **kwargs)
+
+
+def _run_sh(script_path, script_args, **kwargs):
+    """Run a .sh script via bash on any OS.
+
+    Always invokes bash explicitly so the script runs on Windows where the
+    OS loader cannot honor the shebang.
+    """
+    bash = _find_bash()
+    if not bash:
+        msg = (
+            "bash not found. On Windows install Git for Windows "
+            "(winget install Git.Git) and reopen your terminal."
+            if IS_WINDOWS
+            else "bash not found at /bin/bash or on PATH."
+        )
+        raise RuntimeError(msg)
+    return subprocess.run([bash, str(script_path), *script_args], **kwargs)
+
 # Tag all Databricks CLI calls with the workshop identity for centralized tracking
 _version_file = PROJECT_ROOT / "VERSION"
 os.environ.setdefault(
@@ -205,42 +268,74 @@ def render_template(template_path: Path, output_path: Path, placeholders: dict,
 
 MIN_DATABRICKS_CLI_VERSION = (0, 287, 0)
 
+
+def _which_any(*names):
+    """Return (canonical_name, full_path) for the first name found on PATH, else None."""
+    for n in names:
+        path = shutil.which(n)
+        if path:
+            return n, path
+    return None
+
+
 def check_prerequisites() -> bool:
     """Check that required tools are installed."""
     all_ok = True
+    # On POSIX we keep the strict python3-only requirement (today's behavior).
+    # On Windows the python.org / winget installer ships only `python.exe`, so
+    # we accept either name there.
+    python_names = ("python3", "python") if IS_WINDOWS else ("python3",)
     checks = [
-        ("python3", "Python 3"),
-        ("node", "Node.js"),
-        ("npm", "npm"),
-        ("databricks", "Databricks CLI"),
+        (python_names, "Python 3"),
+        (("node",), "Node.js"),
+        (("npm",), "npm"),
+        (("databricks",), "Databricks CLI"),
     ]
-    for cmd, label in checks:
-        if shutil.which(cmd):
-            version = ""
-            try:
-                result = subprocess.run([cmd, "--version"], capture_output=True, text=True, timeout=10)
-                version = result.stdout.strip().split("\n")[0] if result.stdout else ""
-            except Exception:
-                pass
-            success(f"{label}: {version}")
-
-            if cmd == "databricks" and version:
-                import re as _re
-                m = _re.search(r"v?(\d+)\.(\d+)\.(\d+)", version)
-                if m:
-                    cli_ver = tuple(int(x) for x in m.groups())
-                    if cli_ver < MIN_DATABRICKS_CLI_VERSION:
-                        min_str = ".".join(str(x) for x in MIN_DATABRICKS_CLI_VERSION)
-                        error(
-                            f"Databricks CLI {version} is too old. "
-                            f"Lakebase Autoscaling requires v{min_str}+. "
-                            f"Update with: brew upgrade databricks  (macOS) "
-                            f"or  curl -fsSL https://raw.githubusercontent.com/databricks/setup-cli/main/install.sh | sh"
-                        )
-                        all_ok = False
-        else:
+    for names, label in checks:
+        found = _which_any(*names)
+        if not found:
             error(f"{label}: NOT FOUND")
             all_ok = False
+            continue
+        cmd_used, _ = found
+        version = ""
+        try:
+            # _run_cmd resolves Windows .cmd shims (e.g. npm -> npm.cmd) so the
+            # version probe doesn't silently fail on Windows.
+            result = _run_cmd([cmd_used, "--version"], capture_output=True, text=True, timeout=10)
+            version = result.stdout.strip().split("\n")[0] if result.stdout else ""
+        except Exception:
+            pass
+        success(f"{label}: {version}")
+
+        if cmd_used == "databricks" and version:
+            import re as _re
+            m = _re.search(r"v?(\d+)\.(\d+)\.(\d+)", version)
+            if m:
+                cli_ver = tuple(int(x) for x in m.groups())
+                if cli_ver < MIN_DATABRICKS_CLI_VERSION:
+                    min_str = ".".join(str(x) for x in MIN_DATABRICKS_CLI_VERSION)
+                    error(
+                        f"Databricks CLI {version} is too old. "
+                        f"Lakebase Autoscaling requires v{min_str}+. "
+                        f"Update with: brew upgrade databricks  (macOS) "
+                        f"or  curl -fsSL https://raw.githubusercontent.com/databricks/setup-cli/main/install.sh | sh"
+                    )
+                    all_ok = False
+
+    # Windows-only: the deploy pipeline shells out to bash scripts via _run_sh.
+    # Surface a clear error early instead of a cryptic FileNotFoundError later.
+    if IS_WINDOWS:
+        if _find_bash():
+            success("bash: found (Git Bash)")
+        else:
+            error(
+                "bash: NOT FOUND. Install Git for Windows: "
+                "winget install Git.Git  "
+                "(or run: powershell -ExecutionPolicy Bypass -File scripts\\install-prerequisites.ps1)"
+            )
+            all_ok = False
+
     return all_ok
 
 
@@ -250,7 +345,7 @@ def check_auth(profile: str = "") -> dict:
     if profile:
         cmd.extend(["--profile", profile])
     try:
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+        result = _run_cmd(cmd, capture_output=True, text=True, timeout=30)
         if result.returncode == 0:
             user_info = json.loads(result.stdout)
             return user_info
@@ -266,7 +361,7 @@ def discover_profile(host: str) -> str:
     over the generic 'DEFAULT' profile.
     """
     try:
-        result = subprocess.run(
+        result = _run_cmd(
             ["databricks", "auth", "profiles", "--output", "json"],
             capture_output=True, text=True, timeout=15,
         )
@@ -295,13 +390,13 @@ def discover_profile(host: str) -> str:
 def _run_deploy(phase_flags: list, config: dict, label: str, step_num: int,
                 total: int) -> int:
     """Run deploy.sh with the given flags. Returns exit code."""
-    deploy_sh = str(PROJECT_ROOT / "scripts" / "deploy.sh")
+    deploy_sh = PROJECT_ROOT / "scripts" / "deploy.sh"
     target = config.get("_metadata", {}).get("target", "user")
     profile = config.get("workspace", {}).get("profile", "")
-    cmd = [deploy_sh, "--target", target] + phase_flags
+    args = ["--target", target] + phase_flags
     if profile:
-        cmd.extend(["--profile", profile])
-    result = subprocess.run(cmd, cwd=PROJECT_ROOT)
+        args.extend(["--profile", profile])
+    result = _run_sh(deploy_sh, args, cwd=PROJECT_ROOT)
     if result.returncode != 0:
         print()
         header("INSTALL FAILED")
@@ -348,7 +443,7 @@ def cmd_install(args):
     if not user_info:
         info("Opening browser for authentication...")
         auth_cmd = ["databricks", "auth", "login", "--host", host]
-        subprocess.run(auth_cmd)
+        _run_cmd(auth_cmd)
         profile = discover_profile(host)
         user_info = check_auth(profile)
 
@@ -494,11 +589,11 @@ def cmd_install(args):
     # ── Step 6: Build frontend ────────────────────────────────────────
     step(6, TOTAL, "Building frontend")
     info("Running npm install...")
-    npm_result = subprocess.run(["npm", "install"], cwd=PROJECT_ROOT, capture_output=True, text=True)
+    npm_result = _run_cmd(["npm", "install"], cwd=PROJECT_ROOT, capture_output=True, text=True)
     if npm_result.returncode != 0:
         warn("npm install had issues, continuing...")
     info("Running npm build...")
-    build_result = subprocess.run(["npm", "run", "build"], cwd=PROJECT_ROOT)
+    build_result = _run_cmd(["npm", "run", "build"], cwd=PROJECT_ROOT)
     if build_result.returncode != 0:
         error("Frontend build failed")
         sys.exit(1)
@@ -580,7 +675,8 @@ def cmd_deploy(args):
     """Deploy code changes. Default is code-only."""
     config = load_config()
 
-    deploy_cmd = [str(PROJECT_ROOT / "scripts" / "deploy.sh")]
+    deploy_sh = PROJECT_ROOT / "scripts" / "deploy.sh"
+    deploy_args = []
 
     # Determine target
     if config:
@@ -589,9 +685,9 @@ def cmd_deploy(args):
 
         meta = config.get("_metadata", {})
         target = getattr(args, "target", "") or meta.get("target", "") or "production"
-        deploy_cmd.extend(["--target", target])
+        deploy_args.extend(["--target", target])
         if profile:
-            deploy_cmd.extend(["--profile", profile])
+            deploy_args.extend(["--profile", profile])
     else:
         warn("No user-config.yaml found. Using deploy.sh defaults.")
 
@@ -599,17 +695,17 @@ def cmd_deploy(args):
     if getattr(args, "full", False):
         pass  # Full deploy (no extra flags)
     elif getattr(args, "tables", False):
-        deploy_cmd.append("--tables-only")
+        deploy_args.append("--tables-only")
     elif getattr(args, "watch", False):
-        deploy_cmd.append("--watch")
+        deploy_args.append("--watch")
     else:
-        deploy_cmd.append("--code-only")
+        deploy_args.append("--code-only")
         if getattr(args, "skip_build", False):
-            deploy_cmd.append("--skip-build")
+            deploy_args.append("--skip-build")
 
-    info(f"Running: {' '.join(deploy_cmd)}")
+    info(f"Running: {deploy_sh} {' '.join(deploy_args)}")
     print()
-    result = subprocess.run(deploy_cmd, cwd=PROJECT_ROOT)
+    result = _run_sh(deploy_sh, deploy_args, cwd=PROJECT_ROOT)
     sys.exit(result.returncode)
 
 
@@ -716,8 +812,9 @@ def cmd_uninstall(args):
     # Step 1: Drop tables
     if not getattr(args, "keep_data", False):
         info("Step 1: Dropping Lakebase tables...")
-        drop_cmd = [str(PROJECT_ROOT / "scripts" / "setup-lakebase.sh"), "--drop"]
-        subprocess.run(drop_cmd, cwd=PROJECT_ROOT, env={**os.environ, "DATABRICKS_HOST": ws.get("host", "")})
+        setup_lakebase_sh = PROJECT_ROOT / "scripts" / "setup-lakebase.sh"
+        _run_sh(setup_lakebase_sh, ["--drop"], cwd=PROJECT_ROOT,
+                env={**os.environ, "DATABRICKS_HOST": ws.get("host", "")})
     else:
         info("Step 1: Skipping table drop (--keep-data)")
 
@@ -726,14 +823,14 @@ def cmd_uninstall(args):
     app_name = app_cfg.get("name", "")
     if app_name:
         del_cmd = ["databricks", "apps", "delete", app_name] + profile_flag
-        subprocess.run(del_cmd, capture_output=True)
+        _run_cmd(del_cmd, capture_output=True)
         success(f"Deleted app: {app_name}")
 
     # Step 3: Destroy bundle
     info("Step 3: Destroying DAB bundle...")
     target = meta.get("target", "production")
     destroy_cmd = ["databricks", "bundle", "destroy", "-t", target, "--auto-approve"] + profile_flag
-    subprocess.run(destroy_cmd, cwd=PROJECT_ROOT, capture_output=True)
+    _run_cmd(destroy_cmd, cwd=PROJECT_ROOT, capture_output=True)
     success("Bundle destroyed")
 
     # Step 4: Clean local files and bundle state

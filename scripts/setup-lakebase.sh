@@ -42,6 +42,28 @@ BLUE='\033[0;34m'
 CYAN='\033[0;36m'
 NC='\033[0m'
 
+# Cross-platform Python / pip detection.
+# POSIX systems ship `python3` / `pip3`; the Python.org / winget Python installer
+# on Windows ships only `python.exe` / `pip.exe`. Probe in that order so behavior
+# on macOS/Linux is unchanged (`PYTHON_BIN=python3`, `PIP_BIN=pip3`) while Windows
+# under Git Bash still works.
+if command -v python3 >/dev/null 2>&1; then
+    PYTHON_BIN="python3"
+elif command -v python >/dev/null 2>&1; then
+    PYTHON_BIN="python"
+else
+    echo "Error: Python 3 not found on PATH (looked for python3, python)." >&2
+    exit 1
+fi
+
+if command -v pip3 >/dev/null 2>&1; then
+    PIP_BIN="pip3"
+elif command -v pip >/dev/null 2>&1; then
+    PIP_BIN="pip"
+else
+    PIP_BIN="$PYTHON_BIN -m pip"
+fi
+
 PROJECT_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$PROJECT_ROOT"
 
@@ -116,7 +138,7 @@ echo ""
 
 if [[ "$ACTION" == "check-instance" ]]; then
     echo -e "${BLUE}Checking Lakebase connection...${NC}"
-    python3 "${PROJECT_ROOT}/scripts/lakebase_manager.py" \
+    $PYTHON_BIN "${PROJECT_ROOT}/scripts/lakebase_manager.py" \
         --action check \
         --app-name "$APP_NAME" \
         --instance-name "$LAKEBASE_INSTANCE_NAME" \
@@ -127,7 +149,7 @@ fi
 
 if [[ "$ACTION" == "setup-permissions" ]]; then
     echo -e "${BLUE}Getting permission setup instructions...${NC}"
-    python3 "${PROJECT_ROOT}/scripts/lakebase_manager.py" \
+    $PYTHON_BIN "${PROJECT_ROOT}/scripts/lakebase_manager.py" \
         --action status \
         --app-name "$APP_NAME" \
         --instance-name "$LAKEBASE_INSTANCE_NAME" \
@@ -142,7 +164,7 @@ if [[ "$ACTION" == "full-setup" ]]; then
     
     # Step 1: Check connection and show status
     echo -e "${CYAN}Step 1: Status Check${NC}"
-    python3 "${PROJECT_ROOT}/scripts/lakebase_manager.py" \
+    $PYTHON_BIN "${PROJECT_ROOT}/scripts/lakebase_manager.py" \
         --action status \
         --app-name "$APP_NAME" \
         --instance-name "$LAKEBASE_INSTANCE_NAME" \
@@ -188,7 +210,7 @@ LAKEBASE_PORT="${LAKEBASE_PORT_OVERRIDE:-$(get_yaml_value "LAKEBASE_PORT")}"
 if [[ -n "${LAKEBASE_USER_OVERRIDE:-}" ]]; then
     LAKEBASE_USER="$LAKEBASE_USER_OVERRIDE"
 else
-    LAKEBASE_USER=$(databricks current-user me --output json 2>/dev/null | python3 -c "import sys,json; print(json.load(sys.stdin).get('userName',''))" 2>/dev/null) || true
+    LAKEBASE_USER=$(databricks current-user me --output json 2>/dev/null | $PYTHON_BIN -c "import sys,json; print(json.load(sys.stdin).get('userName',''))" 2>/dev/null) || true
     if [[ -z "$LAKEBASE_USER" ]]; then
         echo -e "${RED}Error: Could not determine current Databricks user${NC}"
         exit 1
@@ -234,14 +256,14 @@ if ! databricks current-user me &>/dev/null; then
 fi
 
 # Check if required Python packages are available (prefer psycopg3, fall back to psycopg2)
-python3 -c "import psycopg" 2>/dev/null || python3 -c "import psycopg2" 2>/dev/null || {
+$PYTHON_BIN -c "import psycopg" 2>/dev/null || $PYTHON_BIN -c "import psycopg2" 2>/dev/null || {
     echo -e "${YELLOW}Installing psycopg[binary]...${NC}"
-    pip3 install -q "psycopg[binary]" || pip3 install -q psycopg2-binary
+    $PIP_BIN install -q "psycopg[binary]" || $PIP_BIN install -q psycopg2-binary
 }
 
-python3 -c "import requests" 2>/dev/null || {
+$PYTHON_BIN -c "import requests" 2>/dev/null || {
     echo -e "${YELLOW}Installing requests...${NC}"
-    pip3 install -q requests
+    $PIP_BIN install -q requests
 }
 
 # =============================================================================
@@ -252,7 +274,7 @@ python3 -c "import requests" 2>/dev/null || {
 export LAKEBASE_HOST LAKEBASE_DATABASE LAKEBASE_SCHEMA LAKEBASE_PORT LAKEBASE_USER ACTION PROJECT_ROOT DATABRICKS_HOST
 export LAKEBASE_MODE ENDPOINT_NAME
 
-python3 << 'PYTHON_EOF'
+$PYTHON_BIN << 'PYTHON_EOF'
 import os
 import sys
 import re

@@ -77,15 +77,30 @@
 ### Prerequisites
 
 - **Node.js 18+** and **Python 3.9+**
-- **Databricks CLI** (`brew install databricks` or `pip install databricks-sdk`)
+- **Databricks CLI**
+  - macOS: `brew install databricks`
+  - Linux: `curl -fsSL https://raw.githubusercontent.com/databricks/setup-cli/main/install.sh | sh`
+  - Windows: `winget install Databricks.DatabricksCLI`
+- **Windows only:** **Git for Windows** (provides `bash.exe`, used by the deployer to run the bundled `.sh` scripts). Install with `winget install Git.Git`, or run `scripts\install-prerequisites.ps1` to install everything (Git, Python, Node, Databricks CLI) in one shot.
 - A **Databricks workspace** with Unity Catalog and Lakebase access (autoscaling mode is default and recommended)
 
 ### Install
 
+**macOS / Linux**
+
 ```bash
-git clone https://github.com/databricks-solutions/vibe-coding-workshop-template.git
-cd vibe-coding-workshop-template
+git clone https://github.com/databricks-solutions/vibe-coding-workshop-app.git
+cd vibe-coding-workshop-app
 ./vibe2value install
+```
+
+**Windows (PowerShell, run as Administrator the first time)**
+
+```powershell
+git clone https://github.com/databricks-solutions/vibe-coding-workshop-app.git
+cd vibe-coding-workshop-app
+powershell -ExecutionPolicy Bypass -File scripts\install-prerequisites.ps1
+.\vibe2value install
 ```
 
 The installer walks you through everything interactively — workspace URL, authentication, resource naming, build, deploy, and verification. When it finishes, you'll have a live app URL.
@@ -102,6 +117,8 @@ The installer walks you through everything interactively — workspace URL, auth
 | `./vibe2value doctor` | Validate prerequisites, config, and auth |
 | `./vibe2value configure` | Regenerate config files from templates |
 | `./vibe2value uninstall` | Tear down all provisioned resources |
+
+> On Windows, replace `./vibe2value` with `.\vibe2value` (the repo ships both a bash launcher and a `.cmd` wrapper).
 
 ---
 
@@ -134,7 +151,8 @@ The installer prompts for Lakebase mode (autoscaling or provisioned). Autoscalin
 ## Project Structure
 
 ```
-├── vibe2value                  # CLI entry point (bash wrapper)
+├── vibe2value                  # CLI entry point (bash wrapper, macOS/Linux)
+├── vibe2value.cmd              # CLI entry point (Windows wrapper for cmd.exe / PowerShell)
 ├── app.py                      # FastAPI backend entry point
 ├── app.yaml.template           # App config template
 ├── databricks.yml.template     # Asset Bundle template
@@ -181,6 +199,7 @@ The installer prompts for Lakebase mode (autoscaling or provisioned). Autoscalin
 | Issue | Fix |
 |-------|-----|
 | Authentication failure | `databricks auth login --host <url>` then `./vibe2value doctor` |
+| `FileNotFoundError` running `npm` or `deploy.sh` on Windows | Install Git for Windows (`winget install Git.Git`) and reopen the terminal so `bash.exe` is on `PATH`. Then re-run `.\vibe2value doctor`. |
 | App stuck UNAVAILABLE | `./vibe2value deploy --full` (includes forced restart) |
 | "App already exists" | Installer handles this automatically; if persistent: `databricks apps delete <name>` then retry |
 | "Multiple profiles matched" | Set `profile` in `user-config.yaml` or re-run `./vibe2value install` |
@@ -192,6 +211,8 @@ The installer prompts for Lakebase mode (autoscaling or provisioned). Autoscalin
 
 ## Local Development
 
+**macOS / Linux**
+
 ```bash
 # Frontend
 npm install && npm run dev
@@ -200,7 +221,17 @@ npm install && npm run dev
 pip install -r requirements.txt && python app.py
 ```
 
-Deploy changes: `./vibe2value deploy`
+**Windows (PowerShell)**
+
+```powershell
+# Frontend
+npm install; npm run dev
+
+# Backend
+pip install -r requirements.txt; python app.py
+```
+
+Deploy changes: `./vibe2value deploy` (macOS/Linux) or `.\vibe2value deploy` (Windows).
 
 ---
 
