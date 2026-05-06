@@ -767,7 +767,7 @@ export function SectionInputsConfig({ onToast }: SectionInputsConfigProps) {
   return (
     <div className="flex h-full gap-4">
       {/* Left Column - Section Tags (ordered by order_number) */}
-      <div className="w-64 flex-shrink-0 bg-card rounded-lg border border-border overflow-hidden flex flex-col">
+      <div className="w-80 flex-shrink-0 bg-card rounded-lg border border-border overflow-hidden flex flex-col">
         <div className="p-3 border-b border-border bg-secondary/50">
           <div className="flex items-center justify-between mb-2">
             <h3 className="font-semibold text-foreground text-sm">Sections</h3>
