@@ -147,7 +147,7 @@ const ASSISTANTS: AssistantOption[] = [
       'Databricks AI Gateway with auto-rotating PAT (10-min cycle)',
       '39 pre-installed skills + automatic MLflow tracing per session',
     ],
-    url: 'https://github.com/datasciencemonkey/coding-agents-databricks-apps/blob/main/docs/deployment.md',
+    url: 'https://github.com/databrickslabs/coding-agents-databricks-apps/blob/main/docs/deployment.md',
     downloadLabel: 'Deploy to Databricks Apps',
     comingSoon: false,
     iconColor: 'text-orange-400',
