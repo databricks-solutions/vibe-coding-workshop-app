@@ -540,13 +540,28 @@ export default function App() {
   const handleDirectionChange = useCallback((newDirection: WorkflowDirection) => {
     if (directionLocked) return;
     setDirection(newDirection);
+    // Accelerators are forward-progression flows and the whole Accelerators
+    // column is hidden in Reverse ETL direction. If the user flips to reverse
+    // while any accelerator level is currently selected, fall back to the
+    // Apps + Lakebase baseline so the path selection doesn't silently point
+    // to a no-longer-visible column.
+    const ACCELERATOR_LEVELS: WorkshopLevel[] = [
+      'accelerator',
+      'genie-accelerator',
+      'data-engineering-accelerator',
+      'skills-accelerator',
+      'agents-accelerator',
+    ];
+    if (newDirection === 'reverse' && ACCELERATOR_LEVELS.includes(workshopLevel)) {
+      setWorkshopLevel('app-database');
+    }
     if (sessionId) {
       apiClient.updateSessionMetadata({
         session_id: sessionId,
         direction: newDirection,
       }).catch(err => console.error('Error persisting direction:', err));
     }
-  }, [directionLocked, sessionId]);
+  }, [directionLocked, sessionId, workshopLevel]);
 
   const handleSaveSession = async (name: string, description: string, rating?: 'thumbs_up' | 'thumbs_down', comment?: string) => {
     if (!sessionId || readOnly) return;

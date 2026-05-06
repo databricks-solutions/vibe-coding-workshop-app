@@ -69,7 +69,7 @@ export interface WorkflowSection {
 }
 
 // Workshop Level Types - 4-column structure
-export type WorkshopLevel = 'app-only' | 'app-database' | 'lakehouse' | 'lakehouse-di' | 'end-to-end' | 'accelerator' | 'genie-accelerator' | 'data-engineering-accelerator' | 'skills-accelerator' | 'reverse-lakehouse' | 'reverse-lakehouse-di' | 'reverse-lakebase' | 'reverse-app';
+export type WorkshopLevel = 'app-only' | 'app-database' | 'lakehouse' | 'lakehouse-di' | 'end-to-end' | 'accelerator' | 'genie-accelerator' | 'data-engineering-accelerator' | 'skills-accelerator' | 'agents-accelerator' | 'reverse-lakehouse' | 'reverse-lakehouse-di' | 'reverse-lakebase' | 'reverse-app';
 
 export type WorkflowDirection = 'forward' | 'reverse';
 
@@ -278,6 +278,12 @@ export const WORKSHOP_LEVELS: Record<WorkshopLevel, LevelConfig> = {
     description: 'Learn to build an Agent Skill following the agentskills.io standard — explore existing skills, define a strategy, generate SKILL.md, apply it, and validate.',
     sectionIds: ['define-usecase', 'agent-skills', 'iterate-enhance', 'cleanup'],
   },
+  'agents-accelerator': {
+    label: 'Agents Accelerator',
+    tooltip: 'Build, evaluate, and deploy a production agent app',
+    description: 'Build a production-ready agent app — Databricks App + Lakebase + Mosaic AI Agent Framework + MLflow for Gen-AI lifecycle.',
+    sectionIds: ['define-usecase', 'databricks-app', 'lakebase', 'agents-on-apps', 'mlflow-genai', 'iterate-enhance', 'cleanup'],
+  },
   'reverse-lakehouse': {
     label: 'Lakehouse',
     tooltip: 'Build Bronze/Silver/Gold data pipelines (reverse ETL start)',
@@ -366,6 +372,32 @@ export const ALL_STEPS: Record<number, WorkflowStep> = {
   35: { number: 35, title: 'Build Analytics App', icon: Plug, color: 'text-emerald-500', sectionTag: 'activation_build_wire' },
   36: { number: 36, title: 'Wire to Lakebase', icon: Link2, color: 'text-emerald-500', sectionTag: 'activation_wire_lakebase' },
   37: { number: 37, title: 'Deploy & Validate', icon: Rocket, color: 'text-emerald-400', sectionTag: 'activation_deploy_validate' },
+
+  // Agents Accelerator — Agents on Apps (Steps 38-48)
+  // Steps 38 and 39 are the design phase; they produce docs/agent_spec.yaml and
+  // docs/agent_tool_plan.yaml so uc_resources_foundation (Step 40) can satisfy
+  // its require_prior_gate of "Agent tool plan ready".
+  38: { number: 38, title: 'Agent Spec Design', icon: FileText, color: 'text-sky-400', sectionTag: 'agent_spec_design' },
+  39: { number: 39, title: 'Agent Tool Selection', icon: Tag, color: 'text-sky-500', sectionTag: 'agent_tool_selection' },
+  40: { number: 40, title: 'UC Resources Foundation', icon: Database, color: 'text-blue-400', sectionTag: 'uc_resources_foundation' },
+  41: { number: 41, title: 'MLflow Tracing + UC OTel', icon: FlaskConical, color: 'text-blue-500', sectionTag: 'mlflow_agent_tracing_uc' },
+  42: { number: 42, title: 'Knowledge Assistant', icon: BookOpen, color: 'text-blue-400', sectionTag: 'knowledge_assistant_create' },
+  43: { number: 43, title: 'Clone + Framework', icon: GitBranch, color: 'text-blue-500', sectionTag: 'track_a_agent_app_clone_framework' },
+  44: { number: 44, title: 'Tools and MCP', icon: Plug, color: 'text-blue-400', sectionTag: 'track_a_agent_ka_genie_tools' },
+  45: { number: 45, title: 'Auth + Memory', icon: Shield, color: 'text-blue-500', sectionTag: 'track_a_agent_auth_memory' },
+  46: { number: 46, title: 'Smoke Eval + Deploy', icon: Rocket, color: 'text-blue-400', sectionTag: 'track_a_agent_eval_deploy' },
+  47: { number: 47, title: 'AppKit Agent Proxy', icon: Link2, color: 'text-blue-500', sectionTag: 'appkit_agent_app_proxy_chat' },
+  48: { number: 48, title: 'Chat Feedback to MLflow', icon: MessageSquareText, color: 'text-blue-400', sectionTag: 'appkit_chat_feedback_mlflow' },
+
+  // Agents Accelerator — MLflow for Gen-AI (Steps 49-56)
+  49: { number: 49, title: 'Prompt Registry', icon: BookOpen, color: 'text-violet-400', sectionTag: 'mlflow_prompt_registry' },
+  50: { number: 50, title: 'Evaluation Datasets', icon: Table2, color: 'text-violet-500', sectionTag: 'mlflow_evaluation_datasets' },
+  51: { number: 51, title: 'Scorers and Judges', icon: ShieldCheck, color: 'text-violet-400', sectionTag: 'mlflow_scorers_and_judges' },
+  52: { number: 52, title: 'Evaluation Runs + Iteration', icon: FlaskConical, color: 'text-violet-500', sectionTag: 'mlflow_evaluation_runs_and_iteration' },
+  53: { number: 53, title: 'Human Review + Sign-off', icon: Tag, color: 'text-violet-400', sectionTag: 'mlflow_human_review_and_signoff' },
+  54: { number: 54, title: 'Logged Model & UC Registration', icon: Database, color: 'text-violet-500', sectionTag: 'mlflow_logged_model_uc_registration' },
+  55: { number: 55, title: 'AI Gateway + Deployment', icon: Rocket, color: 'text-violet-400', sectionTag: 'mlflow_gateway_and_deployment' },
+  56: { number: 56, title: 'Production Monitoring + Debugging', icon: BarChart3, color: 'text-violet-500', sectionTag: 'mlflow_production_monitoring_and_debugging' },
 };
 
 // The logical sections with their step groupings (4-chapter structure + activation + skills)
@@ -465,6 +497,30 @@ export const WORKFLOW_SECTIONS: WorkflowSection[] = [
     bgColor: 'bg-pink-500/15',
     borderColor: 'border-pink-500/30',
     steps: [20, 21].map(n => ALL_STEPS[n]),
+  },
+  {
+    id: 'agents-on-apps',
+    chapter: 'Agents Accelerator',
+    title: 'Agents on Apps',
+    focus: 'Design the agent, then build it on top of your Databricks App + Lakebase',
+    description: "Design the agent's intent and tool plan, then stand up a production-grade agent on top of your Databricks App and Lakebase foundation. Author docs/agent_spec.yaml and docs/agent_tool_plan.yaml, then create UC resources, tracing, Knowledge Assistant, tools, OBO auth, Lakebase memory, deployment, AppKit proxying, and feedback capture.",
+    icon: Bot,
+    color: 'text-blue-400',
+    bgColor: 'bg-blue-500/15',
+    borderColor: 'border-blue-500/30',
+    steps: [38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48].map(n => ALL_STEPS[n]),
+  },
+  {
+    id: 'mlflow-genai',
+    chapter: 'Agents Accelerator',
+    title: 'MLflow for Gen-AI',
+    focus: 'Manage the agent lifecycle: prompts, evaluation, registry, deployment, monitoring',
+    description: 'Bring the MLflow 3 GenAI lifecycle to your agent: Prompt Registry, evaluation datasets, scorers and judges, evaluation runs with iteration routing, human review, UC model registration, AI Gateway deployment, and production monitoring.',
+    icon: FlaskConical,
+    color: 'text-violet-400',
+    bgColor: 'bg-violet-500/15',
+    borderColor: 'border-violet-500/30',
+    steps: [49, 50, 51, 52, 53, 54, 55, 56].map(n => ALL_STEPS[n]),
   },
   {
     id: 'cleanup',
@@ -635,6 +691,7 @@ export const CHAPTER_VISIBILITY: Record<WorkshopLevel, Set<'ch1' | 'ch2' | 'ch3'
   'genie-accelerator': new Set(['ch3', 'ch4']),
   'data-engineering-accelerator': new Set(['ch3']),
   'skills-accelerator': new Set([]),
+  'agents-accelerator': new Set(['ch1', 'ch2', 'ch4']),
   'reverse-lakehouse': new Set(['ch3']),
   'reverse-lakehouse-di': new Set(['ch3', 'ch4']),
   'reverse-lakebase': new Set(['ch2', 'ch3', 'ch4']),
@@ -652,6 +709,7 @@ export const ARCH_VISIBILITY: Record<WorkshopLevel, { ch1: boolean; ch2: boolean
   'genie-accelerator': { ch1: false, ch2: false, ch3: true, ch4: true },
   'data-engineering-accelerator': { ch1: false, ch2: false, ch3: true, ch4: false },
   'skills-accelerator': { ch1: false, ch2: false, ch3: false, ch4: false },
+  'agents-accelerator': { ch1: true, ch2: true, ch3: false, ch4: true },
   'reverse-lakehouse': { ch1: false, ch2: false, ch3: true, ch4: false },
   'reverse-lakehouse-di': { ch1: false, ch2: false, ch3: true, ch4: true },
   'reverse-lakebase': { ch1: false, ch2: true, ch3: true, ch4: true },
@@ -672,6 +730,9 @@ export const LEVEL_UI_OVERRIDES: Partial<Record<WorkshopLevel, LevelUIOverrides>
     defaultUseCaseMode: 'custom',
   },
   'skills-accelerator': {
+    defaultUseCaseMode: 'library',
+  },
+  'agents-accelerator': {
     defaultUseCaseMode: 'library',
   },
 };

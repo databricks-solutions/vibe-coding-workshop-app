@@ -269,6 +269,114 @@ export const serviceData: Record<string, ServiceInfo> = {
     ],
     docUrl: 'https://docs.databricks.com/aws/en/generative-ai/agent-framework/create-agent',
     docLabel: 'Databricks Agents Documentation'
+  },
+  agentFramework: {
+    name: 'Agent Framework',
+    description: 'The Mosaic AI Agent Framework lets you build production-grade agents with the ResponsesAgent or ChatAgent interfaces. Framework-agnostic (LangGraph, LlamaIndex, OpenAI SDK, custom Python) with automatic MLflow signature inference and native compatibility with Playground, Agent Evaluation, and Databricks Apps.',
+    benefits: [
+      'ResponsesAgent recommended primary interface — auto MLflow signature inference',
+      'ChatAgent for streaming + markdown + persistent chat UI',
+      'Bring any agent framework (LangGraph, LlamaIndex, OpenAI SDK, custom)',
+      'Native Playground / Agent Evaluation / Apps integration',
+      'Single agent definition deploys via mlflow.models.log_model + agents.deploy'
+    ],
+    limitations: [
+      'Requires Python and basic ML serving familiarity',
+      'Agent reasoning quality depends on the underlying foundation model',
+      'Streaming responses require careful client wiring'
+    ],
+    docUrl: 'https://docs.databricks.com/aws/en/generative-ai/agent-framework/create-agent',
+    docLabel: 'Mosaic AI Agent Framework Documentation'
+  },
+  toolsMcp: {
+    name: 'Tools & MCP',
+    description: 'Connect agents to capabilities via Model Context Protocol (MCP). Three server types: Managed (Unity Catalog Functions, Vector Search, Genie Spaces, Databricks SQL), External (OAuth-connected third-party MCP servers), and Custom (proprietary tools hosted as a Databricks App).',
+    benefits: [
+      'Standardized MCP protocol — agents reuse tools across frameworks',
+      'Managed servers handle auth, governance, and lifecycle automatically',
+      'Unity Catalog Functions become callable tools with one decorator',
+      'Vector Search + Genie Spaces give grounded retrieval and SQL access',
+      'Custom servers let you wrap proprietary APIs behind a uniform interface'
+    ],
+    limitations: [
+      'External MCP servers require OAuth and approval flow setup',
+      'Custom servers add an extra Databricks App to manage',
+      'Token costs scale with tool-call count'
+    ],
+    docUrl: 'https://docs.databricks.com/aws/en/generative-ai/agent-framework/mcp',
+    docLabel: 'MCP on Databricks Documentation'
+  },
+  lakebaseMemory: {
+    name: 'Lakebase Memory',
+    description: 'Persist agent conversation state on Lakebase Postgres. Short-term memory uses a LangGraph (or OpenAI Agents SDK) checkpointer keyed by thread_id. Long-term memory extracts key insights into a Lakebase table that the agent queries via Mosaic AI Vector Search.',
+    benefits: [
+      'Short-term memory survives across requests (LangGraph thread_id checkpoint)',
+      'Long-term memory enables personalization across sessions',
+      'Reuses the existing Lakebase instance — no extra infra',
+      'Same Postgres governance covers both UI data and agent memory',
+      'Vector Search over insight extracts gives semantic recall'
+    ],
+    limitations: [
+      'Long-term memory needs a curation/extraction pipeline',
+      'Vector Search index updates have minutes-scale latency',
+      'Memory growth requires retention policies'
+    ],
+    docUrl: 'https://docs.databricks.com/aws/en/generative-ai/agent-framework/stateful-agents',
+    docLabel: 'Stateful Agents on Lakebase Documentation'
+  },
+  mlflowPromptRegistry: {
+    name: 'Prompt Registry',
+    description: 'MLflow 3 Prompt Registry provides git-style versioning for prompts, including aliases (e.g. @production, @staging) for promotion. Pin agents to specific prompt versions and roll back without redeploying code.',
+    benefits: [
+      'Git-style version history per prompt',
+      'Aliases (@production, @staging, etc.) for safe promotion',
+      'Diff views across versions',
+      'Prompts decoupled from agent code',
+      'Native integration with mlflow.genai.evaluate'
+    ],
+    limitations: [
+      'Requires MLflow 3 (mlflow >= 3.3.0)',
+      'Aliases are mutable — treat promotion as a deployment event',
+      'Prompts are text-only; structured templates need versioning convention'
+    ],
+    docUrl: 'https://docs.databricks.com/aws/en/mlflow3/genai/prompt-version-mgmt/prompt-registry/evaluate-prompts',
+    docLabel: 'MLflow 3 Prompt Registry Documentation'
+  },
+  mlflowEval: {
+    name: 'MLflow Evaluation',
+    description: 'Curate evaluation datasets in Unity Catalog, define scorers and LLM-as-judge graders (Correctness, RetrievalGroundedness, Guidelines, Custom, Code-based), then run mlflow.genai.evaluate() across prompt and model variants. Inspect traces and capture human ratings via the Review App.',
+    benefits: [
+      'Curated UC-table datasets — same dataset across runs for fair comparison',
+      'Built-in judges + Guidelines + Custom Python scorers',
+      'Side-by-side evaluation runs in the MLflow UI',
+      'Review App for human ratings + sign-off',
+      'Traces capture every tool call for debugging'
+    ],
+    limitations: [
+      'LLM-judge scoring incurs token costs',
+      'Eval datasets need refresh as the use case evolves',
+      'Some judges are still in preview'
+    ],
+    docUrl: 'https://docs.databricks.com/aws/en/mlflow3/genai/eval-monitor/concepts/judges',
+    docLabel: 'MLflow 3 Evaluation Documentation'
+  },
+  mlflowMonitoring: {
+    name: 'Production Monitoring',
+    description: 'Enable AI Gateway-enabled inference tables to capture every production request and response, then run MLflow 3 scheduled scorers (scorer.register() / .start()) at a configurable sampling rate (0.0–1.0, max 20 scorers per experiment) to detect quality drift in production.',
+    benefits: [
+      'AI Gateway-enabled inference tables (legacy tables deprecated 2026-04-30)',
+      'Scheduled scorers run continuously without redeploying the agent',
+      'Sampling rate keeps cost predictable',
+      'Surface drift in an AI/BI dashboard wired to scorer outputs',
+      'Ties production traffic back to MLflow experiment runs'
+    ],
+    limitations: [
+      'Max 20 scheduled scorers per MLflow experiment',
+      'Scorer cadence has minute-scale floor',
+      'AI Gateway must be enabled on the serving endpoint'
+    ],
+    docUrl: 'https://docs.databricks.com/aws/en/mlflow3/genai/eval-monitor/run-scorer-in-prod',
+    docLabel: 'MLflow 3 Production Monitoring Documentation'
   }
 };
 

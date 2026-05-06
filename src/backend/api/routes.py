@@ -139,15 +139,31 @@ def _refresh_lakebase_cache():
     schema = get_schema()
     
     try:
-        # Fetch latest usecase_descriptions (PostgreSQL syntax with DISTINCT ON)
-        usecase_desc_sql = f"""
+        # Fetch latest usecase_descriptions (PostgreSQL syntax with DISTINCT ON).
+        # Includes optional outcome-map grouping fields (category, category_order,
+        # display_order). On legacy databases that haven't run the
+        # 09_add_category_columns.sql migration yet, retry without those columns
+        # so existing deployments don't break.
+        usecase_desc_sql_with_category = f"""
             SELECT DISTINCT ON (industry, use_case)
-                industry, industry_label, use_case, use_case_label, prompt_template, version
+                industry, industry_label, use_case, use_case_label, prompt_template, version,
+                category, category_order, display_order
             FROM {schema}.usecase_descriptions
             WHERE is_active = TRUE
             ORDER BY industry, use_case, version DESC
         """
-        usecase_descriptions = execute_query(usecase_desc_sql)
+        try:
+            usecase_descriptions = execute_query(usecase_desc_sql_with_category)
+        except Exception as col_err:
+            logger.info(f"Category columns not yet present ({col_err}); falling back to legacy SELECT. Run 09_add_category_columns.sql to enable outcome-map grouping.")
+            usecase_desc_sql_legacy = f"""
+                SELECT DISTINCT ON (industry, use_case)
+                    industry, industry_label, use_case, use_case_label, prompt_template, version
+                FROM {schema}.usecase_descriptions
+                WHERE is_active = TRUE
+                ORDER BY industry, use_case, version DESC
+            """
+            usecase_descriptions = execute_query(usecase_desc_sql_legacy)
         
         if usecase_descriptions:
             _lakebase_cache["usecase_descriptions"] = usecase_descriptions
@@ -588,6 +604,9 @@ class PromptConfigCreate(BaseModel):
     use_case_label: str = Field(..., min_length=1, description="Display label for use case")
     prompt_template: str = Field(..., description="The prompt template text")
     path_type: str = Field(default="use_case", description="Entry type: 'use_case' or 'skill'")
+    category: Optional[str] = Field(default=None, description="Outcome-map column title (e.g. 'Agentic AI Operations'). NULL for Sample / legacy.")
+    category_order: Optional[int] = Field(default=None, description="Outcome-map column position (1, 2, 3) within the industry.")
+    display_order: Optional[int] = Field(default=None, description="Card order within the column.")
 
 
 class PromptConfigResponse(BaseModel):
@@ -604,6 +623,9 @@ class PromptConfigResponse(BaseModel):
     updated_at: Optional[str] = None
     created_by: Optional[str] = None
     path_type: str = "use_case"
+    category: Optional[str] = None
+    category_order: Optional[int] = None
+    display_order: Optional[int] = None
 
 
 class SectionInputCreate(BaseModel):
@@ -696,7 +718,7 @@ def get_industries() -> List[Dict]:
     """
     # Custom label overrides (value -> label)
     label_overrides = {
-        "sample": "sample [for enablement]"
+        "sample": "Sample"
     }
     
     # Priority order for industries (first in list = first in dropdown)
@@ -739,7 +761,10 @@ def _derive_path_type(row: Dict) -> str:
     return row.get("path_type") or ("skill" if row.get("use_case") in SKILL_USE_CASES else "use_case")
 
 def get_use_cases_map() -> Dict[str, List[Dict]]:
-    """Get use cases map - from Lakebase or YAML fallback. Includes path_type per entry."""
+    """Get use cases map - from Lakebase or YAML fallback. Includes path_type
+    plus optional outcome-map grouping (category, category_order, display_order)
+    per entry so the frontend OutcomeMapGrid can render data-driven columns.
+    """
     # Try Lakebase first
     lakebase_data = get_usecase_descriptions_from_lakebase()
     if lakebase_data:
@@ -751,11 +776,20 @@ def get_use_cases_map() -> Dict[str, List[Dict]]:
             if industry and use_case:
                 if industry not in use_cases_map:
                     use_cases_map[industry] = [{"value": "", "label": "Select a use case..."}]
-                use_cases_map[industry].append({
+                entry = {
                     "value": use_case,
                     "label": row.get("use_case_label", use_case.title()),
-                    "path_type": _derive_path_type(row)
-                })
+                    "path_type": _derive_path_type(row),
+                }
+                # Outcome-map grouping (Travel & Hospitality). NULL/missing for
+                # Sample, legacy rows, and any database that hasn't run the
+                # 09_add_category_columns.sql migration yet.
+                category = row.get("category")
+                if category:
+                    entry["category"] = category
+                    entry["category_order"] = row.get("category_order")
+                    entry["display_order"] = row.get("display_order")
+                use_cases_map[industry].append(entry)
         return use_cases_map
     
     # Fallback to YAML (no path_type in YAML — default to 'use_case')
@@ -834,7 +868,7 @@ def get_section_input_prompts_map() -> Dict[str, Dict[str, Any]]:
 # Note: Only "sample" is enabled for now. Other industries are hidden.
 INDUSTRIES: List[Dict] = get_industries() or [
     {"value": "", "label": "Select an industry..."},
-    {"value": "sample", "label": "sample [for enablement]"},
+    {"value": "sample", "label": "Sample"},
 ]
 
 USE_CASES: Dict[str, List[Dict]] = get_use_cases_map() or {}
@@ -849,10 +883,10 @@ PREREQUISITES: List[Dict] = get_prerequisites_list() or []
 
 def format_industry_name(industry: str) -> str:
     industry_map = {
-        "sample": "Sample for Enablement",
+        "sample": "Sample",
         "retail": "Retail",
         "cpg": "CPG",
-        "travel": "Travel"
+        "travel": "Travel & Hospitality"
     }
     return industry_map.get(industry.lower(), industry)
 
@@ -871,6 +905,42 @@ DEFAULT_CODING_ASSISTANTS_CONFIG_JSON = json.dumps([
     {"id": "copilot", "recommended": False},
     {"id": "vscode", "recommended": False},
 ])
+
+
+# Default value for the databricks_cli_profile parameter. Used by both the
+# empty-DB fallback path and the self-healing bootstrap so that prompt
+# substitution always has a usable value, even on existing deployments that
+# were seeded before this parameter existed.
+DEFAULT_DATABRICKS_CLI_PROFILE = 'DEFAULT'
+
+
+def _bootstrap_databricks_cli_profile_if_missing() -> None:
+    """
+    Self-healing: on existing deployments that were seeded before this param
+    existed, insert the default row so admins see it without rerunning
+    `vibe2value configure`. Idempotent via ON CONFLICT on param_key.
+    """
+    schema = get_schema()
+    sql = f"""
+        INSERT INTO {schema}.workshop_parameters
+            (param_key, param_label, param_value, param_description, param_type,
+             display_order, is_required, is_active, allow_session_override,
+             inserted_at, updated_at, created_by)
+        VALUES
+            ('databricks_cli_profile',
+             'Profile',
+             %s,
+             'Databricks CLI profile name (from ~/.databrickscfg) used for `--profile` flags in generated workflow prompts. Defaults to DEFAULT. Override per-session if you authenticated under a different profile name.',
+             'text',
+             28, FALSE, TRUE, TRUE,
+             CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 'system-bootstrap')
+        ON CONFLICT (param_key) DO NOTHING
+    """
+    try:
+        execute_insert(sql, (DEFAULT_DATABRICKS_CLI_PROFILE,))
+    except Exception as e:
+        # Never fail the parent request if bootstrap hits a transient error.
+        logger.warning(f"[Config API] databricks_cli_profile bootstrap skipped: {e}")
 
 
 def _bootstrap_coding_assistants_config_if_missing() -> None:
@@ -932,12 +1002,29 @@ def get_workshop_parameters_sync() -> Dict[str, str]:
             'app_name': os.getenv('APP_NAME', ''),
             'lakebase_mode': os.getenv('LAKEBASE_MODE', 'autoscaling'),
             'coding_assistants_config': DEFAULT_CODING_ASSISTANTS_CONFIG_JSON,
+            # Agent Tool Inputs (Step 39 Agent Tool Selection / agent_tool_selection)
+            'agent_tool_sql_mcp_enabled': 'true',
+            'agent_sql_catalog': 'samples',
+            'agent_sql_schema': 'wanderbricks',
+            'agent_sql_warehouse_id': os.getenv('DEFAULT_WAREHOUSE', ''),
+            'agent_sql_table_scope': 'all',
+            'agent_tool_genie_enabled': 'false',
+            'genie_space_id': '',
+            'agent_tool_vector_search_enabled': 'false',
+            'vs_endpoint': '',
+            'vs_index': '',
+            'agent_tool_uc_functions_enabled': 'false',
+            'uc_function_targets': '',
+            'agent_tool_external_mcp_enabled': 'false',
+            'external_mcp_connection': '',
+            'databricks_cli_profile': DEFAULT_DATABRICKS_CLI_PROFILE,
         }
     
     out = {row['param_key']: row['param_value'] for row in results}
     # Backfill for template substitution so callers can safely read this key
     # even before the GET endpoint has had a chance to bootstrap.
     out.setdefault('coding_assistants_config', DEFAULT_CODING_ASSISTANTS_CONFIG_JSON)
+    out.setdefault('databricks_cli_profile', DEFAULT_DATABRICKS_CLI_PROFILE)
     return out
 
 
@@ -4267,14 +4354,186 @@ async def get_workshop_parameters(response: Response) -> List[WorkshopParameter]
                 is_required=False,
                 is_active=True,
                 allow_session_override=False
-            )
+            ),
+            # Agent Tool Inputs (Step 39 Agent Tool Selection / agent_tool_selection Tool Plan)
+            WorkshopParameter(
+                param_key="agent_tool_sql_mcp_enabled",
+                param_label="Agent Tool: SQL MCP Enabled",
+                param_value="true",
+                param_description="Whether to include the SQL MCP tool when generating the agent Tool Plan.",
+                param_type="text",
+                display_order=14,
+                is_required=False,
+                is_active=True,
+                allow_session_override=True
+            ),
+            WorkshopParameter(
+                param_key="agent_sql_catalog",
+                param_label="Agent SQL MCP Catalog",
+                param_value="samples",
+                param_description="Unity Catalog catalog the agent SQL MCP tool will read from.",
+                param_type="catalog",
+                display_order=15,
+                is_required=False,
+                is_active=True,
+                allow_session_override=True
+            ),
+            WorkshopParameter(
+                param_key="agent_sql_schema",
+                param_label="Agent SQL MCP Schema",
+                param_value="wanderbricks",
+                param_description="Unity Catalog schema (within agent_sql_catalog) the agent SQL MCP tool will read from.",
+                param_type="text",
+                display_order=16,
+                is_required=False,
+                is_active=True,
+                allow_session_override=True
+            ),
+            WorkshopParameter(
+                param_key="agent_sql_warehouse_id",
+                param_label="Agent SQL MCP Warehouse ID",
+                param_value=os.getenv('DEFAULT_WAREHOUSE', ''),
+                param_description="SQL warehouse the agent SQL MCP tool will issue read-only queries against.",
+                param_type="text",
+                display_order=17,
+                is_required=False,
+                is_active=True,
+                allow_session_override=True
+            ),
+            WorkshopParameter(
+                param_key="agent_sql_table_scope",
+                param_label="Agent SQL MCP Table Scope",
+                param_value="all",
+                param_description='Either "all" (the default — every table in the schema, governed by Unity Catalog permissions) or a comma-separated allowlist of fully qualified table names.',
+                param_type="text",
+                display_order=18,
+                is_required=False,
+                is_active=True,
+                allow_session_override=True
+            ),
+            WorkshopParameter(
+                param_key="agent_tool_genie_enabled",
+                param_label="Agent Tool: Genie Enabled",
+                param_value="false",
+                param_description="Whether to include a Genie tool in the agent Tool Plan.",
+                param_type="text",
+                display_order=19,
+                is_required=False,
+                is_active=True,
+                allow_session_override=True
+            ),
+            WorkshopParameter(
+                param_key="genie_space_id",
+                param_label="Genie Space ID",
+                param_value="",
+                param_description="ID of an existing Genie Space the agent should call.",
+                param_type="text",
+                display_order=20,
+                is_required=False,
+                is_active=True,
+                allow_session_override=True
+            ),
+            WorkshopParameter(
+                param_key="agent_tool_vector_search_enabled",
+                param_label="Agent Tool: Vector Search Enabled",
+                param_value="false",
+                param_description="Whether to include a Vector Search tool in the agent Tool Plan.",
+                param_type="text",
+                display_order=21,
+                is_required=False,
+                is_active=True,
+                allow_session_override=True
+            ),
+            WorkshopParameter(
+                param_key="vs_endpoint",
+                param_label="Vector Search Endpoint",
+                param_value="",
+                param_description="Name of an existing Vector Search endpoint.",
+                param_type="text",
+                display_order=22,
+                is_required=False,
+                is_active=True,
+                allow_session_override=True
+            ),
+            WorkshopParameter(
+                param_key="vs_index",
+                param_label="Vector Search Index",
+                param_value="",
+                param_description="Fully qualified Vector Search index name (catalog.schema.index).",
+                param_type="text",
+                display_order=23,
+                is_required=False,
+                is_active=True,
+                allow_session_override=True
+            ),
+            WorkshopParameter(
+                param_key="agent_tool_uc_functions_enabled",
+                param_label="Agent Tool: UC Functions Enabled",
+                param_value="false",
+                param_description="Whether to include UC Function tools in the agent Tool Plan.",
+                param_type="text",
+                display_order=24,
+                is_required=False,
+                is_active=True,
+                allow_session_override=True
+            ),
+            WorkshopParameter(
+                param_key="uc_function_targets",
+                param_label="UC Function Targets",
+                param_value="",
+                param_description="Comma- or newline-separated list of fully qualified UC function names (catalog.schema.function).",
+                param_type="text",
+                display_order=25,
+                is_required=False,
+                is_active=True,
+                allow_session_override=True
+            ),
+            WorkshopParameter(
+                param_key="agent_tool_external_mcp_enabled",
+                param_label="Agent Tool: External MCP Enabled",
+                param_value="false",
+                param_description="Whether to include an external MCP server in the agent Tool Plan.",
+                param_type="text",
+                display_order=26,
+                is_required=False,
+                is_active=True,
+                allow_session_override=True
+            ),
+            WorkshopParameter(
+                param_key="external_mcp_connection",
+                param_label="External MCP Connection",
+                param_value="",
+                param_description="Name of the Unity Catalog connection backing an external MCP server.",
+                param_type="text",
+                display_order=27,
+                is_required=False,
+                is_active=True,
+                allow_session_override=True
+            ),
+            WorkshopParameter(
+                param_key="databricks_cli_profile",
+                param_label="Profile",
+                param_value=DEFAULT_DATABRICKS_CLI_PROFILE,
+                param_description="Databricks CLI profile name (from ~/.databrickscfg) used for `--profile` flags in generated workflow prompts. Defaults to DEFAULT. Override per-session if you authenticated under a different profile name.",
+                param_type="text",
+                display_order=28,
+                is_required=False,
+                is_active=True,
+                allow_session_override=True
+            ),
         ]
     
-    # Self-heal: existing deployments that were seeded before this param
-    # existed won't have the row yet. Insert the default and re-read so the
-    # admin UI immediately sees it. Idempotent (ON CONFLICT DO NOTHING).
+    # Self-heal: existing deployments that were seeded before these params
+    # existed won't have the rows yet. Insert defaults and re-read so the
+    # admin UI immediately sees them. Idempotent (ON CONFLICT DO NOTHING).
+    needs_reread = False
     if not any(row.get('param_key') == 'coding_assistants_config' for row in results):
         _bootstrap_coding_assistants_config_if_missing()
+        needs_reread = True
+    if not any(row.get('param_key') == 'databricks_cli_profile' for row in results):
+        _bootstrap_databricks_cli_profile_if_missing()
+        needs_reread = True
+    if needs_reread:
         results = execute_query(sql)
     
     return [WorkshopParameter(**row) for row in results]

@@ -17,14 +17,14 @@ industries:
   - value: ""
     label: "Select an industry..."
   - value: "sample"
-    label: "sample [for enablement]"
+    label: "Sample"
+  - value: "travel"
+    label: "Travel & Hospitality"
   # Hidden for now - uncomment to enable:
   # - value: "retail"
   #   label: "Retail"
   # - value: "cpg"
   #   label: "CPG"
-  # - value: "travel"
-  #   label: "Travel & Hospitality"
 
 # -----------------------------------------------------------------------------
 # USE CASES BY INDUSTRY (Static UI dropdown)
@@ -86,21 +86,66 @@ use_cases:
     - value: "portfolio_innovation"
       label: "Portfolio Optimization & Innovation"
 
+  # Travel & Hospitality outcome-map use cases. category + category_order +
+  # display_order drive the OutcomeMapGrid 3-column layout. The frontend treats
+  # any item with `category` as outcome-map content; items without it fall
+  # through to the simple UseCaseCardGrid.
   travel:
     - value: ""
       label: "Select a use case..."
-    - value: "travel_customer_data"
-      label: "Customer Data Management"
-    - value: "customer_insights_activation"
-      label: "Customer Insights & Activation"
-    - value: "travel_employee_360"
-      label: "Employee 360"
-    - value: "travel_agentic_workforce"
-      label: "Agentic Workforce"
-    - value: "call_center_ops"
-      label: "Call Center Operations"
+    # Column 1: Agentic AI Operations
+    - value: "autonomous_disruption_response"
+      label: "Autonomous Disruption Response"
+      category: "Agentic AI Operations"
+      category_order: 1
+      display_order: 1
+    - value: "predictive_maintenance"
+      label: "Predictive Maintenance"
+      category: "Agentic AI Operations"
+      category_order: 1
+      display_order: 2
+    - value: "smarter_scheduling"
+      label: "Smarter Scheduling"
+      category: "Agentic AI Operations"
+      category_order: 1
+      display_order: 3
+    - value: "realtime_operations_view"
+      label: "Real-Time Operations View"
+      category: "Agentic AI Operations"
+      category_order: 1
+      display_order: 4
+    # Column 2: Diversified Revenue Growth
     - value: "dynamic_pricing"
-      label: "Dynamic Pricing & Promotion"
+      label: "Dynamic Pricing"
+      category: "Diversified Revenue Growth"
+      category_order: 2
+      display_order: 1
+    - value: "intelligent_offers_management"
+      label: "Intelligent Offers Management"
+      category: "Diversified Revenue Growth"
+      category_order: 2
+      display_order: 2
+    - value: "product_channel_development"
+      label: "Product & Channel Development"
+      category: "Diversified Revenue Growth"
+      category_order: 2
+      display_order: 3
+    # Column 3: Consumer at the Center of Every Decision
+    - value: "ai_driven_booking"
+      label: "AI-Driven Booking"
+      category: "Consumer at the Center of Every Decision"
+      category_order: 3
+      display_order: 1
+    - value: "hyper_personalized_marketing"
+      label: "Hyper-Personalized Marketing"
+      category: "Consumer at the Center of Every Decision"
+      category_order: 3
+      display_order: 2
+    - value: "agentic_customer_service"
+      label: "Agentic Customer Service"
+      category: "Consumer at the Center of Every Decision"
+      category_order: 3
+      display_order: 3
 
 # -----------------------------------------------------------------------------
 # PREREQUISITES (Static UI configuration)

@@ -11,6 +11,12 @@ export interface SelectOption {
   value: string;
   label: string;
   path_type?: 'use_case' | 'skill';
+  /** Outcome-map column title (e.g. "Agentic AI Operations"). Set on Travel use cases; absent on Sample. */
+  category?: string;
+  /** Outcome-map column position within the industry (1, 2, 3). */
+  category_order?: number;
+  /** Card order within the column. */
+  display_order?: number;
 }
 
 export interface GeneratedContent {
