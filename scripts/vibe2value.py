@@ -222,7 +222,7 @@ def get_placeholder_map(config: dict) -> dict:
         "__TAG_MANAGED_BY__": tags.get("managed_by", "vibe2value"),
         "__TAG_CUSTOM__": tags.get("custom_tags", ""),
         "__DEPLOYER_EMAIL__": user.get("email", ""),
-        "__INSTALLER_VERSION__": meta.get("installer_version", "1.0.0"),
+        "__INSTALLER_VERSION__": meta.get("installer_version", "2.0.0"),
         "__COMPANY_BRAND_URL__": branding.get("customer_url", ""),
     }
 
@@ -576,7 +576,7 @@ def cmd_install(args):
         },
         "_metadata": {
             "installed_at": datetime.now(timezone.utc).isoformat(),
-            "installer_version": "1.0.0",
+            "installer_version": "2.0.0",
             "target": target,
             "created_resources": [],
         },

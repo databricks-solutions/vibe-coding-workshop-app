@@ -53,6 +53,6 @@ branding:
 # Metadata (managed by vibe2value, do not edit manually)
 _metadata:
   installed_at: ""
-  installer_version: "1.0.0"
+  installer_version: "2.0.0"
   target: "user"                      # Bundle deploy target (must match a target in databricks.yml)
   created_resources: []               # Tracks what the installer created for uninstall

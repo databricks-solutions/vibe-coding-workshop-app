@@ -33,7 +33,7 @@ UPLOADS_DIR = BASE_DIR / "uploads"
 app = FastAPI(
     title="Vibe Coding Workshop API",
     description="AI-Powered Development Workflow Application - All UI data served from backend",
-    version="1.0.0",
+    version="2.0.0",
 )
 
 # ============== Security Configuration ==============
@@ -115,7 +115,7 @@ async def health_check():
     return {
         "status": "healthy",
         "app": "Vibe Coding Workshop",
-        "version": "1.0.0",
+        "version": "2.0.0",
         "features": [
             "Industries API",
             "Use Cases API", 
@@ -171,7 +171,7 @@ async def serve_spa(full_path: str):
     # Fallback if dist doesn't exist
     return JSONResponse({
         "message": "Vibe Coding Workshop API",
-        "version": "1.0.0",
+        "version": "2.0.0",
         "api_docs": "/docs",
         "endpoints": {
             "industries": "/api/industries",
