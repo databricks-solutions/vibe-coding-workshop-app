@@ -12692,3 +12692,298 @@ true, 1, true, current_timestamp(), current_timestamp(), current_user());
 -- =============================================================================
 -- END GENIE CODE FORKS — DATA_PRODUCT_ACCELERATOR (LAKEHOUSE)
 -- =============================================================================
+
+-- =============================================================================
+-- GENIE CODE FORKS — DATA_PRODUCT_ACCELERATOR (AI / AGENTS)
+-- =============================================================================
+-- Per-step `coding_assistant='genie-code'` forks for 4 V2V AI/Agents steps
+-- (15, 16, 17, 24). Each fork = verbatim default body + a small "Genie Code
+-- Overrides" appendix that @-references the helper file at
+-- @data_product_accelerator/skills/common/genie-code/genie-code-helpers.md
+-- (committed to the workshop-template repo at 33029ba).
+--
+-- All Lakeview / Genie API / MLflow GenAI SDK calls are inlined in the
+-- per-step appendices — no helper file changes needed in this PR.
+--
+-- Default rows (input_id 10, 12, 11, 117) are unchanged — Cursor / Copilot /
+-- VS Code / AI Gateway sessions resolve to those as today. Only Genie Code
+-- sessions hit the new forks below.
+--
+-- Step 18 (agent_framework, build agent) and Step 19 (wire_ui_agent) are
+-- intentionally NOT forked — Step 18 is heavy MLflow/Model Serving surface
+-- (deferred to a follow-up PR) and Step 19 depends on the AppKit chapter
+-- which is excluded from genie-code. Step 25 (optimize_genie) is also
+-- deferred — its 6-script orchestrator is too complex to faithfully inline.
+-- =============================================================================
+
+-- Step 15 (usecase_plan) — Genie Code fork
+INSERT INTO ${catalog}.${schema}.section_input_prompts
+(input_id, section_tag, coding_assistant, input_template, system_prompt,
+ bypass_llm, version, is_active, inserted_at, updated_at, created_by)
+VALUES
+(1020, 'usecase_plan', 'genie-code',
+'Perform project planning using @data_product_accelerator/skills/planning/00-project-planning/SKILL.md with planning_mode: workshop
+
+This will involve the following steps:
+
+- **Analyze Gold layer** — examine your completed Gold tables to identify natural business domains, key relationships, and analytical questions
+- **Generate use-case plans** — create structured plans organized as Phase 1 addendums (1.2 TVFs, 1.3 Metric Views, 1.4 Monitors, 1.5 Dashboards, 1.6 Genie Spaces, 1.7 Alerts, 1.1 ML Models). Filenames must match the canonical numbering table at `data_product_accelerator/skills/planning/00-project-planning/assets/addendum-numbering.md`.
+- **Produce YAML manifests** — generate 4 machine-readable manifest files (semantic-layer, observability, ML, GenAI agents) as contracts for downstream implementation stages
+- **Emit Gold dependency manifest** — write `plans/manifests/gold-dependency-manifest.yaml` with every Gold table/column referenced across all addendums, then intersect it against `{lakehouse_default_catalog}.information_schema` for `{user_schema_prefix}_gold`. If any reference is missing, the skill writes `plans/gold-gap-remediation.md` and STOPS — downstream orchestrators (semantic layer, observability, ML, GenAI agents) will refuse to run until Gold is fixed.
+- **Apply workshop mode caps** — enforce hard limits (3-5 TVFs, 1-2 Metric Views, 1 Genie Space) to keep the workshop focused on pattern variety over depth
+- **Define deployment order** — establish build sequence: TVFs → Metric Views → Genie Spaces → Dashboards → Monitors → Alerts → Agents
+
+If a PRD exists at @docs/design_prd.md, reference it for business requirements, user personas, and workflows.
+
+---
+
+## Genie Code Overrides
+
+The skill above is correct as-is. Replace ONLY the run/deploy steps below — Genie Code has no terminal, no Asset Bundle, no local filesystem.
+
+**Once per Genie Code session:** clone `https://github.com/databricks-solutions/vibe-coding-workshop-template` into `/Workspace/Users/<your_email>/v2v-in-geniecode/vibe-coding-workshop-template` (Workspace → Repos → Add Repo), then read `@data_product_accelerator/skills/common/genie-code/genie-code-helpers.md` and run **Section 1 — Bootstrap** (3 cells). That defines `w`, `REPO_ROOT`, `read_file`, `write_file`, `write_notebook`, `run_sql`, `run_job_by_name`, `make_job_notebook`, `create_job`, `create_pipeline_idempotent`.
+
+**Substitutions for THIS step:**
+
+- The skill reads source schema metadata via SQL → `rows = run_sql("SELECT table_name, column_name, data_type FROM {lakehouse_default_catalog}.information_schema.columns WHERE table_schema = ''{user_schema_prefix}_gold'' ORDER BY table_name, ordinal_position")` (and similar against `information_schema.tables`).
+- The skill reads the existing PRD if present → `prd_text = read_file(f"{REPO_ROOT}/docs/design_prd.md")` (catch FileNotFoundError — PRD is optional).
+- The skill writes plan addendums (`plans/phase1-addendum-1.1-ml-models.md`, `1.2-tvfs.md`, `1.3-metric-views.md`, `1.4-monitors.md`, `1.5-aibi-dashboards.md`, `1.6-genie-spaces.md`, `1.7-alerts.md`) → `write_file(f"{REPO_ROOT}/plans/<filename>", content)`. Filenames MUST match the canonical numbering at `@data_product_accelerator/skills/planning/00-project-planning/assets/addendum-numbering.md`.
+- The skill writes 4 manifest YAMLs (`semantic-layer-manifest.yaml`, `observability-manifest.yaml`, `ml-manifest.yaml`, `genai-agents-manifest.yaml`) → `write_file(f"{REPO_ROOT}/plans/manifests/<file>.yaml", yaml_text)`.
+- The skill writes the Gold dependency manifest → `write_file(f"{REPO_ROOT}/plans/manifests/gold-dependency-manifest.yaml", yaml_text)`, then intersects it against `information_schema` via `run_sql`.
+
+**Traps:** (1) If Gold tables/columns referenced in any addendum are missing from `information_schema`, the skill writes `plans/gold-gap-remediation.md` and STOPS — do not proceed; downstream orchestrators (semantic layer, observability, ML, GenAI agents) will refuse to run until Gold is fixed. (2) Workshop mode caps are non-negotiable: max 3-5 TVFs, 1-2 Metric Views, 1 Genie Space — keep the workshop focused on pattern variety over depth.',
+'',
+true, 1, true, current_timestamp(), current_timestamp(), current_user());
+
+-- Step 16 (aibi_dashboard) — Genie Code fork
+INSERT INTO ${catalog}.${schema}.section_input_prompts
+(input_id, section_tag, coding_assistant, input_template, system_prompt,
+ bypass_llm, version, is_active, inserted_at, updated_at, created_by)
+VALUES
+(1021, 'aibi_dashboard', 'genie-code',
+'Build an AI/BI (Lakeview) Dashboard using @data_product_accelerator/skills/monitoring/02-databricks-aibi-dashboards/SKILL.md
+
+This will involve the following end-to-end workflow:
+
+- **Build Lakeview dashboard** — create a complete `.lvdash.json` configuration with KPI counters, charts, data tables, and filters for business self-service analytics
+- **Use 6-column grid layout** — position all widgets on a 6-column grid (NOT 12!) with correct widget versions (KPIs=v2, Charts=v3, Tables=v2, Filters=v2)
+- **Query Metric Views** — write dataset queries using `MEASURE()` function against Metric Views with `${catalog}.${gold_schema}` variable substitution
+- **Use a mixed dataset strategy** — `MEASURE()` for KPIs, trends, and dimension breakdowns sourced from Metric Views; direct Gold SQL for detail/drill-down tables and filter value datasets (e.g., `SELECT DISTINCT ...`)
+- **Validate SQL and widget alignment** — run pre-deployment validation ensuring every widget `fieldName` matches its SQL alias exactly (90% reduction in dev loop time)
+- **Run Phase 0.5 pre-flight** — BEFORE any deploy, enumerate every `${var}` placeholder in the `.lvdash.json`, then assert the deploy job provides every one. Missing a single variable corrupts the upload silently (see `monitoring/02-databricks-aibi-dashboards/SKILL.md` → "Pre-loop variable enumeration").
+- **Deploy via UPDATE-or-CREATE** — use Workspace Import API with `overwrite: true` AND base64-encoded ASCII content (raw UTF-8 bytes silently corrupts the file). Preserves dashboard URLs and viewer permissions.
+
+Reference the dashboard plan at @plans/phase1-addendum-1.5-aibi-dashboards.md (canonical numbering — see `data_product_accelerator/skills/planning/00-project-planning/assets/addendum-numbering.md`; the legacy name `1.1-dashboards.md` is forbidden).
+
+The skill provides:
+- Dashboard JSON structure with **6-column grid** layout (NOT 12!)
+- Widget patterns: KPI counters (v2), charts (v3), tables (v2), filters (v2)
+- Query patterns from Metric Views using `MEASURE()` function
+- Pre-deployment SQL validation (90% reduction in dev loop time)
+- UPDATE-or-CREATE deployment pattern (preserves URLs and permissions)
+- Variable substitution (`${catalog}`, `${gold_schema}`) — no hardcoded schemas
+- Monitoring table query patterns (window structs, CASE pivots) if Lakehouse Monitors exist
+
+Before building, load prerequisite skills:
+- **MUST READ** `semantic-layer/01-metric-views-patterns/SKILL.md` for MEASURE() syntax (since this dashboard queries Metric Views)
+- **MUST READ** `common/databricks-expert-agent/SKILL.md` for "Extract Don''t Generate" principle
+- **MUST READ** `common/naming-tagging-standards/SKILL.md` for dashboard and file naming conventions
+- Check installed skills for `databricks-lakeview-dashboard` (16+ widget patterns, mandatory query testing workflow)
+
+Build the dashboard in this order:
+0. Validate inputs — verify the plan file and manifests exist. If the plan file is missing, STOP and ask.
+1. Plan layout (KPIs, filters, charts, tables)
+2. Create datasets (validated SQL queries)
+3. Build widgets with correct version specs
+4. Configure parameters (DATE type, not DATETIME)
+5. Add Global Filters page
+6. Deploy via Workspace Import API
+
+---
+
+## Genie Code Overrides
+
+The skill above is correct as-is. Replace ONLY the run/deploy steps below — Genie Code has no terminal, no Asset Bundle, no local filesystem.
+
+**Once per Genie Code session:** clone `https://github.com/databricks-solutions/vibe-coding-workshop-template` into `/Workspace/Users/<your_email>/v2v-in-geniecode/vibe-coding-workshop-template` (Workspace → Repos → Add Repo), then read `@data_product_accelerator/skills/common/genie-code/genie-code-helpers.md` and run **Section 1 — Bootstrap** (3 cells). That defines `w`, `REPO_ROOT`, `read_file`, `write_file`, `write_notebook`, `run_sql`, `run_job_by_name`, `make_job_notebook`, `create_job`, `create_pipeline_idempotent`.
+
+**Substitutions for THIS step:**
+
+- Build the `.lvdash.json` payload (skill content unchanged — 6-column grid, widget version specs, MEASURE() syntax) → assemble as a Python dict in-memory; no local file write.
+- Pre-deployment SQL validation (every widget `fieldName` matches its SQL alias) → loop datasets and `run_sql(query)` on each; assert the returned column names cover every widget `fieldName` reference.
+- Phase 0.5 variable enumeration → BEFORE deploy, scan the `.lvdash.json` payload for every `${var}` placeholder and assert your upload provides each one (a missing var corrupts the upload silently).
+- `databricks workspace import` (Lakeview file) → `import json, base64; lvdash_bytes = json.dumps(lvdash_payload, ensure_ascii=True).encode("ascii"); w.workspace.import_(path=DASHBOARD_PATH, content=base64.b64encode(lvdash_bytes).decode(), format=ImportFormat.AUTO, overwrite=True)`. Use `.encode("ascii")` — NOT `.encode("utf-8")`.
+- UPDATE-or-CREATE deployment → first list existing dashboards: `existing = [d for d in w.lakeview.list() if d.display_name == DASHBOARD_NAME]`. If found, `w.lakeview.update(dashboard_id=existing[0].dashboard_id, dashboard=...)` then `w.lakeview.publish(dashboard_id=existing[0].dashboard_id, warehouse_id=WAREHOUSE_ID)`. Otherwise `created = w.lakeview.create(dashboard=...)` then `w.lakeview.publish(dashboard_id=created.dashboard_id, warehouse_id=WAREHOUSE_ID)`. The UPDATE path preserves URLs and viewer permissions; the CREATE path mints a new dashboard URL.
+
+**Traps (3):** (1) Raw UTF-8 bytes silently corrupt the `.lvdash.json` upload — ALWAYS `base64.b64encode(json.dumps(...).encode("ascii"))`. (2) Widget version specs are non-negotiable: KPIs=v2, Charts=v3, Tables=v2, Filters=v2 — wrong version = silent render failure in the browser. (3) Use a 6-column grid, NOT 12. The skill defaults are correct; do not "round up" widget widths.',
+'',
+true, 1, true, current_timestamp(), current_timestamp(), current_user());
+
+-- Step 17 (genie_space) — Genie Code fork
+INSERT INTO ${catalog}.${schema}.section_input_prompts
+(input_id, section_tag, coding_assistant, input_template, system_prompt,
+ bypass_llm, version, is_active, inserted_at, updated_at, created_by)
+VALUES
+(1022, 'genie_space', 'genie-code',
+'Set up the semantic layer using @data_product_accelerator/skills/semantic-layer/00-semantic-layer-setup/SKILL.md
+
+This will involve the following end-to-end workflow:
+
+- **Read plan manifests** — extract TVF, Metric View, and Genie Space specifications from the semantic-layer-manifest.yaml (from Step 13 planning)
+- **Create Metric Views** — build Metric Views using `WITH METRICS LANGUAGE YAML` syntax with dimensions, measures, 3-5 synonyms each, and format specifications
+- **Create Table-Valued Functions (TVFs)** — write parameterized SQL functions with STRING date params (non-negotiable for Genie), v3.0 bullet-point COMMENTs, and ROW_NUMBER for Top-N patterns
+- **Configure Genie Space** — set up natural language query interface with data assets (Metric Views → TVFs → Gold tables priority), General Instructions (≤20 lines), and ≥10 benchmark questions with exact expected SQL
+- **Create JSON exports** — export Genie Space configuration as JSON for CI/CD deployment across environments. Before every POST/PATCH, run the `_assert_sql_arrays` validator: every `sql:` field in the `serialized_space` payload must be a `List[str]` (never a bare string) — see `semantic-layer/04-genie-space-export-import-api/SKILL.md` → "Required `serialized_space` Invariants".
+- **Bake `semantic_warehouse_id`** — the warehouse ID must be a CONCRETE value stamped into the exported JSON at deploy time, NOT a `--var` runtime parameter. Copy the resolved warehouse ID from `plans/deploy-checkpoint.md` (emitted by `bundle validate`).
+- **Persist space IDs** — after the first successful POST, copy the `[ACTION REQUIRED]` `genie_space_id_<stem>` block from the deploy script output into `databricks.yml` so subsequent runs PATCH the existing space instead of creating duplicates.
+- **Optimize for accuracy** — run benchmark questions via Conversation API and tune 6 control levers until accuracy ≥95% and repeatability ≥90%
+
+Implement in this order:
+
+1. **Table-Valued Functions (TVFs)** — using plan at @plans/phase1-addendum-1.2-tvfs.md
+2. **Metric Views** — using plan at @plans/phase1-addendum-1.3-metric-views.md
+3. **Genie Space** — using plan at @plans/phase1-addendum-1.6-genie-spaces.md
+4. **Genie JSON Exports** — create export/import deployment jobs
+
+The orchestrator skill automatically loads worker skills for TVFs, Metric Views, Genie Space patterns, and export/import API.
+
+---
+
+## Genie Code Overrides
+
+The skill above is correct as-is. Replace ONLY the run/deploy steps below — Genie Code has no terminal, no Asset Bundle, no local filesystem.
+
+**Once per Genie Code session:** clone `https://github.com/databricks-solutions/vibe-coding-workshop-template` into `/Workspace/Users/<your_email>/v2v-in-geniecode/vibe-coding-workshop-template` (Workspace → Repos → Add Repo), then read `@data_product_accelerator/skills/common/genie-code/genie-code-helpers.md` and run **Section 1 — Bootstrap** (3 cells). That defines `w`, `REPO_ROOT`, `read_file`, `write_file`, `write_notebook`, `run_sql`, `run_job_by_name`, `make_job_notebook`, `create_job`, `create_pipeline_idempotent`.
+
+**Substitutions for THIS step:**
+
+- Read planning manifests (skill expects local FS) → `manifest_text = read_file(f"{REPO_ROOT}/plans/manifests/semantic-layer-manifest.yaml"); import yaml; manifest = yaml.safe_load(manifest_text)`.
+- Resolve `semantic_warehouse_id` (CONCRETE value, NOT a `--var` runtime parameter) → `WAREHOUSE_ID = next(w.warehouses.list()).id` (or read from `read_file(f"{REPO_ROOT}/plans/deploy-checkpoint.md")` if previously emitted).
+- Create Metric Views (`WITH METRICS LANGUAGE YAML`) → for each Metric View in the manifest: `metric_view_ddl = f"CREATE OR REPLACE VIEW `{lakehouse_default_catalog}`.`{user_schema_prefix}_gold`.`{name}` WITH METRICS LANGUAGE YAML AS $$\n{yaml_body}\n$$"; run_sql(metric_view_ddl)`. Use `$$...$$` dollar-quoting so YAML internal apostrophes don''t conflict with SQL string quoting.
+- Create TVFs (parameterized SQL functions, STRING date params) → for each TVF in the manifest: `tvf_ddl = f"CREATE OR REPLACE FUNCTION `{lakehouse_default_catalog}`.`{user_schema_prefix}_gold`.`{fn_name}`(p_date STRING, ...) RETURNS TABLE(...) COMMENT ''<v3.0 bullet-point COMMENT>'' RETURN <body>"; run_sql(tvf_ddl)`. STRING date params are non-negotiable for Genie compatibility.
+- Configure Genie Space → assemble `space_payload = {"display_name": NAME, "warehouse_id": WAREHOUSE_ID, "general_instructions": INSTRUCTIONS_LE_20_LINES, "data_assets": SORTED_ASSETS, "benchmark_questions": [{"question": q, "expected_sql": [s]}]}`. Sort `data_assets` by `table_name`/`function_name` before submission. Call `_assert_sql_arrays(space_payload)` BEFORE any POST/PATCH (validator below).
+- First deploy (CREATE) → `import json, uuid; payload = {"serialized_space": json.dumps(space_payload)}; created = w.api_client.do("POST", "/api/2.0/genie/spaces", body=payload); genie_space_id = created["space_id"]; write_file(f"{REPO_ROOT}/plans/genie-space-state.json", json.dumps({"space_id": genie_space_id}))`.
+- Subsequent deploys (UPDATE) → `state = json.loads(read_file(f"{REPO_ROOT}/plans/genie-space-state.json")); GENIE_SPACE_ID = state["space_id"]; existing = w.genie.get_space(space_id=GENIE_SPACE_ID); _assert_sql_arrays(space_payload); w.api_client.do("PUT", f"/api/2.0/genie/spaces/{GENIE_SPACE_ID}", body={"serialized_space": json.dumps(space_payload)})`.
+- Inline `_assert_sql_arrays` validator (runs before every POST/PATCH; no helper file change needed):
+
+```python
+def _assert_sql_arrays(payload):
+    """Walk serialized_space and assert every sql: field is a List[str], not a bare string."""
+    import json
+    space = payload if isinstance(payload, dict) else json.loads(payload)
+    for asset in space.get("data_assets", []):
+        if "sql" in asset and not isinstance(asset["sql"], list):
+            raise ValueError(f"sql must be List[str], got {type(asset[''sql''])} in asset {asset.get(''name'')}")
+    for bench in space.get("benchmark_questions", []):
+        if "expected_sql" in bench and not isinstance(bench["expected_sql"], list):
+            raise ValueError(f"expected_sql must be List[str] for question {bench.get(''question'', '''')[:40]!r}")
+```
+
+**Traps (5):** (1) Every `sql:` field in the `serialized_space` payload MUST be a `List[str]`, never a bare string — bare-string commits corrupt the space silently and Genie returns nonsense answers. Run `_assert_sql_arrays(payload)` before every POST/PATCH. (2) IDs must use `uuid.uuid4().hex` (32-char hex, no dashes) for asset/dataset IDs. (3) `serialized_space` is a JSON string (`json.dumps(...)`), not a nested object inside the request body. (4) Data asset arrays must be sorted (tables by `table_name`, TVFs by `function_name`) before submission — unsorted arrays cause non-deterministic asset IDs across runs. (5) Genie Space MUST use a Serverless SQL Warehouse (non-negotiable) — classic warehouses fail with `FATAL: External authorization failed` on managed-online queries.',
+'',
+true, 1, true, current_timestamp(), current_timestamp(), current_user());
+
+-- Step 24 (deploy_di_assets) — Genie Code fork
+INSERT INTO ${catalog}.${schema}.section_input_prompts
+(input_id, section_tag, coding_assistant, input_template, system_prompt,
+ bypass_llm, version, is_active, inserted_at, updated_at, created_by)
+VALUES
+(1023, 'deploy_di_assets', 'genie-code',
+'Deploy all Data Intelligence assets (TVFs, Metric Views, Genie Spaces, and AI/BI Dashboards). Follow this orchestrator first, then its referenced worker skills:
+
+- **Primary orchestrator (read first):** @data_product_accelerator/skills/semantic-layer/00-semantic-layer-setup/SKILL.md — owns Phase 0 (gold inventory check), phase gates, and template-first workflow. Any task touching 2+ semantic-layer asset types MUST route through this skill.
+- **Worker skills (referenced by the orchestrator):** @data_product_accelerator/skills/common/databricks-asset-bundles/SKILL.md and @data_product_accelerator/skills/semantic-layer/04-genie-space-export-import-api/SKILL.md
+
+Before starting:
+- **Verify Gold schema inventory.** Query `information_schema.tables` / `information_schema.columns` in the live catalog and only deploy artifacts whose target tables and columns exist on disk AND in the live Gold schema. Do NOT trust `semantic-layer-manifest.yaml` as ground truth.
+- **Use templates, don''t write from scratch.** Start `src/{project}_semantic/deploy_genie_spaces.py` from `data_product_accelerator/skills/semantic-layer/04-genie-space-export-import-api/assets/templates/deploy_genie_spaces.py`, and `resources/semantic/genie_deploy_job.yml` from `genie-deployment-job-template.yml` — then customize. Hand-written versions are the #1 source of multi-cycle deploy failures.
+- **Read `plans/deploy-checkpoint.md` for concrete values.** Template variables below (e.g. `{lakehouse_default_catalog}`, `{user_schema_prefix}_gold`, job names like `tvf_job`) are project-invariant placeholders; the concrete resolved values for THIS deployment — actual job names, metric-view names, `semantic_warehouse_id`, workspace paths — live in `plans/deploy-checkpoint.md`, emitted by the Asset Bundles skill immediately after `databricks bundle validate`. If that file is missing, run the checkpoint emitter first (see `data_product_accelerator/skills/common/databricks-asset-bundles/SKILL.md` → "Emit Deploy Checkpoint") — do NOT invent names.
+- **Run Phase 0.5 local pre-flight.** Before any `bundle deploy`, execute the four local checks in `data_product_accelerator/skills/semantic-layer/00-semantic-layer-setup/SKILL.md` → "Phase 0.5: Local Pre-Flight": variable enumeration, DDL smoke test, Genie `_assert_sql_arrays`, live-catalog intersection. Any STOP rule triggering here halts deployment.
+
+This is a **semantic layer deployment checkpoint** — it deploys and verifies all Data Intelligence assets in the correct order.
+
+## Deployment Order (Mandatory)
+
+Deploy in this sequence — each component depends on the previous:
+
+```bash
+# 1. Validate the bundle
+databricks bundle validate -t dev
+
+# 2. Deploy all assets to workspace
+databricks bundle deploy -t dev
+
+# 3. Deploy TVFs (SQL task — creates parameterized functions in Gold schema)
+databricks bundle run -t dev tvf_job
+
+# 4. Deploy Metric Views (Python task — creates WITH METRICS LANGUAGE YAML views)
+databricks bundle run -t dev metric_views_job
+
+# 5. Deploy AI/BI Dashboard (if applicable)
+databricks bundle run -t dev dashboard_deploy_job
+
+# 6. Deploy Genie Space via Export/Import API
+#    Uses UPDATE-or-CREATE pattern with variable substitution
+databricks bundle run -t dev genie_deploy_job
+```
+
+## Genie Space API Deployment
+
+The Genie Space is deployed programmatically using the Export/Import API skill:
+- JSON config exported with `${catalog}` and `${gold_schema}` template variables
+- All IDs use `uuid.uuid4().hex` (32-char hex, no dashes)
+- `serialized_space` is a JSON string (`json.dumps()`), not a nested object
+- Data asset arrays sorted before submission (tables by `table_name`, TVFs by `function_name`)
+- Genie Space MUST use a **Serverless SQL Warehouse** (non-negotiable)
+
+## Verification (per-task, NOT end-of-flow)
+
+Run the **per-task verification** table in `data_product_accelerator/skills/semantic-layer/00-semantic-layer-setup/SKILL.md` → "Per-task verification (MANDATORY — run AFTER each task completes)". Each row lists pass criteria and a STOP rule. Do NOT defer verification to the end of the deploy — a failed TVF will silently break Metric Views, which will silently break the Genie Space.
+
+Concrete TVF / Metric View names for THIS deployment come from `plans/deploy-checkpoint.md` (emitted after `bundle validate`). The snippets below use placeholder names — replace with the concrete names from the checkpoint.
+
+```sql
+-- Verify TVFs are created (replace <tvf_name> / params with values from plans/deploy-checkpoint.md)
+SELECT * FROM {lakehouse_default_catalog}.{user_schema_prefix}_gold.<tvf_name>(<args>);
+
+-- Verify Metric Views exist
+SELECT table_name, table_type FROM {lakehouse_default_catalog}.information_schema.tables
+WHERE table_schema = ''{user_schema_prefix}_gold'' AND table_type = ''METRIC_VIEW'';
+
+-- Test a Metric View query (replace <metric_view_name> / <measure_name> with values from plans/deploy-checkpoint.md)
+SELECT MEASURE(<measure_name>) FROM {lakehouse_default_catalog}.{user_schema_prefix}_gold.<metric_view_name>;
+```
+
+Target catalog: `{lakehouse_default_catalog}`
+Gold schema: `{user_schema_prefix}_gold`
+Concrete job names, metric-view names, TVF names, warehouse IDs, workspace paths: `plans/deploy-checkpoint.md`
+
+---
+
+## Genie Code Overrides
+
+The skill above is correct as-is. Replace ONLY the run/deploy steps below — Genie Code has no terminal, no Asset Bundle, no local filesystem.
+
+**Once per Genie Code session:** clone `https://github.com/databricks-solutions/vibe-coding-workshop-template` into `/Workspace/Users/<your_email>/v2v-in-geniecode/vibe-coding-workshop-template` (Workspace → Repos → Add Repo), then read `@data_product_accelerator/skills/common/genie-code/genie-code-helpers.md` and run **Section 1 — Bootstrap** (3 cells). That defines `w`, `REPO_ROOT`, `read_file`, `write_file`, `write_notebook`, `run_sql`, `run_job_by_name`, `make_job_notebook`, `create_job`, `create_pipeline_idempotent`.
+
+**Note for Genie Code:** In Cursor mode this step is a `bundle deploy + bundle run *` orchestration. In Genie Code, V2V Steps 15-17 already created and ran each asset incrementally via SDK, so this step is a **verify / re-run** checkpoint — only re-execute stages that have changed since the last deploy.
+
+**Substitutions for THIS step:**
+
+- `databricks bundle validate -t dev` → Skip — no bundle.
+- `databricks bundle deploy -t dev` → Skip — assets already created via SDK in V2V Steps 15-17.
+- `databricks bundle run -t dev tvf_job` → `run_job_by_name("tvf")` (only if you created a TVF job in Step 17; if TVFs were created via direct `run_sql` DDL, skip).
+- `databricks bundle run -t dev metric_views_job` → `run_job_by_name("metric_view")` (same caveat).
+- `databricks bundle run -t dev dashboard_deploy_job` → re-run the Lakeview UPDATE-or-CREATE block from V2V Step 16 (or `w.lakeview.publish(dashboard_id=DASHBOARD_ID, warehouse_id=WAREHOUSE_ID)` if you only need to republish without changing the spec).
+- `databricks bundle run -t dev genie_deploy_job` → re-run the Genie API UPDATE block from V2V Step 17: `_assert_sql_arrays(payload)` then `w.api_client.do("PUT", f"/api/2.0/genie/spaces/{GENIE_SPACE_ID}", body={"serialized_space": json.dumps(payload)})`.
+- Per-task verification (after each cell) → run the skill''s "Per-task verification" queries via `run_sql(...)` against `information_schema.tables` filtered for `table_type=''METRIC_VIEW''`, a `MEASURE()` test on each Metric View, and `w.genie.get_space(space_id=GENIE_SPACE_ID)` to confirm the space exists with all data assets present.
+
+Run order if fully re-deploying: TVFs → Metric Views → Dashboard → Genie Space → Verify.
+
+**Traps (3):** (1) `_assert_sql_arrays(payload)` is mandatory on EVERY Genie Space redeploy — re-running the orchestrator without re-validating drops you into the silent-corruption failure mode where Genie returns nonsense answers. (2) Stage order matters: Metric Views depend on TVFs (Metric DDL referencing a missing function fails at parse time); Genie Space data assets reference Metric Views (deploying Genie before Metric/TVF resolves to non-existent objects — the API accepts the payload but Genie returns "schema not found" at query time). (3) Variable substitution for `${catalog}` / `${gold_schema}` in the `.lvdash.json` is processed by Databricks Workspace at upload time — concrete values must be present in `plans/deploy-checkpoint.md`; the SDK has no `--var` resolver.',
+'',
+true, 1, true, current_timestamp(), current_timestamp(), current_user());
+
+-- =============================================================================
+-- END GENIE CODE FORKS — DATA_PRODUCT_ACCELERATOR (AI / AGENTS)
+-- =============================================================================
