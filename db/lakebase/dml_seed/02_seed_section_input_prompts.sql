@@ -12987,3 +12987,128 @@ true, 1, true, current_timestamp(), current_timestamp(), current_user());
 -- =============================================================================
 -- END GENIE CODE FORKS — DATA_PRODUCT_ACCELERATOR (AI / AGENTS)
 -- =============================================================================
+
+-- =============================================================================
+-- GENIE CODE FORKS — APPS_LAKEBASE (APPKIT)
+-- =============================================================================
+-- Per-step `coding_assistant='genie-code'` fork for the AppKit chapter.
+-- Currently scopes to Step 3 (prd_generation). Step 4 (figma_ui_design),
+-- Step 5 (cursor_copilot_ui_design / scaffold-build), and Step 6 (deploy)
+-- are not forked yet — those land in a follow-up using
+-- @apps_lakebase/prompts/{generate_prd_gc,one-ui-design-local,setup_lakebase_gc,
+-- wire_ui_to_lakebase_gc,deploy_and_test_gc}.md from the
+-- vibe-coding-workshop-template (jai-gc-update branch).
+--
+-- Default row (input_id 1) is unchanged — Cursor / Copilot / VS Code /
+-- AI Gateway sessions resolve to it as today. Only Genie Code sessions
+-- hit the new fork below.
+-- =============================================================================
+
+-- Step 3 (prd_generation) — Genie Code fork
+INSERT INTO ${catalog}.${schema}.section_input_prompts
+(input_id, section_tag, coding_assistant, input_template, system_prompt,
+ bypass_llm, version, is_active, inserted_at, updated_at, created_by)
+VALUES
+(1001, 'prd_generation', 'genie-code',
+'Generate a prompt that I can copy into my AI coding assistant (Cursor/Copilot/Genie Code) to create a simple Product Requirements Document (PRD).
+
+The generated prompt MUST include these instructions at the very beginning:
+
+```
+## IMPORTANT - READ FIRST
+Your ONLY task is to create a PRD document. Do NOT:
+- Generate any code or scripts
+- Create any implementation files
+- Start building the application
+- Define table structures, schemas, or database designs
+- Create table names or data models
+- Define API endpoints, routes, or API specifications
+- Include implementation-specific logic or technical details
+- Do anything other than creating the PRD
+
+You MUST:
+- Create ONLY the PRD document
+- Save it to: docs/design_prd.md
+- STOP after saving the PRD - do nothing else
+```
+
+After those instructions, the prompt should ask for a simple, focused PRD for a {industry_name} application focused on {use_case_title}.
+
+## Use Case Context to Include
+{use_case_description}
+
+## Application Context to Include
+- **Industry**: {industry_name}
+- **Use Case**: {use_case_title}
+- Use a neutral, professional product name and generic terminology
+- Web first, but include mobile considerations if applicable
+
+## PRD Focus Guidelines
+**Keep it simple** - Focus on providing enough details to generate a clear, readable PRD without over-engineering.
+
+**Important Constraints:**
+- Do NOT include table definitions, table names, or database schema designs - these will come in later steps
+- Do NOT include API definitions, endpoints, or implementation-specific logic
+- Only focus on **High Value workflows**
+- Document **Happy Path only** - skip edge cases and error handling details for now
+- Prioritize clarity over completeness
+
+## PRD Structure to Request
+The generated prompt should ask for a PRD with these sections:
+
+1. **Summary** - Product vision, problem statement, target personas (2-3 max), goals + non-goals
+2. **Scope** - MVP scope only, clear out of scope items
+3. **User Journeys** - High-value end-to-end flows (Happy Path only) for primary personas
+4. **Functional Requirements** - Key requirements with simple acceptance criteria
+5. **Non-Functional Requirements** - Basic performance, security, accessibility notes
+6. **High-Level Data Entities** - Entity names and relationships only (NO table definitions or schemas)
+7. **Release Plan** - Simple milestones from MVP to GA
+
+The prompt MUST end with:
+```
+Save this PRD to: docs/design_prd.md
+STOP after saving. Do not generate any code, tables, APIs, or proceed with other tasks.
+```
+
+---
+
+## Genie Code Overrides
+
+The prompt above is correct as-is. Replace ONLY the file save verb below — Genie Code has no local filesystem; the PRD must land under `/Workspace`.
+
+**Once per Genie Code session:** clone `https://github.com/databricks-solutions/vibe-coding-workshop-template` into `/Workspace/Users/<your_email>/v2v-in-geniecode/vibe-coding-workshop-template` (Workspace → Repos → Add Repo), then read `@data_product_accelerator/skills/common/genie-code/genie-code-helpers.md` and run **Section 1 — Bootstrap** (3 cells). That defines `w`, `REPO_ROOT`, `read_file`, `write_file`, `write_notebook`, `run_sql`, `run_job_by_name`, `make_job_notebook`, `create_job`, `create_pipeline_idempotent`.
+
+**Substitutions for THIS step:**
+
+- The final instruction `Save this PRD to: docs/design_prd.md` → `prd_path = (REPO_ROOT + "/docs/design_prd.md").replace("/Workspace", "", 1); write_file(prd_path, prd_markdown)`
+- Any local-FS save the assistant might emit (`open(path, "w").write(...)`, `pathlib.Path(...).write_text(...)`, `dbutils.fs.put(...)`) → use `write_file(prd_path, prd_markdown)` only.
+
+**Traps:**
+1. Ensure the `docs/` folder exists in the cloned repo before writing — `write_file` does NOT auto-create parent directories. Run `w.workspace.mkdirs(REPO_ROOT + "/docs")` once per session if needed.
+2. The PRD must be **plain markdown content**, not the entire document wrapped in a single fenced code block — otherwise downstream genie-code forks (`gold_layer_design`, `bronze_layer_creation`, etc.) that already substitute `@docs/design_prd.md` → `read_file(...)` will receive the code-fence wrapper as part of the content.
+3. Do NOT save the PRD as a notebook via `write_notebook(...)`. Every downstream fork uses `read_file(...)` and expects a `.md` file. If you want a notebook view in the Workspace UI, render the PRD in a separate cell using `displayHTML(prd_markdown)` AFTER the file write completes.',
+'You are generating a prompt that users will copy into their AI coding assistant.
+
+Your output should be a complete, ready-to-use prompt that when pasted into Cursor, Copilot, or a Genie Code notebook cell will:
+1. Create ONLY a simple Product Requirements Document
+2. Save it to docs/design_prd.md
+3. NOT generate any code, scripts, table definitions, or API specifications
+
+CRITICAL: Your generated prompt MUST start with clear instructions telling the AI to ONLY create the PRD document and save it to docs/design_prd.md, and to NOT do anything else. Focus on High Value workflows with Happy Path only.
+
+The prompt should be focused and specific to {use_case_title}, incorporating the use case context provided.
+
+**OUTPUT FORMAT RULES:**
+- Output the prompt directly as plain markdown text - do NOT wrap the entire output in code blocks or backticks
+- Use proper markdown formatting: ## for headers, - for bullet points, **text** for bold
+- For code blocks within your output (like file paths or specific instructions to include verbatim), use triple backticks on their own lines
+- Do NOT use single backticks for multi-line content
+- The output should render properly when displayed as markdown
+
+**GENIE CODE PRESERVATION RULE:**
+You MUST preserve the entire `## Genie Code Overrides` section (including its bootstrap paragraph, the Substitutions list, and the Traps list) that appears at the end of the input_template VERBATIM in your output. Do not paraphrase, summarize, reformat, reorder, translate, merge, or move it. It is runtime metadata for the user''s Genie Code environment, not part of the PRD they are generating. Place it at the very end of your output, after the final ``Save this PRD to: docs/design_prd.md`` instruction block, separated by a horizontal rule (`---`).',
+false, 1, true, current_timestamp(), current_timestamp(), current_user());
+
+-- =============================================================================
+-- END GENIE CODE FORKS — APPS_LAKEBASE (APPKIT)
+-- =============================================================================
