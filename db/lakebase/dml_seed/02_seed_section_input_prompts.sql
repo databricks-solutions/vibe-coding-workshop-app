@@ -12356,3 +12356,339 @@ true, 1, true, current_timestamp(), current_timestamp(), current_user());
 -- =============================================================================
 -- END OF SEED FORK EXAMPLES
 -- =============================================================================
+
+-- =============================================================================
+-- GENIE CODE FORKS — DATA_PRODUCT_ACCELERATOR (LAKEHOUSE)
+-- =============================================================================
+-- Per-step `coding_assistant='genie-code'` forks for the 6 V2V Lakehouse steps
+-- (10, 11, 12, 13, 14, 23). Each fork = verbatim default body + a small
+-- "Genie Code Overrides" appendix that @-references the helper file
+-- @data_product_accelerator/skills/common/genie-code/genie-code-helpers.md
+-- (committed to the workshop-template repo at 33029ba).
+--
+-- Default rows (input_id 5, 6, 7, 8, 9, 116) are unchanged — Cursor / Copilot /
+-- VS Code / AI Gateway sessions resolve to those as today. Only Genie Code
+-- sessions hit the new forks below.
+-- =============================================================================
+
+-- Step 10 (bronze_table_metadata) — Genie Code fork
+INSERT INTO ${catalog}.${schema}.section_input_prompts
+(input_id, section_tag, coding_assistant, input_template, system_prompt,
+ bypass_llm, version, is_active, inserted_at, updated_at, created_by)
+VALUES
+(1010, 'bronze_table_metadata', 'genie-code',
+'Extract table schema metadata from Databricks and save as a CSV data dictionary.
+
+This will:
+
+- **Query information_schema.columns** — extract all table and column metadata from the **{chapter_3_lakehouse_catalog}.{chapter_3_lakehouse_schema}** source
+- **Convert results to CSV** — transform the JSON API response into a structured CSV file using Python
+- **Save as data_product_accelerator/context/{use_case_file_prefix}_Schema.csv** — create the data dictionary that drives the entire Design-First Pipeline (all subsequent steps reference this CSV)
+
+**Source:** `{chapter_3_lakehouse_catalog}.{chapter_3_lakehouse_schema}` (configured in the source panel above — auto-set from Step 9 or editable via Edit)
+
+Copy and paste this prompt to the AI:
+
+```
+Run this SQL query and save results to CSV:
+
+Query: SELECT * FROM {chapter_3_lakehouse_catalog}.information_schema.columns WHERE table_schema = ''{chapter_3_lakehouse_schema}'' ORDER BY table_name, ordinal_position
+
+Output: data_product_accelerator/context/{use_case_file_prefix}_Schema.csv
+```
+
+---
+
+## Genie Code Overrides
+
+The prompt above describes a CLI-based extraction. Replace the run/deploy steps below for Genie Code (no terminal, no `jq`, no `/tmp`).
+
+**Once per Genie Code session:** clone `https://github.com/databricks-solutions/vibe-coding-workshop-template` into `/Workspace/Users/<your_email>/v2v-in-geniecode/vibe-coding-workshop-template` (Workspace → Repos → Add Repo), then read `@data_product_accelerator/skills/common/genie-code/genie-code-helpers.md` and run **Section 1 — Bootstrap** (3 cells). That defines `w`, `REPO_ROOT`, `read_file`, `write_file`, `write_notebook`, `run_sql`, `run_job_by_name`, `make_job_notebook`, `create_job`, `create_pipeline_idempotent`.
+
+**Substitutions for THIS step:**
+
+- `databricks warehouses list ... jq ''.[0].id''` → Skip — `run_sql()` picks the warehouse automatically.
+- `databricks api post /api/2.0/sql/statements ... > /tmp/sql_result.json` → `rows = run_sql("SELECT * FROM {chapter_3_lakehouse_catalog}.information_schema.columns WHERE table_schema = ''{chapter_3_lakehouse_schema}'' ORDER BY table_name, ordinal_position")`
+- `python3 << EOF / open("/tmp/...") / open("<OUTPUT_FILE>", "w")` → build CSV in-memory: `from io import StringIO; import csv; buf = StringIO(); csv.writer(buf).writerows([("table_catalog","table_schema","table_name","column_name","ordinal_position","is_nullable","data_type","comment")] + rows); write_file(f"{REPO_ROOT}/data_product_accelerator/context/{use_case_file_prefix}_Schema.csv", buf.getvalue())`
+
+**Trap:** 0 rows → wrong `{chapter_3_lakehouse_catalog}` / `{chapter_3_lakehouse_schema}` or empty source. (Lakebase Postgres source path is out of scope for this fork — use UC `information_schema.columns` only.)',
+'',
+true, 1, true, current_timestamp(), current_timestamp(), current_user());
+
+-- Step 11 (gold_layer_design) — Genie Code fork
+INSERT INTO ${catalog}.${schema}.section_input_prompts
+(input_id, section_tag, coding_assistant, input_template, system_prompt,
+ bypass_llm, version, is_active, inserted_at, updated_at, created_by)
+VALUES
+(1011, 'gold_layer_design', 'genie-code',
+'I have a customer schema at @data_product_accelerator/context/{use_case_file_prefix}_Schema.csv.
+
+Please design the Gold layer using @data_product_accelerator/skills/gold/00-gold-layer-design/SKILL.md
+
+This skill will orchestrate the following end-to-end design workflow:
+
+- **Parse the schema CSV** — read the source schema file, classify each table as a dimension, fact, or bridge, and infer foreign key relationships from column names and comments
+- **Design the dimensional model** — identify dimensions (with SCD Type 1/2 decisions), fact tables (with explicit grain definitions), and measures, then assign tables to business domains
+- **Persist design decisions** — write `DESIGN_DECISIONS.md` before generating YAML so every YAML file shares one FK format, description format, and transformation enum
+- **Create ERD diagrams** — generate Mermaid Entity-Relationship Diagrams organized by table count (master ERD always, plus domain and summary ERDs for larger schemas)
+- **Generate YAML schema files** — produce one YAML file per Gold table with column definitions, PK/FK constraints, table properties, lineage metadata, and dual-purpose descriptions (human + LLM readable)
+- **Document column-level lineage** — trace every Gold column back through Silver to Bronze with transformation type (DIRECT_COPY, AGGREGATION, DERIVATION, etc.) in both CSV and Markdown formats
+- **Create business documentation** — write a Business Onboarding Guide with domain context, real-world scenarios, and role-based getting-started guides
+- **Map source tables** — produce a Source Table Mapping CSV documenting which source tables are included, excluded, or planned with rationale for each
+- **Validate design consistency** — cross-check YAML schemas, ERD diagrams, and lineage CSV to ensure all columns, relationships, and constraints are consistent
+
+The orchestrator skill will automatically load its worker skills for merge patterns, deduplication, documentation standards, Mermaid ERDs, schema validation, grain validation, and YAML-driven setup.
+
+---
+
+## Genie Code Overrides
+
+The skill above is correct as-is. Replace ONLY the file I/O verbs the skill emits — Genie Code has no local filesystem; all artifacts live under `/Workspace`.
+
+**Once per Genie Code session:** clone `https://github.com/databricks-solutions/vibe-coding-workshop-template` into `/Workspace/Users/<your_email>/v2v-in-geniecode/vibe-coding-workshop-template` (Workspace → Repos → Add Repo), then read `@data_product_accelerator/skills/common/genie-code/genie-code-helpers.md` and run **Section 1 — Bootstrap** (3 cells). That defines `w`, `REPO_ROOT`, `read_file`, `write_file`, `write_notebook`, `run_sql`, `run_job_by_name`, `make_job_notebook`, `create_job`, `create_pipeline_idempotent`.
+
+**Substitutions for THIS step:**
+
+- The skill reads `data_product_accelerator/context/{use_case_file_prefix}_Schema.csv` from local FS → `csv_text = read_file(f"{REPO_ROOT}/data_product_accelerator/context/{use_case_file_prefix}_Schema.csv")`
+- The skill writes `gold_layer_design/*.yaml`, `DESIGN_DECISIONS.md`, ERD `.md`, lineage CSV/MD, Business Onboarding Guide, Source Table Mapping CSV → `write_file(f"{REPO_ROOT}/gold_layer_design/<file>", content)` (per skill-navigator output convention: artifacts go to repo root, NOT `data_product_accelerator/`)
+- Any `python scripts/*.py` validation in the skill → run validation logic inline as a Genie Code Python cell (use `read_file()` to load existing artifacts to compare against)
+
+**Traps:** schema CSV not found → confirm V2V Step 10 ran AND `REPO_ROOT` matches your workspace clone path. No `open(local_path)`, no `pathlib`, no `os.path.join` against local FS — every read/write goes through `read_file` / `write_file`.',
+'',
+true, 1, true, current_timestamp(), current_timestamp(), current_user());
+
+-- Step 12 (bronze_layer_creation) — Genie Code fork
+INSERT INTO ${catalog}.${schema}.section_input_prompts
+(input_id, section_tag, coding_assistant, input_template, system_prompt,
+ bypass_llm, version, is_active, inserted_at, updated_at, created_by)
+VALUES
+(1012, 'bronze_layer_creation', 'genie-code',
+'Set up the Bronze layer using @data_product_accelerator/skills/bronze/00-bronze-layer-setup/SKILL.md with Approach C — copy data from the existing source tables in the {chapter_3_lakehouse_catalog}.{chapter_3_lakehouse_schema} schema.
+
+This will involve the following steps:
+
+- **Clone all source tables** from the {chapter_3_lakehouse_catalog}.{chapter_3_lakehouse_schema} schema into your target catalog''s Bronze schema
+- **Apply enterprise table properties** — enable Change Data Feed (CDF), Liquid Clustering (CLUSTER BY AUTO), auto-optimize, and auto-compact on every table
+- **Preserve source COMMENTs** — carry over all column-level documentation from the source schema
+- **Create Asset Bundle job** — generate a repeatable, version-controlled deployment job (databricks.yml + clone script)
+- **Deploy and run** — validate, deploy the bundle, and execute the clone job to populate Bronze tables
+
+IMPORTANT: Use the EXISTING catalog `{lakehouse_default_catalog}` -- do NOT create a new catalog. Create the Bronze schema `{user_schema_prefix}_bronze` and tables inside this catalog.
+
+NOTE: Before creating the schema, check if `{lakehouse_default_catalog}.{user_schema_prefix}_bronze` already exists. If it does, DROP the schema with CASCADE and recreate it from scratch. These are user-specific schemas so dropping is safe.
+
+---
+
+## Genie Code Overrides
+
+The skill above is correct as-is. Replace ONLY the bundle/CLI verbs below — Genie Code has no terminal, no Asset Bundle, no local filesystem.
+
+**Once per Genie Code session:** clone `https://github.com/databricks-solutions/vibe-coding-workshop-template` into `/Workspace/Users/<your_email>/v2v-in-geniecode/vibe-coding-workshop-template` (Workspace → Repos → Add Repo), then read `@data_product_accelerator/skills/common/genie-code/genie-code-helpers.md` and run **Section 1 — Bootstrap** (3 cells). That defines `w`, `REPO_ROOT`, `read_file`, `write_file`, `write_notebook`, `run_sql`, `run_job_by_name`, `make_job_notebook`, `create_job`, `create_pipeline_idempotent`.
+
+**Substitutions for THIS step:**
+
+- Build `databricks.yml` + `bronze_clone_job.yml` Asset Bundle → Skip; the skill''s YAML is reference-only.
+- `databricks bundle validate / deploy -t dev` → `body = make_job_notebook(clone_logic); notebook_path = (REPO_ROOT + "/src/{user_schema_prefix}_bronze/clone").replace("/Workspace", "", 1); write_notebook(notebook_path, body); create_job("Bronze Clone", notebook_path, base_params={"TARGET_CATALOG":"{lakehouse_default_catalog}","BRONZE_SCHEMA":"{user_schema_prefix}_bronze","SOURCE_CATALOG":"{chapter_3_lakehouse_catalog}","SOURCE_SCHEMA":"{chapter_3_lakehouse_schema}"})`
+- `databricks bundle run -t dev bronze_clone_job` → `run_job_by_name("bronze_clone")`
+- `python scripts/copy_from_source.py` → inline the clone logic in the notebook body passed to `write_notebook(...)`.
+
+**Traps:** (1) the body inside `write_notebook(...)` MUST start with `%pip install --upgrade databricks-sdk -q` then `dbutils.library.restartPython()` — the job''s compute does NOT inherit your session''s pip install. Use `make_job_notebook(body)` to get the header for free. (2) Never set the reserved `TBLPROPERTIES` key `''table_type''` (UC raises `[UNSUPPORTED_FEATURE.SET_TABLE_PROPERTY]`); use `''layer''=''bronze''` instead. CDF / auto-optimize / `CLUSTER BY AUTO` properties are fine — they are not reserved.',
+'',
+true, 1, true, current_timestamp(), current_timestamp(), current_user());
+
+-- Step 13 (silver_layer_sdp) — Genie Code fork
+INSERT INTO ${catalog}.${schema}.section_input_prompts
+(input_id, section_tag, coding_assistant, input_template, system_prompt,
+ bypass_llm, version, is_active, inserted_at, updated_at, created_by)
+VALUES
+(1013, 'silver_layer_sdp', 'genie-code',
+'Set up the Silver layer using @data_product_accelerator/skills/silver/00-silver-layer-setup/SKILL.md
+
+This will involve the following steps:
+
+- **Generate SDP pipeline notebooks** — create Spark Declarative Pipeline notebooks with incremental ingestion from Bronze using Change Data Feed (CDF)
+- **Create centralized DQ rules table** — build a configurable data quality rules table with expectations (null checks, range validation, referential integrity)
+- **Create Asset Bundle** — generate bundle configuration for both the DQ rules setup job and the SDP pipeline
+- **Deploy and run in order** — deploy the bundle, run the DQ rules setup job FIRST (creates the rules table), then run the SDP pipeline (reads rules from the table)
+
+Ensure bundle is validated and deployed successfully, and silver layer jobs run with no errors.
+
+Validate the results in the UI to ensure the DQ rules show up in centralized delta table, and that the silver layer pipeline runs successfully with Expectations being checked.
+
+IMPORTANT: Use the EXISTING catalog `{lakehouse_default_catalog}` -- do NOT create a new catalog. Create the Silver schema `{user_schema_prefix}_silver` and all Silver tables inside this catalog.
+
+NOTE: Before creating the schema, check if `{lakehouse_default_catalog}.{user_schema_prefix}_silver` already exists. If it does, DROP the schema with CASCADE and recreate it from scratch. These are user-specific schemas so dropping is safe.
+
+NOTE: This is a shared workshop workspace. Include a `user_prefix` variable in your pipeline/job `name:` fields (e.g., `"[${bundle.target} ${var.user_prefix}] Silver Layer Pipeline"`) to avoid `pipeline name is already used` collisions with other attendees. `databricks bundle deploy --force` does NOT resolve these — see `common/databricks-asset-bundles` → "Shared Workspace Naming".
+
+---
+
+## Genie Code Overrides
+
+The skill above is correct as-is. Replace ONLY the bundle/CLI verbs below — Genie Code has no terminal, no Asset Bundle, no local filesystem.
+
+**Once per Genie Code session:** clone `https://github.com/databricks-solutions/vibe-coding-workshop-template` into `/Workspace/Users/<your_email>/v2v-in-geniecode/vibe-coding-workshop-template` (Workspace → Repos → Add Repo), then read `@data_product_accelerator/skills/common/genie-code/genie-code-helpers.md` and run **Section 1 — Bootstrap** (3 cells). That defines `w`, `REPO_ROOT`, `read_file`, `write_file`, `write_notebook`, `run_sql`, `run_job_by_name`, `make_job_notebook`, `create_job`, `create_pipeline_idempotent`.
+
+**Substitutions for THIS step:**
+
+- Build `databricks.yml` + Silver YAMLs Asset Bundle → Skip; YAML is reference-only.
+- `databricks bundle deploy -t dev` (DQ rules setup job) → `dq_body = make_job_notebook(dq_setup_logic); dq_path = (REPO_ROOT + "/src/{user_schema_prefix}_silver/setup_dq_rules").replace("/Workspace", "", 1); write_notebook(dq_path, dq_body); create_job("Silver DQ Setup", dq_path, base_params={"TARGET_CATALOG":"{lakehouse_default_catalog}","SILVER_SCHEMA":"{user_schema_prefix}_silver"})`
+- `databricks bundle deploy -t dev` (DLT pipeline) → `pipe_path = (REPO_ROOT + "/src/{user_schema_prefix}_silver/silver_pipeline").replace("/Workspace", "", 1); write_notebook(pipe_path, sdp_notebook_body); pipeline_id = create_pipeline_idempotent("Silver Layer Pipeline", pipe_path, "{lakehouse_default_catalog}", "{user_schema_prefix}_silver")`
+- `databricks bundle run -t dev silver_dq_setup_job` → `run_job_by_name("silver_dq_setup")` — MUST run BEFORE the pipeline (creates `dq_rules` Delta table)
+- `databricks bundle run -t dev silver_dlt_pipeline` → `w.pipelines.start_update(pipeline_id=pipeline_id, full_refresh=True)` — `full_refresh=True` is MANDATORY (see traps)
+- `${bundle.target} ${var.user_prefix}` collision avoidance → embed `APP_NAME` directly in the helper-managed name: `create_pipeline_idempotent("Silver Layer Pipeline", ...)` already prefixes with `[dev {APP_NAME}]`. The SDK has no `${var.*}` resolver.
+
+**Traps (5):**
+
+1. **`full_refresh=True` is mandatory.** Bronze re-clone in V2V Step 12 invalidates incremental checkpoints; `False` causes every `silver_*` flow to fail with sparse-event stale-state errors ("failed more than 2 times").
+2. Read Bronze with `spark.readStream.table(bronze_table)`, NOT `readChangeFeed=True` — raises `[DELTA_MISSING_CHANGE_DATA]` because CDF was enabled via `ALTER TABLE` after the initial write, so version 0 has no CDF records.
+3. `cluster_by_auto=True` on `@dlt.table`. **NEVER** set `pipelines.autoOptimize.zOrderCols` (no `spark.conf.set`, no extra pipeline `configuration` keys) — raises `DLTAnalysisException: ZORDER BY is not compatible with Liquid Clustering`.
+4. Import EVERY `pyspark.sql.functions` symbol the SDP notebook uses (`col, lit, when, current_timestamp, sha2, concat_ws, coalesce`, ...). Partial imports raise `NameError: name ''lit'' is not defined` at pipeline init / "Failed to analyze flow".
+5. No `DEFAULT` clauses in `CREATE TABLE` DDL on serverless (`WRONG_COLUMN_DEFAULTS_FOR_DELTA_FEATURE_NOT_ENABLED`). Reserved `TBLPROPERTIES` — never `''table_type''` on `dq_rules`; use `''dq_rules_role''=''metadata''` instead.',
+'',
+true, 1, true, current_timestamp(), current_timestamp(), current_user());
+
+-- Step 14 (gold_layer_pipeline) — Genie Code fork
+INSERT INTO ${catalog}.${schema}.section_input_prompts
+(input_id, section_tag, coding_assistant, input_template, system_prompt,
+ bypass_llm, version, is_active, inserted_at, updated_at, created_by)
+VALUES
+(1014, 'gold_layer_pipeline', 'genie-code',
+'Implement the Gold layer using @data_product_accelerator/skills/gold/01-gold-layer-setup/SKILL.md
+
+This will involve the following steps:
+
+- **Read YAML schemas** — use the Gold layer design YAML files (from Step 9) as the single source of truth for all table definitions, columns, and constraints
+- **Create Gold tables** — generate CREATE TABLE DDL from YAML, add PRIMARY KEY constraints, then add FOREIGN KEY constraints (NOT ENFORCED) in dependency order
+- **Merge data from Silver** — deduplicate Silver records before MERGE, map columns using YAML lineage metadata, merge dimensions first (SCD1/SCD2) then facts (FK dependency order)
+- **Deploy 2-job architecture** — gold_setup_job (2 tasks: create tables + add FK constraints) and gold_merge_job (populate data from Silver)
+- **Validate results** — verify table creation, PK/FK constraints, row counts, SCD2 history, and fact-dimension joins
+
+Use the gold layer design YAML files as the target destination, and the silver layer tables as source.
+
+Limit pipelines to only 5 core tables for purposes of this exercise.
+
+IMPORTANT: Use the EXISTING catalog `{lakehouse_default_catalog}` -- do NOT create a new catalog. Create the Gold schema `{user_schema_prefix}_gold` and all Gold tables inside this catalog.
+
+NOTE: Before creating the schema, check if `{lakehouse_default_catalog}.{user_schema_prefix}_gold` already exists. If it does, DROP the schema with CASCADE and recreate it from scratch. These are user-specific schemas so dropping is safe.
+
+---
+
+## Genie Code Overrides
+
+The skill above is correct as-is. Replace ONLY the bundle/CLI verbs below — Genie Code has no terminal, no Asset Bundle, no local filesystem.
+
+**Once per Genie Code session:** clone `https://github.com/databricks-solutions/vibe-coding-workshop-template` into `/Workspace/Users/<your_email>/v2v-in-geniecode/vibe-coding-workshop-template` (Workspace → Repos → Add Repo), then read `@data_product_accelerator/skills/common/genie-code/genie-code-helpers.md` and run **Section 1 — Bootstrap** (3 cells). That defines `w`, `REPO_ROOT`, `read_file`, `write_file`, `write_notebook`, `run_sql`, `run_job_by_name`, `make_job_notebook`, `create_job`, `create_pipeline_idempotent`.
+
+**Substitutions for THIS step:**
+
+- Read YAML schemas (skill uses local FS) → `yaml_text = read_file(f"{REPO_ROOT}/gold_layer_design/<table>.yaml")` (per V2V Step 11 output convention).
+- Build `databricks.yml` + Gold YAMLs Asset Bundle → Skip; YAML is reference-only.
+- `databricks bundle deploy -t dev` (Gold setup job — creates tables + FK constraints) → `setup_body = make_job_notebook(gold_setup_logic); setup_path = (REPO_ROOT + "/src/{user_schema_prefix}_gold/setup").replace("/Workspace", "", 1); write_notebook(setup_path, setup_body); create_job("Gold Setup", setup_path, base_params={"TARGET_CATALOG":"{lakehouse_default_catalog}","GOLD_SCHEMA":"{user_schema_prefix}_gold"})`
+- `databricks bundle deploy -t dev` (Gold merge job — populates data from Silver) → `merge_body = make_job_notebook(gold_merge_logic); merge_path = (REPO_ROOT + "/src/{user_schema_prefix}_gold/merge").replace("/Workspace", "", 1); write_notebook(merge_path, merge_body); create_job("Gold Merge", merge_path, base_params={"TARGET_CATALOG":"{lakehouse_default_catalog}","SILVER_SCHEMA":"{user_schema_prefix}_silver","GOLD_SCHEMA":"{user_schema_prefix}_gold"})`
+- `databricks bundle run -t dev gold_setup_job` → `run_job_by_name("gold setup")`
+- `databricks bundle run -t dev gold_merge_job` → `run_job_by_name("gold merge")`
+
+**Traps (3):**
+
+1. **Strip every `DEFAULT` clause** from generated DDL — SCD2 columns (`is_current`, `effective_from`, `effective_to`, `created_at`) MUST set values in INSERT/MERGE, NOT DDL. `WRONG_COLUMN_DEFAULTS_FOR_DELTA_FEATURE_NOT_ENABLED` on serverless otherwise.
+2. **Gold MERGE — the `src_*` source temp view MUST `.select(...)` every Gold column the `MERGE` references**, with `lit(None).cast("<sql_type>")` placeholders for any YAML-only Gold column missing from the Silver DataFrame. Otherwise `[UNRESOLVED_COLUMN.WITH_SUGGESTION]` on `src` during `WHEN MATCHED THEN UPDATE SET *`. Call `df.printSchema()` on the source DataFrame ONCE before `MERGE` per table to catch column omissions.
+3. For string-prefixed business keys (e.g. `r12`) where the Gold key is numeric: `regexp_extract(col("id"), r"(\d+)", 1).cast("bigint")`. Do NOT pass the raw string into a numeric Gold key column.',
+'',
+true, 1, true, current_timestamp(), current_timestamp(), current_user());
+
+-- Step 23 (deploy_lakehouse_assets) — Genie Code fork
+INSERT INTO ${catalog}.${schema}.section_input_prompts
+(input_id, section_tag, coding_assistant, input_template, system_prompt,
+ bypass_llm, version, is_active, inserted_at, updated_at, created_by)
+VALUES
+(1015, 'deploy_lakehouse_assets', 'genie-code',
+'Deploy and run all Bronze, Silver, and Gold layer jobs end-to-end using @data_product_accelerator/skills/common/databricks-asset-bundles/SKILL.md and @data_product_accelerator/skills/common/databricks-autonomous-operations/SKILL.md
+
+This is a **deployment checkpoint** — it validates and runs the complete Lakehouse pipeline in dependency order.
+
+## Deployment Order (Mandatory)
+
+Run these commands in strict sequence — each stage depends on the previous one:
+
+```bash
+# 1. Validate the bundle (catches config errors before deploy)
+databricks bundle validate -t dev
+
+# 2. Deploy all assets to workspace
+databricks bundle deploy -t dev
+
+# 3. Run Bronze clone job (creates Bronze tables from source)
+databricks bundle run -t dev bronze_clone_job
+
+# 4. Run Silver DQ setup job FIRST (creates dq_rules table — must exist before pipeline)
+databricks bundle run -t dev silver_dq_setup_job
+
+# 5. Run Silver DLT pipeline (reads from Bronze via CDF, applies DQ rules)
+databricks bundle run -t dev silver_dlt_pipeline
+
+# 6. Run Gold setup job (creates tables from YAML + adds PK/FK constraints)
+databricks bundle run -t dev gold_setup_job
+
+# 7. Run Gold merge job (deduplicates Silver → merges into Gold)
+databricks bundle run -t dev gold_merge_job
+```
+
+If any job fails, use the autonomous operations skill to diagnose and fix:
+- Get the failed task `run_id` (not the parent job `run_id`)
+- Run `databricks runs get-run-output --run-id <TASK_RUN_ID>` to diagnose
+- Apply fix and redeploy (max 3 iterations before escalation)
+
+## Verification Queries
+
+After all jobs complete successfully, verify end-to-end:
+
+```sql
+-- Bronze: verify tables and CDF
+SHOW TABLES IN {lakehouse_default_catalog}.{user_schema_prefix}_bronze;
+
+-- Silver: verify DQ rules and cleaned tables
+SELECT COUNT(*) FROM {lakehouse_default_catalog}.{user_schema_prefix}_silver.dq_rules;
+SHOW TABLES IN {lakehouse_default_catalog}.{user_schema_prefix}_silver;
+
+-- Gold: verify tables, constraints, and row counts
+SHOW TABLES IN {lakehouse_default_catalog}.{user_schema_prefix}_gold;
+SELECT * FROM {lakehouse_default_catalog}.information_schema.table_constraints
+WHERE table_schema = ''{user_schema_prefix}_gold'';
+```
+
+Target catalog: `{lakehouse_default_catalog}`
+Target schemas: `{user_schema_prefix}_bronze`, `{user_schema_prefix}_silver`, `{user_schema_prefix}_gold`
+
+---
+
+## Genie Code Overrides
+
+The default body above orchestrates the deployment via Asset Bundle CLI. In Genie Code, replace the entire `databricks bundle …` sequence with the deploy-assets cells from the helper file — they are self-contained Python, idempotent, and emit task-level diagnostics on failure.
+
+**Once per Genie Code session:** clone `https://github.com/databricks-solutions/vibe-coding-workshop-template` into `/Workspace/Users/<your_email>/v2v-in-geniecode/vibe-coding-workshop-template` (Workspace → Repos → Add Repo), then read `@data_product_accelerator/skills/common/genie-code/genie-code-helpers.md` and run **Section 1 — Bootstrap** (3 cells). That defines `w`, `REPO_ROOT`, `read_file`, `write_file`, `write_notebook`, `run_sql`, `run_job_by_name`, `make_job_notebook`, `create_job`, `create_pipeline_idempotent`.
+
+**Substitutions for THIS step (use Section 2 of the helper file):**
+
+- `databricks bundle validate / deploy -t dev` → Skip — assets were already created via SDK in V2V Steps 12, 13, 14.
+- `databricks bundle run -t dev bronze_clone_job` → **Cell C** of `genie-code-helpers.md` Section 2 (`run_job_by_name("bronze")`).
+- `databricks bundle run -t dev silver_dq_setup_job` → **Cell D** (`run_job_by_name("dq")`).
+- `databricks bundle run -t dev silver_dlt_pipeline` → **Cell E** (`w.pipelines.start_update(pipeline_id, full_refresh=True)` — full_refresh is MANDATORY).
+- `databricks bundle run -t dev gold_setup_job` → **Cell F** (`run_job_by_name("gold setup")`).
+- `databricks bundle run -t dev gold_merge_job` → **Cell G** (`run_job_by_name("gold merge")`).
+- Verification SQL appendix (`SHOW TABLES; SELECT COUNT(*) UNION ALL ...`) → **Cell H** (allowlisted Bronze/Gold counts + Silver `silver_*` filter + Gold PK/FK constraint inventory). Never iterate raw `SHOW TABLES` for row counts — `src_*` merge staging views from Cell G appear in the same session and are NOT real Delta tables.
+- Diagnose a failed task → **Failed-task diagnostics** snippet of Section 2. Uses task-level `run_id` from `run_details.tasks[i].run_id`, NOT the parent run_id. `get_run_output(run_id=parent_run.run_id)` returns `{}` on the parent.
+
+Run order: **A2 → B → C → D → E → F → G → H**. Cell B is a cold-start gate that lists what V2V Steps 10-14 should have created — if it raises `COLD START — required resources are missing`, complete Steps 12-14 before re-running Cell B.
+
+**Traps (3):**
+
+1. `TABLE_OR_VIEW_NOT_FOUND` on `..._bronze.src_*` → those are merge staging views from Cell G, not Bronze tables. Always use Cell H allowlist verification, never raw `SHOW TABLES` iteration.
+2. Silver pipeline FAILED with sparse events / "failed more than 2 times" → confirm `full_refresh=True` (Cell E hard-codes it) and that Cell D ran first. Cell E has propagation logic that picks the canonical pipeline name; if multiple silver pipelines match `APP_NAME`, edit Cell E to set `chosen = pipelines[i]` after inspecting Cell B output.
+3. Gold merge `[UNRESOLVED_COLUMN.WITH_SUGGESTION]` on `src` → see V2V Step 14 traps — `src_*` source view must `.select(...)` every Gold column with `lit(None).cast(...)` placeholders for YAML-only Gold columns missing from Silver.',
+'',
+true, 1, true, current_timestamp(), current_timestamp(), current_user());
+
+-- =============================================================================
+-- END GENIE CODE FORKS — DATA_PRODUCT_ACCELERATOR (LAKEHOUSE)
+-- =============================================================================
