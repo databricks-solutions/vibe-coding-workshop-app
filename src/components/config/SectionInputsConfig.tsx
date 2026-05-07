@@ -26,7 +26,6 @@ import {
 type MarkdownComponentProps = {
   children?: ReactNode;
   href?: string;
-  inline?: boolean;
 };
 
 function getErrorMessage(error: unknown, fallback: string): string {
@@ -58,18 +57,18 @@ const markdownComponents = {
   li: ({ children }: MarkdownComponentProps) => (
     <li className="text-muted-foreground pl-1">{children}</li>
   ),
-  code: ({ inline, children }: MarkdownComponentProps) => 
-    inline ? (
-      <code className="bg-secondary text-primary px-1.5 py-0.5 rounded text-sm font-mono">
-        {children}
-      </code>
-    ) : (
-      <code className="block bg-slate-900 text-emerald-400 p-3 rounded-lg text-sm font-mono overflow-x-auto my-3 whitespace-pre-wrap">
-        {children}
-      </code>
-    ),
+  code: ({ children }: MarkdownComponentProps) => (
+    <code className="bg-secondary text-primary px-1.5 py-0.5 rounded text-sm font-mono break-all">
+      {children}
+    </code>
+  ),
   pre: ({ children }: MarkdownComponentProps) => (
-    <pre className="bg-slate-900 text-emerald-400 p-4 rounded-lg overflow-x-auto my-3 text-sm">
+    <pre
+      className={
+        'block bg-slate-900 text-emerald-400 p-4 rounded-lg overflow-x-auto my-3 text-sm ' +
+        '[&_code]:bg-transparent [&_code]:text-emerald-400 [&_code]:p-0 [&_code]:rounded-none [&_code]:break-normal'
+      }
+    >
       {children}
     </pre>
   ),
