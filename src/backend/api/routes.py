@@ -901,7 +901,7 @@ DEFAULT_CODING_ASSISTANTS_CONFIG_JSON = json.dumps([
     {"id": "cursor", "recommended": True},
     {"id": "coda", "recommended": True},
     {"id": "ai-gateway", "recommended": True},
-    {"id": "genie-code", "recommended": False},
+    {"id": "genie-code", "recommended": True},
     {"id": "copilot", "recommended": False},
     {"id": "vscode", "recommended": False},
 ])
@@ -3878,6 +3878,26 @@ async def delete_section_input(section_tag: str) -> Dict[str, Any]:
 
 PREREQUISITES_KEY = "__prerequisites__"
 
+# Workshop-path visibility shares this table via a synthetic-key namespace
+# (mirrors the __prerequisites__ precedent above). A row keyed
+# '__path_<level>__' with enabled=FALSE means the corresponding LevelSelector
+# button is disabled for that coding_assistant. The backend never enumerates
+# the universe of valid levels; the frontend (which owns WORKSHOP_LEVELS) is
+# the source of truth.
+PATH_KEY_PREFIX = "__path_"
+PATH_KEY_PATTERN = re.compile(r"^__path_[a-z][a-z0-9-]+__$")
+
+
+def is_path_key(key: str) -> bool:
+    """True if `key` is a well-formed workshop-path key (`__path_<level>__`)."""
+    return bool(PATH_KEY_PATTERN.match(key))
+
+
+def level_from_path_key(key: str) -> str:
+    """Strip the `__path_` prefix and trailing `__` from a path key. Caller must
+    verify with `is_path_key` first."""
+    return key[len(PATH_KEY_PREFIX):-2]
+
 
 def _default_disabled_step_tags() -> List[str]:
     """Return section_tags where step_enabled=FALSE among active Default rows.
@@ -3932,12 +3952,34 @@ def get_disabled_step_tags(coding_assistant: str = DEFAULT_CODING_ASSISTANT_KEY)
     overrides = _load_visibility_overrides()
     disabled = set(default_disabled)
     for (key, asst), enabled in overrides.items():
-        if asst != coding_assistant or key == PREREQUISITES_KEY:
+        # Skip non-step keys (synthetic namespaces own their own resolvers):
+        #   - PREREQUISITES_KEY -> get_prerequisites_visible
+        #   - __path_<level>__  -> get_disabled_path_levels
+        if asst != coding_assistant or key == PREREQUISITES_KEY or is_path_key(key):
             continue
         if enabled:
             disabled.discard(key)
         else:
             disabled.add(key)
+    return sorted(disabled)
+
+
+def get_disabled_path_levels(coding_assistant: str = DEFAULT_CODING_ASSISTANT_KEY) -> List[str]:
+    """Resolve disabled workshop-path levels for a given coding_assistant.
+
+    Reads only `__path_<level>__` rows from step_visibility_overrides. Absence
+    of a row means the path is enabled (the safe default). The backend never
+    enumerates the universe of valid levels — the frontend's WORKSHOP_LEVELS
+    map is the canonical list and the admin matrix lookup is keyed off it.
+    """
+    coding_assistant = _normalize_coding_assistant(coding_assistant)
+    overrides = _load_visibility_overrides()
+    disabled: List[str] = []
+    for (key, asst), enabled in overrides.items():
+        if not is_path_key(key) or asst != coding_assistant:
+            continue
+        if not enabled:
+            disabled.append(level_from_path_key(key))
     return sorted(disabled)
 
 
@@ -3984,13 +4026,17 @@ async def get_disabled_steps(coding_assistant: Optional[str] = None):
 
 @router.get("/config/visibility", summary="Get effective visibility for an assistant")
 async def get_visibility(coding_assistant: Optional[str] = None):
-    """Runtime combined fetch: returns disabled_steps + prerequisites_visible
-    for the given coding_assistant in one call.
+    """Runtime combined fetch: returns disabled_steps + disabled_paths +
+    prerequisites_visible for the given coding_assistant in one call.
+
+    `disabled_paths` is the list of workshop-level identifiers (e.g. 'app-only',
+    'lakehouse-di') the LevelSelector should grey out for this assistant.
     """
     asst = _validate_coding_assistant_key(coding_assistant)
     return {
         "coding_assistant": asst,
         "disabled_steps": get_disabled_step_tags(asst),
+        "disabled_paths": get_disabled_path_levels(asst),
         "prerequisites_visible": get_prerequisites_visible(asst),
     }
 
@@ -4030,6 +4076,21 @@ async def get_step_visibility_matrix():
             "genie_code_enabled": bool(overrides.get((section_tag, "genie-code"), default_value)),
         })
 
+    # Workshop-path rows. Only keys actually present in the overrides table
+    # show up here; the admin UI merges these with its own canonical level list
+    # (WORKSHOP_LEVELS) so paths that have never been touched still render as
+    # all-enabled cells. Default-when-missing for paths is TRUE (enabled), since
+    # there is no section_input_prompts row that holds a path's "Default" value.
+    path_keys = sorted({k for (k, _a) in overrides.keys() if is_path_key(k)})
+    for k in path_keys:
+        items.append({
+            "section_key": k,
+            "kind": "path",
+            "default_enabled":    bool(overrides.get((k, DEFAULT_CODING_ASSISTANT_KEY), True)),
+            "coda_enabled":       bool(overrides.get((k, "coda"), True)),
+            "genie_code_enabled": bool(overrides.get((k, "genie-code"), True)),
+        })
+
     return {"items": items}
 
 
@@ -4057,9 +4118,10 @@ async def toggle_step_visibility(section_key: str, body: StepVisibilityUpdate):
     """Enable or disable a step for the given coding_assistant.
 
     Routing:
-      * Default + real section_tag  -> UPDATE section_input_prompts (existing path, unchanged).
+      * '__path_<level>__'           -> UPSERT step_visibility_overrides (all assistants).
+      * Default + real section_tag   -> UPDATE section_input_prompts (existing path, unchanged).
       * Default + '__prerequisites__' -> UPSERT step_visibility_overrides.
-      * CoDA / Genie Code (any key) -> UPSERT step_visibility_overrides.
+      * CoDA / Genie Code (any key)  -> UPSERT step_visibility_overrides.
     """
     assistant_key = _validate_coding_assistant_key(body.coding_assistant)
     logger.info(
@@ -4068,6 +4130,28 @@ async def toggle_step_visibility(section_key: str, body: StepVisibilityUpdate):
     )
 
     schema = get_schema()
+
+    if is_path_key(section_key):
+        # Workshop-path keys live entirely in step_visibility_overrides (there
+        # is no section_input_prompts row for a path). Same shape as the
+        # __prerequisites__ branch below.
+        _upsert_override(section_key, assistant_key, body.enabled)
+        return {
+            "success": True,
+            "section_key": section_key,
+            "coding_assistant": assistant_key,
+            "enabled": bool(body.enabled),
+        }
+
+    # Defense-in-depth: a key that starts with the path prefix but fails the
+    # regex (e.g. uppercase, empty level, illegal chars) is almost certainly a
+    # bug or an attack. Reject loudly rather than silently falling through to
+    # the section_input_prompts 404 path.
+    if section_key.startswith(PATH_KEY_PREFIX):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Malformed path key: {section_key!r}. Expected '__path_<level>__' with lowercase letters, digits, and dashes.",
+        )
 
     if section_key == PREREQUISITES_KEY:
         # Prerequisites: all three keys stored in overrides table.

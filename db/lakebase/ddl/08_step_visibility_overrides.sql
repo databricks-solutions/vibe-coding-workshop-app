@@ -11,6 +11,11 @@
 --   * Prerequisites (section_key = '__prerequisites__'):
 --     All three keys ('__default__','coda','genie-code') live here. Default
 --     defaults to TRUE when no row exists.
+--   * Workshop paths (section_key = '__path_<level>__'):
+--     All three keys live here. Absence == enabled. Seeded by
+--     db/lakebase/dml_seed/09_seed_path_visibility_overrides.sql with the
+--     initial Genie Code-disabled set. Powers the per-assistant runtime path
+--     restrictions and the Visibility admin matrix.
 --
 -- Initial values are seeded by db/lakebase/dml_seed/08_seed_step_visibility_overrides.sql
 -- which copies the current section_input_prompts.step_enabled values into CoDA
@@ -34,4 +39,4 @@ CREATE INDEX IF NOT EXISTS idx_svo_assistant
     ON ${schema}.step_visibility_overrides(coding_assistant);
 
 COMMENT ON TABLE ${schema}.step_visibility_overrides IS
-'Per-coding-assistant visibility overrides. Real steps: CoDA/Genie rows only (Default lives on section_input_prompts). Prerequisites: all three keys keyed under section_key=__prerequisites__.';
+'Per-coding-assistant visibility overrides. section_key may be: a section_tag (real step; Default lives on section_input_prompts, CoDA/Genie rows only here), __prerequisites__ (workshop intro; all three keys here), or __path_<level>__ (workshop path picker; all three keys here, absence == enabled).';

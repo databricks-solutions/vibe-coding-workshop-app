@@ -681,7 +681,10 @@ try:
             # updated_by='seed' guards on UPDATEs so admin-made changes are
             # never clobbered). Re-running them here is how product-default
             # tweaks reach existing installs without a disruptive --recreate.
-            POST_SEED_MIGRATIONS = ['08_seed_step_visibility_overrides.sql']
+            POST_SEED_MIGRATIONS = [
+                '08_seed_step_visibility_overrides.sql',
+                '09_seed_path_visibility_overrides.sql',
+            ]
             print(f"  Applying idempotent post-seed migrations...")
             for mig in POST_SEED_MIGRATIONS:
                 mig_path = os.path.join(DML_SEED_DIR, mig)

@@ -982,22 +982,33 @@ class ApiClient {
     return this.fetch<string[]>(`/config/disabled-steps${qs}`);
   }
 
-  /** Combined runtime visibility fetch: disabled steps + prerequisites visible
-   * for the session's active coding assistant. */
+  /** Combined runtime visibility fetch: disabled steps + disabled paths +
+   * prerequisites visible for the session's active coding assistant.
+   *
+   * `disabled_paths` is a list of workshop-level identifiers (e.g. 'app-only',
+   * 'lakehouse-di') the LevelSelector should grey out. Older servers that
+   * predate this field omit it; callers must default to `[]`. */
   async getVisibility(
     codingAssistant?: string,
-  ): Promise<{ coding_assistant: string; disabled_steps: string[]; prerequisites_visible: boolean }> {
+  ): Promise<{
+    coding_assistant: string;
+    disabled_steps: string[];
+    disabled_paths?: string[];
+    prerequisites_visible: boolean;
+  }> {
     const qs = codingAssistant
       ? `?coding_assistant=${encodeURIComponent(codingAssistant)}`
       : '';
     return this.fetch(`/config/visibility${qs}`);
   }
 
-  /** Admin: full three-column visibility matrix (Default / CoDA / Genie Code). */
+  /** Admin: full three-column visibility matrix (Default / CoDA / Genie Code).
+   * `kind: 'path'` rows are workshop-level visibility entries keyed by
+   * `__path_<level>__`. */
   async getStepVisibilityMatrix(): Promise<{
     items: Array<{
       section_key: string;
-      kind: 'step' | 'prerequisites';
+      kind: 'step' | 'prerequisites' | 'path';
       default_enabled: boolean;
       coda_enabled: boolean;
       genie_code_enabled: boolean;

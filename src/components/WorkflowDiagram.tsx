@@ -19,7 +19,8 @@ import {
   type WorkshopLevel,
   type WorkflowDirection,
   type AIAgentModule,
-  type MedallionLayer
+  type MedallionLayer,
+  type ChainContext
 } from '../constants/workflowSections';
 import { 
   getStepPoints, 
@@ -82,9 +83,14 @@ interface WorkflowDiagramProps {
   customDescription?: string;
   initialBrandUrl?: string;
   workshopLevel?: WorkshopLevel;
+  chainContext?: ChainContext;
   onWorkshopLevelChange?: (level: WorkshopLevel) => void;
   levelExplicitlySelected?: boolean;
   disabledSectionTags?: Set<string>;
+  /** Workshop levels (LevelSelector buttons) the active coding assistant has
+   * disabled. Powers the runtime path-picker grandfather rule: the currently-
+   * selected level remains clickable even if it's in this set. */
+  disabledWorkshopLevels?: Set<WorkshopLevel>;
   prerequisitesVisible?: boolean;
   onStepPromptGenerated: (stepNumber: number, promptText: string) => void;
   onIndustryChange: (value: string, label: string) => void;
@@ -160,9 +166,11 @@ export function WorkflowDiagram({
   customDescription = '',
   initialBrandUrl = '',
   workshopLevel = 'end-to-end',
+  chainContext = null,
   onWorkshopLevelChange,
   levelExplicitlySelected = false,
   disabledSectionTags = new Set<string>(),
+  disabledWorkshopLevels = new Set<WorkshopLevel>(),
   prerequisitesVisible = true,
   onStepPromptGenerated,
   onIndustryChange,
@@ -322,8 +330,8 @@ export function WorkflowDiagram({
   // When on the app chain and crossing into lakehouse/lakehouse-di, compute
   // cumulative overrides so app + lakebase sections remain visible.
   const cumulativeOverrides = useMemo(
-    () => getCumulativeOverrides(workshopLevel, completedSteps),
-    [workshopLevel, completedSteps],
+    () => getCumulativeOverrides(workshopLevel, completedSteps, chainContext),
+    [workshopLevel, completedSteps, chainContext],
   );
   const rawSections = getFilteredSections(
     workshopLevel,
@@ -432,15 +440,19 @@ export function WorkflowDiagram({
     if (intentDefined && pathAcknowledged) return 5;
     // Intent defined → Stage 4 (Path & Architecture)
     if (intentDefined) return 4;
-    // Prerequisites completed -- OR hidden by admin visibility config, in which
-    // case there is nothing for the user to complete and we must auto-advance
-    // onto the next visible stage (Define Intent) instead of stranding them.
+
+    // Walk the wizard forward from Stage 0. Each gate must clear before the
+    // next can apply — otherwise switching coding assistants (which refetches
+    // prerequisites_visible from the backend) could yank the user past Stage 1
+    // the moment they pick an assistant whose prereqs are hidden out-of-the-box
+    // (e.g. CoDA). The earlier check ordering let an unconfirmed Stage 1 jump
+    // straight to Stage 3 without an explicit Continue click.
+    if (!welcomeAcknowledged) return 0;
+    if (!codingAssistantConfirmed) return 1;
+    // Past Stage 1: auto-skip Stage 2 when prereqs are hidden by admin or
+    // already completed — there's nothing for the user to do there.
     if (prerequisitesCompleted || !prerequisitesVisible) return 3;
-    // Coding assistant confirmed → Stage 2 (Prerequisites)
-    if (codingAssistantConfirmed) return 2;
-    // Welcome acknowledged → Stage 1 (Coding Assistant)
-    if (welcomeAcknowledged) return 1;
-    return 0;
+    return 2;
   }, [completedSteps, prerequisitesCompleted, prerequisitesVisible, codingAssistantConfirmed, selectedIndustry, selectedUseCase, welcomeAcknowledged, pathAcknowledged]);
 
   const wizardStage = deriveWizardStage();
@@ -3187,6 +3199,7 @@ export function WorkflowDiagram({
         <PathAndArchitecture
           key={`path-${sessionId}`}
           selectedLevel={workshopLevel}
+          chainContext={chainContext}
           onLevelChange={onWorkshopLevelChange}
           completedSteps={completedSteps}
           levelExplicitlySelected={levelExplicitlySelected}
@@ -3202,6 +3215,7 @@ export function WorkflowDiagram({
           onAIModulesChange={onAIModulesChange}
           medallionLayers={medallionLayers}
           onMedallionLayersChange={onMedallionLayersChange}
+          disabledWorkshopLevels={disabledWorkshopLevels}
         />
       )}
 

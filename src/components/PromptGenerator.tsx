@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
-import { Sparkles, Loader2, ChevronDown, Maximize2, Minimize2, X, Check, RotateCcw, Library, PenLine, Palette, Globe } from 'lucide-react';
+import { Sparkles, Loader2, ChevronDown, Maximize2, Minimize2, X, Check, RotateCcw, Library, PenLine, Palette, Globe, ArrowRight } from 'lucide-react';
 import { apiClient, type SelectOption } from '../api/client';
 import { useUseCaseBuilder } from '../hooks/useUseCaseBuilder';
 import { useEscapeKey } from '../hooks/useEscapeKey';
@@ -12,6 +12,7 @@ import { UseCaseCardGrid } from './UseCaseCardGrid';
 import { OutcomeMapGrid } from './OutcomeMapGrid';
 import { SkillPathPanel } from './SkillPathPanel';
 import { UseCaseDescriptionBox } from './UseCaseDescriptionBox';
+import { BorderBeamButton } from './BorderBeamButton';
 
 const SKILL_USE_CASES = new Set(['build_skill']);
 
@@ -725,14 +726,53 @@ export function PromptGenerator({
               })()}
 
               {/* Get Started Button for Use Case path */}
-              {(() => {
-                const baseClasses = 'w-full py-2.5 px-4 rounded-md transition-all flex items-center justify-center gap-2 text-ui-base font-medium';
-                if (!prerequisitesCompleted) return <button disabled className={`${baseClasses} bg-muted text-muted-foreground cursor-not-allowed opacity-60`}><Sparkles className="w-4 h-4" />Complete Prerequisites First</button>;
-                if (isGenerating) return <button disabled className={`${baseClasses} bg-emerald-600 text-white`}><Loader2 className="w-4 h-4 animate-spin" />Starting...</button>;
-                if (hasStarted) return <button onClick={() => setHasStarted(false)} className={`${baseClasses} bg-emerald-900/40 text-emerald-300 border border-emerald-500/30 hover:bg-emerald-900/60`}><RotateCcw className="w-4 h-4" />Get Started</button>;
-                if (canStart) return <div className="border-beam-wrapper w-full"><button onClick={handleGeneratePrompt} className={`${baseClasses} relative z-10 rounded-[calc(0.5rem-2px)] bg-emerald-600 text-white hover:bg-emerald-500`}><Sparkles className="w-4 h-4" />Get Started</button></div>;
-                return <button disabled className={`${baseClasses} bg-muted text-muted-foreground cursor-not-allowed`}><Sparkles className="w-4 h-4" />Get Started</button>;
-              })()}
+              <div className="flex justify-end pt-2">
+                {(() => {
+                  const cls = 'flex items-center gap-2 px-5 py-2.5 text-ui-base font-medium';
+                  if (!prerequisitesCompleted) {
+                    return (
+                      <BorderBeamButton active={false} disabled onClick={() => {}} className={cls}>
+                        <Sparkles className="w-4 h-4" />
+                        <span>Complete Prerequisites First</span>
+                      </BorderBeamButton>
+                    );
+                  }
+                  if (isGenerating) {
+                    return (
+                      <BorderBeamButton active={false} disabled onClick={() => {}} className={cls}>
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        <span>Starting...</span>
+                      </BorderBeamButton>
+                    );
+                  }
+                  if (hasStarted) {
+                    return (
+                      <BorderBeamButton
+                        active={false}
+                        onClick={() => setHasStarted(false)}
+                        className={`${cls} !bg-emerald-900/40 !text-emerald-300 border border-emerald-500/30 hover:!bg-emerald-900/60`}
+                      >
+                        <RotateCcw className="w-4 h-4" />
+                        <span>Get Started</span>
+                      </BorderBeamButton>
+                    );
+                  }
+                  if (canStart) {
+                    return (
+                      <BorderBeamButton active onClick={handleGeneratePrompt} className={cls}>
+                        <span>Get Started</span>
+                        <ArrowRight className="w-4 h-4" />
+                      </BorderBeamButton>
+                    );
+                  }
+                  return (
+                    <BorderBeamButton active={false} disabled onClick={() => {}} className={cls}>
+                      <span>Get Started</span>
+                      <ArrowRight className="w-4 h-4" />
+                    </BorderBeamButton>
+                  );
+                })()}
+              </div>
             </>
           )}
 

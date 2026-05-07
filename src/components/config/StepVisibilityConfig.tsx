@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { apiClient } from '../../api/client';
-import { WORKFLOW_SECTIONS } from '../../constants/workflowSections';
+import { WORKFLOW_SECTIONS, WORKSHOP_LEVELS, type WorkshopLevel } from '../../constants/workflowSections';
+import { BUTTON_LABELS } from '../LevelSelector';
 import { Loader2, AlertTriangle } from 'lucide-react';
 
 interface StepVisibilityConfigProps {
@@ -11,7 +12,7 @@ type AssistantColumn = '__default__' | 'coda' | 'genie-code';
 
 interface MatrixItem {
   section_key: string;
-  kind: 'step' | 'prerequisites';
+  kind: 'step' | 'prerequisites' | 'path';
   default_enabled: boolean;
   coda_enabled: boolean;
   genie_code_enabled: boolean;
@@ -19,12 +20,55 @@ interface MatrixItem {
 
 interface StepRow {
   sectionKey: string;
-  kind: 'step' | 'prerequisites';
+  kind: 'step' | 'prerequisites' | 'path';
   title: string;
   chapter: string;
   chapterColor: string;
   values: Record<AssistantColumn, boolean>;
 }
+
+// ---------------------------------------------------------------------------
+// Workshop-path rows derive from the frontend's canonical WORKSHOP_LEVELS map
+// (the backend never enumerates the level universe). Display order mirrors
+// the LevelSelector visual layout so the matrix and the picker line up.
+// ---------------------------------------------------------------------------
+
+const PATH_KEY_PREFIX = '__path_';
+const pathKeyFor = (level: WorkshopLevel) => `${PATH_KEY_PREFIX}${level}__`;
+
+// Forward direction first (matches the column ordering in LevelSelector),
+// then End-to-End, then accelerators, then Reverse ETL.
+const PATH_DISPLAY_ORDER: WorkshopLevel[] = [
+  'app-only', 'app-database',
+  'lakehouse', 'lakehouse-di',
+  'end-to-end',
+  'accelerator', 'genie-accelerator', 'data-engineering-accelerator',
+  'skills-accelerator', 'agents-accelerator',
+  'reverse-lakehouse', 'reverse-lakehouse-di', 'reverse-lakebase', 'reverse-app',
+];
+
+// Per-level chapter header. Mirrors the persona-aligned column groupings used
+// by LevelSelector but is intentionally duplicated here as a static lookup so
+// (a) StepVisibilityConfig has no dependency on non-component exports from the
+// LevelSelector module (preserves react-refresh fast-refresh boundaries), and
+// (b) admins see a stable display order even if LevelSelector's internal track
+// model evolves later.
+const PATH_CHAPTER: Record<WorkshopLevel, string> = {
+  'app-only':                       'Workshop Paths · Apps and Lakebase',
+  'app-database':                   'Workshop Paths · Apps and Lakebase',
+  'lakehouse':                      'Workshop Paths · Lakehouse',
+  'lakehouse-di':                   'Workshop Paths · AI and Agents',
+  'end-to-end':                     'Workshop Paths · Complete Workshop',
+  'accelerator':                    'Workshop Paths · Accelerators',
+  'genie-accelerator':              'Workshop Paths · Accelerators',
+  'data-engineering-accelerator':   'Workshop Paths · Accelerators',
+  'skills-accelerator':             'Workshop Paths · Accelerators',
+  'agents-accelerator':             'Workshop Paths · Accelerators',
+  'reverse-lakehouse':              'Workshop Paths · Reverse ETL',
+  'reverse-lakehouse-di':           'Workshop Paths · Reverse ETL',
+  'reverse-lakebase':               'Workshop Paths · Reverse ETL',
+  'reverse-app':                    'Workshop Paths · Reverse ETL',
+};
 
 const COLUMNS: Array<{ id: AssistantColumn; label: string }> = [
   { id: '__default__', label: 'Default' },
@@ -48,6 +92,7 @@ function groupByChapter(rows: StepRow[]): Array<[string, StepRow[]]> {
 
 export function StepVisibilityConfig({ onToast }: StepVisibilityConfigProps) {
   const [prereqRow, setPrereqRow] = useState<StepRow | null>(null);
+  const [pathRows, setPathRows] = useState<StepRow[]>([]);
   const [stepRows, setStepRows] = useState<StepRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [toggling, setToggling] = useState<string | null>(null);
@@ -81,6 +126,30 @@ export function StepVisibilityConfig({ onToast }: StepVisibilityConfigProps) {
           }
         : null;
       setPrereqRow(prereqRowBuilt);
+
+      // Workshop-path rows. Built from the frontend's canonical level list
+      // (WORKSHOP_LEVELS) — the backend never enumerates levels, so any level
+      // not yet present in step_visibility_overrides shows up as all-enabled.
+      // This mirrors the runtime resolver's "absence == enabled" rule.
+      const pathRowsBuilt: StepRow[] = PATH_DISPLAY_ORDER
+        .filter(level => level in WORKSHOP_LEVELS)
+        .map(level => {
+          const key = pathKeyFor(level);
+          const it = itemMap.get(key);
+          return {
+            sectionKey: key,
+            kind: 'path' as const,
+            title: BUTTON_LABELS[level] ?? level,
+            chapter: PATH_CHAPTER[level],
+            chapterColor: 'text-primary',
+            values: {
+              '__default__': it?.default_enabled ?? true,
+              'coda':        it?.coda_enabled    ?? true,
+              'genie-code':  it?.genie_code_enabled ?? true,
+            },
+          };
+        });
+      setPathRows(pathRowsBuilt);
 
       // Real step rows, grouped by chapter. Mirror the pre-change upload-variant
       // behaviour: if `${tag}_upload` exists in the matrix, insert it right after
@@ -166,6 +235,8 @@ export function StepVisibilityConfig({ onToast }: StepVisibilityConfigProps) {
       const updated: StepRow = { ...row, values: { ...row.values, [col]: v } };
       if (row.kind === 'prerequisites') {
         setPrereqRow(updated);
+      } else if (row.kind === 'path') {
+        setPathRows(prev => prev.map(r => (r.sectionKey === row.sectionKey ? updated : r)));
       } else {
         setStepRows(prev => prev.map(r => (r.sectionKey === row.sectionKey ? updated : r)));
       }
@@ -175,11 +246,17 @@ export function StepVisibilityConfig({ onToast }: StepVisibilityConfigProps) {
     try {
       await apiClient.setStepVisibility(row.sectionKey, next, col);
       const colLabel = COLUMNS.find(c => c.id === col)?.label ?? col;
-      onToast(`"${row.title}" — ${colLabel}: ${next ? 'enabled' : 'disabled'}`, 'success');
+      // Path-row wording reads more naturally in the UI: paths are "available"
+      // or "hidden" rather than "enabled"/"disabled" (which fits steps better).
+      const verb = row.kind === 'path'
+        ? (next ? 'available' : 'hidden')
+        : (next ? 'enabled' : 'disabled');
+      const noun = row.kind === 'path' ? 'path' : 'step';
+      onToast(`${noun.charAt(0).toUpperCase() + noun.slice(1)} "${row.title}" — ${colLabel}: ${verb}`, 'success');
     } catch (err) {
       console.error('Error toggling step visibility:', err);
       apply(previous);
-      onToast('Failed to update step visibility', 'error');
+      onToast(`Failed to update ${row.kind === 'path' ? 'path' : 'step'} visibility`, 'error');
     } finally {
       setToggling(null);
     }
@@ -189,35 +266,38 @@ export function StepVisibilityConfig({ onToast }: StepVisibilityConfigProps) {
     return (
       <div className="flex items-center justify-center py-20">
         <Loader2 className="w-5 h-5 animate-spin text-primary mr-3" />
-        <span className="text-sm text-muted-foreground">Loading steps...</span>
+        <span className="text-sm text-muted-foreground">Loading visibility...</span>
       </div>
     );
   }
 
   const grouped = groupByChapter(stepRows);
+  const groupedPaths = groupByChapter(pathRows);
 
   return (
     <div className="h-full overflow-y-auto">
       <div className="max-w-4xl mx-auto">
         <div className="mb-6">
-          <h2 className="text-lg font-semibold text-foreground">Step Visibility</h2>
+          <h2 className="text-lg font-semibold text-foreground">Visibility</h2>
           <p className="text-sm text-muted-foreground mt-1">
-            Each step has three independent visibility toggles &mdash; one per coding assistant.
-            Newly created sections start with all three enabled and matching today&rsquo;s Default;
-            changing Default later does not flip CoDA or Genie Code.
+            Workshop paths and steps each have three independent visibility toggles
+            &mdash; one per coding assistant. Newly added rows start with all three enabled.
+            Changing Default later does not flip CoDA or Genie Code.
           </p>
           <div className="mt-3 flex items-start gap-2 rounded-md border border-amber-500/30 bg-amber-500/5 px-3 py-2">
             <AlertTriangle className="w-4 h-4 text-amber-400 mt-0.5 shrink-0" />
             <p className="text-ui-sm text-amber-400/90">
-              Hiding a section (including Prerequisites) auto-advances the wizard to the next
-              visible section for that assistant. Users are never stranded on a hidden stage.
+              Hiding a step (including Prerequisites) auto-advances the wizard to the next
+              visible step for that assistant. Hiding a workshop path greys it out in the
+              picker; the user&rsquo;s currently-selected path always remains clickable
+              even when hidden, so saved sessions never break.
             </p>
           </div>
         </div>
 
         {/* Column header */}
         <div className="hidden sm:grid grid-cols-[minmax(0,1fr)_repeat(3,minmax(100px,120px))] gap-4 px-5 pb-2 text-ui-xs uppercase tracking-wide text-muted-foreground">
-          <div>Step</div>
+          <div>Path / Step</div>
           {COLUMNS.map(c => (
             <div key={c.id} className="text-center">{c.label}</div>
           ))}
@@ -239,6 +319,27 @@ export function StepVisibilityConfig({ onToast }: StepVisibilityConfigProps) {
               </div>
             </div>
           )}
+
+          {/* Workshop paths — pinned above steps. Sourced from WORKSHOP_LEVELS
+              (frontend canonical list); rows render even when no override row
+              exists for them yet (defaults to all-enabled). */}
+          {groupedPaths.map(([chapter, paths]) => (
+            <div key={chapter} className="rounded-xl border border-border bg-card overflow-hidden">
+              <div className="px-5 py-3 bg-secondary/30 border-b border-border">
+                <h3 className="text-ui-base font-semibold text-foreground">{chapter}</h3>
+              </div>
+              <div className="divide-y divide-border/50">
+                {paths.map(p => (
+                  <VisibilityRow
+                    key={p.sectionKey}
+                    row={p}
+                    toggling={toggling}
+                    onToggle={handleToggle}
+                  />
+                ))}
+              </div>
+            </div>
+          ))}
 
           {grouped.map(([chapter, steps]) => (
             <div key={chapter} className="rounded-xl border border-border bg-card overflow-hidden">
@@ -291,12 +392,14 @@ function VisibilityRow({ row, toggling, onToggle }: VisibilityRowProps) {
         const on = row.values[col.id];
         const tid = `${row.sectionKey}::${col.id}`;
         const isToggling = toggling === tid;
+        const offVerb = row.kind === 'path' ? 'hidden' : 'disabled';
+        const onVerb  = row.kind === 'path' ? 'available' : 'enabled';
         return (
           <div key={col.id} className="flex justify-center">
             <button
               onClick={() => onToggle(row, col.id)}
               disabled={isToggling}
-              aria-label={`Set ${col.label} visibility for ${row.title} to ${on ? 'disabled' : 'enabled'}`}
+              aria-label={`Set ${col.label} visibility for ${row.title} to ${on ? offVerb : onVerb}`}
               className="relative shrink-0"
             >
               <div

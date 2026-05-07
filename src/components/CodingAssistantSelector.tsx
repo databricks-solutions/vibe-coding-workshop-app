@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
-import { ChevronDown, CheckCircle, ExternalLink, Download, Sparkles, Terminal, Lock } from 'lucide-react';
+import { ChevronDown, CheckCircle, ExternalLink, Download, Sparkles, Star, Terminal, Lock } from 'lucide-react';
 import { BorderBeamButton } from './BorderBeamButton';
 import { AiGatewaySetupGuide } from './AiGatewaySetupGuide';
 import {
@@ -53,12 +53,16 @@ function DatabricksIcon({ className }: { className?: string }) {
 interface AssistantOption {
   id: AssistantId;
   name: string;
+  /** Compact name used on the assistant card; falls back to `name` when omitted. */
+  shortName?: string;
   tagline: string;
   detail: string;
   features: string[];
   url: string;
   downloadLabel: string;
   comingSoon: boolean;
+  beta?: boolean;
+  betaNote?: string;
   iconColor: string;
   iconBg: string;
   selectedBorder: string;
@@ -119,6 +123,7 @@ const ASSISTANTS: AssistantOption[] = [
   {
     id: 'ai-gateway',
     name: 'VS Code + Databricks AI Gateway',
+    shortName: 'VS Code + AI Gateway',
     tagline: 'Claude Code routed through Databricks AI Gateway',
     detail: 'Use VS Code with the Claude Code CLI, routed through a Databricks AI Gateway endpoint. Governed model access, per-user quotas, and usage tracking — no direct Anthropic account required.',
     features: [
@@ -165,7 +170,9 @@ const ASSISTANTS: AssistantOption[] = [
     features: ['Unity Catalog integration', 'Agentic data workflows', 'Built into Databricks platform'],
     url: 'https://docs.databricks.com/aws/en/genie-code/',
     downloadLabel: 'Learn More',
-    comingSoon: true,
+    comingSoon: false,
+    beta: true,
+    betaNote: 'Active beta — expect rough edges. Some workshop steps may not work yet.',
     iconColor: 'text-cyan-400',
     iconBg: 'bg-cyan-500/15',
     selectedBorder: 'border-cyan-500/60',
@@ -344,9 +351,12 @@ export function CodingAssistantSelector({
         }`}
       >
         <div className="px-4 pb-4 space-y-3">
-          {/* Option cards */}
-          <div className="flex flex-wrap gap-2">
-            {orderedAssistants.map(({ assistant, recommended }) => {
+          {/* Option cards: recommended row (top) + other row (bottom) */}
+          {(() => {
+            const recommendedRow = orderedAssistants.filter(o => o.recommended);
+            const otherRow = orderedAssistants.filter(o => !o.recommended);
+
+            const renderCard = ({ assistant, recommended }: { assistant: AssistantOption; recommended: boolean }) => {
               const isSelected = selectedAssistant === assistant.id;
               const isDisabled = assistant.comingSoon || isLocked;
               const Icon = assistant.icon;
@@ -356,7 +366,7 @@ export function CodingAssistantSelector({
                   key={assistant.id}
                   onClick={() => { if (!isDisabled) onSelect(assistant.id); }}
                   disabled={isDisabled}
-                  className={`relative flex items-center gap-2.5 rounded-lg border px-3 py-2.5 transition-all ${
+                  className={`relative flex items-center gap-2.5 rounded-lg border px-3 py-2.5 min-w-0 transition-all ${
                     isSelected && isLocked
                       ? `${assistant.selectedBorder} ring-1 ${assistant.selectedRing} ${assistant.selectedBg} cursor-default`
                       : isDisabled
@@ -366,36 +376,73 @@ export function CodingAssistantSelector({
                           : 'border-border hover:border-muted-foreground/50 hover:bg-secondary/20 cursor-pointer'
                   }`}
                 >
-                  <div className={`p-1.5 rounded-md ${isSelected ? assistant.iconBg : 'bg-secondary/60'}`}>
+                  <div className={`p-1.5 rounded-md flex-shrink-0 ${isSelected ? assistant.iconBg : 'bg-secondary/60'}`}>
                     <Icon className={`w-4 h-4 ${isSelected ? assistant.iconColor : 'text-muted-foreground'}`} />
                   </div>
-                  <div className="text-left">
+                  <div className="text-left min-w-0 flex-1">
                     <div className="flex items-center gap-1.5 flex-wrap">
-                      <span className={`text-ui-base font-medium ${isSelected ? 'text-foreground' : 'text-foreground/80'}`}>
+                      <span className={`text-ui-base font-medium leading-tight ${isSelected ? 'text-foreground' : 'text-foreground/80'}`}>
                         {assistant.name}
                       </span>
-                      {isSelected && <CheckCircle className={`w-3.5 h-3.5 ${assistant.iconColor}`} />}
+                      {isSelected && <CheckCircle className={`w-3.5 h-3.5 flex-shrink-0 ${assistant.iconColor}`} />}
                       {recommended && (
-                        <span
-                          className="inline-flex items-center gap-1 text-ui-3xs font-semibold uppercase tracking-[0.08em] px-2 py-0.5 rounded-full bg-gradient-to-r from-amber-500/15 to-amber-400/10 text-amber-200 border border-amber-400/30 whitespace-nowrap shadow-[inset_0_0_0_1px_rgba(251,191,36,0.05)]"
-                          title="Recommended"
+                        <Star
+                          className="w-3.5 h-3.5 fill-amber-400 text-amber-400 flex-shrink-0"
+                          aria-label="Recommended"
                         >
-                          <Sparkles className="w-2.5 h-2.5" />
-                          Recommended
+                          <title>Recommended</title>
+                        </Star>
+                      )}
+                      {assistant.beta && !assistant.comingSoon && (
+                        <span
+                          className="inline-flex items-center gap-1 text-ui-3xs font-semibold uppercase tracking-[0.08em] px-1.5 py-0.5 rounded-full bg-cyan-500/15 text-cyan-300 border border-cyan-400/40 whitespace-nowrap"
+                          title={assistant.betaNote}
+                        >
+                          Beta<span aria-hidden="true">*</span>
                         </span>
                       )}
                     </div>
-                    <span className="text-ui-2xs text-muted-foreground">{assistant.tagline}</span>
+                    <span className="block text-ui-2xs text-muted-foreground truncate">{assistant.tagline}</span>
+                    {assistant.beta && assistant.betaNote && (
+                      <span className="block text-ui-3xs italic text-cyan-300/70 mt-0.5 truncate" title={assistant.betaNote}>
+                        * {assistant.betaNote}
+                      </span>
+                    )}
                   </div>
                   {assistant.comingSoon && (
-                    <span className="ml-auto text-ui-3xs font-bold uppercase tracking-widest px-1.5 py-0.5 rounded bg-amber-900/50 text-amber-300/80 border border-amber-700/30 whitespace-nowrap">
+                    <span className="ml-auto text-ui-3xs font-bold uppercase tracking-widest px-1.5 py-0.5 rounded bg-amber-900/50 text-amber-300/80 border border-amber-700/30 whitespace-nowrap flex-shrink-0">
                       Soon
                     </span>
                   )}
                 </button>
               );
-            })}
-          </div>
+            };
+
+            // Static class names so Tailwind JIT picks them up at build time.
+            const colsClass = (count: number): string => {
+              switch (Math.min(Math.max(count, 1), 4)) {
+                case 1: return 'lg:grid-cols-1';
+                case 2: return 'lg:grid-cols-2';
+                case 3: return 'lg:grid-cols-3';
+                default: return 'lg:grid-cols-4';
+              }
+            };
+
+            return (
+              <>
+                {recommendedRow.length > 0 && (
+                  <div className={`grid gap-2 grid-cols-1 sm:grid-cols-2 ${colsClass(recommendedRow.length)}`}>
+                    {recommendedRow.map(entry => renderCard(entry))}
+                  </div>
+                )}
+                {otherRow.length > 0 && (
+                  <div className={`grid gap-2 grid-cols-1 sm:grid-cols-2 ${colsClass(otherRow.length)}`}>
+                    {otherRow.map(entry => renderCard(entry))}
+                  </div>
+                )}
+              </>
+            );
+          })()}
 
           {/* Detail panel for selected assistant */}
           {selected && (
@@ -419,6 +466,16 @@ export function CodingAssistantSelector({
                         </div>
                       ))}
                     </div>
+
+                    {/* Beta callout */}
+                    {selected.beta && (
+                      <div className="mt-3 flex items-start gap-2 rounded-md border border-cyan-500/30 bg-cyan-500/5 px-3 py-2 text-ui-xs text-cyan-200/90">
+                        <Sparkles className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
+                        <span>
+                          {selected.betaNote ?? 'Active beta — expect rough edges. Some workshop steps may not work yet.'}
+                        </span>
+                      </div>
+                    )}
 
                     {/* Download CTA */}
                     <div className="mt-4 flex items-center gap-3">

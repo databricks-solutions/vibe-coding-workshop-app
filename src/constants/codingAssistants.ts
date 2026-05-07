@@ -77,15 +77,34 @@ export function parseCodingAssistantsConfig(
 
 /**
  * Default config used as a seed fallback.
- * Order: Cursor, CoDA, VS Code + AI Gateway (all recommended); then GitHub
- * Copilot, VS Code, Genie Code. This mirrors the order admins see in the
- * Workshop Parameters editor on a fresh install.
+ * Order: Cursor, CoDA, VS Code + AI Gateway, Genie Code (all recommended,
+ * shown on the top row); then GitHub Copilot, VS Code (bottom row). This
+ * mirrors the order admins see in the Workshop Parameters editor on a
+ * fresh install. Genie Code is recommended but flagged beta in the catalog.
  */
 export const DEFAULT_CODING_ASSISTANTS_CONFIG: CodingAssistantConfigEntry[] = [
   { id: 'cursor', recommended: true },
   { id: 'coda', recommended: true },
   { id: 'ai-gateway', recommended: true },
-  { id: 'genie-code', recommended: false },
+  { id: 'genie-code', recommended: true },
   { id: 'copilot', recommended: false },
   { id: 'vscode', recommended: false },
 ];
+
+/**
+ * Per-assistant cold-start workshop level. Applied ONLY when the user picks
+ * an assistant on a fresh session that hasn't had an explicit level chosen
+ * yet. Saved sessions and explicit user selections are never overridden.
+ *
+ * Genie Code is currently in active beta and doesn't yet support the full
+ * Apps + Lakebase chapters end-to-end, so we default new Genie Code sessions
+ * to the 4h Lakehouse + AI/Agents flow (`lakehouse-di`) which it can run
+ * cleanly. Other assistants fall through to the system default (end-to-end).
+ *
+ * Stored as a string literal to keep this module free of cross-imports from
+ * workflowSections.ts. Consumers narrow it via `WorkshopLevel` at the call
+ * site.
+ */
+export const DEFAULT_LEVEL_BY_ASSISTANT: Partial<Record<AssistantId, string>> = {
+  'genie-code': 'lakehouse-di',
+};
