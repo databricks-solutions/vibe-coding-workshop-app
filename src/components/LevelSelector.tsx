@@ -1,20 +1,25 @@
 /**
  * LevelSelector Component
  *
- * A tiered 4-column layout for selecting workshop paths.
- * Each column is an independent track. Options within a column are additive.
+ * A tiered 4-column layout for selecting workshop paths. The first three
+ * columns are persona-aligned chapters; the fourth column holds role-agnostic
+ * specialized tracks (Accelerators). On first open, `end-to-end` is the
+ * default level and pre-highlights every chapter button — visually conveying
+ * "everything selected" with no extra "Complete Workshop" toggle.
  *
  * Path locking: Once a user explicitly selects a level AND completes all foundation
  * steps (1, 2, 3), switching between tracks is disabled. Movement within the same
  * track (e.g. "Databricks Apps" → "+ Lakebase") remains allowed.
  *
  * Layout:
- * ┌──────────────────┬──────────────┬─────────────┬─────────────────────┐
- * │ Web App + DB     │ Analytics+AI │  End to End │    Accelerators     │
- * │ [Databricks Apps]│ [Lakehouse]  │ [Complete   │ [Data Product Acc.] │
- * │ [+ Lakebase]     │ [+ Data Int] │  Workshop]  │ [Genie Acc. (soon)] │
- * │                  │              │             │ [Lakebase Acc.(soon)]│
- * └──────────────────┴──────────────┴─────────────┴─────────────────────┘
+ *    [For App Developers]   [For Data Engineering]   [For Data Science]   (no caption)
+ * ┌──────────────────────┬───────────────────────┬────────────────────┬────────────────────────┐
+ * │  Apps and Lakebase   │     Lakehouse         │   AI and Agents    │      Accelerators      │
+ * │  [Databricks Apps]   │  [Lakehouse]          │  [+ AI and Agents] │  [Agents Acc.]         │
+ * │  [+ Lakebase]        │  Bronze/Silver/Gold   │  Genie/Agent/Dash  │  [Genie Acc.]          │
+ * │                      │  chips                │  chips             │  [Data Eng. Acc.]      │
+ * │                      │                       │                    │  [Skills Acc.]         │
+ * └──────────────────────┴───────────────────────┴────────────────────┴────────────────────────┘
  */
 
 import { motion, LayoutGroup } from 'framer-motion';
@@ -29,31 +34,59 @@ import {
   NON_AI_FALLBACK,
   levelSupportsMedallionToggles,
   getApplicableMedallionLayers,
+  ALL_MEDALLION_LAYERS,
   NON_LAKEHOUSE_FALLBACK,
   type WorkshopLevel,
   type WorkflowDirection,
   type AIAgentModule,
   type MedallionLayer,
+  type ChainContext,
 } from '../constants/workflowSections';
-import { Check, Info, Globe, HardDrive, Brain, Database, Rocket, Lock, Layers, MessageSquareText, BookOpen, Bot, LayoutDashboard } from 'lucide-react';
+import { Check, Info, Globe, HardDrive, Brain, Database, Lock, Layers, MessageSquareText, BookOpen, Bot, LayoutDashboard, Code2 } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 import { NewBadge } from './NewBadge';
+import { PathDurationBar } from './PathDurationBar';
+
+// Reasons a path button can be locked. Drives the tooltip wording so the user
+// always knows *why* a path is unavailable. 'workflow-started' is the default
+// path-lock-after-foundation; 'use-case' fires when a specific use case pinned
+// the level; 'assistant' fires when the active coding assistant doesn't
+// support this path (per admin Visibility config).
+type LockReason = 'workflow-started' | 'use-case' | 'assistant';
+
+const LOCK_REASON_TEXT: Record<LockReason, { title: string; body: string }> = {
+  'workflow-started': {
+    title: 'Path is locked',
+    body: 'Start a new session to switch tracks.',
+  },
+  'use-case': {
+    title: 'Path is locked',
+    body: 'The selected use case pinned the workshop level.',
+  },
+  'assistant': {
+    title: 'Not available with this assistant',
+    body: "This path isn't supported by the selected coding assistant. Switch coding assistants to use it, or pick another path.",
+  },
+};
 
 function LockedTooltip({
-  title = 'Path is locked',
-  body = 'Start a new session to switch tracks.',
-}: { title?: string; body?: string } = {}) {
+  reason = 'workflow-started',
+  title,
+  body,
+}: { reason?: LockReason; title?: string; body?: string } = {}) {
+  const fallback = LOCK_REASON_TEXT[reason];
   return (
     <div className="absolute left-1/2 -translate-x-1/2 top-full mt-2 z-50
       opacity-0 scale-95 translate-y-1 group-hover:opacity-100 group-hover:scale-100 group-hover:translate-y-0
       transition-all duration-200 ease-out pointer-events-none">
       <div className="w-2.5 h-2.5 rotate-45 bg-popover border-l border-t border-border/50 absolute -top-[5px] left-1/2 -translate-x-1/2 z-10" />
-      <div className="relative bg-popover/95 backdrop-blur-md border border-border/50 shadow-xl rounded-lg px-3.5 py-2.5 whitespace-nowrap">
+      <div className="relative bg-popover/95 backdrop-blur-md border border-border/50 shadow-xl rounded-lg px-3.5 py-2.5 max-w-xs">
         <div className="flex items-center gap-2">
           <Lock className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-          <span className="text-ui-sm font-semibold text-foreground">{title}</span>
+          <span className="text-ui-sm font-semibold text-foreground whitespace-nowrap">{title ?? fallback.title}</span>
         </div>
-        <p className="text-ui-xs text-muted-foreground mt-1 ml-[22px]">
-          {body}
+        <p className="text-ui-xs text-muted-foreground mt-1 ml-[22px] whitespace-normal">
+          {body ?? fallback.body}
         </p>
       </div>
     </div>
@@ -62,6 +95,7 @@ function LockedTooltip({
 
 interface LevelSelectorProps {
   selectedLevel: WorkshopLevel;
+  chainContext?: ChainContext;
   onLevelChange: (level: WorkshopLevel) => void;
   completedSteps?: Set<number>;
   levelExplicitlySelected?: boolean;
@@ -72,6 +106,10 @@ interface LevelSelectorProps {
   onAIModulesChange?: (modules: Set<AIAgentModule>) => void;
   medallionLayers?: Set<MedallionLayer>;
   onMedallionLayersChange?: (layers: Set<MedallionLayer>) => void;
+  /** Workshop levels disabled for the active coding assistant. The currently-
+   * selected level is grandfathered (always clickable) inside the picker so
+   * shared sessions and mid-session assistant changes never lose state. */
+  disabledWorkshopLevels?: Set<WorkshopLevel>;
 }
 
 const BUTTON_LABELS: Record<WorkshopLevel, string> = {
@@ -108,12 +146,14 @@ const LEVEL_DESCRIPTIONS: Record<WorkshopLevel, string> = {
   'reverse-app': 'Design and deploy an analytics application powered by synced Lakebase data.',
 };
 
-type Track = 'app' | 'analytics' | 'full' | 'accelerator';
+type Track = 'apps-lakebase' | 'lakehouse' | 'ai-agents' | 'accelerator';
 
 function getTrack(level: WorkshopLevel): Track {
-  if (level === 'app-only' || level === 'app-database' || level === 'reverse-lakebase' || level === 'reverse-app') return 'app';
-  if (level === 'lakehouse' || level === 'lakehouse-di' || level === 'reverse-lakehouse' || level === 'reverse-lakehouse-di') return 'analytics';
-  if (level === 'end-to-end') return 'full';
+  if (level === 'app-only' || level === 'app-database' || level === 'reverse-lakebase' || level === 'reverse-app') return 'apps-lakebase';
+  if (level === 'lakehouse' || level === 'reverse-lakehouse') return 'lakehouse';
+  if (level === 'lakehouse-di' || level === 'reverse-lakehouse-di') return 'ai-agents';
+  // 'end-to-end' and all accelerator levels fall through to the Accelerators
+  // column for column-lock semantics. end-to-end no longer has its own UI button.
   return 'accelerator';
 }
 
@@ -122,8 +162,12 @@ function getTrack(level: WorkshopLevel): Track {
  * When on a progressive chain, all levels up to and including the current
  * position are highlighted to show the cumulative path.
  */
-function getHighlightedButtons(selectedLevel: WorkshopLevel, completedSteps: Set<number>): Set<WorkshopLevel> {
-  const chain = getActiveChain(selectedLevel, completedSteps);
+function getHighlightedButtons(
+  selectedLevel: WorkshopLevel,
+  completedSteps: Set<number>,
+  chainContext?: ChainContext,
+): Set<WorkshopLevel> {
+  const chain = getActiveChain(selectedLevel, completedSteps, chainContext);
   if (chain) {
     const idx = chain.indexOf(selectedLevel);
     if (idx !== -1) return new Set(chain.slice(0, idx + 1));
@@ -154,11 +198,20 @@ function getHighlightedButtons(selectedLevel: WorkshopLevel, completedSteps: Set
 }
 
 const TRACK_LABEL: Record<Track, string> = {
-  app: 'Web App + Database',
-  analytics: 'Analytics + AI',
-  full: 'End to End',
-  accelerator: 'Accelerators',
+  'apps-lakebase': 'Apps and Lakebase',
+  'lakehouse': 'Lakehouse',
+  'ai-agents': 'AI and Agents',
+  'accelerator': 'Accelerators',
 };
+
+// Persona captions rendered above the three chapter columns. The accelerators
+// column intentionally has no caption so the role-agnostic specialized tracks
+// stay visually distinct from the persona-aligned chapter columns.
+const COLUMN_PERSONAS: { icon: LucideIcon; label: string; tone: string }[] = [
+  { icon: Code2,    label: 'For Application Developers', tone: 'text-amber-300/60' },
+  { icon: Database, label: 'For Data Engineering',       tone: 'text-teal-300/60'  },
+  { icon: Brain,    label: 'For Data Science',           tone: 'text-cyan-300/60'  },
+];
 
 export { BUTTON_LABELS, LEVEL_DESCRIPTIONS };
 
@@ -168,6 +221,7 @@ export { BUTTON_LABELS, LEVEL_DESCRIPTIONS };
  */
 export function LevelSelectorContent({
   selectedLevel,
+  chainContext,
   onLevelChange,
   completedSteps = new Set(),
   useCaseLockedLevel,
@@ -177,10 +231,12 @@ export function LevelSelectorContent({
   onAIModulesChange,
   medallionLayers,
   onMedallionLayersChange,
+  disabledWorkshopLevels,
 }: LevelSelectorProps) {
   return (
     <LevelSelectorGrid
       selectedLevel={selectedLevel}
+      chainContext={chainContext}
       onLevelChange={onLevelChange}
       completedSteps={completedSteps}
       useCaseLockedLevel={useCaseLockedLevel}
@@ -190,12 +246,14 @@ export function LevelSelectorContent({
       onAIModulesChange={onAIModulesChange}
       medallionLayers={medallionLayers}
       onMedallionLayersChange={onMedallionLayersChange}
+      disabledWorkshopLevels={disabledWorkshopLevels}
     />
   );
 }
 
 function LevelSelectorGrid({
   selectedLevel,
+  chainContext = null,
   onLevelChange,
   completedSteps = new Set(),
   useCaseLockedLevel,
@@ -205,32 +263,101 @@ function LevelSelectorGrid({
   onAIModulesChange,
   medallionLayers,
   onMedallionLayersChange,
+  disabledWorkshopLevels,
 }: LevelSelectorProps) {
-  const highlightedButtons = getHighlightedButtons(selectedLevel, completedSteps);
+  const highlightedButtons = getHighlightedButtons(selectedLevel, completedSteps, chainContext);
 
   const hasStartedWorkflow = Array.from(completedSteps).some(s => s >= 2);
-  const activeChain = hasStartedWorkflow ? getActiveChain(selectedLevel, completedSteps) : null;
+  const activeChain = hasStartedWorkflow ? getActiveChain(selectedLevel, completedSteps, chainContext) : null;
   const chainIdx = activeChain ? activeChain.indexOf(selectedLevel) : -1;
   const isPathLocked = hasStartedWorkflow || !!useCaseLockedLevel;
 
-  const isButtonDisabled = (level: WorkshopLevel): boolean => {
-    if (useCaseLockedLevel && level !== useCaseLockedLevel) return true;
-    if (level === 'skills-accelerator' && !useCaseLockedLevel && hasUseCaseSelected) return true;
-    // Agents Accelerator intentionally does NOT require a specific use case:
-    // the user picks any sample use case (e.g. "Booking App"), then clicking
-    // this button locks the flow to the Agents path. The entire Accelerators
-    // column is hidden in Reverse ETL direction (see Column 4 wrapper below),
-    // so no direction-based disable is needed here.
-    if (!hasStartedWorkflow) return false;
+  // Additive-selection gates. The "+" prefix levels are hard-disabled until
+  // their parent in the APP_CHAIN is highlighted/selected. Once Apps is
+  // selected, "+ Lakebase" unlocks; once Lakehouse is selected, "+ AI and
+  // Agents" unlocks. These gates apply only in forward direction — reverse
+  // chain deals with its own separate level set.
+  const isAdditiveGateDisabled = (level: WorkshopLevel): { disabled: boolean; tooltipBody?: string } => {
+    if (direction === 'reverse') return { disabled: false };
+    if (useCaseLockedLevel) return { disabled: false };
+    if (level === 'app-database') {
+      const appsSelected = highlightedButtons.has('app-only') || highlightedButtons.has('app-database');
+      if (!appsSelected) {
+        return { disabled: true, tooltipBody: 'Select Databricks Apps first to enable.' };
+      }
+    }
+    if (level === 'lakehouse-di') {
+      const lakehouseSelected = highlightedButtons.has('lakehouse') || highlightedButtons.has('lakehouse-di');
+      if (!lakehouseSelected) {
+        return { disabled: true, tooltipBody: 'Select Lakehouse first to enable.' };
+      }
+    }
+    return { disabled: false };
+  };
 
-    if (activeChain) {
-      const targetIdx = activeChain.indexOf(level);
-      if (targetIdx === chainIdx) return false;
-      if (targetIdx === chainIdx + 1) return false;
-      return true;
+  // Resolve why a button is locked, in priority order. Returns null when the
+  // button is enabled. The returned `reason` drives the LockedTooltip wording
+  // so the user always knows whether this is an assistant restriction, a
+  // use-case lock, an additive gate, or the standard "workflow started" lock.
+  //
+  // Grandfather rule: the currently-selected level is ALWAYS clickable, even
+  // if it lives in `disabledWorkshopLevels`. This preserves shared sessions
+  // (a session saved with `app-database` and a Cursor user, opened later by a
+  // Genie Code user, still works) and prevents mid-session assistant changes
+  // from silently mutating progress.
+  const getLockState = (level: WorkshopLevel): { reason: LockReason; title?: string; body?: string } | null => {
+    // Grandfather: current selection is always usable.
+    if (level === selectedLevel) return null;
+
+    // 1. Assistant restriction. Highest-priority message because it's the most
+    //    likely cause of confusion when a user just switched assistants.
+    if (disabledWorkshopLevels?.has(level)) {
+      return { reason: 'assistant' };
     }
 
-    return level !== selectedLevel;
+    // 2. Use-case lock pinned a specific level — every other level is locked.
+    if (useCaseLockedLevel && level !== useCaseLockedLevel) {
+      return { reason: 'use-case' };
+    }
+
+    // 3. Skills Accelerator is hidden once a non-skills use case is selected
+    //    (the use-case lock above pins it directly when chosen).
+    if (level === 'skills-accelerator' && !useCaseLockedLevel && hasUseCaseSelected) {
+      return { reason: 'use-case' };
+    }
+
+    // 4. Additive gate ("+ Lakebase" needs Apps, "+ AI and Agents" needs
+    //    Lakehouse). Friendlier wording than the generic locked tooltip.
+    const additive = isAdditiveGateDisabled(level);
+    if (additive.disabled) {
+      return { reason: 'workflow-started', title: 'Select prerequisite first', body: additive.tooltipBody };
+    }
+
+    // 5. Workflow-started path lock. Foundation steps complete -> only the
+    //    active chain's current and next-step buttons remain clickable.
+    if (hasStartedWorkflow) {
+      if (activeChain) {
+        const targetIdx = activeChain.indexOf(level);
+        if (targetIdx === chainIdx) return null;
+        if (targetIdx === chainIdx + 1) return null;
+        return { reason: 'workflow-started' };
+      }
+      return { reason: 'workflow-started' };
+    }
+
+    return null;
+  };
+
+  const isButtonDisabled = (level: WorkshopLevel): boolean => getLockState(level) !== null;
+
+  // Dynamic button label. When the user is climbing APP_CHAIN, Lakehouse
+  // becomes additive ("+ Lakehouse") to signal it stacks on top of the
+  // already-selected Apps + Lakebase.
+  const getButtonLabel = (level: WorkshopLevel): string => {
+    if (level === 'lakehouse' && chainContext === 'app' && direction !== 'reverse') {
+      return '+ Lakehouse';
+    }
+    return BUTTON_LABELS[level];
   };
 
   const isHighlighted = (level: WorkshopLevel) => highlightedButtons.has(level);
@@ -268,12 +395,12 @@ function LevelSelectorGrid({
   `;
 
   const appHasHighlight = isHighlighted('app-only') || isHighlighted('app-database') || isHighlighted('reverse-lakebase') || isHighlighted('reverse-app');
-  const analyticsHasHighlight = isHighlighted('lakehouse') || isHighlighted('lakehouse-di') || isHighlighted('reverse-lakehouse') || isHighlighted('reverse-lakehouse-di');
-  const endToEndHasHighlight = isHighlighted('end-to-end');
+  const lakehouseHasHighlight = isHighlighted('lakehouse') || isHighlighted('reverse-lakehouse');
+  const aiAgentsHasHighlight = isHighlighted('lakehouse-di') || isHighlighted('reverse-lakehouse-di');
 
   const isAppSelected = appHasHighlight && (selectedLevel === 'app-only' || selectedLevel === 'app-database' || selectedLevel === 'reverse-lakebase' || selectedLevel === 'reverse-app');
-  const isAnalyticsSelected = analyticsHasHighlight && (selectedLevel === 'lakehouse' || selectedLevel === 'lakehouse-di' || selectedLevel === 'reverse-lakehouse' || selectedLevel === 'reverse-lakehouse-di');
-  const isEndToEndSelected = selectedLevel === 'end-to-end';
+  const isLakehouseSelected = lakehouseHasHighlight && (selectedLevel === 'lakehouse' || selectedLevel === 'reverse-lakehouse');
+  const isAiAgentsSelected = aiAgentsHasHighlight && (selectedLevel === 'lakehouse-di' || selectedLevel === 'reverse-lakehouse-di');
   const isAcceleratorSelected = selectedLevel === 'accelerator' || selectedLevel === 'genie-accelerator' || selectedLevel === 'data-engineering-accelerator' || selectedLevel === 'skills-accelerator' || selectedLevel === 'agents-accelerator';
 
   const isColumnLocked = (track: Track) => {
@@ -293,18 +420,28 @@ function LevelSelectorGrid({
     return !trackLevels.includes(selectedLevel);
   };
 
+  // Toggle-off baseline is chain-aware. Genie Code (and any future assistant
+  // that can't run the Apps + Lakebase chapters) lives on LAKEHOUSE_CHAIN, so
+  // deselecting Lakehouse-DI must fall back to Lakehouse — never jump across
+  // chains into a flow the assistant doesn't support. Reverse direction has
+  // no toggle-off (handled below).
+  const getToggleOffBaseline = (): WorkshopLevel => {
+    if (chainContext === 'lakehouse') return 'lakehouse';
+    return 'app-database';
+  };
+
   const handleLevelClick = (level: WorkshopLevel) => {
     if (isButtonDisabled(level)) return;
     // Toggle-off: clicking the currently-selected level deselects it and falls
-    // back to the Apps + Lakebase baseline. Mirrors the Bronze/Silver/Gold chip
+    // back to the active chain's baseline (Apps + Lakebase for APP_CHAIN, plain
+    // Lakehouse for LAKEHOUSE_CHAIN). Mirrors the Bronze/Silver/Gold chip
     // click-to-deselect pattern. Disabled when:
-    //   - the clicked level IS the baseline (app-only / app-database) — nothing
-    //     to fall back to.
+    //   - the clicked level IS already the baseline — nothing to fall back to.
     //   - the workflow has already started (cannot move backward across a chain).
     //   - a use-case lock is pinning the current level.
-    //   - direction is reverse (app-database is a forward-direction level;
-    //     a reverse-level deselect would cross directions and confuse state).
-    const isBaselineLevel = level === 'app-only' || level === 'app-database';
+    //   - direction is reverse (forward-direction baselines don't apply).
+    const baseline = getToggleOffBaseline();
+    const isBaselineLevel = level === 'app-only' || level === baseline;
     const isReverse = direction === 'reverse';
     if (
       level === selectedLevel &&
@@ -313,7 +450,7 @@ function LevelSelectorGrid({
       !useCaseLockedLevel &&
       !isReverse
     ) {
-      onLevelChange('app-database');
+      onLevelChange(baseline);
       return;
     }
     onLevelChange(level);
@@ -323,15 +460,18 @@ function LevelSelectorGrid({
   // would be allowed on next click. Mirrors the Bronze/Silver/Gold chip UX.
   const getToggleHint = (level: WorkshopLevel): string | undefined => {
     if (level !== selectedLevel) return undefined;
-    const isBaselineLevel = level === 'app-only' || level === 'app-database';
+    const baseline = getToggleOffBaseline();
+    const isBaselineLevel = level === 'app-only' || level === baseline;
     if (isBaselineLevel || hasStartedWorkflow || useCaseLockedLevel || direction === 'reverse') {
       return undefined;
     }
-    return 'Click again to deselect and return to Apps + Lakebase';
+    const baselineLabel = baseline === 'lakehouse' ? 'Lakehouse' : 'Apps + Lakebase';
+    return `Click again to deselect and return to ${baselineLabel}`;
   };
 
   const renderButton = (level: WorkshopLevel, icon: React.ReactNode) => {
-    const disabled = isButtonDisabled(level);
+    const lockState = getLockState(level);
+    const disabled = lockState !== null;
     const btn = (
       <button
         onClick={() => handleLevelClick(level)}
@@ -341,18 +481,22 @@ function LevelSelectorGrid({
       >
         <div className="flex items-center gap-2.5">
           {icon}
-          <span className="flex-1 text-left">{BUTTON_LABELS[level]}</span>
+          <span className="flex-1 text-left">{getButtonLabel(level)}</span>
           {!disabled && (selectedLevel === level || isHighlighted(level)) && (
             <Check className={`w-3.5 h-3.5 flex-shrink-0 ${selectedLevel === level ? '' : 'opacity-60'}`} />
           )}
         </div>
       </button>
     );
-    if (disabled) {
+    if (disabled && lockState) {
       return (
         <div className="relative group">
           {btn}
-          <LockedTooltip />
+          <LockedTooltip
+            reason={lockState.reason}
+            title={lockState.title}
+            body={lockState.body}
+          />
         </div>
       );
     }
@@ -365,6 +509,14 @@ function LevelSelectorGrid({
       {TRACK_LABEL[track]}
     </div>
   );
+
+  // The Estimated Build Time bar is positioned here — directly below the
+  // "Choose Your Workshop Path" header and above the chapter columns — so it
+  // sits adjacent to the controls that actually drive its segments. Effective
+  // chip sets fall back to "all on" when the parent hasn't wired up the
+  // toggle props yet, mirroring PathAndArchitecture's coercion.
+  const effectiveAIModules = aiAgentsModules ?? new Set(ALL_AI_MODULES);
+  const effectiveMedallionLayers = medallionLayers ?? new Set(ALL_MEDALLION_LAYERS);
 
   return (
     <>
@@ -390,24 +542,86 @@ function LevelSelectorGrid({
         )}
       </div>
 
+      {/* Estimated Build Time — sits right above the chapter columns so the
+          time impact of each click is visible inline, instead of forcing the
+          user to scroll back up to the card header. */}
+      <div className="mb-4">
+        <PathDurationBar
+          level={selectedLevel}
+          direction={direction}
+          aiModules={effectiveAIModules}
+          medallionLayers={effectiveMedallionLayers}
+          completedSteps={completedSteps}
+          chainContext={chainContext}
+          variant="full"
+        />
+      </div>
+
+      {/* Persona caption row — subtly aligns each chapter column with the
+          target audience. The 4th slot (over Accelerators) is intentionally
+          blank so the role-agnostic specialized tracks stay visually distinct.
+          In reverse direction, columns reorder (Lakehouse leads), so the
+          persona captions reorder to keep the alignment correct. */}
+      <div className="flex gap-3 mb-1.5 px-1">
+        {(direction === 'reverse'
+          ? [COLUMN_PERSONAS[1], COLUMN_PERSONAS[2], COLUMN_PERSONAS[0]]
+          : COLUMN_PERSONAS
+        ).map(p => (
+          <div
+            key={p.label}
+            className="flex-1 flex items-center justify-center gap-1.5 pb-0.5 border-b border-border/30
+                       text-ui-3xs uppercase tracking-[0.12em] font-semibold text-muted-foreground/70"
+          >
+            <p.icon className={`w-3 h-3 ${p.tone}`} />
+            <span>{p.label}</span>
+          </div>
+        ))}
+        {direction !== 'reverse' && <div className="flex-1" aria-hidden="true" />}
+      </div>
+
       {/* 4-Column Box Layout */}
       <LayoutGroup>
         <div className="flex gap-3">
-          {direction === 'reverse' ? (
-            <>
-              {/* Column 1 (was Column 2): Analytics + AI — reverse levels */}
-              <motion.div layout layoutId="col-analytics" className={getBoxClass(isAnalyticsSelected, analyticsHasHighlight && !isAnalyticsSelected, isColumnLocked('analytics'))}
+          {(() => {
+            // Build the three persona-aligned chapter columns. Each column
+            // renders the same way regardless of direction; only the levels
+            // they reference and the column ordering differ.
+            const lakehouseLevel: WorkshopLevel = direction === 'reverse' ? 'reverse-lakehouse' : 'lakehouse';
+            const aiLevel: WorkshopLevel = direction === 'reverse' ? 'reverse-lakehouse-di' : 'lakehouse-di';
+
+            const appsLakebaseColumn = (
+              <motion.div key="col-app" layout layoutId="col-app"
+                className={getBoxClass(isAppSelected, appHasHighlight && !isAppSelected, isColumnLocked('apps-lakebase'))}
                 transition={{ type: 'spring', stiffness: 250, damping: 22, mass: 0.9 }}>
-                {columnHeader('analytics')}
+                {columnHeader('apps-lakebase')}
                 <div className="space-y-2">
-                  {/* Chip sub-panels render ONLY when the user is on a
-                      progression-chain level (lakehouse, reverse-lakehouse,
-                      etc.). When an accelerator is selected, all 5 accelerators
-                      present an identical Analytics column — plain buttons,
-                      no chips — regardless of which one is selected. */}
+                  {direction === 'reverse' ? (
+                    <>
+                      {renderButton('reverse-lakebase', <HardDrive className="w-4 h-4 flex-shrink-0" />)}
+                      {renderButton('reverse-app', <Globe className="w-4 h-4 flex-shrink-0" />)}
+                    </>
+                  ) : (
+                    <>
+                      {renderButton('app-only', <Globe className="w-4 h-4 flex-shrink-0" />)}
+                      {renderButton('app-database', <HardDrive className="w-4 h-4 flex-shrink-0" />)}
+                    </>
+                  )}
+                </div>
+              </motion.div>
+            );
+
+            // Lakehouse column: medallion chips only render when on a
+            // progression-chain level. When an accelerator is selected, this
+            // column shows the plain Lakehouse button without chips.
+            const lakehouseColumn = (
+              <motion.div key="col-lakehouse" layout layoutId="col-lakehouse"
+                className={getBoxClass(isLakehouseSelected, lakehouseHasHighlight && !isLakehouseSelected, isColumnLocked('lakehouse'))}
+                transition={{ type: 'spring', stiffness: 250, damping: 22, mass: 0.9 }}>
+                {columnHeader('lakehouse')}
+                <div className="space-y-2">
                   {!isAcceleratorSelected && levelSupportsMedallionToggles(selectedLevel) && medallionLayers && onMedallionLayersChange ? (
                     <div className="rounded-lg border border-teal-500/30 bg-teal-500/[0.05] p-1.5 space-y-1.5">
-                      {renderButton('reverse-lakehouse', <Database className="w-4 h-4 flex-shrink-0" />)}
+                      {renderButton(lakehouseLevel, <Database className="w-4 h-4 flex-shrink-0" />)}
                       <MedallionLayerSelector
                         level={selectedLevel}
                         layers={medallionLayers}
@@ -418,11 +632,23 @@ function LevelSelectorGrid({
                       />
                     </div>
                   ) : (
-                    renderButton('reverse-lakehouse', <Database className="w-4 h-4 flex-shrink-0" />)
+                    renderButton(lakehouseLevel, <Database className="w-4 h-4 flex-shrink-0" />)
                   )}
+                </div>
+              </motion.div>
+            );
+
+            // AI and Agents column: AI module chips only render when on a
+            // progression-chain level (same rationale as Lakehouse column).
+            const aiAgentsColumn = (
+              <motion.div key="col-ai-agents" layout layoutId="col-ai-agents"
+                className={getBoxClass(isAiAgentsSelected, aiAgentsHasHighlight && !isAiAgentsSelected, isColumnLocked('ai-agents'))}
+                transition={{ type: 'spring', stiffness: 250, damping: 22, mass: 0.9 }}>
+                {columnHeader('ai-agents')}
+                <div className="space-y-2">
                   {!isAcceleratorSelected && levelSupportsAIModuleToggles(selectedLevel) && aiAgentsModules && onAIModulesChange ? (
                     <div className="rounded-lg border border-cyan-500/30 bg-cyan-500/[0.05] p-1.5 space-y-1.5">
-                      {renderButton('reverse-lakehouse-di', <Brain className="w-4 h-4 flex-shrink-0" />)}
+                      {renderButton(aiLevel, <Brain className="w-4 h-4 flex-shrink-0" />)}
                       <AIAgentsModuleSelector
                         level={selectedLevel}
                         modules={aiAgentsModules}
@@ -432,83 +658,20 @@ function LevelSelectorGrid({
                       />
                     </div>
                   ) : (
-                    renderButton('reverse-lakehouse-di', <Brain className="w-4 h-4 flex-shrink-0" />)
+                    renderButton(aiLevel, <Brain className="w-4 h-4 flex-shrink-0" />)
                   )}
                 </div>
               </motion.div>
+            );
 
-              {/* Column 2 (was Column 1): Web App + DB — reverse levels */}
-              <motion.div layout layoutId="col-app" className={getBoxClass(isAppSelected, appHasHighlight && !isAppSelected, isColumnLocked('app'))}
-                transition={{ type: 'spring', stiffness: 250, damping: 22, mass: 0.9 }}>
-                {columnHeader('app')}
-                <div className="space-y-2">
-                  {renderButton('reverse-lakebase', <HardDrive className="w-4 h-4 flex-shrink-0" />)}
-                  {renderButton('reverse-app', <Globe className="w-4 h-4 flex-shrink-0" />)}
-                </div>
-              </motion.div>
-            </>
-          ) : (
-            <>
-              {/* Column 1: Web App + Database (default) */}
-              <motion.div layout layoutId="col-app" className={getBoxClass(isAppSelected, appHasHighlight && !isAppSelected, isColumnLocked('app'))}
-                transition={{ type: 'spring', stiffness: 250, damping: 22, mass: 0.9 }}>
-                {columnHeader('app')}
-                <div className="space-y-2">
-                  {renderButton('app-only', <Globe className="w-4 h-4 flex-shrink-0" />)}
-                  {renderButton('app-database', <HardDrive className="w-4 h-4 flex-shrink-0" />)}
-                </div>
-              </motion.div>
-
-              {/* Column 2: Analytics + AI (default) */}
-              <motion.div layout layoutId="col-analytics" className={getBoxClass(isAnalyticsSelected, analyticsHasHighlight && !isAnalyticsSelected, isColumnLocked('analytics'))}
-                transition={{ type: 'spring', stiffness: 250, damping: 22, mass: 0.9 }}>
-                {columnHeader('analytics')}
-                <div className="space-y-2">
-                  {/* See note in the reverse-direction column: chip panels
-                      only render when the user is on a progression-chain level.
-                      When an accelerator is selected, this column shows plain
-                      buttons for all 5 accelerators. */}
-                  {!isAcceleratorSelected && levelSupportsMedallionToggles(selectedLevel) && medallionLayers && onMedallionLayersChange ? (
-                    <div className="rounded-lg border border-teal-500/30 bg-teal-500/[0.05] p-1.5 space-y-1.5">
-                      {renderButton('lakehouse', <Database className="w-4 h-4 flex-shrink-0" />)}
-                      <MedallionLayerSelector
-                        level={selectedLevel}
-                        layers={medallionLayers}
-                        onChange={onMedallionLayersChange}
-                        onLevelChange={onLevelChange}
-                        hasStartedWorkflow={hasStartedWorkflow}
-                        useCaseLockedLevel={useCaseLockedLevel ?? null}
-                      />
-                    </div>
-                  ) : (
-                    renderButton('lakehouse', <Database className="w-4 h-4 flex-shrink-0" />)
-                  )}
-                  {!isAcceleratorSelected && levelSupportsAIModuleToggles(selectedLevel) && aiAgentsModules && onAIModulesChange ? (
-                    <div className="rounded-lg border border-cyan-500/30 bg-cyan-500/[0.05] p-1.5 space-y-1.5">
-                      {renderButton('lakehouse-di', <Brain className="w-4 h-4 flex-shrink-0" />)}
-                      <AIAgentsModuleSelector
-                        level={selectedLevel}
-                        modules={aiAgentsModules}
-                        onChange={onAIModulesChange}
-                        onLevelChange={onLevelChange}
-                        hasStartedWorkflow={hasStartedWorkflow}
-                      />
-                    </div>
-                  ) : (
-                    renderButton('lakehouse-di', <Brain className="w-4 h-4 flex-shrink-0" />)
-                  )}
-                </div>
-              </motion.div>
-            </>
-          )}
-
-        {/* Column 3: End to End */}
-        <div className={getBoxClass(isEndToEndSelected, endToEndHasHighlight && !isEndToEndSelected, isColumnLocked('full'))}>
-          {columnHeader('full')}
-          <div className="space-y-2">
-            {renderButton('end-to-end', <Layers className="w-4 h-4 flex-shrink-0" />)}
-          </div>
-        </div>
+            // Reverse direction reorders the persona-aligned columns:
+            // Lakehouse leads (it's the entry point for reverse ETL),
+            // followed by AI and Agents, then Apps and Lakebase
+            // (which holds the analytics-app/synced-Lakebase outputs).
+            return direction === 'reverse'
+              ? <>{lakehouseColumn}{aiAgentsColumn}{appsLakebaseColumn}</>
+              : <>{appsLakebaseColumn}{lakehouseColumn}{aiAgentsColumn}</>;
+          })()}
 
         {/* Column 4: Accelerators — hidden in Reverse ETL direction. The
             accelerators are forward-progression flows; they have no meaningful
@@ -519,89 +682,88 @@ function LevelSelectorGrid({
           {columnHeader('accelerator')}
           <div className="space-y-2">
             {/* Agents Accelerator — first in the list; works with any sample use case; clicking it locks the flow */}
-            <div className={isButtonDisabled('agents-accelerator') ? 'relative group' : undefined}>
-              <button
-                onClick={() => handleLevelClick('agents-accelerator')}
-                disabled={isButtonDisabled('agents-accelerator')}
-                className={getButtonClass('agents-accelerator')}
-                title={getToggleHint('agents-accelerator')}
-              >
-                <div className="flex items-center gap-2.5">
-                  <Bot className="w-4 h-4 flex-shrink-0" />
-                  <span className="flex-1 text-left">{BUTTON_LABELS['agents-accelerator']}</span>
-                  <NewBadge tone={selectedLevel === 'agents-accelerator' ? 'inverted' : 'emerald'} />
-                  <span
-                    title="Beta — feature is available but still being tested"
-                    className={`text-ui-3xs px-1.5 py-0.5 rounded font-medium ${
-                      selectedLevel === 'agents-accelerator'
-                        ? 'bg-white/20 text-primary-foreground/80 border border-white/20'
-                        : 'bg-amber-500/20 text-amber-600 dark:text-amber-400 border border-amber-500/30'
-                    }`}
-                  >Beta</span>
-                  {!isButtonDisabled('agents-accelerator') && (selectedLevel === 'agents-accelerator' || isHighlighted('agents-accelerator')) && (
-                    <Check className={`w-3.5 h-3.5 flex-shrink-0 ${selectedLevel === 'agents-accelerator' ? '' : 'opacity-60'}`} />
-                  )}
+            {(() => {
+              const lockState = getLockState('agents-accelerator');
+              const disabled = lockState !== null;
+              return (
+                <div className={disabled ? 'relative group' : undefined}>
+                  <button
+                    onClick={() => handleLevelClick('agents-accelerator')}
+                    disabled={disabled}
+                    className={getButtonClass('agents-accelerator')}
+                    title={getToggleHint('agents-accelerator')}
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <Bot className="w-4 h-4 flex-shrink-0" />
+                      <span className="flex-1 text-left">{BUTTON_LABELS['agents-accelerator']}</span>
+                      <NewBadge tone={selectedLevel === 'agents-accelerator' ? 'inverted' : 'emerald'} />
+                      <span
+                        title="Beta — feature is available but still being tested"
+                        className={`text-ui-3xs px-1.5 py-0.5 rounded font-medium ${
+                          selectedLevel === 'agents-accelerator'
+                            ? 'bg-white/20 text-primary-foreground/80 border border-white/20'
+                            : 'bg-amber-500/20 text-amber-600 dark:text-amber-400 border border-amber-500/30'
+                        }`}
+                      >Beta</span>
+                      {!disabled && (selectedLevel === 'agents-accelerator' || isHighlighted('agents-accelerator')) && (
+                        <Check className={`w-3.5 h-3.5 flex-shrink-0 ${selectedLevel === 'agents-accelerator' ? '' : 'opacity-60'}`} />
+                      )}
+                    </div>
+                  </button>
+                  {disabled && lockState && <LockedTooltip reason={lockState.reason} title={lockState.title} body={lockState.body} />}
                 </div>
-              </button>
-              {isButtonDisabled('agents-accelerator') && <LockedTooltip />}
-            </div>
-
-            {/* Data Product Accelerator (New) */}
-            <div className={isButtonDisabled('accelerator') ? 'relative group' : undefined}>
-              <button
-                onClick={() => handleLevelClick('accelerator')}
-                disabled={isButtonDisabled('accelerator')}
-                className={getButtonClass('accelerator')}
-                title={getToggleHint('accelerator')}
-              >
-                <div className="flex items-center gap-2.5">
-                  <Rocket className="w-4 h-4 flex-shrink-0" />
-                  <span className="flex-1 text-left">{BUTTON_LABELS['accelerator']}</span>
-                  {!isButtonDisabled('accelerator') && (selectedLevel === 'accelerator' || isHighlighted('accelerator')) && (
-                    <Check className={`w-3.5 h-3.5 flex-shrink-0 ${selectedLevel === 'accelerator' ? '' : 'opacity-60'}`} />
-                  )}
-                </div>
-              </button>
-              {isButtonDisabled('accelerator') && <LockedTooltip />}
-            </div>
+              );
+            })()}
 
             {/* Genie Accelerator */}
-            <div className={isButtonDisabled('genie-accelerator') ? 'relative group' : undefined}>
-              <button
-                onClick={() => handleLevelClick('genie-accelerator')}
-                disabled={isButtonDisabled('genie-accelerator')}
-                className={getButtonClass('genie-accelerator')}
-                title={getToggleHint('genie-accelerator')}
-              >
-                <div className="flex items-center gap-2.5">
-                  <MessageSquareText className="w-4 h-4 flex-shrink-0" />
-                  <span className="flex-1 text-left">{BUTTON_LABELS['genie-accelerator']}</span>
-                  {!isButtonDisabled('genie-accelerator') && (selectedLevel === 'genie-accelerator' || isHighlighted('genie-accelerator')) && (
-                    <Check className={`w-3.5 h-3.5 flex-shrink-0 ${selectedLevel === 'genie-accelerator' ? '' : 'opacity-60'}`} />
-                  )}
+            {(() => {
+              const lockState = getLockState('genie-accelerator');
+              const disabled = lockState !== null;
+              return (
+                <div className={disabled ? 'relative group' : undefined}>
+                  <button
+                    onClick={() => handleLevelClick('genie-accelerator')}
+                    disabled={disabled}
+                    className={getButtonClass('genie-accelerator')}
+                    title={getToggleHint('genie-accelerator')}
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <MessageSquareText className="w-4 h-4 flex-shrink-0" />
+                      <span className="flex-1 text-left">{BUTTON_LABELS['genie-accelerator']}</span>
+                      {!disabled && (selectedLevel === 'genie-accelerator' || isHighlighted('genie-accelerator')) && (
+                        <Check className={`w-3.5 h-3.5 flex-shrink-0 ${selectedLevel === 'genie-accelerator' ? '' : 'opacity-60'}`} />
+                      )}
+                    </div>
+                  </button>
+                  {disabled && lockState && <LockedTooltip reason={lockState.reason} title={lockState.title} body={lockState.body} />}
                 </div>
-              </button>
-              {isButtonDisabled('genie-accelerator') && <LockedTooltip />}
-            </div>
+              );
+            })()}
 
             {/* Data Engineering Accelerator */}
-            <div className={isButtonDisabled('data-engineering-accelerator') ? 'relative group' : undefined}>
-              <button
-                onClick={() => handleLevelClick('data-engineering-accelerator')}
-                disabled={isButtonDisabled('data-engineering-accelerator')}
-                className={getButtonClass('data-engineering-accelerator')}
-                title={getToggleHint('data-engineering-accelerator')}
-              >
-                <div className="flex items-center gap-2.5">
-                  <Database className="w-4 h-4 flex-shrink-0" />
-                  <span className="flex-1 text-left">{BUTTON_LABELS['data-engineering-accelerator']}</span>
-                  {!isButtonDisabled('data-engineering-accelerator') && (selectedLevel === 'data-engineering-accelerator' || isHighlighted('data-engineering-accelerator')) && (
-                    <Check className={`w-3.5 h-3.5 flex-shrink-0 ${selectedLevel === 'data-engineering-accelerator' ? '' : 'opacity-60'}`} />
-                  )}
+            {(() => {
+              const lockState = getLockState('data-engineering-accelerator');
+              const disabled = lockState !== null;
+              return (
+                <div className={disabled ? 'relative group' : undefined}>
+                  <button
+                    onClick={() => handleLevelClick('data-engineering-accelerator')}
+                    disabled={disabled}
+                    className={getButtonClass('data-engineering-accelerator')}
+                    title={getToggleHint('data-engineering-accelerator')}
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <Database className="w-4 h-4 flex-shrink-0" />
+                      <span className="flex-1 text-left">{BUTTON_LABELS['data-engineering-accelerator']}</span>
+                      {!disabled && (selectedLevel === 'data-engineering-accelerator' || isHighlighted('data-engineering-accelerator')) && (
+                        <Check className={`w-3.5 h-3.5 flex-shrink-0 ${selectedLevel === 'data-engineering-accelerator' ? '' : 'opacity-60'}`} />
+                      )}
+                    </div>
+                  </button>
+                  {disabled && lockState && <LockedTooltip reason={lockState.reason} title={lockState.title} body={lockState.body} />}
                 </div>
-              </button>
-              {isButtonDisabled('data-engineering-accelerator') && <LockedTooltip />}
-            </div>
+              );
+            })()}
 
             {/* Agent Skills Accelerator - gated by SKILLS_ACCELERATOR_STATUS */}
             {SKILLS_ACCELERATOR_STATUS === 'coming-soon' ? (
@@ -616,38 +778,30 @@ function LevelSelectorGrid({
                   <span className="text-ui-3xs px-1.5 py-0.5 bg-muted rounded text-muted-foreground">soon</span>
                 </div>
               </button>
-            ) : (
-              <div className={isButtonDisabled('skills-accelerator') ? 'relative group' : undefined}>
-                <button
-                  onClick={() => handleLevelClick('skills-accelerator')}
-                  disabled={isButtonDisabled('skills-accelerator')}
-                  className={getButtonClass('skills-accelerator')}
-                  title={getToggleHint('skills-accelerator')}
-                >
-                  <div className="flex items-center gap-2.5">
-                    <BookOpen className="w-4 h-4 flex-shrink-0" />
-                    <span className="flex-1 text-left">{BUTTON_LABELS['skills-accelerator']}</span>
-                    {!isButtonDisabled('skills-accelerator') && (selectedLevel === 'skills-accelerator' || isHighlighted('skills-accelerator')) && (
-                      <Check className={`w-3.5 h-3.5 flex-shrink-0 ${selectedLevel === 'skills-accelerator' ? '' : 'opacity-60'}`} />
-                    )}
-                  </div>
-                </button>
-                {isButtonDisabled('skills-accelerator') && <LockedTooltip />}
-              </div>
-            )}
+            ) : (() => {
+              const lockState = getLockState('skills-accelerator');
+              const disabled = lockState !== null;
+              return (
+                <div className={disabled ? 'relative group' : undefined}>
+                  <button
+                    onClick={() => handleLevelClick('skills-accelerator')}
+                    disabled={disabled}
+                    className={getButtonClass('skills-accelerator')}
+                    title={getToggleHint('skills-accelerator')}
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <BookOpen className="w-4 h-4 flex-shrink-0" />
+                      <span className="flex-1 text-left">{BUTTON_LABELS['skills-accelerator']}</span>
+                      {!disabled && (selectedLevel === 'skills-accelerator' || isHighlighted('skills-accelerator')) && (
+                        <Check className={`w-3.5 h-3.5 flex-shrink-0 ${selectedLevel === 'skills-accelerator' ? '' : 'opacity-60'}`} />
+                      )}
+                    </div>
+                  </button>
+                  {disabled && lockState && <LockedTooltip reason={lockState.reason} title={lockState.title} body={lockState.body} />}
+                </div>
+              );
+            })()}
 
-            {/* Lakebase Accelerator - Coming Soon */}
-            <button
-              disabled
-              title="Coming soon — Lakebase Accelerator"
-              className="px-4 py-2.5 rounded-lg text-ui-sm font-medium w-full bg-secondary/50 text-muted-foreground cursor-not-allowed border border-dashed border-border"
-            >
-              <div className="flex items-center gap-2.5">
-                <HardDrive className="w-4 h-4 flex-shrink-0 opacity-70" />
-                <span className="flex-1 text-left truncate">Lakebase Accelerator</span>
-                <span className="text-ui-3xs px-1.5 py-0.5 bg-muted rounded text-muted-foreground">soon</span>
-              </div>
-            </button>
           </div>
         </div>
         )}
@@ -924,12 +1078,14 @@ export function LevelSelector({
         : 'Progressive — App + Lakebase + Lakehouse + AI and Agents';
     }
     const isAppSelected = selectedLevel === 'app-only' || selectedLevel === 'app-database' || selectedLevel === 'reverse-lakebase' || selectedLevel === 'reverse-app';
-    const isAnalyticsSelected = selectedLevel === 'lakehouse' || selectedLevel === 'lakehouse-di' || selectedLevel === 'reverse-lakehouse' || selectedLevel === 'reverse-lakehouse-di';
+    const isLakehouseSelected = selectedLevel === 'lakehouse' || selectedLevel === 'reverse-lakehouse';
+    const isAiAgentsSelected = selectedLevel === 'lakehouse-di' || selectedLevel === 'reverse-lakehouse-di';
     const isEndToEndSelected = selectedLevel === 'end-to-end';
     const isAcceleratorSelected = selectedLevel === 'accelerator' || selectedLevel === 'genie-accelerator' || selectedLevel === 'data-engineering-accelerator' || selectedLevel === 'skills-accelerator' || selectedLevel === 'agents-accelerator';
-    if (isAppSelected) return `Web App + Database — ${BUTTON_LABELS[selectedLevel]}`;
-    if (isAnalyticsSelected) return `Analytics + AI — ${BUTTON_LABELS[selectedLevel]}`;
-    if (isEndToEndSelected) return 'End to End — Complete Workshop';
+    if (isAppSelected) return `Apps and Lakebase — ${BUTTON_LABELS[selectedLevel]}`;
+    if (isLakehouseSelected) return `Lakehouse — ${BUTTON_LABELS[selectedLevel]}`;
+    if (isAiAgentsSelected) return `AI and Agents — ${BUTTON_LABELS[selectedLevel]}`;
+    if (isEndToEndSelected) return 'Complete Workshop — All chapters selected';
     if (isAcceleratorSelected) return `Accelerators — ${BUTTON_LABELS[selectedLevel]}`;
     return BUTTON_LABELS[selectedLevel];
   })();

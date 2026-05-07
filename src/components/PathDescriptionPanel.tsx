@@ -1,5 +1,5 @@
 import { AnimatePresence, motion } from 'framer-motion';
-import { Blocks, Clock } from 'lucide-react';
+import { Blocks } from 'lucide-react';
 import type { WorkshopLevel, WorkflowDirection } from '../constants/workflowSections';
 import { PATH_DESCRIPTIONS } from '../constants/pathDescriptions';
 
@@ -51,16 +51,12 @@ export function PathDescriptionPanel({ selectedLevel }: PathDescriptionPanelProp
         transition={{ duration: 0.22, ease: 'easeOut' }}
         className={`rounded-lg border ${accent.border} ${accent.bg} px-5 py-4`}
       >
-        {/* Header row */}
-        <div className="flex items-center justify-between mb-2.5">
-          <div className="flex items-center gap-2">
-            <Blocks className="w-4 h-4 text-muted-foreground" />
-            <span className="text-ui-sm font-semibold text-foreground">What You'll Build</span>
-          </div>
-          <div className="flex items-center gap-1.5 text-ui-xs text-muted-foreground">
-            <Clock className="w-3.5 h-3.5" />
-            <span>~{desc.estimatedMinutes} min</span>
-          </div>
+        {/* Header row — total build time lives in the Estimated Build Time bar
+            at the top of the Path & Architecture card, so we don't repeat it
+            here. Keep this header to just the section label. */}
+        <div className="flex items-center gap-2 mb-2.5">
+          <Blocks className="w-4 h-4 text-muted-foreground" />
+          <span className="text-ui-sm font-semibold text-foreground">What You'll Build</span>
         </div>
 
         {/* Tagline */}

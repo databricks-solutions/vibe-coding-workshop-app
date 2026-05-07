@@ -1,15 +1,17 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { ChevronDown, ChevronRight, ChevronLeft, Lock, Map, ArrowRight } from 'lucide-react';
-import { LevelSelectorContent, BUTTON_LABELS } from './LevelSelector';
+import { LevelSelectorContent } from './LevelSelector';
 import { ArchitectureDiagramContent } from './ArchitectureDiagram';
 import { PathDescriptionPanel } from './PathDescriptionPanel';
 import { BorderBeamButton } from './BorderBeamButton';
 import { NewBadge } from './NewBadge';
 import { CopyLinkButton } from './CopyLinkButton';
-import type { WorkshopLevel, WorkflowDirection, AIAgentModule, MedallionLayer } from '../constants/workflowSections';
+import { PathDurationBar } from './PathDurationBar';
+import { ALL_AI_MODULES, ALL_MEDALLION_LAYERS, type WorkshopLevel, type WorkflowDirection, type AIAgentModule, type MedallionLayer, type ChainContext } from '../constants/workflowSections';
 
 interface PathAndArchitectureProps {
   selectedLevel: WorkshopLevel;
+  chainContext?: ChainContext;
   onLevelChange: (level: WorkshopLevel) => void;
   completedSteps: Set<number>;
   levelExplicitlySelected?: boolean;
@@ -25,10 +27,16 @@ interface PathAndArchitectureProps {
   onAIModulesChange?: (modules: Set<AIAgentModule>) => void;
   medallionLayers?: Set<MedallionLayer>;
   onMedallionLayersChange?: (layers: Set<MedallionLayer>) => void;
+  /** Workshop levels disabled for the active coding assistant. The currently-
+   * selected level is grandfathered (still clickable) inside LevelSelector
+   * so saved/shared sessions never break and mid-session assistant changes
+   * never lose progress. */
+  disabledWorkshopLevels?: Set<WorkshopLevel>;
 }
 
 export function PathAndArchitecture({
   selectedLevel,
+  chainContext = null,
   onLevelChange,
   completedSteps,
   forceCollapsed = false,
@@ -43,6 +51,7 @@ export function PathAndArchitecture({
   onAIModulesChange,
   medallionLayers,
   onMedallionLayersChange,
+  disabledWorkshopLevels,
 }: PathAndArchitectureProps) {
   const [userOverride, setUserOverride] = useState<boolean | null>(null);
   const prevForceCollapsed = useRef(forceCollapsed);
@@ -56,6 +65,12 @@ export function PathAndArchitecture({
 
   // forceExpanded is authoritative; forceCollapsed sets the default (user can still override)
   const isExpanded = forceExpanded ? true : (userOverride ?? (forceCollapsed ? false : true));
+
+  // The Path Duration Bar consumes all four state inputs. Some callers may
+  // omit chip/module sets, so we fall back to the all-on defaults that match
+  // the rest of the app's defaulting logic in App.tsx.
+  const effectiveAIModules = aiAgentsModules ?? new Set(ALL_AI_MODULES);
+  const effectiveMedallionLayers = medallionLayers ?? new Set(ALL_MEDALLION_LAYERS);
 
   return (
     <div id="path-architecture-section" className="bg-card rounded-lg border border-border overflow-hidden">
@@ -76,11 +91,17 @@ export function PathAndArchitecture({
           </p>
         </div>
 
-        {/* Selected path badge when collapsed */}
+        {/* Compact duration bar — replaces the legacy path-name pill when collapsed */}
         {!isExpanded && (
-          <span className="text-ui-xs font-medium text-primary bg-primary/10 border border-primary/20 px-2.5 py-1 rounded-full">
-            {BUTTON_LABELS[selectedLevel]}
-          </span>
+          <PathDurationBar
+            level={selectedLevel}
+            direction={direction}
+            aiModules={effectiveAIModules}
+            medallionLayers={effectiveMedallionLayers}
+            completedSteps={completedSteps}
+            chainContext={chainContext}
+            variant="compact"
+          />
         )}
 
         <CopyLinkButton sectionId="path-architecture-section" />
@@ -96,6 +117,12 @@ export function PathAndArchitecture({
         isExpanded ? 'max-h-[3000px] opacity-100' : 'max-h-0 opacity-0 overflow-hidden'
       }`}>
         <div className="px-4 pb-4 space-y-4">
+          {/* Estimated Build Time bar moved into LevelSelectorGrid — it now
+              renders right under the "Choose Your Workshop Path" header so it
+              sits adjacent to the controls that drive it, instead of leading
+              the entire card. The compact variant in the collapsed-card header
+              still surfaces the total when this section is folded. */}
+
           {/* Direction Toggle */}
           <div className="flex justify-center mb-4">
             <div
@@ -221,6 +248,7 @@ export function PathAndArchitecture({
           {/* Level Selector Grid */}
           <LevelSelectorContent
             selectedLevel={selectedLevel}
+            chainContext={chainContext}
             onLevelChange={onLevelChange}
             completedSteps={completedSteps}
             useCaseLockedLevel={useCaseLockedLevel}
@@ -230,6 +258,7 @@ export function PathAndArchitecture({
             onAIModulesChange={onAIModulesChange}
             medallionLayers={medallionLayers}
             onMedallionLayersChange={onMedallionLayersChange}
+            disabledWorkshopLevels={disabledWorkshopLevels}
           />
 
           {/* What You'll Build — path description panel */}
@@ -241,6 +270,7 @@ export function PathAndArchitecture({
           {/* Architecture Diagram */}
           <ArchitectureDiagramContent
             workshopLevel={selectedLevel}
+            chainContext={chainContext}
             completedSteps={completedSteps}
             direction={direction}
             aiAgentsModules={aiAgentsModules}

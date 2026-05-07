@@ -13,7 +13,8 @@ import {
 } from './components/session';
 import { apiClient } from './api/client';
 import { Zap, MessageSquare, Trophy, Plus, PanelLeftClose, PanelLeft, Menu, X, BarChart3, Eye } from 'lucide-react';
-import { normalizeLevel, getFilteredSections, getCumulativeOverrides, USE_CASE_LEVEL_LOCK, isForwardProgression, getDisabledTagsForAIModules, ALL_AI_MODULES, getDisabledTagsForMedallionLayers, normalizeMedallionLayers, ALL_MEDALLION_LAYERS, type WorkshopLevel, type WorkflowDirection, type AIAgentModule, type MedallionLayer } from './constants/workflowSections';
+import { normalizeLevel, getFilteredSections, getCumulativeOverrides, USE_CASE_LEVEL_LOCK, isForwardProgression, getDisabledTagsForAIModules, ALL_AI_MODULES, getDisabledTagsForMedallionLayers, normalizeMedallionLayers, ALL_MEDALLION_LAYERS, computeChainContext, deriveInitialChainContext, type WorkshopLevel, type WorkflowDirection, type AIAgentModule, type MedallionLayer, type ChainContext } from './constants/workflowSections';
+import { DEFAULT_LEVEL_BY_ASSISTANT } from './constants/codingAssistants';
 
 export default function App() {
   const location = useLocation();
@@ -71,6 +72,12 @@ export default function App() {
   const [codingAssistant, setCodingAssistant] = useState<string | null>(null);
   // Default to end-to-end which includes all chapters (complete workshop)
   const [workshopLevel, setWorkshopLevel] = useState<WorkshopLevel>('end-to-end');
+  // Explicit chain context for additive path selection. See ChainContext docs
+  // in workflowSections.ts. Tracks whether the user is climbing APP_CHAIN
+  // (Apps → +Lakebase → +Lakehouse → +AI/Agents) versus a standalone Lakehouse
+  // chain or a reverse-direction chain. Starts as null (no chain locked in);
+  // the first level click computes the proper context via computeChainContext.
+  const [chainContext, setChainContext] = useState<ChainContext>(null);
   const [direction, setDirection] = useState<WorkflowDirection>('forward');
   const [levelExplicitlySelected, setLevelExplicitlySelected] = useState(false);
   const [useCaseLockedLevel, setUseCaseLockedLevel] = useState<WorkshopLevel | null>(null);
@@ -83,9 +90,12 @@ export default function App() {
 
   // Visibility state (fetched per coding_assistant from backend). The Set is
   // the list of disabled section_tags. `prerequisitesVisible` controls whether
-  // the Prerequisites block renders in the wizard.
+  // the Prerequisites block renders in the wizard. `disabledWorkshopLevels`
+  // lists the LevelSelector buttons that should be greyed out for the active
+  // coding assistant — populated from `disabled_paths` in the same fetch.
   const [disabledSectionTags, setDisabledSectionTags] = useState<Set<string>>(new Set());
   const [prerequisitesVisible, setPrerequisitesVisible] = useState<boolean>(true);
+  const [disabledWorkshopLevels, setDisabledWorkshopLevels] = useState<Set<WorkshopLevel>>(new Set());
 
   // Client-side AI sub-module selection (Genie / Agent / Dashboard chips).
   // Kept SEPARATE from `disabledSectionTags` so the per-coding-assistant visibility
@@ -320,6 +330,7 @@ export default function App() {
       setLevelExplicitlySelected(false);
       setUseCaseLockedLevel(null);
       setWorkshopLevel('end-to-end');
+      setChainContext(null);
       setAiAgentsModules(new Set(ALL_AI_MODULES));
       setMedallionLayers(new Set(ALL_MEDALLION_LAYERS));
       setInitialExpandedStep(1);
@@ -345,13 +356,19 @@ export default function App() {
   };
 
   // Helper to find the next incomplete step
-  const getNextIncompleteStep = (completed: number[], skipped: number[] = [], level?: WorkshopLevel): number => {
+  const getNextIncompleteStep = (
+    completed: number[],
+    skipped: number[] = [],
+    level?: WorkshopLevel,
+    chainOverride?: ChainContext,
+  ): number => {
     const completedSet = new Set(completed);
     const skippedSet = new Set(skipped);
     const effectiveLevel = level || workshopLevel;
+    const effectiveChain = chainOverride ?? chainContext;
     // Use cumulative overrides so app-chain users who progressed to lakehouse
     // see the full step list (including step 9 which requires ch2 visibility)
-    const cumOverrides = getCumulativeOverrides(effectiveLevel, completedSet);
+    const cumOverrides = getCumulativeOverrides(effectiveLevel, completedSet, effectiveChain);
     const sections = getFilteredSections(
       effectiveLevel,
       effectiveDisabledTags,
@@ -400,7 +417,15 @@ export default function App() {
 
         // Restore workshop level — use-case lock takes precedence over saved value
         const loadedLevel = loadedLock ?? normalizeLevel(response.workshop_level || 'end-to-end');
-        setWorkshopLevel(!loadedLock && loadedLevel === 'skills-accelerator' ? 'end-to-end' : loadedLevel);
+        const effectiveRestoredLevel: WorkshopLevel =
+          !loadedLock && loadedLevel === 'skills-accelerator' ? 'end-to-end' : loadedLevel;
+        setWorkshopLevel(effectiveRestoredLevel);
+        // Reconstruct the additive-chain context from the saved level + completed
+        // steps. Without an explicit persisted chainContext we fall back to the
+        // legacy "any APP_LAKEBASE_STEPS completed → APP_CHAIN" heuristic for
+        // ambiguous lakehouse/lakehouse-di states.
+        const restoredChain = deriveInitialChainContext(effectiveRestoredLevel, loadedCompleted);
+        setChainContext(restoredChain);
         
         // Restore custom use case overrides from session_parameters
         const sessionParams = response.session_parameters || {};
@@ -414,7 +439,12 @@ export default function App() {
         setCodingAssistant(sessionParams.coding_assistant || null);
         
         // Navigate to the next incomplete step using the actual section order
-        const nextStep = getNextIncompleteStep(Array.from(loadedCompleted), loadedSkippedSteps, loadedLevel);
+        const nextStep = getNextIncompleteStep(
+          Array.from(loadedCompleted),
+          loadedSkippedSteps,
+          loadedLevel,
+          restoredChain,
+        );
         setInitialExpandedStep(nextStep);
         
         // Trigger fade-out animation
@@ -442,6 +472,12 @@ export default function App() {
       }
     }
     setWorkshopLevel(level);
+    // Update the additive chain context. Climbing APP_CHAIN
+    // (Apps → +Lakebase → +Lakehouse → +AI/Agents) is preserved when the next
+    // level continues that chain; standalone Lakehouse / accelerator / reverse
+    // clicks reset/swap the context appropriately.
+    const nextChain = computeChainContext(chainContext, workshopLevel, level);
+    setChainContext(nextChain);
     // Whenever the user changes paths, reset the AI sub-module chips back to
     // the inclusive default. Keeps re-entering AI predictable ("all on by default").
     if (level !== workshopLevel) {
@@ -463,7 +499,7 @@ export default function App() {
         workshop_level: level,
       }).catch(err => console.error('Error saving workshop level:', err));
     }
-  }, [sessionId, levelExplicitlySelected, completedSteps, workshopLevel, readOnly, setMedallionLayers]);
+  }, [sessionId, levelExplicitlySelected, completedSteps, workshopLevel, readOnly, setMedallionLayers, chainContext]);
 
   const handleStepPromptGenerated = useCallback((stepNumber: number, promptText: string) => {
     if (readOnly) return;
@@ -525,17 +561,42 @@ export default function App() {
     }
   }, [sessionId, workshopLevel, readOnly]);
 
-  // Handle coding assistant selection
+  // Handle coding assistant selection.
+  //
+  // Per-assistant cold-start default: some assistants (currently Genie Code,
+  // which is in active beta and can't yet drive the full Apps + Lakebase
+  // chapters) prefer a narrower default workshop level than the generic
+  // `end-to-end`. We apply that override ONLY when the user hasn't yet
+  // explicitly chosen a level — saved sessions and any explicit pick win.
   const handleCodingAssistantChange = useCallback((assistantId: string) => {
     if (readOnly) return;
     setCodingAssistant(assistantId);
+    const assistantDefault = DEFAULT_LEVEL_BY_ASSISTANT[assistantId as keyof typeof DEFAULT_LEVEL_BY_ASSISTANT];
+    const shouldApplyAssistantDefault =
+      !levelExplicitlySelected &&
+      assistantDefault !== undefined &&
+      assistantDefault !== workshopLevel;
+    if (shouldApplyAssistantDefault) {
+      const nextLevel = assistantDefault as WorkshopLevel;
+      setWorkshopLevel(nextLevel);
+      // Mirror the non-explicit chain reset that `computeChainContext` would
+      // produce: a cold-start switch into the lakehouse/AI flow lives on the
+      // LAKEHOUSE_CHAIN, not the APP_CHAIN.
+      setChainContext(computeChainContext(chainContext, workshopLevel, nextLevel));
+      if (sessionId) {
+        apiClient.updateSessionMetadata({
+          session_id: sessionId,
+          workshop_level: nextLevel,
+        }).catch(err => console.error('Error saving assistant-default workshop level:', err));
+      }
+    }
     if (sessionId) {
       apiClient.updateSessionMetadata({
         session_id: sessionId,
         coding_assistant: assistantId,
       }).catch(err => console.error('Error saving coding assistant:', err));
     }
-  }, [sessionId, readOnly]);
+  }, [sessionId, readOnly, levelExplicitlySelected, workshopLevel, chainContext]);
 
   const handleDirectionChange = useCallback((newDirection: WorkflowDirection) => {
     if (directionLocked) return;
@@ -651,6 +712,13 @@ export default function App() {
   // changes, and after every Config->Workflow navigation (dataRefreshKey bump).
   // A local `cancelled` flag drops stale responses so a quick assistant swap
   // never leaves a stale result applied.
+  //
+  // Critically, this effect NEVER calls setWorkshopLevel — the runtime grandfather
+  // rule lives in LevelSelector.isButtonDisabled (the currently-selected level
+  // is always clickable, even if it's now in disabledWorkshopLevels). This
+  // eliminates the entire class of "saved session silently mutated" bugs: a
+  // user's stored workshop_level is never overwritten just because their
+  // coding-assistant choice or admin config changed underneath them.
   useEffect(() => {
     let cancelled = false;
     apiClient
@@ -659,6 +727,7 @@ export default function App() {
         if (cancelled) return;
         setDisabledSectionTags(new Set(v.disabled_steps));
         setPrerequisitesVisible(v.prerequisites_visible);
+        setDisabledWorkshopLevels(new Set((v.disabled_paths ?? []) as WorkshopLevel[]));
       })
       .catch(err => {
         if (cancelled) return;
@@ -1080,9 +1149,11 @@ export default function App() {
                     customDescription={customDescription}
                     initialBrandUrl={brandUrl}
                     workshopLevel={workshopLevel}
+                    chainContext={chainContext}
                     onWorkshopLevelChange={handleWorkshopLevelChange}
                     levelExplicitlySelected={levelExplicitlySelected}
                     disabledSectionTags={effectiveDisabledTags}
+                    disabledWorkshopLevels={disabledWorkshopLevels}
                     prerequisitesVisible={prerequisitesVisible}
                     useCaseLockedLevel={useCaseLockedLevel}
                     direction={direction}

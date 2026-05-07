@@ -746,7 +746,7 @@ export function getLevelUIOverrides(level: WorkshopLevel): LevelUIOverrides {
 // Users can incrementally add capabilities but never go back.
 // ---------------------------------------------------------------------------
 
-const APP_CHAIN: WorkshopLevel[] = ['app-only', 'app-database', 'lakehouse', 'lakehouse-di'];
+export const APP_CHAIN: WorkshopLevel[] = ['app-only', 'app-database', 'lakehouse', 'lakehouse-di'];
 const LAKEHOUSE_CHAIN: WorkshopLevel[] = ['lakehouse', 'lakehouse-di'];
 
 // Reverse ETL section ordering
@@ -770,10 +770,100 @@ const APP_LAKEBASE_STEPS = new Set([4, 5, 6, 7, 8]);
  * Determine which progression chain a user is on, using completedSteps
  * to disambiguate when `lakehouse` / `lakehouse-di` appear in both chains.
  */
+/**
+ * Explicit chain context tracked in App state.
+ *
+ * The user may climb APP_CHAIN cumulatively (Apps → +Lakebase → +Lakehouse → +AI/Agents)
+ * or LAKEHOUSE_CHAIN (Lakehouse → +AI/Agents) or REVERSE_ANALYTICS_CHAIN.
+ * Accelerators have no chain (`null`). When set, this overrides the older
+ * "infer from completedSteps" heuristic so that switching levels mid-flow
+ * preserves the cumulative composition (e.g. clicking Lakehouse from
+ * `app-database` keeps Apps + Lakebase visible instead of dropping them).
+ */
+export type ChainContext = 'app' | 'lakehouse' | 'reverse' | null;
+
+/**
+ * Compute the new chain context after a level click.
+ *
+ * Rules:
+ *  - Accelerator levels      → null
+ *  - reverse-* levels        → 'reverse'
+ *  - app-only / app-database → 'app'
+ *  - end-to-end              → 'app' (its sectionIds already cover everything;
+ *                              APP_CHAIN context preserves cumulative semantics)
+ *  - lakehouse / lakehouse-di:
+ *      keep 'app' only when the user is genuinely climbing APP_CHAIN — i.e.
+ *      the previous level was Apps/Lakebase, OR it was Lakehouse/Lakehouse+AI
+ *      and the prior chain was already 'app' (so chained +AI clicks preserve
+ *      the additive context). Otherwise → 'lakehouse' (standalone).
+ *      This is what fixes the reported "click Lakehouse from app-database
+ *      drops Apps+Lakebase" bug while still letting cold→Lakehouse render
+ *      Lakehouse-only.
+ */
+export function computeChainContext(
+  prevChain: ChainContext,
+  prevLevel: WorkshopLevel,
+  nextLevel: WorkshopLevel,
+): ChainContext {
+  if (
+    nextLevel === 'accelerator' ||
+    nextLevel === 'genie-accelerator' ||
+    nextLevel === 'data-engineering-accelerator' ||
+    nextLevel === 'skills-accelerator' ||
+    nextLevel === 'agents-accelerator'
+  ) {
+    return null;
+  }
+  if (
+    nextLevel === 'reverse-lakehouse' ||
+    nextLevel === 'reverse-lakehouse-di' ||
+    nextLevel === 'reverse-lakebase' ||
+    nextLevel === 'reverse-app'
+  ) {
+    return 'reverse';
+  }
+  if (nextLevel === 'app-only' || nextLevel === 'app-database') return 'app';
+  if (nextLevel === 'end-to-end') return 'app';
+  if (nextLevel === 'lakehouse' || nextLevel === 'lakehouse-di') {
+    const climbingFromApp =
+      prevLevel === 'app-only' ||
+      prevLevel === 'app-database' ||
+      ((prevLevel === 'lakehouse' || prevLevel === 'lakehouse-di') && prevChain === 'app');
+    return climbingFromApp ? 'app' : 'lakehouse';
+  }
+  return prevChain;
+}
+
+/**
+ * Derive the initial chain context on session load from the restored
+ * `workshop_level` and `completedSteps`. We don't persist chainContext
+ * separately on the backend, so this reconstructs it the same way the
+ * legacy `getActiveChain` heuristic would: any of the app-lakebase steps
+ * completed implies the user climbed APP_CHAIN.
+ */
+export function deriveInitialChainContext(
+  level: WorkshopLevel,
+  completedSteps: Set<number> = new Set(),
+): ChainContext {
+  if (level === 'lakehouse' || level === 'lakehouse-di') {
+    for (const s of APP_LAKEBASE_STEPS) {
+      if (completedSteps.has(s)) return 'app';
+    }
+    return 'lakehouse';
+  }
+  return computeChainContext(null, level, level);
+}
+
 export function getActiveChain(
   level: WorkshopLevel,
   completedSteps: Set<number>,
+  chainContext?: ChainContext,
 ): WorkshopLevel[] | null {
+  // Explicit chain context (from App state) wins over step-based inference.
+  if (chainContext === 'app') return APP_CHAIN;
+  if (chainContext === 'lakehouse') return LAKEHOUSE_CHAIN;
+  if (chainContext === 'reverse') return REVERSE_ANALYTICS_CHAIN;
+
   if (level === 'app-only' || level === 'app-database') return APP_CHAIN;
   if (
     level === 'reverse-lakehouse' ||
@@ -835,8 +925,9 @@ export interface CumulativeOverrides {
 export function getCumulativeOverrides(
   level: WorkshopLevel,
   completedSteps: Set<number>,
+  chainContext?: ChainContext,
 ): CumulativeOverrides | null {
-  const chain = getActiveChain(level, completedSteps);
+  const chain = getActiveChain(level, completedSteps, chainContext);
   if (!chain || chain === LAKEHOUSE_CHAIN) return null;
 
   const idx = chain.indexOf(level);

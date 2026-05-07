@@ -44,6 +44,7 @@ import {
   type WorkshopLevel,
   type AIAgentModule,
   type MedallionLayer,
+  type ChainContext,
 } from '../constants/workflowSections';
 import { ServicePopover } from './ServicePopover';
 
@@ -636,6 +637,7 @@ function SkillsAcceleratorView({
 
 interface ArchitectureDiagramContentProps {
   workshopLevel?: WorkshopLevel;
+  chainContext?: ChainContext;
   completedSteps?: Set<number>;
   direction?: 'forward' | 'reverse';
   aiAgentsModules?: Set<AIAgentModule>;
@@ -676,6 +678,7 @@ function shouldShowMedallionLayer(
  */
 export function ArchitectureDiagramContent({
   workshopLevel = 'end-to-end',
+  chainContext = null,
   completedSteps,
   direction = 'forward',
   aiAgentsModules,
@@ -728,7 +731,7 @@ export function ArchitectureDiagramContent({
     if (!isSkillsAccelerator) setExpandedCard(null);
   }, [isSkillsAccelerator]);
 
-  const cumOverrides = completedSteps ? getCumulativeOverrides(workshopLevel, completedSteps) : null;
+  const cumOverrides = completedSteps ? getCumulativeOverrides(workshopLevel, completedSteps, chainContext) : null;
   const visibility = cumOverrides?.archVisibility ?? ARCH_VISIBILITY[workshopLevel];
   const showAppLakebase = visibility.ch1 || visibility.ch2;
   const showLakehouse = visibility.ch3;
