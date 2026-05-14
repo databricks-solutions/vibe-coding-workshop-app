@@ -23,7 +23,46 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 CONFIG_PATH = PROJECT_ROOT / "user-config.yaml"
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from brand_extractor import extract_brand_assets, hex_to_hsl
+from brand_extractor import (
+    extract_brand_assets,
+    hex_to_hsl,
+    looks_like_valid_url,
+    _normalise_color,
+    _redact_url,
+    _try_brandcolorcode,
+)
+
+# Length caps applied at the prompt boundary (defense-in-depth: also enforced
+# by _yaml_safe on save and by extract_brand_assets internally).
+_BRAND_NAME_PROMPT_CAP = 200
+_BRAND_HEX_PROMPT_CAP = 32
+
+
+def _yaml_safe(v):
+    """Make a value safe to store in our simple double-quoted YAML format.
+
+    The custom YAML serializer in save_config writes values as
+    ``  key: "value"``.  If *value* contains an unescaped double quote,
+    embedded newline, or control character, parsing breaks (or worse: it
+    could be used to inject an additional YAML key).  This helper neutralises
+    those cases without losing meaningful information:
+
+        * ``"`` is replaced with ``'`` (companies don't usually have double
+          quotes in their names; apostrophes are preserved).
+        * CR/LF are replaced with a single space.
+        * Other ASCII control characters are stripped.
+        * Length is capped at 500 characters.
+
+    Non-string inputs are coerced to ``str``.  Returns ``""`` on any error.
+    """
+    try:
+        if v is None:
+            return ""
+        s = str(v).replace('"', "'").replace("\r", "").replace("\n", " ")
+        s = "".join(c for c in s if ord(c) >= 0x20 or c == "\t")
+        return s[:500]
+    except Exception:
+        return ""
 
 # ---------------------------------------------------------------------------
 # Cross-platform subprocess helpers
@@ -186,7 +225,7 @@ def save_config(config: dict):
                 if isinstance(v, list):
                     lines.append(f'  {k}: []')
                 else:
-                    lines.append(f'  {k}: "{v}"')
+                    lines.append(f'  {k}: "{_yaml_safe(v)}"')
         lines.append("")
     with open(CONFIG_PATH, "w") as f:
         f.write("\n".join(lines) + "\n")
@@ -507,6 +546,20 @@ def cmd_install(args):
     endpoint = input(f"  Model endpoint [{defaults['endpoint']}]: ").strip() or defaults["endpoint"]
 
     # Optional: customer website URL for branding
+    # ------------------------------------------------------------------
+    # Branding pipeline (purely additive, fully fault-isolated):
+    #   1. Read the URL the user typed (any non-empty value is preserved
+    #      as customer_url even if extraction returns nothing).
+    #   2. Attempt site-based extraction (UA-hardened, SSRF-guarded).
+    #   3. Show what was found, then offer two optional override prompts:
+    #        - Company display name (default = extracted or humanised domain)
+    #        - Primary brand color hex (default = extracted, often empty)
+    #      Both prompts accept blank to skip; both are wrapped in absolute
+    #      exception guards so a broken stdin never aborts the install.
+    # The customer URL stored in user-config.yaml -> seeded into
+    # workshop_parameters.company_brand_url is ALWAYS the user-typed URL,
+    # never a brandcolorcode.com URL.
+    # ------------------------------------------------------------------
     brand_url_input = (
         input(f"  Customer website URL for branding, e.g. www.databricks.com (optional) [{defaults['brand_url']}]: ").strip()
         or defaults["brand_url"]
@@ -514,23 +567,112 @@ def cmd_install(args):
     brand_url = ""
     brand_extracted = {}
     if brand_url_input:
+        # Cap user-typed URL length to a sane bound before doing anything else
+        brand_url_input = brand_url_input[:2048]
         url_candidate = brand_url_input if brand_url_input.startswith("http") else "https://" + brand_url_input
-        info(f"Extracting brand assets from {url_candidate}...")
-        try:
-            brand_extracted = extract_brand_assets(url_candidate)
-            if brand_extracted.get("company_name") or brand_extracted.get("logo_url") or brand_extracted.get("primary_color"):
-                brand_url = url_candidate
-                success(
-                    f"Brand extracted: {brand_extracted.get('company_name', 'Unknown')} "
-                    f"(logo: {'yes' if brand_extracted.get('logo_url') else 'no'}, "
-                    f"colors: {'yes' if brand_extracted.get('primary_color') else 'no'})"
-                )
-            else:
-                warn("Could not extract brand information from that URL. Skipping branding, using defaults.")
-                brand_extracted = {}
-        except Exception:
-            warn("Could not reach or parse the website. Skipping branding, using defaults.")
+
+        # ------------------------------------------------------------------
+        # Quick validation: the URL that lands in workshop_parameters MUST be
+        # a real, safe URL.  ``looks_like_valid_url`` checks scheme +
+        # hostname shape + SSRF / scheme-injection guards.  If it fails, we
+        # warn, store nothing, and skip extraction + override prompts.  This
+        # is the ONLY gate between user input and the workshop_parameters
+        # row -- the value we assign to ``brand_url`` below is exactly what
+        # the user typed (with ``https://`` prepended if they omitted it).
+        # ------------------------------------------------------------------
+        if not looks_like_valid_url(url_candidate):
+            warn(
+                f"{brand_url_input!r} does not look like a valid URL "
+                "(expected something like 'www.databricks.com'). Skipping branding."
+            )
+            brand_url = ""
             brand_extracted = {}
+        else:
+            # Preserve the user-typed URL unconditionally so it lands in
+            # branding.customer_url -> __COMPANY_BRAND_URL__ -> workshop_parameters
+            # even when extraction is fully blocked.  This fixes the
+            # "both pipelines populated empty" bug from the previous installer.
+            brand_url = url_candidate
+            info(f"Extracting brand assets from {_redact_url(url_candidate)}...")
+            try:
+                brand_extracted = extract_brand_assets(url_candidate) or {}
+            except Exception:
+                warn("Could not reach or parse the website; continuing with defaults.")
+                brand_extracted = {}
+
+            # Report what extraction found (user can override below)
+            try:
+                success(
+                    f"Brand extracted: name={brand_extracted.get('company_name') or '(none)'!r}, "
+                    f"logo={'yes' if brand_extracted.get('logo_url') else 'no'}, "
+                    f"colors={'yes' if brand_extracted.get('primary_color') else 'no'}"
+                )
+            except Exception:
+                pass
+
+            # Optional override prompts.  Wrapped in absolute exception guards
+            # so a broken stdin / unexpected error never aborts the install.
+            try:
+                extracted_name = brand_extracted.get("company_name", "") or ""
+                name_default = extracted_name[:_BRAND_NAME_PROMPT_CAP]
+                name_prompt = (
+                    f"  Company display name, e.g. Databricks [{name_default}]: "
+                    if name_default
+                    else "  Company display name, e.g. Databricks (optional): "
+                )
+                company_input = input(name_prompt).strip()[:_BRAND_NAME_PROMPT_CAP]
+                name_was_overridden = False
+                if company_input:
+                    if company_input != extracted_name:
+                        name_was_overridden = True
+                    brand_extracted["company_name"] = company_input
+                elif name_default:
+                    brand_extracted["company_name"] = name_default
+
+                # If the user supplied a better/longer company name (e.g. typed
+                # "American Airlines" instead of accepting "Aa"), AND we still
+                # have no primary color, re-attempt the curated brandcolorcode
+                # lookup with the corrected name.  This unlocks color extraction
+                # for WAF-blocked sites whose 2-char humanised domain was too
+                # short for the title-validation gate inside extract_brand_assets.
+                try:
+                    if (
+                        name_was_overridden
+                        and not brand_extracted.get("primary_color")
+                        and brand_extracted.get("company_name")
+                    ):
+                        extra_colors = _try_brandcolorcode(brand_extracted["company_name"])
+                        if extra_colors:
+                            brand_extracted["primary_color"] = extra_colors[0]
+                            if len(extra_colors) >= 2 and not brand_extracted.get("secondary_color"):
+                                brand_extracted["secondary_color"] = extra_colors[1]
+                            if len(extra_colors) >= 3 and not brand_extracted.get("accent_color"):
+                                brand_extracted["accent_color"] = extra_colors[2]
+                            info(f"Found curated brand colors for {brand_extracted['company_name']!r}.")
+                except Exception:
+                    pass
+
+                color_default = brand_extracted.get("primary_color", "") or ""
+                color_prompt = (
+                    f"  Primary brand color hex, e.g. #C8102E (optional) [{color_default}]: "
+                    if color_default else
+                    "  Primary brand color hex, e.g. #C8102E (optional): "
+                )
+                color_input = input(color_prompt).strip()[:_BRAND_HEX_PROMPT_CAP]
+                if color_input:
+                    try:
+                        normalized = _normalise_color(color_input)
+                        if normalized:
+                            brand_extracted["primary_color"] = normalized
+                        else:
+                            warn(f"Invalid hex color {color_input!r}; keeping previous value.")
+                    except Exception:
+                        warn("Could not parse color input; keeping previous value.")
+            except (KeyboardInterrupt, EOFError):
+                # User control -- must propagate so Ctrl+C still aborts the install
+                raise
+            except Exception:
+                warn("Skipping branding prompts due to unexpected error; install continues.")
 
     # ── Step 5: Save configuration ────────────────────────────────────
     step(5, TOTAL, "Saving configuration & generating files")
