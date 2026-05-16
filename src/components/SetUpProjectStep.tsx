@@ -1,15 +1,24 @@
 /**
  * SetUpProjectStep Component
- * 
+ *
  * Workflow Step 2: Set Up Project
- * Combines Clone Repository + Open in Editor + Configure Auth into a single workflow step.
- * This is an instructional step with no LLM processing required.
- * 
- * Uses workspace_url from Workshop Parameters for the auth login command.
+ *
+ * Renders one of three instructional variants based on the user-selected
+ * coding assistant (no LLM processing in any variant):
+ *
+ *   - 'desktop' (default for cursor / copilot / vscode / ai-gateway / null /
+ *     unknown): Clone Repository + Open in Editor + Configure AI Model +
+ *     Configure Databricks Auth. Uses workspace_url from Workshop Parameters
+ *     for the auth login command.
+ *   - 'coda':        Single clone command. CoDA runs in a Databricks App
+ *                    browser terminal so auth + model are already wired.
+ *   - 'genie-code':  Single clone command targeting /Workspace/Users/<email>/
+ *                    v2v-in-geniecode/... with the email auto-injected from
+ *                    apiClient.getCurrentUser().
  */
 
 import { useState, useEffect } from 'react';
-import { GitBranch, Copy, Check, CheckCircle, ChevronDown, ChevronUp, ExternalLink, RefreshCw } from 'lucide-react';
+import { GitBranch, Copy, Check, CheckCircle, ChevronDown, ChevronUp, ExternalLink, RefreshCw, Sparkles, Terminal } from 'lucide-react';
 import { BorderBeamButton } from './BorderBeamButton';
 import { useReadOnly } from '../contexts/ReadOnlyContext';
 
@@ -23,6 +32,30 @@ interface SetUpProjectStepProps {
   onStepReset?: () => void;
   sessionId?: string | null;
   useCaseLabel?: string;
+  /**
+   * The user-selected coding assistant (from CodingAssistantSelector / session).
+   * Drives which body variant renders inside the Set Up Project card:
+   *   - 'coda'       -> CoDA simplified body (clone only; auth + model already wired)
+   *   - 'genie-code' -> Genie Code simplified body (/Workspace path with auto-injected email)
+   *   - anything else (cursor / copilot / vscode / ai-gateway / null / unknown)
+   *                  -> Desktop default body (A. clone + B. model + C. auth)
+   */
+  codingAssistant?: string | null;
+  /**
+   * The signed-in user's email (already fetched once at the App level via
+   * apiClient.getCurrentUser). Only consumed by the Genie Code variant to
+   * build the /Workspace/Users/<email>/v2v-in-geniecode/... clone target.
+   * Falls back to '<your_email>' placeholder when null / empty.
+   */
+  currentUserEmail?: string | null;
+}
+
+type SetUpProjectVariant = 'coda' | 'genie-code' | 'desktop';
+
+function resolveVariant(codingAssistant?: string | null): SetUpProjectVariant {
+  if (codingAssistant === 'coda') return 'coda';
+  if (codingAssistant === 'genie-code') return 'genie-code';
+  return 'desktop';
 }
 
 const DEFAULT_FOLDER = 'vibe-coding-workshop-template';
@@ -142,10 +175,13 @@ export function SetUpProjectStep({
   onStepReset,
   sessionId,
   useCaseLabel,
+  codingAssistant,
+  currentUserEmail,
 }: SetUpProjectStepProps) {
   const readOnly = useReadOnly();
   const folderName = deriveFolderName(useCaseLabel);
   const cloneCmd = `git clone ${REPO_URL} ${folderName}`;
+  const variant = resolveVariant(codingAssistant);
 
   const [copiedCommand, setCopiedCommand] = useState<string | null>(null);
   const [workspaceUrl, setWorkspaceUrl] = useState<string>(DEFAULT_WORKSPACE_URL);
@@ -176,7 +212,10 @@ export function SetUpProjectStep({
     }
   };
 
-  // Re-fetch workspace URL when refreshKey or sessionId changes
+  // Re-fetch workspace URL when refreshKey or sessionId changes so the
+  // Desktop variant's auth login command stays current with the active
+  // session / workshop parameters. The Genie Code variant's email comes
+  // in as a prop from App.tsx (no extra API call needed here).
   useEffect(() => {
     fetchWorkspaceUrl();
   }, [refreshKey, sessionId]);
@@ -216,7 +255,11 @@ export function SetUpProjectStep({
               Set Up Project
             </h3>
             <p className="text-sm text-muted-foreground">
-              Clone the template repository and configure Databricks authentication
+              {variant === 'coda'
+                ? 'Clone the workshop template into your CoDA browser terminal'
+                : variant === 'genie-code'
+                  ? 'Clone the workshop template into your Databricks /Workspace path'
+                  : 'Clone the template repository and configure Databricks authentication'}
             </p>
           </div>
         </div>
@@ -276,6 +319,14 @@ export function SetUpProjectStep({
               Select an industry and use case in &quot;Define Your Intent&quot; to get started
             </div>
           )}
+
+          {/* ===========================================================
+               VARIANT 1: DESKTOP (default)
+               Applies to: cursor / copilot / vscode / ai-gateway / null / unknown.
+               Three sub-sections (A. Clone, B. Model, C. Auth) -- unchanged.
+               =========================================================== */}
+          {variant === 'desktop' && (
+          <>
           {/* Sub-section A: Clone the repository */}
           <div className="space-y-4">
             <div className="flex items-center gap-2">
@@ -462,7 +513,146 @@ In **Cursor**, click on the model selector in the Agent panel and choose the lat
               </div>
             </div>
           </div>
-          
+          </>
+          )}
+
+          {/* ===========================================================
+               VARIANT 2: CoDA (simplified)
+               CoDA runs Claude Code / Codex / Gemini CLI / OpenCode in a
+               browser terminal inside a Databricks App. Already on the
+               workspace auth context, model already wired through the AI
+               Gateway -- so we drop sub-sections B and C entirely and just
+               show the clone command + a "why no extra setup" info card.
+               =========================================================== */}
+          {variant === 'coda' && (
+            <div className="space-y-4">
+              <div className="flex items-center gap-2">
+                <div className="w-6 h-6 rounded-full bg-orange-900/50 text-orange-300 flex items-center justify-center text-xs font-bold">
+                  A
+                </div>
+                <h4 className="font-semibold text-foreground">Clone the repository</h4>
+              </div>
+
+              <div className="pl-8 space-y-4">
+                <div className="text-sm text-muted-foreground space-y-2">
+                  {renderDescription(`Clone the workshop template into your CoDA browser terminal.
+
+**Step 1:** Open the integrated terminal inside your CoDA workspace (it opens by default on the right side of the screen).
+
+**Step 2:** Run the clone command below. The cloned folder will appear in CoDA's file tree -- open and edit files directly there.`)}
+                </div>
+
+                {/* Single clone command */}
+                <div className="space-y-2">
+                  <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Command</p>
+                  <div>
+                    <p className="text-xs text-slate-400 mb-1">Clone the repository</p>
+                    <CommandBox
+                      label="Clone"
+                      cmd={cloneCmd}
+                      copiedKey={copiedCommand || ''}
+                      onCopy={handleCopyCommand}
+                    />
+                  </div>
+                </div>
+
+                {/* Why no further setup card -- replaces sub-sections B + C */}
+                <div className="mt-4 p-3 bg-orange-900/15 border border-orange-700/30 rounded-lg">
+                  <div className="flex items-start gap-2">
+                    <Terminal className="w-4 h-4 text-orange-300 flex-shrink-0 mt-0.5" />
+                    <div className="flex-1">
+                      <p className="text-sm font-medium text-orange-300 mb-2">You're running inside CoDA &mdash; no extra setup needed</p>
+                      <ul className="text-xs text-muted-foreground space-y-1 list-disc list-inside marker:text-orange-300/60">
+                        <li>Already authenticated to your Databricks workspace (no <code className="bg-background/80 px-1 py-0.5 rounded text-primary font-mono text-ui-xs">databricks auth login</code>)</li>
+                        <li>Claude / Codex / Gemini / OpenCode are pre-wired through the Databricks AI Gateway (no model picker)</li>
+                        <li>39 pre-installed skills + MLflow session tracing already enabled</li>
+                      </ul>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Links */}
+                <div className="flex flex-wrap gap-2 mt-3">
+                  <LinkButton label="View Repository" url="https://github.com/databricks-solutions/vibe-coding-workshop-template" color="orange" />
+                  <LinkButton label="CoDA Deployment Docs" url="https://github.com/databrickslabs/coding-agents-databricks-apps/blob/main/docs/deployment.md" color="blue" />
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ===========================================================
+               VARIANT 3: Genie Code (simplified, /Workspace path)
+               Genie Code is native to Databricks and operates on /Workspace
+               paths via Unity Catalog. User is already authenticated and the
+               underlying model is already configured -- they just need to
+               clone the repo into the right /Workspace location so Genie
+               Code can see it. Email is auto-injected from getCurrentUser().
+               =========================================================== */}
+          {variant === 'genie-code' && (() => {
+            const emailForPath = currentUserEmail || '<your_email>';
+            const genieCloneCmd = `git clone https://github.com/databricks-solutions/vibe-coding-workshop-template /Workspace/Users/${emailForPath}/v2v-in-geniecode/vibe-coding-workshop-template`;
+            return (
+              <div className="space-y-4">
+                <div className="flex items-center gap-2">
+                  <div className="w-6 h-6 rounded-full bg-orange-900/50 text-orange-300 flex items-center justify-center text-xs font-bold">
+                    A
+                  </div>
+                  <h4 className="font-semibold text-foreground">Clone into your Databricks workspace</h4>
+                </div>
+
+                <div className="pl-8 space-y-4">
+                  <div className="text-sm text-muted-foreground space-y-2">
+                    {renderDescription(`Clone the workshop template into your /Workspace path so Genie Code can read and operate on the files.
+
+**Step 1:** Open the Genie Code terminal panel.
+
+**Step 2:** Run the clone command below. Run this **once per Genie Code session** -- the path includes your user email so each workshop attendee gets their own copy.`)}
+                  </div>
+
+                  {/* Single clone command (email auto-injected) */}
+                  <div className="space-y-2">
+                    <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Command</p>
+                    <div>
+                      <p className="text-xs text-slate-400 mb-1">Clone into your /Workspace path</p>
+                      <CommandBox
+                        label="Clone"
+                        cmd={genieCloneCmd}
+                        copiedKey={copiedCommand || ''}
+                        onCopy={handleCopyCommand}
+                      />
+                      <p className="text-xs text-slate-500 mt-1 italic">
+                        {currentUserEmail
+                          ? '💡 Auto-filled with your signed-in Databricks email. Swap it if you\'re cloning into someone else\'s workspace path.'
+                          : '💡 Your email will be auto-filled once the session loads, or replace `<your_email>` manually.'}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Why no further setup card -- replaces sub-sections B + C */}
+                  <div className="mt-4 p-3 bg-cyan-900/15 border border-cyan-700/30 rounded-lg">
+                    <div className="flex items-start gap-2">
+                      <Sparkles className="w-4 h-4 text-cyan-300 flex-shrink-0 mt-0.5" />
+                      <div className="flex-1">
+                        <p className="text-sm font-medium text-cyan-300 mb-2">You're running inside Genie Code &mdash; no extra setup needed</p>
+                        <ul className="text-xs text-muted-foreground space-y-1 list-disc list-inside marker:text-cyan-300/60">
+                          <li>Already authenticated to your Databricks workspace (no <code className="bg-background/80 px-1 py-0.5 rounded text-primary font-mono text-ui-xs">databricks auth login</code>)</li>
+                          <li>The underlying AI model is already configured (no model picker)</li>
+                          <li>Files at <code className="bg-background/80 px-1 py-0.5 rounded text-primary font-mono text-ui-xs">/Workspace/Users/...</code> appear directly in the workspace browser</li>
+                        </ul>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Links */}
+                  <div className="flex flex-wrap gap-2 mt-3">
+                    <LinkButton label="View Repository" url="https://github.com/databricks-solutions/vibe-coding-workshop-template" color="orange" />
+                    <LinkButton label="Genie Code Docs" url="https://docs.databricks.com/aws/en/genie-code/" color="blue" />
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
+
           {/* Bottom Mark Done Button */}
           <div className="flex justify-end pt-4 border-t border-border/50">
             {!isComplete && !readOnly && (

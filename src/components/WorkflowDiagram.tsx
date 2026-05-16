@@ -992,6 +992,27 @@ export function WorkflowDiagram({
                     }}
                     sessionId={sessionId}
                     useCaseLabel={customUseCaseLabel || selectedUseCaseLabel}
+                    codingAssistant={codingAssistant}
+                    currentUserEmail={
+                      // Only forward the email once it's actually resolved to
+                      // a real value. We filter:
+                      //   * '' / undefined  -> not yet fetched
+                      //   * 'user@databricks.com' -> App.tsx synthetic placeholder
+                      //     (initialized for header/menu copy before fetch resolves)
+                      //   * 'unknown'       -> backend fallback when no OAuth
+                      //     headers were present (src/backend/api/routes.py
+                      //     _get_session_user)
+                      //   * any value without an '@' -> not a real email
+                      // so the Genie Code clone command never embeds a
+                      // misleading placeholder path. Genie Code body falls
+                      // back to the literal '<your_email>' marker in those
+                      // cases, which clearly signals the user must edit it.
+                      currentUser
+                        && currentUser.includes('@')
+                        && currentUser !== 'user@databricks.com'
+                        ? currentUser
+                        : null
+                    }
                   />
                 </div>
               );
