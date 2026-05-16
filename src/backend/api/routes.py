@@ -3887,6 +3887,14 @@ PREREQUISITES_KEY = "__prerequisites__"
 PATH_KEY_PREFIX = "__path_"
 PATH_KEY_PATTERN = re.compile(r"^__path_[a-z][a-z0-9-]+__$")
 
+# Virtual step keys: real workflow steps (kind='step') that have NO row in
+# section_input_prompts because the UI renders them statically (no LLM
+# template). All three visibility columns (Default, CoDA, Genie Code) live
+# in step_visibility_overrides for these keys, just like __prerequisites__.
+# The admin Visibility matrix exposes each as its own three-column toggle
+# row under the step's owning chapter.
+VIRTUAL_STEP_KEYS = frozenset({"project_setup"})
+
 
 def is_path_key(key: str) -> bool:
     """True if `key` is a well-formed workshop-path key (`__path_<level>__`)."""
@@ -3939,17 +3947,28 @@ def get_disabled_step_tags(coding_assistant: str = DEFAULT_CODING_ASSISTANT_KEY)
     """Resolve disabled section_tags for a given coding_assistant.
 
     Semantics:
-      * Default: unchanged — reads section_input_prompts step_enabled=FALSE set.
+      * Default: reads section_input_prompts step_enabled=FALSE set, then
+        folds in any (vkey, '__default__')=FALSE rows for VIRTUAL_STEP_KEYS
+        (which have no section_input_prompts row, so their Default-column
+        visibility lives entirely in step_visibility_overrides).
       * CoDA / Genie Code: start from Default's disabled set, then apply the
         assistant's explicit override rows (an override can reveal a
         default-disabled step or hide a default-enabled step).
     """
     coding_assistant = _normalize_coding_assistant(coding_assistant)
     default_disabled = set(_default_disabled_step_tags())
+    overrides = _load_visibility_overrides()
+
+    # Virtual step keys (e.g. project_setup) have no section_input_prompts row.
+    # The Default column for each lives in step_visibility_overrides; absence
+    # of a row means visible (TRUE) by safe default.
+    for vkey in VIRTUAL_STEP_KEYS:
+        if overrides.get((vkey, DEFAULT_CODING_ASSISTANT_KEY), True) is False:
+            default_disabled.add(vkey)
+
     if coding_assistant == DEFAULT_CODING_ASSISTANT_KEY:
         return sorted(default_disabled)
 
-    overrides = _load_visibility_overrides()
     disabled = set(default_disabled)
     for (key, asst), enabled in overrides.items():
         # Skip non-step keys (synthetic namespaces own their own resolvers):
@@ -4066,7 +4085,25 @@ async def get_step_visibility_matrix():
         "genie_code_enabled": bool(overrides.get((PREREQUISITES_KEY, "genie-code"), prereq_default)),
     })
 
+    # Virtual step rows. These are real workflow steps (kind='step') that have
+    # no section_input_prompts row and therefore wouldn't be discovered by the
+    # default_map loop below. All three columns come from the overrides table
+    # with a safe TRUE default when no row exists yet.
+    for vkey in sorted(VIRTUAL_STEP_KEYS):
+        vdefault = overrides.get((vkey, DEFAULT_CODING_ASSISTANT_KEY), True)
+        items.append({
+            "section_key": vkey,
+            "kind": "step",
+            "default_enabled": bool(vdefault),
+            "coda_enabled": bool(overrides.get((vkey, "coda"), vdefault)),
+            "genie_code_enabled": bool(overrides.get((vkey, "genie-code"), vdefault)),
+        })
+
     for section_tag in sorted(default_map.keys()):
+        # Virtual step keys are emitted above; never double-emit if a
+        # section_input_prompts row is later added for the same tag.
+        if section_tag in VIRTUAL_STEP_KEYS:
+            continue
         default_value = bool(default_map[section_tag])
         items.append({
             "section_key": section_tag,
@@ -4118,10 +4155,11 @@ async def toggle_step_visibility(section_key: str, body: StepVisibilityUpdate):
     """Enable or disable a step for the given coding_assistant.
 
     Routing:
-      * '__path_<level>__'           -> UPSERT step_visibility_overrides (all assistants).
-      * Default + real section_tag   -> UPDATE section_input_prompts (existing path, unchanged).
-      * Default + '__prerequisites__' -> UPSERT step_visibility_overrides.
-      * CoDA / Genie Code (any key)  -> UPSERT step_visibility_overrides.
+      * '__path_<level>__'              -> UPSERT step_visibility_overrides (all assistants).
+      * Any key in VIRTUAL_STEP_KEYS    -> UPSERT step_visibility_overrides (all assistants).
+      * '__prerequisites__'             -> UPSERT step_visibility_overrides (all assistants).
+      * Default + real section_tag      -> UPDATE section_input_prompts (existing path, unchanged).
+      * CoDA / Genie Code (any key)     -> UPSERT step_visibility_overrides.
     """
     assistant_key = _validate_coding_assistant_key(body.coding_assistant)
     logger.info(
@@ -4159,6 +4197,20 @@ async def toggle_step_visibility(section_key: str, body: StepVisibilityUpdate):
         return {
             "success": True,
             "section_key": PREREQUISITES_KEY,
+            "coding_assistant": assistant_key,
+            "enabled": bool(body.enabled),
+        }
+
+    if section_key in VIRTUAL_STEP_KEYS:
+        # Virtual steps (no section_input_prompts row): all three keys stored
+        # in the overrides table, identical shape to the __prerequisites__
+        # branch above. Routing here BEFORE the Default-section_input_prompts
+        # branch is required because the existence-check there would 404 for
+        # virtual keys.
+        _upsert_override(section_key, assistant_key, body.enabled)
+        return {
+            "success": True,
+            "section_key": section_key,
             "coding_assistant": assistant_key,
             "enabled": bool(body.enabled),
         }

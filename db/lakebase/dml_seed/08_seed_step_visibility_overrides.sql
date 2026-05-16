@@ -6,26 +6,31 @@
 -- special '__prerequisites__' section_key.
 --
 -- CoDA product defaults:
---   The Prerequisites section and the 'project_setup' workflow step are hidden
---   out-of-the-box for the CoDA coding assistant because CoDA handles workspace
---   bootstrapping itself -- users would otherwise be asked to do redundant work.
---   Admins can re-enable either from Config -> Step Visibility at any time.
+--   The Prerequisites section is hidden out-of-the-box for the CoDA coding
+--   assistant because CoDA handles workspace bootstrapping itself -- users
+--   would otherwise be asked to do redundant work. The 'project_setup'
+--   workflow step is left visible (admins can hide it per-assistant via the
+--   Visibility matrix when desired).
 --
 -- Genie Code product defaults:
---   The 'project_setup' workflow step is hidden out-of-the-box for Genie Code
---   for the same reason as CoDA: Genie Code drives the workspace bootstrap on
---   its own, so the manual "Set Up Project" step would be redundant. The
---   Prerequisites section is left visible (Genie Code users still benefit from
---   the standard environment checks).
+--   The Prerequisites section is also hidden out-of-the-box for Genie Code
+--   for the same reason as CoDA: Genie Code drives the workspace bootstrap
+--   on its own, so the manual environment-check checklist is redundant. The
+--   'project_setup' workflow step is left visible (controlled independently
+--   from Prerequisites via its own toggle in the Visibility matrix).
 --
 -- Idempotency contract:
 --   * The INSERTs below use ON CONFLICT DO NOTHING so re-runs (or redeploys)
 --     never overwrite an admin-made per-assistant value that already exists.
---   * The final UPDATE forces the per-assistant product defaults to FALSE, but
---     ONLY for rows still in their original seeded state (updated_by = 'seed').
---     This makes the migration safe for existing installs (where the previous
---     version of this file left those rows as TRUE) while never clobbering a
---     value that an admin has already toggled in the UI.
+--   * The final UPDATE block reconciles installs that received earlier
+--     versions of this seed:
+--       - For Prerequisites: forces 'coda' AND 'genie-code' rows to FALSE
+--         when still in seeded state (older seeds left Genie Code as TRUE).
+--       - For project_setup: forces 'coda' AND 'genie-code' rows to TRUE
+--         when still in seeded state (older seeds set them to FALSE, hiding
+--         step 2; that product default has been retracted).
+--     Every UPDATE is guarded by `updated_by = 'seed'` so admin-touched rows
+--     (where updated_by carries the admin's identity) are never clobbered.
 --
 -- Runs AFTER db/lakebase/dml_seed/02_seed_section_input_prompts.sql because
 -- setup-lakebase.sh sorts seed files by filename (see scripts/setup-lakebase.sh
@@ -69,44 +74,50 @@ ON CONFLICT (section_key, coding_assistant) DO NOTHING;
 -- (they have no LLM template -- the UI renders them as static instructional
 -- sections) so the mirror-from-Default INSERTs above don't reach them. We seed
 -- them explicitly here:
---   * __prerequisites__ : the workshop Prerequisites block. Visible for Default
---     and Genie Code; hidden for CoDA (CoDA handles environment setup itself).
---   * project_setup     : Step 2 "Set Up Project". Hidden for both CoDA and
---     Genie Code -- both assistants bootstrap the workspace themselves, so
---     this redundant step is hidden out-of-the-box.
+--   * __prerequisites__ : the workshop Prerequisites block. Visible for Default;
+--     hidden for both CoDA and Genie Code (both assistants bootstrap the
+--     workspace themselves, so the manual environment-check checklist is
+--     redundant for them).
+--   * project_setup     : Step 2 "Set Up Project". Visible for all three
+--     assistants by default. Lives entirely in this overrides table (it has
+--     no section_input_prompts row) and is exposed as its own three-column
+--     toggle in the admin Visibility matrix so admins can hide it per
+--     coding-assistant if desired.
 INSERT INTO ${catalog}.${schema}.step_visibility_overrides
   (section_key, coding_assistant, enabled, updated_at, updated_by)
 VALUES
   ('__prerequisites__', '__default__', TRUE,  CURRENT_TIMESTAMP, 'seed'),
   ('__prerequisites__', 'coda',        FALSE, CURRENT_TIMESTAMP, 'seed'),
-  ('__prerequisites__', 'genie-code',  TRUE,  CURRENT_TIMESTAMP, 'seed'),
-  ('project_setup',     'coda',        FALSE, CURRENT_TIMESTAMP, 'seed'),
-  ('project_setup',     'genie-code',  FALSE, CURRENT_TIMESTAMP, 'seed')
+  ('__prerequisites__', 'genie-code',  FALSE, CURRENT_TIMESTAMP, 'seed'),
+  ('project_setup',     '__default__', TRUE,  CURRENT_TIMESTAMP, 'seed'),
+  ('project_setup',     'coda',        TRUE,  CURRENT_TIMESTAMP, 'seed'),
+  ('project_setup',     'genie-code',  TRUE,  CURRENT_TIMESTAMP, 'seed')
 ON CONFLICT (section_key, coding_assistant) DO NOTHING;
 
--- Migration for installs that received the earlier (all-TRUE) version of this
--- seed: force the per-assistant product defaults to FALSE, but only when the
--- row is still in its original seeded state. updated_by='seed' = never touched
--- by an admin, so flipping it to the new default is safe and preserves any
--- admin intent captured via the Config UI (which writes updated_by=<user email>).
+-- Migration for installs that received earlier versions of this seed.
+-- updated_by='seed' = never touched by an admin, so flipping it to the new
+-- default is safe and preserves any admin intent captured via the Config UI
+-- (which writes updated_by=<user email>).
 --
--- CoDA: hide both Prerequisites and project_setup.
+-- Prerequisites: hide for both CoDA and Genie Code. Older seeds left Genie
+-- Code's row as TRUE (visible); the new product default is FALSE.
 UPDATE ${catalog}.${schema}.step_visibility_overrides
 SET enabled    = FALSE,
     updated_at = CURRENT_TIMESTAMP,
     updated_by = 'seed'
-WHERE coding_assistant = 'coda'
-  AND section_key IN ('__prerequisites__', 'project_setup')
+WHERE coding_assistant IN ('coda', 'genie-code')
+  AND section_key = '__prerequisites__'
   AND enabled = TRUE
   AND updated_by = 'seed';
 
--- Genie Code: hide project_setup only (Prerequisites stays visible for this
--- assistant). Same updated_by='seed' guard so admin overrides are preserved.
+-- project_setup: reveal for both CoDA and Genie Code. Older seeds set this
+-- to FALSE for both assistants (hiding step 2); the new product default is
+-- TRUE. Admin overrides remain untouched via the updated_by='seed' guard.
 UPDATE ${catalog}.${schema}.step_visibility_overrides
-SET enabled    = FALSE,
+SET enabled    = TRUE,
     updated_at = CURRENT_TIMESTAMP,
     updated_by = 'seed'
-WHERE coding_assistant = 'genie-code'
+WHERE coding_assistant IN ('coda', 'genie-code')
   AND section_key = 'project_setup'
-  AND enabled = TRUE
+  AND enabled = FALSE
   AND updated_by = 'seed';
