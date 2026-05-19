@@ -831,7 +831,7 @@ def cmd_install(args):
     # ── Step 6: Build frontend ────────────────────────────────────────
     step(6, TOTAL, "Building frontend")
     info("Running npm install...")
-    npm_result = _run_cmd(["npm", "install"], cwd=PROJECT_ROOT, capture_output=True, text=True)
+    npm_result = _run_cmd(["npm", "install", "--include=dev"], cwd=PROJECT_ROOT, capture_output=True, text=True)
     if npm_result.returncode != 0:
         warn("npm install had issues, continuing...")
     info("Running npm build...")
