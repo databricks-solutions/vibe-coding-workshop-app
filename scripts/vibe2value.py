@@ -535,6 +535,25 @@ def cmd_install(args):
     profile = existing_config.get("workspace", {}).get("profile", "")
     user_info = check_auth(profile) if profile else {}
 
+    # Ambient-credential fallback: if the pinned profile failed (stale, not
+    # present on this machine, etc.) try resolving via env vars before
+    # declaring the environment headless. This is what makes the installer
+    # work transparently inside a Databricks App container, where the
+    # platform injects DATABRICKS_HOST / DATABRICKS_TOKEN /
+    # DATABRICKS_CLIENT_ID automatically. Also catches any other host that
+    # exports DATABRICKS_* variables (CI runners with secrets, dev shells
+    # with `databricks auth env`, etc.).
+    if not user_info:
+        ambient = check_auth("")  # no --profile: respects DATABRICKS_* env vars
+        if ambient:
+            if profile:
+                info(f"Using ambient Databricks credentials from environment "
+                     f"(saved profile '{profile}' is not usable on this machine).")
+            else:
+                info("Using ambient Databricks credentials from environment.")
+            user_info = ambient
+            profile = ""  # propagate to deploy.sh so it also uses env vars
+
     # Fail fast in headless environments (Databricks Web Terminal, notebook
     # %sh, SSH session, CI runner, Databricks Apps container, piped runs,
     # ...) before attempting browser OAuth. The CLI's `databricks auth login`
