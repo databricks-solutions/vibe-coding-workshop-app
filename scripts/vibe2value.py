@@ -393,6 +393,61 @@ def check_auth(profile: str = "") -> dict:
     return {}
 
 
+def _detect_headless() -> tuple:
+    """Best-effort detection of environments without a usable browser.
+
+    Returns ``(is_headless, reason)``. The detector is intentionally biased
+    toward declaring "headless": a false positive prints a help message and
+    exits 1 (recoverable via ``VIBE2VALUE_FORCE_BROWSER=1``), whereas a
+    false negative lets ``databricks auth login`` hang on its
+    ``localhost:8020`` callback that cannot be reached from a browser on
+    another device.
+
+    Detection signals, in priority order:
+      * Explicit overrides: ``VIBE2VALUE_FORCE_BROWSER`` (off),
+        ``VIBE2VALUE_NO_BROWSER_AUTH`` (on).
+      * Definitive: generic ``CI`` flag; well-known CI markers
+        (``GITHUB_ACTIONS`` etc.); Databricks Apps container env vars.
+      * Strong: ``DATABRICKS_RUNTIME_VERSION`` (set inside all Databricks
+        compute); Linux session with no ``DISPLAY``/``WAYLAND_DISPLAY``;
+        non-TTY stdin.
+
+    Pure function: reads only ``os.environ``, ``sys.platform`` and
+    ``sys.stdin.isatty()``. Safe to call from any context; all exceptions
+    are caught and treated as "not headless".
+    """
+    truthy = ("1", "true", "yes")
+
+    try:
+        if os.environ.get("VIBE2VALUE_FORCE_BROWSER", "").lower() in truthy:
+            return False, ""
+        if os.environ.get("VIBE2VALUE_NO_BROWSER_AUTH", "").lower() in truthy:
+            return True, "VIBE2VALUE_NO_BROWSER_AUTH is set"
+
+        if os.environ.get("CI", "").lower() in truthy:
+            return True, "CI=true (running in a CI system)"
+        for v in ("GITHUB_ACTIONS", "GITLAB_CI", "CIRCLECI", "JENKINS_URL",
+                  "BUILDKITE", "TF_BUILD", "TEAMCITY_VERSION"):
+            if os.environ.get(v):
+                return True, f"{v} is set (CI system detected)"
+        if os.environ.get("DATABRICKS_APP_PORT") or os.environ.get("DATABRICKS_APP_NAME"):
+            return True, "running inside a Databricks App container"
+
+        if os.environ.get("DATABRICKS_RUNTIME_VERSION"):
+            return True, ("DATABRICKS_RUNTIME_VERSION is set "
+                          "(running inside Databricks compute)")
+        if sys.platform.startswith("linux"):
+            if not os.environ.get("DISPLAY") and not os.environ.get("WAYLAND_DISPLAY"):
+                return True, ("no DISPLAY / WAYLAND_DISPLAY on Linux "
+                              "(no graphical session)")
+        if not sys.stdin.isatty():
+            return True, "stdin is not a TTY (non-interactive invocation)"
+    except Exception:
+        return False, ""
+
+    return False, ""
+
+
 def discover_profile(host: str) -> str:
     """Find the Databricks CLI profile that matches a workspace host URL.
 
@@ -479,6 +534,32 @@ def cmd_install(args):
     step(3, TOTAL, "Authenticating")
     profile = existing_config.get("workspace", {}).get("profile", "")
     user_info = check_auth(profile) if profile else {}
+
+    # Fail fast in headless environments (Databricks Web Terminal, notebook
+    # %sh, SSH session, CI runner, Databricks Apps container, piped runs,
+    # ...) before attempting browser OAuth. The CLI's `databricks auth login`
+    # uses a `localhost:8020` redirect_uri that a browser on any other
+    # device cannot reach, so the login would hang indefinitely. This
+    # applies whether or not stdin is a TTY -- the localhost callback
+    # can't reach this machine either way. Override with
+    # VIBE2VALUE_FORCE_BROWSER=1 for the rare laptop case where detection
+    # is wrong (e.g. stray DATABRICKS_RUNTIME_VERSION export).
+    if not user_info:
+        headless, headless_reason = _detect_headless()
+        if headless:
+            error(f"Not authenticated and the environment looks headless "
+                  f"({headless_reason}).")
+            print( "  Browser OAuth uses a localhost:8020 callback that cannot")
+            print( "  be reached from a browser on another device. Configure")
+            print( "  credentials and re-run with one of:")
+            print(f"    1. export DATABRICKS_HOST={host}")
+            print( "       export DATABRICKS_TOKEN=dapi…")
+            print( "    2. databricks configure --token --profile <name>")
+            print( "    3. ~/.databrickscfg block with client_id/client_secret "
+                   "(service-principal M2M)")
+            print( "  To force the browser flow anyway: VIBE2VALUE_FORCE_BROWSER=1")
+            sys.exit(1)
+
     if not user_info:
         info("Opening browser for authentication...")
         auth_cmd = ["databricks", "auth", "login", "--host", host]
