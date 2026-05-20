@@ -97,6 +97,9 @@ export function getPreviousOutputsForStep(
     case 19:
       return stepPrompts[18] ? { agent_framework: stepPrompts[18] } : undefined;
 
+    case 21:
+      return stepPrompts[20] ? { iteration_plan: stepPrompts[20] } : undefined;
+
     case 26:
       return { gold_table_target: goldTableTargetString(goldTableTarget) };
 

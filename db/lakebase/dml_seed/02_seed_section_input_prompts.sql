@@ -4995,7 +4995,25 @@ Use MoSCoW method:
 Industry: {industry}
 Use Case: {use_case}
 
-Review the current implementation and identify enhancements specific to the {industry} {use_case} use case.',
+Review the current implementation and identify enhancements specific to the {industry} {use_case} use case.
+
+---
+
+## Output contract for the next step (Redeploy & Test)
+
+End your generated plan with these four sections, exactly named, so Step 21 (Redeploy & Test) can consume them programmatically. Step 21 receives this entire plan as `{iteration_plan}` and looks for these section headings verbatim — do not rename, reorder, or merge them.
+
+### Change Manifest
+List every file path, API endpoint, database table, env var, secret, config key, and gate (feature flag, Lakebase visibility row, per-assistant fork, env-driven toggle) you propose to touch, grouped by enhancement. Include for each: the enhancement name, the artifact, and a one-line "why" so the Step 21 reviewer can sanity-check the diff against this manifest before deploying.
+
+### Smoke Tests (per enhancement)
+For each enhancement, write 1–3 given / when / then steps a human can execute in under 5 minutes to prove the new behavior works. Each test must specify the gate state required (default vs target) and the observable signal (HTTP status, JSON field, log line, UI element). If the enhancement has no observable signal, redesign it before listing it here.
+
+### Regression-Risk Surface
+Call out any "preserves pre-existing behavior" guarantee — i.e., a code path you intend to leave behaviorally unchanged even though the file containing it was touched. For each, name the call site, the input that exercises the unchanged path, and the expected output. Step 21 re-verifies these explicitly. Leave the section heading present with the text "None." if there are no such guarantees.
+
+### Migrations / Order of Operations
+Ordered list of schema changes, DDL, seed updates, env var changes, or permission grants that must run before the app code deploys. Each entry: the artifact (SQL file path, CLI command, or description), and the reason it must precede the app deploy. Leave the section heading present with the text "None." if there are no migrations.',
 'You are a product manager and developer specializing in iterative application development.
 Generate a detailed, actionable prompt for enhancing the application based on user feedback.
 Focus on:
@@ -5062,689 +5080,318 @@ What areas could be improved?
 - [ ] Release notes',
 1, true, current_timestamp(), current_timestamp(), current_user());
 
--- Step 21: Redeploy & Test Application (Autonomous Operations + Repository Documentation) - bypass_LLM = TRUE
+-- Step 21: Redeploy & Test - consumes Step 20's iteration_plan, verifies the delta only - bypass_LLM = TRUE
 INSERT INTO ${catalog}.${schema}.section_input_prompts 
 (input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
 VALUES
 (15, 'redeploy_test',
-'Build, deploy, and test the complete application using @data_product_accelerator/skills/common/databricks-autonomous-operations/SKILL.md for self-healing deployment and @data_product_accelerator/skills/common/databricks-asset-bundles/SKILL.md for DAB validation.
+'## Your Task
 
-After deployment succeeds, document the entire repository using @data_product_accelerator/skills/admin/documentation-organization/SKILL.md in Framework Documentation Authoring mode.
+Deploy and verify **only the changes introduced in this iteration**. Self-heal on failure (max 3 attempts), document only the surface that changed, and update the project state file.
 
----
+**First:** Read the iteration plan from Step 20 (delivered below as `{iteration_plan}`) — it tells you what changed, what to migrate, what to flag-gate, and what to verify. If `{iteration_plan}` is empty or contains a `[No iteration_plan provided ...]` placeholder, stop and return to Step 20 — there is nothing for this step to verify.
 
-## IMPORTANT: Analyze Current Project First
-
-**This step uses your existing project deployment infrastructure.** Before deploying:
-
-1. **Review the current project structure** to identify:
-   - Deploy scripts (e.g., `deploy.sh`, `scripts/deploy.py`)
-   - Build configurations (`package.json`, `requirements.txt`)
-   - DAB configuration (`databricks.yml`)
-   - Environment configurations
-
-Use the AI assistant to analyze the project:
-```
-@codebase What deploy scripts and configurations exist in this project? 
-How do I build and deploy this application to Databricks?
-```
+**Workspace:** `{workspace_url}`
+**Profile:** `{databricks_cli_profile}`
+**App name:** `{user_app_name}`
 
 ---
 
-## Deployment Process (Self-Healing Loop)
+### Mandatory Reads
 
-Follow the autonomous operations skill''s core loop: **Deploy -> Poll -> Diagnose -> Fix -> Redeploy -> Verify** (max 3 iterations before escalation).
+- The iteration plan (above) — change manifest, smoke tests, regression-risk surface, migrations
+- The project deploy script if present (`./deploy.sh`, `scripts/deploy.sh`, `scripts/deploy.py`) — reuse it; do not write ad-hoc deploy commands
+- `databricks.yml` and `app.yaml` — confirm target and env config
+- `package.json` and `requirements.txt` — only if the iteration touched them
+- The project state file (`.vibecoding-state.md` or equivalent) — append your results at the end
 
-### Step 1: Identify Deployment Scripts
-Look for existing scripts in your project:
-```bash
-# Common locations to check:
-ls -la deploy.sh
-ls -la scripts/
-ls -la databricks.yml
-cat package.json | grep scripts
-```
-
-### Step 2: Build the Application
-Based on your project type:
-
-**For React/Node.js frontend:**
-```bash
-npm install
-npm run build
-```
-
-**For Python backend:**
-```bash
-pip install -r requirements.txt
-```
-
-### Step 3: Validate the Bundle (Pre-Deploy)
-```bash
-# Pre-flight validation catches ~80% of errors
-databricks bundle validate -t dev
-```
-If validation fails, read the error, fix the YAML, and re-validate before proceeding.
-
-### Step 4: Deploy Using Project Scripts
-Use the deploy scripts found in your project:
-```bash
-# If deploy.sh exists:
-./deploy.sh
-
-# Or if using DAB:
-databricks bundle deploy -t dev
-```
-
-### Step 5: Deploy DAB Artifacts
-If you have Databricks Asset Bundles configured:
-```bash
-# Authenticate if needed
-databricks auth login --host https://{workspace_url} --profile DEFAULT
-
-# Validate and deploy
-databricks bundle validate
-databricks bundle deploy -t dev
-
-# Run jobs/pipelines (extract RUN_ID from output URL)
-databricks bundle run <job_name> -t dev
-```
-
-### Step 6: Poll with Exponential Backoff
-After triggering a job run, poll for completion:
-```bash
-# Poll job status (30s -> 60s -> 120s backoff)
-databricks jobs get-run <RUN_ID> --output json | jq -r ''.state.life_cycle_state''
-# PENDING -> RUNNING -> TERMINATED
-
-# When TERMINATED, check result:
-databricks jobs get-run <RUN_ID> --output json | jq -r ''.state.result_state''
-# SUCCESS -> verify    FAILED -> diagnose
-```
-
-### Step 7: On Failure — Diagnose
-```bash
-# CRITICAL: Use TASK run_id, NOT parent job run_id
-databricks jobs get-run <JOB_RUN_ID> --output json \
-  | jq ''.tasks[] | select(.state.result_state == "FAILED") | {task: .task_key, run_id: .run_id, error: .state.state_message}''
-
-# Get detailed output for each failed task
-databricks jobs get-run-output <TASK_RUN_ID> --output json \
-  | jq -r ''.notebook_output.result // .error // "No output"''
-```
-
-### Step 8: Self-Healing Loop (Fix -> Redeploy -> Re-Poll)
-1. Read the source file(s) identified from the error
-2. Apply the fix
-3. Redeploy: `databricks bundle deploy -t dev`
-4. Re-run: `databricks bundle run -t dev <job_name>`
-5. Return to Step 6 (Poll)
-
-**Maximum 3 iterations.** After 3 failed attempts, escalate to user with all errors, fixes attempted, and run page URLs.
-
-### Step 9: Verify Deployment
-Check deployment status:
-```bash
-# Check app status
-databricks apps get <app-name>
-
-# View logs
-databricks apps get <app-name> --output json | jq .app_status
-
-# For multi-task jobs, verify all tasks succeeded:
-databricks jobs get-run <RUN_ID> --output json \
-  | jq ''.tasks[] | {task: .task_key, result: .state.result_state}''
-```
+Use the autonomous operations skill at `@data_product_accelerator/skills/common/databricks-autonomous-operations/SKILL.md` for the deploy → poll → diagnose → fix → redeploy loop, and `@data_product_accelerator/skills/common/databricks-asset-bundles/SKILL.md` for any DAB validation.
 
 ---
 
-## Testing Checklist
+### Steps
 
-After deployment, verify:
+1. **Diff review.** Run `git diff --stat HEAD` and `git status --short`. Every changed file must appear in the iteration plan''s **Change Manifest**. If `git diff` lists files that are NOT in the manifest, the plan is stale — stop and return to Step 20.
 
-### Application Health
-- [ ] App URL is accessible
-- [ ] `/api/health` returns 200 OK
-- [ ] No errors in application logs
+2. **Pick the deploy mode based on the manifest.**
+   - **Code-only delta** (only files under `src/`, no changes to `databricks.yml` / `app.yaml` / `requirements.txt` / DAB resources): use the project''s incremental path. If a `deploy.sh --code-only` exists, prefer it (e.g., `./scripts/deploy.sh --code-only -t <target>`). It builds the frontend, syncs files, and triggers a rolling app deploy without resetting permissions or re-seeding tables.
+   - **Infra delta** (any of those touched, or new DAB jobs / pipelines / dashboards): full deploy. Validate first (`databricks bundle validate -t <target>`), then `./deploy.sh -t <target>` or `databricks bundle deploy -t <target>`. If validation fails, fix the YAML and re-validate before deploying.
+   - **Mixed**: do migrations / DDL first (Step 3), then full deploy, then a code-only re-sync if needed.
 
-### Frontend Functionality
-- [ ] UI loads without JavaScript errors
-- [ ] Navigation works correctly
-- [ ] Forms submit successfully
-- [ ] Data displays in tables and charts
+3. **Run migrations or schema changes BEFORE app deploy.** If the iteration plan''s **Migrations / Order of Operations** section lists anything, apply each item in order. Common patterns:
+   - SQL files in the project (`db/**/*.sql`) — apply via `databricks sql --warehouse-id <id> --file <path>` or `psql` for Lakebase.
+   - Setup script (`scripts/setup-lakebase.sh`, `scripts/migrate.sh`) — run it.
+   - If a migration fails, the self-healing loop fixes the migration first (max 3 attempts). Do NOT deploy app code against a half-migrated database.
 
-### Backend Functionality
-- [ ] API endpoints respond correctly
-- [ ] Database connections work
-- [ ] Authentication/authorization works
+4. **Deploy.** Execute the chosen mode from Step 2. Watch for transient OAuth quota or "already exists" errors — most project deploy scripts already retry with cleanup; if not, follow the autonomous-operations skill''s recovery patterns.
 
-### Data Pipelines (if DAB deployed)
-- [ ] Bronze jobs completed successfully
-- [ ] Silver pipeline processed data
-- [ ] Gold tables populated correctly
-- [ ] Data visible in dashboards/Genie
+5. **Poll.**
+   - For app-only iterations, poll `databricks apps get {user_app_name} --output json | jq -r .app_status.state` until `RUNNING`.
+   - For DAB job/pipeline runs (only if the manifest lists them), poll `databricks jobs get-run <RUN_ID>` with 30s → 60s → 120s backoff until `TERMINATED`, then check `result_state`.
+
+6. **On failure — diagnose.** For app failures: `databricks apps logs {user_app_name} --tail 200`. For job failures, use the **task** run_id, not the parent job run_id:
+   ```
+   databricks jobs get-run <JOB_RUN_ID> --output json \
+     | jq ''.tasks[] | select(.state.result_state == "FAILED") | {task: .task_key, run_id: .run_id, error: .state.state_message}''
+   databricks jobs get-run-output <TASK_RUN_ID> --output json | jq -r ''.notebook_output.result // .error''
+   ```
+   Apply fix → redeploy (Step 4) → re-poll (Step 5). Cap at 3 iterations. On the 4th failure, escalate with all errors, fixes attempted, and run page URLs.
+
+7. **Verify the delta — not the whole app.** This is the part most teams get wrong. For each enhancement listed in `{iteration_plan}`:
+   - Run its smoke tests (given / when / then) from the plan, exactly as written.
+   - If the enhancement is gated (feature flag, env var, Lakebase visibility row, per-assistant fork, etc.), run with the gate at its **default state per the plan** first; verify pre-existing behavior is intact for cohorts that don''t see the change. Then flip the gate to the target state for the target cohort and verify the new behavior.
+   - If the enhancement appears under the plan''s **Regression-Risk Surface** section, re-run the explicit "preserves pre-existing behavior" check the plan called out. **This is the only regression sweep — there is no broader one.**
+   - Record PASS/FAIL with evidence (curl response, log line, screenshot path).
+   - Any FAIL re-enters the self-healing loop in Step 6 — but targeting the *enhancement*, not the deploy.
+
+   Once-per-deploy checks (run once, not per enhancement): `curl -fsS $APP_URL/api/health` returns 200, no ERROR-level lines in `databricks apps logs {user_app_name} --tail 200`.
+
+   **Exit criteria:** every enhancement smoke test passes at the correct gate state, and `/api/health` is 200.
+
+8. **Update docs for the changed surface only.** Use `@data_product_accelerator/skills/admin/documentation-organization/SKILL.md` in Framework Documentation Authoring mode, but scope the update to the change manifest:
+   - For each entry in the manifest, find the matching page under the project''s `docs/` and update only that page.
+   - For new modules / endpoints / tables, generate a new page.
+   - For gates introduced this iteration, append to the operations doc under "Active gates / flags" with default state, target cohort, and rollback action.
+   - **Do not regenerate the whole `docs/` tree** — Framework Authoring mode supports targeted updates; use them.
+   - Run organizational enforcement at the end: audit root for stray `.md` files, move misplaced docs, validate kebab-case naming.
+
+9. **Close the loop on the state file.** Append to the project state file (`.vibecoding-state.md` or equivalent) with:
+   - Step name (`## Redeploy & Test — <iteration label>`)
+   - Deploy timestamp, target, app URL, run page URLs
+   - Smoke test results per enhancement (PASS/FAIL with evidence)
+   - Gates now live and their current state
+   - Anything the self-healing loop had to fix (so the next iteration''s Step 20 picks it up as a "watch this" item)
+
+   The state file becomes the closed loop: the next time someone runs Step 20, they see what happened in the previous Step 21 before planning more changes.
 
 ---
 
-## Debugging Failed Deployments
+### Common Errors
 
-If deployment fails:
-1. Check build logs for errors
-2. Verify environment variables are set
-3. Check Databricks workspace permissions
-4. Review app.yaml configuration
-5. Check network connectivity
-
-```bash
-# View deployment logs
-databricks apps get <app-name>
-
-# Check bundle deployment status
-databricks bundle validate
-databricks bundle deploy -t dev --verbose
-```
+| Error | Fix |
+|-------|-----|
+| `{iteration_plan}` substitutes to empty or to `[No iteration_plan provided ...]` | Step 20 was not run, or its output was not chained. Run Step 20 first; the test tab and real workflow both pipe `stepPrompts[20]` as `previous_outputs.iteration_plan` automatically |
+| `git diff` lists files NOT in the change manifest | Plan is stale. Stop and re-run Step 20 to refresh the manifest before deploying |
+| App stuck in `UNAVAILABLE` after `--code-only` deploy | Run `databricks apps start {user_app_name}` then re-deploy code; most project scripts auto-recover this in 3 attempts |
+| Bundle deploy hits OAuth quota (`QUOTA_EXCEEDED`, `1000 OAuth`) | Account-wide cap. Clean up stale apps via `databricks apps list` then retry. Most project deploy scripts include this recovery — read the script before improvising |
+| Smoke test passes but `/api/health` is 200 with `source: "mock"` | The test was checking HTTP status, not envelope semantics. Re-run with `jq ''.source''` and confirm `"live"`. Check `databricks apps logs {user_app_name} --tail 200 \| grep "falling back to mock"` for the masked exception |
+| New endpoint in the manifest, but smoke test fails because old behavior is gone | The "preserves pre-existing behavior" guarantee was violated. Don''t paper over — return to Step 20, fix the regression, re-run from Step 1 |
 
 ---
 
-## Post-Deployment: Document the Entire Repository
+### Guardrails
 
-**After deployment succeeds**, run this prompt in a new AI assistant thread:
+- **Never deploy a fix you haven''t smoke-tested.** Each iteration of the self-healing loop must end with a smoke test of the enhancement, not just a successful deploy.
+- **Never expand scope inside this step.** If `{iteration_plan}` missed something, return to Step 20. Don''t fix-while-you-go — that is how iteration plans drift from reality.
+- **Never skip the close-the-loop append in Step 9.** The next Step 20 depends on it.
+- **Don''t re-seed Lakebase or re-run permission setup on a code-only delta.** Use the project''s incremental path (`--code-only` or equivalent). Otherwise you reset SP roles, app resources, and tags for no reason.
+- **Don''t generate the whole `docs/` tree on every iteration.** Targeted updates only — anything else creates noisy diffs and reviewer fatigue.
 
-```
-Document this entire repository using @data_product_accelerator/skills/admin/documentation-organization/SKILL.md
+---
 
-Use Framework Documentation Authoring mode to create a complete docs/ set:
-- Architecture overview with diagrams
-- Component deep dives for each major module
-- Deployment guide
-- Operations guide (health checks, monitoring, alerting)
-- Troubleshooting guide (common errors and solutions)
+### Done When
 
-Also run organizational enforcement:
-- Audit root directory for stray .md files
-- Move any misplaced docs to correct docs/ subdirectory
-- Validate all naming uses kebab-case
-```
-
-This generates comprehensive project documentation under `docs/{project-name}-design/`.',
-'',
+- [ ] `{iteration_plan}` was read; `git diff` matches its change manifest
+- [ ] Migrations applied (or N/A) BEFORE app deploy
+- [ ] Deploy succeeded (within 3 self-heal iterations) using the right mode for the delta
+- [ ] Every enhancement smoke test PASSED at the correct gate state
+- [ ] Regression-risk surface re-verified (only what the plan flagged)
+- [ ] `/api/health` returns 200 (and `source: "live"` if the project uses envelope semantics)
+- [ ] Docs updated for the changed surface only
+- [ ] State file appended with deploy timestamp, smoke test results, gates live, fixes applied',
+'This prompt is returned as-is for direct use in Cursor/Copilot. No LLM processing.',
 'Redeploy & Test Application',
-'Use project deploy scripts and DAB to build, deploy, and test the complete application with self-healing operations and full repository documentation',
+'Deploy and verify only the iteration delta with a self-healing loop, then update docs and state file for the changed surface.',
 19,
-'## 🔄 What is Redeploy and Test?
+'## Prerequisite
 
-**Redeploy & Test** is not "deploy and pray" — it is a **systematic, self-healing operational loop** powered by the autonomous operations skill. Every deployment follows a disciplined cycle: validate, deploy, poll, diagnose, fix, and verify. After deployment succeeds, the **entire repository** is documented comprehensively.
-
-### Two Skills Working Together
-
-| Skill | Role | When It Activates |
-|-------|------|-------------------|
-| **Autonomous Operations** | Self-healing deploy loop with diagnostics | During deployment and troubleshooting |
-| **Documentation Organization** | Full repository documentation authoring | After deployment succeeds (explicit prompt) |
-
-### Core Principles
-
-| Principle | Benefit |
-|-----------|---------|
-| **Self-Healing Loop** | Deploy -> Poll -> Diagnose -> Fix -> Redeploy (max 3 iterations) |
-| **Pre-Deploy Validation** | `databricks bundle validate` catches ~80% of errors before deploy |
-| **Exponential Backoff** | 30s -> 60s -> 120s polling prevents API rate limits |
-| **Task-Level Diagnostics** | Get output from failed tasks, not just the parent job |
-| **Documentation as Final Step** | Every project gets architecture, operations, and troubleshooting docs |
-
----
-
-## 🏗️ Self-Healing Deployment Architecture
-
-```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                    AUTONOMOUS DEPLOY-TEST-DOCUMENT LOOP                     │
-├─────────────────────────────────────────────────────────────────────────────┤
-│                                                                             │
-│  ┌──────────┐    ┌──────────┐    ┌──────────────┐    ┌──────────────┐     │
-│  │ VALIDATE │───▶│  DEPLOY  │───▶│  POLL        │───▶│  RESULT?     │     │
-│  │  Bundle  │    │  Bundle  │    │  (Backoff)   │    │              │     │
-│  └──────────┘    └──────────┘    │  30s→60s→120s│    └──────┬───────┘     │
-│       ▲                          └──────────────┘           │              │
-│       │                                                     │              │
-│       │            ┌────────────────────────────────────────┤              │
-│       │            │                                        │              │
-│       │            ▼                                        ▼              │
-│       │     ┌──────────────┐                    ┌──────────────────┐      │
-│       │     │    FAILED    │                    │    SUCCESS       │      │
-│       │     │              │                    │                  │      │
-│       │     │ ┌──────────┐ │                    │ ┌──────────────┐ │      │
-│       │     │ │ Diagnose │ │                    │ │ Verify All   │ │      │
-│       │     │ │ (task-   │ │                    │ │ Tasks + App  │ │      │
-│       │     │ │  level)  │ │                    │ │ Health       │ │      │
-│       │     │ └────┬─────┘ │                    │ └──────┬───────┘ │      │
-│       │     │      │       │                    │        │         │      │
-│       │     │      ▼       │                    │        ▼         │      │
-│       │     │ ┌──────────┐ │                    │ ┌──────────────┐ │      │
-│       │     │ │   Fix    │ │                    │ │ Document     │ │      │
-│       │     │ │  Source  │ │                    │ │ Entire Repo  │ │      │
-│       │     │ └────┬─────┘ │                    │ │ (Framework   │ │      │
-│       │     │      │       │                    │ │  Authoring)  │ │      │
-│       │     └──────┼───────┘                    │ └──────────────┘ │      │
-│       │            │                            └──────────────────┘      │
-│       │            │                                                      │
-│       └────────────┘                                                      │
-│       Redeploy (max 3 iterations)                                         │
-│                                                                           │
-│  After 3 failures ──▶ ESCALATE to user with all errors + run URLs        │
-│                                                                           │
-└─────────────────────────────────────────────────────────────────────────────┘
-```
-
----
-
-## 📖 Key Concepts
-
-| Concept | Why It Matters |
-|---------|----------------|
-| **Self-Healing Loop** | Deploy -> Poll -> Diagnose -> Fix -> Redeploy (max 3 iterations before escalation) |
-| **Exponential Backoff** | 30s -> 60s -> 120s polling intervals prevent API rate limits and reduce noise |
-| **Task-Level Diagnostics** | `get-run-output` needs the **TASK** `run_id`, not the parent job `run_id` — critical for multi-task jobs |
-| **Dependency Ordering** | Bronze -> Silver -> Gold -> Semantic -> Monitoring -> Alerts -> Genie |
-| **Structured Notebook Exit** | `dbutils.notebook.exit(json.dumps({...}))` enables machine-parseable output retrieval |
-| **Partial Success** | >=90% tasks succeeding = OK; fix individual failures without rerunning everything |
-| **Full Repo Documentation** | Post-deployment step generates complete `docs/{project}-design/` with architecture, operations, troubleshooting |
-| **Framework Doc Authoring** | 4-step workflow: Requirements Gathering -> File Structure -> Fill Templates -> Quality Validation |
-| **Root Directory Hygiene** | Only README.md, QUICKSTART.md, CHANGELOG.md allowed in root; all other docs in `docs/` |
-| **43-Item Quality Checklist** | Validates organization, naming, structure, content, usability, and maintenance of all documentation |
-
----
-
-## Prerequisite
-
-**Run this in your cloned Template Repository** (see Prerequisites in Step 0). These prompts assume you are working in that codebase with a coding assistant (Cursor or Copilot) enabled.
-
-**Before this step, you should have completed:**
-- Bronze, Silver, and Gold layer setup (tables populated)
-- Semantic layer (Metric Views, TVFs, Genie Space)
-- Any application code (frontend/backend)
-- DAB configuration (`databricks.yml`)
+Step 20 (Iterate & Enhance) must have run in this same session — Step 21 reads its output as `{iteration_plan}`. The plan must include the four named sections it emits in its "Output contract for the next step" block: **Change Manifest**, **Smoke Tests**, **Regression-Risk Surface**, **Migrations / Order of Operations**. If any are missing, return to Step 20 and complete it before running this step.
 
 ---
 
 ## Steps to Apply
 
-### Step 1: Analyze Project
-```
-@codebase What deploy scripts and configurations exist? How do I build and deploy?
-```
+1. **Copy the generated prompt** from above.
+2. **Paste into Cursor or Copilot** in your project repo (the codebase that the iteration plan describes).
+3. The coding assistant will:
+   - Read the iteration plan delivered as `{iteration_plan}`
+   - Run `git diff --stat HEAD` against the Change Manifest to catch stale plans
+   - Pick code-only or full deploy based on what the manifest touched
+   - Apply migrations BEFORE app deploy (if any)
+   - Run the project deploy script (`./deploy.sh`, `./scripts/deploy.sh`) — preferring `--code-only` for code-only deltas
+   - Self-heal failures (max 3 iterations) via the autonomous-operations skill
+   - Verify ONLY the enhancements listed in the plan, at the correct gate state
+   - Update docs only for the changed surface
+   - Append results back to the project state file (`.vibecoding-state.md` or equivalent)
 
-### Step 2: Build Application
-```bash
-npm install && npm run build  # or equivalent for your project
-pip install -r requirements.txt  # if Python backend
-```
-
-### Step 3: Validate Bundle (Pre-Deploy)
-```bash
-databricks bundle validate -t dev
-# Catches ~80% of errors — fix any issues before proceeding
-```
-
-### Step 4: Deploy Using Project Scripts
-```bash
-./deploy.sh  # or your project''''s deploy script
-# Or: databricks bundle deploy -t dev
-```
-
-### Step 5: Deploy DAB Artifacts
-```bash
-databricks bundle deploy -t dev
-databricks bundle run <job_name> -t dev
-# Extract RUN_ID from the output URL
-```
-
-### Step 6: Poll with Exponential Backoff
-```bash
-# Poll: 30s -> 60s -> 120s intervals
-databricks jobs get-run <RUN_ID> --output json | jq -r ''.state.life_cycle_state''
-# When TERMINATED: check .state.result_state
-```
-
-### Step 7: On Failure — Diagnose and Fix
-```bash
-# Get failed tasks (use TASK run_id, not parent)
-databricks jobs get-run <RUN_ID> --output json \
-  | jq ''.tasks[] | select(.state.result_state == "FAILED") | {task: .task_key, run_id: .run_id}''
-
-# Get task output
-databricks jobs get-run-output <TASK_RUN_ID> --output json \
-  | jq -r ''.notebook_output.result // .error // "No output"''
-
-# Fix -> Redeploy -> Re-poll (max 3 iterations)
-```
-
-### Step 8: Verify All Tasks and Application Health
-```bash
-# Verify all tasks succeeded
-databricks jobs get-run <RUN_ID> --output json \
-  | jq ''.tasks[] | {task: .task_key, result: .state.result_state}''
-
-# Check app health
-curl -s https://<app-url>/api/health
-databricks apps get <app-name> --output json | jq .app_status
-```
-
-### Step 9: Run Testing Checklist
-- Application health (URL accessible, health endpoint OK)
-- Frontend functionality (UI loads, navigation, forms, data display)
-- Backend functionality (API endpoints, database, auth)
-- Data pipelines (Bronze, Silver, Gold, dashboards, Genie)
-
-### Step 10: Document the Entire Repository
-After deployment succeeds, paste this prompt in a **new AI assistant thread**:
-
-```
-Document this entire repository using @data_product_accelerator/skills/admin/documentation-organization/SKILL.md
-
-Use Framework Documentation Authoring mode to create a complete docs/ set:
-- Architecture overview with diagrams
-- Component deep dives for each major module
-- Deployment guide
-- Operations guide (health checks, monitoring, alerting)
-- Troubleshooting guide (common errors and solutions)
-
-Also run organizational enforcement:
-- Audit root directory for stray .md files
-- Move any misplaced docs to correct docs/ subdirectory
-- Validate all naming uses kebab-case
-```
-
-This triggers the documentation-organization skill''''s **Mode 2: Framework Documentation Authoring** which:
-1. Gathers requirements (framework name, audience, tech stack, components)
-2. Generates numbered docs under `docs/{project-name}-design/`
-3. Fills templates (index, introduction, architecture, components, implementation, operations, troubleshooting)
-4. Validates against the 43-item quality checklist
+**Note:** This step verifies the iteration delta — not the whole app. The smoke tests come from the iteration plan, not from a generic checklist. If you want a full app health sweep, run a separate end-to-end verification step.
 
 ---
 
-## 🔧 What Happens Behind the Scenes
+## What Happens Behind the Scenes
 
-When you paste the deployment prompt, the AI reads `@data_product_accelerator/skills/common/databricks-autonomous-operations/SKILL.md` — the **autonomous operations skill**. Behind the scenes:
+The coding assistant reads three skills as needed:
 
-### Autonomous Operations Skill
+| Skill | Role |
+|-------|------|
+| `databricks-autonomous-operations` | Self-healing deploy loop with task-level diagnostics |
+| `databricks-asset-bundles` | DAB validation patterns (only used if the manifest touched DAB resources) |
+| `documentation-organization` (Framework Authoring mode) | Targeted doc updates for the changed surface |
 
-1. **Bundle Discovery** — reads `databricks.yml` to identify all resources (jobs, pipelines, dashboards, alerts)
-2. **Pre-Deploy Validation** — runs `databricks bundle validate` which catches ~80% of errors before deployment
-3. **Deploy and Extract** — deploys bundle and extracts RUN_ID from the output URL
-4. **Exponential Backoff Polling** — polls job status at 30s -> 60s -> 120s intervals until terminal state
-5. **On Failure: Task-Level Diagnosis** — extracts task-level run_ids (NOT parent job run_id), gets detailed output via `get-run-output`, matches errors against the error-solution matrix
-6. **Self-Healing Loop** — applies fix, redeploys, re-polls (max 3 iterations before escalation)
-7. **On Success: Full Verification** — verifies all tasks succeeded, retrieves structured JSON output from notebooks
-8. **Common skills auto-loaded**:
-   - `databricks-asset-bundles` — DAB validation and deployment patterns
-   - `databricks-expert-agent` — core Databricks best practices
-   - `naming-tagging-standards` — enterprise naming conventions
+The deploy mode is chosen automatically from the manifest:
 
-### Documentation Organization Skill (Explicit Post-Deployment Trigger)
-
-After deployment succeeds, the user runs a **separate prompt** that triggers the documentation-organization skill''''s **Framework Documentation Authoring mode (Mode 2)** to document the entire repository:
-
-1. **Requirements Gathering** — skill determines framework name, audience, tech stack, component count, and documentation depth
-2. **File Structure Generation** — creates numbered docs under `docs/{project-name}-design/`:
-   - `00-index.md` — document index with architecture summary and quick start
-   - `01-introduction.md` — purpose, scope, prerequisites, success criteria
-   - `02-architecture-overview.md` — Mermaid/ASCII diagrams, data flows, component inventory
-   - `03-{component-1}.md` through `NN-{component-N}.md` — component deep dives
-   - `{N+1}-implementation-guide.md` — phased steps with validation
-   - `{N+2}-operations-guide.md` — health checks, alerting, escalation matrix
-   - `appendices/A-code-examples.md`, `B-troubleshooting.md`, `C-references.md`
-3. **Quality Validation** — runs 43-item checklist (organization, naming, structure, content, usability, maintenance, special cases)
-4. **Organizational Enforcement** — audits root for stray `.md` files, enforces `kebab-case` naming, routes misplaced docs to correct `docs/` subdirectory
-
-### 🏅 Databricks Best Practices Applied
-
-| Practice | How It''''s Used Here |
-|----------|-------------------|
-| **Self-Healing Deploy Loop** | Max 3 iterations of deploy-diagnose-fix before escalation to user |
-| **Exponential Backoff Polling** | 30s -> 60s -> 120s intervals prevent API rate limiting and reduce noise |
-| **Task-Level Diagnostics** | Uses **task** `run_id` (not parent job `run_id`) for `get-run-output` — critical for multi-task jobs |
-| **Structured Notebook Exit** | JSON output from `dbutils.notebook.exit()` enables machine-parseable result retrieval |
-| **Pre-Deploy Validation** | `databricks bundle validate` catches ~80% of errors before any deployment attempt |
-| **Dependency-Aware Ordering** | Follows Bronze -> Gold -> Semantic -> Monitoring -> Genie deployment order |
-| **Partial Success Handling** | >=90% task success = OK; debug individual failures without rerunning everything |
-| **CLI jq Patterns** | Structured JSON parsing for job state, failed tasks, and task output |
-| **App Health Verification** | `/api/health` endpoint check + app logs review after deployment |
-| **Never Retry Destructive Ops** | No auto-retry of `bundle destroy`, `DROP TABLE`, `DELETE` monitors/alerts |
-| **Full Repository Documentation** | Post-deployment prompt triggers Framework Documentation Authoring for entire repo |
-| **Numbered Documentation Set** | `docs/{project-name}-design/` with `00-index.md` through `NN-operations-guide.md` |
-| **Root Directory Hygiene** | Only README/QUICKSTART/CHANGELOG in root; all other docs in `docs/` hierarchy |
-| **Quality Checklist Validation** | 43-item checklist covering organization, naming, structure, content, usability |
+| Manifest contains | Mode |
+|---|---|
+| Only `src/**` changes | Code-only (`./deploy.sh --code-only` or equivalent) |
+| Any of `databricks.yml`, `app.yaml`, `requirements.txt`, or DAB resources | Full deploy (`./deploy.sh` or `databricks bundle deploy`) |
+| Both | Migrations first, then full deploy, then code-only re-sync |
 
 ---
 
-## ⚠️ Error Troubleshooting Quick Reference
+## Why this is different from a generic redeploy
 
-If deployment or jobs fail, check this table first:
+A generic "redeploy and test" runs the same checklist regardless of what changed. That is a recipe for deploying a regression and never noticing — the `/api/health` endpoint will pass even if dark mode broke or the auth flow stopped working.
 
-| Error | Quick Fix |
-|-------|-----------|
-| `ModuleNotFoundError` | Add to `%pip install` or DAB environment spec |
-| `TABLE_OR_VIEW_NOT_FOUND` | Run setup job first; check 3-part catalog.schema.table path |
-| `DELTA_MULTIPLE_SOURCE_ROW_MATCHING` | Deduplicate source before MERGE |
-| `Invalid access token (403)` | `databricks auth login --host <url> --profile <name>` |
-| `ResourceAlreadyExists` | Delete + recreate (monitors, alerts) |
-| `python_task not recognized` | Use `notebook_task` with `notebook_path` |
-| `PARSE_SYNTAX_ERROR` | Read failing SQL file, fix syntax, redeploy |
-| `Parameter not found` | Use `base_parameters` dict, not CLI-style `parameters` |
-| `run_job_task` vs `job_task` | Use `run_job_task` (not `job_task`) |
-| Genie `INTERNAL_ERROR` | Deploy semantic layer (TVFs + Metric Views) first |
+Step 21 is delta-driven: every smoke test traces back to a specific enhancement in the iteration plan. If an enhancement has no smoke test, the plan is incomplete and you return to Step 20. If `git diff` shows a file the plan didn''t mention, the plan is stale and you return to Step 20. The seam between iteration and verification is enforced, not assumed.
 
 ---
 
-## 📂 Post-Deployment: Document the Entire Repository
-
-After deployment succeeds, run the documentation-organization skill to create comprehensive project documentation.
-
-### The Documentation Prompt
-
-Paste this in a **new AI assistant thread** after deployment:
+## Architecture: Step 20 → Step 21 Handoff
 
 ```
-Document this entire repository using @data_product_accelerator/skills/admin/documentation-organization/SKILL.md
-
-Use Framework Documentation Authoring mode to create a complete docs/ set:
-- Architecture overview with diagrams
-- Component deep dives for each major module
-- Deployment guide
-- Operations guide (health checks, monitoring, alerting)
-- Troubleshooting guide (common errors and solutions)
-
-Also run organizational enforcement:
-- Audit root directory for stray .md files
-- Move any misplaced docs to correct docs/ subdirectory
-- Validate all naming uses kebab-case
+┌──────────────────────────────────────────────────────────────────────────┐
+│  STEP 20: Iterate & Enhance                                              │
+│  LLM generates an iteration plan with 4 named sections:                  │
+│    Change Manifest | Smoke Tests | Regression-Risk Surface | Migrations  │
+└────────────────────────────────────┬─────────────────────────────────────┘
+                                     │ stepPrompts[20]
+                                     ▼
+┌──────────────────────────────────────────────────────────────────────────┐
+│  Workshop chain: previous_outputs.iteration_plan = stepPrompts[20]       │
+│  Substituted into Step 21''s prompt as {iteration_plan} verbatim.         │
+└────────────────────────────────────┬─────────────────────────────────────┘
+                                     │
+                                     ▼
+┌──────────────────────────────────────────────────────────────────────────┐
+│  STEP 21: Redeploy & Test                                                │
+│    1. Read {iteration_plan}                                              │
+│    2. Diff review vs Change Manifest                                     │
+│    3. Migrations BEFORE app deploy                                       │
+│    4-6. Deploy + poll + self-heal (max 3 iters)                          │
+│    7. Smoke test EACH enhancement at correct gate state                  │
+│    8. Update only changed-surface docs                                   │
+│    9. Append results to project state file                               │
+└──────────────────────────────────────────────────────────────────────────┘
 ```
 
-### Expected Documentation Structure
-
-```
-docs/{project-name}-design/
-├── 00-index.md                        # Document index, architecture summary
-├── 01-introduction.md                 # Purpose, scope, prerequisites
-├── 02-architecture-overview.md        # Diagrams, data flows, components
-├── 03-{component-1}.md               # Component deep dive
-├── 04-{component-2}.md               # Component deep dive
-├── ...                                # Additional components
-├── {N}-implementation-guide.md        # Phased steps with validation
-├── {N+1}-operations-guide.md          # Health checks, alerting, escalation
-└── appendices/
-    ├── A-code-examples.md             # Code snippets and patterns
-    ├── B-troubleshooting.md           # Error-solution matrix
-    └── C-references.md                # External references and links
-```
-
-### Documentation Naming Rules
-
-| Format | Use For | Example |
-|--------|---------|---------|
-| `kebab-case.md` | All docs | `deployment-guide.md` |
-| `NN-descriptive-name.md` | Framework docs (numbered) | `03-data-pipelines.md` |
-| `YYYY-MM-DD-description.md` | Historical/dated records | `2026-02-07-initial-deployment.md` |
-| NEVER `PascalCase.md` | -- | `DeploymentGuide.md` |
-| NEVER `ALL_CAPS.md` | -- | `DEPLOYMENT_GUIDE.md` |
-
-### 4-Step Documentation Workflow
-
-| Step | What Happens | Output |
-|------|-------------|--------|
-| 1. Requirements Gathering | Skill asks about framework, audience, components, depth | Requirements table |
-| 2. File Structure | Creates numbered file tree under `docs/` | Directory structure |
-| 3. Fill Templates | Generates each doc from fill-in-the-blank templates | Complete documentation |
-| 4. Quality Validation | Runs 43-item checklist across 7 categories | Validation report |',
+The append in Step 9 closes the loop — the *next* Step 20 reads the previous Step 21''s outcome before planning more changes.',
 '## Expected Deliverables
-
-### 🔄 Deployment Process (Self-Healing Loop)
-
-```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                      SELF-HEALING DEPLOYMENT LOOP                           │
-├─────────────────────────────────────────────────────────────────────────────┤
-│                                                                             │
-│  Iteration 1: Deploy → Run → Poll → [FAIL] → Diagnose → Fix → Redeploy   │
-│  Iteration 2: Run → Poll → [FAIL] → Diagnose → Fix → Redeploy             │
-│  Iteration 3: Run → Poll → [FAIL] → ESCALATE TO USER                      │
-│                                                                             │
-│  OR: Deploy → Run → Poll → [SUCCESS] → Verify → Document Repo             │
-│                                                                             │
-└─────────────────────────────────────────────────────────────────────────────┘
-```
 
 ### Self-Healing Loop Tracking
 
-| Iteration | Error | Fix Applied | Outcome |
-|-----------|-------|-------------|---------|
+| Iteration | Failure | Fix Applied | Outcome |
+|-----------|---------|-------------|---------|
 | 1 | (recorded from diagnosis) | (what was changed) | FAIL / SUCCESS |
 | 2 | (recorded from diagnosis) | (what was changed) | FAIL / SUCCESS |
 | 3 | (recorded from diagnosis) | (what was changed) | FAIL / ESCALATE |
 
----
-
-### 📊 Deployment Verification Commands
-
-```bash
-# 1. Check overall job status
-databricks jobs get-run <RUN_ID> --output json | jq ''.state''
-
-# 2. Get summary of all tasks
-databricks jobs get-run <RUN_ID> --output json \
-  | jq ''.tasks[] | {task: .task_key, run_id: .run_id, result: .state.result_state}''
-
-# 3. Get failed tasks only
-databricks jobs get-run <RUN_ID> --output json \
-  | jq ''.tasks[] | select(.state.result_state == "FAILED") | {task: .task_key, error: .state.state_message, url: .run_page_url}''
-
-# 4. Get task output (MUST use TASK run_id, not parent job run_id)
-databricks jobs get-run-output <TASK_RUN_ID> --output json \
-  | jq -r ''.notebook_output.result // "No output"''
-
-# 5. Check app status
-databricks apps get <app-name>
-databricks apps get <app-name> --output json | jq .app_status
-
-# 6. Check bundle status
-databricks bundle validate
-databricks bundle summary
-```
+If your loop terminates at iteration 1 with SUCCESS, ignore rows 2 and 3. If you reach iteration 3 with FAIL, escalate to the user with this table populated, the run page URLs, and the section of `{iteration_plan}` that triggered the failure.
 
 ---
 
-### ✅ Application Health Checks
+### Per-Enhancement Smoke Test Results
 
-**Application:**
-- [ ] App deployed and accessible at URL
-- [ ] Health endpoint (`/api/health`) returns 200 OK
-- [ ] UI loads without JavaScript errors
-- [ ] Navigation works correctly
-- [ ] Forms submit successfully
-- [ ] Data displays in tables and charts
-- [ ] Authentication/authorization working
-- [ ] API endpoints respond correctly
-- [ ] Database connections working
-- [ ] No errors in application logs
+For each enhancement in `{iteration_plan}`, record:
 
-**DAB Artifacts (if deployed):**
-- [ ] All jobs visible in Workflows UI
-- [ ] All job tasks completed with `SUCCESS` result state
-- [ ] Pipelines running successfully
-- [ ] Tables created in Unity Catalog
-- [ ] Data flowing correctly through Bronze -> Silver -> Gold
-- [ ] Data visible in dashboards/Genie
+| Enhancement | Gate state tested | Smoke test | PASS / FAIL | Evidence |
+|---|---|---|---|---|
+| (from plan) | default / target | (given/when/then) | PASS or FAIL | curl output, log line, screenshot path |
+
+Every row must be PASS at the correct gate state before this step exits. A FAIL row re-enters the self-healing loop targeting the *enhancement*, not the deploy.
 
 ---
 
-### 📂 Repository Documentation Set Created
+### Regression-Risk Re-Verification
 
-After running the documentation-organization prompt, the following structure is generated:
+Only required if `{iteration_plan}` listed entries under "Regression-Risk Surface":
+
+| Risk surface | Pre-existing behavior expected | Result | Evidence |
+|---|---|---|---|
+
+If the plan said "None.", skip this section.
+
+---
+
+### Once-Per-Deploy Health Checks
+
+- [ ] `curl -fsS $APP_URL/api/health` returns 200
+- [ ] `databricks apps get {user_app_name} --output json | jq .app_status.state` returns `RUNNING`
+- [ ] `databricks apps logs {user_app_name} --tail 200` has no ERROR-level lines
+- [ ] If the project uses envelope semantics: every `/api/*` endpoint returns `source: "live"`, never `"mock"`
+
+---
+
+### Targeted Documentation Updates
+
+Updated only the doc pages that map to entries in `{iteration_plan}`''s **Change Manifest**. Did NOT regenerate the whole `docs/` tree.
+
+- [ ] Each touched module has a corresponding doc update
+- [ ] New modules / endpoints / tables have new pages
+- [ ] Active gates / flags table updated in operations doc
+- [ ] Root directory audited for stray `.md` files (kebab-case enforced)
+
+---
+
+### State File Append
+
+Appended to `.vibecoding-state.md` (or project equivalent):
 
 ```
-docs/{project-name}-design/
-├── 00-index.md                        # Document index
-├── 01-introduction.md                 # Purpose, scope, prerequisites
-├── 02-architecture-overview.md        # Diagrams, data flows
-├── 03-{component-1}.md               # Component deep dive
-├── ...                                # Additional components
-├── {N}-implementation-guide.md        # Build instructions
-├── {N+1}-operations-guide.md          # Health checks, alerting
-└── appendices/
-    ├── A-code-examples.md             # Code patterns
-    ├── B-troubleshooting.md           # Error-solution matrix
-    └── C-references.md                # External references
+## Redeploy & Test — <iteration label>
+
+- Deploy timestamp: <ISO-8601>
+- Target: <target>
+- App URL: <url>
+- Bundle / app deploy run URLs: <urls>
+
+### Smoke test results
+- <enhancement 1>: PASS (<gate state>) — <evidence>
+- <enhancement 2>: PASS (<gate state>) — <evidence>
+
+### Gates now live
+- <gate 1>: <state>, <cohort>
+- <gate 2>: <state>, <cohort>
+
+### Self-heal fixes applied
+- (or "None — clean deploy on first attempt")
+
+### Watch this for next iteration
+- <anything that warrants investigation in the next plan>
 ```
 
-**Organizational Enforcement Results:**
-- [ ] Root directory audited (only README, QUICKSTART, CHANGELOG remain)
-- [ ] All doc filenames use `kebab-case`
-- [ ] Numbered sequence for framework docs (00-, 01-, 02-, ...)
-- [ ] No misplaced `.md` files in root or wrong subdirectories
+This append is non-negotiable — the next Step 20 reads it before planning the next iteration.
 
 ---
 
-### ✅ Success Criteria Checklist
+### Success Criteria Checklist
 
-**Bundle Deployment:**
-- [ ] `databricks bundle validate` passes with no errors
-- [ ] `databricks bundle deploy` completes successfully
-- [ ] All resources deployed to target workspace
+**Input handoff:**
+- [ ] `{iteration_plan}` was non-empty and contained all four required sections
+- [ ] `git diff` matches the plan''s Change Manifest
 
-**Job Execution and Monitoring:**
-- [ ] Jobs triggered and RUN_ID captured
-- [ ] Polling with exponential backoff (30s -> 60s -> 120s)
-- [ ] All tasks reached terminal state (SUCCESS)
-- [ ] Task output retrieved via `get-run-output` using task run_id
+**Deploy:**
+- [ ] Migrations applied (or N/A) BEFORE app deploy
+- [ ] Correct deploy mode chosen for the delta (code-only / full / mixed)
+- [ ] Deploy succeeded within 3 self-heal iterations
 
-**Application Health:**
-- [ ] App URL is accessible
-- [ ] `/api/health` returns 200 OK
-- [ ] UI loads without errors
-- [ ] API endpoints respond correctly
-- [ ] No errors in application logs
+**Verification:**
+- [ ] Every enhancement smoke test PASSED at the correct gate state
+- [ ] Regression-risk surface re-verified (if listed in plan)
+- [ ] `/api/health` is 200
 
-**Self-Healing Loop:**
-- [ ] If failures occurred: diagnosed using task-level CLI commands
-- [ ] If failures occurred: fix applied and redeployed (max 3 iterations)
-- [ ] If escalated: all errors, fixes, and run URLs provided to user
-
-**Data Pipeline Verification:**
-- [ ] Bronze tables populated with data
-- [ ] Silver pipeline processed without errors
-- [ ] Gold tables reflect correct aggregations
-- [ ] Dashboards and Genie Spaces functional
-
-**Repository Documentation:**
-- [ ] `docs/{project-name}-design/` directory exists with numbered docs
-- [ ] Architecture overview includes diagrams (Mermaid or ASCII)
-- [ ] Component deep dives cover each major module
-- [ ] Operations guide includes health checks and alerting procedures
-- [ ] Troubleshooting guide includes common errors and solutions
-- [ ] No stray `.md` files in root (only README, QUICKSTART, CHANGELOG)
-- [ ] All doc filenames use `kebab-case`
-- [ ] 43-item quality checklist passed',
+**Output handoff:**
+- [ ] Docs updated for the changed surface only
+- [ ] State file appended with deploy timestamp, smoke test results, gates live, fixes applied',
 true, 1, true, current_timestamp(), current_timestamp(), current_user());
 
 -- Setup Lakebase (Config Only — Package + Bundle Resources)

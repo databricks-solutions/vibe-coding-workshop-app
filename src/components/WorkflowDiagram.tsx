@@ -2892,6 +2892,7 @@ export function WorkflowDiagram({
                     stepNumber={21}
                     onPromptGenerated={onStepPromptGenerated}
                     initialPrompt={stepPrompts[21]}
+                    previousOutputs={stepPrompts[20] ? { iteration_plan: stepPrompts[20] } : undefined}
                     isPreviousStepComplete={isPreviousStepComplete(21)}
                     isExpanded={expandedStep === 21}
                     onToggleExpand={() => toggleExpand(21)}
