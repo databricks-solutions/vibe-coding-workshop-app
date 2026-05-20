@@ -550,7 +550,11 @@ class ApiClient {
     onError: (error: string) => void,
     previousOutputs?: Record<string, string>,
     sessionId?: string | null,
-    onRetry?: (attempt: number, maxAttempts: number, reason: string) => void
+    onRetry?: (attempt: number, maxAttempts: number, reason: string) => void,
+    // Optional explicit assistant override (used by the Test Scenario tab to pick a
+    // fork without a session). When omitted, the backend reads the assistant from
+    // the session — preserving every existing call site's behavior unchanged.
+    codingAssistant?: string | null,
   ): AbortController {
     const controller = new AbortController();
 
@@ -566,6 +570,7 @@ class ApiClient {
             use_llm: true,
             previous_outputs: previousOutputs,
             session_id: sessionId || undefined,  // Use session-specific parameters if provided
+            coding_assistant: codingAssistant || undefined,
           }),
           signal: controller.signal,
         });

@@ -531,6 +531,11 @@ class PromptRequest(BaseModel):
     use_llm: bool = True  # If True, generates prompt using LLM; if False, returns input as prompt
     previous_outputs: Optional[Dict[str, str]] = None  # Outputs from previous steps, e.g., {"prd_document": "..."}
     session_id: Optional[str] = None  # If provided, uses session-specific parameter overrides
+    # Optional explicit override of the coding assistant used for fork resolution.
+    # When omitted (the existing behavior), the assistant is read from the session's
+    # session_parameters.coding_assistant (or DEFAULT when there is no session).
+    # The Test Scenario tab uses this to pick a fork without creating a session.
+    coding_assistant: Optional[str] = None
 
 class TestPromptRequest(BaseModel):
     """Request model for testing prompt generation with custom values (used in Configuration page)"""
@@ -1145,7 +1150,7 @@ def get_effective_workshop_parameters(session_id: Optional[str] = None) -> Dict[
     return params
 
 
-def get_section_input_content(industry: str, use_case: str, section_tag: str, previous_outputs: Optional[Dict[str, str]] = None, session_id: Optional[str] = None) -> Dict[str, str]:
+def get_section_input_content(industry: str, use_case: str, section_tag: str, previous_outputs: Optional[Dict[str, str]] = None, session_id: Optional[str] = None, coding_assistant_override: Optional[str] = None) -> Dict[str, str]:
     """
     Get the input content (context/requirements) for a specific section.
     Templates are loaded from prompts_config.yaml with parameter substitution.
@@ -1193,7 +1198,13 @@ def get_section_input_content(industry: str, use_case: str, section_tag: str, pr
     # Resolve the correct prompt for the session's coding assistant.
     # Falls back to the legacy 'default' section_tag entry if the requested tag
     # has no row in the database at all (preserves pre-existing behavior).
-    assistant_key = _get_session_coding_assistant(session_id)
+    # When `coding_assistant_override` is provided (Test Scenario tab), it takes
+    # priority over the session lookup so an explicit choice can drive fork
+    # resolution without persisting anything to a session.
+    if coding_assistant_override is not None and coding_assistant_override != "":
+        assistant_key = _normalize_coding_assistant(coding_assistant_override)
+    else:
+        assistant_key = _get_session_coding_assistant(session_id)
     fork_template = get_section_input_template(section_tag, assistant_key)
     template = (
         fork_template
@@ -2328,7 +2339,8 @@ async def stream_llm_response(
     use_case: str, 
     section_tag: str,
     previous_outputs: Optional[Dict[str, str]] = None,
-    session_id: Optional[str] = None
+    session_id: Optional[str] = None,
+    coding_assistant_override: Optional[str] = None,
 ) -> AsyncGenerator[str, None]:
     """
     Stream LLM response using Server-Sent Events format.
@@ -2338,9 +2350,13 @@ async def stream_llm_response(
     
     Args:
         session_id: If provided, uses session-specific parameter overrides
+        coding_assistant_override: If provided, bypass the session lookup and use this
+            assistant key for fork resolution (Test Scenario tab path).
     """
     # Get the input content for this section (uses session parameters if session_id provided)
-    section_content = get_section_input_content(industry, use_case, section_tag, previous_outputs, session_id)
+    section_content = get_section_input_content(
+        industry, use_case, section_tag, previous_outputs, session_id, coding_assistant_override
+    )
     input_text = section_content["input"]
     system_prompt = section_content.get("system_prompt", "You are a helpful assistant.")
     bypass_llm = section_content.get("bypass_llm", False)
@@ -2423,7 +2439,8 @@ async def generate_prompt_stream(request: PromptRequest):
             request.use_case, 
             request.section_tag, 
             request.previous_outputs,
-            request.session_id  # Use session-specific parameters if provided
+            request.session_id,  # Use session-specific parameters if provided
+            request.coding_assistant,  # Explicit override (Test Scenario tab); None elsewhere
         ),
         media_type="text/event-stream",
         headers={

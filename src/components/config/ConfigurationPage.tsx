@@ -18,8 +18,9 @@ import { SectionInputsConfig } from './SectionInputsConfig';
 import { WorkshopParametersConfig } from './WorkshopParametersConfig';
 import { StepVisibilityConfig } from './StepVisibilityConfig';
 import { AiGatewayEndpointConfig } from './AiGatewayEndpointConfig';
+import { TestScenarioConfig } from './TestScenarioConfig';
 
-type TabType = 'prompts' | 'section-inputs' | 'workshop-parameters' | 'step-visibility' | 'ai-gateway';
+type TabType = 'prompts' | 'section-inputs' | 'workshop-parameters' | 'step-visibility' | 'ai-gateway' | 'test-scenario';
 
 interface Toast {
   id: number;
@@ -34,6 +35,7 @@ const tabParamMap: Record<string, TabType> = {
   'workshop-parameters': 'workshop-parameters',
   'step-visibility': 'step-visibility',
   'ai-gateway': 'ai-gateway',
+  'test-scenario': 'test-scenario',
 };
 
 export function ConfigurationPage() {
@@ -160,6 +162,21 @@ export function ConfigurationPage() {
               Set up AI Gateway Endpoint
             </span>
           </Link>
+          <Link
+            to="/config/test-scenario"
+            className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
+              activeTab === 'test-scenario'
+                ? 'border-primary text-primary'
+                : 'border-transparent text-muted-foreground hover:text-foreground hover:border-border'
+            }`}
+          >
+            <span className="flex items-center gap-2">
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" />
+              </svg>
+              Test Scenario
+            </span>
+          </Link>
         </div>
       </div>
 
@@ -171,6 +188,7 @@ export function ConfigurationPage() {
           {activeTab === 'workshop-parameters' && <WorkshopParametersConfig onToast={showToast} />}
           {activeTab === 'step-visibility' && <StepVisibilityConfig onToast={showToast} />}
           {activeTab === 'ai-gateway' && <AiGatewayEndpointConfig onToast={showToast} />}
+          {activeTab === 'test-scenario' && <TestScenarioConfig onToast={showToast} />}
         </div>
       </div>
 
