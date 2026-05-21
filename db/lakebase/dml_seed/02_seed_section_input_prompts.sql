@@ -12059,7 +12059,9 @@ The prompt above describes a CLI-based extraction. Replace the run/deploy steps 
 - `python3 << EOF / open("/tmp/...") / open("<OUTPUT_FILE>", "w")` → build CSV in-memory: `from io import StringIO; import csv; buf = StringIO(); csv.writer(buf).writerows([("table_catalog","table_schema","table_name","column_name","ordinal_position","is_nullable","data_type","comment")] + rows); write_file(f"{REPO_ROOT}/data_product_accelerator/context/{use_case_file_prefix}_Schema.csv", buf.getvalue())`
 
 **Trap:** 0 rows → wrong `{chapter_3_lakehouse_catalog}` / `{chapter_3_lakehouse_schema}` or empty source. (Lakebase Postgres source path is out of scope for this fork — use UC `information_schema.columns` only.)',
-'',
+'You are a senior data engineering lead.
+
+Traverse the @data_product_accelerator/skills/common folder to identify all available skills, understand their intended use, and invoke the relevant skills as needed to complete the task.',
 true, 1, true, current_timestamp(), current_timestamp(), current_user());
 
 -- Step 11 (gold_layer_design) — Genie Code fork
@@ -12101,7 +12103,9 @@ The skill above is correct as-is. Replace ONLY the file I/O verbs the skill emit
 - Any `python scripts/*.py` validation in the skill → run validation logic inline as a Genie Code Python cell (use `read_file()` to load existing artifacts to compare against)
 
 **Traps:** schema CSV not found → confirm V2V Step 10 ran AND `REPO_ROOT` matches your workspace clone path. No `open(local_path)`, no `pathlib`, no `os.path.join` against local FS — every read/write goes through `read_file` / `write_file`.',
-'',
+'You are a senior data engineering lead.
+
+Traverse the @data_product_accelerator/skills/common folder to identify all available skills, understand their intended use, and invoke the relevant skills as needed to complete the task.',
 true, 1, true, current_timestamp(), current_timestamp(), current_user());
 
 -- Step 12 (bronze_layer_creation) — Genie Code fork
@@ -12140,7 +12144,9 @@ The skill above is correct as-is. Replace ONLY the bundle/CLI verbs below — Ge
 - `python scripts/copy_from_source.py` → inline the clone logic in the notebook body passed to `write_notebook(...)`.
 
 **Traps:** (1) the body inside `write_notebook(...)` MUST start with `%pip install --upgrade databricks-sdk -q` then `dbutils.library.restartPython()` — the job''s compute does NOT inherit your session''s pip install. Use `make_job_notebook(body)` to get the header for free. (2) Never set the reserved `TBLPROPERTIES` key `''table_type''` (UC raises `[UNSUPPORTED_FEATURE.SET_TABLE_PROPERTY]`); use `''layer''=''bronze''` instead. CDF / auto-optimize / `CLUSTER BY AUTO` properties are fine — they are not reserved.',
-'',
+'You are a senior data engineering lead.
+
+Traverse the @data_product_accelerator/skills/common folder to identify all available skills, understand their intended use, and invoke the relevant skills as needed to complete the task.',
 true, 1, true, current_timestamp(), current_timestamp(), current_user());
 
 -- Step 13 (silver_layer_sdp) — Genie Code fork
@@ -12192,7 +12198,9 @@ The skill above is correct as-is. Replace ONLY the bundle/CLI verbs below — Ge
 3. `cluster_by_auto=True` on `@dlt.table`. **NEVER** set `pipelines.autoOptimize.zOrderCols` (no `spark.conf.set`, no extra pipeline `configuration` keys) — raises `DLTAnalysisException: ZORDER BY is not compatible with Liquid Clustering`.
 4. Import EVERY `pyspark.sql.functions` symbol the SDP notebook uses (`col, lit, when, current_timestamp, sha2, concat_ws, coalesce`, ...). Partial imports raise `NameError: name ''lit'' is not defined` at pipeline init / "Failed to analyze flow".
 5. No `DEFAULT` clauses in `CREATE TABLE` DDL on serverless (`WRONG_COLUMN_DEFAULTS_FOR_DELTA_FEATURE_NOT_ENABLED`). Reserved `TBLPROPERTIES` — never `''table_type''` on `dq_rules`; use `''dq_rules_role''=''metadata''` instead.',
-'',
+'You are a senior data engineering lead.
+
+Traverse the @data_product_accelerator/skills/common folder to identify all available skills, understand their intended use, and invoke the relevant skills as needed to complete the task.',
 true, 1, true, current_timestamp(), current_timestamp(), current_user());
 
 -- Step 14 (gold_layer_pipeline) — Genie Code fork
@@ -12241,7 +12249,9 @@ The skill above is correct as-is. Replace ONLY the bundle/CLI verbs below — Ge
 1. **Strip every `DEFAULT` clause** from generated DDL — SCD2 columns (`is_current`, `effective_from`, `effective_to`, `created_at`) MUST set values in INSERT/MERGE, NOT DDL. `WRONG_COLUMN_DEFAULTS_FOR_DELTA_FEATURE_NOT_ENABLED` on serverless otherwise.
 2. **Gold MERGE — the `src_*` source temp view MUST `.select(...)` every Gold column the `MERGE` references**, with `lit(None).cast("<sql_type>")` placeholders for any YAML-only Gold column missing from the Silver DataFrame. Otherwise `[UNRESOLVED_COLUMN.WITH_SUGGESTION]` on `src` during `WHEN MATCHED THEN UPDATE SET *`. Call `df.printSchema()` on the source DataFrame ONCE before `MERGE` per table to catch column omissions.
 3. For string-prefixed business keys (e.g. `r12`) where the Gold key is numeric: `regexp_extract(col("id"), r"(\d+)", 1).cast("bigint")`. Do NOT pass the raw string into a numeric Gold key column.',
-'',
+'You are a senior data engineering lead.
+
+Traverse the @data_product_accelerator/skills/common folder to identify all available skills, understand their intended use, and invoke the relevant skills as needed to complete the task.',
 true, 1, true, current_timestamp(), current_timestamp(), current_user());
 
 -- Step 23 (deploy_lakehouse_assets) — Genie Code fork
@@ -12333,7 +12343,9 @@ Run order: **A2 → B → C → D → E → F → G → H**. Cell B is a cold-st
 1. `TABLE_OR_VIEW_NOT_FOUND` on `..._bronze.src_*` → those are merge staging views from Cell G, not Bronze tables. Always use Cell H allowlist verification, never raw `SHOW TABLES` iteration.
 2. Silver pipeline FAILED with sparse events / "failed more than 2 times" → confirm `full_refresh=True` (Cell E hard-codes it) and that Cell D ran first. Cell E has propagation logic that picks the canonical pipeline name; if multiple silver pipelines match `APP_NAME`, edit Cell E to set `chosen = pipelines[i]` after inspecting Cell B output.
 3. Gold merge `[UNRESOLVED_COLUMN.WITH_SUGGESTION]` on `src` → see V2V Step 14 traps — `src_*` source view must `.select(...)` every Gold column with `lit(None).cast(...)` placeholders for YAML-only Gold columns missing from Silver.',
-'',
+'You are a senior data engineering lead.
+
+Traverse the @data_product_accelerator/skills/common folder to identify all available skills, understand their intended use, and invoke the relevant skills as needed to complete the task.',
 true, 1, true, current_timestamp(), current_timestamp(), current_user());
 
 -- =============================================================================
@@ -12399,7 +12411,9 @@ The skill above is correct as-is. Replace ONLY the run/deploy steps below — Ge
 - The skill writes the Gold dependency manifest → `write_file(f"{REPO_ROOT}/plans/manifests/gold-dependency-manifest.yaml", yaml_text)`, then intersects it against `information_schema` via `run_sql`.
 
 **Traps:** (1) If Gold tables/columns referenced in any addendum are missing from `information_schema`, the skill writes `plans/gold-gap-remediation.md` and STOPS — do not proceed; downstream orchestrators (semantic layer, observability, ML, GenAI agents) will refuse to run until Gold is fixed. (2) Workshop mode caps are non-negotiable: max 3-5 TVFs, 1-2 Metric Views, 1 Genie Space — keep the workshop focused on pattern variety over depth.',
-'',
+'You are a senior data engineering lead.
+
+Traverse the @data_product_accelerator/skills/common folder to identify all available skills, understand their intended use, and invoke the relevant skills as needed to complete the task.',
 true, 1, true, current_timestamp(), current_timestamp(), current_user());
 
 -- Step 16 (aibi_dashboard) — Genie Code fork
@@ -12463,7 +12477,9 @@ The skill above is correct as-is. Replace ONLY the run/deploy steps below — Ge
 - UPDATE-or-CREATE deployment → first list existing dashboards: `existing = [d for d in w.lakeview.list() if d.display_name == DASHBOARD_NAME]`. If found, `w.lakeview.update(dashboard_id=existing[0].dashboard_id, dashboard=...)` then `w.lakeview.publish(dashboard_id=existing[0].dashboard_id, warehouse_id=WAREHOUSE_ID)`. Otherwise `created = w.lakeview.create(dashboard=...)` then `w.lakeview.publish(dashboard_id=created.dashboard_id, warehouse_id=WAREHOUSE_ID)`. The UPDATE path preserves URLs and viewer permissions; the CREATE path mints a new dashboard URL.
 
 **Traps (3):** (1) Raw UTF-8 bytes silently corrupt the `.lvdash.json` upload — ALWAYS `base64.b64encode(json.dumps(...).encode("ascii"))`. (2) Widget version specs are non-negotiable: KPIs=v2, Charts=v3, Tables=v2, Filters=v2 — wrong version = silent render failure in the browser. (3) Use a 6-column grid, NOT 12. The skill defaults are correct; do not "round up" widget widths.',
-'',
+'You are a senior data engineering lead.
+
+Traverse the @data_product_accelerator/skills/common folder to identify all available skills, understand their intended use, and invoke the relevant skills as needed to complete the task.',
 true, 1, true, current_timestamp(), current_timestamp(), current_user());
 
 -- Step 17 (genie_space) — Genie Code fork
@@ -12527,7 +12543,9 @@ def _assert_sql_arrays(payload):
 ```
 
 **Traps (5):** (1) Every `sql:` field in the `serialized_space` payload MUST be a `List[str]`, never a bare string — bare-string commits corrupt the space silently and Genie returns nonsense answers. Run `_assert_sql_arrays(payload)` before every POST/PATCH. (2) IDs must use `uuid.uuid4().hex` (32-char hex, no dashes) for asset/dataset IDs. (3) `serialized_space` is a JSON string (`json.dumps(...)`), not a nested object inside the request body. (4) Data asset arrays must be sorted (tables by `table_name`, TVFs by `function_name`) before submission — unsorted arrays cause non-deterministic asset IDs across runs. (5) Genie Space MUST use a Serverless SQL Warehouse (non-negotiable) — classic warehouses fail with `FATAL: External authorization failed` on managed-online queries.',
-'',
+'You are a senior data engineering lead.
+
+Traverse the @data_product_accelerator/skills/common folder to identify all available skills, understand their intended use, and invoke the relevant skills as needed to complete the task.',
 true, 1, true, current_timestamp(), current_timestamp(), current_user());
 
 -- Step 24 (deploy_di_assets) — Genie Code fork
@@ -12628,7 +12646,9 @@ The skill above is correct as-is. Replace ONLY the run/deploy steps below — Ge
 Run order if fully re-deploying: TVFs → Metric Views → Dashboard → Genie Space → Verify.
 
 **Traps (3):** (1) `_assert_sql_arrays(payload)` is mandatory on EVERY Genie Space redeploy — re-running the orchestrator without re-validating drops you into the silent-corruption failure mode where Genie returns nonsense answers. (2) Stage order matters: Metric Views depend on TVFs (Metric DDL referencing a missing function fails at parse time); Genie Space data assets reference Metric Views (deploying Genie before Metric/TVF resolves to non-existent objects — the API accepts the payload but Genie returns "schema not found" at query time). (3) Variable substitution for `${catalog}` / `${gold_schema}` in the `.lvdash.json` is processed by Databricks Workspace at upload time — concrete values must be present in `plans/deploy-checkpoint.md`; the SDK has no `--var` resolver.',
-'',
+'You are a senior data engineering lead.
+
+Traverse the @data_product_accelerator/skills/common folder to identify all available skills, understand their intended use, and invoke the relevant skills as needed to complete the task.',
 true, 1, true, current_timestamp(), current_timestamp(), current_user());
 
 -- =============================================================================
