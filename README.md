@@ -86,15 +86,68 @@
 
 ### Install
 
-**macOS / Linux**
+The bundle ships with **canonical defaults already committed** -- `databricks.yml` is git-source-mode-pinned to this upstream repo (`https://github.com/databricks-solutions/vibe-coding-workshop-app`, branch `main`), `app.yaml` resolves Lakebase host at runtime, and seed SQL + brand-config render to safe defaults. A fresh `git clone` is deploy-ready with **zero local edits**.
+
+The recommended install is split across two roles:
+
+- **Workshop attendees** create the app entirely through the Databricks UI -- no terminal required.
+- **Workshop hosts / SAs** run a **one-time CLI bootstrap per workspace** to provision Lakebase + apply DDL/seed. After that, every additional attendee in the same workspace is pure UI.
+
+#### Option B -- Databricks UI (primary, no terminal)
+
+1. In your workspace, go to **Apps -> Create app -> Custom app**.
+2. Choose **From a Git repository** and paste:
+   ```
+   https://github.com/databricks-solutions/vibe-coding-workshop-app
+   ```
+   (branch `main`, provider `gitHub`).
+3. Click **Deploy**. The app shell starts and the Apps UI marks it RUNNING.
+4. If Lakebase has not yet been bootstrapped in this workspace, the workshop UI will show a "waiting for Lakebase" banner. Hit `/health/lakebase` to confirm; it returns `{"ready": false, ...}` until the host bootstrap (below) completes.
+5. Once Lakebase is bootstrapped, refresh the app -- data-backed pages start working.
+
+#### One-time-per-workspace bootstrap (workshop host / SA, ~5 min, CLI)
+
+Anyone with workspace admin or workspace.write privileges runs this once:
 
 ```bash
 git clone https://github.com/databricks-solutions/vibe-coding-workshop-app.git
 cd vibe-coding-workshop-app
+databricks bundle deploy   -t user --profile <your-profile>     # provisions Lakebase + UC catalog
+databricks bundle run post_deploy -t user --profile <your-profile>   # SP grants + DDL/seed + RUNNING wait
+```
+
+Or run the same two commands as a single script:
+
+```bash
+./scripts/deploy.sh -t user -p <your-profile>
+```
+
+`databricks bundle deploy` provisions Lakebase (autoscaling project + branch) and the UC catalog, and reconciles with the UI-created app declaration since both point at the same `git_repository`. `databricks bundle run post_deploy` applies SP grants, runs idempotent DDL/seed migrations, and waits for the app to reach RUNNING. Both commands are safe to re-run any time.
+
+#### Option A -- Pure CLI (no UI, same canonical bundle)
+
+If you'd rather not click through the UI at all, the bootstrap commands above also create the app shell (the bundle's `apps` resource is git-source-mode and CAN_USE-permissioned), so they're a complete install:
+
+```bash
+git clone https://github.com/databricks-solutions/vibe-coding-workshop-app.git
+cd vibe-coding-workshop-app
+databricks bundle deploy   -t user --profile <your-profile>
+databricks bundle run post_deploy -t user --profile <your-profile>
+```
+
+Identical end state as Option B + bootstrap.
+
+#### Option C -- Customize before installing
+
+Forks that want different resource names, branding, a different upstream URL, or workspace-source mode (instead of git-source) should run the interactive customizer:
+
+```bash
 ./vibe2value install
 ```
 
-**Windows (PowerShell, run as Administrator the first time)**
+This walks you through workspace URL, authentication, resource naming, branding, and frontend build, then **overwrites** the committed `databricks.yml` / `app.yaml` / seed SQL / `brand-config.json` with your custom values, then runs the same two bundle commands as Option A. Treat the resulting working-tree diff as your customization -- don't commit it back upstream unless you intend to change the canonical defaults for everyone.
+
+**Windows (PowerShell, run as Administrator the first time):**
 
 ```powershell
 git clone https://github.com/databricks-solutions/vibe-coding-workshop-app.git
@@ -103,22 +156,25 @@ powershell -ExecutionPolicy Bypass -File scripts\install-prerequisites.ps1
 .\vibe2value install
 ```
 
-The installer walks you through everything interactively — workspace URL, authentication, resource naming, build, deploy, and verification. When it finishes, you'll have a live app URL.
-
 ### Commands
 
 | Command | Description |
 |---------|-------------|
-| `./vibe2value install` | First-time interactive setup and deploy |
+| `databricks bundle deploy -t user` | Zero-config deploy from canonical commit (Lakebase + UC + git-source app) |
+| `databricks bundle run post_deploy -t user` | SP grants + DDL/seed + RUNNING wait (idempotent) |
+| `./scripts/deploy.sh -t user -p <profile>` | Wrapper for the two commands above |
+| `./vibe2value install` | Interactive customization + first-time deploy |
 | `./vibe2value deploy` | Push code changes (build + sync + deploy) |
 | `./vibe2value deploy --full` | Full infrastructure redeploy |
 | `./vibe2value deploy --tables` | Reseed database tables only |
 | `./vibe2value deploy --watch` | Continuous file sync for development |
 | `./vibe2value doctor` | Validate prerequisites, config, and auth |
-| `./vibe2value configure` | Regenerate config files from templates |
+| `./vibe2value configure` | Re-render `databricks.yml` etc. from `user-config.yaml` |
 | `./vibe2value uninstall` | Tear down all provisioned resources |
 
 > On Windows, replace `./vibe2value` with `.\vibe2value` (the repo ships both a bash launcher and a `.cmd` wrapper).
+
+> **Contributing:** the canonical `databricks.yml`, `app.yaml`, seed SQL, and `brand-config.json` are committed at vanilla defaults so zero-config installs work. Running `./vibe2value configure` re-renders them from your local `user-config.yaml`; do not commit that diff unless you intentionally changed the canonical defaults.
 
 ---
 
@@ -136,13 +192,18 @@ app.yaml.template                →   app.yaml
 user-config.yaml.example         →   user-config.yaml
 ```
 
-A full deploy (`./vibe2value deploy --full`) runs these steps:
+A full deploy (`./vibe2value deploy --full` or `./scripts/deploy.sh`) runs these steps:
 
-1. Deploy infrastructure via Databricks Asset Bundle (Lakebase project + App)
-2. Sync application source code and discover Lakebase endpoint
-3. Configure permissions (Unity Catalog, Lakebase database roles, App access)
-4. Create and seed Lakebase tables
-5. Final forced app deploy — stop, redeploy, start, verify RUNNING
+1. `databricks bundle validate -t <target>` -- catch yaml/schema errors before any provisioning happens.
+2. `databricks bundle deploy -t <target>` -- declarative apply of the Lakebase project + branch, the UC catalog, the app shell, and the `users`-group `CAN_USE` grants on the project and the app.
+3. `databricks bundle run post_deploy -t <target>` -- runs `scripts/post_deploy.py`, which:
+   - waits for the app's service principal to materialize, then grants it `ALL_PRIVILEGES` on the UC catalog;
+   - creates Lakebase postgres roles for the SP and the `users` group with `DATABRICKS_SUPERUSER` (idempotent);
+   - resolves the autoscaling endpoint host via the SDK, then applies every `db/lakebase/ddl/*.sql` and `db/lakebase/dml_seed/*.sql` via psycopg, gated on a `<schema>._migrations` table so re-runs only apply new files;
+   - if the app was installed with a `git_repository` binding, triggers `databricks apps deploy --json '{"git_source": {"branch": "main"}}'` to pull the latest code from GitHub;
+   - waits for the app to reach RUNNING.
+
+The Lakebase host that the app needs to talk to Postgres is *not* baked into `app.yaml` -- it is resolved on app startup from the deterministic `ENDPOINT_NAME` via the SDK (see [`src/backend/lakebase_host_resolver.py`](src/backend/lakebase_host_resolver.py)), so the install flow no longer needs a "look up the host, then redeploy with it patched" round trip.
 
 The installer prompts for Lakebase mode (autoscaling or provisioned). Autoscaling is the default; it uses a Lakebase project that scales to zero when idle and auto-discovers its endpoint during deploy.
 

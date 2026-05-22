@@ -30,12 +30,15 @@ dist-ssr
 __pycache__/
 *.pyc
 
-# vibe2value generated files (contain user-specific values)
+# vibe2value: user-specific config (NEVER commit -- contains personal values)
 user-config.yaml
-databricks.yml
-app.yaml
-db/lakebase/dml_seed/03_seed_workshop_parameters.sql
-public/brand-config.json
+
+# NOTE: databricks.yml, app.yaml, db/lakebase/dml_seed/03_seed_workshop_parameters.sql,
+# and public/brand-config.json are committed with VANILLA DEFAULTS so a fresh
+# `git clone` can run `databricks bundle deploy` directly (zero-config install).
+# Running `./vibe2value configure` re-renders these from your user-config.yaml --
+# the resulting working-tree diff is your customization and should NOT be
+# committed back upstream unless you intend to change the canonical defaults.
 
 # Databricks bundle state (local deployment metadata)
 .databricks/

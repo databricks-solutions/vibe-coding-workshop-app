@@ -31,6 +31,13 @@ lakebase:
 app:
   name: "vibe-coding-workshop-app"
   serving_endpoint: "databricks-claude-sonnet-4-5"
+  # Public GitHub URL for one-shot, git-based install (no databricks sync needed).
+  # When set, the bundle's apps: resource binds the app to this repo, and
+  # `databricks apps deploy --json '{"git_source":{"branch":"main"}}'` pulls
+  # the code straight from GitHub. Leave empty to fall back to workspace-folder
+  # source (sync via databricks.yml `sync:` block).
+  git_repo_url: ""                    # e.g. https://github.com/<org>/vibe-coding-workshop-app
+  git_repo_branch: "main"             # branch deployed by post_deploy on git installs
 
 user:
   email: ""                           # Auto-discovered during install

@@ -4,10 +4,12 @@ Databricks Apps Entry Point - FastAPI Application
 Serves both the React frontend and API endpoints.
 """
 
+import logging
 import os
 import sys
 import time
 from collections import deque
+from contextlib import asynccontextmanager
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -23,6 +25,39 @@ from fastapi.responses import FileResponse, JSONResponse
 
 # Import the API router
 from src.backend.api.routes import router as api_router
+from src.backend.lakebase_host_resolver import resolve_and_export_lakebase_host
+
+logger = logging.getLogger("app")
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """FastAPI lifespan hook -- runs once per worker on startup.
+
+    Resolves LAKEBASE_HOST from the deterministic ENDPOINT_NAME so app.yaml
+    no longer has to be sed-patched after the bundle deploy provisions the
+    Lakebase endpoint. Safe no-op outside Databricks Apps.
+
+    Failure here is intentionally non-fatal. With Option B (UI-first git
+    install), the app may start *before* `databricks bundle run post_deploy`
+    has provisioned Lakebase. The /health endpoint stays green so the Apps UI
+    shows RUNNING; /health/lakebase reports readiness separately so the React
+    shell can render a "waiting for Lakebase bootstrap" message instead of
+    looking broken.
+    """
+    try:
+        host = resolve_and_export_lakebase_host()
+        app.state.lakebase_ready = bool(host)
+        if not host:
+            logger.warning(
+                "Lakebase not yet provisioned at startup. The app shell is "
+                "running, but data-backed endpoints will fail until "
+                "`databricks bundle run post_deploy` completes."
+            )
+    except Exception:
+        logger.exception("Lakebase host resolution failed; continuing startup")
+        app.state.lakebase_ready = False
+    yield
 
 # Get the directory where this script is located
 BASE_DIR = Path(__file__).resolve().parent
@@ -34,6 +69,7 @@ app = FastAPI(
     title="Vibe Coding Workshop API",
     description="AI-Powered Development Workflow Application - All UI data served from backend",
     version="2.0.0",
+    lifespan=lifespan,
 )
 
 # ============== Security Configuration ==============
@@ -111,18 +147,52 @@ app.include_router(api_router, prefix="/api", tags=["API"])
 
 @app.get("/health")
 async def health_check():
-    """Health check endpoint for Databricks Apps."""
+    """Process-level health check for the Databricks Apps platform.
+
+    Always returns 200 once the FastAPI process is up so the Apps UI marks the
+    app RUNNING. Lakebase readiness is reported separately via
+    /health/lakebase so platform health and data-tier health can diverge
+    during the UI-first install flow.
+    """
     return {
         "status": "healthy",
         "app": "Vibe Coding Workshop",
         "version": "2.0.0",
+        "lakebase_ready": bool(getattr(app.state, "lakebase_ready", False)),
         "features": [
             "Industries API",
-            "Use Cases API", 
+            "Use Cases API",
             "Prompt Generation API",
             "Workflow Steps API",
-            "Prerequisites API"
-        ]
+            "Prerequisites API",
+        ],
+    }
+
+
+@app.get("/health/lakebase")
+async def lakebase_health():
+    """Reports whether Lakebase has been provisioned and is reachable.
+
+    The lifespan hook (resolve_and_export_lakebase_host) sets
+    `app.state.lakebase_ready = True` when ENDPOINT_NAME resolved to a real
+    Postgres host. This endpoint is intentionally cheap (no DB round trip);
+    consumers that need "can I actually query?" guarantees should hit a
+    data-backed API endpoint and observe the failure mode instead.
+
+    Returns 200 with `ready: false` (rather than a 5xx) so the React shell
+    can poll it without triggering platform-level alerts during the
+    bootstrap window.
+    """
+    ready = bool(getattr(app.state, "lakebase_ready", False))
+    return {
+        "ready": ready,
+        "endpoint_name": os.environ.get("ENDPOINT_NAME", ""),
+        "message": (
+            "Lakebase is provisioned and reachable."
+            if ready
+            else "Waiting for Lakebase. Run `databricks bundle run post_deploy` "
+                 "to provision Lakebase and apply seed data."
+        ),
     }
 
 

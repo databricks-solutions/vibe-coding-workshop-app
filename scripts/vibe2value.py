@@ -22,6 +22,13 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 CONFIG_PATH = PROJECT_ROOT / "user-config.yaml"
 
+# Canonical upstream that the committed databricks.yml binds the app's
+# `git_repository.url` to. This is what Workspace Apps UI "paste GitHub URL ->
+# Deploy" should match for the bundle to reconcile cleanly with the UI-created
+# app. Forks that push to a different repo override this by setting
+# `app.git_repo_url` in user-config.yaml.
+CANONICAL_GIT_REPO_URL = "https://github.com/databricks-solutions/vibe-coding-workshop-app"
+
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from brand_extractor import (
     extract_brand_assets,
@@ -251,10 +258,32 @@ def get_placeholder_map(config: dict) -> dict:
         "__LAKEBASE_HOST__": "",  # discovered at deploy time
         "__LAKEBASE_USER__": user.get("email", ""),
         "__LAKEBASE_UC_CATALOG__": lb.get("uc_catalog", lb.get("catalog", "") + "_lakebase"),
-        "__APP_NAME__": app.get("name", ""),
+        "__APP_NAME__": app.get("name", "") or "vibe-coding-workshop-app",
         "__SERVING_ENDPOINT__": app.get("serving_endpoint", "databricks-claude-sonnet-4-5"),
+        # Defaults to the canonical upstream when user-config doesn't specify
+        # a value (None). Setting it to empty string explicitly forces
+        # workspace-source mode -- see `git_source_enabled` flag computation.
+        "__GIT_REPO_URL__": (
+            app.get("git_repo_url")
+            if app.get("git_repo_url") is not None
+            else CANONICAL_GIT_REPO_URL
+        ),
+        "__GIT_REPO_BRANCH__": app.get("git_repo_branch", "main"),
         "__DEFAULT_WAREHOUSE__": lb.get("warehouse", ""),
-        "__ENDPOINT_NAME__": lb.get("endpoint_name", ""),
+        # ENDPOINT_NAME is fully derivable from the lakebase project + branch
+        # (Lakebase auto-creates a "primary" endpoint per branch under
+        # LKB-11750 stable naming). When the user hasn't pinned a specific
+        # endpoint, default to the canonical path so app.yaml ships
+        # autoscaling-mode-ready out of the box.
+        "__ENDPOINT_NAME__": (
+            lb.get("endpoint_name")
+            or (
+                f"projects/{lb.get('instance_name') or 'vibe-coding-workshop-lakebase'}/"
+                f"branches/main/endpoints/primary"
+                if lb.get("mode", "autoscaling") == "autoscaling"
+                else ""
+            )
+        ),
         "__LAKEBASE_MODE__": lb.get("mode", "autoscaling"),
         "__TAG_PROJECT__": tags.get("project", "vibe_coding_workshop"),
         "__TAG_ENVIRONMENT__": tags.get("environment", "") or target,
@@ -798,6 +827,11 @@ def cmd_install(args):
         "app": {
             "name": app_name,
             "serving_endpoint": endpoint,
+            # Empty by default -> bundle uses workspace-source. Set to a public
+            # GitHub URL (and re-run `./vibe2value configure`) to switch the
+            # bundle's apps: resource to a declarative git_repository binding.
+            "git_repo_url": existing_config.get("app", {}).get("git_repo_url", ""),
+            "git_repo_branch": existing_config.get("app", {}).get("git_repo_branch", "main"),
         },
         "user": {
             "email": email,
@@ -872,11 +906,31 @@ def cmd_configure(args, config=None):
     info("Rendering config files from templates...")
     placeholders = get_placeholder_map(config)
     lb = config.get("lakebase", {})
+    app_cfg = config.get("app", {})
+    ws_cfg = config.get("workspace", {})
     lakebase_mode = lb.get("mode", "autoscaling")
+    # Git-source is the canonical default. The Apps UI "paste GitHub URL ->
+    # Deploy" flow expects a `git_repository` block on the apps resource so
+    # the bundle deploy reconciles with the UI-created app instead of fighting
+    # it. Forks that need workspace-source mode set `app.git_repo_url: ""`
+    # explicitly in user-config.yaml.
+    git_repo_url = app_cfg.get("git_repo_url")
+    if git_repo_url is None:
+        git_repo_url = CANONICAL_GIT_REPO_URL
+    git_source_enabled = bool(git_repo_url.strip())
+    has_workspace_host = bool((ws_cfg.get("host") or "").strip())
     flags = {
         "CREATE_CATALOG": lb.get("create_catalog", "true").lower() == "true",
         "LAKEBASE_PROVISIONED": lakebase_mode == "provisioned",
         "LAKEBASE_AUTOSCALING": lakebase_mode == "autoscaling",
+        # Git-source vs workspace-folder source for the apps: bundle resource.
+        # Public repo + git_repo_url set -> declarative git_repository binding.
+        "APP_GIT_SOURCE": git_source_enabled,
+        "APP_WORKSPACE_SOURCE": not git_source_enabled,
+        # Pin a workspace host into the bundle target only when the operator
+        # explicitly set one in user-config.yaml. Otherwise the canonical bundle
+        # omits the `workspace:` block entirely so the CLI profile drives auth.
+        "HAS_WORKSPACE_HOST": has_workspace_host,
     }
 
     rendered = []
@@ -934,10 +988,20 @@ def cmd_deploy(args):
         warn("No user-config.yaml found. Using deploy.sh defaults.")
 
     # Deploy mode
+    # Default: code-only (fast inner loop). --full = bundle deploy + post_deploy.
+    # --tables runs only the migrations slice of post_deploy via post_deploy.py.
     if getattr(args, "full", False):
-        pass  # Full deploy (no extra flags)
+        pass  # Full deploy (no extra flags) -> bundle validate/deploy + post_deploy
     elif getattr(args, "tables", False):
-        deploy_args.append("--tables-only")
+        # Re-run only the DDL/seed step (no SP grants, no code push, no wait).
+        info("Re-running DDL/seed only via scripts/post_deploy.py")
+        post_deploy_py = PROJECT_ROOT / "scripts" / "post_deploy.py"
+        result = _run_cmd(
+            ["python3", str(post_deploy_py), "--no-code-push", "--no-wait"]
+            + (["--profile", profile] if profile else []),
+            cwd=PROJECT_ROOT,
+        )
+        sys.exit(result.returncode)
     elif getattr(args, "watch", False):
         deploy_args.append("--watch")
     else:

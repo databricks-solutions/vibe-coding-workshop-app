@@ -7,7 +7,7 @@
 # This file is auto-generated. Edit user-config.yaml instead, then run:
 #   ./vibe2value configure
 # =============================================================================
-name: __APP_NAME__
+name: vibe-coding-workshop-app
 description: "AI-Powered Development Workflow - Vibe Coding Workshop"
 
 # Entry point
@@ -27,7 +27,7 @@ env:
   
   # LLM Model endpoint
   - name: DATABRICKS_SERVING_ENDPOINT
-    value: "__SERVING_ENDPOINT__"
+    value: "databricks-claude-sonnet-4-5"
   
   # ---------------------------------------------------------------------------
   # Lakebase PostgreSQL Configuration
@@ -41,7 +41,7 @@ env:
     value: "databricks_postgres"
   
   - name: LAKEBASE_SCHEMA
-    value: "__LAKEBASE_SCHEMA__"
+    value: "vibe_coding_workshop"
   
   - name: LAKEBASE_PORT
     value: "5432"
@@ -59,11 +59,11 @@ env:
   # When empty, the app falls back to Provisioned mode using PGPASSWORD
   # injected by the Lakebase resource link.
   - name: ENDPOINT_NAME
-    value: "__ENDPOINT_NAME__"
+    value: "projects/vibe-coding-workshop-lakebase/branches/main/endpoints/primary"
 
   # Lakebase mode: "autoscaling" (default) or "provisioned"
   - name: LAKEBASE_MODE
-    value: "__LAKEBASE_MODE__"
+    value: "autoscaling"
 
   # Toggle Lakebase (set to "false" for YAML fallback)
   - name: USE_LAKEBASE

@@ -17,7 +17,7 @@ bundle:
 variables:
   lakebase_instance_name:
     description: "Lakebase PostgreSQL instance name (Provisioned) or project name (Autoscaling)"
-    default: "__LAKEBASE_INSTANCE_NAME__"
+    default: "vibe-coding-workshop-lakebase"
   lakebase_capacity:
     description: "Lakebase instance capacity (CU_1, CU_2, etc.) - Provisioned only"
     default: "CU_2"
@@ -29,16 +29,16 @@ variables:
     default: "2"
   lakebase_catalog:
     description: "Lakebase catalog name (Unity Catalog)"
-    default: "__LAKEBASE_CATALOG__"
+    default: "vibe_coding_workshop_catalog"
   lakebase_database:
     description: "Lakebase database name"
     default: "databricks_postgres"
   lakebase_schema:
     description: "Lakebase schema for configuration tables"
-    default: "__LAKEBASE_SCHEMA__"
+    default: "vibe_coding_workshop"
   app_name:
     description: "Databricks App name"
-    default: "__APP_NAME__"
+    default: "vibe-coding-workshop-app"
 
 # =============================================================================
 # Targets
@@ -57,15 +57,11 @@ targets:
         # static value needed here. Forks that prefer a literal value can set
         # it via ./vibe2value install, which re-renders this block.
         owner: ${workspace.current_user.short_name}
-    # __IF_HAS_WORKSPACE_HOST__
-    workspace:
-      host: __WORKSPACE_HOST__
-    # __ENDIF_HAS_WORKSPACE_HOST__
     variables:
-      lakebase_instance_name: "__LAKEBASE_INSTANCE_NAME__"
-      lakebase_catalog: "__LAKEBASE_CATALOG__"
-      lakebase_schema: "__LAKEBASE_SCHEMA__"
-      app_name: "__APP_NAME__"
+      lakebase_instance_name: "vibe-coding-workshop-lakebase"
+      lakebase_catalog: "vibe_coding_workshop_catalog"
+      lakebase_schema: "vibe_coding_workshop"
+      app_name: "vibe-coding-workshop-app"
 
 # =============================================================================
 # Resources
@@ -74,23 +70,6 @@ resources:
   # ---------------------------------------------------------------------------
   # Lakebase Provisioned Instance (legacy mode, used when ENDPOINT_NAME not set)
   # ---------------------------------------------------------------------------
-  # __IF_LAKEBASE_PROVISIONED__
-  database_instances:
-    vibe_coding_lakebase:
-      name: ${var.lakebase_instance_name}
-      capacity: ${var.lakebase_capacity}
-
-  # Lakebase Catalog/Database (only if user has CREATE CATALOG permission)
-  # __IF_CREATE_CATALOG__
-  database_catalogs:
-    vibe_coding_catalog:
-      database_instance_name: ${resources.database_instances.vibe_coding_lakebase.name}
-      name: ${var.lakebase_catalog}
-      database_name: ${var.lakebase_database}
-      create_database_if_not_exists: true
-  # __ENDIF_CREATE_CATALOG__
-  # __ENDIF_LAKEBASE_PROVISIONED__
-
   # ---------------------------------------------------------------------------
   # Lakebase Autoscaling (default, used when ENDPOINT_NAME is set)
   # Docs: https://docs.databricks.com/aws/en/oltp/projects/manage-with-bundles
@@ -98,7 +77,6 @@ resources:
   #       read-write endpoint per branch.  Autoscaling limits are set via CLI
   #       post-deploy in deploy.sh.
   # ---------------------------------------------------------------------------
-  # __IF_LAKEBASE_AUTOSCALING__
   postgres_projects:
     vibe_coding_project:
       project_id: ${var.lakebase_instance_name}
@@ -116,10 +94,7 @@ resources:
   # NOTE: `postgres_roles` is not yet a bundle resource type in CLI <= 0.298.x.
   # The 'users' group DATABRICKS_SUPERUSER grant and the SP-specific role grant
   # are both applied imperatively (and idempotently) by scripts/post_deploy.py.
-  # __ENDIF_LAKEBASE_AUTOSCALING__
-
   # Databricks App
-  # __IF_APP_GIT_SOURCE__
   # Git-source app: bundle declares the GitHub URL + branch; on deploy, the
   # app pulls code straight from GitHub. No databricks sync required.
   # Note: `git_repository` is currently a preview field but is accepted by the
@@ -130,53 +105,16 @@ resources:
       name: ${var.app_name}
       description: "AI-Powered Development Workflow - Vibe Coding Workshop"
       git_repository:
-        url: __GIT_REPO_URL__
+        url: https://github.com/databricks-solutions/vibe-coding-workshop-app
         provider: gitHub
       git_source:
-        branch: __GIT_REPO_BRANCH__
+        branch: main
       permissions:
         - level: CAN_USE
           group_name: users
-  # __ENDIF_APP_GIT_SOURCE__
-  # __IF_APP_WORKSPACE_SOURCE__
-  # Workspace-source app (fallback when git_repo_url is unset in user-config.yaml):
-  # bundle uploads the project to a workspace folder via `databricks bundle deploy`.
-  apps:
-    vibe_coding_workshop:
-      name: ${var.app_name}
-      description: "AI-Powered Development Workflow - Vibe Coding Workshop"
-      source_code_path: .
-      permissions:
-        - level: CAN_USE
-          group_name: users
-  # __ENDIF_APP_WORKSPACE_SOURCE__
-
 # =============================================================================
 # Sync Configuration (workspace-source apps only; ignored for git-source)
 # =============================================================================
-# __IF_APP_WORKSPACE_SOURCE__
-sync:
-  include:
-    - "src/**"
-    - "dist/**"
-    - "app.yaml"
-    - "app.py"
-    - "requirements.txt"
-    - "scripts/**"
-    - "db/**"
-    - "VERSION"
-  exclude:
-    - "node_modules/**"
-    - "__pycache__/**"
-    - "*.pyc"
-    - ".git/**"
-    - "deploy.py"
-    - "*.template"
-    - "user-config.yaml*"
-    - "package.json"
-    - "package-lock.json"
-# __ENDIF_APP_WORKSPACE_SOURCE__
-
 # =============================================================================
 # Scripts
 # =============================================================================
