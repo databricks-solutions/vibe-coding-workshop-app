@@ -1,11 +1,11 @@
 import { createElement } from 'react';
-import type { CategoryOrder } from './outcomeMapTheme';
-import { THEMES } from './outcomeMapTheme';
+import type { OutcomeMapTheme } from './outcomeMapTheme';
 
 interface ColumnHeaderBandProps {
   title: string;
   count: number;
-  themeOrder: CategoryOrder;
+  /** Resolved theme (palette is now keyed by rendered column index, not category_order). */
+  theme: OutcomeMapTheme;
   /** Stagger the band's entrance so columns appear left-to-right */
   staggerIndex: number;
 }
@@ -15,9 +15,7 @@ interface ColumnHeaderBandProps {
  * the column theme icon, title with tight letter-spacing, animated use-case-
  * count chip, and a one-time diagonal shimmer sweep on first paint.
  */
-export function ColumnHeaderBand({ title, count, themeOrder, staggerIndex }: ColumnHeaderBandProps) {
-  const theme = THEMES[themeOrder];
-
+export function ColumnHeaderBand({ title, count, theme, staggerIndex }: ColumnHeaderBandProps) {
   return (
     <div
       className={`relative overflow-hidden rounded-t-2xl ${theme.headerBand} px-4 py-3.5 animate-slide-up-fade`}

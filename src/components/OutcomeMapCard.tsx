@@ -2,16 +2,16 @@ import { createElement, useRef, type MouseEvent, type CSSProperties } from 'reac
 import { Check } from 'lucide-react';
 import type { SelectOption } from '../api/client';
 import {
-  THEMES,
   getIconForSlug,
   LEAF_PILLS_BY_SLUG,
   deriveValueProp,
-  type CategoryOrder,
+  type OutcomeMapTheme,
 } from './outcomeMapTheme';
 
 interface OutcomeMapCardProps {
   useCase: SelectOption;
-  themeOrder: CategoryOrder;
+  /** Resolved theme (palette is now keyed by rendered column index, not category_order). */
+  theme: OutcomeMapTheme;
   isSelected: boolean;
   hasSelection: boolean;
   onSelect: (slug: string) => void;
@@ -35,7 +35,7 @@ interface OutcomeMapCardProps {
  */
 export function OutcomeMapCard({
   useCase,
-  themeOrder,
+  theme,
   isSelected,
   hasSelection,
   onSelect,
@@ -43,7 +43,6 @@ export function OutcomeMapCard({
   promptTemplate,
   staggerIndex,
 }: OutcomeMapCardProps) {
-  const theme = THEMES[themeOrder];
   const pills = LEAF_PILLS_BY_SLUG[useCase.value] ?? [];
   const cardRef = useRef<HTMLButtonElement>(null);
 
@@ -181,8 +180,8 @@ export function OutcomeMapCard({
   );
 
   // BorderBeam wrapper only when selected (and not disabled). Recoloured per
-  // theme via the `theme-cyan|emerald|amber` modifier class added in
-  // index.css alongside the existing .border-beam-wrapper rule. The wrapper
+  // theme via the `theme-<palette>` modifier classes added in index.css
+  // alongside the existing .border-beam-wrapper rule. The wrapper
   // (not the inner button) carries the selection scale so the orbit and the
   // card stay edge-aligned — scaling the inner button alone caused it to
   // overflow the wrapper's clip and produced jagged right/bottom edges.

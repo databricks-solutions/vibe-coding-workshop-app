@@ -25,10 +25,19 @@ import {
   MessagesSquare,
   Sparkles,
   Bot,
+  Heart,
+  Compass,
   HelpCircle,
 } from 'lucide-react';
 
-export type CategoryOrder = 1 | 2 | 3;
+/**
+ * Position of a category within an industry. Backend stores this as a free
+ * `INTEGER`; the frontend now treats it as a generic `number` and resolves
+ * the visual theme by the column's *rendered* index (not by `category_order`
+ * value) so the palette stays predictable even when orders are sparse
+ * (e.g. 1, 2, 5, 7).
+ */
+export type CategoryOrder = number;
 
 export interface OutcomeMapTheme {
   /** Slide-style full-width gradient header band */
@@ -73,9 +82,15 @@ export interface OutcomeMapTheme {
 // header bands) — text stays neutral (text-foreground) so it flips cleanly
 // black/light in light mode and white-ish in dark mode. This keeps every
 // label legible while the theme palette still identifies each column.
-export const THEMES: Record<CategoryOrder, OutcomeMapTheme> = {
-  1: {
-    // Agentic AI Operations — slide dark teal
+//
+// Ordered list (NOT a map keyed by `category_order`). The grid resolves a
+// theme by the column's RENDERED index via `getThemeForColumn`, so backends
+// can use sparse / non-contiguous `category_order` values and the colour
+// rotation stays consistent. When the number of categories exceeds the
+// palette length, themes cycle (palette[index % palette.length]).
+export const THEME_PALETTE: OutcomeMapTheme[] = [
+  {
+    // Index 0 — slide dark teal (Travel default: Agentic AI Operations)
     headerBand: 'bg-gradient-to-r from-cyan-700 via-cyan-600 to-cyan-700/95',
     columnBackdrop: 'bg-gradient-to-b from-cyan-500/[0.05] via-cyan-500/[0.02] to-transparent',
     columnBorder: 'ring-1 ring-cyan-500/10',
@@ -96,8 +111,8 @@ export const THEMES: Record<CategoryOrder, OutcomeMapTheme> = {
     beamClass: 'theme-cyan',
     magneticGlow: 'hsla(189, 92%, 60%, 0.18)',
   },
-  2: {
-    // Diversified Revenue Growth — slide green
+  {
+    // Index 1 — slide green (Travel default: Diversified Revenue Growth)
     headerBand: 'bg-gradient-to-r from-emerald-700 via-emerald-600 to-emerald-700/95',
     columnBackdrop: 'bg-gradient-to-b from-emerald-500/[0.05] via-emerald-500/[0.02] to-transparent',
     columnBorder: 'ring-1 ring-emerald-500/10',
@@ -117,8 +132,8 @@ export const THEMES: Record<CategoryOrder, OutcomeMapTheme> = {
     beamClass: 'theme-emerald',
     magneticGlow: 'hsla(160, 84%, 55%, 0.18)',
   },
-  3: {
-    // Consumer at the Center of Every Decision — slide orange
+  {
+    // Index 2 — slide orange (Travel default: Consumer at the Center of Every Decision)
     headerBand: 'bg-gradient-to-r from-amber-700 via-amber-600 to-amber-700/95',
     columnBackdrop: 'bg-gradient-to-b from-amber-500/[0.05] via-amber-500/[0.02] to-transparent',
     columnBorder: 'ring-1 ring-amber-500/10',
@@ -138,7 +153,88 @@ export const THEMES: Record<CategoryOrder, OutcomeMapTheme> = {
     beamClass: 'theme-amber',
     magneticGlow: 'hsla(38, 92%, 60%, 0.18)',
   },
-};
+  {
+    // Index 3 — violet (deep purple, distinct from the first three hues)
+    headerBand: 'bg-gradient-to-r from-violet-700 via-violet-600 to-violet-700/95',
+    columnBackdrop: 'bg-gradient-to-b from-violet-500/[0.05] via-violet-500/[0.02] to-transparent',
+    columnBorder: 'ring-1 ring-violet-500/10',
+    cardTopEdge: 'before:bg-gradient-to-r before:from-violet-500/0 before:via-violet-500/70 before:to-violet-500/0',
+    cardHoverRing: 'ring-1 ring-violet-500/40 shadow-xl shadow-violet-500/20',
+    cardSelectedRing: 'ring-2 ring-violet-500/70 dark:ring-violet-400/70 shadow-2xl shadow-violet-500/30',
+    cardSelectedBg: 'bg-violet-500/[0.07] dark:bg-violet-500/[0.12]',
+    titleSelected: 'text-foreground',
+    iconBg: 'bg-violet-500/15 dark:bg-violet-500/22 ring-1 ring-violet-500/25',
+    iconBgSelected: 'bg-violet-500/25 dark:bg-violet-500/35 ring-1 ring-violet-500/40',
+    iconAccent: 'text-violet-700 dark:text-violet-200',
+    pillBg: 'bg-violet-500/18 ring-1 ring-violet-500/30 text-foreground dark:bg-violet-500/15 dark:ring-violet-400/25',
+    pillBgSelected: 'bg-violet-500/30 ring-1 ring-violet-500/45 text-foreground dark:bg-violet-500/25 dark:ring-violet-300/45 font-semibold',
+    countChip: 'bg-violet-500/18 ring-1 ring-violet-500/30 text-foreground dark:bg-violet-500/15 dark:ring-violet-400/25',
+    headerCountChip: 'bg-white/20 text-white ring-1 ring-white/25',
+    headerIcon: Sparkles,
+    beamClass: 'theme-violet',
+    magneticGlow: 'hsla(262, 90%, 65%, 0.18)',
+  },
+  {
+    // Index 4 — rose (warm pink/red, distinct from amber)
+    headerBand: 'bg-gradient-to-r from-rose-700 via-rose-600 to-rose-700/95',
+    columnBackdrop: 'bg-gradient-to-b from-rose-500/[0.05] via-rose-500/[0.02] to-transparent',
+    columnBorder: 'ring-1 ring-rose-500/10',
+    cardTopEdge: 'before:bg-gradient-to-r before:from-rose-500/0 before:via-rose-500/70 before:to-rose-500/0',
+    cardHoverRing: 'ring-1 ring-rose-500/40 shadow-xl shadow-rose-500/20',
+    cardSelectedRing: 'ring-2 ring-rose-500/70 dark:ring-rose-400/70 shadow-2xl shadow-rose-500/30',
+    cardSelectedBg: 'bg-rose-500/[0.07] dark:bg-rose-500/[0.12]',
+    titleSelected: 'text-foreground',
+    iconBg: 'bg-rose-500/15 dark:bg-rose-500/22 ring-1 ring-rose-500/25',
+    iconBgSelected: 'bg-rose-500/25 dark:bg-rose-500/35 ring-1 ring-rose-500/40',
+    iconAccent: 'text-rose-700 dark:text-rose-200',
+    pillBg: 'bg-rose-500/18 ring-1 ring-rose-500/30 text-foreground dark:bg-rose-500/15 dark:ring-rose-400/25',
+    pillBgSelected: 'bg-rose-500/30 ring-1 ring-rose-500/45 text-foreground dark:bg-rose-500/25 dark:ring-rose-300/45 font-semibold',
+    countChip: 'bg-rose-500/18 ring-1 ring-rose-500/30 text-foreground dark:bg-rose-500/15 dark:ring-rose-400/25',
+    headerCountChip: 'bg-white/20 text-white ring-1 ring-white/25',
+    headerIcon: Heart,
+    beamClass: 'theme-rose',
+    magneticGlow: 'hsla(352, 84%, 60%, 0.18)',
+  },
+  {
+    // Index 5 — sky (true blue, distinguishable from the teal cyan in index 0)
+    headerBand: 'bg-gradient-to-r from-sky-700 via-sky-600 to-sky-700/95',
+    columnBackdrop: 'bg-gradient-to-b from-sky-500/[0.05] via-sky-500/[0.02] to-transparent',
+    columnBorder: 'ring-1 ring-sky-500/10',
+    cardTopEdge: 'before:bg-gradient-to-r before:from-sky-500/0 before:via-sky-500/70 before:to-sky-500/0',
+    cardHoverRing: 'ring-1 ring-sky-500/40 shadow-xl shadow-sky-500/20',
+    cardSelectedRing: 'ring-2 ring-sky-500/70 dark:ring-sky-400/70 shadow-2xl shadow-sky-500/30',
+    cardSelectedBg: 'bg-sky-500/[0.07] dark:bg-sky-500/[0.12]',
+    titleSelected: 'text-foreground',
+    iconBg: 'bg-sky-500/15 dark:bg-sky-500/22 ring-1 ring-sky-500/25',
+    iconBgSelected: 'bg-sky-500/25 dark:bg-sky-500/35 ring-1 ring-sky-500/40',
+    iconAccent: 'text-sky-700 dark:text-sky-200',
+    pillBg: 'bg-sky-500/18 ring-1 ring-sky-500/30 text-foreground dark:bg-sky-500/15 dark:ring-sky-400/25',
+    pillBgSelected: 'bg-sky-500/30 ring-1 ring-sky-500/45 text-foreground dark:bg-sky-500/25 dark:ring-sky-300/45 font-semibold',
+    countChip: 'bg-sky-500/18 ring-1 ring-sky-500/30 text-foreground dark:bg-sky-500/15 dark:ring-sky-400/25',
+    headerCountChip: 'bg-white/20 text-white ring-1 ring-white/25',
+    headerIcon: Compass,
+    beamClass: 'theme-sky',
+    magneticGlow: 'hsla(199, 89%, 60%, 0.18)',
+  },
+];
+
+/**
+ * Resolve a theme by the column's rendered index (0-based). When the column
+ * count exceeds the palette length, themes cycle from the start. This keeps
+ * theme assignment fully decoupled from `category_order` so backends can use
+ * any positive integers without breaking the visual rotation.
+ */
+export const getThemeForColumn = (columnIndex: number): OutcomeMapTheme =>
+  THEME_PALETTE[((columnIndex % THEME_PALETTE.length) + THEME_PALETTE.length) % THEME_PALETTE.length];
+
+/**
+ * Back-compat: kept so any external consumer that referenced the old shape
+ * still type-checks. New code should use `getThemeForColumn` instead.
+ *
+ * @deprecated Use `getThemeForColumn(columnIndex)` — addressing by
+ * `category_order` ties theme to backend values, which we no longer do.
+ */
+export const THEMES = THEME_PALETTE;
 
 /**
  * Per-card icon. Keyed by `use_case` slug so it stays in the frontend (no DB
