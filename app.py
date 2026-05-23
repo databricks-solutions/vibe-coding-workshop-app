@@ -26,6 +26,7 @@ from fastapi.responses import FileResponse, JSONResponse
 # Import the API router
 from src.backend.api.routes import router as api_router
 from src.backend.lakebase_host_resolver import resolve_and_export_lakebase_host
+from src.backend.migrations import MigrationResult, apply_pending_migrations
 
 logger = logging.getLogger("app")
 
@@ -34,29 +35,54 @@ logger = logging.getLogger("app")
 async def lifespan(app: FastAPI):
     """FastAPI lifespan hook -- runs once per worker on startup.
 
-    Resolves LAKEBASE_HOST from the deterministic ENDPOINT_NAME so app.yaml
-    no longer has to be sed-patched after the bundle deploy provisions the
-    Lakebase endpoint. Safe no-op outside Databricks Apps.
+    With the May 2026 Apps + Lakebase release, the bundle's
+    `apps.<name>.resources[].database` binding causes the platform to
+    auto-inject PGHOST/PGUSER/PGDATABASE/PGPORT/PGSSLMODE -- so the legacy
+    `lakebase_host_resolver` SDK lookup is now a fallback for installs that
+    predate the binding. After resolving connection details, this hook also
+    applies any unapplied DDL + seed SQL via the `<schema>._migrations`
+    ledger, retiring the previous `databricks bundle run post_deploy`
+    follow-up step.
 
-    Failure here is intentionally non-fatal. With Option B (UI-first git
-    install), the app may start *before* `databricks bundle run post_deploy`
-    has provisioned Lakebase. The /health endpoint stays green so the Apps UI
-    shows RUNNING; /health/lakebase reports readiness separately so the React
-    shell can render a "waiting for Lakebase bootstrap" message instead of
-    looking broken.
+    Both phases are intentionally non-fatal: the /health endpoint stays
+    green for the Apps platform health check, and /health/lakebase reports
+    data-tier readiness separately so the React shell can show a
+    "waiting for Lakebase bootstrap" message during the rare cold-start
+    window where the postgres binding is still attaching.
     """
+    # Phase 1: ensure LAKEBASE_HOST is populated. On modern installs PGHOST
+    # is already injected by the resource binding, so the resolver is a
+    # no-op. Legacy installs without the binding fall through to the SDK
+    # lookup based on ENDPOINT_NAME.
+    if not os.environ.get("PGHOST", "").strip():
+        try:
+            resolve_and_export_lakebase_host()
+        except Exception:
+            logger.exception("Lakebase host resolution failed; continuing startup")
+
+    # Phase 2: apply DDL/seed migrations idempotently. This replaces the old
+    # `databricks bundle run post_deploy` step.
     try:
-        host = resolve_and_export_lakebase_host()
-        app.state.lakebase_ready = bool(host)
-        if not host:
-            logger.warning(
-                "Lakebase not yet provisioned at startup. The app shell is "
-                "running, but data-backed endpoints will fail until "
-                "`databricks bundle run post_deploy` completes."
-            )
-    except Exception:
-        logger.exception("Lakebase host resolution failed; continuing startup")
-        app.state.lakebase_ready = False
+        result: MigrationResult = apply_pending_migrations()
+    except Exception as exc:
+        logger.exception("apply_pending_migrations raised unexpectedly")
+        result = MigrationResult(
+            ready=False, applied=[], skipped=[], failed=[],
+            reason=f"unexpected error: {exc}",
+        )
+
+    app.state.lakebase_ready = result.ready
+    app.state.lakebase_migrations = result
+    if result.ready:
+        logger.info(
+            "Lakebase ready (applied=%d skipped=%d)",
+            len(result.applied), len(result.skipped),
+        )
+    else:
+        logger.warning(
+            "Lakebase not ready: %s (applied=%d skipped=%d failed=%d)",
+            result.reason, len(result.applied), len(result.skipped), len(result.failed),
+        )
     yield
 
 # Get the directory where this script is located
@@ -171,29 +197,38 @@ async def health_check():
 
 @app.get("/health/lakebase")
 async def lakebase_health():
-    """Reports whether Lakebase has been provisioned and is reachable.
+    """Reports whether Lakebase is provisioned, reachable, and migrated.
 
-    The lifespan hook (resolve_and_export_lakebase_host) sets
-    `app.state.lakebase_ready = True` when ENDPOINT_NAME resolved to a real
-    Postgres host. This endpoint is intentionally cheap (no DB round trip);
-    consumers that need "can I actually query?" guarantees should hit a
-    data-backed API endpoint and observe the failure mode instead.
+    The lifespan hook applies DDL + seed migrations on startup and stores a
+    structured ``MigrationResult`` on ``app.state``. This endpoint surfaces
+    that result -- including the per-file applied / skipped / failed lists --
+    so attendees and operators can tell at a glance whether the data tier is
+    ready, and if not, why.
 
-    Returns 200 with `ready: false` (rather than a 5xx) so the React shell
-    can poll it without triggering platform-level alerts during the
-    bootstrap window.
+    Returns 200 with ``ready: false`` (rather than a 5xx) so the React shell
+    can poll it without triggering platform-level alerts during the rare
+    cold-start window where the postgres binding is still attaching.
     """
     ready = bool(getattr(app.state, "lakebase_ready", False))
-    return {
+    result = getattr(app.state, "lakebase_migrations", None)
+    payload = {
         "ready": ready,
         "endpoint_name": os.environ.get("ENDPOINT_NAME", ""),
         "message": (
-            "Lakebase is provisioned and reachable."
+            "Lakebase is provisioned and reachable; migrations are up to date."
             if ready
-            else "Waiting for Lakebase. Run `databricks bundle run post_deploy` "
-                 "to provision Lakebase and apply seed data."
+            else "Lakebase is not ready. The /api endpoints will fail until the "
+                 "`apps.<name>.resources[].database` binding finishes attaching "
+                 "and the lifespan migration step succeeds."
         ),
     }
+    if result is not None:
+        payload["applied"] = result.applied
+        payload["skipped"] = result.skipped
+        payload["failed"] = result.failed
+        if result.reason:
+            payload["reason"] = result.reason
+    return payload
 
 
 # ============== Static File Serving ==============

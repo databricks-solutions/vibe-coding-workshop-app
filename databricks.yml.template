@@ -106,6 +106,15 @@ resources:
       permissions:
         - level: CAN_USE
           group_name: users
+        # Pin the app SP at the project level so the bundle's declarative
+        # `permissions` block doesn't get reconciled away when the platform
+        # attaches the app SP via the `apps.<name>.resources[].postgres`
+        # binding below. Without this entry, `bundle validate` warns and the
+        # `users` group CAN_USE grant can get silently dropped at runtime.
+        # The branch-level CAN_CONNECT_AND_CREATE is granted separately by
+        # the app resource binding.
+        - level: CAN_USE
+          service_principal_name: ${resources.apps.vibe_coding_workshop.service_principal_client_id}
 
   postgres_branches:
     vibe_coding_branch:
@@ -113,9 +122,12 @@ resources:
       branch_id: "main"
       no_expiry: true
 
-  # NOTE: `postgres_roles` is not yet a bundle resource type in CLI <= 0.298.x.
-  # The 'users' group DATABRICKS_SUPERUSER grant and the SP-specific role grant
-  # are both applied imperatively (and idempotently) by scripts/post_deploy.py.
+  # NOTE: postgres_roles are NOT declared here. With the May 2026 Apps + Lakebase
+  # release, declaring an `apps.<name>.resources[].postgres` binding (below)
+  # automatically creates the app SP a postgres role on the bound branch with
+  # CONNECT + CREATE privileges. The 'users' group role is no longer required
+  # for the canonical install; if you grant workshop attendees CAN_USE on the
+  # app they reach Postgres through the app SP, not directly.
   # __ENDIF_LAKEBASE_AUTOSCALING__
 
   # Databricks App
@@ -125,10 +137,25 @@ resources:
   # Note: `git_repository` is currently a preview field but is accepted by the
   # bundle schema. `git_source` provides the branch/tag/commit ref the bundle
   # validator requires (since `source_code_path` is omitted in this mode).
+  #
+  # `resources` declaratively binds the app to its Lakebase database. The
+  # platform injects PGHOST / PGUSER / PGDATABASE / PGPORT / PGSSLMODE from
+  # this binding at runtime (see app.yaml `valueFrom: postgres`), creates the
+  # app SP a postgres role with CAN_CONNECT_AND_CREATE on the branch, and
+  # rotates OAuth tokens automatically. This is the single hook that
+  # converts `databricks bundle deploy` into a true one-shot install --
+  # no separate role-grant step is needed.
   apps:
     vibe_coding_workshop:
       name: ${var.app_name}
       description: "AI-Powered Development Workflow - Vibe Coding Workshop"
+      resources:
+        - name: postgres
+          description: "Lakebase Autoscaling default database for the workshop"
+          postgres:
+            branch: "${resources.postgres_projects.vibe_coding_project.name}/branches/main"
+            database: "${resources.postgres_projects.vibe_coding_project.name}/branches/main/databases/databricks-postgres"
+            permission: "CAN_CONNECT_AND_CREATE"
       git_repository:
         url: __GIT_REPO_URL__
         provider: gitHub
@@ -145,6 +172,13 @@ resources:
     vibe_coding_workshop:
       name: ${var.app_name}
       description: "AI-Powered Development Workflow - Vibe Coding Workshop"
+      resources:
+        - name: postgres
+          description: "Lakebase Autoscaling default database for the workshop"
+          postgres:
+            branch: "${resources.postgres_projects.vibe_coding_project.name}/branches/main"
+            database: "${resources.postgres_projects.vibe_coding_project.name}/branches/main/databases/databricks-postgres"
+            permission: "CAN_CONNECT_AND_CREATE"
       source_code_path: .
       permissions:
         - level: CAN_USE
@@ -178,14 +212,18 @@ sync:
 # __ENDIF_APP_WORKSPACE_SOURCE__
 
 # =============================================================================
-# Scripts
+# Scripts (retired)
 # =============================================================================
-# Run via:  databricks bundle run post_deploy [-t <target>]
-# Encapsulates every imperative step that needs a post-create SP client_id:
-# UC ALL_PRIVILEGES, Lakebase role grants, DDL/seed application, git-source
-# code push, and the wait-for-RUNNING loop. Idempotent.
-scripts:
-  post_deploy:
-    # Bundle scripts disallow ${var.x} interpolation, so post_deploy.py
-    # default-loads its arguments from user-config.yaml.
-    content: python scripts/post_deploy.py
+# `scripts.post_deploy` was the previous home for SP grants + Lakebase role
+# creation + DDL/seed migrations. As of the May 2026 Apps + Lakebase release
+# all of those steps are now handled inline:
+#   * SP postgres role / CONNECT / CREATE -- created by the
+#     `apps.x.resources[].database` binding above.
+#   * DDL + seed application -- run on first cold start by the FastAPI
+#     lifespan handler (see app.py + src/backend/migrations.py), gated by a
+#     `<schema>._migrations` ledger so re-runs are no-ops.
+# `databricks bundle deploy` is now the entire install -- no `bundle run`
+# follow-up is required.
+#
+# The legacy script is preserved at scripts/legacy/post_deploy.py for forks
+# that need the imperative flow (older CLIs, customised migrations, etc.).

@@ -1061,9 +1061,15 @@ def cmd_deploy(args):
     if getattr(args, "full", False):
         pass  # Full deploy (no extra flags) -> bundle validate/deploy + post_deploy
     elif getattr(args, "tables", False):
-        # Re-run only the DDL/seed step (no SP grants, no code push, no wait).
-        info("Re-running DDL/seed only via scripts/post_deploy.py")
-        post_deploy_py = PROJECT_ROOT / "scripts" / "post_deploy.py"
+        # Re-run only the DDL/seed step. The canonical install runs migrations
+        # in-app via the lifespan handler, but operators sometimes want to
+        # force a fresh seed without waiting for the app to cold-start
+        # (e.g. after editing a `db/lakebase/dml_seed/*.sql` file). The
+        # legacy post_deploy.py is the right tool for that out-of-band
+        # invocation -- it shares the same ledger as the runtime path so
+        # there is no risk of double-applying.
+        info("Re-running DDL/seed via scripts/legacy/post_deploy.py")
+        post_deploy_py = PROJECT_ROOT / "scripts" / "legacy" / "post_deploy.py"
         result = _run_cmd(
             ["python3", str(post_deploy_py), "--no-code-push", "--no-wait"]
             + (["--profile", profile] if profile else []),

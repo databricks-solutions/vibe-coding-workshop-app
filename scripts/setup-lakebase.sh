@@ -3,12 +3,17 @@
 # Vibe Coding Workshop - Lakebase Table Setup
 # =============================================================================
 #
-# DEPRECATED for production deploys. The canonical install path is now:
-#   1. databricks bundle deploy -t <target>
-#   2. databricks bundle run post_deploy -t <target>
-# `scripts/post_deploy.py` runs an idempotent, _migrations-tracked DDL/seed
-# applier that supersedes this script. Keep this script around for ad-hoc dev
-# reseeds (e.g. --recreate, --drop, --status) when iterating locally.
+# DEPRECATED for production deploys. The canonical install path is now a
+# single `databricks bundle deploy -t <target>` -- the app itself applies
+# DDL + seed migrations on first cold start (see app.py lifespan +
+# src/backend/migrations.py), gated by a `<schema>._migrations` ledger so
+# re-runs are no-ops.
+#
+# Keep this script around for ad-hoc dev reseeds (e.g. --recreate, --drop,
+# --status) when iterating locally without redeploying the app. For an
+# out-of-band batch reseed against a deployed install, prefer
+# `python scripts/legacy/post_deploy.py --no-code-push --no-wait` which
+# shares the same ledger.
 #
 # Creates or recreates the tables in Lakebase using Python/psycopg2.
 # Optionally creates the Lakebase instance if it doesn't exist.

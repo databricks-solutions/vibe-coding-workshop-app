@@ -32,32 +32,27 @@ env:
   # ---------------------------------------------------------------------------
   # Lakebase PostgreSQL Configuration
   # ---------------------------------------------------------------------------
-  # LAKEBASE_HOST is intentionally NOT set here.
-  #   - Autoscaling mode: app.py resolves the host on startup from ENDPOINT_NAME
-  #     via the Databricks SDK (postgres.get_endpoint), so no sed-patching after
-  #     bundle deploy is needed. See src/backend/lakebase_host_resolver.py.
-  #   - Provisioned mode: PGHOST is auto-injected by the Lakebase resource link.
-  - name: LAKEBASE_DATABASE
-    value: "databricks_postgres"
-  
+  # The bundle declares an `apps.<name>.resources[].database` binding (see
+  # databricks.yml). At runtime the Apps platform auto-injects:
+  #     PGHOST, PGUSER, PGDATABASE, PGPORT, PGSSLMODE, PGAPPNAME
+  # ...resolved from that binding -- no manual host lookup or sed-patch is
+  # needed after deploy. `src/backend/services/lakebase.py` reads PG* first
+  # and falls back to LAKEBASE_* only for legacy installs.
+  #
+  # LAKEBASE_SCHEMA is the schema name our DDL targets. It is NOT a
+  # connection attribute (Postgres connects to a database, not a schema), so
+  # it is not platform-injectable and is set here explicitly.
   - name: LAKEBASE_SCHEMA
     value: "vibe_coding_workshop"
-  
-  - name: LAKEBASE_PORT
-    value: "5432"
-  
-  # NOTE: LAKEBASE_USER is NOT set here. When running on Databricks Apps,
-  # the app's service principal identity is used automatically.
-  # - Autoscaling mode: uses DATABRICKS_CLIENT_ID (injected by platform)
-  # - Provisioned mode: uses PGUSER (injected via resource link in Step 4c)
-  # Hardcoding a user email here causes auth failures.
-  
-  # ENDPOINT_NAME: Lakebase Autoscaling endpoint resource path.
+
+  # ENDPOINT_NAME -- Lakebase Autoscaling endpoint resource path.
   # Format: projects/{project_id}/branches/{branch_id}/endpoints/{endpoint_id}
-  # When set, the app uses Autoscaling mode with OAuth token rotation
-  # via the Databricks SDK (databricks-sdk generate_database_credential).
-  # When empty, the app falls back to Provisioned mode using PGPASSWORD
-  # injected by the Lakebase resource link.
+  # The platform-managed binding does NOT inject PGPASSWORD because Lakebase
+  # Autoscaling tokens are short-lived (~1h). The app calls
+  # `client.postgres.generate_database_credential(endpoint=ENDPOINT_NAME)` on
+  # demand to mint a fresh token (see services/lakebase.py). This name is
+  # fully derivable from the bundle (project name + branch + literal
+  # 'primary') so we ship it as a literal, not a `valueFrom`.
   - name: ENDPOINT_NAME
     value: "projects/vibe-coding-workshop-lakebase/branches/main/endpoints/primary"
 

@@ -6,20 +6,23 @@
 #
 #     ./scripts/deploy.sh -p <databricks-cli-profile>
 #
-# end-to-end provisions Lakebase Autoscaling + UC catalog, creates the app
-# from this git repo, applies SP grants and DDL/seed migrations, and waits
-# for the app to reach RUNNING. Zero local config required -- the canonical
-# `databricks.yml` ships with safe defaults for everything (instance name,
-# schema, catalog, app name); `post_deploy.py` reads those same defaults so
-# user-config.yaml is purely optional (created only when you customise via
-# `./vibe2value install`).
+# is now equivalent to a single `databricks bundle deploy` -- it provisions
+# the Lakebase Autoscaling project + branch, the app shell, and binds the app
+# to its Postgres database via `apps.<name>.resources[].database`. The Apps
+# platform creates the app SP a postgres role with CONNECT + CREATE on the
+# bound branch, and the app applies DDL + seed migrations on first cold
+# start (see app.py lifespan + src/backend/migrations.py).
 #
-# Default (full deploy):
+# Why the wrapper still exists:
+#   * surfaces a friendlier dist-staleness check before deploy
+#   * runs `bundle validate` so YAML errors surface BEFORE any provisioning
+#   * provides the --code-only / --watch fast inner-loop dev paths
+#
+# Default (full one-shot install):
 #   ./scripts/deploy.sh [-t <target>] [-p <profile>]
 #     -> databricks bundle validate
-#     -> databricks bundle deploy           (provisions Lakebase + UC + app)
-#     -> databricks bundle run post_deploy  (SP grants + DDL/seed + RUNNING wait,
-#                                            idempotent: safe to re-run)
+#     -> databricks bundle deploy   (provisions Lakebase + app + binding;
+#                                    migrations apply on first cold start)
 #
 # Inner-loop dev (requires user-config.yaml -- run `./vibe2value install` first):
 #   ./scripts/deploy.sh --code-only [-t <target>] [-p <profile>] [--skip-build]
@@ -139,7 +142,10 @@ print(yaml.safe_load(open('user-config.yaml')).get('app', {}).get('name', ''))
 fi
 
 # ---------------------------------------------------------------------
-# Default path: full bundle deploy + post_deploy.
+# Default path: full bundle deploy. The Apps + Lakebase resource binding
+# (declared in databricks.yml) handles SP role creation; the app's
+# lifespan handler applies DDL + seed migrations on first cold start.
+# No `bundle run post_deploy` follow-up is required.
 # ---------------------------------------------------------------------
 log "Verifying frontend build artifacts (dist/)"
 verify_dist_fresh
@@ -152,8 +158,6 @@ log "Deploying bundle (target=$TARGET)"
 databricks bundle deploy -t "$TARGET" "${PROFILE_FLAG[@]}"
 ok "Bundle deploy complete"
 
-log "Running post_deploy (SP grants + DDL/seed + code push + RUNNING wait)"
-databricks bundle run post_deploy -t "$TARGET" "${PROFILE_FLAG[@]}"
-ok "post_deploy complete"
-
-color "1;32" "🎉 Install complete -- app should now be RUNNING."
+color "1;32" "🎉 Install complete."
+color "1;32" "    Lakebase + app are provisioned; migrations apply on the app's"
+color "1;32" "    first cold start. Watch /health/lakebase to confirm readiness."

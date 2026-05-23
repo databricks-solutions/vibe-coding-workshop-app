@@ -86,30 +86,34 @@
 
 ### Install
 
-The bundle ships with **canonical defaults already committed** -- `databricks.yml` declares a Lakebase Autoscaling project + branch, a Unity Catalog catalog, and an app resource bound to this upstream git repo (`https://github.com/databricks-solutions/vibe-coding-workshop-app`, branch `main`). `app.yaml` resolves Lakebase host at runtime, and seed SQL + brand-config render to safe defaults. **A fresh `git clone` is deploy-ready with zero local edits.**
+The bundle ships with **canonical defaults already committed** -- `databricks.yml` declares a Lakebase Autoscaling project + branch, an app shell bound to this upstream git repo (`https://github.com/databricks-solutions/vibe-coding-workshop-app`, branch `main`), and an `apps.<name>.resources[].database` binding that wires the app's service principal to the Lakebase database with `CAN_CONNECT_AND_CREATE`. `app.yaml` reads PG* env vars injected by that binding at runtime; the FastAPI lifespan handler applies DDL + seed migrations on first cold start. **A fresh `git clone` is deploy-ready with zero local edits.**
 
-#### One-shot install (recommended)
+#### One-shot install -- single CLI call (recommended for the workspace admin)
+
+The first person who installs the app on a workspace must use the CLI -- it is the only path that provisions Lakebase. After that, additional attendees can spin up their own copies of the app entirely through the workspace UI (see below).
 
 ```bash
 git clone https://github.com/databricks-solutions/vibe-coding-workshop-app.git
 cd vibe-coding-workshop-app
-./scripts/deploy.sh -p <your-databricks-cli-profile>
+databricks bundle deploy -p <your-databricks-cli-profile>
 ```
 
-That single invocation:
-1. `databricks bundle validate` -- catches schema errors before any provisioning.
-2. `databricks bundle deploy` -- declaratively provisions the Lakebase Autoscaling project + branch, the Unity Catalog, the app shell (bound to this git repo via `git_repository`), and the `users`-group `CAN_USE` grants.
-3. `databricks bundle run post_deploy` -- waits for the app's service principal, grants it `ALL_PRIVILEGES` on the UC catalog and `DATABRICKS_SUPERUSER` on the Lakebase branch, applies idempotent DDL + seed migrations to the schema, triggers a git-source pull, and waits for the app to reach RUNNING.
+That single command:
 
-End state: a live app URL with Lakebase already wired up. Both phases are idempotent -- re-run the script any time to reconcile drift, apply new migrations, or recover from a partial failure.
+1. Provisions the Lakebase Autoscaling project + the `main` branch.
+2. Creates the Databricks App from this git repository (`git_repository` field) so the app code is pulled directly from GitHub on first start.
+3. Declares the `apps.<name>.resources[].database` binding. The Apps platform creates the app's service principal a Postgres role on the bound branch with `CAN_CONNECT_AND_CREATE`, and injects `PGHOST` / `PGUSER` / `PGDATABASE` / `PGPORT` / `PGSSLMODE` into the running container.
+4. Grants the workspace `users` group `CAN_USE` on the app and the Lakebase project.
 
-> **Why two CLI calls under one script?** Bundles do not yet expose a native `post_deploy` lifecycle hook ([databricks/cli#3801](https://github.com/databricks/cli/issues/3801)), and `postgres_roles` is not yet a declarative resource type in the bundle schema (CLI <= 1.0.0). `scripts/deploy.sh` chains `bundle deploy` + `bundle run post_deploy` so installers see a single command. Once those gaps close upstream, `databricks bundle deploy` alone will be enough.
+When the app cold-starts, its FastAPI lifespan handler ([`app.py`](app.py)) calls [`src/backend/migrations.py::apply_pending_migrations`](src/backend/migrations.py), which mints a fresh Lakebase OAuth token via the SDK and replays every `db/lakebase/ddl/*.sql` and `db/lakebase/dml_seed/*.sql` file that is not yet present in the `<schema>._migrations` ledger. Subsequent cold starts are no-ops; new SQL files added to the repo are applied automatically the next time the app restarts.
 
-> **Zero-config:** `post_deploy.py` reads its arguments from the same `variables.*.default` block that `databricks.yml` ships -- no `user-config.yaml` is required for the canonical install. `user-config.yaml` is only used when you customise the bundle via `./vibe2value install`.
+> **Operator helper script:** `./scripts/deploy.sh -p <profile>` wraps the same `databricks bundle deploy` and adds two niceties -- a `bundle validate` pre-check that catches YAML/schema errors before any provisioning happens, and a frontend `dist/` staleness check. Use it instead of the raw `bundle deploy` call if you want those guards.
 
-#### Alternative -- UI git deploy (app-only, requires the one-shot to have run once per workspace)
+> **Zero-config:** the canonical `databricks.yml` ships with safe defaults for every required value (instance name, schema, app name, git URL). `user-config.yaml` is only needed if you fork and want to override those defaults via `./vibe2value install`.
 
-After someone has run `./scripts/deploy.sh` once on a workspace (which creates the Lakebase project + UC catalog), additional attendees can spin up their own copies of the app entirely through the UI:
+#### UI git deploy (additional attendees, after the admin install)
+
+Once the workspace admin has run the one-shot install above, additional attendees can spin up their own copies of the app entirely through the UI -- no CLI required:
 
 1. In your workspace, go to **Apps -> Create app -> Custom app**.
 2. Choose **From a Git repository** and paste:
@@ -117,9 +121,12 @@ After someone has run `./scripts/deploy.sh` once on a workspace (which creates t
    https://github.com/databricks-solutions/vibe-coding-workshop-app
    ```
    (branch `main`, provider `gitHub`).
-3. Click **Deploy**.
+3. Click **Deploy** to create the app shell from the repo.
+4. Once the app is created, click **+ Add resource -> Database** and pick the existing Lakebase database the admin provisioned (`vibe-coding-workshop-lakebase` -> branch `main` -> database `databricks-postgres`). Grant `CAN_CONNECT_AND_CREATE`. This step is what makes the platform inject `PGHOST` etc. into the new app's runtime -- without it, the app starts but `/health/lakebase` will keep reporting `ready: false`.
 
-The new app inherits the existing Lakebase + UC resources (everyone in the workspace shares the same `vibe-coding-workshop-lakebase` project + `vibe_coding_workshop` schema). This path provisions **only** the app shell -- it cannot create Lakebase by itself, which is why the one-shot CLI install above is required at least once per workspace.
+The new app uses the same Lakebase project as the admin install; the `<schema>._migrations` ledger ensures DDL + seed migrations are applied exactly once across all attendee apps.
+
+> **Why can't the UI flow create Lakebase?** Lakebase Autoscaling projects are bundle resources; the workspace **Apps -> Create** UI provisions only the app shell. Anyone with `CREATE_APPLICATION` on the workspace can use the UI flow, but the admin must have run `databricks bundle deploy` at least once to create the shared Lakebase project and database.
 
 #### Customise before installing (forks)
 
@@ -144,13 +151,12 @@ powershell -ExecutionPolicy Bypass -File scripts\install-prerequisites.ps1
 
 | Command | Description |
 |---------|-------------|
-| `./scripts/deploy.sh -p <profile>` | **One-shot install** -- bundle validate + deploy + post_deploy (Lakebase + UC + app + DDL/seed + RUNNING wait). Zero local config required. |
-| `databricks bundle deploy -t user --profile <profile>` | Just step 2: provisions Lakebase Autoscaling project + branch + UC catalog + app shell from git source. |
-| `databricks bundle run post_deploy -t user --profile <profile>` | Just step 3: SP grants + DDL/seed + git pull + RUNNING wait (idempotent). |
+| `databricks bundle deploy -p <profile>` | **One-shot install** -- provisions Lakebase + app + resource binding in a single call. Migrations apply on the app's first cold start. |
+| `./scripts/deploy.sh -p <profile>` | Same as above, plus a `bundle validate` pre-check and a `dist/` freshness guard. |
 | `./vibe2value install` | Interactive customization (workspace URL, resource names, branding) + first-time deploy. |
 | `./vibe2value deploy` | Push code changes (build + sync + deploy) -- requires `user-config.yaml`. |
 | `./vibe2value deploy --full` | Full infrastructure redeploy. |
-| `./vibe2value deploy --tables` | Reseed database tables only. |
+| `./vibe2value deploy --tables` | Out-of-band DDL/seed reseed via `scripts/legacy/post_deploy.py` (shares the same `_migrations` ledger as the runtime path). |
 | `./vibe2value deploy --watch` | Continuous file sync for development. |
 | `./vibe2value doctor` | Validate prerequisites, config, and auth. |
 | `./vibe2value configure` | Re-render `databricks.yml` etc. from `user-config.yaml`. |
@@ -176,20 +182,22 @@ app.yaml.template                →   app.yaml
 user-config.yaml.example         →   user-config.yaml
 ```
 
-A full deploy (`./vibe2value deploy --full` or `./scripts/deploy.sh`) runs these steps:
+A full deploy (`./vibe2value deploy --full` or `./scripts/deploy.sh`) collapses to a single `databricks bundle deploy`:
 
-1. `databricks bundle validate -t <target>` -- catch yaml/schema errors before any provisioning happens.
-2. `databricks bundle deploy -t <target>` -- declarative apply of the Lakebase project + branch, the UC catalog, the app shell, and the `users`-group `CAN_USE` grants on the project and the app.
-3. `databricks bundle run post_deploy -t <target>` -- runs `scripts/post_deploy.py`, which:
-   - waits for the app's service principal to materialize, then grants it `ALL_PRIVILEGES` on the UC catalog;
-   - creates Lakebase postgres roles for the SP and the `users` group with `DATABRICKS_SUPERUSER` (idempotent);
-   - resolves the autoscaling endpoint host via the SDK, then applies every `db/lakebase/ddl/*.sql` and `db/lakebase/dml_seed/*.sql` via psycopg, gated on a `<schema>._migrations` table so re-runs only apply new files;
-   - if the app was installed with a `git_repository` binding, triggers `databricks apps deploy --json '{"git_source": {"branch": "main"}}'` to pull the latest code from GitHub;
-   - waits for the app to reach RUNNING.
+1. `databricks bundle validate -t <target>` -- catch yaml/schema errors before any provisioning happens (only when invoked through `./scripts/deploy.sh`).
+2. `databricks bundle deploy -t <target>` -- declaratively applies:
+   - the Lakebase Autoscaling project + branch (with `users`-group `CAN_USE`);
+   - the Databricks App, pulled from this git repository via `git_repository`;
+   - the `apps.<name>.resources[].database` binding that wires the app's service principal to the Lakebase database with `CAN_CONNECT_AND_CREATE`. The Apps platform owns Postgres role creation and OAuth credential rotation.
 
-The Lakebase host that the app needs to talk to Postgres is *not* baked into `app.yaml` -- it is resolved on app startup from the deterministic `ENDPOINT_NAME` via the SDK (see [`src/backend/lakebase_host_resolver.py`](src/backend/lakebase_host_resolver.py)), so the install flow no longer needs a "look up the host, then redeploy with it patched" round trip.
+When the app cold-starts, the FastAPI lifespan handler in [`app.py`](app.py) calls [`src/backend/migrations.py::apply_pending_migrations`](src/backend/migrations.py), which:
+   - reads `PGHOST` / `PGUSER` / `PGDATABASE` / `PGPORT` / `PGSSLMODE` from the env (injected by the resource binding);
+   - mints a fresh Lakebase OAuth token via `client.postgres.generate_database_credential(endpoint=ENDPOINT_NAME)`;
+   - applies every `db/lakebase/ddl/*.sql` and `db/lakebase/dml_seed/*.sql` whose filename is not yet present in the `<schema>._migrations` ledger.
 
-The installer prompts for Lakebase mode (autoscaling or provisioned). Autoscaling is the default; it uses a Lakebase project that scales to zero when idle and auto-discovers its endpoint during deploy.
+The migration step never raises into the lifespan path -- failures are recorded on `app.state` and surfaced via `/health/lakebase`, so the app process stays up while the React shell renders a clear "waiting for Lakebase bootstrap" state.
+
+The installer prompts for Lakebase mode (autoscaling or provisioned). Autoscaling is the default; it uses a Lakebase project that scales to zero when idle.
 
 ---
 
