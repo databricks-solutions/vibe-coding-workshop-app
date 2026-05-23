@@ -8,9 +8,28 @@ pnpm-debug.log*
 lerna-debug.log*
 
 node_modules
-dist
 dist-ssr
 *.local
+
+# NOTE: `dist/` is intentionally NOT gitignored. The built React shell must
+# ship with the canonical commit so Databricks Apps git-source mode (Option B
+# zero-config install) can serve the frontend without running `npm install` /
+# Vite build inside the Apps build container. The Apps platform's npm proxy
+# is unreliable, so we avoid touching it entirely. Pre-built artifacts are
+# committed as part of every release; `./scripts/deploy.sh` and
+# `./vibe2value` verify `dist/index.html` is present and fresh before push.
+
+# `package.json` + `package-lock.json` are NOT committed. The Databricks Apps
+# build runner detects `package.json` at the repo root and unconditionally
+# runs `npm install` (which then fails against the platform's internal npm
+# proxy: `npm-proxy.dev.databricks.com`). Since we ship the pre-built `dist/`
+# directly, npm install is unnecessary at deploy time -- and per the Apps
+# docs, "If you omit package.json from the app root, Databricks won't run
+# npm at all." Templates (`package.json.template`, `package-lock.json.template`)
+# are committed so local developers can `cp package.json.template package.json
+# && npm install` (or `./vibe2value install`) to set up a dev environment.
+package.json
+package-lock.json
 
 # Editor directories and files
 .vscode/*

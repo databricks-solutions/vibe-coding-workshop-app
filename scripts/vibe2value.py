@@ -185,6 +185,71 @@ def step(current: int, total: int, msg: str):
 
 
 # ---------------------------------------------------------------------------
+# Frontend bootstrap helpers
+# ---------------------------------------------------------------------------
+# `package.json` and `package-lock.json` are intentionally NOT committed -- the
+# Databricks Apps build runner detects them and runs `npm install` against an
+# unreliable internal proxy, which fails. Templates are committed instead.
+# These helpers materialize the real files for local dev and verify the
+# committed `dist/` shell is fresh enough to deploy.
+
+def _materialize_package_json() -> bool:
+    """Copy package.json.template -> package.json (and lock) if missing.
+
+    Returns True if files exist (either pre-existing or newly materialized),
+    False if templates are also missing (fatal config error).
+    """
+    pkg = PROJECT_ROOT / "package.json"
+    lock = PROJECT_ROOT / "package-lock.json"
+    pkg_tmpl = PROJECT_ROOT / "package.json.template"
+    lock_tmpl = PROJECT_ROOT / "package-lock.json.template"
+
+    if not pkg.exists():
+        if not pkg_tmpl.exists():
+            error("Neither package.json nor package.json.template exists -- repo is corrupt.")
+            return False
+        info(f"Materializing package.json from template (Apps git-source mode keeps the source-of-truth as a template to skip npm install at deploy time)")
+        shutil.copy2(pkg_tmpl, pkg)
+
+    if not lock.exists() and lock_tmpl.exists():
+        shutil.copy2(lock_tmpl, lock)
+
+    return True
+
+
+def _verify_dist_fresh() -> None:
+    """Warn if `dist/` is missing or older than any frontend source file.
+
+    Apps git-source mode serves the React shell from the committed `dist/`
+    -- if it's stale, the deployed app won't reflect recent frontend changes.
+    Only warns; never aborts (the dist may legitimately be missing right
+    before a fresh `npm run build`).
+    """
+    dist_index = PROJECT_ROOT / "dist" / "index.html"
+    if not dist_index.exists():
+        warn("dist/index.html is missing -- Apps git-source mode requires the pre-built React shell.")
+        warn("    Run `npm install && npm run build` (or let `./vibe2value install` do it) before pushing.")
+        return
+
+    dist_mtime = dist_index.stat().st_mtime
+    sources = []
+    for pattern in ("src", "public", "index.html", "vite.config.ts", "tsconfig.json", "tsconfig.app.json", "package.json"):
+        path = PROJECT_ROOT / pattern
+        if path.is_file():
+            sources.append(path)
+        elif path.is_dir():
+            sources.extend(p for p in path.rglob("*") if p.is_file())
+
+    newer = [p for p in sources if p.stat().st_mtime > dist_mtime]
+    if newer:
+        sample = newer[0].relative_to(PROJECT_ROOT)
+        warn(f"dist/index.html is older than {sample} ({len(newer)} source file(s) newer) -- frontend changes won't ship until you rebuild.")
+        warn("    Run `npm run build` and commit dist/ before pushing.")
+    else:
+        success("dist/ is up to date with frontend sources.")
+
+
+# ---------------------------------------------------------------------------
 # YAML helpers (no pyyaml dependency -- simple key: value parsing)
 # ---------------------------------------------------------------------------
 
@@ -864,6 +929,8 @@ def cmd_install(args):
 
     # ── Step 6: Build frontend ────────────────────────────────────────
     step(6, TOTAL, "Building frontend")
+    if not _materialize_package_json():
+        sys.exit(1)
     info("Running npm install...")
     npm_result = _run_cmd(["npm", "install", "--include=dev"], cwd=PROJECT_ROOT, capture_output=True, text=True)
     if npm_result.returncode != 0:
@@ -874,6 +941,7 @@ def cmd_install(args):
         error("Frontend build failed")
         sys.exit(1)
     success("Frontend built")
+    _verify_dist_fresh()
 
     # ── Step 7: Full deploy ─────────────────────────────────────────
     step(7, TOTAL, "Deploying to Databricks")
@@ -1009,6 +1077,12 @@ def cmd_deploy(args):
         if getattr(args, "skip_build", False):
             deploy_args.append("--skip-build")
 
+    # Any path that may run `npm run build` needs a real package.json.
+    # The Apps build runner doesn't see this file (it's gitignored), so we
+    # materialize it locally only when the dev path requires it.
+    if not getattr(args, "skip_build", False) and not getattr(args, "tables", False):
+        _materialize_package_json()
+
     info(f"Running: {deploy_sh} {' '.join(deploy_args)}")
     print()
     result = _run_sh(deploy_sh, deploy_args, cwd=PROJECT_ROOT)
@@ -1057,6 +1131,16 @@ def cmd_doctor(args):
         else:
             warn(f"{name} missing")
             all_ok = False
+    print()
+
+    # Frontend build artifacts (committed for Apps git-source mode)
+    info("Checking frontend build artifacts...")
+    if (PROJECT_ROOT / "package.json.template").exists():
+        success("package.json.template present (npm dev bootstrap)")
+    else:
+        warn("package.json.template missing -- contributors won't be able to install npm deps locally")
+        all_ok = False
+    _verify_dist_fresh()
     print()
 
     # Databricks CLI auth

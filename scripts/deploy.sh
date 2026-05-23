@@ -58,7 +58,36 @@ fi
 color() { local c=$1; shift; printf "\033[%sm%s\033[0m\n" "$c" "$*"; }
 log()   { color "0;36" "▶ $*"; }
 ok()    { color "0;32" "✓ $*"; }
+warn()  { color "0;33" "⚠ $*"; }
 fail()  { color "0;31" "✗ $*" >&2; exit 1; }
+
+# -----------------------------------------------------------------------------
+# verify_dist_fresh -- guard the canonical commit
+#
+# Apps git-source mode serves the React shell from the committed `dist/`. If
+# `dist/index.html` is missing the install will fail; if `dist/` is older than
+# any frontend source file the user is likely about to push a stale build.
+#
+# This check is non-fatal in CODE_ONLY mode (that path rebuilds frontend
+# explicitly) and in CI (CI=true) where pre-build steps have already run.
+# -----------------------------------------------------------------------------
+verify_dist_fresh() {
+    [[ -f dist/index.html ]] || fail "dist/index.html missing -- run \`npm install && npm run build\` (or \`./vibe2value install\`) before deploying. Apps git-source mode requires the pre-built React shell to be committed."
+
+    # If the dev hasn't materialized package.json (e.g., fresh git-source clone
+    # that only has package.json.template), skip staleness check entirely --
+    # there's no source-of-truth to compare against.
+    [[ -f package.json ]] || { ok "dist/index.html present (no local package.json -- skipping staleness check)"; return 0; }
+
+    local newest_src
+    newest_src=$(find src public index.html vite.config.ts tsconfig*.json package.json -type f -newer dist/index.html 2>/dev/null | head -1 || true)
+    if [[ -n "$newest_src" ]]; then
+        warn "dist/index.html is older than $newest_src -- frontend changes won't ship until you rebuild."
+        warn "    Run \`npm run build\` (or \`./vibe2value install\`) and commit dist/ before pushing."
+    else
+        ok "dist/ is up to date"
+    fi
+}
 
 if [[ "$CODE_ONLY" == true ]]; then
     # ---------------------------------------------------------------------
@@ -99,6 +128,9 @@ fi
 # ---------------------------------------------------------------------
 # Default path: full bundle deploy + post_deploy.
 # ---------------------------------------------------------------------
+log "Verifying frontend build artifacts (dist/)"
+verify_dist_fresh
+
 log "Validating bundle (target=$TARGET)"
 databricks bundle validate -t "$TARGET" "${PROFILE_FLAG[@]}" >/dev/null
 ok "Bundle valid"
