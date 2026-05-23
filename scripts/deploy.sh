@@ -2,14 +2,26 @@
 # =============================================================================
 # Vibe Coding Workshop -- one-shot install / fast inner-loop dev wrapper
 # =============================================================================
+# This is the canonical install entrypoint. From a fresh `git clone`, running
+#
+#     ./scripts/deploy.sh -p <databricks-cli-profile>
+#
+# end-to-end provisions Lakebase Autoscaling + UC catalog, creates the app
+# from this git repo, applies SP grants and DDL/seed migrations, and waits
+# for the app to reach RUNNING. Zero local config required -- the canonical
+# `databricks.yml` ships with safe defaults for everything (instance name,
+# schema, catalog, app name); `post_deploy.py` reads those same defaults so
+# user-config.yaml is purely optional (created only when you customise via
+# `./vibe2value install`).
+#
 # Default (full deploy):
 #   ./scripts/deploy.sh [-t <target>] [-p <profile>]
 #     -> databricks bundle validate
-#     -> databricks bundle deploy
-#     -> databricks bundle run post_deploy   (idempotent, applies SP grants,
-#                                             DDL/seed, code push, RUNNING wait)
+#     -> databricks bundle deploy           (provisions Lakebase + UC + app)
+#     -> databricks bundle run post_deploy  (SP grants + DDL/seed + RUNNING wait,
+#                                            idempotent: safe to re-run)
 #
-# Inner-loop dev (preserved from the legacy script):
+# Inner-loop dev (requires user-config.yaml -- run `./vibe2value install` first):
 #   ./scripts/deploy.sh --code-only [-t <target>] [-p <profile>] [--skip-build]
 #   ./scripts/deploy.sh --watch     [-t <target>] [-p <profile>]
 #     -> npm run build (unless --skip-build)
@@ -95,6 +107,7 @@ if [[ "$CODE_ONLY" == true ]]; then
     # Temporarily uses workspace-source for the app even if it was installed
     # with git_repository -- the next full `./scripts/deploy.sh` re-binds it.
     # ---------------------------------------------------------------------
+    [[ -f user-config.yaml ]] || fail "--code-only / --watch require user-config.yaml. Run \`./vibe2value install\` first to generate it (or use the default \`./scripts/deploy.sh\` for a full one-shot install)."
     APP_NAME=$(python3 -c "
 import yaml
 print(yaml.safe_load(open('user-config.yaml')).get('app', {}).get('name', ''))

@@ -458,24 +458,112 @@ def _load_user_config() -> dict:
         return {}
 
 
+def _load_bundle_variable_defaults() -> dict:
+    """Extract the `variables.*.default` block from databricks.yml.
+
+    Used as the fallback source of truth when user-config.yaml is absent --
+    i.e. when an installer runs `./scripts/deploy.sh -p <profile>` from a
+    fresh `git clone` and has never invoked `vibe2value install` to render
+    a personalised user-config.yaml. The canonical databricks.yml ships with
+    safe defaults for every required value (instance name, schema, catalog,
+    app name), so a zero-config install is fully resolved from the bundle
+    file alone.
+
+    Returns ``{}`` if databricks.yml is missing or unparseable; the caller
+    falls back further to argparse-level defaults / hard-coded constants.
+    """
+    bundle_path = PROJECT_ROOT / "databricks.yml"
+    if not bundle_path.exists():
+        return {}
+    try:
+        import yaml  # type: ignore
+    except ImportError:
+        return {}
+    try:
+        bundle = yaml.safe_load(bundle_path.read_text()) or {}
+    except Exception as exc:
+        log.warning("Could not parse databricks.yml: %s", exc)
+        return {}
+    out: dict = {}
+    for var_name, var_spec in (bundle.get("variables") or {}).items():
+        if isinstance(var_spec, dict) and "default" in var_spec:
+            out[var_name] = var_spec["default"]
+    return out
+
+
+# Canonical hard-coded defaults that match the committed databricks.yml.
+# These are a third-tier fallback used if both user-config.yaml AND
+# databricks.yml are unreadable -- e.g. someone runs post_deploy.py manually
+# from a stripped-down checkout. Keep these in sync with databricks.yml's
+# `variables.*.default` block.
+_CANONICAL_DEFAULTS = {
+    "app_name": "vibe-coding-workshop-app",
+    "lakebase_instance_name": "vibe-coding-workshop-lakebase",
+    "lakebase_branch": "main",
+    "lakebase_schema": "vibe_coding_workshop",
+    "lakebase_catalog": "vibe_coding_workshop_catalog",
+    "lakebase_database": "databricks_postgres",
+}
+
+
+def _resolved_default(user_cfg_section: dict, user_cfg_key: str,
+                      bundle_var_defaults: dict, bundle_var_key: str,
+                      canonical_key: str) -> str:
+    """Pick the first non-empty value from user-config -> bundle defaults -> canonical."""
+    for source in (
+        user_cfg_section.get(user_cfg_key) if user_cfg_section else None,
+        bundle_var_defaults.get(bundle_var_key),
+        _CANONICAL_DEFAULTS.get(canonical_key),
+    ):
+        if source:
+            return str(source)
+    return ""
+
+
 def main(argv: list[str]) -> int:
+    # Layered defaults (first non-empty wins):
+    #   1. user-config.yaml (set by `./vibe2value install` for customised forks)
+    #   2. databricks.yml -> variables.*.default (canonical commit fallback)
+    #   3. _CANONICAL_DEFAULTS hard-coded (last-resort fallback)
+    # This makes `./scripts/deploy.sh -p <profile>` work end-to-end from a
+    # fresh `git clone` with zero local config files.
     cfg = _load_user_config()
     cfg_app = cfg.get("app", {}) or {}
     cfg_lb = cfg.get("lakebase", {}) or {}
     cfg_ws = cfg.get("workspace", {}) or {}
+    bundle_vars = _load_bundle_variable_defaults()
+
+    default_app_name = (
+        cfg_app.get("name")
+        or os.environ.get("APP_NAME")
+        or bundle_vars.get("app_name")
+        or _CANONICAL_DEFAULTS["app_name"]
+    )
+    default_project = _resolved_default(
+        cfg_lb, "instance_name", bundle_vars, "lakebase_instance_name", "lakebase_instance_name",
+    )
+    default_schema = _resolved_default(
+        cfg_lb, "schema", bundle_vars, "lakebase_schema", "lakebase_schema",
+    )
+    default_catalog = _resolved_default(
+        cfg_lb, "catalog", bundle_vars, "lakebase_catalog", "lakebase_catalog",
+    )
+    default_database = _resolved_default(
+        cfg_lb, "database", bundle_vars, "lakebase_database", "lakebase_database",
+    )
 
     p = argparse.ArgumentParser(description="Finalize a vibe-coding-workshop install after `databricks bundle deploy`.")
-    p.add_argument("--app-name", default=cfg_app.get("name") or os.environ.get("APP_NAME") or "")
-    p.add_argument("--project", default=cfg_lb.get("instance_name") or "",
+    p.add_argument("--app-name", default=default_app_name)
+    p.add_argument("--project", default=default_project,
                    help="Lakebase project name (e.g. vibe-coding-workshop-lakebase)")
     p.add_argument("--branch", default="main", help="Lakebase branch (default: main)")
-    p.add_argument("--catalog", default=cfg_lb.get("catalog", ""),
+    p.add_argument("--catalog", default=default_catalog,
                    help="Unity Catalog name to grant SP ALL_PRIVILEGES on (omit to skip)")
-    p.add_argument("--schema", default=cfg_lb.get("schema") or "",
+    p.add_argument("--schema", default=default_schema,
                    help="Postgres schema to seed (e.g. vibe_coding_workshop)")
-    p.add_argument("--database", default=cfg_lb.get("database", "databricks_postgres"))
+    p.add_argument("--database", default=default_database)
     p.add_argument("--port", type=int, default=5432)
-    p.add_argument("--profile", default=cfg_ws.get("profile") or None,
+    p.add_argument("--profile", default=cfg_ws.get("profile") or os.environ.get("DATABRICKS_CONFIG_PROFILE") or None,
                    help="Databricks CLI profile")
     p.add_argument("--git-branch", default=cfg_app.get("git_repo_branch", "main"),
                    help="Git branch to deploy from (git-source apps only)")
