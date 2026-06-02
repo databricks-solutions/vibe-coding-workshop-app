@@ -4992,10 +4992,10 @@ Use MoSCoW method:
 ---
 
 ## Industry Context
-Industry: {industry}
-Use Case: {use_case}
+Industry: {industry_name}
+Use Case: {use_case_title}
 
-Review the current implementation and identify enhancements specific to the {industry} {use_case} use case.
+Review the current implementation and identify enhancements specific to the {industry_name} {use_case_title} use case.
 
 ---
 

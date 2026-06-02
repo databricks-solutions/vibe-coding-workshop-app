@@ -1246,6 +1246,13 @@ def get_section_input_content(industry: str, use_case: str, section_tag: str, pr
         '{use_case_description}': use_case_description,
         '{section_tag}': section_tag,
     }
+
+    # Scoped strictly to the Iterate & Enhance step. Its template is the only one
+    # that uses the bare {industry}/{use_case} tokens; gating on section_tag
+    # guarantees no other step's substitution behavior changes.
+    if section_tag == 'iterate_enhance':
+        params['{industry}'] = industry_name
+        params['{use_case}'] = use_case_title
     
     # Add workshop parameters to substitution params
     for key, value in workshop_params.items():
