@@ -325,7 +325,7 @@ You are a full-stack developer building a web application on Databricks AppKit. 
 
 ### File Locations
 
-The app is scaffolded into its own **top-level** directory `$APP_ROOT` (= `<app_name>/` at the repo root — a sibling of `apps_lakebase/`, NOT nested inside it). This mirrors how the data-product bundle lives in its own top-level `<use_case_slug>_dab/` folder, so the app''s root has parity across coding agents.
+The app is scaffolded into its own **top-level** directory `$APP_ROOT` (= `<app_name>/` at the repo root — a sibling of `apps_lakebase/`, NOT nested inside it). This mirrors how the data-product bundle lives in its own top-level `{user_schema_prefix}_<use_case_slug>_dab/` folder, so the app''s root has parity across coding agents.
 
 | What | Where |
 |------|-------|
@@ -370,7 +370,7 @@ if echo "$APP_NAME" | grep -q ''[^a-z0-9-]''; then
   echo "Must be lowercase letters, numbers, and hyphens only."
 fi
 
-# Top-level app directory (parity with <use_case_slug>_dab). Run all commands from the repo root.
+# Top-level app directory (parity with {user_schema_prefix}_<use_case_slug>_dab). Run all commands from the repo root.
 APP_ROOT="$APP_NAME"
 echo "App root: $APP_ROOT"
 ```
@@ -637,7 +637,7 @@ Run `skills/vibecoding-state` operation `enter` with `prompt_id: "cursor_copilot
 - `client_context` = `genie_code`
 - `artifact_root` = your workshop clone root (e.g. `/Workspace/Users/<your-email>/.assistant/skills/vibe-coding-workshop`)
 - `skill_ref_root` = `skills/vibe-coding-workshop` (substitute your clone folder if you cloned somewhere other than `.assistant/skills/vibe-coding-workshop`)
-- `app_root` = `<artifact_root>/<app_name>` — the **self-contained AppKit app project** (e.g. `…/vibe-coding-workshop/prashanth-s-{use_case_slug}`), a TOP-LEVEL sibling of any `<use_case_slug>_dab` bundle, NOT nested under `apps_lakebase/` and NOT the bare clone root. Referred to below as `<APP_ROOT>`. `app.yaml`, `databricks.yml`, `server/`, `client/`, and `<APP_ROOT>/.vibecoding-state.md` all live here.
+- `app_root` = `<artifact_root>/<app_name>` — the **self-contained AppKit app project** (e.g. `…/vibe-coding-workshop/prashanth-s-{use_case_slug}`), a TOP-LEVEL sibling of any `{user_schema_prefix}_<use_case_slug>_dab` bundle, NOT nested under `apps_lakebase/` and NOT the bare clone root. Referred to below as `<APP_ROOT>`. `app.yaml`, `databricks.yml`, `server/`, `client/`, and `<APP_ROOT>/.vibecoding-state.md` all live here.
 - `app_deploy.verb` = `apps deploy` (gated) — used in step 05, NOT here.
 
 `app_root` is `<pending>` until `APP_NAME` is derived (Step 1). After Step 1, re-run `enter`''s capture (or update the block) so `app_root` resolves to `<artifact_root>/<APP_NAME>`.
@@ -697,7 +697,7 @@ Write files with `executeCode` `open(path,"w").write(...)` against warm compute 
 
 Write `<artifact_root>/docs/ui_design.md` (clone-rooted, NOT `@docs/...`) describing key screens/pages, core components and their mock-data sources, navigation flow, and design direction.
 
-**State-lock:** this prompt runs between an `enter` (Step 0) and an `exit`. After the gate passes, run `skills/vibecoding-state` op `exit` — params: `prompt_id: "cursor_copilot_ui_design"`, `gate: "App scaffolded + UI authored (deploy + verify deferred to step 05)"`, `captured: {app_name, app_root}`.
+**State-lock:** this prompt runs between an `enter` (Step 0) and an `exit`. After the gate passes, run `skills/vibecoding-state` op `exit` — params: `prompt_id: "cursor_copilot_ui_design"`, `gate: "App scaffolded + UI authored (deploy + verify deferred to step 05)"`, `captured: {app_name, app_root}`. **This `enter`/`exit` pair is a mandatory ritual, not advisory.** Step 0''s `enter` MUST locate — or, if this is the first prompt of the track, bootstrap-create — the canonical live state file at `<app_root>/.vibecoding-state.md` (never the temporary `example/…` bootstrap path). The closing `exit` MUST append this prompt''s Per-Step Log entry, Gate result, and `captured` vars to that file, then **re-read it and echo the appended section to prove the write landed**. **Gate completion rule:** this prompt is NOT complete until that re-read confirms the appended entry — the chat summary is NOT the state store.
 
 **Gate:** `App scaffolded + UI authored (deploy + verify deferred to step 05)` — `<APP_ROOT>` contains a scaffolded blank AppKit project (`app.yaml`, `databricks.yml` with `name: <APP_NAME>`, `server/server.ts` using `await createApp({ plugins: [server()] })`, and `client/` pages built from the PRD with mock data), and `<artifact_root>/docs/ui_design.md` exists. NO local server was run, NO `http://localhost:8000` check was attempted, and NOTHING was deployed or validated — deploy + deployed-URL verification are step 05.
 
@@ -765,7 +765,7 @@ FIRSTNAME=$(echo "$EMAIL" | cut -d''@'' -f1 | cut -d''.'' -f1)
 LASTINITIAL=$(echo "$EMAIL" | cut -d''@'' -f1 | cut -d''.'' -f2 | cut -c1)
 APP_PREFIX="${FIRSTNAME}-${LASTINITIAL}"
 APP_NAME="${APP_PREFIX}-{use_case_slug}"
-APP_ROOT="$APP_NAME"   # top-level app dir at the repo root (parity with <use_case_slug>_dab)
+APP_ROOT="$APP_NAME"   # top-level app dir at the repo root (parity with {user_schema_prefix}_<use_case_slug>_dab)
 ```
 
 Verify `app.yaml` has the Lakebase-specific environment variables (in addition to the generic checks the deploy skill performs):
@@ -1667,7 +1667,7 @@ The orchestrator skill will automatically load its worker skills for merge patte
 'Gold Layer Design (PRD-aligned)',
 'Design Gold layer using project skills with YAML definitions and Mermaid ERD',
 9,
-'> **Artifact root (client-aware).** Resolve the data-product bundle root via `vibecoding-state` (`dp_bundle_root` in `## Environment Capabilities`, = `<artifact_root>/<use_case_slug>_dab`) and write **every Gold-design artifact under `<use_case_slug>_dab/gold_layer_design/`** — NOT the bare repo/clone root. This is the same dedicated bundle folder the Bronze→Silver→Gold pipeline builds into, so the Gold pipeline (Step 12) can `sync` `gold_layer_design/yaml/**` from right beside the bundle. The shape is identical on every client: on Cursor/Copilot it is `<repo-root>/<use_case_slug>_dab/`; on Databricks Genie Code it is `<clone-root>/<use_case_slug>_dab/` — never the page''s current working directory.
+'> **Artifact root (client-aware).** Resolve the data-product bundle root via `vibecoding-state` (`dp_bundle_root` in `## Environment Capabilities`, = `<artifact_root>/{user_schema_prefix}_<use_case_slug>_dab`) and write **every Gold-design artifact under `{user_schema_prefix}_<use_case_slug>_dab/gold_layer_design/`** — NOT the bare repo/clone root. This is the same dedicated bundle folder the Bronze→Silver→Gold pipeline builds into, so the Gold pipeline (Step 12) can `sync` `gold_layer_design/yaml/**` from right beside the bundle. The shape is identical on every client: on Cursor/Copilot it is `<repo-root>/{user_schema_prefix}_<use_case_slug>_dab/`; on Databricks Genie Code it is `<clone-root>/{user_schema_prefix}_<use_case_slug>_dab/` — never the page''s current working directory.
 
 ## 1️⃣ How To Apply
 
@@ -1961,12 +1961,12 @@ VALUES
 
 ### Step 0 — Resolve your environment (once, before anything else)
 
-Run `skills/vibecoding-state` operation `resolve_root`. Read these resolved values and use them literally throughout:
+Run `skills/vibecoding-state` operation `enter` (params: `prompt_id: "gold_layer_design"`). This is the **FIRST data-product step**, so `enter` **bootstrap-creates** the canonical live state file at `<dp_bundle_root>/.vibecoding-state.md` from the template if absent (copying Workshop Choices from the prior `example/…` bootstrap file). Read these resolved values and use them literally throughout:
 
 - `client_context` = `genie_code`
 - `artifact_root` = your workshop clone root (e.g. `/Workspace/Users/<your-email>/.assistant/skills/vibe-coding-workshop`)
 - `skill_ref_root` = `skills/vibe-coding-workshop` (substitute your clone folder if you cloned somewhere other than `.assistant/skills/vibe-coding-workshop`)
-- `dp_bundle_root` = `<artifact_root>/<use_case_slug>_dab` — the **self-contained data-product Asset Bundle project** the whole pipeline builds into (e.g. `…/vibe-coding-workshop/booking_app_dab`). Referred to below as `<DP_BUNDLE_ROOT>`. This step writes the design INTO `<DP_BUNDLE_ROOT>/gold_layer_design/`. The folder may not exist yet (the Bronze step creates the bundle''s `databricks.yml` later) — that''s fine, writing the files creates it. Use the SAME `<use_case_slug>_dab` name the Lakehouse steps use, so the design and the bundle stay in one folder.
+- `dp_bundle_root` = `<artifact_root>/{user_schema_prefix}_<use_case_slug>_dab` — the **self-contained data-product Asset Bundle project** the whole pipeline builds into (e.g. `…/vibe-coding-workshop/{user_schema_prefix}_booking_app_dab`). Referred to below as `<DP_BUNDLE_ROOT>`. This step writes the design INTO `<DP_BUNDLE_ROOT>/gold_layer_design/`. The folder may not exist yet (the Bronze step creates the bundle''s `databricks.yml` later) — that''s fine, writing the files creates it. Use the SAME `{user_schema_prefix}_<use_case_slug>_dab` name the Lakehouse steps use, so the design and the bundle stay in one folder.
 
 Your source schema is `<artifact_root>/data_product_accelerator/context/{use_case_file_prefix}_Schema.csv`.
 
@@ -1982,6 +1982,8 @@ Then the Gold design orchestrator and its common skill (load in this order):
 3. `readSkillFile("skills/vibe-coding-workshop/data_product_accelerator/skills/common/naming-tagging-standards/SKILL.md")` — naming prefixes (`dim_`/`fact_`), dual-purpose (human + Genie/LLM) COMMENTs, governed PII tags. **NEVER name a table/column or write a description without reading this.**
 
 When the orchestrator lists further **Mandatory Skill Dependencies** (its design workers: grain definition, dimension patterns, fact-table patterns, conformed dimensions, ERD diagrams, table documentation, design validation), load EACH the same way: take its repo-relative path and prefix it with `skill_ref_root`. Genie Code has no repo-root-relative resolution and `AGENTS.md` does not carry across threads — so always prefix with `skill_ref_root`. **Read those design workers in ONE batched `readSkillFile` turn — Genie Code reads multiple skill files in parallel in a single turn, so never serialize independent reads (`genie-code-environment` §10).**
+
+**🔴 Preflight acknowledgement (hard gate — do this BEFORE writing any file).** After the batched `readSkillFile` returns, echo a one-line acknowledgement for EACH skill you loaded — its full `<skill_ref_root>`-prefixed path + the single rule you will apply from it. If you cannot state the rule, you have not actually read the skill — STOP and read it before writing anything. Do not write any design artifact (YAML, ERD, lineage, docs) until every listed skill is acknowledged — silently skipping a skill read is the regression this preflight exists to prevent.
 
 ### Step 2 — Run the design workflow, writing every artifact under `<DP_BUNDLE_ROOT>/gold_layer_design/`
 
@@ -2007,6 +2009,8 @@ Use `createAsset`/the workspace file APIs to write these files under `<DP_BUNDLE
 - **Warm up, then budget generously.** This phase does real Python work — parsing the schema CSV, generating one YAML per Gold table, building ERDs, and running cross-table validation. Make the FIRST `executeCode` call a trivial `print("ready")` to absorb the ~3–5 min serverless cold start once, then set `timeoutMinutes` **≥ 20** on every subsequent `executeCode`. **Never set `timeoutMinutes` below 15** — a smaller budget only buys a cold-start timeout and a wasted retry.
 - **Write files through warm compute.** Once compute is warm, write each artifact with `executeCode` `open(path,"w").write(...)` (one call per file, creates it directly). The compute-free trio `createAsset` → `readFile` → `workspaceUpdateFile` works too, but it is 3 calls and `workspaceUpdateFile` can only update a file that already exists AND was read in this thread — reserve it for single updates, not bulk generation.
 
+**State-lock:** this prompt runs between an `enter` (Step 0) and an `exit`. After the gate passes, run `skills/vibecoding-state` op `exit` — params: `prompt_id: "gold_layer_design"`, `gate: "Gold design complete"`, `captured: {gold_design_path}`. **This `enter`/`exit` pair is a mandatory ritual, not advisory.** Step 0''s `enter` MUST locate — or, if this is the first prompt of the track, bootstrap-create — the canonical live state file at `<dp_bundle_root>/.vibecoding-state.md` (never the temporary `example/…` bootstrap path). The closing `exit` MUST append this prompt''s Per-Step Log entry, Gate result, and `captured` vars to that file, then **re-read it and echo the appended section to prove the write landed**. **Gate completion rule:** this prompt is NOT complete until that re-read confirms the appended entry — the chat summary is NOT the state store.
+
 **Gate:** `Gold design complete` — `<DP_BUNDLE_ROOT>/gold_layer_design/` contains `DESIGN_DECISIONS.md` (written before any YAML), one YAML per Gold table under `yaml/{domain}/`, the master ERD, and `COLUMN_LINEAGE.csv` — all under the data-product bundle folder so the Gold pipeline can sync them in place. No schema/table was created and nothing was deployed (that is step 12).',
 '',
 true, 1, true, current_timestamp(), current_timestamp(), current_user());
@@ -2026,7 +2030,7 @@ This will involve the following steps:
 - **Create Asset Bundle job** — generate a repeatable, version-controlled deployment job (databricks.yml + clone script)
 - **Deploy and run** — validate, deploy the bundle, and execute the clone job to populate Bronze tables
 
-**Bundle root:** Create this Asset Bundle in its own dedicated top-level directory `{use_case_slug}_dab/` at the repo root (the data-product `dp_bundle_root`) — write `databricks.yml`, `src/`, and `resources/` UNDER `{use_case_slug}_dab/`, never at the bare repo root. Every later data-product step (Silver, Gold, semantic, deploy) extends this SAME bundle folder, so the design (`gold_layer_design/`) and plans (`plans/`) co-locate here too. This is the same root folder on every coding agent.
+**Bundle root:** Create this Asset Bundle in its own dedicated top-level directory `{user_schema_prefix}_{use_case_slug}_dab/` at the repo root (the data-product `dp_bundle_root`) — write `databricks.yml`, `src/`, and `resources/` UNDER `{user_schema_prefix}_{use_case_slug}_dab/`, never at the bare repo root. Every later data-product step (Silver, Gold, semantic, deploy) extends this SAME bundle folder, so the design (`gold_layer_design/`) and plans (`plans/`) co-locate here too. This is the same root folder on every coding agent.
 
 IMPORTANT: Use the EXISTING catalog `{lakehouse_default_catalog}` -- do NOT create a new catalog. Create the Bronze schema `{user_schema_prefix}_bronze` and tables inside this catalog.
 
@@ -2243,7 +2247,7 @@ When you paste the prompt, the AI reads `@data_product_accelerator/skills/bronze
 ### 📁 Generated Asset Bundle Structure
 
 ```
-{use_case_slug}_dab/                    # data-product bundle root (dp_bundle_root) — a dedicated top-level folder at the repo root, NOT the bare root
+{user_schema_prefix}_{use_case_slug}_dab/                    # data-product bundle root (dp_bundle_root) — a dedicated top-level folder at the repo root, NOT the bare root
 ├── databricks.yml                      # Bundle configuration (updated)
 ├── src/
 │   └── {project}_bronze/
@@ -2297,10 +2301,19 @@ Run `skills/vibecoding-state` operation `enter` with `prompt_id: "bronze_layer_c
 - `client_context` = `genie_code`
 - `artifact_root` = your workshop clone root (e.g. `/Workspace/Users/<your-email>/.assistant/skills/vibe-coding-workshop`)
 - `skill_ref_root` = `skills/vibe-coding-workshop` (substitute your clone folder if you cloned somewhere other than `.assistant/skills/vibe-coding-workshop`)
-- `dp_bundle_root` = `<artifact_root>/{use_case_slug}_dab` — the **self-contained Databricks Asset Bundle project** for the whole data-product pipeline (e.g. `…/vibe-coding-workshop/booking_app_dab`). This — NOT the clone root — is where you write `databricks.yml`, `src/`, and `resources/`, and it is the **page you deploy from**. Referred to below as `<DP_BUNDLE_ROOT>`.
+- `dp_bundle_root` = `<artifact_root>/{user_schema_prefix}_{use_case_slug}_dab` — the **self-contained Databricks Asset Bundle project** for the whole data-product pipeline (e.g. `…/vibe-coding-workshop/{user_schema_prefix}_booking_app_dab`). This — NOT the clone root — is where you write `databricks.yml`, `src/`, and `resources/`, and it is the **page you deploy from**. Referred to below as `<DP_BUNDLE_ROOT>`.
 - deploy verb = `bundle deploy --target dev`, run through the `runDatabricksCli` tool
 
 If `enter` has not run in this thread, run it now — every step below depends on these values.
+
+### Step 0.5 — Resolve the target catalog (no-create invariant — HARD STOP if absent)
+
+Catalogs are pre-provisioned in this workshop — you must **NEVER** create one. `CREATE CATALOG` in a Default-Storage workspace fails ("no metastore storage root"); creating catalogs is also not the customer best practice you are demonstrating. Resolve the catalog read-only, BEFORE authoring anything:
+
+1. **List existing catalogs (read-only):** `executeCode` → `[c.name for c in w.catalogs.list()]` (or `SHOW CATALOGS`).
+2. **If `{lakehouse_default_catalog}` is present** → proceed; use it literally as `USE CATALOG {lakehouse_default_catalog}` everywhere below.
+3. **If `{lakehouse_default_catalog}` is ABSENT → 🛑 HARD STOP. Do NOT create it.** Print the existing catalogs as a numbered list and ask the operator to pick the catalog to use (or confirm the intended name). Re-run this step with their choice. Record the chosen value as `lakehouse_default_catalog` so the `exit` capture (Step 3) persists it and every downstream step reuses it without re-prompting.
+4. **The generated clone/DDL notebook (Step 2) must `USE CATALOG <existing>` and must NEVER emit `CREATE CATALOG` / `CREATE CATALOG IF NOT EXISTS`.** Only the user-specific SCHEMA (`{user_schema_prefix}_bronze`) is created — inside the existing catalog, by the deployed job.
 
 ### Step 1 — Load the required skills by their FULL clone-rooted paths
 
@@ -2317,6 +2330,8 @@ Then the Bronze orchestrator and its data-product common skills (load in this or
 6. `readSkillFile("skills/vibe-coding-workshop/data_product_accelerator/skills/common/schema-management-patterns/SKILL.md")` — `CREATE SCHEMA IF NOT EXISTS` patterns.
 
 When the orchestrator lists further **Mandatory Skill Dependencies**, load EACH the same way: take its repo-relative path and prefix it with `skill_ref_root`. Genie Code has no repo-root-relative resolution and `AGENTS.md` does not carry across threads — so always prefix with `skill_ref_root`. **Read them in one batched `readSkillFile` turn — Genie Code reads multiple skill files in parallel in a single turn, so never serialize independent reads (`genie-code-environment` §10).**
+
+**🔴 Preflight acknowledgement (hard gate — do this BEFORE writing any file).** After the batched `readSkillFile` returns, echo a one-line acknowledgement for EACH skill you loaded — its full `<skill_ref_root>`-prefixed path + the single rule you will apply from it. If you cannot state the rule, you have not actually read the skill — STOP and read it before writing anything. Do not author `databricks.yml`, job/pipeline YAML, notebooks, or any artifact until every listed skill is acknowledged — silently skipping a skill read is the regression this preflight exists to prevent.
 
 ### Step 2 — Author the bundle (Approach C — copy sample data). Do NOT execute anything yet.
 
@@ -2336,6 +2351,17 @@ NOTE: The job notebook checks whether `{lakehouse_default_catalog}.{user_schema_
   - `<DP_BUNDLE_ROOT>/databricks.yml`
   - `<DP_BUNDLE_ROOT>/src/{user_schema_prefix}_bronze/clone_samples.py`
   - `<DP_BUNDLE_ROOT>/resources/bronze/bronze_clone_job.yml`
+- 🔴 **`databricks.yml` MUST disable source-linked deployment from the start.** This is the bundle''s root config and every later layer inherits it, so set it here, in Bronze, under `targets.dev`:
+
+```yaml
+targets:
+  dev:
+    presets:
+      source_linked_deployment: false
+```
+
+  Rationale: with source-linked deployment ON, a `notebook_task` whose source is a workspace file resolves to the in-place editor file rather than the uploaded bundle artifact — which fails at run time with "Unable to access the notebook" (a live Bronze failure). `false` uploads a real notebook artifact, which is the customer best practice you are demonstrating. **Verify after deploy:** `databricks bundle validate --target dev` reports no source-linked warning, and the deployed job task points at the bundle''s uploaded artifact path (under `…/.bundle/…/files/`), not your editor file path.
+- 🔴 **The bundle `name:` MUST match the username-prefixed folder name** so concurrent workshop users in a shared workspace never collide. Set `bundle: { name: {user_schema_prefix}_{use_case_slug}_dab }` (the same `{user_schema_prefix}_{use_case_slug}_dab` as `<DP_BUNDLE_ROOT>`''s folder). Databricks already isolates deploys per user under `/Workspace/Users/<email>/.bundle/…`; the prefix additionally disambiguates the source folder AND the bundle name in shared catalogs/UIs.
 - **Open the bundle editor BEFORE any `bundle` command — and surface its link.** As soon as `<DP_BUNDLE_ROOT>/databricks.yml` exists, the workspace file browser shows an **"Open in bundle editor"** affordance on that folder (and an **"Open in editor"** button at the top of the folder view). Its page CWD IS `<DP_BUNDLE_ROOT>` — the bundle-root page `bundle deploy`/`run` require, where Genie Code runs deploy/run pre-approved. **Do not make the operator hunt for the icon** — build a clickable link with the pre-authenticated `WorkspaceClient` (`w`) and print it:
   - `host = w.config.host`; `o = w.get_workspace_id()`
   - `file_id = w.workspace.get_status("<DP_BUNDLE_ROOT>/databricks.yml").object_id`
@@ -2349,7 +2375,7 @@ NOTE: The job notebook checks whether `{lakehouse_default_catalog}.{user_schema_
   - `databricks bundle run --target dev bronze_clone_job`
 - **🛑 If a `bundle` command is blocked or fails, STOP — do not work around it.** A `databricks.yml not found` error or a "blocked by safety guardrails" message means you are NOT on the bundle page: open the **bundle-editor link** above and retry (CONFIRMED — the same `bundle deploy` that is "blocked" from a file page returns "Deployment complete!" from the bundle editor). If it STILL fails from the bundle editor, STOP and report the blocker to the operator. Do **NOT** create the job or tables via the Jobs/Pipelines REST API (`jobs/create`, `/api/2.0/pipelines`), the SDK, or direct SQL to "get it done" — that silently defeats the bundle (no version control, no `bundle destroy` cleanup) and FAILS the gate. The REST/SDK route is an **escape hatch available only if the operator explicitly authorizes it.**
 
-**State-lock:** this prompt runs between an `enter` (Step 0) and an `exit`. After the gate passes, run `skills/vibecoding-state` op `exit` — params: `prompt_id: "bronze_layer_creation"`, `gate: "Bronze layer live"`, `captured: {lakehouse_default_catalog, bronze_schema}`.
+**State-lock:** this prompt runs between an `enter` (Step 0) and an `exit`. After the gate passes, run `skills/vibecoding-state` op `exit` — params: `prompt_id: "bronze_layer_creation"`, `gate: "Bronze layer live"`, `captured: {lakehouse_default_catalog, bronze_schema}`. **This `enter`/`exit` pair is a mandatory ritual, not advisory.** Step 0''s `enter` MUST locate — or, if this is the first prompt of the track, bootstrap-create — the canonical live state file at `<dp_bundle_root>/.vibecoding-state.md` (never the temporary `example/…` bootstrap path). The closing `exit` MUST append this prompt''s Per-Step Log entry, Gate result, and `captured` vars to that file, then **re-read it and echo the appended section to prove the write landed**. **Gate completion rule:** this prompt is NOT complete until that re-read confirms the appended entry — the chat summary is NOT the state store.
 
 **Gate:** `Bronze layer live` — the Bronze clone job was **created by `bundle deploy` and executed by `bundle run`** (the job is visible in Workflows and returned a successful run ID), AND every source table is present in `{lakehouse_default_catalog}.{user_schema_prefix}_bronze` with Change Data Feed enabled. Tables existing + CDF on is **necessary but NOT sufficient** — if the tables were created by direct SQL instead of the deployed job, the gate FAILS and you must redo this via the bundle.
 
@@ -2544,7 +2570,7 @@ VALUES
 (8, 'silver_layer_sdp',
 'Set up the Silver layer using @data_product_accelerator/skills/silver/00-silver-layer-setup/SKILL.md
 
-**Bundle root:** Extend the SAME data-product bundle created in Bronze — its dedicated top-level folder `{use_case_slug}_dab/` at the repo root (`dp_bundle_root`). All relative paths below (`src/`, `resources/`, `databricks.yml`) resolve UNDER `{use_case_slug}_dab/`, never the bare repo root. Same folder on every coding agent.
+**Bundle root:** Extend the SAME data-product bundle created in Bronze — its dedicated top-level folder `{user_schema_prefix}_{use_case_slug}_dab/` at the repo root (`dp_bundle_root`). All relative paths below (`src/`, `resources/`, `databricks.yml`) resolve UNDER `{user_schema_prefix}_{use_case_slug}_dab/`, never the bare repo root. Same folder on every coding agent.
 
 This will involve the following steps:
 
@@ -2760,7 +2786,7 @@ When you paste the prompt, the AI reads `@data_product_accelerator/skills/silver
 ### 📁 Generated Files
 
 ```
-{use_case_slug}_dab/                     # data-product bundle root (dp_bundle_root) — same folder Bronze created
+{user_schema_prefix}_{use_case_slug}_dab/                     # data-product bundle root (dp_bundle_root) — same folder Bronze created
 ├── databricks.yml                        # Updated with Silver resources
 ├── src/
 │   └── {project}_silver/
@@ -2897,7 +2923,7 @@ Run `skills/vibecoding-state` operation `enter` with `prompt_id: "silver_layer_s
 - `client_context` = `genie_code`
 - `artifact_root` = your workshop clone root (e.g. `/Workspace/Users/<your-email>/.assistant/skills/vibe-coding-workshop`)
 - `skill_ref_root` = `skills/vibe-coding-workshop` (substitute your clone folder if you cloned somewhere other than `.assistant/skills/vibe-coding-workshop`)
-- `dp_bundle_root` = `<artifact_root>/{use_case_slug}_dab` — the **self-contained Databricks Asset Bundle project** for the whole data-product pipeline (e.g. `…/vibe-coding-workshop/booking_app_dab`). This is the SAME bundle you created for Bronze — extend it; do NOT make a new one. It is where `databricks.yml`, `src/`, and `resources/` live, and the **page you deploy from**. Referred to below as `<DP_BUNDLE_ROOT>`.
+- `dp_bundle_root` = `<artifact_root>/{user_schema_prefix}_{use_case_slug}_dab` — the **self-contained Databricks Asset Bundle project** for the whole data-product pipeline (e.g. `…/vibe-coding-workshop/{user_schema_prefix}_booking_app_dab`). This is the SAME bundle you created for Bronze — extend it; do NOT make a new one. It is where `databricks.yml`, `src/`, and `resources/` live, and the **page you deploy from**. Referred to below as `<DP_BUNDLE_ROOT>`.
 - deploy verb = `bundle deploy --target dev`, run through the `runDatabricksCli` tool
 
 If `enter` reports the Bronze gate is not `Bronze layer live`, STOP — finish the Bronze step first. If `enter` has not run in this thread, run it now.
@@ -2921,6 +2947,8 @@ Then the Silver orchestrator and its data-product common + worker skills (load i
 
 When the orchestrator lists further **Mandatory Skill Dependencies**, load EACH the same way: take its repo-relative path and prefix it with `skill_ref_root`. Genie Code has no repo-root-relative resolution and `AGENTS.md` does not carry across threads — so always prefix with `skill_ref_root`. **Read them in one batched `readSkillFile` turn — Genie Code reads multiple skill files in parallel in a single turn, so never serialize independent reads (`genie-code-environment` §10).**
 
+**🔴 Preflight acknowledgement (hard gate — do this BEFORE writing any file).** After the batched `readSkillFile` returns, echo a one-line acknowledgement for EACH skill you loaded — its full `<skill_ref_root>`-prefixed path + the single rule you will apply from it. If you cannot state the rule, you have not actually read the skill — STOP and read it before writing anything. Do not author `databricks.yml`, job/pipeline YAML, notebooks, or any artifact until every listed skill is acknowledged — silently skipping a skill read is the regression this preflight exists to prevent.
+
 ### Step 2 — Author the Silver bundle (SDP + centralized DQ rules). Do NOT execute anything yet.
 
 Using the skills above, AUTHOR (write files only — no execution) the bundle resources whose job/pipeline, when run, will:
@@ -2929,7 +2957,7 @@ Using the skills above, AUTHOR (write files only — no execution) the bundle re
 - **Create a centralized DQ-rules table** — a configurable `dq_rules` Delta table (null checks, range validation, referential integrity), with a PK on `(table_name, rule_name)`, plus a pure-Python `dq_rules_loader.py` (no notebook header).
 - **Use the 2-resource pattern** — a regular `silver_dq_setup_job` (creates/populates `dq_rules`) AND a `silver_dlt_pipeline` (reads rules from the table). The setup job MUST run before the pipeline.
 
-IMPORTANT: Use the EXISTING catalog `{lakehouse_default_catalog}` — do NOT create a new catalog. The pipeline/job creates the Silver schema `{user_schema_prefix}_silver` and all Silver tables inside this catalog.
+IMPORTANT: Use the EXISTING catalog `{lakehouse_default_catalog}` — do NOT create a new catalog. `{lakehouse_default_catalog}` was resolved and persisted by the Bronze step (its Step 0.5 hard-stop) — read it from `## Environment Capabilities`; **never create a catalog and do not re-prompt for it.** The pipeline/job creates the Silver schema `{user_schema_prefix}_silver` and all Silver tables inside this catalog.
 
 NOTE: The setup job checks whether `{lakehouse_default_catalog}.{user_schema_prefix}_silver` already exists and, if so, DROPs it with CASCADE and recreates it (user-specific schema — safe to drop). This DROP/CREATE runs INSIDE the job, not as a direct statement you execute.
 
@@ -2941,6 +2969,7 @@ NOTE: This is a shared workshop workspace. Put a `user_prefix` variable in every
   - `<DP_BUNDLE_ROOT>/src/{user_schema_prefix}_silver/` — `setup_dq_rules_table.py`, `dq_rules_loader.py` (pure Python), `silver_dimensions.py`, `silver_facts.py`, `data_quality_monitoring.py`
   - `<DP_BUNDLE_ROOT>/resources/silver/silver_dq_setup_job.yml` and `<DP_BUNDLE_ROOT>/resources/silver/silver_dlt_pipeline.yml`
   - extend the EXISTING `<DP_BUNDLE_ROOT>/databricks.yml` (the one from Bronze)
+- **Confirm `targets.dev.presets.source_linked_deployment: false` is present** in the inherited `databricks.yml` (Bronze set it). If absent, add it — never enable source-linked deployment; it breaks file-backed `notebook_task` sources.
 - **Open the bundle editor BEFORE any `bundle` command — and surface its link.** `<DP_BUNDLE_ROOT>/databricks.yml` already exists (from Bronze), so the workspace file browser shows the **"Open in bundle editor"** affordance on that folder (and an **"Open in editor"** button at the top). Its page CWD IS `<DP_BUNDLE_ROOT>` — the bundle-root page `bundle deploy`/`run` require, where Genie Code runs deploy/run pre-approved. **Do not make the operator hunt for the icon** — build a clickable link with the pre-authenticated `WorkspaceClient` (`w`) and print it:
   - `host = w.config.host`; `o = w.get_workspace_id()`
   - `file_id = w.workspace.get_status("<DP_BUNDLE_ROOT>/databricks.yml").object_id`
@@ -2955,7 +2984,7 @@ NOTE: This is a shared workshop workspace. Put a `user_prefix` variable in every
   - `databricks bundle run --target dev silver_dlt_pipeline`
 - **🛑 If a `bundle` command is blocked or fails, STOP — do not work around it.** A `databricks.yml not found` error or a "blocked by safety guardrails" message means you are NOT on the bundle page: open the **bundle-editor link** above and retry (CONFIRMED — the same `bundle deploy`/`run` that is "blocked" from a file page succeeds from the bundle editor). If it STILL fails from the bundle editor, STOP and report the blocker. Do **NOT** create the jobs, pipeline, or tables via the Jobs/Pipelines REST API (`jobs/create`, `/api/2.0/pipelines`), the SDK, or direct SQL to "get it done" — that silently defeats the bundle (no version control, no `bundle destroy` cleanup) and FAILS the gate. The REST/SDK route is an **escape hatch available only if the operator explicitly authorizes it.**
 
-**State-lock:** this prompt runs between an `enter` (Step 0) and an `exit`. After the gate passes, run `skills/vibecoding-state` op `exit` — params: `prompt_id: "silver_layer_sdp"`, `gate: "Silver layer live"`, `captured: {silver_schema, silver_dlt_pipeline, dq_rules_table}`.
+**State-lock:** this prompt runs between an `enter` (Step 0) and an `exit`. After the gate passes, run `skills/vibecoding-state` op `exit` — params: `prompt_id: "silver_layer_sdp"`, `gate: "Silver layer live"`, `captured: {silver_schema, silver_dlt_pipeline, dq_rules_table}`. **This `enter`/`exit` pair is a mandatory ritual, not advisory.** Step 0''s `enter` MUST locate — or, if this is the first prompt of the track, bootstrap-create — the canonical live state file at `<dp_bundle_root>/.vibecoding-state.md` (never the temporary `example/…` bootstrap path). The closing `exit` MUST append this prompt''s Per-Step Log entry, Gate result, and `captured` vars to that file, then **re-read it and echo the appended section to prove the write landed**. **Gate completion rule:** this prompt is NOT complete until that re-read confirms the appended entry — the chat summary is NOT the state store.
 
 **Gate:** `Silver layer live` — the DQ-rules setup job and the Silver pipeline were **created by `bundle deploy` and executed by `bundle run`** (the setup job ran first and the pipeline shows expectations evaluated in its event log), AND the Silver tables exist in `{lakehouse_default_catalog}.{user_schema_prefix}_silver` with the `dq_rules` table populated. Tables existing is **necessary but NOT sufficient** — if anything was created by direct SQL instead of the deployed bundle, the gate FAILS and you must redo it via the bundle.',
 '',
@@ -2968,7 +2997,7 @@ VALUES
 (9, 'gold_layer_pipeline',
 'Implement the Gold layer using @data_product_accelerator/skills/gold/01-gold-layer-setup/SKILL.md
 
-**Bundle root:** Extend the SAME data-product bundle created in Bronze — its dedicated top-level folder `{use_case_slug}_dab/` at the repo root (`dp_bundle_root`). All relative paths below (`src/`, `resources/`, `gold_layer_design/`, `databricks.yml`) resolve UNDER `{use_case_slug}_dab/`, never the bare repo root. Same folder on every coding agent.
+**Bundle root:** Extend the SAME data-product bundle created in Bronze — its dedicated top-level folder `{user_schema_prefix}_{use_case_slug}_dab/` at the repo root (`dp_bundle_root`). All relative paths below (`src/`, `resources/`, `gold_layer_design/`, `databricks.yml`) resolve UNDER `{user_schema_prefix}_{use_case_slug}_dab/`, never the bare repo root. Same folder on every coding agent.
 
 This will involve the following steps:
 
@@ -3292,7 +3321,7 @@ When you paste the prompt, the AI reads `@data_product_accelerator/skills/gold/0
 ### 📁 Generated Asset Bundle Structure
 
 ```
-{use_case_slug}_dab/                       # data-product bundle root (dp_bundle_root) — same folder Bronze + Silver use
+{user_schema_prefix}_{use_case_slug}_dab/                       # data-product bundle root (dp_bundle_root) — same folder Bronze + Silver use
 ├── databricks.yml                          # Bundle config (MUST sync YAML files!)
 ├── src/
 │   └── {project}_gold/
@@ -3504,6 +3533,8 @@ VALUES
 
 ❌ **NEVER** run `CREATE SCHEMA` / `CREATE TABLE` / `ALTER TABLE … ADD CONSTRAINT` (PK or FK) / `MERGE` / any data-loading statement directly via `executeCode` / `spark.sql` / a notebook cell. Those statements are the **body of the bundle''s jobs** (`gold_setup_job`, `gold_merge_job`). The bundle **is** the execution mechanism — never bypass it, even though direct SQL is faster. Creating live tables/constraints with no versioned bundle behind them is the regression this fork exists to prevent.
 
+❌ **NEVER load Gold data with a full-table replace.** `merge_gold_tables.py` MUST use Delta `MERGE` (`whenMatchedUpdateAll` / `whenNotMatchedInsertAll`) into the EXISTING table. `.write.mode("overwrite").option("overwriteSchema","true").saveAsTable(...)`, `.saveAsTable(..., mode="overwrite")`, `CREATE OR REPLACE TABLE … AS SELECT`, and any other full-table replace are **FORBIDDEN** — an overwrite silently WIPES the PRIMARY KEY / FOREIGN KEY / NOT NULL constraints, `CLUSTER BY`, and `TBLPROPERTIES` (CDF, row-tracking) that `gold_setup_job` created. Merge into the table `gold_setup_job` built; never recreate or replace it. (This was a live regression: a `saveAsTable` overwrite passed "tables exist" but dropped every constraint.)
+
 ✅ The ONLY things you run directly are (a) **read-only** inspection (`SHOW TABLES`, `SHOW CONSTRAINTS`, `DESCRIBE`, `SELECT … FROM information_schema …`, `SELECT COUNT(*)`) and (b) `databricks bundle validate` / `deploy` / `run` through `runDatabricksCli`. If `bundle deploy` is blocked, FIX the page context (open the bundle editor — Step 3) — do **not** fall back to direct SQL, the Jobs REST API, or the SDK.
 
 ### Step 0 — Resolve your environment (once, before anything else)
@@ -3513,7 +3544,7 @@ Run `skills/vibecoding-state` operation `enter` with `prompt_id: "gold_layer_pip
 - `client_context` = `genie_code`
 - `artifact_root` = your workshop clone root (e.g. `/Workspace/Users/<your-email>/.assistant/skills/vibe-coding-workshop`)
 - `skill_ref_root` = `skills/vibe-coding-workshop` (substitute your clone folder if you cloned somewhere other than `.assistant/skills/vibe-coding-workshop`)
-- `dp_bundle_root` = `<artifact_root>/{use_case_slug}_dab` — the **SAME self-contained Asset Bundle** you built for Bronze + Silver (e.g. `…/vibe-coding-workshop/booking_app_dab`). EXTEND it; do NOT make a new one. `databricks.yml`, `src/`, and `resources/` live here, and it is the **page you deploy from**. Referred to below as `<DP_BUNDLE_ROOT>`. Your Gold design YAML (from step 9) lives at `<DP_BUNDLE_ROOT>/gold_layer_design/yaml/` — read it from there.
+- `dp_bundle_root` = `<artifact_root>/{user_schema_prefix}_{use_case_slug}_dab` — the **SAME self-contained Asset Bundle** you built for Bronze + Silver (e.g. `…/vibe-coding-workshop/{user_schema_prefix}_booking_app_dab`). EXTEND it; do NOT make a new one. `databricks.yml`, `src/`, and `resources/` live here, and it is the **page you deploy from**. Referred to below as `<DP_BUNDLE_ROOT>`. Your Gold design YAML (from step 9) lives at `<DP_BUNDLE_ROOT>/gold_layer_design/yaml/` — read it from there.
 - deploy verb = `bundle deploy --target dev`, run through the `runDatabricksCli` tool
 
 If `enter` reports the Silver gate is not `Silver layer live`, STOP — finish the Silver step first. If `enter` has not run in this thread, run it now.
@@ -3536,18 +3567,21 @@ Then the Gold implementation orchestrator and its data-product common skills (lo
 
 When the orchestrator lists further **Mandatory Skill Dependencies**, load EACH the same way: take its repo-relative path and prefix it with `skill_ref_root`. Genie Code has no repo-root-relative resolution and `AGENTS.md` does not carry across threads — so always prefix with `skill_ref_root`. **Read them in one batched `readSkillFile` turn — Genie Code reads multiple skill files in parallel in a single turn, so never serialize independent reads (`genie-code-environment` §10).**
 
+**🔴 Preflight acknowledgement (hard gate — do this BEFORE writing any file).** After the batched `readSkillFile` returns, echo a one-line acknowledgement for EACH skill you loaded — its full `<skill_ref_root>`-prefixed path + the single rule you will apply from it. If you cannot state the rule, you have not actually read the skill — STOP and read it before writing anything. Do not author `databricks.yml`, job/pipeline YAML, notebooks, or any artifact until every listed skill is acknowledged — silently skipping a skill read is the regression this preflight exists to prevent.
+
 ### Step 2 — Author the Gold bundle (YAML-driven 2-job architecture). Do NOT execute anything yet.
 
 Using the skills above, AUTHOR (write files only — no execution) the bundle resources whose jobs, when run, will:
 
 - **Read the Gold design YAML as the single source of truth** — extract table names, columns, types, PKs, and FKs from `<DP_BUNDLE_ROOT>/gold_layer_design/yaml/**/*.yaml` (from step 9). Never hardcode or hallucinate schema elements.
 - **`gold_setup_job` (2 tasks)** — Task 1 `setup_tables.py`: `CREATE` Gold tables from YAML + add PRIMARY KEYs; Task 2 `add_fk_constraints.py` (`depends_on` Task 1): `ALTER TABLE … ADD FOREIGN KEY … NOT ENFORCED` in dependency order. FKs are added before data because UC constraints are informational, not enforced.
-- **`gold_merge_job`** — `merge_gold_tables.py`: deduplicate Silver on the YAML `business_key`, map Silver→Gold columns from YAML lineage / `COLUMN_LINEAGE.csv`, then MERGE dimensions first (SCD1/SCD2) and facts last (FK dependency order). Never name variables `count`/`sum`/`min`/`max` (they shadow PySpark functions).
+- **`gold_merge_job` Task 1 — `merge_gold_tables.py`**: deduplicate Silver on the YAML `business_key`, map Silver→Gold columns from YAML lineage / `COLUMN_LINEAGE.csv`, then MERGE dimensions first (SCD1/SCD2) and facts last (FK dependency order). Never name variables `count`/`sum`/`min`/`max` (they shadow PySpark functions).
+- **`gold_merge_job` Task 2 — `validate_gold.py`** (`depends_on` the merge task, in the SAME job — do NOT add a third job; keep the proven setup-job / merge-job split): post-merge guardrail that **fails the task** (raise) on any violation, so a green merge that wiped constraints cannot pass. Assert, per Gold table: (a) the PRIMARY KEY constraint is still present (query `information_schema.table_constraints`); (b) declared FOREIGN KEYs are still present; (c) NOT NULL on every surrogate/PK column preserved; (d) `delta.enableChangeDataFeed` + `delta.enableRowTracking` still `true` (the overwrite-wipe tell); (e) each table''s row count is `> 0` and within an expected ratio of its Silver source. Keep `gold_setup_job` and `gold_merge_job` as two separate jobs — `validate_gold.py` is a second TASK of the merge job, not a new job.
 - **Limit to the 5 core tables** for this exercise: `dim_property` (SCD2), `dim_destination` (SCD1), `dim_user` (SCD2), `dim_host` (SCD2), `fact_booking_detail` (Fact).
 
 🔴 **CRITICAL bundle wiring (without it the jobs cannot find the schemas):** the EXISTING `<DP_BUNDLE_ROOT>/databricks.yml` MUST gain (a) a `sync` rule that includes `gold_layer_design/yaml/**/*.yaml` so the YAML reaches the workspace, and (b) `pyyaml>=6.0` in the job environment. Because the design YAML already lives under `<DP_BUNDLE_ROOT>/gold_layer_design/`, the sync path is relative and in place.
 
-IMPORTANT: Use the EXISTING catalog `{lakehouse_default_catalog}` — do NOT create a new catalog. The job creates the Gold schema `{user_schema_prefix}_gold` and all Gold tables inside this catalog.
+IMPORTANT: Use the EXISTING catalog `{lakehouse_default_catalog}` — do NOT create a new catalog. `{lakehouse_default_catalog}` was resolved and persisted by the Bronze step (its Step 0.5 hard-stop) — read it from `## Environment Capabilities`; **never create a catalog and do not re-prompt for it.** The job creates the Gold schema `{user_schema_prefix}_gold` and all Gold tables inside this catalog.
 
 NOTE: The setup job checks whether `{lakehouse_default_catalog}.{user_schema_prefix}_gold` already exists and, if so, DROPs it with CASCADE and recreates it (user-specific schema — safe to drop). This DROP/CREATE runs INSIDE the job, not as a direct statement you execute.
 
@@ -3556,9 +3590,11 @@ NOTE: This is a shared workshop workspace. Put a `user_prefix` variable in every
 ### Step 3 — Write bundle files to `<DP_BUNDLE_ROOT>`, then deploy FROM that page
 
 - Write every generated file UNDER `<DP_BUNDLE_ROOT>` — never the clone root (writing at the clone root is the "one level too high" bug), never `/tmp`, never a bare relative path (Genie Code''s CWD is page-type-dependent):
-  - `<DP_BUNDLE_ROOT>/src/{user_schema_prefix}_gold/` — `setup_tables.py`, `add_fk_constraints.py`, `merge_gold_tables.py`
-  - `<DP_BUNDLE_ROOT>/resources/gold/gold_setup_job.yml` and `<DP_BUNDLE_ROOT>/resources/gold/gold_merge_job.yml`
+  - `<DP_BUNDLE_ROOT>/src/{user_schema_prefix}_gold/` — `setup_tables.py`, `add_fk_constraints.py`, `merge_gold_tables.py`, `validate_gold.py`
+  - `<DP_BUNDLE_ROOT>/resources/gold/gold_setup_job.yml` and `<DP_BUNDLE_ROOT>/resources/gold/gold_merge_job.yml` (the merge job has two tasks: `merge` then `validate_gold` via `depends_on`)
   - extend the EXISTING `<DP_BUNDLE_ROOT>/databricks.yml` (the one from Bronze + Silver) — add the Gold resources AND the `gold_layer_design/yaml/**` sync rule + `pyyaml>=6.0`
+- **`notebook_path` depth reminder:** each `notebook_task.notebook_path` in `resources/gold/*.yml` is resolved **relative to that resource YAML file**, so from `resources/gold/` back to the source it is `../../src/{user_schema_prefix}_gold/<file>` (TWO levels up). A wrong depth is the classic "notebook not found" deploy failure — count the `../` from `resources/gold/`, not from the bundle root.
+- **Confirm `targets.dev.presets.source_linked_deployment: false` is present** in the inherited `databricks.yml` (Bronze set it). If absent, add it — never enable source-linked deployment; it breaks file-backed `notebook_task` sources.
 - **Open the bundle editor BEFORE any `bundle` command — and surface its link.** `<DP_BUNDLE_ROOT>/databricks.yml` already exists (from Bronze + Silver), so the workspace file browser shows the **"Open in bundle editor"** affordance on that folder (and an **"Open in editor"** button at the top). Its page CWD IS `<DP_BUNDLE_ROOT>` — the bundle-root page `bundle deploy`/`run` require, where Genie Code runs deploy/run pre-approved. **Do not make the operator hunt for the icon** — build a clickable link with the pre-authenticated `WorkspaceClient` (`w`) and print it:
   - `host = w.config.host`; `o = w.get_workspace_id()`
   - `file_id = w.workspace.get_status("<DP_BUNDLE_ROOT>/databricks.yml").object_id`
@@ -3570,12 +3606,12 @@ NOTE: This is a shared workshop workspace. Put a `user_prefix` variable in every
   - `databricks bundle validate --target dev`
   - `databricks bundle deploy --target dev`
   - `databricks bundle run --target dev gold_setup_job`  ← **must run first** (Task 1 creates tables + PKs, Task 2 adds FKs via `depends_on`)
-  - `databricks bundle run --target dev gold_merge_job`
+  - `databricks bundle run --target dev gold_merge_job`  ← runs `merge_gold_tables.py` THEN `validate_gold.py` (`depends_on`); if `validate_gold` fails, the constraints were wiped — fix `merge_gold_tables.py` to use Delta `MERGE` (not `saveAsTable`) and redeploy
 - **🛑 If a `bundle` command is blocked or fails, STOP — do not work around it.** A `databricks.yml not found` error or a "blocked by safety guardrails" message means you are NOT on the bundle page: open the **bundle-editor link** above and retry (CONFIRMED — the same `bundle deploy`/`run` that is "blocked" from a file page succeeds from the bundle editor). If it STILL fails from the bundle editor, STOP and report the blocker. Do **NOT** create the jobs, tables, constraints, or merges via the Jobs/Pipelines REST API (`jobs/create`, `/api/2.0/pipelines`), the SDK, or direct SQL to "get it done" — that silently defeats the bundle (no version control, no `bundle destroy` cleanup) and FAILS the gate. The REST/SDK route is an **escape hatch available only if the operator explicitly authorizes it.**
 
-**State-lock:** this prompt runs between an `enter` (Step 0) and an `exit`. After the gate passes, run `skills/vibecoding-state` op `exit` — params: `prompt_id: "gold_layer_pipeline"`, `gate: "Gold layer live"`, `captured: {gold_schema, gold_setup_job, gold_merge_job}`.
+**State-lock:** this prompt runs between an `enter` (Step 0) and an `exit`. After the gate passes, run `skills/vibecoding-state` op `exit` — params: `prompt_id: "gold_layer_pipeline"`, `gate: "Gold layer live"`, `captured: {gold_schema, gold_setup_job, gold_merge_job}`. **This `enter`/`exit` pair is a mandatory ritual, not advisory.** Step 0''s `enter` MUST locate — or, if this is the first prompt of the track, bootstrap-create — the canonical live state file at `<dp_bundle_root>/.vibecoding-state.md` (never the temporary `example/…` bootstrap path). The closing `exit` MUST append this prompt''s Per-Step Log entry, Gate result, and `captured` vars to that file, then **re-read it and echo the appended section to prove the write landed**. **Gate completion rule:** this prompt is NOT complete until that re-read confirms the appended entry — the chat summary is NOT the state store.
 
-**Gate:** `Gold layer live` — `gold_setup_job` (both tasks) and `gold_merge_job` were **created by `bundle deploy` and executed by `bundle run`** (the setup job ran first and the merge job populated data), AND the 5 Gold tables exist in `{lakehouse_default_catalog}.{user_schema_prefix}_gold` with PRIMARY KEY constraints present (FK constraints may be partial in serverless — that is expected). Tables existing is **necessary but NOT sufficient** — if anything was created by direct SQL instead of the deployed bundle, the gate FAILS and you must redo it via the bundle.',
+**Gate:** `Gold layer live` — `gold_setup_job` (both tasks) and `gold_merge_job` (both tasks — `merge` then `validate_gold`) were **created by `bundle deploy` and executed by `bundle run`** (the setup job ran first and the merge job populated data), the `validate_gold` task PASSED (PKs/FKs/NOT NULL/CDF/row-tracking all still present after the merge — i.e. data was loaded by `MERGE`, never a `saveAsTable` overwrite), AND the 5 Gold tables exist in `{lakehouse_default_catalog}.{user_schema_prefix}_gold` with PRIMARY KEY constraints present (FK constraints may be partial in serverless — that is expected). Tables existing is **necessary but NOT sufficient** — if anything was created by direct SQL instead of the deployed bundle, or `validate_gold` reports wiped constraints, the gate FAILS and you must redo it via the bundle.',
 '',
 true, 1, true, current_timestamp(), current_timestamp(), current_user());
 
@@ -3600,7 +3636,7 @@ If a PRD exists at @docs/design_prd.md, reference it for business requirements, 
 'Create Use-Case Plan',
 'Generate implementation plans for operationalizing use cases with supporting artifacts',
 13,
-'> **Artifact root (client-aware).** Resolve the data-product bundle root via `vibecoding-state` (`dp_bundle_root` in `## Environment Capabilities`, = `<artifact_root>/<use_case_slug>_dab`) and write **every plan document and manifest under `<use_case_slug>_dab/plans/`** — NOT the bare repo/clone root. This is the same dedicated bundle folder the Lakehouse + Gold-design steps build into, so the downstream deploy steps find `plans/manifests/*.yaml` right beside the bundle. The shape is identical on every client: on Cursor/Copilot it is `<repo-root>/<use_case_slug>_dab/`; on Databricks Genie Code it is `<clone-root>/<use_case_slug>_dab/` — never the page''s current working directory.
+'> **Artifact root (client-aware).** Resolve the data-product bundle root via `vibecoding-state` (`dp_bundle_root` in `## Environment Capabilities`, = `<artifact_root>/{user_schema_prefix}_<use_case_slug>_dab`) and write **every plan document and manifest under `{user_schema_prefix}_<use_case_slug>_dab/plans/`** — NOT the bare repo/clone root. This is the same dedicated bundle folder the Lakehouse + Gold-design steps build into, so the downstream deploy steps find `plans/manifests/*.yaml` right beside the bundle. The shape is identical on every client: on Cursor/Copilot it is `<repo-root>/{user_schema_prefix}_<use_case_slug>_dab/`; on Databricks Genie Code it is `<clone-root>/{user_schema_prefix}_<use_case_slug>_dab/` — never the page''s current working directory.
 
 ## 1️⃣ How To Apply
 
@@ -4028,12 +4064,14 @@ VALUES
 
 ### Step 0 — Resolve your environment (once, before anything else)
 
-Run `skills/vibecoding-state` operation `resolve_root`. Read these resolved values and use them literally throughout:
+Run `skills/vibecoding-state` operation `enter` (params: `prompt_id: "usecase_plan"`) — it locates the canonical live state file at `<dp_bundle_root>/.vibecoding-state.md` (bootstrap-created by the first data-product step). Read these resolved values and use them literally throughout:
 
 - `client_context` = `genie_code`
 - `artifact_root` = your workshop clone root (e.g. `/Workspace/Users/<your-email>/.assistant/skills/vibe-coding-workshop`)
 - `skill_ref_root` = `skills/vibe-coding-workshop` (substitute your clone folder if you cloned somewhere other than `.assistant/skills/vibe-coding-workshop`)
-- `dp_bundle_root` = `<artifact_root>/<use_case_slug>_dab` — the **self-contained data-product Asset Bundle project** the whole pipeline builds into (e.g. `…/vibe-coding-workshop/booking_app_dab`). Referred to below as `<DP_BUNDLE_ROOT>`. This step writes the plans INTO `<DP_BUNDLE_ROOT>/plans/`. Your Gold design (from step 9) lives at `<DP_BUNDLE_ROOT>/gold_layer_design/`; an optional PRD (from the PRD step) lives at `<artifact_root>/docs/design_prd.md`.
+- `dp_bundle_root` = `<artifact_root>/{user_schema_prefix}_<use_case_slug>_dab` — the **self-contained data-product Asset Bundle project** the whole pipeline builds into (e.g. `…/vibe-coding-workshop/{user_schema_prefix}_booking_app_dab`). Referred to below as `<DP_BUNDLE_ROOT>`. This step writes the plans INTO `<DP_BUNDLE_ROOT>/plans/`. Your Gold design (from step 9) lives at `<DP_BUNDLE_ROOT>/gold_layer_design/`; an optional PRD (from the PRD step) lives at `<artifact_root>/docs/design_prd.md`.
+
+When this step intersects the gold dependency manifest against the live catalog, use the EXISTING `{lakehouse_default_catalog}` that the Bronze step resolved and persisted (its Step 0.5 hard-stop) — read it from state; **never create a catalog and do not re-prompt for it.** This is a read-only intersection against `information_schema`.
 
 ### Step 1 — Load the required skills by their FULL clone-rooted paths
 
@@ -4047,6 +4085,8 @@ Then the planning orchestrator and its common skill (load in this order):
 3. `readSkillFile("skills/vibe-coding-workshop/data_product_accelerator/skills/common/naming-tagging-standards/SKILL.md")` — enterprise naming conventions for every planned artifact.
 
 When the orchestrator lists further **Mandatory Skill Dependencies**, load EACH the same way: take its repo-relative path and prefix it with `skill_ref_root`. Genie Code has no repo-root-relative resolution and `AGENTS.md` does not carry across threads — so always prefix with `skill_ref_root`. **Read them in one batched `readSkillFile` turn — Genie Code reads multiple skill files in parallel in a single turn, so never serialize independent reads (`genie-code-environment` §10).**
+
+**🔴 Preflight acknowledgement (hard gate — do this BEFORE writing any file).** After the batched `readSkillFile` returns, echo a one-line acknowledgement for EACH skill you loaded — its full `<skill_ref_root>`-prefixed path + the single rule you will apply from it. If you cannot state the rule, you have not actually read the skill — STOP and read it before writing anything. Do not write any plan document or manifest until every listed skill is acknowledged — silently skipping a skill read is the regression this preflight exists to prevent.
 
 ### Step 2 — Run the planning workflow, writing every artifact under `<DP_BUNDLE_ROOT>/plans/`
 
@@ -4068,6 +4108,8 @@ Anchor EVERY output to `<DP_BUNDLE_ROOT>/plans/` — never the bare clone root, 
 
 Use `createAsset`/the workspace file APIs to write these under `<DP_BUNDLE_ROOT>/plans/`. If a parent folder does not exist yet, create it — do not retarget to the clone root.
 
+**State-lock:** this prompt runs between an `enter` (Step 0) and an `exit`. After the gate passes, run `skills/vibecoding-state` op `exit` — params: `prompt_id: "usecase_plan"`, `gate: "Use-case plan complete"`, `captured: {usecase_plan_path}`. **This `enter`/`exit` pair is a mandatory ritual, not advisory.** Step 0''s `enter` MUST locate — or, if this is the first prompt of the track, bootstrap-create — the canonical live state file at `<dp_bundle_root>/.vibecoding-state.md` (never the temporary `example/…` bootstrap path). The closing `exit` MUST append this prompt''s Per-Step Log entry, Gate result, and `captured` vars to that file, then **re-read it and echo the appended section to prove the write landed**. **Gate completion rule:** this prompt is NOT complete until that re-read confirms the appended entry — the chat summary is NOT the state store.
+
 **Gate:** `Use-case plan complete` — `<DP_BUNDLE_ROOT>/plans/` contains the README + Phase-1 master + the selected addendums + all 4 manifests, the first plan line confirms `**Planning Mode:** Workshop`, and `gold-dependency-manifest.yaml` was intersected against the live `{lakehouse_default_catalog}.{user_schema_prefix}_gold` catalog with zero missing references (gaps ⇒ `gold-gap-remediation.md` emitted and planning STOPS). No schema/table was created and nothing was deployed.',
 '',
 true, 1, true, current_timestamp(), current_timestamp(), current_user());
@@ -4079,7 +4121,7 @@ VALUES
 (12, 'aibi_dashboard',
 'Build an AI/BI (Lakeview) Dashboard using @data_product_accelerator/skills/monitoring/02-databricks-aibi-dashboards/SKILL.md
 
-**Bundle root:** Extend the SAME data-product bundle the Lakehouse steps built — its dedicated top-level folder `{use_case_slug}_dab/` at the repo root (`dp_bundle_root`). All relative paths (`src/`, `resources/`, `plans/`, `databricks.yml`) resolve UNDER `{use_case_slug}_dab/`, never the bare repo root. Same folder on every coding agent.
+**Bundle root:** Extend the SAME data-product bundle the Lakehouse steps built — its dedicated top-level folder `{user_schema_prefix}_{use_case_slug}_dab/` at the repo root (`dp_bundle_root`). All relative paths (`src/`, `resources/`, `plans/`, `databricks.yml`) resolve UNDER `{user_schema_prefix}_{use_case_slug}_dab/`, never the bare repo root. Same folder on every coding agent.
 
 This will involve the following end-to-end workflow:
 
@@ -4091,7 +4133,7 @@ This will involve the following end-to-end workflow:
 - **Run Phase 0.5 pre-flight** — BEFORE any deploy, enumerate every `${var}` placeholder in the `.lvdash.json`, then assert the deploy job provides every one. Missing a single variable corrupts the upload silently (see `monitoring/02-databricks-aibi-dashboards/SKILL.md` → "Pre-loop variable enumeration").
 - **Deploy via UPDATE-or-CREATE** — use Workspace Import API with `overwrite: true` AND base64-encoded ASCII content (raw UTF-8 bytes silently corrupts the file). Preserves dashboard URLs and viewer permissions.
 
-Reference the dashboard plan at @{use_case_slug}_dab/plans/phase1-addendum-1.5-aibi-dashboards.md (canonical numbering — see `data_product_accelerator/skills/planning/00-project-planning/assets/addendum-numbering.md`; the legacy name `1.1-dashboards.md` is forbidden).
+Reference the dashboard plan at @{user_schema_prefix}_{use_case_slug}_dab/plans/phase1-addendum-1.5-aibi-dashboards.md (canonical numbering — see `data_product_accelerator/skills/planning/00-project-planning/assets/addendum-numbering.md`; the legacy name `1.1-dashboards.md` is forbidden).
 
 The skill provides:
 - Dashboard JSON structure with **6-column grid** layout (NOT 12!)
@@ -4612,7 +4654,7 @@ Run `skills/vibecoding-state` operation `enter` with `prompt_id: "aibi_dashboard
 - `client_context` = `genie_code`
 - `artifact_root` = your workshop clone root (e.g. `/Workspace/Users/<your-email>/.assistant/skills/vibe-coding-workshop`)
 - `skill_ref_root` = `skills/vibe-coding-workshop` (substitute your clone folder if you cloned somewhere other than `.assistant/skills/vibe-coding-workshop`)
-- `dp_bundle_root` = `<artifact_root>/{use_case_slug}_dab` — the **SAME self-contained Asset Bundle** you built for Bronze + Silver + Gold (+ semantic layer) (e.g. `…/booking_app_dab`). EXTEND it; do NOT make a new one. It is the **page you deploy from**. Referred to below as `<DP_BUNDLE_ROOT>`. Your dashboard plan lives at `<DP_BUNDLE_ROOT>/plans/phase1-addendum-1.5-aibi-dashboards.md`, the resolved names at `<DP_BUNDLE_ROOT>/plans/deploy-checkpoint.md`, and Gold design YAML at `<DP_BUNDLE_ROOT>/gold_layer_design/yaml/`.
+- `dp_bundle_root` = `<artifact_root>/{user_schema_prefix}_{use_case_slug}_dab` — the **SAME self-contained Asset Bundle** you built for Bronze + Silver + Gold (+ semantic layer) (e.g. `…/{user_schema_prefix}_booking_app_dab`). EXTEND it; do NOT make a new one. It is the **page you deploy from**. Referred to below as `<DP_BUNDLE_ROOT>`. Your dashboard plan lives at `<DP_BUNDLE_ROOT>/plans/phase1-addendum-1.5-aibi-dashboards.md`, the resolved names at `<DP_BUNDLE_ROOT>/plans/deploy-checkpoint.md`, and Gold design YAML at `<DP_BUNDLE_ROOT>/gold_layer_design/yaml/`.
 - deploy verb = `bundle deploy --target dev`, run through the `runDatabricksCli` tool
 
 If `enter` reports the Gold gate is not `Gold layer live`, STOP — finish the Gold pipeline step first. If `enter` has not run in this thread, run it now.
@@ -4633,6 +4675,8 @@ Then the dashboard worker skill and its common/semantic skills (load in this ord
 
 When any skill lists further **Mandatory Skill Dependencies**, load EACH the same way: prefix its repo-relative path with `skill_ref_root`. Genie Code has no repo-root-relative resolution and `AGENTS.md` does not carry across threads. **Read them in one batched `readSkillFile` turn — Genie Code reads multiple skill files in parallel in a single turn, so never serialize independent reads (`genie-code-environment` §10).**
 
+**🔴 Preflight acknowledgement (hard gate — do this BEFORE writing any file).** After the batched `readSkillFile` returns, echo a one-line acknowledgement for EACH skill you loaded — its full `<skill_ref_root>`-prefixed path + the single rule you will apply from it. If you cannot state the rule, you have not actually read the skill — STOP and read it before writing anything. Do not author `databricks.yml`, job/pipeline YAML, notebooks, or any artifact until every listed skill is acknowledged — silently skipping a skill read is the regression this preflight exists to prevent.
+
 ### Step 2 — Author the dashboard + deploy job. Do NOT execute anything yet.
 
 Using the skills above and the plan at `<DP_BUNDLE_ROOT>/plans/phase1-addendum-1.5-aibi-dashboards.md` (extract specs — don''t generate), AUTHOR (write files only — no execution):
@@ -4641,7 +4685,7 @@ Using the skills above and the plan at `<DP_BUNDLE_ROOT>/plans/phase1-addendum-1
 - `deploy_dashboard.py` (UPDATE-or-CREATE with `overwrite: true`, base64-encoding the rendered ASCII JSON — never raw UTF-8 bytes), `validate_dashboard_queries.py`, `validate_widget_encodings.py`.
 - The bundle resource `dashboard_deploy_job.yml` that runs `deploy_dashboard.py`.
 
-IMPORTANT: Query the EXISTING Gold schema `{user_schema_prefix}_gold` in `{lakehouse_default_catalog}` — the dashboard reads from it; it does NOT create any catalog/schema/table.
+IMPORTANT: Query the EXISTING Gold schema `{user_schema_prefix}_gold` in `{lakehouse_default_catalog}` — the dashboard reads from it; it does NOT create any catalog/schema/table. `{lakehouse_default_catalog}` was resolved and persisted by the Bronze step (its Step 0.5 hard-stop) — read it from `## Environment Capabilities`; **never create a catalog and do not re-prompt for it.**
 
 NOTE: This is a shared workshop workspace. Put a `user_prefix` variable in the job `name:` and the dashboard display name to avoid collisions (see `databricks-asset-bundles` → "Shared Workspace Naming").
 
@@ -4652,6 +4696,7 @@ NOTE: This is a shared workshop workspace. Put a `user_prefix` variable in the j
   - `<DP_BUNDLE_ROOT>/scripts/` — `deploy_dashboard.py`, `validate_dashboard_queries.py`, `validate_widget_encodings.py`
   - `<DP_BUNDLE_ROOT>/resources/monitoring/` — `dashboard_deploy_job.yml`
   - extend the EXISTING `<DP_BUNDLE_ROOT>/databricks.yml`
+- **Confirm `targets.dev.presets.source_linked_deployment: false` is present** in the inherited `databricks.yml` (Bronze set it). If absent, add it — never enable source-linked deployment; it breaks file-backed `notebook_task` sources.
 - **Run the local validators first** (`python scripts/validate_dashboard_queries.py`, `python scripts/validate_widget_encodings.py`, Phase-0.5 `${var}` enumeration) — these are read-only/local and are allowed. STOP and fix on any failure before deploying.
 - **Open the bundle editor BEFORE any `bundle` command — and surface its link.** `<DP_BUNDLE_ROOT>/databricks.yml` already exists, so the workspace file browser shows the **"Open in bundle editor"** affordance on that folder (and an **"Open in editor"** button at the top). Its page CWD IS `<DP_BUNDLE_ROOT>` — the bundle-root page `bundle deploy`/`run` require, where Genie Code runs deploy/run pre-approved. **Do not make the operator hunt for the icon** — build a clickable link with the pre-authenticated `WorkspaceClient` (`w`) and print it:
   - `host = w.config.host`; `o = w.get_workspace_id()`
@@ -4666,7 +4711,7 @@ NOTE: This is a shared workshop workspace. Put a `user_prefix` variable in the j
   - `databricks bundle run --target dev dashboard_deploy_job`
 - **🛑 If a `bundle` command is blocked or fails, STOP — do not work around it.** A `databricks.yml not found` error or a "blocked by safety guardrails" message means you are NOT on the bundle page: open the **bundle-editor link** above and retry (CONFIRMED — the same `bundle deploy`/`run` that is "blocked" from a file page succeeds from the bundle editor). If it STILL fails from the bundle editor, STOP and report the blocker. Do **NOT** publish the dashboard via a hand-rolled `w.workspace.import_` call, the Jobs REST API (`jobs/create`), or the SDK to "get it done" — that silently defeats the bundle (no version control, no `bundle destroy` cleanup) and FAILS the gate. The REST/SDK route is an **escape hatch available only if the operator explicitly authorizes it.**
 
-**State-lock:** this prompt runs between an `enter` (Step 0) and an `exit`. After the gate passes, run `skills/vibecoding-state` op `exit` — params: `prompt_id: "aibi_dashboard"`, `gate: "Dashboard deployed"`, `captured: {dashboard_path, dashboard_deploy_job}`.
+**State-lock:** this prompt runs between an `enter` (Step 0) and an `exit`. After the gate passes, run `skills/vibecoding-state` op `exit` — params: `prompt_id: "aibi_dashboard"`, `gate: "Dashboard deployed"`, `captured: {dashboard_path, dashboard_deploy_job}`. **This `enter`/`exit` pair is a mandatory ritual, not advisory.** Step 0''s `enter` MUST locate — or, if this is the first prompt of the track, bootstrap-create — the canonical live state file at `<dp_bundle_root>/.vibecoding-state.md` (never the temporary `example/…` bootstrap path). The closing `exit` MUST append this prompt''s Per-Step Log entry, Gate result, and `captured` vars to that file, then **re-read it and echo the appended section to prove the write landed**. **Gate completion rule:** this prompt is NOT complete until that re-read confirms the appended entry — the chat summary is NOT the state store.
 
 **Gate:** `Dashboard deployed` — the `.lvdash.json` was **deployed by `bundle deploy` and run by `bundle run dashboard_deploy_job`**, the widgets render, and every widget field maps to a validated SQL alias. The dashboard existing in the workspace is **necessary but NOT sufficient** — if it was published by a hand-rolled import or the Jobs API instead of the deployed bundle, the gate FAILS and you must redo it via the bundle.',
 '',
@@ -4679,7 +4724,7 @@ VALUES
 (11, 'genie_space',
 'Set up the semantic layer using @data_product_accelerator/skills/semantic-layer/00-semantic-layer-setup/SKILL.md
 
-**Bundle root:** Extend the SAME data-product bundle the Lakehouse steps built — its dedicated top-level folder `{use_case_slug}_dab/` at the repo root (`dp_bundle_root`). All relative paths below (`src/`, `resources/`, `plans/`, `databricks.yml`) resolve UNDER `{use_case_slug}_dab/`, never the bare repo root. Same folder on every coding agent.
+**Bundle root:** Extend the SAME data-product bundle the Lakehouse steps built — its dedicated top-level folder `{user_schema_prefix}_{use_case_slug}_dab/` at the repo root (`dp_bundle_root`). All relative paths below (`src/`, `resources/`, `plans/`, `databricks.yml`) resolve UNDER `{user_schema_prefix}_{use_case_slug}_dab/`, never the bare repo root. Same folder on every coding agent.
 
 This will involve the following end-to-end workflow:
 
@@ -4694,9 +4739,9 @@ This will involve the following end-to-end workflow:
 
 Implement in this order:
 
-1. **Table-Valued Functions (TVFs)** — using plan at @{use_case_slug}_dab/plans/phase1-addendum-1.2-tvfs.md
-2. **Metric Views** — using plan at @{use_case_slug}_dab/plans/phase1-addendum-1.3-metric-views.md
-3. **Genie Space** — using plan at @{use_case_slug}_dab/plans/phase1-addendum-1.6-genie-spaces.md
+1. **Table-Valued Functions (TVFs)** — using plan at @{user_schema_prefix}_{use_case_slug}_dab/plans/phase1-addendum-1.2-tvfs.md
+2. **Metric Views** — using plan at @{user_schema_prefix}_{use_case_slug}_dab/plans/phase1-addendum-1.3-metric-views.md
+3. **Genie Space** — using plan at @{user_schema_prefix}_{use_case_slug}_dab/plans/phase1-addendum-1.6-genie-spaces.md
 4. **Genie JSON Exports** — create export/import deployment jobs
 
 The orchestrator skill automatically loads worker skills for TVFs, Metric Views, Genie Space patterns, and export/import API.
@@ -5303,7 +5348,7 @@ Run `skills/vibecoding-state` operation `enter` with `prompt_id: "genie_space"` 
 - `client_context` = `genie_code`
 - `artifact_root` = your workshop clone root (e.g. `/Workspace/Users/<your-email>/.assistant/skills/vibe-coding-workshop`)
 - `skill_ref_root` = `skills/vibe-coding-workshop` (substitute your clone folder if you cloned somewhere other than `.assistant/skills/vibe-coding-workshop`)
-- `dp_bundle_root` = `<artifact_root>/{use_case_slug}_dab` — the **SAME self-contained Asset Bundle** you built for Bronze + Silver + Gold (e.g. `…/booking_app_dab`). EXTEND it; do NOT make a new one. `databricks.yml`, `src/`, `resources/` live here, and it is the **page you deploy from**. Referred to below as `<DP_BUNDLE_ROOT>`. Your plan manifest lives at `<DP_BUNDLE_ROOT>/plans/manifests/semantic-layer-manifest.yaml`, plan addendums at `<DP_BUNDLE_ROOT>/plans/`, and Gold design YAML at `<DP_BUNDLE_ROOT>/gold_layer_design/yaml/`.
+- `dp_bundle_root` = `<artifact_root>/{user_schema_prefix}_{use_case_slug}_dab` — the **SAME self-contained Asset Bundle** you built for Bronze + Silver + Gold (e.g. `…/{user_schema_prefix}_booking_app_dab`). EXTEND it; do NOT make a new one. `databricks.yml`, `src/`, `resources/` live here, and it is the **page you deploy from**. Referred to below as `<DP_BUNDLE_ROOT>`. Your plan manifest lives at `<DP_BUNDLE_ROOT>/plans/manifests/semantic-layer-manifest.yaml`, plan addendums at `<DP_BUNDLE_ROOT>/plans/`, and Gold design YAML at `<DP_BUNDLE_ROOT>/gold_layer_design/yaml/`.
 - deploy verb = `bundle deploy --target dev`, run through the `runDatabricksCli` tool
 
 If `enter` reports the Gold gate is not `Gold layer live`, STOP — finish the Gold pipeline step first. If `enter` has not run in this thread, run it now.
@@ -5323,6 +5368,8 @@ Then the Semantic Layer orchestrator and its common skills (load in this order; 
 
 When the orchestrator lists further **Mandatory Skill Dependencies** (workers `01-metric-views-patterns`, `02-databricks-table-valued-functions`, `03-genie-space-patterns`, `04-genie-space-export-import-api`, `05-genie-space-optimization`), load EACH the same way. Genie Code has no repo-root-relative resolution and `AGENTS.md` does not carry across threads — so always prefix with `skill_ref_root`. **Read those workers in one batched `readSkillFile` turn — Genie Code reads multiple skill files in parallel in a single turn, so never serialize independent reads (`genie-code-environment` §10).**
 
+**🔴 Preflight acknowledgement (hard gate — do this BEFORE writing any file).** After the batched `readSkillFile` returns, echo a one-line acknowledgement for EACH skill you loaded — its full `<skill_ref_root>`-prefixed path + the single rule you will apply from it. If you cannot state the rule, you have not actually read the skill — STOP and read it before writing anything. Do not author `databricks.yml`, job/pipeline YAML, notebooks, or any artifact until every listed skill is acknowledged — silently skipping a skill read is the regression this preflight exists to prevent.
+
 ### Step 2 — Author the semantic-layer bundle (TVFs → Metric Views → Genie). Do NOT execute anything yet.
 
 Using the skills above and the plan manifest at `<DP_BUNDLE_ROOT>/plans/manifests/semantic-layer-manifest.yaml` (extract specs — don''t generate), AUTHOR (write files only — no execution) the resources whose jobs, when run, will:
@@ -5331,7 +5378,7 @@ Using the skills above and the plan manifest at `<DP_BUNDLE_ROOT>/plans/manifest
 - **TVFs** — parameterized SQL functions with **STRING** date params (non-negotiable for Genie), v3.0 bullet-point COMMENTs, `ROW_NUMBER` for Top-N (never `LIMIT {param}`), `is_current = true` on SCD2 joins, `NULLIF` on divisions.
 - **Genie Space** — the export/import JSON config (`"version": 2` at root, IDs via `uuid.uuid4().hex`, arrays sorted, `serialized_space` = `json.dumps(...)` with every `sql:` field a `List[str]`), a **concrete** `semantic_warehouse_id` baked in from `<DP_BUNDLE_ROOT>/plans/deploy-checkpoint.md`, a Serverless SQL Warehouse (non-negotiable), General Instructions ≤ 20 lines, and ≥ 10 benchmark questions with exact SQL.
 
-IMPORTANT: Use the EXISTING catalog `{lakehouse_default_catalog}` and the Gold schema `{user_schema_prefix}_gold` — all TVFs/Metric Views are created there by the jobs. Use `${catalog}` / `${gold_schema}` variable substitution in configs; never hardcode.
+IMPORTANT: Use the EXISTING catalog `{lakehouse_default_catalog}` and the Gold schema `{user_schema_prefix}_gold` — all TVFs/Metric Views are created there by the jobs. `{lakehouse_default_catalog}` was resolved and persisted by the Bronze step (its Step 0.5 hard-stop) — read it from `## Environment Capabilities`; **never create a catalog and do not re-prompt for it.** Use `${catalog}` / `${gold_schema}` variable substitution in configs; never hardcode.
 
 NOTE: This is a shared workshop workspace. Put a `user_prefix` variable in every job `name:` field to avoid collisions — `bundle deploy --force` does NOT resolve these (see `databricks-asset-bundles` → "Shared Workspace Naming").
 
@@ -5341,6 +5388,7 @@ NOTE: This is a shared workshop workspace. Put a `user_prefix` variable in every
   - `<DP_BUNDLE_ROOT>/src/{user_schema_prefix}_semantic/` — `table_valued_functions.sql`, `semantic/metric_views/*.yaml` + `create_metric_views.py`, `genie/genie_space_config.json`, `deploy_genie_spaces.py`
   - `<DP_BUNDLE_ROOT>/resources/semantic-layer/` — `tvf_job.yml`, `metric_views_job.yml`, `genie_deploy_job.yml`
   - extend the EXISTING `<DP_BUNDLE_ROOT>/databricks.yml` (from Bronze + Silver + Gold)
+- **Confirm `targets.dev.presets.source_linked_deployment: false` is present** in the inherited `databricks.yml` (Bronze set it). If absent, add it — never enable source-linked deployment; it breaks file-backed `notebook_task` sources.
 - **Open the bundle editor BEFORE any `bundle` command — and surface its link.** `<DP_BUNDLE_ROOT>/databricks.yml` already exists, so the workspace file browser shows the **"Open in bundle editor"** affordance on that folder (and an **"Open in editor"** button at the top). Its page CWD IS `<DP_BUNDLE_ROOT>` — the bundle-root page `bundle deploy`/`run` require, where Genie Code runs deploy/run pre-approved. **Do not make the operator hunt for the icon** — build a clickable link with the pre-authenticated `WorkspaceClient` (`w`) and print it:
   - `host = w.config.host`; `o = w.get_workspace_id()`
   - `file_id = w.workspace.get_status("<DP_BUNDLE_ROOT>/databricks.yml").object_id`
@@ -5356,7 +5404,7 @@ NOTE: This is a shared workshop workspace. Put a `user_prefix` variable in every
   - `databricks bundle run --target dev genie_deploy_job`  ← creates/PATCHes the Genie Space via the export/import API job
 - **🛑 If a `bundle` command is blocked or fails, STOP — do not work around it.** A `databricks.yml not found` error or a "blocked by safety guardrails" message means you are NOT on the bundle page: open the **bundle-editor link** above and retry (CONFIRMED — the same `bundle deploy`/`run` that is "blocked" from a file page succeeds from the bundle editor). If it STILL fails from the bundle editor, STOP and report the blocker. Do **NOT** create the TVFs/Metric Views/Genie Space via direct SQL, the Jobs REST API (`jobs/create`), or a hand-rolled Genie/workspace API call to "get it done" — that silently defeats the bundle (no version control, no `bundle destroy` cleanup) and FAILS the gate. The REST/SDK route is an **escape hatch available only if the operator explicitly authorizes it.**
 
-**State-lock:** this prompt runs between an `enter` (Step 0) and an `exit`. After the gate passes, run `skills/vibecoding-state` op `exit` — params: `prompt_id: "genie_space"`, `gate: "Genie Space live"`, `captured: {genie_space_id, semantic_warehouse_id}`.
+**State-lock:** this prompt runs between an `enter` (Step 0) and an `exit`. After the gate passes, run `skills/vibecoding-state` op `exit` — params: `prompt_id: "genie_space"`, `gate: "Genie Space live"`, `captured: {genie_space_id, semantic_warehouse_id}`. **This `enter`/`exit` pair is a mandatory ritual, not advisory.** Step 0''s `enter` MUST locate — or, if this is the first prompt of the track, bootstrap-create — the canonical live state file at `<dp_bundle_root>/.vibecoding-state.md` (never the temporary `example/…` bootstrap path). The closing `exit` MUST append this prompt''s Per-Step Log entry, Gate result, and `captured` vars to that file, then **re-read it and echo the appended section to prove the write landed**. **Gate completion rule:** this prompt is NOT complete until that re-read confirms the appended entry — the chat summary is NOT the state store.
 
 **Gate:** `Genie Space live` — the TVFs, Metric Views, and Genie Space were **created by `bundle deploy` and executed by `bundle run`** (`tvf_job` → `metric_views_job` → `genie_deploy_job`), the Genie Space uses a Serverless SQL Warehouse, and it meets the accuracy/repeatability targets on the benchmark questions. Assets existing is **necessary but NOT sufficient** — if anything was created by direct SQL or a hand-rolled API call instead of the deployed bundle, the gate FAILS and you must redo it via the bundle.',
 '',
@@ -5507,7 +5555,7 @@ Run `skills/vibecoding-state` operation `enter` with `prompt_id: "agent_framewor
 - `client_context` = `genie_code`
 - `artifact_root` = your workshop clone root (e.g. `/Workspace/Users/<your-email>/.assistant/skills/vibe-coding-workshop`)
 - `skill_ref_root` = `skills/vibe-coding-workshop` (substitute your clone folder if you cloned somewhere other than `.assistant/skills/vibe-coding-workshop`)
-- `dp_bundle_root` = `<artifact_root>/<use_case_slug>_dab` — the **SAME self-contained Asset Bundle** you built for Bronze/Silver/Gold/semantic (e.g. `…/vibe-coding-workshop/booking_app_dab`). EXTEND it; do NOT make a new one. This is the **page you deploy from**. Referred to below as `<DP_BUNDLE_ROOT>`.
+- `dp_bundle_root` = `<artifact_root>/{user_schema_prefix}_<use_case_slug>_dab` — the **SAME self-contained Asset Bundle** you built for Bronze/Silver/Gold/semantic (e.g. `…/vibe-coding-workshop/{user_schema_prefix}_booking_app_dab`). EXTEND it; do NOT make a new one. This is the **page you deploy from**. Referred to below as `<DP_BUNDLE_ROOT>`.
 - Workspace: `{workspace_url}`
 - Genie Space ID(s): from the Build Genie Space step''s `exit` capture in `.vibecoding-state.md` (under `state_file_root`). A space that exists but can''t answer questions yields a greeting-only agent — run the connectivity probe in the scaffold skill''s Prerequisites first.
 - deploy verb = `bundle deploy --target dev`, run through the `runDatabricksCli` tool
@@ -5568,7 +5616,7 @@ NOTE: This is a shared workshop workspace. Put a `user_prefix` variable in the j
 - **🛑 If a `bundle` command is blocked or fails, STOP — do not work around it.** A `databricks.yml not found` error or a "blocked by safety guardrails" message means you are NOT on the bundle page: open the **bundle-editor link** above and retry (CONFIRMED — the same `bundle deploy`/`run` that is "blocked" from a file page succeeds from the bundle editor). If it STILL fails from the bundle editor, STOP and report the blocker. Do **NOT** create the job via the Jobs REST API (`jobs/create`), `databricks jobs submit`, the SDK, or call `agents.deploy()` directly to "get it done" — that silently defeats the bundle (no version control, no `bundle destroy` cleanup) and FAILS the gate. Those routes are an **escape hatch available only if the operator explicitly authorizes it.**
 - **Verify (read-only) — the tool-calling path, not just a greeting.** After READY, run a domain-specific data question through the pre-authenticated SDK via `executeCode` — `w.serving_endpoints.query(name="<endpoint>", inputs={"input":[{"role":"user","content":"<domain-specific data question>"}]})`. Do NOT use `curl + databricks auth token` — `auth token` is hard-blocked on Genie Code. PASS = the response contains a `function_call` to the Genie MCP tool followed by a `message` with real numbers (a Playground greeting is a smoke test, NOT the gate — `EMBEDDED_CREDENTIALS` endpoints route MCP calls through the system SP regardless of caller). Then open AI Playground (Serving → your endpoint → Query) and confirm the same question answers there.
 
-**State-lock:** this prompt runs between an `enter` (Step 0) and an `exit`. After the gate passes, run `skills/vibecoding-state` op `exit` — params: `prompt_id: "agent_framework"`, `gate: "Agent endpoint READY"`, `captured: {agent_serving_endpoint, genie_space_id, agent_schema}`.
+**State-lock:** this prompt runs between an `enter` (Step 0) and an `exit`. After the gate passes, run `skills/vibecoding-state` op `exit` — params: `prompt_id: "agent_framework"`, `gate: "Agent endpoint READY"`, `captured: {agent_serving_endpoint, genie_space_id, agent_schema}`. **This `enter`/`exit` pair is a mandatory ritual, not advisory.** Step 0''s `enter` MUST locate — or, if this is the first prompt of the track, bootstrap-create — the canonical live state file at `<agent_app_root>/.vibecoding-state.md` (never the temporary `example/…` bootstrap path). The closing `exit` MUST append this prompt''s Per-Step Log entry, Gate result, and `captured` vars to that file, then **re-read it and echo the appended section to prove the write landed**. **Gate completion rule:** this prompt is NOT complete until that re-read confirms the appended entry — the chat summary is NOT the state store.
 
 **Gate:** `Agent endpoint READY` — the `agent_deploy_job` was **created by `bundle deploy` and executed by `bundle run`** (visible in Workflows with a successful run ID), the serving endpoint reached READY, and a `w.serving_endpoints.query(...)` probe with a domain-specific question returned a tool call to the Genie MCP. The endpoint existing is **necessary but NOT sufficient** — if it was created by a direct `agents.deploy()` / `jobs submit` instead of the deployed bundle job, the gate FAILS and you must redo it via the bundle.',
 '',
@@ -6270,7 +6318,7 @@ FIRSTNAME=$(echo "$EMAIL" | cut -d''@'' -f1 | cut -d''.'' -f1)
 LASTINITIAL=$(echo "$EMAIL" | cut -d''@'' -f1 | cut -d''.'' -f2 | cut -c1)
 APP_PREFIX="${FIRSTNAME}-${LASTINITIAL}"
 APP_NAME="${APP_PREFIX}-{use_case_slug}"
-APP_ROOT="$APP_NAME"   # top-level app dir at the repo root (parity with <use_case_slug>_dab)
+APP_ROOT="$APP_NAME"   # top-level app dir at the repo root (parity with {user_schema_prefix}_<use_case_slug>_dab)
 DB_SCHEMA=$(echo "$APP_NAME" | tr ''-'' ''_'')
 echo "PROFILE=$PROFILE  APP_NAME=$APP_NAME  APP_ROOT=$APP_ROOT  DB_SCHEMA=$DB_SCHEMA"
 ```
@@ -6623,7 +6671,7 @@ FIRSTNAME=$(echo "$EMAIL" | cut -d''@'' -f1 | cut -d''.'' -f1)
 LASTINITIAL=$(echo "$EMAIL" | cut -d''@'' -f1 | cut -d''.'' -f2 | cut -c1)
 APP_PREFIX="${FIRSTNAME}-${LASTINITIAL}"
 APP_NAME="${APP_PREFIX}-{use_case_slug}"
-APP_ROOT="$APP_NAME"   # top-level app dir at the repo root (parity with <use_case_slug>_dab)
+APP_ROOT="$APP_NAME"   # top-level app dir at the repo root (parity with {user_schema_prefix}_<use_case_slug>_dab)
 echo "Deploying app: $APP_NAME (root: $APP_ROOT)"
 ```
 
@@ -6815,7 +6863,7 @@ Run `skills/vibecoding-state` operation `enter` with `prompt_id: "deploy_databri
 - `client_context` = `genie_code`
 - `artifact_root` = your workshop clone root (e.g. `/Workspace/Users/<your-email>/.assistant/skills/vibe-coding-workshop`)
 - `skill_ref_root` = `skills/vibe-coding-workshop` (substitute your clone folder if different)
-- `app_root` = `<artifact_root>/<app_name>` — the **self-contained AppKit app project** authored in step 04 (a TOP-LEVEL sibling of any `<use_case_slug>_dab` bundle, NOT under `apps_lakebase/`). Referred to below as `<APP_ROOT>`; `<APP_ROOT>/.vibecoding-state.md`, `app.yaml`, `databricks.yml`, `server/`, and `client/` all live here.
+- `app_root` = `<artifact_root>/<app_name>` — the **self-contained AppKit app project** authored in step 04 (a TOP-LEVEL sibling of any `{user_schema_prefix}_<use_case_slug>_dab` bundle, NOT under `apps_lakebase/`). Referred to below as `<APP_ROOT>`; `<APP_ROOT>/.vibecoding-state.md`, `app.yaml`, `databricks.yml`, `server/`, and `client/` all live here.
 - `app_deploy.verb` = `apps deploy` — the gated deploy verb; on Genie Code it resolves to the SDK SNAPSHOT call (CLI deploy is the IDE path).
 
 **First:** read `<APP_ROOT>/.vibecoding-state.md` (full clone-rooted path — NOT a bare `@…` mention) for the `APP_NAME`, workspace, and any resolved issues captured in step 04.
@@ -6868,7 +6916,7 @@ A deployed App sits behind the Databricks Apps **OAuth gate** — a raw `Authori
 
 Confirm the React UI loads (not an error page), mock data renders, and logs show a healthy server start on port 8000 with no ERROR-level messages.
 
-**State-lock:** this prompt runs between an `enter` (Step 0) and an `exit`. After the gate passes, run `skills/vibecoding-state` op `exit` — params: `prompt_id: "deploy_databricks_app"`, `gate: "App deployed (SDK SNAPSHOT) + live URL verified behind OAuth"`, `captured: {app_name, app_root, app_url}`.
+**State-lock:** this prompt runs between an `enter` (Step 0) and an `exit`. After the gate passes, run `skills/vibecoding-state` op `exit` — params: `prompt_id: "deploy_databricks_app"`, `gate: "App deployed (SDK SNAPSHOT) + live URL verified behind OAuth"`, `captured: {app_name, app_root, app_url}`. **This `enter`/`exit` pair is a mandatory ritual, not advisory.** Step 0''s `enter` MUST locate — or, if this is the first prompt of the track, bootstrap-create — the canonical live state file at `<app_root>/.vibecoding-state.md` (never the temporary `example/…` bootstrap path). The closing `exit` MUST append this prompt''s Per-Step Log entry, Gate result, and `captured` vars to that file, then **re-read it and echo the appended section to prove the write landed**. **Gate completion rule:** this prompt is NOT complete until that re-read confirms the appended entry — the chat summary is NOT the state store.
 
 **Gate:** `App deployed (SDK SNAPSHOT) + live URL verified behind OAuth` — `w.apps.get(APP_NAME)` reports `compute_status.state: "ACTIVE"`, the latest deployment is `SUCCEEDED`, and the deployed `url` was reached through the OAuth session (browser or 3-hop `requests.Session()`) showing the React mock-data UI with no ERROR logs. Verification used the DEPLOYED URL — NO `http://localhost:8000` check was attempted, and NO UI assets were hand-created as a workaround.
 
@@ -7349,7 +7397,7 @@ VALUES
 
 This is a **deployment checkpoint** — it validates and runs the complete Lakehouse pipeline in dependency order.
 
-**Bundle root:** Run every `bundle` command from the SAME data-product bundle folder the Lakehouse steps built — its dedicated top-level directory `{use_case_slug}_dab/` at the repo root (`dp_bundle_root`). `databricks.yml`, `src/`, and `resources/` all live UNDER `{use_case_slug}_dab/`; `cd` there before deploying (on Genie Code, be on that folder''s bundle-editor page). Same folder on every coding agent.
+**Bundle root:** Run every `bundle` command from the SAME data-product bundle folder the Lakehouse steps built — its dedicated top-level directory `{user_schema_prefix}_{use_case_slug}_dab/` at the repo root (`dp_bundle_root`). `databricks.yml`, `src/`, and `resources/` all live UNDER `{user_schema_prefix}_{use_case_slug}_dab/`; `cd` there before deploying (on Genie Code, be on that folder''s bundle-editor page). Same folder on every coding agent.
 
 ## Deployment Order (Mandatory)
 
@@ -7476,7 +7524,7 @@ This is a **deployment checkpoint** that validates the entire Lakehouse pipeline
 ### Asset Bundle Structure (Built in Steps 10-12)
 
 ```
-{use_case_slug}_dab/                     # data-product bundle root (dp_bundle_root) — the one folder all layers share
+{user_schema_prefix}_{use_case_slug}_dab/                     # data-product bundle root (dp_bundle_root) — the one folder all layers share
 ├── databricks.yml                        # Bundle configuration (all layers)
 ├── src/
 │   ├── {project}_bronze/                # Bronze notebooks (clone/generate)
@@ -7618,10 +7666,12 @@ Run `skills/vibecoding-state` operation `enter` with `prompt_id: "deploy_lakehou
 - `client_context` = `genie_code`
 - `artifact_root` = your workshop clone root (e.g. `/Workspace/Users/<your-email>/.assistant/skills/vibe-coding-workshop`)
 - `skill_ref_root` = `skills/vibe-coding-workshop` (substitute your clone folder if you cloned somewhere other than `.assistant/skills/vibe-coding-workshop`)
-- `dp_bundle_root` = `<artifact_root>/{use_case_slug}_dab` — the SAME self-contained Asset Bundle you built across Bronze + Silver + Gold (e.g. `…/vibe-coding-workshop/booking_app_dab`). Its `databricks.yml` already defines all 5 layer resources. This is the **page you deploy from**. Referred to below as `<DP_BUNDLE_ROOT>`.
+- `dp_bundle_root` = `<artifact_root>/{user_schema_prefix}_{use_case_slug}_dab` — the SAME self-contained Asset Bundle you built across Bronze + Silver + Gold (e.g. `…/vibe-coding-workshop/{user_schema_prefix}_booking_app_dab`). Its `databricks.yml` already defines all 5 layer resources. This is the **page you deploy from**. Referred to below as `<DP_BUNDLE_ROOT>`.
 - deploy verb = `bundle deploy --target dev`, run through the `runDatabricksCli` tool
 
 **Precondition:** `<DP_BUNDLE_ROOT>/databricks.yml` must already define `bronze_clone_job`, `silver_dq_setup_job`, `silver_dlt_pipeline`, `gold_setup_job`, and `gold_merge_job` (authored in steps 10–12). If a resource is missing, STOP and go back to the layer step that creates it — do NOT hand-create it here. If `enter` has not run in this thread, run it now.
+
+**Catalog:** `{lakehouse_default_catalog}` was resolved and persisted by the Bronze step (its Step 0.5 hard-stop) — read it from `## Environment Capabilities`; **never create a catalog and do not re-prompt for it.** This step only deploys + runs the jobs that populate schemas inside that existing catalog.
 
 ### Step 1 — Load the required skills by their FULL clone-rooted paths
 
@@ -7636,6 +7686,8 @@ Then the autonomous-operations worker (for the diagnose → fix → redeploy loo
 
 When any skill lists further **Mandatory Skill Dependencies**, load EACH the same way: take its repo-relative path and prefix it with `skill_ref_root`. Genie Code has no repo-root-relative resolution and `AGENTS.md` does not carry across threads — so always prefix with `skill_ref_root`. **Read them in one batched `readSkillFile` turn — Genie Code reads multiple skill files in parallel in a single turn, so never serialize independent reads (`genie-code-environment` §10).**
 
+**🔴 Preflight acknowledgement (hard gate — do this BEFORE writing any file).** After the batched `readSkillFile` returns, echo a one-line acknowledgement for EACH skill you loaded — its full `<skill_ref_root>`-prefixed path + the single rule you will apply from it. If you cannot state the rule, you have not actually read the skill — STOP and read it before writing anything. Do not author `databricks.yml`, job/pipeline YAML, notebooks, or any artifact until every listed skill is acknowledged — silently skipping a skill read is the regression this preflight exists to prevent.
+
 ### Step 2 — Deploy and run the whole pipeline FROM the bundle editor
 
 - **Open the bundle editor BEFORE any `bundle` command — and surface its link.** `<DP_BUNDLE_ROOT>/databricks.yml` already exists, so the workspace file browser shows the **"Open in bundle editor"** affordance on that folder (and an **"Open in editor"** button at the top). Its page CWD IS `<DP_BUNDLE_ROOT>` — the bundle-root page `bundle deploy`/`run` require, where Genie Code runs deploy/run pre-approved. **Do not make the operator hunt for the icon** — build a clickable link with the pre-authenticated `WorkspaceClient` (`w`) and print it:
@@ -7645,6 +7697,7 @@ When any skill lists further **Mandatory Skill Dependencies**, load EACH the sam
   - **Bundle editor:** `{host}/editor/files/{file_id}?o={o}&contextId=folder%3A{folder_id}` (plain folder: `{host}/browse/folders/{folder_id}?o={o}`)
 
   Tell the operator to open the **bundle-editor link**, then run every `databricks bundle …` command below from that page.
+- **Confirm `targets.dev.presets.source_linked_deployment: false` is present** in the bundle''s `databricks.yml` (set by Bronze) — `bundle validate --target dev` must report no source-linked warning. Never enable it; it breaks file-backed `notebook_task` sources.
 - Validate → deploy → run all five jobs **in strict dependency order** through `runDatabricksCli`, **from the bundle-editor page**, each with `--target dev` (mandatory — a target-less deploy is guardrail-blocked):
   - `databricks bundle validate --target dev`
   - `databricks bundle deploy --target dev`
@@ -7664,7 +7717,7 @@ Use **read-only** `executeCode`/SQL to confirm the deployed jobs produced the da
 - `SELECT COUNT(*) FROM {lakehouse_default_catalog}.{user_schema_prefix}_silver.dq_rules;` and `SHOW TABLES IN {lakehouse_default_catalog}.{user_schema_prefix}_silver;`
 - `SHOW TABLES IN {lakehouse_default_catalog}.{user_schema_prefix}_gold;` and `SELECT * FROM {lakehouse_default_catalog}.information_schema.table_constraints WHERE table_schema = ''{user_schema_prefix}_gold'';`
 
-**State-lock:** this prompt runs between an `enter` (Step 0) and an `exit`. After the gate passes, run `skills/vibecoding-state` op `exit` — params: `prompt_id: "deploy_lakehouse_assets"`, `gate: "Lakehouse assets deployed"`, `captured: {bronze_schema, silver_schema, gold_schema}`.
+**State-lock:** this prompt runs between an `enter` (Step 0) and an `exit`. After the gate passes, run `skills/vibecoding-state` op `exit` — params: `prompt_id: "deploy_lakehouse_assets"`, `gate: "Lakehouse assets deployed"`, `captured: {bronze_schema, silver_schema, gold_schema}`. **This `enter`/`exit` pair is a mandatory ritual, not advisory.** Step 0''s `enter` MUST locate — or, if this is the first prompt of the track, bootstrap-create — the canonical live state file at `<dp_bundle_root>/.vibecoding-state.md` (never the temporary `example/…` bootstrap path). The closing `exit` MUST append this prompt''s Per-Step Log entry, Gate result, and `captured` vars to that file, then **re-read it and echo the appended section to prove the write landed**. **Gate completion rule:** this prompt is NOT complete until that re-read confirms the appended entry — the chat summary is NOT the state store.
 
 **Gate:** `Lakehouse assets deployed` — all five jobs (`bronze_clone_job`, `silver_dq_setup_job`, `silver_dlt_pipeline`, `gold_setup_job`, `gold_merge_job`) were **deployed by `bundle deploy` and executed by `bundle run`** in dependency order end-to-end, AND the Bronze/Silver/Gold schemas in `{lakehouse_default_catalog}` are populated (`dq_rules` present, Gold PK constraints present). Tables existing is **necessary but NOT sufficient** — if anything was created or repaired by direct SQL / REST API / SDK instead of the deployed bundle, the gate FAILS and you must redo it via the bundle.',
 '',
@@ -7688,7 +7741,7 @@ Before starting:
 
 This is a **semantic layer deployment checkpoint** — it deploys and verifies all Data Intelligence assets in the correct order.
 
-**Bundle root:** Run every `bundle` command from the SAME data-product bundle folder the Lakehouse + semantic steps built — its dedicated top-level directory `{use_case_slug}_dab/` at the repo root (`dp_bundle_root`). All relative paths (`src/{project}_semantic/`, `resources/semantic/`, `plans/`, `databricks.yml`) resolve UNDER `{use_case_slug}_dab/`; `cd` there before deploying (on Genie Code, be on that folder''s bundle-editor page). Same folder on every coding agent.
+**Bundle root:** Run every `bundle` command from the SAME data-product bundle folder the Lakehouse + semantic steps built — its dedicated top-level directory `{user_schema_prefix}_{use_case_slug}_dab/` at the repo root (`dp_bundle_root`). All relative paths (`src/{project}_semantic/`, `resources/semantic/`, `plans/`, `databricks.yml`) resolve UNDER `{user_schema_prefix}_{use_case_slug}_dab/`; `cd` there before deploying (on Genie Code, be on that folder''s bundle-editor page). Same folder on every coding agent.
 
 ## Deployment Order (Mandatory)
 
@@ -7972,10 +8025,12 @@ Run `skills/vibecoding-state` operation `enter` with `prompt_id: "deploy_di_asse
 - `client_context` = `genie_code`
 - `artifact_root` = your workshop clone root (e.g. `/Workspace/Users/<your-email>/.assistant/skills/vibe-coding-workshop`)
 - `skill_ref_root` = `skills/vibe-coding-workshop` (substitute your clone folder if you cloned somewhere other than `.assistant/skills/vibe-coding-workshop`)
-- `dp_bundle_root` = `<artifact_root>/{use_case_slug}_dab` — the **SAME self-contained Asset Bundle** that holds the Lakehouse + semantic-layer + dashboard resources you authored in the prior steps (e.g. `…/booking_app_dab`). EXTEND/DEPLOY it; do NOT make a new one. It is the **page you deploy from**. Referred to below as `<DP_BUNDLE_ROOT>`. The resolved concrete names (job names, MV/TVF names, `semantic_warehouse_id`, workspace paths) live at `<DP_BUNDLE_ROOT>/plans/deploy-checkpoint.md`; Gold design YAML at `<DP_BUNDLE_ROOT>/gold_layer_design/yaml/`.
+- `dp_bundle_root` = `<artifact_root>/{user_schema_prefix}_{use_case_slug}_dab` — the **SAME self-contained Asset Bundle** that holds the Lakehouse + semantic-layer + dashboard resources you authored in the prior steps (e.g. `…/{user_schema_prefix}_booking_app_dab`). EXTEND/DEPLOY it; do NOT make a new one. It is the **page you deploy from**. Referred to below as `<DP_BUNDLE_ROOT>`. The resolved concrete names (job names, MV/TVF names, `semantic_warehouse_id`, workspace paths) live at `<DP_BUNDLE_ROOT>/plans/deploy-checkpoint.md`; Gold design YAML at `<DP_BUNDLE_ROOT>/gold_layer_design/yaml/`.
 - deploy verb = `bundle deploy --target dev`, run through the `runDatabricksCli` tool
 
 If `enter` reports the prior gate is not `Lakehouse assets deployed`, STOP — finish the Lakehouse deploy checkpoint first. If `enter` has not run in this thread, run it now.
+
+**Catalog:** `{lakehouse_default_catalog}` was resolved and persisted by the Bronze step (its Step 0.5 hard-stop) — read it from `## Environment Capabilities`; **never create a catalog and do not re-prompt for it.** Every TVF/Metric View/Genie asset targets the Gold schema inside that existing catalog.
 
 ### Step 1 — Load the required skills by their FULL clone-rooted paths
 
@@ -7990,6 +8045,8 @@ Then the Semantic Layer orchestrator and the Genie export/import worker (load in
 4. `readSkillFile("skills/vibe-coding-workshop/data_product_accelerator/skills/semantic-layer/04-genie-space-export-import-api/SKILL.md")` — the `serialized_space` invariants (`json.dumps()` string, `uuid.uuid4().hex` IDs, sorted arrays, every `sql:` field a `List[str]`).
 
 When the orchestrator lists further **Mandatory Skill Dependencies**, load EACH the same way: prefix its repo-relative path with `skill_ref_root`. Genie Code has no repo-root-relative resolution and `AGENTS.md` does not carry across threads. **Read them in one batched `readSkillFile` turn — Genie Code reads multiple skill files in parallel in a single turn, so never serialize independent reads (`genie-code-environment` §10).**
+
+**🔴 Preflight acknowledgement (hard gate — do this BEFORE writing any file).** After the batched `readSkillFile` returns, echo a one-line acknowledgement for EACH skill you loaded — its full `<skill_ref_root>`-prefixed path + the single rule you will apply from it. If you cannot state the rule, you have not actually read the skill — STOP and read it before writing anything. Do not author `databricks.yml`, job/pipeline YAML, notebooks, or any artifact until every listed skill is acknowledged — silently skipping a skill read is the regression this preflight exists to prevent.
 
 ### Step 2 — Pre-flight, then confirm the bundle resources exist. Do NOT deploy yet.
 
@@ -8007,6 +8064,7 @@ When the orchestrator lists further **Mandatory Skill Dependencies**, load EACH 
   - **Bundle editor:** `{host}/editor/files/{file_id}?o={o}&contextId=folder%3A{folder_id}` (plain folder: `{host}/browse/folders/{folder_id}?o={o}`)
 
   Tell the operator to open the **bundle-editor link**, then run every `databricks bundle …` command below from that page. Edit the EXISTING on-page `databricks.yml` — files created via the workspace API may not reach the CLI''s FUSE mount.
+- **Confirm `targets.dev.presets.source_linked_deployment: false` is present** in the bundle''s `databricks.yml` (set by Bronze) — `bundle validate --target dev` must report no source-linked warning. Never enable it; it breaks file-backed `notebook_task` sources.
 - Validate → deploy → run the jobs IN ORDER through `runDatabricksCli`, **from the bundle-editor page**, each with `--target dev` (mandatory — a target-less deploy is guardrail-blocked). **Verify per-task AFTER each `run`, never at the end** — a failed TVF silently breaks Metric Views, which silently breaks the Genie Space:
   - `databricks bundle validate --target dev`
   - `databricks bundle deploy --target dev`
@@ -8016,7 +8074,7 @@ When the orchestrator lists further **Mandatory Skill Dependencies**, load EACH 
   - `databricks bundle run --target dev genie_deploy_job`    ← then verify the GET API returns the new/updated Space; STOP on failure
 - **🛑 If a `bundle` command is blocked or fails, STOP — do not work around it.** A `databricks.yml not found` error or a "blocked by safety guardrails" message means you are NOT on the bundle page: open the **bundle-editor link** above and retry (CONFIRMED — the same `bundle deploy`/`run` that is "blocked" from a file page succeeds from the bundle editor). If it STILL fails from the bundle editor, STOP and report the blocker. Do **NOT** create the TVFs/Metric Views/Dashboard/Genie Space via direct SQL, the Jobs REST API (`jobs/create`), a hand-rolled `w.workspace.import_`, or a hand-rolled Genie API call to "get it done" — that silently defeats the bundle (no version control, no `bundle destroy` cleanup) and FAILS the gate. The REST/SDK route is an **escape hatch available only if the operator explicitly authorizes it.**
 
-**State-lock:** this prompt runs between an `enter` (Step 0) and an `exit`. After the gate passes, run `skills/vibecoding-state` op `exit` — params: `prompt_id: "deploy_di_assets"`, `gate: "Semantic layer assets deployed"`, `captured: {tvf_job, metric_views_job, dashboard_deploy_job, genie_deploy_job}`.
+**State-lock:** this prompt runs between an `enter` (Step 0) and an `exit`. After the gate passes, run `skills/vibecoding-state` op `exit` — params: `prompt_id: "deploy_di_assets"`, `gate: "Semantic layer assets deployed"`, `captured: {tvf_job, metric_views_job, dashboard_deploy_job, genie_deploy_job}`. **This `enter`/`exit` pair is a mandatory ritual, not advisory.** Step 0''s `enter` MUST locate — or, if this is the first prompt of the track, bootstrap-create — the canonical live state file at `<dp_bundle_root>/.vibecoding-state.md` (never the temporary `example/…` bootstrap path). The closing `exit` MUST append this prompt''s Per-Step Log entry, Gate result, and `captured` vars to that file, then **re-read it and echo the appended section to prove the write landed**. **Gate completion rule:** this prompt is NOT complete until that re-read confirms the appended entry — the chat summary is NOT the state store.
 
 **Gate:** `Semantic layer assets deployed` — the TVFs, Metric Views, Dashboard, and Genie Space were **brought up in dependency order by `bundle deploy` + `bundle run`** (`tvf_job` → `metric_views_job` → `dashboard_deploy_job` → `genie_deploy_job`), each per-task verification passed, and the deploy checkpoint is recorded at `<DP_BUNDLE_ROOT>/plans/deploy-checkpoint.md`. Assets existing is **necessary but NOT sufficient** — if any was created by direct SQL or a hand-rolled API call instead of the deployed bundle, the gate FAILS and you must redo it via the bundle.',
 '',
@@ -11004,7 +11062,7 @@ Confirm the endpoint is live without `curl`/`auth token`:
 
 PASS = `sync_status == "READY"` AND `knowledge_source_file_count >= 1`.
 
-**State-lock:** this prompt runs between an `enter` (Step 0) and an `exit`. After the gate passes, run `skills/vibecoding-state` op `exit` — params: `prompt_id: "knowledge_assistant_create"`, `gate: "KA READY"`, `captured: {doc_qa_backend: "knowledge_assistant", knowledge_source_path, knowledge_source_file_count, knowledge_source_origin, ka_endpoint_name, knowledge_assistant_id, knowledge_source_type, sync_status}`.
+**State-lock:** this prompt runs between an `enter` (Step 0) and an `exit`. After the gate passes, run `skills/vibecoding-state` op `exit` — params: `prompt_id: "knowledge_assistant_create"`, `gate: "KA READY"`, `captured: {doc_qa_backend: "knowledge_assistant", knowledge_source_path, knowledge_source_file_count, knowledge_source_origin, ka_endpoint_name, knowledge_assistant_id, knowledge_source_type, sync_status}`. **This `enter`/`exit` pair is a mandatory ritual, not advisory.** Step 0''s `enter` MUST locate — or, if this is the first prompt of the track, bootstrap-create — the canonical live state file at `<agent_app_root>/.vibecoding-state.md` (never the temporary `example/…` bootstrap path). The closing `exit` MUST append this prompt''s Per-Step Log entry, Gate result, and `captured` vars to that file, then **re-read it and echo the appended section to prove the write landed**. **Gate completion rule:** this prompt is NOT complete until that re-read confirms the appended entry — the chat summary is NOT the state store.
 
 **Gate:** `KA READY` — `sync_status == "READY"`, `knowledge_source_file_count >= 1`, `ka_endpoint_name` and `knowledge_assistant_id` captured into state, KA reachable from a read-only `w.serving_endpoints.get(...)` smoke call — OR `Skipped - KA not selected` when the Tool Plan did not select KA. The KA existing is necessary but NOT sufficient: if it was created via the (absent) `w.knowledge_assistants` wrapper rather than the REST contract, the run never reached this gate.',
 '',
@@ -11015,7 +11073,7 @@ INSERT INTO ${catalog}.${schema}.section_input_prompts
 (input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
 VALUES
 (203, 'track_a_agent_app_clone_framework',
-'Clone the Track A agent-app framework template (FastAPI host + OpenAI Agents SDK + MLflow tracing + two-layer Lakebase memory) into its own **top-level** directory `$AGENT_APP_ROOT` (= `<agent_app_name>/` at the repo root — a sibling of `apps_lakebase/` and of the AppKit `$APP_ROOT`, NOT nested inside `apps_lakebase/`) and stand up the **{use_case_slug}** agent''s runtime shell. This mirrors how the AppKit app lives in its own top-level `$APP_ROOT` and the data-product bundle in `<use_case_slug>_dab/`, so the agent app''s root has parity across coding agents. Today there is no agent app code; after this prompt runs, the cloned app boots locally with `uv run dev`, responds to a "Hello" smoke test, emits MLflow AGENT spans at `{mlflow_experiment_path}`, and is registered in `databricks.yml`.
+'Clone the Track A agent-app framework template (FastAPI host + OpenAI Agents SDK + MLflow tracing + two-layer Lakebase memory) into its own **top-level** directory `$AGENT_APP_ROOT` (= `<agent_app_name>/` at the repo root — a sibling of `apps_lakebase/` and of the AppKit `$APP_ROOT`, NOT nested inside `apps_lakebase/`) and stand up the **{use_case_slug}** agent''s runtime shell. This mirrors how the AppKit app lives in its own top-level `$APP_ROOT` and the data-product bundle in `{user_schema_prefix}_<use_case_slug>_dab/`, so the agent app''s root has parity across coding agents. Today there is no agent app code; after this prompt runs, the cloned app boots locally with `uv run dev`, responds to a "Hello" smoke test, emits MLflow AGENT spans at `{mlflow_experiment_path}`, and is registered in `databricks.yml`.
 
 This will involve the following steps:
 
@@ -11172,7 +11230,7 @@ VALUES
 
 ❌ **NEVER run `uv run dev` and NEVER open `http://localhost:8000`.** Genie Code has no foreground local server surface; a `uv run dev` loop would hang the session. The `uv` + `pip` + Python 3.12 toolchain IS present (`genie-code-environment` §4), so you install deps with `uv pip install -e .` and then exercise the agent **in-process** inside `executeCode` (import `build_agent`, call `agent.run("Hello")`), which emits the MLflow AGENT span. Server startup is deferred to the deploy step (46) where the Apps runtime builds the `uv`/FastAPI server **server-side**.
 
-❌ **NEVER write the cloned app to the bare clone root, to `apps_lakebase/`, or to `/tmp`.** It goes under `<AGENT_APP_ROOT>` only (a top-level sibling of `<APP_ROOT>` and `<use_case_slug>_dab`).
+❌ **NEVER write the cloned app to the bare clone root, to `apps_lakebase/`, or to `/tmp`.** It goes under `<AGENT_APP_ROOT>` only (a top-level sibling of `<APP_ROOT>` and `{user_schema_prefix}_<use_case_slug>_dab`).
 
 ✅ The things you run directly are (a) `git clone` of the template, (b) `uv pip install -e .` in-session, (c) in-process `executeCode` smoke + MLflow span check, and (d) **read-only** inspection.
 
@@ -11183,7 +11241,7 @@ Run `skills/vibecoding-state` operation `enter` with `prompt_id: "track_a_agent_
 - `client_context` = `genie_code`
 - `artifact_root` = your workshop clone root (e.g. `/Workspace/Users/<your-email>/.assistant/skills/vibe-coding-workshop`)
 - `skill_ref_root` = `skills/vibe-coding-workshop` (substitute your clone folder if different)
-- `agent_app_root` = `<artifact_root>/{agent_app_name}` — the self-contained Track A agent app project dir, a TOP-LEVEL sibling of `<APP_ROOT>` and `<use_case_slug>_dab`, NOT under `apps_lakebase/`. Referred to below as `<AGENT_APP_ROOT>`. `app.yaml`, `pyproject.toml`, `databricks.yml`, `server/`, and `<AGENT_APP_ROOT>/.vibecoding-state.md` all live here.
+- `agent_app_root` = `<artifact_root>/{agent_app_name}` — the self-contained Track A agent app project dir, a TOP-LEVEL sibling of `<APP_ROOT>` and `{user_schema_prefix}_<use_case_slug>_dab`, NOT under `apps_lakebase/`. Referred to below as `<AGENT_APP_ROOT>`. `app.yaml`, `pyproject.toml`, `databricks.yml`, `server/`, and `<AGENT_APP_ROOT>/.vibecoding-state.md` all live here.
 - `mlflow_experiment_path` = `{mlflow_experiment_path}`
 - Workspace: `{workspace_url}`
 
@@ -11212,7 +11270,7 @@ Load every further reference the skills name the same way (repo-relative path pr
 
 Via `executeCode` (no server): set `MLFLOW_EXPERIMENT` / tracking to `{mlflow_experiment_path}`, import the agent factory from `<AGENT_APP_ROOT>` (`build_agent(ModelConfig(development_config="config.yml"))`), and call the invoke path with input "Hello". Confirm a streaming/text response AND that an MLflow **AGENT** span appears at `{mlflow_experiment_path}` for the run (`mlflow.search_traces(...)` or the experiment UI). Do NOT start `uv run dev` to do this.
 
-**State-lock:** this prompt runs between an `enter` (Step 0) and an `exit`. After the gate passes, run `skills/vibecoding-state` op `exit` — params: `prompt_id: "track_a_agent_app_clone_framework"`, `gate: "Agent framework live"`.
+**State-lock:** this prompt runs between an `enter` (Step 0) and an `exit`. After the gate passes, run `skills/vibecoding-state` op `exit` — params: `prompt_id: "track_a_agent_app_clone_framework"`, `gate: "Agent framework live"`. **This `enter`/`exit` pair is a mandatory ritual, not advisory.** Step 0''s `enter` MUST locate — or, if this is the first prompt of the track, bootstrap-create — the canonical live state file at `<agent_app_root>/.vibecoding-state.md` (never the temporary `example/…` bootstrap path). The closing `exit` MUST append this prompt''s Per-Step Log entry, Gate result, and `captured` vars to that file, then **re-read it and echo the appended section to prove the write landed**. **Gate completion rule:** this prompt is NOT complete until that re-read confirms the appended entry — the chat summary is NOT the state store.
 
 **Gate:** `Agent framework live` — the cloned app under `<AGENT_APP_ROOT>` responds to an **in-process** "Hello" with MLflow AGENT spans visible at `{mlflow_experiment_path}`; `config.yml` carries `llm_endpoint`/`llm_api_base_url`/`llm_api_mode` from `runtime_config.llm`; the agent uses `ModelConfig(development_config="config.yml")` and `model=config.get("llm_endpoint")`; module-level `@invoke` + `@stream` handlers are present. NO `http://localhost:8000` check was attempted.',
 '',
@@ -11444,7 +11502,7 @@ Load every further reference the skills name the same way (prefix repo-relative 
 
 Via `executeCode` (no server): build the agent from `<AGENT_APP_ROOT>` and, for each wired tool, send a prompt that forces that tool, then assert a **TOOL** span for it in MLflow (`mlflow.search_traces(...)`). Read-only SQL only; KA query; Genie ask; UC function call. Skipped families produce zero TOOL spans and are absent from the trace — that is a clean state, not a failure.
 
-**State-lock:** this prompt runs between an `enter` (Step 0) and an `exit`. After the gate passes, run `skills/vibecoding-state` op `exit` — params: `prompt_id: "track_a_agent_ka_genie_tools"`, `gate: "Tools wired"`.
+**State-lock:** this prompt runs between an `enter` (Step 0) and an `exit`. After the gate passes, run `skills/vibecoding-state` op `exit` — params: `prompt_id: "track_a_agent_ka_genie_tools"`, `gate: "Tools wired"`. **This `enter`/`exit` pair is a mandatory ritual, not advisory.** Step 0''s `enter` MUST locate — or, if this is the first prompt of the track, bootstrap-create — the canonical live state file at `<agent_app_root>/.vibecoding-state.md` (never the temporary `example/…` bootstrap path). The closing `exit` MUST append this prompt''s Per-Step Log entry, Gate result, and `captured` vars to that file, then **re-read it and echo the appended section to prove the write landed**. **Gate completion rule:** this prompt is NOT complete until that re-read confirms the appended entry — the chat summary is NOT the state store.
 
 **Gate:** `Tools wired` — MLflow traces show one TOOL span per selected tool in `docs/agent_tool_plan.yaml.selected_tools[]` (asserted **in-process**, not via a local server); skipped families are marked skipped not failed; SQL smoke used read-only queries with fully-qualified table names; `databricks.yml`/`app.yaml` carry the Tool Plan''s grants verbatim.',
 '',
@@ -11650,7 +11708,7 @@ Via `executeCode` (no server):
 - **`user_api_scopes_in_app_yaml`** — assert the scopes are present in `<AGENT_APP_ROOT>/app.yaml`.
 - **Memory** — same-thread turn 2 references turn 1 (short-term); a fact stated in thread A is recalled in a fresh thread B for the same user (long-term).
 
-**State-lock:** this prompt runs between an `enter` (Step 0) and an `exit`. After the gate passes, run `skills/vibecoding-state` op `exit` — params: `prompt_id: "track_a_agent_auth_memory"`, `gate: "Auth + Memory verified"`, `captured: {lakebase_instance, lakebase_database, embedding_endpoint, thread_id_strategy}`.
+**State-lock:** this prompt runs between an `enter` (Step 0) and an `exit`. After the gate passes, run `skills/vibecoding-state` op `exit` — params: `prompt_id: "track_a_agent_auth_memory"`, `gate: "Auth + Memory verified"`, `captured: {lakebase_instance, lakebase_database, embedding_endpoint, thread_id_strategy}`. **This `enter`/`exit` pair is a mandatory ritual, not advisory.** Step 0''s `enter` MUST locate — or, if this is the first prompt of the track, bootstrap-create — the canonical live state file at `<agent_app_root>/.vibecoding-state.md` (never the temporary `example/…` bootstrap path). The closing `exit` MUST append this prompt''s Per-Step Log entry, Gate result, and `captured` vars to that file, then **re-read it and echo the appended section to prove the write landed**. **Gate completion rule:** this prompt is NOT complete until that re-read confirms the appended entry — the chat summary is NOT the state store.
 
 **Gate:** `Auth + Memory verified` — OBO and SP probes both pass **in-process**; same-thread turn 2 references turn 1; a fact stated in thread A is recalled in fresh thread B for the same user. NO `http://localhost:8000` check was attempted.',
 '',
@@ -11887,7 +11945,7 @@ Three probes (no localhost, no `curl`+token):
 
 Then confirm platform health: `w.apps.get(<agent_app_name>).compute_status.state == "ACTIVE"` (or `databricks apps get "<agent_app_name>"` via `runDatabricksCli`).
 
-**State-lock:** this prompt runs between an `enter` (Step 0) and an `exit`. After the gate passes, run `skills/vibecoding-state` op `exit` — params: `prompt_id: "track_a_agent_eval_deploy"`, `gate: "Agent App RUNNING"`, `captured: {agent_app_url, agent_app_name}`. `exit` re-evaluates the four fail-closed conditions; any positive condition flips the gate to `Smoke regressed — block`.
+**State-lock:** this prompt runs between an `enter` (Step 0) and an `exit`. After the gate passes, run `skills/vibecoding-state` op `exit` — params: `prompt_id: "track_a_agent_eval_deploy"`, `gate: "Agent App RUNNING"`, `captured: {agent_app_url, agent_app_name}`. `exit` re-evaluates the four fail-closed conditions; any positive condition flips the gate to `Smoke regressed — block`. **This `enter`/`exit` pair is a mandatory ritual, not advisory.** Step 0''s `enter` MUST locate — or, if this is the first prompt of the track, bootstrap-create — the canonical live state file at `<agent_app_root>/.vibecoding-state.md` (never the temporary `example/…` bootstrap path). The closing `exit` MUST append this prompt''s Per-Step Log entry, Gate result, and `captured` vars to that file, then **re-read it and echo the appended section to prove the write landed**. **Gate completion rule:** this prompt is NOT complete until that re-read confirms the appended entry — the chat summary is NOT the state store.
 
 **Gate:** `Agent App RUNNING` — smoke eval pass/fail visible in MLflow AND none of the four fail-closed conditions tripped; the bundle''s resource grants deployed via `bundle deploy` from the bundle-editor page; the app host deployed via the SDK SNAPSHOT call (server-side `uv`/FastAPI build) with compute `ACTIVE`; the deployed `/invocations` returned 200 through the 3-hop OAuth session; traces visible at `{mlflow_experiment_path}`. The app/grants existing is **necessary but NOT sufficient** — if the grants were hand-applied (REST/`spark.sql`) instead of by `bundle deploy` from the bundle-editor page, or the host was hand-created, the gate FAILS and you redo it via the bundle + SDK SNAPSHOT. Verification used the DEPLOYED URL — NO localhost check, NO `curl`+`auth token`, and NO hand-created app.
 
@@ -12080,7 +12138,7 @@ Load every further reference the skills name the same way (prefix with `skill_re
    - **AppKit SP-only** — call `/api/chat` WITHOUT forwarding the user token; this probe catches a missing-OBO bug.
    - **AppKit with forwarded OBO** — call `/api/chat` with the user''s OBO token forwarded; expect a streamed answer with the user''s identity.
 
-**State-lock:** this prompt runs between an `enter` (Step 0) and an `exit`. After the gate passes, run `skills/vibecoding-state` op `exit` — params: `prompt_id: "appkit_agent_app_proxy_chat"`, `gate: "AppKit ↔ Agent App proxy live"`.
+**State-lock:** this prompt runs between an `enter` (Step 0) and an `exit`. After the gate passes, run `skills/vibecoding-state` op `exit` — params: `prompt_id: "appkit_agent_app_proxy_chat"`, `gate: "AppKit ↔ Agent App proxy live"`. **This `enter`/`exit` pair is a mandatory ritual, not advisory.** Step 0''s `enter` MUST locate — or, if this is the first prompt of the track, bootstrap-create — the canonical live state file at `<app_root>/.vibecoding-state.md` (never the temporary `example/…` bootstrap path). The closing `exit` MUST append this prompt''s Per-Step Log entry, Gate result, and `captured` vars to that file, then **re-read it and echo the appended section to prove the write landed**. **Gate completion rule:** this prompt is NOT complete until that re-read confirms the appended entry — the chat summary is NOT the state store.
 
 **Gate:** `AppKit ↔ Agent App proxy live` — `/chat` streams chat against the Agent App with OBO forwarding; all three probes pass via the 3-hop OAuth session against the DEPLOYED URLs. NO bash test script, NO `curl`+`auth token`, NO localhost check was used.',
 '',
@@ -12307,7 +12365,7 @@ Load every further reference the skills name the same way (prefix with `skill_re
 1. Redeploy the AppKit app (`w.apps.deploy(<app_name>, AppDeployment(source_code_path="<APP_ROOT>", mode=SNAPSHOT))`) and, if the agent `/feedback` path changed, the agent app (`source_code_path="<AGENT_APP_ROOT>"`). Poll each to `SUCCEEDED`, compute `ACTIVE`.
 2. Through the 3-hop OAuth `requests.Session()`: send a chat turn, click thumbs-down (POST `/feedback`), then confirm via `executeCode` that an MLflow Assessment row appears for that `trace_id` at `{mlflow_feedback_experiment_path}`. Wait 3-5 min idle and re-test to confirm persistence.
 
-**State-lock:** this prompt runs between an `enter` (Step 0) and an `exit`. After the gate passes, run `skills/vibecoding-state` op `exit` — params: `prompt_id: "appkit_chat_feedback_mlflow"`, `gate: "Deployed + idle resilience passed + 04c round-trip verified"`, `captured: {mlflow_feedback_experiment_path}`.
+**State-lock:** this prompt runs between an `enter` (Step 0) and an `exit`. After the gate passes, run `skills/vibecoding-state` op `exit` — params: `prompt_id: "appkit_chat_feedback_mlflow"`, `gate: "Deployed + idle resilience passed + 04c round-trip verified"`, `captured: {mlflow_feedback_experiment_path}`. **This `enter`/`exit` pair is a mandatory ritual, not advisory.** Step 0''s `enter` MUST locate — or, if this is the first prompt of the track, bootstrap-create — the canonical live state file at `<app_root>/.vibecoding-state.md` (never the temporary `example/…` bootstrap path). The closing `exit` MUST append this prompt''s Per-Step Log entry, Gate result, and `captured` vars to that file, then **re-read it and echo the appended section to prove the write landed**. **Gate completion rule:** this prompt is NOT complete until that re-read confirms the appended entry — the chat summary is NOT the state store.
 
 **Gate:** `Deployed + idle resilience passed + 04c round-trip verified` — sidebar + history works; thumbs up/down linked to MLflow traces via `mlflow.log_feedback(...)` from the Track A Agent App; an end-to-end 👎 round-trip shows up in the MLflow trace UI (verified through the 3-hop OAuth session against the DEPLOYED URL); the app survives 3-5 min idle. NO localhost check, NO `curl`+`auth token`.',
 '',
@@ -13497,7 +13555,7 @@ Then verify (read-only) the trace↔gateway correlation: a `databricks_request_i
 
 **🛑 If a `bundle` command is blocked or fails**, you are NOT on the bundle page. A `databricks.yml not found` error or a "blocked by safety guardrails" message means the page CWD is wrong — open the bundle-editor link and retry (CONFIRMED: the same `bundle deploy` that is "blocked" from a file page succeeds from the bundle editor). **Do not fall back to direct SQL** or hand-apply the gateway/grants. If it STILL fails from the bundle editor, STOP and report. The hand-apply / REST routes are an **escape hatch available only if the operator explicitly authorizes it.**
 
-**State-lock:** this prompt runs between an `enter` (Step 0) and an `exit`. After the gate passes, run `skills/vibecoding-state` op `exit` — params: `prompt_id: "mlflow_gateway_and_deployment"`, `gate: "Optional gateway route configured or skipped"`, `captured: {ai_gateway_endpoint, ai_gateway_status, agent_app_url, agent_app_name}`.
+**State-lock:** this prompt runs between an `enter` (Step 0) and an `exit`. After the gate passes, run `skills/vibecoding-state` op `exit` — params: `prompt_id: "mlflow_gateway_and_deployment"`, `gate: "Optional gateway route configured or skipped"`, `captured: {ai_gateway_endpoint, ai_gateway_status, agent_app_url, agent_app_name}`. **This `enter`/`exit` pair is a mandatory ritual, not advisory.** Step 0''s `enter` MUST locate — or, if this is the first prompt of the track, bootstrap-create — the canonical live state file at `<agent_app_root>/.vibecoding-state.md` (never the temporary `example/…` bootstrap path). The closing `exit` MUST append this prompt''s Per-Step Log entry, Gate result, and `captured` vars to that file, then **re-read it and echo the appended section to prove the write landed**. **Gate completion rule:** this prompt is NOT complete until that re-read confirms the appended entry — the chat summary is NOT the state store.
 
 **Gate:** `Optional gateway route configured or skipped` — if a pre-provisioned Gateway exists, the agent routes through `{ai_gateway_endpoint}`, the DAB deploy ran via `bundle deploy` from the bundle-editor page, and `databricks_request_id` correlates traces to Gateway inference tables; otherwise `ai_gateway_status: "skipped_unavailable"` is recorded and the raw Track A route is left intact. When a gateway IS configured, the gateway/grants existing is **necessary but NOT sufficient** — if they were hand-applied (REST/`spark.sql`) instead of by `bundle deploy` from the bundle-editor page, the gate FAILS and you redo it via the bundle. Promotion proceeded only because `signoff_decision == APPROVED`.',
 '',
@@ -13562,7 +13620,7 @@ Patch `<AGENT_APP_ROOT>/databricks.yml` to declare the periodic trace-archival /
 
 Materialize ≥ 4 SQL alerts from `governance.monitoring.required_alerts[]` plus the section `6b` recipes in `references/monitoring-dashboard-queries.md` (including the `rollback_trigger` from the 53 sign-off). Inspect production traces read-only with the native `search_traces` / `get_trace_metrics` / `get_assessments` tools to confirm the scorers and annotations are landing.
 
-**State-lock:** this prompt runs between an `enter` (Step 0) and an `exit`. After the gate passes, run `skills/vibecoding-state` op `exit` — params: `prompt_id: "mlflow_production_monitoring_and_debugging"`, `gate: "alerts wired; agent-as-judge running"`, `captured: {production_alerts_configured, agent_failure_root_cause_writes_observed}`.
+**State-lock:** this prompt runs between an `enter` (Step 0) and an `exit`. After the gate passes, run `skills/vibecoding-state` op `exit` — params: `prompt_id: "mlflow_production_monitoring_and_debugging"`, `gate: "alerts wired; agent-as-judge running"`, `captured: {production_alerts_configured, agent_failure_root_cause_writes_observed}`. **This `enter`/`exit` pair is a mandatory ritual, not advisory.** Step 0''s `enter` MUST locate — or, if this is the first prompt of the track, bootstrap-create — the canonical live state file at `<agent_app_root>/.vibecoding-state.md` (never the temporary `example/…` bootstrap path). The closing `exit` MUST append this prompt''s Per-Step Log entry, Gate result, and `captured` vars to that file, then **re-read it and echo the appended section to prove the write landed**. **Gate completion rule:** this prompt is NOT complete until that re-read confirms the appended entry — the chat summary is NOT the state store.
 
 **Gate:** `alerts wired; agent-as-judge running` — continuous-eval scorers (registered via `executeCode`, confirmed via `get_scheduled_scorers`) sample production traces against `governance.scorer_suite.production_scorers[]`; ≥ 4 SQL alerts are configured; the trace-archival/backfill job was deployed via `bundle deploy` from the bundle-editor page; and `agent_failure_root_cause` rows are written to `{lakehouse_default_catalog}.{db_schema}_ops.{agent_resource_prefix}_otel_annotations` on low-scoring traces, each cluster dispatched to the right track. The job/alerts existing is **necessary but NOT sufficient** — if the archival job was hand-created (REST/`spark.sql`/`executeCode`) instead of by `bundle deploy` from the bundle-editor page, the gate FAILS and you redo it via the bundle.',
 '',
