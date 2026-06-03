@@ -128,7 +128,8 @@ Your ONLY task is to create a PRD document. Do NOT:
 
 You MUST:
 - Create ONLY the PRD document
-- Save it to: docs/design_prd.md
+- First resolve <ARTIFACT_ROOT> = the workshop project / clone root (the folder that holds this repo). On Cursor/Copilot that is your repo root; on Databricks Genie Code it is your /Workspace/Users/<email>/.assistant/skills/<repo> clone — NOT the page''s current working directory.
+- Save it to: <ARTIFACT_ROOT>/docs/design_prd.md
 - STOP after saving the PRD - do nothing else
 ```
 
@@ -166,17 +167,17 @@ The generated prompt should ask for a PRD with these sections:
 
 The prompt MUST end with:
 ```
-Save this PRD to: docs/design_prd.md
+Save this PRD to: <ARTIFACT_ROOT>/docs/design_prd.md
 STOP after saving. Do not generate any code, tables, APIs, or proceed with other tasks.
 ```',
 'You are generating a prompt that users will copy into their AI coding assistant.
 
 Your output should be a complete, ready-to-use prompt that when pasted into Cursor or Copilot will:
 1. Create ONLY a simple Product Requirements Document
-2. Save it to docs/design_prd.md
+2. Save it to `<ARTIFACT_ROOT>/docs/design_prd.md` (where `<ARTIFACT_ROOT>` is the workshop project / clone root — resolve it first; never assume the page''s working directory)
 3. NOT generate any code, scripts, table definitions, or API specifications
 
-CRITICAL: Your generated prompt MUST start with clear instructions telling the AI to ONLY create the PRD document and save it to docs/design_prd.md, and to NOT do anything else. Focus on High Value workflows with Happy Path only.
+CRITICAL: Your generated prompt MUST start with clear instructions telling the AI to ONLY create the PRD document and save it to `<ARTIFACT_ROOT>/docs/design_prd.md`, and to NOT do anything else. Focus on High Value workflows with Happy Path only.
 
 The prompt should be focused and specific to {use_case_title}, incorporating the use case context provided.
 
@@ -191,15 +192,17 @@ The prompt should be focused and specific to {use_case_title}, incorporating the
 3,
 '## Prerequisite
 
-**Run this in your cloned Template Repository** (see Prerequisites in Step 0). These prompts assume you are working in that codebase with a coding assistant (Cursor or Copilot) enabled.
+**Run this in your cloned Template Repository** (see Prerequisites in Step 0). These prompts assume you are working in that codebase with a coding assistant enabled.
+
+**Capture your artifact root first (client-aware).** This step writes a file *before* `bootstrap` runs, so invoke `vibecoding-state.resolve_root` to resolve `<ARTIFACT_ROOT>` — the workshop clone / git-folder root that relative artifact paths resolve against (it reads `artifact_root` from `## Environment Capabilities` if a state file already exists, otherwise detects the active client and clone root; it is gate-free and writes nothing). Echo the rule to yourself: **artifacts land under `<ARTIFACT_ROOT>`** — your repo root on Cursor/Copilot, your `/Workspace/Users/<email>/.assistant/skills/<repo>` clone on Databricks Genie Code — **never the page''s current working directory** (on Genie Code the CWD is page-type-dependent). Then write the PRD to `<ARTIFACT_ROOT>/docs/design_prd.md`.
 
 ---
 
 ## Steps to Apply
 
 1. **Copy the generated prompt** using the copy button
-2. **Paste it into your AI coding assistant** (Cursor or VS Code with Copilot)
-3. **Let the AI generate the PRD** - it will create a `docs/design_prd.md` file
+2. **Paste it into your AI coding assistant**
+3. **Let the AI generate the PRD** - it will create a `<ARTIFACT_ROOT>/docs/design_prd.md` file
 4. **Review the generated PRD** carefully
    - Validate assumptions
    - Ensure all user personas are accurately represented
@@ -268,11 +271,13 @@ In addition, document the design with:
 'Figma UI Design',
 'Design a simple, clean user interface using Figma AI',
 4,
-'## Steps to Apply
+'> **Artifact root (client-aware).** The PRD lives at `<ARTIFACT_ROOT>/docs/design_prd.md`, where `<ARTIFACT_ROOT>` is your workshop clone root (resolve via `vibecoding-state.resolve_root`). On Cursor/Copilot that is your repo root and the `@docs/design_prd.md` mention resolves there; on Databricks Genie Code open it under your `/Workspace/Users/<email>/.assistant/skills/<repo>` clone — never the page''s current working directory.
+
+## Steps to Apply
 
 1. **First, get your PRD ready:**
    - Copy the PRD content generated from the previous step (Step 3)
-   - Or open `@docs/design_prd.md` and copy its contents
+   - Or open `<ARTIFACT_ROOT>/docs/design_prd.md` (IDE clients that support `@`-mentions can use the `@docs/design_prd.md` mention) and copy its contents
 
 2. **Open Figma and create a new design file**
 
@@ -291,7 +296,7 @@ In addition, document the design with:
    - Or use Figma''''s code export features
 
 8. **Move to code implementation:**
-   - Open Cursor or VS Code with the project
+   - Open your coding assistant with the project
    - Use the exported Figma designs as visual reference
    - Implement the UI components in code
 
@@ -302,7 +307,7 @@ Simple UI design mockups that match the PRD:
 - Key screens for primary user flows
 - Basic component designs
 - Clean, minimal layouts
-- Ready for implementation in Cursor/Copilot',
+- Ready for implementation in your coding assistant',
 true, 1, true, current_timestamp(), current_timestamp(), current_user());
 
 -- Scaffold, Build, and Test Locally
@@ -314,18 +319,20 @@ VALUES
 
 You are a full-stack developer building a web application on Databricks AppKit. Your goal is to scaffold a blank AppKit project, build a UI with mock data from a PRD, and test locally.
 
-**First:** Read `apps_lakebase/$APP_NAME/.vibecoding-state.md` if it exists — it contains resolved issues and variable values from prior phases.
+**First:** Read `$APP_ROOT/.vibecoding-state.md` if it exists — it contains resolved issues and variable values from prior phases.
 
 **Workspace:** `{workspace_url}`
 
 ### File Locations
 
+The app is scaffolded into its own **top-level** directory `$APP_ROOT` (= `<app_name>/` at the repo root — a sibling of `apps_lakebase/`, NOT nested inside it). This mirrors how the data-product bundle lives in its own top-level `<use_case_slug>_dab/` folder, so the app''s root has parity across coding agents.
+
 | What | Where |
 |------|-------|
-| All app source, configs, server, client | `apps_lakebase/$APP_NAME/` |
+| All app source, configs, server, client | `$APP_ROOT/` (top-level app dir) |
 | Design docs (PRD, UI design) | `docs/` (repo root) |
 
-All file paths below are relative to `apps_lakebase/$APP_NAME/` unless explicitly prefixed with `docs/`.
+All file paths below are relative to `$APP_ROOT/` unless explicitly prefixed with `docs/`.
 
 ### Hard Constraints
 
@@ -336,6 +343,8 @@ All file paths below are relative to `apps_lakebase/$APP_NAME/` unless explicitl
 ---
 
 ### Step 1: Authenticate and Set Up Variables
+
+> **Client note:** IDE runs these in a terminal; Genie Code runs the `databricks …` commands via `runDatabricksCli` (pre-authenticated). See `genie-code-environment`.
 
 ```bash
 # Authenticate to Databricks (creates / refreshes the named profile)
@@ -360,6 +369,10 @@ if echo "$APP_NAME" | grep -q ''[^a-z0-9-]''; then
   echo "ERROR: APP_NAME contains invalid characters: $APP_NAME"
   echo "Must be lowercase letters, numbers, and hyphens only."
 fi
+
+# Top-level app directory (parity with <use_case_slug>_dab). Run all commands from the repo root.
+APP_ROOT="$APP_NAME"
+echo "App root: $APP_ROOT"
 ```
 
 **Important:** App names must be max 26 characters, lowercase letters/numbers/hyphens only (no underscores). The validation above catches issues automatically.
@@ -372,26 +385,26 @@ Read and follow **every step** in the `01-appkit-scaffold` skill at `@apps_lakeb
 
 The skill will guide you through:
 1. **Installing Databricks Agent Skills** — required before scaffolding. Do not skip this.
-2. **Scaffolding the AppKit project** inside `apps_lakebase/`
+2. **Scaffolding the AppKit project** into its own top-level directory `$APP_ROOT`
 
 **Parameters to use** (the skill needs these values):
 - **Profile:** Use `$PROFILE` (or select one via `databricks auth profiles`)
 - **App name:** Use `$APP_NAME` from Step 1
 - **Features:** None — scaffold a **blank** app (no `--features` flag)
 - **Description:** `"{use_case_slug} app"`
-- **Working directory:** Run `cd apps_lakebase` first so the app is created inside `apps_lakebase/`
+- **Working directory:** Run from the **repo root** so the app is created at the top level as `$APP_ROOT/` (a sibling of `apps_lakebase/`, NOT inside it). Do **not** `cd apps_lakebase` first.
 
 After the skill completes scaffold + `npm install`, verify the bundle config:
 
 ```bash
 # app.yaml has no name field (only the start command) — this is expected.
 # The app name lives in databricks.yml:
-grep "name:" databricks.yml
+grep "name:" $APP_ROOT/databricks.yml
 ```
 
 If `databricks.yml` doesn''t contain `$APP_NAME`, update it manually.
 
-**From this point on, all file paths are relative to `apps_lakebase/$APP_NAME/`** — this is your app root.
+**From this point on, all file paths are relative to `$APP_ROOT/`** — this is your app root.
 
 ---
 
@@ -444,7 +457,7 @@ Save a design overview to `@docs/ui_design.md` (parent `docs/` folder at repo ro
 
 ### Step 6: Test Locally
 
-From your app directory (`apps_lakebase/$APP_NAME/`):
+From your app directory (`$APP_ROOT/`):
 
 ```bash
 # Free port 8000 if something is already bound to it
@@ -478,7 +491,7 @@ curl -s -o /dev/null -w "%{http_code}" http://localhost:8000
 Your job is complete when:
 
 - [ ] Databricks CLI is authenticated and `APP_NAME` is set
-- [ ] AppKit project is scaffolded inside `apps_lakebase/` as a blank app (no plugins)
+- [ ] AppKit project is scaffolded at the top level as `$APP_ROOT/` (sibling of `apps_lakebase/`) as a blank app (no plugins)
 - [ ] Backend (`server/server.ts`) uses `await createApp({ plugins: [server()] })` (not `.catch(console.error)`)
 - [ ] Frontend (`client/src/`) implements key pages with mock data
 - [ ] Loading/error/empty states on every data-driven component
@@ -488,7 +501,7 @@ Your job is complete when:
 - [ ] `databricks apps validate` passes (catches strict-mode TS errors and smoke test regressions that `npm run build` alone misses)
 - [ ] `.vibecoding-state.md` updated (see below)
 
-**Before finishing**, write (or append to) `apps_lakebase/$APP_NAME/.vibecoding-state.md` with:
+**Before finishing**, write (or append to) `$APP_ROOT/.vibecoding-state.md` with:
 - Step name (`## Scaffold, Build & Test`)
 - Key variable values (`APP_NAME`, `PROFILE`, workspace URL)
 - Any resolved issues or workarounds encountered during this phase
@@ -507,7 +520,7 @@ Key requirements:
 
 CLI Best Practices:
 
-- Run from `apps_lakebase/` or use `apps_lakebase/scripts/` for scripts
+- Run from the repo root (the workshop clone root); use `apps_lakebase/scripts/` for shared scripts
 - Run CLI commands outside the IDE sandbox to avoid SSL/TLS certificate errors
 
 This prompt is returned as-is for direct use in Cursor/Copilot. No LLM processing.',
@@ -518,7 +531,7 @@ This prompt is returned as-is for direct use in Cursor/Copilot. No LLM processin
 
 1. **Copy the generated prompt**
 2. **Replace** `{workspace_url}` and `{use_case_slug}` with your values
-3. **Paste into Cursor or Copilot**
+3. **Paste into your coding assistant**
 4. The code assistant will:
    - Authenticate and scaffold a blank AppKit project
    - Read your PRD and build the UI with mock data
@@ -531,7 +544,7 @@ This prompt is returned as-is for direct use in Cursor/Copilot. No LLM processin
 **Project directory tree:**
 
 ```
-apps_lakebase/$APP_NAME/
+$APP_ROOT/
 ├── app.yaml                    # App deployment configuration
 ├── databricks.yml              # Databricks bundle config
 ├── package.json                # Dependencies (@databricks/appkit, etc.)
@@ -601,6 +614,97 @@ $ curl -s http://localhost:8000 | head -1
 ```',
 true, 1, true, current_timestamp(), current_timestamp(), current_user());
 
+-- cursor_copilot_ui_design (genie-code fork) — prescriptive paths + directives; BUILD-ONLY (scaffold + author UI, no local npm/localhost, deploy deferred to step 05); app authored under <APP_ROOT>; bypass_LLM = TRUE
+INSERT INTO ${catalog}.${schema}.section_input_prompts
+(input_id, section_tag, coding_assistant, input_template, system_prompt,
+ bypass_llm, version, is_active, inserted_at, updated_at, created_by)
+VALUES
+(911, 'cursor_copilot_ui_design', 'genie-code',
+'**Genie Code — this is a prescriptive runbook. Follow the steps in order. Do NOT improvise paths, do NOT use bare relative paths, do NOT use `@`-mentions, and do NOT deploy. This is a BUILD-ONLY step: you SCAFFOLD the AppKit project and AUTHOR the UI with mock data — you do NOT run a local server, you do NOT test at `http://localhost:8000`, and you do NOT run `databricks apps deploy`. Initial deploy + URL verification happen in the **Deploy to Databricks Apps** step (05). Every skill is named by its full clone-rooted path; the app is anchored to `<APP_ROOT>`.**
+
+### 🔴 Non-negotiable execution rules (read before anything)
+
+❌ **NEVER** run `npm run dev`, open `http://localhost:8000`, or rely on a local Node server — Genie Code is serverless and has **no local npm and no localhost** (`genie-code-environment` "AppKit/Node reality"). The IDE''s `curl -o /dev/null -w "%{http_code}" http://localhost:8000` smoke check does **NOT** apply here; build correctness is proven server-side at deploy time (step 05), where the Apps runtime runs `npm install` + `npm run build` from source.
+
+❌ **NEVER** run `databricks apps deploy` (or `databricks apps validate`) in this step — deployment and the deployed-URL verification are step 05''s job. This step ends when the project is scaffolded and the UI is authored.
+
+✅ The ONLY CLI you run here is **read-only** identity/scaffold via `runDatabricksCli` (`databricks current-user me`, `databricks apps init …`). You are pre-authenticated — do **NOT** run `databricks auth login`.
+
+### Step 0 — Resolve your environment (once, before anything else)
+
+Run `skills/vibecoding-state` operation `enter` with `prompt_id: "cursor_copilot_ui_design"`. It writes and echoes the `## Environment Capabilities` block. Read these resolved values and use them literally throughout:
+
+- `client_context` = `genie_code`
+- `artifact_root` = your workshop clone root (e.g. `/Workspace/Users/<your-email>/.assistant/skills/vibe-coding-workshop`)
+- `skill_ref_root` = `skills/vibe-coding-workshop` (substitute your clone folder if you cloned somewhere other than `.assistant/skills/vibe-coding-workshop`)
+- `app_root` = `<artifact_root>/<app_name>` — the **self-contained AppKit app project** (e.g. `…/vibe-coding-workshop/prashanth-s-{use_case_slug}`), a TOP-LEVEL sibling of any `<use_case_slug>_dab` bundle, NOT nested under `apps_lakebase/` and NOT the bare clone root. Referred to below as `<APP_ROOT>`. `app.yaml`, `databricks.yml`, `server/`, `client/`, and `<APP_ROOT>/.vibecoding-state.md` all live here.
+- `app_deploy.verb` = `apps deploy` (gated) — used in step 05, NOT here.
+
+`app_root` is `<pending>` until `APP_NAME` is derived (Step 1). After Step 1, re-run `enter`''s capture (or update the block) so `app_root` resolves to `<artifact_root>/<APP_NAME>`.
+
+### Step 1 — Derive `APP_NAME` and `<APP_ROOT>` (no `auth login`)
+
+You are pre-authenticated. Get your identity read-only via `runDatabricksCli`, then construct the app name (max 26 chars, lowercase/numbers/hyphens only):
+
+```bash
+databricks current-user me --output json
+```
+
+- `EMAIL` = `.userName`; `FIRSTNAME` = the part before `.`; `LASTINITIAL` = first char after `.`.
+- `APP_NAME` = `<FIRSTNAME>-<LASTINITIAL>-{use_case_slug}` (truncate to 26 chars, strip a trailing `-`).
+- `<APP_ROOT>` = `<artifact_root>/<APP_NAME>`. This is where the project is scaffolded and authored.
+
+> Workspace target for this run: `{workspace_url}`. The session profile placeholder `{databricks_cli_profile}` is **inert on Genie Code** — runDatabricksCli is pre-authenticated, so omit `--profile`.
+
+### Step 2 — Load the required skills by their FULL clone-rooted paths
+
+Load each skill with `readSkillFile` using its fully-qualified `<skill_ref_root>`-prefixed path — NEVER a bare `@…` mention, NEVER a repo-relative path. **The root-level `skills/` come FIRST: they are the highest-priority, always-on guardrails and govern everything below.** Read them in ONE batched `readSkillFile` turn (`genie-code-environment` §10 — Genie Code reads multiple files in parallel in a single turn).
+
+1. `readSkillFile("skills/vibe-coding-workshop/apps_lakebase/skills/01-appkit-scaffold/SKILL.md")` — scaffold mechanics; **on Genie Code `apps init` needs `--output-dir`** (it otherwise lands at `/Workspace/<name>`, ignoring the page CWD).
+2. `readSkillFile("skills/vibe-coding-workshop/apps_lakebase/skills/02-appkit-build/SKILL.md")` — UI build patterns, design quality, and its referenced `references/llm-guardrails.md` + `references/design-quality.md`. **Read every reference the skill points to before writing component code.**
+
+When either skill lists further mandatory references, load EACH the same way: take its repo-relative path and prefix it with `skill_ref_root`. Genie Code has no repo-root-relative resolution and `AGENTS.md` does not carry across threads — so always prefix with `skill_ref_root`.
+
+### Step 3 — Scaffold the blank app INTO `<APP_ROOT>` (no local npm)
+
+Scaffold via `runDatabricksCli`, pinning the output directory so the project lands at `<APP_ROOT>` (a top-level sibling of `apps_lakebase/`, NOT inside it) — never `/Workspace/<name>`:
+
+```
+databricks apps init --name "<APP_NAME>" --run none --output-dir "<artifact_root>"
+```
+
+`apps init` creates `<artifact_root>/<APP_NAME>/` = `<APP_ROOT>`. The `⚠ npm not found` warning is **expected** — Genie Code has no local npm, so `npm install` is skipped here and runs **server-side on deploy** (step 05). Do not try to install npm or run `npm install`. Verify `<APP_ROOT>/databricks.yml` exists and contains `name: <APP_NAME>`; if not, set it.
+
+### Step 4 — Read the PRD
+
+Read `<artifact_root>/docs/design_prd.md` (full clone-rooted path — NOT a bare `@docs/...` mention; design docs live at the clone root''s `docs/`, not under `<APP_ROOT>`). Extract personas, key journeys (Happy Path), core features, and the entities/relationships the UI must display.
+
+### Step 5 — Author the UI with mock data (files only — no server)
+
+Drive the `02-appkit-build` skill to author the frontend under `<APP_ROOT>/client/` and the backend under `<APP_ROOT>/server/`. **Demo-data strategy:** static mock-data arrays directly in components (`data` prop with hardcoded representative samples) — there is no live backend, SQL warehouse, or database at this stage. Skip the SQL-query parts of the build skill (`config/queries/`, `npm run typegen`, `useAnalyticsQuery`, `sql.*`). Replace the entire `<APP_ROOT>/server/server.ts` with:
+
+```typescript
+import { createApp, server } from "@databricks/appkit";
+
+await createApp({
+  plugins: [server()],
+});
+```
+
+Write files with `executeCode` `open(path,"w").write(...)` against warm compute (warm up once with a trivial `print("ready")` to absorb the serverless cold start, then keep `timeoutMinutes` generous). Do **not** run `npm run build`/`npm run dev` — there is no local Node; the build runs server-side at deploy.
+
+### Step 6 — Create the UI design document
+
+Write `<artifact_root>/docs/ui_design.md` (clone-rooted, NOT `@docs/...`) describing key screens/pages, core components and their mock-data sources, navigation flow, and design direction.
+
+**State-lock:** this prompt runs between an `enter` (Step 0) and an `exit`. After the gate passes, run `skills/vibecoding-state` op `exit` — params: `prompt_id: "cursor_copilot_ui_design"`, `gate: "App scaffolded + UI authored (deploy + verify deferred to step 05)"`, `captured: {app_name, app_root}`.
+
+**Gate:** `App scaffolded + UI authored (deploy + verify deferred to step 05)` — `<APP_ROOT>` contains a scaffolded blank AppKit project (`app.yaml`, `databricks.yml` with `name: <APP_NAME>`, `server/server.ts` using `await createApp({ plugins: [server()] })`, and `client/` pages built from the PRD with mock data), and `<artifact_root>/docs/ui_design.md` exists. NO local server was run, NO `http://localhost:8000` check was attempted, and NOTHING was deployed or validated — deploy + deployed-URL verification are step 05.
+
+**➡️ Next step.** The app now lives under `<APP_ROOT>`. Step 05 (**Deploy to Databricks Apps**) deploys it via the SDK SNAPSHOT path (`w.apps.deploy(...)`, build runs server-side) and verifies the deployed URL with the 3-hop OAuth session — keep `<APP_ROOT>` as your working anchor.',
+'',
+true, 1, true, current_timestamp(), current_timestamp(), current_user());
+
 -- Deploy and E2E Test with Lakebase
 INSERT INTO ${catalog}.${schema}.section_input_prompts 
 (input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
@@ -610,11 +714,11 @@ VALUES
 
 Deploy the Lakebase-wired web application to Databricks Apps and run comprehensive end-to-end testing. This is the first deploy with Lakebase code — the Service Principal will create the database schema, tables, and seed data on startup.
 
-**First:** Read `apps_lakebase/$APP_NAME/.vibecoding-state.md` if it exists — it contains resolved issues and variable values from prior phases.
+**First:** Read `$APP_ROOT/.vibecoding-state.md` if it exists — it contains resolved issues and variable values from prior phases.
 
 **Workspace:** `{workspace_url}`
 
-**Working directory:** All app paths and commands use the `apps_lakebase/` folder. The scaffolded AppKit app lives at `apps_lakebase/$APP_NAME/`.
+**Working directory:** Run all commands from the **repo root**. The scaffolded AppKit app lives in its own top-level directory `$APP_ROOT/` (= `<app_name>/` at the repo root, a sibling of `apps_lakebase/` — NOT nested inside it).
 
 **Prerequisite:** Complete the **Wire Lakebase Backend** step first. Local testing must pass with mock fallback data before deployment.
 
@@ -630,6 +734,8 @@ Deploy the Lakebase-wired web application to Databricks Apps and run comprehensi
 ### Step 1: Set Variables and Validate Lakebase Config
 
 Derive your app name and auto-detect a CLI profile for the target workspace:
+
+> **Client note:** IDE runs these in a terminal; Genie Code runs the `databricks …` commands via `runDatabricksCli` (resolved channel in `## Environment Capabilities`; SDK `w.apps.deploy(...)` fallback per `genie-code-environment`).
 
 ```bash
 PROFILE="{databricks_cli_profile}"
@@ -659,19 +765,20 @@ FIRSTNAME=$(echo "$EMAIL" | cut -d''@'' -f1 | cut -d''.'' -f1)
 LASTINITIAL=$(echo "$EMAIL" | cut -d''@'' -f1 | cut -d''.'' -f2 | cut -c1)
 APP_PREFIX="${FIRSTNAME}-${LASTINITIAL}"
 APP_NAME="${APP_PREFIX}-{use_case_slug}"
+APP_ROOT="$APP_NAME"   # top-level app dir at the repo root (parity with <use_case_slug>_dab)
 ```
 
 Verify `app.yaml` has the Lakebase-specific environment variables (in addition to the generic checks the deploy skill performs):
 
 ```bash
-grep "valueFrom.*postgres" apps_lakebase/$APP_NAME/app.yaml && echo "LAKEBASE_ENDPOINT: OK"
-grep "postgres_project" apps_lakebase/$APP_NAME/databricks.yml && echo "Bundle resources: OK"
+grep "valueFrom.*postgres" $APP_ROOT/app.yaml && echo "LAKEBASE_ENDPOINT: OK"
+grep "postgres_project" $APP_ROOT/databricks.yml && echo "Bundle resources: OK"
 ```
 
 Then run the AppKit validator to catch schema or resource binding issues early:
 
 ```bash
-cd apps_lakebase/$APP_NAME && databricks apps validate --profile $PROFILE
+cd $APP_ROOT && databricks apps validate --profile $PROFILE
 ```
 
 Fix any validation errors before deploying.
@@ -689,7 +796,7 @@ The **Setup Lakebase** step declared `postgres_projects` in `databricks.yml` (Ph
 **If this is the first deploy** (project does not exist yet), deploy once to create the project, then discover the database ID:
 
 ```bash
-cd apps_lakebase/$APP_NAME
+cd $APP_ROOT
 databricks apps deploy --profile $PROFILE
 # Wait for deploy to complete, then:
 DB_ID=$(databricks postgres list-databases projects/$APP_NAME/branches/production \
@@ -739,7 +846,7 @@ For the full schema reference, see `@apps_lakebase/skills/04-appkit-plugin-add/r
 
 ### Step 2: Deploy (SP Creates Database Objects)
 
-Read and follow the `03-appkit-deploy` skill at `@apps_lakebase/skills/03-appkit-deploy/SKILL.md`. Run all skill commands from the `apps_lakebase/` directory.
+Read and follow the `03-appkit-deploy` skill at `@apps_lakebase/skills/03-appkit-deploy/SKILL.md`. Run all skill commands from the app root `$APP_ROOT/` (or the repo root, `cd`-ing into `$APP_ROOT` as needed).
 
 The skill covers: config validation, build, deploy, UI verification, error diagnosis (3-iteration fix loop), and workspace app limit handling.
 
@@ -867,8 +974,8 @@ databricks apps logs $APP_NAME --tail-lines 100 --profile $PROFILE
 **Fix cycle:**
 
 1. Identify the error from logs
-2. Apply the fix in `apps_lakebase/$APP_NAME/`
-3. Redeploy: `cd apps_lakebase/$APP_NAME && databricks apps deploy --profile $PROFILE`
+2. Apply the fix in `$APP_ROOT/`
+3. Redeploy: `cd $APP_ROOT && databricks apps deploy --profile $PROFILE`
 4. Wait for the app to reach RUNNING state (stream logs with `databricks apps logs $APP_NAME --follow --profile $PROFILE`)
 5. Re-test endpoints
 
@@ -952,7 +1059,7 @@ END $$;
 After granting, verify local connectivity:
 
 ```bash
-cd apps_lakebase/$APP_NAME
+cd $APP_ROOT
 lsof -ti:8000 | xargs kill -9 2>/dev/null || true
 npm run dev
 # In another terminal:
@@ -975,10 +1082,17 @@ Your job is complete when:
 - [ ] Idle connection test passes (still "Live Data" after 3-5 minutes idle)
 - [ ] `.vibecoding-state.md` updated (see below)
 
-**Before finishing**, append to `apps_lakebase/$APP_NAME/.vibecoding-state.md` with:
+**Before finishing**, append to `$APP_ROOT/.vibecoding-state.md` with:
 - Step name (`## Deploy and E2E Test`)
 - Key variable values (`APP_URL`, test results summary)
-- Any resolved issues or workarounds encountered during this phase',
+- Any resolved issues or workarounds encountered during this phase
+
+**State-lock (`skills/vibecoding-state`) — run this prompt between an `enter` and an `exit` so workshop state is resolved and locked:**
+
+1. **Phase 0 — first, before any step below:** `skills/vibecoding-state` op `enter` — params: `prompt_id: "workspace_setup_deploy"`. `enter` resolves the `## Environment Capabilities` triple (deploy verb, CLI channel, `state_file_root`) so every deploy/run step below uses the resolved channel — `runDatabricksCli` on Genie Code — and writes state under `state_file_root`, never a bare-local assumption.
+2. **Final — after the step succeeds:** `skills/vibecoding-state` op `exit` — params: `prompt_id: "workspace_setup_deploy"`, `gate: "Infrastructure healthy"`, `captured: {app_name, app_url}`.
+
+**Gate:** `Infrastructure healthy` — the Lakebase-wired app is deployed and RUNNING, the health endpoint reports source live, and the idle-resilience re-test still reports live.',
 'You are a QA engineer deploying and running end-to-end tests for an AppKit web application with Lakebase. Your goal is to deploy the Lakebase-wired app to Databricks Apps (where the Service Principal creates database objects on first boot), verify Lakebase connectivity and API correctness, and test connection resilience after idle periods.
 
 Key requirements:
@@ -994,7 +1108,7 @@ Key requirements:
 
 CLI Best Practices:
 
-- Run from `apps_lakebase/` or use `apps_lakebase/scripts/` for scripts
+- Run from the repo root (the workshop clone root); use `apps_lakebase/scripts/` for shared scripts
 - Run CLI commands outside the IDE sandbox to avoid SSL/TLS certificate errors
 
 This prompt is returned as-is for direct use in Cursor/Copilot. No LLM processing.',
@@ -1005,7 +1119,7 @@ This prompt is returned as-is for direct use in Cursor/Copilot. No LLM processin
 
 1. **Copy the generated prompt**
 2. **Replace** `{workspace_url}` and `{use_case_slug}` with your values
-3. **Paste into Cursor or Copilot**
+3. **Paste into your coding assistant**
 4. The code assistant will:
    - Validate Lakebase config in `app.yaml`
    - Deploy the app (SP creates database objects on first boot)
@@ -1108,7 +1222,7 @@ This will:
 
 - **Query information_schema.columns** — extract all table and column metadata from the **{chapter_3_lakehouse_catalog}.{chapter_3_lakehouse_schema}** source
 - **Convert results to CSV** — transform the JSON API response into a structured CSV file using Python
-- **Save as data_product_accelerator/context/{use_case_file_prefix}_Schema.csv** — create the data dictionary that drives the entire Design-First Pipeline (all subsequent steps reference this CSV)
+- **Save as <ARTIFACT_ROOT>/data_product_accelerator/context/{use_case_file_prefix}_Schema.csv** — create the data dictionary that drives the entire Design-First Pipeline (all subsequent steps reference this CSV)
 
 **Source:** `{chapter_3_lakehouse_catalog}.{chapter_3_lakehouse_schema}` (configured in the source panel above — auto-set from Step 9 or editable via Edit)
 
@@ -1119,7 +1233,7 @@ Run this SQL query and save results to CSV:
 
 Query: SELECT * FROM {chapter_3_lakehouse_catalog}.information_schema.columns WHERE table_schema = ''{chapter_3_lakehouse_schema}'' ORDER BY table_name, ordinal_position
 
-Output: data_product_accelerator/context/{use_case_file_prefix}_Schema.csv
+Output: <ARTIFACT_ROOT>/data_product_accelerator/context/{use_case_file_prefix}_Schema.csv
 
 ---
 
@@ -1161,20 +1275,22 @@ Common queries:
 - Sample data: SELECT * FROM <catalog>.<schema>.<table> LIMIT 1000
 
 Expected output (for schema query):
-- Console: "Saved N rows to data_product_accelerator/context/{use_case_file_prefix}_Schema.csv"
+- Console: "Saved N rows to <ARTIFACT_ROOT>/data_product_accelerator/context/{use_case_file_prefix}_Schema.csv"
 - CSV file with columns: table_catalog, table_schema, table_name, column_name, ordinal_position, is_nullable, data_type, comment, ...
 ```',
 '',
 'Table Metadata & Data Dictionary',
 'Extract table schema metadata from Databricks and save as CSV for data dictionary reference',
 8,
-'## 1️⃣ How To Apply
+'> **Artifact root (client-aware).** Resolve `<ARTIFACT_ROOT>` via `vibecoding-state.resolve_root` (it reads `artifact_root` from `## Environment Capabilities`, or detects the active client + clone root) and write every artifact under it. On Cursor/Copilot that is your repo root; on Databricks Genie Code it is your `/Workspace/Users/<email>/.assistant/skills/<repo>` clone — never the page''s current working directory.
 
-Copy the prompt from the Prompt tab, start a new Agent chat in your IDE, paste it and press Enter.
+## 1️⃣ How To Apply
+
+Copy the prompt from the Prompt tab, start a new Agent chat in your coding assistant, paste it and press Enter.
 
 **Prerequisite:** Run this in your cloned Template Repository (see Prerequisites in Step 0). Ensure Databricks CLI is authenticated.
 
-**Steps:** Copy the prompt → paste into Cursor or VS Code with Copilot → AI executes SQL via Databricks CLI → CSV saved to data_product_accelerator/context/{use_case_file_prefix}_Schema.csv.
+**Steps:** Copy the prompt → paste into your coding assistant → AI executes SQL via Databricks CLI → CSV saved to <ARTIFACT_ROOT>/data_product_accelerator/context/{use_case_file_prefix}_Schema.csv.
 
 **Note:** The source catalog and schema are shown in the **Source** panel above this prompt. If you completed Step 9 (Register Lakebase in Unity Catalog), these are automatically set to your Lakebase UC catalog and user schema. You can edit or reset them using the Edit/Reset buttons.
 
@@ -1185,7 +1301,7 @@ Copy the prompt from the Prompt tab, start a new Agent chat in your IDE, paste i
 This step extracts the **data dictionary** — a CSV file containing every table, column, data type, and comment from the source schema. This CSV becomes the starting input for the entire Design-First Pipeline:
 
 ```
-data_product_accelerator/context/{use_case_file_prefix}_Schema.csv
+<ARTIFACT_ROOT>/data_product_accelerator/context/{use_case_file_prefix}_Schema.csv
   → Gold Design (Step 11)  — reads CSV to design dimensional model
   → Bronze (Step 12)       — uses schema to create tables
   → Silver (Step 13)       — uses schema for DQ expectations
@@ -1212,7 +1328,7 @@ This step does **not** invoke an Agent Skill — it runs a direct SQL extraction
 **Downstream Compatibility Note:** Bronze setup (Step 10) additionally requires per-table governance annotations (entity_type, contains_pii, data_classification, business_owner). If these are not present in the extracted CSV, the Bronze skill will infer them from column/table name patterns or ask.',
 '## Expected Deliverables
 
-- data_product_accelerator/context/{use_case_file_prefix}_Schema.csv file created
+- <ARTIFACT_ROOT>/data_product_accelerator/context/{use_case_file_prefix}_Schema.csv file created
 - Contains column metadata rows for all tables in {chapter_3_lakehouse_catalog}.{chapter_3_lakehouse_schema}
 - Includes: table_name, column_name, data_type, comment
 - Ready for use as data dictionary reference
@@ -1228,7 +1344,7 @@ VALUES
 
 This will:
 
-- **Save the CSV file** to `data_product_accelerator/context/{use_case_file_prefix}_Schema.csv`
+- **Save the CSV file** to `<ARTIFACT_ROOT>/data_product_accelerator/context/{use_case_file_prefix}_Schema.csv`
 - **Validate metadata quality** — check for missing comments, incorrect data types, and sequencing issues
 - **Enrich if needed** — fill missing fields, normalize types, and add recommended columns
 - **Print verification summary** — confirm table count, column count, and any fixes applied
@@ -1236,7 +1352,7 @@ This will:
 Copy and paste this prompt to the AI:
 
 ```
-Save the following CSV content to: data_product_accelerator/context/{use_case_file_prefix}_Schema.csv
+Save the following CSV content to: <ARTIFACT_ROOT>/data_product_accelerator/context/{use_case_file_prefix}_Schema.csv
 
 --- CSV CONTENT START ---
 {csv_content}
@@ -1274,7 +1390,9 @@ Note: Bronze setup (Step 10) additionally requires per-table governance annotati
 'Table Metadata & Data Dictionary (Upload CSV)',
 'Upload an existing schema CSV to create the data dictionary for your project',
 8,
-'## 1️⃣ How To Apply
+'> **Artifact root (client-aware).** Resolve `<ARTIFACT_ROOT>` via `vibecoding-state.resolve_root` (it reads `artifact_root` from `## Environment Capabilities`, or detects the active client + clone root) and write every artifact under it. On Cursor/Copilot that is your repo root; on Databricks Genie Code it is your `/Workspace/Users/<email>/.assistant/skills/<repo>` clone — never the page''s current working directory.
+
+## 1️⃣ How To Apply
 
 Select the **Upload CSV** tab in Step 10, upload your schema metadata CSV file, and click **Process & Generate**.
 
@@ -1283,8 +1401,8 @@ Select the **Upload CSV** tab in Step 10, upload your schema metadata CSV file, 
 2. Wait for validation — all required columns must be present (table_name, column_name, data_type, ordinal_position, is_nullable, comment)
 3. Review the preview (table count, column count, detected table names)
 4. Click **Process & Generate** to create the coding assistant prompt
-5. Copy the generated prompt into Cursor or VS Code with Copilot
-6. The coding assistant will save the CSV to `data_product_accelerator/context/{use_case_file_prefix}_Schema.csv`
+5. Copy the generated prompt into your coding assistant
+6. The coding assistant will save the CSV to `<ARTIFACT_ROOT>/data_product_accelerator/context/{use_case_file_prefix}_Schema.csv`
 
 ---
 
@@ -1293,7 +1411,7 @@ Select the **Upload CSV** tab in Step 10, upload your schema metadata CSV file, 
 Same as the Extract mode — a **data dictionary CSV** that drives the entire Design-First Pipeline. The only difference is the source: instead of querying `information_schema`, you''re providing the CSV directly.
 
 ```
-data_product_accelerator/context/{use_case_file_prefix}_Schema.csv
+<ARTIFACT_ROOT>/data_product_accelerator/context/{use_case_file_prefix}_Schema.csv
   → Gold Design (Step 11)  — reads CSV to design dimensional model
   → Bronze (Step 12)       — uses schema to create tables
   → Silver (Step 13)       — uses schema for DQ expectations
@@ -1313,7 +1431,7 @@ Use this when:
 The CSV must follow the `information_schema.columns` format with required columns: `table_name`, `column_name`, `data_type`, `ordinal_position`, `is_nullable`, `comment`.',
 '## Expected Deliverables
 
-- `data_product_accelerator/context/{use_case_file_prefix}_Schema.csv` file created via coding assistant
+- `<ARTIFACT_ROOT>/data_product_accelerator/context/{use_case_file_prefix}_Schema.csv` file created via coding assistant
 - Contains column metadata rows for all tables in your schema
 - Includes: table_name, column_name, data_type, ordinal_position, is_nullable, comment
 - Ready for use as data dictionary reference
@@ -1340,7 +1458,7 @@ Copy and paste this prompt to the AI:
 ```
 Read the PRD at @docs/design_prd.md and design a complete database schema for the **{use_case_title}** use case.
 
-**Output file:** data_product_accelerator/context/{use_case_file_prefix}_Schema.csv
+**Output file:** <ARTIFACT_ROOT>/data_product_accelerator/context/{use_case_file_prefix}_Schema.csv
 
 **Schema design requirements:**
 1. Design 5-15 tables covering all entities, relationships, and transactional data described in the PRD
@@ -1379,12 +1497,14 @@ Note: Bronze setup (Step 10) additionally requires per-table governance annotati
 'Table Metadata & Data Dictionary (Design from PRD)',
 'Design table schema from your PRD — for when you don''t have existing tables or a CSV',
 8,
-'## How To Apply
+'> **Artifact root (client-aware).** Resolve `<ARTIFACT_ROOT>` via `vibecoding-state.resolve_root` (it reads `artifact_root` from `## Environment Capabilities`, or detects the active client + clone root) and write every artifact under it. On Cursor/Copilot that is your repo root; on Databricks Genie Code it is your `/Workspace/Users/<email>/.assistant/skills/<repo>` clone — never the page''s current working directory.
+
+## How To Apply
 
 1. **Prerequisite:** Complete Step 3 (PRD Generation) first — the PRD is used as input to design the schema
 2. Click **Generate** to create the prompt with your PRD embedded
-3. Copy the prompt into Cursor or VS Code with Copilot
-4. The coding assistant reads the PRD, designs tables, and saves the CSV to `data_product_accelerator/context/{use_case_file_prefix}_Schema.csv`
+3. Copy the prompt into your coding assistant
+4. The coding assistant reads the PRD, designs tables, and saves the CSV to `<ARTIFACT_ROOT>/data_product_accelerator/context/{use_case_file_prefix}_Schema.csv`
 5. Review the generated schema and iterate if needed
 
 ---
@@ -1406,7 +1526,7 @@ This mode works just like the Lakebase table creation step — it gives your cod
 The generated CSV becomes the **data dictionary** that drives the entire Design-First Pipeline:
 
 ```
-data_product_accelerator/context/{use_case_file_prefix}_Schema.csv
+<ARTIFACT_ROOT>/data_product_accelerator/context/{use_case_file_prefix}_Schema.csv
   → Gold Design (Step 11)  — reads CSV to design dimensional model
   → Bronze (Step 12)       — uses schema to create tables
   → Silver (Step 13)       — uses schema for DQ expectations
@@ -1414,7 +1534,7 @@ data_product_accelerator/context/{use_case_file_prefix}_Schema.csv
 ```',
 '## Expected Deliverables
 
-- `data_product_accelerator/context/{use_case_file_prefix}_Schema.csv` file created via coding assistant
+- `<ARTIFACT_ROOT>/data_product_accelerator/context/{use_case_file_prefix}_Schema.csv` file created via coding assistant
 - Contains 5-15 tables with realistic column definitions designed from the PRD
 - Includes: table_catalog, table_schema, table_name, column_name, ordinal_position, data_type, is_nullable, comment
 - Every column has a descriptive business-context comment
@@ -1431,7 +1551,7 @@ VALUES
 
 This will:
 
-- **Save the CSV file** to `data_product_accelerator/context/{use_case_file_prefix}_Schema.csv`
+- **Save the CSV file** to `<ARTIFACT_ROOT>/data_product_accelerator/context/{use_case_file_prefix}_Schema.csv`
 - **Validate metadata quality** — check for missing comments, incorrect data types, and sequencing issues
 - **Enrich if needed** — fill missing fields, normalize types, and add recommended columns
 - **Print verification summary** — confirm table count, column count, and any fixes applied
@@ -1439,7 +1559,7 @@ This will:
 Copy and paste this prompt to the AI:
 
 ```
-Save the following CSV content to: data_product_accelerator/context/{use_case_file_prefix}_Schema.csv
+Save the following CSV content to: <ARTIFACT_ROOT>/data_product_accelerator/context/{use_case_file_prefix}_Schema.csv
 
 --- CSV CONTENT START ---
 {csv_content}
@@ -1474,7 +1594,9 @@ Missing comments, incorrect types, or invalid rows will cascade into errors down
 'Analyze Silver Metadata (Upload CSV)',
 'Upload an existing Silver layer schema CSV to create the data dictionary for your Genie Accelerator project',
 8,
-'## 1️⃣ How To Apply
+'> **Artifact root (client-aware).** Resolve `<ARTIFACT_ROOT>` via `vibecoding-state.resolve_root` (it reads `artifact_root` from `## Environment Capabilities`, or detects the active client + clone root) and write every artifact under it. On Cursor/Copilot that is your repo root; on Databricks Genie Code it is your `/Workspace/Users/<email>/.assistant/skills/<repo>` clone — never the page''s current working directory.
+
+## 1️⃣ How To Apply
 
 Select the **Upload CSV** tab in the Analyze Silver Metadata step, upload your schema metadata CSV file, and click **Process & Generate**.
 
@@ -1483,8 +1605,8 @@ Select the **Upload CSV** tab in the Analyze Silver Metadata step, upload your s
 2. Wait for validation — all required columns must be present (table_name, column_name, data_type, ordinal_position, is_nullable, comment)
 3. Review the preview (table count, column count, detected table names)
 4. Click **Process & Generate** to create the coding assistant prompt
-5. Copy the generated prompt into Cursor or VS Code with Copilot
-6. The coding assistant will save the CSV to `data_product_accelerator/context/{use_case_file_prefix}_Schema.csv`
+5. Copy the generated prompt into your coding assistant
+6. The coding assistant will save the CSV to `<ARTIFACT_ROOT>/data_product_accelerator/context/{use_case_file_prefix}_Schema.csv`
 
 ---
 
@@ -1493,7 +1615,7 @@ Select the **Upload CSV** tab in the Analyze Silver Metadata step, upload your s
 A **data dictionary CSV** that drives the Genie Accelerator pipeline. Instead of pointing to Silver layer tables in Databricks, you provide the CSV directly.
 
 ```
-data_product_accelerator/context/{use_case_file_prefix}_Schema.csv
+<ARTIFACT_ROOT>/data_product_accelerator/context/{use_case_file_prefix}_Schema.csv
   → Bronze Creation (Step 12)  — uses schema to create tables and sample data
   → Gold Design (Step 11)      — reads CSV to design dimensional model
   → Gold Pipeline (Step 14)    — uses YAML schemas derived from this CSV
@@ -1512,7 +1634,7 @@ Use this when:
 The CSV must follow the `information_schema.columns` format with required columns: `table_name`, `column_name`, `data_type`, `ordinal_position`, `is_nullable`, `comment`.',
 '## Expected Deliverables
 
-- `data_product_accelerator/context/{use_case_file_prefix}_Schema.csv` file created via coding assistant
+- `<ARTIFACT_ROOT>/data_product_accelerator/context/{use_case_file_prefix}_Schema.csv` file created via coding assistant
 - Contains column metadata rows for all tables in your Silver layer schema
 - Includes: table_name, column_name, data_type, ordinal_position, is_nullable, comment
 - Ready for use as data dictionary reference
@@ -1532,7 +1654,7 @@ This skill will orchestrate the following end-to-end design workflow:
 
 - **Parse the schema CSV** — read the source schema file, classify each table as a dimension, fact, or bridge, and infer foreign key relationships from column names and comments
 - **Design the dimensional model** — identify dimensions (with SCD Type 1/2 decisions), fact tables (with explicit grain definitions), and measures, then assign tables to business domains
-- **Persist design decisions** — write `DESIGN_DECISIONS.md` before generating YAML so every YAML file shares one FK format, description format, and transformation enum
+- **Persist design decisions** — write `<ARTIFACT_ROOT>/gold_layer_design/DESIGN_DECISIONS.md` before generating YAML so every YAML file shares one FK format, description format, and transformation enum
 - **Create ERD diagrams** — generate Mermaid Entity-Relationship Diagrams organized by table count (master ERD always, plus domain and summary ERDs for larger schemas)
 - **Generate YAML schema files** — produce one YAML file per Gold table with column definitions, PK/FK constraints, table properties, lineage metadata, and dual-purpose descriptions (human + LLM readable)
 - **Document column-level lineage** — trace every Gold column back through Silver to Bronze with transformation type (DIRECT_COPY, AGGREGATION, DERIVATION, etc.) in both CSV and Markdown formats
@@ -1545,9 +1667,11 @@ The orchestrator skill will automatically load its worker skills for merge patte
 'Gold Layer Design (PRD-aligned)',
 'Design Gold layer using project skills with YAML definitions and Mermaid ERD',
 9,
-'## 1️⃣ How To Apply
+'> **Artifact root (client-aware).** Resolve the data-product bundle root via `vibecoding-state` (`dp_bundle_root` in `## Environment Capabilities`, = `<artifact_root>/<use_case_slug>_dab`) and write **every Gold-design artifact under `<use_case_slug>_dab/gold_layer_design/`** — NOT the bare repo/clone root. This is the same dedicated bundle folder the Bronze→Silver→Gold pipeline builds into, so the Gold pipeline (Step 12) can `sync` `gold_layer_design/yaml/**` from right beside the bundle. The shape is identical on every client: on Cursor/Copilot it is `<repo-root>/<use_case_slug>_dab/`; on Databricks Genie Code it is `<clone-root>/<use_case_slug>_dab/` — never the page''s current working directory.
 
-Copy the prompt from the **Prompt** tab, start a **new Agent chat** in your IDE, paste it, and press Enter.
+## 1️⃣ How To Apply
+
+Copy the prompt from the **Prompt** tab, start a **new Agent chat** in your coding assistant, paste it, and press Enter.
 
 ---
 
@@ -1556,15 +1680,15 @@ Copy the prompt from the **Prompt** tab, start a **new Agent chat** in your IDE,
 **Run this in your cloned Template Repository** (see Prerequisites in Step 0).
 
 Ensure you have:
-- ✅ `data_product_accelerator/context/{use_case_file_prefix}_Schema.csv` - Your source schema file (from Bronze/Silver)
+- ✅ `<ARTIFACT_ROOT>/data_product_accelerator/context/{use_case_file_prefix}_Schema.csv` - Your source schema file (from Bronze/Silver)
 - ✅ `data_product_accelerator/skills/gold/00-gold-layer-design/SKILL.md` - The Gold layer design orchestrator skill
 
 ---
 
 ### Steps to Apply
 
-1. **Start new Agent thread** — Open Cursor and start a new Agent thread for clean context
-2. **Copy and paste the prompt** — Use the copy button, paste into Cursor; the AI will read your schema and the orchestrator skill (which automatically loads all worker skills)
+1. **Start new Agent thread** — start a new Agent thread in your coding assistant for clean context
+2. **Copy and paste the prompt** — Use the copy button, paste into your coding assistant; the AI will read your schema and the orchestrator skill (which automatically loads all worker skills)
 3. **Review generated design** — The AI creates `gold_layer_design/` with ERD diagrams, YAML schema files, and lineage documentation
 4. **Validate the design** — Check grain, SCD type, relationships, and lineage for each fact/dimension
 5. **Get stakeholder sign-off** — Share the ERD and design summary with business stakeholders before implementation
@@ -1649,7 +1773,7 @@ This framework uses a **skills-first architecture** with an **orchestrator/worke
 |-------|-------------|------------|
 | **Phase 0** | Parse schema CSV, classify tables (dim/fact/bridge), infer FKs | Table inventory |
 | **Phase 1** | Gather project requirements (domain, use cases, stakeholders) | Project context |
-| **Phase 2** | Design dimensional model (dimensions, facts, grain, SCD types) | Model blueprint → writes `DESIGN_DECISIONS.md` |
+| **Phase 2** | Design dimensional model (dimensions, facts, grain, SCD types) | Model blueprint → writes `<ARTIFACT_ROOT>/gold_layer_design/DESIGN_DECISIONS.md` |
 | **Phase 3** | Create ERD diagrams using Mermaid syntax | `erd_master.md` + domain ERDs |
 | **Phase 4** | Generate YAML schema files with lineage and descriptions | `yaml/{domain}/{table}.yaml` |
 | **Phase 5** | Document column-level lineage (Bronze → Silver → Gold) | `COLUMN_LINEAGE.csv` |
@@ -1819,6 +1943,74 @@ unknown_member:
 - [ ] Stakeholder sign-off obtained',
 true, 1, true, current_timestamp(), current_timestamp(), current_user());
 
+-- gold_layer_design (genie-code fork) — prescriptive paths + skill refs; design-only (writes artifacts, no deploy); artifacts land under <DP_BUNDLE_ROOT>/gold_layer_design; bypass_LLM = TRUE
+INSERT INTO ${catalog}.${schema}.section_input_prompts
+(input_id, section_tag, coding_assistant, input_template, system_prompt,
+ bypass_llm, version, is_active, inserted_at, updated_at, created_by)
+VALUES
+(903, 'gold_layer_design', 'genie-code',
+'**Genie Code — this is a prescriptive runbook. Follow the steps in order. Do NOT improvise paths, do NOT use bare relative paths, do NOT use `@`-mentions. This is a DESIGN-ONLY step: you WRITE design artifacts (YAML, ERDs, lineage, docs) — you do NOT create schemas/tables, run SQL, or deploy anything. Every skill is named by its full clone-rooted path; every artifact is anchored to `<DP_BUNDLE_ROOT>/gold_layer_design/`.**
+
+### 🔴 Non-negotiable rules (read before anything)
+
+❌ **NEVER** create a catalog/schema/table, run `CREATE`/`MERGE`/DDL, or build/deploy an Asset Bundle in this step — that is the Gold *pipeline* step (step 12), not design. Design produces FILES only.
+
+❌ **NEVER** write the design to the bare clone root, `/tmp`, the page''s current working directory, or a bare relative path. Genie Code''s CWD is page-type-dependent, so a bare `gold_layer_design/` lands in the wrong place.
+
+✅ Write **every** design artifact under `<DP_BUNDLE_ROOT>/gold_layer_design/` — the SAME data-product bundle folder the Lakehouse steps (Bronze → Silver → Gold pipeline) build into. Co-locating the design here is what lets the Gold pipeline''s `databricks.yml` later sync `gold_layer_design/yaml/**` from right beside it.
+
+### Step 0 — Resolve your environment (once, before anything else)
+
+Run `skills/vibecoding-state` operation `resolve_root`. Read these resolved values and use them literally throughout:
+
+- `client_context` = `genie_code`
+- `artifact_root` = your workshop clone root (e.g. `/Workspace/Users/<your-email>/.assistant/skills/vibe-coding-workshop`)
+- `skill_ref_root` = `skills/vibe-coding-workshop` (substitute your clone folder if you cloned somewhere other than `.assistant/skills/vibe-coding-workshop`)
+- `dp_bundle_root` = `<artifact_root>/<use_case_slug>_dab` — the **self-contained data-product Asset Bundle project** the whole pipeline builds into (e.g. `…/vibe-coding-workshop/booking_app_dab`). Referred to below as `<DP_BUNDLE_ROOT>`. This step writes the design INTO `<DP_BUNDLE_ROOT>/gold_layer_design/`. The folder may not exist yet (the Bronze step creates the bundle''s `databricks.yml` later) — that''s fine, writing the files creates it. Use the SAME `<use_case_slug>_dab` name the Lakehouse steps use, so the design and the bundle stay in one folder.
+
+Your source schema is `<artifact_root>/data_product_accelerator/context/{use_case_file_prefix}_Schema.csv`.
+
+### Step 1 — Load the required skills by their FULL clone-rooted paths
+
+Load each skill with `readSkillFile` using its fully-qualified `<skill_ref_root>`-prefixed path — NEVER a bare `@…` mention, NEVER a repo-relative path. **The root-level `skills/` come FIRST: they are the highest-priority, always-on guardrails and govern everything below.**
+
+1. `readSkillFile("skills/vibe-coding-workshop/skills/databricks-expert-agent/SKILL.md")` — core rule: extract names from the source schema CSV, never hardcode or hallucinate table/column names.
+
+Then the Gold design orchestrator and its common skill (load in this order):
+
+2. `readSkillFile("skills/vibe-coding-workshop/data_product_accelerator/skills/gold/00-gold-layer-design/SKILL.md")` — the design orchestrator. Drive the full 9-phase design workflow from it.
+3. `readSkillFile("skills/vibe-coding-workshop/data_product_accelerator/skills/common/naming-tagging-standards/SKILL.md")` — naming prefixes (`dim_`/`fact_`), dual-purpose (human + Genie/LLM) COMMENTs, governed PII tags. **NEVER name a table/column or write a description without reading this.**
+
+When the orchestrator lists further **Mandatory Skill Dependencies** (its design workers: grain definition, dimension patterns, fact-table patterns, conformed dimensions, ERD diagrams, table documentation, design validation), load EACH the same way: take its repo-relative path and prefix it with `skill_ref_root`. Genie Code has no repo-root-relative resolution and `AGENTS.md` does not carry across threads — so always prefix with `skill_ref_root`. **Read those design workers in ONE batched `readSkillFile` turn — Genie Code reads multiple skill files in parallel in a single turn, so never serialize independent reads (`genie-code-environment` §10).**
+
+### Step 2 — Run the design workflow, writing every artifact under `<DP_BUNDLE_ROOT>/gold_layer_design/`
+
+Drive the orchestrator''s end-to-end design workflow against `<artifact_root>/data_product_accelerator/context/{use_case_file_prefix}_Schema.csv`:
+
+- Parse the schema CSV; classify each table as dimension / fact / bridge; infer FK relationships from column names + comments.
+- Design the dimensional model — SCD Type 1/2 decisions per dimension, explicit grain per fact, measures, and business domains.
+- **Write `<DP_BUNDLE_ROOT>/gold_layer_design/DESIGN_DECISIONS.md` BEFORE any YAML** so every YAML shares one FK format, description format, and transformation enum.
+- Generate Mermaid ERDs, one YAML schema file per Gold table, column-level lineage (Bronze → Silver → Gold), the Business Onboarding Guide, the Source Table Mapping, and the design-consistency validation report.
+
+Anchor EVERY output to `<DP_BUNDLE_ROOT>/gold_layer_design/` — never the bare clone root, never the page CWD. The key paths:
+
+- `<DP_BUNDLE_ROOT>/gold_layer_design/DESIGN_DECISIONS.md`  ← written first
+- `<DP_BUNDLE_ROOT>/gold_layer_design/erd_master.md` (+ per-domain ERDs under `…/gold_layer_design/erd/` for larger schemas)
+- `<DP_BUNDLE_ROOT>/gold_layer_design/yaml/{domain}/{table}.yaml`  ← the Gold pipeline (step 12) reads these, and its bundle syncs `gold_layer_design/yaml/**`
+- `<DP_BUNDLE_ROOT>/gold_layer_design/COLUMN_LINEAGE.csv` and `COLUMN_LINEAGE.md`
+- `<DP_BUNDLE_ROOT>/gold_layer_design/SOURCE_TABLE_MAPPING.csv`, `DESIGN_SUMMARY.md`, and `docs/BUSINESS_ONBOARDING_GUIDE.md`
+
+Use `createAsset`/the workspace file APIs to write these files under `<DP_BUNDLE_ROOT>/gold_layer_design/`. If a path-resolution tool reports the parent folder does not exist, create it (the bundle folder is built up across steps) — do not retarget to the clone root.
+
+**Genie Code execution notes — this is a heavy, compute-bound phase; heed these (see `genie-code-environment` §10):**
+
+- **Warm up, then budget generously.** This phase does real Python work — parsing the schema CSV, generating one YAML per Gold table, building ERDs, and running cross-table validation. Make the FIRST `executeCode` call a trivial `print("ready")` to absorb the ~3–5 min serverless cold start once, then set `timeoutMinutes` **≥ 20** on every subsequent `executeCode`. **Never set `timeoutMinutes` below 15** — a smaller budget only buys a cold-start timeout and a wasted retry.
+- **Write files through warm compute.** Once compute is warm, write each artifact with `executeCode` `open(path,"w").write(...)` (one call per file, creates it directly). The compute-free trio `createAsset` → `readFile` → `workspaceUpdateFile` works too, but it is 3 calls and `workspaceUpdateFile` can only update a file that already exists AND was read in this thread — reserve it for single updates, not bulk generation.
+
+**Gate:** `Gold design complete` — `<DP_BUNDLE_ROOT>/gold_layer_design/` contains `DESIGN_DECISIONS.md` (written before any YAML), one YAML per Gold table under `yaml/{domain}/`, the master ERD, and `COLUMN_LINEAGE.csv` — all under the data-product bundle folder so the Gold pipeline can sync them in place. No schema/table was created and nothing was deployed (that is step 12).',
+'',
+true, 1, true, current_timestamp(), current_timestamp(), current_user());
+
 -- Step 10: Bronze Layer Creation (Approach C - Copy Sample Data) - bypass_LLM = TRUE
 INSERT INTO ${catalog}.${schema}.section_input_prompts 
 (input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
@@ -1834,16 +2026,25 @@ This will involve the following steps:
 - **Create Asset Bundle job** — generate a repeatable, version-controlled deployment job (databricks.yml + clone script)
 - **Deploy and run** — validate, deploy the bundle, and execute the clone job to populate Bronze tables
 
+**Bundle root:** Create this Asset Bundle in its own dedicated top-level directory `{use_case_slug}_dab/` at the repo root (the data-product `dp_bundle_root`) — write `databricks.yml`, `src/`, and `resources/` UNDER `{use_case_slug}_dab/`, never at the bare repo root. Every later data-product step (Silver, Gold, semantic, deploy) extends this SAME bundle folder, so the design (`gold_layer_design/`) and plans (`plans/`) co-locate here too. This is the same root folder on every coding agent.
+
 IMPORTANT: Use the EXISTING catalog `{lakehouse_default_catalog}` -- do NOT create a new catalog. Create the Bronze schema `{user_schema_prefix}_bronze` and tables inside this catalog.
 
-NOTE: Before creating the schema, check if `{lakehouse_default_catalog}.{user_schema_prefix}_bronze` already exists. If it does, DROP the schema with CASCADE and recreate it from scratch. These are user-specific schemas so dropping is safe.',
+NOTE: Before creating the schema, check if `{lakehouse_default_catalog}.{user_schema_prefix}_bronze` already exists. If it does, DROP the schema with CASCADE and recreate it from scratch. These are user-specific schemas so dropping is safe.
+
+**State-lock (`skills/vibecoding-state`) — run this prompt between an `enter` and an `exit` so workshop state is resolved and locked:**
+
+1. **Phase 0 — first, before any step below:** `skills/vibecoding-state` op `enter` — params: `prompt_id: "bronze_layer_creation"`. `enter` resolves the `## Environment Capabilities` triple (deploy verb, CLI channel, `state_file_root`) so every deploy/run step below uses the resolved channel — `runDatabricksCli` on Genie Code — and writes state under `state_file_root`, never a bare-local assumption.
+2. **Final — after the step succeeds:** `skills/vibecoding-state` op `exit` — params: `prompt_id: "bronze_layer_creation"`, `gate: "Bronze layer live"`, `captured: {lakehouse_default_catalog, bronze_schema}`.
+
+**Gate:** `Bronze layer live` — the Bronze clone job completes and every source table is present in the Bronze schema with Change Data Feed enabled.',
 '',
 'Bronze Layer Creation (Approach C)',
 'Create Bronze layer by copying sample data from {chapter_3_lakehouse_catalog}.{chapter_3_lakehouse_schema} with Asset Bundle structure',
 10,
 '## 1️⃣ How To Apply
 
-Copy the prompt above, start a **new Agent chat** in Cursor, and paste it.
+Copy the prompt above, start a **new Agent chat** in your coding assistant, and paste it.
 
 ### Prerequisite
 
@@ -1856,8 +2057,8 @@ Ensure you have:
 
 ### Steps to Apply
 
-**Step 1:** Start a new Agent thread in Cursor
-**Step 2:** Copy the prompt and paste it into Cursor
+**Step 1:** Start a new Agent thread in your coding assistant
+**Step 2:** Copy the prompt and paste it into your coding assistant
 **Step 3:** Review generated code (Asset Bundle config, clone script, job definition)
 **Step 4:** Validate: `databricks bundle validate -t dev`
 **Step 5:** Deploy: `databricks bundle deploy -t dev`
@@ -2042,7 +2243,7 @@ When you paste the prompt, the AI reads `@data_product_accelerator/skills/bronze
 ### 📁 Generated Asset Bundle Structure
 
 ```
-project_root/
+{use_case_slug}_dab/                    # data-product bundle root (dp_bundle_root) — a dedicated top-level folder at the repo root, NOT the bare root
 ├── databricks.yml                      # Bundle configuration (updated)
 ├── src/
 │   └── {project}_bronze/
@@ -2075,6 +2276,87 @@ project_root/
 - [ ] Sample data looks correct',
 true, 1, true, current_timestamp(), current_timestamp(), current_user());
 
+-- bronze_layer_creation (genie-code fork) — prescriptive paths + directives; bundle-job-only; bypass_LLM = TRUE
+INSERT INTO ${catalog}.${schema}.section_input_prompts
+(input_id, section_tag, coding_assistant, input_template, system_prompt,
+ bypass_llm, version, is_active, inserted_at, updated_at, created_by)
+VALUES
+(901, 'bronze_layer_creation', 'genie-code',
+'**Genie Code — this is a prescriptive runbook. Follow the steps in order. Do NOT improvise paths, do NOT use bare relative paths, do NOT use `@`-mentions, and do NOT create tables directly. Every skill is named by its full clone-rooted path; every artifact is anchored to `<DP_BUNDLE_ROOT>`; every table is created by a deployed bundle job — never by hand.**
+
+### 🔴 Non-negotiable execution rule (read before anything)
+
+❌ **NEVER** run table DDL, `CREATE` / `DEEP CLONE`, `ALTER … SET TBLPROPERTIES`, `CLUSTER BY`, or any data-loading statement directly via `executeCode` / `spark.sql` / a notebook cell. Those statements are the **body of the bundle job**. The bundle **is** the execution mechanism — never bypass it, even though direct SQL is faster. Creating live tables with no versioned bundle behind them is the regression this fork exists to prevent.
+
+✅ The ONLY things you run directly are (a) **read-only** inspection (`SHOW TABLES`, `DESCRIBE`, `SELECT COUNT(*)`) and (b) `databricks bundle validate` / `deploy` / `run` through `runDatabricksCli`. If `bundle deploy` is blocked, FIX the page context (Step 3) — do **not** fall back to direct SQL.
+
+### Step 0 — Resolve your environment (once, before anything else)
+
+Run `skills/vibecoding-state` operation `enter` with `prompt_id: "bronze_layer_creation"`. It writes and echoes the `## Environment Capabilities` block. Read these resolved values and use them literally throughout:
+
+- `client_context` = `genie_code`
+- `artifact_root` = your workshop clone root (e.g. `/Workspace/Users/<your-email>/.assistant/skills/vibe-coding-workshop`)
+- `skill_ref_root` = `skills/vibe-coding-workshop` (substitute your clone folder if you cloned somewhere other than `.assistant/skills/vibe-coding-workshop`)
+- `dp_bundle_root` = `<artifact_root>/{use_case_slug}_dab` — the **self-contained Databricks Asset Bundle project** for the whole data-product pipeline (e.g. `…/vibe-coding-workshop/booking_app_dab`). This — NOT the clone root — is where you write `databricks.yml`, `src/`, and `resources/`, and it is the **page you deploy from**. Referred to below as `<DP_BUNDLE_ROOT>`.
+- deploy verb = `bundle deploy --target dev`, run through the `runDatabricksCli` tool
+
+If `enter` has not run in this thread, run it now — every step below depends on these values.
+
+### Step 1 — Load the required skills by their FULL clone-rooted paths
+
+Load each skill with `readSkillFile` using its fully-qualified `<skill_ref_root>`-prefixed path — NEVER a bare `@…` mention, NEVER a repo-relative path. **The root-level `skills/` come FIRST: they are the highest-priority, always-on guardrails and govern everything below.**
+
+1. `readSkillFile("skills/vibe-coding-workshop/skills/databricks-expert-agent/SKILL.md")` — core rule: extract names from the source, never hardcode.
+2. `readSkillFile("skills/vibe-coding-workshop/skills/databricks-asset-bundles/SKILL.md")` — serverless job YAML, Environments V4, `notebook_task`, `base_parameters`. **You will not write any `databricks.yml` or job YAML until you have read this.**
+
+Then the Bronze orchestrator and its data-product common skills (load in this order):
+
+3. `readSkillFile("skills/vibe-coding-workshop/data_product_accelerator/skills/bronze/00-bronze-layer-setup/SKILL.md")` — the orchestrator (drive Approach C from it).
+4. `readSkillFile("skills/vibe-coding-workshop/data_product_accelerator/skills/common/naming-tagging-standards/SKILL.md")` — table/schema naming prefixes (`bronze_`), COMMENTs, governed PII tags. **NEVER name a table or schema without reading this.**
+5. `readSkillFile("skills/vibe-coding-workshop/data_product_accelerator/skills/common/databricks-table-properties/SKILL.md")` — Bronze TBLPROPERTIES, `CLUSTER BY AUTO`, governance metadata. **NEVER write TBLPROPERTIES without reading this.**
+6. `readSkillFile("skills/vibe-coding-workshop/data_product_accelerator/skills/common/schema-management-patterns/SKILL.md")` — `CREATE SCHEMA IF NOT EXISTS` patterns.
+
+When the orchestrator lists further **Mandatory Skill Dependencies**, load EACH the same way: take its repo-relative path and prefix it with `skill_ref_root`. Genie Code has no repo-root-relative resolution and `AGENTS.md` does not carry across threads — so always prefix with `skill_ref_root`. **Read them in one batched `readSkillFile` turn — Genie Code reads multiple skill files in parallel in a single turn, so never serialize independent reads (`genie-code-environment` §10).**
+
+### Step 2 — Author the bundle (Approach C — copy sample data). Do NOT execute anything yet.
+
+Using the skills above, AUTHOR (write files only — no execution) a bundle whose job, when it runs, will:
+
+- **Clone all source tables** from the `{chapter_3_lakehouse_catalog}.{chapter_3_lakehouse_schema}` schema into your target Bronze schema (the `DEEP CLONE` is a statement INSIDE the job notebook — not something you run now).
+- **Apply enterprise table properties** — Change Data Feed (CDF), `CLUSTER BY AUTO`, auto-optimize, and auto-compact on every table.
+- **Preserve source COMMENTs** — carry over all column-level documentation from the source schema.
+
+IMPORTANT: Use the EXISTING catalog `{lakehouse_default_catalog}` — do NOT create a new catalog. The job creates the Bronze schema `{user_schema_prefix}_bronze` and its tables inside this catalog.
+
+NOTE: The job notebook checks whether `{lakehouse_default_catalog}.{user_schema_prefix}_bronze` already exists and, if so, DROPs it with CASCADE and recreates it from scratch (user-specific schema — safe to drop). This DROP/CREATE runs INSIDE the job, not as a direct statement you execute.
+
+### Step 3 — Write bundle files to `<DP_BUNDLE_ROOT>`, then deploy FROM that page
+
+- Write every generated file UNDER `<DP_BUNDLE_ROOT>` — never the clone root (writing at the clone root is the "one level too high" bug), never `/tmp`, never a bare relative path (Genie Code''s CWD is page-type-dependent):
+  - `<DP_BUNDLE_ROOT>/databricks.yml`
+  - `<DP_BUNDLE_ROOT>/src/{user_schema_prefix}_bronze/clone_samples.py`
+  - `<DP_BUNDLE_ROOT>/resources/bronze/bronze_clone_job.yml`
+- **Open the bundle editor BEFORE any `bundle` command — and surface its link.** As soon as `<DP_BUNDLE_ROOT>/databricks.yml` exists, the workspace file browser shows an **"Open in bundle editor"** affordance on that folder (and an **"Open in editor"** button at the top of the folder view). Its page CWD IS `<DP_BUNDLE_ROOT>` — the bundle-root page `bundle deploy`/`run` require, where Genie Code runs deploy/run pre-approved. **Do not make the operator hunt for the icon** — build a clickable link with the pre-authenticated `WorkspaceClient` (`w`) and print it:
+  - `host = w.config.host`; `o = w.get_workspace_id()`
+  - `file_id = w.workspace.get_status("<DP_BUNDLE_ROOT>/databricks.yml").object_id`
+  - `folder_id = w.workspace.get_status("<DP_BUNDLE_ROOT>").object_id`
+  - **Bundle editor:** `{host}/editor/files/{file_id}?o={o}&contextId=folder%3A{folder_id}` (plain folder: `{host}/browse/folders/{folder_id}?o={o}`)
+
+  Tell the operator to open the **bundle-editor link**, then run every `databricks bundle …` command below from that page. Edit the EXISTING on-page `databricks.yml` — files created via the workspace API may not reach the CLI''s FUSE mount.
+- Validate → deploy → run the job through `runDatabricksCli`, **from the bundle-editor page**, each with `--target dev` (mandatory — a target-less deploy is guardrail-blocked):
+  - `databricks bundle validate --target dev`
+  - `databricks bundle deploy --target dev`
+  - `databricks bundle run --target dev bronze_clone_job`
+- **🛑 If a `bundle` command is blocked or fails, STOP — do not work around it.** A `databricks.yml not found` error or a "blocked by safety guardrails" message means you are NOT on the bundle page: open the **bundle-editor link** above and retry (CONFIRMED — the same `bundle deploy` that is "blocked" from a file page returns "Deployment complete!" from the bundle editor). If it STILL fails from the bundle editor, STOP and report the blocker to the operator. Do **NOT** create the job or tables via the Jobs/Pipelines REST API (`jobs/create`, `/api/2.0/pipelines`), the SDK, or direct SQL to "get it done" — that silently defeats the bundle (no version control, no `bundle destroy` cleanup) and FAILS the gate. The REST/SDK route is an **escape hatch available only if the operator explicitly authorizes it.**
+
+**State-lock:** this prompt runs between an `enter` (Step 0) and an `exit`. After the gate passes, run `skills/vibecoding-state` op `exit` — params: `prompt_id: "bronze_layer_creation"`, `gate: "Bronze layer live"`, `captured: {lakehouse_default_catalog, bronze_schema}`.
+
+**Gate:** `Bronze layer live` — the Bronze clone job was **created by `bundle deploy` and executed by `bundle run`** (the job is visible in Workflows and returned a successful run ID), AND every source table is present in `{lakehouse_default_catalog}.{user_schema_prefix}_bronze` with Change Data Feed enabled. Tables existing + CDF on is **necessary but NOT sufficient** — if the tables were created by direct SQL instead of the deployed job, the gate FAILS and you must redo this via the bundle.
+
+**➡️ Next step — keep the bundle editor open.** You now have a `databricks.yml` under `<DP_BUNDLE_ROOT>`, so the **"Open in bundle editor"** affordance is available on that folder. Every later data-product step (Silver, Gold, semantic, …) extends this SAME bundle and deploys from this SAME bundle-editor page — stay in (or return to) the bundle editor for `<DP_BUNDLE_ROOT>` rather than working from a generic file page.',
+'',
+true, 1, true, current_timestamp(), current_timestamp(), current_user());
+
 -- Step 10b: Bronze Layer Creation (from Uploaded CSV) - bypass_LLM = TRUE
 -- Uses Agent Skill to generate DDLs + Faker test data from a schema CSV.
 INSERT INTO ${catalog}.${schema}.section_input_prompts 
@@ -2097,14 +2379,21 @@ This will involve the following steps:
    - `databricks bundle deploy -t dev`
    - `databricks bundle run bronze_setup_job -t dev`
    - `databricks bundle run bronze_data_generator_job -t dev`
-   - Run validation queries to confirm tables exist, row counts are correct, and CDF is enabled',
+   - Run validation queries to confirm tables exist, row counts are correct, and CDF is enabled
+
+**State-lock (`genai-agents/vibecoding-state`) — run this prompt between an `enter` and an `exit` so workshop state is resolved and locked:**
+
+1. **Phase 0 — first, before any step below:** `genai-agents/vibecoding-state` op `enter` — params: `prompt_id: "bronze_layer_creation_upload"`. `enter` resolves the `## Environment Capabilities` triple (deploy verb, CLI channel, `state_file_root`) so every deploy/run step below uses the resolved channel — `runDatabricksCli` on Genie Code — and writes state under `state_file_root`, never a bare-local assumption.
+2. **Final — after the step succeeds:** `genai-agents/vibecoding-state` op `exit` — params: `prompt_id: "bronze_layer_creation_upload"`, `gate: "Bronze layer live"`, `captured: {lakehouse_default_catalog, bronze_schema}`.
+
+**Gate:** `Bronze layer live` — the Bronze setup and data-generator jobs complete and the Bronze tables are populated.',
 '',
 'Bronze Layer Creation (from CSV)',
 'Generate DDLs and Faker test data from the uploaded schema CSV using Agent Skills to build the Bronze layer',
 10,
 '## 1️⃣ How To Apply
 
-Copy the prompt above, start a **new Agent chat** in Cursor, and paste it. The AI will read the Bronze setup skill and generate the implementation.
+Copy the prompt above, start a **new Agent chat** in your coding assistant, and paste it. The AI will read the Bronze setup skill and generate the implementation.
 
 ### Prerequisite
 
@@ -2120,15 +2409,17 @@ Ensure you have:
 
 **Step 1: Generate Bronze Layer Code**
 
-1. **Start a new Agent thread** in Cursor
+1. **Start a new Agent thread** in your coding assistant
 2. **Copy the prompt** using the copy button
-3. **Paste it into Cursor** and let the AI:
+3. **Paste it into your coding assistant** and let the AI:
    - Read the skill file and parse your schema CSV
    - Classify tables (dimensions vs facts) and identify FK relationships
    - Generate `setup_tables.py` with CREATE TABLE DDLs
    - Generate Faker data scripts with seeded data and corruption
 
 **Step 2: Deploy the Bundle**
+
+> **Client note:** IDE runs these in a terminal; Genie Code runs the `databricks bundle …` commands via `runDatabricksCli` (be on the bundle''s page; resolved channel in `## Environment Capabilities`). See `genie-code-environment`.
 
 ```bash
 # Deploy to Databricks workspace
@@ -2253,6 +2544,8 @@ VALUES
 (8, 'silver_layer_sdp',
 'Set up the Silver layer using @data_product_accelerator/skills/silver/00-silver-layer-setup/SKILL.md
 
+**Bundle root:** Extend the SAME data-product bundle created in Bronze — its dedicated top-level folder `{use_case_slug}_dab/` at the repo root (`dp_bundle_root`). All relative paths below (`src/`, `resources/`, `databricks.yml`) resolve UNDER `{use_case_slug}_dab/`, never the bare repo root. Same folder on every coding agent.
+
 This will involve the following steps:
 
 - **Generate SDP pipeline notebooks** — create Spark Declarative Pipeline notebooks with incremental ingestion from Bronze using Change Data Feed (CDF)
@@ -2268,14 +2561,21 @@ IMPORTANT: Use the EXISTING catalog `{lakehouse_default_catalog}` -- do NOT crea
 
 NOTE: Before creating the schema, check if `{lakehouse_default_catalog}.{user_schema_prefix}_silver` already exists. If it does, DROP the schema with CASCADE and recreate it from scratch. These are user-specific schemas so dropping is safe.
 
-NOTE: This is a shared workshop workspace. Include a `user_prefix` variable in your pipeline/job `name:` fields (e.g., `"[${bundle.target} ${var.user_prefix}] Silver Layer Pipeline"`) to avoid `pipeline name is already used` collisions with other attendees. `databricks bundle deploy --force` does NOT resolve these — see `common/databricks-asset-bundles` → "Shared Workspace Naming".',
+NOTE: This is a shared workshop workspace. Include a `user_prefix` variable in your pipeline/job `name:` fields (e.g., `"[${bundle.target} ${var.user_prefix}] Silver Layer Pipeline"`) to avoid `pipeline name is already used` collisions with other attendees. `databricks bundle deploy --force` does NOT resolve these — see `common/databricks-asset-bundles` → "Shared Workspace Naming".
+
+**State-lock (`skills/vibecoding-state`) — run this prompt between an `enter` and an `exit` so workshop state is resolved and locked:**
+
+1. **Phase 0 — first, before any step below:** `skills/vibecoding-state` op `enter` — params: `prompt_id: "silver_layer_sdp"`, `require_prior_gate: {prompt_id: "bronze_layer_creation", gate: "Bronze layer live"}`. `enter` resolves the `## Environment Capabilities` triple (deploy verb, CLI channel, `state_file_root`) so every deploy/run step below uses the resolved channel — `runDatabricksCli` on Genie Code — and writes state under `state_file_root`, never a bare-local assumption.
+2. **Final — after the step succeeds:** `skills/vibecoding-state` op `exit` — params: `prompt_id: "silver_layer_sdp"`, `gate: "Silver layer live"`, `captured: {silver_schema, silver_dlt_pipeline, dq_rules_table}`.
+
+**Gate:** `Silver layer live` — the DQ-rules setup job runs first, then the Silver pipeline completes with data-quality expectations evaluated.',
 '',
 'Silver Layer Pipelines (SDP)',
 'Create Silver layer using Spark Declarative Pipelines with centralized data quality rules',
 11,
 '## 1️⃣ How To Apply
 
-Copy the prompt above, start a **new Agent chat** in Cursor, and paste it. The AI will read the Silver setup skill and generate the implementation.
+Copy the prompt above, start a **new Agent chat** in your coding assistant, and paste it. The AI will read the Silver setup skill and generate the implementation.
 
 ### Prerequisite
 
@@ -2289,14 +2589,16 @@ Ensure you have:
 
 **Step 1: Generate Silver Layer Code**
 
-1. **Start a new Agent thread** in Cursor
+1. **Start a new Agent thread** in your coding assistant
 2. **Copy the prompt** using the copy button
-3. **Paste it into Cursor** and let the AI generate:
+3. **Paste it into your coding assistant** and let the AI generate:
    - SDP pipeline notebooks
    - Data quality rules configuration
    - Asset Bundle job definitions
 
 **Step 2: Validate the Bundle**
+
+> **Client note:** IDE runs these in a terminal; Genie Code runs the `databricks bundle …` commands via `runDatabricksCli` (be on the bundle''s page; resolved channel in `## Environment Capabilities`). See `genie-code-environment`.
 
 ```bash
 # Validate bundle configuration
@@ -2458,7 +2760,7 @@ When you paste the prompt, the AI reads `@data_product_accelerator/skills/silver
 ### 📁 Generated Files
 
 ```
-project_root/
+{use_case_slug}_dab/                     # data-product bundle root (dp_bundle_root) — same folder Bronze created
 ├── databricks.yml                        # Updated with Silver resources
 ├── src/
 │   └── {project}_silver/
@@ -2574,12 +2876,99 @@ FROM {lakehouse_default_catalog}.{user_schema_prefix}_silver.dq_rules;
 - [ ] Incremental processing working (only new/changed rows)',
 true, 1, true, current_timestamp(), current_timestamp(), current_user());
 
+-- silver_layer_sdp (genie-code fork) — prescriptive paths + directives; bundle-job-only; bypass_LLM = TRUE
+INSERT INTO ${catalog}.${schema}.section_input_prompts
+(input_id, section_tag, coding_assistant, input_template, system_prompt,
+ bypass_llm, version, is_active, inserted_at, updated_at, created_by)
+VALUES
+(902, 'silver_layer_sdp', 'genie-code',
+'**Genie Code — this is a prescriptive runbook. Follow the steps in order. Do NOT improvise paths, do NOT use bare relative paths, do NOT use `@`-mentions, and do NOT create tables or run the pipeline by hand. Every skill is named by its full clone-rooted path; every artifact is anchored to `<DP_BUNDLE_ROOT>`; every Silver table is created by the deployed SDP pipeline — never by direct SQL.**
+
+### 🔴 Non-negotiable execution rule (read before anything)
+
+❌ **NEVER** run `CREATE SCHEMA` / `CREATE TABLE` / DLT logic / DQ-rules inserts / any data-loading statement directly via `executeCode` / `spark.sql` / a notebook cell. Those statements are the **body of the bundle''s job and pipeline**. The bundle **is** the execution mechanism — never bypass it, even though direct SQL is faster. Creating live tables with no versioned bundle behind them is the regression this fork exists to prevent.
+
+✅ The ONLY things you run directly are (a) **read-only** inspection (`SHOW TABLES`, `DESCRIBE`, `SELECT … FROM event_log(...)`) and (b) `databricks bundle validate` / `deploy` / `run` through `runDatabricksCli`. If `bundle deploy` is blocked, FIX the page context (open the bundle editor — Step 3) — do **not** fall back to direct SQL, the Jobs/Pipelines REST API, or the SDK.
+
+### Step 0 — Resolve your environment (once, before anything else)
+
+Run `skills/vibecoding-state` operation `enter` with `prompt_id: "silver_layer_sdp"` and `require_prior_gate: {prompt_id: "bronze_layer_creation", gate: "Bronze layer live"}`. It writes and echoes the `## Environment Capabilities` block. Read these resolved values and use them literally throughout:
+
+- `client_context` = `genie_code`
+- `artifact_root` = your workshop clone root (e.g. `/Workspace/Users/<your-email>/.assistant/skills/vibe-coding-workshop`)
+- `skill_ref_root` = `skills/vibe-coding-workshop` (substitute your clone folder if you cloned somewhere other than `.assistant/skills/vibe-coding-workshop`)
+- `dp_bundle_root` = `<artifact_root>/{use_case_slug}_dab` — the **self-contained Databricks Asset Bundle project** for the whole data-product pipeline (e.g. `…/vibe-coding-workshop/booking_app_dab`). This is the SAME bundle you created for Bronze — extend it; do NOT make a new one. It is where `databricks.yml`, `src/`, and `resources/` live, and the **page you deploy from**. Referred to below as `<DP_BUNDLE_ROOT>`.
+- deploy verb = `bundle deploy --target dev`, run through the `runDatabricksCli` tool
+
+If `enter` reports the Bronze gate is not `Bronze layer live`, STOP — finish the Bronze step first. If `enter` has not run in this thread, run it now.
+
+### Step 1 — Load the required skills by their FULL clone-rooted paths
+
+Load each skill with `readSkillFile` using its fully-qualified `<skill_ref_root>`-prefixed path — NEVER a bare `@…` mention, NEVER a repo-relative path. **The root-level `skills/` come FIRST: they are the highest-priority, always-on guardrails and govern everything below.**
+
+1. `readSkillFile("skills/vibe-coding-workshop/skills/databricks-expert-agent/SKILL.md")` — core rule: extract names from the source, never hardcode.
+2. `readSkillFile("skills/vibe-coding-workshop/skills/databricks-asset-bundles/SKILL.md")` — DLT pipeline YAML, job YAML, serverless config, and the multi-user `${var.user_prefix}` "Shared Workspace Naming" pattern. **You will not write any `databricks.yml`, pipeline, or job YAML until you have read this.**
+
+Then the Silver orchestrator and its data-product common + worker skills (load in this order):
+
+3. `readSkillFile("skills/vibe-coding-workshop/data_product_accelerator/skills/silver/00-silver-layer-setup/SKILL.md")` — the orchestrator. Follow every `See: references/…` link it names (prefix those with `skill_ref_root` too).
+4. `readSkillFile("skills/vibe-coding-workshop/data_product_accelerator/skills/common/schema-management-patterns/SKILL.md")` — `CREATE SCHEMA IF NOT EXISTS` with governance metadata. **NEVER write `CREATE SCHEMA` without reading this.**
+5. `readSkillFile("skills/vibe-coding-workshop/data_product_accelerator/skills/common/naming-tagging-standards/SKILL.md")` — naming prefixes (`silver_`), dual-purpose COMMENTs, governed PII tags. **NEVER name a table or resource without reading this.**
+6. `readSkillFile("skills/vibe-coding-workshop/data_product_accelerator/skills/common/databricks-table-properties/SKILL.md")` — Silver TBLPROPERTIES (CDF, `delta.enableRowTracking`, auto-optimize, `cluster_by_auto`). **NEVER write TBLPROPERTIES without reading this.**
+7. `readSkillFile("skills/vibe-coding-workshop/data_product_accelerator/skills/common/unity-catalog-constraints/SKILL.md")` — PRIMARY KEY constraint syntax for the `dq_rules` table (`(table_name, rule_name)`). **NEVER define PK/FK without reading this.**
+8. `readSkillFile("skills/vibe-coding-workshop/data_product_accelerator/skills/common/databricks-python-imports/SKILL.md")` — pure-Python module pattern so `dq_rules_loader.py` has NO notebook header.
+9. `readSkillFile("skills/vibe-coding-workshop/data_product_accelerator/skills/silver/01-dlt-expectations-patterns/SKILL.md")` and `readSkillFile("skills/vibe-coding-workshop/data_product_accelerator/skills/silver/02-dqx-patterns/SKILL.md")` — the DQ expectations + DQX worker patterns.
+
+When the orchestrator lists further **Mandatory Skill Dependencies**, load EACH the same way: take its repo-relative path and prefix it with `skill_ref_root`. Genie Code has no repo-root-relative resolution and `AGENTS.md` does not carry across threads — so always prefix with `skill_ref_root`. **Read them in one batched `readSkillFile` turn — Genie Code reads multiple skill files in parallel in a single turn, so never serialize independent reads (`genie-code-environment` §10).**
+
+### Step 2 — Author the Silver bundle (SDP + centralized DQ rules). Do NOT execute anything yet.
+
+Using the skills above, AUTHOR (write files only — no execution) the bundle resources whose job/pipeline, when run, will:
+
+- **Generate SDP pipeline notebooks** — Spark Declarative Pipeline notebooks with incremental ingestion from Bronze via Change Data Feed (CDF), expectations, and quarantine tables.
+- **Create a centralized DQ-rules table** — a configurable `dq_rules` Delta table (null checks, range validation, referential integrity), with a PK on `(table_name, rule_name)`, plus a pure-Python `dq_rules_loader.py` (no notebook header).
+- **Use the 2-resource pattern** — a regular `silver_dq_setup_job` (creates/populates `dq_rules`) AND a `silver_dlt_pipeline` (reads rules from the table). The setup job MUST run before the pipeline.
+
+IMPORTANT: Use the EXISTING catalog `{lakehouse_default_catalog}` — do NOT create a new catalog. The pipeline/job creates the Silver schema `{user_schema_prefix}_silver` and all Silver tables inside this catalog.
+
+NOTE: The setup job checks whether `{lakehouse_default_catalog}.{user_schema_prefix}_silver` already exists and, if so, DROPs it with CASCADE and recreates it (user-specific schema — safe to drop). This DROP/CREATE runs INSIDE the job, not as a direct statement you execute.
+
+NOTE: This is a shared workshop workspace. Put a `user_prefix` variable in every pipeline/job `name:` field (e.g. `"[${bundle.target} ${var.user_prefix}] Silver Layer Pipeline"`) to avoid `pipeline name is already used` collisions — `bundle deploy --force` does NOT resolve these (see `databricks-asset-bundles` → "Shared Workspace Naming").
+
+### Step 3 — Write bundle files to `<DP_BUNDLE_ROOT>`, then deploy FROM that page
+
+- Write every generated file UNDER `<DP_BUNDLE_ROOT>` — never the clone root (writing at the clone root is the "one level too high" bug), never `/tmp`, never a bare relative path (Genie Code''s CWD is page-type-dependent):
+  - `<DP_BUNDLE_ROOT>/src/{user_schema_prefix}_silver/` — `setup_dq_rules_table.py`, `dq_rules_loader.py` (pure Python), `silver_dimensions.py`, `silver_facts.py`, `data_quality_monitoring.py`
+  - `<DP_BUNDLE_ROOT>/resources/silver/silver_dq_setup_job.yml` and `<DP_BUNDLE_ROOT>/resources/silver/silver_dlt_pipeline.yml`
+  - extend the EXISTING `<DP_BUNDLE_ROOT>/databricks.yml` (the one from Bronze)
+- **Open the bundle editor BEFORE any `bundle` command — and surface its link.** `<DP_BUNDLE_ROOT>/databricks.yml` already exists (from Bronze), so the workspace file browser shows the **"Open in bundle editor"** affordance on that folder (and an **"Open in editor"** button at the top). Its page CWD IS `<DP_BUNDLE_ROOT>` — the bundle-root page `bundle deploy`/`run` require, where Genie Code runs deploy/run pre-approved. **Do not make the operator hunt for the icon** — build a clickable link with the pre-authenticated `WorkspaceClient` (`w`) and print it:
+  - `host = w.config.host`; `o = w.get_workspace_id()`
+  - `file_id = w.workspace.get_status("<DP_BUNDLE_ROOT>/databricks.yml").object_id`
+  - `folder_id = w.workspace.get_status("<DP_BUNDLE_ROOT>").object_id`
+  - **Bundle editor:** `{host}/editor/files/{file_id}?o={o}&contextId=folder%3A{folder_id}` (plain folder: `{host}/browse/folders/{folder_id}?o={o}`)
+
+  Tell the operator to open the **bundle-editor link**, then run every `databricks bundle …` command below from that page. Edit the EXISTING on-page `databricks.yml` — files created via the workspace API may not reach the CLI''s FUSE mount.
+- Validate → deploy → run the DQ setup job FIRST → run the pipeline through `runDatabricksCli`, **from the bundle-editor page**, each with `--target dev` (mandatory — a target-less deploy is guardrail-blocked):
+  - `databricks bundle validate --target dev`
+  - `databricks bundle deploy --target dev`
+  - `databricks bundle run --target dev silver_dq_setup_job`  ← **must run first** (creates `dq_rules`; the pipeline fails with `Table or view not found: dq_rules` otherwise)
+  - `databricks bundle run --target dev silver_dlt_pipeline`
+- **🛑 If a `bundle` command is blocked or fails, STOP — do not work around it.** A `databricks.yml not found` error or a "blocked by safety guardrails" message means you are NOT on the bundle page: open the **bundle-editor link** above and retry (CONFIRMED — the same `bundle deploy`/`run` that is "blocked" from a file page succeeds from the bundle editor). If it STILL fails from the bundle editor, STOP and report the blocker. Do **NOT** create the jobs, pipeline, or tables via the Jobs/Pipelines REST API (`jobs/create`, `/api/2.0/pipelines`), the SDK, or direct SQL to "get it done" — that silently defeats the bundle (no version control, no `bundle destroy` cleanup) and FAILS the gate. The REST/SDK route is an **escape hatch available only if the operator explicitly authorizes it.**
+
+**State-lock:** this prompt runs between an `enter` (Step 0) and an `exit`. After the gate passes, run `skills/vibecoding-state` op `exit` — params: `prompt_id: "silver_layer_sdp"`, `gate: "Silver layer live"`, `captured: {silver_schema, silver_dlt_pipeline, dq_rules_table}`.
+
+**Gate:** `Silver layer live` — the DQ-rules setup job and the Silver pipeline were **created by `bundle deploy` and executed by `bundle run`** (the setup job ran first and the pipeline shows expectations evaluated in its event log), AND the Silver tables exist in `{lakehouse_default_catalog}.{user_schema_prefix}_silver` with the `dq_rules` table populated. Tables existing is **necessary but NOT sufficient** — if anything was created by direct SQL instead of the deployed bundle, the gate FAILS and you must redo it via the bundle.',
+'',
+true, 1, true, current_timestamp(), current_timestamp(), current_user());
+
 -- Step 12: Gold Layer Pipeline (YAML-Driven Implementation) - bypass_LLM = TRUE
 INSERT INTO ${catalog}.${schema}.section_input_prompts 
 (input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
 VALUES
 (9, 'gold_layer_pipeline',
 'Implement the Gold layer using @data_product_accelerator/skills/gold/01-gold-layer-setup/SKILL.md
+
+**Bundle root:** Extend the SAME data-product bundle created in Bronze — its dedicated top-level folder `{use_case_slug}_dab/` at the repo root (`dp_bundle_root`). All relative paths below (`src/`, `resources/`, `gold_layer_design/`, `databricks.yml`) resolve UNDER `{use_case_slug}_dab/`, never the bare repo root. Same folder on every coding agent.
 
 This will involve the following steps:
 
@@ -2595,14 +2984,21 @@ Limit pipelines to only 5 core tables for purposes of this exercise.
 
 IMPORTANT: Use the EXISTING catalog `{lakehouse_default_catalog}` -- do NOT create a new catalog. Create the Gold schema `{user_schema_prefix}_gold` and all Gold tables inside this catalog.
 
-NOTE: Before creating the schema, check if `{lakehouse_default_catalog}.{user_schema_prefix}_gold` already exists. If it does, DROP the schema with CASCADE and recreate it from scratch. These are user-specific schemas so dropping is safe.',
+NOTE: Before creating the schema, check if `{lakehouse_default_catalog}.{user_schema_prefix}_gold` already exists. If it does, DROP the schema with CASCADE and recreate it from scratch. These are user-specific schemas so dropping is safe.
+
+**State-lock (`skills/vibecoding-state`) — run this prompt between an `enter` and an `exit` so workshop state is resolved and locked:**
+
+1. **Phase 0 — first, before any step below:** `skills/vibecoding-state` op `enter` — params: `prompt_id: "gold_layer_pipeline"`, `require_prior_gate: {prompt_id: "silver_layer_sdp", gate: "Silver layer live"}`. `enter` resolves the `## Environment Capabilities` triple (deploy verb, CLI channel, `state_file_root`) so every deploy/run step below uses the resolved channel — `runDatabricksCli` on Genie Code — and writes state under `state_file_root`, never a bare-local assumption.
+2. **Final — after the step succeeds:** `skills/vibecoding-state` op `exit` — params: `prompt_id: "gold_layer_pipeline"`, `gate: "Gold layer live"`, `captured: {gold_schema, gold_setup_job, gold_merge_job}`.
+
+**Gate:** `Gold layer live` — the Gold setup and merge jobs complete and the PK/FK constraints are present.',
 '',
 'Gold Layer Pipeline (YAML-Driven)',
 'Build Gold layer by reading YAML schemas, creating tables with PK/FK constraints (NOT ENFORCED), and merging from Silver with deduplication',
 12,
 '## 1️⃣ How To Apply
 
-Copy the prompt above, start a **new Agent chat** in Cursor, and paste it. The AI will read YAML files and generate implementation code.
+Copy the prompt above, start a **new Agent chat** in your coding assistant, and paste it. The AI will read YAML files and generate implementation code.
 
 ### Prerequisite
 
@@ -2616,9 +3012,9 @@ Ensure you have:
 
 ### Steps to Apply
 
-**Step 1: Start New Agent Thread** — Open Cursor and start a new Agent thread for clean context.
+**Step 1: Start New Agent Thread** — start a new Agent thread in your coding assistant for clean context.
 
-**Step 2: Copy and Paste the Prompt** — Copy the prompt using the copy button, paste it into Cursor. The AI will read YAML files and generate implementation code.
+**Step 2: Copy and Paste the Prompt** — Copy the prompt using the copy button, paste it into your coding assistant. The AI will read YAML files and generate implementation code.
 
 **Step 3: Review Generated Code** — The AI will create:
 - `setup_tables.py` — reads YAML → CREATE TABLE + PKs
@@ -2628,6 +3024,8 @@ Ensure you have:
 - `gold_merge_job.yml` — merge job (scheduled, PAUSED in dev)
 
 **Step 4: Validate the Bundle**
+
+> **Client note:** IDE runs these in a terminal; Genie Code runs the `databricks bundle …` commands via `runDatabricksCli` (be on the bundle''s page; resolved channel in `## Environment Capabilities`). See `genie-code-environment`.
 
 ```bash
 # Validate bundle configuration
@@ -2894,7 +3292,7 @@ When you paste the prompt, the AI reads `@data_product_accelerator/skills/gold/0
 ### 📁 Generated Asset Bundle Structure
 
 ```
-project_root/
+{use_case_slug}_dab/                       # data-product bundle root (dp_bundle_root) — same folder Bronze + Silver use
 ├── databricks.yml                          # Bundle config (MUST sync YAML files!)
 ├── src/
 │   └── {project}_gold/
@@ -3094,6 +3492,93 @@ LIMIT 10;
 - [ ] Tags applied: `environment`, `layer=gold`, `job_type`',
 true, 1, true, current_timestamp(), current_timestamp(), current_user());
 
+-- gold_layer_pipeline (genie-code fork) — prescriptive paths + directives; bundle-job-only; reads YAML from <DP_BUNDLE_ROOT>/gold_layer_design; bypass_LLM = TRUE
+INSERT INTO ${catalog}.${schema}.section_input_prompts
+(input_id, section_tag, coding_assistant, input_template, system_prompt,
+ bypass_llm, version, is_active, inserted_at, updated_at, created_by)
+VALUES
+(904, 'gold_layer_pipeline', 'genie-code',
+'**Genie Code — this is a prescriptive runbook. Follow the steps in order. Do NOT improvise paths, do NOT use bare relative paths, do NOT use `@`-mentions, and do NOT create tables, constraints, or merges by hand. Every skill is named by its full clone-rooted path; every artifact is anchored to `<DP_BUNDLE_ROOT>`; every Gold table, PK, FK, and MERGE is created by a deployed bundle job — never by direct SQL.**
+
+### 🔴 Non-negotiable execution rule (read before anything)
+
+❌ **NEVER** run `CREATE SCHEMA` / `CREATE TABLE` / `ALTER TABLE … ADD CONSTRAINT` (PK or FK) / `MERGE` / any data-loading statement directly via `executeCode` / `spark.sql` / a notebook cell. Those statements are the **body of the bundle''s jobs** (`gold_setup_job`, `gold_merge_job`). The bundle **is** the execution mechanism — never bypass it, even though direct SQL is faster. Creating live tables/constraints with no versioned bundle behind them is the regression this fork exists to prevent.
+
+✅ The ONLY things you run directly are (a) **read-only** inspection (`SHOW TABLES`, `SHOW CONSTRAINTS`, `DESCRIBE`, `SELECT … FROM information_schema …`, `SELECT COUNT(*)`) and (b) `databricks bundle validate` / `deploy` / `run` through `runDatabricksCli`. If `bundle deploy` is blocked, FIX the page context (open the bundle editor — Step 3) — do **not** fall back to direct SQL, the Jobs REST API, or the SDK.
+
+### Step 0 — Resolve your environment (once, before anything else)
+
+Run `skills/vibecoding-state` operation `enter` with `prompt_id: "gold_layer_pipeline"` and `require_prior_gate: {prompt_id: "silver_layer_sdp", gate: "Silver layer live"}`. It writes and echoes the `## Environment Capabilities` block. Read these resolved values and use them literally throughout:
+
+- `client_context` = `genie_code`
+- `artifact_root` = your workshop clone root (e.g. `/Workspace/Users/<your-email>/.assistant/skills/vibe-coding-workshop`)
+- `skill_ref_root` = `skills/vibe-coding-workshop` (substitute your clone folder if you cloned somewhere other than `.assistant/skills/vibe-coding-workshop`)
+- `dp_bundle_root` = `<artifact_root>/{use_case_slug}_dab` — the **SAME self-contained Asset Bundle** you built for Bronze + Silver (e.g. `…/vibe-coding-workshop/booking_app_dab`). EXTEND it; do NOT make a new one. `databricks.yml`, `src/`, and `resources/` live here, and it is the **page you deploy from**. Referred to below as `<DP_BUNDLE_ROOT>`. Your Gold design YAML (from step 9) lives at `<DP_BUNDLE_ROOT>/gold_layer_design/yaml/` — read it from there.
+- deploy verb = `bundle deploy --target dev`, run through the `runDatabricksCli` tool
+
+If `enter` reports the Silver gate is not `Silver layer live`, STOP — finish the Silver step first. If `enter` has not run in this thread, run it now.
+
+### Step 1 — Load the required skills by their FULL clone-rooted paths
+
+Load each skill with `readSkillFile` using its fully-qualified `<skill_ref_root>`-prefixed path — NEVER a bare `@…` mention, NEVER a repo-relative path. **The root-level `skills/` come FIRST: they are the highest-priority, always-on guardrails and govern everything below.**
+
+1. `readSkillFile("skills/vibe-coding-workshop/skills/databricks-expert-agent/SKILL.md")` — core rule: extract every table/column/PK/FK from the YAML, never hardcode or hallucinate ("Extract, Don''t Generate").
+2. `readSkillFile("skills/vibe-coding-workshop/skills/databricks-asset-bundles/SKILL.md")` — 2-job YAML, Environments V4, `notebook_task`, `base_parameters`, the **`sync` mapping** for `gold_layer_design/yaml/**` + `pyyaml>=6.0`, and the multi-user `${var.user_prefix}` "Shared Workspace Naming" pattern. **You will not write any `databricks.yml` or job YAML until you have read this.**
+
+Then the Gold implementation orchestrator and its data-product common skills (load in this order):
+
+3. `readSkillFile("skills/vibe-coding-workshop/data_product_accelerator/skills/gold/01-gold-layer-setup/SKILL.md")` — the orchestrator (YAML-driven setup → PKs → FKs → merge). Follow every `See: references/…` link it names (prefix those with `skill_ref_root` too).
+4. `readSkillFile("skills/vibe-coding-workshop/data_product_accelerator/skills/common/schema-management-patterns/SKILL.md")` — `CREATE SCHEMA IF NOT EXISTS` with governance metadata. **NEVER write `CREATE SCHEMA` without reading this.**
+5. `readSkillFile("skills/vibe-coding-workshop/data_product_accelerator/skills/common/naming-tagging-standards/SKILL.md")` — naming prefixes (`dim_`/`fact_`), dual-purpose COMMENTs, governed PII tags. **NEVER name a table or resource without reading this.**
+6. `readSkillFile("skills/vibe-coding-workshop/data_product_accelerator/skills/common/databricks-table-properties/SKILL.md")` — Gold TBLPROPERTIES (CDF, `delta.enableRowTracking`, auto-optimize, `CLUSTER BY AUTO`, `layer=gold`). **NEVER write TBLPROPERTIES without reading this.**
+7. `readSkillFile("skills/vibe-coding-workshop/data_product_accelerator/skills/common/unity-catalog-constraints/SKILL.md")` — surrogate keys as PKs (NOT NULL), FK via `ALTER TABLE … NOT ENFORCED`, and the serverless rule that FKs must target PK columns. **NEVER define PK/FK without reading this.**
+8. `readSkillFile("skills/vibe-coding-workshop/data_product_accelerator/skills/common/databricks-python-imports/SKILL.md")` — pure-Python shared-config module pattern (avoids `sys.path` issues across job tasks).
+
+When the orchestrator lists further **Mandatory Skill Dependencies**, load EACH the same way: take its repo-relative path and prefix it with `skill_ref_root`. Genie Code has no repo-root-relative resolution and `AGENTS.md` does not carry across threads — so always prefix with `skill_ref_root`. **Read them in one batched `readSkillFile` turn — Genie Code reads multiple skill files in parallel in a single turn, so never serialize independent reads (`genie-code-environment` §10).**
+
+### Step 2 — Author the Gold bundle (YAML-driven 2-job architecture). Do NOT execute anything yet.
+
+Using the skills above, AUTHOR (write files only — no execution) the bundle resources whose jobs, when run, will:
+
+- **Read the Gold design YAML as the single source of truth** — extract table names, columns, types, PKs, and FKs from `<DP_BUNDLE_ROOT>/gold_layer_design/yaml/**/*.yaml` (from step 9). Never hardcode or hallucinate schema elements.
+- **`gold_setup_job` (2 tasks)** — Task 1 `setup_tables.py`: `CREATE` Gold tables from YAML + add PRIMARY KEYs; Task 2 `add_fk_constraints.py` (`depends_on` Task 1): `ALTER TABLE … ADD FOREIGN KEY … NOT ENFORCED` in dependency order. FKs are added before data because UC constraints are informational, not enforced.
+- **`gold_merge_job`** — `merge_gold_tables.py`: deduplicate Silver on the YAML `business_key`, map Silver→Gold columns from YAML lineage / `COLUMN_LINEAGE.csv`, then MERGE dimensions first (SCD1/SCD2) and facts last (FK dependency order). Never name variables `count`/`sum`/`min`/`max` (they shadow PySpark functions).
+- **Limit to the 5 core tables** for this exercise: `dim_property` (SCD2), `dim_destination` (SCD1), `dim_user` (SCD2), `dim_host` (SCD2), `fact_booking_detail` (Fact).
+
+🔴 **CRITICAL bundle wiring (without it the jobs cannot find the schemas):** the EXISTING `<DP_BUNDLE_ROOT>/databricks.yml` MUST gain (a) a `sync` rule that includes `gold_layer_design/yaml/**/*.yaml` so the YAML reaches the workspace, and (b) `pyyaml>=6.0` in the job environment. Because the design YAML already lives under `<DP_BUNDLE_ROOT>/gold_layer_design/`, the sync path is relative and in place.
+
+IMPORTANT: Use the EXISTING catalog `{lakehouse_default_catalog}` — do NOT create a new catalog. The job creates the Gold schema `{user_schema_prefix}_gold` and all Gold tables inside this catalog.
+
+NOTE: The setup job checks whether `{lakehouse_default_catalog}.{user_schema_prefix}_gold` already exists and, if so, DROPs it with CASCADE and recreates it (user-specific schema — safe to drop). This DROP/CREATE runs INSIDE the job, not as a direct statement you execute.
+
+NOTE: This is a shared workshop workspace. Put a `user_prefix` variable in every job `name:` field (e.g. `"[${bundle.target} ${var.user_prefix}] Gold Setup Job"`) to avoid name collisions — `bundle deploy --force` does NOT resolve these (see `databricks-asset-bundles` → "Shared Workspace Naming").
+
+### Step 3 — Write bundle files to `<DP_BUNDLE_ROOT>`, then deploy FROM that page
+
+- Write every generated file UNDER `<DP_BUNDLE_ROOT>` — never the clone root (writing at the clone root is the "one level too high" bug), never `/tmp`, never a bare relative path (Genie Code''s CWD is page-type-dependent):
+  - `<DP_BUNDLE_ROOT>/src/{user_schema_prefix}_gold/` — `setup_tables.py`, `add_fk_constraints.py`, `merge_gold_tables.py`
+  - `<DP_BUNDLE_ROOT>/resources/gold/gold_setup_job.yml` and `<DP_BUNDLE_ROOT>/resources/gold/gold_merge_job.yml`
+  - extend the EXISTING `<DP_BUNDLE_ROOT>/databricks.yml` (the one from Bronze + Silver) — add the Gold resources AND the `gold_layer_design/yaml/**` sync rule + `pyyaml>=6.0`
+- **Open the bundle editor BEFORE any `bundle` command — and surface its link.** `<DP_BUNDLE_ROOT>/databricks.yml` already exists (from Bronze + Silver), so the workspace file browser shows the **"Open in bundle editor"** affordance on that folder (and an **"Open in editor"** button at the top). Its page CWD IS `<DP_BUNDLE_ROOT>` — the bundle-root page `bundle deploy`/`run` require, where Genie Code runs deploy/run pre-approved. **Do not make the operator hunt for the icon** — build a clickable link with the pre-authenticated `WorkspaceClient` (`w`) and print it:
+  - `host = w.config.host`; `o = w.get_workspace_id()`
+  - `file_id = w.workspace.get_status("<DP_BUNDLE_ROOT>/databricks.yml").object_id`
+  - `folder_id = w.workspace.get_status("<DP_BUNDLE_ROOT>").object_id`
+  - **Bundle editor:** `{host}/editor/files/{file_id}?o={o}&contextId=folder%3A{folder_id}` (plain folder: `{host}/browse/folders/{folder_id}?o={o}`)
+
+  Tell the operator to open the **bundle-editor link**, then run every `databricks bundle …` command below from that page. Edit the EXISTING on-page `databricks.yml` — files created via the workspace API may not reach the CLI''s FUSE mount.
+- Validate → deploy → run the setup job FIRST → run the merge job through `runDatabricksCli`, **from the bundle-editor page**, each with `--target dev` (mandatory — a target-less deploy is guardrail-blocked):
+  - `databricks bundle validate --target dev`
+  - `databricks bundle deploy --target dev`
+  - `databricks bundle run --target dev gold_setup_job`  ← **must run first** (Task 1 creates tables + PKs, Task 2 adds FKs via `depends_on`)
+  - `databricks bundle run --target dev gold_merge_job`
+- **🛑 If a `bundle` command is blocked or fails, STOP — do not work around it.** A `databricks.yml not found` error or a "blocked by safety guardrails" message means you are NOT on the bundle page: open the **bundle-editor link** above and retry (CONFIRMED — the same `bundle deploy`/`run` that is "blocked" from a file page succeeds from the bundle editor). If it STILL fails from the bundle editor, STOP and report the blocker. Do **NOT** create the jobs, tables, constraints, or merges via the Jobs/Pipelines REST API (`jobs/create`, `/api/2.0/pipelines`), the SDK, or direct SQL to "get it done" — that silently defeats the bundle (no version control, no `bundle destroy` cleanup) and FAILS the gate. The REST/SDK route is an **escape hatch available only if the operator explicitly authorizes it.**
+
+**State-lock:** this prompt runs between an `enter` (Step 0) and an `exit`. After the gate passes, run `skills/vibecoding-state` op `exit` — params: `prompt_id: "gold_layer_pipeline"`, `gate: "Gold layer live"`, `captured: {gold_schema, gold_setup_job, gold_merge_job}`.
+
+**Gate:** `Gold layer live` — `gold_setup_job` (both tasks) and `gold_merge_job` were **created by `bundle deploy` and executed by `bundle run`** (the setup job ran first and the merge job populated data), AND the 5 Gold tables exist in `{lakehouse_default_catalog}.{user_schema_prefix}_gold` with PRIMARY KEY constraints present (FK constraints may be partial in serverless — that is expected). Tables existing is **necessary but NOT sufficient** — if anything was created by direct SQL instead of the deployed bundle, the gate FAILS and you must redo it via the bundle.',
+'',
+true, 1, true, current_timestamp(), current_timestamp(), current_user());
+
 -- Step 13: Create Use-Case Plan (Operationalization Planning) - bypass_LLM = TRUE
 INSERT INTO ${catalog}.${schema}.section_input_prompts 
 (input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
@@ -3106,7 +3591,7 @@ This will involve the following steps:
 - **Analyze Gold layer** — examine your completed Gold tables to identify natural business domains, key relationships, and analytical questions
 - **Generate use-case plans** — create structured plans organized as Phase 1 addendums (1.2 TVFs, 1.3 Metric Views, 1.4 Monitors, 1.5 Dashboards, 1.6 Genie Spaces, 1.7 Alerts, 1.1 ML Models). Filenames must match the canonical numbering table at `data_product_accelerator/skills/planning/00-project-planning/assets/addendum-numbering.md`.
 - **Produce YAML manifests** — generate 4 machine-readable manifest files (semantic-layer, observability, ML, GenAI agents) as contracts for downstream implementation stages
-- **Emit Gold dependency manifest** — write `plans/manifests/gold-dependency-manifest.yaml` with every Gold table/column referenced across all addendums, then intersect it against `{lakehouse_default_catalog}.information_schema` for `{user_schema_prefix}_gold`. If any reference is missing, the skill writes `plans/gold-gap-remediation.md` and STOPS — downstream orchestrators (semantic layer, observability, ML, GenAI agents) will refuse to run until Gold is fixed.
+- **Emit Gold dependency manifest** — write `<ARTIFACT_ROOT>/plans/manifests/gold-dependency-manifest.yaml` with every Gold table/column referenced across all addendums, then intersect it against `{lakehouse_default_catalog}.information_schema` for `{user_schema_prefix}_gold`. If any reference is missing, the skill writes `<ARTIFACT_ROOT>/plans/gold-gap-remediation.md` and STOPS — downstream orchestrators (semantic layer, observability, ML, GenAI agents) will refuse to run until Gold is fixed.
 - **Apply workshop mode caps** — enforce hard limits (3-5 TVFs, 1-2 Metric Views, 1 Genie Space) to keep the workshop focused on pattern variety over depth
 - **Define deployment order** — establish build sequence: TVFs → Metric Views → Genie Spaces → Dashboards → Monitors → Alerts → Agents
 
@@ -3115,9 +3600,11 @@ If a PRD exists at @docs/design_prd.md, reference it for business requirements, 
 'Create Use-Case Plan',
 'Generate implementation plans for operationalizing use cases with supporting artifacts',
 13,
-'## 1️⃣ How To Apply
+'> **Artifact root (client-aware).** Resolve the data-product bundle root via `vibecoding-state` (`dp_bundle_root` in `## Environment Capabilities`, = `<artifact_root>/<use_case_slug>_dab`) and write **every plan document and manifest under `<use_case_slug>_dab/plans/`** — NOT the bare repo/clone root. This is the same dedicated bundle folder the Lakehouse + Gold-design steps build into, so the downstream deploy steps find `plans/manifests/*.yaml` right beside the bundle. The shape is identical on every client: on Cursor/Copilot it is `<repo-root>/<use_case_slug>_dab/`; on Databricks Genie Code it is `<clone-root>/<use_case_slug>_dab/` — never the page''s current working directory.
 
-Copy the prompt above, start a **new Agent chat** in Cursor, and paste it. The AI will analyze your Gold layer and create use case plans.
+## 1️⃣ How To Apply
+
+Copy the prompt above, start a **new Agent chat** in your coding assistant, and paste it. The AI will analyze your Gold layer and create use case plans.
 
 ### Prerequisite
 
@@ -3127,12 +3614,12 @@ Ensure you have:
 - ✅ Gold Layer Design completed (Step 9)
 - ✅ Gold Layer Implementation completed (Step 12)
 - ✅ `data_product_accelerator/skills/planning/00-project-planning/SKILL.md` - The project planning skill
-- ✅ `docs/design_prd.md` - PRD with business requirements (optional, if available)
+- ✅ `<ARTIFACT_ROOT>/docs/design_prd.md` - PRD with business requirements (optional, if available)
 
 ### Steps to Apply
 
-1. **Start new Agent thread** — Open Cursor and start a new Agent thread for clean context
-2. **Copy and paste the prompt** — Use the copy button, paste into Cursor; the AI will analyze your Gold layer and create use case plans
+1. **Start new Agent thread** — start a new Agent thread in your coding assistant for clean context
+2. **Copy and paste the prompt** — Use the copy button, paste into your coding assistant; the AI will analyze your Gold layer and create use case plans
 3. **Review generated plans** — Plans appear in `plans/` folder (Phase addendums, artifact specs, implementation priorities)
 4. **Prioritize use cases** — Identify highest-value use cases, assign P0/P1/P2, determine implementation order
 5. **Prepare for implementation** — Use plans to guide Step 14+ (implement artifacts based on plans)
@@ -3165,7 +3652,7 @@ After building the Gold layer (data foundation), we now plan how to **operationa
 
 ### PRD-Driven Planning
 
-If a **Product Requirements Document (PRD)** exists at `docs/design_prd.md`, it provides:
+If a **Product Requirements Document (PRD)** exists at `<ARTIFACT_ROOT>/docs/design_prd.md`, it provides:
 
 | PRD Element | How It Informs Planning |
 |-------------|-------------------------|
@@ -3503,7 +3990,7 @@ This workshop uses `planning_mode: workshop` — hard caps prevent artifact bloa
 
 **YAML Manifests (Plan-as-Contract):**
 - [ ] 4 domain manifests generated in `plans/manifests/`
-- [ ] `plans/manifests/gold-dependency-manifest.yaml` generated AND intersected against the live `{lakehouse_default_catalog}.{user_schema_prefix}_gold` catalog with zero missing tables/columns (if gaps: `plans/gold-gap-remediation.md` emitted and planning STOPS)
+- [ ] `<ARTIFACT_ROOT>/plans/manifests/gold-dependency-manifest.yaml` generated AND intersected against the live `{lakehouse_default_catalog}.{user_schema_prefix}_gold` catalog with zero missing tables/columns (if gaps: `<ARTIFACT_ROOT>/plans/gold-gap-remediation.md` emitted and planning STOPS)
 - [ ] `planning_mode: workshop` present in all manifests
 - [ ] All table/column references validated against Gold YAML
 - [ ] Artifact counts in manifests match plan addendum counts
@@ -3523,12 +4010,76 @@ This workshop uses `planning_mode: workshop` — hard caps prevent artifact bloa
 - [ ] Source Gold tables identified for each artifact',
 true, 1, true, current_timestamp(), current_timestamp(), current_user());
 
+-- usecase_plan (genie-code fork) — prescriptive paths + skill refs; document-writing (no deploy); plans land under <DP_BUNDLE_ROOT>/plans; bypass_LLM = TRUE
+INSERT INTO ${catalog}.${schema}.section_input_prompts
+(input_id, section_tag, coding_assistant, input_template, system_prompt,
+ bypass_llm, version, is_active, inserted_at, updated_at, created_by)
+VALUES
+(906, 'usecase_plan', 'genie-code',
+'**Genie Code — this is a prescriptive runbook. Follow the steps in order. Do NOT improvise paths, do NOT use bare relative paths, do NOT use `@`-mentions. This is a PLANNING / DOCUMENT-WRITING step: you WRITE plan documents and YAML manifests — you do NOT create tables, run SQL DDL, or deploy anything. Every skill is named by its full clone-rooted path; every artifact is anchored to `<DP_BUNDLE_ROOT>/plans/`.**
+
+### 🔴 Non-negotiable rules (read before anything)
+
+❌ **NEVER** create a catalog/schema/table, run `CREATE`/`MERGE`/DDL, or build/deploy an Asset Bundle in this step — planning produces FILES only. (Read-only inspection of the live Gold schema for validation is fine — see Step 2.)
+
+❌ **NEVER** write the plans to the bare clone root, `/tmp`, the page''s current working directory, or a bare relative path. Genie Code''s CWD is page-type-dependent, so a bare `plans/` lands in the wrong place.
+
+✅ Write **every** plan document and manifest under `<DP_BUNDLE_ROOT>/plans/` — the SAME data-product bundle folder the Lakehouse + Gold-design steps build into, so the downstream deploy steps (semantic layer, dashboard, DI assets) find `plans/manifests/*.yaml` and `plans/deploy-checkpoint.md` right beside the bundle they deploy from.
+
+### Step 0 — Resolve your environment (once, before anything else)
+
+Run `skills/vibecoding-state` operation `resolve_root`. Read these resolved values and use them literally throughout:
+
+- `client_context` = `genie_code`
+- `artifact_root` = your workshop clone root (e.g. `/Workspace/Users/<your-email>/.assistant/skills/vibe-coding-workshop`)
+- `skill_ref_root` = `skills/vibe-coding-workshop` (substitute your clone folder if you cloned somewhere other than `.assistant/skills/vibe-coding-workshop`)
+- `dp_bundle_root` = `<artifact_root>/<use_case_slug>_dab` — the **self-contained data-product Asset Bundle project** the whole pipeline builds into (e.g. `…/vibe-coding-workshop/booking_app_dab`). Referred to below as `<DP_BUNDLE_ROOT>`. This step writes the plans INTO `<DP_BUNDLE_ROOT>/plans/`. Your Gold design (from step 9) lives at `<DP_BUNDLE_ROOT>/gold_layer_design/`; an optional PRD (from the PRD step) lives at `<artifact_root>/docs/design_prd.md`.
+
+### Step 1 — Load the required skills by their FULL clone-rooted paths
+
+Load each skill with `readSkillFile` using its fully-qualified `<skill_ref_root>`-prefixed path — NEVER a bare `@…` mention, NEVER a repo-relative path. **The root-level `skills/` come FIRST: they are the highest-priority, always-on guardrails and govern everything below.**
+
+1. `readSkillFile("skills/vibe-coding-workshop/skills/databricks-expert-agent/SKILL.md")` — core "Extract, Don''t Generate" rule applied to the plan-to-implementation handoff.
+
+Then the planning orchestrator and its common skill (load in this order):
+
+2. `readSkillFile("skills/vibe-coding-workshop/data_product_accelerator/skills/planning/00-project-planning/SKILL.md")` — the project-planning orchestrator. Run it with `planning_mode: workshop`. Honor the canonical addendum-numbering table it names (prefix that path with `skill_ref_root` too).
+3. `readSkillFile("skills/vibe-coding-workshop/data_product_accelerator/skills/common/naming-tagging-standards/SKILL.md")` — enterprise naming conventions for every planned artifact.
+
+When the orchestrator lists further **Mandatory Skill Dependencies**, load EACH the same way: take its repo-relative path and prefix it with `skill_ref_root`. Genie Code has no repo-root-relative resolution and `AGENTS.md` does not carry across threads — so always prefix with `skill_ref_root`. **Read them in one batched `readSkillFile` turn — Genie Code reads multiple skill files in parallel in a single turn, so never serialize independent reads (`genie-code-environment` §10).**
+
+### Step 2 — Run the planning workflow, writing every artifact under `<DP_BUNDLE_ROOT>/plans/`
+
+Drive the orchestrator with `planning_mode: workshop`:
+
+- **Analyze the Gold layer** — examine the completed Gold tables (read-only) to identify business domains, relationships, and analytical questions.
+- **Generate use-case plans** — Phase 1 addendums (1.2 TVFs, 1.3 Metric Views, 1.6 Genie Spaces by default; 1.1/1.4/1.5/1.7 if requested). Filenames MUST match the canonical addendum-numbering table.
+- **Produce the 4 YAML manifests** (semantic-layer, observability, ML, GenAI agents) as machine-readable contracts for downstream stages.
+- **Emit the Gold dependency manifest** at `<DP_BUNDLE_ROOT>/plans/manifests/gold-dependency-manifest.yaml`, then intersect it against the LIVE `{lakehouse_default_catalog}.information_schema` for `{user_schema_prefix}_gold` (read-only). If any reference is missing, write `<DP_BUNDLE_ROOT>/plans/gold-gap-remediation.md` and STOP — downstream orchestrators refuse to run until Gold is fixed.
+- **Apply workshop caps** (3-5 TVFs, 1-2 Metric Views, 1 Genie Space) and **define deployment order** (TVFs → Metric Views → Genie Spaces → Dashboards → Monitors → Alerts → Agents).
+
+If a PRD exists at `<artifact_root>/docs/design_prd.md`, reference it for business requirements, personas, and workflows.
+
+Anchor EVERY output to `<DP_BUNDLE_ROOT>/plans/` — never the bare clone root, never the page CWD. The key paths:
+
+- `<DP_BUNDLE_ROOT>/plans/README.md`, `prerequisites.md`, `use-case-catalog.md`, `phase1-use-cases.md`
+- `<DP_BUNDLE_ROOT>/plans/phase1-addendum-1.2-tvfs.md`, `…-1.3-metric-views.md`, `…-1.6-genie-spaces.md` (+ others if selected)
+- `<DP_BUNDLE_ROOT>/plans/manifests/semantic-layer-manifest.yaml`, `observability-manifest.yaml`, `ml-manifest.yaml`, `genai-agents-manifest.yaml`, `gold-dependency-manifest.yaml`
+
+Use `createAsset`/the workspace file APIs to write these under `<DP_BUNDLE_ROOT>/plans/`. If a parent folder does not exist yet, create it — do not retarget to the clone root.
+
+**Gate:** `Use-case plan complete` — `<DP_BUNDLE_ROOT>/plans/` contains the README + Phase-1 master + the selected addendums + all 4 manifests, the first plan line confirms `**Planning Mode:** Workshop`, and `gold-dependency-manifest.yaml` was intersected against the live `{lakehouse_default_catalog}.{user_schema_prefix}_gold` catalog with zero missing references (gaps ⇒ `gold-gap-remediation.md` emitted and planning STOPS). No schema/table was created and nothing was deployed.',
+'',
+true, 1, true, current_timestamp(), current_timestamp(), current_user());
+
 -- Step 14: Build AI/BI Dashboard (moved to step 16, order_number 14) - bypass_LLM = TRUE
 INSERT INTO ${catalog}.${schema}.section_input_prompts 
 (input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
 VALUES
 (12, 'aibi_dashboard',
 'Build an AI/BI (Lakeview) Dashboard using @data_product_accelerator/skills/monitoring/02-databricks-aibi-dashboards/SKILL.md
+
+**Bundle root:** Extend the SAME data-product bundle the Lakehouse steps built — its dedicated top-level folder `{use_case_slug}_dab/` at the repo root (`dp_bundle_root`). All relative paths (`src/`, `resources/`, `plans/`, `databricks.yml`) resolve UNDER `{use_case_slug}_dab/`, never the bare repo root. Same folder on every coding agent.
 
 This will involve the following end-to-end workflow:
 
@@ -3540,7 +4091,7 @@ This will involve the following end-to-end workflow:
 - **Run Phase 0.5 pre-flight** — BEFORE any deploy, enumerate every `${var}` placeholder in the `.lvdash.json`, then assert the deploy job provides every one. Missing a single variable corrupts the upload silently (see `monitoring/02-databricks-aibi-dashboards/SKILL.md` → "Pre-loop variable enumeration").
 - **Deploy via UPDATE-or-CREATE** — use Workspace Import API with `overwrite: true` AND base64-encoded ASCII content (raw UTF-8 bytes silently corrupts the file). Preserves dashboard URLs and viewer permissions.
 
-Reference the dashboard plan at @plans/phase1-addendum-1.5-aibi-dashboards.md (canonical numbering — see `data_product_accelerator/skills/planning/00-project-planning/assets/addendum-numbering.md`; the legacy name `1.1-dashboards.md` is forbidden).
+Reference the dashboard plan at @{use_case_slug}_dab/plans/phase1-addendum-1.5-aibi-dashboards.md (canonical numbering — see `data_product_accelerator/skills/planning/00-project-planning/assets/addendum-numbering.md`; the legacy name `1.1-dashboards.md` is forbidden).
 
 The skill provides:
 - Dashboard JSON structure with **6-column grid** layout (NOT 12!)
@@ -3564,14 +4115,21 @@ Build the dashboard in this order:
 3. Build widgets with correct version specs
 4. Configure parameters (DATE type, not DATETIME)
 5. Add Global Filters page
-6. Deploy via Workspace Import API',
+6. Deploy via Workspace Import API
+
+**State-lock (`skills/vibecoding-state`) — run this prompt between an `enter` and an `exit` so workshop state is resolved and locked:**
+
+1. **Phase 0 — first, before any step below:** `skills/vibecoding-state` op `enter` — params: `prompt_id: "aibi_dashboard"`, `require_prior_gate: {prompt_id: "gold_layer_pipeline", gate: "Gold layer live"}`. `enter` resolves the `## Environment Capabilities` triple (deploy verb, CLI channel, `state_file_root`) so every deploy/run step below uses the resolved channel — `runDatabricksCli` on Genie Code — and writes state under `state_file_root`, never a bare-local assumption.
+2. **Final — after the step succeeds:** `skills/vibecoding-state` op `exit` — params: `prompt_id: "aibi_dashboard"`, `gate: "Dashboard deployed"`, `captured: {dashboard_path, dashboard_deploy_job}`.
+
+**Gate:** `Dashboard deployed` — the dashboard artifact is deployed, the widgets render, and every widget field maps to a validated SQL alias.',
 '',
 'Build AI/BI Dashboard',
 'Create an AI/BI (Lakeview) dashboard with KPI counters, charts, filters, and automated deployment from Gold layer data',
 14,
 '## 1️⃣ How To Apply
 
-**Copy the prompt above**, start a **new Agent thread** in Cursor, and **paste it**. The AI will build the dashboard in phases.
+**Copy the prompt above**, start a **new Agent thread** in your coding assistant, and **paste it**. The AI will build the dashboard in phases.
 
 ---
 
@@ -3590,9 +4148,9 @@ Ensure you have:
 
 ### Steps to Apply
 
-**Step 1:** Start new Agent thread — Open Cursor and start a **new Agent thread** for clean context.
+**Step 1:** Start new Agent thread — start a **new Agent thread** in your coding assistant for clean context.
 
-**Step 2:** Copy and paste the prompt — Copy the entire prompt using the copy button, paste it into Cursor. The AI will build the dashboard in phases.
+**Step 2:** Copy and paste the prompt — Copy the entire prompt using the copy button, paste it into your coding assistant. The AI will build the dashboard in phases.
 
 **Step 2.5:** Input Validation — The AI will verify the plan file exists at `plans/phase1-addendum-1.5-aibi-dashboards.md`. **If missing**, the AI should ask you for the correct path rather than silently proceeding. It will also load prerequisite skills (`metric-views-patterns` for MEASURE() syntax, `databricks-expert-agent` for extract-don''t-generate).
 
@@ -3605,6 +4163,8 @@ Ensure you have:
 **Step 6:** Parameter and Filter Configuration — The AI will add DATE parameters with static defaults (not DATETIME), create Global Filters page (`PAGE_TYPE_GLOBAL_FILTERS`), and link filter widgets to dataset parameters.
 
 **Step 7:** Validate and Deploy
+
+> **Client note:** IDE runs these in a terminal; Genie Code runs the `databricks bundle …` commands via `runDatabricksCli` (be on the bundle''s page; resolved channel in `## Environment Capabilities`). See `genie-code-environment`.
 
 ```bash
 # Pre-deployment validation
@@ -4031,12 +4591,95 @@ WHERE table_schema = ''{user_schema_prefix}_gold'' AND table_type = ''METRIC_VIE
 ```',
 true, 1, true, current_timestamp(), current_timestamp(), current_user());
 
+-- aibi_dashboard (genie-code fork) — prescriptive paths + directives; bundle-job deploy; reads plans/gold YAML from <DP_BUNDLE_ROOT>; bypass_LLM = TRUE
+INSERT INTO ${catalog}.${schema}.section_input_prompts
+(input_id, section_tag, coding_assistant, input_template, system_prompt,
+ bypass_llm, version, is_active, inserted_at, updated_at, created_by)
+VALUES
+(907, 'aibi_dashboard', 'genie-code',
+'**Genie Code — this is a prescriptive runbook. Follow the steps in order. Do NOT improvise paths, do NOT use bare relative paths, do NOT use `@`-mentions, and do NOT publish the dashboard by hand. Every skill is named by its full clone-rooted path; every artifact is anchored to `<DP_BUNDLE_ROOT>`; the dashboard is deployed by a deployed bundle job — never by a one-off Workspace Import call you run yourself.**
+
+### 🔴 Non-negotiable execution rule (read before anything)
+
+❌ **NEVER** publish/import the dashboard by calling `w.workspace.import_` / the Workspace Import API **by hand**, and NEVER create datasets, widgets, or the dashboard via an ad-hoc API call. The dashboard is deployed as the **body of the bundle job** `dashboard_deploy_job` (which itself runs `deploy_dashboard.py` with the UPDATE-or-CREATE + base64 pattern). The bundle **is** the execution mechanism — never bypass it, even though a direct import is faster. A live dashboard with no versioned bundle behind it is the regression this fork exists to prevent.
+
+✅ The ONLY things you run directly are (a) **read-only / local** checks — `python scripts/validate_dashboard_queries.py`, `python scripts/validate_widget_encodings.py`, the Phase-0.5 `${var}` enumeration, a read-only `SELECT … information_schema …` to confirm COMMENTs/Metric Views — and (b) `databricks bundle validate` / `deploy` / `run` through `runDatabricksCli`. If `bundle deploy` is blocked, FIX the page context (open the bundle editor — Step 3) — do **not** fall back to a hand-rolled import, the Jobs REST API, or the SDK.
+
+### Step 0 — Resolve your environment (once, before anything else)
+
+Run `skills/vibecoding-state` operation `enter` with `prompt_id: "aibi_dashboard"` and `require_prior_gate: {prompt_id: "gold_layer_pipeline", gate: "Gold layer live"}`. It writes and echoes the `## Environment Capabilities` block. Read these resolved values and use them literally throughout:
+
+- `client_context` = `genie_code`
+- `artifact_root` = your workshop clone root (e.g. `/Workspace/Users/<your-email>/.assistant/skills/vibe-coding-workshop`)
+- `skill_ref_root` = `skills/vibe-coding-workshop` (substitute your clone folder if you cloned somewhere other than `.assistant/skills/vibe-coding-workshop`)
+- `dp_bundle_root` = `<artifact_root>/{use_case_slug}_dab` — the **SAME self-contained Asset Bundle** you built for Bronze + Silver + Gold (+ semantic layer) (e.g. `…/booking_app_dab`). EXTEND it; do NOT make a new one. It is the **page you deploy from**. Referred to below as `<DP_BUNDLE_ROOT>`. Your dashboard plan lives at `<DP_BUNDLE_ROOT>/plans/phase1-addendum-1.5-aibi-dashboards.md`, the resolved names at `<DP_BUNDLE_ROOT>/plans/deploy-checkpoint.md`, and Gold design YAML at `<DP_BUNDLE_ROOT>/gold_layer_design/yaml/`.
+- deploy verb = `bundle deploy --target dev`, run through the `runDatabricksCli` tool
+
+If `enter` reports the Gold gate is not `Gold layer live`, STOP — finish the Gold pipeline step first. If `enter` has not run in this thread, run it now.
+
+### Step 1 — Load the required skills by their FULL clone-rooted paths
+
+Load each skill with `readSkillFile` using its fully-qualified `<skill_ref_root>`-prefixed path — NEVER a bare `@…` mention, NEVER a repo-relative path. **The root-level `skills/` come FIRST: they are the highest-priority, always-on guardrails and govern everything below.**
+
+1. `readSkillFile("skills/vibe-coding-workshop/skills/databricks-expert-agent/SKILL.md")` — "Extract, Don''t Generate": validate every table/column against the Gold YAML before writing dataset SQL.
+2. `readSkillFile("skills/vibe-coding-workshop/skills/databricks-asset-bundles/SKILL.md")` — the `dashboard_deploy_job` resource, serverless Environments V4, and the `${var.user_prefix}` "Shared Workspace Naming" pattern. **You will not write any `databricks.yml` or job YAML until you have read this.**
+
+Then the dashboard worker skill and its common/semantic skills (load in this order):
+
+3. `readSkillFile("skills/vibe-coding-workshop/data_product_accelerator/skills/monitoring/02-databricks-aibi-dashboards/SKILL.md")` — the AI/BI dashboard worker: `.lvdash.json` structure, 6-column grid (NOT 12!), widget versions (KPI=v2, charts=v3, tables=v2, filters=v2), pre-deploy validation, UPDATE-or-CREATE + base64 deployment.
+4. `readSkillFile("skills/vibe-coding-workshop/data_product_accelerator/skills/semantic-layer/01-metric-views-patterns/SKILL.md")` — `MEASURE()` syntax for the Metric-View datasets this dashboard queries.
+5. `readSkillFile("skills/vibe-coding-workshop/data_product_accelerator/skills/common/naming-tagging-standards/SKILL.md")` — dashboard + file naming conventions.
+6. `readSkillFile("skills/vibe-coding-workshop/data_product_accelerator/skills/common/databricks-python-imports/SKILL.md")` — pure-Python module pattern for `deploy_dashboard.py` and the validators.
+
+When any skill lists further **Mandatory Skill Dependencies**, load EACH the same way: prefix its repo-relative path with `skill_ref_root`. Genie Code has no repo-root-relative resolution and `AGENTS.md` does not carry across threads. **Read them in one batched `readSkillFile` turn — Genie Code reads multiple skill files in parallel in a single turn, so never serialize independent reads (`genie-code-environment` §10).**
+
+### Step 2 — Author the dashboard + deploy job. Do NOT execute anything yet.
+
+Using the skills above and the plan at `<DP_BUNDLE_ROOT>/plans/phase1-addendum-1.5-aibi-dashboards.md` (extract specs — don''t generate), AUTHOR (write files only — no execution):
+
+- The `.lvdash.json`: 6-column grid (widths 1-6, NEVER 7-12), correct widget versions, `${catalog}.${gold_schema}` substitution in every dataset query (never hardcoded), `MEASURE()` for KPIs/trends/breakdowns from Metric Views, direct Gold SQL for detail tables and filter lists, DATE (not DATETIME) parameters with static defaults, and a `PAGE_TYPE_GLOBAL_FILTERS` page. Validate every column against `<DP_BUNDLE_ROOT>/gold_layer_design/yaml/` first; every widget `fieldName` must match its SQL alias exactly.
+- `deploy_dashboard.py` (UPDATE-or-CREATE with `overwrite: true`, base64-encoding the rendered ASCII JSON — never raw UTF-8 bytes), `validate_dashboard_queries.py`, `validate_widget_encodings.py`.
+- The bundle resource `dashboard_deploy_job.yml` that runs `deploy_dashboard.py`.
+
+IMPORTANT: Query the EXISTING Gold schema `{user_schema_prefix}_gold` in `{lakehouse_default_catalog}` — the dashboard reads from it; it does NOT create any catalog/schema/table.
+
+NOTE: This is a shared workshop workspace. Put a `user_prefix` variable in the job `name:` and the dashboard display name to avoid collisions (see `databricks-asset-bundles` → "Shared Workspace Naming").
+
+### Step 3 — Write bundle files to `<DP_BUNDLE_ROOT>`, then deploy FROM that page
+
+- Write every generated file UNDER `<DP_BUNDLE_ROOT>` — never the clone root (the "one level too high" bug), never `/tmp`, never a bare relative path (Genie Code''s CWD is page-type-dependent):
+  - `<DP_BUNDLE_ROOT>/docs/dashboards/` — `*.lvdash.json` (+ a short README)
+  - `<DP_BUNDLE_ROOT>/scripts/` — `deploy_dashboard.py`, `validate_dashboard_queries.py`, `validate_widget_encodings.py`
+  - `<DP_BUNDLE_ROOT>/resources/monitoring/` — `dashboard_deploy_job.yml`
+  - extend the EXISTING `<DP_BUNDLE_ROOT>/databricks.yml`
+- **Run the local validators first** (`python scripts/validate_dashboard_queries.py`, `python scripts/validate_widget_encodings.py`, Phase-0.5 `${var}` enumeration) — these are read-only/local and are allowed. STOP and fix on any failure before deploying.
+- **Open the bundle editor BEFORE any `bundle` command — and surface its link.** `<DP_BUNDLE_ROOT>/databricks.yml` already exists, so the workspace file browser shows the **"Open in bundle editor"** affordance on that folder (and an **"Open in editor"** button at the top). Its page CWD IS `<DP_BUNDLE_ROOT>` — the bundle-root page `bundle deploy`/`run` require, where Genie Code runs deploy/run pre-approved. **Do not make the operator hunt for the icon** — build a clickable link with the pre-authenticated `WorkspaceClient` (`w`) and print it:
+  - `host = w.config.host`; `o = w.get_workspace_id()`
+  - `file_id = w.workspace.get_status("<DP_BUNDLE_ROOT>/databricks.yml").object_id`
+  - `folder_id = w.workspace.get_status("<DP_BUNDLE_ROOT>").object_id`
+  - **Bundle editor:** `{host}/editor/files/{file_id}?o={o}&contextId=folder%3A{folder_id}` (plain folder: `{host}/browse/folders/{folder_id}?o={o}`)
+
+  Tell the operator to open the **bundle-editor link**, then run every `databricks bundle …` command below from that page. Edit the EXISTING on-page `databricks.yml` — files created via the workspace API may not reach the CLI''s FUSE mount.
+- Validate → deploy → run the dashboard job through `runDatabricksCli`, **from the bundle-editor page**, each with `--target dev` (mandatory — a target-less deploy is guardrail-blocked):
+  - `databricks bundle validate --target dev`
+  - `databricks bundle deploy --target dev`
+  - `databricks bundle run --target dev dashboard_deploy_job`
+- **🛑 If a `bundle` command is blocked or fails, STOP — do not work around it.** A `databricks.yml not found` error or a "blocked by safety guardrails" message means you are NOT on the bundle page: open the **bundle-editor link** above and retry (CONFIRMED — the same `bundle deploy`/`run` that is "blocked" from a file page succeeds from the bundle editor). If it STILL fails from the bundle editor, STOP and report the blocker. Do **NOT** publish the dashboard via a hand-rolled `w.workspace.import_` call, the Jobs REST API (`jobs/create`), or the SDK to "get it done" — that silently defeats the bundle (no version control, no `bundle destroy` cleanup) and FAILS the gate. The REST/SDK route is an **escape hatch available only if the operator explicitly authorizes it.**
+
+**State-lock:** this prompt runs between an `enter` (Step 0) and an `exit`. After the gate passes, run `skills/vibecoding-state` op `exit` — params: `prompt_id: "aibi_dashboard"`, `gate: "Dashboard deployed"`, `captured: {dashboard_path, dashboard_deploy_job}`.
+
+**Gate:** `Dashboard deployed` — the `.lvdash.json` was **deployed by `bundle deploy` and run by `bundle run dashboard_deploy_job`**, the widgets render, and every widget field maps to a validated SQL alias. The dashboard existing in the workspace is **necessary but NOT sufficient** — if it was published by a hand-rolled import or the Jobs API instead of the deployed bundle, the gate FAILS and you must redo it via the bundle.',
+'',
+true, 1, true, current_timestamp(), current_timestamp(), current_user());
+
 -- Step 15: Build Genie Space [Metric Views/TVFs] - bypass_LLM = TRUE
 INSERT INTO ${catalog}.${schema}.section_input_prompts 
 (input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
 VALUES
 (11, 'genie_space',
 'Set up the semantic layer using @data_product_accelerator/skills/semantic-layer/00-semantic-layer-setup/SKILL.md
+
+**Bundle root:** Extend the SAME data-product bundle the Lakehouse steps built — its dedicated top-level folder `{use_case_slug}_dab/` at the repo root (`dp_bundle_root`). All relative paths below (`src/`, `resources/`, `plans/`, `databricks.yml`) resolve UNDER `{use_case_slug}_dab/`, never the bare repo root. Same folder on every coding agent.
 
 This will involve the following end-to-end workflow:
 
@@ -4051,19 +4694,26 @@ This will involve the following end-to-end workflow:
 
 Implement in this order:
 
-1. **Table-Valued Functions (TVFs)** — using plan at @plans/phase1-addendum-1.2-tvfs.md
-2. **Metric Views** — using plan at @plans/phase1-addendum-1.3-metric-views.md
-3. **Genie Space** — using plan at @plans/phase1-addendum-1.6-genie-spaces.md
+1. **Table-Valued Functions (TVFs)** — using plan at @{use_case_slug}_dab/plans/phase1-addendum-1.2-tvfs.md
+2. **Metric Views** — using plan at @{use_case_slug}_dab/plans/phase1-addendum-1.3-metric-views.md
+3. **Genie Space** — using plan at @{use_case_slug}_dab/plans/phase1-addendum-1.6-genie-spaces.md
 4. **Genie JSON Exports** — create export/import deployment jobs
 
-The orchestrator skill automatically loads worker skills for TVFs, Metric Views, Genie Space patterns, and export/import API.',
+The orchestrator skill automatically loads worker skills for TVFs, Metric Views, Genie Space patterns, and export/import API.
+
+**State-lock (`skills/vibecoding-state`) — run this prompt between an `enter` and an `exit` so workshop state is resolved and locked:**
+
+1. **Phase 0 — first, before any step below:** `skills/vibecoding-state` op `enter` — params: `prompt_id: "genie_space"`, `require_prior_gate: {prompt_id: "gold_layer_pipeline", gate: "Gold layer live"}`. `enter` resolves the `## Environment Capabilities` triple (deploy verb, CLI channel, `state_file_root`) so every deploy/run step below uses the resolved channel — `runDatabricksCli` on Genie Code — and writes state under `state_file_root`, never a bare-local assumption.
+2. **Final — after the step succeeds:** `skills/vibecoding-state` op `exit` — params: `prompt_id: "genie_space"`, `gate: "Genie Space live"`, `captured: {genie_space_id, semantic_warehouse_id}`.
+
+**Gate:** `Genie Space live` — the Genie Space is live and meets the accuracy and repeatability targets on the benchmark questions.',
 '',
 'Build Genie Space [Metric Views/TVFs]',
 'Create semantic layer with TVFs, Metric Views, and Genie Space for natural language analytics',
 15,
 '## 1️⃣ How To Apply
 
-Copy the prompt above, start a **new Agent chat** in Cursor, and paste it. The AI will process all 4 implementation steps in order.
+Copy the prompt above, start a **new Agent chat** in your coding assistant, and paste it. The AI will process all 4 implementation steps in order.
 
 ---
 
@@ -4085,9 +4735,9 @@ Ensure you have:
 
 ### Steps to Apply
 
-**Step 1: Start New Agent Thread** — Open Cursor and start a new Agent thread for clean context.
+**Step 1: Start New Agent Thread** — start a new Agent thread in your coding assistant for clean context.
 
-**Step 2: Copy and Paste the Prompt** — Copy the entire prompt using the copy button, paste it into Cursor. The AI will process all 4 implementation steps in order.
+**Step 2: Copy and Paste the Prompt** — Copy the entire prompt using the copy button, paste it into your coding assistant. The AI will process all 4 implementation steps in order.
 
 **Step 3: Phase 0 — Plan Reading** — The AI will read `plans/manifests/semantic-layer-manifest.yaml` (implementation checklist), extract exact TVF names, Metric View specs, Genie Space configuration. If no manifest exists, fall back to self-discovery from Gold tables.
 
@@ -4104,6 +4754,8 @@ Ensure you have:
 **Checkpoint:** After Phase 3 completes, review the generated Genie Space artifacts before deploying.
 
 **Step 7: Deploy and Validate**
+
+> **Client note:** IDE runs these in a terminal; Genie Code runs the `databricks bundle …` commands via `runDatabricksCli` (be on the bundle''s page; resolved channel in `## Environment Capabilities`). See `genie-code-environment`.
 
 ```bash
 # Deploy all semantic layer jobs
@@ -4630,6 +5282,86 @@ spark.sql(create_sql)
 - [ ] `databricks bundle deploy -t dev` succeeds',
 true, 1, true, current_timestamp(), current_timestamp(), current_user());
 
+-- genie_space (genie-code fork) — prescriptive paths + directives; bundle-job-only; reads plans/gold YAML from <DP_BUNDLE_ROOT>; bypass_LLM = TRUE
+INSERT INTO ${catalog}.${schema}.section_input_prompts
+(input_id, section_tag, coding_assistant, input_template, system_prompt,
+ bypass_llm, version, is_active, inserted_at, updated_at, created_by)
+VALUES
+(908, 'genie_space', 'genie-code',
+'**Genie Code — this is a prescriptive runbook. Follow the steps in order. Do NOT improvise paths, do NOT use bare relative paths, do NOT use `@`-mentions, and do NOT create TVFs, Metric Views, or the Genie Space by hand. Every skill is named by its full clone-rooted path; every artifact is anchored to `<DP_BUNDLE_ROOT>`; every TVF, Metric View, and Genie Space is brought up by a deployed bundle job — never by direct SQL or an ad-hoc API call.**
+
+### 🔴 Non-negotiable execution rule (read before anything)
+
+❌ **NEVER** create a TVF (`CREATE FUNCTION`), a Metric View (`CREATE VIEW … WITH METRICS`), or the Genie Space directly via `executeCode` / `spark.sql` / a notebook cell, and NEVER POST/PATCH the Genie Space by calling the workspace/Genie REST API **by hand**. Those operations are the **body of the bundle jobs** (`tvf_job`, `metric_views_job`, `genie_deploy_job`). The bundle **is** the execution mechanism — never bypass it, even though direct SQL or a one-off API call is faster. Creating live assets with no versioned bundle behind them is the regression this fork exists to prevent.
+
+✅ The ONLY things you run directly are (a) **read-only** inspection (`SHOW`/`DESCRIBE`, `SELECT … FROM information_schema …`, a benchmark `SELECT` to verify a TVF/Metric View, a read-only Conversation-API benchmark call) and (b) `databricks bundle validate` / `deploy` / `run` through `runDatabricksCli`. If `bundle deploy` is blocked, FIX the page context (open the bundle editor — Step 3) — do **not** fall back to direct SQL, the Jobs REST API, or the SDK.
+
+### Step 0 — Resolve your environment (once, before anything else)
+
+Run `skills/vibecoding-state` operation `enter` with `prompt_id: "genie_space"` and `require_prior_gate: {prompt_id: "gold_layer_pipeline", gate: "Gold layer live"}`. It writes and echoes the `## Environment Capabilities` block. Read these resolved values and use them literally throughout:
+
+- `client_context` = `genie_code`
+- `artifact_root` = your workshop clone root (e.g. `/Workspace/Users/<your-email>/.assistant/skills/vibe-coding-workshop`)
+- `skill_ref_root` = `skills/vibe-coding-workshop` (substitute your clone folder if you cloned somewhere other than `.assistant/skills/vibe-coding-workshop`)
+- `dp_bundle_root` = `<artifact_root>/{use_case_slug}_dab` — the **SAME self-contained Asset Bundle** you built for Bronze + Silver + Gold (e.g. `…/booking_app_dab`). EXTEND it; do NOT make a new one. `databricks.yml`, `src/`, `resources/` live here, and it is the **page you deploy from**. Referred to below as `<DP_BUNDLE_ROOT>`. Your plan manifest lives at `<DP_BUNDLE_ROOT>/plans/manifests/semantic-layer-manifest.yaml`, plan addendums at `<DP_BUNDLE_ROOT>/plans/`, and Gold design YAML at `<DP_BUNDLE_ROOT>/gold_layer_design/yaml/`.
+- deploy verb = `bundle deploy --target dev`, run through the `runDatabricksCli` tool
+
+If `enter` reports the Gold gate is not `Gold layer live`, STOP — finish the Gold pipeline step first. If `enter` has not run in this thread, run it now.
+
+### Step 1 — Load the required skills by their FULL clone-rooted paths
+
+Load each skill with `readSkillFile` using its fully-qualified `<skill_ref_root>`-prefixed path — NEVER a bare `@…` mention, NEVER a repo-relative path. **The root-level `skills/` come FIRST: they are the highest-priority, always-on guardrails and govern everything below.**
+
+1. `readSkillFile("skills/vibe-coding-workshop/skills/databricks-expert-agent/SKILL.md")` — "Extract, Don''t Generate": validate every table/column against the Gold YAML before writing SQL.
+2. `readSkillFile("skills/vibe-coding-workshop/skills/databricks-asset-bundles/SKILL.md")` — SQL-task job for TVFs, Python/notebook job for Metric Views, the Genie export/import job, serverless Environments V4, and the `${var.user_prefix}` "Shared Workspace Naming" pattern. **You will not write any `databricks.yml` or job YAML until you have read this.**
+
+Then the Semantic Layer orchestrator and its common skills (load in this order; the orchestrator auto-names workers 01–05 — load EACH the same way with the `skill_ref_root` prefix):
+
+3. `readSkillFile("skills/vibe-coding-workshop/data_product_accelerator/skills/semantic-layer/00-semantic-layer-setup/SKILL.md")` — the orchestrator (Phase 0 gold-inventory check, phase gates, template-first workflow). Any task touching 2+ semantic-layer asset types MUST route through this skill.
+4. `readSkillFile("skills/vibe-coding-workshop/data_product_accelerator/skills/common/naming-tagging-standards/SKILL.md")` — naming + dual-purpose COMMENTs for every TVF/Metric View. **NEVER name an asset without reading this.**
+5. `readSkillFile("skills/vibe-coding-workshop/data_product_accelerator/skills/common/databricks-python-imports/SKILL.md")` — pure-Python module pattern for `create_metric_views.py` and the Genie deploy script.
+
+When the orchestrator lists further **Mandatory Skill Dependencies** (workers `01-metric-views-patterns`, `02-databricks-table-valued-functions`, `03-genie-space-patterns`, `04-genie-space-export-import-api`, `05-genie-space-optimization`), load EACH the same way. Genie Code has no repo-root-relative resolution and `AGENTS.md` does not carry across threads — so always prefix with `skill_ref_root`. **Read those workers in one batched `readSkillFile` turn — Genie Code reads multiple skill files in parallel in a single turn, so never serialize independent reads (`genie-code-environment` §10).**
+
+### Step 2 — Author the semantic-layer bundle (TVFs → Metric Views → Genie). Do NOT execute anything yet.
+
+Using the skills above and the plan manifest at `<DP_BUNDLE_ROOT>/plans/manifests/semantic-layer-manifest.yaml` (extract specs — don''t generate), AUTHOR (write files only — no execution) the resources whose jobs, when run, will:
+
+- **Metric Views** — `WITH METRICS LANGUAGE YAML` views (dimensions, measures, 3-5 synonyms each, formats), built by `create_metric_views.py` reading per-MV YAML. Validate every column against `<DP_BUNDLE_ROOT>/gold_layer_design/yaml/` first.
+- **TVFs** — parameterized SQL functions with **STRING** date params (non-negotiable for Genie), v3.0 bullet-point COMMENTs, `ROW_NUMBER` for Top-N (never `LIMIT {param}`), `is_current = true` on SCD2 joins, `NULLIF` on divisions.
+- **Genie Space** — the export/import JSON config (`"version": 2` at root, IDs via `uuid.uuid4().hex`, arrays sorted, `serialized_space` = `json.dumps(...)` with every `sql:` field a `List[str]`), a **concrete** `semantic_warehouse_id` baked in from `<DP_BUNDLE_ROOT>/plans/deploy-checkpoint.md`, a Serverless SQL Warehouse (non-negotiable), General Instructions ≤ 20 lines, and ≥ 10 benchmark questions with exact SQL.
+
+IMPORTANT: Use the EXISTING catalog `{lakehouse_default_catalog}` and the Gold schema `{user_schema_prefix}_gold` — all TVFs/Metric Views are created there by the jobs. Use `${catalog}` / `${gold_schema}` variable substitution in configs; never hardcode.
+
+NOTE: This is a shared workshop workspace. Put a `user_prefix` variable in every job `name:` field to avoid collisions — `bundle deploy --force` does NOT resolve these (see `databricks-asset-bundles` → "Shared Workspace Naming").
+
+### Step 3 — Write bundle files to `<DP_BUNDLE_ROOT>`, then deploy FROM that page
+
+- Write every generated file UNDER `<DP_BUNDLE_ROOT>` — never the clone root (the "one level too high" bug), never `/tmp`, never a bare relative path (Genie Code''s CWD is page-type-dependent):
+  - `<DP_BUNDLE_ROOT>/src/{user_schema_prefix}_semantic/` — `table_valued_functions.sql`, `semantic/metric_views/*.yaml` + `create_metric_views.py`, `genie/genie_space_config.json`, `deploy_genie_spaces.py`
+  - `<DP_BUNDLE_ROOT>/resources/semantic-layer/` — `tvf_job.yml`, `metric_views_job.yml`, `genie_deploy_job.yml`
+  - extend the EXISTING `<DP_BUNDLE_ROOT>/databricks.yml` (from Bronze + Silver + Gold)
+- **Open the bundle editor BEFORE any `bundle` command — and surface its link.** `<DP_BUNDLE_ROOT>/databricks.yml` already exists, so the workspace file browser shows the **"Open in bundle editor"** affordance on that folder (and an **"Open in editor"** button at the top). Its page CWD IS `<DP_BUNDLE_ROOT>` — the bundle-root page `bundle deploy`/`run` require, where Genie Code runs deploy/run pre-approved. **Do not make the operator hunt for the icon** — build a clickable link with the pre-authenticated `WorkspaceClient` (`w`) and print it:
+  - `host = w.config.host`; `o = w.get_workspace_id()`
+  - `file_id = w.workspace.get_status("<DP_BUNDLE_ROOT>/databricks.yml").object_id`
+  - `folder_id = w.workspace.get_status("<DP_BUNDLE_ROOT>").object_id`
+  - **Bundle editor:** `{host}/editor/files/{file_id}?o={o}&contextId=folder%3A{folder_id}` (plain folder: `{host}/browse/folders/{folder_id}?o={o}`)
+
+  Tell the operator to open the **bundle-editor link**, then run every `databricks bundle …` command below from that page. Edit the EXISTING on-page `databricks.yml` — files created via the workspace API may not reach the CLI''s FUSE mount.
+- Validate → deploy → run the TVF job, then the Metric Views job, then (optionally) the Genie deploy job through `runDatabricksCli`, **from the bundle-editor page**, each with `--target dev` (mandatory — a target-less deploy is guardrail-blocked):
+  - `databricks bundle validate --target dev`
+  - `databricks bundle deploy --target dev`
+  - `databricks bundle run --target dev tvf_job`  ← TVFs first (Metric Views / Genie depend on them)
+  - `databricks bundle run --target dev metric_views_job`
+  - `databricks bundle run --target dev genie_deploy_job`  ← creates/PATCHes the Genie Space via the export/import API job
+- **🛑 If a `bundle` command is blocked or fails, STOP — do not work around it.** A `databricks.yml not found` error or a "blocked by safety guardrails" message means you are NOT on the bundle page: open the **bundle-editor link** above and retry (CONFIRMED — the same `bundle deploy`/`run` that is "blocked" from a file page succeeds from the bundle editor). If it STILL fails from the bundle editor, STOP and report the blocker. Do **NOT** create the TVFs/Metric Views/Genie Space via direct SQL, the Jobs REST API (`jobs/create`), or a hand-rolled Genie/workspace API call to "get it done" — that silently defeats the bundle (no version control, no `bundle destroy` cleanup) and FAILS the gate. The REST/SDK route is an **escape hatch available only if the operator explicitly authorizes it.**
+
+**State-lock:** this prompt runs between an `enter` (Step 0) and an `exit`. After the gate passes, run `skills/vibecoding-state` op `exit` — params: `prompt_id: "genie_space"`, `gate: "Genie Space live"`, `captured: {genie_space_id, semantic_warehouse_id}`.
+
+**Gate:** `Genie Space live` — the TVFs, Metric Views, and Genie Space were **created by `bundle deploy` and executed by `bundle run`** (`tvf_job` → `metric_views_job` → `genie_deploy_job`), the Genie Space uses a Serverless SQL Warehouse, and it meets the accuracy/repeatability targets on the benchmark questions. Assets existing is **necessary but NOT sufficient** — if anything was created by direct SQL or a hand-rolled API call instead of the deployed bundle, the gate FAILS and you must redo it via the bundle.',
+'',
+true, 1, true, current_timestamp(), current_timestamp(), current_user());
+
 -- Step 16: Build & Deploy Agent - bypass_LLM = TRUE
 INSERT INTO ${catalog}.${schema}.section_input_prompts 
 (input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
@@ -4639,7 +5371,7 @@ VALUES
 
 Build and deploy an MCP tool-calling agent that connects to the Genie Spaces created in Step 15, then deploy it to Databricks Model Serving.
 
-**First:** Read `apps_lakebase/$APP_NAME/.vibecoding-state.md` if it exists — it contains Genie Space IDs from the Build Genie Space step (Step 15) and variable values from prior phases.
+**First:** Read `$APP_ROOT/.vibecoding-state.md` if it exists — it contains Genie Space IDs from the Build Genie Space step (Step 15) and variable values from prior phases.
 
 **Workspace:** `{workspace_url}`
 
@@ -4651,6 +5383,8 @@ Build and deploy an MCP tool-calling agent that connects to the Genie Spaces cre
 
 Verify prerequisites and set up the UC schema for model registration:
 
+> **Client note:** IDE runs these in a terminal; Genie Code runs the `databricks …` commands via `runDatabricksCli` (pre-authenticated; resolved channel in `## Environment Capabilities`). See `genie-code-environment`.
+
 ```bash
 GENIE_SPACE_ID="<FROM_STEP_15_OR_VIBECODING_STATE>"
 
@@ -4658,11 +5392,11 @@ databricks serving-endpoints get databricks-claude-sonnet-4-6 --profile $PROFILE
 
 UC_CATALOG="{lakehouse_default_catalog}"
 UC_SCHEMA="{user_schema_prefix}_agents"
-databricks schemas get "$UC_CATALOG.$UC_SCHEMA" --profile $PROFILE 2>/dev/null || \
-  databricks schemas create --catalog-name "$UC_CATALOG" --name "$UC_SCHEMA" --profile $PROFILE
 ```
 
-If no interactive cluster is available, plan to run Steps 2–5 as a serverless job (see the skill''s Step 2 "No interactive cluster?" callout and `references/job-submission.md`).
+The UC agent schema `$UC_CATALOG.$UC_SCHEMA` is created by the deploy job''s notebook via direct SQL (`CREATE SCHEMA IF NOT EXISTS`) — the deliberate schema exception, **not** a bundle resource. Do **not** run `databricks schemas create` here (it is also hard-blocked on Genie Code).
+
+Steps 2–5 deploy as a **bundle job** (`agent_deploy_job`): `bundle deploy -t dev` then `bundle run -t dev agent_deploy_job` — the same spine as Bronze/Silver/Gold. See the skill''s Step 2 "Deploy Steps 2–5 as a bundle job" section (`references/agent_deploy_job.yml` + `references/agent-deploy-notebook.py`).
 
 ---
 
@@ -4693,15 +5427,22 @@ After Step 5, verify the tool-calling path with `curl + PAT` against `/invocatio
 - [ ] Serving endpoint in `READY` state (skill Step 5 gate)
 - [ ] Step 5 gate passed: `curl + PAT` against `/invocations` returned a `function_call` to the Genie MCP tool (see skill Step 5 verification gate)
 - [ ] Step 5b auto-grant ran (see skill): UC privileges on `{lakehouse_default_catalog}.{gold_schema}` applied idempotently to the endpoint system SP UUID, and the SP UUID is recorded in `DEPLOY_CHECKPOINT.md`
-- [ ] `DEPLOY_CHECKPOINT.md` written to `apps_lakebase/$APP_NAME/agents/` (Step 17 reads endpoint name + SP UUID from it)
+- [ ] `DEPLOY_CHECKPOINT.md` written to `$APP_ROOT/agents/` (Step 17 reads endpoint name + SP UUID from it)
 - [ ] `.vibecoding-state.md` updated (see below)
 
-**Before finishing**, append to `apps_lakebase/$APP_NAME/.vibecoding-state.md`:
+**Before finishing**, append to `$APP_ROOT/.vibecoding-state.md`:
 - Step name (`## Build & Deploy Agent (Step 16)`)
 - UC Model Name (`{catalog}.{schema}.{model_name}`)
 - Serving Endpoint Name (derived from UC model name, dots replaced with hyphens)
 - Genie Space ID used
-- AI Playground: verified working',
+- AI Playground: verified working
+
+**State-lock (`skills/vibecoding-state`) — run this prompt between an `enter` and an `exit` so workshop state is resolved and locked:**
+
+1. **Phase 0 — first, before any step below:** `skills/vibecoding-state` op `enter` — params: `prompt_id: "agent_framework"`, `require_prior_gate: {prompt_id: "genie_space", gate: "Genie Space live"}`. `enter` resolves the `## Environment Capabilities` triple (deploy verb, CLI channel, `state_file_root`) so every deploy/run step below uses the resolved channel — `runDatabricksCli` on Genie Code — and writes state under `state_file_root`, never a bare-local assumption.
+2. **Final — after the step succeeds:** `skills/vibecoding-state` op `exit` — params: `prompt_id: "agent_framework"`, `gate: "Agent endpoint READY"`, `captured: {agent_serving_endpoint, genie_space_id, agent_schema}`.
+
+**Gate:** `Agent endpoint READY` — the agent serving endpoint reaches READY and a probe of the invocations route returns a tool call to the Genie MCP.',
 'You are a senior ML engineer deploying an MCP tool-calling agent to Databricks Model Serving. Follow the canonical OpenAI MCP Tool Calling Agent notebook pattern exactly — no custom orchestration, no LangGraph, no bespoke tool-calling loops.
 
 Approach: Read the skill, then execute each step sequentially. Use the skill''s Decision Defaults table for any choices. If a decision is not covered there, pick the simpler option and move on.
@@ -4714,7 +5455,7 @@ This prompt is returned as-is for direct use in Cursor/Copilot. No LLM processin
 
 1. Copy the **Input Template** section above
 2. Replace `{workspace_url}`, `{lakehouse_default_catalog}`, `{user_schema_prefix}`, and `{use_case_slug}` with your values
-3. Paste into Cursor or Copilot
+3. Paste into your coding assistant
 4. The code assistant will:
    - Read `.vibecoding-state.md` for Genie Space IDs from Step 15
    - Read the `09-simple-agent-scaffold` skill and follow all 5 steps
@@ -4743,6 +5484,96 @@ agent-config.yaml       # ModelConfig parameters (LLM endpoint, system prompt, G
 ```',
 true, 3, true, current_timestamp(), current_timestamp(), current_user());
 
+-- agent_framework (genie-code fork) — prescriptive paths + directives; bundle-job-only agent deploy; schema via direct-SQL exception; bypass_LLM = TRUE
+INSERT INTO ${catalog}.${schema}.section_input_prompts
+(input_id, section_tag, coding_assistant, input_template, system_prompt,
+ bypass_llm, version, is_active, inserted_at, updated_at, created_by)
+VALUES
+(910, 'agent_framework', 'genie-code',
+'**Genie Code — this is a prescriptive runbook. Follow the steps in order. Do NOT improvise paths, do NOT use bare relative paths, do NOT use `@`-mentions, and do NOT deploy the agent by hand. Every skill is named by its full clone-rooted path; every artifact is anchored to `<DP_BUNDLE_ROOT>`; the agent serving endpoint is created by RUNNING a deployed bundle job (`agent_deploy_job`) — never by an ad-hoc `agents.deploy()`, never by `databricks jobs submit`.**
+
+### 🔴 Non-negotiable execution rule (read before anything)
+
+❌ **NEVER** run `agents.deploy()`, `mlflow.register_model()`, `log_model()`, or any endpoint/model creation directly via `executeCode` / `spark.sql` / a loose notebook cell. Those calls are the **body of the bundle job** (`agent_deploy_job`''s notebook task). The bundle **is** the execution mechanism — never bypass it, even though calling `agents.deploy()` straight from `executeCode` is faster. Creating a live endpoint with no versioned bundle behind it is the regression this fork exists to prevent.
+
+⚠️ **The one exception — the UC agent schema.** Schemas are NOT modeled as bundle resources in this workshop; the agent schema `{lakehouse_default_catalog}.{user_schema_prefix}_agents` is created with direct SQL (`CREATE SCHEMA IF NOT EXISTS`) **inside the job notebook** (Genie Code''s `databricks schemas create` is hard-blocked anyway). That single `CREATE SCHEMA` is the only DDL allowed, and it still runs inside the deployed job — not as a hand-run statement.
+
+✅ The ONLY things you run directly are (a) **read-only** inspection (`databricks serving-endpoints get`, `SHOW SCHEMAS`, a `w.serving_endpoints.query(...)` smoke test) and (b) `databricks bundle validate` / `deploy` / `run` through `runDatabricksCli`. If `bundle deploy` is blocked, FIX the page context (open the bundle editor — Step 3) — do **not** fall back to direct SQL, `jobs submit`, the Jobs REST API, or a bare `agents.deploy()`.
+
+### Step 0 — Resolve your environment (once, before anything else)
+
+Run `skills/vibecoding-state` operation `enter` with `prompt_id: "agent_framework"` and `require_prior_gate: {prompt_id: "genie_space", gate: "Genie Space live"}`. It writes and echoes the `## Environment Capabilities` block. Read these resolved values and use them literally throughout:
+
+- `client_context` = `genie_code`
+- `artifact_root` = your workshop clone root (e.g. `/Workspace/Users/<your-email>/.assistant/skills/vibe-coding-workshop`)
+- `skill_ref_root` = `skills/vibe-coding-workshop` (substitute your clone folder if you cloned somewhere other than `.assistant/skills/vibe-coding-workshop`)
+- `dp_bundle_root` = `<artifact_root>/<use_case_slug>_dab` — the **SAME self-contained Asset Bundle** you built for Bronze/Silver/Gold/semantic (e.g. `…/vibe-coding-workshop/booking_app_dab`). EXTEND it; do NOT make a new one. This is the **page you deploy from**. Referred to below as `<DP_BUNDLE_ROOT>`.
+- Workspace: `{workspace_url}`
+- Genie Space ID(s): from the Build Genie Space step''s `exit` capture in `.vibecoding-state.md` (under `state_file_root`). A space that exists but can''t answer questions yields a greeting-only agent — run the connectivity probe in the scaffold skill''s Prerequisites first.
+- deploy verb = `bundle deploy --target dev`, run through the `runDatabricksCli` tool
+
+If `enter` reports the Genie Space gate is not `Genie Space live`, STOP — finish the Build Genie Space step first. If `enter` has not run in this thread, run it now.
+
+### Step 1 — Load the required skills by their FULL clone-rooted paths
+
+Load each skill with `readSkillFile` using its fully-qualified `<skill_ref_root>`-prefixed path — NEVER a bare `@…` mention, NEVER a repo-relative path. **The root-level `skills/` come FIRST: they are the highest-priority, always-on guardrails and govern everything below.**
+
+1. `readSkillFile("skills/vibe-coding-workshop/skills/databricks-expert-agent/SKILL.md")` — core rule: extract names/IDs from the source and from `.vibecoding-state.md`, never hardcode or hallucinate.
+2. `readSkillFile("skills/vibe-coding-workshop/skills/databricks-asset-bundles/SKILL.md")` — serverless job YAML, Environments V4, `notebook_task`, `base_parameters`, the `sync` mapping, and the multi-user `${var.user_prefix}` "Shared Workspace Naming" pattern. **You will not write any `databricks.yml` or job YAML until you have read this.**
+
+Then the agent scaffold orchestrator and its deploy-job references (load in this order):
+
+3. `readSkillFile("skills/vibe-coding-workshop/data_product_accelerator/skills/genai-agents/09-simple-agent-scaffold/SKILL.md")` — the orchestrator (Steps 1–5 + 5a/5b/5c). Drive the "Deploy Steps 2–5 as a bundle job" path from it.
+4. `readSkillFile("skills/vibe-coding-workshop/data_product_accelerator/skills/genai-agents/09-simple-agent-scaffold/references/agent_deploy_job.yml")` — the canonical bundle-job resource (serverless, `base_parameters`).
+5. `readSkillFile("skills/vibe-coding-workshop/data_product_accelerator/skills/genai-agents/09-simple-agent-scaffold/references/agent-deploy-notebook.py")` — the notebook-task body (schema-via-SQL + Steps 2–5 + 5b auto-grant + 5c checkpoint).
+6. `readSkillFile("skills/vibe-coding-workshop/data_product_accelerator/skills/common/naming-tagging-standards/SKILL.md")` — schema/model naming (`_agents`, `-genie-agent`), COMMENTs, governed tags. **NEVER name a schema or model without reading this.**
+
+When the orchestrator names further references (`references/post-deploy-permissions.md`, etc.), load EACH the same way — prefix its repo-relative path with `skill_ref_root`. Genie Code has no repo-root-relative resolution and `AGENTS.md` does not carry across threads — so always prefix with `skill_ref_root`. Read independent files in one batched `readSkillFile` turn.
+
+### Step 2 — Author the agent + its deploy job (write files only — do NOT execute anything yet)
+
+Using the skills above, AUTHOR (write files only — no execution) under `<DP_BUNDLE_ROOT>`:
+
+- `<DP_BUNDLE_ROOT>/agents/agent.py` — the `MCPToolCallingAgent(ResponsesAgent)` from the scaffold template. NO `signature` param; `input` key not `messages`; `nest_asyncio.apply()` at top.
+- `<DP_BUNDLE_ROOT>/agents/agent-config.yaml` — resolve all three TODO blocks: `llm_endpoint` (`databricks-claude-sonnet-4-6` or your model), a domain-specific `system_prompt`, and each Genie Space ID from Step 0. No `TODO_REPLACE` strings may remain.
+- `<DP_BUNDLE_ROOT>/agents/deploy_agent.py` — copy `references/agent-deploy-notebook.py` verbatim (it creates the agent schema via SQL, then logs/registers/deploys/grants/checkpoints).
+- `<DP_BUNDLE_ROOT>/resources/agent_deploy_job.yml` — copy `references/agent_deploy_job.yml`.
+- Extend the EXISTING `<DP_BUNDLE_ROOT>/databricks.yml` (the one from Bronze/Silver/Gold) — add the `agent_deploy_job` resource AND its `variables:` block.
+
+🔴 **CRITICAL bundle wiring (without it the job cannot find the agent source or its inputs):** in the EXISTING `<DP_BUNDLE_ROOT>/databricks.yml`, set the `variables:` so the job''s `base_parameters` resolve to YOUR values, and point `agents_folder_ws_path` at where `bundle deploy` syncs the source (`${workspace.file_path}/agents`):
+
+- `catalog` = `{lakehouse_default_catalog}`
+- `agent_schema` = `{user_schema_prefix}_agents` (created by the job via direct SQL — NOT a `schemas:` resource)
+- `agent_model_name` = `{use_case_slug}-genie-agent` — so the UC model name is `{catalog}.{schema}.{model_name}` → `{lakehouse_default_catalog}.{user_schema_prefix}_agents.{use_case_slug}-genie-agent`
+- `gold_schema` = `{gold_schema}` (the Genie Space''s gold tables — granted to the endpoint system SP in Step 5b)
+- `semantic_warehouse_id`, `genie_space_id` = read from `.vibecoding-state.md`
+
+NOTE: This is a shared workshop workspace. Put a `user_prefix` variable in the job `name:` (e.g. `"[${bundle.target} ${var.user_prefix}] Agent Deploy"`) to avoid name collisions — `bundle deploy --force` does NOT resolve these (see `databricks-asset-bundles` → "Shared Workspace Naming").
+
+### Step 3 — Deploy FROM the bundle-editor page, run the job, then verify
+
+- Write every generated file UNDER `<DP_BUNDLE_ROOT>` — never the clone root (the "one level too high" bug), never `/tmp`, never a bare relative path (Genie Code''s CWD is page-type-dependent).
+- **Open the bundle editor BEFORE any `bundle` command — and surface its link.** `<DP_BUNDLE_ROOT>/databricks.yml` already exists (from Bronze/Silver/Gold), so the workspace file browser shows the **"Open in bundle editor"** affordance on that folder (and an **"Open in editor"** button at the top). Its page CWD IS `<DP_BUNDLE_ROOT>` — the bundle-root page `bundle deploy`/`run` require, where Genie Code runs deploy/run pre-approved. **Do not make the operator hunt for the icon** — build a clickable link with the pre-authenticated `WorkspaceClient` (`w`) and print it:
+  - `host = w.config.host`; `o = w.get_workspace_id()`
+  - `file_id = w.workspace.get_status("<DP_BUNDLE_ROOT>/databricks.yml").object_id`
+  - `folder_id = w.workspace.get_status("<DP_BUNDLE_ROOT>").object_id`
+  - **Bundle editor:** `{host}/editor/files/{file_id}?o={o}&contextId=folder%3A{folder_id}` (plain folder: `{host}/browse/folders/{folder_id}?o={o}`)
+
+  Tell the operator to open the **bundle-editor link**, then run every `databricks bundle …` command below from that page. Edit the EXISTING on-page `databricks.yml` — files created via the workspace API may not reach the CLI''s FUSE mount.
+- Validate → deploy → run the agent deploy job through `runDatabricksCli`, **from the bundle-editor page**, each with `--target dev` (mandatory — a target-less deploy is guardrail-blocked); omit `--profile` (pre-authenticated) and do NOT `databricks sync` (deploy syncs the source):
+  - `databricks bundle validate --target dev`
+  - `databricks bundle deploy --target dev`
+  - `databricks bundle run --target dev agent_deploy_job`
+- The job creates the agent schema (direct SQL), logs/registers/deploys the agent, waits for READY, auto-grants the endpoint system SP on `{lakehouse_default_catalog}.{gold_schema}` (Step 5b), and writes `DEPLOY_CHECKPOINT.md`. Read the run output for the endpoint name and SP UUID — do not rederive them.
+- **🛑 If a `bundle` command is blocked or fails, STOP — do not work around it.** A `databricks.yml not found` error or a "blocked by safety guardrails" message means you are NOT on the bundle page: open the **bundle-editor link** above and retry (CONFIRMED — the same `bundle deploy`/`run` that is "blocked" from a file page succeeds from the bundle editor). If it STILL fails from the bundle editor, STOP and report the blocker. Do **NOT** create the job via the Jobs REST API (`jobs/create`), `databricks jobs submit`, the SDK, or call `agents.deploy()` directly to "get it done" — that silently defeats the bundle (no version control, no `bundle destroy` cleanup) and FAILS the gate. Those routes are an **escape hatch available only if the operator explicitly authorizes it.**
+- **Verify (read-only) — the tool-calling path, not just a greeting.** After READY, run a domain-specific data question through the pre-authenticated SDK via `executeCode` — `w.serving_endpoints.query(name="<endpoint>", inputs={"input":[{"role":"user","content":"<domain-specific data question>"}]})`. Do NOT use `curl + databricks auth token` — `auth token` is hard-blocked on Genie Code. PASS = the response contains a `function_call` to the Genie MCP tool followed by a `message` with real numbers (a Playground greeting is a smoke test, NOT the gate — `EMBEDDED_CREDENTIALS` endpoints route MCP calls through the system SP regardless of caller). Then open AI Playground (Serving → your endpoint → Query) and confirm the same question answers there.
+
+**State-lock:** this prompt runs between an `enter` (Step 0) and an `exit`. After the gate passes, run `skills/vibecoding-state` op `exit` — params: `prompt_id: "agent_framework"`, `gate: "Agent endpoint READY"`, `captured: {agent_serving_endpoint, genie_space_id, agent_schema}`.
+
+**Gate:** `Agent endpoint READY` — the `agent_deploy_job` was **created by `bundle deploy` and executed by `bundle run`** (visible in Workflows with a successful run ID), the serving endpoint reached READY, and a `w.serving_endpoints.query(...)` probe with a domain-specific question returned a tool call to the Genie MCP. The endpoint existing is **necessary but NOT sufficient** — if it was created by a direct `agents.deploy()` / `jobs submit` instead of the deployed bundle job, the gate FAILS and you must redo it via the bundle.',
+'',
+true, 1, true, current_timestamp(), current_timestamp(), current_user());
+
 -- Step 17: Wire Agent to AppKit UI - bypass_LLM = TRUE
 INSERT INTO ${catalog}.${schema}.section_input_prompts 
 (input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
@@ -4752,17 +5583,19 @@ VALUES
 
 Wire the deployed agent endpoint from Step 16 into the existing AppKit application using the Serving plugin.
 
-**First:** Read `apps_lakebase/$APP_NAME/.vibecoding-state.md` — it contains the serving endpoint name and UC model name from Step 16 (Build & Deploy Agent).
+**First:** Read `$APP_ROOT/.vibecoding-state.md` — it contains the serving endpoint name and UC model name from Step 16 (Build & Deploy Agent).
 
 **Workspace:** `{workspace_url}`
 
-**Working directory:** All app paths and commands use the `apps_lakebase/` folder. The scaffolded AppKit app lives at `apps_lakebase/$APP_NAME/`.
+**Working directory:** Run all commands from the **repo root**. The scaffolded AppKit app lives in its own top-level directory `$APP_ROOT/` (= `<app_name>/` at the repo root, a sibling of `apps_lakebase/` — NOT nested inside it). `$APP_ROOT` is recorded in `.vibecoding-state.md` from the **Scaffold, Build & Test** step; if running standalone, set `APP_ROOT="$APP_NAME"`.
 
 **Prerequisite:** Step 16 completed — the agent endpoint is deployed on Databricks Model Serving and in `READY` state. The AppKit app is already deployed with Lakebase wiring (from Step 19).
 
 ---
 
 ### Step 1: Verify Endpoint
+
+> **Client note:** IDE runs these in a terminal; Genie Code runs the `databricks …` commands via `runDatabricksCli` (resolved channel in `## Environment Capabilities`; SDK `w.apps.deploy(...)` fallback per `genie-code-environment`).
 
 ```bash
 ENDPOINT_NAME="<FROM_STEP_16_OR_VIBECODING_STATE>"
@@ -4800,7 +5633,7 @@ The skill covers:
 ### Build Gate
 
 ```bash
-cd apps_lakebase/$APP_NAME
+cd $APP_ROOT
 npm run build
 ```
 
@@ -4815,7 +5648,7 @@ Before `databricks apps deploy`, read `@apps_lakebase/skills/03-appkit-deploy/SK
 Deploy using the `03-appkit-deploy` skill pattern:
 
 ```bash
-cd apps_lakebase/$APP_NAME
+cd $APP_ROOT
 databricks apps deploy --profile $PROFILE
 ```
 
@@ -4842,13 +5675,20 @@ If deployment fails, check logs with `databricks apps logs $APP_NAME --tail-line
 - [ ] Multi-turn conversation works (second message includes first exchange)
 - [ ] `.vibecoding-state.md` updated (see below)
 
-**Before finishing**, append to `apps_lakebase/$APP_NAME/.vibecoding-state.md`:
+**Before finishing**, append to `$APP_ROOT/.vibecoding-state.md`:
 - Step name (`## Wire Agent to AppKit UI (Step 17)`)
 - Serving plugin registered in `server/server.ts`
 - `DATABRICKS_SERVING_ENDPOINT_NAME` bound in `app.yaml`
 - Chat component added to UI
 - Streaming responses verified
-- Agent endpoint name (from Step 16)',
+- Agent endpoint name (from Step 16)
+
+**State-lock (`skills/vibecoding-state`) — run this prompt between an `enter` and an `exit` so workshop state is resolved and locked:**
+
+1. **Phase 0 — first, before any step below:** `skills/vibecoding-state` op `enter` — params: `prompt_id: "wire_ui_agent"`, `require_prior_gate: {prompt_id: "agent_framework", gate: "Agent endpoint READY"}`. `enter` resolves the `## Environment Capabilities` triple (deploy verb, CLI channel, `state_file_root`) so every deploy/run step below uses the resolved channel — `runDatabricksCli` on Genie Code. This is an app-track prompt, so `state_file_root` resolves to `app_root` (`<artifact_root>/<app_name>` = `$APP_ROOT`) and state is written to `$APP_ROOT/.vibecoding-state.md`, never a bare-local assumption.
+2. **Final — after the step succeeds:** `skills/vibecoding-state` op `exit` — params: `prompt_id: "wire_ui_agent"`, `gate: "Agent wired to UI"`, `captured: {serving_endpoint_name, app_name}`.
+
+**Gate:** `Agent wired to UI` — the app build passes, the app is RUNNING, and the serving-invoke route returns a valid agent response.',
 'You are a senior AppKit engineer wiring a Databricks Model Serving endpoint into an existing AppKit application. You use the AppKit Serving plugin — not custom API routes, not direct fetch calls, not FastAPI middleware.
 
 Key requirements:
@@ -4857,7 +5697,7 @@ Key requirements:
 - Use the `04-appkit-plugin-add` skill to register the Serving plugin
 - Do NOT improvise npm lifecycle hooks, platform-detection conditionals, or workarounds that skip the platform''s build pipeline
 - Use `npm run build` as the build gate — do NOT run `npm run dev` before the first deploy with the Serving plugin (env vars won''t be set)
-- Run from `apps_lakebase/` or use `apps_lakebase/$APP_NAME/` for app commands
+- Run from the repo root; the app lives at `$APP_ROOT/` (top-level app dir)
 
 > **When in doubt, consult these authoritative sources before improvising:**
 > - Serving plugin docs: https://databricks.github.io/appkit/docs/plugins/serving
@@ -4872,7 +5712,7 @@ This prompt is returned as-is for direct use in Cursor/Copilot. No LLM processin
 
 1. Copy the **Input Template** section above
 2. Replace `{workspace_url}` with your workspace URL
-3. Paste into Cursor or Copilot
+3. Paste into your coding assistant
 4. The code assistant will:
    - Read `.vibecoding-state.md` for the endpoint name from Step 16
    - Register the Serving plugin via the `04-appkit-plugin-add` skill
@@ -4992,10 +5832,10 @@ Use MoSCoW method:
 ---
 
 ## Industry Context
-Industry: {industry_name}
-Use Case: {use_case_title}
+Industry: {industry}
+Use Case: {use_case}
 
-Review the current implementation and identify enhancements specific to the {industry_name} {use_case_title} use case.
+Review the current implementation and identify enhancements specific to the {industry} {use_case} use case.
 
 ---
 
@@ -5026,7 +5866,7 @@ Focus on:
 18,
 '## Prerequisite
 
-**Run this in your cloned Template Repository** (see Prerequisites in Step 0). These prompts assume you are working in that codebase with a coding assistant (Cursor or Copilot) enabled.
+**Run this in your cloned Template Repository** (see Prerequisites in Step 0). These prompts assume you are working in that codebase with a coding assistant enabled.
 
 ---
 
@@ -5198,7 +6038,14 @@ Use the autonomous operations skill at `@data_product_accelerator/skills/common/
 - [ ] Regression-risk surface re-verified (only what the plan flagged)
 - [ ] `/api/health` returns 200 (and `source: "live"` if the project uses envelope semantics)
 - [ ] Docs updated for the changed surface only
-- [ ] State file appended with deploy timestamp, smoke test results, gates live, fixes applied',
+- [ ] State file appended with deploy timestamp, smoke test results, gates live, fixes applied
+
+**State-lock (`skills/vibecoding-state`) — run this prompt between an `enter` and an `exit` so workshop state is resolved and locked:**
+
+1. **Phase 0 — first, before any step below:** `skills/vibecoding-state` op `enter` — params: `prompt_id: "redeploy_test"`. `enter` resolves the `## Environment Capabilities` triple (deploy verb, CLI channel, `state_file_root`) so every deploy/run step below uses the resolved channel — `runDatabricksCli` on Genie Code — and writes state under `state_file_root`, never a bare-local assumption.
+2. **Final — after the step succeeds:** `skills/vibecoding-state` op `exit` — params: `prompt_id: "redeploy_test"`, `gate: "Redeployed + smoke passed"`, `captured: {user_app_name}`.
+
+**Gate:** `Redeployed + smoke passed` — every enhancement smoke test passes and the once-per-deploy health checks pass.',
 'This prompt is returned as-is for direct use in Cursor/Copilot. No LLM processing.',
 'Redeploy & Test Application',
 'Deploy and verify only the iteration delta with a self-healing loop, then update docs and state file for the changed surface.',
@@ -5212,7 +6059,7 @@ Step 20 (Iterate & Enhance) must have run in this same session — Step 21 reads
 ## Steps to Apply
 
 1. **Copy the generated prompt** from above.
-2. **Paste into Cursor or Copilot** in your project repo (the codebase that the iteration plan describes).
+2. **Paste into your coding assistant** in your project repo (the codebase that the iteration plan describes).
 3. The coding assistant will:
    - Read the iteration plan delivered as `{iteration_plan}`
    - Run `git diff --stat HEAD` against the Change Manifest to catch stale plans
@@ -5403,11 +6250,11 @@ VALUES
 
 Install the Lakebase (PostgreSQL) package and configure bundle resources so the platform auto-provisions Lakebase on deploy. This is a **config-only** step — install the npm package and configure YAML files. Do NOT modify `server.ts` — plugin registration and database code happen in the **Wire Lakebase Backend** step.
 
-**First:** Read `apps_lakebase/$APP_NAME/.vibecoding-state.md` if it exists — it contains resolved issues and variable values from prior phases.
+**First:** Read `$APP_ROOT/.vibecoding-state.md` if it exists — it contains resolved issues and variable values from prior phases.
 
 **Workspace:** `{workspace_url}`
 
-**Working directory:** All app code and commands use the `apps_lakebase/` folder. The scaffolded AppKit app lives at `apps_lakebase/$APP_NAME/`.
+**Working directory:** Run all commands from the **repo root**. The scaffolded AppKit app lives in its own top-level directory `$APP_ROOT/` (= `<app_name>/` at the repo root, a sibling of `apps_lakebase/` — NOT nested inside it).
 
 > **MANDATORY:** Read `.vibecoding-state.md` first to get the `PROFILE` value from prior phases. Use `--profile $PROFILE` on every `databricks` CLI command in this step. If the returned email doesn''t match the prior phase, stop and verify the profile.
 
@@ -5423,8 +6270,9 @@ FIRSTNAME=$(echo "$EMAIL" | cut -d''@'' -f1 | cut -d''.'' -f1)
 LASTINITIAL=$(echo "$EMAIL" | cut -d''@'' -f1 | cut -d''.'' -f2 | cut -c1)
 APP_PREFIX="${FIRSTNAME}-${LASTINITIAL}"
 APP_NAME="${APP_PREFIX}-{use_case_slug}"
+APP_ROOT="$APP_NAME"   # top-level app dir at the repo root (parity with <use_case_slug>_dab)
 DB_SCHEMA=$(echo "$APP_NAME" | tr ''-'' ''_'')
-echo "PROFILE=$PROFILE  APP_NAME=$APP_NAME  DB_SCHEMA=$DB_SCHEMA"
+echo "PROFILE=$PROFILE  APP_NAME=$APP_NAME  APP_ROOT=$APP_ROOT  DB_SCHEMA=$DB_SCHEMA"
 ```
 
 ---
@@ -5432,7 +6280,7 @@ echo "PROFILE=$PROFILE  APP_NAME=$APP_NAME  DB_SCHEMA=$DB_SCHEMA"
 ### Step 2: Install the Lakebase Package
 
 ```bash
-cd apps_lakebase/$APP_NAME
+cd $APP_ROOT
 npm install @databricks/lakebase
 ```
 
@@ -5452,6 +6300,8 @@ Lakebase Autoscaling uses a **two-phase** deploy process because the database ID
 > **Do NOT declare `postgres_branches` or `postgres_endpoints`** in `databricks.yml`. Lakebase Autoscaling auto-creates these with the project. Declaring them causes Terraform errors: `branch already exists` / `read_write endpoint already exists`.
 
 **Pre-check — does the project already exist?**
+
+> **Client note:** IDE runs these in a terminal; Genie Code runs the `databricks …` commands via `runDatabricksCli` (pre-authenticated). See `genie-code-environment`.
 
 ```bash
 databricks postgres get-project projects/$APP_NAME --profile $PROFILE --output json 2>&1
@@ -5512,7 +6362,7 @@ Local development uses mock fallback data before the first deploy.
 ### Step 6: Verify Package Installation
 
 ```bash
-cd apps_lakebase/$APP_NAME
+cd $APP_ROOT
 npm ls @databricks/lakebase
 ```
 
@@ -5523,7 +6373,7 @@ Must show `@databricks/lakebase` in the dependency tree.
 ### Step 7: Validate Configuration
 
 ```bash
-cd apps_lakebase/$APP_NAME
+cd $APP_ROOT
 databricks apps validate --profile $PROFILE
 ```
 
@@ -5541,7 +6391,7 @@ Must pass with no errors. Common issues: YAML indentation errors (use 2-space in
 - [ ] `databricks apps validate` passes (warning about `valueFrom: postgres` is expected)
 - [ ] `.vibecoding-state.md` updated (see below)
 
-**Before finishing**, append to `apps_lakebase/$APP_NAME/.vibecoding-state.md` with:
+**Before finishing**, append to `$APP_ROOT/.vibecoding-state.md` with:
 - Step name (`## Setup Lakebase`)
 - Key variable values (`DB_SCHEMA`, bundle resource project_id, `PROFILE`)
 - Any resolved issues or workarounds encountered during this phase
@@ -5568,7 +6418,7 @@ This prompt is returned as-is for direct use in Cursor/Copilot. No LLM processin
 
 1. Copy the **Input Template** section above
 2. Replace `{workspace_url}` and `{use_case_slug}` with your values
-3. Paste into Cursor or Copilot
+3. Paste into your coding assistant
 4. The code assistant will:
    - Install the `@databricks/lakebase` npm package
    - Add bundle resources to `databricks.yml`
@@ -5581,7 +6431,7 @@ This prompt is returned as-is for direct use in Cursor/Copilot. No LLM processin
 **Package verification:**
 
 ```
-$ cd apps_lakebase/$APP_NAME && npm ls @databricks/lakebase
+$ cd $APP_ROOT && npm ls @databricks/lakebase
 └── @databricks/lakebase@x.x.x
 ```
 
@@ -5627,11 +6477,11 @@ VALUES
 
 Wire the AppKit web application to a Lakebase database so the UI fetches data from Lakebase PostgreSQL via Express API routes. This step registers the `lakebase()` plugin in `server.ts` (moved here from Setup Lakebase to avoid runtime crashes in local dev) AND writes all database code. Lakebase is the sole data source — there is no SQL warehouse in this flow. Local validation is **`npm run build` only** — `npm run dev` will crash because Lakebase env vars (`LAKEBASE_ENDPOINT`, `PGHOST`) are not set until after the first deploy. Deployment and live data verification happen in the **Deploy and E2E Test** step.
 
-**First:** Read `apps_lakebase/$APP_NAME/.vibecoding-state.md` if it exists — it contains resolved issues and variable values from prior phases (including `DB_SCHEMA` from the **Setup Lakebase** step).
+**First:** Read `$APP_ROOT/.vibecoding-state.md` if it exists — it contains resolved issues and variable values from prior phases (including `DB_SCHEMA` from the **Setup Lakebase** step).
 
 **Workspace:** `{workspace_url}`
 
-**Working directory:** All app code and commands use the `apps_lakebase/` folder. The scaffolded AppKit app lives at `apps_lakebase/$APP_NAME/`.
+**Working directory:** Run all commands from the **repo root**. The scaffolded AppKit app lives in its own top-level directory `$APP_ROOT/` (= `<app_name>/` at the repo root, a sibling of `apps_lakebase/` — NOT nested inside it). `$APP_ROOT` is recorded in `.vibecoding-state.md` from the **Scaffold, Build & Test** step; if running standalone, set `APP_ROOT="$APP_NAME"`.
 
 **Prerequisite:** The **Setup Lakebase** step must be complete — the `@databricks/lakebase` package is installed, bundle resources are declared in `databricks.yml`, and `app.yaml` has `valueFrom: postgres`. Note: `server.ts` was NOT modified in that step — this step adds the `lakebase()` plugin registration along with all database code.
 
@@ -5656,7 +6506,7 @@ When deployed in the **Deploy and E2E Test** step, the Service Principal will ru
 Before proceeding, verify the app builds cleanly:
 
 ```bash
-cd apps_lakebase/$APP_NAME
+cd $APP_ROOT
 npm run build   # Must pass with zero errors
 ```
 
@@ -5685,7 +6535,7 @@ Follow **Step 4** of the `05-appkit-lakebase-wiring` skill. In summary:
 - [ ] "Critical Notes for Next Phase" from prior step''s `.vibecoding-state.md` are preserved (especially: do NOT remove `postgres_projects` from `databricks.yml`)
 - [ ] `.vibecoding-state.md` updated (see below)
 
-**Before finishing**, append to `apps_lakebase/$APP_NAME/.vibecoding-state.md` with:
+**Before finishing**, append to `$APP_ROOT/.vibecoding-state.md` with:
 - Step name (`## Wire Lakebase Backend`)
 - Key variable values (`DB_SCHEMA`, API endpoints created)
 - Any resolved issues or workarounds encountered during this phase
@@ -5711,7 +6561,7 @@ This prompt is returned as-is for direct use in Cursor/Copilot. No LLM processin
 
 1. Copy the **Input Template** section above
 2. Replace `{workspace_url}` with your value
-3. Paste into Cursor or Copilot
+3. Paste into your coding assistant
 4. The code assistant will:
    - Read the `05-appkit-lakebase-wiring` skill for patterns
    - Register `lakebase()` in the plugins array
@@ -5726,7 +6576,7 @@ This prompt is returned as-is for direct use in Cursor/Copilot. No LLM processin
 **Build validation:**
 
 ```
-$ cd apps_lakebase/$APP_NAME && npm run build
+$ cd $APP_ROOT && npm run build
 ... (build output) ...
 Build completed successfully.
 ```
@@ -5745,11 +6595,11 @@ VALUES
 
 Deploy the locally-tested AppKit web application to Databricks Apps.
 
-**First:** Read `apps_lakebase/$APP_NAME/.vibecoding-state.md` if it exists — it contains resolved issues and variable values from prior phases.
+**First:** Read `$APP_ROOT/.vibecoding-state.md` if it exists — it contains resolved issues and variable values from prior phases.
 
 **Workspace:** `{workspace_url}`
 
-**Working directory:** All app paths and commands use the `apps_lakebase/` folder. The scaffolded AppKit app lives at `apps_lakebase/$APP_NAME/`.
+**Working directory:** Run all commands from the **repo root**. The scaffolded AppKit app lives in its own top-level directory `$APP_ROOT/` (= `<app_name>/` at the repo root, a sibling of `apps_lakebase/` — NOT nested inside it).
 
 ---
 
@@ -5773,10 +6623,13 @@ FIRSTNAME=$(echo "$EMAIL" | cut -d''@'' -f1 | cut -d''.'' -f1)
 LASTINITIAL=$(echo "$EMAIL" | cut -d''@'' -f1 | cut -d''.'' -f2 | cut -c1)
 APP_PREFIX="${FIRSTNAME}-${LASTINITIAL}"
 APP_NAME="${APP_PREFIX}-{use_case_slug}"
-echo "Deploying app: $APP_NAME"
+APP_ROOT="$APP_NAME"   # top-level app dir at the repo root (parity with <use_case_slug>_dab)
+echo "Deploying app: $APP_NAME (root: $APP_ROOT)"
 ```
 
 Confirm (or create) a CLI profile for the target workspace. Re-derives `PROFILE` if the configured one is empty/invalid:
+
+> **Client note:** IDE runs these in a terminal; Genie Code runs the `databricks …` commands via `runDatabricksCli` (pre-authenticated; if the enhanced CLI deploy is blocked, use the SDK `w.apps.deploy(...)` fallback). See `genie-code-environment`.
 
 ```bash
 PROFILE="{databricks_cli_profile}"
@@ -5804,14 +6657,14 @@ echo "Using profile: $PROFILE"
 Verify the app directory exists and `databricks.yml` points to the target workspace:
 
 ```bash
-ls apps_lakebase/$APP_NAME/databricks.yml
-grep "host:" apps_lakebase/$APP_NAME/databricks.yml
+ls $APP_ROOT/databricks.yml
+grep "host:" $APP_ROOT/databricks.yml
 ```
 
 If deploying to a different workspace than where you scaffolded in the **Scaffold, Build & Test** step, update `databricks.yml` to match your target workspace and clear old bundle state:
 
 ```bash
-rm -rf apps_lakebase/$APP_NAME/.databricks
+rm -rf $APP_ROOT/.databricks
 ```
 
 ---
@@ -5821,7 +6674,7 @@ rm -rf apps_lakebase/$APP_NAME/.databricks
 Run a local build before deploying to surface code issues early:
 
 ```bash
-cd apps_lakebase/$APP_NAME
+cd $APP_ROOT
 npm run build
 ```
 
@@ -5833,7 +6686,7 @@ If this fails with TypeScript errors (e.g., unused imports, type mismatches), fi
 
 ### Step 2: Deploy
 
-Read and follow the `03-appkit-deploy` skill at `@apps_lakebase/skills/03-appkit-deploy/SKILL.md`. Run all skill commands from the `apps_lakebase/` directory.
+Read and follow the `03-appkit-deploy` skill at `@apps_lakebase/skills/03-appkit-deploy/SKILL.md`. Run all skill commands from the app root `$APP_ROOT/` (or the repo root, `cd`-ing into `$APP_ROOT` as needed).
 
 The skill covers: config validation, build, deploy, UI verification, error diagnosis (3-iteration fix loop), and workspace app limit handling.
 
@@ -5849,7 +6702,7 @@ Your job is complete when:
 - [ ] Mock data renders correctly in all components
 - [ ] `.vibecoding-state.md` updated (see below)
 
-**Before finishing**, append to `apps_lakebase/$APP_NAME/.vibecoding-state.md` with:
+**Before finishing**, append to `$APP_ROOT/.vibecoding-state.md` with:
 - Step name (`## Deploy to Databricks Apps`)
 - Key variable values (`APP_NAME`, `PROFILE`, app URL, workspace URL)
 - Any resolved issues or workarounds encountered during this phase',
@@ -5864,7 +6717,7 @@ Key requirements:
 
 CLI Best Practices:
 
-- Run from `apps_lakebase/` or use `apps_lakebase/scripts/` for scripts
+- Run from the repo root (the workshop clone root); use `apps_lakebase/scripts/` for shared scripts
 - Run CLI commands outside the IDE sandbox to avoid SSL/TLS certificate errors
 
 This prompt is returned as-is for direct use in Cursor/Copilot. No LLM processing.',
@@ -5875,7 +6728,7 @@ This prompt is returned as-is for direct use in Cursor/Copilot. No LLM processin
 
 1. **Copy the generated prompt**
 2. **Replace** `{workspace_url}` and `{use_case_slug}` with your values
-3. **Paste into Cursor or Copilot**
+3. **Paste into your coding assistant**
 4. The code assistant will:
    - Derive your app name and validate config
    - Deploy the app to Databricks Apps using the deploy skill
@@ -5887,7 +6740,7 @@ This prompt is returned as-is for direct use in Cursor/Copilot. No LLM processin
 **Terminal output — deploy sequence:**
 
 ```
-$ cd apps_lakebase/$APP_NAME
+$ cd $APP_ROOT
 $ databricks apps deploy --profile $PROFILE
 
 Deploying app ''{user_app_name}''...
@@ -5938,6 +6791,91 @@ Log format varies by AppKit version. Look for messages confirming the server is 
 The same mock-data UI from the **Scaffold, Build & Test** step, now accessible at a public HTTPS URL — no local machine required.',
 true, 1, true, current_timestamp(), current_timestamp(), current_user());
 
+-- deploy_databricks_app (genie-code fork) — prescriptive paths + directives; deploys the app authored under <APP_ROOT> via the SDK SNAPSHOT path (w.apps.deploy; build runs server-side) and verifies the live URL with the 3-hop OAuth session; NO local npm/localhost; bypass_LLM = TRUE
+INSERT INTO ${catalog}.${schema}.section_input_prompts
+(input_id, section_tag, coding_assistant, input_template, system_prompt,
+ bypass_llm, version, is_active, inserted_at, updated_at, created_by)
+VALUES
+(912, 'deploy_databricks_app', 'genie-code',
+'**Genie Code — this is a prescriptive runbook. Follow the steps in order. Do NOT improvise paths, do NOT use bare relative paths, do NOT use `@`-mentions. This step DEPLOYS the app that step 04 scaffolded and authored under `<APP_ROOT>`, then VERIFIES the live URL. There is no local npm and no localhost — the Apps runtime builds server-side. The reliable deploy mechanism on Genie Code is the SDK `w.apps.deploy(...)` SNAPSHOT path, not the enhanced CLI deploy.**
+
+### 🔴 Non-negotiable execution rules (read before anything)
+
+❌ **NEVER** run `npm run build` / `npm run dev` locally, and **NEVER** open `http://localhost:8000` — Genie Code has **no local Node toolchain** (`genie-code-environment` "AppKit/Node reality"). A SNAPSHOT deploy runs `npm install` + `npm run build` (Vite) **server-side from the un-built source** under `<APP_ROOT>`, so you deploy source directly.
+
+❌ **DO NOT** rely on `databricks apps deploy` via `runDatabricksCli` — it is page-dependent (hard-blocked on dashboard/file-editor pages) and CWD-defeated. If it is blocked, **do not declare deployment impossible** — fall through to the SDK path below. *blocked ≠ impossible — try the next path.*
+
+✅ The canonical deploy mechanism here is the **SDK SNAPSHOT** call run through `executeCode`:
+`w.apps.deploy(<APP_NAME>, AppDeployment(source_code_path="<APP_ROOT>", mode=AppDeploymentMode.SNAPSHOT))`, then poll the deployment + compute state.
+
+### Step 0 — Resolve your environment (once, before anything else)
+
+Run `skills/vibecoding-state` operation `enter` with `prompt_id: "deploy_databricks_app"`. Read the resolved `## Environment Capabilities` values and use them literally:
+
+- `client_context` = `genie_code`
+- `artifact_root` = your workshop clone root (e.g. `/Workspace/Users/<your-email>/.assistant/skills/vibe-coding-workshop`)
+- `skill_ref_root` = `skills/vibe-coding-workshop` (substitute your clone folder if different)
+- `app_root` = `<artifact_root>/<app_name>` — the **self-contained AppKit app project** authored in step 04 (a TOP-LEVEL sibling of any `<use_case_slug>_dab` bundle, NOT under `apps_lakebase/`). Referred to below as `<APP_ROOT>`; `<APP_ROOT>/.vibecoding-state.md`, `app.yaml`, `databricks.yml`, `server/`, and `client/` all live here.
+- `app_deploy.verb` = `apps deploy` — the gated deploy verb; on Genie Code it resolves to the SDK SNAPSHOT call (CLI deploy is the IDE path).
+
+**First:** read `<APP_ROOT>/.vibecoding-state.md` (full clone-rooted path — NOT a bare `@…` mention) for the `APP_NAME`, workspace, and any resolved issues captured in step 04.
+
+### Step 1 — Confirm `APP_NAME` and `<APP_ROOT>`, validate config
+
+You are pre-authenticated — do **NOT** run `databricks auth login`. Re-derive identity read-only and re-confirm the app name (max 26 chars, lowercase/numbers/hyphens):
+
+```bash
+databricks current-user me --output json
+```
+
+- `APP_NAME` = `<FIRSTNAME>-<LASTINITIAL>-{use_case_slug}` (truncate to 26, strip trailing `-`) — must match what step 04 wrote.
+- `<APP_ROOT>` = `<artifact_root>/<APP_NAME>`.
+
+> Workspace target: `{workspace_url}`. The session profile placeholder `{databricks_cli_profile}` is **inert on Genie Code** — runDatabricksCli/SDK are pre-authenticated, so omit `--profile`; do NOT run the IDE''s `databricks auth login` profile-creation fallback.
+
+Validate the scaffolded project exists and points at the target workspace (read-only checks via `executeCode`, not the IDE''s `ls`/`grep` shell):
+
+- `<APP_ROOT>/databricks.yml` exists and its `host:` matches `{workspace_url}`; `name:` = `<APP_NAME>`.
+- `<APP_ROOT>/app.yaml`, `<APP_ROOT>/server/server.ts`, and `<APP_ROOT>/client/` are present.
+
+If you scaffolded against a different workspace, fix `host:` in `<APP_ROOT>/databricks.yml` and remove stale state at `<APP_ROOT>/.databricks` before deploying.
+
+### Step 2 — Load the deploy skill by its FULL clone-rooted path
+
+Load with `readSkillFile` — NEVER a bare `@…` mention, NEVER a repo-relative path. **The root-level `skills/` come FIRST as the highest-priority guardrails:**
+
+1. `readSkillFile("skills/vibe-coding-workshop/apps_lakebase/skills/03-appkit-deploy/SKILL.md")` — config validation, deploy, UI verification, the 3-iteration error-fix loop, and workspace app-limit handling. Translate any `databricks apps deploy` step it shows into the SDK SNAPSHOT call below; the skill''s localhost/`npm run build` pre-flights do NOT apply on Genie Code.
+
+Load every further mandatory reference the skill names the same way (repo-relative path prefixed with `skill_ref_root`). `AGENTS.md` root context does not carry across Genie Code threads — always prefix with `skill_ref_root`.
+
+### Step 3 — Register (if needed) and deploy via the SDK SNAPSHOT path
+
+Run via `executeCode` against warm compute (warm up once with `print("ready")` to absorb the serverless cold start, keep `timeoutMinutes` generous):
+
+1. Ensure the app exists — `w.apps.get(APP_NAME)`; if it 404s, `w.apps.create(...)` and wait for the compute to be `ACTIVE`.
+2. Deploy source directly (build runs server-side):
+   `w.apps.deploy(APP_NAME, AppDeployment(source_code_path="<APP_ROOT>", mode=AppDeploymentMode.SNAPSHOT))`.
+3. Poll the returned deployment until it reaches `SUCCEEDED` (and surface `apps logs <APP_NAME>` on `FAILED`); confirm `w.apps.get(APP_NAME).compute_status.state == "ACTIVE"`.
+
+If `runDatabricksCli databricks apps deploy` happens to be available on the current AppKit project page, it is an acceptable equivalent — but the SDK SNAPSHOT call is the cross-page-reliable mechanism. Do NOT fall back to creating UI assets by hand.
+
+### Step 4 — Verify the DEPLOYED app (not localhost)
+
+A deployed App sits behind the Databricks Apps **OAuth gate** — a raw `Authorization: Bearer` token (even SDK `w.config.token`) is rejected (`/api/health` → 401). Verify one of two ways (`genie-code-environment` §7):
+
+- **Browser** — open `w.apps.get(APP_NAME).url`; the OAuth flow establishes the session. Use `apps logs <APP_NAME>` for backend assertions.
+- **Programmatic** — replay the **3-hop Apps OAuth handshake in one `requests.Session()`** (CSRF cookie persists through the PKCE callback), then reuse the session for `/api/*` calls. Reusable snippet: `readSkillFile("skills/vibe-coding-workshop/skills/genie-code-environment/references/app-verification.md")`.
+
+Confirm the React UI loads (not an error page), mock data renders, and logs show a healthy server start on port 8000 with no ERROR-level messages.
+
+**State-lock:** this prompt runs between an `enter` (Step 0) and an `exit`. After the gate passes, run `skills/vibecoding-state` op `exit` — params: `prompt_id: "deploy_databricks_app"`, `gate: "App deployed (SDK SNAPSHOT) + live URL verified behind OAuth"`, `captured: {app_name, app_root, app_url}`.
+
+**Gate:** `App deployed (SDK SNAPSHOT) + live URL verified behind OAuth` — `w.apps.get(APP_NAME)` reports `compute_status.state: "ACTIVE"`, the latest deployment is `SUCCEEDED`, and the deployed `url` was reached through the OAuth session (browser or 3-hop `requests.Session()`) showing the React mock-data UI with no ERROR logs. Verification used the DEPLOYED URL — NO `http://localhost:8000` check was attempted, and NO UI assets were hand-created as a workaround.
+
+**🛑 STOP — do not work around a blocked deploy.** If the SDK SNAPSHOT deploy or the OAuth verification fails, STOP and report the exact error and which path (CLI vs SDK) was attempted. Do NOT hand-create the app, do NOT fabricate a URL, and do NOT skip verification. Only take an alternate path if the user explicitly authorizes it.',
+'',
+true, 1, true, current_timestamp(), current_timestamp(), current_user());
+
 -- Register Lakebase in Unity Catalog - step_enabled = FALSE (hidden by default)
 INSERT INTO ${catalog}.${schema}.section_input_prompts 
 (input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, bypass_llm, step_enabled, version, is_active, inserted_at, updated_at, created_by)
@@ -5959,6 +6897,8 @@ Register the Lakebase PostgreSQL database as a Unity Catalog database catalog so
 ### Step 1: Check if Catalog Already Exists
 
 Run the following CLI command to check whether the catalog has already been registered:
+
+> **Client note:** IDE runs these in a terminal; Genie Code runs the `databricks …` commands via `runDatabricksCli` (pre-authenticated). See `genie-code-environment`.
 
 ```bash
 databricks catalogs get {lakebase_uc_catalog_name}
@@ -6015,7 +6955,7 @@ This replaces the manual process of syncing individual tables and converting typ
 ## Steps to Apply
 
 1. Copy the generated prompt using the copy button
-2. Paste it into Cursor or VS Code with Copilot
+2. Paste it into your coding assistant
 3. The AI will check if the catalog already exists
 4. If not, it will create the database catalog using the Databricks CLI
 5. It will verify the catalog is ACTIVE
@@ -6118,7 +7058,7 @@ ORDER BY table_name
    - Append constraint info (Queries 3-4) as additional columns: constraint_type, constraint_name
    - Append tag info (Queries 5-6) as additional columns: column_tags, table_tags
    - Output columns: table_name, table_type, table_comment, column_name, ordinal_position, data_type, is_nullable, column_default, column_comment, constraint_type, constraint_name, column_tags, table_tags
-   - Save to: data_product_accelerator/context/{use_case_file_prefix}_Metadata.csv
+   - Save to: <ARTIFACT_ROOT>/data_product_accelerator/context/{use_case_file_prefix}_Metadata.csv
 
 5. Analyze the metadata and create docs/genie_plan.md with:
    - **Table Inventory**: List each table with its type, row purpose (inferred from table comment and column patterns), and estimated business domain
@@ -6136,13 +7076,15 @@ Known warehouse ID: <YOUR_WAREHOUSE_ID> (get via: databricks warehouses list --o
 'Analyze Silver Metadata',
 'Extract and analyze comprehensive table/column metadata from Silver layer schema including comments, constraints, and tags',
 22,
-'## 1️⃣ How To Apply
+'> **Artifact root (client-aware).** Resolve `<ARTIFACT_ROOT>` via `vibecoding-state.resolve_root` (it reads `artifact_root` from `## Environment Capabilities`, or detects the active client + clone root) and write every artifact under it. On Cursor/Copilot that is your repo root; on Databricks Genie Code it is your `/Workspace/Users/<email>/.assistant/skills/<repo>` clone — never the page''s current working directory.
 
-Copy the prompt from the Prompt tab, start a new Agent chat in your IDE, paste it and press Enter.
+## 1️⃣ How To Apply
+
+Copy the prompt from the Prompt tab, start a new Agent chat in your coding assistant, paste it and press Enter.
 
 **Prerequisite:** Run this in your cloned Template Repository (see Prerequisites in Step 0). Ensure Databricks CLI is authenticated.
 
-**Steps:** Copy the prompt → paste into Cursor or VS Code with Copilot → AI executes 6 SQL queries via Databricks CLI → merges results into enriched CSV → creates analysis document.
+**Steps:** Copy the prompt → paste into your coding assistant → AI executes 6 SQL queries via Databricks CLI → merges results into enriched CSV → creates analysis document.
 
 **Note:** The source catalog and schema are shown in the **Silver Layer** panel above this prompt. You can edit them using the Edit button.
 
@@ -6156,7 +7098,7 @@ This step extracts **comprehensive metadata** from your Silver layer — not jus
 
 | File | Purpose |
 |------|---------|
-| `data_product_accelerator/context/{use_case_file_prefix}_Metadata.csv` | Enriched metadata CSV with all table/column/constraint/tag information. Fed into Gold Layer Design. |
+| `<ARTIFACT_ROOT>/data_product_accelerator/context/{use_case_file_prefix}_Metadata.csv` | Enriched metadata CSV with all table/column/constraint/tag information. Fed into Gold Layer Design. |
 | `docs/genie_plan.md` | Analysis document with table relevance, relationship maps, Genie Space recommendations, and metric/TVF candidates. |
 
 ### Why Enriched Metadata Matters
@@ -6182,7 +7124,7 @@ This step extracts **comprehensive metadata** from your Silver layer — not jus
 | **Analysis-Driven Design** | The genie_plan.md provides a reasoned assessment before jumping into Gold design |',
 '## Expected Deliverables
 
-- `data_product_accelerator/context/{use_case_file_prefix}_Metadata.csv` — enriched metadata CSV
+- `<ARTIFACT_ROOT>/data_product_accelerator/context/{use_case_file_prefix}_Metadata.csv` — enriched metadata CSV
 - `docs/genie_plan.md` — analysis with table relevance, relationships, Genie Space recommendations, metric/TVF candidates
 - CSV contains: table_name, table_type, table_comment, column_name, data_type, is_nullable, column_comment, constraint_type, constraint_name, column_tags, table_tags',
 true, 1, true, current_timestamp(), current_timestamp(), current_user());
@@ -6207,7 +7149,7 @@ Copy and paste this prompt to the AI:
 ```
 Read the PRD at @docs/design_prd.md and design a complete silver layer database schema for the **{use_case_title}** use case.
 
-**Output file:** data_product_accelerator/context/{use_case_file_prefix}_Metadata.csv
+**Output file:** <ARTIFACT_ROOT>/data_product_accelerator/context/{use_case_file_prefix}_Metadata.csv
 
 **Schema design requirements:**
 1. Design 5-15 silver layer tables covering all entities, relationships, and transactional data described in the PRD
@@ -6255,12 +7197,14 @@ This CSV drives the Genie Accelerator pipeline:
 'Analyze Silver Metadata (Design from PRD)',
 'Design silver layer schema from your PRD — for when you don''t have existing Silver tables or a CSV',
 22,
-'## How To Apply
+'> **Artifact root (client-aware).** Resolve `<ARTIFACT_ROOT>` via `vibecoding-state.resolve_root` (it reads `artifact_root` from `## Environment Capabilities`, or detects the active client + clone root) and write every artifact under it. On Cursor/Copilot that is your repo root; on Databricks Genie Code it is your `/Workspace/Users/<email>/.assistant/skills/<repo>` clone — never the page''s current working directory.
+
+## How To Apply
 
 1. **Prerequisite:** Complete Step 3 (PRD Generation) first — the PRD is used as input to design the schema
 2. Click **Generate** to create the prompt with your PRD embedded
-3. Copy the prompt into Cursor or VS Code with Copilot
-4. The coding assistant reads the PRD, designs tables, and saves the CSV to `data_product_accelerator/context/{use_case_file_prefix}_Metadata.csv`
+3. Copy the prompt into your coding assistant
+4. The coding assistant reads the PRD, designs tables, and saves the CSV to `<ARTIFACT_ROOT>/data_product_accelerator/context/{use_case_file_prefix}_Metadata.csv`
 5. Review the generated schema and iterate if needed
 
 ---
@@ -6282,7 +7226,7 @@ This mode works just like the Extract and Upload modes — it gives your coding 
 The generated CSV and analysis document drive the entire Genie Accelerator pipeline:
 
 ```
-data_product_accelerator/context/{use_case_file_prefix}_Metadata.csv
+<ARTIFACT_ROOT>/data_product_accelerator/context/{use_case_file_prefix}_Metadata.csv
   → Gold Design (Step 11)  — reads CSV to design dimensional model
   → Deploy Assets (Step 23) — uses schema to create tables
   → Optimize Genie (Step 25) — uses analysis for Genie Space config
@@ -6292,7 +7236,7 @@ docs/genie_plan.md
 ```',
 '## Expected Deliverables
 
-- `data_product_accelerator/context/{use_case_file_prefix}_Metadata.csv` file created via coding assistant
+- `<ARTIFACT_ROOT>/data_product_accelerator/context/{use_case_file_prefix}_Metadata.csv` file created via coding assistant
 - Contains 5-15 tables with enriched metadata designed from the PRD
 - Includes: table_name, table_type, table_comment, column_name, ordinal_position, data_type, is_nullable, column_comment, constraint_type, constraint_name
 - Every column has a descriptive business-context comment and every table has a table_comment
@@ -6336,7 +7280,7 @@ NOTE: Before creating the schema, check if `{lakehouse_default_catalog}.{user_sc
 23,
 '## 1️⃣ How To Apply
 
-Copy the prompt from the **Prompt** tab, start a **new Agent chat** in your IDE, paste it, and press Enter.
+Copy the prompt from the **Prompt** tab, start a **new Agent chat** in your coding assistant, paste it, and press Enter.
 
 ---
 
@@ -6354,8 +7298,8 @@ Ensure you have:
 
 ### Steps to Apply
 
-1. **Start new Agent thread** — Open Cursor and start a new Agent thread for clean context
-2. **Copy and paste the prompt** — Use the copy button, paste into Cursor; the AI will read your metadata, PRD, genie plan, and the orchestrator skill
+1. **Start new Agent thread** — start a new Agent thread in your coding assistant for clean context
+2. **Copy and paste the prompt** — Use the copy button, paste into your coding assistant; the AI will read your metadata, PRD, genie plan, and the orchestrator skill
 3. **Review generated design** — The AI creates `gold_layer_design/` with ERD diagrams, YAML schema files, and lineage documentation
 4. **Validate the design** — Check grain, SCD type, relationships, and lineage for each fact/dimension
 5. **Verify PRD alignment** — Ensure the Gold design supports the business requirements from the PRD
@@ -6405,9 +7349,13 @@ VALUES
 
 This is a **deployment checkpoint** — it validates and runs the complete Lakehouse pipeline in dependency order.
 
+**Bundle root:** Run every `bundle` command from the SAME data-product bundle folder the Lakehouse steps built — its dedicated top-level directory `{use_case_slug}_dab/` at the repo root (`dp_bundle_root`). `databricks.yml`, `src/`, and `resources/` all live UNDER `{use_case_slug}_dab/`; `cd` there before deploying (on Genie Code, be on that folder''s bundle-editor page). Same folder on every coding agent.
+
 ## Deployment Order (Mandatory)
 
 Run these commands in strict sequence — each stage depends on the previous one:
+
+> **Client note:** IDE runs these in a terminal; Genie Code runs the `databricks bundle …` commands via `runDatabricksCli` (be on the bundle''s page; resolved channel in `## Environment Capabilities`). See `genie-code-environment`.
 
 ```bash
 # 1. Validate the bundle (catches config errors before deploy)
@@ -6456,14 +7404,21 @@ WHERE table_schema = ''{user_schema_prefix}_gold'';
 ```
 
 Target catalog: `{lakehouse_default_catalog}`
-Target schemas: `{user_schema_prefix}_bronze`, `{user_schema_prefix}_silver`, `{user_schema_prefix}_gold`',
+Target schemas: `{user_schema_prefix}_bronze`, `{user_schema_prefix}_silver`, `{user_schema_prefix}_gold`
+
+**State-lock (`skills/vibecoding-state`) — run this prompt between an `enter` and an `exit` so workshop state is resolved and locked:**
+
+1. **Phase 0 — first, before any step below:** `skills/vibecoding-state` op `enter` — params: `prompt_id: "deploy_lakehouse_assets"`. `enter` resolves the `## Environment Capabilities` triple (deploy verb, CLI channel, `state_file_root`) so every deploy/run step below uses the resolved channel — `runDatabricksCli` on Genie Code — and writes state under `state_file_root`, never a bare-local assumption.
+2. **Final — after the step succeeds:** `skills/vibecoding-state` op `exit` — params: `prompt_id: "deploy_lakehouse_assets"`, `gate: "Lakehouse assets deployed"`, `captured: {bronze_schema, silver_schema, gold_schema}`.
+
+**Gate:** `Lakehouse assets deployed` — Bronze, Silver DQ, Silver DLT, Gold setup, and Gold merge all complete end-to-end.',
 '',
 'Deploy Lakehouse Assets (Bronze → Silver → Gold)',
 'Validate, deploy, and run all Bronze, Silver, and Gold layer jobs in dependency order using Asset Bundles with autonomous operations',
 23,
 '## 1️⃣ How To Apply
 
-Copy the prompt from the **Prompt** tab, start a **new Agent chat** in your IDE, paste it, and press Enter.
+Copy the prompt from the **Prompt** tab, start a **new Agent chat** in your coding assistant, paste it, and press Enter.
 
 ---
 
@@ -6482,9 +7437,9 @@ Ensure you have:
 
 ### Steps to Apply
 
-**Step 1: Start New Agent Thread** — Open Cursor and start a new Agent thread for clean context.
+**Step 1: Start New Agent Thread** — start a new Agent thread in your coding assistant for clean context.
 
-**Step 2: Copy and Paste the Prompt** — Use the copy button, paste it into Cursor. The AI reads both the Asset Bundles skill and the Autonomous Operations skill.
+**Step 2: Copy and Paste the Prompt** — Use the copy button, paste it into your coding assistant. The AI reads both the Asset Bundles skill and the Autonomous Operations skill.
 
 **Step 3: Validate** — The AI runs `databricks bundle validate -t dev` to catch config errors before deploying.
 
@@ -6521,7 +7476,7 @@ This is a **deployment checkpoint** that validates the entire Lakehouse pipeline
 ### Asset Bundle Structure (Built in Steps 10-12)
 
 ```
-project_root/
+{use_case_slug}_dab/                     # data-product bundle root (dp_bundle_root) — the one folder all layers share
 ├── databricks.yml                        # Bundle configuration (all layers)
 ├── src/
 │   ├── {project}_bronze/                # Bronze notebooks (clone/generate)
@@ -6642,6 +7597,79 @@ The autonomous operations skill follows this protocol:
 - [ ] Ready for Data Intelligence layer (Genie, Dashboards)',
 true, 1, true, current_timestamp(), current_timestamp(), current_user());
 
+-- deploy_lakehouse_assets (genie-code fork) — prescriptive: deploy+run the whole pipeline FROM the bundle editor; bundle-only, no hand-run SQL/API; bypass_LLM = TRUE
+INSERT INTO ${catalog}.${schema}.section_input_prompts
+(input_id, section_tag, coding_assistant, input_template, system_prompt,
+ bypass_llm, version, is_active, inserted_at, updated_at, created_by)
+VALUES
+(905, 'deploy_lakehouse_assets', 'genie-code',
+'**Genie Code — this is a prescriptive runbook. Follow the steps in order. Do NOT improvise paths, do NOT use bare relative paths, do NOT use `@`-mentions, and do NOT create or repair tables/jobs by hand. This is an end-to-end DEPLOY + RUN checkpoint for the bundle you already authored in steps 10–12: every job runs via the deployed bundle, from the bundle-editor page — never by direct SQL, the REST API, or the SDK.**
+
+### 🔴 Non-negotiable execution rule (read before anything)
+
+❌ **NEVER** create/repair tables, schemas, jobs, or pipelines directly via `executeCode` / `spark.sql` / `jobs/create` / `/api/2.0/pipelines` / the SDK / a notebook cell. The five jobs (`bronze_clone_job`, `silver_dq_setup_job`, `silver_dlt_pipeline`, `gold_setup_job`, `gold_merge_job`) ALREADY exist as resources in the bundle''s `databricks.yml`. The bundle **is** the execution mechanism — you only `validate` / `deploy` / `run` it.
+
+✅ The ONLY things you run directly are (a) **read-only** inspection (`SHOW TABLES`, `SHOW CONSTRAINTS`, `DESCRIBE`, `SELECT … FROM information_schema …`, `SELECT COUNT(*)`) and (b) `databricks bundle validate` / `deploy` / `run` through `runDatabricksCli`. If a `bundle` command is blocked, FIX the page context (open the bundle editor — Step 2) — do **not** fall back to direct SQL, the Jobs/Pipelines REST API, or the SDK.
+
+### Step 0 — Resolve your environment (once, before anything else)
+
+Run `skills/vibecoding-state` operation `enter` with `prompt_id: "deploy_lakehouse_assets"`. It writes and echoes the `## Environment Capabilities` block. Read these resolved values and use them literally throughout:
+
+- `client_context` = `genie_code`
+- `artifact_root` = your workshop clone root (e.g. `/Workspace/Users/<your-email>/.assistant/skills/vibe-coding-workshop`)
+- `skill_ref_root` = `skills/vibe-coding-workshop` (substitute your clone folder if you cloned somewhere other than `.assistant/skills/vibe-coding-workshop`)
+- `dp_bundle_root` = `<artifact_root>/{use_case_slug}_dab` — the SAME self-contained Asset Bundle you built across Bronze + Silver + Gold (e.g. `…/vibe-coding-workshop/booking_app_dab`). Its `databricks.yml` already defines all 5 layer resources. This is the **page you deploy from**. Referred to below as `<DP_BUNDLE_ROOT>`.
+- deploy verb = `bundle deploy --target dev`, run through the `runDatabricksCli` tool
+
+**Precondition:** `<DP_BUNDLE_ROOT>/databricks.yml` must already define `bronze_clone_job`, `silver_dq_setup_job`, `silver_dlt_pipeline`, `gold_setup_job`, and `gold_merge_job` (authored in steps 10–12). If a resource is missing, STOP and go back to the layer step that creates it — do NOT hand-create it here. If `enter` has not run in this thread, run it now.
+
+### Step 1 — Load the required skills by their FULL clone-rooted paths
+
+Load each skill with `readSkillFile` using its fully-qualified `<skill_ref_root>`-prefixed path — NEVER a bare `@…` mention, NEVER a repo-relative path. **The root-level `skills/` come FIRST: they are the highest-priority, always-on guardrails and govern everything below.**
+
+1. `readSkillFile("skills/vibe-coding-workshop/skills/databricks-expert-agent/SKILL.md")` — core operating rules.
+2. `readSkillFile("skills/vibe-coding-workshop/skills/databricks-asset-bundles/SKILL.md")` — `bundle validate`/`deploy`/`run` semantics, `--target dev`, and the multi-user `${var.user_prefix}` "Shared Workspace Naming" pattern.
+
+Then the autonomous-operations worker (for the diagnose → fix → redeploy loop):
+
+3. `readSkillFile("skills/vibe-coding-workshop/data_product_accelerator/skills/common/databricks-autonomous-operations/SKILL.md")` — the deploy → poll → diagnose → fix → redeploy protocol for job failures. **NEVER hand-patch a live job; fix the bundle source and redeploy.**
+
+When any skill lists further **Mandatory Skill Dependencies**, load EACH the same way: take its repo-relative path and prefix it with `skill_ref_root`. Genie Code has no repo-root-relative resolution and `AGENTS.md` does not carry across threads — so always prefix with `skill_ref_root`. **Read them in one batched `readSkillFile` turn — Genie Code reads multiple skill files in parallel in a single turn, so never serialize independent reads (`genie-code-environment` §10).**
+
+### Step 2 — Deploy and run the whole pipeline FROM the bundle editor
+
+- **Open the bundle editor BEFORE any `bundle` command — and surface its link.** `<DP_BUNDLE_ROOT>/databricks.yml` already exists, so the workspace file browser shows the **"Open in bundle editor"** affordance on that folder (and an **"Open in editor"** button at the top). Its page CWD IS `<DP_BUNDLE_ROOT>` — the bundle-root page `bundle deploy`/`run` require, where Genie Code runs deploy/run pre-approved. **Do not make the operator hunt for the icon** — build a clickable link with the pre-authenticated `WorkspaceClient` (`w`) and print it:
+  - `host = w.config.host`; `o = w.get_workspace_id()`
+  - `file_id = w.workspace.get_status("<DP_BUNDLE_ROOT>/databricks.yml").object_id`
+  - `folder_id = w.workspace.get_status("<DP_BUNDLE_ROOT>").object_id`
+  - **Bundle editor:** `{host}/editor/files/{file_id}?o={o}&contextId=folder%3A{folder_id}` (plain folder: `{host}/browse/folders/{folder_id}?o={o}`)
+
+  Tell the operator to open the **bundle-editor link**, then run every `databricks bundle …` command below from that page.
+- Validate → deploy → run all five jobs **in strict dependency order** through `runDatabricksCli`, **from the bundle-editor page**, each with `--target dev` (mandatory — a target-less deploy is guardrail-blocked):
+  - `databricks bundle validate --target dev`
+  - `databricks bundle deploy --target dev`
+  - `databricks bundle run --target dev bronze_clone_job`
+  - `databricks bundle run --target dev silver_dq_setup_job`  ← **must run before the DLT pipeline** (creates `dq_rules`)
+  - `databricks bundle run --target dev silver_dlt_pipeline`
+  - `databricks bundle run --target dev gold_setup_job`  ← 2 tasks: create tables + PKs, then add FKs
+  - `databricks bundle run --target dev gold_merge_job`
+- **🛑 If a `bundle` command is blocked, STOP — do not work around it.** A `databricks.yml not found` error or a "blocked by safety guardrails" message means you are NOT on the bundle page: open the **bundle-editor link** above and retry (CONFIRMED — the same `bundle deploy`/`run` that is "blocked" from a file page succeeds from the bundle editor). If it STILL fails from the bundle editor, STOP and report the blocker. Do **NOT** create the jobs, pipeline, tables, or merges via the Jobs/Pipelines REST API (`jobs/create`, `/api/2.0/pipelines`), the SDK, or direct SQL to "get it done" — that silently defeats the bundle (no version control, no `bundle destroy` cleanup) and FAILS the gate. The REST/SDK route is an **escape hatch available only if the operator explicitly authorizes it.**
+- **If a deployed job FAILS (vs. is blocked), use the autonomous-operations loop — still inside the bundle:** get the failed **task** `run_id` (not the parent job run_id), `databricks runs get-run-output --run-id <TASK_RUN_ID>` to diagnose, fix the offending **bundle source file** under `<DP_BUNDLE_ROOT>`, then `bundle deploy --target dev` + `bundle run …` again (max 3 iterations before escalating). Never patch the live job via the API/UI — fix the source and redeploy.
+
+### Step 3 — Verify end-to-end (read-only)
+
+Use **read-only** `executeCode`/SQL to confirm the deployed jobs produced the data — never to create it:
+
+- `SHOW TABLES IN {lakehouse_default_catalog}.{user_schema_prefix}_bronze;` (and `DESCRIBE EXTENDED` to confirm CDF)
+- `SELECT COUNT(*) FROM {lakehouse_default_catalog}.{user_schema_prefix}_silver.dq_rules;` and `SHOW TABLES IN {lakehouse_default_catalog}.{user_schema_prefix}_silver;`
+- `SHOW TABLES IN {lakehouse_default_catalog}.{user_schema_prefix}_gold;` and `SELECT * FROM {lakehouse_default_catalog}.information_schema.table_constraints WHERE table_schema = ''{user_schema_prefix}_gold'';`
+
+**State-lock:** this prompt runs between an `enter` (Step 0) and an `exit`. After the gate passes, run `skills/vibecoding-state` op `exit` — params: `prompt_id: "deploy_lakehouse_assets"`, `gate: "Lakehouse assets deployed"`, `captured: {bronze_schema, silver_schema, gold_schema}`.
+
+**Gate:** `Lakehouse assets deployed` — all five jobs (`bronze_clone_job`, `silver_dq_setup_job`, `silver_dlt_pipeline`, `gold_setup_job`, `gold_merge_job`) were **deployed by `bundle deploy` and executed by `bundle run`** in dependency order end-to-end, AND the Bronze/Silver/Gold schemas in `{lakehouse_default_catalog}` are populated (`dq_rules` present, Gold PK constraints present). Tables existing is **necessary but NOT sufficient** — if anything was created or repaired by direct SQL / REST API / SDK instead of the deployed bundle, the gate FAILS and you must redo it via the bundle.',
+'',
+true, 1, true, current_timestamp(), current_timestamp(), current_user());
+
 -- Step 24: Deploy Data Intelligence Assets - bypass_LLM = TRUE
 INSERT INTO ${catalog}.${schema}.section_input_prompts 
 (input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
@@ -6660,9 +7688,13 @@ Before starting:
 
 This is a **semantic layer deployment checkpoint** — it deploys and verifies all Data Intelligence assets in the correct order.
 
+**Bundle root:** Run every `bundle` command from the SAME data-product bundle folder the Lakehouse + semantic steps built — its dedicated top-level directory `{use_case_slug}_dab/` at the repo root (`dp_bundle_root`). All relative paths (`src/{project}_semantic/`, `resources/semantic/`, `plans/`, `databricks.yml`) resolve UNDER `{use_case_slug}_dab/`; `cd` there before deploying (on Genie Code, be on that folder''s bundle-editor page). Same folder on every coding agent.
+
 ## Deployment Order (Mandatory)
 
 Deploy in this sequence — each component depends on the previous:
+
+> **Client note:** IDE runs these in a terminal; Genie Code runs the `databricks bundle …` commands via `runDatabricksCli` (be on the bundle''s page; resolved channel in `## Environment Capabilities`). See `genie-code-environment`.
 
 ```bash
 # 1. Validate the bundle
@@ -6714,14 +7746,21 @@ SELECT MEASURE(<measure_name>) FROM {lakehouse_default_catalog}.{user_schema_pre
 
 Target catalog: `{lakehouse_default_catalog}`
 Gold schema: `{user_schema_prefix}_gold`
-Concrete job names, metric-view names, TVF names, warehouse IDs, workspace paths: `plans/deploy-checkpoint.md`',
+Concrete job names, metric-view names, TVF names, warehouse IDs, workspace paths: `plans/deploy-checkpoint.md`
+
+**State-lock (`skills/vibecoding-state`) — run this prompt between an `enter` and an `exit` so workshop state is resolved and locked:**
+
+1. **Phase 0 — first, before any step below:** `skills/vibecoding-state` op `enter` — params: `prompt_id: "deploy_di_assets"`, `require_prior_gate: {prompt_id: "deploy_lakehouse_assets", gate: "Lakehouse assets deployed"}`. `enter` resolves the `## Environment Capabilities` triple (deploy verb, CLI channel, `state_file_root`) so every deploy/run step below uses the resolved channel — `runDatabricksCli` on Genie Code — and writes state under `state_file_root`, never a bare-local assumption.
+2. **Final — after the step succeeds:** `skills/vibecoding-state` op `exit` — params: `prompt_id: "deploy_di_assets"`, `gate: "Semantic layer assets deployed"`, `captured: {tvf_job, metric_views_job, dashboard_deploy_job, genie_deploy_job}`.
+
+**Gate:** `Semantic layer assets deployed` — the TVFs, Metric Views, Dashboard, and Genie Space are brought up in order and the deploy checkpoint is recorded.',
 '',
 'Deploy Semantic Layer Assets (TVFs → Metric Views → Genie → Dashboard)',
 'Deploy TVFs, Metric Views, Genie Spaces (via Export/Import API), and AI/BI Dashboards in dependency order',
 24,
 '## 1️⃣ How To Apply
 
-Copy the prompt from the **Prompt** tab, start a **new Agent chat** in your IDE, paste it, and press Enter.
+Copy the prompt from the **Prompt** tab, start a **new Agent chat** in your coding assistant, paste it, and press Enter.
 
 ---
 
@@ -6741,9 +7780,9 @@ Ensure you have:
 
 ### Steps to Apply
 
-**Step 1: Start New Agent Thread** — Open Cursor and start a new Agent thread for clean context.
+**Step 1: Start New Agent Thread** — start a new Agent thread in your coding assistant for clean context.
 
-**Step 2: Copy and Paste the Prompt** — Use the copy button, paste it into Cursor. The AI reads the Asset Bundles skill and the Genie Space Export/Import API skill.
+**Step 2: Copy and Paste the Prompt** — Use the copy button, paste it into your coding assistant. The AI reads the Asset Bundles skill and the Genie Space Export/Import API skill.
 
 **Step 3: Deploy TVFs** — SQL task creates parameterized functions (STRING date params, v3.0 bullet COMMENTs, ROW_NUMBER for Top-N).
 
@@ -6912,6 +7951,77 @@ The Genie Space deployment follows this protocol:
 - [ ] Ready for Genie Optimization (Step 25)',
 true, 1, true, current_timestamp(), current_timestamp(), current_user());
 
+-- deploy_di_assets (genie-code fork) — prescriptive paths + directives; bundle-job-only ordered deploy; reads plans/checkpoint from <DP_BUNDLE_ROOT>; bypass_LLM = TRUE
+INSERT INTO ${catalog}.${schema}.section_input_prompts
+(input_id, section_tag, coding_assistant, input_template, system_prompt,
+ bypass_llm, version, is_active, inserted_at, updated_at, created_by)
+VALUES
+(909, 'deploy_di_assets', 'genie-code',
+'**Genie Code — this is a prescriptive runbook. Follow the steps in order. Do NOT improvise paths, do NOT use bare relative paths, do NOT use `@`-mentions, and do NOT bring any asset up by hand. This is the semantic-layer DEPLOYMENT CHECKPOINT: every TVF, Metric View, Dashboard, and Genie Space is brought up — in dependency order — by a deployed bundle job, never by direct SQL or an ad-hoc API call.**
+
+### 🔴 Non-negotiable execution rule (read before anything)
+
+❌ **NEVER** create a TVF/Metric View via `executeCode` / `spark.sql`, publish the dashboard via a hand-rolled `w.workspace.import_`, or POST/PATCH the Genie Space by calling the REST API **by hand**. Those operations are the **body of the bundle jobs** — `tvf_job`, `metric_views_job`, `dashboard_deploy_job`, `genie_deploy_job` — executed by `databricks bundle run`. The bundle **is** the execution mechanism; never bypass it even though direct calls are faster. Live DI assets with no versioned bundle behind them are the regression this fork exists to prevent.
+
+✅ The ONLY things you run directly are (a) **read-only / local** checks — the Phase-0.5 pre-flight (variable enumeration, DDL smoke test, Genie `_assert_sql_arrays`, live-catalog intersection), the per-task verification `SELECT`s, a read-only Conversation-API benchmark call — and (b) `databricks bundle validate` / `deploy` / `run` through `runDatabricksCli`. If `bundle deploy` is blocked, FIX the page context (open the bundle editor — Step 3) — do **not** fall back to direct SQL, the Jobs REST API, or the SDK.
+
+### Step 0 — Resolve your environment (once, before anything else)
+
+Run `skills/vibecoding-state` operation `enter` with `prompt_id: "deploy_di_assets"` and `require_prior_gate: {prompt_id: "deploy_lakehouse_assets", gate: "Lakehouse assets deployed"}`. It writes and echoes the `## Environment Capabilities` block. Read these resolved values and use them literally throughout:
+
+- `client_context` = `genie_code`
+- `artifact_root` = your workshop clone root (e.g. `/Workspace/Users/<your-email>/.assistant/skills/vibe-coding-workshop`)
+- `skill_ref_root` = `skills/vibe-coding-workshop` (substitute your clone folder if you cloned somewhere other than `.assistant/skills/vibe-coding-workshop`)
+- `dp_bundle_root` = `<artifact_root>/{use_case_slug}_dab` — the **SAME self-contained Asset Bundle** that holds the Lakehouse + semantic-layer + dashboard resources you authored in the prior steps (e.g. `…/booking_app_dab`). EXTEND/DEPLOY it; do NOT make a new one. It is the **page you deploy from**. Referred to below as `<DP_BUNDLE_ROOT>`. The resolved concrete names (job names, MV/TVF names, `semantic_warehouse_id`, workspace paths) live at `<DP_BUNDLE_ROOT>/plans/deploy-checkpoint.md`; Gold design YAML at `<DP_BUNDLE_ROOT>/gold_layer_design/yaml/`.
+- deploy verb = `bundle deploy --target dev`, run through the `runDatabricksCli` tool
+
+If `enter` reports the prior gate is not `Lakehouse assets deployed`, STOP — finish the Lakehouse deploy checkpoint first. If `enter` has not run in this thread, run it now.
+
+### Step 1 — Load the required skills by their FULL clone-rooted paths
+
+Load each skill with `readSkillFile` using its fully-qualified `<skill_ref_root>`-prefixed path — NEVER a bare `@…` mention, NEVER a repo-relative path. **The root-level `skills/` come FIRST: they are the highest-priority, always-on guardrails and govern everything below.**
+
+1. `readSkillFile("skills/vibe-coding-workshop/skills/databricks-expert-agent/SKILL.md")` — "Extract, Don''t Generate": only deploy artifacts whose tables/columns exist on disk AND in the live Gold schema. Do NOT trust `semantic-layer-manifest.yaml` as ground truth.
+2. `readSkillFile("skills/vibe-coding-workshop/skills/databricks-asset-bundles/SKILL.md")` — bundle structure, serverless Environments V4, "Emit Deploy Checkpoint", and the `${var.user_prefix}` "Shared Workspace Naming" pattern.
+
+Then the Semantic Layer orchestrator and the Genie export/import worker (load in this order):
+
+3. `readSkillFile("skills/vibe-coding-workshop/data_product_accelerator/skills/semantic-layer/00-semantic-layer-setup/SKILL.md")` — owns Phase 0 (gold inventory check), Phase 0.5 (local pre-flight), the phase gates, and the per-task verification matrix. Any task touching 2+ semantic-layer asset types MUST route through it.
+4. `readSkillFile("skills/vibe-coding-workshop/data_product_accelerator/skills/semantic-layer/04-genie-space-export-import-api/SKILL.md")` — the `serialized_space` invariants (`json.dumps()` string, `uuid.uuid4().hex` IDs, sorted arrays, every `sql:` field a `List[str]`).
+
+When the orchestrator lists further **Mandatory Skill Dependencies**, load EACH the same way: prefix its repo-relative path with `skill_ref_root`. Genie Code has no repo-root-relative resolution and `AGENTS.md` does not carry across threads. **Read them in one batched `readSkillFile` turn — Genie Code reads multiple skill files in parallel in a single turn, so never serialize independent reads (`genie-code-environment` §10).**
+
+### Step 2 — Pre-flight, then confirm the bundle resources exist. Do NOT deploy yet.
+
+- **Verify the Gold schema inventory** (read-only): query `information_schema.tables` / `.columns` in the live `{lakehouse_default_catalog}.{user_schema_prefix}_gold` and only deploy artifacts whose target tables/columns exist on disk AND in the live Gold schema.
+- **Confirm templates were used** (from the genie_space + aibi_dashboard steps): `<DP_BUNDLE_ROOT>/src/{project}_semantic/deploy_genie_spaces.py` (the `{project}_semantic` directory), `<DP_BUNDLE_ROOT>/resources/semantic-layer/*.yml`, `<DP_BUNDLE_ROOT>/resources/monitoring/dashboard_deploy_job.yml` all exist. If missing, go back and author them — do NOT hand-write from scratch (the #1 source of multi-cycle deploy failures).
+- **Read `<DP_BUNDLE_ROOT>/plans/deploy-checkpoint.md` for concrete values** — actual job names, metric-view names, `semantic_warehouse_id`, workspace paths. The `{lakehouse_default_catalog}` / `{user_schema_prefix}_gold` / `tvf_job` tokens below are project-invariant placeholders; resolve them from the checkpoint. If the checkpoint is missing, run the Asset Bundles "Emit Deploy Checkpoint" step first — do NOT invent names.
+- **Run Phase 0.5 local pre-flight** (read-only/local, allowed): variable enumeration, DDL smoke test, Genie `_assert_sql_arrays`, live-catalog intersection. Any STOP rule here halts deployment.
+
+### Step 3 — Deploy FROM the bundle page, in dependency order
+
+- **Open the bundle editor BEFORE any `bundle` command — and surface its link.** `<DP_BUNDLE_ROOT>/databricks.yml` already exists, so the workspace file browser shows the **"Open in bundle editor"** affordance on that folder (and an **"Open in editor"** button at the top). Its page CWD IS `<DP_BUNDLE_ROOT>` — the bundle-root page `bundle deploy`/`run` require, where Genie Code runs deploy/run pre-approved. **Do not make the operator hunt for the icon** — build a clickable link with the pre-authenticated `WorkspaceClient` (`w`) and print it:
+  - `host = w.config.host`; `o = w.get_workspace_id()`
+  - `file_id = w.workspace.get_status("<DP_BUNDLE_ROOT>/databricks.yml").object_id`
+  - `folder_id = w.workspace.get_status("<DP_BUNDLE_ROOT>").object_id`
+  - **Bundle editor:** `{host}/editor/files/{file_id}?o={o}&contextId=folder%3A{folder_id}` (plain folder: `{host}/browse/folders/{folder_id}?o={o}`)
+
+  Tell the operator to open the **bundle-editor link**, then run every `databricks bundle …` command below from that page. Edit the EXISTING on-page `databricks.yml` — files created via the workspace API may not reach the CLI''s FUSE mount.
+- Validate → deploy → run the jobs IN ORDER through `runDatabricksCli`, **from the bundle-editor page**, each with `--target dev` (mandatory — a target-less deploy is guardrail-blocked). **Verify per-task AFTER each `run`, never at the end** — a failed TVF silently breaks Metric Views, which silently breaks the Genie Space:
+  - `databricks bundle validate --target dev`
+  - `databricks bundle deploy --target dev`
+  - `databricks bundle run --target dev tvf_job`            ← then verify TVFs (run a TVF `SELECT`); STOP on failure
+  - `databricks bundle run --target dev metric_views_job`   ← then verify `table_type = ''METRIC_VIEW''` + a `MEASURE()` query; STOP on failure
+  - `databricks bundle run --target dev dashboard_deploy_job` ← then verify the dashboard opens without parse errors; STOP on failure
+  - `databricks bundle run --target dev genie_deploy_job`    ← then verify the GET API returns the new/updated Space; STOP on failure
+- **🛑 If a `bundle` command is blocked or fails, STOP — do not work around it.** A `databricks.yml not found` error or a "blocked by safety guardrails" message means you are NOT on the bundle page: open the **bundle-editor link** above and retry (CONFIRMED — the same `bundle deploy`/`run` that is "blocked" from a file page succeeds from the bundle editor). If it STILL fails from the bundle editor, STOP and report the blocker. Do **NOT** create the TVFs/Metric Views/Dashboard/Genie Space via direct SQL, the Jobs REST API (`jobs/create`), a hand-rolled `w.workspace.import_`, or a hand-rolled Genie API call to "get it done" — that silently defeats the bundle (no version control, no `bundle destroy` cleanup) and FAILS the gate. The REST/SDK route is an **escape hatch available only if the operator explicitly authorizes it.**
+
+**State-lock:** this prompt runs between an `enter` (Step 0) and an `exit`. After the gate passes, run `skills/vibecoding-state` op `exit` — params: `prompt_id: "deploy_di_assets"`, `gate: "Semantic layer assets deployed"`, `captured: {tvf_job, metric_views_job, dashboard_deploy_job, genie_deploy_job}`.
+
+**Gate:** `Semantic layer assets deployed` — the TVFs, Metric Views, Dashboard, and Genie Space were **brought up in dependency order by `bundle deploy` + `bundle run`** (`tvf_job` → `metric_views_job` → `dashboard_deploy_job` → `genie_deploy_job`), each per-task verification passed, and the deploy checkpoint is recorded at `<DP_BUNDLE_ROOT>/plans/deploy-checkpoint.md`. Assets existing is **necessary but NOT sufficient** — if any was created by direct SQL or a hand-rolled API call instead of the deployed bundle, the gate FAILS and you must redo it via the bundle.',
+'',
+true, 1, true, current_timestamp(), current_timestamp(), current_user());
+
 -- Step 25: Optimize Genie - bypass_LLM = TRUE, step_enabled = FALSE (hidden by default)
 INSERT INTO ${catalog}.${schema}.section_input_prompts 
 (input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, bypass_llm, step_enabled, version, is_active, inserted_at, updated_at, created_by)
@@ -6976,14 +8086,21 @@ For each control lever in priority order:
 | **Repeatability** | ≥ 90% | Same question → same SQL on repeated runs |
 
 Target catalog: `{lakehouse_default_catalog}`
-Gold schema: `{user_schema_prefix}_gold`',
+Gold schema: `{user_schema_prefix}_gold`
+
+**State-lock (`skills/vibecoding-state`) — run this prompt between an `enter` and an `exit` so workshop state is resolved and locked:**
+
+1. **Phase 0 — first, before any step below:** `skills/vibecoding-state` op `enter` — params: `prompt_id: "optimize_genie"`. `enter` resolves the `## Environment Capabilities` triple (deploy verb, CLI channel, `state_file_root`) so every deploy/run step below uses the resolved channel — `runDatabricksCli` on Genie Code — and writes state under `state_file_root`, never a bare-local assumption.
+2. **Final — after the step succeeds:** `skills/vibecoding-state` op `exit` — params: `prompt_id: "optimize_genie"`, `gate: "Genie quality targets passed"`, `captured: {optimization_progress, genie_space_config}`.
+
+**Gate:** `Genie quality targets passed` — all eight Genie quality targets pass on the benchmark.',
 '',
 'Optimize Genie Space (Benchmark-Driven)',
 'Systematically optimize Genie Space accuracy using 4 workers, 8 quality scorers, 6 control levers, and MLflow experiment tracking',
 25,
 '## 1️⃣ How To Apply
 
-Copy the prompt from the **Prompt** tab, start a **new Agent chat** in your IDE, paste it, and press Enter.
+Copy the prompt from the **Prompt** tab, start a **new Agent chat** in your coding assistant, paste it, and press Enter.
 
 ---
 
@@ -7004,9 +8121,9 @@ Ensure you have:
 
 ### Steps to Apply
 
-**Step 1: Start New Agent Thread** — Open Cursor and start a new Agent thread for clean context.
+**Step 1: Start New Agent Thread** — start a new Agent thread in your coding assistant for clean context.
 
-**Step 2: Copy and Paste the Prompt** — Use the copy button, paste it into Cursor. The AI reads the Genie Optimization Orchestrator skill which automatically loads 4 worker skills.
+**Step 2: Copy and Paste the Prompt** — Use the copy button, paste it into your coding assistant. The AI reads the Genie Optimization Orchestrator skill which automatically loads 4 worker skills.
 
 **Step 3: Phase 1 — Baseline** — The AI:
 1. Snapshots current Genie Space metadata
@@ -7222,7 +8339,7 @@ After exploring, you should understand:
 26,
 '## How to Apply
 
-1. Open your cloned workshop template repository in Cursor/VS Code
+1. Open your cloned workshop template repository in your coding assistant
 2. Navigate to `data_product_accelerator/skills/common/naming-tagging-standards/SKILL.md`
 3. Read through the existing tagging patterns and note what governance capabilities exist
 4. Navigate to `data_product_accelerator/skills/admin/create-agent-skill/SKILL.md`
@@ -7419,7 +8536,7 @@ For other asset types, use the verification approach described in your use case 
    data_product_accelerator/skills/common/<your-skill-name>/
    ```
 2. Save all generated files (SKILL.md, references, assets) from the previous step
-3. Open your AI assistant (Cursor) and ask it to use the new skill
+3. Open your AI assistant and ask it to use the new skill
 4. Review the commands/queries the agent generates
 5. Verify the results were applied correctly',
 '## Expected Output
@@ -7558,6 +8675,8 @@ VALUES
 ## Step 0: Runtime Discovery (MANDATORY — run before any cleanup)
 
 ### 0a. Resolve CLI Profile
+
+> **Client note:** IDE runs these in a terminal; Genie Code runs the `databricks …` commands via `runDatabricksCli` (pre-authenticated). See `genie-code-environment`.
 
 ```bash
 # Use the configured Databricks CLI profile (defaults to DEFAULT — change in Session Settings → Profile if your ~/.databrickscfg uses a different name)
@@ -7879,7 +8998,7 @@ databricks current-user me --profile {databricks_cli_profile} --output json
 This is required — `databricks api` calls will silently hit the wrong workspace without it.
 
 ### Step 2: Copy the Generated Prompt
-Copy the cleanup prompt into your AI coding assistant (Cursor or Copilot) from the project root.
+Copy the cleanup prompt into your AI coding assistant from the project root.
 
 ### Step 3: Let the Assistant Run Discovery and Present the Inventory
 The assistant will execute Step 0 (discover the CLI profile, read `databricks.yml` at the repo root and under `apps_lakebase/<APP_DIR>/`, find a warehouse, resolve the Lakebase UC catalog), then sweep every phase and print a full inventory of resources that will be deleted.
@@ -7975,6 +9094,8 @@ Plan which Gold layer assets to sync from the Lakehouse into Lakebase PostgreSQL
 
 2. **Ensure the Lakebase project exists with cost-optimized sizing** (idempotent; safe to re-run):
 
+   > **Client note:** IDE runs these in a terminal; Genie Code runs the `databricks …` commands via `runDatabricksCli` (pre-authenticated; resolved channel in `## Environment Capabilities`). See `genie-code-environment`.
+
    ```bash
    # Create the per-student project if it does not already exist (ignore "already exists")
    databricks postgres create-project {user_app_name} --json ''''{"spec": {"display_name": "{user_app_name}"}}''''
@@ -8024,7 +9145,14 @@ Plan which Gold layer assets to sync from the Lakehouse into Lakebase PostgreSQL
 - `@docs/activation_sync_plan.md` exists with: candidate table, per-candidate PK + sync mode + type notes, creation order, and per-candidate CDF notes (including explicit "CDF not applicable" rows for Metric Views / TVFs / Iceberg).
 - Every synced name uses the `_synced` suffix.
 - No candidate is marked CONTINUOUS. Every TRIGGERED candidate cites a `>=24h` cron.
-- STOP after saving -- do not create synced tables in this step.',
+- STOP after saving -- do not create synced tables in this step.
+
+**State-lock (`skills/vibecoding-state`) — run this prompt between an `enter` and an `exit` so workshop state is resolved and locked:**
+
+1. **Phase 0 — first, before any step below:** `skills/vibecoding-state` op `enter` — params: `prompt_id: "activation_table_design"`. `enter` resolves the `## Environment Capabilities` triple (deploy verb, CLI channel, `state_file_root`) so every deploy/run step below uses the resolved channel — `runDatabricksCli` on Genie Code — and writes state under `state_file_root`, never a bare-local assumption.
+2. **Final — after the step succeeds:** `skills/vibecoding-state` op `exit` — params: `prompt_id: "activation_table_design"`, `gate: "Synced tables planned"`, `captured: {user_app_name, endpoint_name}`.
+
+**Gate:** `Synced tables planned` — the reverse-ETL and synced-table plan checklists are complete and the Lakebase project and endpoint are identified.',
 'You are a data architect planning reverse ETL sync from Databricks Lakehouse to Lakebase PostgreSQL using Synced Tables.
 
 This prompt is returned as-is for direct use in Cursor/Copilot. No LLM processing.',
@@ -8040,7 +9168,7 @@ This prompt is returned as-is for direct use in Cursor/Copilot. No LLM processin
 ## Steps to Apply
 
 1. Copy the generated prompt
-2. Paste into Cursor or Copilot
+2. Paste into your coding assistant
 3. The code assistant will:
    - Read your Gold layer design, use-case plan, and PRD
    - Identify sync candidates with primary keys and sync modes
@@ -8167,7 +9295,14 @@ while time.time() < deadline:
 - Every candidate in `@docs/activation_sync_plan.md` has been created via the REST API contract above, with `spec.project = projects/{user_app_name}` and `spec.branch = projects/{user_app_name}/branches/production`, in dependency order.
 - Polling shows a healthy `detailed_state` for each synced table within the 15-minute cap.
 - `SELECT count(*) FROM {user_schema_prefix}.<synced_table>` returns non-zero row counts consistent with the Gold source.
-- STOP after verification -- analytics app design is the next step.',
+- STOP after verification -- analytics app design is the next step.
+
+**State-lock (`skills/vibecoding-state`) — run this prompt between an `enter` and an `exit` so workshop state is resolved and locked:**
+
+1. **Phase 0 — first, before any step below:** `skills/vibecoding-state` op `enter` — params: `prompt_id: "activation_reverse_sync"`, `require_prior_gate: {prompt_id: "activation_table_design", gate: "Synced tables planned"}`. `enter` resolves the `## Environment Capabilities` triple (deploy verb, CLI channel, `state_file_root`) so every deploy/run step below uses the resolved channel — `runDatabricksCli` on Genie Code — and writes state under `state_file_root`, never a bare-local assumption.
+2. **Final — after the step succeeds:** `skills/vibecoding-state` op `exit` — params: `prompt_id: "activation_reverse_sync"`, `gate: "Synced tables live"`, `captured: {synced_schema, synced_tables}`.
+
+**Gate:** `Synced tables live` — every candidate table is synced with a healthy state and non-zero row counts.',
 'You are a Databricks engineer implementing Synced Tables for reverse ETL from the Lakehouse Gold layer into Lakebase PostgreSQL.
 
 CLI Best Practices:
@@ -8186,7 +9321,7 @@ This prompt is returned as-is for direct use in Cursor/Copilot. No LLM processin
 ## Steps to Apply
 
 1. Copy the generated prompt
-2. Paste into Cursor or Copilot
+2. Paste into your coding assistant
 3. The code assistant will:
    - Read your sync plan and Gold layer design
    - Enable CDF where needed
@@ -8274,7 +9409,14 @@ Synced data location (project, Postgres database, schema, Lakehouse source) come
 
 - `@docs/analytics_ui_design.md` exists with pages, per-page KPIs/charts, data sources (`{user_schema_prefix}.<synced_table>` + columns), navigation, and the extend-vs-greenfield decision with file evidence.
 - Every visualization cites a synced Lakebase table from the sync plan.
-- STOP after saving -- do not build the app in this step.',
+- STOP after saving -- do not build the app in this step.
+
+**State-lock (`skills/vibecoding-state`) — run this prompt between an `enter` and an `exit` so workshop state is resolved and locked:**
+
+1. **Phase 0 — first, before any step below:** `skills/vibecoding-state` op `enter` — params: `prompt_id: "activation_app_design"`, `require_prior_gate: {prompt_id: "activation_reverse_sync", gate: "Synced tables live"}`. `enter` resolves the `## Environment Capabilities` triple (deploy verb, CLI channel, `state_file_root`) so every deploy/run step below uses the resolved channel — `runDatabricksCli` on Genie Code — and writes state under `state_file_root`, never a bare-local assumption.
+2. **Final — after the step succeeds:** `skills/vibecoding-state` op `exit` — params: `prompt_id: "activation_app_design"`, `gate: "Analytics app designed"`, `captured: {analytics_ui_design}`.
+
+**Gate:** `Analytics app designed` — the analytics UI design doc is complete with pages, KPIs, and data sources.',
 'You are a UI/UX designer creating analytics dashboards powered by Lakebase synced data.
 
 This prompt is returned as-is for direct use in Cursor/Copilot. No LLM processing.',
@@ -8290,7 +9432,7 @@ Complete **Create Synced Tables** (Step 33) so data is available in Lakebase.
 ## Steps to Apply
 
 1. Copy the generated prompt
-2. Paste into Cursor or Copilot
+2. Paste into your coding assistant
 3. The code assistant will:
    - Read the sync plan, Gold design, and PRD
    - Design analytics pages with KPIs and data sources
@@ -8412,7 +9554,14 @@ Do NOT add `psycopg2-binary` -- Lakebase Autoscaling uses `psycopg3` with a cust
 - ConnectionStatus is visible at the top center and shows "Mock Data".
 - Navigation works (extending existing app or greenfield).
 - Local dev passes at `http://localhost:8000` with zero external dependencies.
-- STOP -- proceed to Step 36 to wire Lakebase.',
+- STOP -- proceed to Step 36 to wire Lakebase.
+
+**State-lock (`skills/vibecoding-state`) — run this prompt between an `enter` and an `exit` so workshop state is resolved and locked:**
+
+1. **Phase 0 — first, before any step below:** `skills/vibecoding-state` op `enter` — params: `prompt_id: "activation_build_wire"`, `require_prior_gate: {prompt_id: "activation_app_design", gate: "Analytics app designed"}`. `enter` resolves the `## Environment Capabilities` triple (deploy verb, CLI channel, `state_file_root`) so every deploy/run step below uses the resolved channel — `runDatabricksCli` on Genie Code — and writes state under `state_file_root`, never a bare-local assumption.
+2. **Final — after the step succeeds:** `skills/vibecoding-state` op `exit` — params: `prompt_id: "activation_build_wire"`, `gate: "Analytics app built (mock)"`, `captured: {app_dir}`.
+
+**Gate:** `Analytics app built (mock)` — the analytics app runs locally with mock data and the connection status reads Mock Data.',
 'You are a full-stack developer building an analytics Databricks App with placeholder data.
 
 This prompt is returned as-is for direct use in Cursor/Copilot. No LLM processing.',
@@ -8428,7 +9577,7 @@ Complete **Design Analytics App** (Step 34). The design document at `@docs/analy
 ## Steps to Apply
 
 1. Copy the generated prompt
-2. Paste into Cursor or Copilot
+2. Paste into your coding assistant
 3. The code assistant will:
    - Read `@docs/reverse_etl.md` and the analytics design
    - Scaffold `apps_lakebase/app.py` (runs via `python app.py`), `requirements.txt`, and the `src/` tree
@@ -8550,7 +9699,14 @@ Environment values (workspace, project, endpoint, Postgres database/schema) come
 - Every analytics endpoint queries `{user_schema_prefix}.*` synced tables and returns `source: "live"` on success with a working mock fallback on error.
 - `/api/health/lakebase` exists and returns `{connected, mode: "autoscaling", schema: "{user_schema_prefix}", error?}`.
 - ConnectionStatus shows "Live Data" on the local app at `http://localhost:8000` and degrades gracefully to "Mock Data" if Lakebase is unreachable.
-- STOP -- deployment is the next step.',
+- STOP -- deployment is the next step.
+
+**State-lock (`skills/vibecoding-state`) — run this prompt between an `enter` and an `exit` so workshop state is resolved and locked:**
+
+1. **Phase 0 — first, before any step below:** `skills/vibecoding-state` op `enter` — params: `prompt_id: "activation_wire_lakebase"`, `require_prior_gate: {prompt_id: "activation_build_wire", gate: "Analytics app built (mock)"}`. `enter` resolves the `## Environment Capabilities` triple (deploy verb, CLI channel, `state_file_root`) so every deploy/run step below uses the resolved channel — `runDatabricksCli` on Genie Code — and writes state under `state_file_root`, never a bare-local assumption.
+2. **Final — after the step succeeds:** `skills/vibecoding-state` op `exit` — params: `prompt_id: "activation_wire_lakebase"`, `gate: "Analytics app live data (local)"`, `captured: {lakebase_service}`.
+
+**Gate:** `Analytics app live data (local)` — the analytics app reads live data locally and every endpoint reports source live.',
 'You are a backend developer wiring a Databricks analytics app to synced Lakebase (PostgreSQL) tables.
 
 This prompt is returned as-is for direct use in Cursor/Copilot. No LLM processing.',
@@ -8566,7 +9722,7 @@ Complete **Build Analytics App** (Step 35). The app must be running locally with
 ## Steps to Apply
 
 1. Copy the generated prompt
-2. Paste into Cursor or Copilot
+2. Paste into your coding assistant
 3. The code assistant will:
    - Read `@docs/reverse_etl.md` and port the Autoscaling connection pattern from the parent repo''s `src/backend/services/lakebase.py`
    - Create `apps_lakebase/src/backend/services/lakebase.py` with `ConnectionPool` + `_OAuthConnection` + `get_connection()`
@@ -8724,7 +9880,14 @@ The app runs as a dedicated service principal; it is **not** a member of the `us
 
 ### Done When
 
-The deployed app passes envelope-level verification: every `/api/analytics/*` and `/api/chat` returns `envelope.source == "live"`, `databricks apps logs ... --tail 200 | grep "falling back to mock"` is empty, and `/api/chat` wiring is confirmed via `response.citations[0].sql`. The app SP holds all four permission classes from the App-SP Permissions section and `databricks postgres list-roles` shows `auth_method=LAKEBASE_OAUTH_V1` + `identity_type=SERVICE_PRINCIPAL`. Pre- and post-deploy `get-endpoint` both match `@docs/reverse_etl.md` (scale-to-zero preserved; no warmup cron). The `Expected Output` checklist (see `how_to_apply` / student UI) is the canonical item-by-item acceptance list.',
+The deployed app passes envelope-level verification: every `/api/analytics/*` and `/api/chat` returns `envelope.source == "live"`, `databricks apps logs ... --tail 200 | grep "falling back to mock"` is empty, and `/api/chat` wiring is confirmed via `response.citations[0].sql`. The app SP holds all four permission classes from the App-SP Permissions section and `databricks postgres list-roles` shows `auth_method=LAKEBASE_OAUTH_V1` + `identity_type=SERVICE_PRINCIPAL`. Pre- and post-deploy `get-endpoint` both match `@docs/reverse_etl.md` (scale-to-zero preserved; no warmup cron). The `Expected Output` checklist (see `how_to_apply` / student UI) is the canonical item-by-item acceptance list.
+
+**State-lock (`skills/vibecoding-state`) — run this prompt between an `enter` and an `exit` so workshop state is resolved and locked:**
+
+1. **Phase 0 — first, before any step below:** `skills/vibecoding-state` op `enter` — params: `prompt_id: "activation_deploy_validate"`, `require_prior_gate: {prompt_id: "activation_wire_lakebase", gate: "Analytics app live data (local)"}`. `enter` resolves the `## Environment Capabilities` triple (deploy verb, CLI channel, `state_file_root`) so every deploy/run step below uses the resolved channel — `runDatabricksCli` on Genie Code — and writes state under `state_file_root`, never a bare-local assumption.
+2. **Final — after the step succeeds:** `skills/vibecoding-state` op `exit` — params: `prompt_id: "activation_deploy_validate"`, `gate: "Activation app deployed + validated"`, `captured: {user_app_name, app_url}`.
+
+**Gate:** `Activation app deployed + validated` — the deployed app''s analytics and chat routes all report source live and the app service principal holds the required permissions.',
 'You are deploying an analytics application to Databricks Apps and validating the reverse ETL data pipeline.
 
 CLI Best Practices:
@@ -8744,7 +9907,7 @@ Complete **Wire to Lakebase** (Step 36). Local testing must pass at `http://loca
 ## Steps to Apply
 
 1. Copy the generated prompt
-2. Paste into Cursor or Copilot
+2. Paste into your coding assistant
 3. The code assistant will:
    - Pre- and post-deploy, assert `get-endpoint` sizing matches `@docs/reverse_etl.md`
    - Grant the four app-SP permission classes (Lakebase bind + schema USAGE/SELECT; Genie space CAN_RUN via **PATCH**; warehouse CAN_USE; UC USE_CATALOG/USE_SCHEMA/SELECT + EXECUTE for TVF schemas)
@@ -8875,7 +10038,7 @@ VALUES
 
 You are a Databricks GenAI agent designer. Author the **Agent Spec** for the **{use_case_slug}** agent — a YAML design artifact at `docs/agent_spec.yaml` that captures intent (purpose, personas, capabilities, model endpoint, MCPs, eval seeds, governance) before any code is written.
 
-**First:** Read `apps_lakebase/$APP_NAME/.vibecoding-state.md` if it exists — it contains resolved issues and variable values from prior phases.
+**First:** Read `$APP_ROOT/.vibecoding-state.md` if it exists — it contains resolved issues and variable values from prior phases.
 
 ## IMPORTANT - READ FIRST
 
@@ -8891,7 +10054,7 @@ Your ONLY task is to create `docs/agent_spec.yaml`. Do NOT generate application 
 You MUST:
 - Read `docs/design_prd.md` (step 03 — business intent); compute its sha256 and record both path and digest as `source_prd`
 - Read `docs/ui_design.md` (step 04 — pages, personas, navigation, user journeys); align Agent Spec personas with this UI
-- Read `apps_lakebase/$APP_NAME/.vibecoding-state.md` (steps 04-07 — APP_NAME, app URL, workspace URL, DB_SCHEMA, API routes, frontend pages)
+- Read `$APP_ROOT/.vibecoding-state.md` (steps 04-07 — APP_NAME, app URL, workspace URL, DB_SCHEMA, API routes, frontend pages)
 - Use `genai-agents/foundation/00b-agent-spec-and-tool-plan/SKILL.md` as the contract
 - Set `agent.model` to `{agent_model}`. If `{agent_model}` is blank, missing, or still a literal `{agent_model}` placeholder, default to `databricks-claude-sonnet-4-6`. Never record vague labels like "Claude" or "best model".
 - Bronze, Gold, Genie, and Data Intelligence artifacts are NOT prerequisites. If external structured data is needed, record it as optional `mcp_research` candidates and let the Tool Plan (step 39) decide.
@@ -8934,7 +10097,7 @@ STOP after saving. Do NOT create code, install MCPs, create UC connections, or p
 
 Key requirements:
 
-- Read `docs/design_prd.md`, `docs/ui_design.md`, and `apps_lakebase/$APP_NAME/.vibecoding-state.md` for context
+- Read `docs/design_prd.md`, `docs/ui_design.md`, and `$APP_ROOT/.vibecoding-state.md` for context
 - Use `genai-agents/foundation/00b-agent-spec-and-tool-plan/SKILL.md` as the spec contract
 - Set `agent.model` to a raw Databricks Model Serving endpoint name (default `databricks-claude-sonnet-4-6`) — never a vague label like "Claude" or "best model"
 - Recommend managed Databricks MCPs (Genie, SQL, Vector Search, UC Functions) plus an optional Knowledge Assistant
@@ -8959,14 +10122,14 @@ The Agent Spec inherits context from the visible upstream Agents Accelerator pat
 
 - **PRD (step 03)** — `docs/design_prd.md` is the source of business intent, personas, and goals; recorded as `source_prd` (path + sha256).
 - **UI design (step 04)** — `docs/ui_design.md` defines pages, personas, navigation, and user journeys. The Agent Spec personas align with this UI.
-- **Deployed AppKit app (step 05)** — `apps_lakebase/$APP_NAME/.vibecoding-state.md` carries `APP_NAME`, app URL, and workspace URL.
+- **Deployed AppKit app (step 05)** — `$APP_ROOT/.vibecoding-state.md` carries `APP_NAME`, app URL, and workspace URL.
 - **Lakebase setup + wiring (steps 06-07)** — the same state file carries `DB_SCHEMA`, app API routes, frontend pages, and any live/mock endpoint notes.
 
 Required upstream artifacts:
 
 - [ ] `docs/design_prd.md` exists (step 03 — PRD generation).
 - [ ] `docs/ui_design.md` exists (step 04 — AppKit UI design).
-- [ ] AppKit app deployed (step 05) — `APP_NAME`, app URL, and workspace URL recorded in `apps_lakebase/$APP_NAME/.vibecoding-state.md`.
+- [ ] AppKit app deployed (step 05) — `APP_NAME`, app URL, and workspace URL recorded in `$APP_ROOT/.vibecoding-state.md`.
 - [ ] Lakebase set up and wired (steps 06-07) — `DB_SCHEMA`, app API routes, frontend pages, and live/mock endpoint notes recorded in the same state file.
 
 Bronze layer, Gold layer, Genie Space, and any other Data Intelligence artifacts are NOT required for the Agent Spec. They can be selected later as optional bring-your-own tool backends in `docs/agent_tool_plan.yaml`.
@@ -8974,7 +10137,7 @@ Bronze layer, Gold layer, Genie Space, and any other Data Intelligence artifacts
 ### Steps to Apply
 
 1. **Copy the generated prompt** using the copy button.
-2. **Paste it into a new Agent thread** in your Coding Assistant (Cursor or VS Code with Copilot).
+2. **Paste it into a new Agent thread** in your Coding Assistant.
 3. **Optionally request MCP web research** - if you want the assistant to suggest relevant external MCP servers, tell it to set `mcp_research_mode: web_research` before searching.
 4. **Let the AI generate the Agent Spec** - it will create `docs/agent_spec.yaml` and stop.
 5. **Review the generated spec** - confirm tool recommendations match your use case before moving to Tool Selection.
@@ -8996,7 +10159,7 @@ PHASE 1: FOUNDATION                      PHASE 2: BUILD              PHASE 3: AP
 │ 41 MLflow Tracing       │              │ 46 Eval+Deploy     │      │                │
 │ 42 Knowledge Assistant  │              └────────────────────┘      └────────────────┘
 └─────────────────────────┘
-        gates chained via apps_lakebase/$APP_NAME/.vibecoding-state.md
+        gates chained via $APP_ROOT/.vibecoding-state.md
 ```
 
 ### Key Concepts
@@ -9010,7 +10173,7 @@ PHASE 1: FOUNDATION                      PHASE 2: BUILD              PHASE 3: AP
 | **`agent.benchmark_seeds`** | `coverage_buckets[]` (domain labels) + `seed_examples[]` (`{input, expectations}` per persona × journey) | Section 50 expands these into ≥20 benchmark rows. Both fields are use-case-shaped — never tool-shaped. |
 | **`governance.scorer_suite`** | `guidelines[]` + `custom_scorer_rules[]` + `judge_questions[]` — three families of scorers, all domain-shaped | Section 51 registers these as the GENERIC scorer suite. Tool-shaped scorers (KA citation, RetrievalGroundedness, etc.) are added separately by 39 from the Tool Plan. |
 | **Tool-agnostic at this step** | The Spec contains no tool predictions. Tool families with `selected: false` in the Plan contribute zero downstream artifacts. | Lets the same Spec drive different Tool Plans — KA-only, SQL-only, full stack — without needing a re-author. |
-| **Coding-assistant-only step** | `bypass_llm: true`; the Input Template is the literal prompt the user pastes into Cursor/Copilot — no meta-LLM rewriting | This step never touches Databricks — no schemas, no installs, no deploy. Pure design. |
+| **Coding-assistant-only step** | `bypass_llm: true`; the Input Template is the literal prompt the user pastes into your coding assistant — no meta-LLM rewriting | This step never touches Databricks — no schemas, no installs, no deploy. Pure design. |
 
 ---
 
@@ -9060,7 +10223,7 @@ VALUES
 
 You are a Databricks GenAI agent designer. Author the **Agent Tool Plan** for the **{use_case_slug}** agent — a YAML design artifact at `docs/agent_tool_plan.yaml` that pins the user-confirmed tool backends (managed MCPs, optional Knowledge Assistant, dynamic SQL MCP) and preserves the Agent Spec''s `agent.model` under a Gateway-ready runtime route.
 
-**First:** Read `apps_lakebase/$APP_NAME/.vibecoding-state.md` if it exists — it contains resolved issues and variable values from prior phases.
+**First:** Read `$APP_ROOT/.vibecoding-state.md` if it exists — it contains resolved issues and variable values from prior phases.
 
 ## IMPORTANT - READ FIRST
 
@@ -9298,7 +10461,7 @@ This will involve the following steps:
 - **Stay idempotent** — every operation tolerates pre-existing schemas/volumes (warm workspaces from earlier runs are fine)
 - **Capture state for downstream skills** — emit the volume map + convenience paths (`knowledge_source_path`, `agent_outputs_path`) so MLflow tracing, KA, memory, benchmarks, and monitoring can resolve them
 
-**First:** Read `apps_lakebase/$APP_NAME/.vibecoding-state.md` if it exists — it contains resolved issues and variable values from prior phases.
+**First:** Read `$APP_ROOT/.vibecoding-state.md` if it exists — it contains resolved issues and variable values from prior phases.
 
 **How this prompt chains with the prior step (skill invocations):**
 
@@ -9336,8 +10499,8 @@ Use the resolved values as `{app_name}`, `{db_schema}`, `{agent_app_name}`, and 
 
 **Invoke skills (in order):**
 
-1. `genai-agents/vibecoding-state` op `enter` — params: `prompt_id: "uc_resources_foundation"`, `require_prior_gate: [{prompt_id: "workspace_setup_deploy", gate: "Infrastructure healthy"}, {prompt_id: "agent_tool_selection", gate: "Agent tool plan ready"}]` (accepts `"Infrastructure healthy with warnings"`).
-2. `genai-agents/vibecoding-state` op `hydrate_from_files` — params: `agent_spec_yaml: "docs/agent_spec.yaml"`, `agent_tool_plan_yaml: "docs/agent_tool_plan.yaml"`, `ui_design_md: "docs/ui_design.md"`, `prd_path: "docs/design_prd.md"`, `state_path: "apps_lakebase/$APP_NAME/.vibecoding-state.md"`. This populates `state://AgentSpec`, `state://AppSpec` (UI), and `state://Spec Provenance` from the design pair so downstream MLflow SDLC prompts (50–56) can keep reading `state://AgentSpec.*` / `state://AppSpec.*` without rewrites. `state://DataSpec` is stamped `optional: true` when no Lakehouse track has populated it. The operation is idempotent: re-running with the same YAML files is a no-op (the `resolved_at` timestamp may drift). It halts only if a required input file is missing, if `agent_spec.yaml.agent.model` is empty, or if any value in the design pair is still wrapped in `{...}` — in those cases re-run prompts 38 / 39 with real values.
+1. `skills/vibecoding-state` op `enter` — params: `prompt_id: "uc_resources_foundation"`, `require_prior_gate: [{prompt_id: "workspace_setup_deploy", gate: "Infrastructure healthy"}, {prompt_id: "agent_tool_selection", gate: "Agent tool plan ready"}]` (accepts `"Infrastructure healthy with warnings"`).
+2. `skills/vibecoding-state` op `hydrate_from_files` — params: `agent_spec_yaml: "docs/agent_spec.yaml"`, `agent_tool_plan_yaml: "docs/agent_tool_plan.yaml"`, `ui_design_md: "docs/ui_design.md"`, `prd_path: "docs/design_prd.md"`, `state_path: "$APP_ROOT/.vibecoding-state.md"`. This populates `state://AgentSpec`, `state://AppSpec` (UI), and `state://Spec Provenance` from the design pair so downstream MLflow SDLC prompts (50–56) can keep reading `state://AgentSpec.*` / `state://AppSpec.*` without rewrites. `state://DataSpec` is stamped `optional: true` when no Lakehouse track has populated it. The operation is idempotent: re-running with the same YAML files is a no-op (the `resolved_at` timestamp may drift). It halts only if a required input file is missing, if `agent_spec.yaml.agent.model` is empty, or if any value in the design pair is still wrapped in `{...}` — in those cases re-run prompts 38 / 39 with real values.
 3. @genai-agents/foundation/00-uc-resources-foundation/SKILL.md — params:
    - `uc_catalog: "{lakehouse_default_catalog}"`
    - `agent_schema: "{db_schema}_agent"`
@@ -9348,7 +10511,7 @@ Use the resolved values as `{app_name}`, `{db_schema}`, `{agent_app_name}`, and 
      - `{ name: "{db_schema}_agent_outputs",     schema: "agent", comment: "Tool-generated artifacts (CSV, charts)" }`
    - **Returns:** `agent_schema`, `ops_schema`, `uc_volumes` (map of actual volume name → `/Volumes/...` path), and convenience aliases `knowledge_source_path` (= `/Volumes/{lakehouse_default_catalog}/{db_schema}_agent/{db_schema}_knowledge_sources`) and `agent_outputs_path` (= `/Volumes/{lakehouse_default_catalog}/{db_schema}_agent/{db_schema}_agent_outputs`).
    - **Idempotency contract:** every operation is idempotent — `CREATE SCHEMA IF NOT EXISTS`, and `WorkspaceClient.volumes.create(...)` wrapped to treat `databricks.sdk.errors.AlreadyExists` as success. Pre-existing schemas/volumes (whether created by a prior run, by a use-case asset bundle, or by another user) MUST NOT cause a failure. The skill MUST always emit the captured map even on a warm workspace where every resource already exists.
-4. `genai-agents/vibecoding-state` op `exit` — params: `prompt_id: "uc_resources_foundation"`, `gate: "UC resources ready"`, `captured: {app_name, db_schema, agent_app_name, agent_resource_prefix, agent_schema, ops_schema, uc_volumes, knowledge_source_path, agent_outputs_path, hydrated_from_files: true, resolver_version: "3.0"}`.
+4. `skills/vibecoding-state` op `exit` — params: `prompt_id: "uc_resources_foundation"`, `gate: "UC resources ready"`, `captured: {app_name, db_schema, agent_app_name, agent_resource_prefix, agent_schema, ops_schema, uc_volumes, knowledge_source_path, agent_outputs_path, hydrated_from_files: true, resolver_version: "3.0"}`.
 
 **Gate:** `UC resources ready` — both schemas exist (`SHOW SCHEMAS IN {lakehouse_default_catalog}` lists them), every entry in `uc_volumes` is reachable via `WorkspaceClient.volumes.read(...)`, and `knowledge_source_path` points to `/Volumes/{lakehouse_default_catalog}/{db_schema}_agent/{db_schema}_knowledge_sources`. Pre-existing resources are explicitly acceptable — the gate proves *existence*, not *first-time creation*.
 
@@ -9369,7 +10532,7 @@ Required:
 - [ ] `workspace_setup_deploy` (input_id 4) — `{lakehouse_default_catalog}` and `{default_warehouse}` resolved. The `Infrastructure healthy` gate (or `Infrastructure healthy with warnings`) is the explicit prior-gate this prompt requires.
 - [ ] `agent_spec_design` (input_id 217) — `docs/agent_spec.yaml` exists (the Agent Spec drives Tool Plan selection).
 - [ ] `agent_tool_selection` (input_id 218) — `docs/agent_tool_plan.yaml` exists with the gate `Agent tool plan ready`.
-- [ ] AppKit + Lakebase context from steps 04-07 — `apps_lakebase/$APP_NAME/.vibecoding-state.md` carries `APP_NAME`, `DB_SCHEMA`, app URL, workspace URL, app API routes, and Lakebase wiring notes.
+- [ ] AppKit + Lakebase context from steps 04-07 — `$APP_ROOT/.vibecoding-state.md` carries `APP_NAME`, `DB_SCHEMA`, app URL, workspace URL, app API routes, and Lakebase wiring notes.
 
 Optional bring-your-own tool inputs (only required when the corresponding tool family is selected in `docs/agent_tool_plan.yaml.selected_tools[]`):
 - SQL MCP — provide `agent_sql_catalog`, `agent_sql_schema`, optional table allowlist, and a SQL warehouse the agent can read with read-only guardrails.
@@ -9438,7 +10601,7 @@ The skill executes a deterministic 8-phase walk with idempotent guards at every 
 
 | Phase | What Happens | Key Output |
 |-------|--------------|------------|
-| **Phase 0** | Read `apps_lakebase/$APP_NAME/.vibecoding-state.md`; pull captured values from earlier phases | Prior state |
+| **Phase 0** | Read `$APP_ROOT/.vibecoding-state.md`; pull captured values from earlier phases | Prior state |
 | **Phase 0.5 (hydrate)** | `vibecoding-state` op `hydrate_from_files` reads `docs/agent_spec.yaml`, `docs/agent_tool_plan.yaml`, `docs/ui_design.md`, and `docs/design_prd.md` and writes `## Agent`, `## UI`, `## Spec Provenance` (and `## Resources` as `optional: true` if no Lakehouse track ran). Stamps `resolver_version: "3.0"` and `hydrated_from_files: true`. Idempotent on rerun. | Hydrated state objects |
 | **Phase 1** | Resolve identity from `databricks current-user me` → derive `APP_NAME`, `DB_SCHEMA`, `AGENT_APP_NAME`, `AGENT_RESOURCE_PREFIX` | Identity-scoped names |
 | **Phase 2** | `CREATE SCHEMA IF NOT EXISTS {catalog}.{db_schema}_agent` | Agent schema |
@@ -9460,7 +10623,7 @@ The skill executes a deterministic 8-phase walk with idempotent guards at every 
 - [ ] MANAGED volume `/Volumes/{lakehouse_default_catalog}/{db_schema}_agent/{db_schema}_agent_outputs` exists
 - [ ] `app_name`, `db_schema`, `agent_app_name`, `agent_schema`, `ops_schema`, `uc_volumes`, `knowledge_source_path`, and `agent_outputs_path` all captured
 - [ ] All consuming skills (F2, F5, Track A 05, SDLC 02/04/07) can now assume these resources exist
-- [ ] **State hydration:** `apps_lakebase/$APP_NAME/.vibecoding-state.md` now contains populated `## Agent`, `## UI`, and `## Spec Provenance` sections sourced from `docs/agent_spec.yaml`, `docs/agent_tool_plan.yaml`, `docs/ui_design.md`, and `docs/design_prd.md`. `## Spec Provenance.resolver_version` reads `"3.0"` and `## Spec Provenance.hydrated_from_files` reads `true`. `## Resources` is either populated (Lakehouse track present) or stamped `optional: true` (Agents-only path).
+- [ ] **State hydration:** `$APP_ROOT/.vibecoding-state.md` now contains populated `## Agent`, `## UI`, and `## Spec Provenance` sections sourced from `docs/agent_spec.yaml`, `docs/agent_tool_plan.yaml`, `docs/ui_design.md`, and `docs/design_prd.md`. `## Spec Provenance.resolver_version` reads `"3.0"` and `## Spec Provenance.hydrated_from_files` reads `true`. `## Resources` is either populated (Lakehouse track present) or stamped `optional: true` (Agents-only path).
 - [ ] **Downstream contract:** every prompt that reads `state://AgentSpec.*`, `state://AppSpec.*`, or `state://Spec Provenance.*` resolves to the file-derived values. SDLC quality-suite prompts (50–56) can run without an additional resolve step.
 - [ ] **Idempotency check:** running this prompt a second time produces zero new schemas, zero new volumes, zero changed sections in the state file (modulo `resolved_at`), and zero errors.',
 true, 1, true, current_timestamp(), current_timestamp(), current_user());
@@ -9486,7 +10649,7 @@ This will involve the following steps:
 
 **Invoke skills (in order):**
 
-1. `genai-agents/vibecoding-state` op `enter` — params: `prompt_id: "mlflow_agent_tracing_uc"`, `require_prior_gate: {prompt_id: "uc_resources_foundation", gate: "UC resources ready"}`.
+1. `skills/vibecoding-state` op `enter` — params: `prompt_id: "mlflow_agent_tracing_uc"`, `require_prior_gate: {prompt_id: "uc_resources_foundation", gate: "UC resources ready"}`.
 2. @genai-agents/foundation/01-mlflow-genai-foundation/SKILL.md — params:
    - `agent_name: "{agent_app_name}"`
    - `mlflow_min_version: "3.10.1"`
@@ -9505,7 +10668,7 @@ This will involve the following steps:
    - `experiment_tags: ["mlflow.promptRegistryLocation"]`
    - `emit_grant_sql: true`
    - `verification: {test_trace_visible_in_uc: true, otel_tables_count: 4}`
-4. `genai-agents/vibecoding-state` op `exit` — params: `prompt_id: "mlflow_agent_tracing_uc"`, `gate: "Tracing live; UC OTel tables ready"`, `captured: {mlflow_experiment_path}`.
+4. `skills/vibecoding-state` op `exit` — params: `prompt_id: "mlflow_agent_tracing_uc"`, `gate: "Tracing live; UC OTel tables ready"`, `captured: {mlflow_experiment_path}`.
 
 **Gate:** `Tracing live; UC OTel tables ready` — `mlflow[databricks] >= 3.10.1` installed, autolog enabled, experiment visible at `{mlflow_experiment_path}`, 4 UC OTel Delta tables created in `{lakehouse_default_catalog}.{db_schema}_agent`, test trace visible in UC.',
 '',
@@ -9618,13 +10781,13 @@ This will involve the following steps:
 - **Smoke-test the endpoint** — confirm the KA serving endpoint responds and capture `ka_endpoint_name`, `knowledge_assistant_id`, `sync_status` as state for the wire-tools prompt
 - **Skip cleanly when not selected** — if `agent_tool_plan.knowledge_assistant.selected: false`, exit with gate `Skipped - KA not selected` and no resources are touched
 
-If `docs/agent_tool_plan.yaml` has `knowledge_assistant.selected: false`, do not create or sync a KA. Instead, call `genai-agents/vibecoding-state` op `exit` with gate `Skipped - KA not selected` and captured `{doc_qa_backend: "n/a", ka_endpoint_name: "n/a", knowledge_assistant_id: "n/a"}`.
+If `docs/agent_tool_plan.yaml` has `knowledge_assistant.selected: false`, do not create or sync a KA. Instead, call `skills/vibecoding-state` op `exit` with gate `Skipped - KA not selected` and captured `{doc_qa_backend: "n/a", ka_endpoint_name: "n/a", knowledge_assistant_id: "n/a"}`.
 
 **How this prompt chains with the prior step (skill invocations):**
 
 **Invoke skills (in order):**
 
-1. `genai-agents/vibecoding-state` op `enter` — params: `prompt_id: "knowledge_assistant_create"`, `require_prior_gate: [{prompt_id: "uc_resources_foundation", gate: "UC resources ready"}, {prompt_id: "agent_tool_selection", gate: "Agent tool plan ready"}]`.
+1. `skills/vibecoding-state` op `enter` — params: `prompt_id: "knowledge_assistant_create"`, `require_prior_gate: [{prompt_id: "uc_resources_foundation", gate: "UC resources ready"}, {prompt_id: "agent_tool_selection", gate: "Agent tool plan ready"}]`.
 2. @genai-agents/foundation/05-knowledge-assistant/SKILL.md — execute Step 5_0 (source-markdown staging only) → 5a–5d. Params:
    - `agent_tool_plan_ref: "docs/agent_tool_plan.yaml"`
    - `ka_source: docs/agent_tool_plan.yaml.knowledge_assistant.ka_source`
@@ -9636,7 +10799,7 @@ If `docs/agent_tool_plan.yaml` has `knowledge_assistant.selected: false`, do not
    - **Step 5_0 responsibility (KA-specific):** stage source markdown into the F0-provisioned volume — branch (A) skip if the volume is already non-empty; branch (B) upload the contents of `ka_source` if it points to a local `.md` directory; branch (C) auto-generate a minimal corpus from `docs/design_prd.md` (extract any glossary, key-terms, or business-context sections — fall back to the PRD''s executive summary if none are explicitly marked) plus `docs/agent_spec.yaml.agent.capabilities` and upload. Do **not** consult `state://DataSpec.*`: the Agents Accelerator visible path may not have run a Lakehouse track, so `## Resources` will be `optional: true` (set by `vibecoding-state.hydrate_from_files` in step 40). The `docs/*` files are the single source of truth for branch (C). **No schema or volume DDL** — if `volume_path` is unreachable, fail with a pointer to F0 (input_id 200).
    - **Steps 5a–5d:** get-or-create KA → get-or-create `files` source at `volume_path` → sync → poll → capture handoff values.
    - **Returns:** `knowledge_source_path`, `knowledge_source_file_count`, `knowledge_source_origin` (`pre_staged` | `local_dir` | `prd_generated`), `ka_endpoint_name`, `knowledge_assistant_id`, `knowledge_source_type`, `sync_status`. (`agent_schema` and `knowledge_source_volume` come from F0''s state, not from this prompt.)
-3. `genai-agents/vibecoding-state` op `exit` — params: `prompt_id: "knowledge_assistant_create"`, `gate: "KA READY"`, `captured: {doc_qa_backend: "knowledge_assistant", knowledge_source_path, knowledge_source_file_count, knowledge_source_origin, ka_endpoint_name, knowledge_assistant_id, knowledge_source_type, sync_status}`.
+3. `skills/vibecoding-state` op `exit` — params: `prompt_id: "knowledge_assistant_create"`, `gate: "KA READY"`, `captured: {doc_qa_backend: "knowledge_assistant", knowledge_source_path, knowledge_source_file_count, knowledge_source_origin, ka_endpoint_name, knowledge_assistant_id, knowledge_source_type, sync_status}`.
 
 **Gate:** `KA READY` — `sync_status = READY`, `knowledge_source_file_count >= 1`, `ka_endpoint_name` and `knowledge_assistant_id` captured into state, KA reachable from a quick `WorkspaceClient.serving_endpoints.get()` smoke call.
 
@@ -9753,27 +10916,123 @@ The bullets below are conditional on the `docs/agent_tool_plan.yaml.knowledge_as
 - [ ] Step 44 reads `knowledge_assistant.selected == false` and skips the KA tool family cleanly (no `tools/ka.py` is generated, no KA serving-endpoint grant is added to `databricks.yml`, no KA TOOL span appears in MLflow).',
 true, 1, true, current_timestamp(), current_timestamp(), current_user());
 
+-- knowledge_assistant_create (genie-code fork) — prescriptive paths + directives; KA via REST api_client.do (SDK 0.67.0 has no w.knowledge_assistants wrapper); read-only verify; bypass_LLM = TRUE
+INSERT INTO ${catalog}.${schema}.section_input_prompts
+(input_id, section_tag, coding_assistant, input_template, system_prompt,
+ bypass_llm, version, is_active, inserted_at, updated_at, created_by)
+VALUES
+(913, 'knowledge_assistant_create', 'genie-code',
+'**Genie Code — this is a prescriptive runbook. Follow the steps in order. Do NOT improvise paths, do NOT use bare relative paths, do NOT use `@`-mentions, and do NOT reach for the `w.knowledge_assistants` SDK module — it does NOT exist in the bundled `databricks-sdk 0.67.0`. Every skill is named by its full clone-rooted path; every Knowledge Assistant (KA) call goes through the generic REST escape hatch `w.api_client.do(...)`. This stands up the **{use_case_slug}** agent''s Knowledge Assistant.**
+
+### 🔴 Non-negotiable execution rules (read before anything)
+
+❌ **NEVER call `w.knowledge_assistants.*`.** On Genie Code''s `databricks-sdk 0.67.0`, `hasattr(w, "knowledge_assistants")` is **False** — every `w.knowledge_assistants.list_knowledge_assistants()` / `create_knowledge_assistant(...)` / `create_knowledge_source(...)` / `sync_knowledge_sources(...)` the foundation skill describes raises `AttributeError`. The REST API is live; you reach it through `w.api_client.do(<verb>, <path>, body=…)`. Do **NOT** `uv pip install -U databricks-sdk` to get the wrapper — the upgrade is ephemeral (gone next session) and unnecessary.
+
+❌ **NEVER verify with `curl` + `databricks auth token`.** `auth token` is hard-blocked on Genie Code. Verify with the pre-authenticated `WorkspaceClient` via `executeCode` (`w.serving_endpoints.get(...)`) or `databricks serving-endpoints get` through `runDatabricksCli`.
+
+✅ The things you run directly are (a) the KA REST calls via `w.api_client.do(...)` inside `executeCode`, (b) volume file staging via `w.files.upload(...)` / `w.dbutils`-free SDK uploads, and (c) **read-only** inspection (`databricks serving-endpoints list/get`, `w.serving_endpoints.get(...)`).
+
+### KA REST contract (use these EXACT verb + path pairs)
+
+`w.knowledge_assistants.<method>` → `w.api_client.do(<verb>, <path>, body=<dict>)`. Prefer the `2.1` prefix; fall back to `2.0` ONLY if a `2.1` verb returns 404 (the API is mid-migration):
+
+| Operation | `w.api_client.do(...)` |
+|---|---|
+| list KAs (idempotency lookup) | `do("GET", "/api/2.1/knowledge-assistants")` |
+| create KA (body needs ≥1 knowledge source) | `do("POST", "/api/2.1/knowledge-assistants", body={...})` |
+| get / update / delete KA | `do("GET" / "PATCH" / "DELETE", f"/api/2.1/{ka_name}")` |
+| list / create knowledge sources | `do("GET" / "POST", f"/api/2.1/{ka_name}/knowledge-sources", body={...})` |
+| sync knowledge sources | `do("POST", f"/api/2.1/{ka_name}/knowledge-sources:sync")` |
+
+Poll readiness with `w.serving_endpoints.get(ka_endpoint_name)` (available) until the KA''s `sync_status == "READY"`.
+
+### Step 0 — Resolve your environment (once, before anything else)
+
+Run `skills/vibecoding-state` operation `enter` with `prompt_id: "knowledge_assistant_create"` and `require_prior_gate: [{prompt_id: "uc_resources_foundation", gate: "UC resources ready"}, {prompt_id: "agent_tool_selection", gate: "Agent tool plan ready"}]`. Read these resolved values and use them literally:
+
+- `client_context` = `genie_code`
+- `artifact_root` = your workshop clone root (e.g. `/Workspace/Users/<your-email>/.assistant/skills/vibe-coding-workshop`)
+- `skill_ref_root` = `skills/vibe-coding-workshop` (substitute your clone folder if different)
+- `agent_app_root` = `<artifact_root>/{agent_app_name}` — the top-level Track A agent app dir (the `docs/agent_tool_plan.yaml` and `docs/agent_spec.yaml` this prompt reads live under it once the agent app exists; pre-clone, read them from where `agent_tool_selection` wrote them under `artifact_root`).
+- Workspace: `{workspace_url}`
+- `ka_display_name` = `{agent_app_name}-knowledge` (idempotency key)
+- `volume_path` = `/Volumes/{lakehouse_default_catalog}/{db_schema}_agent/{db_schema}_knowledge_sources` (provisioned by `uc_resources_foundation`)
+
+If `enter` reports either prior gate is unmet, STOP and finish that prompt first. If `enter` has not run in this thread, run it now.
+
+### Step 0a — Skip cleanly if KA is not selected
+
+Read `docs/agent_tool_plan.yaml.knowledge_assistant.selected` (resolve `docs/` under `artifact_root`/`agent_app_root`). If it is `false`, do **nothing** else: run `skills/vibecoding-state` op `exit` — `prompt_id: "knowledge_assistant_create"`, `gate: "Skipped - KA not selected"`, `captured: {doc_qa_backend: "n/a", ka_endpoint_name: "n/a", knowledge_assistant_id: "n/a"}` — and end the prompt. Create no volumes, no KA, no sources.
+
+### Step 1 — Load the required skills by their FULL clone-rooted paths
+
+Load each with `readSkillFile` using its `<skill_ref_root>`-prefixed path — NEVER a bare `@…` mention, NEVER a repo-relative path. **The root-level `skills/` come FIRST: they are the highest-priority, always-on guardrails.**
+
+1. `readSkillFile("skills/vibe-coding-workshop/skills/genie-code-environment/SKILL.md")` — §6b is the normative KA-on-Genie-Code contract (the REST table above comes from it). Loading this flips the manifest-load gate.
+2. `readSkillFile("skills/vibe-coding-workshop/skills/databricks-expert-agent/SKILL.md")` — extract names/IDs from source + `.vibecoding-state.md`; never hardcode or hallucinate.
+3. `readSkillFile("skills/vibe-coding-workshop/genai-agents/foundation/05-knowledge-assistant/SKILL.md")` — the orchestrator (Steps 5_0 → 5a–5d: stage docs → get-or-create KA → attach source → sync → poll). **Translate each `w.knowledge_assistants.*` call it shows into the `w.api_client.do(...)` pair from the table above** — the skill''s step LOGIC (idempotency, branches, polling) is correct; only the SDK surface changes.
+4. `readSkillFile("skills/vibe-coding-workshop/data_product_accelerator/skills/common/naming-tagging-standards/SKILL.md")` — KA / source naming + COMMENTs. **NEVER name a KA or source without reading this.**
+
+When the orchestrator names further references, load EACH the same way — prefix its repo-relative path with `skill_ref_root`. Genie Code has no repo-root-relative resolution and `AGENTS.md` does not carry across threads. Read independent files in one batched `readSkillFile` turn.
+
+### Step 2 — Stage source documents into the UC volume
+
+Run the foundation skill''s **Step 5_0** logic against `volume_path` (from Step 0), via `executeCode` with the pre-authenticated `w`:
+
+- Branch (A) — if `volume_path` already holds `.md` files, skip re-upload.
+- Branch (B) — if `docs/agent_tool_plan.yaml.knowledge_assistant.ka_source` points at a local `.md` directory, upload its contents with `overwrite=True`.
+- Branch (C) — else auto-generate a minimal corpus from `docs/design_prd.md` (glossary / key-terms / business-context, executive-summary fallback) plus `docs/agent_spec.yaml.agent.capabilities`, and upload.
+
+Do **NOT** run any `CREATE SCHEMA` / `CREATE VOLUME` DDL — that was `uc_resources_foundation` (input_id 200). If `volume_path` is unreachable, STOP and point back to that prompt. Branch (C) reads only `docs/*`, never `state://DataSpec.*`.
+
+### Step 3 — Get-or-create the KA + source, sync, poll (all via `w.api_client.do`)
+
+Inside `executeCode` with the pre-authenticated `w`, in order (idempotent — a second run creates zero new KAs / sources):
+
+1. **Get-or-create KA.** `do("GET", "/api/2.1/knowledge-assistants")`; if a KA with `display_name == ka_display_name` exists, reuse it; else `do("POST", "/api/2.1/knowledge-assistants", body={... display_name=ka_display_name, at least one knowledge source bound to volume_path ...})`. Capture `knowledge_assistant_id` and `ka_endpoint_name` from the response.
+2. **Get-or-create the `files` knowledge source** at `volume_path`: `do("GET", f"/api/2.1/{ka_name}/knowledge-sources")` then reuse-or-`do("POST", ...)`.
+3. **Sync:** `do("POST", f"/api/2.1/{ka_name}/knowledge-sources:sync")` (incremental, safe to re-call).
+4. **Poll** `w.serving_endpoints.get(ka_endpoint_name)` until `sync_status == "READY"`.
+
+If any `2.1` verb 404s, retry the same call on `/api/2.0/...`. If it still fails, STOP and report — do NOT fall back to the missing SDK wrapper.
+
+### Step 4 — Verify (read-only)
+
+Confirm the endpoint is live without `curl`/`auth token`:
+- `executeCode`: `w.serving_endpoints.get(ka_endpoint_name)` returns the endpoint and `sync_status == "READY"`, OR
+- `runDatabricksCli`: `databricks serving-endpoints list --output json | jq ''.endpoints[] | select(.name | startswith("ka-"))''` shows it `READY`.
+
+PASS = `sync_status == "READY"` AND `knowledge_source_file_count >= 1`.
+
+**State-lock:** this prompt runs between an `enter` (Step 0) and an `exit`. After the gate passes, run `skills/vibecoding-state` op `exit` — params: `prompt_id: "knowledge_assistant_create"`, `gate: "KA READY"`, `captured: {doc_qa_backend: "knowledge_assistant", knowledge_source_path, knowledge_source_file_count, knowledge_source_origin, ka_endpoint_name, knowledge_assistant_id, knowledge_source_type, sync_status}`.
+
+**Gate:** `KA READY` — `sync_status == "READY"`, `knowledge_source_file_count >= 1`, `ka_endpoint_name` and `knowledge_assistant_id` captured into state, KA reachable from a read-only `w.serving_endpoints.get(...)` smoke call — OR `Skipped - KA not selected` when the Tool Plan did not select KA. The KA existing is necessary but NOT sufficient: if it was created via the (absent) `w.knowledge_assistants` wrapper rather than the REST contract, the run never reached this gate.',
+'',
+true, 1, true, current_timestamp(), current_timestamp(), current_user());
+
 -- Step 43 / order 43: Phase 2 / Agent Build - Clone + Framework
 INSERT INTO ${catalog}.${schema}.section_input_prompts 
 (input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
 VALUES
 (203, 'track_a_agent_app_clone_framework',
-'Clone the Track A agent-app framework template (FastAPI host + OpenAI Agents SDK + MLflow tracing + two-layer Lakebase memory) into `apps_lakebase/{agent_app_name}/` and stand up the **{use_case_slug}** agent''s runtime shell. Today there is no agent app code; after this prompt runs, the cloned app boots locally with `uv run dev`, responds to a "Hello" smoke test, emits MLflow AGENT spans at `{mlflow_experiment_path}`, and is registered in `databricks.yml`.
+'Clone the Track A agent-app framework template (FastAPI host + OpenAI Agents SDK + MLflow tracing + two-layer Lakebase memory) into its own **top-level** directory `$AGENT_APP_ROOT` (= `<agent_app_name>/` at the repo root — a sibling of `apps_lakebase/` and of the AppKit `$APP_ROOT`, NOT nested inside `apps_lakebase/`) and stand up the **{use_case_slug}** agent''s runtime shell. This mirrors how the AppKit app lives in its own top-level `$APP_ROOT` and the data-product bundle in `<use_case_slug>_dab/`, so the agent app''s root has parity across coding agents. Today there is no agent app code; after this prompt runs, the cloned app boots locally with `uv run dev`, responds to a "Hello" smoke test, emits MLflow AGENT spans at `{mlflow_experiment_path}`, and is registered in `databricks.yml`.
 
 This will involve the following steps:
 
-- **Clone the framework template** — `git clone` the `agent-openai-advanced` template into `{agent_app_name}/` so the canonical scaffold (Option B handlers + Lakebase memory pre-wired) becomes the starting point
+- **Clone the framework template** — `git clone` the `agent-openai-advanced` template into `$AGENT_APP_ROOT/` so the canonical scaffold (Option B handlers + Lakebase memory pre-wired) becomes the starting point
 - **Install dependencies with `uv`** — run `uv pip install -e .` against the template''s `pyproject.toml` so local + deployed runtimes share the same dependency tree
 - **Wire Option B module-level handlers** — wire `@mlflow.genai.agent_server.invoke` and `@stream` async handlers (canonical for Databricks Apps; not the rejected `mlflow.pyfunc.ResponsesAgent` path)
 - **Drive the model from `config.yml`** — write `llm_endpoint`, `llm_api_base_url`, `llm_api_mode` from `runtime_config.llm` into `config.yml` so Python never hardcodes the model endpoint
 - **Smoke-test the framework** — start `uv run dev`, send "Hello", and confirm an MLflow AGENT span appears at `{mlflow_experiment_path}` before any tools are wired
 - **Register the app in `databricks.yml`** — declare the new agent app so the bundle deploy phase later can lift it as a Databricks App resource
 
+**First:** Read `$AGENT_APP_ROOT/.vibecoding-state.md` if it exists — it carries resolved issues and variable values from prior phases. `enter` resolves `$AGENT_APP_ROOT` (= `<artifact_root>/<agent_app_name>`, the top-level agent app dir) for you; from this point on, all agent-app file paths are relative to `$AGENT_APP_ROOT/`.
+
 **How this prompt chains with the prior step (skill invocations):**
 
 **Invoke skills (in order):**
 
-1. `genai-agents/vibecoding-state` op `enter` — params: `prompt_id: "track_a_agent_app_clone_framework"`, `require_prior_gate: [{prompt_id: "mlflow_agent_tracing_uc", gate: "Tracing live; UC OTel tables ready"}, {prompt_id: "agent_tool_selection", gate: "Agent tool plan ready"}]`.
+1. `skills/vibecoding-state` op `enter` — params: `prompt_id: "track_a_agent_app_clone_framework"`, `require_prior_gate: [{prompt_id: "mlflow_agent_tracing_uc", gate: "Tracing live; UC OTel tables ready"}, {prompt_id: "agent_tool_selection", gate: "Agent tool plan ready"}]`.
 2. @genai-agents/tracks/A-custom-agent-apps/01-clone-and-run/SKILL.md — params:
    - `template: "agent-openai-advanced"` (canonical: short-term + long-term Lakebase memory built in)
    - `agent_name: "{agent_app_name}"`
@@ -9794,7 +11053,7 @@ This will involve the following steps:
    - `streaming_runner: true`
    - `verification: {mlflow_agent_spans_visible: true, invoke_handler_present: true, stream_handler_present: true}`
    - The skill reads `agent.system_prompt` (paste verbatim into `Agent(instructions=...)`), `agent.capabilities[]` (chat-panel capability list), and `docs/agent_tool_plan.yaml.runtime_config.llm` (write `endpoint`, `api_base_url`, and `api_mode` into `config.yml` as `llm_endpoint`, `llm_api_base_url`, and `llm_api_mode`). No model endpoint may be hardcoded in Python.
-4. `genai-agents/vibecoding-state` op `exit` — params: `prompt_id: "track_a_agent_app_clone_framework"`, `gate: "Agent framework live"`.
+4. `skills/vibecoding-state` op `exit` — params: `prompt_id: "track_a_agent_app_clone_framework"`, `gate: "Agent framework live"`.
 
 **Gate:** `Agent framework live` — template chat UI responds to "Hello" locally; `config.yml` contains `llm_endpoint`, `llm_api_base_url`, and `llm_api_mode` from `docs/agent_tool_plan.yaml.runtime_config.llm`; the agent uses `ModelConfig(development_config="config.yml")` and `model=config.get("llm_endpoint")`; MLflow AGENT spans are visible for `{agent_app_name}` at `{mlflow_experiment_path}`.
 
@@ -9817,7 +11076,7 @@ If a PRD exists at @docs/design_prd.md, reference it for business requirements, 
 ### Steps to Apply
 1. Start a new Agent thread in your Coding Assistant.
 2. Paste this prompt verbatim.
-3. The AI will (a) clone the `agent-openai-advanced` template into your repo, (b) install deps via `uv`, (c) start the local dev server, (d) wire Option B module-level handlers, (e) verify MLflow AGENT spans appear at `{mlflow_experiment_path}`.
+3. The AI will (a) clone the `agent-openai-advanced` template into the top-level `$AGENT_APP_ROOT/` (sibling of `apps_lakebase/`), (b) install deps via `uv`, (c) start the local dev server, (d) wire Option B module-level handlers, (e) verify MLflow AGENT spans appear at `{mlflow_experiment_path}`.
 4. Confirm "Hello" returns a streaming response in the local chat UI before exit.
 
 ---
@@ -9878,7 +11137,7 @@ Two skills run end-to-end in this prompt: `01-clone-and-run` then `02-agent-fram
 | Phase | What Happens | Key Output |
 |-------|--------------|------------|
 | **Phase 0** | `vibecoding-state` op `enter` confirms `Tracing live; UC OTel tables ready` AND `Agent tool plan ready` | Foundation context |
-| **Phase 1** | `git clone` the `agent-openai-advanced` template into `{agent_app_name}/` | Template cloned |
+| **Phase 1** | `git clone` the `agent-openai-advanced` template into `$AGENT_APP_ROOT/` (top-level agent app dir) | Template cloned |
 | **Phase 2** | `uv pip install -e .` installs dependencies from the template''s `pyproject.toml` | Deps installed |
 | **Phase 3** | `uv run dev` starts the local dev server; smoke test "Hello" returns | Dev server up |
 | **Phase 4** | Walk project structure: `app.py`, `config.yml`, `tools/`, `tests/` | Layout understood |
@@ -9901,6 +11160,64 @@ Two skills run end-to-end in this prompt: `01-clone-and-run` then `02-agent-fram
 - [ ] Agent construction uses `ModelConfig` and `model=config.get("llm_endpoint")`',
 true, 1, true, current_timestamp(), current_timestamp(), current_user());
 
+-- track_a_agent_app_clone_framework (genie-code fork) — prescriptive paths; clone into top-level <AGENT_APP_ROOT>; NO local `uv run dev`/localhost smoke (run the agent in-process via executeCode); bypass_LLM = TRUE
+INSERT INTO ${catalog}.${schema}.section_input_prompts
+(input_id, section_tag, coding_assistant, input_template, system_prompt,
+ bypass_llm, version, is_active, inserted_at, updated_at, created_by)
+VALUES
+(914, 'track_a_agent_app_clone_framework', 'genie-code',
+'**Genie Code — this is a prescriptive runbook. Follow the steps in order. Do NOT improvise paths, do NOT use bare relative paths, do NOT use `@`-mentions, and do NOT start a local dev server. The agent app is cloned into its own TOP-LEVEL directory `<AGENT_APP_ROOT>`; the "Hello" smoke runs the agent IN-PROCESS via `executeCode`, not against `http://localhost:8000`. This stands up the **{use_case_slug}** agent''s runtime shell.**
+
+### 🔴 Non-negotiable execution rules (read before anything)
+
+❌ **NEVER run `uv run dev` and NEVER open `http://localhost:8000`.** Genie Code has no foreground local server surface; a `uv run dev` loop would hang the session. The `uv` + `pip` + Python 3.12 toolchain IS present (`genie-code-environment` §4), so you install deps with `uv pip install -e .` and then exercise the agent **in-process** inside `executeCode` (import `build_agent`, call `agent.run("Hello")`), which emits the MLflow AGENT span. Server startup is deferred to the deploy step (46) where the Apps runtime builds the `uv`/FastAPI server **server-side**.
+
+❌ **NEVER write the cloned app to the bare clone root, to `apps_lakebase/`, or to `/tmp`.** It goes under `<AGENT_APP_ROOT>` only (a top-level sibling of `<APP_ROOT>` and `<use_case_slug>_dab`).
+
+✅ The things you run directly are (a) `git clone` of the template, (b) `uv pip install -e .` in-session, (c) in-process `executeCode` smoke + MLflow span check, and (d) **read-only** inspection.
+
+### Step 0 — Resolve your environment (once, before anything else)
+
+Run `skills/vibecoding-state` operation `enter` with `prompt_id: "track_a_agent_app_clone_framework"` and `require_prior_gate: [{prompt_id: "mlflow_agent_tracing_uc", gate: "Tracing live; UC OTel tables ready"}, {prompt_id: "agent_tool_selection", gate: "Agent tool plan ready"}]`. Read these resolved values and use them literally:
+
+- `client_context` = `genie_code`
+- `artifact_root` = your workshop clone root (e.g. `/Workspace/Users/<your-email>/.assistant/skills/vibe-coding-workshop`)
+- `skill_ref_root` = `skills/vibe-coding-workshop` (substitute your clone folder if different)
+- `agent_app_root` = `<artifact_root>/{agent_app_name}` — the self-contained Track A agent app project dir, a TOP-LEVEL sibling of `<APP_ROOT>` and `<use_case_slug>_dab`, NOT under `apps_lakebase/`. Referred to below as `<AGENT_APP_ROOT>`. `app.yaml`, `pyproject.toml`, `databricks.yml`, `server/`, and `<AGENT_APP_ROOT>/.vibecoding-state.md` all live here.
+- `mlflow_experiment_path` = `{mlflow_experiment_path}`
+- Workspace: `{workspace_url}`
+
+If `enter` reports either prior gate is unmet, STOP and finish that prompt first. If `enter` has not run in this thread, run it now.
+
+### Step 1 — Load the required skills by their FULL clone-rooted paths
+
+Load each with `readSkillFile` using its `<skill_ref_root>`-prefixed path — NEVER a bare `@…` mention, NEVER a repo-relative path. **The root-level `skills/` come FIRST as the highest-priority guardrails.**
+
+1. `readSkillFile("skills/vibe-coding-workshop/skills/genie-code-environment/SKILL.md")` — §4 (Python toolchain + server-side build) is the normative basis for "no local server; build server-side." Loading this flips the manifest-load gate.
+2. `readSkillFile("skills/vibe-coding-workshop/skills/databricks-expert-agent/SKILL.md")` — extract names/IDs from source + `.vibecoding-state.md`; never hardcode.
+3. `readSkillFile("skills/vibe-coding-workshop/genai-agents/tracks/A-custom-agent-apps/01-clone-and-run/SKILL.md")` — clone + dep install + project walk. **Skip its `uv run dev` / localhost steps** — substitute the in-process smoke in Step 3 below.
+4. `readSkillFile("skills/vibe-coding-workshop/genai-agents/tracks/A-custom-agent-apps/02-agent-framework/SKILL.md")` — Option B module-level `@invoke`/`@stream` handlers, `ModelConfig(development_config="config.yml")`, `config.yml` keys.
+
+Load every further reference the skills name the same way (repo-relative path prefixed with `skill_ref_root`). `AGENTS.md` root context does not carry across Genie Code threads.
+
+### Step 2 — Clone + author under `<AGENT_APP_ROOT>` (write files only)
+
+- `git clone` the `agent-openai-advanced` template into `<AGENT_APP_ROOT>/` (NOT the clone root, NOT `apps_lakebase/`).
+- `uv pip install -e .` against `<AGENT_APP_ROOT>/pyproject.toml` (the toolchain is present; this resolves deps for the in-process smoke).
+- Wire Option B handlers in `<AGENT_APP_ROOT>/app.py` (`@mlflow.genai.agent_server.invoke` + `@stream`); paste `agent.system_prompt` into `Agent(instructions=...)`; expose `agent.capabilities[]`.
+- Write `<AGENT_APP_ROOT>/config.yml` with `llm_endpoint`, `llm_api_base_url`, `llm_api_mode` from `docs/agent_tool_plan.yaml.runtime_config.llm` (resolve `docs/` under `<AGENT_APP_ROOT>`). No model endpoint hardcoded in Python.
+- Register the app in `<AGENT_APP_ROOT>/databricks.yml` so the deploy step (46) can lift it.
+
+### Step 3 — In-process "Hello" smoke + MLflow span check (NOT localhost)
+
+Via `executeCode` (no server): set `MLFLOW_EXPERIMENT` / tracking to `{mlflow_experiment_path}`, import the agent factory from `<AGENT_APP_ROOT>` (`build_agent(ModelConfig(development_config="config.yml"))`), and call the invoke path with input "Hello". Confirm a streaming/text response AND that an MLflow **AGENT** span appears at `{mlflow_experiment_path}` for the run (`mlflow.search_traces(...)` or the experiment UI). Do NOT start `uv run dev` to do this.
+
+**State-lock:** this prompt runs between an `enter` (Step 0) and an `exit`. After the gate passes, run `skills/vibecoding-state` op `exit` — params: `prompt_id: "track_a_agent_app_clone_framework"`, `gate: "Agent framework live"`.
+
+**Gate:** `Agent framework live` — the cloned app under `<AGENT_APP_ROOT>` responds to an **in-process** "Hello" with MLflow AGENT spans visible at `{mlflow_experiment_path}`; `config.yml` carries `llm_endpoint`/`llm_api_base_url`/`llm_api_mode` from `runtime_config.llm`; the agent uses `ModelConfig(development_config="config.yml")` and `model=config.get("llm_endpoint")`; module-level `@invoke` + `@stream` handlers are present. NO `http://localhost:8000` check was attempted.',
+'',
+true, 1, true, current_timestamp(), current_timestamp(), current_user());
+
 -- Step 44 / order 44: Phase 2 / Agent Build - Wire Tools and MCP
 INSERT INTO ${catalog}.${schema}.section_input_prompts 
 (input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
@@ -9921,7 +11238,7 @@ This will involve the following steps:
 
 **Invoke skills (in order):**
 
-1. `genai-agents/vibecoding-state` op `enter` — params: `prompt_id: "track_a_agent_ka_genie_tools"`, `require_prior_gate: {prompt_id: "track_a_agent_app_clone_framework", gate: "Agent framework live"}`.
+1. `skills/vibecoding-state` op `enter` — params: `prompt_id: "track_a_agent_ka_genie_tools"`, `require_prior_gate: {prompt_id: "track_a_agent_app_clone_framework", gate: "Agent framework live"}`.
 2. @genai-agents/tracks/A-custom-agent-apps/03-tools-and-mcp/SKILL.md — params:
    - `agent_name: "{agent_app_name}"`
    - `agent_spec_ref: "docs/agent_spec.yaml"`
@@ -9940,7 +11257,7 @@ This will involve the following steps:
    - `warehouse_id: "{default_warehouse}"`
    - SQL MCP wiring uses `selected_mcp_servers[].meta.warehouse_id` and the read-only guardrails from `selected_tools[].guardrails`. Default policy: `readonly: true`; allowed statements `SELECT, DESCRIBE, EXPLAIN`; require fully qualified `catalog.schema.table` names; `CAN_USE` on the warehouse plus `USE_CATALOG`, `USE_SCHEMA`, and `SELECT` on each table in `selected_mcp_servers[].scope.allowed_tables`. Tool families not present in `selected_tools[]` (e.g. KA when `knowledge_assistant.selected: false`, Genie when not selected) are skipped, not failed.
    - The configured model route is also a runtime resource. Include the entries from `docs/agent_tool_plan.yaml.resource_grants.databricks_yml.serving_endpoints[]` verbatim — those entries already carry the scalar endpoint name (e.g. `name: "databricks-claude-sonnet-4-6"`, `permission: "CAN_QUERY"`). Do NOT substitute the YAML-path string `docs/agent_spec.yaml.agent.model` or `docs/agent_tool_plan.yaml.runtime_config.llm.endpoint` for the endpoint name; those are file paths, not Databricks serving-endpoint names. The model route must be exposed to the app runtime through `config.yml` / `ModelConfig` keys (`llm_endpoint`, `llm_api_base_url`, `llm_api_mode`), again populated from the SCALAR `runtime_config.llm.endpoint` value, not by hardcoding the endpoint or base URL in Python.
-3. `genai-agents/vibecoding-state` op `exit` — params: `prompt_id: "track_a_agent_ka_genie_tools"`, `gate: "Tools wired"`.
+3. `skills/vibecoding-state` op `exit` — params: `prompt_id: "track_a_agent_ka_genie_tools"`, `gate: "Tools wired"`.
 
 **Gate:** `Tools wired` - MLflow traces show TOOL spans for every selected tool in `docs/agent_tool_plan.yaml.selected_tools[]`; skipped tool families are marked skipped, not failed; SQL MCP smoke tests use read-only queries with fully qualified table names.
 
@@ -9951,7 +11268,7 @@ If a PRD exists at @docs/design_prd.md, reference it for business requirements, 
 44,
 '## 1️⃣ How To Apply
 
-Open a **new Agent thread in your Coding Assistant** and paste the prompt above. The AI invokes `03-tools-and-mcp` which reads `docs/agent_spec.yaml`, `docs/agent_tool_plan.yaml`, and `apps_lakebase/$APP_NAME/.vibecoding-state.md` (AppKit + Lakebase context from steps 04-07) to materialize every tool declared in the Tool Plan. `state://DataSpec` is optional — only consulted when the Lakehouse track has produced one and is not a prerequisite for this prompt.
+Open a **new Agent thread in your Coding Assistant** and paste the prompt above. The AI invokes `03-tools-and-mcp` which reads `docs/agent_spec.yaml`, `docs/agent_tool_plan.yaml`, and `$APP_ROOT/.vibecoding-state.md` (AppKit + Lakebase context from steps 04-07) to materialize every tool declared in the Tool Plan. `state://DataSpec` is optional — only consulted when the Lakehouse track has produced one and is not a prerequisite for this prompt.
 
 ### Selected Backend Sources
 
@@ -9975,7 +11292,7 @@ Bronze tables, Bronze metadata, and Data Intelligence outputs are **not** requir
 - `docs/agent_tool_plan.yaml` exists with `selected_tools[]` populated. Entries that need BYO IDs — Genie (`meta.genie_space_id`), Vector Search (`meta.endpoint`, `meta.index`), SQL MCP (`scope.catalog`, `scope.schema`, `meta.warehouse_id`, `scope.allowed_tables`), UC Functions (`target`), External MCP (`selected_mcp_servers[].uc_connection`) — must carry those IDs inside the Tool Plan itself. Entries the user omitted are skipped, not failed.
 - `ka_endpoint_name` is captured in state ONLY when `knowledge_assistant_create` (input_id 202) ran (i.e. KA was selected); otherwise the KA tool family is skipped.
 - `warehouse_id` and `lakebase_host` captured in state from earlier prompts (`workspace_setup_deploy` and the Lakebase steps).
-- `docs/agent_spec.yaml` exists with `tool_recommendations` populated (loose recommendations from step 38; not a binding selection). Final binding selections live in `docs/agent_tool_plan.yaml.selected_tools[]` — that is the canonical source consumed by this prompt. `agent.tools[]` is NOT a required field of the Agent Spec; it is a state-projection field populated by `vibecoding-state.hydrate_from_files` from `tool_recommendations` overlaid by `selected_tools` (see `genai-agents/vibecoding-state/SKILL.md` § *Operation: hydrate_from_files*).
+- `docs/agent_spec.yaml` exists with `tool_recommendations` populated (loose recommendations from step 38; not a binding selection). Final binding selections live in `docs/agent_tool_plan.yaml.selected_tools[]` — that is the canonical source consumed by this prompt. `agent.tools[]` is NOT a required field of the Agent Spec; it is a state-projection field populated by `vibecoding-state.hydrate_from_files` from `tool_recommendations` overlaid by `selected_tools` (see `skills/vibecoding-state/SKILL.md` § *Operation: hydrate_from_files*).
 - BYO tool IDs (`genie_space_id`, Vector Search endpoint/index, UC Function names, external MCP UC connection) come from `docs/agent_tool_plan.yaml`, NOT from rendered globals like `{genie_space_id}`.
 
 ### Steps to Apply
@@ -10076,6 +11393,63 @@ Model route (always applicable):
 - [ ] The selected model endpoint is exposed to the Agent App as the `llm_endpoint` key in `config.yml` / `ModelConfig`, again populated from the scalar value (not the YAML path).',
 true, 1, true, current_timestamp(), current_timestamp(), current_user());
 
+-- track_a_agent_ka_genie_tools (genie-code fork) — prescriptive paths; tools authored under <AGENT_APP_ROOT>; in-process TOOL-span smoke (no local dev server); bypass_LLM = TRUE
+INSERT INTO ${catalog}.${schema}.section_input_prompts
+(input_id, section_tag, coding_assistant, input_template, system_prompt,
+ bypass_llm, version, is_active, inserted_at, updated_at, created_by)
+VALUES
+(915, 'track_a_agent_ka_genie_tools', 'genie-code',
+'**Genie Code — this is a prescriptive runbook. Follow the steps in order. Do NOT improvise paths, do NOT use bare relative paths, do NOT use `@`-mentions, and do NOT start a local dev server. Every tool module is authored under `<AGENT_APP_ROOT>`; the per-tool smoke runs the agent IN-PROCESS via `executeCode` and asserts TOOL spans in MLflow. This wires the **{use_case_slug}** agent''s tools.**
+
+### 🔴 Non-negotiable execution rules (read before anything)
+
+❌ **NEVER run `uv run dev` / open `http://localhost:8000`.** Smoke each wired tool in-process (`executeCode`: build the agent, send a prompt that triggers the tool, assert the TOOL span). The resource grants are declared in `databricks.yml` / `app.yaml` and applied at the deploy step (46) — do **NOT** inline-create endpoints, Genie spaces, or connections from Python.
+
+❌ **NEVER hardcode BYO tool IDs.** Genie `genie_space_id`, Vector Search endpoint/index, UC function names, and external-MCP UC connection all come from `docs/agent_tool_plan.yaml` (resolve `docs/` under `<AGENT_APP_ROOT>`), never from rendered globals like `{genie_space_id}`. KA''s `ka_endpoint_name` is the one ID that flows through state (captured by `knowledge_assistant_create`, input_id 202/913).
+
+✅ The things you run directly are (a) authoring tool modules + bundle/app YAML under `<AGENT_APP_ROOT>`, (b) in-process `executeCode` smoke + MLflow TOOL-span checks, and (c) read-only inspection.
+
+### Step 0 — Resolve your environment (once, before anything else)
+
+Run `skills/vibecoding-state` operation `enter` with `prompt_id: "track_a_agent_ka_genie_tools"` and `require_prior_gate: {prompt_id: "track_a_agent_app_clone_framework", gate: "Agent framework live"}`. Read these resolved values and use them literally:
+
+- `client_context` = `genie_code`
+- `artifact_root` = your workshop clone root (e.g. `/Workspace/Users/<your-email>/.assistant/skills/vibe-coding-workshop`)
+- `skill_ref_root` = `skills/vibe-coding-workshop` (substitute your clone folder if different)
+- `agent_app_root` = `<artifact_root>/{agent_app_name}` (the top-level Track A agent app dir from prompt 43). Referred to below as `<AGENT_APP_ROOT>`.
+- `default_warehouse` = `{default_warehouse}`
+- Workspace: `{workspace_url}`
+
+If `enter` reports the prior gate is unmet, STOP. If `enter` has not run in this thread, run it now.
+
+### Step 1 — Load the required skills by their FULL clone-rooted paths
+
+Load each with `readSkillFile` using its `<skill_ref_root>`-prefixed path — NEVER a bare `@…` mention. **The root-level `skills/` come FIRST as the highest-priority guardrails.**
+
+1. `readSkillFile("skills/vibe-coding-workshop/skills/genie-code-environment/SKILL.md")` — §4 (no local server, build server-side) and §6b (KA via `w.api_client.do`, if the KA tool family is selected). Loading this flips the manifest-load gate.
+2. `readSkillFile("skills/vibe-coding-workshop/skills/databricks-expert-agent/SKILL.md")` — extract IDs from `docs/agent_tool_plan.yaml` + state; never hardcode.
+3. `readSkillFile("skills/vibe-coding-workshop/genai-agents/tracks/A-custom-agent-apps/03-tools-and-mcp/SKILL.md")` — one `@function_tool` per `selected_tools[]` entry; skip absent families (skipped ≠ failed); declare `databricks.yml`/`app.yaml` grants. **Replace its local-dev-server smoke with the in-process smoke in Step 3.**
+4. `readSkillFile("skills/vibe-coding-workshop/data_product_accelerator/skills/common/naming-tagging-standards/SKILL.md")` — tool/resource naming + COMMENTs.
+
+Load every further reference the skills name the same way (prefix repo-relative paths with `skill_ref_root`). `AGENTS.md` root context does not carry across Genie Code threads.
+
+### Step 2 — Author tools + grants under `<AGENT_APP_ROOT>` (write files only)
+
+- Generate one `@function_tool` module per family present in `docs/agent_tool_plan.yaml.selected_tools[]` (`tools/ka.py`, `tools/genie.py`, `tools/sql.py`, `tools/uc_functions.py`, `tools/external_mcp.py`) under `<AGENT_APP_ROOT>/`. Families absent from `selected_tools[]` are recorded skipped, not failed — no empty stubs.
+- Patch `<AGENT_APP_ROOT>/databricks.yml` with the exact `resource_grants.databricks_yml.*` entries from the Tool Plan (serving endpoints incl. the SCALAR model endpoint name with `CAN_QUERY`, Genie `CAN_RUN`, warehouse `CAN_USE`, UC functions `EXECUTE`, UC connections `CAN_USE`). No extra/missing grants.
+- Patch `<AGENT_APP_ROOT>/app.yaml` with `valueFrom` refs + the OAuth scopes from `resource_grants.app_yaml_oauth_scopes`.
+- Pin SQL read-only guardrails (`SELECT/DESCRIBE/EXPLAIN`, fully-qualified `catalog.schema.table`) from `selected_tools[].guardrails`. If a required BYO field is blank/missing/`{...}`, STOP and ask — no placeholder literals.
+
+### Step 3 — In-process per-tool TOOL-span smoke (NOT localhost)
+
+Via `executeCode` (no server): build the agent from `<AGENT_APP_ROOT>` and, for each wired tool, send a prompt that forces that tool, then assert a **TOOL** span for it in MLflow (`mlflow.search_traces(...)`). Read-only SQL only; KA query; Genie ask; UC function call. Skipped families produce zero TOOL spans and are absent from the trace — that is a clean state, not a failure.
+
+**State-lock:** this prompt runs between an `enter` (Step 0) and an `exit`. After the gate passes, run `skills/vibecoding-state` op `exit` — params: `prompt_id: "track_a_agent_ka_genie_tools"`, `gate: "Tools wired"`.
+
+**Gate:** `Tools wired` — MLflow traces show one TOOL span per selected tool in `docs/agent_tool_plan.yaml.selected_tools[]` (asserted **in-process**, not via a local server); skipped families are marked skipped not failed; SQL smoke used read-only queries with fully-qualified table names; `databricks.yml`/`app.yaml` carry the Tool Plan''s grants verbatim.',
+'',
+true, 1, true, current_timestamp(), current_timestamp(), current_user());
+
 -- Step 45 / order 45: Phase 2 / Agent Build - Auth + Lakebase Memory
 INSERT INTO ${catalog}.${schema}.section_input_prompts 
 (input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
@@ -10096,7 +11470,7 @@ This will involve the following steps:
 
 **Invoke skills (in order):**
 
-1. `genai-agents/vibecoding-state` op `enter` — params: `prompt_id: "track_a_agent_auth_memory"`, `require_prior_gate: {prompt_id: "track_a_agent_ka_genie_tools", gate: "Tools wired"}`.
+1. `skills/vibecoding-state` op `enter` — params: `prompt_id: "track_a_agent_auth_memory"`, `require_prior_gate: {prompt_id: "track_a_agent_ka_genie_tools", gate: "Tools wired"}`.
 2. @genai-agents/tracks/A-custom-agent-apps/04-authentication/SKILL.md — params:
    - `agent_name: "{agent_app_name}"`
    - `app_level_auth: "service_principal"`
@@ -10119,7 +11493,7 @@ This will involve the following steps:
    - `post_llm_persist_facts: true`
    - `graceful_degradation: true`
    - `verification: {memory_persists_across_turns: true, long_term_recall_after_new_thread: true}`
-4. `genai-agents/vibecoding-state` op `exit` — params: `prompt_id: "track_a_agent_auth_memory"`, `gate: "Auth + Memory verified"`, `captured: {lakebase_instance, lakebase_database, embedding_endpoint, thread_id_strategy}`.
+4. `skills/vibecoding-state` op `exit` — params: `prompt_id: "track_a_agent_auth_memory"`, `gate: "Auth + Memory verified"`, `captured: {lakebase_instance, lakebase_database, embedding_endpoint, thread_id_strategy}`.
 
 **Gate:** `Auth + Memory verified` — both OBO and SP flows pass the local verification probes; same-thread turn 2 references turn 1 (short-term); a fact stated in thread A is recalled when starting a fresh thread B for the same user (long-term).',
 '',
@@ -10221,6 +11595,67 @@ Two skills run end-to-end (`04-authentication` then `05-lakebase-memory`) over 7
 - [ ] `lakebase_instance`, `lakebase_database`, `embedding_endpoint`, `thread_id_strategy` captured in state',
 true, 1, true, current_timestamp(), current_timestamp(), current_user());
 
+-- track_a_agent_auth_memory (genie-code fork) — prescriptive paths; OBO/SP + two-layer Lakebase memory authored under <AGENT_APP_ROOT>; in-process verification (no local dev server); bypass_LLM = TRUE
+INSERT INTO ${catalog}.${schema}.section_input_prompts
+(input_id, section_tag, coding_assistant, input_template, system_prompt,
+ bypass_llm, version, is_active, inserted_at, updated_at, created_by)
+VALUES
+(916, 'track_a_agent_auth_memory', 'genie-code',
+'**Genie Code — this is a prescriptive runbook. Follow the steps in order. Do NOT improvise paths, do NOT use bare relative paths, do NOT use `@`-mentions, and do NOT start a local dev server. OBO/SP auth and the two-layer Lakebase memory are authored under `<AGENT_APP_ROOT>`; the OBO/SP + memory probes run IN-PROCESS via `executeCode`. This wires auth + memory for the **{use_case_slug}** agent.**
+
+### 🔴 Non-negotiable execution rules (read before anything)
+
+❌ **NEVER run `uv run dev` / open `http://localhost:8000`.** The `obo_local` / `sp_local` / memory probes run in-process via `executeCode`: construct a fake `http_request` carrying `x-forwarded-access-token` for the OBO path and a module-level SP `WorkspaceClient` for the fallback path, then call the handler logic directly. No server.
+
+❌ **NEVER hardcode the runtime token for OBO.** On serverless the SP runtime token is `w.config.authenticate()["Authorization"]` (NOT `w.config.token`, which is `None`) — see `genie-code-environment` §2 / `app-verification.md`. The OBO path uses the forwarded user token; the SP fallback uses the authenticated runtime token.
+
+✅ The things you run directly are (a) authoring auth + memory code and `app.yaml` scopes under `<AGENT_APP_ROOT>`, (b) in-process `executeCode` OBO/SP + multi-turn memory probes, and (c) read-only inspection. Lakebase (`{lakebase_instance}` / `{lakebase_database}`) is already provisioned — do NOT create instances here.
+
+### Step 0 — Resolve your environment (once, before anything else)
+
+Run `skills/vibecoding-state` operation `enter` with `prompt_id: "track_a_agent_auth_memory"` and `require_prior_gate: {prompt_id: "track_a_agent_ka_genie_tools", gate: "Tools wired"}`. Read these resolved values and use them literally:
+
+- `client_context` = `genie_code`
+- `artifact_root` = your workshop clone root (e.g. `/Workspace/Users/<your-email>/.assistant/skills/vibe-coding-workshop`)
+- `skill_ref_root` = `skills/vibe-coding-workshop` (substitute your clone folder if different)
+- `agent_app_root` = `<artifact_root>/{agent_app_name}` (the top-level Track A agent app dir). Referred to below as `<AGENT_APP_ROOT>`.
+- `lakebase_instance` = `{lakebase_instance}`; `lakebase_database` = `{lakebase_database}`
+- Workspace: `{workspace_url}`
+
+If `enter` reports the prior gate is unmet, STOP. If `enter` has not run in this thread, run it now.
+
+### Step 1 — Load the required skills by their FULL clone-rooted paths
+
+Load each with `readSkillFile` using its `<skill_ref_root>`-prefixed path — NEVER a bare `@…` mention. **The root-level `skills/` come FIRST as the highest-priority guardrails.**
+
+1. `readSkillFile("skills/vibe-coding-workshop/skills/genie-code-environment/SKILL.md")` — §2 (runtime token = `w.config.authenticate()`) + §4 (no local server). Loading this flips the manifest-load gate.
+2. `readSkillFile("skills/vibe-coding-workshop/skills/databricks-expert-agent/SKILL.md")` — extract IDs from state; never hardcode.
+3. `readSkillFile("skills/vibe-coding-workshop/genai-agents/tracks/A-custom-agent-apps/04-authentication/SKILL.md")` — OBO via `get_user_workspace_client(http_request)` inside `@invoke`/`@stream`, SP fallback, `user_api_scopes` in `app.yaml`. **Run its `obo_local`/`sp_local` probes in-process per Step 3 — not against a local server.**
+4. `readSkillFile("skills/vibe-coding-workshop/genai-agents/tracks/A-custom-agent-apps/05-lakebase-memory/SKILL.md")` — two-layer memory (`AsyncDatabricksSession` short-term, `LongTermMemory` long-term, `databricks-gte-large-en` 1024-dim).
+
+Load every further reference the skills name the same way (prefix with `skill_ref_root`). `AGENTS.md` root context does not carry across Genie Code threads.
+
+### Step 2 — Author auth + memory under `<AGENT_APP_ROOT>` (write files only)
+
+- Wire OBO: call `get_user_workspace_client(http_request)` INSIDE `@invoke`/`@stream`; keep the module-level SP `WorkspaceClient` for background paths.
+- Declare `user_api_scopes` in `<AGENT_APP_ROOT>/app.yaml` from `docs/agent_tool_plan.yaml.resource_grants.app_yaml_oauth_scopes` (default `["serving.serving-endpoints", "sql", "unity-catalog"]`; +`dashboards.genie` if Genie selected; +`catalog.connections` if external MCP UC connections selected).
+- Short-term memory: `AsyncDatabricksSession` against `{lakebase_database}`, keyed `thread_id` (`request.custom_inputs.thread_id || request.conversation_id`).
+- Long-term memory: `LongTermMemory` with `databricks-gte-large-en` (1024 dims), keyed `user_id`; pre-LLM search + post-LLM persist; graceful degradation on Lakebase outage; sessions OBO-scoped inside `@invoke`.
+
+### Step 3 — In-process OBO/SP + memory probes (NOT localhost)
+
+Via `executeCode` (no server):
+- **`obo_local`** — call the handler with a fake `http_request` carrying a `x-forwarded-access-token`; confirm `get_user_workspace_client` returns a user-scoped client.
+- **`sp_local`** — call a background path with no `http_request`; confirm it falls back to the module-level SP client (runtime token via `w.config.authenticate()`).
+- **`user_api_scopes_in_app_yaml`** — assert the scopes are present in `<AGENT_APP_ROOT>/app.yaml`.
+- **Memory** — same-thread turn 2 references turn 1 (short-term); a fact stated in thread A is recalled in a fresh thread B for the same user (long-term).
+
+**State-lock:** this prompt runs between an `enter` (Step 0) and an `exit`. After the gate passes, run `skills/vibecoding-state` op `exit` — params: `prompt_id: "track_a_agent_auth_memory"`, `gate: "Auth + Memory verified"`, `captured: {lakebase_instance, lakebase_database, embedding_endpoint, thread_id_strategy}`.
+
+**Gate:** `Auth + Memory verified` — OBO and SP probes both pass **in-process**; same-thread turn 2 references turn 1; a fact stated in thread A is recalled in fresh thread B for the same user. NO `http://localhost:8000` check was attempted.',
+'',
+true, 1, true, current_timestamp(), current_timestamp(), current_user());
+
 -- Step 46 / order 46: Phase 2 / Agent Build - Smoke Eval + Deploy
 INSERT INTO ${catalog}.${schema}.section_input_prompts 
 (input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
@@ -10248,7 +11683,7 @@ This prompt maps to the canonical `local_eval_smoke` role. The smoke Gate **fail
 
 **Invoke skills (in order):**
 
-1. `genai-agents/vibecoding-state` op `enter` — params: `prompt_id: "track_a_agent_eval_deploy"`, `require_prior_gate: {prompt_id: "track_a_agent_auth_memory", gate: "Auth + Memory verified"}`.
+1. `skills/vibecoding-state` op `enter` — params: `prompt_id: "track_a_agent_eval_deploy"`, `require_prior_gate: {prompt_id: "track_a_agent_auth_memory", gate: "Auth + Memory verified"}`.
 2. @genai-agents/tracks/A-custom-agent-apps/06-evaluation/SKILL.md — params:
    - `agent_name: "{agent_app_name}"`
    - `agent_spec_ref: "state://AgentSpec"`
@@ -10265,7 +11700,7 @@ This prompt maps to the canonical `local_eval_smoke` role. The smoke Gate **fail
    - `ai_gateway_required: false`
    - `post_deploy_checks: ["curl_query", "python_sdk_query", "traces_visible_in_mlflow"]`
 4. **Inline verification:** `databricks apps get "{agent_app_name}" --output json | jq -r ''.status.state''` must return `RUNNING` before exit.
-5. `genai-agents/vibecoding-state` op `exit` — params: `prompt_id: "track_a_agent_eval_deploy"`, `gate: "Agent App RUNNING"`, `captured: {agent_app_url, agent_app_name}`. `exit` re-evaluates the four fail-closed conditions above; any positive condition flips the Gate to `Smoke regressed — block` and refuses to advance.
+5. `skills/vibecoding-state` op `exit` — params: `prompt_id: "track_a_agent_eval_deploy"`, `gate: "Agent App RUNNING"`, `captured: {agent_app_url, agent_app_name}`. `exit` re-evaluates the four fail-closed conditions above; any positive condition flips the Gate to `Smoke regressed — block` and refuses to advance.
 
 **Gate:** `Agent App RUNNING` — smoke eval pass/fail visible in MLflow AND none of the four fail-closed conditions above are tripped (no L1 scorer below floor, `correctness/mean` at or above floor, no `UNRESOLVED_COLUMN` / `TABLE_OR_VIEW_NOT_FOUND` / permission denied / empty tool output, no open `mlflow_eval_known_quality_issues[]` targeting `first_scored_eval`); agent app deployed; curl + Python SDK calls against `<agent_app_url>/invocations` succeed; traces from the deployed app show up at `{mlflow_experiment_path}`. The deployed app uses the configured model route from `runtime_config.llm`; the core gate does not create, configure, or require AI Gateway.',
 '',
@@ -10375,6 +11810,91 @@ Two skills run sequentially (`06-evaluation` then `07-deploy-and-query`) plus an
 - [ ] `agent_app_url`, `agent_app_name` captured in state',
 true, 1, true, current_timestamp(), current_timestamp(), current_user());
 
+-- track_a_agent_eval_deploy (genie-code fork) — prescriptive paths; in-session `uv` eval; bundle deploy via runDatabricksCli from the bundle editor + apps deploy via SDK SNAPSHOT (server-side uv/FastAPI build); /invocations verified with the 3-hop OAuth session; bypass_LLM = TRUE
+INSERT INTO ${catalog}.${schema}.section_input_prompts
+(input_id, section_tag, coding_assistant, input_template, system_prompt,
+ bypass_llm, version, is_active, inserted_at, updated_at, created_by)
+VALUES
+(917, 'track_a_agent_eval_deploy', 'genie-code',
+'**Genie Code — this is a prescriptive runbook. Follow the steps in order. Do NOT improvise paths, do NOT use bare relative paths, do NOT use `@`-mentions, and do NOT hand-create the app. The smoke eval runs in-session with `uv`; the agent app under `<AGENT_APP_ROOT>` deploys via `bundle deploy` (resource grants, from the bundle-editor page) PLUS the SDK SNAPSHOT app deploy (server-side `uv`/FastAPI build); the deployed `/invocations` is verified with the 3-hop OAuth session. This evaluates + deploys the **{use_case_slug}** agent.**
+
+### 🔴 Non-negotiable execution rules (read before anything)
+
+❌ **NEVER `curl` + `databricks auth token`.** `auth token` is hard-blocked on Genie Code. A deployed App sits behind the Apps **OAuth gate**: a raw `Authorization: Bearer` token (even the runtime token) returns 401. Verify `/invocations` with the **3-hop OAuth `requests.Session()`** (`genie-code-environment` §7 / `app-verification.md`).
+
+❌ **DO NOT rely on `databricks apps deploy` via `runDatabricksCli` for the app host** — it is page-dependent/CWD-defeated. Use the SDK SNAPSHOT call. The **bundle** half (`bundle deploy`, which applies the Tool Plan''s resource grants) DOES run via `runDatabricksCli`, but **only from the bundle-editor page** for `<AGENT_APP_ROOT>`. *blocked ≠ impossible — try the next path.*
+
+❌ **NEVER apply the resource grants by hand via `executeCode` or `spark.sql` `GRANT`, and NEVER apply them via the Permissions REST API.** Those grants are the **body of the bundle** — `bundle deploy` IS the mechanism that applies them. Hand-applying grants creates an un-versioned drift with no `bundle destroy` cleanup and FAILS the gate. **Do not fall back to direct SQL.** Those hand-apply routes are an **escape hatch available only if the operator explicitly authorizes it.**
+
+✅ The things you run directly are (a) `uv run agent-evaluate` in-session, (b) `databricks bundle validate/deploy --target dev` via `runDatabricksCli` from the bundle-editor page, (c) the SDK SNAPSHOT app deploy via `executeCode`, and (d) the 3-hop OAuth `/invocations` probe + trace check.
+
+### Step 0 — Resolve your environment (once, before anything else)
+
+Run `skills/vibecoding-state` operation `enter` with `prompt_id: "track_a_agent_eval_deploy"` and `require_prior_gate: {prompt_id: "track_a_agent_auth_memory", gate: "Auth + Memory verified"}`. Read these resolved values and use them literally:
+
+- `client_context` = `genie_code`
+- `artifact_root` = your workshop clone root (e.g. `/Workspace/Users/<your-email>/.assistant/skills/vibe-coding-workshop`)
+- `skill_ref_root` = `skills/vibe-coding-workshop` (substitute your clone folder if different)
+- `agent_app_root` = `<artifact_root>/{agent_app_name}` (the top-level Track A agent app dir). Referred to below as `<AGENT_APP_ROOT>`. Its `databricks.yml` lives here, so this folder is the **`bundle deploy` page-context root**.
+- `mlflow_experiment_path` = `{mlflow_experiment_path}`
+- `bundle_deploy.verb` = `bundle deploy --target dev` (run via `runDatabricksCli`); `app_deploy.verb` = `apps deploy` (resolves to the SDK SNAPSHOT call on Genie Code)
+- Workspace: `{workspace_url}`
+
+If `enter` reports the prior gate is unmet, STOP. If `enter` has not run in this thread, run it now.
+
+### Step 1 — Load the required skills by their FULL clone-rooted paths
+
+Load each with `readSkillFile` using its `<skill_ref_root>`-prefixed path — NEVER a bare `@…` mention. **The root-level `skills/` come FIRST as the highest-priority guardrails.**
+
+1. `readSkillFile("skills/vibe-coding-workshop/skills/genie-code-environment/SKILL.md")` — §4 (server-side `uv`/FastAPI SNAPSHOT build) + §7 (deployed-app OAuth). Loading this flips the manifest-load gate.
+2. `readSkillFile("skills/vibe-coding-workshop/skills/databricks-asset-bundles/SKILL.md")` — serverless YAML, `--target dev`, the bundle-editor page-context rule. **You will not run any `bundle` command until you have read this.**
+3. `readSkillFile("skills/vibe-coding-workshop/genai-agents/tracks/A-custom-agent-apps/06-evaluation/SKILL.md")` — smoke eval + the four fail-closed conditions. Run `uv run agent-evaluate` in-session.
+4. `readSkillFile("skills/vibe-coding-workshop/genai-agents/tracks/A-custom-agent-apps/07-deploy-and-query/SKILL.md")` — deploy + post-deploy probes. **Translate its `databricks apps deploy` into the SDK SNAPSHOT call (Step 4) and its `curl` probe into the 3-hop OAuth session (Step 5).**
+5. `readSkillFile("skills/vibe-coding-workshop/skills/genie-code-environment/references/app-verification.md")` — the reusable 3-hop OAuth `requests.Session()` snippet (incl. a POST to a Track A Agent App `/invocations`).
+
+Load every further reference the skills name the same way (prefix with `skill_ref_root`). `AGENTS.md` root context does not carry across Genie Code threads.
+
+### Step 2 — Run the fail-closed smoke eval (in-session `uv`)
+
+Build `tests/eval_dataset.json` under `<AGENT_APP_ROOT>` from the UNION of `governance.verification.smoke_test_cases[]` (Spec) and `docs/agent_tool_plan.yaml.verification.tool_smoke_tests[]` (Plan; one per `selected_tools[]` entry). Run `uv run agent-evaluate` from `<AGENT_APP_ROOT>` and write per-case pass/fail to `{mlflow_experiment_path}`. **Fail closed** — do NOT advance if any L1 scorer is below floor, `correctness/mean` is below floor, any tool in `selected_tools[]` returns `UNRESOLVED_COLUMN`/`TABLE_OR_VIEW_NOT_FOUND`/permission-denied/empty, any selected tool is missing a TOOL span, or an open `mlflow_eval_known_quality_issues[]` targets `first_scored_eval`. Tools absent from `selected_tools[]` cannot trip this.
+
+### Step 3 — Bundle-deploy the resource grants (from the bundle-editor page)
+
+`<AGENT_APP_ROOT>/databricks.yml` already exists, so the workspace file browser shows the **"Open in bundle editor"** affordance on that folder. **Surface a clickable link and open it BEFORE any `bundle` command** (its page CWD is `<AGENT_APP_ROOT>`, where `bundle deploy` is pre-approved). Build the link via the pre-authenticated `w`:
+- `host = w.config.host`; `o = w.get_workspace_id()`
+- `file_id = w.workspace.get_status("<AGENT_APP_ROOT>/databricks.yml").object_id`; `folder_id = w.workspace.get_status("<AGENT_APP_ROOT>").object_id`
+- **Bundle editor:** `{host}/editor/files/{file_id}?o={o}&contextId=folder%3A{folder_id}`
+
+From that page, via `runDatabricksCli` (omit `--profile`; do NOT `databricks sync`):
+- `databricks bundle validate --target dev`
+- `databricks bundle deploy --target dev`
+
+**🛑 If a `bundle` command is blocked or fails**, you are NOT on the bundle page. A `databricks.yml not found` error or a "blocked by safety guardrails" message means the page CWD is wrong — open the bundle-editor link and retry (CONFIRMED: the same `bundle deploy` that is "blocked" from a file page succeeds from the bundle editor). **Do not fall back to direct SQL** or hand-apply grants. If it STILL fails from the bundle editor, STOP and report. The hand-apply / REST routes are an **escape hatch available only if the operator explicitly authorizes it.**
+
+### Step 4 — Deploy the app host via the SDK SNAPSHOT path (server-side build)
+
+Via `executeCode` against warm compute (warm up once with `print("ready")`; generous `timeoutMinutes`): the Apps runtime installs `uv` deps + starts the FastAPI server **server-side** from the un-built source under `<AGENT_APP_ROOT>` (TESTED — `uv`/FastAPI SNAPSHOT build, `genie-code-environment` §4):
+1. `w.apps.get(<agent_app_name>)`; if 404, `w.apps.create(...)` and wait for compute `ACTIVE`.
+2. `w.apps.deploy(<agent_app_name>, AppDeployment(source_code_path="<AGENT_APP_ROOT>", mode=AppDeploymentMode.SNAPSHOT))`.
+3. Poll `get_deployment` until `SUCCEEDED` (surface `apps logs <agent_app_name>` on `FAILED`); confirm `w.apps.get(<agent_app_name>).compute_status.state == "ACTIVE"`. Capture `agent_app_url`.
+
+### Step 5 — Post-deploy probes against the DEPLOYED `/invocations` (3-hop OAuth)
+
+Three probes (no localhost, no `curl`+token):
+- **OAuth `/invocations` POST** — replay the 3-hop Apps OAuth handshake in one `requests.Session()` (snippet from `app-verification.md`), then POST a domain question to `<agent_app_url>/invocations`; expect 200 + a valid agent response.
+- **Python SDK invoke** — confirm the same via the SDK path.
+- **Traces visible** — production traces from the deployed app appear at `{mlflow_experiment_path}`.
+
+Then confirm platform health: `w.apps.get(<agent_app_name>).compute_status.state == "ACTIVE"` (or `databricks apps get "<agent_app_name>"` via `runDatabricksCli`).
+
+**State-lock:** this prompt runs between an `enter` (Step 0) and an `exit`. After the gate passes, run `skills/vibecoding-state` op `exit` — params: `prompt_id: "track_a_agent_eval_deploy"`, `gate: "Agent App RUNNING"`, `captured: {agent_app_url, agent_app_name}`. `exit` re-evaluates the four fail-closed conditions; any positive condition flips the gate to `Smoke regressed — block`.
+
+**Gate:** `Agent App RUNNING` — smoke eval pass/fail visible in MLflow AND none of the four fail-closed conditions tripped; the bundle''s resource grants deployed via `bundle deploy` from the bundle-editor page; the app host deployed via the SDK SNAPSHOT call (server-side `uv`/FastAPI build) with compute `ACTIVE`; the deployed `/invocations` returned 200 through the 3-hop OAuth session; traces visible at `{mlflow_experiment_path}`. The app/grants existing is **necessary but NOT sufficient** — if the grants were hand-applied (REST/`spark.sql`) instead of by `bundle deploy` from the bundle-editor page, or the host was hand-created, the gate FAILS and you redo it via the bundle + SDK SNAPSHOT. Verification used the DEPLOYED URL — NO localhost check, NO `curl`+`auth token`, and NO hand-created app.
+
+**🛑 STOP — do not work around a blocked deploy.** If `bundle deploy`, the SDK SNAPSHOT deploy, or the OAuth probe fails, STOP and report the exact error and which path was attempted. Do NOT hand-create the app, fabricate a URL, or skip verification. Take an alternate path only if the operator explicitly authorizes it.',
+'',
+true, 1, true, current_timestamp(), current_timestamp(), current_user());
+
 -- Step 47 / order 47: Phase 3 / AppKit Integration - AppKit <-> Agent App Proxy
 INSERT INTO ${catalog}.${schema}.section_input_prompts 
 (input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
@@ -10384,21 +11904,21 @@ VALUES
 
 This will involve the following steps:
 
-- **Declare the Agent App as `CAN_USE` resource** — patch `apps_lakebase/{app_name}/databricks.yml` to declare the Agent App as a bundle resource named `agent-backend`
+- **Declare the Agent App as `CAN_USE` resource** — patch `$APP_ROOT/databricks.yml` to declare the Agent App as a bundle resource named `agent-backend`
 - **Expose `AGENT_APP_URL` in `app.yaml`** — bind `AGENT_APP_URL` via `valueFrom: agent-backend` so swapping environments (dev/staging/prod) requires no code change
 - **Write the `server.extend()` proxy** — add `POST /api/chat` that forwards `x-forwarded-access-token` verbatim and bridges Agent-App SSE into the format the AppKit chat page understands
 - **Mount the chat page** — wire the AppKit chat React page at `/chat` to consume the proxy stream
 - **Run the 3-probe e2e test** — direct agent / AppKit SP-only / AppKit with forwarded OBO must all pass to prove the auth wiring is correct
 
-**First:** Read `apps_lakebase/$APP_NAME/.vibecoding-state.md` if it exists — it contains the AppKit app identity (`APP_NAME`) and Lakebase values from prior phases.
+**First:** Read `$APP_ROOT/.vibecoding-state.md` if it exists — it contains the AppKit app identity (`APP_NAME`) and Lakebase values from prior phases.
 
 **How this prompt chains with the prior step (skill invocations):**
 
 **Invoke skills (in order):**
 
-1. `genai-agents/vibecoding-state` op `enter` — params: `prompt_id: "appkit_agent_app_proxy_chat"`, `require_prior_gate: {prompt_id: "track_a_agent_eval_deploy", gate: "Agent App RUNNING"}`.
+1. `skills/vibecoding-state` op `enter` — params: `prompt_id: "appkit_agent_app_proxy_chat"`, `require_prior_gate: {prompt_id: "track_a_agent_eval_deploy", gate: "Agent App RUNNING"}`.
 2. @apps_lakebase/skills/06d-appkit-agent-app-proxy/SKILL.md — params:
-   - `app_dir: "apps_lakebase/{app_name}"`
+   - `app_dir: "$APP_ROOT"` (= `<artifact_root>/<app_name>`, the top-level AppKit app dir)
    - `agent_app_name: "{agent_app_name}"`
    - `agent_app_url: "{agent_app_url}"`
    - `chat_route: "/api/chat"`
@@ -10409,7 +11929,7 @@ This will involve the following steps:
    - `obo_forwarding: true` (verbatim `x-forwarded-access-token`)
    - `verification: {cmd: "bash apps_lakebase/skills/06d-appkit-agent-app-proxy/scripts/test-agent-app-proxy.sh --appkit-app {app_name} --agent-app {agent_app_name}", behavior: "3 probes pass"}`
    - Wires the AppKit frontend to the Agent App backend via a vanilla `server.extend()` proxy with SP + OBO auth layers. Does **not** use the Serving plugin — the backend is a Databricks App, not a Model Serving endpoint.
-3. `genai-agents/vibecoding-state` op `exit` — params: `prompt_id: "appkit_agent_app_proxy_chat"`, `gate: "AppKit ↔ Agent App proxy live"`.
+3. `skills/vibecoding-state` op `exit` — params: `prompt_id: "appkit_agent_app_proxy_chat"`, `gate: "AppKit ↔ Agent App proxy live"`.
 
 **Gate:** `AppKit ↔ Agent App proxy live` — streaming chat works on `/chat` against the Agent App; the 3-probe e2e test (direct agent, AppKit SP-only, AppKit with forwarded OBO) passes.',
 '',
@@ -10426,7 +11946,7 @@ Open a **new Agent thread in your Coding Assistant** and paste the prompt above.
 
 ### Steps to Apply
 1. New thread in your Coding Assistant, paste prompt.
-2. AI patches `apps_lakebase/{app_name}/databricks.yml` to declare the Agent App as a `CAN_USE` resource named `agent-backend`.
+2. AI patches `$APP_ROOT/databricks.yml` to declare the Agent App as a `CAN_USE` resource named `agent-backend`.
 3. AI patches `app.yaml` to expose `AGENT_APP_URL` via `valueFrom`.
 4. AI generates the `server.extend()` proxy at `/api/chat` that forwards `x-forwarded-access-token` and bridges the dual-format SSE stream to the AppKit chat page at `/chat`.
 5. AI runs the 3-probe e2e script to confirm the proxy works end-to-end.
@@ -10486,8 +12006,8 @@ When you paste the prompt, the AI walks the proxy install in five phases:
 
 | Phase | What the AI Does | Where It Writes |
 |-------|------------------|-----------------|
-| 1. Declare resource | Add `agent-backend` `app` resource with `CAN_USE` | `apps_lakebase/{app_name}/databricks.yml` |
-| 2. Expose env var | Bind `AGENT_APP_URL` via `valueFrom: agent-backend` | `apps_lakebase/{app_name}/app.yaml` |
+| 1. Declare resource | Add `agent-backend` `app` resource with `CAN_USE` | `$APP_ROOT/databricks.yml` |
+| 2. Expose env var | Bind `AGENT_APP_URL` via `valueFrom: agent-backend` | `$APP_ROOT/app.yaml` |
 | 3. Write proxy route | `server.extend()` adds `POST /api/chat` that forwards `x-forwarded-access-token` and bridges SSE | AppKit backend extension module |
 | 4. Wire chat page | React chat page hits `/api/chat`; consumes proxy SSE | AppKit frontend route at `/chat` |
 | 5. Run 3-probe e2e | `test-agent-app-proxy.sh` hits direct agent, AppKit SP-only, AppKit-with-OBO | Smoke output captured before gate exit |
@@ -10498,11 +12018,72 @@ When you paste the prompt, the AI walks the proxy install in five phases:
 |------------|---------------|----------------|
 | `Agent App RUNNING` (from `track_a_agent_eval_deploy`, with `agent_app_url`, `agent_app_name`) | `AppKit ↔ Agent App proxy live` | `/chat` page renders streaming chat against the Agent App with OBO; 3-probe e2e green |',
 '### Resources Created
-- [ ] `apps_lakebase/{app_name}/databricks.yml` declares the Agent App as `agent-backend` resource
-- [ ] `app.yaml` exposes `AGENT_APP_URL` via `valueFrom: agent-backend`
+- [ ] `$APP_ROOT/databricks.yml` declares the Agent App as `agent-backend` resource
+- [ ] `$APP_ROOT/app.yaml` exposes `AGENT_APP_URL` via `valueFrom: agent-backend`
 - [ ] `/api/chat` proxy route streams against the Agent App with OBO header forwarding
 - [ ] `/chat` AppKit page renders streaming chat
 - [ ] 3-probe e2e test passes (direct agent, AppKit SP-only, AppKit with forwarded OBO)',
+true, 1, true, current_timestamp(), current_timestamp(), current_user());
+
+-- appkit_agent_app_proxy_chat (genie-code fork) — prescriptive paths; proxy authored under <APP_ROOT>; redeploy via SDK SNAPSHOT; 3-probe e2e via the 3-hop OAuth session (no bash script, no localhost); bypass_LLM = TRUE
+INSERT INTO ${catalog}.${schema}.section_input_prompts
+(input_id, section_tag, coding_assistant, input_template, system_prompt,
+ bypass_llm, version, is_active, inserted_at, updated_at, created_by)
+VALUES
+(918, 'appkit_agent_app_proxy_chat', 'genie-code',
+'**Genie Code — this is a prescriptive runbook. Follow the steps in order. Do NOT improvise paths, do NOT use bare relative paths, do NOT use `@`-mentions, and do NOT run the bash test script or open localhost. The `server.extend()` proxy is authored under `<APP_ROOT>`; the AppKit app redeploys via the SDK SNAPSHOT call; the 3-probe e2e runs through the 3-hop OAuth `requests.Session()`.**
+
+### 🔴 Non-negotiable execution rules (read before anything)
+
+❌ **NEVER run `bash …/test-agent-app-proxy.sh` and NEVER open `http://localhost:8000`.** Genie Code has no local Node toolchain and the script''s `curl + databricks auth token` is hard-blocked. Run the 3 probes via the 3-hop OAuth `requests.Session()` against the DEPLOYED AppKit + Agent App URLs (`genie-code-environment` §7 / `app-verification.md`).
+
+❌ **DO NOT rely on `databricks apps deploy` via `runDatabricksCli`** for the AppKit host — use the SDK SNAPSHOT call (`w.apps.deploy(..., mode=SNAPSHOT)`); the Node/Vite build runs server-side.
+
+✅ The things you run directly are (a) authoring the proxy + `databricks.yml`/`app.yaml` edits under `<APP_ROOT>`, (b) the SDK SNAPSHOT redeploy via `executeCode`, and (c) the 3-hop OAuth 3-probe e2e.
+
+### Step 0 — Resolve your environment (once, before anything else)
+
+Run `skills/vibecoding-state` operation `enter` with `prompt_id: "appkit_agent_app_proxy_chat"` and `require_prior_gate: {prompt_id: "track_a_agent_eval_deploy", gate: "Agent App RUNNING"}`. Read these resolved values and use them literally:
+
+- `client_context` = `genie_code`
+- `artifact_root` = your workshop clone root (e.g. `/Workspace/Users/<your-email>/.assistant/skills/vibe-coding-workshop`)
+- `skill_ref_root` = `skills/vibe-coding-workshop` (substitute your clone folder if different)
+- `app_root` = `<artifact_root>/{app_name}` — the top-level AppKit app dir (NOT under `apps_lakebase/`). Referred to below as `<APP_ROOT>`.
+- `app_deploy.verb` = `apps deploy` (resolves to the SDK SNAPSHOT call on Genie Code)
+- `{agent_app_name}`, `{agent_app_url}` = the separately-deployed Track A Agent App''s name + URL, from the `track_a_agent_eval_deploy` `exit` capture in `.vibecoding-state.md` (the proxy declares `{agent_app_name}` as the `agent-backend` `CAN_USE` resource and binds `AGENT_APP_URL` to `{agent_app_url}`)
+- Workspace: `{workspace_url}`
+
+**First:** read `<APP_ROOT>/.vibecoding-state.md` (full clone-rooted path) for `APP_NAME`, Lakebase values, and `agent_app_url`/`agent_app_name`. If `enter` reports the Agent App gate is unmet, STOP.
+
+### Step 1 — Load the required skills by their FULL clone-rooted paths
+
+Load each with `readSkillFile` using its `<skill_ref_root>`-prefixed path — NEVER a bare `@…` mention. **The root-level `skills/` come FIRST as the highest-priority guardrails.**
+
+1. `readSkillFile("skills/vibe-coding-workshop/skills/genie-code-environment/SKILL.md")` — §4 (server-side build) + §7 (deployed-app OAuth). Loading this flips the manifest-load gate.
+2. `readSkillFile("skills/vibe-coding-workshop/apps_lakebase/skills/06d-appkit-agent-app-proxy/SKILL.md")` — the vanilla `server.extend()` proxy with SP + OBO and dual-format streaming. **Replace its `bash …/test-agent-app-proxy.sh` verification with the OAuth 3-probe e2e in Step 3.**
+3. `readSkillFile("skills/vibe-coding-workshop/skills/genie-code-environment/references/app-verification.md")` — the reusable 3-hop OAuth `requests.Session()` snippet.
+
+Load every further reference the skills name the same way (prefix with `skill_ref_root`). `AGENTS.md` root context does not carry across Genie Code threads.
+
+### Step 2 — Author the proxy + grants under `<APP_ROOT>` (write files only)
+
+- Patch `<APP_ROOT>/databricks.yml` to declare the Agent App as a `CAN_USE` resource named `agent-backend`.
+- Patch `<APP_ROOT>/app.yaml` to bind `AGENT_APP_URL` via `valueFrom: agent-backend`.
+- Add the `server.extend()` `POST /api/chat` proxy that forwards `x-forwarded-access-token` verbatim and bridges the Agent-App SSE into the AppKit chat-page format.
+- Mount the AppKit chat React page at `/chat` consuming the proxy stream.
+
+### Step 3 — Redeploy via SDK SNAPSHOT, then run the 3-probe e2e (OAuth)
+
+1. Redeploy the AppKit app: `w.apps.deploy(<app_name>, AppDeployment(source_code_path="<APP_ROOT>", mode=AppDeploymentMode.SNAPSHOT))`; poll to `SUCCEEDED`, compute `ACTIVE`.
+2. 3-probe e2e via the 3-hop OAuth `requests.Session()` (no bash, no localhost):
+   - **Direct agent** — POST a question to `<agent_app_url>/invocations`; expect 200 + agent response.
+   - **AppKit SP-only** — call `/api/chat` WITHOUT forwarding the user token; this probe catches a missing-OBO bug.
+   - **AppKit with forwarded OBO** — call `/api/chat` with the user''s OBO token forwarded; expect a streamed answer with the user''s identity.
+
+**State-lock:** this prompt runs between an `enter` (Step 0) and an `exit`. After the gate passes, run `skills/vibecoding-state` op `exit` — params: `prompt_id: "appkit_agent_app_proxy_chat"`, `gate: "AppKit ↔ Agent App proxy live"`.
+
+**Gate:** `AppKit ↔ Agent App proxy live` — `/chat` streams chat against the Agent App with OBO forwarding; all three probes pass via the 3-hop OAuth session against the DEPLOYED URLs. NO bash test script, NO `curl`+`auth token`, NO localhost check was used.',
+'',
 true, 1, true, current_timestamp(), current_timestamp(), current_user());
 
 -- Step 48 / order 48: Phase 3 / AppKit Integration - Chatbot Feedback -> MLflow Trace Assessments
@@ -10525,15 +12106,15 @@ This will involve the following steps:
 
 This prompt assumes the canonical two-app path: AppKit `/api/chat` → Agent App `/invocations` → MLflow trace. Do not switch to the legacy Serving plugin path.
 
-**First:** Read `apps_lakebase/$APP_NAME/.vibecoding-state.md` if it exists — it contains the AppKit app identity (`APP_NAME`) and Lakebase values from prior phases.
+**First:** Read `$APP_ROOT/.vibecoding-state.md` if it exists — it contains the AppKit app identity (`APP_NAME`) and Lakebase values from prior phases.
 
 **How this prompt chains with the prior step (skill invocations):**
 
 **Invoke skills (in order):**
 
-1. `genai-agents/vibecoding-state` op `enter` — params: `prompt_id: "appkit_chat_feedback_mlflow"`, `require_prior_gate: {prompt_id: "appkit_agent_app_proxy_chat", gate: "AppKit ↔ Agent App proxy live"}`.
+1. `skills/vibecoding-state` op `enter` — params: `prompt_id: "appkit_chat_feedback_mlflow"`, `require_prior_gate: {prompt_id: "appkit_agent_app_proxy_chat", gate: "AppKit ↔ Agent App proxy live"}`.
 2. @apps_lakebase/skills/07-appkit-chat-history/SKILL.md — params:
-   - `app_dir: "apps_lakebase/{app_name}"`
+   - `app_dir: "$APP_ROOT"` (= `<artifact_root>/<app_name>`, the top-level AppKit app dir)
    - `lakebase_host: "{lakebase_host}"`
    - `sidebar_enabled: true`
    - `navigation: "by_conversation"`
@@ -10542,7 +12123,7 @@ This prompt assumes the canonical two-app path: AppKit `/api/chat` → Agent App
    - `ephemeral_fallback: true`
    - `streaming_proxy: "two-app-agent-proxy"` (proxy route streams via `/api/chat` from `06d-appkit-agent-app-proxy`, forwards OBO to the Agent App, persists messages, and captures MLflow `trace_id` for feedback linking)
 3. @genai-agents/sdlc/04c-end-user-feedback/SKILL.md — params:
-   - `agent_app_dir: "{agent_app_name}"`
+   - `agent_app_dir: "$AGENT_APP_ROOT"` (= `<artifact_root>/<agent_app_name>`, the top-level Track A agent app dir)
    - `feedback_route: "/feedback"`
    - `trace_id_source: "invoke_response_field"` (return `trace_id` from `@invoke`; for `@stream` send a final `{type: "done", trace_id}` SSE event)
    - `assessment_name: "user_feedback"`
@@ -10552,7 +12133,7 @@ This prompt assumes the canonical two-app path: AppKit `/api/chat` → Agent App
    - `support_update_delete: true`
    - Owns the **Python `mlflow.log_feedback(...)` write-path** in the Track A Agent App.
 4. @apps_lakebase/skills/08-appkit-feedback/SKILL.md — params:
-   - `app_dir: "apps_lakebase/{app_name}"`
+   - `app_dir: "$APP_ROOT"` (= `<artifact_root>/<app_name>`, the top-level AppKit app dir)
    - `mlflow_feedback_experiment_name: "{mlflow_feedback_experiment_path}"`
    - `mlflow_api: "Assessments"`
    - `auth: "client.config.authenticate()"`
@@ -10561,7 +12142,7 @@ This prompt assumes the canonical two-app path: AppKit `/api/chat` → Agent App
    - `python_contract: "genai-agents/sdlc/04c-end-user-feedback"`
    - `capture_into_state: ["mlflow_feedback_experiment_path"]`
 5. **Inline steps:** `databricks experiments create --name "{mlflow_feedback_experiment_path}"` (capture path), then deploy and run E2E including idle resilience (wait 3–5 min then re-test). Verify the round-trip: send a chat turn, click 👎, refresh the trace in the MLflow UI and confirm the `user_feedback=false` assessment with `source_type=HUMAN, source_id=<your email>` is attached.
-6. `genai-agents/vibecoding-state` op `exit` — params: `prompt_id: "appkit_chat_feedback_mlflow"`, `gate: "Deployed + idle resilience passed + 04c round-trip verified"`, `captured: {mlflow_feedback_experiment_path}`.
+6. `skills/vibecoding-state` op `exit` — params: `prompt_id: "appkit_chat_feedback_mlflow"`, `gate: "Deployed + idle resilience passed + 04c round-trip verified"`, `captured: {mlflow_feedback_experiment_path}`.
 
 **Gate:** `Deployed + idle resilience passed + 04c round-trip verified` — sidebar + history works; thumbs-up/down linked to MLflow traces via `mlflow.log_feedback(...)` from the Track A Agent App; an end-to-end 👎 round-trip shows up in the MLflow trace UI; the app survives 3–5 min idle.',
 '',
@@ -10653,8 +12234,8 @@ When you paste the prompt, the AI walks five sub-installs across two apps:
 
 | Phase | What the AI Does | Where It Writes |
 |-------|------------------|-----------------|
-| 1. Chat history | Install `07-appkit-chat-history`: Lakebase persistence, OBO scoping, sidebar UI | AppKit app dir (`apps_lakebase/{app_name}`) |
-| 2. Agent feedback | Install `04c-end-user-feedback`: `/feedback` REST + `mlflow.log_feedback(...)` on every POST; emit final `done` SSE with `trace_id` | Agent app dir |
+| 1. Chat history | Install `07-appkit-chat-history`: Lakebase persistence, OBO scoping, sidebar UI | AppKit app dir (`$APP_ROOT`) |
+| 2. Agent feedback | Install `04c-end-user-feedback`: `/feedback` REST + `mlflow.log_feedback(...)` on every POST; emit final `done` SSE with `trace_id` | Agent app dir (`$AGENT_APP_ROOT`) |
 | 3. AppKit feedback | Install `08-appkit-feedback`: thumbs up/down controls bound to the `/feedback` route; capture `trace_id` per turn | AppKit chat page |
 | 4. Experiment | Create `{mlflow_feedback_experiment_path}` and capture path into state | MLflow experiment + state file |
 | 5. Round-trip + idle | Send a turn, click thumbs-down, refresh trace, wait 3-5 min idle, re-test | Verification log before gate exit |
@@ -10671,6 +12252,65 @@ When you paste the prompt, the AI walks five sub-installs across two apps:
 - [ ] MLflow experiment at `{mlflow_feedback_experiment_path}` created
 - [ ] At least one `user_feedback` assessment visible in the MLflow trace UI with `source_type=HUMAN`
 - [ ] App passes 3–5 minute idle resilience re-test',
+true, 1, true, current_timestamp(), current_timestamp(), current_user());
+
+-- appkit_chat_feedback_mlflow (genie-code fork) — prescriptive paths; chat history + feedback authored under <APP_ROOT>, agent feedback under <AGENT_APP_ROOT>; redeploy via SDK SNAPSHOT; verify via OAuth session (no localhost); bypass_LLM = TRUE
+INSERT INTO ${catalog}.${schema}.section_input_prompts
+(input_id, section_tag, coding_assistant, input_template, system_prompt,
+ bypass_llm, version, is_active, inserted_at, updated_at, created_by)
+VALUES
+(919, 'appkit_chat_feedback_mlflow', 'genie-code',
+'**Genie Code — this is a prescriptive runbook. Follow the steps in order. Do NOT improvise paths, do NOT use bare relative paths, do NOT use `@`-mentions, and do NOT open localhost. AppKit chat history + thumbs feedback are authored under `<APP_ROOT>`; the agent''s `/feedback` write-path under `<AGENT_APP_ROOT>`; redeploy via the SDK SNAPSHOT call; verify through the 3-hop OAuth session.**
+
+### 🔴 Non-negotiable execution rules (read before anything)
+
+❌ **NEVER open `http://localhost:8000` and NEVER `curl`+`databricks auth token`.** Verify the feedback round-trip through the 3-hop OAuth `requests.Session()` against the DEPLOYED AppKit URL, and inspect MLflow assessments via `executeCode` (`genie-code-environment` §7).
+
+❌ **DO NOT rely on `databricks apps deploy` via `runDatabricksCli`** for either host — use the SDK SNAPSHOT call; builds run server-side.
+
+✅ The things you run directly are (a) authoring the chat-history/feedback code under `<APP_ROOT>` and the agent `/feedback` path under `<AGENT_APP_ROOT>`, (b) SDK SNAPSHOT redeploys, and (c) the OAuth round-trip + MLflow assessment check.
+
+### Step 0 — Resolve your environment (once, before anything else)
+
+Run `skills/vibecoding-state` operation `enter` with `prompt_id: "appkit_chat_feedback_mlflow"` and `require_prior_gate: {prompt_id: "appkit_agent_app_proxy_chat", gate: "AppKit ↔ Agent App proxy live"}`. Read these resolved values and use them literally:
+
+- `client_context` = `genie_code`
+- `artifact_root` = your workshop clone root (e.g. `/Workspace/Users/<your-email>/.assistant/skills/vibe-coding-workshop`)
+- `skill_ref_root` = `skills/vibe-coding-workshop` (substitute your clone folder if different)
+- `app_root` = `<artifact_root>/{app_name}` — the top-level AppKit app dir. Referred to below as `<APP_ROOT>`.
+- `agent_app_root` = `<artifact_root>/{agent_app_name}` — the top-level Track A agent app dir. Referred to below as `<AGENT_APP_ROOT>`.
+- `lakebase_host` = `{lakebase_host}`; `mlflow_feedback_experiment_path` = `{mlflow_feedback_experiment_path}` — MUST be `/Users/<user_email>/mlflow/{user_app_name}-feedback` (the same `${FIRSTNAME}-${LASTINITIAL}-${use_case_slug}` identity that backs `APP_NAME`), so concurrent attendees never collide; HARD STOP on a generic leaf like `feedback` / `Default` / `my-app-feedback`
+- Workspace: `{workspace_url}`
+
+**First:** read `<APP_ROOT>/.vibecoding-state.md` for `APP_NAME` + Lakebase values. If `enter` reports the prior gate is unmet, STOP.
+
+### Step 1 — Load the required skills by their FULL clone-rooted paths
+
+Load each with `readSkillFile` using its `<skill_ref_root>`-prefixed path — NEVER a bare `@…` mention. **The root-level `skills/` come FIRST as the highest-priority guardrails.**
+
+1. `readSkillFile("skills/vibe-coding-workshop/skills/genie-code-environment/SKILL.md")` — §4 (server-side build) + §7 (deployed-app OAuth). Loading this flips the manifest-load gate.
+2. `readSkillFile("skills/vibe-coding-workshop/apps_lakebase/skills/07-appkit-chat-history/SKILL.md")` — Lakebase chat persistence, OBO scoping, sidebar UI (authored under `<APP_ROOT>`).
+3. `readSkillFile("skills/vibe-coding-workshop/genai-agents/sdlc/04c-end-user-feedback/SKILL.md")` — the Python `mlflow.log_feedback(...)` write-path + `/feedback` route in the Agent App (authored under `<AGENT_APP_ROOT>`); return `trace_id` from `@invoke`, final `{type:"done", trace_id}` SSE from `@stream`.
+4. `readSkillFile("skills/vibe-coding-workshop/apps_lakebase/skills/08-appkit-feedback/SKILL.md")` — thumbs up/down controls bound to `/feedback` + MLflow Assessments (authored under `<APP_ROOT>`); auth via `client.config.authenticate()`.
+5. `readSkillFile("skills/vibe-coding-workshop/skills/genie-code-environment/references/app-verification.md")` — the 3-hop OAuth `requests.Session()` snippet.
+
+Load every further reference the skills name the same way (prefix with `skill_ref_root`). `AGENTS.md` root context does not carry across Genie Code threads.
+
+### Step 2 — Author chat history + feedback (write files only)
+
+- Under `<APP_ROOT>`: Lakebase-backed chat history (per-conversation sidebar, OBO-scoped, auto-title, ephemeral fallback); thumbs up/down controls capturing `trace_id` per turn and writing MLflow Assessments to `{mlflow_feedback_experiment_path}`.
+- Under `<AGENT_APP_ROOT>`: the `/feedback` REST route that calls `mlflow.log_feedback(...)` on every POST and emits the final `done` SSE with `trace_id`.
+- Create the MLflow feedback experiment `{mlflow_feedback_experiment_path}` and capture its path into state.
+
+### Step 3 — Redeploy both hosts via SDK SNAPSHOT, then verify (OAuth)
+
+1. Redeploy the AppKit app (`w.apps.deploy(<app_name>, AppDeployment(source_code_path="<APP_ROOT>", mode=SNAPSHOT))`) and, if the agent `/feedback` path changed, the agent app (`source_code_path="<AGENT_APP_ROOT>"`). Poll each to `SUCCEEDED`, compute `ACTIVE`.
+2. Through the 3-hop OAuth `requests.Session()`: send a chat turn, click thumbs-down (POST `/feedback`), then confirm via `executeCode` that an MLflow Assessment row appears for that `trace_id` at `{mlflow_feedback_experiment_path}`. Wait 3-5 min idle and re-test to confirm persistence.
+
+**State-lock:** this prompt runs between an `enter` (Step 0) and an `exit`. After the gate passes, run `skills/vibecoding-state` op `exit` — params: `prompt_id: "appkit_chat_feedback_mlflow"`, `gate: "Deployed + idle resilience passed + 04c round-trip verified"`, `captured: {mlflow_feedback_experiment_path}`.
+
+**Gate:** `Deployed + idle resilience passed + 04c round-trip verified` — sidebar + history works; thumbs up/down linked to MLflow traces via `mlflow.log_feedback(...)` from the Track A Agent App; an end-to-end 👎 round-trip shows up in the MLflow trace UI (verified through the 3-hop OAuth session against the DEPLOYED URL); the app survives 3-5 min idle. NO localhost check, NO `curl`+`auth token`.',
+'',
 true, 1, true, current_timestamp(), current_timestamp(), current_user());
 
 -- =============================================================================
@@ -10741,16 +12381,18 @@ This will involve the following steps:
 
 **Invoke skills (in order):**
 
-1. `genai-agents/vibecoding-state` op `enter` — params: `prompt_id: "mlflow_prompt_registry"`, `require_prior_gate: {prompt_id: "mlflow_agent_tracing_uc", gate: "Tracing live; UC OTel tables ready"}`.
+1. `skills/vibecoding-state` op `enter` — params: `prompt_id: "mlflow_prompt_registry"`, `require_prior_gate: {prompt_id: "mlflow_agent_tracing_uc", gate: "Tracing live; UC OTel tables ready"}`.
 2. @genai-agents/sdlc/01-prompt-registry/SKILL.md — params:
    - `agent_name: "{agent_app_name}"`
    - `uc_catalog: "{lakehouse_default_catalog}"`
    - `uc_schema: "{db_schema}_agent"`
    - `aliases: ["@production", "@staging"]`
    - `verify_loader: "prompts://"`
-3. `genai-agents/vibecoding-state` op `exit` — params: `prompt_id: "mlflow_prompt_registry"`, `gate: "Prompts registered in UC; @production and @staging aliases set"`.
+3. `skills/vibecoding-state` op `exit` — params: `prompt_id: "mlflow_prompt_registry"`, `gate: "Prompts registered in UC; @production and @staging aliases set"`.
 
-**Gate:** `Prompts registered in UC; @production and @staging aliases set` — every prompt the agent loads is now governed in UC and addressable via `prompts://...@alias` instead of inline strings.',
+**Gate:** `Prompts registered in UC; @production and @staging aliases set` — every prompt the agent loads is now governed in UC and addressable via `prompts://...@alias` instead of inline strings.
+
+> **Genie Code execution.** These are pure MLflow SDK operations — on Genie Code run them directly via `executeCode` on serverless (the full `mlflow`/`mlflow.genai` Python SDK), exactly as the IDE/CLI flow runs them in‑session. **No job, no bundle.** Call `mlflow.set_experiment("{mlflow_experiment_path}")` first so registrations and traces land in the agent''s experiment. Verify with the native `search_prompts` / `get_prompt_details` tools rather than re‑deriving. Run any incidental CLI step through `runDatabricksCli` (pre‑authenticated). Use full clone‑rooted skill paths (`skills/...`), never bare `@`-mentions. See `skills/genie-code-environment`.',
 '',
 'Phase 1 / Build the Quality Suite — Register Prompts in Unity Catalog',
 'Register the agent''s prompts as UC-governed assets with @production / @staging aliases (upstream of eval datasets and scorers)',
@@ -10874,7 +12516,7 @@ This will involve the following steps:
 
 **Invoke skills (in order):**
 
-1. `genai-agents/vibecoding-state` op `enter` — params: `prompt_id: "mlflow_evaluation_datasets"`, `require_prior_gate: {prompt_id: "mlflow_prompt_registry", gate: "Prompts registered in UC; @production and @staging aliases set"}`.
+1. `skills/vibecoding-state` op `enter` — params: `prompt_id: "mlflow_evaluation_datasets"`, `require_prior_gate: {prompt_id: "mlflow_prompt_registry", gate: "Prompts registered in UC; @production and @staging aliases set"}`.
 2. @genai-agents/sdlc/02-evaluation-datasets/SKILL.md — params:
    - `agent_name: "{agent_app_name}"`
    - `agent_spec_ref: "state://AgentSpec"`
@@ -10883,9 +12525,11 @@ This will involve the following steps:
    - `target_table: "{lakehouse_default_catalog}.{db_schema}_agent.{agent_resource_prefix}_benchmarks"`
    - `min_rows: 20`
    - The skill reads `agent.benchmark_seeds.coverage_buckets[]`, `agent.benchmark_seeds.seed_examples[]`, and `ui.user_journeys[]` (every journey must have at least one benchmark row), AND `docs/agent_tool_plan.yaml.verification.tool_smoke_tests[]` (one tool-shaped row appended per entry; tool families with `selected: false` contribute zero rows).
-3. `genai-agents/vibecoding-state` op `exit` — params: `prompt_id: "mlflow_evaluation_datasets"`, `gate: "≥ 20 benchmark rows; every user journey covered"`.
+3. `skills/vibecoding-state` op `exit` — params: `prompt_id: "mlflow_evaluation_datasets"`, `gate: "≥ 20 benchmark rows; every user journey covered"`.
 
-**Gate:** `≥ 20 benchmark rows; every user journey covered` — the benchmark table at `{lakehouse_default_catalog}.{db_schema}_agent.{agent_resource_prefix}_benchmarks` is the single source of truth for scorers (input_id 211) and eval runs (input_id 212). Coverage assertion holds across THREE axes: every `agent.benchmark_seeds.coverage_buckets[]`, every `ui.user_journeys[]`, AND every `verification.tool_smoke_tests[]` entry from the Tool Plan has ≥ 1 row.',
+**Gate:** `≥ 20 benchmark rows; every user journey covered` — the benchmark table at `{lakehouse_default_catalog}.{db_schema}_agent.{agent_resource_prefix}_benchmarks` is the single source of truth for scorers (input_id 211) and eval runs (input_id 212). Coverage assertion holds across THREE axes: every `agent.benchmark_seeds.coverage_buckets[]`, every `ui.user_journeys[]`, AND every `verification.tool_smoke_tests[]` entry from the Tool Plan has ≥ 1 row.
+
+> **Genie Code execution.** These are pure MLflow GenAI SDK operations — on Genie Code run them directly via `executeCode` on serverless (`mlflow.genai.datasets`), exactly as the IDE/CLI flow runs them in‑session. **No job, no bundle.** Call `mlflow.set_experiment("{mlflow_experiment_path}")` first. Verify the dataset with the native `list_datasets` / `get_dataset_records` tools rather than re‑deriving. Run any incidental CLI step through `runDatabricksCli` (pre‑authenticated). Use full clone‑rooted skill paths (`skills/...`), never bare `@`-mentions. See `skills/genie-code-environment`.',
 '',
 'Phase 1 / Build the Quality Suite — Evaluation Dataset',
 'Generate ≥ 20 benchmark rows that cover every coverage bucket and user journey from the AgentSpec',
@@ -11004,7 +12648,7 @@ This will involve the following steps:
 
 **Invoke skills (in order):**
 
-1. `genai-agents/vibecoding-state` op `enter` — params: `prompt_id: "mlflow_scorers_and_judges"`, `require_prior_gate: {prompt_id: "mlflow_evaluation_datasets", gate: "≥ 20 benchmark rows; every user journey covered"}`.
+1. `skills/vibecoding-state` op `enter` — params: `prompt_id: "mlflow_scorers_and_judges"`, `require_prior_gate: {prompt_id: "mlflow_evaluation_datasets", gate: "≥ 20 benchmark rows; every user journey covered"}`.
 2. @genai-agents/sdlc/03-scorers-and-judges/SKILL.md — params:
    - `agent_name: "{agent_app_name}"`
    - `agent_spec_ref: "state://AgentSpec"`
@@ -11014,9 +12658,11 @@ This will involve the following steps:
    - `builtins: [{name: "safety", sampling: 1.0, threshold: 0.95}, {name: "relevance", threshold: 0.8}]`
    - The skill reads the GENERIC suite from `governance.scorer_suite.guidelines[]`, `governance.scorer_suite.custom_scorer_rules[]`, `governance.scorer_suite.judge_questions[]` (use-case shaped, tool-agnostic) AND the TOOL-SHAPED suite from `docs/agent_tool_plan.yaml.runtime_guardrails.tool_shaped_scorers[]` (derived mechanically from `selected_tools[]`). The two are unioned and deduped.
    - `RetrievalGroundedness` is registered ONLY if KA or Vector Search appears in `selected_tools[]`. `ka_citation_present` only if KA selected. `genie_sql_correctness` and `genie_response_grounded_in_table` only if Genie selected. `sql_readonly_compliance` and `sql_fully_qualified_names` only if SQL MCP selected. `uc_function_signature_match` only if UC Functions selected. There is NO defaulting for tool families absent from `selected_tools[]`.
-3. `genai-agents/vibecoding-state` op `exit` — params: `prompt_id: "mlflow_scorers_and_judges"`, `gate: "Scorer suite registered with thresholds"`.
+3. `skills/vibecoding-state` op `exit` — params: `prompt_id: "mlflow_scorers_and_judges"`, `gate: "Scorer suite registered with thresholds"`.
 
-**Gate:** `Scorer suite registered with thresholds` — every scorer the use case needs (builtins + Guidelines + custom code scorers + LLM judges from the Spec) UNIONED with every tool-shaped scorer hint from `docs/agent_tool_plan.yaml.runtime_guardrails.tool_shaped_scorers[]` is registered against `{mlflow_experiment_path}` with explicit thresholds. No `RetrievalGroundedness` / `ka_citation_present` / `genie_*` / `sql_*` scorer registers unless its tool family is in `selected_tools[]`. Ready for the first scored eval (input_id 212).',
+**Gate:** `Scorer suite registered with thresholds` — every scorer the use case needs (builtins + Guidelines + custom code scorers + LLM judges from the Spec) UNIONED with every tool-shaped scorer hint from `docs/agent_tool_plan.yaml.runtime_guardrails.tool_shaped_scorers[]` is registered against `{mlflow_experiment_path}` with explicit thresholds. No `RetrievalGroundedness` / `ka_citation_present` / `genie_*` / `sql_*` scorer registers unless its tool family is in `selected_tools[]`. Ready for the first scored eval (input_id 212).
+
+> **Genie Code execution.** These are pure MLflow GenAI SDK operations — on Genie Code register scorers/judges directly via `executeCode` on serverless (full `mlflow.genai.scorers` SDK; `scorer.register()`/`.start()` for scheduled scorers), exactly as the IDE/CLI flow runs them in‑session. **No job, no bundle.** Call `mlflow.set_experiment("{mlflow_experiment_path}")` first so scorers bind to the agent''s experiment. Verify with the native `get_scheduled_scorers` tool rather than re‑deriving. Every `make_judge` call routes through the resolved `llm_judge_default` role binding. Run any incidental CLI step through `runDatabricksCli`. Use full clone‑rooted skill paths (`skills/...`), never bare `@`-mentions. See `skills/genie-code-environment`.',
 '',
 'Phase 1 / Build the Quality Suite — Scorers and Judges',
 'Register builtin scorers, Guidelines, custom code scorers, and LLM judges with thresholds (judge calls route via llm_judge_default role)',
@@ -11139,14 +12785,14 @@ This will involve the following steps:
 - **Run the scored eval** — call `mlflow.genai.evaluate()` against the benchmark table using the registered scorer suite from prompt 51 (which is itself the union of generic Spec scorers + tool-shaped Plan scorers — KA absent ⇒ no KA scorer ran)
 - **Tag the run for traceability** — log the run under `{mlflow_experiment_path}` with `mlflow.promptRegistryLocation` so the eval can be tied back to the exact prompt versions
 - **Classify the failure shape** — compute `failure_shape_classification.primary_shape` (instruction / tool_call_empty / retrieval / safety / other) and `safety_buffer` per scorer. `tool_call_empty` ONLY fires for tools present in `docs/agent_tool_plan.yaml.selected_tools[]`; tools absent from `selected_tools[]` cannot be the cause of a `tool_call_empty` failure (they were never wired)
-- **Route the next iteration** — instruction-shape (no L1 failure) → Skill 08b prompt hand-authoring; tool-call-empty → Skill 06 direct trace debug, scoped to the SPECIFIC selected tool that returned empty (not generic "tool failed"); retrieval → retrieval tuning ONLY if KA or Vector Search is in `selected_tools[]`; L1 floor breach → architecture redesign
+- **Route the next iteration** — instruction-shape (no L1 failure) → Skill 08b prompt hand-authoring; tool-call-empty → Track A Skill 08 direct trace debug, scoped to the SPECIFIC selected tool that returned empty (not generic "tool failed"); retrieval → retrieval tuning ONLY if KA or Vector Search is in `selected_tools[]`; L1 floor breach → architecture redesign
 - **Fire the either-or gate** — emit `Eval thresholds met` OR `Eval regressed — iterate` with the routing branch and full failure-shape schema captured into state
 
 **How this prompt chains with the prior step (skill invocations):**
 
 **Invoke skills (in order):**
 
-1. `genai-agents/vibecoding-state` op `enter` — params: `prompt_id: "mlflow_evaluation_runs_and_iteration"`, `require_prior_gate: {prompt_id: "mlflow_scorers_and_judges", gate: "Scorer suite registered with thresholds"}`.
+1. `skills/vibecoding-state` op `enter` — params: `prompt_id: "mlflow_evaluation_runs_and_iteration"`, `require_prior_gate: {prompt_id: "mlflow_scorers_and_judges", gate: "Scorer suite registered with thresholds"}`.
    This prompt maps to the canonical `first_scored_eval` role. Before any benchmark run, `enter` MUST evaluate the following preflight checks (a halt unblocks only via a `state_overrides[]` entry with `gate_type: preflight_check` whose `affected_state_field` matches the failing clause):
    ```yaml
    preflight_checks:
@@ -11164,7 +12810,7 @@ This will involve the following steps:
    - `scorer_suite_from_prompt: "mlflow_scorers_and_judges"`
    - `record_per_scorer_table: true`
    - The skill reads `docs/agent_tool_plan.yaml.selected_tools[]` to scope failure-shape classification — `primary_shape: tool_call_empty` and the `tool_call_empty` routing branch only fire for tools present in `selected_tools[]`. Tools that were never wired cannot fail.
-3. `genai-agents/vibecoding-state` op `exit` — params: `prompt_id: "mlflow_evaluation_runs_and_iteration"`, `gate: "<Eval thresholds met | Eval regressed — iterate>"`, `captured: {per_scorer_pass_fail_table, failing_scorers_if_regressed, failure_shape_classification, safety_buffer, predict_fn_exception_count, predict_fn_sentinel_count_per_run, judges_with_silent_aggregation_dropouts, mlflow_eval_predict_fn_signature}`.
+3. `skills/vibecoding-state` op `exit` — params: `prompt_id: "mlflow_evaluation_runs_and_iteration"`, `gate: "<Eval thresholds met | Eval regressed — iterate>"`, `captured: {per_scorer_pass_fail_table, failing_scorers_if_regressed, failure_shape_classification, safety_buffer, predict_fn_exception_count, predict_fn_sentinel_count_per_run, judges_with_silent_aggregation_dropouts, mlflow_eval_predict_fn_signature}`.
 
 **Captured failure-shape schema (mandatory in `captured` at `exit`):**
 
@@ -11189,11 +12835,13 @@ mlflow_eval_predict_fn_signature: string
 
 1. If `l1_failures` is non-empty → route to **architecture / system-prompt redesign** (do NOT route to Skill 08b — instruction-only iteration cannot recover an L1 scorer that is below floor). Open the failure-shape redesign loop instead.
 2. Else if `primary_shape == "instruction"` AND `l1_failures` is empty → route to @genai-agents/sdlc/08b-prompt-handauthoring/SKILL.md (the next prompt, `mlflow_logged_model_uc_registration`, gates step 2 on exactly this branch).
-3. Else if `primary_shape == "tool_call_empty"` → route to @genai-agents/sdlc/06-direct-trace-debug/SKILL.md, scoped to the specific tool from `selected_tools[]` that returned empty (the `failing_trace_ids[].failing_scorers` and `selected_tools[]` together identify which tool to debug — never "tool failed" in the generic).
+3. Else if `primary_shape == "tool_call_empty"` → route to @genai-agents/tracks/A-custom-agent-apps/08-debugging/SKILL.md (direct trace debugging), scoped to the specific tool from `selected_tools[]` that returned empty (the `failing_trace_ids[].failing_scorers` and `selected_tools[]` together identify which tool to debug — never "tool failed" in the generic).
 4. Else if `primary_shape == "retrieval"` → route to **retrieval tuning** (chunking / embedding / top-k / filters in the KA tool or vector index). This route ONLY exists when KA or Vector Search is in `selected_tools[]`; if neither retrieval tool was selected, `primary_shape` cannot be `retrieval` and this branch never fires.
 5. Else (`safety`, `other`) → escalate to the agent owner; do NOT auto-iterate.
 
-**Gate:** either `Eval thresholds met` OR `Eval regressed — iterate` — record which scorers failed AND the routing branch fired (via `failure_shape_classification.primary_shape` and `l1_failures`); the next prompt (`mlflow_logged_model_uc_registration`) gates only the instruction-shaped, no-L1-failure branch via Skill 08b — direct tool/retrieval debugging or architecture redesign handles the rest.',
+**Gate:** either `Eval thresholds met` OR `Eval regressed — iterate` — record which scorers failed AND the routing branch fired (via `failure_shape_classification.primary_shape` and `l1_failures`); the next prompt (`mlflow_logged_model_uc_registration`) gates only the instruction-shaped, no-L1-failure branch via Skill 08b — direct tool/retrieval debugging or architecture redesign handles the rest.
+
+> **Genie Code execution.** `mlflow.genai.evaluate()` runs via the MLflow SDK on serverless — on Genie Code invoke it directly via `executeCode`, exactly as the IDE/CLI flow runs it in‑session. **No job, no bundle.** Call `mlflow.set_experiment("{mlflow_experiment_path}")` first so the eval run + traces land in the agent''s experiment. Inspect the run and per‑row traces with the native `search_runs` (`mlflow.runType = ''evaluation''`) / `get_trace` / `get_assessments` tools rather than re‑deriving. Run any incidental CLI step through `runDatabricksCli`. Use full clone‑rooted skill paths (`skills/...`), never bare `@`-mentions. See `skills/genie-code-environment`.',
 '',
 'Phase 1 / Build the Quality Suite — First Scored Eval + Iteration Entry',
 'Run mlflow.genai.evaluate against the benchmark table; capture failure-shape classification + routing decision (owns System Prompt Review preflight contract)',
@@ -11246,7 +12894,7 @@ First scored eval (mlflow.genai.evaluate vs benchmarks_table)
    │   -> 08b prompt hand-authoring       │
    │                                      │
    │ elif primary_shape == tool_call_empty│
-   │   -> 06 direct trace debug           │
+   │   -> Track A 08 direct trace debug   │
    │                                      │
    │ elif primary_shape == retrieval:     │
    │   -> retrieval tuning (chunking,     │
@@ -11333,7 +12981,7 @@ This will involve the following steps:
 
 **Invoke skills (in order):**
 
-1. `genai-agents/vibecoding-state` op `enter` — params: `prompt_id: "mlflow_human_review_and_signoff"`, `require_prior_gate: {prompt_id: "mlflow_evaluation_runs_and_iteration", gate: "Eval thresholds met | Eval regressed — iterate"}`.
+1. `skills/vibecoding-state` op `enter` — params: `prompt_id: "mlflow_human_review_and_signoff"`, `require_prior_gate: {prompt_id: "mlflow_evaluation_runs_and_iteration", gate: "Eval thresholds met | Eval regressed — iterate"}`.
 2. @genai-agents/sdlc/04-evaluation-runs/SKILL.md op `labeling_session` — params:
    - `agent_name: "{agent_app_name}"`
    - `agent_spec_ref: "state://AgentSpec"`
@@ -11356,9 +13004,11 @@ This will involve the following steps:
    - `required_fields: ["Decision: APPROVED", "rollback_trigger"]`
    - `capture_into_state: ["signoff_decision"]`
    - The skill reads `governance.monitoring.rollback_trigger_example` for the hint wording.
-5. `genai-agents/vibecoding-state` op `exit` — params: `prompt_id: "mlflow_human_review_and_signoff"`, `gate: "<Signoff APPROVED | Signoff REJECTED — block promotion>"`, `captured: {signoff_decision}`.
+5. `skills/vibecoding-state` op `exit` — params: `prompt_id: "mlflow_human_review_and_signoff"`, `gate: "<Signoff APPROVED | Signoff REJECTED — block promotion>"`, `captured: {signoff_decision}`.
 
-**Gate:** `Signoff APPROVED` (or `Signoff REJECTED — block promotion`) — decision markdown committed to the UC volume; CI promotion gates on `Decision: APPROVED`.',
+**Gate:** `Signoff APPROVED` (or `Signoff REJECTED — block promotion`) — decision markdown committed to the UC volume; CI promotion gates on `Decision: APPROVED`.
+
+> **Genie Code execution.** The labeling setup + sync run via the MLflow SDK (`mlflow.genai.labeling` — confirmed available on Genie Code), but labeling itself is a **human step**. On Genie Code: (1) via `executeCode`, build the label schemas and call `create_labeling_session(name=..., label_schemas=[...])` (the `label_schemas` arg is REQUIRED), then `session.add_traces(<pandas DataFrame with a `trace_id` column>)` — a bare list silently no‑ops; (2) surface the **Review App URL** via `openAsset` and then **STOP** — the SME labels in the Review App UI; the agent does NOT label and does NOT proceed to sync until the operator confirms labeling is complete; (3) resume via `executeCode` with `session.sync(to_dataset=...)` then `merge_records_from_session(...)`. Pin the trace destination to `{mlflow_experiment_path}` so `add_traces` sees the right traces. Verify the session/schemas with the native `readAssetById(mlflowLabelingSchema)` / `list_labeling_sessions` tools. The `decision.md` write is an ordinary UC‑volume file write. **No job, no bundle.** Use full clone‑rooted skill paths (`skills/...`), never bare `@`-mentions. See `skills/genie-code-environment`.',
 '',
 'Phase 2 / Human Review — Labeling + Stakeholder Sign-Off (Expert-in-the-Loop)',
 'SME labeling session syncs into benchmarks; stakeholder sign-off gate decides promotion (Decision: APPROVED hard-asserts downstream)',
@@ -11499,7 +13149,7 @@ If the prior scored eval (input_id 212) produced `Eval regressed — iterate` an
 
 **Invoke skills (in order):**
 
-1. `genai-agents/vibecoding-state` op `enter` — params: `prompt_id: "mlflow_logged_model_uc_registration"`, `require_prior_gate: {prompt_id: "mlflow_human_review_and_signoff", gate: "Signoff APPROVED"}`, `hard_assert: {var: "signoff_decision", equals: "APPROVED"}`.
+1. `skills/vibecoding-state` op `enter` — params: `prompt_id: "mlflow_logged_model_uc_registration"`, `require_prior_gate: {prompt_id: "mlflow_human_review_and_signoff", gate: "Signoff APPROVED"}`, `hard_assert: {var: "signoff_decision", equals: "APPROVED"}`.
 
 2. **(Optional, only if `failing_scorers_if_regressed` is non-empty AND `failure_shape == instruction` AND no L1 scorer failure)** @genai-agents/sdlc/08b-prompt-handauthoring/SKILL.md — params:
    - `agent_spec_ref: "state://AgentSpec"`
@@ -11521,9 +13171,11 @@ If the prior scored eval (input_id 212) produced `Eval regressed — iterate` an
    - `promotion_alias: "@champion"`
    - `promote_if: "eval_scores_ge_prior_champion"`
 
-4. `genai-agents/vibecoding-state` op `exit` — params: `prompt_id: "mlflow_logged_model_uc_registration"`, `gate: "@champion set"`, `captured: {prompt_iteration_ran}`.
+4. `skills/vibecoding-state` op `exit` — params: `prompt_id: "mlflow_logged_model_uc_registration"`, `gate: "@champion set"`, `captured: {prompt_iteration_ran}`.
 
-**Gate:** `@champion set` — the agent is logged via `mlflow.models.log_model`, registered at `{lakehouse_default_catalog}.{db_schema}_agent.{agent_resource_prefix}`, and the `@champion` alias is moved to the new version IFF eval scores are ≥ the prior champion. Promotion is hard-asserted on `signoff_decision == APPROVED` from input_id 213.',
+**Gate:** `@champion set` — the agent is logged via `mlflow.models.log_model`, registered at `{lakehouse_default_catalog}.{db_schema}_agent.{agent_resource_prefix}`, and the `@champion` alias is moved to the new version IFF eval scores are ≥ the prior champion. Promotion is hard-asserted on `signoff_decision == APPROVED` from input_id 213.
+
+> **Genie Code execution.** Logging + UC registration run via the MLflow SDK — on Genie Code run `mlflow.models.log_model` / `register_model` (+ `@champion` alias) directly via `executeCode` on serverless, exactly as the IDE/CLI flow runs them in‑session. **No job, no bundle resource required** (the native `register_model_to_uc` tool is also available). Call `mlflow.set_experiment("{mlflow_experiment_path}")` first; the UC model lands under the per‑user prefixed `{lakehouse_default_catalog}.{db_schema}_agent.{agent_resource_prefix}`. Verify with `list_artifacts` / `search_runs`. Run any incidental CLI step through `runDatabricksCli`. Use full clone‑rooted skill paths (`skills/...`), never bare `@`-mentions. See `skills/genie-code-environment`.',
 '',
 'Phase 3 / Promote with Governance — Logged Model + UC Registration',
 'Optional 08b hand-author iteration on instruction-shaped failures, then log + register the agent at @champion in UC (gated on signoff_decision == APPROVED)',
@@ -11658,7 +13310,7 @@ This will involve the following steps:
 
 **Invoke skills (in order):**
 
-1. `genai-agents/vibecoding-state` op `enter` — params: `prompt_id: "mlflow_gateway_and_deployment"`, `require_prior_gate: {prompt_id: "mlflow_logged_model_uc_registration", gate: "@champion set"}`, `hard_assert: {var: "signoff_decision", equals: "APPROVED"}`.
+1. `skills/vibecoding-state` op `enter` — params: `prompt_id: "mlflow_gateway_and_deployment"`, `require_prior_gate: {prompt_id: "mlflow_logged_model_uc_registration", gate: "@champion set"}`, `hard_assert: {var: "signoff_decision", equals: "APPROVED"}`.
 
 2. @genai-agents/foundation/04-ai-gateway/SKILL.md — params:
    - `mode: "preprovisioned_or_skip"`
@@ -11677,9 +13329,11 @@ This will involve the following steps:
    - `block_promotion_if_missing: "/Volumes/{lakehouse_default_catalog}/{db_schema}_ops/signoffs/v1/decision.md :: ''Decision: APPROVED''"`
    - `warehouse_id: "{default_warehouse}"`
 
-4. `genai-agents/vibecoding-state` op `exit` — params: `prompt_id: "mlflow_gateway_and_deployment"`, `gate: "Optional gateway route configured or skipped"`, `captured: {ai_gateway_endpoint, ai_gateway_status, agent_app_url, agent_app_name}`.
+4. `skills/vibecoding-state` op `exit` — params: `prompt_id: "mlflow_gateway_and_deployment"`, `gate: "Optional gateway route configured or skipped"`, `captured: {ai_gateway_endpoint, ai_gateway_status, agent_app_url, agent_app_name}`.
 
-**Gate:** `Optional gateway route configured or skipped` — if a pre-provisioned AI Gateway endpoint exists, the agent app is configured to use it and `ai_gateway_endpoint` is captured. If no endpoint or public admin API is available, the prompt records `ai_gateway_status: "skipped_unavailable"` and leaves the core Track A raw model route intact.',
+**Gate:** `Optional gateway route configured or skipped` — if a pre-provisioned AI Gateway endpoint exists, the agent app is configured to use it and `ai_gateway_endpoint` is captured. If no endpoint or public admin API is available, the prompt records `ai_gateway_status: "skipped_unavailable"` and leaves the core Track A raw model route intact.
+
+> **Genie Code execution.** This is a **deploy** step. On Genie Code follow the `99-mlflow_gateway_and_deployment.genie-code.md` fork (input_id 920): patch `databricks.yml` / `app.yaml` under `$AGENT_APP_ROOT`, then run `bundle deploy` via `runDatabricksCli` **from the bundle‑editor page** — the gateway resource + grants are the body of the bundle; never hand‑create them via `executeCode`/`spark.sql` or the REST API. SDK probes (endpoint reachability) run via `executeCode`. Use full clone‑rooted skill paths (`skills/...`), never bare `@`-mentions. See `skills/genie-code-environment`.',
 '',
 'Optional Hardening — Pre-Provisioned AI Gateway + Asset-Bundle Deployment',
 'Optional future governance layer: use a pre-provisioned AI Gateway endpoint or public admin APIs when available; core Track A does not depend on this step',
@@ -11768,8 +13422,8 @@ When you paste the prompt, the AI walks six phases (with a short-circuit if Gate
 |-------|------------------|-----------------|
 | 1. Gate enter | Hard-assert `signoff_decision == APPROVED`; refuse otherwise | State entry check |
 | 2. Provision or skip | Use pre-provisioned Gateway OR record `ai_gateway_status: skipped_unavailable` | State capture |
-| 3. Patch `databricks.yml` | Add Gateway resource, env, permissions | `apps_lakebase/{app_name}/databricks.yml` |
-| 4. Patch `app.yaml` | Inject `LLM_GATEWAY_BASE_URL`, `LLM_GATEWAY_MODEL` | `apps_lakebase/{app_name}/app.yaml` |
+| 3. Patch `databricks.yml` | Add Gateway resource, env, permissions | `$AGENT_APP_ROOT/databricks.yml` |
+| 4. Patch `app.yaml` | Inject `LLM_GATEWAY_BASE_URL`, `LLM_GATEWAY_MODEL` | `$AGENT_APP_ROOT/app.yaml` |
 | 5. Propagate request id | Wire `databricks_request_id` header from MLflow trace through Gateway | Agent-side header forwarding |
 | 6. DAB deploy + verify | `databricks bundle deploy`; verify trace ↔ gateway correlation | Bundle deploy log |
 
@@ -11785,6 +13439,133 @@ When you paste the prompt, the AI walks six phases (with a short-circuit if Gate
 - [ ] `databricks_request_id` header propagated for trace ↔ gateway correlation
 - [ ] Promotion hard-blocked unless `decision.md` reads `Decision: APPROVED`
 - [ ] `ai_gateway_endpoint`, `agent_app_url`, `agent_app_name` captured in state',
+true, 1, true, current_timestamp(), current_timestamp(), current_user());
+
+-- mlflow_gateway_and_deployment (genie-code fork) — prescriptive paths; optional pre-provisioned AI Gateway + DAB deploy; bundle deploy via runDatabricksCli from the bundle editor; signoff hard-assert; bypass_LLM = TRUE
+INSERT INTO ${catalog}.${schema}.section_input_prompts
+(input_id, section_tag, coding_assistant, input_template, system_prompt,
+ bypass_llm, version, is_active, inserted_at, updated_at, created_by)
+VALUES
+(920, 'mlflow_gateway_and_deployment', 'genie-code',
+'**Genie Code — this is a prescriptive runbook. Follow the steps in order. Do NOT improvise paths, do NOT use bare relative paths, do NOT use `@`-mentions. This OPTIONAL step fronts the agent''s model route with a PRE-PROVISIONED AI Gateway and DAB-deploys the agent app under `<AGENT_APP_ROOT>`. If no Gateway endpoint / public admin API exists, record `skipped_unavailable` and leave the raw route intact. Promotion is hard-blocked unless sign-off is APPROVED.**
+
+### 🔴 Non-negotiable execution rules (read before anything)
+
+❌ **NEVER provision an AI Gateway from scratch here** — this step is `preprovisioned_or_skip`. If neither a pre-provisioned Gateway endpoint nor a public admin API is available, capture `ai_gateway_status: "skipped_unavailable"` and exit cleanly. Core Track A is unaffected.
+
+❌ **NEVER deploy by hand or via the Jobs/Permissions REST API, and NEVER apply the gateway/grants via `executeCode` or `spark.sql`.** The gateway resource + grants are the **body of the bundle** — `bundle deploy` IS the mechanism. Hand-applying them is an un-versioned drift that FAILS the gate. The DAB deploy runs `databricks bundle validate/deploy --target dev` via `runDatabricksCli` **only from the bundle-editor page** for `<AGENT_APP_ROOT>` (its `databricks.yml` makes that folder the `bundle deploy` page-context root). *blocked ≠ impossible — open the bundle editor and retry.* Those hand-apply routes are an **escape hatch available only if the operator explicitly authorizes it.**
+
+✅ The things you run directly are (a) patching `<AGENT_APP_ROOT>/databricks.yml` + `app.yaml`, (b) `databricks bundle validate/deploy --target dev` via `runDatabricksCli` from the bundle-editor page, and (c) read-only trace↔gateway correlation checks.
+
+### Step 0 — Resolve your environment (once, before anything else)
+
+Run `skills/vibecoding-state` operation `enter` with `prompt_id: "mlflow_gateway_and_deployment"`, `require_prior_gate: {prompt_id: "mlflow_logged_model_uc_registration", gate: "@champion set"}`, and `hard_assert: {var: "signoff_decision", equals: "APPROVED"}`. Read these resolved values and use them literally:
+
+- `client_context` = `genie_code`
+- `artifact_root` = your workshop clone root (e.g. `/Workspace/Users/<your-email>/.assistant/skills/vibe-coding-workshop`)
+- `skill_ref_root` = `skills/vibe-coding-workshop` (substitute your clone folder if different)
+- `agent_app_root` = `<artifact_root>/{agent_app_name}` — the top-level Track A agent app dir; its `databricks.yml` makes it the `bundle deploy` page-context root. Referred to below as `<AGENT_APP_ROOT>`.
+- `bundle_deploy.verb` = `bundle deploy --target dev` (run via `runDatabricksCli` from the bundle-editor page)
+- `default_warehouse` = `{default_warehouse}`
+- Workspace: `{workspace_url}`
+
+If `enter`''s `hard_assert` shows `signoff_decision != APPROVED`, STOP — promotion is blocked until the human-review gate approves. If `enter` has not run in this thread, run it now.
+
+### Step 1 — Load the required skills by their FULL clone-rooted paths
+
+Load each with `readSkillFile` using its `<skill_ref_root>`-prefixed path — NEVER a bare `@…` mention. **The root-level `skills/` come FIRST as the highest-priority guardrails.**
+
+1. `readSkillFile("skills/vibe-coding-workshop/skills/genie-code-environment/SKILL.md")` — §4 (server-side build) + §8 (bundle-editor page-context deploy). Loading this flips the manifest-load gate.
+2. `readSkillFile("skills/vibe-coding-workshop/skills/databricks-asset-bundles/SKILL.md")` — serverless YAML, `--target dev`, bundle-editor page-context rule. **You will not run any `bundle` command until you have read this.**
+3. `readSkillFile("skills/vibe-coding-workshop/genai-agents/foundation/04-ai-gateway/SKILL.md")` — `mode: preprovisioned_or_skip`; capture `ai_gateway_endpoint` / `ai_gateway_status`.
+4. `readSkillFile("skills/vibe-coding-workshop/genai-agents/sdlc/06-deployment-and-automation/SKILL.md")` — DAB customize of `databricks.yml`/`app.yaml`, the `databricks_request_id` header propagation, and the `decision.md :: Decision: APPROVED` promotion block.
+
+Load every further reference the skills name the same way (prefix with `skill_ref_root`). `AGENTS.md` root context does not carry across Genie Code threads.
+
+### Step 2 — Gateway route or clean skip, then patch the bundle (write files only)
+
+- If a pre-provisioned Gateway endpoint (or public admin API) exists: point `runtime_config.llm` at `{ai_gateway_endpoint}`; patch `<AGENT_APP_ROOT>/databricks.yml` to declare the Gateway resource + the `{default_warehouse}` SQL warehouse; patch `<AGENT_APP_ROOT>/app.yaml` with `LLM_GATEWAY_BASE_URL` / `LLM_GATEWAY_MODEL` and the `databricks_request_id` header propagation. Capture `ai_gateway_endpoint` + `ai_gateway_status`.
+- If none is available: capture `ai_gateway_status: "skipped_unavailable"`, change nothing else, and skip to the exit.
+
+### Step 3 — DAB deploy from the bundle-editor page (only when not skipped)
+
+`<AGENT_APP_ROOT>/databricks.yml` already exists, so surface the **bundle-editor link** and open it BEFORE any `bundle` command (build it with the pre-authenticated `w`: `host=w.config.host`, `o=w.get_workspace_id()`, `file_id=w.workspace.get_status("<AGENT_APP_ROOT>/databricks.yml").object_id`, `folder_id=w.workspace.get_status("<AGENT_APP_ROOT>").object_id` → `{host}/editor/files/{file_id}?o={o}&contextId=folder%3A{folder_id}`). From that page, via `runDatabricksCli` (omit `--profile`; do NOT `databricks sync`):
+- `databricks bundle validate --target dev`
+- `databricks bundle deploy --target dev`
+
+Then verify (read-only) the trace↔gateway correlation: a `databricks_request_id` from an MLflow trace appears in the Gateway inference tables under `{lakehouse_default_catalog}.{db_schema}_ops.gw_*`.
+
+**🛑 If a `bundle` command is blocked or fails**, you are NOT on the bundle page. A `databricks.yml not found` error or a "blocked by safety guardrails" message means the page CWD is wrong — open the bundle-editor link and retry (CONFIRMED: the same `bundle deploy` that is "blocked" from a file page succeeds from the bundle editor). **Do not fall back to direct SQL** or hand-apply the gateway/grants. If it STILL fails from the bundle editor, STOP and report. The hand-apply / REST routes are an **escape hatch available only if the operator explicitly authorizes it.**
+
+**State-lock:** this prompt runs between an `enter` (Step 0) and an `exit`. After the gate passes, run `skills/vibecoding-state` op `exit` — params: `prompt_id: "mlflow_gateway_and_deployment"`, `gate: "Optional gateway route configured or skipped"`, `captured: {ai_gateway_endpoint, ai_gateway_status, agent_app_url, agent_app_name}`.
+
+**Gate:** `Optional gateway route configured or skipped` — if a pre-provisioned Gateway exists, the agent routes through `{ai_gateway_endpoint}`, the DAB deploy ran via `bundle deploy` from the bundle-editor page, and `databricks_request_id` correlates traces to Gateway inference tables; otherwise `ai_gateway_status: "skipped_unavailable"` is recorded and the raw Track A route is left intact. When a gateway IS configured, the gateway/grants existing is **necessary but NOT sufficient** — if they were hand-applied (REST/`spark.sql`) instead of by `bundle deploy` from the bundle-editor page, the gate FAILS and you redo it via the bundle. Promotion proceeded only because `signoff_decision == APPROVED`.',
+'',
+true, 1, true, current_timestamp(), current_timestamp(), current_user());
+
+-- mlflow_production_monitoring_and_debugging (genie-code fork) — prescriptive paths; hybrid SDK scorers + agent-as-judge via executeCode PLUS the trace-archival/backfill job via bundle deploy from the bundle editor; SQL alerts via runDatabricksCli; bypass_LLM = TRUE
+INSERT INTO ${catalog}.${schema}.section_input_prompts
+(input_id, section_tag, coding_assistant, input_template, system_prompt,
+ bypass_llm, version, is_active, inserted_at, updated_at, created_by)
+VALUES
+(921, 'mlflow_production_monitoring_and_debugging', 'genie-code',
+'**Genie Code — this is a prescriptive runbook. Follow the steps in order. Do NOT improvise paths, do NOT use bare relative paths, do NOT use `@`-mentions. This is the Operate phase for the deployed **{agent_app_name}** agent. It is HYBRID: the continuous-eval scorers and the agent-as-judge categorizer register via the in-session MLflow SDK (`executeCode`), but the periodic trace-archival / backfill job is a bundle `jobs` resource that deploys via `bundle deploy` from the bundle-editor page.**
+
+### 🔴 Non-negotiable execution rules (read before anything)
+
+❌ **The scorers and the categorizer are SDK objects — register them via `executeCode`** (`scorer.register()`/`.start()`, `make_judge`). Set `mlflow.set_experiment("{mlflow_experiment_path}")` first. Verify them with the native `get_scheduled_scorers` tool. Every `make_judge` failure-categorizer call routes through the resolved `failure_categorizer` role binding — **never** the raw `{llm_endpoint}`.
+
+❌ **NEVER hand-create the trace-archival / backfill job, and NEVER apply it via `executeCode` or `spark.sql`.** The job is the **body of the bundle** — `bundle deploy` IS the mechanism that creates it. Hand-creating it (Jobs REST, `executeCode`, `spark.sql`) is an un-versioned drift with no `bundle destroy` cleanup and FAILS the gate. **Do not fall back to direct SQL** to fake the job. That route is an **escape hatch available only if the operator explicitly authorizes it.**
+
+✅ The things you run directly are (a) `executeCode` for the SDK scorers + agent-as-judge categorizer, (b) patching `<AGENT_APP_ROOT>/databricks.yml` to declare the archival `jobs` resource, (c) `databricks bundle validate/deploy --target dev` via `runDatabricksCli` from the bundle-editor page, (d) the ≥ 4 SQL alerts via `runDatabricksCli`, and (e) read-only trace inspection.
+
+### Step 0 — Resolve your environment (once, before anything else)
+
+Run `skills/vibecoding-state` operation `enter` with `prompt_id: "mlflow_production_monitoring_and_debugging"`, `require_prior_gate: {prompt_id: "mlflow_gateway_and_deployment", gate: "Optional gateway route configured or skipped"}`. Read these resolved values and use them literally:
+
+- `client_context` = `genie_code`
+- `artifact_root` = your workshop clone root (e.g. `/Workspace/Users/<your-email>/.assistant/skills/vibe-coding-workshop`)
+- `skill_ref_root` = `skills/vibe-coding-workshop` (substitute your clone folder if different)
+- `agent_app_root` = `<artifact_root>/{agent_app_name}` — the top-level Track A agent app dir; its `databricks.yml` makes it the `bundle deploy` page-context root. Referred to below as `<AGENT_APP_ROOT>`.
+- `mlflow_experiment_path` = `{mlflow_experiment_path}` (set this before any SDK scorer call)
+- `otel_prefix` = `{lakehouse_default_catalog}.{db_schema}_ops.{agent_resource_prefix}_otel_`
+- `bundle_deploy.verb` = `bundle deploy --target dev` (run via `runDatabricksCli` from the bundle-editor page)
+- Workspace: `{workspace_url}`
+
+If `enter` has not run in this thread, run it now.
+
+### Step 1 — Load the required skills by their FULL clone-rooted paths
+
+Load each with `readSkillFile` using its `<skill_ref_root>`-prefixed path — NEVER a bare `@…` mention. **The root-level `skills/` come FIRST as the highest-priority guardrails.**
+
+1. `readSkillFile("skills/vibe-coding-workshop/skills/genie-code-environment/SKILL.md")` — §4 (server-side build) + §8 (bundle-editor page-context deploy). Loading this flips the manifest-load gate.
+2. `readSkillFile("skills/vibe-coding-workshop/skills/databricks-asset-bundles/SKILL.md")` — serverless `jobs` YAML, `--target dev`, bundle-editor page-context rule. **You will not run any `bundle` command until you have read this.**
+3. `readSkillFile("skills/vibe-coding-workshop/genai-agents/sdlc/07-production-monitoring/SKILL.md")` — continuous-eval sampling against `governance.scorer_suite.production_scorers[]`, the ≥ 4 SQL alerts from `governance.monitoring.required_alerts[]` + the `references/monitoring-dashboard-queries.md` section `6b` recipes, and the trace-archival/backfill `jobs` bundle resource.
+4. `readSkillFile("skills/vibe-coding-workshop/genai-agents/tracks/A-custom-agent-apps/08-debugging/SKILL.md")` section `agent-as-judge-debugging` — the `failure_categorizer` judge, `filter {value_lt: 0.7, window: "7d"}`, `agent_failure_root_cause` writes to `{lakehouse_default_catalog}.{db_schema}_ops.{agent_resource_prefix}_otel_annotations`, top-5 clustering, and the `{instruction: queue_prompt_optimization, retrieval: queue_retrieval_tuning, tool: queue_tool_fix}` routing.
+
+Load every further reference the skills name the same way (prefix with `skill_ref_root`). `AGENTS.md` root context does not carry across Genie Code threads.
+
+### Step 2 — SDK scorers + agent-as-judge categorizer (run via `executeCode`)
+
+- Configure continuous-eval sampling of production OTel traces under `{lakehouse_default_catalog}.{db_schema}_ops.{agent_resource_prefix}_otel_*` against `governance.scorer_suite.production_scorers[]`; register/schedule the scorers with `scorer.register()`/`.start()`. Verify with the native `get_scheduled_scorers` tool.
+- Stand up the agent-as-judge categorizer: a `make_judge` routed through `{llm_role_endpoints.failure_categorizer.endpoint}` (never raw `{llm_endpoint}`), filtering trace assessments at `value < 0.7` over a 7d window, writing `agent_failure_root_cause` annotations to `{lakehouse_default_catalog}.{db_schema}_ops.{agent_resource_prefix}_otel_annotations`, clustering the top 5 failure shapes, and routing each cluster (instruction → queue_prompt_optimization; retrieval → queue_retrieval_tuning; tool → queue_tool_fix).
+
+### Step 3 — Deploy the trace-archival / backfill job from the bundle-editor page
+
+Patch `<AGENT_APP_ROOT>/databricks.yml` to declare the periodic trace-archival / backfill **`jobs`** resource (write the file only). `<AGENT_APP_ROOT>/databricks.yml` already exists, so surface the **bundle-editor link** and open it BEFORE any `bundle` command (build it with the pre-authenticated `w`: `host=w.config.host`, `o=w.get_workspace_id()`, `file_id=w.workspace.get_status("<AGENT_APP_ROOT>/databricks.yml").object_id`, `folder_id=w.workspace.get_status("<AGENT_APP_ROOT>").object_id` → `{host}/editor/files/{file_id}?o={o}&contextId=folder%3A{folder_id}`). From that page, via `runDatabricksCli` (omit `--profile`; do NOT `databricks sync`):
+- `databricks bundle validate --target dev`
+- `databricks bundle deploy --target dev`
+
+**🛑 If a `bundle` command is blocked or fails**, you are NOT on the bundle page. A `databricks.yml not found` error or a "blocked by safety guardrails" message means the page CWD is wrong — open the bundle-editor link and retry (CONFIRMED: the same `bundle deploy` that is "blocked" from a file page succeeds from the bundle editor). **Do not fall back to direct SQL** or hand-create the job. If it STILL fails from the bundle editor, STOP and report. The hand-create / Jobs-REST routes are an **escape hatch available only if the operator explicitly authorizes it.**
+
+### Step 4 — SQL alerts (≥ 4) via `runDatabricksCli`
+
+Materialize ≥ 4 SQL alerts from `governance.monitoring.required_alerts[]` plus the section `6b` recipes in `references/monitoring-dashboard-queries.md` (including the `rollback_trigger` from the 53 sign-off). Inspect production traces read-only with the native `search_traces` / `get_trace_metrics` / `get_assessments` tools to confirm the scorers and annotations are landing.
+
+**State-lock:** this prompt runs between an `enter` (Step 0) and an `exit`. After the gate passes, run `skills/vibecoding-state` op `exit` — params: `prompt_id: "mlflow_production_monitoring_and_debugging"`, `gate: "alerts wired; agent-as-judge running"`, `captured: {production_alerts_configured, agent_failure_root_cause_writes_observed}`.
+
+**Gate:** `alerts wired; agent-as-judge running` — continuous-eval scorers (registered via `executeCode`, confirmed via `get_scheduled_scorers`) sample production traces against `governance.scorer_suite.production_scorers[]`; ≥ 4 SQL alerts are configured; the trace-archival/backfill job was deployed via `bundle deploy` from the bundle-editor page; and `agent_failure_root_cause` rows are written to `{lakehouse_default_catalog}.{db_schema}_ops.{agent_resource_prefix}_otel_annotations` on low-scoring traces, each cluster dispatched to the right track. The job/alerts existing is **necessary but NOT sufficient** — if the archival job was hand-created (REST/`spark.sql`/`executeCode`) instead of by `bundle deploy` from the bundle-editor page, the gate FAILS and you redo it via the bundle.',
+'',
 true, 1, true, current_timestamp(), current_timestamp(), current_user());
 
 -- Step 56 / order 56: Phase 4 / Operate in Production - Monitoring + Agent-as-Judge Debugging
@@ -11811,7 +13592,7 @@ This will involve the following steps:
 
 **Invoke skills (in order):**
 
-1. `genai-agents/vibecoding-state` op `enter` — params: `prompt_id: "mlflow_production_monitoring_and_debugging"`, `require_prior_gate: {prompt_id: "mlflow_gateway_and_deployment", gate: "gateway live; DAB-deployed"}`.
+1. `skills/vibecoding-state` op `enter` — params: `prompt_id: "mlflow_production_monitoring_and_debugging"`, `require_prior_gate: {prompt_id: "mlflow_gateway_and_deployment", gate: "gateway live; DAB-deployed"}`.
 
 2. @genai-agents/sdlc/07-production-monitoring/SKILL.md — params:
    - `agent_name: "{agent_app_name}"`
@@ -11831,9 +13612,11 @@ This will involve the following steps:
    - `action_routing: {instruction: "queue_prompt_optimization", retrieval: "queue_retrieval_tuning", tool: "queue_tool_fix"}`
    - The skill reads `governance.scorer_suite.primary_scorer` to set `filter.assessment_name`.
 
-4. `genai-agents/vibecoding-state` op `exit` — params: `prompt_id: "mlflow_production_monitoring_and_debugging"`, `gate: "alerts wired; agent-as-judge running"`, `captured: {production_alerts_configured, agent_failure_root_cause_writes_observed}`.
+4. `skills/vibecoding-state` op `exit` — params: `prompt_id: "mlflow_production_monitoring_and_debugging"`, `gate: "alerts wired; agent-as-judge running"`, `captured: {production_alerts_configured, agent_failure_root_cause_writes_observed}`.
 
-**Gate:** `alerts wired; agent-as-judge running` — continuous-eval scorers sampling production traces against `governance.scorer_suite.production_scorers[]`, ≥ 4 SQL alerts configured (drawn from `governance.monitoring.required_alerts[]` and the `references/monitoring-dashboard-queries.md` section `6b` recipes), and `agent_failure_root_cause` rows being written to `{lakehouse_default_catalog}.{db_schema}_ops.{agent_resource_prefix}_otel_annotations` on low-scoring traces, with each cluster dispatched to the correct follow-up track (instruction → prompt iteration; retrieval → retrieval tuning; tool → tool fix).',
+**Gate:** `alerts wired; agent-as-judge running` — continuous-eval scorers sampling production traces against `governance.scorer_suite.production_scorers[]`, ≥ 4 SQL alerts configured (drawn from `governance.monitoring.required_alerts[]` and the `references/monitoring-dashboard-queries.md` section `6b` recipes), and `agent_failure_root_cause` rows being written to `{lakehouse_default_catalog}.{db_schema}_ops.{agent_resource_prefix}_otel_annotations` on low-scoring traces, with each cluster dispatched to the correct follow-up track (instruction → prompt iteration; retrieval → retrieval tuning; tool → tool fix).
+
+> **Genie Code execution.** **Hybrid step** (SDK scorers + a bundle‑deployed monitoring job). On Genie Code follow the `99-mlflow_production_monitoring_and_debugging.genie-code.md` fork (input_id 921): the continuous‑eval scorers and agent‑as‑judge categorizer register via `executeCode` (verify with `get_scheduled_scorers`), but the periodic **trace‑archival / backfill job** is a bundle `jobs` resource — deploy it via `runDatabricksCli` `bundle deploy` **from the bundle‑editor page**, never hand‑create it. Inspect production traces with `search_traces` / `get_trace_metrics` / `get_assessments`. See `skills/genie-code-environment`.',
 '',
 'Phase 4 / Operate in Production — Monitoring and Agent-as-Judge Debugging',
 'Configure continuous-eval sampling, ≥ 4 SQL alerts, and agent-as-judge auto-categorization that routes failure clusters to the right iteration track',
@@ -12002,780 +13785,4 @@ true, 1, true, current_timestamp(), current_timestamp(), current_user());
 
 -- =============================================================================
 -- END OF SEED FORK EXAMPLES
--- =============================================================================
-
--- =============================================================================
--- GENIE CODE FORKS — DATA_PRODUCT_ACCELERATOR (LAKEHOUSE)
--- =============================================================================
--- Per-step `coding_assistant='genie-code'` forks for the 6 V2V Lakehouse steps
--- (10, 11, 12, 13, 14, 23). Each fork = verbatim default body + a small
--- "Genie Code Overrides" appendix that @-references the helper file
--- @data_product_accelerator/skills/common/genie-code/genie-code-helpers.md
--- (committed to the workshop-template repo at 33029ba).
---
--- Default rows (input_id 5, 6, 7, 8, 9, 116) are unchanged — Cursor / Copilot /
--- VS Code / AI Gateway sessions resolve to those as today. Only Genie Code
--- sessions hit the new forks below.
--- =============================================================================
-
--- Step 10 (bronze_table_metadata) — Genie Code fork
-INSERT INTO ${catalog}.${schema}.section_input_prompts
-(input_id, section_tag, coding_assistant, input_template, system_prompt,
- bypass_llm, version, is_active, inserted_at, updated_at, created_by)
-VALUES
-(1010, 'bronze_table_metadata', 'genie-code',
-'Extract table schema metadata from Databricks and save as a CSV data dictionary.
-
-This will:
-
-- **Query information_schema.columns** — extract all table and column metadata from the **{chapter_3_lakehouse_catalog}.{chapter_3_lakehouse_schema}** source
-- **Convert results to CSV** — transform the JSON API response into a structured CSV file using Python
-- **Save as data_product_accelerator/context/{use_case_file_prefix}_Schema.csv** — create the data dictionary that drives the entire Design-First Pipeline (all subsequent steps reference this CSV)
-
-**Source:** `{chapter_3_lakehouse_catalog}.{chapter_3_lakehouse_schema}` (configured in the source panel above — auto-set from Step 9 or editable via Edit)
-
-Copy and paste this prompt to the AI:
-
-```
-Run this SQL query and save results to CSV:
-
-Query: SELECT * FROM {chapter_3_lakehouse_catalog}.information_schema.columns WHERE table_schema = ''{chapter_3_lakehouse_schema}'' ORDER BY table_name, ordinal_position
-
-Output: data_product_accelerator/context/{use_case_file_prefix}_Schema.csv
-```
-
----
-
-## Genie Code Overrides
-
-The prompt above describes a CLI-based extraction. Replace the run/deploy steps below for Genie Code (no terminal, no `jq`, no `/tmp`).
-
-**Once per Genie Code session:** clone `https://github.com/databricks-solutions/vibe-coding-workshop-template` into `/Workspace/Users/<your_email>/v2v-in-geniecode/vibe-coding-workshop-template` (Workspace → Repos → Add Repo), then read `@data_product_accelerator/skills/common/genie-code/genie-code-helpers.md` and run **Section 1 — Bootstrap** (3 cells). That defines `w`, `REPO_ROOT`, `read_file`, `write_file`, `write_notebook`, `run_sql`, `run_job_by_name`, `make_job_notebook`, `create_job`, `create_pipeline_idempotent`.
-
-**Substitutions for THIS step:**
-
-- `databricks warehouses list ... jq ''.[0].id''` → Skip — `run_sql()` picks the warehouse automatically.
-- `databricks api post /api/2.0/sql/statements ... > /tmp/sql_result.json` → `rows = run_sql("SELECT * FROM {chapter_3_lakehouse_catalog}.information_schema.columns WHERE table_schema = ''{chapter_3_lakehouse_schema}'' ORDER BY table_name, ordinal_position")`
-- `python3 << EOF / open("/tmp/...") / open("<OUTPUT_FILE>", "w")` → build CSV in-memory: `from io import StringIO; import csv; buf = StringIO(); csv.writer(buf).writerows([("table_catalog","table_schema","table_name","column_name","ordinal_position","is_nullable","data_type","comment")] + rows); write_file(f"{REPO_ROOT}/data_product_accelerator/context/{use_case_file_prefix}_Schema.csv", buf.getvalue())`
-
-**Trap:** 0 rows → wrong `{chapter_3_lakehouse_catalog}` / `{chapter_3_lakehouse_schema}` or empty source. (Lakebase Postgres source path is out of scope for this fork — use UC `information_schema.columns` only.)',
-'You are a senior data engineering lead.
-
-Traverse the @data_product_accelerator/skills/common folder to identify all available skills, understand their intended use, and invoke the relevant skills as needed to complete the task.',
-true, 1, true, current_timestamp(), current_timestamp(), current_user());
-
--- Step 11 (gold_layer_design) — Genie Code fork
-INSERT INTO ${catalog}.${schema}.section_input_prompts
-(input_id, section_tag, coding_assistant, input_template, system_prompt,
- bypass_llm, version, is_active, inserted_at, updated_at, created_by)
-VALUES
-(1011, 'gold_layer_design', 'genie-code',
-'I have a customer schema at @data_product_accelerator/context/{use_case_file_prefix}_Schema.csv.
-
-Please design the Gold layer using @data_product_accelerator/skills/gold/00-gold-layer-design/SKILL.md
-
-This skill will orchestrate the following end-to-end design workflow:
-
-- **Parse the schema CSV** — read the source schema file, classify each table as a dimension, fact, or bridge, and infer foreign key relationships from column names and comments
-- **Design the dimensional model** — identify dimensions (with SCD Type 1/2 decisions), fact tables (with explicit grain definitions), and measures, then assign tables to business domains
-- **Persist design decisions** — write `DESIGN_DECISIONS.md` before generating YAML so every YAML file shares one FK format, description format, and transformation enum
-- **Create ERD diagrams** — generate Mermaid Entity-Relationship Diagrams organized by table count (master ERD always, plus domain and summary ERDs for larger schemas)
-- **Generate YAML schema files** — produce one YAML file per Gold table with column definitions, PK/FK constraints, table properties, lineage metadata, and dual-purpose descriptions (human + LLM readable)
-- **Document column-level lineage** — trace every Gold column back through Silver to Bronze with transformation type (DIRECT_COPY, AGGREGATION, DERIVATION, etc.) in both CSV and Markdown formats
-- **Create business documentation** — write a Business Onboarding Guide with domain context, real-world scenarios, and role-based getting-started guides
-- **Map source tables** — produce a Source Table Mapping CSV documenting which source tables are included, excluded, or planned with rationale for each
-- **Validate design consistency** — cross-check YAML schemas, ERD diagrams, and lineage CSV to ensure all columns, relationships, and constraints are consistent
-
-The orchestrator skill will automatically load its worker skills for merge patterns, deduplication, documentation standards, Mermaid ERDs, schema validation, grain validation, and YAML-driven setup.
-
----
-
-## Genie Code Overrides
-
-The skill above is correct as-is. Replace ONLY the file I/O verbs the skill emits — Genie Code has no local filesystem; all artifacts live under `/Workspace`.
-
-**Once per Genie Code session:** clone `https://github.com/databricks-solutions/vibe-coding-workshop-template` into `/Workspace/Users/<your_email>/v2v-in-geniecode/vibe-coding-workshop-template` (Workspace → Repos → Add Repo), then read `@data_product_accelerator/skills/common/genie-code/genie-code-helpers.md` and run **Section 1 — Bootstrap** (3 cells). That defines `w`, `REPO_ROOT`, `read_file`, `write_file`, `write_notebook`, `run_sql`, `run_job_by_name`, `make_job_notebook`, `create_job`, `create_pipeline_idempotent`.
-
-**Substitutions for THIS step:**
-
-- The skill reads `data_product_accelerator/context/{use_case_file_prefix}_Schema.csv` from local FS → `csv_text = read_file(f"{REPO_ROOT}/data_product_accelerator/context/{use_case_file_prefix}_Schema.csv")`
-- The skill writes `gold_layer_design/*.yaml`, `DESIGN_DECISIONS.md`, ERD `.md`, lineage CSV/MD, Business Onboarding Guide, Source Table Mapping CSV → `write_file(f"{REPO_ROOT}/gold_layer_design/<file>", content)` (per skill-navigator output convention: artifacts go to repo root, NOT `data_product_accelerator/`)
-- Any `python scripts/*.py` validation in the skill → run validation logic inline as a Genie Code Python cell (use `read_file()` to load existing artifacts to compare against)
-
-**Traps:** schema CSV not found → confirm V2V Step 10 ran AND `REPO_ROOT` matches your workspace clone path. No `open(local_path)`, no `pathlib`, no `os.path.join` against local FS — every read/write goes through `read_file` / `write_file`.',
-'You are a senior data engineering lead.
-
-Traverse the @data_product_accelerator/skills/common folder to identify all available skills, understand their intended use, and invoke the relevant skills as needed to complete the task.',
-true, 1, true, current_timestamp(), current_timestamp(), current_user());
-
--- Step 12 (bronze_layer_creation) — Genie Code fork
-INSERT INTO ${catalog}.${schema}.section_input_prompts
-(input_id, section_tag, coding_assistant, input_template, system_prompt,
- bypass_llm, version, is_active, inserted_at, updated_at, created_by)
-VALUES
-(1012, 'bronze_layer_creation', 'genie-code',
-'Set up the Bronze layer using @data_product_accelerator/skills/bronze/00-bronze-layer-setup/SKILL.md with Approach C — copy data from the existing source tables in the {chapter_3_lakehouse_catalog}.{chapter_3_lakehouse_schema} schema.
-
-This will involve the following steps:
-
-- **Clone all source tables** from the {chapter_3_lakehouse_catalog}.{chapter_3_lakehouse_schema} schema into your target catalog''s Bronze schema
-- **Apply enterprise table properties** — enable Change Data Feed (CDF), Liquid Clustering (CLUSTER BY AUTO), auto-optimize, and auto-compact on every table
-- **Preserve source COMMENTs** — carry over all column-level documentation from the source schema
-- **Create Asset Bundle job** — generate a repeatable, version-controlled deployment job (databricks.yml + clone script)
-- **Deploy and run** — validate, deploy the bundle, and execute the clone job to populate Bronze tables
-
-IMPORTANT: Use the EXISTING catalog `{lakehouse_default_catalog}` -- do NOT create a new catalog. Create the Bronze schema `{user_schema_prefix}_bronze` and tables inside this catalog.
-
-NOTE: Before creating the schema, check if `{lakehouse_default_catalog}.{user_schema_prefix}_bronze` already exists. If it does, DROP the schema with CASCADE and recreate it from scratch. These are user-specific schemas so dropping is safe.
-
----
-
-## Genie Code Overrides
-
-The skill above is correct as-is. Replace ONLY the bundle/CLI verbs below — Genie Code has no terminal, no Asset Bundle, no local filesystem.
-
-**Once per Genie Code session:** clone `https://github.com/databricks-solutions/vibe-coding-workshop-template` into `/Workspace/Users/<your_email>/v2v-in-geniecode/vibe-coding-workshop-template` (Workspace → Repos → Add Repo), then read `@data_product_accelerator/skills/common/genie-code/genie-code-helpers.md` and run **Section 1 — Bootstrap** (3 cells). That defines `w`, `REPO_ROOT`, `read_file`, `write_file`, `write_notebook`, `run_sql`, `run_job_by_name`, `make_job_notebook`, `create_job`, `create_pipeline_idempotent`.
-
-**Substitutions for THIS step:**
-
-- Build `databricks.yml` + `bronze_clone_job.yml` Asset Bundle → Skip; the skill''s YAML is reference-only.
-- `databricks bundle validate / deploy -t dev` → `body = make_job_notebook(clone_logic); notebook_path = (REPO_ROOT + "/src/{user_schema_prefix}_bronze/clone").replace("/Workspace", "", 1); write_notebook(notebook_path, body); create_job("Bronze Clone", notebook_path, base_params={"TARGET_CATALOG":"{lakehouse_default_catalog}","BRONZE_SCHEMA":"{user_schema_prefix}_bronze","SOURCE_CATALOG":"{chapter_3_lakehouse_catalog}","SOURCE_SCHEMA":"{chapter_3_lakehouse_schema}"})`
-- `databricks bundle run -t dev bronze_clone_job` → `run_job_by_name("bronze_clone")`
-- `python scripts/copy_from_source.py` → inline the clone logic in the notebook body passed to `write_notebook(...)`.
-
-**Traps:** (1) the body inside `write_notebook(...)` MUST start with `%pip install --upgrade databricks-sdk -q` then `dbutils.library.restartPython()` — the job''s compute does NOT inherit your session''s pip install. Use `make_job_notebook(body)` to get the header for free. (2) Never set the reserved `TBLPROPERTIES` key `''table_type''` (UC raises `[UNSUPPORTED_FEATURE.SET_TABLE_PROPERTY]`); use `''layer''=''bronze''` instead. CDF / auto-optimize / `CLUSTER BY AUTO` properties are fine — they are not reserved.',
-'You are a senior data engineering lead.
-
-Traverse the @data_product_accelerator/skills/common folder to identify all available skills, understand their intended use, and invoke the relevant skills as needed to complete the task.',
-true, 1, true, current_timestamp(), current_timestamp(), current_user());
-
--- Step 13 (silver_layer_sdp) — Genie Code fork
-INSERT INTO ${catalog}.${schema}.section_input_prompts
-(input_id, section_tag, coding_assistant, input_template, system_prompt,
- bypass_llm, version, is_active, inserted_at, updated_at, created_by)
-VALUES
-(1013, 'silver_layer_sdp', 'genie-code',
-'Set up the Silver layer using @data_product_accelerator/skills/silver/00-silver-layer-setup/SKILL.md
-
-This will involve the following steps:
-
-- **Generate SDP pipeline notebooks** — create Spark Declarative Pipeline notebooks with incremental ingestion from Bronze using Change Data Feed (CDF)
-- **Create centralized DQ rules table** — build a configurable data quality rules table with expectations (null checks, range validation, referential integrity)
-- **Create Asset Bundle** — generate bundle configuration for both the DQ rules setup job and the SDP pipeline
-- **Deploy and run in order** — deploy the bundle, run the DQ rules setup job FIRST (creates the rules table), then run the SDP pipeline (reads rules from the table)
-
-Ensure bundle is validated and deployed successfully, and silver layer jobs run with no errors.
-
-Validate the results in the UI to ensure the DQ rules show up in centralized delta table, and that the silver layer pipeline runs successfully with Expectations being checked.
-
-IMPORTANT: Use the EXISTING catalog `{lakehouse_default_catalog}` -- do NOT create a new catalog. Create the Silver schema `{user_schema_prefix}_silver` and all Silver tables inside this catalog.
-
-NOTE: Before creating the schema, check if `{lakehouse_default_catalog}.{user_schema_prefix}_silver` already exists. If it does, DROP the schema with CASCADE and recreate it from scratch. These are user-specific schemas so dropping is safe.
-
-NOTE: This is a shared workshop workspace. Include a `user_prefix` variable in your pipeline/job `name:` fields (e.g., `"[${bundle.target} ${var.user_prefix}] Silver Layer Pipeline"`) to avoid `pipeline name is already used` collisions with other attendees. `databricks bundle deploy --force` does NOT resolve these — see `common/databricks-asset-bundles` → "Shared Workspace Naming".
-
----
-
-## Genie Code Overrides
-
-The skill above is correct as-is. Replace ONLY the bundle/CLI verbs below — Genie Code has no terminal, no Asset Bundle, no local filesystem.
-
-**Once per Genie Code session:** clone `https://github.com/databricks-solutions/vibe-coding-workshop-template` into `/Workspace/Users/<your_email>/v2v-in-geniecode/vibe-coding-workshop-template` (Workspace → Repos → Add Repo), then read `@data_product_accelerator/skills/common/genie-code/genie-code-helpers.md` and run **Section 1 — Bootstrap** (3 cells). That defines `w`, `REPO_ROOT`, `read_file`, `write_file`, `write_notebook`, `run_sql`, `run_job_by_name`, `make_job_notebook`, `create_job`, `create_pipeline_idempotent`.
-
-**Substitutions for THIS step:**
-
-- Build `databricks.yml` + Silver YAMLs Asset Bundle → Skip; YAML is reference-only.
-- `databricks bundle deploy -t dev` (DQ rules setup job) → `dq_body = make_job_notebook(dq_setup_logic); dq_path = (REPO_ROOT + "/src/{user_schema_prefix}_silver/setup_dq_rules").replace("/Workspace", "", 1); write_notebook(dq_path, dq_body); create_job("Silver DQ Setup", dq_path, base_params={"TARGET_CATALOG":"{lakehouse_default_catalog}","SILVER_SCHEMA":"{user_schema_prefix}_silver"})`
-- `databricks bundle deploy -t dev` (DLT pipeline) → `pipe_path = (REPO_ROOT + "/src/{user_schema_prefix}_silver/silver_pipeline").replace("/Workspace", "", 1); write_notebook(pipe_path, sdp_notebook_body); pipeline_id = create_pipeline_idempotent("Silver Layer Pipeline", pipe_path, "{lakehouse_default_catalog}", "{user_schema_prefix}_silver")`
-- `databricks bundle run -t dev silver_dq_setup_job` → `run_job_by_name("silver_dq_setup")` — MUST run BEFORE the pipeline (creates `dq_rules` Delta table)
-- `databricks bundle run -t dev silver_dlt_pipeline` → `w.pipelines.start_update(pipeline_id=pipeline_id, full_refresh=True)` — `full_refresh=True` is MANDATORY (see traps)
-- `${bundle.target} ${var.user_prefix}` collision avoidance → embed `APP_NAME` directly in the helper-managed name: `create_pipeline_idempotent("Silver Layer Pipeline", ...)` already prefixes with `[dev {APP_NAME}]`. The SDK has no `${var.*}` resolver.
-
-**Traps (5):**
-
-1. **`full_refresh=True` is mandatory.** Bronze re-clone in V2V Step 12 invalidates incremental checkpoints; `False` causes every `silver_*` flow to fail with sparse-event stale-state errors ("failed more than 2 times").
-2. Read Bronze with `spark.readStream.table(bronze_table)`, NOT `readChangeFeed=True` — raises `[DELTA_MISSING_CHANGE_DATA]` because CDF was enabled via `ALTER TABLE` after the initial write, so version 0 has no CDF records.
-3. `cluster_by_auto=True` on `@dlt.table`. **NEVER** set `pipelines.autoOptimize.zOrderCols` (no `spark.conf.set`, no extra pipeline `configuration` keys) — raises `DLTAnalysisException: ZORDER BY is not compatible with Liquid Clustering`.
-4. Import EVERY `pyspark.sql.functions` symbol the SDP notebook uses (`col, lit, when, current_timestamp, sha2, concat_ws, coalesce`, ...). Partial imports raise `NameError: name ''lit'' is not defined` at pipeline init / "Failed to analyze flow".
-5. No `DEFAULT` clauses in `CREATE TABLE` DDL on serverless (`WRONG_COLUMN_DEFAULTS_FOR_DELTA_FEATURE_NOT_ENABLED`). Reserved `TBLPROPERTIES` — never `''table_type''` on `dq_rules`; use `''dq_rules_role''=''metadata''` instead.',
-'You are a senior data engineering lead.
-
-Traverse the @data_product_accelerator/skills/common folder to identify all available skills, understand their intended use, and invoke the relevant skills as needed to complete the task.',
-true, 1, true, current_timestamp(), current_timestamp(), current_user());
-
--- Step 14 (gold_layer_pipeline) — Genie Code fork
-INSERT INTO ${catalog}.${schema}.section_input_prompts
-(input_id, section_tag, coding_assistant, input_template, system_prompt,
- bypass_llm, version, is_active, inserted_at, updated_at, created_by)
-VALUES
-(1014, 'gold_layer_pipeline', 'genie-code',
-'Implement the Gold layer using @data_product_accelerator/skills/gold/01-gold-layer-setup/SKILL.md
-
-This will involve the following steps:
-
-- **Read YAML schemas** — use the Gold layer design YAML files (from Step 9) as the single source of truth for all table definitions, columns, and constraints
-- **Create Gold tables** — generate CREATE TABLE DDL from YAML, add PRIMARY KEY constraints, then add FOREIGN KEY constraints (NOT ENFORCED) in dependency order
-- **Merge data from Silver** — deduplicate Silver records before MERGE, map columns using YAML lineage metadata, merge dimensions first (SCD1/SCD2) then facts (FK dependency order)
-- **Deploy 2-job architecture** — gold_setup_job (2 tasks: create tables + add FK constraints) and gold_merge_job (populate data from Silver)
-- **Validate results** — verify table creation, PK/FK constraints, row counts, SCD2 history, and fact-dimension joins
-
-Use the gold layer design YAML files as the target destination, and the silver layer tables as source.
-
-Limit pipelines to only 5 core tables for purposes of this exercise.
-
-IMPORTANT: Use the EXISTING catalog `{lakehouse_default_catalog}` -- do NOT create a new catalog. Create the Gold schema `{user_schema_prefix}_gold` and all Gold tables inside this catalog.
-
-NOTE: Before creating the schema, check if `{lakehouse_default_catalog}.{user_schema_prefix}_gold` already exists. If it does, DROP the schema with CASCADE and recreate it from scratch. These are user-specific schemas so dropping is safe.
-
----
-
-## Genie Code Overrides
-
-The skill above is correct as-is. Replace ONLY the bundle/CLI verbs below — Genie Code has no terminal, no Asset Bundle, no local filesystem.
-
-**Once per Genie Code session:** clone `https://github.com/databricks-solutions/vibe-coding-workshop-template` into `/Workspace/Users/<your_email>/v2v-in-geniecode/vibe-coding-workshop-template` (Workspace → Repos → Add Repo), then read `@data_product_accelerator/skills/common/genie-code/genie-code-helpers.md` and run **Section 1 — Bootstrap** (3 cells). That defines `w`, `REPO_ROOT`, `read_file`, `write_file`, `write_notebook`, `run_sql`, `run_job_by_name`, `make_job_notebook`, `create_job`, `create_pipeline_idempotent`.
-
-**Substitutions for THIS step:**
-
-- Read YAML schemas (skill uses local FS) → `yaml_text = read_file(f"{REPO_ROOT}/gold_layer_design/<table>.yaml")` (per V2V Step 11 output convention).
-- Build `databricks.yml` + Gold YAMLs Asset Bundle → Skip; YAML is reference-only.
-- `databricks bundle deploy -t dev` (Gold setup job — creates tables + FK constraints) → `setup_body = make_job_notebook(gold_setup_logic); setup_path = (REPO_ROOT + "/src/{user_schema_prefix}_gold/setup").replace("/Workspace", "", 1); write_notebook(setup_path, setup_body); create_job("Gold Setup", setup_path, base_params={"TARGET_CATALOG":"{lakehouse_default_catalog}","GOLD_SCHEMA":"{user_schema_prefix}_gold"})`
-- `databricks bundle deploy -t dev` (Gold merge job — populates data from Silver) → `merge_body = make_job_notebook(gold_merge_logic); merge_path = (REPO_ROOT + "/src/{user_schema_prefix}_gold/merge").replace("/Workspace", "", 1); write_notebook(merge_path, merge_body); create_job("Gold Merge", merge_path, base_params={"TARGET_CATALOG":"{lakehouse_default_catalog}","SILVER_SCHEMA":"{user_schema_prefix}_silver","GOLD_SCHEMA":"{user_schema_prefix}_gold"})`
-- `databricks bundle run -t dev gold_setup_job` → `run_job_by_name("gold setup")`
-- `databricks bundle run -t dev gold_merge_job` → `run_job_by_name("gold merge")`
-
-**Traps (3):**
-
-1. **Strip every `DEFAULT` clause** from generated DDL — SCD2 columns (`is_current`, `effective_from`, `effective_to`, `created_at`) MUST set values in INSERT/MERGE, NOT DDL. `WRONG_COLUMN_DEFAULTS_FOR_DELTA_FEATURE_NOT_ENABLED` on serverless otherwise.
-2. **Gold MERGE — the `src_*` source temp view MUST `.select(...)` every Gold column the `MERGE` references**, with `lit(None).cast("<sql_type>")` placeholders for any YAML-only Gold column missing from the Silver DataFrame. Otherwise `[UNRESOLVED_COLUMN.WITH_SUGGESTION]` on `src` during `WHEN MATCHED THEN UPDATE SET *`. Call `df.printSchema()` on the source DataFrame ONCE before `MERGE` per table to catch column omissions.
-3. For string-prefixed business keys (e.g. `r12`) where the Gold key is numeric: `regexp_extract(col("id"), r"(\d+)", 1).cast("bigint")`. Do NOT pass the raw string into a numeric Gold key column.',
-'You are a senior data engineering lead.
-
-Traverse the @data_product_accelerator/skills/common folder to identify all available skills, understand their intended use, and invoke the relevant skills as needed to complete the task.',
-true, 1, true, current_timestamp(), current_timestamp(), current_user());
-
--- Step 23 (deploy_lakehouse_assets) — Genie Code fork
-INSERT INTO ${catalog}.${schema}.section_input_prompts
-(input_id, section_tag, coding_assistant, input_template, system_prompt,
- bypass_llm, version, is_active, inserted_at, updated_at, created_by)
-VALUES
-(1015, 'deploy_lakehouse_assets', 'genie-code',
-'Deploy and run all Bronze, Silver, and Gold layer jobs end-to-end using @data_product_accelerator/skills/common/databricks-asset-bundles/SKILL.md and @data_product_accelerator/skills/common/databricks-autonomous-operations/SKILL.md
-
-This is a **deployment checkpoint** — it validates and runs the complete Lakehouse pipeline in dependency order.
-
-## Deployment Order (Mandatory)
-
-Run these commands in strict sequence — each stage depends on the previous one:
-
-```bash
-# 1. Validate the bundle (catches config errors before deploy)
-databricks bundle validate -t dev
-
-# 2. Deploy all assets to workspace
-databricks bundle deploy -t dev
-
-# 3. Run Bronze clone job (creates Bronze tables from source)
-databricks bundle run -t dev bronze_clone_job
-
-# 4. Run Silver DQ setup job FIRST (creates dq_rules table — must exist before pipeline)
-databricks bundle run -t dev silver_dq_setup_job
-
-# 5. Run Silver DLT pipeline (reads from Bronze via CDF, applies DQ rules)
-databricks bundle run -t dev silver_dlt_pipeline
-
-# 6. Run Gold setup job (creates tables from YAML + adds PK/FK constraints)
-databricks bundle run -t dev gold_setup_job
-
-# 7. Run Gold merge job (deduplicates Silver → merges into Gold)
-databricks bundle run -t dev gold_merge_job
-```
-
-If any job fails, use the autonomous operations skill to diagnose and fix:
-- Get the failed task `run_id` (not the parent job `run_id`)
-- Run `databricks runs get-run-output --run-id <TASK_RUN_ID>` to diagnose
-- Apply fix and redeploy (max 3 iterations before escalation)
-
-## Verification Queries
-
-After all jobs complete successfully, verify end-to-end:
-
-```sql
--- Bronze: verify tables and CDF
-SHOW TABLES IN {lakehouse_default_catalog}.{user_schema_prefix}_bronze;
-
--- Silver: verify DQ rules and cleaned tables
-SELECT COUNT(*) FROM {lakehouse_default_catalog}.{user_schema_prefix}_silver.dq_rules;
-SHOW TABLES IN {lakehouse_default_catalog}.{user_schema_prefix}_silver;
-
--- Gold: verify tables, constraints, and row counts
-SHOW TABLES IN {lakehouse_default_catalog}.{user_schema_prefix}_gold;
-SELECT * FROM {lakehouse_default_catalog}.information_schema.table_constraints
-WHERE table_schema = ''{user_schema_prefix}_gold'';
-```
-
-Target catalog: `{lakehouse_default_catalog}`
-Target schemas: `{user_schema_prefix}_bronze`, `{user_schema_prefix}_silver`, `{user_schema_prefix}_gold`
-
----
-
-## Genie Code Overrides
-
-The default body above orchestrates the deployment via Asset Bundle CLI. In Genie Code, replace the entire `databricks bundle …` sequence with the deploy-assets cells from the helper file — they are self-contained Python, idempotent, and emit task-level diagnostics on failure.
-
-**Once per Genie Code session:** clone `https://github.com/databricks-solutions/vibe-coding-workshop-template` into `/Workspace/Users/<your_email>/v2v-in-geniecode/vibe-coding-workshop-template` (Workspace → Repos → Add Repo), then read `@data_product_accelerator/skills/common/genie-code/genie-code-helpers.md` and run **Section 1 — Bootstrap** (3 cells). That defines `w`, `REPO_ROOT`, `read_file`, `write_file`, `write_notebook`, `run_sql`, `run_job_by_name`, `make_job_notebook`, `create_job`, `create_pipeline_idempotent`.
-
-**Substitutions for THIS step (use Section 2 of the helper file):**
-
-- `databricks bundle validate / deploy -t dev` → Skip — assets were already created via SDK in V2V Steps 12, 13, 14.
-- `databricks bundle run -t dev bronze_clone_job` → **Cell C** of `genie-code-helpers.md` Section 2 (`run_job_by_name("bronze")`).
-- `databricks bundle run -t dev silver_dq_setup_job` → **Cell D** (`run_job_by_name("dq")`).
-- `databricks bundle run -t dev silver_dlt_pipeline` → **Cell E** (`w.pipelines.start_update(pipeline_id, full_refresh=True)` — full_refresh is MANDATORY).
-- `databricks bundle run -t dev gold_setup_job` → **Cell F** (`run_job_by_name("gold setup")`).
-- `databricks bundle run -t dev gold_merge_job` → **Cell G** (`run_job_by_name("gold merge")`).
-- Verification SQL appendix (`SHOW TABLES; SELECT COUNT(*) UNION ALL ...`) → **Cell H** (allowlisted Bronze/Gold counts + Silver `silver_*` filter + Gold PK/FK constraint inventory). Never iterate raw `SHOW TABLES` for row counts — `src_*` merge staging views from Cell G appear in the same session and are NOT real Delta tables.
-- Diagnose a failed task → **Failed-task diagnostics** snippet of Section 2. Uses task-level `run_id` from `run_details.tasks[i].run_id`, NOT the parent run_id. `get_run_output(run_id=parent_run.run_id)` returns `{}` on the parent.
-
-Run order: **A2 → B → C → D → E → F → G → H**. Cell B is a cold-start gate that lists what V2V Steps 10-14 should have created — if it raises `COLD START — required resources are missing`, complete Steps 12-14 before re-running Cell B.
-
-**Traps (3):**
-
-1. `TABLE_OR_VIEW_NOT_FOUND` on `..._bronze.src_*` → those are merge staging views from Cell G, not Bronze tables. Always use Cell H allowlist verification, never raw `SHOW TABLES` iteration.
-2. Silver pipeline FAILED with sparse events / "failed more than 2 times" → confirm `full_refresh=True` (Cell E hard-codes it) and that Cell D ran first. Cell E has propagation logic that picks the canonical pipeline name; if multiple silver pipelines match `APP_NAME`, edit Cell E to set `chosen = pipelines[i]` after inspecting Cell B output.
-3. Gold merge `[UNRESOLVED_COLUMN.WITH_SUGGESTION]` on `src` → see V2V Step 14 traps — `src_*` source view must `.select(...)` every Gold column with `lit(None).cast(...)` placeholders for YAML-only Gold columns missing from Silver.',
-'You are a senior data engineering lead.
-
-Traverse the @data_product_accelerator/skills/common folder to identify all available skills, understand their intended use, and invoke the relevant skills as needed to complete the task.',
-true, 1, true, current_timestamp(), current_timestamp(), current_user());
-
--- =============================================================================
--- END GENIE CODE FORKS — DATA_PRODUCT_ACCELERATOR (LAKEHOUSE)
--- =============================================================================
-
--- =============================================================================
--- GENIE CODE FORKS — DATA_PRODUCT_ACCELERATOR (AI / AGENTS)
--- =============================================================================
--- Per-step `coding_assistant='genie-code'` forks for 4 V2V AI/Agents steps
--- (15, 16, 17, 24). Each fork = verbatim default body + a small "Genie Code
--- Overrides" appendix that @-references the helper file at
--- @data_product_accelerator/skills/common/genie-code/genie-code-helpers.md
--- (committed to the workshop-template repo at 33029ba).
---
--- All Lakeview / Genie API / MLflow GenAI SDK calls are inlined in the
--- per-step appendices — no helper file changes needed in this PR.
---
--- Default rows (input_id 10, 12, 11, 117) are unchanged — Cursor / Copilot /
--- VS Code / AI Gateway sessions resolve to those as today. Only Genie Code
--- sessions hit the new forks below.
---
--- Step 18 (agent_framework, build agent) and Step 19 (wire_ui_agent) are
--- intentionally NOT forked — Step 18 is heavy MLflow/Model Serving surface
--- (deferred to a follow-up PR) and Step 19 depends on the AppKit chapter
--- which is excluded from genie-code. Step 25 (optimize_genie) is also
--- deferred — its 6-script orchestrator is too complex to faithfully inline.
--- =============================================================================
-
--- Step 15 (usecase_plan) — Genie Code fork
-INSERT INTO ${catalog}.${schema}.section_input_prompts
-(input_id, section_tag, coding_assistant, input_template, system_prompt,
- bypass_llm, version, is_active, inserted_at, updated_at, created_by)
-VALUES
-(1020, 'usecase_plan', 'genie-code',
-'Perform project planning using @data_product_accelerator/skills/planning/00-project-planning/SKILL.md with planning_mode: workshop
-
-This will involve the following steps:
-
-- **Analyze Gold layer** — examine your completed Gold tables to identify natural business domains, key relationships, and analytical questions
-- **Generate use-case plans** — create structured plans organized as Phase 1 addendums (1.2 TVFs, 1.3 Metric Views, 1.4 Monitors, 1.5 Dashboards, 1.6 Genie Spaces, 1.7 Alerts, 1.1 ML Models). Filenames must match the canonical numbering table at `data_product_accelerator/skills/planning/00-project-planning/assets/addendum-numbering.md`.
-- **Produce YAML manifests** — generate 4 machine-readable manifest files (semantic-layer, observability, ML, GenAI agents) as contracts for downstream implementation stages
-- **Emit Gold dependency manifest** — write `plans/manifests/gold-dependency-manifest.yaml` with every Gold table/column referenced across all addendums, then intersect it against `{lakehouse_default_catalog}.information_schema` for `{user_schema_prefix}_gold`. If any reference is missing, the skill writes `plans/gold-gap-remediation.md` and STOPS — downstream orchestrators (semantic layer, observability, ML, GenAI agents) will refuse to run until Gold is fixed.
-- **Apply workshop mode caps** — enforce hard limits (3-5 TVFs, 1-2 Metric Views, 1 Genie Space) to keep the workshop focused on pattern variety over depth
-- **Define deployment order** — establish build sequence: TVFs → Metric Views → Genie Spaces → Dashboards → Monitors → Alerts → Agents
-
-If a PRD exists at @docs/design_prd.md, reference it for business requirements, user personas, and workflows.
-
----
-
-## Genie Code Overrides
-
-The skill above is correct as-is. Replace ONLY the run/deploy steps below — Genie Code has no terminal, no Asset Bundle, no local filesystem.
-
-**Once per Genie Code session:** clone `https://github.com/databricks-solutions/vibe-coding-workshop-template` into `/Workspace/Users/<your_email>/v2v-in-geniecode/vibe-coding-workshop-template` (Workspace → Repos → Add Repo), then read `@data_product_accelerator/skills/common/genie-code/genie-code-helpers.md` and run **Section 1 — Bootstrap** (3 cells). That defines `w`, `REPO_ROOT`, `read_file`, `write_file`, `write_notebook`, `run_sql`, `run_job_by_name`, `make_job_notebook`, `create_job`, `create_pipeline_idempotent`.
-
-**Substitutions for THIS step:**
-
-- The skill reads source schema metadata via SQL → `rows = run_sql("SELECT table_name, column_name, data_type FROM {lakehouse_default_catalog}.information_schema.columns WHERE table_schema = ''{user_schema_prefix}_gold'' ORDER BY table_name, ordinal_position")` (and similar against `information_schema.tables`).
-- The skill reads the existing PRD if present → `prd_text = read_file(f"{REPO_ROOT}/docs/design_prd.md")` (catch FileNotFoundError — PRD is optional).
-- The skill writes plan addendums (`plans/phase1-addendum-1.1-ml-models.md`, `1.2-tvfs.md`, `1.3-metric-views.md`, `1.4-monitors.md`, `1.5-aibi-dashboards.md`, `1.6-genie-spaces.md`, `1.7-alerts.md`) → `write_file(f"{REPO_ROOT}/plans/<filename>", content)`. Filenames MUST match the canonical numbering at `@data_product_accelerator/skills/planning/00-project-planning/assets/addendum-numbering.md`.
-- The skill writes 4 manifest YAMLs (`semantic-layer-manifest.yaml`, `observability-manifest.yaml`, `ml-manifest.yaml`, `genai-agents-manifest.yaml`) → `write_file(f"{REPO_ROOT}/plans/manifests/<file>.yaml", yaml_text)`.
-- The skill writes the Gold dependency manifest → `write_file(f"{REPO_ROOT}/plans/manifests/gold-dependency-manifest.yaml", yaml_text)`, then intersects it against `information_schema` via `run_sql`.
-
-**Traps:** (1) If Gold tables/columns referenced in any addendum are missing from `information_schema`, the skill writes `plans/gold-gap-remediation.md` and STOPS — do not proceed; downstream orchestrators (semantic layer, observability, ML, GenAI agents) will refuse to run until Gold is fixed. (2) Workshop mode caps are non-negotiable: max 3-5 TVFs, 1-2 Metric Views, 1 Genie Space — keep the workshop focused on pattern variety over depth.',
-'You are a senior data engineering lead.
-
-Traverse the @data_product_accelerator/skills/common folder to identify all available skills, understand their intended use, and invoke the relevant skills as needed to complete the task.',
-true, 1, true, current_timestamp(), current_timestamp(), current_user());
-
--- Step 16 (aibi_dashboard) — Genie Code fork
-INSERT INTO ${catalog}.${schema}.section_input_prompts
-(input_id, section_tag, coding_assistant, input_template, system_prompt,
- bypass_llm, version, is_active, inserted_at, updated_at, created_by)
-VALUES
-(1021, 'aibi_dashboard', 'genie-code',
-'Build an AI/BI (Lakeview) Dashboard using @data_product_accelerator/skills/monitoring/02-databricks-aibi-dashboards/SKILL.md
-
-This will involve the following end-to-end workflow:
-
-- **Build Lakeview dashboard** — create a complete `.lvdash.json` configuration with KPI counters, charts, data tables, and filters for business self-service analytics
-- **Use 6-column grid layout** — position all widgets on a 6-column grid (NOT 12!) with correct widget versions (KPIs=v2, Charts=v3, Tables=v2, Filters=v2)
-- **Query Metric Views** — write dataset queries using `MEASURE()` function against Metric Views with `${catalog}.${gold_schema}` variable substitution
-- **Use a mixed dataset strategy** — `MEASURE()` for KPIs, trends, and dimension breakdowns sourced from Metric Views; direct Gold SQL for detail/drill-down tables and filter value datasets (e.g., `SELECT DISTINCT ...`)
-- **Validate SQL and widget alignment** — run pre-deployment validation ensuring every widget `fieldName` matches its SQL alias exactly (90% reduction in dev loop time)
-- **Run Phase 0.5 pre-flight** — BEFORE any deploy, enumerate every `${var}` placeholder in the `.lvdash.json`, then assert the deploy job provides every one. Missing a single variable corrupts the upload silently (see `monitoring/02-databricks-aibi-dashboards/SKILL.md` → "Pre-loop variable enumeration").
-- **Deploy via UPDATE-or-CREATE** — use Workspace Import API with `overwrite: true` AND base64-encoded ASCII content (raw UTF-8 bytes silently corrupts the file). Preserves dashboard URLs and viewer permissions.
-
-Reference the dashboard plan at @plans/phase1-addendum-1.5-aibi-dashboards.md (canonical numbering — see `data_product_accelerator/skills/planning/00-project-planning/assets/addendum-numbering.md`; the legacy name `1.1-dashboards.md` is forbidden).
-
-The skill provides:
-- Dashboard JSON structure with **6-column grid** layout (NOT 12!)
-- Widget patterns: KPI counters (v2), charts (v3), tables (v2), filters (v2)
-- Query patterns from Metric Views using `MEASURE()` function
-- Pre-deployment SQL validation (90% reduction in dev loop time)
-- UPDATE-or-CREATE deployment pattern (preserves URLs and permissions)
-- Variable substitution (`${catalog}`, `${gold_schema}`) — no hardcoded schemas
-- Monitoring table query patterns (window structs, CASE pivots) if Lakehouse Monitors exist
-
-Before building, load prerequisite skills:
-- **MUST READ** `semantic-layer/01-metric-views-patterns/SKILL.md` for MEASURE() syntax (since this dashboard queries Metric Views)
-- **MUST READ** `common/databricks-expert-agent/SKILL.md` for "Extract Don''t Generate" principle
-- **MUST READ** `common/naming-tagging-standards/SKILL.md` for dashboard and file naming conventions
-- Check installed skills for `databricks-lakeview-dashboard` (16+ widget patterns, mandatory query testing workflow)
-
-Build the dashboard in this order:
-0. Validate inputs — verify the plan file and manifests exist. If the plan file is missing, STOP and ask.
-1. Plan layout (KPIs, filters, charts, tables)
-2. Create datasets (validated SQL queries)
-3. Build widgets with correct version specs
-4. Configure parameters (DATE type, not DATETIME)
-5. Add Global Filters page
-6. Deploy via Workspace Import API
-
----
-
-## Genie Code Overrides
-
-The skill above is correct as-is. Replace ONLY the run/deploy steps below — Genie Code has no terminal, no Asset Bundle, no local filesystem.
-
-**Once per Genie Code session:** clone `https://github.com/databricks-solutions/vibe-coding-workshop-template` into `/Workspace/Users/<your_email>/v2v-in-geniecode/vibe-coding-workshop-template` (Workspace → Repos → Add Repo), then read `@data_product_accelerator/skills/common/genie-code/genie-code-helpers.md` and run **Section 1 — Bootstrap** (3 cells). That defines `w`, `REPO_ROOT`, `read_file`, `write_file`, `write_notebook`, `run_sql`, `run_job_by_name`, `make_job_notebook`, `create_job`, `create_pipeline_idempotent`.
-
-**Substitutions for THIS step:**
-
-- Build the `.lvdash.json` payload (skill content unchanged — 6-column grid, widget version specs, MEASURE() syntax) → assemble as a Python dict in-memory; no local file write.
-- Pre-deployment SQL validation (every widget `fieldName` matches its SQL alias) → loop datasets and `run_sql(query)` on each; assert the returned column names cover every widget `fieldName` reference.
-- Phase 0.5 variable enumeration → BEFORE deploy, scan the `.lvdash.json` payload for every `${var}` placeholder and assert your upload provides each one (a missing var corrupts the upload silently).
-- `databricks workspace import` (Lakeview file) → `import json, base64; lvdash_bytes = json.dumps(lvdash_payload, ensure_ascii=True).encode("ascii"); w.workspace.import_(path=DASHBOARD_PATH, content=base64.b64encode(lvdash_bytes).decode(), format=ImportFormat.AUTO, overwrite=True)`. Use `.encode("ascii")` — NOT `.encode("utf-8")`.
-- UPDATE-or-CREATE deployment → first list existing dashboards: `existing = [d for d in w.lakeview.list() if d.display_name == DASHBOARD_NAME]`. If found, `w.lakeview.update(dashboard_id=existing[0].dashboard_id, dashboard=...)` then `w.lakeview.publish(dashboard_id=existing[0].dashboard_id, warehouse_id=WAREHOUSE_ID)`. Otherwise `created = w.lakeview.create(dashboard=...)` then `w.lakeview.publish(dashboard_id=created.dashboard_id, warehouse_id=WAREHOUSE_ID)`. The UPDATE path preserves URLs and viewer permissions; the CREATE path mints a new dashboard URL.
-
-**Traps (3):** (1) Raw UTF-8 bytes silently corrupt the `.lvdash.json` upload — ALWAYS `base64.b64encode(json.dumps(...).encode("ascii"))`. (2) Widget version specs are non-negotiable: KPIs=v2, Charts=v3, Tables=v2, Filters=v2 — wrong version = silent render failure in the browser. (3) Use a 6-column grid, NOT 12. The skill defaults are correct; do not "round up" widget widths.',
-'You are a senior data engineering lead.
-
-Traverse the @data_product_accelerator/skills/common folder to identify all available skills, understand their intended use, and invoke the relevant skills as needed to complete the task.',
-true, 1, true, current_timestamp(), current_timestamp(), current_user());
-
--- Step 17 (genie_space) — Genie Code fork
-INSERT INTO ${catalog}.${schema}.section_input_prompts
-(input_id, section_tag, coding_assistant, input_template, system_prompt,
- bypass_llm, version, is_active, inserted_at, updated_at, created_by)
-VALUES
-(1022, 'genie_space', 'genie-code',
-'Set up the semantic layer using @data_product_accelerator/skills/semantic-layer/00-semantic-layer-setup/SKILL.md
-
-This will involve the following end-to-end workflow:
-
-- **Read plan manifests** — extract TVF, Metric View, and Genie Space specifications from the semantic-layer-manifest.yaml (from Step 13 planning)
-- **Create Metric Views** — build Metric Views using `WITH METRICS LANGUAGE YAML` syntax with dimensions, measures, 3-5 synonyms each, and format specifications
-- **Create Table-Valued Functions (TVFs)** — write parameterized SQL functions with STRING date params (non-negotiable for Genie), v3.0 bullet-point COMMENTs, and ROW_NUMBER for Top-N patterns
-- **Configure Genie Space** — set up natural language query interface with data assets (Metric Views → TVFs → Gold tables priority), General Instructions (≤20 lines), and ≥10 benchmark questions with exact expected SQL
-- **Create JSON exports** — export Genie Space configuration as JSON for CI/CD deployment across environments. Before every POST/PATCH, run the `_assert_sql_arrays` validator: every `sql:` field in the `serialized_space` payload must be a `List[str]` (never a bare string) — see `semantic-layer/04-genie-space-export-import-api/SKILL.md` → "Required `serialized_space` Invariants".
-- **Bake `semantic_warehouse_id`** — the warehouse ID must be a CONCRETE value stamped into the exported JSON at deploy time, NOT a `--var` runtime parameter. Copy the resolved warehouse ID from `plans/deploy-checkpoint.md` (emitted by `bundle validate`).
-- **Persist space IDs** — after the first successful POST, copy the `[ACTION REQUIRED]` `genie_space_id_<stem>` block from the deploy script output into `databricks.yml` so subsequent runs PATCH the existing space instead of creating duplicates.
-- **Optimize for accuracy** — run benchmark questions via Conversation API and tune 6 control levers until accuracy ≥95% and repeatability ≥90%
-
-Implement in this order:
-
-1. **Table-Valued Functions (TVFs)** — using plan at @plans/phase1-addendum-1.2-tvfs.md
-2. **Metric Views** — using plan at @plans/phase1-addendum-1.3-metric-views.md
-3. **Genie Space** — using plan at @plans/phase1-addendum-1.6-genie-spaces.md
-4. **Genie JSON Exports** — create export/import deployment jobs
-
-The orchestrator skill automatically loads worker skills for TVFs, Metric Views, Genie Space patterns, and export/import API.
-
----
-
-## Genie Code Overrides
-
-The skill above is correct as-is. Replace ONLY the run/deploy steps below — Genie Code has no terminal, no Asset Bundle, no local filesystem.
-
-**Once per Genie Code session:** clone `https://github.com/databricks-solutions/vibe-coding-workshop-template` into `/Workspace/Users/<your_email>/v2v-in-geniecode/vibe-coding-workshop-template` (Workspace → Repos → Add Repo), then read `@data_product_accelerator/skills/common/genie-code/genie-code-helpers.md` and run **Section 1 — Bootstrap** (3 cells). That defines `w`, `REPO_ROOT`, `read_file`, `write_file`, `write_notebook`, `run_sql`, `run_job_by_name`, `make_job_notebook`, `create_job`, `create_pipeline_idempotent`.
-
-**Substitutions for THIS step:**
-
-- Read planning manifests (skill expects local FS) → `manifest_text = read_file(f"{REPO_ROOT}/plans/manifests/semantic-layer-manifest.yaml"); import yaml; manifest = yaml.safe_load(manifest_text)`.
-- Resolve `semantic_warehouse_id` (CONCRETE value, NOT a `--var` runtime parameter) → `WAREHOUSE_ID = next(w.warehouses.list()).id` (or read from `read_file(f"{REPO_ROOT}/plans/deploy-checkpoint.md")` if previously emitted).
-- Create Metric Views (`WITH METRICS LANGUAGE YAML`) → for each Metric View in the manifest: `metric_view_ddl = f"CREATE OR REPLACE VIEW `{lakehouse_default_catalog}`.`{user_schema_prefix}_gold`.`{name}` WITH METRICS LANGUAGE YAML AS $$\n{yaml_body}\n$$"; run_sql(metric_view_ddl)`. Use `$$...$$` dollar-quoting so YAML internal apostrophes don''t conflict with SQL string quoting.
-- Create TVFs (parameterized SQL functions, STRING date params) → for each TVF in the manifest: `tvf_ddl = f"CREATE OR REPLACE FUNCTION `{lakehouse_default_catalog}`.`{user_schema_prefix}_gold`.`{fn_name}`(p_date STRING, ...) RETURNS TABLE(...) COMMENT ''<v3.0 bullet-point COMMENT>'' RETURN <body>"; run_sql(tvf_ddl)`. STRING date params are non-negotiable for Genie compatibility.
-- Configure Genie Space → assemble `space_payload = {"display_name": NAME, "warehouse_id": WAREHOUSE_ID, "general_instructions": INSTRUCTIONS_LE_20_LINES, "data_assets": SORTED_ASSETS, "benchmark_questions": [{"question": q, "expected_sql": [s]}]}`. Sort `data_assets` by `table_name`/`function_name` before submission. Call `_assert_sql_arrays(space_payload)` BEFORE any POST/PATCH (validator below).
-- First deploy (CREATE) → `import json, uuid; payload = {"serialized_space": json.dumps(space_payload)}; created = w.api_client.do("POST", "/api/2.0/genie/spaces", body=payload); genie_space_id = created["space_id"]; write_file(f"{REPO_ROOT}/plans/genie-space-state.json", json.dumps({"space_id": genie_space_id}))`.
-- Subsequent deploys (UPDATE) → `state = json.loads(read_file(f"{REPO_ROOT}/plans/genie-space-state.json")); GENIE_SPACE_ID = state["space_id"]; existing = w.genie.get_space(space_id=GENIE_SPACE_ID); _assert_sql_arrays(space_payload); w.api_client.do("PUT", f"/api/2.0/genie/spaces/{GENIE_SPACE_ID}", body={"serialized_space": json.dumps(space_payload)})`.
-- Inline `_assert_sql_arrays` validator (runs before every POST/PATCH; no helper file change needed):
-
-```python
-def _assert_sql_arrays(payload):
-    """Walk serialized_space and assert every sql: field is a List[str], not a bare string."""
-    import json
-    space = payload if isinstance(payload, dict) else json.loads(payload)
-    for asset in space.get("data_assets", []):
-        if "sql" in asset and not isinstance(asset["sql"], list):
-            raise ValueError(f"sql must be List[str], got {type(asset[''sql''])} in asset {asset.get(''name'')}")
-    for bench in space.get("benchmark_questions", []):
-        if "expected_sql" in bench and not isinstance(bench["expected_sql"], list):
-            raise ValueError(f"expected_sql must be List[str] for question {bench.get(''question'', '''')[:40]!r}")
-```
-
-**Traps (5):** (1) Every `sql:` field in the `serialized_space` payload MUST be a `List[str]`, never a bare string — bare-string commits corrupt the space silently and Genie returns nonsense answers. Run `_assert_sql_arrays(payload)` before every POST/PATCH. (2) IDs must use `uuid.uuid4().hex` (32-char hex, no dashes) for asset/dataset IDs. (3) `serialized_space` is a JSON string (`json.dumps(...)`), not a nested object inside the request body. (4) Data asset arrays must be sorted (tables by `table_name`, TVFs by `function_name`) before submission — unsorted arrays cause non-deterministic asset IDs across runs. (5) Genie Space MUST use a Serverless SQL Warehouse (non-negotiable) — classic warehouses fail with `FATAL: External authorization failed` on managed-online queries.',
-'You are a senior data engineering lead.
-
-Traverse the @data_product_accelerator/skills/common folder to identify all available skills, understand their intended use, and invoke the relevant skills as needed to complete the task.',
-true, 1, true, current_timestamp(), current_timestamp(), current_user());
-
--- Step 24 (deploy_di_assets) — Genie Code fork
-INSERT INTO ${catalog}.${schema}.section_input_prompts
-(input_id, section_tag, coding_assistant, input_template, system_prompt,
- bypass_llm, version, is_active, inserted_at, updated_at, created_by)
-VALUES
-(1023, 'deploy_di_assets', 'genie-code',
-'Deploy all Data Intelligence assets (TVFs, Metric Views, Genie Spaces, and AI/BI Dashboards). Follow this orchestrator first, then its referenced worker skills:
-
-- **Primary orchestrator (read first):** @data_product_accelerator/skills/semantic-layer/00-semantic-layer-setup/SKILL.md — owns Phase 0 (gold inventory check), phase gates, and template-first workflow. Any task touching 2+ semantic-layer asset types MUST route through this skill.
-- **Worker skills (referenced by the orchestrator):** @data_product_accelerator/skills/common/databricks-asset-bundles/SKILL.md and @data_product_accelerator/skills/semantic-layer/04-genie-space-export-import-api/SKILL.md
-
-Before starting:
-- **Verify Gold schema inventory.** Query `information_schema.tables` / `information_schema.columns` in the live catalog and only deploy artifacts whose target tables and columns exist on disk AND in the live Gold schema. Do NOT trust `semantic-layer-manifest.yaml` as ground truth.
-- **Use templates, don''t write from scratch.** Start `src/{project}_semantic/deploy_genie_spaces.py` from `data_product_accelerator/skills/semantic-layer/04-genie-space-export-import-api/assets/templates/deploy_genie_spaces.py`, and `resources/semantic/genie_deploy_job.yml` from `genie-deployment-job-template.yml` — then customize. Hand-written versions are the #1 source of multi-cycle deploy failures.
-- **Read `plans/deploy-checkpoint.md` for concrete values.** Template variables below (e.g. `{lakehouse_default_catalog}`, `{user_schema_prefix}_gold`, job names like `tvf_job`) are project-invariant placeholders; the concrete resolved values for THIS deployment — actual job names, metric-view names, `semantic_warehouse_id`, workspace paths — live in `plans/deploy-checkpoint.md`, emitted by the Asset Bundles skill immediately after `databricks bundle validate`. If that file is missing, run the checkpoint emitter first (see `data_product_accelerator/skills/common/databricks-asset-bundles/SKILL.md` → "Emit Deploy Checkpoint") — do NOT invent names.
-- **Run Phase 0.5 local pre-flight.** Before any `bundle deploy`, execute the four local checks in `data_product_accelerator/skills/semantic-layer/00-semantic-layer-setup/SKILL.md` → "Phase 0.5: Local Pre-Flight": variable enumeration, DDL smoke test, Genie `_assert_sql_arrays`, live-catalog intersection. Any STOP rule triggering here halts deployment.
-
-This is a **semantic layer deployment checkpoint** — it deploys and verifies all Data Intelligence assets in the correct order.
-
-## Deployment Order (Mandatory)
-
-Deploy in this sequence — each component depends on the previous:
-
-```bash
-# 1. Validate the bundle
-databricks bundle validate -t dev
-
-# 2. Deploy all assets to workspace
-databricks bundle deploy -t dev
-
-# 3. Deploy TVFs (SQL task — creates parameterized functions in Gold schema)
-databricks bundle run -t dev tvf_job
-
-# 4. Deploy Metric Views (Python task — creates WITH METRICS LANGUAGE YAML views)
-databricks bundle run -t dev metric_views_job
-
-# 5. Deploy AI/BI Dashboard (if applicable)
-databricks bundle run -t dev dashboard_deploy_job
-
-# 6. Deploy Genie Space via Export/Import API
-#    Uses UPDATE-or-CREATE pattern with variable substitution
-databricks bundle run -t dev genie_deploy_job
-```
-
-## Genie Space API Deployment
-
-The Genie Space is deployed programmatically using the Export/Import API skill:
-- JSON config exported with `${catalog}` and `${gold_schema}` template variables
-- All IDs use `uuid.uuid4().hex` (32-char hex, no dashes)
-- `serialized_space` is a JSON string (`json.dumps()`), not a nested object
-- Data asset arrays sorted before submission (tables by `table_name`, TVFs by `function_name`)
-- Genie Space MUST use a **Serverless SQL Warehouse** (non-negotiable)
-
-## Verification (per-task, NOT end-of-flow)
-
-Run the **per-task verification** table in `data_product_accelerator/skills/semantic-layer/00-semantic-layer-setup/SKILL.md` → "Per-task verification (MANDATORY — run AFTER each task completes)". Each row lists pass criteria and a STOP rule. Do NOT defer verification to the end of the deploy — a failed TVF will silently break Metric Views, which will silently break the Genie Space.
-
-Concrete TVF / Metric View names for THIS deployment come from `plans/deploy-checkpoint.md` (emitted after `bundle validate`). The snippets below use placeholder names — replace with the concrete names from the checkpoint.
-
-```sql
--- Verify TVFs are created (replace <tvf_name> / params with values from plans/deploy-checkpoint.md)
-SELECT * FROM {lakehouse_default_catalog}.{user_schema_prefix}_gold.<tvf_name>(<args>);
-
--- Verify Metric Views exist
-SELECT table_name, table_type FROM {lakehouse_default_catalog}.information_schema.tables
-WHERE table_schema = ''{user_schema_prefix}_gold'' AND table_type = ''METRIC_VIEW'';
-
--- Test a Metric View query (replace <metric_view_name> / <measure_name> with values from plans/deploy-checkpoint.md)
-SELECT MEASURE(<measure_name>) FROM {lakehouse_default_catalog}.{user_schema_prefix}_gold.<metric_view_name>;
-```
-
-Target catalog: `{lakehouse_default_catalog}`
-Gold schema: `{user_schema_prefix}_gold`
-Concrete job names, metric-view names, TVF names, warehouse IDs, workspace paths: `plans/deploy-checkpoint.md`
-
----
-
-## Genie Code Overrides
-
-The skill above is correct as-is. Replace ONLY the run/deploy steps below — Genie Code has no terminal, no Asset Bundle, no local filesystem.
-
-**Once per Genie Code session:** clone `https://github.com/databricks-solutions/vibe-coding-workshop-template` into `/Workspace/Users/<your_email>/v2v-in-geniecode/vibe-coding-workshop-template` (Workspace → Repos → Add Repo), then read `@data_product_accelerator/skills/common/genie-code/genie-code-helpers.md` and run **Section 1 — Bootstrap** (3 cells). That defines `w`, `REPO_ROOT`, `read_file`, `write_file`, `write_notebook`, `run_sql`, `run_job_by_name`, `make_job_notebook`, `create_job`, `create_pipeline_idempotent`.
-
-**Note for Genie Code:** In Cursor mode this step is a `bundle deploy + bundle run *` orchestration. In Genie Code, V2V Steps 15-17 already created and ran each asset incrementally via SDK, so this step is a **verify / re-run** checkpoint — only re-execute stages that have changed since the last deploy.
-
-**Substitutions for THIS step:**
-
-- `databricks bundle validate -t dev` → Skip — no bundle.
-- `databricks bundle deploy -t dev` → Skip — assets already created via SDK in V2V Steps 15-17.
-- `databricks bundle run -t dev tvf_job` → `run_job_by_name("tvf")` (only if you created a TVF job in Step 17; if TVFs were created via direct `run_sql` DDL, skip).
-- `databricks bundle run -t dev metric_views_job` → `run_job_by_name("metric_view")` (same caveat).
-- `databricks bundle run -t dev dashboard_deploy_job` → re-run the Lakeview UPDATE-or-CREATE block from V2V Step 16 (or `w.lakeview.publish(dashboard_id=DASHBOARD_ID, warehouse_id=WAREHOUSE_ID)` if you only need to republish without changing the spec).
-- `databricks bundle run -t dev genie_deploy_job` → re-run the Genie API UPDATE block from V2V Step 17: `_assert_sql_arrays(payload)` then `w.api_client.do("PUT", f"/api/2.0/genie/spaces/{GENIE_SPACE_ID}", body={"serialized_space": json.dumps(payload)})`.
-- Per-task verification (after each cell) → run the skill''s "Per-task verification" queries via `run_sql(...)` against `information_schema.tables` filtered for `table_type=''METRIC_VIEW''`, a `MEASURE()` test on each Metric View, and `w.genie.get_space(space_id=GENIE_SPACE_ID)` to confirm the space exists with all data assets present.
-
-Run order if fully re-deploying: TVFs → Metric Views → Dashboard → Genie Space → Verify.
-
-**Traps (3):** (1) `_assert_sql_arrays(payload)` is mandatory on EVERY Genie Space redeploy — re-running the orchestrator without re-validating drops you into the silent-corruption failure mode where Genie returns nonsense answers. (2) Stage order matters: Metric Views depend on TVFs (Metric DDL referencing a missing function fails at parse time); Genie Space data assets reference Metric Views (deploying Genie before Metric/TVF resolves to non-existent objects — the API accepts the payload but Genie returns "schema not found" at query time). (3) Variable substitution for `${catalog}` / `${gold_schema}` in the `.lvdash.json` is processed by Databricks Workspace at upload time — concrete values must be present in `plans/deploy-checkpoint.md`; the SDK has no `--var` resolver.',
-'You are a senior data engineering lead.
-
-Traverse the @data_product_accelerator/skills/common folder to identify all available skills, understand their intended use, and invoke the relevant skills as needed to complete the task.',
-true, 1, true, current_timestamp(), current_timestamp(), current_user());
-
--- =============================================================================
--- END GENIE CODE FORKS — DATA_PRODUCT_ACCELERATOR (AI / AGENTS)
--- =============================================================================
-
--- =============================================================================
--- GENIE CODE FORKS — APPS_LAKEBASE (APPKIT)
--- =============================================================================
--- Per-step `coding_assistant='genie-code'` fork for the AppKit chapter.
--- Currently scopes to Step 3 (prd_generation). Step 4 (figma_ui_design),
--- Step 5 (cursor_copilot_ui_design / scaffold-build), and Step 6 (deploy)
--- are not forked yet — those land in a follow-up using
--- @apps_lakebase/prompts/{generate_prd_gc,one-ui-design-local,setup_lakebase_gc,
--- wire_ui_to_lakebase_gc,deploy_and_test_gc}.md from the
--- vibe-coding-workshop-template (jai-gc-update branch).
---
--- Default row (input_id 1) is unchanged — Cursor / Copilot / VS Code /
--- AI Gateway sessions resolve to it as today. Only Genie Code sessions
--- hit the new fork below.
--- =============================================================================
-
--- Step 3 (prd_generation) — Genie Code fork
-INSERT INTO ${catalog}.${schema}.section_input_prompts
-(input_id, section_tag, coding_assistant, input_template, system_prompt,
- bypass_llm, version, is_active, inserted_at, updated_at, created_by)
-VALUES
-(1001, 'prd_generation', 'genie-code',
-'Generate a prompt that I can copy into my AI coding assistant (Cursor/Copilot/Genie Code) to create a simple Product Requirements Document (PRD).
-
-The generated prompt MUST include these instructions at the very beginning:
-
-```
-## IMPORTANT - READ FIRST
-Your ONLY task is to create a PRD document. Do NOT:
-- Generate any code or scripts
-- Create any implementation files
-- Start building the application
-- Define table structures, schemas, or database designs
-- Create table names or data models
-- Define API endpoints, routes, or API specifications
-- Include implementation-specific logic or technical details
-- Do anything other than creating the PRD
-
-You MUST:
-- Create ONLY the PRD document
-- Save it to: docs/design_prd.md
-- STOP after saving the PRD - do nothing else
-```
-
-After those instructions, the prompt should ask for a simple, focused PRD for a {industry_name} application focused on {use_case_title}.
-
-## Use Case Context to Include
-{use_case_description}
-
-## Application Context to Include
-- **Industry**: {industry_name}
-- **Use Case**: {use_case_title}
-- Use a neutral, professional product name and generic terminology
-- Web first, but include mobile considerations if applicable
-
-## PRD Focus Guidelines
-**Keep it simple** - Focus on providing enough details to generate a clear, readable PRD without over-engineering.
-
-**Important Constraints:**
-- Do NOT include table definitions, table names, or database schema designs - these will come in later steps
-- Do NOT include API definitions, endpoints, or implementation-specific logic
-- Only focus on **High Value workflows**
-- Document **Happy Path only** - skip edge cases and error handling details for now
-- Prioritize clarity over completeness
-
-## PRD Structure to Request
-The generated prompt should ask for a PRD with these sections:
-
-1. **Summary** - Product vision, problem statement, target personas (2-3 max), goals + non-goals
-2. **Scope** - MVP scope only, clear out of scope items
-3. **User Journeys** - High-value end-to-end flows (Happy Path only) for primary personas
-4. **Functional Requirements** - Key requirements with simple acceptance criteria
-5. **Non-Functional Requirements** - Basic performance, security, accessibility notes
-6. **High-Level Data Entities** - Entity names and relationships only (NO table definitions or schemas)
-7. **Release Plan** - Simple milestones from MVP to GA
-
-The prompt MUST end with:
-```
-Save this PRD to: docs/design_prd.md
-STOP after saving. Do not generate any code, tables, APIs, or proceed with other tasks.
-```
-
----
-
-## Genie Code Overrides
-
-The prompt above is correct as-is. Replace ONLY the file save verb below — Genie Code has no local filesystem; the PRD must land under `/Workspace`.
-
-**Once per Genie Code session:** clone `https://github.com/databricks-solutions/vibe-coding-workshop-template` into `/Workspace/Users/<your_email>/v2v-in-geniecode/vibe-coding-workshop-template` (Workspace → Repos → Add Repo), then read `@data_product_accelerator/skills/common/genie-code/genie-code-helpers.md` and run **Section 1 — Bootstrap** (3 cells). That defines `w`, `REPO_ROOT`, `read_file`, `write_file`, `write_notebook`, `run_sql`, `run_job_by_name`, `make_job_notebook`, `create_job`, `create_pipeline_idempotent`.
-
-**Substitutions for THIS step:**
-
-- The final instruction `Save this PRD to: docs/design_prd.md` → `prd_path = (REPO_ROOT + "/docs/design_prd.md").replace("/Workspace", "", 1); write_file(prd_path, prd_markdown)`
-- Any local-FS save the assistant might emit (`open(path, "w").write(...)`, `pathlib.Path(...).write_text(...)`, `dbutils.fs.put(...)`) → use `write_file(prd_path, prd_markdown)` only.
-
-**Traps:**
-1. Ensure the `docs/` folder exists in the cloned repo before writing — `write_file` does NOT auto-create parent directories. Run `w.workspace.mkdirs(REPO_ROOT + "/docs")` once per session if needed.
-2. The PRD must be **plain markdown content**, not the entire document wrapped in a single fenced code block — otherwise downstream genie-code forks (`gold_layer_design`, `bronze_layer_creation`, etc.) that already substitute `@docs/design_prd.md` → `read_file(...)` will receive the code-fence wrapper as part of the content.
-3. Do NOT save the PRD as a notebook via `write_notebook(...)`. Every downstream fork uses `read_file(...)` and expects a `.md` file. If you want a notebook view in the Workspace UI, render the PRD in a separate cell using `displayHTML(prd_markdown)` AFTER the file write completes.',
-'You are generating a prompt that users will copy into their AI coding assistant.
-
-Your output should be a complete, ready-to-use prompt that when pasted into Cursor, Copilot, or a Genie Code notebook cell will:
-1. Create ONLY a simple Product Requirements Document
-2. Save it to docs/design_prd.md
-3. NOT generate any code, scripts, table definitions, or API specifications
-
-CRITICAL: Your generated prompt MUST start with clear instructions telling the AI to ONLY create the PRD document and save it to docs/design_prd.md, and to NOT do anything else. Focus on High Value workflows with Happy Path only.
-
-The prompt should be focused and specific to {use_case_title}, incorporating the use case context provided.
-
-**OUTPUT FORMAT RULES:**
-- Output the prompt directly as plain markdown text - do NOT wrap the entire output in code blocks or backticks
-- Use proper markdown formatting: ## for headers, - for bullet points, **text** for bold
-- For code blocks within your output (like file paths or specific instructions to include verbatim), use triple backticks on their own lines
-- Do NOT use single backticks for multi-line content
-- The output should render properly when displayed as markdown
-
-**GENIE CODE PRESERVATION RULE:**
-You MUST preserve the entire `## Genie Code Overrides` section (including its bootstrap paragraph, the Substitutions list, and the Traps list) that appears at the end of the input_template VERBATIM in your output. Do not paraphrase, summarize, reformat, reorder, translate, merge, or move it. It is runtime metadata for the user''s Genie Code environment, not part of the PRD they are generating. Place it at the very end of your output, after the final ``Save this PRD to: docs/design_prd.md`` instruction block, separated by a horizontal rule (`---`).',
-false, 1, true, current_timestamp(), current_timestamp(), current_user());
-
--- =============================================================================
--- END GENIE CODE FORKS — APPS_LAKEBASE (APPKIT)
 -- =============================================================================
