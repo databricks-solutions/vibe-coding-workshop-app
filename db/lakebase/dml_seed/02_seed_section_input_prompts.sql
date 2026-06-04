@@ -693,6 +693,28 @@ await createApp({
 
 Write files with `executeCode` `open(path,"w").write(...)` against warm compute (warm up once with a trivial `print("ready")` to absorb the serverless cold start, then keep `timeoutMinutes` generous). Do **not** run `npm run build`/`npm run dev` — there is no local Node; the build runs server-side at deploy.
 
+🔴 **Preserve the scaffold''s import specifiers verbatim.** `apps init` ships `client/src/index.css` with `@import "@databricks/appkit-ui/styles.css";` and every `.tsx` importing components from `@databricks/appkit-ui/react`. **Edit these files incrementally — never regenerate `App.tsx`/`index.css` from memory**, which is how the wrong specifiers (bare `@databricks/appkit-ui`, extension-less `…/styles`) get reintroduced and the server-side build fails. Likewise keep the scaffold''s `client/src/ErrorBoundary.tsx` (it is what surfaces a client runtime crash in the browser at step 05). See `02-appkit-build` "Hard Rules" + `references/llm-guardrails.md` rules 11–12.
+
+### Step 5b — Pre-handoff import-specifier gate (the only static check here)
+
+There is **no local `tsc`/`npm`** on Genie Code, so a regex scan is the **only** way to catch the #1 build-killer (wrong `@databricks/appkit-ui` specifiers) before this step hands off to deploy. Run via `executeCode` (read files in Python + regex — do NOT depend on the IDE''s shell `grep`):
+
+```python
+import re, pathlib
+root = pathlib.Path("<APP_ROOT>/client/src")
+bad = []
+for f in root.rglob("*"):
+    if f.suffix in {".ts", ".tsx", ".css"}:
+        t = f.read_text()
+        if re.search(r''from\s+["\'']@databricks/appkit-ui["\'']'', t):
+            bad.append(f"{f}: bare ''@databricks/appkit-ui'' -> use ''/react''")
+        if re.search(r''@import\s+["\'']@databricks/appkit-ui/styles["\'']'', t):
+            bad.append(f"{f}: ''/styles'' missing ''.css'' -> use ''/styles.css''")
+print("\n".join(bad) or "OK")
+```
+
+Fix every hit before declaring this step complete. `OK` is required to hand off to step 05. (Step 05 re-runs this same gate as its pre-deploy check.)
+
 ### Step 6 — Create the UI design document
 
 Write `<artifact_root>/docs/ui_design.md` (clone-rooted, NOT `@docs/...`) describing key screens/pages, core components and their mock-data sources, navigation flow, and design direction.
@@ -1981,9 +2003,11 @@ Then the Gold design orchestrator and its common skill (load in this order):
 2. `readSkillFile("skills/vibe-coding-workshop/data_product_accelerator/skills/gold/00-gold-layer-design/SKILL.md")` — the design orchestrator. Drive the full 9-phase design workflow from it.
 3. `readSkillFile("skills/vibe-coding-workshop/data_product_accelerator/skills/common/naming-tagging-standards/SKILL.md")` — naming prefixes (`dim_`/`fact_`), dual-purpose (human + Genie/LLM) COMMENTs, governed PII tags. **NEVER name a table/column or write a description without reading this.**
 
-When the orchestrator lists further **Mandatory Skill Dependencies** (its design workers: grain definition, dimension patterns, fact-table patterns, conformed dimensions, ERD diagrams, table documentation, design validation), load EACH the same way: take its repo-relative path and prefix it with `skill_ref_root`. Genie Code has no repo-root-relative resolution and `AGENTS.md` does not carry across threads — so always prefix with `skill_ref_root`. **Read those design workers in ONE batched `readSkillFile` turn — Genie Code reads multiple skill files in parallel in a single turn, so never serialize independent reads (`genie-code-environment` §10).**
+The orchestrator also lists **Mandatory Skill Dependencies** — its design workers (grain definition, dimension patterns, fact-table patterns, conformed dimensions, ERD diagrams, table documentation, design validation). Load EACH the same way: take its repo-relative path and prefix it with `skill_ref_root`. Genie Code has no repo-root-relative resolution and `AGENTS.md` does not carry across threads — so always prefix with `skill_ref_root`.
 
-**🔴 Preflight acknowledgement (hard gate — do this BEFORE writing any file).** After the batched `readSkillFile` returns, echo a one-line acknowledgement for EACH skill you loaded — its full `<skill_ref_root>`-prefixed path + the single rule you will apply from it. If you cannot state the rule, you have not actually read the skill — STOP and read it before writing anything. Do not write any design artifact (YAML, ERD, lineage, docs) until every listed skill is acknowledged — silently skipping a skill read is the regression this preflight exists to prevent.
+🔴 **Do NOT batch-read the design workers upfront. Load each worker just-in-time, at the start of the phase that needs it**, following the orchestrator''s per-phase reading table (`00-gold-layer-design/SKILL.md`, "Skill reading strategy"): Phase 0 = schema-intake; Phase 2 = dimension-patterns + fact-patterns; Phase 3 = erd-patterns; Phase 4 = yaml-schema-patterns + table-documentation; Phase 8 = design-validation. **This deliberately overrides the general Genie Code "batch parallel reads" heuristic (`genie-code-environment` §10) for design workers only** — the orchestrator found that pre-loading every worker pushes the active phase''s rules out of the attention window and produces YAML format divergence across tables, so here quality wins over the context-savings of batching. The Tier-A skills above (Steps 1–3: databricks-expert-agent, the orchestrator, naming-tagging-standards) still load together as one batch; only the design workers are staged per phase.
+
+**🔴 Preflight acknowledgement (hard gate).** Echo a one-line acknowledgement for EACH skill the moment you load it — its full `<skill_ref_root>`-prefixed path + the single rule you will apply from it. For Tier-A, acknowledge all three before writing any file. For each design worker, acknowledge it as its phase begins, before producing that phase''s artifacts. If you cannot state the rule, you have not actually read the skill — STOP and read it before continuing. Silently skipping a skill read is the regression this preflight exists to prevent.
 
 ### Step 2 — Run the design workflow, writing every artifact under `<DP_BUNDLE_ROOT>/gold_layer_design/`
 
@@ -1993,6 +2017,8 @@ Drive the orchestrator''s end-to-end design workflow against `<artifact_root>/da
 - Design the dimensional model — SCD Type 1/2 decisions per dimension, explicit grain per fact, measures, and business domains.
 - **Write `<DP_BUNDLE_ROOT>/gold_layer_design/DESIGN_DECISIONS.md` BEFORE any YAML** so every YAML shares one FK format, description format, and transformation enum.
 - Generate Mermaid ERDs, one YAML schema file per Gold table, column-level lineage (Bronze → Silver → Gold), the Business Onboarding Guide, the Source Table Mapping, and the design-consistency validation report.
+- **Tag generated dimensions.** Any dimension with no Silver source (e.g. `dim_date`, `dim_time`) MUST carry `population_strategy: generate_sequence` in its YAML; every Silver-sourced table carries `population_strategy: merge_from_silver`. This tells the Gold pipeline step (12) to INSERT `dim_date` from a generated sequence instead of trying to MERGE from a non-existent Silver source. Record the `dim_date` exception in `DESIGN_DECISIONS.md`.
+- **Upstream cross-reference is mandatory when Silver exists.** After generating the YAML, check whether Silver tables exist (`spark.catalog.tableExists(...)`); if they do, run the orchestrator''s `cross_reference_silver_at_design_time()` to validate every YAML `silver_column` against the live Silver schema via `DESCRIBE`, fix any mismatches, and write the resulting mismatch count (target: 0) into the validation report. Do not treat this as optional when Silver is present — it is the external check that catches systematic column errors the self-consistency checks cannot.
 
 Anchor EVERY output to `<DP_BUNDLE_ROOT>/gold_layer_design/` — never the bare clone root, never the page CWD. The key paths:
 
@@ -2001,17 +2027,18 @@ Anchor EVERY output to `<DP_BUNDLE_ROOT>/gold_layer_design/` — never the bare 
 - `<DP_BUNDLE_ROOT>/gold_layer_design/yaml/{domain}/{table}.yaml`  ← the Gold pipeline (step 12) reads these, and its bundle syncs `gold_layer_design/yaml/**`
 - `<DP_BUNDLE_ROOT>/gold_layer_design/COLUMN_LINEAGE.csv` and `COLUMN_LINEAGE.md`
 - `<DP_BUNDLE_ROOT>/gold_layer_design/SOURCE_TABLE_MAPPING.csv`, `DESIGN_SUMMARY.md`, and `docs/BUSINESS_ONBOARDING_GUIDE.md`
+- `<DP_BUNDLE_ROOT>/gold_layer_design/DESIGN_GAP_ANALYSIS.md` (coverage analysis) and `README.md` (navigation hub) — both are MANDATORY per the orchestrator''s deliverables checklist; do not skip them
 
 Use `createAsset`/the workspace file APIs to write these files under `<DP_BUNDLE_ROOT>/gold_layer_design/`. If a path-resolution tool reports the parent folder does not exist, create it (the bundle folder is built up across steps) — do not retarget to the clone root.
 
 **Genie Code execution notes — this is a heavy, compute-bound phase; heed these (see `genie-code-environment` §10):**
 
 - **Warm up, then budget generously.** This phase does real Python work — parsing the schema CSV, generating one YAML per Gold table, building ERDs, and running cross-table validation. Make the FIRST `executeCode` call a trivial `print("ready")` to absorb the ~3–5 min serverless cold start once, then set `timeoutMinutes` **≥ 20** on every subsequent `executeCode`. **Never set `timeoutMinutes` below 15** — a smaller budget only buys a cold-start timeout and a wasted retry.
-- **Write files through warm compute.** Once compute is warm, write each artifact with `executeCode` `open(path,"w").write(...)` (one call per file, creates it directly). The compute-free trio `createAsset` → `readFile` → `workspaceUpdateFile` works too, but it is 3 calls and `workspaceUpdateFile` can only update a file that already exists AND was read in this thread — reserve it for single updates, not bulk generation.
+- **Write files through warm compute.** Once compute is warm, write each artifact with `executeCode` `open(path,"w").write(...)` (one call per file, creates it directly). The compute-free trio `createAsset` → `readFile` → `workspaceUpdateFile` works too, but it is 3 calls and `workspaceUpdateFile` can only update a file that already exists AND was read in this thread — reserve it for single updates, not bulk generation. 🔴 **Verify every write with `os.path.exists(path)` (or `os.listdir(dir)`) in the SAME `executeCode` block — NOT `listFiles`:** the workspace REST API behind `listFiles` lags FUSE-written files (a live run saw `listFiles`=7 while `os.listdir`=12), so `listFiles` returns false "missing-file" negatives and you waste turns recreating files that already exist.
 
 **State-lock:** this prompt runs between an `enter` (Step 0) and an `exit`. After the gate passes, run `skills/vibecoding-state` op `exit` — params: `prompt_id: "gold_layer_design"`, `gate: "Gold design complete"`, `captured: {gold_design_path}`. **This `enter`/`exit` pair is a mandatory ritual, not advisory.** Step 0''s `enter` MUST locate — or, if this is the first prompt of the track, bootstrap-create — the canonical live state file at `<dp_bundle_root>/.vibecoding-state.md` (never the temporary `example/…` bootstrap path). The closing `exit` MUST append this prompt''s Per-Step Log entry, Gate result, and `captured` vars to that file, then **re-read it and echo the appended section to prove the write landed**. **Gate completion rule:** this prompt is NOT complete until that re-read confirms the appended entry — the chat summary is NOT the state store.
 
-**Gate:** `Gold design complete` — `<DP_BUNDLE_ROOT>/gold_layer_design/` contains `DESIGN_DECISIONS.md` (written before any YAML), one YAML per Gold table under `yaml/{domain}/`, the master ERD, and `COLUMN_LINEAGE.csv` — all under the data-product bundle folder so the Gold pipeline can sync them in place. No schema/table was created and nothing was deployed (that is step 12).',
+**Gate:** `Gold design complete` — `<DP_BUNDLE_ROOT>/gold_layer_design/` contains the FULL mandatory deliverables set from the orchestrator''s deliverables checklist: `DESIGN_DECISIONS.md` (written before any YAML), one YAML per Gold table under `yaml/{domain}/`, the master ERD, `COLUMN_LINEAGE.csv` (+ `COLUMN_LINEAGE.md`), `SOURCE_TABLE_MAPPING.csv`, `DESIGN_SUMMARY.md`, `docs/BUSINESS_ONBOARDING_GUIDE.md`, **`DESIGN_GAP_ANALYSIS.md`, and `README.md`** — all under the data-product bundle folder so the Gold pipeline can sync them in place. **Upstream cross-reference:** if Silver tables exist, the YAML-lineage-vs-live-Silver `DESCRIBE` check ran and its mismatch count (target: 0) is recorded in the validation report — this is a hard part of the gate, not optional. No schema/table was created and nothing was deployed (that is step 12).',
 '',
 true, 1, true, current_timestamp(), current_timestamp(), current_user());
 
@@ -2306,6 +2333,8 @@ Run `skills/vibecoding-state` operation `enter` with `prompt_id: "bronze_layer_c
 
 If `enter` has not run in this thread, run it now — every step below depends on these values.
 
+**On resume after a context reset:** trust the live state file over any chat summary — a prompt whose state entry shows its gate PASSED is DONE (do NOT re-run it), and before re-writing files reconcile what is already on disk with `os.listdir(...)` (NOT `listFiles`, which lags FUSE writes) against the state file''s captured paths, so you resume rather than recreate.
+
 ### Step 0.5 — Resolve the target catalog (no-create invariant — HARD STOP if absent)
 
 Catalogs are pre-provisioned in this workshop — you must **NEVER** create one. `CREATE CATALOG` in a Default-Storage workspace fails ("no metastore storage root"); creating catalogs is also not the customer best practice you are demonstrating. Resolve the catalog read-only, BEFORE authoring anything:
@@ -2317,21 +2346,23 @@ Catalogs are pre-provisioned in this workshop — you must **NEVER** create one.
 
 ### Step 1 — Load the required skills by their FULL clone-rooted paths
 
-Load each skill with `readSkillFile` using its fully-qualified `<skill_ref_root>`-prefixed path — NEVER a bare `@…` mention, NEVER a repo-relative path. **The root-level `skills/` come FIRST: they are the highest-priority, always-on guardrails and govern everything below.**
+Load each skill with `readSkillFile` using its fully-qualified `<skill_ref_root>`-prefixed path — NEVER a bare `@…` mention, NEVER a repo-relative path. **The root-level `skills/` come FIRST: they are the highest-priority, always-on guardrails and govern everything below.** Skills load in two tiers to keep context lean without weakening the preflight-ack gate.
+
+**Tier A — read in FULL now (one batched `readSkillFile` turn) and acknowledge.** These are the guardrails used while authoring in Step 2:
 
 1. `readSkillFile("skills/vibe-coding-workshop/skills/databricks-expert-agent/SKILL.md")` — core rule: extract names from the source, never hardcode.
 2. `readSkillFile("skills/vibe-coding-workshop/skills/databricks-asset-bundles/SKILL.md")` — serverless job YAML, Environments V4, `notebook_task`, `base_parameters`. **You will not write any `databricks.yml` or job YAML until you have read this.**
-
-Then the Bronze orchestrator and its data-product common skills (load in this order):
-
 3. `readSkillFile("skills/vibe-coding-workshop/data_product_accelerator/skills/bronze/00-bronze-layer-setup/SKILL.md")` — the orchestrator (drive Approach C from it).
-4. `readSkillFile("skills/vibe-coding-workshop/data_product_accelerator/skills/common/naming-tagging-standards/SKILL.md")` — table/schema naming prefixes (`bronze_`), COMMENTs, governed PII tags. **NEVER name a table or schema without reading this.**
-5. `readSkillFile("skills/vibe-coding-workshop/data_product_accelerator/skills/common/databricks-table-properties/SKILL.md")` — Bronze TBLPROPERTIES, `CLUSTER BY AUTO`, governance metadata. **NEVER write TBLPROPERTIES without reading this.**
-6. `readSkillFile("skills/vibe-coding-workshop/data_product_accelerator/skills/common/schema-management-patterns/SKILL.md")` — `CREATE SCHEMA IF NOT EXISTS` patterns.
+4. `readSkillFile("skills/vibe-coding-workshop/data_product_accelerator/skills/common/databricks-table-properties/SKILL.md")` — Bronze TBLPROPERTIES, `CLUSTER BY AUTO`, governance metadata, and the no-`DEFAULT`-in-DDL rule. **NEVER write TBLPROPERTIES without reading this.**
 
-When the orchestrator lists further **Mandatory Skill Dependencies**, load EACH the same way: take its repo-relative path and prefix it with `skill_ref_root`. Genie Code has no repo-root-relative resolution and `AGENTS.md` does not carry across threads — so always prefix with `skill_ref_root`. **Read them in one batched `readSkillFile` turn — Genie Code reads multiple skill files in parallel in a single turn, so never serialize independent reads (`genie-code-environment` §10).**
+**Tier B — acknowledge the inlined one-line rule now; defer the full `readSkillFile` to the phase that uses it.** This only DEFERS the read (the orchestrator''s per-phase Pre-Conditions force the full read at the right moment) — it does NOT skip it:
 
-**🔴 Preflight acknowledgement (hard gate — do this BEFORE writing any file).** After the batched `readSkillFile` returns, echo a one-line acknowledgement for EACH skill you loaded — its full `<skill_ref_root>`-prefixed path + the single rule you will apply from it. If you cannot state the rule, you have not actually read the skill — STOP and read it before writing anything. Do not author `databricks.yml`, job/pipeline YAML, notebooks, or any artifact until every listed skill is acknowledged — silently skipping a skill read is the regression this preflight exists to prevent.
+- `skills/vibe-coding-workshop/data_product_accelerator/skills/common/naming-tagging-standards/SKILL.md` — rule: snake_case, `bronze_` table/schema prefix, dual-purpose COMMENTs on every table/column, governed `class.*` PII tags inferred from column names. Full read when you name the schema/tables.
+- `skills/vibe-coding-workshop/data_product_accelerator/skills/common/schema-management-patterns/SKILL.md` — rule: `CREATE SCHEMA IF NOT EXISTS` with governance metadata; enable Predictive Optimization via `ALTER SCHEMA ENABLE PREDICTIVE OPTIMIZATION` (NOT TBLPROPERTIES); schemas are NOT bundle resources. Full read when you create the Bronze schema.
+
+When the orchestrator lists further **Mandatory Skill Dependencies**, load EACH the same way: take its repo-relative path and prefix it with `skill_ref_root`. Genie Code has no repo-root-relative resolution and `AGENTS.md` does not carry across threads — so always prefix with `skill_ref_root`. **Read independent Tier-A skills in one batched `readSkillFile` turn — Genie Code reads multiple skill files in parallel in a single turn, so never serialize independent reads (`genie-code-environment` §10).**
+
+**🔴 Preflight acknowledgement (hard gate — do this BEFORE writing any file).** Echo a one-line acknowledgement for EVERY skill above — **both tiers**: for Tier A, the rule you took from the full read; for Tier B, the inlined rule above plus the phase at which you will full-read it. If you cannot state a Tier-A skill''s rule, you have not actually read it — STOP and read it before writing anything. Do not author `databricks.yml`, job/pipeline YAML, notebooks, or any artifact until every listed skill (both tiers) is acknowledged — silently skipping a skill is the regression this preflight exists to prevent.
 
 ### Step 2 — Author the bundle (Approach C — copy sample data). Do NOT execute anything yet.
 
@@ -2340,6 +2371,7 @@ Using the skills above, AUTHOR (write files only — no execution) a bundle whos
 - **Clone all source tables** from the `{chapter_3_lakehouse_catalog}.{chapter_3_lakehouse_schema}` schema into your target Bronze schema (the `DEEP CLONE` is a statement INSIDE the job notebook — not something you run now).
 - **Apply enterprise table properties** — Change Data Feed (CDF), `CLUSTER BY AUTO`, auto-optimize, and auto-compact on every table.
 - **Preserve source COMMENTs** — carry over all column-level documentation from the source schema.
+- 🔴 **No `DEFAULT` column clauses in any DDL.** A `DEFAULT <expr>` clause needs the `delta.feature.allowColumnDefaults` table feature (off by default) and the `CREATE TABLE` will fail — set defaults at INSERT time instead, and do not add columns the source/template did not call for (see `common/unity-catalog-constraints` → "Never Use `DEFAULT` Column Clauses in DDL").
 
 IMPORTANT: Use the EXISTING catalog `{lakehouse_default_catalog}` — do NOT create a new catalog. The job creates the Bronze schema `{user_schema_prefix}_bronze` and its tables inside this catalog.
 
@@ -2369,6 +2401,7 @@ targets:
   - **Bundle editor:** `{host}/editor/files/{file_id}?o={o}&contextId=folder%3A{folder_id}` (plain folder: `{host}/browse/folders/{folder_id}?o={o}`)
 
   Tell the operator to open the **bundle-editor link**, then run every `databricks bundle …` command below from that page. Edit the EXISTING on-page `databricks.yml` — files created via the workspace API may not reach the CLI''s FUSE mount.
+- **File-write tiers + verify writes (Genie Code — see `genie-code-environment` §10).** Once compute is warm, write each file with `executeCode` `open(path,"w").write(...)` (one call per file; make the FIRST `executeCode` a trivial `print("ready")` to absorb the ~3–5 min serverless cold start, and never set `timeoutMinutes` below 15). The compute-free `createAsset` → `readFile` → `workspaceUpdateFile` trio also works, but `workspaceUpdateFile` only updates a file that already exists AND was read this thread — reserve it for editing the on-page `databricks.yml`. 🔴 **Verify every write with `os.path.exists(path)` (or `os.listdir(dir)`) in the SAME `executeCode` block — NOT `listFiles`:** the workspace REST API behind `listFiles` lags FUSE-written files (a live run saw `listFiles`=7 while `os.listdir`=12), so `listFiles` returns false "missing-file" negatives and you waste turns recreating files that already exist.
 - Validate → deploy → run the job through `runDatabricksCli`, **from the bundle-editor page**, each with `--target dev` (mandatory — a target-less deploy is guardrail-blocked):
   - `databricks bundle validate --target dev`
   - `databricks bundle deploy --target dev`
@@ -2928,33 +2961,43 @@ Run `skills/vibecoding-state` operation `enter` with `prompt_id: "silver_layer_s
 
 If `enter` reports the Bronze gate is not `Bronze layer live`, STOP — finish the Bronze step first. If `enter` has not run in this thread, run it now.
 
+**On resume after a context reset:** trust the live state file over any chat summary — a prompt whose state entry shows its gate PASSED is DONE (do NOT re-run it), and before re-writing files reconcile what is already on disk with `os.listdir(...)` (NOT `listFiles`, which lags FUSE writes) against the state file''s captured paths, so you resume rather than recreate.
+
 ### Step 1 — Load the required skills by their FULL clone-rooted paths
 
-Load each skill with `readSkillFile` using its fully-qualified `<skill_ref_root>`-prefixed path — NEVER a bare `@…` mention, NEVER a repo-relative path. **The root-level `skills/` come FIRST: they are the highest-priority, always-on guardrails and govern everything below.**
+Load each skill with `readSkillFile` using its fully-qualified `<skill_ref_root>`-prefixed path — NEVER a bare `@…` mention, NEVER a repo-relative path. **The root-level `skills/` come FIRST: they are the highest-priority, always-on guardrails and govern everything below.** Skills load in two tiers to keep context lean without weakening the preflight-ack gate.
+
+**Tier A — read in FULL now (one batched `readSkillFile` turn) and acknowledge.** These are the guardrails used while authoring in Step 2:
 
 1. `readSkillFile("skills/vibe-coding-workshop/skills/databricks-expert-agent/SKILL.md")` — core rule: extract names from the source, never hardcode.
 2. `readSkillFile("skills/vibe-coding-workshop/skills/databricks-asset-bundles/SKILL.md")` — DLT pipeline YAML, job YAML, serverless config, and the multi-user `${var.user_prefix}` "Shared Workspace Naming" pattern. **You will not write any `databricks.yml`, pipeline, or job YAML until you have read this.**
-
-Then the Silver orchestrator and its data-product common + worker skills (load in this order):
-
 3. `readSkillFile("skills/vibe-coding-workshop/data_product_accelerator/skills/silver/00-silver-layer-setup/SKILL.md")` — the orchestrator. Follow every `See: references/…` link it names (prefix those with `skill_ref_root` too).
-4. `readSkillFile("skills/vibe-coding-workshop/data_product_accelerator/skills/common/schema-management-patterns/SKILL.md")` — `CREATE SCHEMA IF NOT EXISTS` with governance metadata. **NEVER write `CREATE SCHEMA` without reading this.**
-5. `readSkillFile("skills/vibe-coding-workshop/data_product_accelerator/skills/common/naming-tagging-standards/SKILL.md")` — naming prefixes (`silver_`), dual-purpose COMMENTs, governed PII tags. **NEVER name a table or resource without reading this.**
-6. `readSkillFile("skills/vibe-coding-workshop/data_product_accelerator/skills/common/databricks-table-properties/SKILL.md")` — Silver TBLPROPERTIES (CDF, `delta.enableRowTracking`, auto-optimize, `cluster_by_auto`). **NEVER write TBLPROPERTIES without reading this.**
-7. `readSkillFile("skills/vibe-coding-workshop/data_product_accelerator/skills/common/unity-catalog-constraints/SKILL.md")` — PRIMARY KEY constraint syntax for the `dq_rules` table (`(table_name, rule_name)`). **NEVER define PK/FK without reading this.**
-8. `readSkillFile("skills/vibe-coding-workshop/data_product_accelerator/skills/common/databricks-python-imports/SKILL.md")` — pure-Python module pattern so `dq_rules_loader.py` has NO notebook header.
-9. `readSkillFile("skills/vibe-coding-workshop/data_product_accelerator/skills/silver/01-dlt-expectations-patterns/SKILL.md")` and `readSkillFile("skills/vibe-coding-workshop/data_product_accelerator/skills/silver/02-dqx-patterns/SKILL.md")` — the DQ expectations + DQX worker patterns.
+4. `readSkillFile("skills/vibe-coding-workshop/data_product_accelerator/skills/common/databricks-table-properties/SKILL.md")` — Silver TBLPROPERTIES (CDF, `delta.enableRowTracking`, auto-optimize, `cluster_by_auto`). **NEVER write TBLPROPERTIES without reading this.**
+5. `readSkillFile("skills/vibe-coding-workshop/data_product_accelerator/skills/common/unity-catalog-constraints/SKILL.md")` — PRIMARY KEY constraint syntax for the `dq_rules` table (`(table_name, rule_name)`), and the no-`DEFAULT`-in-DDL rule. **NEVER define PK/FK without reading this.**
+6. `readSkillFile("skills/vibe-coding-workshop/data_product_accelerator/skills/silver/01-dlt-expectations-patterns/SKILL.md")` and `readSkillFile("skills/vibe-coding-workshop/data_product_accelerator/skills/silver/02-dqx-patterns/SKILL.md")` — the DQ expectations + DQX worker patterns.
 
-When the orchestrator lists further **Mandatory Skill Dependencies**, load EACH the same way: take its repo-relative path and prefix it with `skill_ref_root`. Genie Code has no repo-root-relative resolution and `AGENTS.md` does not carry across threads — so always prefix with `skill_ref_root`. **Read them in one batched `readSkillFile` turn — Genie Code reads multiple skill files in parallel in a single turn, so never serialize independent reads (`genie-code-environment` §10).**
+**Tier B — acknowledge the inlined one-line rule now; defer the full `readSkillFile` to the phase that uses it.** This only DEFERS the read (the orchestrator''s per-phase Pre-Conditions force the full read at the right moment) — it does NOT skip it:
 
-**🔴 Preflight acknowledgement (hard gate — do this BEFORE writing any file).** After the batched `readSkillFile` returns, echo a one-line acknowledgement for EACH skill you loaded — its full `<skill_ref_root>`-prefixed path + the single rule you will apply from it. If you cannot state the rule, you have not actually read the skill — STOP and read it before writing anything. Do not author `databricks.yml`, job/pipeline YAML, notebooks, or any artifact until every listed skill is acknowledged — silently skipping a skill read is the regression this preflight exists to prevent.
+- `skills/vibe-coding-workshop/data_product_accelerator/skills/common/schema-management-patterns/SKILL.md` — rule: `CREATE SCHEMA IF NOT EXISTS` with governance metadata; enable Predictive Optimization via `ALTER SCHEMA ENABLE PREDICTIVE OPTIMIZATION` (NOT TBLPROPERTIES); schemas are NOT bundle resources. Full read when you create the Silver schema (Phase 1).
+- `skills/vibe-coding-workshop/data_product_accelerator/skills/common/naming-tagging-standards/SKILL.md` — rule: snake_case, `silver_` table prefix, dual-purpose COMMENTs on every table/column, governed `class.*` PII tags inferred from column names. Full read when you name tables / write TBLPROPERTIES (Phases 2/4).
+- `skills/vibe-coding-workshop/data_product_accelerator/skills/common/databricks-python-imports/SKILL.md` — rule: `dq_rules_loader.py` is PURE Python (NO `# Databricks notebook source` header); import by module name, no `sys.path` hacks. Full read when you write the loader (Phase 3).
+
+When the orchestrator lists further **Mandatory Skill Dependencies**, load EACH the same way: take its repo-relative path and prefix it with `skill_ref_root`. Genie Code has no repo-root-relative resolution and `AGENTS.md` does not carry across threads — so always prefix with `skill_ref_root`. **Read independent Tier-A skills in one batched `readSkillFile` turn — Genie Code reads multiple skill files in parallel in a single turn, so never serialize independent reads (`genie-code-environment` §10).**
+
+**🔴 Preflight acknowledgement (hard gate — do this BEFORE writing any file).** Echo a one-line acknowledgement for EVERY skill above — **both tiers**: for Tier A, the rule you took from the full read; for Tier B, the inlined rule above plus the phase at which you will full-read it. If you cannot state a Tier-A skill''s rule, you have not actually read it — STOP and read it before writing anything. Do not author `databricks.yml`, job/pipeline YAML, notebooks, or any artifact until every listed skill (both tiers) is acknowledged — silently skipping a skill is the regression this preflight exists to prevent.
+
+### Step 1.5 — Pin the Bronze column inventory (read-only hard gate — do this BEFORE writing any DQ rule or DLT code)
+
+🔴 **Column names come ONLY from the live Bronze schema — never from the PRD, the schema CSV, or memory.** Before authoring `setup_dq_rules_table.py`, `silver_dimensions.py`, `silver_facts.py`, or any `constraint_sql`, run `DESCRIBE TABLE {lakehouse_default_catalog}.{bronze_schema}.<table>` for EVERY Bronze table you will read (this is read-only inspection, permitted by the rule above). Build and echo a `{table: [column, …]}` map and keep it in working memory as the **pinned inventory**.
+
+**Invariant:** every `constraint_sql` expression, every Silver `SELECT`/column reference, and every `get_bronze_table()` column MUST use a name from this pinned map. A rule or column that references a name NOT in the pinned map is a **hard error** — fix the name (or drop the rule) before writing the file; do NOT guess a "close enough" name. This is the exact failure the Silver run hit (`price`→`base_price`, `latitude`→`property_latitude`): the PRD said "price" and "coordinates" but the live schema used prefixed names. Pinning the inventory first makes that class of bug impossible.
 
 ### Step 2 — Author the Silver bundle (SDP + centralized DQ rules). Do NOT execute anything yet.
 
 Using the skills above, AUTHOR (write files only — no execution) the bundle resources whose job/pipeline, when run, will:
 
 - **Generate SDP pipeline notebooks** — Spark Declarative Pipeline notebooks with incremental ingestion from Bronze via Change Data Feed (CDF), expectations, and quarantine tables.
-- **Create a centralized DQ-rules table** — a configurable `dq_rules` Delta table (null checks, range validation, referential integrity), with a PK on `(table_name, rule_name)`, plus a pure-Python `dq_rules_loader.py` (no notebook header).
+- **Create a centralized DQ-rules table** — a configurable `dq_rules` Delta table (null checks, range validation, referential integrity), with a PK on `(table_name, rule_name)`, plus a pure-Python `dq_rules_loader.py` (no notebook header). 🔴 Author the `dq_rules` DDL EXACTLY as the `01-dlt-expectations-patterns` template shows — do NOT add columns it omits (no `is_active`) and **no `DEFAULT` column clauses** (a `DEFAULT <expr>` needs the `allowColumnDefaults` table feature, off by default, and the DDL fails; set defaults at INSERT time). This is a real regression: an invented `is_active BOOLEAN NOT NULL DEFAULT true` failed the DQ-setup job.
 - **Use the 2-resource pattern** — a regular `silver_dq_setup_job` (creates/populates `dq_rules`) AND a `silver_dlt_pipeline` (reads rules from the table). The setup job MUST run before the pipeline.
 
 IMPORTANT: Use the EXISTING catalog `{lakehouse_default_catalog}` — do NOT create a new catalog. `{lakehouse_default_catalog}` was resolved and persisted by the Bronze step (its Step 0.5 hard-stop) — read it from `## Environment Capabilities`; **never create a catalog and do not re-prompt for it.** The pipeline/job creates the Silver schema `{user_schema_prefix}_silver` and all Silver tables inside this catalog.
@@ -2977,6 +3020,11 @@ NOTE: This is a shared workshop workspace. Put a `user_prefix` variable in every
   - **Bundle editor:** `{host}/editor/files/{file_id}?o={o}&contextId=folder%3A{folder_id}` (plain folder: `{host}/browse/folders/{folder_id}?o={o}`)
 
   Tell the operator to open the **bundle-editor link**, then run every `databricks bundle …` command below from that page. Edit the EXISTING on-page `databricks.yml` — files created via the workspace API may not reach the CLI''s FUSE mount.
+- **File-write tiers + verify writes (Genie Code — see `genie-code-environment` §10).** Once compute is warm, write each file with `executeCode` `open(path,"w").write(...)` (one call per file; make the FIRST `executeCode` a trivial `print("ready")` to absorb the ~3–5 min serverless cold start, and never set `timeoutMinutes` below 15). The compute-free `createAsset` → `readFile` → `workspaceUpdateFile` trio also works, but `workspaceUpdateFile` only updates a file that already exists AND was read this thread — reserve it for editing the on-page `databricks.yml`. 🔴 **Verify every write with `os.path.exists(path)` (or `os.listdir(dir)`) in the SAME `executeCode` block — NOT `listFiles`:** the workspace REST API behind `listFiles` lags FUSE-written files (a live run saw `listFiles`=7 while `os.listdir`=12), so `listFiles` returns false "missing-file" negatives and you waste turns recreating files that already exist.
+- 🔴 **Step 2.5 — Contract test (read-only; run AFTER the files are written, BEFORE any `bundle deploy`).** Catch the column/DDL bugs on disk, not in a failed job run. In one `executeCode` block:
+  - **Dry-import the loader:** `import importlib.util` and load `<DP_BUNDLE_ROOT>/src/{user_schema_prefix}_silver/dq_rules_loader.py` — it must import with NO `ModuleNotFoundError` and NO `# Databricks notebook source` header (pure Python).
+  - **Validate every rule''s SQL against the live schema:** parse each `constraint_sql` out of `setup_dq_rules_table.py` and run it read-only as `SELECT <constraint_sql> FROM {lakehouse_default_catalog}.{bronze_schema}.<table> LIMIT 1`. A `LIMIT 1` SELECT executes the expression without touching the pipeline — an `[UNRESOLVED_COLUMN]` / parse error here is the exact failure that otherwise only surfaces as a failed DQ-setup/pipeline run. Also assert every column named in each `constraint_sql` is in the Step 1.5 pinned inventory.
+  - **Confirm the loader''s expected `dq_rules` row shape matches `setup_dq_rules_table.py`''s INSERT columns.** If any check fails, FIX the file (correct the column name, drop the bad rule, or remove a stray `DEFAULT`/invented column) and re-run this step — do NOT deploy until it is clean. This whole step is read-only inspection, permitted by the non-negotiable rule above.
 - Validate → deploy → run the DQ setup job FIRST → run the pipeline through `runDatabricksCli`, **from the bundle-editor page**, each with `--target dev` (mandatory — a target-less deploy is guardrail-blocked):
   - `databricks bundle validate --target dev`
   - `databricks bundle deploy --target dev`
@@ -3549,32 +3597,40 @@ Run `skills/vibecoding-state` operation `enter` with `prompt_id: "gold_layer_pip
 
 If `enter` reports the Silver gate is not `Silver layer live`, STOP — finish the Silver step first. If `enter` has not run in this thread, run it now.
 
+**On resume after a context reset:** trust the live state file over any chat summary — a prompt whose state entry shows its gate PASSED is DONE (do NOT re-run it), and before re-writing files reconcile what is already on disk with `os.listdir(...)` (NOT `listFiles`, which lags FUSE writes) against the state file''s captured paths, so you resume rather than recreate.
+
 ### Step 1 — Load the required skills by their FULL clone-rooted paths
 
-Load each skill with `readSkillFile` using its fully-qualified `<skill_ref_root>`-prefixed path — NEVER a bare `@…` mention, NEVER a repo-relative path. **The root-level `skills/` come FIRST: they are the highest-priority, always-on guardrails and govern everything below.**
+Load each skill with `readSkillFile` using its fully-qualified `<skill_ref_root>`-prefixed path — NEVER a bare `@…` mention, NEVER a repo-relative path. **The root-level `skills/` come FIRST: they are the highest-priority, always-on guardrails and govern everything below.** Skills load in two tiers to keep context lean without weakening the preflight-ack gate.
+
+**Tier A — read in FULL now (one batched `readSkillFile` turn) and acknowledge.** These are the guardrails used while authoring in Step 2:
 
 1. `readSkillFile("skills/vibe-coding-workshop/skills/databricks-expert-agent/SKILL.md")` — core rule: extract every table/column/PK/FK from the YAML, never hardcode or hallucinate ("Extract, Don''t Generate").
 2. `readSkillFile("skills/vibe-coding-workshop/skills/databricks-asset-bundles/SKILL.md")` — 2-job YAML, Environments V4, `notebook_task`, `base_parameters`, the **`sync` mapping** for `gold_layer_design/yaml/**` + `pyyaml>=6.0`, and the multi-user `${var.user_prefix}` "Shared Workspace Naming" pattern. **You will not write any `databricks.yml` or job YAML until you have read this.**
-
-Then the Gold implementation orchestrator and its data-product common skills (load in this order):
-
 3. `readSkillFile("skills/vibe-coding-workshop/data_product_accelerator/skills/gold/01-gold-layer-setup/SKILL.md")` — the orchestrator (YAML-driven setup → PKs → FKs → merge). Follow every `See: references/…` link it names (prefix those with `skill_ref_root` too).
-4. `readSkillFile("skills/vibe-coding-workshop/data_product_accelerator/skills/common/schema-management-patterns/SKILL.md")` — `CREATE SCHEMA IF NOT EXISTS` with governance metadata. **NEVER write `CREATE SCHEMA` without reading this.**
-5. `readSkillFile("skills/vibe-coding-workshop/data_product_accelerator/skills/common/naming-tagging-standards/SKILL.md")` — naming prefixes (`dim_`/`fact_`), dual-purpose COMMENTs, governed PII tags. **NEVER name a table or resource without reading this.**
-6. `readSkillFile("skills/vibe-coding-workshop/data_product_accelerator/skills/common/databricks-table-properties/SKILL.md")` — Gold TBLPROPERTIES (CDF, `delta.enableRowTracking`, auto-optimize, `CLUSTER BY AUTO`, `layer=gold`). **NEVER write TBLPROPERTIES without reading this.**
-7. `readSkillFile("skills/vibe-coding-workshop/data_product_accelerator/skills/common/unity-catalog-constraints/SKILL.md")` — surrogate keys as PKs (NOT NULL), FK via `ALTER TABLE … NOT ENFORCED`, and the serverless rule that FKs must target PK columns. **NEVER define PK/FK without reading this.**
-8. `readSkillFile("skills/vibe-coding-workshop/data_product_accelerator/skills/common/databricks-python-imports/SKILL.md")` — pure-Python shared-config module pattern (avoids `sys.path` issues across job tasks).
+4. `readSkillFile("skills/vibe-coding-workshop/data_product_accelerator/skills/common/databricks-table-properties/SKILL.md")` — Gold TBLPROPERTIES (CDF, `delta.enableRowTracking`, auto-optimize, `CLUSTER BY AUTO`, `layer=gold`), and the no-`DEFAULT`-in-DDL rule. **NEVER write TBLPROPERTIES without reading this.**
+5. `readSkillFile("skills/vibe-coding-workshop/data_product_accelerator/skills/common/unity-catalog-constraints/SKILL.md")` — surrogate keys as PKs (NOT NULL), FK via `ALTER TABLE … NOT ENFORCED`, the serverless rule that FKs must target PK columns, and the no-`DEFAULT`-in-DDL rule. **NEVER define PK/FK without reading this.**
 
-When the orchestrator lists further **Mandatory Skill Dependencies**, load EACH the same way: take its repo-relative path and prefix it with `skill_ref_root`. Genie Code has no repo-root-relative resolution and `AGENTS.md` does not carry across threads — so always prefix with `skill_ref_root`. **Read them in one batched `readSkillFile` turn — Genie Code reads multiple skill files in parallel in a single turn, so never serialize independent reads (`genie-code-environment` §10).**
+**Tier B — acknowledge the inlined one-line rule now; defer the full `readSkillFile` to the phase that uses it.** This only DEFERS the read (the orchestrator''s per-phase Pre-Conditions force the full read at the right moment) — it does NOT skip it:
 
-**🔴 Preflight acknowledgement (hard gate — do this BEFORE writing any file).** After the batched `readSkillFile` returns, echo a one-line acknowledgement for EACH skill you loaded — its full `<skill_ref_root>`-prefixed path + the single rule you will apply from it. If you cannot state the rule, you have not actually read the skill — STOP and read it before writing anything. Do not author `databricks.yml`, job/pipeline YAML, notebooks, or any artifact until every listed skill is acknowledged — silently skipping a skill read is the regression this preflight exists to prevent.
+- `skills/vibe-coding-workshop/data_product_accelerator/skills/common/schema-management-patterns/SKILL.md` — rule: `CREATE SCHEMA IF NOT EXISTS` with governance metadata; enable Predictive Optimization via `ALTER SCHEMA ENABLE PREDICTIVE OPTIMIZATION` (NOT TBLPROPERTIES); schemas are NOT bundle resources. Full read when you create the Gold schema.
+- `skills/vibe-coding-workshop/data_product_accelerator/skills/common/naming-tagging-standards/SKILL.md` — rule: snake_case, `dim_`/`fact_` prefixes, dual-purpose COMMENTs on every table/column, governed `class.*` PII tags inferred from column names. Full read when you name tables / write TBLPROPERTIES.
+- `skills/vibe-coding-workshop/data_product_accelerator/skills/common/databricks-python-imports/SKILL.md` — rule: shared-config module is PURE Python (no notebook header); use the `rsplit` path pattern, import by module name, no `sys.path` hacks. Full read when you write the shared module.
+
+When the orchestrator lists further **Mandatory Skill Dependencies**, load EACH the same way: take its repo-relative path and prefix it with `skill_ref_root`. Genie Code has no repo-root-relative resolution and `AGENTS.md` does not carry across threads — so always prefix with `skill_ref_root`. **Read independent Tier-A skills in one batched `readSkillFile` turn — Genie Code reads multiple skill files in parallel in a single turn, so never serialize independent reads (`genie-code-environment` §10).**
+
+**🔴 Preflight acknowledgement (hard gate — do this BEFORE writing any file).** Echo a one-line acknowledgement for EVERY skill above — **both tiers**: for Tier A, the rule you took from the full read; for Tier B, the inlined rule above plus the phase at which you will full-read it. If you cannot state a Tier-A skill''s rule, you have not actually read it — STOP and read it before writing anything. Do not author `databricks.yml`, job/pipeline YAML, notebooks, or any artifact until every listed skill (both tiers) is acknowledged — silently skipping a skill is the regression this preflight exists to prevent.
+
+### Step 1.5 — Pin the Silver column inventory (read-only hard gate — do this BEFORE writing `merge_gold_tables.py`)
+
+🔴 **Silver→Gold column mappings come ONLY from the live Silver schema + the Gold YAML — never from memory.** Before authoring `merge_gold_tables.py`, run `DESCRIBE TABLE {lakehouse_default_catalog}.{user_schema_prefix}_silver.<table>` for every Silver source you will read, and echo the `{table: [column, …]}` map (the **pinned inventory**). Every Silver column referenced in the merge''s `SELECT`, dedup `business_key`, and Silver→Gold lineage map MUST use a name from this pinned map AND resolve against the Gold YAML target columns — a Silver column absent from the live `DESCRIBE` is a hard error, not a guess. This pairs with the post-merge `validate_gold` task: pin the inputs up front, validate the outputs after.
 
 ### Step 2 — Author the Gold bundle (YAML-driven 2-job architecture). Do NOT execute anything yet.
 
 Using the skills above, AUTHOR (write files only — no execution) the bundle resources whose jobs, when run, will:
 
 - **Read the Gold design YAML as the single source of truth** — extract table names, columns, types, PKs, and FKs from `<DP_BUNDLE_ROOT>/gold_layer_design/yaml/**/*.yaml` (from step 9). Never hardcode or hallucinate schema elements.
-- **`gold_setup_job` (2 tasks)** — Task 1 `setup_tables.py`: `CREATE` Gold tables from YAML + add PRIMARY KEYs; Task 2 `add_fk_constraints.py` (`depends_on` Task 1): `ALTER TABLE … ADD FOREIGN KEY … NOT ENFORCED` in dependency order. FKs are added before data because UC constraints are informational, not enforced.
+- **`gold_setup_job` (2 tasks)** — Task 1 `setup_tables.py`: `CREATE` Gold tables from YAML + add PRIMARY KEYs; Task 2 `add_fk_constraints.py` (`depends_on` Task 1): `ALTER TABLE … ADD FOREIGN KEY … NOT ENFORCED` in dependency order. FKs are added before data because UC constraints are informational, not enforced. 🔴 **No `DEFAULT` column clauses** in `setup_tables.py` DDL — a `DEFAULT <expr>` needs the `allowColumnDefaults` table feature (off by default) and the `CREATE TABLE` fails; declare columns without `DEFAULT` and set values at INSERT/MERGE time (see `common/unity-catalog-constraints` → "Never Use `DEFAULT` Column Clauses in DDL").
 - **`gold_merge_job` Task 1 — `merge_gold_tables.py`**: deduplicate Silver on the YAML `business_key`, map Silver→Gold columns from YAML lineage / `COLUMN_LINEAGE.csv`, then MERGE dimensions first (SCD1/SCD2) and facts last (FK dependency order). Never name variables `count`/`sum`/`min`/`max` (they shadow PySpark functions).
 - **`gold_merge_job` Task 2 — `validate_gold.py`** (`depends_on` the merge task, in the SAME job — do NOT add a third job; keep the proven setup-job / merge-job split): post-merge guardrail that **fails the task** (raise) on any violation, so a green merge that wiped constraints cannot pass. Assert, per Gold table: (a) the PRIMARY KEY constraint is still present (query `information_schema.table_constraints`); (b) declared FOREIGN KEYs are still present; (c) NOT NULL on every surrogate/PK column preserved; (d) `delta.enableChangeDataFeed` + `delta.enableRowTracking` still `true` (the overwrite-wipe tell); (e) each table''s row count is `> 0` and within an expected ratio of its Silver source. Keep `gold_setup_job` and `gold_merge_job` as two separate jobs — `validate_gold.py` is a second TASK of the merge job, not a new job.
 - **Limit to the 5 core tables** for this exercise: `dim_property` (SCD2), `dim_destination` (SCD1), `dim_user` (SCD2), `dim_host` (SCD2), `fact_booking_detail` (Fact).
@@ -3602,6 +3658,7 @@ NOTE: This is a shared workshop workspace. Put a `user_prefix` variable in every
   - **Bundle editor:** `{host}/editor/files/{file_id}?o={o}&contextId=folder%3A{folder_id}` (plain folder: `{host}/browse/folders/{folder_id}?o={o}`)
 
   Tell the operator to open the **bundle-editor link**, then run every `databricks bundle …` command below from that page. Edit the EXISTING on-page `databricks.yml` — files created via the workspace API may not reach the CLI''s FUSE mount.
+- **File-write tiers + verify writes (Genie Code — see `genie-code-environment` §10).** Once compute is warm, write each file with `executeCode` `open(path,"w").write(...)` (one call per file; make the FIRST `executeCode` a trivial `print("ready")` to absorb the ~3–5 min serverless cold start, and never set `timeoutMinutes` below 15). The compute-free `createAsset` → `readFile` → `workspaceUpdateFile` trio also works, but `workspaceUpdateFile` only updates a file that already exists AND was read this thread — reserve it for editing the on-page `databricks.yml`. 🔴 **Verify every write with `os.path.exists(path)` (or `os.listdir(dir)`) in the SAME `executeCode` block — NOT `listFiles`:** the workspace REST API behind `listFiles` lags FUSE-written files (a live run saw `listFiles`=7 while `os.listdir`=12), so `listFiles` returns false "missing-file" negatives and you waste turns recreating files that already exist.
 - Validate → deploy → run the setup job FIRST → run the merge job through `runDatabricksCli`, **from the bundle-editor page**, each with `--target dev` (mandatory — a target-less deploy is guardrail-blocked):
   - `databricks bundle validate --target dev`
   - `databricks bundle deploy --target dev`
@@ -4107,6 +4164,8 @@ Anchor EVERY output to `<DP_BUNDLE_ROOT>/plans/` — never the bare clone root, 
 - `<DP_BUNDLE_ROOT>/plans/manifests/semantic-layer-manifest.yaml`, `observability-manifest.yaml`, `ml-manifest.yaml`, `genai-agents-manifest.yaml`, `gold-dependency-manifest.yaml`
 
 Use `createAsset`/the workspace file APIs to write these under `<DP_BUNDLE_ROOT>/plans/`. If a parent folder does not exist yet, create it — do not retarget to the clone root.
+
+**File-write tiers + verify writes (Genie Code — see `genie-code-environment` §10).** Once compute is warm, write each plan/manifest with `executeCode` `open(path,"w").write(...)` (one call per file; make the FIRST `executeCode` a trivial `print("ready")` to absorb the ~3–5 min serverless cold start, and never set `timeoutMinutes` below 15). The compute-free `createAsset` → `readFile` → `workspaceUpdateFile` trio also works, but `workspaceUpdateFile` only updates a file that already exists AND was read this thread. 🔴 **Verify every write with `os.path.exists(path)` (or `os.listdir(dir)`) in the SAME `executeCode` block — NOT `listFiles`:** the workspace REST API behind `listFiles` lags FUSE-written files (a live run saw `listFiles`=7 while `os.listdir`=12), so `listFiles` returns false "missing-file" negatives and you waste turns recreating files that already exist.
 
 **State-lock:** this prompt runs between an `enter` (Step 0) and an `exit`. After the gate passes, run `skills/vibecoding-state` op `exit` — params: `prompt_id: "usecase_plan"`, `gate: "Use-case plan complete"`, `captured: {usecase_plan_path}`. **This `enter`/`exit` pair is a mandatory ritual, not advisory.** Step 0''s `enter` MUST locate — or, if this is the first prompt of the track, bootstrap-create — the canonical live state file at `<dp_bundle_root>/.vibecoding-state.md` (never the temporary `example/…` bootstrap path). The closing `exit` MUST append this prompt''s Per-Step Log entry, Gate result, and `captured` vars to that file, then **re-read it and echo the appended section to prove the write landed**. **Gate completion rule:** this prompt is NOT complete until that re-read confirms the appended entry — the chat summary is NOT the state store.
 
@@ -4661,21 +4720,23 @@ If `enter` reports the Gold gate is not `Gold layer live`, STOP — finish the G
 
 ### Step 1 — Load the required skills by their FULL clone-rooted paths
 
-Load each skill with `readSkillFile` using its fully-qualified `<skill_ref_root>`-prefixed path — NEVER a bare `@…` mention, NEVER a repo-relative path. **The root-level `skills/` come FIRST: they are the highest-priority, always-on guardrails and govern everything below.**
+Load each skill with `readSkillFile` using its fully-qualified `<skill_ref_root>`-prefixed path — NEVER a bare `@…` mention, NEVER a repo-relative path. **The root-level `skills/` come FIRST: they are the highest-priority, always-on guardrails and govern everything below.** Skills load in two tiers to keep context lean without weakening the preflight-ack gate.
+
+**Tier A — read in FULL now (one batched `readSkillFile` turn) and acknowledge:**
 
 1. `readSkillFile("skills/vibe-coding-workshop/skills/databricks-expert-agent/SKILL.md")` — "Extract, Don''t Generate": validate every table/column against the Gold YAML before writing dataset SQL.
 2. `readSkillFile("skills/vibe-coding-workshop/skills/databricks-asset-bundles/SKILL.md")` — the `dashboard_deploy_job` resource, serverless Environments V4, and the `${var.user_prefix}` "Shared Workspace Naming" pattern. **You will not write any `databricks.yml` or job YAML until you have read this.**
-
-Then the dashboard worker skill and its common/semantic skills (load in this order):
-
 3. `readSkillFile("skills/vibe-coding-workshop/data_product_accelerator/skills/monitoring/02-databricks-aibi-dashboards/SKILL.md")` — the AI/BI dashboard worker: `.lvdash.json` structure, 6-column grid (NOT 12!), widget versions (KPI=v2, charts=v3, tables=v2, filters=v2), pre-deploy validation, UPDATE-or-CREATE + base64 deployment.
 4. `readSkillFile("skills/vibe-coding-workshop/data_product_accelerator/skills/semantic-layer/01-metric-views-patterns/SKILL.md")` — `MEASURE()` syntax for the Metric-View datasets this dashboard queries.
-5. `readSkillFile("skills/vibe-coding-workshop/data_product_accelerator/skills/common/naming-tagging-standards/SKILL.md")` — dashboard + file naming conventions.
-6. `readSkillFile("skills/vibe-coding-workshop/data_product_accelerator/skills/common/databricks-python-imports/SKILL.md")` — pure-Python module pattern for `deploy_dashboard.py` and the validators.
 
-When any skill lists further **Mandatory Skill Dependencies**, load EACH the same way: prefix its repo-relative path with `skill_ref_root`. Genie Code has no repo-root-relative resolution and `AGENTS.md` does not carry across threads. **Read them in one batched `readSkillFile` turn — Genie Code reads multiple skill files in parallel in a single turn, so never serialize independent reads (`genie-code-environment` §10).**
+**Tier B — acknowledge the inlined one-line rule now; defer the full `readSkillFile` to the phase that uses it** (this only DEFERS the read — the orchestrator''s per-phase Pre-Conditions force the full read at the right moment — it does NOT skip it):
 
-**🔴 Preflight acknowledgement (hard gate — do this BEFORE writing any file).** After the batched `readSkillFile` returns, echo a one-line acknowledgement for EACH skill you loaded — its full `<skill_ref_root>`-prefixed path + the single rule you will apply from it. If you cannot state the rule, you have not actually read the skill — STOP and read it before writing anything. Do not author `databricks.yml`, job/pipeline YAML, notebooks, or any artifact until every listed skill is acknowledged — silently skipping a skill read is the regression this preflight exists to prevent.
+- `skills/vibe-coding-workshop/data_product_accelerator/skills/common/naming-tagging-standards/SKILL.md` — rule: snake_case dashboard + file naming, dual-purpose COMMENTs, governed `class.*` PII tags. Full read when you name the dashboard / files.
+- `skills/vibe-coding-workshop/data_product_accelerator/skills/common/databricks-python-imports/SKILL.md` — rule: `deploy_dashboard.py` and the validators are PURE Python (no notebook header); import by module name, no `sys.path` hacks. Full read when you write those scripts.
+
+When any skill lists further **Mandatory Skill Dependencies**, load EACH the same way: prefix its repo-relative path with `skill_ref_root`. Genie Code has no repo-root-relative resolution and `AGENTS.md` does not carry across threads. **Read independent Tier-A skills in one batched `readSkillFile` turn — Genie Code reads multiple skill files in parallel in a single turn, so never serialize independent reads (`genie-code-environment` §10).**
+
+**🔴 Preflight acknowledgement (hard gate — do this BEFORE writing any file).** Echo a one-line acknowledgement for EVERY skill above — **both tiers**: for Tier A, the rule you took from the full read; for Tier B, the inlined rule above plus the phase at which you will full-read it. If you cannot state a Tier-A skill''s rule, you have not actually read it — STOP and read it before writing anything. Do not author `databricks.yml`, job/pipeline YAML, notebooks, or any artifact until every listed skill (both tiers) is acknowledged — silently skipping a skill is the regression this preflight exists to prevent.
 
 ### Step 2 — Author the dashboard + deploy job. Do NOT execute anything yet.
 
@@ -4705,6 +4766,7 @@ NOTE: This is a shared workshop workspace. Put a `user_prefix` variable in the j
   - **Bundle editor:** `{host}/editor/files/{file_id}?o={o}&contextId=folder%3A{folder_id}` (plain folder: `{host}/browse/folders/{folder_id}?o={o}`)
 
   Tell the operator to open the **bundle-editor link**, then run every `databricks bundle …` command below from that page. Edit the EXISTING on-page `databricks.yml` — files created via the workspace API may not reach the CLI''s FUSE mount.
+- **File-write tiers + verify writes (Genie Code — see `genie-code-environment` §10).** Once compute is warm, write each file with `executeCode` `open(path,"w").write(...)` (one call per file; make the FIRST `executeCode` a trivial `print("ready")` to absorb the ~3–5 min serverless cold start, and never set `timeoutMinutes` below 15). The compute-free `createAsset` → `readFile` → `workspaceUpdateFile` trio also works, but `workspaceUpdateFile` only updates a file that already exists AND was read this thread — reserve it for editing the on-page `databricks.yml`. 🔴 **Verify every write with `os.path.exists(path)` (or `os.listdir(dir)`) in the SAME `executeCode` block — NOT `listFiles`:** the workspace REST API behind `listFiles` lags FUSE-written files (a live run saw `listFiles`=7 while `os.listdir`=12), so `listFiles` returns false "missing-file" negatives and you waste turns recreating files that already exist.
 - Validate → deploy → run the dashboard job through `runDatabricksCli`, **from the bundle-editor page**, each with `--target dev` (mandatory — a target-less deploy is guardrail-blocked):
   - `databricks bundle validate --target dev`
   - `databricks bundle deploy --target dev`
@@ -5355,20 +5417,22 @@ If `enter` reports the Gold gate is not `Gold layer live`, STOP — finish the G
 
 ### Step 1 — Load the required skills by their FULL clone-rooted paths
 
-Load each skill with `readSkillFile` using its fully-qualified `<skill_ref_root>`-prefixed path — NEVER a bare `@…` mention, NEVER a repo-relative path. **The root-level `skills/` come FIRST: they are the highest-priority, always-on guardrails and govern everything below.**
+Load each skill with `readSkillFile` using its fully-qualified `<skill_ref_root>`-prefixed path — NEVER a bare `@…` mention, NEVER a repo-relative path. **The root-level `skills/` come FIRST: they are the highest-priority, always-on guardrails and govern everything below.** Skills load in two tiers to keep context lean without weakening the preflight-ack gate.
+
+**Tier A — read in FULL now (one batched `readSkillFile` turn) and acknowledge:**
 
 1. `readSkillFile("skills/vibe-coding-workshop/skills/databricks-expert-agent/SKILL.md")` — "Extract, Don''t Generate": validate every table/column against the Gold YAML before writing SQL.
 2. `readSkillFile("skills/vibe-coding-workshop/skills/databricks-asset-bundles/SKILL.md")` — SQL-task job for TVFs, Python/notebook job for Metric Views, the Genie export/import job, serverless Environments V4, and the `${var.user_prefix}` "Shared Workspace Naming" pattern. **You will not write any `databricks.yml` or job YAML until you have read this.**
-
-Then the Semantic Layer orchestrator and its common skills (load in this order; the orchestrator auto-names workers 01–05 — load EACH the same way with the `skill_ref_root` prefix):
-
 3. `readSkillFile("skills/vibe-coding-workshop/data_product_accelerator/skills/semantic-layer/00-semantic-layer-setup/SKILL.md")` — the orchestrator (Phase 0 gold-inventory check, phase gates, template-first workflow). Any task touching 2+ semantic-layer asset types MUST route through this skill.
-4. `readSkillFile("skills/vibe-coding-workshop/data_product_accelerator/skills/common/naming-tagging-standards/SKILL.md")` — naming + dual-purpose COMMENTs for every TVF/Metric View. **NEVER name an asset without reading this.**
-5. `readSkillFile("skills/vibe-coding-workshop/data_product_accelerator/skills/common/databricks-python-imports/SKILL.md")` — pure-Python module pattern for `create_metric_views.py` and the Genie deploy script.
+
+**Tier B — acknowledge the inlined one-line rule now; defer the full `readSkillFile` to the phase that uses it** (this only DEFERS the read — the orchestrator''s per-phase Pre-Conditions force the full read at the right moment — it does NOT skip it):
+
+- `skills/vibe-coding-workshop/data_product_accelerator/skills/common/naming-tagging-standards/SKILL.md` — rule: snake_case, dual-purpose (human + Genie/LLM) COMMENTs on every TVF/Metric View, governed `class.*` PII tags. Full read when you name/comment an asset.
+- `skills/vibe-coding-workshop/data_product_accelerator/skills/common/databricks-python-imports/SKILL.md` — rule: `create_metric_views.py` and the Genie deploy script are PURE Python (no notebook header); import by module name, no `sys.path` hacks. Full read when you write those scripts.
 
 When the orchestrator lists further **Mandatory Skill Dependencies** (workers `01-metric-views-patterns`, `02-databricks-table-valued-functions`, `03-genie-space-patterns`, `04-genie-space-export-import-api`, `05-genie-space-optimization`), load EACH the same way. Genie Code has no repo-root-relative resolution and `AGENTS.md` does not carry across threads — so always prefix with `skill_ref_root`. **Read those workers in one batched `readSkillFile` turn — Genie Code reads multiple skill files in parallel in a single turn, so never serialize independent reads (`genie-code-environment` §10).**
 
-**🔴 Preflight acknowledgement (hard gate — do this BEFORE writing any file).** After the batched `readSkillFile` returns, echo a one-line acknowledgement for EACH skill you loaded — its full `<skill_ref_root>`-prefixed path + the single rule you will apply from it. If you cannot state the rule, you have not actually read the skill — STOP and read it before writing anything. Do not author `databricks.yml`, job/pipeline YAML, notebooks, or any artifact until every listed skill is acknowledged — silently skipping a skill read is the regression this preflight exists to prevent.
+**🔴 Preflight acknowledgement (hard gate — do this BEFORE writing any file).** Echo a one-line acknowledgement for EVERY skill above — **both tiers**: for Tier A, the rule you took from the full read; for Tier B, the inlined rule above plus the phase at which you will full-read it. If you cannot state a Tier-A skill''s rule, you have not actually read it — STOP and read it before writing anything. Do not author `databricks.yml`, job/pipeline YAML, notebooks, or any artifact until every listed skill (both tiers) is acknowledged — silently skipping a skill is the regression this preflight exists to prevent.
 
 ### Step 2 — Author the semantic-layer bundle (TVFs → Metric Views → Genie). Do NOT execute anything yet.
 
@@ -5396,6 +5460,7 @@ NOTE: This is a shared workshop workspace. Put a `user_prefix` variable in every
   - **Bundle editor:** `{host}/editor/files/{file_id}?o={o}&contextId=folder%3A{folder_id}` (plain folder: `{host}/browse/folders/{folder_id}?o={o}`)
 
   Tell the operator to open the **bundle-editor link**, then run every `databricks bundle …` command below from that page. Edit the EXISTING on-page `databricks.yml` — files created via the workspace API may not reach the CLI''s FUSE mount.
+- **File-write tiers + verify writes (Genie Code — see `genie-code-environment` §10).** Once compute is warm, write each file with `executeCode` `open(path,"w").write(...)` (one call per file; make the FIRST `executeCode` a trivial `print("ready")` to absorb the ~3–5 min serverless cold start, and never set `timeoutMinutes` below 15). The compute-free `createAsset` → `readFile` → `workspaceUpdateFile` trio also works, but `workspaceUpdateFile` only updates a file that already exists AND was read this thread — reserve it for editing the on-page `databricks.yml`. 🔴 **Verify every write with `os.path.exists(path)` (or `os.listdir(dir)`) in the SAME `executeCode` block — NOT `listFiles`:** the workspace REST API behind `listFiles` lags FUSE-written files (a live run saw `listFiles`=7 while `os.listdir`=12), so `listFiles` returns false "missing-file" negatives and you waste turns recreating files that already exist.
 - Validate → deploy → run the TVF job, then the Metric Views job, then (optionally) the Genie deploy job through `runDatabricksCli`, **from the bundle-editor page**, each with `--target dev` (mandatory — a target-less deploy is guardrail-blocked):
   - `databricks bundle validate --target dev`
   - `databricks bundle deploy --target dev`
@@ -6856,6 +6921,10 @@ VALUES
 ✅ The canonical deploy mechanism here is the **SDK SNAPSHOT** call run through `executeCode`:
 `w.apps.deploy(<APP_NAME>, AppDeployment(source_code_path="<APP_ROOT>", mode=AppDeploymentMode.SNAPSHOT))`, then poll the deployment + compute state.
 
+🛑 **NEVER delete or regenerate `<APP_ROOT>/package-lock.json`.** On the SDK SNAPSHOT path a missing lockfile **hard-fails the source-export phase in ~10s** (`RESOURCE_DOES_NOT_EXIST`), before `npm install` ever runs. Change dependencies by editing `package.json` and keeping the lockfile consistent — never delete it as a "reset."
+
+💰 **Optimize for the fewest deploys, not the fewest edits.** A deploy costs **~50s cold / ~30s warm** and emits **no compute-readable build error** (see Step 3). File writes are ~0.15s. So front-load the grep gate (Step 2b) and batch fixes (Step 3) rather than burning blind deploy-fail cycles one edit at a time.
+
 ### Step 0 — Resolve your environment (once, before anything else)
 
 Run `skills/vibecoding-state` operation `enter` with `prompt_id: "deploy_databricks_app"`. Read the resolved `## Environment Capabilities` values and use them literally:
@@ -6896,6 +6965,29 @@ Load with `readSkillFile` — NEVER a bare `@…` mention, NEVER a repo-relative
 
 Load every further mandatory reference the skill names the same way (repo-relative path prefixed with `skill_ref_root`). `AGENTS.md` root context does not carry across Genie Code threads — always prefix with `skill_ref_root`.
 
+### Step 2b — Pre-deploy import-specifier gate (cheapest possible check)
+
+There is **no local `tsc`/`npm`** on Genie Code, so a static regex scan is the only pre-flight that catches the #1 build-killer — wrong `@databricks/appkit-ui` import specifiers — **before** a ~50s blind deploy. Run this via `executeCode` (read the files in Python + regex; do NOT depend on the IDE''s shell `grep`):
+
+- **Flag** any component import from the bare `@databricks/appkit-ui` (must be `@databricks/appkit-ui/react`).
+- **Flag** any `@import "@databricks/appkit-ui/styles"` missing the `.css` extension (must be `@databricks/appkit-ui/styles.css`).
+
+```python
+import re, pathlib
+root = pathlib.Path("<APP_ROOT>/client/src")
+bad = []
+for f in root.rglob("*"):
+    if f.suffix in {".ts", ".tsx", ".css"}:
+        t = f.read_text()
+        if re.search(r''from\s+["\'']@databricks/appkit-ui["\'']'', t):
+            bad.append(f"{f}: bare ''@databricks/appkit-ui'' -> use ''/react''")
+        if re.search(r''@import\s+["\'']@databricks/appkit-ui/styles["\'']'', t):
+            bad.append(f"{f}: ''/styles'' missing ''.css'' -> use ''/styles.css''")
+print("\n".join(bad) or "OK")
+```
+
+Fix every hit **before** Step 3. (`OK` = clear to deploy. This gate does NOT replace a human render check — see Step 4.)
+
 ### Step 3 — Register (if needed) and deploy via the SDK SNAPSHOT path
 
 Run via `executeCode` against warm compute (warm up once with `print("ready")` to absorb the serverless cold start, keep `timeoutMinutes` generous):
@@ -6903,18 +6995,25 @@ Run via `executeCode` against warm compute (warm up once with `print("ready")` t
 1. Ensure the app exists — `w.apps.get(APP_NAME)`; if it 404s, `w.apps.create(...)` and wait for the compute to be `ACTIVE`.
 2. Deploy source directly (build runs server-side):
    `w.apps.deploy(APP_NAME, AppDeployment(source_code_path="<APP_ROOT>", mode=AppDeploymentMode.SNAPSHOT))`.
-3. Poll the returned deployment until it reaches `SUCCEEDED` (and surface `apps logs <APP_NAME>` on `FAILED`); confirm `w.apps.get(APP_NAME).compute_status.state == "ACTIVE"`.
+3. Poll the returned deployment until it reaches `SUCCEEDED`; confirm `w.apps.get(APP_NAME).compute_status.state == "ACTIVE"`.
 
 If `runDatabricksCli databricks apps deploy` happens to be available on the current AppKit project page, it is an acceptable equivalent — but the SDK SNAPSHOT call is the cross-page-reliable mechanism. Do NOT fall back to creating UI assets by hand.
 
+**On `FAILED` → `/logz`-human escalation (build logs are NOT readable from compute).** The server-side Vite/tsc build error is **not** retrievable programmatically: `deployment.status.message` and the REST API return only a generic "check /logz"; `databricks apps logs <APP_NAME>` returns an OAuth-token error; fetching `/logz` over raw HTTP hits PKCE/401. The only place the exact error appears is **`<app-url>/logz` in a browser**, where the operator is already authenticated.
+
+- Print `f"{w.apps.get(APP_NAME).url}/logz"` and ask the operator to open it and paste back the exact failing line (e.g. `client/src/App.tsx(L,C): error TS####: …`). Fix that file:line, then redeploy.
+- **No-browser fallback — the 2–3-file batch ladder.** When a human/browser is unavailable, localize the break by deploying in small batches: revert to the last `SUCCEEDED` source, re-apply changes **2–3 files at a time**, and redeploy after each batch (~50s each). The batch that flips green→`FAILED` contains the break; bisect within it. This trades deploy cycles for the missing log — so keep batches small but non-trivial.
+
 ### Step 4 — Verify the DEPLOYED app (not localhost)
+
+**`SUCCEEDED` is necessary but NOT sufficient — a green deploy does not prove a working app.** A server **boot** crash surfaces as `deployment.state == FAILED` (agent-visible), but a **client-side runtime crash compiles and deploys green** (`deployment.state == SUCCEEDED`, `compute_status.state == ACTIVE`) while the UI shows nothing but a blank page or error — **invisible to the agent**. The scaffold''s `ErrorBoundary.tsx` surfaces the stack in the browser; this is why Step 04 must keep it. So a **human render check** is mandatory before declaring success.
 
 A deployed App sits behind the Databricks Apps **OAuth gate** — a raw `Authorization: Bearer` token (even SDK `w.config.token`) is rejected (`/api/health` → 401). Verify one of two ways (`genie-code-environment` §7):
 
-- **Browser** — open `w.apps.get(APP_NAME).url`; the OAuth flow establishes the session. Use `apps logs <APP_NAME>` for backend assertions.
-- **Programmatic** — replay the **3-hop Apps OAuth handshake in one `requests.Session()`** (CSRF cookie persists through the PKCE callback), then reuse the session for `/api/*` calls. Reusable snippet: `readSkillFile("skills/vibe-coding-workshop/skills/genie-code-environment/references/app-verification.md")`.
+- **Browser (required for the render check)** — print `w.apps.get(APP_NAME).url` and have the operator open it; the OAuth flow establishes the session. They MUST confirm the React UI actually renders (mock data visible, no `ErrorBoundary` stack, not a blank/error page). For any deeper build/runtime error, open `<app-url>/logz` in the same browser — that is where the real log lives (`apps logs <APP_NAME>` returns an OAuth error from compute).
+- **Programmatic** — replay the **3-hop Apps OAuth handshake in one `requests.Session()`** (CSRF cookie persists through the PKCE callback), then reuse the session for `/api/*` calls. Reusable snippet: `readSkillFile("skills/vibe-coding-workshop/skills/genie-code-environment/references/app-verification.md")`. A `200` on `/` confirms the server booted, but only a human-rendered page confirms the client did not crash.
 
-Confirm the React UI loads (not an error page), mock data renders, and logs show a healthy server start on port 8000 with no ERROR-level messages.
+Confirm the React UI loads (not a blank/error page), mock data renders, and `/logz` shows a healthy server start on port 8000 with no ERROR-level messages.
 
 **State-lock:** this prompt runs between an `enter` (Step 0) and an `exit`. After the gate passes, run `skills/vibecoding-state` op `exit` — params: `prompt_id: "deploy_databricks_app"`, `gate: "App deployed (SDK SNAPSHOT) + live URL verified behind OAuth"`, `captured: {app_name, app_root, app_url}`. **This `enter`/`exit` pair is a mandatory ritual, not advisory.** Step 0''s `enter` MUST locate — or, if this is the first prompt of the track, bootstrap-create — the canonical live state file at `<app_root>/.vibecoding-state.md` (never the temporary `example/…` bootstrap path). The closing `exit` MUST append this prompt''s Per-Step Log entry, Gate result, and `captured` vars to that file, then **re-read it and echo the appended section to prove the write landed**. **Gate completion rule:** this prompt is NOT complete until that re-read confirms the appended entry — the chat summary is NOT the state store.
 
@@ -7708,6 +7807,7 @@ When any skill lists further **Mandatory Skill Dependencies**, load EACH the sam
   - `databricks bundle run --target dev gold_merge_job`
 - **🛑 If a `bundle` command is blocked, STOP — do not work around it.** A `databricks.yml not found` error or a "blocked by safety guardrails" message means you are NOT on the bundle page: open the **bundle-editor link** above and retry (CONFIRMED — the same `bundle deploy`/`run` that is "blocked" from a file page succeeds from the bundle editor). If it STILL fails from the bundle editor, STOP and report the blocker. Do **NOT** create the jobs, pipeline, tables, or merges via the Jobs/Pipelines REST API (`jobs/create`, `/api/2.0/pipelines`), the SDK, or direct SQL to "get it done" — that silently defeats the bundle (no version control, no `bundle destroy` cleanup) and FAILS the gate. The REST/SDK route is an **escape hatch available only if the operator explicitly authorizes it.**
 - **If a deployed job FAILS (vs. is blocked), use the autonomous-operations loop — still inside the bundle:** get the failed **task** `run_id` (not the parent job run_id), `databricks runs get-run-output --run-id <TASK_RUN_ID>` to diagnose, fix the offending **bundle source file** under `<DP_BUNDLE_ROOT>`, then `bundle deploy --target dev` + `bundle run …` again (max 3 iterations before escalating). Never patch the live job via the API/UI — fix the source and redeploy.
+- **When you rewrite a bundle source file during a fix (Genie Code — see `genie-code-environment` §10):** write it with `executeCode` `open(path,"w").write(...)` (warm compute) or the `createAsset` → `readFile` → `workspaceUpdateFile` trio, and 🔴 **verify the write with `os.path.exists(path)` in the SAME `executeCode` block — NOT `listFiles`** (the workspace REST API behind `listFiles` lags FUSE-written files, so it reports false "missing-file" negatives and you re-create files that already exist).
 
 ### Step 3 — Verify end-to-end (read-only)
 
@@ -8064,6 +8164,7 @@ When the orchestrator lists further **Mandatory Skill Dependencies**, load EACH 
   - **Bundle editor:** `{host}/editor/files/{file_id}?o={o}&contextId=folder%3A{folder_id}` (plain folder: `{host}/browse/folders/{folder_id}?o={o}`)
 
   Tell the operator to open the **bundle-editor link**, then run every `databricks bundle …` command below from that page. Edit the EXISTING on-page `databricks.yml` — files created via the workspace API may not reach the CLI''s FUSE mount.
+- **File-write tiers + verify writes (Genie Code — see `genie-code-environment` §10).** Once compute is warm, write each file with `executeCode` `open(path,"w").write(...)` (one call per file; make the FIRST `executeCode` a trivial `print("ready")` to absorb the ~3–5 min serverless cold start, and never set `timeoutMinutes` below 15). The compute-free `createAsset` → `readFile` → `workspaceUpdateFile` trio also works, but `workspaceUpdateFile` only updates a file that already exists AND was read this thread — reserve it for editing the on-page `databricks.yml`. 🔴 **Verify every write with `os.path.exists(path)` (or `os.listdir(dir)`) in the SAME `executeCode` block — NOT `listFiles`:** the workspace REST API behind `listFiles` lags FUSE-written files (a live run saw `listFiles`=7 while `os.listdir`=12), so `listFiles` returns false "missing-file" negatives and you waste turns recreating files that already exist.
 - **Confirm `targets.dev.presets.source_linked_deployment: false` is present** in the bundle''s `databricks.yml` (set by Bronze) — `bundle validate --target dev` must report no source-linked warning. Never enable it; it breaks file-backed `notebook_task` sources.
 - Validate → deploy → run the jobs IN ORDER through `runDatabricksCli`, **from the bundle-editor page**, each with `--target dev` (mandatory — a target-less deploy is guardrail-blocked). **Verify per-task AFTER each `run`, never at the end** — a failed TVF silently breaks Metric Views, which silently breaks the Genie Space:
   - `databricks bundle validate --target dev`
