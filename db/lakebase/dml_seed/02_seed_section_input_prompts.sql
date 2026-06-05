@@ -818,26 +818,6 @@ Write `<artifact_root>/docs/ui_design.md` (clone-rooted, NOT `@docs/...`) descri
 '',
 true, 1, true, current_timestamp(), current_timestamp(), current_user());
 
--- setup_lakebase (genie-code fork) — synced from sections/99-setup_lakebase.genie-code.md
-INSERT INTO ${catalog}.${schema}.section_input_prompts
-(input_id, section_tag, coding_assistant, input_template, system_prompt,
- bypass_llm, version, is_active, inserted_at, updated_at, created_by)
-VALUES
-(922, 'setup_lakebase', 'genie-code',
-'PLACEHOLDER — replaced by sync_markdown_to_seed.py from the markdown fork.',
-'',
-true, 1, true, current_timestamp(), current_timestamp(), current_user());
-
--- wire_ui_lakebase (genie-code fork) — synced from sections/99-wire_ui_lakebase.genie-code.md
-INSERT INTO ${catalog}.${schema}.section_input_prompts
-(input_id, section_tag, coding_assistant, input_template, system_prompt,
- bypass_llm, version, is_active, inserted_at, updated_at, created_by)
-VALUES
-(923, 'wire_ui_lakebase', 'genie-code',
-'PLACEHOLDER — replaced by sync_markdown_to_seed.py from the markdown fork.',
-'',
-true, 1, true, current_timestamp(), current_timestamp(), current_user());
-
 -- Deploy and E2E Test with Lakebase
 INSERT INTO ${catalog}.${schema}.section_input_prompts 
 (input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
