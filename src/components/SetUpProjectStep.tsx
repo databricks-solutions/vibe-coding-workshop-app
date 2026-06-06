@@ -608,7 +608,9 @@ In **Cursor**, click on the model selector in the Agent panel and choose the lat
                   <div className="text-sm text-muted-foreground space-y-2">
                     {renderDescription(`You're inside Genie Code -- pre-authenticated and serverless. No \`databricks auth login\`, no model setup.
 
-**Step 1 -- Clone into your skills folder** (run in the Genie Code terminal). This is the folder Genie Code reads skills from. Cloning anywhere else means the workshop skills will **NOT** load.`)}
+**Step 1 -- Clone into your skills folder** (run in the Genie Code terminal). This is the folder Genie Code reads skills from. Cloning anywhere else means the workshop skills will **NOT** load.
+
+This folder is the **skill-load anchor only** -- Genie Code reads workshop skills from here. Your project artifacts (apps, bundles, docs) build separately under \`/Workspace/Users/${emailForPath}/vibe-coding-workshop\`, which the workshop creates for you on the first step.`)}
                   </div>
 
                   {/* Step 1 clone command (email auto-injected, branch-pinned) */}
