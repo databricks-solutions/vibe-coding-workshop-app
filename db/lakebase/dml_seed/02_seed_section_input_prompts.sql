@@ -128,7 +128,7 @@ Your ONLY task is to create a PRD document. Do NOT:
 
 You MUST:
 - Create ONLY the PRD document
-- First resolve <ARTIFACT_ROOT> = the workshop project / clone root (the folder that holds this repo). On Cursor/Copilot that is your repo root; on Databricks Genie Code it is your /Workspace/Users/<email>/.assistant/skills/<repo> clone — NOT the page''s current working directory.
+- First resolve <ARTIFACT_ROOT> = the workshop project root. On Cursor/Copilot that is your repo root; on Databricks Genie Code it is your user project root /Workspace/Users/<email>/<repo> (the repo is cloned separately at /Workspace/Users/<email>/.assistant/skills/<repo> for skill loading only) — NOT the page''s current working directory.
 - Save it to: <ARTIFACT_ROOT>/docs/design_prd.md
 - STOP after saving the PRD - do nothing else
 ```
@@ -174,7 +174,7 @@ STOP after saving. Do not generate any code, tables, APIs, or proceed with other
 
 Your output should be a complete, ready-to-use prompt that when pasted into Cursor or Copilot will:
 1. Create ONLY a simple Product Requirements Document
-2. Save it to `<ARTIFACT_ROOT>/docs/design_prd.md` (where `<ARTIFACT_ROOT>` is the workshop project / clone root — resolve it first; never assume the page''s working directory)
+2. Save it to `<ARTIFACT_ROOT>/docs/design_prd.md` (where `<ARTIFACT_ROOT>` is the workshop project root — resolve it first; on Databricks Genie Code that is your `/Workspace/Users/<email>/<repo>`, NOT the `.assistant/skills` clone; never assume the page''s working directory)
 3. NOT generate any code, scripts, table definitions, or API specifications
 
 CRITICAL: Your generated prompt MUST start with clear instructions telling the AI to ONLY create the PRD document and save it to `<ARTIFACT_ROOT>/docs/design_prd.md`, and to NOT do anything else. Focus on High Value workflows with Happy Path only.
@@ -194,7 +194,7 @@ The prompt should be focused and specific to {use_case_title}, incorporating the
 
 **Run this in your cloned Template Repository** (see Prerequisites in Step 0). These prompts assume you are working in that codebase with a coding assistant enabled.
 
-**Capture your artifact root first (client-aware).** This step writes a file *before* `bootstrap` runs, so invoke `vibecoding-state.resolve_root` to resolve `<ARTIFACT_ROOT>` — the workshop clone / git-folder root that relative artifact paths resolve against (it reads `artifact_root` from `## Environment Capabilities` if a state file already exists, otherwise detects the active client and clone root; it is gate-free and writes nothing). Echo the rule to yourself: **artifacts land under `<ARTIFACT_ROOT>`** — your repo root on Cursor/Copilot, your `/Workspace/Users/<email>/.assistant/skills/<repo>` clone on Databricks Genie Code — **never the page''s current working directory** (on Genie Code the CWD is page-type-dependent). Then write the PRD to `<ARTIFACT_ROOT>/docs/design_prd.md`.
+**Capture your artifact root first (client-aware).** This step writes a file *before* `bootstrap` runs, so invoke `vibecoding-state.resolve_root` to resolve `<ARTIFACT_ROOT>` — the workshop project root that relative artifact paths resolve against (it reads `artifact_root` from `## Environment Capabilities` if a state file already exists, otherwise detects the active client, `artifact_root` + `skills_install_root`; it is gate-free and writes no state file, but it ensures `<ARTIFACT_ROOT>` exists). Echo the rule to yourself: **artifacts land under `<ARTIFACT_ROOT>`** — your repo root on Cursor/Copilot, your user project root `/Workspace/Users/<email>/<repo>` on Databricks Genie Code (the repo is cloned separately at `/Workspace/Users/<email>/.assistant/skills/<repo>` for skill loading only) — **never the page''s current working directory** (on Genie Code the CWD is page-type-dependent). Ensure `<ARTIFACT_ROOT>` exists, then write the PRD to `<ARTIFACT_ROOT>/docs/design_prd.md`.
 
 ---
 
@@ -271,7 +271,7 @@ In addition, document the design with:
 'Figma UI Design',
 'Design a simple, clean user interface using Figma AI',
 4,
-'> **Artifact root (client-aware).** The PRD lives at `<ARTIFACT_ROOT>/docs/design_prd.md`, where `<ARTIFACT_ROOT>` is your workshop clone root (resolve via `vibecoding-state.resolve_root`). On Cursor/Copilot that is your repo root and the `@docs/design_prd.md` mention resolves there; on Databricks Genie Code open it under your `/Workspace/Users/<email>/.assistant/skills/<repo>` clone — never the page''s current working directory.
+'> **Artifact root (client-aware).** The PRD lives at `<ARTIFACT_ROOT>/docs/design_prd.md`, where `<ARTIFACT_ROOT>` is your workshop clone root (resolve via `vibecoding-state.resolve_root`). On Cursor/Copilot that is your repo root and the `@docs/design_prd.md` mention resolves there; on Databricks Genie Code open it under your user project root `/Workspace/Users/<email>/<repo>` (the repo is cloned separately at `/Workspace/Users/<email>/.assistant/skills/<repo>` for skill loading only) — never the page''s current working directory.
 
 ## Steps to Apply
 
@@ -520,7 +520,7 @@ Key requirements:
 
 CLI Best Practices:
 
-- Run from the repo root (the workshop clone root); use `apps_lakebase/scripts/` for shared scripts
+- Run from the repo root (the workshop project root); use `apps_lakebase/scripts/` for shared scripts
 - Run CLI commands outside the IDE sandbox to avoid SSL/TLS certificate errors
 
 This prompt is returned as-is for direct use in Cursor/Copilot. No LLM processing.',
@@ -665,7 +665,7 @@ VALUES
 This will involve the following steps:
 
 - **Resolve identity** — derive `APP_NAME` and `<APP_ROOT>` (no `auth login`).
-- **Load the skills** — read the scaffold and build skills by their full clone-rooted paths.
+- **Load the skills** — read the scaffold and build skills by their full `skill_ref_root`-prefixed paths.
 - **Scaffold the app** — create the blank AppKit project into `<APP_ROOT>` (no local npm).
 - **Read the PRD** — ground the UI in the product requirements.
 - **Author the UI** — write screens and components on mock data (files only, no server).
@@ -673,7 +673,7 @@ This will involve the following steps:
 
 The steps below are the prescriptive runbook for those actions; follow them in order.
 
-**Genie Code — this is a prescriptive runbook. Follow the steps in order. Do NOT improvise paths, do NOT use bare relative paths, do NOT use `@`-mentions, and do NOT deploy. This is a BUILD-ONLY step: you SCAFFOLD the AppKit project and AUTHOR the UI with mock data — you do NOT run a local server, you do NOT test at `http://localhost:8000`, and you do NOT run `databricks apps deploy`. Initial deploy + URL verification happen in the **Deploy to Databricks Apps** step (05). Every skill is named by its full clone-rooted path; the app is anchored to `<APP_ROOT>`.**
+**Genie Code — this is a prescriptive runbook. Follow the steps in order. Do NOT improvise paths, do NOT use bare relative paths, do NOT use `@`-mentions, and do NOT deploy. This is a BUILD-ONLY step: you SCAFFOLD the AppKit project and AUTHOR the UI with mock data — you do NOT run a local server, you do NOT test at `http://localhost:8000`, and you do NOT run `databricks apps deploy`. Initial deploy + URL verification happen in the **Deploy to Databricks Apps** step (05). Every skill is named by its full `skill_ref_root`-prefixed path; the app is anchored to `<APP_ROOT>`.**
 
 ### 🔴 Non-negotiable execution rules (read before anything)
 
@@ -688,9 +688,9 @@ The steps below are the prescriptive runbook for those actions; follow them in o
 Run `skills/vibecoding-state` operation `enter` with `prompt_id: "cursor_copilot_ui_design"`. It writes and echoes the `## Environment Capabilities` block. Read these resolved values and use them literally throughout:
 
 - `client_context` = `genie_code`
-- `artifact_root` = your workshop clone root (e.g. `/Workspace/Users/<your-email>/.assistant/skills/vibe-coding-workshop`)
+- `artifact_root` = your workshop project root (e.g. `/Workspace/Users/<your-email>/vibe-coding-workshop`) — where all generated bundles/apps/docs build; the repo itself is cloned at `/Workspace/Users/<your-email>/.assistant/skills/vibe-coding-workshop` (skills load from there via `skill_ref_root`, NOT from `artifact_root`)
 - `skill_ref_root` = `skills/vibe-coding-workshop` (substitute your clone folder if you cloned somewhere other than `.assistant/skills/vibe-coding-workshop`)
-- `app_root` = `<artifact_root>/<app_name>` — the **self-contained AppKit app project** (e.g. `…/vibe-coding-workshop/prashanth-s-{use_case_slug}`), a TOP-LEVEL sibling of any `{user_schema_prefix}_<use_case_slug>_dab` bundle, NOT nested under `apps_lakebase/` and NOT the bare clone root. Referred to below as `<APP_ROOT>`. `app.yaml`, `databricks.yml`, `server/`, `client/`, and `<APP_ROOT>/.vibecoding-state.md` all live here.
+- `app_root` = `<artifact_root>/<app_name>` — the **self-contained AppKit app project** (e.g. `…/vibe-coding-workshop/jane-d-{use_case_slug}`), a TOP-LEVEL sibling of any `{user_schema_prefix}_<use_case_slug>_dab` bundle, NOT nested under `apps_lakebase/` and NOT the bare project root. Referred to below as `<APP_ROOT>`. `app.yaml`, `databricks.yml`, `server/`, `client/`, and `<APP_ROOT>/.vibecoding-state.md` all live here.
 - `app_deploy.verb` = `apps deploy` (gated) — used in step 05, NOT here.
 
 `app_root` is `<pending>` until `APP_NAME` is derived (Step 1). After Step 1, re-run `enter`''s capture (or update the block) so `app_root` resolves to `<artifact_root>/<APP_NAME>`.
@@ -711,7 +711,7 @@ databricks current-user me --output json
 >
 > **Host of record is the runtime, not the template.** On Genie Code the authoritative workspace is the pre-authenticated runtime — derive it from `w.config.host` (or `databricks current-user me`). If `databricks.yml`''s `host:` and `{workspace_url}` disagree, **trust the runtime host**; do not chase the templated value.
 
-### Step 2 — Load the required skills by their FULL clone-rooted paths
+### Step 2 — Load the required skills by their FULL `skill_ref_root`-prefixed paths
 
 Load each skill with `readSkillFile` using its fully-qualified `<skill_ref_root>`-prefixed path — NEVER a bare `@…` mention, NEVER a repo-relative path. **The root-level `skills/` come FIRST: they are the highest-priority, always-on guardrails and govern everything below.** Read them in ONE batched `readSkillFile` turn (`genie-code-environment` §10 — Genie Code reads multiple files in parallel in a single turn).
 
@@ -732,7 +732,7 @@ databricks apps init --name "<APP_NAME>" --run none --output-dir "<artifact_root
 
 ### Step 4 — Read the PRD
 
-Read `<artifact_root>/docs/design_prd.md` (full clone-rooted path — NOT a bare `@docs/...` mention; design docs live at the clone root''s `docs/`, not under `<APP_ROOT>`). Extract personas, key journeys (Happy Path), core features, and the entities/relationships the UI must display.
+Read `<artifact_root>/docs/design_prd.md` (full `<artifact_root>`-anchored path — NOT a bare `@docs/...` mention; design docs live at `<artifact_root>`''s `docs/`, not under `<APP_ROOT>`). Extract personas, key journeys (Happy Path), core features, and the entities/relationships the UI must display.
 
 ### Step 5 — Author the UI with mock data (files only — no server)
 
@@ -808,7 +808,7 @@ Fix every **BLOCKING** hit and triage every **REVIEW** hit before declaring this
 
 ### Step 6 — Create the UI design document
 
-Write `<artifact_root>/docs/ui_design.md` (clone-rooted, NOT `@docs/...`) describing key screens/pages, core components and their mock-data sources, navigation flow, and design direction.
+Write `<artifact_root>/docs/ui_design.md` (`<artifact_root>`-anchored, NOT `@docs/...`) describing key screens/pages, core components and their mock-data sources, navigation flow, and design direction.
 
 **State-lock:** this prompt runs between an `enter` (Step 0) and an `exit`. After the gate passes, run `skills/vibecoding-state` op `exit` — params: `prompt_id: "cursor_copilot_ui_design"`, `gate: "App scaffolded + UI authored (deploy + verify deferred to step 05)"`, `captured: {app_name, app_root}`. **This `enter`/`exit` pair is a mandatory ritual, not advisory.** Step 0''s `enter` MUST locate — or, if this is the first prompt of the track, bootstrap-create — the canonical live state file at `<app_root>/.vibecoding-state.md` (never the temporary `example/…` bootstrap path). The closing `exit` MUST append this prompt''s Per-Step Log entry, Gate result, and `captured` vars to that file, then **re-read it and echo the appended section to prove the write landed**. **Gate completion rule:** this prompt is NOT complete until that re-read confirms the appended entry — the chat summary is NOT the state store.
 
@@ -1221,7 +1221,7 @@ Key requirements:
 
 CLI Best Practices:
 
-- Run from the repo root (the workshop clone root); use `apps_lakebase/scripts/` for shared scripts
+- Run from the repo root (the workshop project root); use `apps_lakebase/scripts/` for shared scripts
 - Run CLI commands outside the IDE sandbox to avoid SSL/TLS certificate errors
 
 This prompt is returned as-is for direct use in Cursor/Copilot. No LLM processing.',
@@ -1395,7 +1395,7 @@ Expected output (for schema query):
 'Table Metadata & Data Dictionary',
 'Extract table schema metadata from Databricks and save as CSV for data dictionary reference',
 8,
-'> **Artifact root (client-aware).** Resolve `<ARTIFACT_ROOT>` via `vibecoding-state.resolve_root` (it reads `artifact_root` from `## Environment Capabilities`, or detects the active client + clone root) and write every artifact under it. On Cursor/Copilot that is your repo root; on Databricks Genie Code it is your `/Workspace/Users/<email>/.assistant/skills/<repo>` clone — never the page''s current working directory.
+'> **Artifact root (client-aware).** Resolve `<ARTIFACT_ROOT>` via `vibecoding-state.resolve_root` (it reads `artifact_root` from `## Environment Capabilities`, or detects the active client, `artifact_root` + `skills_install_root`) and write every artifact under it. On Cursor/Copilot that is your repo root; on Databricks Genie Code it is your user project root `/Workspace/Users/<email>/<repo>` (the repo is cloned separately at `/Workspace/Users/<email>/.assistant/skills/<repo>` for skill loading only) — never the page''s current working directory.
 
 ## 1️⃣ How To Apply
 
@@ -1503,7 +1503,7 @@ Note: Bronze setup (Step 10) additionally requires per-table governance annotati
 'Table Metadata & Data Dictionary (Upload CSV)',
 'Upload an existing schema CSV to create the data dictionary for your project',
 8,
-'> **Artifact root (client-aware).** Resolve `<ARTIFACT_ROOT>` via `vibecoding-state.resolve_root` (it reads `artifact_root` from `## Environment Capabilities`, or detects the active client + clone root) and write every artifact under it. On Cursor/Copilot that is your repo root; on Databricks Genie Code it is your `/Workspace/Users/<email>/.assistant/skills/<repo>` clone — never the page''s current working directory.
+'> **Artifact root (client-aware).** Resolve `<ARTIFACT_ROOT>` via `vibecoding-state.resolve_root` (it reads `artifact_root` from `## Environment Capabilities`, or detects the active client, `artifact_root` + `skills_install_root`) and write every artifact under it. On Cursor/Copilot that is your repo root; on Databricks Genie Code it is your user project root `/Workspace/Users/<email>/<repo>` (the repo is cloned separately at `/Workspace/Users/<email>/.assistant/skills/<repo>` for skill loading only) — never the page''s current working directory.
 
 ## 1️⃣ How To Apply
 
@@ -1610,7 +1610,7 @@ Note: Bronze setup (Step 10) additionally requires per-table governance annotati
 'Table Metadata & Data Dictionary (Design from PRD)',
 'Design table schema from your PRD — for when you don''t have existing tables or a CSV',
 8,
-'> **Artifact root (client-aware).** Resolve `<ARTIFACT_ROOT>` via `vibecoding-state.resolve_root` (it reads `artifact_root` from `## Environment Capabilities`, or detects the active client + clone root) and write every artifact under it. On Cursor/Copilot that is your repo root; on Databricks Genie Code it is your `/Workspace/Users/<email>/.assistant/skills/<repo>` clone — never the page''s current working directory.
+'> **Artifact root (client-aware).** Resolve `<ARTIFACT_ROOT>` via `vibecoding-state.resolve_root` (it reads `artifact_root` from `## Environment Capabilities`, or detects the active client, `artifact_root` + `skills_install_root`) and write every artifact under it. On Cursor/Copilot that is your repo root; on Databricks Genie Code it is your user project root `/Workspace/Users/<email>/<repo>` (the repo is cloned separately at `/Workspace/Users/<email>/.assistant/skills/<repo>` for skill loading only) — never the page''s current working directory.
 
 ## How To Apply
 
@@ -1707,7 +1707,7 @@ Missing comments, incorrect types, or invalid rows will cascade into errors down
 'Analyze Silver Metadata (Upload CSV)',
 'Upload an existing Silver layer schema CSV to create the data dictionary for your Genie Accelerator project',
 8,
-'> **Artifact root (client-aware).** Resolve `<ARTIFACT_ROOT>` via `vibecoding-state.resolve_root` (it reads `artifact_root` from `## Environment Capabilities`, or detects the active client + clone root) and write every artifact under it. On Cursor/Copilot that is your repo root; on Databricks Genie Code it is your `/Workspace/Users/<email>/.assistant/skills/<repo>` clone — never the page''s current working directory.
+'> **Artifact root (client-aware).** Resolve `<ARTIFACT_ROOT>` via `vibecoding-state.resolve_root` (it reads `artifact_root` from `## Environment Capabilities`, or detects the active client, `artifact_root` + `skills_install_root`) and write every artifact under it. On Cursor/Copilot that is your repo root; on Databricks Genie Code it is your user project root `/Workspace/Users/<email>/<repo>` (the repo is cloned separately at `/Workspace/Users/<email>/.assistant/skills/<repo>` for skill loading only) — never the page''s current working directory.
 
 ## 1️⃣ How To Apply
 
@@ -1780,7 +1780,7 @@ The orchestrator skill will automatically load its worker skills for merge patte
 'Gold Layer Design (PRD-aligned)',
 'Design Gold layer using project skills with YAML definitions and Mermaid ERD',
 9,
-'> **Artifact root (client-aware).** Resolve the data-product bundle root via `vibecoding-state` (`dp_bundle_root` in `## Environment Capabilities`, = `<artifact_root>/{user_schema_prefix}_<use_case_slug>_dab`) and write **every Gold-design artifact under `{user_schema_prefix}_<use_case_slug>_dab/gold_layer_design/`** — NOT the bare repo/clone root. This is the same dedicated bundle folder the Bronze→Silver→Gold pipeline builds into, so the Gold pipeline (Step 12) can `sync` `gold_layer_design/yaml/**` from right beside the bundle. The shape is identical on every client: on Cursor/Copilot it is `<repo-root>/{user_schema_prefix}_<use_case_slug>_dab/`; on Databricks Genie Code it is `<clone-root>/{user_schema_prefix}_<use_case_slug>_dab/` — never the page''s current working directory.
+'> **Artifact root (client-aware).** Resolve the data-product bundle root via `vibecoding-state` (`dp_bundle_root` in `## Environment Capabilities`, = `<artifact_root>/{user_schema_prefix}_<use_case_slug>_dab`) and write **every Gold-design artifact under `{user_schema_prefix}_<use_case_slug>_dab/gold_layer_design/`** — NOT the bare repo/project root. This is the same dedicated bundle folder the Bronze→Silver→Gold pipeline builds into, so the Gold pipeline (Step 12) can `sync` `gold_layer_design/yaml/**` from right beside the bundle. The shape is identical on every client: on Cursor/Copilot it is `<repo-root>/{user_schema_prefix}_<use_case_slug>_dab/`; on Databricks Genie Code it is `<project-root>/{user_schema_prefix}_<use_case_slug>_dab/` (your user project root `/Workspace/Users/<email>/<repo>`, NOT the skills clone) — never the page''s current working directory.
 
 ## 1️⃣ How To Apply
 
@@ -2066,19 +2066,19 @@ VALUES
 
 This will involve the following steps:
 
-- **Load the design skills** — full clone-rooted paths.
+- **Load the design skills** — full `skill_ref_root`-prefixed paths.
 - **Run the design workflow** — drive it from the orchestrator.
 - **Write the artifacts** — the dimensional model, ERDs, and YAML schemas under `<DP_BUNDLE_ROOT>/gold_layer_design/`.
 
 The steps below are the prescriptive runbook for those actions; follow them in order.
 
-**Genie Code — this is a prescriptive runbook. Follow the steps in order. Do NOT improvise paths, do NOT use bare relative paths, do NOT use `@`-mentions. This is a DESIGN-ONLY step: you WRITE design artifacts (YAML, ERDs, lineage, docs) — you do NOT create schemas/tables, run SQL, or deploy anything. Every skill is named by its full clone-rooted path; every artifact is anchored to `<DP_BUNDLE_ROOT>/gold_layer_design/`.**
+**Genie Code — this is a prescriptive runbook. Follow the steps in order. Do NOT improvise paths, do NOT use bare relative paths, do NOT use `@`-mentions. This is a DESIGN-ONLY step: you WRITE design artifacts (YAML, ERDs, lineage, docs) — you do NOT create schemas/tables, run SQL, or deploy anything. Every skill is named by its full `skill_ref_root`-prefixed path; every artifact is anchored to `<DP_BUNDLE_ROOT>/gold_layer_design/`.**
 
 ### 🔴 Non-negotiable rules (read before anything)
 
 ❌ **NEVER** create a catalog/schema/table, run `CREATE`/`MERGE`/DDL, or build/deploy an Asset Bundle in this step — that is the Gold *pipeline* step (step 12), not design. Design produces FILES only.
 
-❌ **NEVER** write the design to the bare clone root, `/tmp`, the page''s current working directory, or a bare relative path. Genie Code''s CWD is page-type-dependent, so a bare `gold_layer_design/` lands in the wrong place.
+❌ **NEVER** write the design to the bare project root, `/tmp`, the page''s current working directory, or a bare relative path. Genie Code''s CWD is page-type-dependent, so a bare `gold_layer_design/` lands in the wrong place.
 
 ✅ Write **every** design artifact under `<DP_BUNDLE_ROOT>/gold_layer_design/` — the SAME data-product bundle folder the Lakehouse steps (Bronze → Silver → Gold pipeline) build into. Co-locating the design here is what lets the Gold pipeline''s `databricks.yml` later sync `gold_layer_design/yaml/**` from right beside it.
 
@@ -2087,13 +2087,13 @@ The steps below are the prescriptive runbook for those actions; follow them in o
 Run `skills/vibecoding-state` operation `enter` (params: `prompt_id: "gold_layer_design"`). This is the **FIRST data-product step**, so `enter` **bootstrap-creates** the canonical live state file at `<dp_bundle_root>/.vibecoding-state.md` from the template if absent (copying Workshop Choices from the prior `example/…` bootstrap file). Read these resolved values and use them literally throughout:
 
 - `client_context` = `genie_code`
-- `artifact_root` = your workshop clone root (e.g. `/Workspace/Users/<your-email>/.assistant/skills/vibe-coding-workshop`)
+- `artifact_root` = your workshop project root (e.g. `/Workspace/Users/<your-email>/vibe-coding-workshop`) — where all generated bundles/apps/docs build; the repo itself is cloned at `/Workspace/Users/<your-email>/.assistant/skills/vibe-coding-workshop` (skills load from there via `skill_ref_root`, NOT from `artifact_root`)
 - `skill_ref_root` = `skills/vibe-coding-workshop` (substitute your clone folder if you cloned somewhere other than `.assistant/skills/vibe-coding-workshop`)
 - `dp_bundle_root` = `<artifact_root>/{user_schema_prefix}_<use_case_slug>_dab` — the **self-contained data-product Asset Bundle project** the whole pipeline builds into (e.g. `…/vibe-coding-workshop/{user_schema_prefix}_booking_app_dab`). Referred to below as `<DP_BUNDLE_ROOT>`. This step writes the design INTO `<DP_BUNDLE_ROOT>/gold_layer_design/`. The folder may not exist yet (the Bronze step creates the bundle''s `databricks.yml` later) — that''s fine, writing the files creates it. Use the SAME `{user_schema_prefix}_<use_case_slug>_dab` name the Lakehouse steps use, so the design and the bundle stay in one folder.
 
 Your source schema is `<artifact_root>/data_product_accelerator/context/{use_case_file_prefix}_Schema.csv`.
 
-### Step 1 — Load the required skills by their FULL clone-rooted paths
+### Step 1 — Load the required skills by their FULL `skill_ref_root`-prefixed paths
 
 Load each skill with `readSkillFile` using its fully-qualified `<skill_ref_root>`-prefixed path — NEVER a bare `@…` mention, NEVER a repo-relative path. **The root-level `skills/` come FIRST: they are the highest-priority, always-on guardrails and govern everything below.**
 
@@ -2121,7 +2121,7 @@ Drive the orchestrator''s end-to-end design workflow against `<artifact_root>/da
 - **Tag generated dimensions.** Any dimension with no Silver source (e.g. `dim_date`, `dim_time`) MUST carry `population_strategy: generate_sequence` in its YAML; every Silver-sourced table carries `population_strategy: merge_from_silver`. This tells the Gold pipeline step (12) to INSERT `dim_date` from a generated sequence instead of trying to MERGE from a non-existent Silver source. Record the `dim_date` exception in `DESIGN_DECISIONS.md`.
 - **Upstream cross-reference is mandatory when Silver exists.** After generating the YAML, check whether Silver tables exist (`spark.catalog.tableExists(...)`); if they do, run the orchestrator''s `cross_reference_silver_at_design_time()` to validate every YAML `silver_column` against the live Silver schema via `DESCRIBE`, fix any mismatches, and write the resulting mismatch count (target: 0) into the validation report. Do not treat this as optional when Silver is present — it is the external check that catches systematic column errors the self-consistency checks cannot.
 
-Anchor EVERY output to `<DP_BUNDLE_ROOT>/gold_layer_design/` — never the bare clone root, never the page CWD. The key paths:
+Anchor EVERY output to `<DP_BUNDLE_ROOT>/gold_layer_design/` — never the bare project root, never the page CWD. The key paths:
 
 - `<DP_BUNDLE_ROOT>/gold_layer_design/DESIGN_DECISIONS.md`  ← written first
 - `<DP_BUNDLE_ROOT>/gold_layer_design/erd_master.md` (+ per-domain ERDs under `…/gold_layer_design/erd/` for larger schemas)
@@ -2130,7 +2130,7 @@ Anchor EVERY output to `<DP_BUNDLE_ROOT>/gold_layer_design/` — never the bare 
 - `<DP_BUNDLE_ROOT>/gold_layer_design/SOURCE_TABLE_MAPPING.csv`, `DESIGN_SUMMARY.md`, and `docs/BUSINESS_ONBOARDING_GUIDE.md`
 - `<DP_BUNDLE_ROOT>/gold_layer_design/DESIGN_GAP_ANALYSIS.md` (coverage analysis) and `README.md` (navigation hub) — both are MANDATORY per the orchestrator''s deliverables checklist; do not skip them
 
-Use `createAsset`/the workspace file APIs to write these files under `<DP_BUNDLE_ROOT>/gold_layer_design/`. If a path-resolution tool reports the parent folder does not exist, create it (the bundle folder is built up across steps) — do not retarget to the clone root.
+Use `createAsset`/the workspace file APIs to write these files under `<DP_BUNDLE_ROOT>/gold_layer_design/`. If a path-resolution tool reports the parent folder does not exist, create it (the bundle folder is built up across steps) — do not retarget to the project root.
 
 **Genie Code execution notes — this is a heavy, compute-bound phase; heed these (see `genie-code-environment` §10):**
 
@@ -2419,13 +2419,13 @@ VALUES
 This will involve the following steps:
 
 - **Resolve the target catalog** — no-create invariant (HARD STOP if absent).
-- **Load the skills** — full clone-rooted paths.
+- **Load the skills** — full `skill_ref_root`-prefixed paths.
 - **Author the Bronze bundle** — copy the sample data (Approach C) into the bundle.
 - **Write and deploy** — write the bundle files to `<DP_BUNDLE_ROOT>`, then deploy and run it from the bundle-editor page.
 
 The steps below are the prescriptive runbook for those actions; follow them in order.
 
-**Genie Code — this is a prescriptive runbook. Follow the steps in order. Do NOT improvise paths, do NOT use bare relative paths, do NOT use `@`-mentions, and do NOT create tables directly. Every skill is named by its full clone-rooted path; every artifact is anchored to `<DP_BUNDLE_ROOT>`; every table is created by a deployed bundle job — never by hand.**
+**Genie Code — this is a prescriptive runbook. Follow the steps in order. Do NOT improvise paths, do NOT use bare relative paths, do NOT use `@`-mentions, and do NOT create tables directly. Every skill is named by its full `skill_ref_root`-prefixed path; every artifact is anchored to `<DP_BUNDLE_ROOT>`; every table is created by a deployed bundle job — never by hand.**
 
 ### 🔴 Non-negotiable execution rule (read before anything)
 
@@ -2438,9 +2438,9 @@ The steps below are the prescriptive runbook for those actions; follow them in o
 Run `skills/vibecoding-state` operation `enter` with `prompt_id: "bronze_layer_creation"`. It writes and echoes the `## Environment Capabilities` block. Read these resolved values and use them literally throughout:
 
 - `client_context` = `genie_code`
-- `artifact_root` = your workshop clone root (e.g. `/Workspace/Users/<your-email>/.assistant/skills/vibe-coding-workshop`)
+- `artifact_root` = your workshop project root (e.g. `/Workspace/Users/<your-email>/vibe-coding-workshop`) — where all generated bundles/apps/docs build; the repo itself is cloned at `/Workspace/Users/<your-email>/.assistant/skills/vibe-coding-workshop` (skills load from there via `skill_ref_root`, NOT from `artifact_root`)
 - `skill_ref_root` = `skills/vibe-coding-workshop` (substitute your clone folder if you cloned somewhere other than `.assistant/skills/vibe-coding-workshop`)
-- `dp_bundle_root` = `<artifact_root>/{user_schema_prefix}_{use_case_slug}_dab` — the **self-contained Databricks Asset Bundle project** for the whole data-product pipeline (e.g. `…/vibe-coding-workshop/{user_schema_prefix}_booking_app_dab`). This — NOT the clone root — is where you write `databricks.yml`, `src/`, and `resources/`, and it is the **page you deploy from**. Referred to below as `<DP_BUNDLE_ROOT>`.
+- `dp_bundle_root` = `<artifact_root>/{user_schema_prefix}_{use_case_slug}_dab` — the **self-contained Databricks Asset Bundle project** for the whole data-product pipeline (e.g. `…/vibe-coding-workshop/{user_schema_prefix}_booking_app_dab`). This — NOT the project root — is where you write `databricks.yml`, `src/`, and `resources/`, and it is the **page you deploy from**. Referred to below as `<DP_BUNDLE_ROOT>`.
 - deploy verb = `bundle deploy --target dev`, run through the `runDatabricksCli` tool
 
 If `enter` has not run in this thread, run it now — every step below depends on these values.
@@ -2456,7 +2456,7 @@ Catalogs are pre-provisioned in this workshop — you must **NEVER** create one.
 3. **If `{lakehouse_default_catalog}` is ABSENT → 🛑 HARD STOP. Do NOT create it.** Print the existing catalogs as a numbered list and ask the operator to pick the catalog to use (or confirm the intended name). Re-run this step with their choice. Record the chosen value as `lakehouse_default_catalog` so the `exit` capture (Step 3) persists it and every downstream step reuses it without re-prompting.
 4. **The generated clone/DDL notebook (Step 2) must `USE CATALOG <existing>` and must NEVER emit `CREATE CATALOG` / `CREATE CATALOG IF NOT EXISTS`.** Only the user-specific SCHEMA (`{user_schema_prefix}_bronze`) is created — inside the existing catalog, by the deployed job.
 
-### Step 1 — Load the required skills by their FULL clone-rooted paths
+### Step 1 — Load the required skills by their FULL `skill_ref_root`-prefixed paths
 
 Load each skill with `readSkillFile` using its fully-qualified `<skill_ref_root>`-prefixed path — NEVER a bare `@…` mention, NEVER a repo-relative path. **The root-level `skills/` come FIRST: they are the highest-priority, always-on guardrails and govern everything below.** Skills load in two tiers to keep context lean without weakening the preflight-ack gate.
 
@@ -2491,7 +2491,7 @@ NOTE: The job notebook checks whether `{lakehouse_default_catalog}.{user_schema_
 
 ### Step 3 — Write bundle files to `<DP_BUNDLE_ROOT>`, then deploy FROM that page
 
-- Write every generated file UNDER `<DP_BUNDLE_ROOT>` — never the clone root (writing at the clone root is the "one level too high" bug), never `/tmp`, never a bare relative path (Genie Code''s CWD is page-type-dependent):
+- Write every generated file UNDER `<DP_BUNDLE_ROOT>` — never the project root (writing at the project root is the "one level too high" bug), never `/tmp`, never a bare relative path (Genie Code''s CWD is page-type-dependent):
   - `<DP_BUNDLE_ROOT>/databricks.yml`
   - `<DP_BUNDLE_ROOT>/src/{user_schema_prefix}_bronze/clone_samples.py`
   - `<DP_BUNDLE_ROOT>/resources/bronze/bronze_clone_job.yml`
@@ -3057,14 +3057,14 @@ VALUES
 
 This will involve the following steps:
 
-- **Load the skills** — full clone-rooted paths.
+- **Load the skills** — full `skill_ref_root`-prefixed paths.
 - **Pin the Bronze column inventory** — read-only, to ground the transforms.
 - **Author the Silver bundle** — SDP plus centralized data quality.
 - **Write and deploy** — write the bundle files to `<DP_BUNDLE_ROOT>`, then deploy and run it from the bundle-editor page.
 
 The steps below are the prescriptive runbook for those actions; follow them in order.
 
-**Genie Code — this is a prescriptive runbook. Follow the steps in order. Do NOT improvise paths, do NOT use bare relative paths, do NOT use `@`-mentions, and do NOT create tables or run the pipeline by hand. Every skill is named by its full clone-rooted path; every artifact is anchored to `<DP_BUNDLE_ROOT>`; every Silver table is created by the deployed SDP pipeline — never by direct SQL.**
+**Genie Code — this is a prescriptive runbook. Follow the steps in order. Do NOT improvise paths, do NOT use bare relative paths, do NOT use `@`-mentions, and do NOT create tables or run the pipeline by hand. Every skill is named by its full `skill_ref_root`-prefixed path; every artifact is anchored to `<DP_BUNDLE_ROOT>`; every Silver table is created by the deployed SDP pipeline — never by direct SQL.**
 
 ### 🔴 Non-negotiable execution rule (read before anything)
 
@@ -3077,7 +3077,7 @@ The steps below are the prescriptive runbook for those actions; follow them in o
 Run `skills/vibecoding-state` operation `enter` with `prompt_id: "silver_layer_sdp"` and `require_prior_gate: {prompt_id: "bronze_layer_creation", gate: "Bronze layer live"}`. It writes and echoes the `## Environment Capabilities` block. Read these resolved values and use them literally throughout:
 
 - `client_context` = `genie_code`
-- `artifact_root` = your workshop clone root (e.g. `/Workspace/Users/<your-email>/.assistant/skills/vibe-coding-workshop`)
+- `artifact_root` = your workshop project root (e.g. `/Workspace/Users/<your-email>/vibe-coding-workshop`) — where all generated bundles/apps/docs build; the repo itself is cloned at `/Workspace/Users/<your-email>/.assistant/skills/vibe-coding-workshop` (skills load from there via `skill_ref_root`, NOT from `artifact_root`)
 - `skill_ref_root` = `skills/vibe-coding-workshop` (substitute your clone folder if you cloned somewhere other than `.assistant/skills/vibe-coding-workshop`)
 - `dp_bundle_root` = `<artifact_root>/{user_schema_prefix}_{use_case_slug}_dab` — the **self-contained Databricks Asset Bundle project** for the whole data-product pipeline (e.g. `…/vibe-coding-workshop/{user_schema_prefix}_booking_app_dab`). This is the SAME bundle you created for Bronze — extend it; do NOT make a new one. It is where `databricks.yml`, `src/`, and `resources/` live, and the **page you deploy from**. Referred to below as `<DP_BUNDLE_ROOT>`.
 - deploy verb = `bundle deploy --target dev`, run through the `runDatabricksCli` tool
@@ -3086,7 +3086,7 @@ If `enter` reports the Bronze gate is not `Bronze layer live`, STOP — finish t
 
 **On resume after a context reset:** trust the live state file over any chat summary — a prompt whose state entry shows its gate PASSED is DONE (do NOT re-run it), and before re-writing files reconcile what is already on disk with `os.listdir(...)` (NOT `listFiles`, which lags FUSE writes) against the state file''s captured paths, so you resume rather than recreate.
 
-### Step 1 — Load the required skills by their FULL clone-rooted paths
+### Step 1 — Load the required skills by their FULL `skill_ref_root`-prefixed paths
 
 Load each skill with `readSkillFile` using its fully-qualified `<skill_ref_root>`-prefixed path — NEVER a bare `@…` mention, NEVER a repo-relative path. **The root-level `skills/` come FIRST: they are the highest-priority, always-on guardrails and govern everything below.** Skills load in two tiers to keep context lean without weakening the preflight-ack gate.
 
@@ -3131,7 +3131,7 @@ NOTE: This is a shared workshop workspace. Put a `user_prefix` variable in every
 
 ### Step 3 — Write bundle files to `<DP_BUNDLE_ROOT>`, then deploy FROM that page
 
-- Write every generated file UNDER `<DP_BUNDLE_ROOT>` — never the clone root (writing at the clone root is the "one level too high" bug), never `/tmp`, never a bare relative path (Genie Code''s CWD is page-type-dependent):
+- Write every generated file UNDER `<DP_BUNDLE_ROOT>` — never the project root (writing at the project root is the "one level too high" bug), never `/tmp`, never a bare relative path (Genie Code''s CWD is page-type-dependent):
   - `<DP_BUNDLE_ROOT>/src/{user_schema_prefix}_silver/` — `setup_dq_rules_table.py`, `dq_rules_loader.py` (pure Python), `silver_dimensions.py`, `silver_facts.py`, `data_quality_monitoring.py`
   - `<DP_BUNDLE_ROOT>/resources/silver/silver_dq_setup_job.yml` and `<DP_BUNDLE_ROOT>/resources/silver/silver_dlt_pipeline.yml`
   - extend the EXISTING `<DP_BUNDLE_ROOT>/databricks.yml` (the one from Bronze)
@@ -3702,14 +3702,14 @@ VALUES
 
 This will involve the following steps:
 
-- **Load the skills** — full clone-rooted paths.
+- **Load the skills** — full `skill_ref_root`-prefixed paths.
 - **Pin the Silver column inventory** — read-only, to ground the joins.
 - **Author the Gold bundle** — the YAML-driven 2-job architecture.
 - **Write and deploy** — write the bundle files to `<DP_BUNDLE_ROOT>`, then deploy and run it from the bundle-editor page.
 
 The steps below are the prescriptive runbook for those actions; follow them in order.
 
-**Genie Code — this is a prescriptive runbook. Follow the steps in order. Do NOT improvise paths, do NOT use bare relative paths, do NOT use `@`-mentions, and do NOT create tables, constraints, or merges by hand. Every skill is named by its full clone-rooted path; every artifact is anchored to `<DP_BUNDLE_ROOT>`; every Gold table, PK, FK, and MERGE is created by a deployed bundle job — never by direct SQL.**
+**Genie Code — this is a prescriptive runbook. Follow the steps in order. Do NOT improvise paths, do NOT use bare relative paths, do NOT use `@`-mentions, and do NOT create tables, constraints, or merges by hand. Every skill is named by its full `skill_ref_root`-prefixed path; every artifact is anchored to `<DP_BUNDLE_ROOT>`; every Gold table, PK, FK, and MERGE is created by a deployed bundle job — never by direct SQL.**
 
 ### 🔴 Non-negotiable execution rule (read before anything)
 
@@ -3724,7 +3724,7 @@ The steps below are the prescriptive runbook for those actions; follow them in o
 Run `skills/vibecoding-state` operation `enter` with `prompt_id: "gold_layer_pipeline"` and `require_prior_gate: {prompt_id: "silver_layer_sdp", gate: "Silver layer live"}`. It writes and echoes the `## Environment Capabilities` block. Read these resolved values and use them literally throughout:
 
 - `client_context` = `genie_code`
-- `artifact_root` = your workshop clone root (e.g. `/Workspace/Users/<your-email>/.assistant/skills/vibe-coding-workshop`)
+- `artifact_root` = your workshop project root (e.g. `/Workspace/Users/<your-email>/vibe-coding-workshop`) — where all generated bundles/apps/docs build; the repo itself is cloned at `/Workspace/Users/<your-email>/.assistant/skills/vibe-coding-workshop` (skills load from there via `skill_ref_root`, NOT from `artifact_root`)
 - `skill_ref_root` = `skills/vibe-coding-workshop` (substitute your clone folder if you cloned somewhere other than `.assistant/skills/vibe-coding-workshop`)
 - `dp_bundle_root` = `<artifact_root>/{user_schema_prefix}_{use_case_slug}_dab` — the **SAME self-contained Asset Bundle** you built for Bronze + Silver (e.g. `…/vibe-coding-workshop/{user_schema_prefix}_booking_app_dab`). EXTEND it; do NOT make a new one. `databricks.yml`, `src/`, and `resources/` live here, and it is the **page you deploy from**. Referred to below as `<DP_BUNDLE_ROOT>`. Your Gold design YAML (from step 9) lives at `<DP_BUNDLE_ROOT>/gold_layer_design/yaml/` — read it from there.
 - deploy verb = `bundle deploy --target dev`, run through the `runDatabricksCli` tool
@@ -3733,7 +3733,7 @@ If `enter` reports the Silver gate is not `Silver layer live`, STOP — finish t
 
 **On resume after a context reset:** trust the live state file over any chat summary — a prompt whose state entry shows its gate PASSED is DONE (do NOT re-run it), and before re-writing files reconcile what is already on disk with `os.listdir(...)` (NOT `listFiles`, which lags FUSE writes) against the state file''s captured paths, so you resume rather than recreate.
 
-### Step 1 — Load the required skills by their FULL clone-rooted paths
+### Step 1 — Load the required skills by their FULL `skill_ref_root`-prefixed paths
 
 Load each skill with `readSkillFile` using its fully-qualified `<skill_ref_root>`-prefixed path — NEVER a bare `@…` mention, NEVER a repo-relative path. **The root-level `skills/` come FIRST: they are the highest-priority, always-on guardrails and govern everything below.** Skills load in two tiers to keep context lean without weakening the preflight-ack gate.
 
@@ -3779,7 +3779,7 @@ NOTE: This is a shared workshop workspace. Put a `user_prefix` variable in every
 
 ### Step 3 — Write bundle files to `<DP_BUNDLE_ROOT>`, then deploy FROM that page
 
-- Write every generated file UNDER `<DP_BUNDLE_ROOT>` — never the clone root (writing at the clone root is the "one level too high" bug), never `/tmp`, never a bare relative path (Genie Code''s CWD is page-type-dependent):
+- Write every generated file UNDER `<DP_BUNDLE_ROOT>` — never the project root (writing at the project root is the "one level too high" bug), never `/tmp`, never a bare relative path (Genie Code''s CWD is page-type-dependent):
   - `<DP_BUNDLE_ROOT>/src/{user_schema_prefix}_gold/` — `setup_tables.py`, `add_fk_constraints.py`, `merge_gold_tables.py`, `validate_gold.py`
   - `<DP_BUNDLE_ROOT>/resources/gold/gold_setup_job.yml` and `<DP_BUNDLE_ROOT>/resources/gold/gold_merge_job.yml` (the merge job has two tasks: `merge` then `validate_gold` via `depends_on`)
   - extend the EXISTING `<DP_BUNDLE_ROOT>/databricks.yml` (the one from Bronze + Silver) — add the Gold resources AND the `gold_layer_design/yaml/**` sync rule + `pyyaml>=6.0`
@@ -3827,7 +3827,7 @@ If a PRD exists at @docs/design_prd.md, reference it for business requirements, 
 'Create Use-Case Plan',
 'Generate implementation plans for operationalizing use cases with supporting artifacts',
 13,
-'> **Artifact root (client-aware).** Resolve the data-product bundle root via `vibecoding-state` (`dp_bundle_root` in `## Environment Capabilities`, = `<artifact_root>/{user_schema_prefix}_<use_case_slug>_dab`) and write **every plan document and manifest under `{user_schema_prefix}_<use_case_slug>_dab/plans/`** — NOT the bare repo/clone root. This is the same dedicated bundle folder the Lakehouse + Gold-design steps build into, so the downstream deploy steps find `plans/manifests/*.yaml` right beside the bundle. The shape is identical on every client: on Cursor/Copilot it is `<repo-root>/{user_schema_prefix}_<use_case_slug>_dab/`; on Databricks Genie Code it is `<clone-root>/{user_schema_prefix}_<use_case_slug>_dab/` — never the page''s current working directory.
+'> **Artifact root (client-aware).** Resolve the data-product bundle root via `vibecoding-state` (`dp_bundle_root` in `## Environment Capabilities`, = `<artifact_root>/{user_schema_prefix}_<use_case_slug>_dab`) and write **every plan document and manifest under `{user_schema_prefix}_<use_case_slug>_dab/plans/`** — NOT the bare repo/project root. This is the same dedicated bundle folder the Lakehouse + Gold-design steps build into, so the downstream deploy steps find `plans/manifests/*.yaml` right beside the bundle. The shape is identical on every client: on Cursor/Copilot it is `<repo-root>/{user_schema_prefix}_<use_case_slug>_dab/`; on Databricks Genie Code it is `<project-root>/{user_schema_prefix}_<use_case_slug>_dab/` (your user project root `/Workspace/Users/<email>/<repo>`, NOT the skills clone) — never the page''s current working directory.
 
 ## 1️⃣ How To Apply
 
@@ -4247,19 +4247,19 @@ VALUES
 
 This will involve the following steps:
 
-- **Load the planning skills** — full clone-rooted paths.
+- **Load the planning skills** — full `skill_ref_root`-prefixed paths.
 - **Run the planning workflow** — drive it from the orchestrator.
 - **Write the artifacts** — every plan doc and YAML manifest under `<DP_BUNDLE_ROOT>/plans/` (no resources created).
 
 The steps below are the prescriptive runbook for those actions; follow them in order.
 
-**Genie Code — this is a prescriptive runbook. Follow the steps in order. Do NOT improvise paths, do NOT use bare relative paths, do NOT use `@`-mentions. This is a PLANNING / DOCUMENT-WRITING step: you WRITE plan documents and YAML manifests — you do NOT create tables, run SQL DDL, or deploy anything. Every skill is named by its full clone-rooted path; every artifact is anchored to `<DP_BUNDLE_ROOT>/plans/`.**
+**Genie Code — this is a prescriptive runbook. Follow the steps in order. Do NOT improvise paths, do NOT use bare relative paths, do NOT use `@`-mentions. This is a PLANNING / DOCUMENT-WRITING step: you WRITE plan documents and YAML manifests — you do NOT create tables, run SQL DDL, or deploy anything. Every skill is named by its full `skill_ref_root`-prefixed path; every artifact is anchored to `<DP_BUNDLE_ROOT>/plans/`.**
 
 ### 🔴 Non-negotiable rules (read before anything)
 
 ❌ **NEVER** create a catalog/schema/table, run `CREATE`/`MERGE`/DDL, or build/deploy an Asset Bundle in this step — planning produces FILES only. (Read-only inspection of the live Gold schema for validation is fine — see Step 2.)
 
-❌ **NEVER** write the plans to the bare clone root, `/tmp`, the page''s current working directory, or a bare relative path. Genie Code''s CWD is page-type-dependent, so a bare `plans/` lands in the wrong place.
+❌ **NEVER** write the plans to the bare project root, `/tmp`, the page''s current working directory, or a bare relative path. Genie Code''s CWD is page-type-dependent, so a bare `plans/` lands in the wrong place.
 
 ✅ Write **every** plan document and manifest under `<DP_BUNDLE_ROOT>/plans/` — the SAME data-product bundle folder the Lakehouse + Gold-design steps build into, so the downstream deploy steps (semantic layer, dashboard, DI assets) find `plans/manifests/*.yaml` and `plans/deploy-checkpoint.md` right beside the bundle they deploy from.
 
@@ -4268,13 +4268,13 @@ The steps below are the prescriptive runbook for those actions; follow them in o
 Run `skills/vibecoding-state` operation `enter` (params: `prompt_id: "usecase_plan"`) — it locates the canonical live state file at `<dp_bundle_root>/.vibecoding-state.md` (bootstrap-created by the first data-product step). Read these resolved values and use them literally throughout:
 
 - `client_context` = `genie_code`
-- `artifact_root` = your workshop clone root (e.g. `/Workspace/Users/<your-email>/.assistant/skills/vibe-coding-workshop`)
+- `artifact_root` = your workshop project root (e.g. `/Workspace/Users/<your-email>/vibe-coding-workshop`) — where all generated bundles/apps/docs build; the repo itself is cloned at `/Workspace/Users/<your-email>/.assistant/skills/vibe-coding-workshop` (skills load from there via `skill_ref_root`, NOT from `artifact_root`)
 - `skill_ref_root` = `skills/vibe-coding-workshop` (substitute your clone folder if you cloned somewhere other than `.assistant/skills/vibe-coding-workshop`)
 - `dp_bundle_root` = `<artifact_root>/{user_schema_prefix}_<use_case_slug>_dab` — the **self-contained data-product Asset Bundle project** the whole pipeline builds into (e.g. `…/vibe-coding-workshop/{user_schema_prefix}_booking_app_dab`). Referred to below as `<DP_BUNDLE_ROOT>`. This step writes the plans INTO `<DP_BUNDLE_ROOT>/plans/`. Your Gold design (from step 9) lives at `<DP_BUNDLE_ROOT>/gold_layer_design/`; an optional PRD (from the PRD step) lives at `<artifact_root>/docs/design_prd.md`.
 
 When this step intersects the gold dependency manifest against the live catalog, use the EXISTING `{lakehouse_default_catalog}` that the Bronze step resolved and persisted (its Step 0.5 hard-stop) — read it from state; **never create a catalog and do not re-prompt for it.** This is a read-only intersection against `information_schema`.
 
-### Step 1 — Load the required skills by their FULL clone-rooted paths
+### Step 1 — Load the required skills by their FULL `skill_ref_root`-prefixed paths
 
 Load each skill with `readSkillFile` using its fully-qualified `<skill_ref_root>`-prefixed path — NEVER a bare `@…` mention, NEVER a repo-relative path. **The root-level `skills/` come FIRST: they are the highest-priority, always-on guardrails and govern everything below.**
 
@@ -4301,13 +4301,13 @@ Drive the orchestrator with `planning_mode: workshop`:
 
 If a PRD exists at `<artifact_root>/docs/design_prd.md`, reference it for business requirements, personas, and workflows.
 
-Anchor EVERY output to `<DP_BUNDLE_ROOT>/plans/` — never the bare clone root, never the page CWD. The key paths:
+Anchor EVERY output to `<DP_BUNDLE_ROOT>/plans/` — never the bare project root, never the page CWD. The key paths:
 
 - `<DP_BUNDLE_ROOT>/plans/README.md`, `prerequisites.md`, `use-case-catalog.md`, `phase1-use-cases.md`
 - `<DP_BUNDLE_ROOT>/plans/phase1-addendum-1.2-tvfs.md`, `…-1.3-metric-views.md`, `…-1.6-genie-spaces.md` (+ others if selected)
 - `<DP_BUNDLE_ROOT>/plans/manifests/semantic-layer-manifest.yaml`, `observability-manifest.yaml`, `ml-manifest.yaml`, `genai-agents-manifest.yaml`, `gold-dependency-manifest.yaml`
 
-Use `createAsset`/the workspace file APIs to write these under `<DP_BUNDLE_ROOT>/plans/`. If a parent folder does not exist yet, create it — do not retarget to the clone root.
+Use `createAsset`/the workspace file APIs to write these under `<DP_BUNDLE_ROOT>/plans/`. If a parent folder does not exist yet, create it — do not retarget to the project root.
 
 **File-write tiers + verify writes (Genie Code — see `genie-code-environment` §10).** Once compute is warm, write each plan/manifest with `executeCode` `open(path,"w").write(...)` (one call per file; make the FIRST `executeCode` a trivial `print("ready")` to absorb the ~3–5 min serverless cold start, and never set `timeoutMinutes` below 15). The compute-free `createAsset` → `readFile` → `workspaceUpdateFile` trio also works, but `workspaceUpdateFile` only updates a file that already exists AND was read this thread. 🔴 **Verify every write with `os.path.exists(path)` (or `os.listdir(dir)`) in the SAME `executeCode` block — NOT `listFiles`:** the workspace REST API behind `listFiles` lags FUSE-written files (a live run saw `listFiles`=7 while `os.listdir`=12), so `listFiles` returns false "missing-file" negatives and you waste turns recreating files that already exist.
 
@@ -4846,14 +4846,14 @@ VALUES
 
 This will involve the following steps:
 
-- **Load the skills** — full clone-rooted paths.
+- **Load the skills** — full `skill_ref_root`-prefixed paths.
 - **Author the dashboard draft and deploy job** — file-based.
 - **Author on the canvas** — the mandatory navigation to lay out the dashboard.
 - **Write and deploy** — write the bundle files to `<DP_BUNDLE_ROOT>`, then deploy from the bundle-editor page.
 
 The steps below are the prescriptive runbook for those actions; follow them in order.
 
-**Genie Code — this is a prescriptive runbook. Follow the steps in order. Do NOT improvise paths, do NOT use bare relative paths, do NOT use `@`-mentions. This is a HYBRID dashboard fork: AUTHOR the dashboard interactively on the Databricks canvas (mandatory navigation), then EXTRACT its `.lvdash.json` and persist it to the Asset Bundle so `dashboard_deploy_job` reproduces it. Every skill is named by its full clone-rooted path; every artifact is anchored to `<DP_BUNDLE_ROOT>`; the dashboard ends up as a persisted `.lvdash.json` that matches the live dashboard, with the deploy job having run once in dev — a live dashboard with no persisted file behind it, or drift, is the regression.**
+**Genie Code — this is a prescriptive runbook. Follow the steps in order. Do NOT improvise paths, do NOT use bare relative paths, do NOT use `@`-mentions. This is a HYBRID dashboard fork: AUTHOR the dashboard interactively on the Databricks canvas (mandatory navigation), then EXTRACT its `.lvdash.json` and persist it to the Asset Bundle so `dashboard_deploy_job` reproduces it. Every skill is named by its full `skill_ref_root`-prefixed path; every artifact is anchored to `<DP_BUNDLE_ROOT>`; the dashboard ends up as a persisted `.lvdash.json` that matches the live dashboard, with the deploy job having run once in dev — a live dashboard with no persisted file behind it, or drift, is the regression.**
 
 ### 🔴 Non-negotiable execution rule (read before anything)
 
@@ -4872,14 +4872,14 @@ This fork is **hybrid** with a dashboard-specific twist: AI/BI dashboards are AU
 Run `skills/vibecoding-state` operation `enter` with `prompt_id: "aibi_dashboard"` and `require_prior_gate: {prompt_id: "gold_layer_pipeline", gate: "Gold layer live"}`. It writes and echoes the `## Environment Capabilities` block. Read these resolved values and use them literally throughout:
 
 - `client_context` = `genie_code`
-- `artifact_root` = your workshop clone root (e.g. `/Workspace/Users/<your-email>/.assistant/skills/vibe-coding-workshop`)
+- `artifact_root` = your workshop project root (e.g. `/Workspace/Users/<your-email>/vibe-coding-workshop`) — where all generated bundles/apps/docs build; the repo itself is cloned at `/Workspace/Users/<your-email>/.assistant/skills/vibe-coding-workshop` (skills load from there via `skill_ref_root`, NOT from `artifact_root`)
 - `skill_ref_root` = `skills/vibe-coding-workshop` (substitute your clone folder if you cloned somewhere other than `.assistant/skills/vibe-coding-workshop`)
 - `dp_bundle_root` = `<artifact_root>/{user_schema_prefix}_{use_case_slug}_dab` — the **SAME self-contained Asset Bundle** you built for Bronze + Silver + Gold (+ semantic layer) (e.g. `…/{user_schema_prefix}_booking_app_dab`). EXTEND it; do NOT make a new one. It is the **page you deploy from**. Referred to below as `<DP_BUNDLE_ROOT>`. Your dashboard plan lives at `<DP_BUNDLE_ROOT>/plans/phase1-addendum-1.5-aibi-dashboards.md`, the resolved names at `<DP_BUNDLE_ROOT>/plans/deploy-checkpoint.md`, and Gold design YAML at `<DP_BUNDLE_ROOT>/gold_layer_design/yaml/`.
 - deploy verb = `bundle deploy --target dev`, run through the `runDatabricksCli` tool
 
 If `enter` reports the Gold gate is not `Gold layer live`, STOP — finish the Gold pipeline step first. If `enter` has not run in this thread, run it now.
 
-### Step 1 — Load the required skills by their FULL clone-rooted paths
+### Step 1 — Load the required skills by their FULL `skill_ref_root`-prefixed paths
 
 Load each skill with `readSkillFile` using its fully-qualified `<skill_ref_root>`-prefixed path — NEVER a bare `@…` mention, NEVER a repo-relative path. **The root-level `skills/` come FIRST: they are the highest-priority, always-on guardrails and govern everything below.** Skills load in two tiers to keep context lean without weakening the preflight-ack gate.
 
@@ -4925,7 +4925,7 @@ The canvas apply is the DEV loop; the persisted `.lvdash.json` + `dashboard_depl
 
 ### Step 3 — Write bundle files to `<DP_BUNDLE_ROOT>`, then deploy FROM that page
 
-- Write every generated file UNDER `<DP_BUNDLE_ROOT>` — never the clone root (the "one level too high" bug), never `/tmp`, never a bare relative path (Genie Code''s CWD is page-type-dependent):
+- Write every generated file UNDER `<DP_BUNDLE_ROOT>` — never the project root (the "one level too high" bug), never `/tmp`, never a bare relative path (Genie Code''s CWD is page-type-dependent):
   - `<DP_BUNDLE_ROOT>/docs/dashboards/` — `*.lvdash.json` (+ a short README)
   - `<DP_BUNDLE_ROOT>/scripts/` — `deploy_dashboard.py`, `validate_dashboard_queries.py`, `validate_widget_encodings.py`
   - `<DP_BUNDLE_ROOT>/resources/monitoring/` — `dashboard_deploy_job.yml`
@@ -5574,14 +5574,14 @@ VALUES
 
 This will involve the following steps:
 
-- **Load the skills** — full clone-rooted paths.
+- **Load the skills** — full `skill_ref_root`-prefixed paths.
 - **Author the semantic-layer bundle** — TVFs → Metric Views → Genie Space.
 - **Apply natively in dev, then extract back** — reconcile the dev-applied objects into the bundle.
 - **Write and deploy** — write the bundle files to `<DP_BUNDLE_ROOT>`, then deploy from the bundle-editor page.
 
 The steps below are the prescriptive runbook for those actions; follow them in order.
 
-**Genie Code — this is a prescriptive runbook. Follow the steps in order. Do NOT improvise paths, do NOT use bare relative paths, do NOT use `@`-mentions. This is a HYBRID semantic-layer fork: AUTHOR each artifact''s definition file first, APPLY it with native tools for a fast dev loop, then EXTRACT it back and persist it to the Asset Bundle so a bundle job reproduces it. Every skill is named by its full clone-rooted path; every artifact is anchored to `<DP_BUNDLE_ROOT>`; every TVF, Metric View, and Genie Space ends up as a persisted bundle resource that matches the live asset, with the bundle job having run once in dev — an orphan live asset with no file behind it, or drift between file and live, is the regression.**
+**Genie Code — this is a prescriptive runbook. Follow the steps in order. Do NOT improvise paths, do NOT use bare relative paths, do NOT use `@`-mentions. This is a HYBRID semantic-layer fork: AUTHOR each artifact''s definition file first, APPLY it with native tools for a fast dev loop, then EXTRACT it back and persist it to the Asset Bundle so a bundle job reproduces it. Every skill is named by its full `skill_ref_root`-prefixed path; every artifact is anchored to `<DP_BUNDLE_ROOT>`; every TVF, Metric View, and Genie Space ends up as a persisted bundle resource that matches the live asset, with the bundle job having run once in dev — an orphan live asset with no file behind it, or drift between file and live, is the regression.**
 
 ### 🔴 Non-negotiable execution rule (read before anything)
 
@@ -5600,14 +5600,14 @@ This fork is **hybrid**: author the definition file FIRST, apply it with native 
 Run `skills/vibecoding-state` operation `enter` with `prompt_id: "genie_space"` and `require_prior_gate: {prompt_id: "gold_layer_pipeline", gate: "Gold layer live"}`. It writes and echoes the `## Environment Capabilities` block. Read these resolved values and use them literally throughout:
 
 - `client_context` = `genie_code`
-- `artifact_root` = your workshop clone root (e.g. `/Workspace/Users/<your-email>/.assistant/skills/vibe-coding-workshop`)
+- `artifact_root` = your workshop project root (e.g. `/Workspace/Users/<your-email>/vibe-coding-workshop`) — where all generated bundles/apps/docs build; the repo itself is cloned at `/Workspace/Users/<your-email>/.assistant/skills/vibe-coding-workshop` (skills load from there via `skill_ref_root`, NOT from `artifact_root`)
 - `skill_ref_root` = `skills/vibe-coding-workshop` (substitute your clone folder if you cloned somewhere other than `.assistant/skills/vibe-coding-workshop`)
 - `dp_bundle_root` = `<artifact_root>/{user_schema_prefix}_{use_case_slug}_dab` — the **SAME self-contained Asset Bundle** you built for Bronze + Silver + Gold (e.g. `…/{user_schema_prefix}_booking_app_dab`). EXTEND it; do NOT make a new one. `databricks.yml`, `src/`, `resources/` live here, and it is the **page you deploy from**. Referred to below as `<DP_BUNDLE_ROOT>`. Your plan manifest lives at `<DP_BUNDLE_ROOT>/plans/manifests/semantic-layer-manifest.yaml`, plan addendums at `<DP_BUNDLE_ROOT>/plans/`, and Gold design YAML at `<DP_BUNDLE_ROOT>/gold_layer_design/yaml/`.
 - deploy verb = `bundle deploy --target dev`, run through the `runDatabricksCli` tool
 
 If `enter` reports the Gold gate is not `Gold layer live`, STOP — finish the Gold pipeline step first. If `enter` has not run in this thread, run it now.
 
-### Step 1 — Load the required skills by their FULL clone-rooted paths
+### Step 1 — Load the required skills by their FULL `skill_ref_root`-prefixed paths
 
 Load each skill with `readSkillFile` using its fully-qualified `<skill_ref_root>`-prefixed path — NEVER a bare `@…` mention, NEVER a repo-relative path. **The root-level `skills/` come FIRST: they are the highest-priority, always-on guardrails and govern everything below.** Skills load in two tiers to keep context lean without weakening the preflight-ack gate.
 
@@ -5655,7 +5655,7 @@ The native apply is the DEV loop only; the persisted file + bundle job (Step 3) 
 
 ### Step 3 — Write bundle files to `<DP_BUNDLE_ROOT>`, then deploy FROM that page
 
-- Write every generated file UNDER `<DP_BUNDLE_ROOT>` — never the clone root (the "one level too high" bug), never `/tmp`, never a bare relative path (Genie Code''s CWD is page-type-dependent):
+- Write every generated file UNDER `<DP_BUNDLE_ROOT>` — never the project root (the "one level too high" bug), never `/tmp`, never a bare relative path (Genie Code''s CWD is page-type-dependent):
   - `<DP_BUNDLE_ROOT>/src/{user_schema_prefix}_semantic/` — `table_valued_functions.sql`, `semantic/metric_views/*.yaml` + `create_metric_views.py`, `genie/genie_space_config.json`, `deploy_genie_spaces.py`
   - `<DP_BUNDLE_ROOT>/resources/semantic-layer/` — `tvf_job.yml`, `metric_views_job.yml`, `genie_deploy_job.yml`
   - extend the EXISTING `<DP_BUNDLE_ROOT>/databricks.yml` (from Bronze + Silver + Gold)
@@ -5857,13 +5857,13 @@ VALUES
 
 This will involve the following steps:
 
-- **Load the skills** — full clone-rooted paths.
+- **Load the skills** — full `skill_ref_root`-prefixed paths.
 - **Author the agent and deploy job** — write files only, do NOT execute anything yet.
 - **Deploy and verify** — deploy from the bundle-editor page, run the job, then verify the endpoint.
 
 The steps below are the prescriptive runbook for those actions; follow them in order.
 
-**Genie Code — this is a prescriptive runbook. Follow the steps in order. Do NOT improvise paths, do NOT use bare relative paths, do NOT use `@`-mentions, and do NOT deploy the agent by hand. Every skill is named by its full clone-rooted path; every artifact is anchored to `<DP_BUNDLE_ROOT>`; the agent serving endpoint is created by RUNNING a deployed bundle job (`agent_deploy_job`) — never by an ad-hoc `agents.deploy()`, never by `databricks jobs submit`.**
+**Genie Code — this is a prescriptive runbook. Follow the steps in order. Do NOT improvise paths, do NOT use bare relative paths, do NOT use `@`-mentions, and do NOT deploy the agent by hand. Every skill is named by its full `skill_ref_root`-prefixed path; every artifact is anchored to `<DP_BUNDLE_ROOT>`; the agent serving endpoint is created by RUNNING a deployed bundle job (`agent_deploy_job`) — never by an ad-hoc `agents.deploy()`, never by `databricks jobs submit`.**
 
 ### 🔴 Non-negotiable execution rule (read before anything)
 
@@ -5878,7 +5878,7 @@ The steps below are the prescriptive runbook for those actions; follow them in o
 Run `skills/vibecoding-state` operation `enter` with `prompt_id: "agent_framework"` and `require_prior_gate: {prompt_id: "genie_space", gate: "Genie Space live"}`. It writes and echoes the `## Environment Capabilities` block. Read these resolved values and use them literally throughout:
 
 - `client_context` = `genie_code`
-- `artifact_root` = your workshop clone root (e.g. `/Workspace/Users/<your-email>/.assistant/skills/vibe-coding-workshop`)
+- `artifact_root` = your workshop project root (e.g. `/Workspace/Users/<your-email>/vibe-coding-workshop`) — where all generated bundles/apps/docs build; the repo itself is cloned at `/Workspace/Users/<your-email>/.assistant/skills/vibe-coding-workshop` (skills load from there via `skill_ref_root`, NOT from `artifact_root`)
 - `skill_ref_root` = `skills/vibe-coding-workshop` (substitute your clone folder if you cloned somewhere other than `.assistant/skills/vibe-coding-workshop`)
 - `dp_bundle_root` = `<artifact_root>/{user_schema_prefix}_<use_case_slug>_dab` — the **SAME self-contained Asset Bundle** you built for Bronze/Silver/Gold/semantic (e.g. `…/vibe-coding-workshop/{user_schema_prefix}_booking_app_dab`). EXTEND it; do NOT make a new one. This is the **page you deploy from**. Referred to below as `<DP_BUNDLE_ROOT>`.
 - Workspace: `{workspace_url}`
@@ -5887,7 +5887,7 @@ Run `skills/vibecoding-state` operation `enter` with `prompt_id: "agent_framewor
 
 If `enter` reports the Genie Space gate is not `Genie Space live`, STOP — finish the Build Genie Space step first. If `enter` has not run in this thread, run it now.
 
-### Step 1 — Load the required skills by their FULL clone-rooted paths
+### Step 1 — Load the required skills by their FULL `skill_ref_root`-prefixed paths
 
 Load each skill with `readSkillFile` using its fully-qualified `<skill_ref_root>`-prefixed path — NEVER a bare `@…` mention, NEVER a repo-relative path. **The root-level `skills/` come FIRST: they are the highest-priority, always-on guardrails and govern everything below.**
 
@@ -5928,7 +5928,7 @@ NOTE: This is a shared workshop workspace. Put a `user_prefix` variable in the j
 
 ### Step 3 — Deploy FROM the bundle-editor page, run the job, then verify
 
-- Write every generated file UNDER `<DP_BUNDLE_ROOT>` — never the clone root (the "one level too high" bug), never `/tmp`, never a bare relative path (Genie Code''s CWD is page-type-dependent).
+- Write every generated file UNDER `<DP_BUNDLE_ROOT>` — never the project root (the "one level too high" bug), never `/tmp`, never a bare relative path (Genie Code''s CWD is page-type-dependent).
 - **Open the bundle editor BEFORE any `bundle` command — and surface its link.** `<DP_BUNDLE_ROOT>/databricks.yml` already exists (from Bronze/Silver/Gold), so the workspace file browser shows the **"Open in bundle editor"** affordance on that folder (and an **"Open in editor"** button at the top). Its page CWD IS `<DP_BUNDLE_ROOT>` — the bundle-root page `bundle deploy`/`run` require, where Genie Code runs deploy/run pre-approved. **Do not make the operator hunt for the icon** — build a clickable link with the pre-authenticated `WorkspaceClient` (`w`) and print it:
   - `host = w.config.host`; `o = w.get_workspace_id()`
   - `file_id = w.workspace.get_status("<DP_BUNDLE_ROOT>/databricks.yml").object_id`
@@ -7210,7 +7210,7 @@ Key requirements:
 
 CLI Best Practices:
 
-- Run from the repo root (the workshop clone root); use `apps_lakebase/scripts/` for shared scripts
+- Run from the repo root (the workshop project root); use `apps_lakebase/scripts/` for shared scripts
 - Run CLI commands outside the IDE sandbox to avoid SSL/TLS certificate errors
 
 This prompt is returned as-is for direct use in Cursor/Copilot. No LLM processing.',
@@ -7335,7 +7335,7 @@ VALUES
 This will involve the following steps:
 
 - **Confirm and validate** — re-confirm `APP_NAME` / `<APP_ROOT>` and structurally validate the config.
-- **Load the deploy skill** — read it by its full clone-rooted path.
+- **Load the deploy skill** — read it by its full `skill_ref_root`-prefixed path.
 - **Run the pre-deploy static gate** — the cheapest checks before shipping.
 - **Deploy via SDK SNAPSHOT** — register if needed, then deploy (the build runs server-side).
 - **Verify the deployed app** — check the live URL, not localhost.
@@ -7362,12 +7362,12 @@ The steps below are the prescriptive runbook for those actions; follow them in o
 Run `skills/vibecoding-state` operation `enter` with `prompt_id: "deploy_databricks_app"`. Read the resolved `## Environment Capabilities` values and use them literally:
 
 - `client_context` = `genie_code`
-- `artifact_root` = your workshop clone root (e.g. `/Workspace/Users/<your-email>/.assistant/skills/vibe-coding-workshop`)
+- `artifact_root` = your workshop project root (e.g. `/Workspace/Users/<your-email>/vibe-coding-workshop`) — where all generated bundles/apps/docs build; the repo itself is cloned at `/Workspace/Users/<your-email>/.assistant/skills/vibe-coding-workshop` (skills load from there via `skill_ref_root`, NOT from `artifact_root`)
 - `skill_ref_root` = `skills/vibe-coding-workshop` (substitute your clone folder if different)
 - `app_root` = `<artifact_root>/<app_name>` — the **self-contained AppKit app project** authored in step 04 (a TOP-LEVEL sibling of any `{user_schema_prefix}_<use_case_slug>_dab` bundle, NOT under `apps_lakebase/`). Referred to below as `<APP_ROOT>`; `<APP_ROOT>/.vibecoding-state.md`, `app.yaml`, `databricks.yml`, `server/`, and `client/` all live here.
 - `app_deploy.verb` = `apps deploy` — the gated deploy verb; on Genie Code it resolves to the SDK SNAPSHOT call (CLI deploy is the IDE path).
 
-**First:** read `<APP_ROOT>/.vibecoding-state.md` (full clone-rooted path — NOT a bare `@…` mention) for the `APP_NAME`, workspace, and any resolved issues captured in step 04.
+**First:** read `<APP_ROOT>/.vibecoding-state.md` (full `<artifact_root>`-anchored path — NOT a bare `@…` mention) for the `APP_NAME`, workspace, and any resolved issues captured in step 04.
 
 ### Step 1 — Confirm `APP_NAME` and `<APP_ROOT>`, validate config
 
@@ -7391,7 +7391,7 @@ Validate the scaffolded project exists and points at the target workspace (read-
 
 If you scaffolded against a different workspace, fix `host:` in `<APP_ROOT>/databricks.yml` and remove stale state at `<APP_ROOT>/.databricks` before deploying.
 
-### Step 2 — Load the deploy skill by its FULL clone-rooted path
+### Step 2 — Load the deploy skill by its FULL `skill_ref_root`-prefixed path
 
 Load with `readSkillFile` — NEVER a bare `@…` mention, NEVER a repo-relative path. **The root-level `skills/` come FIRST as the highest-priority guardrails:**
 
@@ -7741,7 +7741,7 @@ Known warehouse ID: <YOUR_WAREHOUSE_ID> (get via: databricks warehouses list --o
 'Analyze Silver Metadata',
 'Extract and analyze comprehensive table/column metadata from Silver layer schema including comments, constraints, and tags',
 22,
-'> **Artifact root (client-aware).** Resolve `<ARTIFACT_ROOT>` via `vibecoding-state.resolve_root` (it reads `artifact_root` from `## Environment Capabilities`, or detects the active client + clone root) and write every artifact under it. On Cursor/Copilot that is your repo root; on Databricks Genie Code it is your `/Workspace/Users/<email>/.assistant/skills/<repo>` clone — never the page''s current working directory.
+'> **Artifact root (client-aware).** Resolve `<ARTIFACT_ROOT>` via `vibecoding-state.resolve_root` (it reads `artifact_root` from `## Environment Capabilities`, or detects the active client, `artifact_root` + `skills_install_root`) and write every artifact under it. On Cursor/Copilot that is your repo root; on Databricks Genie Code it is your user project root `/Workspace/Users/<email>/<repo>` (the repo is cloned separately at `/Workspace/Users/<email>/.assistant/skills/<repo>` for skill loading only) — never the page''s current working directory.
 
 ## 1️⃣ How To Apply
 
@@ -7862,7 +7862,7 @@ This CSV drives the Genie Accelerator pipeline:
 'Analyze Silver Metadata (Design from PRD)',
 'Design silver layer schema from your PRD — for when you don''t have existing Silver tables or a CSV',
 22,
-'> **Artifact root (client-aware).** Resolve `<ARTIFACT_ROOT>` via `vibecoding-state.resolve_root` (it reads `artifact_root` from `## Environment Capabilities`, or detects the active client + clone root) and write every artifact under it. On Cursor/Copilot that is your repo root; on Databricks Genie Code it is your `/Workspace/Users/<email>/.assistant/skills/<repo>` clone — never the page''s current working directory.
+'> **Artifact root (client-aware).** Resolve `<ARTIFACT_ROOT>` via `vibecoding-state.resolve_root` (it reads `artifact_root` from `## Environment Capabilities`, or detects the active client, `artifact_root` + `skills_install_root`) and write every artifact under it. On Cursor/Copilot that is your repo root; on Databricks Genie Code it is your user project root `/Workspace/Users/<email>/<repo>` (the repo is cloned separately at `/Workspace/Users/<email>/.assistant/skills/<repo>` for skill loading only) — never the page''s current working directory.
 
 ## How To Apply
 
@@ -8272,7 +8272,7 @@ VALUES
 
 This will involve the following steps:
 
-- **Load the skills** — full clone-rooted paths.
+- **Load the skills** — full `skill_ref_root`-prefixed paths.
 - **Deploy and run the pipeline** — from the bundle-editor page.
 - **Verify end-to-end** — read-only.
 
@@ -8291,7 +8291,7 @@ The steps below are the prescriptive runbook for those actions; follow them in o
 Run `skills/vibecoding-state` operation `enter` with `prompt_id: "deploy_lakehouse_assets"`. It writes and echoes the `## Environment Capabilities` block. Read these resolved values and use them literally throughout:
 
 - `client_context` = `genie_code`
-- `artifact_root` = your workshop clone root (e.g. `/Workspace/Users/<your-email>/.assistant/skills/vibe-coding-workshop`)
+- `artifact_root` = your workshop project root (e.g. `/Workspace/Users/<your-email>/vibe-coding-workshop`) — where all generated bundles/apps/docs build; the repo itself is cloned at `/Workspace/Users/<your-email>/.assistant/skills/vibe-coding-workshop` (skills load from there via `skill_ref_root`, NOT from `artifact_root`)
 - `skill_ref_root` = `skills/vibe-coding-workshop` (substitute your clone folder if you cloned somewhere other than `.assistant/skills/vibe-coding-workshop`)
 - `dp_bundle_root` = `<artifact_root>/{user_schema_prefix}_{use_case_slug}_dab` — the SAME self-contained Asset Bundle you built across Bronze + Silver + Gold (e.g. `…/vibe-coding-workshop/{user_schema_prefix}_booking_app_dab`). Its `databricks.yml` already defines all 5 layer resources. This is the **page you deploy from**. Referred to below as `<DP_BUNDLE_ROOT>`.
 - deploy verb = `bundle deploy --target dev`, run through the `runDatabricksCli` tool
@@ -8300,7 +8300,7 @@ Run `skills/vibecoding-state` operation `enter` with `prompt_id: "deploy_lakehou
 
 **Catalog:** `{lakehouse_default_catalog}` was resolved and persisted by the Bronze step (its Step 0.5 hard-stop) — read it from `## Environment Capabilities`; **never create a catalog and do not re-prompt for it.** This step only deploys + runs the jobs that populate schemas inside that existing catalog.
 
-### Step 1 — Load the required skills by their FULL clone-rooted paths
+### Step 1 — Load the required skills by their FULL `skill_ref_root`-prefixed paths
 
 Load each skill with `readSkillFile` using its fully-qualified `<skill_ref_root>`-prefixed path — NEVER a bare `@…` mention, NEVER a repo-relative path. **The root-level `skills/` come FIRST: they are the highest-priority, always-on guardrails and govern everything below.**
 
@@ -8642,7 +8642,7 @@ VALUES
 
 This will involve the following steps:
 
-- **Load the skills** — full clone-rooted paths.
+- **Load the skills** — full `skill_ref_root`-prefixed paths.
 - **Pre-flight** — confirm the bundle resources are present.
 - **Deploy from the bundle page** — in dependency order.
 
@@ -8667,7 +8667,7 @@ This is the deployment checkpoint of the **hybrid** semantic-layer forks. The ar
 Run `skills/vibecoding-state` operation `enter` with `prompt_id: "deploy_di_assets"` and `require_prior_gate: {prompt_id: "deploy_lakehouse_assets", gate: "Lakehouse assets deployed"}`. It writes and echoes the `## Environment Capabilities` block. Read these resolved values and use them literally throughout:
 
 - `client_context` = `genie_code`
-- `artifact_root` = your workshop clone root (e.g. `/Workspace/Users/<your-email>/.assistant/skills/vibe-coding-workshop`)
+- `artifact_root` = your workshop project root (e.g. `/Workspace/Users/<your-email>/vibe-coding-workshop`) — where all generated bundles/apps/docs build; the repo itself is cloned at `/Workspace/Users/<your-email>/.assistant/skills/vibe-coding-workshop` (skills load from there via `skill_ref_root`, NOT from `artifact_root`)
 - `skill_ref_root` = `skills/vibe-coding-workshop` (substitute your clone folder if you cloned somewhere other than `.assistant/skills/vibe-coding-workshop`)
 - `dp_bundle_root` = `<artifact_root>/{user_schema_prefix}_{use_case_slug}_dab` — the **SAME self-contained Asset Bundle** that holds the Lakehouse + semantic-layer + dashboard resources you authored in the prior steps (e.g. `…/{user_schema_prefix}_booking_app_dab`). EXTEND/DEPLOY it; do NOT make a new one. It is the **page you deploy from**. Referred to below as `<DP_BUNDLE_ROOT>`. The resolved concrete names (job names, MV/TVF names, `semantic_warehouse_id`, workspace paths) live at `<DP_BUNDLE_ROOT>/plans/deploy-checkpoint.md`; Gold design YAML at `<DP_BUNDLE_ROOT>/gold_layer_design/yaml/`.
 - deploy verb = `bundle deploy --target dev`, run through the `runDatabricksCli` tool
@@ -8676,7 +8676,7 @@ If `enter` reports the prior gate is not `Lakehouse assets deployed`, STOP — f
 
 **Catalog:** `{lakehouse_default_catalog}` was resolved and persisted by the Bronze step (its Step 0.5 hard-stop) — read it from `## Environment Capabilities`; **never create a catalog and do not re-prompt for it.** Every TVF/Metric View/Genie asset targets the Gold schema inside that existing catalog.
 
-### Step 1 — Load the required skills by their FULL clone-rooted paths
+### Step 1 — Load the required skills by their FULL `skill_ref_root`-prefixed paths
 
 Load each skill with `readSkillFile` using its fully-qualified `<skill_ref_root>`-prefixed path — NEVER a bare `@…` mention, NEVER a repo-relative path. **The root-level `skills/` come FIRST: they are the highest-priority, always-on guardrails and govern everything below.**
 
@@ -11901,14 +11901,14 @@ VALUES
 This will involve the following steps:
 
 - **Skip cleanly if KA is not selected**.
-- **Load the skills** — full clone-rooted paths.
+- **Load the skills** — full `skill_ref_root`-prefixed paths.
 - **Stage source documents** — into the UC volume.
 - **Get-or-create the KA and source** — sync and poll, all via `w.api_client.do`.
 - **Verify** — read-only.
 
 The steps below are the prescriptive runbook for those actions; follow them in order.
 
-**Genie Code — this is a prescriptive runbook. Follow the steps in order. Do NOT improvise paths, do NOT use bare relative paths, do NOT use `@`-mentions, and do NOT reach for the `w.knowledge_assistants` SDK module — it does NOT exist in the bundled `databricks-sdk 0.67.0`. Every skill is named by its full clone-rooted path; every Knowledge Assistant (KA) call goes through the generic REST escape hatch `w.api_client.do(...)`. This stands up the **{use_case_slug}** agent''s Knowledge Assistant.**
+**Genie Code — this is a prescriptive runbook. Follow the steps in order. Do NOT improvise paths, do NOT use bare relative paths, do NOT use `@`-mentions, and do NOT reach for the `w.knowledge_assistants` SDK module — it does NOT exist in the bundled `databricks-sdk 0.67.0`. Every skill is named by its full `skill_ref_root`-prefixed path; every Knowledge Assistant (KA) call goes through the generic REST escape hatch `w.api_client.do(...)`. This stands up the **{use_case_slug}** agent''s Knowledge Assistant.**
 
 ### 🔴 Non-negotiable execution rules (read before anything)
 
@@ -11937,7 +11937,7 @@ Poll readiness with `w.serving_endpoints.get(ka_endpoint_name)` (available) unti
 Run `skills/vibecoding-state` operation `enter` with `prompt_id: "knowledge_assistant_create"` and `require_prior_gate: [{prompt_id: "uc_resources_foundation", gate: "UC resources ready"}, {prompt_id: "agent_tool_selection", gate: "Agent tool plan ready"}]`. Read these resolved values and use them literally:
 
 - `client_context` = `genie_code`
-- `artifact_root` = your workshop clone root (e.g. `/Workspace/Users/<your-email>/.assistant/skills/vibe-coding-workshop`)
+- `artifact_root` = your workshop project root (e.g. `/Workspace/Users/<your-email>/vibe-coding-workshop`) — where all generated bundles/apps/docs build; the repo itself is cloned at `/Workspace/Users/<your-email>/.assistant/skills/vibe-coding-workshop` (skills load from there via `skill_ref_root`, NOT from `artifact_root`)
 - `skill_ref_root` = `skills/vibe-coding-workshop` (substitute your clone folder if different)
 - `agent_app_root` = `<artifact_root>/{agent_app_name}` — the top-level Track A agent app dir (the `docs/agent_tool_plan.yaml` and `docs/agent_spec.yaml` this prompt reads live under it once the agent app exists; pre-clone, read them from where `agent_tool_selection` wrote them under `artifact_root`).
 - Workspace: `{workspace_url}`
@@ -11950,7 +11950,7 @@ If `enter` reports either prior gate is unmet, STOP and finish that prompt first
 
 Read `docs/agent_tool_plan.yaml.knowledge_assistant.selected` (resolve `docs/` under `artifact_root`/`agent_app_root`). If it is `false`, do **nothing** else: run `skills/vibecoding-state` op `exit` — `prompt_id: "knowledge_assistant_create"`, `gate: "Skipped - KA not selected"`, `captured: {doc_qa_backend: "n/a", ka_endpoint_name: "n/a", knowledge_assistant_id: "n/a"}` — and end the prompt. Create no volumes, no KA, no sources.
 
-### Step 1 — Load the required skills by their FULL clone-rooted paths
+### Step 1 — Load the required skills by their FULL `skill_ref_root`-prefixed paths
 
 Load each with `readSkillFile` using its `<skill_ref_root>`-prefixed path — NEVER a bare `@…` mention, NEVER a repo-relative path. **The root-level `skills/` come FIRST: they are the highest-priority, always-on guardrails.**
 
@@ -12156,7 +12156,7 @@ VALUES
 
 This will involve the following steps:
 
-- **Load the skills** — full clone-rooted paths.
+- **Load the skills** — full `skill_ref_root`-prefixed paths.
 - **Clone and author** — under `<AGENT_APP_ROOT>` (write files only).
 - **Smoke-test** — in-process "Hello" plus an MLflow span check (not localhost).
 
@@ -12168,7 +12168,7 @@ The steps below are the prescriptive runbook for those actions; follow them in o
 
 ❌ **NEVER run `uv run dev` and NEVER open `http://localhost:8000`.** Genie Code has no foreground local server surface; a `uv run dev` loop would hang the session. The `uv` + `pip` + Python 3.12 toolchain IS present (`genie-code-environment` §4), so you install deps with `uv pip install -e .` and then exercise the agent **in-process** inside `executeCode` (import `build_agent`, call `agent.run("Hello")`), which emits the MLflow AGENT span. Server startup is deferred to the deploy step (46) where the Apps runtime builds the `uv`/FastAPI server **server-side**.
 
-❌ **NEVER write the cloned app to the bare clone root, to `apps_lakebase/`, or to `/tmp`.** It goes under `<AGENT_APP_ROOT>` only (a top-level sibling of `<APP_ROOT>` and `{user_schema_prefix}_<use_case_slug>_dab`).
+❌ **NEVER write the cloned app to the bare project root, to `apps_lakebase/`, or to `/tmp`.** It goes under `<AGENT_APP_ROOT>` only (a top-level sibling of `<APP_ROOT>` and `{user_schema_prefix}_<use_case_slug>_dab`).
 
 ✅ The things you run directly are (a) `git clone` of the template, (b) `uv pip install -e .` in-session, (c) in-process `executeCode` smoke + MLflow span check, and (d) **read-only** inspection.
 
@@ -12177,7 +12177,7 @@ The steps below are the prescriptive runbook for those actions; follow them in o
 Run `skills/vibecoding-state` operation `enter` with `prompt_id: "track_a_agent_app_clone_framework"` and `require_prior_gate: [{prompt_id: "mlflow_agent_tracing_uc", gate: "Tracing live; UC OTel tables ready"}, {prompt_id: "agent_tool_selection", gate: "Agent tool plan ready"}]`. Read these resolved values and use them literally:
 
 - `client_context` = `genie_code`
-- `artifact_root` = your workshop clone root (e.g. `/Workspace/Users/<your-email>/.assistant/skills/vibe-coding-workshop`)
+- `artifact_root` = your workshop project root (e.g. `/Workspace/Users/<your-email>/vibe-coding-workshop`) — where all generated bundles/apps/docs build; the repo itself is cloned at `/Workspace/Users/<your-email>/.assistant/skills/vibe-coding-workshop` (skills load from there via `skill_ref_root`, NOT from `artifact_root`)
 - `skill_ref_root` = `skills/vibe-coding-workshop` (substitute your clone folder if different)
 - `agent_app_root` = `<artifact_root>/{agent_app_name}` — the self-contained Track A agent app project dir, a TOP-LEVEL sibling of `<APP_ROOT>` and `{user_schema_prefix}_<use_case_slug>_dab`, NOT under `apps_lakebase/`. Referred to below as `<AGENT_APP_ROOT>`. `app.yaml`, `pyproject.toml`, `databricks.yml`, `server/`, and `<AGENT_APP_ROOT>/.vibecoding-state.md` all live here.
 - `mlflow_experiment_path` = `{mlflow_experiment_path}`
@@ -12185,7 +12185,7 @@ Run `skills/vibecoding-state` operation `enter` with `prompt_id: "track_a_agent_
 
 If `enter` reports either prior gate is unmet, STOP and finish that prompt first. If `enter` has not run in this thread, run it now.
 
-### Step 1 — Load the required skills by their FULL clone-rooted paths
+### Step 1 — Load the required skills by their FULL `skill_ref_root`-prefixed paths
 
 Load each with `readSkillFile` using its `<skill_ref_root>`-prefixed path — NEVER a bare `@…` mention, NEVER a repo-relative path. **The root-level `skills/` come FIRST as the highest-priority guardrails.**
 
@@ -12198,7 +12198,7 @@ Load every further reference the skills name the same way (repo-relative path pr
 
 ### Step 2 — Clone + author under `<AGENT_APP_ROOT>` (write files only)
 
-- `git clone` the `agent-openai-advanced` template into `<AGENT_APP_ROOT>/` (NOT the clone root, NOT `apps_lakebase/`).
+- `git clone` the `agent-openai-advanced` template into `<AGENT_APP_ROOT>/` (NOT the project root, NOT `apps_lakebase/`).
 - `uv pip install -e .` against `<AGENT_APP_ROOT>/pyproject.toml` (the toolchain is present; this resolves deps for the in-process smoke).
 - Wire Option B handlers in `<AGENT_APP_ROOT>/app.py` (`@mlflow.genai.agent_server.invoke` + `@stream`); paste `agent.system_prompt` into `Agent(instructions=...)`; expose `agent.capabilities[]`.
 - Write `<AGENT_APP_ROOT>/config.yml` with `llm_endpoint`, `llm_api_base_url`, `llm_api_mode` from `docs/agent_tool_plan.yaml.runtime_config.llm` (resolve `docs/` under `<AGENT_APP_ROOT>`). No model endpoint hardcoded in Python.
@@ -12399,7 +12399,7 @@ VALUES
 
 This will involve the following steps:
 
-- **Load the skills** — full clone-rooted paths.
+- **Load the skills** — full `skill_ref_root`-prefixed paths.
 - **Author tools and grants** — under `<AGENT_APP_ROOT>` (write files only).
 - **Smoke each tool** — in-process per-tool TOOL-span (not localhost).
 
@@ -12420,7 +12420,7 @@ The steps below are the prescriptive runbook for those actions; follow them in o
 Run `skills/vibecoding-state` operation `enter` with `prompt_id: "track_a_agent_ka_genie_tools"` and `require_prior_gate: {prompt_id: "track_a_agent_app_clone_framework", gate: "Agent framework live"}`. Read these resolved values and use them literally:
 
 - `client_context` = `genie_code`
-- `artifact_root` = your workshop clone root (e.g. `/Workspace/Users/<your-email>/.assistant/skills/vibe-coding-workshop`)
+- `artifact_root` = your workshop project root (e.g. `/Workspace/Users/<your-email>/vibe-coding-workshop`) — where all generated bundles/apps/docs build; the repo itself is cloned at `/Workspace/Users/<your-email>/.assistant/skills/vibe-coding-workshop` (skills load from there via `skill_ref_root`, NOT from `artifact_root`)
 - `skill_ref_root` = `skills/vibe-coding-workshop` (substitute your clone folder if different)
 - `agent_app_root` = `<artifact_root>/{agent_app_name}` (the top-level Track A agent app dir from prompt 43). Referred to below as `<AGENT_APP_ROOT>`.
 - `default_warehouse` = `{default_warehouse}`
@@ -12428,7 +12428,7 @@ Run `skills/vibecoding-state` operation `enter` with `prompt_id: "track_a_agent_
 
 If `enter` reports the prior gate is unmet, STOP. If `enter` has not run in this thread, run it now.
 
-### Step 1 — Load the required skills by their FULL clone-rooted paths
+### Step 1 — Load the required skills by their FULL `skill_ref_root`-prefixed paths
 
 Load each with `readSkillFile` using its `<skill_ref_root>`-prefixed path — NEVER a bare `@…` mention. **The root-level `skills/` come FIRST as the highest-priority guardrails.**
 
@@ -12611,7 +12611,7 @@ VALUES
 
 This will involve the following steps:
 
-- **Load the skills** — full clone-rooted paths.
+- **Load the skills** — full `skill_ref_root`-prefixed paths.
 - **Author auth and memory** — under `<AGENT_APP_ROOT>` (write files only).
 - **Probe** — in-process OBO/SP and memory probes (not localhost).
 
@@ -12632,7 +12632,7 @@ The steps below are the prescriptive runbook for those actions; follow them in o
 Run `skills/vibecoding-state` operation `enter` with `prompt_id: "track_a_agent_auth_memory"` and `require_prior_gate: {prompt_id: "track_a_agent_ka_genie_tools", gate: "Tools wired"}`. Read these resolved values and use them literally:
 
 - `client_context` = `genie_code`
-- `artifact_root` = your workshop clone root (e.g. `/Workspace/Users/<your-email>/.assistant/skills/vibe-coding-workshop`)
+- `artifact_root` = your workshop project root (e.g. `/Workspace/Users/<your-email>/vibe-coding-workshop`) — where all generated bundles/apps/docs build; the repo itself is cloned at `/Workspace/Users/<your-email>/.assistant/skills/vibe-coding-workshop` (skills load from there via `skill_ref_root`, NOT from `artifact_root`)
 - `skill_ref_root` = `skills/vibe-coding-workshop` (substitute your clone folder if different)
 - `agent_app_root` = `<artifact_root>/{agent_app_name}` (the top-level Track A agent app dir). Referred to below as `<AGENT_APP_ROOT>`.
 - `lakebase_instance` = `{lakebase_instance}`; `lakebase_database` = `{lakebase_database}`
@@ -12640,7 +12640,7 @@ Run `skills/vibecoding-state` operation `enter` with `prompt_id: "track_a_agent_
 
 If `enter` reports the prior gate is unmet, STOP. If `enter` has not run in this thread, run it now.
 
-### Step 1 — Load the required skills by their FULL clone-rooted paths
+### Step 1 — Load the required skills by their FULL `skill_ref_root`-prefixed paths
 
 Load each with `readSkillFile` using its `<skill_ref_root>`-prefixed path — NEVER a bare `@…` mention. **The root-level `skills/` come FIRST as the highest-priority guardrails.**
 
@@ -12836,7 +12836,7 @@ VALUES
 
 This will involve the following steps:
 
-- **Load the skills** — full clone-rooted paths.
+- **Load the skills** — full `skill_ref_root`-prefixed paths.
 - **Run the smoke eval** — fail-closed, in-session `uv`.
 - **Bundle-deploy the grants** — from the bundle-editor page.
 - **Deploy the app host** — via the SDK SNAPSHOT path (server-side build).
@@ -12861,7 +12861,7 @@ The steps below are the prescriptive runbook for those actions; follow them in o
 Run `skills/vibecoding-state` operation `enter` with `prompt_id: "track_a_agent_eval_deploy"` and `require_prior_gate: {prompt_id: "track_a_agent_auth_memory", gate: "Auth + Memory verified"}`. Read these resolved values and use them literally:
 
 - `client_context` = `genie_code`
-- `artifact_root` = your workshop clone root (e.g. `/Workspace/Users/<your-email>/.assistant/skills/vibe-coding-workshop`)
+- `artifact_root` = your workshop project root (e.g. `/Workspace/Users/<your-email>/vibe-coding-workshop`) — where all generated bundles/apps/docs build; the repo itself is cloned at `/Workspace/Users/<your-email>/.assistant/skills/vibe-coding-workshop` (skills load from there via `skill_ref_root`, NOT from `artifact_root`)
 - `skill_ref_root` = `skills/vibe-coding-workshop` (substitute your clone folder if different)
 - `agent_app_root` = `<artifact_root>/{agent_app_name}` (the top-level Track A agent app dir). Referred to below as `<AGENT_APP_ROOT>`. Its `databricks.yml` lives here, so this folder is the **`bundle deploy` page-context root**.
 - `mlflow_experiment_path` = `{mlflow_experiment_path}`
@@ -12870,7 +12870,7 @@ Run `skills/vibecoding-state` operation `enter` with `prompt_id: "track_a_agent_
 
 If `enter` reports the prior gate is unmet, STOP. If `enter` has not run in this thread, run it now.
 
-### Step 1 — Load the required skills by their FULL clone-rooted paths
+### Step 1 — Load the required skills by their FULL `skill_ref_root`-prefixed paths
 
 Load each with `readSkillFile` using its `<skill_ref_root>`-prefixed path — NEVER a bare `@…` mention. **The root-level `skills/` come FIRST as the highest-priority guardrails.**
 
@@ -13063,7 +13063,7 @@ VALUES
 
 This will involve the following steps:
 
-- **Load the skills** — read the proxy and agent-app skills by their full clone-rooted paths.
+- **Load the skills** — read the proxy and agent-app skills by their full `skill_ref_root`-prefixed paths.
 - **Author the proxy and grants** — write the `server.extend()` proxy under `<APP_ROOT>` (files only).
 - **Redeploy and probe** — redeploy via SDK SNAPSHOT, then run the 3-probe OAuth end-to-end.
 
@@ -13084,16 +13084,16 @@ The steps below are the prescriptive runbook for those actions; follow them in o
 Run `skills/vibecoding-state` operation `enter` with `prompt_id: "appkit_agent_app_proxy_chat"` and `require_prior_gate: {prompt_id: "track_a_agent_eval_deploy", gate: "Agent App RUNNING"}`. Read these resolved values and use them literally:
 
 - `client_context` = `genie_code`
-- `artifact_root` = your workshop clone root (e.g. `/Workspace/Users/<your-email>/.assistant/skills/vibe-coding-workshop`)
+- `artifact_root` = your workshop project root (e.g. `/Workspace/Users/<your-email>/vibe-coding-workshop`) — where all generated bundles/apps/docs build; the repo itself is cloned at `/Workspace/Users/<your-email>/.assistant/skills/vibe-coding-workshop` (skills load from there via `skill_ref_root`, NOT from `artifact_root`)
 - `skill_ref_root` = `skills/vibe-coding-workshop` (substitute your clone folder if different)
 - `app_root` = `<artifact_root>/{app_name}` — the top-level AppKit app dir (NOT under `apps_lakebase/`). Referred to below as `<APP_ROOT>`.
 - `app_deploy.verb` = `apps deploy` (resolves to the SDK SNAPSHOT call on Genie Code)
 - `{agent_app_name}`, `{agent_app_url}` = the separately-deployed Track A Agent App''s name + URL, from the `track_a_agent_eval_deploy` `exit` capture in `.vibecoding-state.md` (the proxy declares `{agent_app_name}` as the `agent-backend` `CAN_USE` resource and binds `AGENT_APP_URL` to `{agent_app_url}`)
 - Workspace: `{workspace_url}`
 
-**First:** read `<APP_ROOT>/.vibecoding-state.md` (full clone-rooted path) for `APP_NAME`, Lakebase values, and `agent_app_url`/`agent_app_name`. If `enter` reports the Agent App gate is unmet, STOP.
+**First:** read `<APP_ROOT>/.vibecoding-state.md` (full `<artifact_root>`-anchored path) for `APP_NAME`, Lakebase values, and `agent_app_url`/`agent_app_name`. If `enter` reports the Agent App gate is unmet, STOP.
 
-### Step 1 — Load the required skills by their FULL clone-rooted paths
+### Step 1 — Load the required skills by their FULL `skill_ref_root`-prefixed paths
 
 Load each with `readSkillFile` using its `<skill_ref_root>`-prefixed path — NEVER a bare `@…` mention. **The root-level `skills/` come FIRST as the highest-priority guardrails.**
 
@@ -13302,7 +13302,7 @@ VALUES
 
 This will involve the following steps:
 
-- **Load the skills** — read the chat-history and feedback skills by their full clone-rooted paths.
+- **Load the skills** — read the chat-history and feedback skills by their full `skill_ref_root`-prefixed paths.
 - **Author chat history and feedback** — write the persistence and feedback code (files only).
 - **Redeploy and verify** — redeploy both hosts via SDK SNAPSHOT, then verify over OAuth.
 
@@ -13323,7 +13323,7 @@ The steps below are the prescriptive runbook for those actions; follow them in o
 Run `skills/vibecoding-state` operation `enter` with `prompt_id: "appkit_chat_feedback_mlflow"` and `require_prior_gate: {prompt_id: "appkit_agent_app_proxy_chat", gate: "AppKit ↔ Agent App proxy live"}`. Read these resolved values and use them literally:
 
 - `client_context` = `genie_code`
-- `artifact_root` = your workshop clone root (e.g. `/Workspace/Users/<your-email>/.assistant/skills/vibe-coding-workshop`)
+- `artifact_root` = your workshop project root (e.g. `/Workspace/Users/<your-email>/vibe-coding-workshop`) — where all generated bundles/apps/docs build; the repo itself is cloned at `/Workspace/Users/<your-email>/.assistant/skills/vibe-coding-workshop` (skills load from there via `skill_ref_root`, NOT from `artifact_root`)
 - `skill_ref_root` = `skills/vibe-coding-workshop` (substitute your clone folder if different)
 - `app_root` = `<artifact_root>/{app_name}` — the top-level AppKit app dir. Referred to below as `<APP_ROOT>`.
 - `agent_app_root` = `<artifact_root>/{agent_app_name}` — the top-level Track A agent app dir. Referred to below as `<AGENT_APP_ROOT>`.
@@ -13332,7 +13332,7 @@ Run `skills/vibecoding-state` operation `enter` with `prompt_id: "appkit_chat_fe
 
 **First:** read `<APP_ROOT>/.vibecoding-state.md` for `APP_NAME` + Lakebase values. If `enter` reports the prior gate is unmet, STOP.
 
-### Step 1 — Load the required skills by their FULL clone-rooted paths
+### Step 1 — Load the required skills by their FULL `skill_ref_root`-prefixed paths
 
 Load each with `readSkillFile` using its `<skill_ref_root>`-prefixed path — NEVER a bare `@…` mention. **The root-level `skills/` come FIRST as the highest-priority guardrails.**
 
@@ -14499,7 +14499,7 @@ VALUES
 
 This will involve the following steps:
 
-- **Load the skills** — full clone-rooted paths.
+- **Load the skills** — full `skill_ref_root`-prefixed paths.
 - **Configure the gateway route or skip cleanly** — then patch the bundle (write files only).
 - **DAB deploy** — from the bundle-editor page (only when not skipped).
 
@@ -14520,7 +14520,7 @@ The steps below are the prescriptive runbook for those actions; follow them in o
 Run `skills/vibecoding-state` operation `enter` with `prompt_id: "mlflow_gateway_and_deployment"`, `require_prior_gate: {prompt_id: "mlflow_logged_model_uc_registration", gate: "@champion set"}`, and `hard_assert: {var: "signoff_decision", equals: "APPROVED"}`. Read these resolved values and use them literally:
 
 - `client_context` = `genie_code`
-- `artifact_root` = your workshop clone root (e.g. `/Workspace/Users/<your-email>/.assistant/skills/vibe-coding-workshop`)
+- `artifact_root` = your workshop project root (e.g. `/Workspace/Users/<your-email>/vibe-coding-workshop`) — where all generated bundles/apps/docs build; the repo itself is cloned at `/Workspace/Users/<your-email>/.assistant/skills/vibe-coding-workshop` (skills load from there via `skill_ref_root`, NOT from `artifact_root`)
 - `skill_ref_root` = `skills/vibe-coding-workshop` (substitute your clone folder if different)
 - `agent_app_root` = `<artifact_root>/{agent_app_name}` — the top-level Track A agent app dir; its `databricks.yml` makes it the `bundle deploy` page-context root. Referred to below as `<AGENT_APP_ROOT>`.
 - `bundle_deploy.verb` = `bundle deploy --target dev` (run via `runDatabricksCli` from the bundle-editor page)
@@ -14529,7 +14529,7 @@ Run `skills/vibecoding-state` operation `enter` with `prompt_id: "mlflow_gateway
 
 If `enter`''s `hard_assert` shows `signoff_decision != APPROVED`, STOP — promotion is blocked until the human-review gate approves. If `enter` has not run in this thread, run it now.
 
-### Step 1 — Load the required skills by their FULL clone-rooted paths
+### Step 1 — Load the required skills by their FULL `skill_ref_root`-prefixed paths
 
 Load each with `readSkillFile` using its `<skill_ref_root>`-prefixed path — NEVER a bare `@…` mention. **The root-level `skills/` come FIRST as the highest-priority guardrails.**
 
@@ -14571,7 +14571,7 @@ VALUES
 
 This will involve the following steps:
 
-- **Load the skills** — full clone-rooted paths.
+- **Load the skills** — full `skill_ref_root`-prefixed paths.
 - **Run SDK scorers and agent-as-judge** — via `executeCode`.
 - **Deploy the trace-archival / backfill job** — from the bundle-editor page.
 - **Wire SQL alerts** — at least four, via `runDatabricksCli`.
@@ -14593,7 +14593,7 @@ The steps below are the prescriptive runbook for those actions; follow them in o
 Run `skills/vibecoding-state` operation `enter` with `prompt_id: "mlflow_production_monitoring_and_debugging"`, `require_prior_gate: {prompt_id: "mlflow_gateway_and_deployment", gate: "Optional gateway route configured or skipped"}`. Read these resolved values and use them literally:
 
 - `client_context` = `genie_code`
-- `artifact_root` = your workshop clone root (e.g. `/Workspace/Users/<your-email>/.assistant/skills/vibe-coding-workshop`)
+- `artifact_root` = your workshop project root (e.g. `/Workspace/Users/<your-email>/vibe-coding-workshop`) — where all generated bundles/apps/docs build; the repo itself is cloned at `/Workspace/Users/<your-email>/.assistant/skills/vibe-coding-workshop` (skills load from there via `skill_ref_root`, NOT from `artifact_root`)
 - `skill_ref_root` = `skills/vibe-coding-workshop` (substitute your clone folder if different)
 - `agent_app_root` = `<artifact_root>/{agent_app_name}` — the top-level Track A agent app dir; its `databricks.yml` makes it the `bundle deploy` page-context root. Referred to below as `<AGENT_APP_ROOT>`.
 - `mlflow_experiment_path` = `{mlflow_experiment_path}` (set this before any SDK scorer call)
@@ -14603,7 +14603,7 @@ Run `skills/vibecoding-state` operation `enter` with `prompt_id: "mlflow_product
 
 If `enter` has not run in this thread, run it now.
 
-### Step 1 — Load the required skills by their FULL clone-rooted paths
+### Step 1 — Load the required skills by their FULL `skill_ref_root`-prefixed paths
 
 Load each with `readSkillFile` using its `<skill_ref_root>`-prefixed path — NEVER a bare `@…` mention. **The root-level `skills/` come FIRST as the highest-priority guardrails.**
 
@@ -14656,7 +14656,7 @@ This will involve the following steps:
 
 The steps below are the prescriptive runbook for those actions; follow them in order.
 
-**Genie Code — this is a prescriptive runbook for Lakebase setup (config + provision). Follow the steps in order. Do NOT improvise paths, do NOT use bare relative paths, do NOT use `@`-mentions, and do NOT deploy in this step. This step adds the Lakebase package to `package.json`, configures `app.yaml` for `valueFrom: postgres`, PROVISIONS the Lakebase project over REST, and BINDS it to the app — so the plugin-bearing deploy in the wiring/deploy steps boots straight to RUNNING. The app is anchored to `<APP_ROOT>`; every skill is named by its full clone-rooted path.**
+**Genie Code — this is a prescriptive runbook for Lakebase setup (config + provision). Follow the steps in order. Do NOT improvise paths, do NOT use bare relative paths, do NOT use `@`-mentions, and do NOT deploy in this step. This step adds the Lakebase package to `package.json`, configures `app.yaml` for `valueFrom: postgres`, PROVISIONS the Lakebase project over REST, and BINDS it to the app — so the plugin-bearing deploy in the wiring/deploy steps boots straight to RUNNING. The app is anchored to `<APP_ROOT>`; every skill is named by its full `skill_ref_root`-prefixed path.**
 
 ### 🔴 Non-negotiable execution rules (read before anything)
 
@@ -14675,11 +14675,11 @@ The steps below are the prescriptive runbook for those actions; follow them in o
 Run `skills/vibecoding-state` operation `enter` with `prompt_id: "setup_lakebase"`. Read the resolved `## Environment Capabilities` values and use them literally:
 
 - `client_context` = `genie_code`
-- `artifact_root` = your workshop clone root (e.g. `/Workspace/Users/<your-email>/.assistant/skills/vibe-coding-workshop`)
+- `artifact_root` = your workshop project root (e.g. `/Workspace/Users/<your-email>/vibe-coding-workshop`) — where all generated bundles/apps/docs build; the repo itself is cloned at `/Workspace/Users/<your-email>/.assistant/skills/vibe-coding-workshop` (skills load from there via `skill_ref_root`, NOT from `artifact_root`)
 - `skill_ref_root` = `skills/vibe-coding-workshop` (substitute your clone folder if different)
 - `app_root` = `<artifact_root>/<app_name>` — the self-contained AppKit app project authored in the build step (a TOP-LEVEL sibling of any `{user_schema_prefix}_<use_case_slug>_dab` bundle, NOT under `apps_lakebase/`). Referred to below as `<APP_ROOT>`; `<APP_ROOT>/.vibecoding-state.md`, `app.yaml`, `databricks.yml`, `server/`, and `client/` all live here.
 
-**First:** read `<APP_ROOT>/.vibecoding-state.md` (full clone-rooted path — NOT a bare `@…` mention) for `APP_NAME`, workspace, and any `DB_SCHEMA` / resolved issues captured by earlier steps.
+**First:** read `<APP_ROOT>/.vibecoding-state.md` (full `<artifact_root>`-anchored path — NOT a bare `@…` mention) for `APP_NAME`, workspace, and any `DB_SCHEMA` / resolved issues captured by earlier steps.
 
 ### Step 1 — Confirm `APP_NAME`, `<APP_ROOT>`, and derive `DB_SCHEMA`
 
@@ -14697,7 +14697,7 @@ databricks current-user me --output json
 >
 > **Host of record is the runtime, not the template.** Derive the workspace from `w.config.host` (or `databricks current-user me`); if `databricks.yml`''s `host:` and `{workspace_url}` disagree, trust the runtime host.
 
-### Step 2 — Load the Lakebase skill by its FULL clone-rooted path
+### Step 2 — Load the Lakebase skill by its FULL `skill_ref_root`-prefixed path
 
 Load with `readSkillFile` — NEVER a bare `@…` mention, NEVER a repo-relative path. The root-level `skills/` come FIRST as the highest-priority guardrails:
 
@@ -14770,14 +14770,14 @@ VALUES
 This will involve the following steps:
 
 - **Confirm context** — re-read the app''s saved state for `APP_NAME`, `<APP_ROOT>`, and `DB_SCHEMA`, and the postgres-bound precondition from setup.
-- **Load the wiring skill** — read the Lakebase wiring skill by its full clone-rooted path.
+- **Load the wiring skill** — read the Lakebase wiring skill by its full `skill_ref_root`-prefixed path.
 - **Register `lakebase()`** — author DDL, seed, and `{ data, source }` API routes inside the `onPluginsReady` callback (no `autoStart:false` / manual `start()`).
 - **Wire the frontend** — swap mock imports for the `useLakebaseData` hook and `ConnectionStatus`.
 - **Run the static gate** — scan `server.ts` for the known wiring traps; the build itself is proven server-side at deploy.
 
 The steps below are the prescriptive runbook for those actions; follow them in order.
 
-**Genie Code — this is a prescriptive runbook for wiring the AppKit UI to Lakebase. Follow the steps in order. Do NOT improvise paths, do NOT use bare relative paths, do NOT use `@`-mentions. This step registers the `lakebase()` plugin in `server.ts` (via the `onPluginsReady` pattern) and authors all database code — DDL, API routes, and frontend hooks. There is no local Node toolchain: the build is proven server-side by the **Deploy** step, not by a local `npm run build`. The app is anchored to `<APP_ROOT>`; every skill is named by its full clone-rooted path.**
+**Genie Code — this is a prescriptive runbook for wiring the AppKit UI to Lakebase. Follow the steps in order. Do NOT improvise paths, do NOT use bare relative paths, do NOT use `@`-mentions. This step registers the `lakebase()` plugin in `server.ts` (via the `onPluginsReady` pattern) and authors all database code — DDL, API routes, and frontend hooks. There is no local Node toolchain: the build is proven server-side by the **Deploy** step, not by a local `npm run build`. The app is anchored to `<APP_ROOT>`; every skill is named by its full `skill_ref_root`-prefixed path.**
 
 ### 🔴 Non-negotiable execution rules (read before anything)
 
@@ -14794,11 +14794,11 @@ The steps below are the prescriptive runbook for those actions; follow them in o
 Run `skills/vibecoding-state` operation `enter` with `prompt_id: "wire_ui_lakebase"`. Read the resolved `## Environment Capabilities` values and use them literally:
 
 - `client_context` = `genie_code`
-- `artifact_root` = your workshop clone root (e.g. `/Workspace/Users/<your-email>/.assistant/skills/vibe-coding-workshop`)
+- `artifact_root` = your workshop project root (e.g. `/Workspace/Users/<your-email>/vibe-coding-workshop`) — where all generated bundles/apps/docs build; the repo itself is cloned at `/Workspace/Users/<your-email>/.assistant/skills/vibe-coding-workshop` (skills load from there via `skill_ref_root`, NOT from `artifact_root`)
 - `skill_ref_root` = `skills/vibe-coding-workshop` (substitute your clone folder if different)
 - `app_root` = `<artifact_root>/<app_name>` — the self-contained AppKit app project (a TOP-LEVEL sibling of any `<use_case_slug>_dab` bundle, NOT under `apps_lakebase/`). Referred to below as `<APP_ROOT>`; `<APP_ROOT>/.vibecoding-state.md`, `app.yaml`, `databricks.yml`, `server/`, and `client/` all live here.
 
-**First:** read `<APP_ROOT>/.vibecoding-state.md` (full clone-rooted path — NOT a bare `@…` mention) for `APP_NAME`, `DB_SCHEMA`, and the resolved issues captured by the **Setup Lakebase** step.
+**First:** read `<APP_ROOT>/.vibecoding-state.md` (full `<artifact_root>`-anchored path — NOT a bare `@…` mention) for `APP_NAME`, `DB_SCHEMA`, and the resolved issues captured by the **Setup Lakebase** step.
 
 **Precondition (from step 06):** `@databricks/lakebase` is in `package.json`, `app.yaml` has `LAKEBASE_ENDPOINT: valueFrom: postgres` + a static `DB_SCHEMA`, the Lakebase project is `ACTIVE`, and the app''s `postgres` resource is **already bound**. With the binding in place, the deploy at the next step boots straight to `RUNNING` — no CRASHED hop. If the binding is missing, return to step 06 before wiring.
 
@@ -14815,7 +14815,7 @@ databricks current-user me --output json
 
 > Workspace target: `{workspace_url}`. The session profile placeholder `{databricks_cli_profile}` is **inert on Genie Code** — runDatabricksCli/SDK are pre-authenticated, so omit `--profile`.
 
-### Step 2 — Load the wiring skill by its FULL clone-rooted path
+### Step 2 — Load the wiring skill by its FULL `skill_ref_root`-prefixed path
 
 Load with `readSkillFile` — NEVER a bare `@…` mention, NEVER a repo-relative path. The root-level `skills/` come FIRST as the highest-priority guardrails:
 
@@ -14893,7 +14893,7 @@ VALUES
 This will involve the following steps:
 
 - **Resolve the target catalog** — no-create invariant (HARD STOP if absent).
-- **Load the skills** — full clone-rooted paths.
+- **Load the skills** — full `skill_ref_root`-prefixed paths.
 - **Author the plan and the Lakebase bundle resource** — write only, do NOT deploy yet.
 - **Wire the resource** — into the bundle `include:`.
 - **Deploy from the bundle editor** — validate, summary, then deploy from that page.
@@ -14901,7 +14901,7 @@ This will involve the following steps:
 
 The steps below are the prescriptive runbook for those actions; follow them in order.
 
-**Genie Code — this is a prescriptive runbook. Follow the steps in order. Do NOT improvise paths, do NOT use bare relative paths, do NOT use `@`-mentions, and do NOT provision Lakebase by hand. Every skill is named by its full clone-rooted path; every artifact is anchored to `<artifact_root>` or `<DP_BUNDLE_ROOT>`; the Lakebase project + endpoint are provisioned by a deployed bundle — never by the `databricks postgres` CLI, the REST create API, or the SDK.**
+**Genie Code — this is a prescriptive runbook. Follow the steps in order. Do NOT improvise paths, do NOT use bare relative paths, do NOT use `@`-mentions, and do NOT provision Lakebase by hand. Every skill is named by its full `skill_ref_root`-prefixed path; every artifact is anchored to `<artifact_root>` or `<DP_BUNDLE_ROOT>`; the Lakebase project + endpoint are provisioned by a deployed bundle — never by the `databricks postgres` CLI, the REST create API, or the SDK.**
 
 ### 🔴 Non-negotiable execution rule (read before anything)
 
@@ -14914,7 +14914,7 @@ The steps below are the prescriptive runbook for those actions; follow them in o
 Run `skills/vibecoding-state` operation `enter` with `prompt_id: "activation_table_design"` and `require_prior_gate: {prompt_id: "gold_layer_pipeline", gate: "Gold layer live"}` (or the latest upstream Gold/semantic gate your track defines). It writes and echoes the `## Environment Capabilities` block. Read these resolved values and use them literally throughout:
 
 - `client_context` = `genie_code`
-- `artifact_root` = your workshop clone root (e.g. `/Workspace/Users/<your-email>/.assistant/skills/vibe-coding-workshop`)
+- `artifact_root` = your workshop project root (e.g. `/Workspace/Users/<your-email>/vibe-coding-workshop`) — where all generated bundles/apps/docs build; the repo itself is cloned at `/Workspace/Users/<your-email>/.assistant/skills/vibe-coding-workshop` (skills load from there via `skill_ref_root`, NOT from `artifact_root`)
 - `skill_ref_root` = `skills/vibe-coding-workshop` (substitute your clone folder if you cloned somewhere other than `.assistant/skills/vibe-coding-workshop`)
 - `dp_bundle_root` = `<artifact_root>/{user_schema_prefix}_{use_case_slug}_dab` — the **self-contained Databricks Asset Bundle project** for the whole data-product pipeline (e.g. `…/vibe-coding-workshop/{user_schema_prefix}_booking_app_dab`). This is the SAME bundle you created for Bronze/Silver/Gold — **extend it; do NOT make a new one.** It is where `databricks.yml`, `src/`, and `resources/` live, and the **page you deploy from**. Referred to below as `<DP_BUNDLE_ROOT>`.
 - `user_app_name` = your per-student app name, which is ALSO the Lakebase `project_id` (one project per student).
@@ -14932,7 +14932,7 @@ Catalogs are pre-provisioned in this workshop — you must **NEVER** create one.
 2. **If `{lakehouse_default_catalog}` is present** → proceed; use it literally everywhere below as the Gold source catalog.
 3. **If `{lakehouse_default_catalog}` is ABSENT → 🛑 HARD STOP. Do NOT create it.** Print the existing catalogs as a numbered list and ask the operator to pick the catalog to use. Re-run this step with their choice and record it so the `exit` capture persists it.
 
-### Step 1 — Load the required skills by their FULL clone-rooted paths
+### Step 1 — Load the required skills by their FULL `skill_ref_root`-prefixed paths
 
 Load each skill with `readSkillFile` using its fully-qualified `<skill_ref_root>`-prefixed path — NEVER a bare `@…` mention, NEVER a repo-relative path. **The root-level `skills/` come FIRST: they are the highest-priority, always-on guardrails and govern everything below.** Read independent skills in ONE batched `readSkillFile` turn (`genie-code-environment` §10 — Genie Code reads multiple files in parallel in a single turn).
 
@@ -14945,7 +14945,7 @@ Load each skill with `readSkillFile` using its fully-qualified `<skill_ref_root>
 
 Write all three artifacts; do NOT run any provisioning command in this step.
 
-**(a) `<artifact_root>/docs/reverse_etl.md`** — the shared single source of truth for Steps 33+ (clone-rooted path, NOT `@docs/…`). It MUST contain exactly these fields:
+**(a) `<artifact_root>/docs/reverse_etl.md`** — the shared single source of truth for Steps 33+ (`<artifact_root>`-anchored path, NOT `@docs/…`). It MUST contain exactly these fields:
 
 ```
 workspace_url:              {workspace_url}
@@ -15051,7 +15051,7 @@ VALUES
 
 This will involve the following steps:
 
-- **Read the plan docs** — clone-rooted paths.
+- **Read the plan docs** — `<artifact_root>`-anchored paths.
 - **Pre-flight** — confirm the endpoint caps did not drift (read-only).
 - **Enable CDF** — on Delta sources for TRIGGERED candidates only (gated).
 - **Create the synced tables** — via the REST client, in dependency order.
@@ -15072,7 +15072,7 @@ The steps below are the prescriptive runbook for those actions; follow them in o
 Run `skills/vibecoding-state` operation `enter` with `prompt_id: "activation_reverse_sync"` and `require_prior_gate: {prompt_id: "activation_table_design", gate: "Synced tables planned"}`. Read the resolved `## Environment Capabilities` values and use them literally:
 
 - `client_context` = `genie_code`
-- `artifact_root` = your workshop clone root (e.g. `/Workspace/Users/<your-email>/.assistant/skills/vibe-coding-workshop`)
+- `artifact_root` = your workshop project root (e.g. `/Workspace/Users/<your-email>/vibe-coding-workshop`) — where all generated bundles/apps/docs build; the repo itself is cloned at `/Workspace/Users/<your-email>/.assistant/skills/vibe-coding-workshop` (skills load from there via `skill_ref_root`, NOT from `artifact_root`)
 - `skill_ref_root` = `skills/vibe-coding-workshop`
 - `dp_bundle_root` = `<artifact_root>/{user_schema_prefix}_{use_case_slug}_dab` — the data-product bundle whose `.vibecoding-state.md` is the activation track''s live state file (the SAME one Step 32 wrote). Referred to below as `<DP_BUNDLE_ROOT>`.
 
@@ -15080,7 +15080,7 @@ If `enter` reports the prior gate is not `Synced tables planned`, STOP — finis
 
 **On resume after a context reset:** trust the live state file over any chat summary — a synced table already created and healthy is DONE; before recreating, GET it first (`/api/2.0/postgres/synced_tables/{synced_table_id}`) and skip if already `ONLINE`.
 
-### Step 1 — Read the plan docs (clone-rooted paths, NOT `@docs/…`)
+### Step 1 — Read the plan docs (`<artifact_root>`-anchored paths, NOT `@docs/…`)
 
 Read these back at runtime; do NOT restate their values in the prompt:
 
@@ -15209,15 +15209,15 @@ VALUES
 
 This will involve the following steps:
 
-- **Read the inputs** — load the plan and design docs by their clone-rooted paths.
-- **Load the design-quality skill** — read it by its full clone-rooted path.
+- **Read the inputs** — load the plan and design docs by their `<artifact_root>`-anchored paths.
+- **Load the design-quality skill** — read it by its full `skill_ref_root`-prefixed path.
 - **Decide extend vs greenfield** — apply the rekeyed decision mechanically.
 - **Design the analytics pages** — mock-data-first, every element sourced to a synced table.
 - **Save the design doc** — write only, no build.
 
 The steps below are the prescriptive runbook for those actions; follow them in order.
 
-**Genie Code — this is a prescriptive runbook. Follow the steps in order. Do NOT improvise paths, do NOT use bare relative paths, do NOT use `@`-mentions, and do NOT build or deploy. This is a DESIGN-ONLY step: you AUTHOR one analytics design doc over the SYNCED Lakebase tables — you do NOT scaffold a project, you do NOT write `client/`/`server/` code, you do NOT run a local server, and you do NOT deploy. Building is the next step. Every skill is named by its full clone-rooted path; the design doc is anchored to `<artifact_root>/docs/`, and the app it describes is anchored to `<APP_ROOT>`.**
+**Genie Code — this is a prescriptive runbook. Follow the steps in order. Do NOT improvise paths, do NOT use bare relative paths, do NOT use `@`-mentions, and do NOT build or deploy. This is a DESIGN-ONLY step: you AUTHOR one analytics design doc over the SYNCED Lakebase tables — you do NOT scaffold a project, you do NOT write `client/`/`server/` code, you do NOT run a local server, and you do NOT deploy. Building is the next step. Every skill is named by its full `skill_ref_root`-prefixed path; the design doc is anchored to `<artifact_root>/docs/`, and the app it describes is anchored to `<APP_ROOT>`.**
 
 ### 🔴 Non-negotiable execution rules (read before anything)
 
@@ -15232,7 +15232,7 @@ The steps below are the prescriptive runbook for those actions; follow them in o
 Run `skills/vibecoding-state` operation `enter` with `prompt_id: "activation_app_design"` and `require_prior_gate: {prompt_id: "activation_reverse_sync", gate: "Synced tables live"}`. Read the resolved `## Environment Capabilities` values and use them literally:
 
 - `client_context` = `genie_code`
-- `artifact_root` = your workshop clone root (e.g. `/Workspace/Users/<your-email>/.assistant/skills/vibe-coding-workshop`)
+- `artifact_root` = your workshop project root (e.g. `/Workspace/Users/<your-email>/vibe-coding-workshop`) — where all generated bundles/apps/docs build; the repo itself is cloned at `/Workspace/Users/<your-email>/.assistant/skills/vibe-coding-workshop` (skills load from there via `skill_ref_root`, NOT from `artifact_root`)
 - `skill_ref_root` = `skills/vibe-coding-workshop` (substitute your clone folder if different)
 - `app_root` = `<artifact_root>/<app_name>` — the self-contained AppKit app project from Chapter 1 (a TOP-LEVEL sibling of any `{use_case_slug}_dab` bundle, NOT under `apps_lakebase/`). Referred to below as `<APP_ROOT>`; `<APP_ROOT>/.vibecoding-state.md`, `app.yaml`, `server/`, and `client/` all live here when an app already exists.
 
@@ -15240,7 +15240,7 @@ If `enter` reports the prior gate is not `Synced tables live`, STOP — finish t
 
 **On resume after a context reset:** trust the live state file over any chat summary — if `analytics_ui_design.md` already exists and the gate shows PASSED, this step is DONE; reconcile on-disk files with `os.path.exists(...)` (NOT `listFiles`) before re-writing.
 
-### Step 1 — Read the inputs (clone-rooted paths, NOT `@docs/…`)
+### Step 1 — Read the inputs (`<artifact_root>`-anchored paths, NOT `@docs/…`)
 
 Read these back at runtime; reference their values rather than re-inventing them:
 
@@ -15250,7 +15250,7 @@ Read these back at runtime; reference their values rather than re-inventing them
 - `<artifact_root>/docs/design_prd.md` — personas, journeys, and analytics needs.
 - `<artifact_root>/docs/ui_design.md` — ONLY if Chapter 1 built an app you are extending (optional).
 
-### Step 2 — Load the design-quality skill by its FULL clone-rooted path
+### Step 2 — Load the design-quality skill by its FULL `skill_ref_root`-prefixed path
 
 Load with `readSkillFile` — NEVER a bare `@…` mention, NEVER a repo-relative path. The root-level `skills/` come FIRST as the highest-priority guardrails:
 
@@ -15298,14 +15298,14 @@ VALUES
 This will involve the following steps:
 
 - **Resolve identity** — derive `APP_NAME` and `<APP_ROOT>` (no `auth login`).
-- **Load the skills** — read the scaffold and build skills by their full clone-rooted paths.
+- **Load the skills** — read the scaffold and build skills by their full `skill_ref_root`-prefixed paths.
 - **Read the design and decide extend vs greenfield**.
 - **Author the analytics pages** — use the `{ data, source }` mock envelope (files only, no server).
 - **Run the static gate** — the only static check before handoff.
 
 The steps below are the prescriptive runbook for those actions; follow them in order.
 
-**Genie Code — this is a prescriptive runbook. Follow the steps in order. Do NOT improvise paths, do NOT use bare relative paths, do NOT use `@`-mentions, and do NOT deploy. This is a BUILD-ONLY step: you SCAFFOLD (or extend) the AppKit analytics app under `<APP_ROOT>` and AUTHOR the analytics pages with mock data — you do NOT run a local server, you do NOT test at `http://localhost:8000`, and you do NOT deploy. Live data is the **Wire to Lakebase** step; deploy is the **Deploy & Validate** step. There is NO FastAPI/`app.py`/`python app.py` here — the genie track is AppKit/TypeScript, not the IDE''s FastAPI app. Every skill is named by its full clone-rooted path; the app is anchored to `<APP_ROOT>`.**
+**Genie Code — this is a prescriptive runbook. Follow the steps in order. Do NOT improvise paths, do NOT use bare relative paths, do NOT use `@`-mentions, and do NOT deploy. This is a BUILD-ONLY step: you SCAFFOLD (or extend) the AppKit analytics app under `<APP_ROOT>` and AUTHOR the analytics pages with mock data — you do NOT run a local server, you do NOT test at `http://localhost:8000`, and you do NOT deploy. Live data is the **Wire to Lakebase** step; deploy is the **Deploy & Validate** step. There is NO FastAPI/`app.py`/`python app.py` here — the genie track is AppKit/TypeScript, not the IDE''s FastAPI app. Every skill is named by its full `skill_ref_root`-prefixed path; the app is anchored to `<APP_ROOT>`.**
 
 ### 🔴 Non-negotiable execution rules (read before anything)
 
@@ -15322,7 +15322,7 @@ The steps below are the prescriptive runbook for those actions; follow them in o
 Run `skills/vibecoding-state` operation `enter` with `prompt_id: "activation_build_wire"` and `require_prior_gate: {prompt_id: "activation_app_design", gate: "Analytics app designed"}`. Read the resolved `## Environment Capabilities` values and use them literally:
 
 - `client_context` = `genie_code`
-- `artifact_root` = your workshop clone root (e.g. `/Workspace/Users/<your-email>/.assistant/skills/vibe-coding-workshop`)
+- `artifact_root` = your workshop project root (e.g. `/Workspace/Users/<your-email>/vibe-coding-workshop`) — where all generated bundles/apps/docs build; the repo itself is cloned at `/Workspace/Users/<your-email>/.assistant/skills/vibe-coding-workshop` (skills load from there via `skill_ref_root`, NOT from `artifact_root`)
 - `skill_ref_root` = `skills/vibe-coding-workshop` (substitute your clone folder if different)
 - `app_root` = `<artifact_root>/<app_name>` — the self-contained AppKit app project (a TOP-LEVEL sibling of any `{use_case_slug}_dab` bundle, NOT under `apps_lakebase/`). Referred to below as `<APP_ROOT>`; `<APP_ROOT>/.vibecoding-state.md`, `app.yaml`, `databricks.yml`, `server/`, and `client/` all live here. This is the `app_dir` recorded at exit.
 
@@ -15342,7 +15342,7 @@ databricks current-user me --output json
 
 > Workspace target: `{workspace_url}`. The session profile placeholder `{databricks_cli_profile}` is **inert on Genie Code** — runDatabricksCli is pre-authenticated, so omit `--profile`. **Host of record is the runtime, not the template** — derive it from `w.config.host`; if `databricks.yml`''s `host:` disagrees with `{workspace_url}`, trust the runtime host.
 
-### Step 2 — Load the required skills by their FULL clone-rooted paths
+### Step 2 — Load the required skills by their FULL `skill_ref_root`-prefixed paths
 
 Load each with `readSkillFile` — NEVER a bare `@…` mention, NEVER a repo-relative path. **The root-level `skills/` come FIRST as the highest-priority guardrails.** Read them in ONE batched `readSkillFile` turn:
 
@@ -15353,7 +15353,7 @@ When either skill names further mandatory references, load EACH the same way (re
 
 ### Step 3 — Read the analytics design + decide extend vs greenfield
 
-Read `<artifact_root>/docs/analytics_ui_design.md` (clone-rooted — NOT `@docs/...`) and apply its extend-vs-greenfield decision. Confirm on-disk reality with `executeCode` `os.path.exists(...)` (NOT `listFiles`, which lags FUSE writes):
+Read `<artifact_root>/docs/analytics_ui_design.md` (`<artifact_root>`-anchored — NOT `@docs/...`) and apply its extend-vs-greenfield decision. Confirm on-disk reality with `executeCode` `os.path.exists(...)` (NOT `listFiles`, which lags FUSE writes):
 
 - **Greenfield** (no `<APP_ROOT>/server/server.ts`) — scaffold the blank app INTO `<APP_ROOT>`, pinning the output dir so it lands as a top-level sibling of `apps_lakebase/`, NOT `/Workspace/<name>`:
 
@@ -15456,14 +15456,14 @@ VALUES
 This will involve the following steps:
 
 - **Confirm context** — `APP_NAME`, `<APP_ROOT>`, and the synced binding target.
-- **Load the wiring skill** — full clone-rooted path.
+- **Load the wiring skill** — full `skill_ref_root`-prefixed path.
 - **Register `lakebase()`** — author READ-ONLY routes via `onPluginsReady`.
 - **Wire the frontend** — `useLakebaseData` and `ConnectionStatus`.
 - **Run the static gate** — the build is proven server-side at deploy.
 
 The steps below are the prescriptive runbook for those actions; follow them in order.
 
-**Genie Code — this is a prescriptive runbook for wiring the AppKit analytics UI to the SYNCED Lakebase tables, READ-ONLY. Follow the steps in order. Do NOT improvise paths, do NOT use bare relative paths, do NOT use `@`-mentions. This step registers the `lakebase()` plugin in `server.ts` (via the `onPluginsReady` pattern) and re-points the mock analytics routes at the synced project — it does NOT create, seed, or mutate any table (the synced tables already exist from the reverse-ETL step). There is no local Node toolchain: the build is proven server-side by the **Deploy & Validate** step, not by a local `python app.py`/`npm run build`. The IDE''s hand-rolled `psycopg3` `ConnectionPool`/`_OAuthConnection` service does NOT apply — the `lakebase()` plugin owns pooling and OAuth-token rotation. The app is anchored to `<APP_ROOT>`; every skill is named by its full clone-rooted path.**
+**Genie Code — this is a prescriptive runbook for wiring the AppKit analytics UI to the SYNCED Lakebase tables, READ-ONLY. Follow the steps in order. Do NOT improvise paths, do NOT use bare relative paths, do NOT use `@`-mentions. This step registers the `lakebase()` plugin in `server.ts` (via the `onPluginsReady` pattern) and re-points the mock analytics routes at the synced project — it does NOT create, seed, or mutate any table (the synced tables already exist from the reverse-ETL step). There is no local Node toolchain: the build is proven server-side by the **Deploy & Validate** step, not by a local `python app.py`/`npm run build`. The IDE''s hand-rolled `psycopg3` `ConnectionPool`/`_OAuthConnection` service does NOT apply — the `lakebase()` plugin owns pooling and OAuth-token rotation. The app is anchored to `<APP_ROOT>`; every skill is named by its full `skill_ref_root`-prefixed path.**
 
 ### 🔴 Non-negotiable execution rules (read before anything)
 
@@ -15482,11 +15482,11 @@ The steps below are the prescriptive runbook for those actions; follow them in o
 Run `skills/vibecoding-state` operation `enter` with `prompt_id: "activation_wire_lakebase"` and `require_prior_gate: {prompt_id: "activation_build_wire", gate: "Analytics app built (mock)"}`. Read the resolved `## Environment Capabilities` values and use them literally:
 
 - `client_context` = `genie_code`
-- `artifact_root` = your workshop clone root (e.g. `/Workspace/Users/<your-email>/.assistant/skills/vibe-coding-workshop`)
+- `artifact_root` = your workshop project root (e.g. `/Workspace/Users/<your-email>/vibe-coding-workshop`) — where all generated bundles/apps/docs build; the repo itself is cloned at `/Workspace/Users/<your-email>/.assistant/skills/vibe-coding-workshop` (skills load from there via `skill_ref_root`, NOT from `artifact_root`)
 - `skill_ref_root` = `skills/vibe-coding-workshop` (substitute your clone folder if different)
 - `app_root` = `<artifact_root>/<app_name>` — the self-contained AppKit app project (a TOP-LEVEL sibling of any `{use_case_slug}_dab` bundle, NOT under `apps_lakebase/`). Referred to below as `<APP_ROOT>`; `<APP_ROOT>/.vibecoding-state.md`, `app.yaml`, `databricks.yml`, `server/`, and `client/` all live here.
 
-**First:** read `<APP_ROOT>/.vibecoding-state.md` (full clone-rooted path — NOT a bare `@…` mention) and `<artifact_root>/docs/reverse_etl.md` + `<artifact_root>/docs/activation_sync_plan.md` for the synced project, Postgres database/schema, endpoint, and the exact synced-table names (each ends in `_synced`).
+**First:** read `<APP_ROOT>/.vibecoding-state.md` (full `<artifact_root>`-anchored path — NOT a bare `@…` mention) and `<artifact_root>/docs/reverse_etl.md` + `<artifact_root>/docs/activation_sync_plan.md` for the synced project, Postgres database/schema, endpoint, and the exact synced-table names (each ends in `_synced`).
 
 **Precondition (from the reverse-ETL step, gate `Synced tables live`):** the synced tables exist in the Lakebase project and the endpoint is `ACTIVE`. If they do not, return to the **Create Synced Tables** step before wiring.
 
@@ -15505,7 +15505,7 @@ databricks current-user me --output json
 
 > Workspace target: `{workspace_url}`. The session profile placeholder `{databricks_cli_profile}` is **inert on Genie Code** — runDatabricksCli/SDK are pre-authenticated, so omit `--profile`.
 
-### Step 2 — Load the wiring skill by its FULL clone-rooted path
+### Step 2 — Load the wiring skill by its FULL `skill_ref_root`-prefixed path
 
 Load with `readSkillFile` — NEVER a bare `@…` mention, NEVER a repo-relative path. The root-level `skills/` come FIRST as the highest-priority guardrails:
 
@@ -15593,7 +15593,7 @@ VALUES
 This will involve the following steps:
 
 - **Confirm and validate** — re-confirm `APP_NAME` / `<APP_ROOT>` and the config; re-check cost (read-only).
-- **Load the deploy skill** — read it by its full clone-rooted path, then run the pre-deploy static gate.
+- **Load the deploy skill** — read it by its full `skill_ref_root`-prefixed path, then run the pre-deploy static gate.
 - **Grant and deploy** — grant the app SP on the synced schema, then deploy via the SDK SNAPSHOT path.
 - **Verify the deployed app** — via envelope semantics (not localhost, not HTTP status).
 - **Post-deploy cost re-check** — read-only.
@@ -15624,12 +15624,12 @@ The steps below are the prescriptive runbook for those actions; follow them in o
 Run `skills/vibecoding-state` operation `enter` with `prompt_id: "activation_deploy_validate"` and `require_prior_gate: {prompt_id: "activation_wire_lakebase", gate: "Analytics app live data (local)"}`. Read the resolved `## Environment Capabilities` values and use them literally:
 
 - `client_context` = `genie_code`
-- `artifact_root` = your workshop clone root (e.g. `/Workspace/Users/<your-email>/.assistant/skills/vibe-coding-workshop`)
+- `artifact_root` = your workshop project root (e.g. `/Workspace/Users/<your-email>/vibe-coding-workshop`) — where all generated bundles/apps/docs build; the repo itself is cloned at `/Workspace/Users/<your-email>/.assistant/skills/vibe-coding-workshop` (skills load from there via `skill_ref_root`, NOT from `artifact_root`)
 - `skill_ref_root` = `skills/vibe-coding-workshop` (substitute your clone folder if different)
 - `app_root` = `<artifact_root>/<app_name>` — the self-contained AppKit app project (a TOP-LEVEL sibling of any `{use_case_slug}_dab` bundle, NOT under `apps_lakebase/`). Referred to below as `<APP_ROOT>`; `<APP_ROOT>/.vibecoding-state.md`, `app.yaml`, `databricks.yml`, `server/`, and `client/` all live here.
 - `app_deploy.verb` = `apps deploy` — the gated deploy verb; on Genie Code it resolves to the SDK SNAPSHOT call (CLI deploy is the IDE path).
 
-**First:** read `<APP_ROOT>/.vibecoding-state.md`, `<artifact_root>/docs/reverse_etl.md` (cost-control targets, schema, endpoint), and `<artifact_root>/docs/activation_sync_plan.md` (synced tables + row counts to spot-check) — full clone-rooted paths, NOT bare `@…` mentions.
+**First:** read `<APP_ROOT>/.vibecoding-state.md`, `<artifact_root>/docs/reverse_etl.md` (cost-control targets, schema, endpoint), and `<artifact_root>/docs/activation_sync_plan.md` (synced tables + row counts to spot-check) — full `<artifact_root>`-anchored paths, NOT bare `@…` mentions.
 
 ### Step 1 — Confirm `APP_NAME` and `<APP_ROOT>`, validate config
 
@@ -15652,7 +15652,7 @@ Validate the project (read-only checks via `executeCode`, not the IDE''s `ls`/`g
 
 Run `databricks postgres get-endpoint projects/{user_app_name}/branches/production/endpoints/primary --output json` via `runDatabricksCli` and ASSERT `autoscaling_limit_min_cu`, `autoscaling_limit_max_cu`, and `suspend_timeout_duration` match `<artifact_root>/docs/reverse_etl.md`. A running App keeps the endpoint warm and bills against whatever ceiling is in place — so do NOT deploy on top of a drifted (larger) ceiling or a disabled suspend. **If any value has drifted, STOP** and return to the **Create Synced Tables / provisioning** step to re-apply the caps (this fork does NOT mutate the endpoint).
 
-### Step 2 — Load the deploy skill by its FULL clone-rooted path
+### Step 2 — Load the deploy skill by its FULL `skill_ref_root`-prefixed path
 
 Load with `readSkillFile` — NEVER a bare `@…` mention, NEVER a repo-relative path. **The root-level `skills/` come FIRST as the highest-priority guardrails:**
 
@@ -15775,14 +15775,14 @@ VALUES
 This will involve the following steps:
 
 - **Confirm context** — `APP_NAME`, `<APP_ROOT>`, and that the endpoint is READY (read-only).
-- **Load the skills** — full clone-rooted paths.
+- **Load the skills** — full `skill_ref_root`-prefixed paths.
 - **Register the Serving plugin** — bind the endpoint resource.
 - **Author the streaming chat UI** — files only, no server.
 - **Static gate and redeploy** — scan, then redeploy via the SDK SNAPSHOT path and verify the deployed chat.
 
 The steps below are the prescriptive runbook for those actions; follow them in order.
 
-**Genie Code — this is a prescriptive runbook for wiring a deployed Model Serving / Agent endpoint into the existing AppKit app and redeploying it. Follow the steps in order. Do NOT improvise paths, do NOT use bare relative paths, do NOT use `@`-mentions. This step registers the AppKit **Serving plugin** in `server.ts`, authors a streaming chat UI, redeploys the AppKit app via the SDK SNAPSHOT call, and verifies the agent chat against the DEPLOYED URL. There is no local Node toolchain: the build runs server-side at redeploy, not via a local `npm run build`. The app is anchored to `<APP_ROOT>`; every skill is named by its full clone-rooted path.**
+**Genie Code — this is a prescriptive runbook for wiring a deployed Model Serving / Agent endpoint into the existing AppKit app and redeploying it. Follow the steps in order. Do NOT improvise paths, do NOT use bare relative paths, do NOT use `@`-mentions. This step registers the AppKit **Serving plugin** in `server.ts`, authors a streaming chat UI, redeploys the AppKit app via the SDK SNAPSHOT call, and verifies the agent chat against the DEPLOYED URL. There is no local Node toolchain: the build runs server-side at redeploy, not via a local `npm run build`. The app is anchored to `<APP_ROOT>`; every skill is named by its full `skill_ref_root`-prefixed path.**
 
 ### 🔴 Non-negotiable execution rules (read before anything)
 
@@ -15799,12 +15799,12 @@ The steps below are the prescriptive runbook for those actions; follow them in o
 Run `skills/vibecoding-state` operation `enter` with `prompt_id: "wire_ui_agent"` and `require_prior_gate: {prompt_id: "agent_framework", gate: "Agent endpoint READY"}`. Read the resolved `## Environment Capabilities` values and use them literally:
 
 - `client_context` = `genie_code`
-- `artifact_root` = your workshop clone root (e.g. `/Workspace/Users/<your-email>/.assistant/skills/vibe-coding-workshop`)
+- `artifact_root` = your workshop project root (e.g. `/Workspace/Users/<your-email>/vibe-coding-workshop`) — where all generated bundles/apps/docs build; the repo itself is cloned at `/Workspace/Users/<your-email>/.assistant/skills/vibe-coding-workshop` (skills load from there via `skill_ref_root`, NOT from `artifact_root`)
 - `skill_ref_root` = `skills/vibe-coding-workshop` (substitute your clone folder if different)
 - `app_root` = `<artifact_root>/<app_name>` — the self-contained AppKit app project (a TOP-LEVEL sibling of any `{use_case_slug}_dab` bundle, NOT under `apps_lakebase/`). Referred to below as `<APP_ROOT>`; `<APP_ROOT>/.vibecoding-state.md`, `app.yaml`, `databricks.yml`, `server/`, and `client/` all live here.
 - `app_deploy.verb` = `apps deploy` — the gated deploy verb; on Genie Code it resolves to the SDK SNAPSHOT call (CLI deploy is the IDE path).
 
-**First:** read `<APP_ROOT>/.vibecoding-state.md` (full clone-rooted path — NOT a bare `@…` mention) for `APP_NAME` and the prior app state. The agent serving endpoint name comes from the `agent_framework` step''s `exit` capture (`agent_serving_endpoint`) — read it from state, do **NOT** re-derive it.
+**First:** read `<APP_ROOT>/.vibecoding-state.md` (full `<artifact_root>`-anchored path — NOT a bare `@…` mention) for `APP_NAME` and the prior app state. The agent serving endpoint name comes from the `agent_framework` step''s `exit` capture (`agent_serving_endpoint`) — read it from state, do **NOT** re-derive it.
 
 **Precondition (from `agent_framework`, gate `Agent endpoint READY`):** the agent is deployed on Databricks Model Serving and READY, and the AppKit app from earlier chapters is already scaffolded/deployed under `<APP_ROOT>`. If `enter` reports the prior gate is unmet, STOP — finish the **Build & Deploy Agent** step first.
 
@@ -15829,7 +15829,7 @@ Expect `.state.ready == "READY"`. Optionally run a domain-specific smoke test th
 
 > Workspace target: `{workspace_url}`. The session profile placeholder `{databricks_cli_profile}` is **inert on Genie Code** — runDatabricksCli/SDK are pre-authenticated, so omit `--profile`. **Host of record is the runtime, not the template** — derive it from `w.config.host`; if `databricks.yml`''s `host:` disagrees with `{workspace_url}`, trust the runtime host.
 
-### Step 2 — Load the required skills by their FULL clone-rooted paths
+### Step 2 — Load the required skills by their FULL `skill_ref_root`-prefixed paths
 
 Load each with `readSkillFile` — NEVER a bare `@…` mention, NEVER a repo-relative path. **The root-level `skills/` come FIRST as the highest-priority guardrails.** Read them in ONE batched `readSkillFile` turn:
 
@@ -16130,7 +16130,7 @@ VALUES
 This will involve the following steps:
 
 - **Resolve context** — load the environment and the Lakebase coordinates from state and `reverse_etl.md`.
-- **Load the skills** — full clone-rooted paths, then acknowledge each rule (hard gate).
+- **Load the skills** — full `skill_ref_root`-prefixed paths, then acknowledge each rule (hard gate).
 - **Resolve the destination schema** — create the user-scoped `_lakebase` schema inside the existing catalog.
 - **Branch on the CDF flag** — the clone path (default) or the CDF path (opt-in, auto-fallback to clone).
 - **Verify and lock state** — echo row counts / stream status and record `sync_mode`.
@@ -16152,16 +16152,16 @@ The steps below are the prescriptive runbook for those actions; follow them in o
 Run `skills/vibecoding-state` operation `enter` with `prompt_id: "sync_from_lakebase"`. It writes and echoes the `## Environment Capabilities` block. Read these resolved values and use them literally throughout:
 
 - `client_context` = `genie_code`
-- `artifact_root` = your workshop clone root (e.g. `/Workspace/Users/<your-email>/.assistant/skills/vibe-coding-workshop`)
+- `artifact_root` = your workshop project root (e.g. `/Workspace/Users/<your-email>/vibe-coding-workshop`) — where all generated bundles/apps/docs build; the repo itself is cloned at `/Workspace/Users/<your-email>/.assistant/skills/vibe-coding-workshop` (skills load from there via `skill_ref_root`, NOT from `artifact_root`)
 - `skill_ref_root` = `skills/vibe-coding-workshop` (substitute your clone folder if you cloned somewhere other than `.assistant/skills/vibe-coding-workshop`)
 - `app_root` = `<artifact_root>/<app_name>` — the AppKit app whose `server/server.ts` holds the Lakebase DDL. Referred to below as `<APP_ROOT>`.
 - `enable_lakebase_cdf` = `{enable_lakebase_cdf}` — the mode flag (`true`/`false`, default `false`).
 
-**Then read the resolved Lakebase coordinates.** Read `<APP_ROOT>/.vibecoding-state.md` and `<artifact_root>/docs/reverse_etl.md` (full clone-rooted paths — NOT bare `@…` mentions) to resolve, and echo:
+**Then read the resolved Lakebase coordinates.** Read `<APP_ROOT>/.vibecoding-state.md` and `<artifact_root>/docs/reverse_etl.md` (full `<artifact_root>`-anchored paths — NOT bare `@…` mentions) to resolve, and echo:
 
 - `user_app_name` (= the Lakebase Autoscaling `project_id`)
 - `lakebase_host` (the Postgres host; from `reverse_etl.md` or `GET /api/2.0/postgres/projects/{user_app_name}/branches/production/endpoints/primary` → `status.hosts.host`)
-- `source_pg_schema` — the Postgres schema holding the operational app tables. This is the app''s `DB_SCHEMA` = `<app_name>` with hyphens turned into underscores (e.g. `prashanth_s_booking_app`), set in `<APP_ROOT>/app.yaml`. It is NOT necessarily the same as `{user_schema_prefix}`.
+- `source_pg_schema` — the Postgres schema holding the operational app tables. This is the app''s `DB_SCHEMA` = `<app_name>` with hyphens turned into underscores (e.g. `jane_d_booking_app`), set in `<APP_ROOT>/app.yaml`. It is NOT necessarily the same as `{user_schema_prefix}`.
 - `lakebase_postgres_database` = `databricks_postgres` (fixed Lakebase default DB)
 - `lakehouse_default_catalog` = `{lakehouse_default_catalog}` (existing pre-provisioned catalog — never create one)
 - `user_schema_prefix` = `{user_schema_prefix}`
@@ -16170,7 +16170,7 @@ Run `skills/vibecoding-state` operation `enter` with `prompt_id: "sync_from_lake
 
 If `enter` has not run in this thread, run it now — every step below depends on these values.
 
-### Step 1 — Load the required skills by their FULL clone-rooted paths
+### Step 1 — Load the required skills by their FULL `skill_ref_root`-prefixed paths
 
 Load each skill with `readSkillFile` using its fully-qualified `<skill_ref_root>`-prefixed path — NEVER a bare `@…` mention, NEVER a repo-relative path. **The root-level `skills/` come FIRST: they are the highest-priority, always-on guardrails.** Read independent skills in ONE batched `readSkillFile` turn (`genie-code-environment` §10 — Genie Code reads multiple files in parallel in a single turn).
 
