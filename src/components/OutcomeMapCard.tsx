@@ -1,6 +1,7 @@
 import { createElement, useRef, type MouseEvent, type CSSProperties } from 'react';
 import { Check } from 'lucide-react';
 import type { SelectOption } from '../api/client';
+import { CertifiedBadge } from './CertifiedBadge';
 import {
   getIconForSlug,
   LEAF_PILLS_BY_SLUG,
@@ -100,7 +101,7 @@ export function OutcomeMapCard({
       type="button"
       role="tab"
       aria-pressed={isSelected}
-      aria-label={`${useCase.label}, ${useCase.category ?? ''}, ${pills.length} features`}
+      aria-label={`${useCase.label}, ${useCase.is_certified ? 'Certified, ' : ''}${useCase.category ?? ''}, ${pills.length} features`}
       disabled={disabled}
       onClick={() => !disabled && onSelect(useCase.value)}
       onMouseMove={handleMouseMove}
@@ -120,6 +121,13 @@ export function OutcomeMapCard({
         }}
       />
 
+      {/* Certified seal — pinned to the top-right corner of the card */}
+      {useCase.is_certified && (
+        <div className="absolute top-3 right-3 z-20 animate-scale-in">
+          <CertifiedBadge size="md" />
+        </div>
+      )}
+
       {/* Top row: themed icon disc + selected check / "N features" chip */}
       <div className="relative flex items-start justify-between mb-4">
         <div
@@ -134,14 +142,14 @@ export function OutcomeMapCard({
         </div>
         {isSelected ? (
           <span
-            className={`inline-flex items-center gap-1 text-[10.5px] font-semibold tracking-wide uppercase px-2 py-[3px] rounded-full ${theme.pillBgSelected} animate-scale-in`}
+            className={`inline-flex items-center gap-1 text-[10.5px] font-semibold tracking-wide uppercase px-2 py-[3px] rounded-full ${theme.pillBgSelected} animate-scale-in ${useCase.is_certified ? 'mr-9' : ''}`}
           >
             <Check className="w-3 h-3" strokeWidth={2.5} />
             Selected
           </span>
         ) : (
           <span
-            className={`text-[10.5px] font-medium tracking-wide px-2 py-[3px] rounded-full ${theme.countChip}`}
+            className={`text-[10.5px] font-medium tracking-wide px-2 py-[3px] rounded-full ${theme.countChip} ${useCase.is_certified ? 'mr-9' : ''}`}
           >
             {pills.length} {pills.length === 1 ? 'feature' : 'features'}
           </span>

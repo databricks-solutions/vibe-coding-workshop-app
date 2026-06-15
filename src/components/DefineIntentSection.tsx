@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { PromptGenerator } from './PromptGenerator';
+import { CertifiedBadge } from './CertifiedBadge';
 import type { WorkshopLevel } from '../constants/workflowSections';
 
 interface DefineIntentSectionProps {
@@ -7,6 +8,7 @@ interface DefineIntentSectionProps {
   selectedUseCase: string;
   selectedIndustryLabel?: string;
   selectedUseCaseLabel?: string;
+  selectedUseCaseCertified?: boolean;
   customUseCaseLabel?: string;
   customDescription?: string;
   initialPrompt?: string;
@@ -19,7 +21,7 @@ interface DefineIntentSectionProps {
   forceCollapsed?: boolean;
   /** When true, forces the section expanded (user cannot collapse). */
   forceExpanded?: boolean;
-  onIntentDefined: (prompt: string, industry: string, useCase: string, industryLabel?: string, useCaseLabel?: string, customDescription?: string) => void;
+  onIntentDefined: (prompt: string, industry: string, useCase: string, industryLabel?: string, useCaseLabel?: string, customDescription?: string, isCertified?: boolean) => void;
   onBrandUrlChange?: (url: string) => void;
 }
 
@@ -36,6 +38,7 @@ export function DefineIntentSection({
   selectedUseCase,
   selectedIndustryLabel,
   selectedUseCaseLabel,
+  selectedUseCaseCertified,
   customUseCaseLabel,
   customDescription,
   initialPrompt,
@@ -101,11 +104,12 @@ export function DefineIntentSection({
       />
       {/* Summary line visible when collapsed and complete */}
       {!isExpanded && intentDefined && summaryText && (
-        <div className="mt-1 px-5 pb-0">
+        <div className="mt-1 px-5 pb-0 flex items-center gap-2 min-w-0">
           <p className="text-ui-xs text-muted-foreground/60 truncate">
             {selectedIndustryLabel || selectedIndustry}
             {summaryText !== (selectedIndustryLabel || selectedIndustry) && ` › ${summaryText}`}
           </p>
+          {selectedUseCaseCertified && <CertifiedBadge size="sm" withLabel className="flex-shrink-0" />}
         </div>
       )}
     </div>

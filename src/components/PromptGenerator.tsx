@@ -19,7 +19,7 @@ const SKILL_USE_CASES = new Set(['build_skill']);
 type DefineMode = 'library' | 'custom';
 
 interface PromptGeneratorProps {
-  onPromptGenerated: (prompt: string, industry: string, useCase: string, industryLabel?: string, useCaseLabel?: string, customDescription?: string) => void;
+  onPromptGenerated: (prompt: string, industry: string, useCase: string, industryLabel?: string, useCaseLabel?: string, customDescription?: string, isCertified?: boolean) => void;
   onBrandUrlChange?: (url: string) => void;
   initialIndustry?: string;
   initialUseCase?: string;
@@ -341,10 +341,12 @@ export function PromptGenerator({
       try {
         const prompt = editedDescription || promptTemplates[selectedIndustry]?.[selectedUsecase] || '';
         const industryLabel = industries.find(i => i.value === selectedIndustry)?.label || selectedIndustry;
-        const useCaseLabel = editedUseCaseLabel || availableUsecases.find(u => u.value === selectedUsecase)?.label || selectedUsecase;
+        const selectedOption = availableUsecases.find(u => u.value === selectedUsecase);
+        const useCaseLabel = editedUseCaseLabel || selectedOption?.label || selectedUsecase;
         const customDesc = (editedDescription && editedDescription !== defaultDescription) ? editedDescription : undefined;
+        const isCertified = !!selectedOption?.is_certified;
         
-        onPromptGenerated(prompt, selectedIndustry, selectedUsecase, industryLabel, useCaseLabel, customDesc);
+        onPromptGenerated(prompt, selectedIndustry, selectedUsecase, industryLabel, useCaseLabel, customDesc, isCertified);
       } catch (err) {
         console.error('Failed to generate prompt:', err);
       } finally {
@@ -367,7 +369,8 @@ export function PromptGenerator({
           useCaseSlug,
           customIndustry.trim(),
           customUseCaseName.trim(),
-          customUseCaseDescription.trim()
+          customUseCaseDescription.trim(),
+          false
         );
       } catch (err) {
         console.error('Failed to generate prompt:', err);

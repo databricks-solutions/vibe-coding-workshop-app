@@ -130,6 +130,9 @@ export default function App() {
   const [selectedIndustryLabel, setSelectedIndustryLabel] = useState<string>('');
   const [selectedUseCase, setSelectedUseCase] = useState<string>('');
   const [selectedUseCaseLabel, setSelectedUseCaseLabel] = useState<string>('');
+  // Whether the selected use case is certified (drives the Certified badge on
+  // the workflow steps). Set when the use case is picked in Define Intent.
+  const [selectedUseCaseCertified, setSelectedUseCaseCertified] = useState<boolean>(false);
   
   // Custom use case overrides (user-edited name/description)
   const [customUseCaseLabel, setCustomUseCaseLabel] = useState<string>('');
@@ -1145,6 +1148,7 @@ export default function App() {
                     selectedIndustryLabel={selectedIndustryLabel}
                     selectedUseCase={selectedUseCase}
                     selectedUseCaseLabel={selectedUseCaseLabel}
+                    selectedUseCaseCertified={selectedUseCaseCertified}
                     customUseCaseLabel={customUseCaseLabel}
                     customDescription={customDescription}
                     initialBrandUrl={brandUrl}
@@ -1177,10 +1181,11 @@ export default function App() {
                         }).catch(err => console.error('Error saving industry:', err));
                       }
                     }}
-                    onUseCaseChange={(val, label) => { 
+                    onUseCaseChange={(val, label, isCertified) => { 
                       if (readOnly) return;
                       setSelectedUseCase(val); 
                       setSelectedUseCaseLabel(label);
+                      setSelectedUseCaseCertified(!!isCertified);
                       const lockLevel = USE_CASE_LEVEL_LOCK[val];
                       if (lockLevel) {
                         setUseCaseLockedLevel(lockLevel);

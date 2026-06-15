@@ -22,7 +22,10 @@ CREATE TABLE IF NOT EXISTS ${schema}.usecase_descriptions (
     -- Outcome-map grouping (NULL for Sample / legacy rows; populated for Travel cards)
     category VARCHAR(100),
     category_order INTEGER,
-    display_order INTEGER
+    display_order INTEGER,
+    -- Certified flag: certified use cases sort to the top of each section and
+    -- render a "Certified" badge in the workshop flow.
+    is_certified BOOLEAN NOT NULL DEFAULT FALSE
 );
 
 -- Indexes
@@ -32,6 +35,9 @@ CREATE INDEX IF NOT EXISTS idx_usecase_path_type ON ${schema}.usecase_descriptio
 CREATE INDEX IF NOT EXISTS idx_usecase_industry_category
     ON ${schema}.usecase_descriptions(industry, category, category_order, display_order)
     WHERE is_active = TRUE;
+CREATE INDEX IF NOT EXISTS idx_usecase_certified
+    ON ${schema}.usecase_descriptions(industry, is_certified)
+    WHERE is_active = TRUE AND is_certified = TRUE;
 
 COMMENT ON TABLE ${schema}.usecase_descriptions IS 
 'Versioned use case descriptions for industries and their use cases. path_type distinguishes use_case from skill entries. category/category_order/display_order drive the outcome-map grid layout (Travel & Hospitality).';

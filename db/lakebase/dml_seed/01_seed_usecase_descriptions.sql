@@ -1484,6 +1484,402 @@ Core entities: Guests, Conversations, Intents, Tools, Sub-Agent Runs, Service Fa
  1, TRUE, current_timestamp(), current_timestamp(), current_user());
 
 -- =============================================================================
+-- TRAVEL & HOSPITALITY -- CERTIFIED OUTCOME-MAP USE CASES (4 new cards)
+-- =============================================================================
+-- These four Aurelia Collection apps are net-new Travel cards added to the
+-- outcome-map columns. They are marked is_certified = TRUE (see the UPDATE at
+-- the end of this block) so they pin to the top of their columns and render a
+-- "Certified" badge in the workshop flow and on the workflow steps.
+-- =============================================================================
+
+INSERT INTO ${catalog}.${schema}.usecase_descriptions
+(config_id, industry, industry_label, use_case, use_case_label,
+ category, category_order, display_order,
+ prompt_template, version, is_active, inserted_at, updated_at, created_by)
+VALUES
+(210, 'travel', 'Travel & Hospitality', 'customer_360_audience_builder', 'Customer 360 Audience Builder',
+ 'Consumer at the Center of Every Decision', 3, 4,
+'Create a data-driven, intent-based audience segmentation and targeting platform for large hotel brands to build, analyze, and activate customer segments based on comprehensive guest profiles, predictive analytics, and localized external market signals. Similar to how HubSpot or Salesforce Marketing Cloud build audiences, but purpose-built for hospitality and driven by real-world market signals.
+
+## Application Type
+Enterprise B2B analytics and audience management platform that enables **Marketing Teams, Revenue Managers, and CRM Analysts** at large hotel brands to discover opportunities driven by real-world market signals, understand guest behavior patterns, and create targeted audiences for personalized marketing campaigns. The experience is *intent-driven* — users arrive with a goal (*"I want to build a campaign"*, *"Show me opportunities"*) and the platform guides them to action, rather than presenting a dashboard of disconnected tools.
+
+## Key Personas
+- **Marketing Manager** (primary): Enters via *"Build a Campaign"* intent. Builds audience segments for campaign targeting, reviews AI recommendations, saves audiences for activation. Needs intuitive, visual tools similar to Mailchimp or HubSpot — not SQL or technical interfaces.
+- **Revenue Manager**: Enters via *"Find Biggest Opportunities"* intent. Identifies high-value segments, analyzes booking patterns and revenue potential, optimizes pricing strategies by segment.
+- **CRM Analyst**: Enters via Insights or Visual Builder directly. Explores customer data, validates segmentation models, creates complex multi-criteria audience rules, monitors segment health metrics.
+
+## Design Philosophy: Intent-Based Navigation
+The navigation follows the campaign lifecycle, not the feature set. Users think in terms of outcomes — the UI organizes around what they want to accomplish, in the order they naturally work:
+
+1. **Overview** — *"What''s happening? What should I pay attention to?"*
+2. **Recommend** — *"What should I do about it?"*
+3. **Build Audience** — *"Let me create and refine my target audience."*
+4. **Insights** — *"Help me understand my customers deeper."*
+5. **Experiment** — *"How do I test and validate my strategy?"*
+
+This replaces feature-based navigation (Dashboard → Segments → Audience Builder → Next Best Action → Analysis → A/B Testing) which required users to know which tool to use rather than guiding them through a workflow.
+
+## Core Features Required
+
+### Overview: Intent-Based Landing
+The landing page is not a dashboard. It presents three clear paths, each leading to a purpose-driven workflow:
+
+- **Build a Campaign**: Start from an objective and let AI recommend the optimal audience, channel mix, and timing. Leads to the Recommend page.
+- **Explore Market Signals**: See external signals driving revenue opportunities in your markets. Scrolls to the Market Signals feed.
+- **Find Biggest Opportunities**: Discover high-value customer segments and untapped revenue from existing guest data. Leads to the Insights page.
+
+### Localized External Market Signals
+A feed of real-world external signals that create revenue opportunities, each paired with a suggested action and a direct path to build an audience:
+- **Weather**: Heat waves, early snowfall, storm disruptions — driving resort/leisure demand shifts
+- **Local Events**: Conferences, festivals, sporting events — driving business/leisure traveler surges in specific markets
+- **Airline Routes**: New routes, added capacity, seasonal expansions — signaling emerging demand in specific cities
+
+Each signal includes: signal type, location, and description; an opportunity explanation connecting the signal to revenue impact; estimated revenue impact; urgency level (High/Medium/Low); a plain-language suggested action; and a structured filter set mapping to real segments and locations (e.g., *Segment = Leisure Families* + *Segment = Luxury Seekers* + *Market = Miami, FL* + *Property Type = Resort*). **"Act on This"** opens the Audience Builder pre-loaded with the full filter set — multiple segments connected with OR logic; location and other filters use AND.
+
+### Quick Metrics
+Compact summary bar showing Total Customers, Active Audiences, Annual Revenue, and Avg Customer LTV — all computed from live data, not hardcoded.
+
+### Recommend: AI-Powered Next Best Action
+AI recommendation engine that suggests the optimal audience and campaign strategy to maximize revenue given constraints.
+- **Input Parameters**: Budget, Timeframe (30/60/90 days), Channel Costs (email, mobile push, direct mail)
+- **Top Recommendation**: target audience name and size, predicted revenue range with confidence interval, expected conversion rate, recommended channel mix chart, confidence score
+- **Explainability on Hover**: hovering a recommendation reveals *why* this audience was recommended — booking-propensity thresholds, LTV context, historical channel response rates, audience-size validity, revenue-confidence basis, and full AI explanation text. The title carries a dotted underline to signal more detail is available.
+- **Alternative Recommendations**: ranked next-best options with the same hover explainability
+- **Action Buttons**: *"Build This Audience"* (pre-loads the builder) and *"Activate Campaign"* (prominent green button → *"Coming soon — audiences exported to Lakebase for downstream marketing system activation."*)
+
+### Audience Builder Interface
+Follows modern marketing-tool UX (Mailchimp, HubSpot, Salesforce Marketing Cloud). Four approaches, unified by a live preview panel that updates in real time. The builder accepts pre-configured filters via URL parameters (multi-filter from signals; single-segment from cards and recommendations).
+
+#### Approach 1: Pre-Built Segments
+Visual segment gallery of K-means segments as clickable cards (name, description, size, avg LTV). Clicking loads it as a filter in the Visual Builder.
+
+#### Approach 2: Visual Audience Builder (Rule-Based)
+Three-panel layout:
+- **Left — Filter Library** organized by category (Booking Behavior, Value & Spend, Predictive Scores, Segments, Demographics, Location, Timing). Clicking a filter adds it to the canvas.
+- **Center — Active Filters Canvas**: editable cards with operator dropdowns (>, >=, <, <=, =) and value inputs; AND/OR connector badges (clickable to toggle); per-filter remove and *Clear All*.
+- **Right — Live Audience Preview** (300ms debounced): Predicted Revenue (primary), Audience Size with reach %, Avg LTV, Conversion Rate, a Quality Score gauge (0–100), Matched Segments count, and contextual Smart Suggestions (e.g., *"Consider adding ''Last Stay > 180 days'' to sharpen at-risk definition"*).
+
+Preview logic: segment filters apply as OR (union); customer-level filters apply as selectivity ratios within matched segments; location filters apply additional geographic selectivity. More filters = smaller, more targeted audience with higher quality and conversion.
+
+#### Approach 3: Natural Language Audience Builder
+Search-style input where non-technical marketers describe their audience in plain language. The system extracts filters with per-filter confidence scores and an overall confidence badge, then *"Apply These Filters in Visual Builder"*. Keyword recognition: *"high-value"* → LTV; *"haven''t booked"*/*"lapsed"* → recency; *"at risk"* → churn risk; *"business"*/*"luxury"*/*"family"* → segment; *"loyal"* → loyalty tier; *"upgrade"* → upgrade propensity.
+
+#### Approach 4: Audience Templates
+Pre-built templates by objective — Acquisition (New Guest Acquisition); Retention (Win-Back, Loyalty Tier Advancement); Upsell (Premium Upsell); Seasonal (Summer Family Getaway, Holiday Season Push). Each shows name, color-coded objective badge, description, typical size range, expected revenue range, and filter tags.
+
+### Save & Activate Flow
+- **Save Audience**: dialog with name input and preview metrics; persists to Lakebase as a saved audience.
+- **Activate Campaign**: after saving, a green button → *"Campaign activation coming soon — audiences are exported to Lakebase for downstream marketing system activation."* This is the designed integration point for downstream execution systems.
+
+### Customer Insights
+Unified tabbed view (replacing separate Segments and Analysis pages):
+- **Segments Tab**: sortable gallery of K-means segments (size, avg LTV, booking frequency, churn rate, top channel) with a *"Build Audience"* button.
+- **Analytics Tab**: live-data charts — Segment Composition (donut), Revenue by Segment (bar), Propensity Distribution (bar), Channel Performance (bar).
+
+### A/B Testing Framework
+Experimentation with statistical-rigor guardrails. Persistent best-practices banner: **Hypothesis First → Size Correctly → Don''t Peek → Practical Significance**.
+- **Create New Test Wizard**: required Hypothesis; Test Type (audience split, channel mix, message variant, offer test); KPI selection; a Power Analysis calculator (baseline rate, minimum detectable effect, confidence, power → required sample size, runtime, 7-day minimum); variant configuration; configurable holdout group.
+- **Test Cards**: 95% confidence intervals per variant; sample-progress bar; day counter; peeking warning (<7 days inflates false positives from 5% to ~30%); underpowered-result warning; winner declaration with absolute/relative lift and projected annual revenue. *"Call Winner"* enables only when sample size, ≥95% significance, and 7-day runtime are all met.
+- **Action Dialogs**: Full Analysis (p-value, lift, power, CIs, business impact, recommendation); Monitoring Dashboard (days elapsed, sample progress, significance); Review & Launch (pre-launch checklist, anti-peeking education).
+
+## Customer 360 Data Foundation
+Comprehensive guest profiles with **Behavioral Metrics** (booking history, property preferences, channel behavior, spend patterns), **Predictive Scores** (LTV with confidence intervals; propensity to book in 30/60/90 days, upgrade, cross-sell; churn risk; FRM scores), and **Segmentation Models** (K-means → 6 segments: Business Travelers, Leisure Families, Luxury Seekers, Budget Conscious, Road Warriors, Occasional Guests).
+
+## Data Entities
+Core entities: Customers, Bookings, Properties, Segments, Propensity Scores, Campaigns, Audiences, Revenue Predictions, Channel Preferences, Behavioral Events, A/B Tests, Test Variants, Test Results, Market Signals, Markets/Locations
+
+## Technical Considerations
+- **Lakebase PostgreSQL** holds all application state (segments, audiences, tests, templates, revenue data); schema scoped per app instance for isolation; idempotent DDL and count-check seed patterns; Service Principal owns all objects
+- **Databricks App** (full-stack) hosting the finder, recommendation, builder, insights, and experiment views; every API endpoint returns mock data when Lakebase is unavailable so the UI always renders
+- **Genie Space** over the Lakebase tables for read-side natural language; **AI Agents** for write-side audience actions; **Mosaic AI** for LLM calls
+- Data flow: Market Signal or AI Recommendation triggers audience intent → builder translates filters to a preview query → save persists a named, versioned audience → activate (future) exports to downstream systems
+- If using the Databricks Python SDK for Lakebase OAuth credentials, pin a recent version (e.g. `databricks-sdk>=0.81`) — app runtimes pre-install an older SDK lacking the Postgres credential API
+
+## Scope Constraints
+**Keep it simple** and focus on intent-driven audience building, revenue prediction, market-signal integration, and rigorous A/B testing for a **single hotel brand with US-based properties**. In scope: intent-based navigation, localized market signals with structured filters, 6 pre-computed K-means segments, all four audience-building approaches, location-aware filtering, the revenue-prediction live preview, Next Best Action with hover explainability, audience persistence, and the A/B testing framework with guardrails. Out of scope for v1: real campaign execution/activation, live external signal APIs, multi-brand support, international properties, real-time behavioral tracking, and custom ML model training.',
+ 1, TRUE, current_timestamp(), current_timestamp(), current_user());
+
+INSERT INTO ${catalog}.${schema}.usecase_descriptions
+(config_id, industry, industry_label, use_case, use_case_label,
+ category, category_order, display_order,
+ prompt_template, version, is_active, inserted_at, updated_at, created_by)
+VALUES
+(211, 'travel', 'Travel & Hospitality', 'cross_sell_upsell_optimization', 'Cross Sell/Upsell Optimization',
+ 'Diversified Revenue Growth', 2, 4,
+'Stand up a **Pre-Arrival Revenue Composer** for luxury hotel groups: a Databricks App backed by Lakebase, where a commercial / revenue manager works the perishable window between booking and check-in — finding arrivals with headroom to spend, composing the right room + dining + spa/experience bundle, and queueing each offer on the right send day. Affinity scoring is a column on a Lakebase table, not the centerpiece — the demo is the *composing workflow*, not the model.
+
+## Intent-First Experience
+The app must open with a problem prompt, not a dashboard; grids and bundle cards appear only as the resolution of that intent. Opening prompts:
+- *"Who is arriving in the next 14 days with headroom to spend?"*
+- *"Which of those send windows close this week?"*
+
+The opening view must also make the value obvious to a first-time user who has not seen any deck: a one-line value statement rendered prominently (*"The pre-arrival window is perishable — compose the bundle while the guest is still planning the stay."*) and a running value metric that grows as the manager works — incremental bundle revenue queued and accepted to date.
+
+## Application Type
+Internal commercial app connecting the **Commercial / Revenue Manager** with a Genie-powered assistant to find high-intent arrivals, compose priced bundles, and queue offers — replacing the arrivals-report export and the one-size-fits-all pre-arrival email.
+
+## Brand Persona
+**Brand: Aurelia Collection** (premium, default) — a small luxury hotel group (12 properties, US + Caribbean). Perception goals: understated, anticipatory, never pushy. Offer principles the app MUST enforce:
+- **Fewer, highly relevant offers** — max 3 active offers per guest per day; the engine suppresses anything below a relevance threshold rather than filling slots.
+- **No spray-and-pray** — no property-wide blasts; every offer is tied to a named guest context and at least one driving signal.
+- **Price with dignity** — discounts are framed as member/guest benefits (*"residents'' rate"*, *"suite welcome"*), never *"percent-off"* banners; floor prices respected.
+- **Tone** — concise, warm, concrete (*"Your table at Ember is held for the evening you arrive"*), no exclamation marks, no urgency theatrics.
+
+*Swapping personas*: for a value/EDLP operator (e.g. an economy roadside chain), invert the dials — volume and price-lead messaging are fine, offer caps loosen, tone is friendly-direct — and efficiency per offer sent becomes the headline metric.
+
+## Key Personas
+- **Commercial / Revenue Manager** (primary): Brand- or regional-level staff who open the app every morning, scan the 14-day horizon, and decide which guests get a composed bundle. Owns the demo.
+- **Property General Manager** (secondary): Reviews queued offers for their hotel and flags anything off-brand.
+
+## Core Features Required
+The application must support three workflows the revenue manager runs in sequence:
+
+### 1. Find the Arrivals With Headroom
+Resolves the opening prompt: an upsell-propensity finder over bookings arriving in the next 14 days.
+- Ranked by propensity and headroom (booked amount vs. comparable full-stay spend), with a send-window countdown
+- One-click drill-down to guest history, booking, and category affinities
+- Example: *"Elena Marsh, arriving Sat Jun 20 at Aurelia Key Biscayne, 4 nights room-only at 2,840 — top-decile spa and dining affinity, send window closes Tue Jun 16"*
+
+### 2. Compose the Bundle
+Auto-suggests 1–2 room + dining + spa/experience combinations per arrival, with suggested price.
+- Each renders a **"Why this bundle"** explanation: affinity drivers, external signal(s), brand rule applied, and a cannibalization note (anything the guest buys unprompted is held, not discounted)
+- Manager swaps components; price re-computes, respecting `discount_floor_pct` from `brand_settings`; approving writes a `bundles` row
+- Example: *"For Elena: Oceanfront Suite upgrade + held table at Ember on arrival night + thermal suite Sunday — price 612, framed as a suite welcome"*
+
+### 3. Queue the Offer
+The execute step: commit the approved bundle into the pre-arrival comms sequence.
+- One click writes a `bundle_offers` row and a `comms_queue` record with recommended `send_date` and a one-line timing reason (delivery simulated)
+- Send-day logic weighs booking-to-arrival gap, signal firm-up timing, and brand cadence cap; queue tracks queued / sent / accepted
+- Example: *"Offer 0114 for Elena queued — send Tue Jun 16: forecast firms up Monday, landing 4 days pre-arrival, inside her planning window"*
+
+## External Signals
+Widen the aperture beyond first-party history, scoped to each stay:
+- **Weather forecast** for the stay dates — rain on an arrival weekend shifts suggestions from the catamaran toward the thermal suite
+- **Local events** during the stay — a food-and-wine festival raises demand for late dining and transfers
+- **Flight arrival times** where known — a 9:40pm landing favors a held late supper over an arrival-night excursion
+
+Signals may be synthetic (*"art of the possible"*) but must visibly drive composition and send-day timing and appear by name in every explanation.
+
+## Explainability Requirements
+Every suggested bundle renders a **"Why this bundle"** explanation naming the guest context, driving signal(s), and brand rule. Example:
+
+> "Why this bundle: Elena booked spa within a day of arrival on 3 of her last 4 stays (spa affinity 0.87). The Jun 20–22 forecast shows rain Sunday, favoring the thermal suite over the catamaran. Brand rule: her only active offer this week (cap 3 per day); 612 stays above the suite floor. Cannibalization note: she reserves the tasting menu unprompted — dining is a held table, not a discounted item."
+
+## Data Entities (Lakebase tables, all in one schema)
+- `guests` — guest_id, name, loyalty_tier, lifetime_spend, stay_count, preferences
+- `bookings` — booking_id, guest_id, property_id, arrival_date, departure_date, room_type, booked_amount, flight_arrival_time (nullable)
+- `products` — product_id, property_id, category (room_upgrade / dining / spa / experience), name, list_price, capacity_per_day
+- `affinity_scores` — guest_id, category, score, top_drivers, scored_at (refreshed nightly; ML out of scope)
+- `bundles` — bundle_id, booking_id, product_ids, suggested_price, rationale, status (draft / approved)
+- `bundle_offers` — offer_id, bundle_id, guest_id, offer_price, valid_through, status (queued / sent / accepted / declined)
+- `comms_queue` — comms_id, offer_id, guest_id, channel, send_date, send_day_reason, status (the execute action writes here)
+- `brand_settings` — brand_id, max_offers_per_guest_per_day, discount_floor_pct, tone_profile, relevance_suppression_threshold (the persona is data)
+
+## Technical Considerations
+- **Lakebase** (Provisioned or Autoscaling) for all tables — single Postgres schema, no Lakehouse dependency
+- **Databricks App** (FastAPI + React) hosting the finder, composer, and queue views
+- **Genie Space** over the Lakebase tables for read-side natural language; **AI Agents** with tool-calling for write-side actions (compose, queue); **Mosaic AI** for LLM calls
+- Nightly job refreshes `affinity_scores` — simple Python scoring for the demo; external signals are seeded synthetic data served through the same app layer
+- If using the Databricks Python SDK for Lakebase OAuth credentials, pin a recent version (e.g. `databricks-sdk>=0.81`) — app runtimes pre-install an older SDK lacking the Postgres credential API
+
+## Scope Constraints
+**Keep it simple** and focus only on the bare minimum to support one brand (Aurelia Collection), 2–3 properties, 20–30 synthetic upcoming arrivals, and the three workflows above. We do not need real PMS/booking-engine integration, payments, real email delivery, multi-tenant auth, or affinity-model training — `affinity_scores` is pre-seeded. Internal-tooling app: single-tenant, one role, no SSO. Out of scope for v1 (phase-2): real comms delivery with open/accept tracking, in-stay and post-stay offer windows, dynamic pricing for bundle components, and loyalty-points payment/redemption flows.',
+ 1, TRUE, current_timestamp(), current_timestamp(), current_user());
+
+INSERT INTO ${catalog}.${schema}.usecase_descriptions
+(config_id, industry, industry_label, use_case, use_case_label,
+ category, category_order, display_order,
+ prompt_template, version, is_active, inserted_at, updated_at, created_by)
+VALUES
+(212, 'travel', 'Travel & Hospitality', 'personalized_ancillaries_offer', 'Personalized Ancillaries Offer',
+ 'Diversified Revenue Growth', 2, 5,
+'Stand up an agentic **Ancillary Revenue Copilot** for a luxury hotel group: a Databricks App backed by Lakebase, where an Ancillary Revenue Manager sees which inventory expires worthless at end of day — spa slots, upgrades, dinner covers, late checkouts — and matches it to the right guests on property. The matching logic is a scoring function behind a Lakebase table — the demo is the *workflow*, not the engine.
+
+## Intent-First Experience
+The app must open with a problem prompt, not a dashboard; grids and charts appear only as the resolution of that intent. Opening prompts the UI leads with:
+- *"Where is revenue expiring today?"* (primary — resolves into the opportunity view of Workflow 1)
+- *"Which guests on property tonight should see an offer?"*
+
+The opening view must also make the value obvious to a first-time user who has not seen any deck:
+- A one-line value statement rendered prominently: *"Unsold inventory expires worthless at end of day — anything recovered above zero is net gain."*
+- Value metrics resolved beside the intent: today''s revenue at risk, and a running recovered / in-play total (the dollar value of offers sent and accepted today) that grows as the manager works — the app''s delivered value, always on screen.
+- A compact *"Why this matters"* note (an expander is fine): the perishable-inventory economics in 2–3 sentences with illustrative numbers (15–20 perishable units per property per day; recovered revenue carries no acquisition cost — it is pure recovery).
+
+## Application Type
+Internal revenue-operations app connecting the **Ancillary Revenue Manager** with a Genie-powered assistant to find expiring inventory, match it to in-house guests, and commit offers without leaving the screen. Replaces *"pull the spa schedule, the upgrade report, and the restaurant book, then guess."*
+
+## Brand Persona
+**Brand: Aurelia Collection** (premium, default) — a small luxury hotel group (12 properties, US + Caribbean). Perception goals: understated, anticipatory, never pushy. Offer principles the app MUST enforce:
+- **Fewer, highly relevant offers** — max 3 active offers per guest per day; the engine suppresses anything below a relevance threshold rather than filling slots.
+- **No spray-and-pray** — no property-wide blasts; every offer is tied to a named guest context and at least one driving signal.
+- **Price with dignity** — discounts are framed as member/guest benefits (*"residents'' rate"* on a spa slot, *"suite welcome"* on an upgrade), never percent-off banners; floor prices respected.
+- **Tone** — concise, warm, concrete (*"A poolside cabana is reserved for you this afternoon"*), no exclamation marks, no urgency theatrics.
+
+*Swapping personas*: for a value/EDLP operator (e.g. an economy roadside chain), invert the dials — volume and price-lead messaging are fine, offer caps loosen, tone is friendly-direct — and efficiency per offer sent becomes the headline metric.
+
+## Key Personas
+- **Ancillary Revenue Manager** (primary): Property-level owner of non-room revenue; opens the app every morning, sees what expires today, decides which offers go out. Owns the demo.
+- **Guest Experience Manager** (secondary): Reviews outgoing offers, vetoes anything off-brand, watches acceptance patterns over time.
+
+## Core Features Required
+The application must support three workflows the Ancillary Revenue Manager runs in sequence each day:
+
+### 1. Surface Expiring Revenue
+Resolves the opening intent: one opportunity view of every unit that expires worthless today, with revenue-at-risk inline.
+- Sorted by revenue-at-risk weighted by time-to-expiry; grouped by inventory type with a daily recoverable total
+- One-click drill-down from any unit to its details and candidate guests
+- Example: *"Aurelia Key West, 10:40am: 4 spa slots (5pm–7pm, $190 each), 2 Gulf-view upgrades ($140 each), 6 dinner covers at Solana, 3 late checkouts — $1,920 expiring today."*
+
+### 2. Match Guests & Recommend Offers
+For each matched guest the manager sees the top-3 offers across all expiring inventory, each with a rendered **"Why this offer"** explanation.
+- Every recommendation names the guest context, the driving external signal, and the brand rule applied
+- Offers below the relevance threshold are suppressed, and the UI says so (*"third slot suppressed — relevance too low"*)
+- Example: *"Suite 412, the Hale party: 5:30pm couples massage at the residents'' rate — spa on two of their last three stays, and rain forecast from 2pm."*
+
+### 3. Execute & Track Offers
+The manager approves an offer and the app commits it as a row in the `offer_decisions` table with status sent (downstream delivery is simulated).
+- Each committed row records guest, unit, offer terms, the explanation string, and a timestamp
+- A tracking panel shows status (sent / accepted / declined / expired), running recovered revenue, and an end-of-day recovered-vs-expired view
+- Example: *"3:10pm: Hale party accepted the 5:30pm spa offer ($190 recovered). Day so far: $620 recovered of $1,920 at risk."*
+
+## External Signals
+The app widens the data aperture beyond first-party stay history. Signals may be synthetic (*"art of the possible"*) but must visibly drive recommendations and appear in explanations:
+- **Weather** — a rainy afternoon raises spa and in-room dining relevance
+- **Local events** — a gallery night or regatta nearby shifts late-checkout and dining demand
+- **Same-day flight arrivals** into the property''s city — late arrivals match late checkout and in-room dining
+
+## Explainability Requirements
+Every recommendation renders a **"Why this offer"** explanation naming: the guest context used, the driving external signal(s), and the brand-persona rule applied. Example, rendered verbatim:
+
+> "Why this offer: The Hale party (Suite 412, in-house through Thursday) booked spa on two of their last three stays. Rain is forecast in Key West from 2pm. Offered as the residents'' rate per Aurelia pricing rules — offer 2 of 3 for this guest today."
+
+## Data Entities (Lakebase tables, all in one schema)
+- `properties` — property_id, name, city, region, room_count, outlets (array)
+- `guests` — guest_id, name, loyalty_tier, stay_history_summary, preferences (array), contact_opt_in
+- `stays` — stay_id, guest_id, property_id, room_number (e.g. "Suite 412", used in explanations), room_type, check_in, check_out, party_size, on_property_now
+- `inventory_units` — unit_id, property_id, unit_type (spa_slot, room_upgrade, dinner_cover, late_checkout), description, expires_at, list_price, floor_price, status
+- `external_signals` — signal_id, property_id, signal_type (weather, local_event, flight_arrivals), signal_date, payload, relevance_note
+- `offer_decisions` — offer_id, guest_id, unit_id, offer_price, framing (the brand-toned label, e.g. "residents'' rate"), explanation, status (sent / accepted / declined / expired), created_at; denormalize guest_name and unit_description for display convenience
+- `brand_settings` — brand_id, max_offers_per_guest_per_day, discount_floor_pct (max discount depth below list; floor_price is the hard floor), tone_profile, suppression_threshold (the persona is data, not prose)
+
+## Technical Considerations
+- **Lakebase** (Provisioned or Autoscaling) for all tables — single Postgres schema; real-time inventory reads and offer-decision writes
+- **Databricks App** hosting the opportunity, recommendation, and tracking views
+- **Genie Space** over the same tables for read-side natural language; **AI Agents** for write-side actions (compose the offer, commit the `offer_decisions` row) via a thin API layer over Lakebase; **Mosaic AI** for LLM calls including brand-toned offer copy
+- A scheduled job refreshes `external_signals` and expires unsold `inventory_units` at end of day
+- If using the Databricks Python SDK for Lakebase OAuth credentials, pin a recent version (e.g. `databricks-sdk>=0.81`) — app runtimes pre-install an older SDK lacking the Postgres credential API
+
+## Scope Constraints
+**Keep it simple** and focus only on the bare minimum to support one brand (Aurelia Collection), 2–3 properties, roughly 25 synthetic in-house guests, 15–20 expiring inventory units per day, and the three workflows above. We do not need real PMS or spa-booking integration, payments, real delivery channels (delivery is simulated by the status field), multi-tenant authentication, or model training. Out of scope for v1 (phase-2): real channel delivery and guest replies, loyalty accrual/redemption mechanics, dynamic pricing of the inventory itself, cross-property offer routing, and retuning the relevance threshold from acceptance history.',
+ 1, TRUE, current_timestamp(), current_timestamp(), current_user());
+
+INSERT INTO ${catalog}.${schema}.usecase_descriptions
+(config_id, industry, industry_label, use_case, use_case_label,
+ category, category_order, display_order,
+ prompt_template, version, is_active, inserted_at, updated_at, created_by)
+VALUES
+(213, 'travel', 'Travel & Hospitality', 'custom_loyalty_based_offers', 'Custom Loyalty-Based Offers',
+ 'Diversified Revenue Growth', 2, 6,
+'Stand up a **Loyalty Offer Studio** for hotel member programs: a Databricks App backed by Lakebase, where a Loyalty Program Manager reviews which Aurelia Circle members need attention, calibrates tier- and lifecycle-aware perks, multipliers, and redemption specials, and launches each with its point-liability impact priced in. The demo is the weekly calibration *workflow*, not the model — lifecycle scoring is just a column on a Lakebase table. Redemptions steer toward perishable unsold inventory: liability burn-down and revenue recovery together.
+
+## Intent-First Experience
+The app opens with a problem prompt, not a dashboard; segment grids and liability charts appear only as the resolution of that intent.
+- *"Which members need attention this week?"*
+- *"Where is point liability building, and which redemptions burn it down against unsold inventory?"*
+
+The opening view must also make the value obvious to a first-time user who has not seen any deck: a one-line value statement rendered prominently (*"The best redemption delights a member and fills a night that would otherwise have gone unsold."*) and running value metrics that grow as launches go out — point liability released and unsold nights recovered to date.
+
+## Application Type
+Internal brand-level app connecting the **Loyalty Program Manager** with a Genie-powered assistant to triage segments, calibrate offers, and launch them — the CFO-facing liability number visible at every step. Replaces exporting CRM lists into spreadsheets and emailing finance about the liability line.
+
+## Brand Persona
+**Brand: Aurelia Collection** (premium, default) — a small luxury hotel group (12 properties, US + Caribbean) whose member program is **Aurelia Circle** (tiers: Member / Silver / Gold / Patron). Perception goals: understated, anticipatory, never pushy. Offer principles the app MUST enforce:
+- **Fewer, highly relevant offers** — max 3 active offers per member per day; the engine suppresses anything below a relevance threshold rather than filling slots.
+- **No spray-and-pray** — no program-wide blasts; every offer is tied to a named member context and at least one driving signal.
+- **Price with dignity** — redemptions and multipliers are framed as member privileges (*"a Gold redemption privilege"*, *"your Patron anniversary stay"*), never percent-off banners; floor prices respected.
+- **Tone** — concise, warm, concrete (*"An ocean-view night at Key West is held for your points this June"*), no exclamation marks, no urgency theatrics.
+
+*Swapping personas*: for a value/EDLP operator (e.g. an economy roadside chain), invert the dials — volume and price-lead messaging are fine, offer caps loosen, tone is friendly-direct — and efficiency per offer sent becomes the headline metric.
+
+## Key Personas
+- **Loyalty Program Manager** (primary): Brand-level owner of Aurelia Circle; opens the app every Monday to see which segments are drifting, where liability concentrates, and what launches this week. Owns the demo.
+- **CRM Analyst** (secondary): Defines lifecycle segment rules, watches response curves after each launch, tunes relevance thresholds.
+
+## Core Features Required
+The application must support three workflows the program manager runs in sequence each week:
+
+### 1. Triage Member Segments
+Resolves the opening intent: at-risk and opportunity segments, dominant driver inline.
+- Segments crossed by lifecycle stage (acquisition, engagement, at-risk, reactivation) and tier; sortable by expiring points, days since last stay, liability concentration
+- Drill-down to member: stay history, point balance, past offer responses
+- Example: *"Gold / at-risk: 214 members, median 41,000 points expiring within 90 days, no stay in 7 months; driver: post-holiday booking lapse"*
+
+### 2. Calibrate the Offer
+The assistant drafts a calibrated offer; the manager tunes it in place.
+- Genie agent proposes the perk, multiplier, or redemption special from `perk_catalog`, steering redemptions toward perishable unsold inventory
+- Every draft renders **"Why this offer"** plus an inline liability-impact check — points burned, USD released, inventory recovered — re-priced live as dials move
+- Example: *"For Gold / at-risk: a 30,000-point redemption special on unsold Riviera Maya suite nights, June 18–25. Projected: 6.4M points burned, 64,000 USD released, 38 unsold suite nights recovered."*
+
+### 3. Launch and Measure
+The execute step.
+- Approval writes a row to `offer_launches` (segment, terms, liability projection, launch window); delivery is simulated
+- Post-launch: redemptions, points burned versus projection, stays generated; the assistant answers *"How did the May reactivation special perform?"*
+- Example: *"Launch L-0147 (Silver / reactivation, double points on two-night stays): 96 of 480 redeemed, 2.1M points burned against 2.6M projected, 61 room nights generated"*
+
+## External Signals
+The app widens the data aperture beyond first-party history. Signals may be synthetic — *art of the possible* — but must visibly drive recommendations and appear in explanations.
+- **Local events** near member home cities — a design fair lifts propensity for Chicago-based members
+- **Weather** at bookable properties — a clear-sky window makes Caribbean redemption nights genuinely more attractive
+- **Competitor promotion intensity** — when nearby luxury flags promote heavily, hold tone steady; relevance over volume
+
+## Explainability Requirements
+Every recommendation renders a **"Why this offer"** explanation naming the member context, driving signal(s), brand rule, and liability impact. Example:
+
+> "Why this offer: Eleanor Voss (Gold, at-risk) has 52,000 points expiring 30 September and favors Aurelia Key West in shoulder season. Driving signals: clear weather at Key West June 19–24 and 11 unsold ocean-view nights. Brand rule: a Gold redemption privilege, one of at most three active offers. Liability impact: burns 35,000 points, releasing an estimated 350 USD while recovering an unsold night."
+
+## Data Entities (Lakebase tables, all in one schema)
+- `members` — member_id, name, tier_id, home_city, join_date, last_stay_date
+- `tiers` — tier_id, name (Member / Silver / Gold / Patron), qualifying_nights, base_point_multiplier
+- `point_balances` — member_id, points_available, points_expiring_90d, next_expiry_date, as_of_date
+- `lifecycle_segments` — segment_id, member_id, stage (acquisition / engagement / at_risk / reactivation), dominant_driver, score, scored_at (refreshed by a scheduled job; model out of scope)
+- `perk_catalog` — perk_id, name, tier_floor, point_cost, cash_cost_estimate_usd, inventory_linked, property_id (set for perishable-inventory perks)
+- `offer_launches` — launch_id, segment_id, offer_type (perk / multiplier / redemption_special), terms, projected_points_burned, projected_liability_released_usd, launch_window, status, created_at
+- `liability_snapshots` — snapshot_date, tier_id, points_outstanding, liability_usd, points_expiring_90d, burn_rate_30d
+- `brand_settings` — brand_id, max_offers_per_member_per_day, discount_floor_pct, tone_profile, relevance_threshold (persona dials as data, not prose)
+
+## Technical Considerations
+- **Lakebase** (Provisioned or Autoscaling) for all tables — single Postgres schema, no Lakehouse dependency
+- **Databricks App** hosting the studio UI and launch workflow
+- **Genie Space** over the Lakebase tables for read-side natural language; an **AI Agent** for write-side launch actions; **Mosaic AI** for any LLM calls inside the agent
+- A nightly job refreshes segments, snapshots, and synthetic signal tables
+- If using the Databricks Python SDK for Lakebase OAuth credentials, pin a recent version (e.g. `databricks-sdk>=0.81`) — app runtimes pre-install an older SDK lacking the Postgres credential API
+
+## Scope Constraints
+**Keep it simple** and focus only on the bare minimum to support one brand (Aurelia Collection), 2–3 properties, 60–80 synthetic Aurelia Circle members across the four tiers, and the three workflows above. We do not need real comms integration, payments, multi-tenant auth, or model training. Liability math is simple arithmetic over pre-populated synthetic data; single-tenant, one role, no SSO. Out of scope (phase-2): real email/push delivery (ESP/CDP), tier upgrade/downgrade automation, partner earn/burn (airline, card transfers), financial-grade liability accounting (breakage actuarials, audit trail), and multi-brand persona switching at runtime.',
+ 1, TRUE, current_timestamp(), current_timestamp(), current_user());
+
+-- =============================================================================
+-- TRAVEL & HOSPITALITY -- MARK CERTIFIED USE CASES
+-- =============================================================================
+-- The four Aurelia cards above plus the existing Autonomous Disruption Response
+-- (#200) are the certified set. Certified use cases pin to the top of their
+-- outcome-map column and render a "Certified" badge in the workshop flow and on
+-- the workflow steps.
+-- =============================================================================
+
+UPDATE ${catalog}.${schema}.usecase_descriptions
+SET is_certified = TRUE
+WHERE industry = 'travel'
+  AND use_case IN (
+    'autonomous_disruption_response',
+    'customer_360_audience_builder',
+    'cross_sell_upsell_optimization',
+    'personalized_ancillaries_offer',
+    'custom_loyalty_based_offers'
+  );
+
+-- =============================================================================
 -- SET path_type FOR SKILL ENTRIES
 -- =============================================================================
 -- All rows default to path_type='use_case' via column DEFAULT.
