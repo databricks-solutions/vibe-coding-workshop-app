@@ -128,7 +128,7 @@ Your ONLY task is to create a PRD document. Do NOT:
 
 You MUST:
 - Create ONLY the PRD document
-- First resolve <ARTIFACT_ROOT> = the workshop project root. On Cursor/Copilot that is your repo root; on Databricks Genie Code it is your user project root /Workspace/Users/<email>/<repo> (the repo is cloned separately at /Workspace/Users/<email>/.assistant/skills/<repo> for skill loading only) — NOT the page''s current working directory.
+- First resolve <ARTIFACT_ROOT> = the workshop project root. On Cursor/Copilot that is your repo root; on Databricks Genie Code it is your user project root /Workspace/Users/<email>/<repo> (your user project is a git clone of the workshop repo so bundles are recognized; the skill tree is copied to /Workspace/Users/<email>/.assistant/skills/<repo> for skill loading only) — NOT the page''s current working directory.
 - Save it to: <ARTIFACT_ROOT>/docs/design_prd.md
 - STOP after saving the PRD - do nothing else
 ```
@@ -174,7 +174,7 @@ STOP after saving. Do not generate any code, tables, APIs, or proceed with other
 
 Your output should be a complete, ready-to-use prompt that when pasted into Cursor or Copilot will:
 1. Create ONLY a simple Product Requirements Document
-2. Save it to `<ARTIFACT_ROOT>/docs/design_prd.md` (where `<ARTIFACT_ROOT>` is the workshop project root — resolve it first; on Databricks Genie Code that is your `/Workspace/Users/<email>/<repo>`, NOT the `.assistant/skills` clone; never assume the page''s working directory)
+2. Save it to `<ARTIFACT_ROOT>/docs/design_prd.md` (where `<ARTIFACT_ROOT>` is the workshop project root — resolve it first; on Databricks Genie Code that is your `/Workspace/Users/<email>/<repo>` (a git clone of the workshop repo), NOT the `.assistant/skills` copy; never assume the page''s working directory)
 3. NOT generate any code, scripts, table definitions, or API specifications
 
 CRITICAL: Your generated prompt MUST start with clear instructions telling the AI to ONLY create the PRD document and save it to `<ARTIFACT_ROOT>/docs/design_prd.md`, and to NOT do anything else. Focus on High Value workflows with Happy Path only.
@@ -194,7 +194,7 @@ The prompt should be focused and specific to {use_case_title}, incorporating the
 
 **Run this in your cloned Template Repository** (see Prerequisites in Step 0). These prompts assume you are working in that codebase with a coding assistant enabled.
 
-**Capture your artifact root first (client-aware).** This step writes a file *before* `bootstrap` runs, so invoke `vibecoding-state.resolve_root` to resolve `<ARTIFACT_ROOT>` — the workshop project root that relative artifact paths resolve against (it reads `artifact_root` from `## Environment Capabilities` if a state file already exists, otherwise detects the active client, `artifact_root` + `skills_install_root`; it is gate-free and writes no state file, but it ensures `<ARTIFACT_ROOT>` exists). Echo the rule to yourself: **artifacts land under `<ARTIFACT_ROOT>`** — your repo root on Cursor/Copilot, your user project root `/Workspace/Users/<email>/<repo>` on Databricks Genie Code (the repo is cloned separately at `/Workspace/Users/<email>/.assistant/skills/<repo>` for skill loading only) — **never the page''s current working directory** (on Genie Code the CWD is page-type-dependent). Ensure `<ARTIFACT_ROOT>` exists, then write the PRD to `<ARTIFACT_ROOT>/docs/design_prd.md`.
+**Capture your artifact root first (client-aware).** This step writes a file *before* `bootstrap` runs, so invoke `vibecoding-state.resolve_root` to resolve `<ARTIFACT_ROOT>` — the workshop project root that relative artifact paths resolve against (it reads `artifact_root` from `## Environment Capabilities` if a state file already exists, otherwise detects the active client, `artifact_root` + `skills_install_root`; it is gate-free and writes no state file, but it ensures `<ARTIFACT_ROOT>` exists). Echo the rule to yourself: **artifacts land under `<ARTIFACT_ROOT>`** — your repo root on Cursor/Copilot, your user project root `/Workspace/Users/<email>/<repo>` on Databricks Genie Code (your user project is a **git clone** of the workshop repo so bundles are recognized; the skill tree is **copied** to `/Workspace/Users/<email>/.assistant/skills/<repo>` for skill loading only) — **never the page''s current working directory** (on Genie Code the CWD is page-type-dependent). Ensure `<ARTIFACT_ROOT>` exists, then write the PRD to `<ARTIFACT_ROOT>/docs/design_prd.md`.
 
 ---
 
@@ -271,7 +271,7 @@ In addition, document the design with:
 'Figma UI Design',
 'Design a simple, clean user interface using Figma AI',
 4,
-'> **Artifact root (client-aware).** The PRD lives at `<ARTIFACT_ROOT>/docs/design_prd.md`, where `<ARTIFACT_ROOT>` is your workshop clone root (resolve via `vibecoding-state.resolve_root`). On Cursor/Copilot that is your repo root and the `@docs/design_prd.md` mention resolves there; on Databricks Genie Code open it under your user project root `/Workspace/Users/<email>/<repo>` (the repo is cloned separately at `/Workspace/Users/<email>/.assistant/skills/<repo>` for skill loading only) — never the page''s current working directory.
+'> **Artifact root (client-aware).** The PRD lives at `<ARTIFACT_ROOT>/docs/design_prd.md`, where `<ARTIFACT_ROOT>` is your workshop clone root (resolve via `vibecoding-state.resolve_root`). On Cursor/Copilot that is your repo root and the `@docs/design_prd.md` mention resolves there; on Databricks Genie Code open it under your user project root `/Workspace/Users/<email>/<repo>` (your user project is a **git clone** of the workshop repo so bundles are recognized; the skill tree is **copied** to `/Workspace/Users/<email>/.assistant/skills/<repo>` for skill loading only) — never the page''s current working directory.
 
 ## Steps to Apply
 
@@ -688,7 +688,7 @@ The steps below are the prescriptive runbook for those actions; follow them in o
 Run `skills/vibecoding-state` operation `enter` with `prompt_id: "cursor_copilot_ui_design"`. It writes and echoes the `## Environment Capabilities` block. Read these resolved values and use them literally throughout:
 
 - `client_context` = `genie_code`
-- `artifact_root` = your workshop project root (e.g. `/Workspace/Users/<your-email>/vibe-coding-workshop`) — where all generated bundles/apps/docs build; the repo itself is cloned at `/Workspace/Users/<your-email>/.assistant/skills/vibe-coding-workshop` (skills load from there via `skill_ref_root`, NOT from `artifact_root`)
+- `artifact_root` = your workshop project root (e.g. `/Workspace/Users/<your-email>/vibe-coding-workshop`), a **git clone** of the workshop repo so generated bundles/apps/docs build in a git working tree and are recognized as Databricks Asset Bundles; the skill tree is **copied** to `/Workspace/Users/<your-email>/.assistant/skills/vibe-coding-workshop` for discovery (skills load from there via `skill_ref_root`, NOT from `artifact_root`)
 - `skill_ref_root` = `skills/vibe-coding-workshop` (substitute your clone folder if you cloned somewhere other than `.assistant/skills/vibe-coding-workshop`)
 - `app_root` = `<artifact_root>/<app_name>` — the **self-contained AppKit app project** (e.g. `…/vibe-coding-workshop/jane-d-{use_case_slug}`), a TOP-LEVEL sibling of any `{user_schema_prefix}_<use_case_slug>_dab` bundle, NOT nested under `apps_lakebase/` and NOT the bare project root. Referred to below as `<APP_ROOT>`. `app.yaml`, `databricks.yml`, `server/`, `client/`, and `<APP_ROOT>/.vibecoding-state.md` all live here.
 - `app_deploy.verb` = `apps deploy` (gated) — used in step 05, NOT here.
@@ -1395,7 +1395,7 @@ Expected output (for schema query):
 'Table Metadata & Data Dictionary',
 'Extract table schema metadata from Databricks and save as CSV for data dictionary reference',
 8,
-'> **Artifact root (client-aware).** Resolve `<ARTIFACT_ROOT>` via `vibecoding-state.resolve_root` (it reads `artifact_root` from `## Environment Capabilities`, or detects the active client, `artifact_root` + `skills_install_root`) and write every artifact under it. On Cursor/Copilot that is your repo root; on Databricks Genie Code it is your user project root `/Workspace/Users/<email>/<repo>` (the repo is cloned separately at `/Workspace/Users/<email>/.assistant/skills/<repo>` for skill loading only) — never the page''s current working directory.
+'> **Artifact root (client-aware).** Resolve `<ARTIFACT_ROOT>` via `vibecoding-state.resolve_root` (it reads `artifact_root` from `## Environment Capabilities`, or detects the active client, `artifact_root` + `skills_install_root`) and write every artifact under it. On Cursor/Copilot that is your repo root; on Databricks Genie Code it is your user project root `/Workspace/Users/<email>/<repo>` (your user project is a **git clone** of the workshop repo so bundles are recognized; the skill tree is **copied** to `/Workspace/Users/<email>/.assistant/skills/<repo>` for skill loading only) — never the page''s current working directory.
 
 ## 1️⃣ How To Apply
 
@@ -1503,7 +1503,7 @@ Note: Bronze setup (Step 10) additionally requires per-table governance annotati
 'Table Metadata & Data Dictionary (Upload CSV)',
 'Upload an existing schema CSV to create the data dictionary for your project',
 8,
-'> **Artifact root (client-aware).** Resolve `<ARTIFACT_ROOT>` via `vibecoding-state.resolve_root` (it reads `artifact_root` from `## Environment Capabilities`, or detects the active client, `artifact_root` + `skills_install_root`) and write every artifact under it. On Cursor/Copilot that is your repo root; on Databricks Genie Code it is your user project root `/Workspace/Users/<email>/<repo>` (the repo is cloned separately at `/Workspace/Users/<email>/.assistant/skills/<repo>` for skill loading only) — never the page''s current working directory.
+'> **Artifact root (client-aware).** Resolve `<ARTIFACT_ROOT>` via `vibecoding-state.resolve_root` (it reads `artifact_root` from `## Environment Capabilities`, or detects the active client, `artifact_root` + `skills_install_root`) and write every artifact under it. On Cursor/Copilot that is your repo root; on Databricks Genie Code it is your user project root `/Workspace/Users/<email>/<repo>` (your user project is a **git clone** of the workshop repo so bundles are recognized; the skill tree is **copied** to `/Workspace/Users/<email>/.assistant/skills/<repo>` for skill loading only) — never the page''s current working directory.
 
 ## 1️⃣ How To Apply
 
@@ -1610,7 +1610,7 @@ Note: Bronze setup (Step 10) additionally requires per-table governance annotati
 'Table Metadata & Data Dictionary (Design from PRD)',
 'Design table schema from your PRD — for when you don''t have existing tables or a CSV',
 8,
-'> **Artifact root (client-aware).** Resolve `<ARTIFACT_ROOT>` via `vibecoding-state.resolve_root` (it reads `artifact_root` from `## Environment Capabilities`, or detects the active client, `artifact_root` + `skills_install_root`) and write every artifact under it. On Cursor/Copilot that is your repo root; on Databricks Genie Code it is your user project root `/Workspace/Users/<email>/<repo>` (the repo is cloned separately at `/Workspace/Users/<email>/.assistant/skills/<repo>` for skill loading only) — never the page''s current working directory.
+'> **Artifact root (client-aware).** Resolve `<ARTIFACT_ROOT>` via `vibecoding-state.resolve_root` (it reads `artifact_root` from `## Environment Capabilities`, or detects the active client, `artifact_root` + `skills_install_root`) and write every artifact under it. On Cursor/Copilot that is your repo root; on Databricks Genie Code it is your user project root `/Workspace/Users/<email>/<repo>` (your user project is a **git clone** of the workshop repo so bundles are recognized; the skill tree is **copied** to `/Workspace/Users/<email>/.assistant/skills/<repo>` for skill loading only) — never the page''s current working directory.
 
 ## How To Apply
 
@@ -1707,7 +1707,7 @@ Missing comments, incorrect types, or invalid rows will cascade into errors down
 'Analyze Silver Metadata (Upload CSV)',
 'Upload an existing Silver layer schema CSV to create the data dictionary for your Genie Accelerator project',
 8,
-'> **Artifact root (client-aware).** Resolve `<ARTIFACT_ROOT>` via `vibecoding-state.resolve_root` (it reads `artifact_root` from `## Environment Capabilities`, or detects the active client, `artifact_root` + `skills_install_root`) and write every artifact under it. On Cursor/Copilot that is your repo root; on Databricks Genie Code it is your user project root `/Workspace/Users/<email>/<repo>` (the repo is cloned separately at `/Workspace/Users/<email>/.assistant/skills/<repo>` for skill loading only) — never the page''s current working directory.
+'> **Artifact root (client-aware).** Resolve `<ARTIFACT_ROOT>` via `vibecoding-state.resolve_root` (it reads `artifact_root` from `## Environment Capabilities`, or detects the active client, `artifact_root` + `skills_install_root`) and write every artifact under it. On Cursor/Copilot that is your repo root; on Databricks Genie Code it is your user project root `/Workspace/Users/<email>/<repo>` (your user project is a **git clone** of the workshop repo so bundles are recognized; the skill tree is **copied** to `/Workspace/Users/<email>/.assistant/skills/<repo>` for skill loading only) — never the page''s current working directory.
 
 ## 1️⃣ How To Apply
 
@@ -1780,7 +1780,7 @@ The orchestrator skill will automatically load its worker skills for merge patte
 'Gold Layer Design (PRD-aligned)',
 'Design Gold layer using project skills with YAML definitions and Mermaid ERD',
 9,
-'> **Artifact root (client-aware).** Resolve the data-product bundle root via `vibecoding-state` (`dp_bundle_root` in `## Environment Capabilities`, = `<artifact_root>/{user_schema_prefix}_<use_case_slug>_dab`) and write **every Gold-design artifact under `{user_schema_prefix}_<use_case_slug>_dab/gold_layer_design/`** — NOT the bare repo/project root. This is the same dedicated bundle folder the Bronze→Silver→Gold pipeline builds into, so the Gold pipeline (Step 12) can `sync` `gold_layer_design/yaml/**` from right beside the bundle. The shape is identical on every client: on Cursor/Copilot it is `<repo-root>/{user_schema_prefix}_<use_case_slug>_dab/`; on Databricks Genie Code it is `<project-root>/{user_schema_prefix}_<use_case_slug>_dab/` (your user project root `/Workspace/Users/<email>/<repo>`, NOT the skills clone) — never the page''s current working directory.
+'> **Artifact root (client-aware).** Resolve the data-product bundle root via `vibecoding-state` (`dp_bundle_root` in `## Environment Capabilities`, = `<artifact_root>/{user_schema_prefix}_<use_case_slug>_dab`) and write **every Gold-design artifact under `{user_schema_prefix}_<use_case_slug>_dab/gold_layer_design/`** — NOT the bare repo/project root. This is the same dedicated bundle folder the Bronze→Silver→Gold pipeline builds into, so the Gold pipeline (Step 12) can `sync` `gold_layer_design/yaml/**` from right beside the bundle. The shape is identical on every client: on Cursor/Copilot it is `<repo-root>/{user_schema_prefix}_<use_case_slug>_dab/`; on Databricks Genie Code it is `<project-root>/{user_schema_prefix}_<use_case_slug>_dab/` (your user project root `/Workspace/Users/<email>/<repo>`, a git clone of the workshop repo, NOT the skills copy) — never the page''s current working directory.
 
 ## 1️⃣ How To Apply
 
@@ -2087,7 +2087,7 @@ The steps below are the prescriptive runbook for those actions; follow them in o
 Run `skills/vibecoding-state` operation `enter` (params: `prompt_id: "gold_layer_design"`). This is the **FIRST data-product step**, so `enter` **bootstrap-creates** the canonical live state file at `<dp_bundle_root>/.vibecoding-state.md` from the template if absent (copying Workshop Choices from the prior `example/…` bootstrap file). Read these resolved values and use them literally throughout:
 
 - `client_context` = `genie_code`
-- `artifact_root` = your workshop project root (e.g. `/Workspace/Users/<your-email>/vibe-coding-workshop`) — where all generated bundles/apps/docs build; the repo itself is cloned at `/Workspace/Users/<your-email>/.assistant/skills/vibe-coding-workshop` (skills load from there via `skill_ref_root`, NOT from `artifact_root`)
+- `artifact_root` = your workshop project root (e.g. `/Workspace/Users/<your-email>/vibe-coding-workshop`), a **git clone** of the workshop repo so generated bundles/apps/docs build in a git working tree and are recognized as Databricks Asset Bundles; the skill tree is **copied** to `/Workspace/Users/<your-email>/.assistant/skills/vibe-coding-workshop` for discovery (skills load from there via `skill_ref_root`, NOT from `artifact_root`)
 - `skill_ref_root` = `skills/vibe-coding-workshop` (substitute your clone folder if you cloned somewhere other than `.assistant/skills/vibe-coding-workshop`)
 - `dp_bundle_root` = `<artifact_root>/{user_schema_prefix}_<use_case_slug>_dab` — the **self-contained data-product Asset Bundle project** the whole pipeline builds into (e.g. `…/vibe-coding-workshop/{user_schema_prefix}_booking_app_dab`). Referred to below as `<DP_BUNDLE_ROOT>`. This step writes the design INTO `<DP_BUNDLE_ROOT>/gold_layer_design/`. The folder may not exist yet (the Bronze step creates the bundle''s `databricks.yml` later) — that''s fine, writing the files creates it. Use the SAME `{user_schema_prefix}_<use_case_slug>_dab` name the Lakehouse steps use, so the design and the bundle stay in one folder.
 
@@ -2379,7 +2379,6 @@ When you paste the prompt, the AI reads `@data_product_accelerator/skills/bronze
 ├── databricks.yml                      # Bundle configuration (updated)
 ├── src/
 │   └── {project}_bronze/
-│       ├── __init__.py
 │       └── clone_samples.py            # Code to copy sample data
 └── resources/
     └── bronze/
@@ -2438,7 +2437,7 @@ The steps below are the prescriptive runbook for those actions; follow them in o
 Run `skills/vibecoding-state` operation `enter` with `prompt_id: "bronze_layer_creation"`. It writes and echoes the `## Environment Capabilities` block. Read these resolved values and use them literally throughout:
 
 - `client_context` = `genie_code`
-- `artifact_root` = your workshop project root (e.g. `/Workspace/Users/<your-email>/vibe-coding-workshop`) — where all generated bundles/apps/docs build; the repo itself is cloned at `/Workspace/Users/<your-email>/.assistant/skills/vibe-coding-workshop` (skills load from there via `skill_ref_root`, NOT from `artifact_root`)
+- `artifact_root` = your workshop project root (e.g. `/Workspace/Users/<your-email>/vibe-coding-workshop`), a **git clone** of the workshop repo so generated bundles/apps/docs build in a git working tree and are recognized as Databricks Asset Bundles; the skill tree is **copied** to `/Workspace/Users/<your-email>/.assistant/skills/vibe-coding-workshop` for discovery (skills load from there via `skill_ref_root`, NOT from `artifact_root`)
 - `skill_ref_root` = `skills/vibe-coding-workshop` (substitute your clone folder if you cloned somewhere other than `.assistant/skills/vibe-coding-workshop`)
 - `dp_bundle_root` = `<artifact_root>/{user_schema_prefix}_{use_case_slug}_dab` — the **self-contained Databricks Asset Bundle project** for the whole data-product pipeline (e.g. `…/vibe-coding-workshop/{user_schema_prefix}_booking_app_dab`). This — NOT the project root — is where you write `databricks.yml`, `src/`, and `resources/`, and it is the **page you deploy from**. Referred to below as `<DP_BUNDLE_ROOT>`.
 - deploy verb = `bundle deploy --target dev`, run through the `runDatabricksCli` tool
@@ -3077,7 +3076,7 @@ The steps below are the prescriptive runbook for those actions; follow them in o
 Run `skills/vibecoding-state` operation `enter` with `prompt_id: "silver_layer_sdp"` and `require_prior_gate: {prompt_id: "bronze_layer_creation", gate: "Bronze layer live"}`. It writes and echoes the `## Environment Capabilities` block. Read these resolved values and use them literally throughout:
 
 - `client_context` = `genie_code`
-- `artifact_root` = your workshop project root (e.g. `/Workspace/Users/<your-email>/vibe-coding-workshop`) — where all generated bundles/apps/docs build; the repo itself is cloned at `/Workspace/Users/<your-email>/.assistant/skills/vibe-coding-workshop` (skills load from there via `skill_ref_root`, NOT from `artifact_root`)
+- `artifact_root` = your workshop project root (e.g. `/Workspace/Users/<your-email>/vibe-coding-workshop`), a **git clone** of the workshop repo so generated bundles/apps/docs build in a git working tree and are recognized as Databricks Asset Bundles; the skill tree is **copied** to `/Workspace/Users/<your-email>/.assistant/skills/vibe-coding-workshop` for discovery (skills load from there via `skill_ref_root`, NOT from `artifact_root`)
 - `skill_ref_root` = `skills/vibe-coding-workshop` (substitute your clone folder if you cloned somewhere other than `.assistant/skills/vibe-coding-workshop`)
 - `dp_bundle_root` = `<artifact_root>/{user_schema_prefix}_{use_case_slug}_dab` — the **self-contained Databricks Asset Bundle project** for the whole data-product pipeline (e.g. `…/vibe-coding-workshop/{user_schema_prefix}_booking_app_dab`). This is the SAME bundle you created for Bronze — extend it; do NOT make a new one. It is where `databricks.yml`, `src/`, and `resources/` live, and the **page you deploy from**. Referred to below as `<DP_BUNDLE_ROOT>`.
 - deploy verb = `bundle deploy --target dev`, run through the `runDatabricksCli` tool
@@ -3724,7 +3723,7 @@ The steps below are the prescriptive runbook for those actions; follow them in o
 Run `skills/vibecoding-state` operation `enter` with `prompt_id: "gold_layer_pipeline"` and `require_prior_gate: {prompt_id: "silver_layer_sdp", gate: "Silver layer live"}`. It writes and echoes the `## Environment Capabilities` block. Read these resolved values and use them literally throughout:
 
 - `client_context` = `genie_code`
-- `artifact_root` = your workshop project root (e.g. `/Workspace/Users/<your-email>/vibe-coding-workshop`) — where all generated bundles/apps/docs build; the repo itself is cloned at `/Workspace/Users/<your-email>/.assistant/skills/vibe-coding-workshop` (skills load from there via `skill_ref_root`, NOT from `artifact_root`)
+- `artifact_root` = your workshop project root (e.g. `/Workspace/Users/<your-email>/vibe-coding-workshop`), a **git clone** of the workshop repo so generated bundles/apps/docs build in a git working tree and are recognized as Databricks Asset Bundles; the skill tree is **copied** to `/Workspace/Users/<your-email>/.assistant/skills/vibe-coding-workshop` for discovery (skills load from there via `skill_ref_root`, NOT from `artifact_root`)
 - `skill_ref_root` = `skills/vibe-coding-workshop` (substitute your clone folder if you cloned somewhere other than `.assistant/skills/vibe-coding-workshop`)
 - `dp_bundle_root` = `<artifact_root>/{user_schema_prefix}_{use_case_slug}_dab` — the **SAME self-contained Asset Bundle** you built for Bronze + Silver (e.g. `…/vibe-coding-workshop/{user_schema_prefix}_booking_app_dab`). EXTEND it; do NOT make a new one. `databricks.yml`, `src/`, and `resources/` live here, and it is the **page you deploy from**. Referred to below as `<DP_BUNDLE_ROOT>`. Your Gold design YAML (from step 9) lives at `<DP_BUNDLE_ROOT>/gold_layer_design/yaml/` — read it from there.
 - deploy verb = `bundle deploy --target dev`, run through the `runDatabricksCli` tool
@@ -3827,7 +3826,7 @@ If a PRD exists at @docs/design_prd.md, reference it for business requirements, 
 'Create Use-Case Plan',
 'Generate implementation plans for operationalizing use cases with supporting artifacts',
 13,
-'> **Artifact root (client-aware).** Resolve the data-product bundle root via `vibecoding-state` (`dp_bundle_root` in `## Environment Capabilities`, = `<artifact_root>/{user_schema_prefix}_<use_case_slug>_dab`) and write **every plan document and manifest under `{user_schema_prefix}_<use_case_slug>_dab/plans/`** — NOT the bare repo/project root. This is the same dedicated bundle folder the Lakehouse + Gold-design steps build into, so the downstream deploy steps find `plans/manifests/*.yaml` right beside the bundle. The shape is identical on every client: on Cursor/Copilot it is `<repo-root>/{user_schema_prefix}_<use_case_slug>_dab/`; on Databricks Genie Code it is `<project-root>/{user_schema_prefix}_<use_case_slug>_dab/` (your user project root `/Workspace/Users/<email>/<repo>`, NOT the skills clone) — never the page''s current working directory.
+'> **Artifact root (client-aware).** Resolve the data-product bundle root via `vibecoding-state` (`dp_bundle_root` in `## Environment Capabilities`, = `<artifact_root>/{user_schema_prefix}_<use_case_slug>_dab`) and write **every plan document and manifest under `{user_schema_prefix}_<use_case_slug>_dab/plans/`** — NOT the bare repo/project root. This is the same dedicated bundle folder the Lakehouse + Gold-design steps build into, so the downstream deploy steps find `plans/manifests/*.yaml` right beside the bundle. The shape is identical on every client: on Cursor/Copilot it is `<repo-root>/{user_schema_prefix}_<use_case_slug>_dab/`; on Databricks Genie Code it is `<project-root>/{user_schema_prefix}_<use_case_slug>_dab/` (your user project root `/Workspace/Users/<email>/<repo>`, a git clone of the workshop repo, NOT the skills copy) — never the page''s current working directory.
 
 ## 1️⃣ How To Apply
 
@@ -4268,7 +4267,7 @@ The steps below are the prescriptive runbook for those actions; follow them in o
 Run `skills/vibecoding-state` operation `enter` (params: `prompt_id: "usecase_plan"`) — it locates the canonical live state file at `<dp_bundle_root>/.vibecoding-state.md` (bootstrap-created by the first data-product step). Read these resolved values and use them literally throughout:
 
 - `client_context` = `genie_code`
-- `artifact_root` = your workshop project root (e.g. `/Workspace/Users/<your-email>/vibe-coding-workshop`) — where all generated bundles/apps/docs build; the repo itself is cloned at `/Workspace/Users/<your-email>/.assistant/skills/vibe-coding-workshop` (skills load from there via `skill_ref_root`, NOT from `artifact_root`)
+- `artifact_root` = your workshop project root (e.g. `/Workspace/Users/<your-email>/vibe-coding-workshop`), a **git clone** of the workshop repo so generated bundles/apps/docs build in a git working tree and are recognized as Databricks Asset Bundles; the skill tree is **copied** to `/Workspace/Users/<your-email>/.assistant/skills/vibe-coding-workshop` for discovery (skills load from there via `skill_ref_root`, NOT from `artifact_root`)
 - `skill_ref_root` = `skills/vibe-coding-workshop` (substitute your clone folder if you cloned somewhere other than `.assistant/skills/vibe-coding-workshop`)
 - `dp_bundle_root` = `<artifact_root>/{user_schema_prefix}_<use_case_slug>_dab` — the **self-contained data-product Asset Bundle project** the whole pipeline builds into (e.g. `…/vibe-coding-workshop/{user_schema_prefix}_booking_app_dab`). Referred to below as `<DP_BUNDLE_ROOT>`. This step writes the plans INTO `<DP_BUNDLE_ROOT>/plans/`. Your Gold design (from step 9) lives at `<DP_BUNDLE_ROOT>/gold_layer_design/`; an optional PRD (from the PRD step) lives at `<artifact_root>/docs/design_prd.md`.
 
@@ -4872,7 +4871,7 @@ This fork is **hybrid** with a dashboard-specific twist: AI/BI dashboards are AU
 Run `skills/vibecoding-state` operation `enter` with `prompt_id: "aibi_dashboard"` and `require_prior_gate: {prompt_id: "gold_layer_pipeline", gate: "Gold layer live"}`. It writes and echoes the `## Environment Capabilities` block. Read these resolved values and use them literally throughout:
 
 - `client_context` = `genie_code`
-- `artifact_root` = your workshop project root (e.g. `/Workspace/Users/<your-email>/vibe-coding-workshop`) — where all generated bundles/apps/docs build; the repo itself is cloned at `/Workspace/Users/<your-email>/.assistant/skills/vibe-coding-workshop` (skills load from there via `skill_ref_root`, NOT from `artifact_root`)
+- `artifact_root` = your workshop project root (e.g. `/Workspace/Users/<your-email>/vibe-coding-workshop`), a **git clone** of the workshop repo so generated bundles/apps/docs build in a git working tree and are recognized as Databricks Asset Bundles; the skill tree is **copied** to `/Workspace/Users/<your-email>/.assistant/skills/vibe-coding-workshop` for discovery (skills load from there via `skill_ref_root`, NOT from `artifact_root`)
 - `skill_ref_root` = `skills/vibe-coding-workshop` (substitute your clone folder if you cloned somewhere other than `.assistant/skills/vibe-coding-workshop`)
 - `dp_bundle_root` = `<artifact_root>/{user_schema_prefix}_{use_case_slug}_dab` — the **SAME self-contained Asset Bundle** you built for Bronze + Silver + Gold (+ semantic layer) (e.g. `…/{user_schema_prefix}_booking_app_dab`). EXTEND it; do NOT make a new one. It is the **page you deploy from**. Referred to below as `<DP_BUNDLE_ROOT>`. Your dashboard plan lives at `<DP_BUNDLE_ROOT>/plans/phase1-addendum-1.5-aibi-dashboards.md`, the resolved names at `<DP_BUNDLE_ROOT>/plans/deploy-checkpoint.md`, and Gold design YAML at `<DP_BUNDLE_ROOT>/gold_layer_design/yaml/`.
 - deploy verb = `bundle deploy --target dev`, run through the `runDatabricksCli` tool
@@ -5600,7 +5599,7 @@ This fork is **hybrid**: author the definition file FIRST, apply it with native 
 Run `skills/vibecoding-state` operation `enter` with `prompt_id: "genie_space"` and `require_prior_gate: {prompt_id: "gold_layer_pipeline", gate: "Gold layer live"}`. It writes and echoes the `## Environment Capabilities` block. Read these resolved values and use them literally throughout:
 
 - `client_context` = `genie_code`
-- `artifact_root` = your workshop project root (e.g. `/Workspace/Users/<your-email>/vibe-coding-workshop`) — where all generated bundles/apps/docs build; the repo itself is cloned at `/Workspace/Users/<your-email>/.assistant/skills/vibe-coding-workshop` (skills load from there via `skill_ref_root`, NOT from `artifact_root`)
+- `artifact_root` = your workshop project root (e.g. `/Workspace/Users/<your-email>/vibe-coding-workshop`), a **git clone** of the workshop repo so generated bundles/apps/docs build in a git working tree and are recognized as Databricks Asset Bundles; the skill tree is **copied** to `/Workspace/Users/<your-email>/.assistant/skills/vibe-coding-workshop` for discovery (skills load from there via `skill_ref_root`, NOT from `artifact_root`)
 - `skill_ref_root` = `skills/vibe-coding-workshop` (substitute your clone folder if you cloned somewhere other than `.assistant/skills/vibe-coding-workshop`)
 - `dp_bundle_root` = `<artifact_root>/{user_schema_prefix}_{use_case_slug}_dab` — the **SAME self-contained Asset Bundle** you built for Bronze + Silver + Gold (e.g. `…/{user_schema_prefix}_booking_app_dab`). EXTEND it; do NOT make a new one. `databricks.yml`, `src/`, `resources/` live here, and it is the **page you deploy from**. Referred to below as `<DP_BUNDLE_ROOT>`. Your plan manifest lives at `<DP_BUNDLE_ROOT>/plans/manifests/semantic-layer-manifest.yaml`, plan addendums at `<DP_BUNDLE_ROOT>/plans/`, and Gold design YAML at `<DP_BUNDLE_ROOT>/gold_layer_design/yaml/`.
 - deploy verb = `bundle deploy --target dev`, run through the `runDatabricksCli` tool
@@ -5878,7 +5877,7 @@ The steps below are the prescriptive runbook for those actions; follow them in o
 Run `skills/vibecoding-state` operation `enter` with `prompt_id: "agent_framework"` and `require_prior_gate: {prompt_id: "genie_space", gate: "Genie Space live"}`. It writes and echoes the `## Environment Capabilities` block. Read these resolved values and use them literally throughout:
 
 - `client_context` = `genie_code`
-- `artifact_root` = your workshop project root (e.g. `/Workspace/Users/<your-email>/vibe-coding-workshop`) — where all generated bundles/apps/docs build; the repo itself is cloned at `/Workspace/Users/<your-email>/.assistant/skills/vibe-coding-workshop` (skills load from there via `skill_ref_root`, NOT from `artifact_root`)
+- `artifact_root` = your workshop project root (e.g. `/Workspace/Users/<your-email>/vibe-coding-workshop`), a **git clone** of the workshop repo so generated bundles/apps/docs build in a git working tree and are recognized as Databricks Asset Bundles; the skill tree is **copied** to `/Workspace/Users/<your-email>/.assistant/skills/vibe-coding-workshop` for discovery (skills load from there via `skill_ref_root`, NOT from `artifact_root`)
 - `skill_ref_root` = `skills/vibe-coding-workshop` (substitute your clone folder if you cloned somewhere other than `.assistant/skills/vibe-coding-workshop`)
 - `dp_bundle_root` = `<artifact_root>/{user_schema_prefix}_<use_case_slug>_dab` — the **SAME self-contained Asset Bundle** you built for Bronze/Silver/Gold/semantic (e.g. `…/vibe-coding-workshop/{user_schema_prefix}_booking_app_dab`). EXTEND it; do NOT make a new one. This is the **page you deploy from**. Referred to below as `<DP_BUNDLE_ROOT>`.
 - Workspace: `{workspace_url}`
@@ -7362,7 +7361,7 @@ The steps below are the prescriptive runbook for those actions; follow them in o
 Run `skills/vibecoding-state` operation `enter` with `prompt_id: "deploy_databricks_app"`. Read the resolved `## Environment Capabilities` values and use them literally:
 
 - `client_context` = `genie_code`
-- `artifact_root` = your workshop project root (e.g. `/Workspace/Users/<your-email>/vibe-coding-workshop`) — where all generated bundles/apps/docs build; the repo itself is cloned at `/Workspace/Users/<your-email>/.assistant/skills/vibe-coding-workshop` (skills load from there via `skill_ref_root`, NOT from `artifact_root`)
+- `artifact_root` = your workshop project root (e.g. `/Workspace/Users/<your-email>/vibe-coding-workshop`), a **git clone** of the workshop repo so generated bundles/apps/docs build in a git working tree and are recognized as Databricks Asset Bundles; the skill tree is **copied** to `/Workspace/Users/<your-email>/.assistant/skills/vibe-coding-workshop` for discovery (skills load from there via `skill_ref_root`, NOT from `artifact_root`)
 - `skill_ref_root` = `skills/vibe-coding-workshop` (substitute your clone folder if different)
 - `app_root` = `<artifact_root>/<app_name>` — the **self-contained AppKit app project** authored in step 04 (a TOP-LEVEL sibling of any `{user_schema_prefix}_<use_case_slug>_dab` bundle, NOT under `apps_lakebase/`). Referred to below as `<APP_ROOT>`; `<APP_ROOT>/.vibecoding-state.md`, `app.yaml`, `databricks.yml`, `server/`, and `client/` all live here.
 - `app_deploy.verb` = `apps deploy` — the gated deploy verb; on Genie Code it resolves to the SDK SNAPSHOT call (CLI deploy is the IDE path).
@@ -7741,7 +7740,7 @@ Known warehouse ID: <YOUR_WAREHOUSE_ID> (get via: databricks warehouses list --o
 'Analyze Silver Metadata',
 'Extract and analyze comprehensive table/column metadata from Silver layer schema including comments, constraints, and tags',
 22,
-'> **Artifact root (client-aware).** Resolve `<ARTIFACT_ROOT>` via `vibecoding-state.resolve_root` (it reads `artifact_root` from `## Environment Capabilities`, or detects the active client, `artifact_root` + `skills_install_root`) and write every artifact under it. On Cursor/Copilot that is your repo root; on Databricks Genie Code it is your user project root `/Workspace/Users/<email>/<repo>` (the repo is cloned separately at `/Workspace/Users/<email>/.assistant/skills/<repo>` for skill loading only) — never the page''s current working directory.
+'> **Artifact root (client-aware).** Resolve `<ARTIFACT_ROOT>` via `vibecoding-state.resolve_root` (it reads `artifact_root` from `## Environment Capabilities`, or detects the active client, `artifact_root` + `skills_install_root`) and write every artifact under it. On Cursor/Copilot that is your repo root; on Databricks Genie Code it is your user project root `/Workspace/Users/<email>/<repo>` (your user project is a **git clone** of the workshop repo so bundles are recognized; the skill tree is **copied** to `/Workspace/Users/<email>/.assistant/skills/<repo>` for skill loading only) — never the page''s current working directory.
 
 ## 1️⃣ How To Apply
 
@@ -7862,7 +7861,7 @@ This CSV drives the Genie Accelerator pipeline:
 'Analyze Silver Metadata (Design from PRD)',
 'Design silver layer schema from your PRD — for when you don''t have existing Silver tables or a CSV',
 22,
-'> **Artifact root (client-aware).** Resolve `<ARTIFACT_ROOT>` via `vibecoding-state.resolve_root` (it reads `artifact_root` from `## Environment Capabilities`, or detects the active client, `artifact_root` + `skills_install_root`) and write every artifact under it. On Cursor/Copilot that is your repo root; on Databricks Genie Code it is your user project root `/Workspace/Users/<email>/<repo>` (the repo is cloned separately at `/Workspace/Users/<email>/.assistant/skills/<repo>` for skill loading only) — never the page''s current working directory.
+'> **Artifact root (client-aware).** Resolve `<ARTIFACT_ROOT>` via `vibecoding-state.resolve_root` (it reads `artifact_root` from `## Environment Capabilities`, or detects the active client, `artifact_root` + `skills_install_root`) and write every artifact under it. On Cursor/Copilot that is your repo root; on Databricks Genie Code it is your user project root `/Workspace/Users/<email>/<repo>` (your user project is a **git clone** of the workshop repo so bundles are recognized; the skill tree is **copied** to `/Workspace/Users/<email>/.assistant/skills/<repo>` for skill loading only) — never the page''s current working directory.
 
 ## How To Apply
 
@@ -8291,7 +8290,7 @@ The steps below are the prescriptive runbook for those actions; follow them in o
 Run `skills/vibecoding-state` operation `enter` with `prompt_id: "deploy_lakehouse_assets"`. It writes and echoes the `## Environment Capabilities` block. Read these resolved values and use them literally throughout:
 
 - `client_context` = `genie_code`
-- `artifact_root` = your workshop project root (e.g. `/Workspace/Users/<your-email>/vibe-coding-workshop`) — where all generated bundles/apps/docs build; the repo itself is cloned at `/Workspace/Users/<your-email>/.assistant/skills/vibe-coding-workshop` (skills load from there via `skill_ref_root`, NOT from `artifact_root`)
+- `artifact_root` = your workshop project root (e.g. `/Workspace/Users/<your-email>/vibe-coding-workshop`), a **git clone** of the workshop repo so generated bundles/apps/docs build in a git working tree and are recognized as Databricks Asset Bundles; the skill tree is **copied** to `/Workspace/Users/<your-email>/.assistant/skills/vibe-coding-workshop` for discovery (skills load from there via `skill_ref_root`, NOT from `artifact_root`)
 - `skill_ref_root` = `skills/vibe-coding-workshop` (substitute your clone folder if you cloned somewhere other than `.assistant/skills/vibe-coding-workshop`)
 - `dp_bundle_root` = `<artifact_root>/{user_schema_prefix}_{use_case_slug}_dab` — the SAME self-contained Asset Bundle you built across Bronze + Silver + Gold (e.g. `…/vibe-coding-workshop/{user_schema_prefix}_booking_app_dab`). Its `databricks.yml` already defines all 5 layer resources. This is the **page you deploy from**. Referred to below as `<DP_BUNDLE_ROOT>`.
 - deploy verb = `bundle deploy --target dev`, run through the `runDatabricksCli` tool
@@ -8667,7 +8666,7 @@ This is the deployment checkpoint of the **hybrid** semantic-layer forks. The ar
 Run `skills/vibecoding-state` operation `enter` with `prompt_id: "deploy_di_assets"` and `require_prior_gate: {prompt_id: "deploy_lakehouse_assets", gate: "Lakehouse assets deployed"}`. It writes and echoes the `## Environment Capabilities` block. Read these resolved values and use them literally throughout:
 
 - `client_context` = `genie_code`
-- `artifact_root` = your workshop project root (e.g. `/Workspace/Users/<your-email>/vibe-coding-workshop`) — where all generated bundles/apps/docs build; the repo itself is cloned at `/Workspace/Users/<your-email>/.assistant/skills/vibe-coding-workshop` (skills load from there via `skill_ref_root`, NOT from `artifact_root`)
+- `artifact_root` = your workshop project root (e.g. `/Workspace/Users/<your-email>/vibe-coding-workshop`), a **git clone** of the workshop repo so generated bundles/apps/docs build in a git working tree and are recognized as Databricks Asset Bundles; the skill tree is **copied** to `/Workspace/Users/<your-email>/.assistant/skills/vibe-coding-workshop` for discovery (skills load from there via `skill_ref_root`, NOT from `artifact_root`)
 - `skill_ref_root` = `skills/vibe-coding-workshop` (substitute your clone folder if you cloned somewhere other than `.assistant/skills/vibe-coding-workshop`)
 - `dp_bundle_root` = `<artifact_root>/{user_schema_prefix}_{use_case_slug}_dab` — the **SAME self-contained Asset Bundle** that holds the Lakehouse + semantic-layer + dashboard resources you authored in the prior steps (e.g. `…/{user_schema_prefix}_booking_app_dab`). EXTEND/DEPLOY it; do NOT make a new one. It is the **page you deploy from**. Referred to below as `<DP_BUNDLE_ROOT>`. The resolved concrete names (job names, MV/TVF names, `semantic_warehouse_id`, workspace paths) live at `<DP_BUNDLE_ROOT>/plans/deploy-checkpoint.md`; Gold design YAML at `<DP_BUNDLE_ROOT>/gold_layer_design/yaml/`.
 - deploy verb = `bundle deploy --target dev`, run through the `runDatabricksCli` tool
@@ -9361,13 +9360,13 @@ VALUES
 - **Workspace URL**: {workspace_url}
 - **User Email**: {created_by}
 
-> **All other values must be discovered at runtime** — read `databricks.yml` (root and app-level) to extract catalog names, schema names, app names, Lakebase project IDs, and warehouse references. Do NOT hardcode resource names.
+> **All other values must be discovered at runtime** — read each bundle''s `databricks.yml` (the data-product bundle at `dp_bundle_root` and the app bundle at `app_root`, both top-level subdirs of `<artifact_root>`) to extract catalog names, schema names, app names, Lakebase project IDs, and warehouse references. Do NOT hardcode resource names.
 
 ---
 
 ## IMPORTANT: Safety Rules
 
-1. **Discover config first** — read `databricks.yml` at the repo root and any `apps_lakebase/*/databricks.yml` to extract actual resource names (catalog, schemas, app name, Lakebase project ID, warehouse).
+1. **Discover config first** — read each bundle''s `databricks.yml` (the data-product bundle at `<ARTIFACT_ROOT>/{user_schema_prefix}_<use_case_slug>_dab/` and the app bundle at `<ARTIFACT_ROOT>/<APP_NAME>/`) to extract actual resource names (catalog, schemas, app name, Lakebase project ID, warehouse).
 2. **Set the correct CLI profile** — match the workspace URL against `~/.databrickscfg` profiles and `export DATABRICKS_CONFIG_PROFILE=<matching_profile>` before any `databricks api` calls.
 3. **Inventory first** — before deleting anything, list every resource that will be affected and print a summary.
 4. **Confirm with the user** — after showing the inventory, ask for explicit confirmation before proceeding.
@@ -9395,7 +9394,7 @@ databricks current-user me --profile {databricks_cli_profile} --output json
 
 ### 0b. Read Bundle Configs
 
-Read `databricks.yml` at the repo root to extract:
+Read the **data-product bundle''s** `databricks.yml` at `<ARTIFACT_ROOT>/{user_schema_prefix}_<use_case_slug>_dab/databricks.yml` (the `dp_bundle_root`) to extract:
 - `variables.catalog.default` → the **Lakehouse catalog** (e.g. `mkim_fevm_azure_classic`)
 - `variables.bronze_schema.default` → bronze schema name
 - `variables.silver_schema.default` → silver schema name
@@ -9404,7 +9403,7 @@ Read `databricks.yml` at the repo root to extract:
 - `variables.source_catalog.default` → source catalog (may equal the main catalog)
 - Warehouse lookup name → resolve to a warehouse ID
 
-Read `apps_lakebase/*/databricks.yml` to extract:
+Read the **app bundle''s** `databricks.yml` at `<ARTIFACT_ROOT>/<APP_NAME>/databricks.yml` (the `app_root`) to extract:
 - `resources.apps.app.name` → the **Databricks App name**
 - `resources.postgres_projects.*.project_id` → the **Lakebase project ID**
 - `resources.apps.app.resources[].postgres.branch` → confirms the Lakebase project path
@@ -9584,7 +9583,7 @@ databricks api post /api/2.0/sql/statements --json @/tmp/sql_stmt.json
 
 ### Phase 7: Lakebase Project
 
-The project ID comes from `apps_lakebase/*/databricks.yml` → `resources.postgres_projects.*.project_id`.
+The project ID comes from the app bundle''s `databricks.yml` at `<ARTIFACT_ROOT>/<APP_NAME>/` → `resources.postgres_projects.*.project_id`.
 
 **Autoscaling mode** (dedicated project — safe to delete entirely):
 ```bash
@@ -9602,7 +9601,7 @@ If unsure, check whether the project name matches the app name (autoscaling) or 
 
 ### Phase 8: Databricks App
 
-The app name comes from `apps_lakebase/*/databricks.yml` → `resources.apps.app.name`.
+The app name comes from the app bundle''s `databricks.yml` at `<ARTIFACT_ROOT>/<APP_NAME>/` → `resources.apps.app.name`.
 
 ```bash
 # Stop the app first (ignore error if already stopped)
@@ -9619,15 +9618,15 @@ databricks apps delete <APP_NAME>
 
 ### Phase 9: Databricks Asset Bundles (DAB)
 
-Destroy bundles in **both** locations — the root data-product bundle and the app-level bundle:
+Destroy bundles in **both** dedicated bundle dirs — the data-product bundle (`dp_bundle_root`) and the app bundle (`app_root`). Each is a top-level subdir of `<artifact_root>` (the project root / git clone); the bare `<artifact_root>` root itself has NO `databricks.yml`:
 
 ```bash
-# Root bundle (data product jobs, pipelines, workspace files)
-cd <REPO_ROOT>
+# Data-product bundle (Bronze/Silver/Gold jobs, pipelines, workspace files) — dp_bundle_root
+cd <ARTIFACT_ROOT>/{user_schema_prefix}_<use_case_slug>_dab
 databricks bundle destroy --auto-approve
 
-# App bundle (app deployment, Lakebase project)
-cd <REPO_ROOT>/apps_lakebase/<APP_DIR>
+# App bundle (app deployment, Lakebase project) — app_root
+cd <ARTIFACT_ROOT>/<APP_NAME>
 databricks bundle destroy --auto-approve
 ```
 
@@ -9707,7 +9706,7 @@ This is required — `databricks api` calls will silently hit the wrong workspac
 Copy the cleanup prompt into your AI coding assistant from the project root.
 
 ### Step 3: Let the Assistant Run Discovery and Present the Inventory
-The assistant will execute Step 0 (discover the CLI profile, read `databricks.yml` at the repo root and under `apps_lakebase/<APP_DIR>/`, find a warehouse, resolve the Lakebase UC catalog), then sweep every phase and print a full inventory of resources that will be deleted.
+The assistant will execute Step 0 (discover the CLI profile, read each bundle''s `databricks.yml` — the data-product bundle at `<ARTIFACT_ROOT>/{user_schema_prefix}_<use_case_slug>_dab/` and the app bundle at `<ARTIFACT_ROOT>/<APP_NAME>/`, find a warehouse, resolve the Lakebase UC catalog), then sweep every phase and print a full inventory of resources that will be deleted.
 
 ### Step 4: Review and Confirm
 Review the inventory carefully. If the list looks correct, confirm to proceed. The assistant will delete resources in dependency order (jobs/pipelines → dashboards → Genie → serving → schemas → Lakebase UC catalog → Lakebase project → app → DAB bundles).
@@ -9723,7 +9722,7 @@ Use these links to confirm resources have been removed:
 - **Genie** page — workshop Genie spaces should be deleted
 
 ### Step 6: DAB Bundles
-Both bundles are destroyed automatically in Phase 9 — the root bundle (`databricks.yml` in the repo root) and the app bundle (`apps_lakebase/<APP_DIR>/databricks.yml`). No manual step is required.',
+Both bundles are destroyed automatically in Phase 9 — the data-product bundle (`<ARTIFACT_ROOT>/{user_schema_prefix}_<use_case_slug>_dab/databricks.yml`) and the app bundle (`<ARTIFACT_ROOT>/<APP_NAME>/databricks.yml`). No manual step is required.',
 '### Resources Removed
 - [ ] All workshop jobs deleted
 - [ ] All workshop DLT pipelines deleted
@@ -9734,8 +9733,8 @@ Both bundles are destroyed automatically in Phase 9 — the root bundle (`databr
 - [ ] Lakebase UC catalog dropped (CASCADE)
 - [ ] Lakebase project deleted (autoscaling) **or** workshop schema dropped (provisioned)
 - [ ] Databricks App stopped and deleted
-- [ ] Root DAB bundle destroyed (`<REPO_ROOT>`)
-- [ ] App DAB bundle destroyed (`<REPO_ROOT>/apps_lakebase/<APP_DIR>`)
+- [ ] Data-product DAB bundle destroyed (`<ARTIFACT_ROOT>/{user_schema_prefix}_<use_case_slug>_dab`)
+- [ ] App DAB bundle destroyed (`<ARTIFACT_ROOT>/<APP_NAME>`)
 - [ ] Skill validation assets deleted (if created)
 
 ### Verification
@@ -11937,7 +11936,7 @@ Poll readiness with `w.serving_endpoints.get(ka_endpoint_name)` (available) unti
 Run `skills/vibecoding-state` operation `enter` with `prompt_id: "knowledge_assistant_create"` and `require_prior_gate: [{prompt_id: "uc_resources_foundation", gate: "UC resources ready"}, {prompt_id: "agent_tool_selection", gate: "Agent tool plan ready"}]`. Read these resolved values and use them literally:
 
 - `client_context` = `genie_code`
-- `artifact_root` = your workshop project root (e.g. `/Workspace/Users/<your-email>/vibe-coding-workshop`) — where all generated bundles/apps/docs build; the repo itself is cloned at `/Workspace/Users/<your-email>/.assistant/skills/vibe-coding-workshop` (skills load from there via `skill_ref_root`, NOT from `artifact_root`)
+- `artifact_root` = your workshop project root (e.g. `/Workspace/Users/<your-email>/vibe-coding-workshop`), a **git clone** of the workshop repo so generated bundles/apps/docs build in a git working tree and are recognized as Databricks Asset Bundles; the skill tree is **copied** to `/Workspace/Users/<your-email>/.assistant/skills/vibe-coding-workshop` for discovery (skills load from there via `skill_ref_root`, NOT from `artifact_root`)
 - `skill_ref_root` = `skills/vibe-coding-workshop` (substitute your clone folder if different)
 - `agent_app_root` = `<artifact_root>/{agent_app_name}` — the top-level Track A agent app dir (the `docs/agent_tool_plan.yaml` and `docs/agent_spec.yaml` this prompt reads live under it once the agent app exists; pre-clone, read them from where `agent_tool_selection` wrote them under `artifact_root`).
 - Workspace: `{workspace_url}`
@@ -12177,7 +12176,7 @@ The steps below are the prescriptive runbook for those actions; follow them in o
 Run `skills/vibecoding-state` operation `enter` with `prompt_id: "track_a_agent_app_clone_framework"` and `require_prior_gate: [{prompt_id: "mlflow_agent_tracing_uc", gate: "Tracing live; UC OTel tables ready"}, {prompt_id: "agent_tool_selection", gate: "Agent tool plan ready"}]`. Read these resolved values and use them literally:
 
 - `client_context` = `genie_code`
-- `artifact_root` = your workshop project root (e.g. `/Workspace/Users/<your-email>/vibe-coding-workshop`) — where all generated bundles/apps/docs build; the repo itself is cloned at `/Workspace/Users/<your-email>/.assistant/skills/vibe-coding-workshop` (skills load from there via `skill_ref_root`, NOT from `artifact_root`)
+- `artifact_root` = your workshop project root (e.g. `/Workspace/Users/<your-email>/vibe-coding-workshop`), a **git clone** of the workshop repo so generated bundles/apps/docs build in a git working tree and are recognized as Databricks Asset Bundles; the skill tree is **copied** to `/Workspace/Users/<your-email>/.assistant/skills/vibe-coding-workshop` for discovery (skills load from there via `skill_ref_root`, NOT from `artifact_root`)
 - `skill_ref_root` = `skills/vibe-coding-workshop` (substitute your clone folder if different)
 - `agent_app_root` = `<artifact_root>/{agent_app_name}` — the self-contained Track A agent app project dir, a TOP-LEVEL sibling of `<APP_ROOT>` and `{user_schema_prefix}_<use_case_slug>_dab`, NOT under `apps_lakebase/`. Referred to below as `<AGENT_APP_ROOT>`. `app.yaml`, `pyproject.toml`, `databricks.yml`, `server/`, and `<AGENT_APP_ROOT>/.vibecoding-state.md` all live here.
 - `mlflow_experiment_path` = `{mlflow_experiment_path}`
@@ -12420,7 +12419,7 @@ The steps below are the prescriptive runbook for those actions; follow them in o
 Run `skills/vibecoding-state` operation `enter` with `prompt_id: "track_a_agent_ka_genie_tools"` and `require_prior_gate: {prompt_id: "track_a_agent_app_clone_framework", gate: "Agent framework live"}`. Read these resolved values and use them literally:
 
 - `client_context` = `genie_code`
-- `artifact_root` = your workshop project root (e.g. `/Workspace/Users/<your-email>/vibe-coding-workshop`) — where all generated bundles/apps/docs build; the repo itself is cloned at `/Workspace/Users/<your-email>/.assistant/skills/vibe-coding-workshop` (skills load from there via `skill_ref_root`, NOT from `artifact_root`)
+- `artifact_root` = your workshop project root (e.g. `/Workspace/Users/<your-email>/vibe-coding-workshop`), a **git clone** of the workshop repo so generated bundles/apps/docs build in a git working tree and are recognized as Databricks Asset Bundles; the skill tree is **copied** to `/Workspace/Users/<your-email>/.assistant/skills/vibe-coding-workshop` for discovery (skills load from there via `skill_ref_root`, NOT from `artifact_root`)
 - `skill_ref_root` = `skills/vibe-coding-workshop` (substitute your clone folder if different)
 - `agent_app_root` = `<artifact_root>/{agent_app_name}` (the top-level Track A agent app dir from prompt 43). Referred to below as `<AGENT_APP_ROOT>`.
 - `default_warehouse` = `{default_warehouse}`
@@ -12632,7 +12631,7 @@ The steps below are the prescriptive runbook for those actions; follow them in o
 Run `skills/vibecoding-state` operation `enter` with `prompt_id: "track_a_agent_auth_memory"` and `require_prior_gate: {prompt_id: "track_a_agent_ka_genie_tools", gate: "Tools wired"}`. Read these resolved values and use them literally:
 
 - `client_context` = `genie_code`
-- `artifact_root` = your workshop project root (e.g. `/Workspace/Users/<your-email>/vibe-coding-workshop`) — where all generated bundles/apps/docs build; the repo itself is cloned at `/Workspace/Users/<your-email>/.assistant/skills/vibe-coding-workshop` (skills load from there via `skill_ref_root`, NOT from `artifact_root`)
+- `artifact_root` = your workshop project root (e.g. `/Workspace/Users/<your-email>/vibe-coding-workshop`), a **git clone** of the workshop repo so generated bundles/apps/docs build in a git working tree and are recognized as Databricks Asset Bundles; the skill tree is **copied** to `/Workspace/Users/<your-email>/.assistant/skills/vibe-coding-workshop` for discovery (skills load from there via `skill_ref_root`, NOT from `artifact_root`)
 - `skill_ref_root` = `skills/vibe-coding-workshop` (substitute your clone folder if different)
 - `agent_app_root` = `<artifact_root>/{agent_app_name}` (the top-level Track A agent app dir). Referred to below as `<AGENT_APP_ROOT>`.
 - `lakebase_instance` = `{lakebase_instance}`; `lakebase_database` = `{lakebase_database}`
@@ -12861,7 +12860,7 @@ The steps below are the prescriptive runbook for those actions; follow them in o
 Run `skills/vibecoding-state` operation `enter` with `prompt_id: "track_a_agent_eval_deploy"` and `require_prior_gate: {prompt_id: "track_a_agent_auth_memory", gate: "Auth + Memory verified"}`. Read these resolved values and use them literally:
 
 - `client_context` = `genie_code`
-- `artifact_root` = your workshop project root (e.g. `/Workspace/Users/<your-email>/vibe-coding-workshop`) — where all generated bundles/apps/docs build; the repo itself is cloned at `/Workspace/Users/<your-email>/.assistant/skills/vibe-coding-workshop` (skills load from there via `skill_ref_root`, NOT from `artifact_root`)
+- `artifact_root` = your workshop project root (e.g. `/Workspace/Users/<your-email>/vibe-coding-workshop`), a **git clone** of the workshop repo so generated bundles/apps/docs build in a git working tree and are recognized as Databricks Asset Bundles; the skill tree is **copied** to `/Workspace/Users/<your-email>/.assistant/skills/vibe-coding-workshop` for discovery (skills load from there via `skill_ref_root`, NOT from `artifact_root`)
 - `skill_ref_root` = `skills/vibe-coding-workshop` (substitute your clone folder if different)
 - `agent_app_root` = `<artifact_root>/{agent_app_name}` (the top-level Track A agent app dir). Referred to below as `<AGENT_APP_ROOT>`. Its `databricks.yml` lives here, so this folder is the **`bundle deploy` page-context root**.
 - `mlflow_experiment_path` = `{mlflow_experiment_path}`
@@ -13084,7 +13083,7 @@ The steps below are the prescriptive runbook for those actions; follow them in o
 Run `skills/vibecoding-state` operation `enter` with `prompt_id: "appkit_agent_app_proxy_chat"` and `require_prior_gate: {prompt_id: "track_a_agent_eval_deploy", gate: "Agent App RUNNING"}`. Read these resolved values and use them literally:
 
 - `client_context` = `genie_code`
-- `artifact_root` = your workshop project root (e.g. `/Workspace/Users/<your-email>/vibe-coding-workshop`) — where all generated bundles/apps/docs build; the repo itself is cloned at `/Workspace/Users/<your-email>/.assistant/skills/vibe-coding-workshop` (skills load from there via `skill_ref_root`, NOT from `artifact_root`)
+- `artifact_root` = your workshop project root (e.g. `/Workspace/Users/<your-email>/vibe-coding-workshop`), a **git clone** of the workshop repo so generated bundles/apps/docs build in a git working tree and are recognized as Databricks Asset Bundles; the skill tree is **copied** to `/Workspace/Users/<your-email>/.assistant/skills/vibe-coding-workshop` for discovery (skills load from there via `skill_ref_root`, NOT from `artifact_root`)
 - `skill_ref_root` = `skills/vibe-coding-workshop` (substitute your clone folder if different)
 - `app_root` = `<artifact_root>/{app_name}` — the top-level AppKit app dir (NOT under `apps_lakebase/`). Referred to below as `<APP_ROOT>`.
 - `app_deploy.verb` = `apps deploy` (resolves to the SDK SNAPSHOT call on Genie Code)
@@ -13323,7 +13322,7 @@ The steps below are the prescriptive runbook for those actions; follow them in o
 Run `skills/vibecoding-state` operation `enter` with `prompt_id: "appkit_chat_feedback_mlflow"` and `require_prior_gate: {prompt_id: "appkit_agent_app_proxy_chat", gate: "AppKit ↔ Agent App proxy live"}`. Read these resolved values and use them literally:
 
 - `client_context` = `genie_code`
-- `artifact_root` = your workshop project root (e.g. `/Workspace/Users/<your-email>/vibe-coding-workshop`) — where all generated bundles/apps/docs build; the repo itself is cloned at `/Workspace/Users/<your-email>/.assistant/skills/vibe-coding-workshop` (skills load from there via `skill_ref_root`, NOT from `artifact_root`)
+- `artifact_root` = your workshop project root (e.g. `/Workspace/Users/<your-email>/vibe-coding-workshop`), a **git clone** of the workshop repo so generated bundles/apps/docs build in a git working tree and are recognized as Databricks Asset Bundles; the skill tree is **copied** to `/Workspace/Users/<your-email>/.assistant/skills/vibe-coding-workshop` for discovery (skills load from there via `skill_ref_root`, NOT from `artifact_root`)
 - `skill_ref_root` = `skills/vibe-coding-workshop` (substitute your clone folder if different)
 - `app_root` = `<artifact_root>/{app_name}` — the top-level AppKit app dir. Referred to below as `<APP_ROOT>`.
 - `agent_app_root` = `<artifact_root>/{agent_app_name}` — the top-level Track A agent app dir. Referred to below as `<AGENT_APP_ROOT>`.
@@ -14520,7 +14519,7 @@ The steps below are the prescriptive runbook for those actions; follow them in o
 Run `skills/vibecoding-state` operation `enter` with `prompt_id: "mlflow_gateway_and_deployment"`, `require_prior_gate: {prompt_id: "mlflow_logged_model_uc_registration", gate: "@champion set"}`, and `hard_assert: {var: "signoff_decision", equals: "APPROVED"}`. Read these resolved values and use them literally:
 
 - `client_context` = `genie_code`
-- `artifact_root` = your workshop project root (e.g. `/Workspace/Users/<your-email>/vibe-coding-workshop`) — where all generated bundles/apps/docs build; the repo itself is cloned at `/Workspace/Users/<your-email>/.assistant/skills/vibe-coding-workshop` (skills load from there via `skill_ref_root`, NOT from `artifact_root`)
+- `artifact_root` = your workshop project root (e.g. `/Workspace/Users/<your-email>/vibe-coding-workshop`), a **git clone** of the workshop repo so generated bundles/apps/docs build in a git working tree and are recognized as Databricks Asset Bundles; the skill tree is **copied** to `/Workspace/Users/<your-email>/.assistant/skills/vibe-coding-workshop` for discovery (skills load from there via `skill_ref_root`, NOT from `artifact_root`)
 - `skill_ref_root` = `skills/vibe-coding-workshop` (substitute your clone folder if different)
 - `agent_app_root` = `<artifact_root>/{agent_app_name}` — the top-level Track A agent app dir; its `databricks.yml` makes it the `bundle deploy` page-context root. Referred to below as `<AGENT_APP_ROOT>`.
 - `bundle_deploy.verb` = `bundle deploy --target dev` (run via `runDatabricksCli` from the bundle-editor page)
@@ -14593,7 +14592,7 @@ The steps below are the prescriptive runbook for those actions; follow them in o
 Run `skills/vibecoding-state` operation `enter` with `prompt_id: "mlflow_production_monitoring_and_debugging"`, `require_prior_gate: {prompt_id: "mlflow_gateway_and_deployment", gate: "Optional gateway route configured or skipped"}`. Read these resolved values and use them literally:
 
 - `client_context` = `genie_code`
-- `artifact_root` = your workshop project root (e.g. `/Workspace/Users/<your-email>/vibe-coding-workshop`) — where all generated bundles/apps/docs build; the repo itself is cloned at `/Workspace/Users/<your-email>/.assistant/skills/vibe-coding-workshop` (skills load from there via `skill_ref_root`, NOT from `artifact_root`)
+- `artifact_root` = your workshop project root (e.g. `/Workspace/Users/<your-email>/vibe-coding-workshop`), a **git clone** of the workshop repo so generated bundles/apps/docs build in a git working tree and are recognized as Databricks Asset Bundles; the skill tree is **copied** to `/Workspace/Users/<your-email>/.assistant/skills/vibe-coding-workshop` for discovery (skills load from there via `skill_ref_root`, NOT from `artifact_root`)
 - `skill_ref_root` = `skills/vibe-coding-workshop` (substitute your clone folder if different)
 - `agent_app_root` = `<artifact_root>/{agent_app_name}` — the top-level Track A agent app dir; its `databricks.yml` makes it the `bundle deploy` page-context root. Referred to below as `<AGENT_APP_ROOT>`.
 - `mlflow_experiment_path` = `{mlflow_experiment_path}` (set this before any SDK scorer call)
@@ -14675,7 +14674,7 @@ The steps below are the prescriptive runbook for those actions; follow them in o
 Run `skills/vibecoding-state` operation `enter` with `prompt_id: "setup_lakebase"`. Read the resolved `## Environment Capabilities` values and use them literally:
 
 - `client_context` = `genie_code`
-- `artifact_root` = your workshop project root (e.g. `/Workspace/Users/<your-email>/vibe-coding-workshop`) — where all generated bundles/apps/docs build; the repo itself is cloned at `/Workspace/Users/<your-email>/.assistant/skills/vibe-coding-workshop` (skills load from there via `skill_ref_root`, NOT from `artifact_root`)
+- `artifact_root` = your workshop project root (e.g. `/Workspace/Users/<your-email>/vibe-coding-workshop`), a **git clone** of the workshop repo so generated bundles/apps/docs build in a git working tree and are recognized as Databricks Asset Bundles; the skill tree is **copied** to `/Workspace/Users/<your-email>/.assistant/skills/vibe-coding-workshop` for discovery (skills load from there via `skill_ref_root`, NOT from `artifact_root`)
 - `skill_ref_root` = `skills/vibe-coding-workshop` (substitute your clone folder if different)
 - `app_root` = `<artifact_root>/<app_name>` — the self-contained AppKit app project authored in the build step (a TOP-LEVEL sibling of any `{user_schema_prefix}_<use_case_slug>_dab` bundle, NOT under `apps_lakebase/`). Referred to below as `<APP_ROOT>`; `<APP_ROOT>/.vibecoding-state.md`, `app.yaml`, `databricks.yml`, `server/`, and `client/` all live here.
 
@@ -14794,7 +14793,7 @@ The steps below are the prescriptive runbook for those actions; follow them in o
 Run `skills/vibecoding-state` operation `enter` with `prompt_id: "wire_ui_lakebase"`. Read the resolved `## Environment Capabilities` values and use them literally:
 
 - `client_context` = `genie_code`
-- `artifact_root` = your workshop project root (e.g. `/Workspace/Users/<your-email>/vibe-coding-workshop`) — where all generated bundles/apps/docs build; the repo itself is cloned at `/Workspace/Users/<your-email>/.assistant/skills/vibe-coding-workshop` (skills load from there via `skill_ref_root`, NOT from `artifact_root`)
+- `artifact_root` = your workshop project root (e.g. `/Workspace/Users/<your-email>/vibe-coding-workshop`), a **git clone** of the workshop repo so generated bundles/apps/docs build in a git working tree and are recognized as Databricks Asset Bundles; the skill tree is **copied** to `/Workspace/Users/<your-email>/.assistant/skills/vibe-coding-workshop` for discovery (skills load from there via `skill_ref_root`, NOT from `artifact_root`)
 - `skill_ref_root` = `skills/vibe-coding-workshop` (substitute your clone folder if different)
 - `app_root` = `<artifact_root>/<app_name>` — the self-contained AppKit app project (a TOP-LEVEL sibling of any `<use_case_slug>_dab` bundle, NOT under `apps_lakebase/`). Referred to below as `<APP_ROOT>`; `<APP_ROOT>/.vibecoding-state.md`, `app.yaml`, `databricks.yml`, `server/`, and `client/` all live here.
 
@@ -14914,7 +14913,7 @@ The steps below are the prescriptive runbook for those actions; follow them in o
 Run `skills/vibecoding-state` operation `enter` with `prompt_id: "activation_table_design"` and `require_prior_gate: {prompt_id: "gold_layer_pipeline", gate: "Gold layer live"}` (or the latest upstream Gold/semantic gate your track defines). It writes and echoes the `## Environment Capabilities` block. Read these resolved values and use them literally throughout:
 
 - `client_context` = `genie_code`
-- `artifact_root` = your workshop project root (e.g. `/Workspace/Users/<your-email>/vibe-coding-workshop`) — where all generated bundles/apps/docs build; the repo itself is cloned at `/Workspace/Users/<your-email>/.assistant/skills/vibe-coding-workshop` (skills load from there via `skill_ref_root`, NOT from `artifact_root`)
+- `artifact_root` = your workshop project root (e.g. `/Workspace/Users/<your-email>/vibe-coding-workshop`), a **git clone** of the workshop repo so generated bundles/apps/docs build in a git working tree and are recognized as Databricks Asset Bundles; the skill tree is **copied** to `/Workspace/Users/<your-email>/.assistant/skills/vibe-coding-workshop` for discovery (skills load from there via `skill_ref_root`, NOT from `artifact_root`)
 - `skill_ref_root` = `skills/vibe-coding-workshop` (substitute your clone folder if you cloned somewhere other than `.assistant/skills/vibe-coding-workshop`)
 - `dp_bundle_root` = `<artifact_root>/{user_schema_prefix}_{use_case_slug}_dab` — the **self-contained Databricks Asset Bundle project** for the whole data-product pipeline (e.g. `…/vibe-coding-workshop/{user_schema_prefix}_booking_app_dab`). This is the SAME bundle you created for Bronze/Silver/Gold — **extend it; do NOT make a new one.** It is where `databricks.yml`, `src/`, and `resources/` live, and the **page you deploy from**. Referred to below as `<DP_BUNDLE_ROOT>`.
 - `user_app_name` = your per-student app name, which is ALSO the Lakebase `project_id` (one project per student).
@@ -15072,7 +15071,7 @@ The steps below are the prescriptive runbook for those actions; follow them in o
 Run `skills/vibecoding-state` operation `enter` with `prompt_id: "activation_reverse_sync"` and `require_prior_gate: {prompt_id: "activation_table_design", gate: "Synced tables planned"}`. Read the resolved `## Environment Capabilities` values and use them literally:
 
 - `client_context` = `genie_code`
-- `artifact_root` = your workshop project root (e.g. `/Workspace/Users/<your-email>/vibe-coding-workshop`) — where all generated bundles/apps/docs build; the repo itself is cloned at `/Workspace/Users/<your-email>/.assistant/skills/vibe-coding-workshop` (skills load from there via `skill_ref_root`, NOT from `artifact_root`)
+- `artifact_root` = your workshop project root (e.g. `/Workspace/Users/<your-email>/vibe-coding-workshop`), a **git clone** of the workshop repo so generated bundles/apps/docs build in a git working tree and are recognized as Databricks Asset Bundles; the skill tree is **copied** to `/Workspace/Users/<your-email>/.assistant/skills/vibe-coding-workshop` for discovery (skills load from there via `skill_ref_root`, NOT from `artifact_root`)
 - `skill_ref_root` = `skills/vibe-coding-workshop`
 - `dp_bundle_root` = `<artifact_root>/{user_schema_prefix}_{use_case_slug}_dab` — the data-product bundle whose `.vibecoding-state.md` is the activation track''s live state file (the SAME one Step 32 wrote). Referred to below as `<DP_BUNDLE_ROOT>`.
 
@@ -15232,7 +15231,7 @@ The steps below are the prescriptive runbook for those actions; follow them in o
 Run `skills/vibecoding-state` operation `enter` with `prompt_id: "activation_app_design"` and `require_prior_gate: {prompt_id: "activation_reverse_sync", gate: "Synced tables live"}`. Read the resolved `## Environment Capabilities` values and use them literally:
 
 - `client_context` = `genie_code`
-- `artifact_root` = your workshop project root (e.g. `/Workspace/Users/<your-email>/vibe-coding-workshop`) — where all generated bundles/apps/docs build; the repo itself is cloned at `/Workspace/Users/<your-email>/.assistant/skills/vibe-coding-workshop` (skills load from there via `skill_ref_root`, NOT from `artifact_root`)
+- `artifact_root` = your workshop project root (e.g. `/Workspace/Users/<your-email>/vibe-coding-workshop`), a **git clone** of the workshop repo so generated bundles/apps/docs build in a git working tree and are recognized as Databricks Asset Bundles; the skill tree is **copied** to `/Workspace/Users/<your-email>/.assistant/skills/vibe-coding-workshop` for discovery (skills load from there via `skill_ref_root`, NOT from `artifact_root`)
 - `skill_ref_root` = `skills/vibe-coding-workshop` (substitute your clone folder if different)
 - `app_root` = `<artifact_root>/<app_name>` — the self-contained AppKit app project from Chapter 1 (a TOP-LEVEL sibling of any `{use_case_slug}_dab` bundle, NOT under `apps_lakebase/`). Referred to below as `<APP_ROOT>`; `<APP_ROOT>/.vibecoding-state.md`, `app.yaml`, `server/`, and `client/` all live here when an app already exists.
 
@@ -15322,7 +15321,7 @@ The steps below are the prescriptive runbook for those actions; follow them in o
 Run `skills/vibecoding-state` operation `enter` with `prompt_id: "activation_build_wire"` and `require_prior_gate: {prompt_id: "activation_app_design", gate: "Analytics app designed"}`. Read the resolved `## Environment Capabilities` values and use them literally:
 
 - `client_context` = `genie_code`
-- `artifact_root` = your workshop project root (e.g. `/Workspace/Users/<your-email>/vibe-coding-workshop`) — where all generated bundles/apps/docs build; the repo itself is cloned at `/Workspace/Users/<your-email>/.assistant/skills/vibe-coding-workshop` (skills load from there via `skill_ref_root`, NOT from `artifact_root`)
+- `artifact_root` = your workshop project root (e.g. `/Workspace/Users/<your-email>/vibe-coding-workshop`), a **git clone** of the workshop repo so generated bundles/apps/docs build in a git working tree and are recognized as Databricks Asset Bundles; the skill tree is **copied** to `/Workspace/Users/<your-email>/.assistant/skills/vibe-coding-workshop` for discovery (skills load from there via `skill_ref_root`, NOT from `artifact_root`)
 - `skill_ref_root` = `skills/vibe-coding-workshop` (substitute your clone folder if different)
 - `app_root` = `<artifact_root>/<app_name>` — the self-contained AppKit app project (a TOP-LEVEL sibling of any `{use_case_slug}_dab` bundle, NOT under `apps_lakebase/`). Referred to below as `<APP_ROOT>`; `<APP_ROOT>/.vibecoding-state.md`, `app.yaml`, `databricks.yml`, `server/`, and `client/` all live here. This is the `app_dir` recorded at exit.
 
@@ -15482,7 +15481,7 @@ The steps below are the prescriptive runbook for those actions; follow them in o
 Run `skills/vibecoding-state` operation `enter` with `prompt_id: "activation_wire_lakebase"` and `require_prior_gate: {prompt_id: "activation_build_wire", gate: "Analytics app built (mock)"}`. Read the resolved `## Environment Capabilities` values and use them literally:
 
 - `client_context` = `genie_code`
-- `artifact_root` = your workshop project root (e.g. `/Workspace/Users/<your-email>/vibe-coding-workshop`) — where all generated bundles/apps/docs build; the repo itself is cloned at `/Workspace/Users/<your-email>/.assistant/skills/vibe-coding-workshop` (skills load from there via `skill_ref_root`, NOT from `artifact_root`)
+- `artifact_root` = your workshop project root (e.g. `/Workspace/Users/<your-email>/vibe-coding-workshop`), a **git clone** of the workshop repo so generated bundles/apps/docs build in a git working tree and are recognized as Databricks Asset Bundles; the skill tree is **copied** to `/Workspace/Users/<your-email>/.assistant/skills/vibe-coding-workshop` for discovery (skills load from there via `skill_ref_root`, NOT from `artifact_root`)
 - `skill_ref_root` = `skills/vibe-coding-workshop` (substitute your clone folder if different)
 - `app_root` = `<artifact_root>/<app_name>` — the self-contained AppKit app project (a TOP-LEVEL sibling of any `{use_case_slug}_dab` bundle, NOT under `apps_lakebase/`). Referred to below as `<APP_ROOT>`; `<APP_ROOT>/.vibecoding-state.md`, `app.yaml`, `databricks.yml`, `server/`, and `client/` all live here.
 
@@ -15624,7 +15623,7 @@ The steps below are the prescriptive runbook for those actions; follow them in o
 Run `skills/vibecoding-state` operation `enter` with `prompt_id: "activation_deploy_validate"` and `require_prior_gate: {prompt_id: "activation_wire_lakebase", gate: "Analytics app live data (local)"}`. Read the resolved `## Environment Capabilities` values and use them literally:
 
 - `client_context` = `genie_code`
-- `artifact_root` = your workshop project root (e.g. `/Workspace/Users/<your-email>/vibe-coding-workshop`) — where all generated bundles/apps/docs build; the repo itself is cloned at `/Workspace/Users/<your-email>/.assistant/skills/vibe-coding-workshop` (skills load from there via `skill_ref_root`, NOT from `artifact_root`)
+- `artifact_root` = your workshop project root (e.g. `/Workspace/Users/<your-email>/vibe-coding-workshop`), a **git clone** of the workshop repo so generated bundles/apps/docs build in a git working tree and are recognized as Databricks Asset Bundles; the skill tree is **copied** to `/Workspace/Users/<your-email>/.assistant/skills/vibe-coding-workshop` for discovery (skills load from there via `skill_ref_root`, NOT from `artifact_root`)
 - `skill_ref_root` = `skills/vibe-coding-workshop` (substitute your clone folder if different)
 - `app_root` = `<artifact_root>/<app_name>` — the self-contained AppKit app project (a TOP-LEVEL sibling of any `{use_case_slug}_dab` bundle, NOT under `apps_lakebase/`). Referred to below as `<APP_ROOT>`; `<APP_ROOT>/.vibecoding-state.md`, `app.yaml`, `databricks.yml`, `server/`, and `client/` all live here.
 - `app_deploy.verb` = `apps deploy` — the gated deploy verb; on Genie Code it resolves to the SDK SNAPSHOT call (CLI deploy is the IDE path).
@@ -15799,7 +15798,7 @@ The steps below are the prescriptive runbook for those actions; follow them in o
 Run `skills/vibecoding-state` operation `enter` with `prompt_id: "wire_ui_agent"` and `require_prior_gate: {prompt_id: "agent_framework", gate: "Agent endpoint READY"}`. Read the resolved `## Environment Capabilities` values and use them literally:
 
 - `client_context` = `genie_code`
-- `artifact_root` = your workshop project root (e.g. `/Workspace/Users/<your-email>/vibe-coding-workshop`) — where all generated bundles/apps/docs build; the repo itself is cloned at `/Workspace/Users/<your-email>/.assistant/skills/vibe-coding-workshop` (skills load from there via `skill_ref_root`, NOT from `artifact_root`)
+- `artifact_root` = your workshop project root (e.g. `/Workspace/Users/<your-email>/vibe-coding-workshop`), a **git clone** of the workshop repo so generated bundles/apps/docs build in a git working tree and are recognized as Databricks Asset Bundles; the skill tree is **copied** to `/Workspace/Users/<your-email>/.assistant/skills/vibe-coding-workshop` for discovery (skills load from there via `skill_ref_root`, NOT from `artifact_root`)
 - `skill_ref_root` = `skills/vibe-coding-workshop` (substitute your clone folder if different)
 - `app_root` = `<artifact_root>/<app_name>` — the self-contained AppKit app project (a TOP-LEVEL sibling of any `{use_case_slug}_dab` bundle, NOT under `apps_lakebase/`). Referred to below as `<APP_ROOT>`; `<APP_ROOT>/.vibecoding-state.md`, `app.yaml`, `databricks.yml`, `server/`, and `client/` all live here.
 - `app_deploy.verb` = `apps deploy` — the gated deploy verb; on Genie Code it resolves to the SDK SNAPSHOT call (CLI deploy is the IDE path).
@@ -16152,7 +16151,7 @@ The steps below are the prescriptive runbook for those actions; follow them in o
 Run `skills/vibecoding-state` operation `enter` with `prompt_id: "sync_from_lakebase"`. It writes and echoes the `## Environment Capabilities` block. Read these resolved values and use them literally throughout:
 
 - `client_context` = `genie_code`
-- `artifact_root` = your workshop project root (e.g. `/Workspace/Users/<your-email>/vibe-coding-workshop`) — where all generated bundles/apps/docs build; the repo itself is cloned at `/Workspace/Users/<your-email>/.assistant/skills/vibe-coding-workshop` (skills load from there via `skill_ref_root`, NOT from `artifact_root`)
+- `artifact_root` = your workshop project root (e.g. `/Workspace/Users/<your-email>/vibe-coding-workshop`), a **git clone** of the workshop repo so generated bundles/apps/docs build in a git working tree and are recognized as Databricks Asset Bundles; the skill tree is **copied** to `/Workspace/Users/<your-email>/.assistant/skills/vibe-coding-workshop` for discovery (skills load from there via `skill_ref_root`, NOT from `artifact_root`)
 - `skill_ref_root` = `skills/vibe-coding-workshop` (substitute your clone folder if you cloned somewhere other than `.assistant/skills/vibe-coding-workshop`)
 - `app_root` = `<artifact_root>/<app_name>` — the AppKit app whose `server/server.ts` holds the Lakebase DDL. Referred to below as `<APP_ROOT>`.
 - `enable_lakebase_cdf` = `{enable_lakebase_cdf}` — the mode flag (`true`/`false`, default `false`).
