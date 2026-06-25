@@ -11,6 +11,7 @@ import { createPortal } from 'react-dom';
 import { Settings, Lock, RotateCcw, Save, Loader2, Check, AlertCircle, Globe, Database, Server, Layers, Bot, ChevronDown, X } from 'lucide-react';
 import { apiClient, type SessionParameter } from '../../api/client';
 import { useEscapeKey } from '../../hooks/useEscapeKey';
+import { PARAM_KEY_TO_CATEGORY, CATEGORY_IDS } from '../../constants/workshopParamCategories';
 
 interface SessionParametersPopoverProps {
   sessionId: string | null;
@@ -26,6 +27,34 @@ const paramIcons: Record<string, React.ElementType> = {
   catalog: Layers,
   endpoint: Bot,
 };
+
+// ---------------------------------------------------------------------------
+// Session-popover hide list.
+//
+// These parameters stay fully visible/editable on the main Workshop Parameters
+// configuration page — they are only HIDDEN from the in-session override
+// popover, where they add noise without adding value for a workshop attendee.
+// Hiding (not removing) keeps every value intact; the backend still returns
+// them and the config page still manages them.
+//
+// Membership = a few infra-only keys + the entire Agent Tools (BYO) category
+// (SQL MCP, Genie, Vector Search, UC Functions, External MCP). The agent-tool
+// keys are derived from the category map so this set stays in sync if keys are
+// added or renamed there.
+// ---------------------------------------------------------------------------
+const SESSION_HIDDEN_INFRA_KEYS = [
+  'workspace_org_id',
+  'default_warehouse',
+  'lakebase_host_name',
+  'app_name',
+];
+
+const SESSION_HIDDEN_PARAM_KEYS = new Set<string>([
+  ...SESSION_HIDDEN_INFRA_KEYS,
+  ...Object.entries(PARAM_KEY_TO_CATEGORY)
+    .filter(([, loc]) => loc.category === CATEGORY_IDS.agentTools)
+    .map(([key]) => key),
+]);
 
 export function SessionParametersPopover({ sessionId, onParametersChanged }: SessionParametersPopoverProps) {
   const [isOpen, setIsOpen] = useState(false);
@@ -158,9 +187,12 @@ export function SessionParametersPopover({ sessionId, onParametersChanged }: Ses
     setSaving(true);
     setError(null);
     try {
-      // Build the parameters to save (only changed ones that allow override)
+      // Build the parameters to save (only changed ones that allow override).
+      // Hidden params are never editable here, so they are excluded — this
+      // preserves any existing session override on them untouched.
       const changedParams: Record<string, string> = {};
       parameters.forEach(p => {
+        if (SESSION_HIDDEN_PARAM_KEYS.has(p.param_key)) return;
         if (p.allow_session_override && editedValues[p.param_key] !== p.global_value) {
           changedParams[p.param_key] = editedValues[p.param_key];
         }
@@ -206,7 +238,16 @@ export function SessionParametersPopover({ sessionId, onParametersChanged }: Ses
     }
   };
 
-  const modifiedCount = parameters.filter(p => p.is_overridden).length;
+  // Parameters actually shown in the session popover: drop admin-only
+  // structured config, drop the session-hidden keys, then order so the
+  // user-configurable rows sit on top and locked (admin-only) rows fall to the
+  // bottom. Array.prototype.sort is stable, so original order is preserved
+  // within each group.
+  const visibleParameters = parameters
+    .filter(p => p.param_type !== 'assistant_config' && !SESSION_HIDDEN_PARAM_KEYS.has(p.param_key))
+    .sort((a, b) => Number(b.allow_session_override) - Number(a.allow_session_override));
+
+  const modifiedCount = visibleParameters.filter(p => p.is_overridden).length;
 
   // Render the popover in a portal to escape parent overflow
   const popoverContent = isOpen ? createPortal(
@@ -262,10 +303,7 @@ export function SessionParametersPopover({ sessionId, onParametersChanged }: Ses
             </div>
           ) : (
             <div className="space-y-4">
-              {parameters.map((param) => {
-                // Admin-only structured params (e.g. coding_assistants_config)
-                // are not human-editable as raw JSON in the session popover.
-                if (param.param_type === 'assistant_config') return null;
+              {visibleParameters.map((param) => {
                 const Icon = paramIcons[param.param_type] || Settings;
                 const isModified = editedValues[param.param_key] !== param.global_value;
                 const isDisabled = !param.allow_session_override;
