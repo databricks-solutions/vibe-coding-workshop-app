@@ -54,7 +54,7 @@ Before sharing the user setup guide, confirm the values users will need to plug 
 - AI Gateway host: `<YOUR_AI_GATEWAY_HOST>`
 - Endpoint name: `<YOUR_ENDPOINT_NAME>`
 
-Share these along with the user setup guide (available in the workflow UI under the **VS Code + Databricks AI Gateway** coding assistant card).
+Share these along with the user setup guide (available in the workflow UI under the **VS Code + Unity AI Gateway** coding assistant card).
 
 ---
 

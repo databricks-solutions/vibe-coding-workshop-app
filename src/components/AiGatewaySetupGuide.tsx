@@ -1,20 +1,22 @@
 import { useEffect, useRef, useState } from 'react';
-import { BookOpen, ChevronDown, ShieldCheck, UserRound } from 'lucide-react';
+import { BookOpen, ChevronDown, ShieldCheck, Sparkles, UserRound } from 'lucide-react';
 import { MarkdownWithCopy } from './MarkdownWithCopy';
 import { ExpandableOutputModal } from './ExpandableOutputModal';
 import attendeeMd from '../content/ai-gateway-attendee.md?raw';
 import adminMd from '../content/ai-gateway-admin.md?raw';
+import whatsNewMd from '../content/ai-gateway-whatsnew.md?raw';
 
-type TabId = 'user' | 'admin';
+type TabId = 'whatsnew' | 'user' | 'admin';
 
 const TABS: { id: TabId; label: string; Icon: typeof UserRound }[] = [
+  { id: 'whatsnew', label: "What's new", Icon: Sparkles },
   { id: 'user', label: 'User setup', Icon: UserRound },
   { id: 'admin', label: 'Admin setup', Icon: ShieldCheck },
 ];
 
 export function AiGatewaySetupGuide() {
   const [expanded, setExpanded] = useState(true);
-  const [activeTab, setActiveTab] = useState<TabId>('user');
+  const [activeTab, setActiveTab] = useState<TabId>('whatsnew');
   const [toast, setToast] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -30,15 +32,20 @@ export function AiGatewaySetupGuide() {
     }
   }, [activeTab]);
 
-  const activeContent = activeTab === 'user' ? attendeeMd : adminMd;
+  const activeContent =
+    activeTab === 'whatsnew' ? whatsNewMd : activeTab === 'user' ? attendeeMd : adminMd;
   const subtitle =
-    activeTab === 'user'
-      ? 'Step-by-step instructions to point Claude Code at your AI Gateway endpoint'
-      : 'Workspace admin: create the AI Gateway endpoint and grant user access';
+    activeTab === 'whatsnew'
+      ? 'Recent announcements & capabilities of Unity AI Gateway'
+      : activeTab === 'user'
+        ? 'Step-by-step instructions to point Claude Code at your AI Gateway endpoint'
+        : 'Workspace admin: create the AI Gateway endpoint and grant user access';
   const fullscreenTitle =
-    activeTab === 'user'
-      ? 'Setup Guide — User setup'
-      : 'Setup Guide — Admin setup';
+    activeTab === 'whatsnew'
+      ? "Unity AI Gateway — What's new"
+      : activeTab === 'user'
+        ? 'Setup Guide — User setup'
+        : 'Setup Guide — Admin setup';
 
   function handleCopy(ok: boolean) {
     setToast(ok ? 'Copied to clipboard' : 'Copy failed');
@@ -58,7 +65,11 @@ export function AiGatewaySetupGuide() {
   function handleTabKeyDown(e: React.KeyboardEvent<HTMLButtonElement>, current: TabId) {
     if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
       e.preventDefault();
-      setActiveTab(current === 'user' ? 'admin' : 'user');
+      const order: TabId[] = TABS.map((t) => t.id);
+      const idx = order.indexOf(current);
+      const delta = e.key === 'ArrowRight' ? 1 : -1;
+      const next = order[(idx + delta + order.length) % order.length];
+      setActiveTab(next);
     }
   }
 
@@ -77,7 +88,7 @@ export function AiGatewaySetupGuide() {
         </div>
         <div className="flex-1 text-left">
           <div className="text-ui-base font-medium text-foreground">
-            Setup Guide — VS Code + Databricks AI Gateway
+            Setup Guide — VS Code + Unity AI Gateway
           </div>
           <div className="text-ui-xs text-muted-foreground">{subtitle}</div>
         </div>

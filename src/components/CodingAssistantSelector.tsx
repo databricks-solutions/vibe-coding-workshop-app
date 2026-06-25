@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
-import { ChevronDown, CheckCircle, ExternalLink, Download, Sparkles, Star, Terminal, Lock } from 'lucide-react';
+import { ChevronDown, CheckCircle, ExternalLink, Download, Sparkles, Star, Terminal, Lock, Info } from 'lucide-react';
 import { BorderBeamButton } from './BorderBeamButton';
 import { AiGatewaySetupGuide } from './AiGatewaySetupGuide';
 import {
@@ -63,6 +63,10 @@ interface AssistantOption {
   comingSoon: boolean;
   beta?: boolean;
   betaNote?: string;
+  /** Shows a "New" badge on the card (no extra text on the card itself). */
+  isNew?: boolean;
+  /** Soft caveat shown ONLY in the expanded detail panel after selection. */
+  caveat?: string;
   iconColor: string;
   iconBg: string;
   selectedBorder: string;
@@ -122,14 +126,14 @@ const ASSISTANTS: AssistantOption[] = [
   },
   {
     id: 'ai-gateway',
-    name: 'VS Code + Databricks AI Gateway',
-    shortName: 'VS Code + AI Gateway',
-    tagline: 'Claude Code routed through Databricks AI Gateway',
-    detail: 'Use VS Code with the Claude Code CLI, routed through a Databricks AI Gateway endpoint. Governed model access, per-user quotas, and usage tracking — no direct Anthropic account required.',
+    name: 'VS Code + Unity AI Gateway',
+    shortName: 'VS Code + Unity AI Gateway',
+    tagline: 'Claude Code routed through Unity AI Gateway',
+    detail: 'Use VS Code with the Claude Code CLI, routed through a Unity AI Gateway endpoint. Unity AI Gateway (formerly Mosaic AI Gateway) is the runtime governance layer for your AI estate — governed model access, LLM guardrails, cost controls, and full request tracing in Unity Catalog, with no direct Anthropic account required.',
     features: [
-      'Governed model access via AI Gateway',
-      'Per-user quotas and usage tracking',
-      'Works in the VS Code integrated terminal',
+      'Governed model access via Unity AI Gateway',
+      'LLM guardrails + per-user cost controls',
+      'Request tracing logged to Unity Catalog',
     ],
     url: 'https://docs.databricks.com/aws/en/mlflow3/genai/tracing/integrations/claude-code',
     downloadLabel: 'Open Docs',
@@ -149,7 +153,7 @@ const ASSISTANTS: AssistantOption[] = [
       'CoDA (Coding agents on Databricks Apps) runs Claude Code, Codex, Gemini CLI, and OpenCode directly in your browser — no local install required. Deploy once to your Databricks workspace and every agent comes wired to the AI Gateway with governed model access, MLflow session tracing, and Unity Catalog-scoped permissions out of the box.',
     features: [
       'Claude Code, Codex, Gemini CLI & OpenCode in one browser terminal',
-      'Databricks AI Gateway with auto-rotating PAT (10-min cycle)',
+      'Unity AI Gateway with auto-rotating PAT (10-min cycle)',
       '39 pre-installed skills + automatic MLflow tracing per session',
     ],
     url: 'https://github.com/databrickslabs/coding-agents-databricks-apps/blob/main/docs/deployment.md',
@@ -171,8 +175,8 @@ const ASSISTANTS: AssistantOption[] = [
     url: 'https://docs.databricks.com/aws/en/genie-code/',
     downloadLabel: 'Learn More',
     comingSoon: false,
-    beta: true,
-    betaNote: 'Active beta — expect rough edges. Some workshop steps may not work yet.',
+    isNew: true,
+    caveat: 'Heads up: Genie Code is brand new. The Apps and Lakebase chapters may not give the best experience yet — for the smoothest run, use the Lakehouse + AI/Agents flow.',
     iconColor: 'text-cyan-400',
     iconBg: 'bg-cyan-500/15',
     selectedBorder: 'border-cyan-500/60',
@@ -401,6 +405,11 @@ export function CodingAssistantSelector({
                           Beta<span aria-hidden="true">*</span>
                         </span>
                       )}
+                      {assistant.isNew && !assistant.comingSoon && (
+                        <span className="inline-flex items-center text-ui-3xs font-semibold uppercase tracking-[0.08em] px-1.5 py-0.5 rounded-full bg-emerald-500/15 text-emerald-300 border border-emerald-400/40 whitespace-nowrap">
+                          New
+                        </span>
+                      )}
                     </div>
                     <span className="block text-ui-2xs text-muted-foreground truncate">{assistant.tagline}</span>
                     {assistant.beta && assistant.betaNote && (
@@ -474,6 +483,14 @@ export function CodingAssistantSelector({
                         <span>
                           {selected.betaNote ?? 'Active beta — expect rough edges. Some workshop steps may not work yet.'}
                         </span>
+                      </div>
+                    )}
+
+                    {/* Soft caveat — only shown in the expanded detail panel */}
+                    {selected.caveat && (
+                      <div className="mt-3 flex items-start gap-2 rounded-md border border-amber-500/30 bg-amber-500/5 px-3 py-2 text-ui-xs text-amber-200/90">
+                        <Info className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
+                        <span>{selected.caveat}</span>
                       </div>
                     )}
 

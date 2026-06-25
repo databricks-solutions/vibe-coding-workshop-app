@@ -1,4 +1,4 @@
-# Claude Code + Databricks AI Gateway — User Setup
+# Claude Code + Unity AI Gateway — User Setup
 
 > **Estimated time:** ~5 minutes
 >
@@ -170,7 +170,7 @@ Save the file.
 
 5. **Send a test message**
    - Type `"Hello, what model are you?"` and press Enter.
-   - If it responds, you're connected through the Databricks AI Gateway. You're all set.
+   - If it responds, you're connected through the Unity AI Gateway. You're all set.
 
 ---
 

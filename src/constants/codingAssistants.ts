@@ -27,7 +27,7 @@ export const ASSISTANT_CATALOG: AssistantCatalogEntry[] = [
   { id: 'cursor', name: 'Cursor' },
   { id: 'copilot', name: 'GitHub Copilot' },
   { id: 'vscode', name: 'VS Code' },
-  { id: 'ai-gateway', name: 'VS Code + Databricks AI Gateway' },
+  { id: 'ai-gateway', name: 'VS Code + Unity AI Gateway' },
   { id: 'coda', name: 'CoDA' },
   { id: 'genie-code', name: 'Genie Code' },
 ];
@@ -77,16 +77,16 @@ export function parseCodingAssistantsConfig(
 
 /**
  * Default config used as a seed fallback.
- * Order: Cursor, CoDA, VS Code + AI Gateway, Genie Code (all recommended,
+ * Order: Cursor, Genie Code, VS Code + Unity AI Gateway, CoDA (all recommended,
  * shown on the top row); then GitHub Copilot, VS Code (bottom row). This
  * mirrors the order admins see in the Workshop Parameters editor on a
- * fresh install. Genie Code is recommended but flagged beta in the catalog.
+ * fresh install. Genie Code is recommended and flagged "New" in the catalog.
  */
 export const DEFAULT_CODING_ASSISTANTS_CONFIG: CodingAssistantConfigEntry[] = [
   { id: 'cursor', recommended: true },
-  { id: 'coda', recommended: true },
-  { id: 'ai-gateway', recommended: true },
   { id: 'genie-code', recommended: true },
+  { id: 'ai-gateway', recommended: true },
+  { id: 'coda', recommended: true },
   { id: 'copilot', recommended: false },
   { id: 'vscode', recommended: false },
 ];
@@ -96,10 +96,10 @@ export const DEFAULT_CODING_ASSISTANTS_CONFIG: CodingAssistantConfigEntry[] = [
  * an assistant on a fresh session that hasn't had an explicit level chosen
  * yet. Saved sessions and explicit user selections are never overridden.
  *
- * Genie Code is currently in active beta and doesn't yet support the full
- * Apps + Lakebase chapters end-to-end, so we default new Genie Code sessions
- * to the 4h Lakehouse + AI/Agents flow (`lakehouse-di`) which it can run
- * cleanly. Other assistants fall through to the system default (end-to-end).
+ * Genie Code doesn't yet give the best experience on the full Apps + Lakebase
+ * chapters end-to-end, so we default new Genie Code sessions to the 4h
+ * Lakehouse + AI/Agents flow (`lakehouse-di`) which it can run cleanly. Other
+ * assistants fall through to the system default (end-to-end).
  *
  * Stored as a string literal to keep this module free of cross-imports from
  * workflowSections.ts. Consumers narrow it via `WorkshopLevel` at the call

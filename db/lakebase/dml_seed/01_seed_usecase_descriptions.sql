@@ -865,7 +865,7 @@ Core entities: Guests, Itineraries, Flights, Properties, Crews, Weather Events, 
 - **Lakeflow** streaming ingest of weather, ops, booking, and crew feeds
 - **Delta Lake** unified event store for disruption history and response outcomes
 - **Lakebase** sub-millisecond operational state serving for the war-room view
-- **Mosaic AI Gateway** model routing to keep recovery decisions under SLA latency
+- **Unity AI Gateway** model routing to keep recovery decisions under SLA latency
 - **Databricks Apps** for the disruption-response command center; **Unity Catalog** for PII-aware audit lineage
 
 ## Scope Constraints
@@ -1126,7 +1126,7 @@ Core entities: Markets, Properties / Flights, Fare Classes / Room Types, Booking
 
 ## Technical Considerations
 - **Mosaic AI** for demand forecasting, price elasticity modeling, and reinforcement learning
-- **Mosaic AI Gateway** for sub-200 ms pricing API calls with low-latency model serving
+- **Unity AI Gateway** for sub-200 ms pricing API calls with low-latency model serving
 - **Lakebase** sub-millisecond price serving to booking engines and reservation systems
 - **Lakeflow** real-time ingestion of booking, competitor-rate, and demand-signal data
 - **Delta Lake** historical pricing and demand for model training; **Mosaic AI Feature Store** for guest context
@@ -1331,7 +1331,7 @@ Core entities (matching the Sample Booking App): Users, Listings, Units/Rooms, A
 
 ## Technical Considerations
 - **Mosaic AI Agent Framework** for the multi-step booking agent (search, fare-quote, hold, book, cancel as registered tools)
-- **Mosaic AI Gateway** for low-latency model routing and cost management on high-volume inference
+- **Unity AI Gateway** for low-latency model routing and cost management on high-volume inference
 - **Mosaic AI Feature Store** for real-time guest features (loyalty, history, session)
 - **Lakebase** for sub-millisecond availability and price serving to the booking engine
 - **Delta Lake** guest history, booking patterns, and preference data
@@ -1474,7 +1474,7 @@ Core entities: Guests, Conversations, Intents, Tools, Sub-Agent Runs, Service Fa
 ## Technical Considerations
 - **Mosaic AI Agent Framework** for multi-step service agents with PMS / CRS / loyalty / payment tool integration
 - **Mosaic AI Agent Evaluation** for testing agent accuracy and escalation behavior before production deployment
-- **Mosaic AI Gateway** for model routing and cost management on high-volume inference
+- **Unity AI Gateway** for model routing and cost management on high-volume inference
 - **Unity Catalog** for agent-action audit trails and PII governance with retention policies
 - **Delta Lake** for interaction history, service-request logs, resolution outcomes, and review analytics
 - **Databricks Apps** for the agent monitoring and escalation dashboard; RAG over policy/knowledge in Delta

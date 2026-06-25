@@ -564,7 +564,7 @@ In **Cursor**, click on the model selector in the Agent panel and choose the lat
                       <p className="text-sm font-medium text-orange-300 mb-2">You're running inside CoDA &mdash; no extra setup needed</p>
                       <ul className="text-xs text-muted-foreground space-y-1 list-disc list-inside marker:text-orange-300/60">
                         <li>Already authenticated to your Databricks workspace (no <code className="bg-background/80 px-1 py-0.5 rounded text-primary font-mono text-ui-xs">databricks auth login</code>)</li>
-                        <li>Claude / Codex / Gemini / OpenCode are pre-wired through the Databricks AI Gateway (no model picker)</li>
+                        <li>Claude / Codex / Gemini / OpenCode are pre-wired through the Unity AI Gateway (no model picker)</li>
                         <li>39 pre-installed skills + MLflow session tracing already enabled</li>
                       </ul>
                     </div>

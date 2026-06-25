@@ -907,9 +907,9 @@ def format_use_case_name(use_case: str) -> str:
 # so backend bootstrap and frontend fallback stay in sync.
 DEFAULT_CODING_ASSISTANTS_CONFIG_JSON = json.dumps([
     {"id": "cursor", "recommended": True},
-    {"id": "coda", "recommended": True},
-    {"id": "ai-gateway", "recommended": True},
     {"id": "genie-code", "recommended": True},
+    {"id": "ai-gateway", "recommended": True},
+    {"id": "coda", "recommended": True},
     {"id": "copilot", "recommended": False},
     {"id": "vscode", "recommended": False},
 ])
