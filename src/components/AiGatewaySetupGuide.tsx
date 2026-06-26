@@ -41,9 +41,9 @@ export function AiGatewaySetupGuide() {
     setManualOpen(false);
   }, [activeTab]);
 
-  // Fullscreen modal shows the full user guide (recommended + manual fallback).
-  const activeContent =
-    activeTab === 'user' ? `${attendeeMd}\n\n---\n\n${attendeeManualMd}` : adminMd;
+  // Fullscreen modal mirrors the default inline view: the recommended path only.
+  // The manual fallback stays behind the inline accordion, not the fullscreen.
+  const activeContent = activeTab === 'user' ? attendeeMd : adminMd;
   const subtitle =
     activeTab === 'user'
       ? 'Step-by-step instructions to point Claude Code at your AI Gateway endpoint'
