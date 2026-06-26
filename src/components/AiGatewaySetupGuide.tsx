@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
-import { Activity, BookOpen, ChevronDown, Network, ShieldCheck, Sparkles, UserRound, Wallet } from 'lucide-react';
+import { Activity, BookOpen, ChevronDown, LifeBuoy, Network, ShieldCheck, Sparkles, UserRound, Wallet } from 'lucide-react';
 import { MarkdownWithCopy } from './MarkdownWithCopy';
 import { ExpandableOutputModal } from './ExpandableOutputModal';
 import attendeeMd from '../content/ai-gateway-attendee.md?raw';
+import attendeeManualMd from '../content/ai-gateway-attendee-manual.md?raw';
 import adminMd from '../content/ai-gateway-admin.md?raw';
 
 type TabId = 'user' | 'admin';
@@ -22,6 +23,7 @@ const OVERVIEW_HIGHLIGHTS: { label: string; Icon: typeof UserRound }[] = [
 export function AiGatewaySetupGuide() {
   const [expanded, setExpanded] = useState(true);
   const [activeTab, setActiveTab] = useState<TabId>('user');
+  const [manualOpen, setManualOpen] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -35,9 +37,13 @@ export function AiGatewaySetupGuide() {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = 0;
     }
+    // Re-entering the User tab should start with the fallback collapsed.
+    setManualOpen(false);
   }, [activeTab]);
 
-  const activeContent = activeTab === 'user' ? attendeeMd : adminMd;
+  // Fullscreen modal shows the full user guide (recommended + manual fallback).
+  const activeContent =
+    activeTab === 'user' ? `${attendeeMd}\n\n---\n\n${attendeeManualMd}` : adminMd;
   const subtitle =
     activeTab === 'user'
       ? 'Step-by-step instructions to point Claude Code at your AI Gateway endpoint'
@@ -174,7 +180,43 @@ export function AiGatewaySetupGuide() {
             ref={scrollRef}
             className="max-h-[380px] overflow-y-auto px-4 py-3 pr-5"
           >
-            <MarkdownWithCopy content={activeContent} onCopy={handleCopy} />
+            {activeTab === 'user' ? (
+              <>
+                <MarkdownWithCopy content={attendeeMd} onCopy={handleCopy} />
+
+                {/* Fallback path — collapsed by default, opened only if ucode didn't work */}
+                <div className="mt-4 rounded-lg border border-amber-500/30 bg-amber-500/5 overflow-hidden">
+                  <button
+                    type="button"
+                    onClick={() => setManualOpen((v) => !v)}
+                    aria-expanded={manualOpen}
+                    className="w-full flex items-center gap-2.5 px-3 py-2.5 text-left hover:bg-amber-500/10 transition-colors"
+                  >
+                    <LifeBuoy className="w-4 h-4 text-amber-300 flex-shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <div className="text-ui-sm font-medium text-foreground">
+                        Recommended setup didn't work? Open manual setup
+                      </div>
+                      <div className="text-ui-2xs text-muted-foreground">
+                        Backup path using a personal access token + settings.json. Most attendees won't need this.
+                      </div>
+                    </div>
+                    <ChevronDown
+                      className={`w-4 h-4 text-amber-300/80 flex-shrink-0 transition-transform duration-200 ${
+                        manualOpen ? 'rotate-180' : ''
+                      }`}
+                    />
+                  </button>
+                  {manualOpen && (
+                    <div className="border-t border-amber-500/20 px-3 py-2">
+                      <MarkdownWithCopy content={attendeeManualMd} onCopy={handleCopy} />
+                    </div>
+                  )}
+                </div>
+              </>
+            ) : (
+              <MarkdownWithCopy content={adminMd} onCopy={handleCopy} />
+            )}
           </div>
           {toast && (
             <div className="absolute bottom-3 right-4 px-3 py-1.5 rounded-md bg-emerald-600 text-white text-ui-xs font-medium shadow-lg animate-fade-in">
