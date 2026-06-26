@@ -1,14 +1,69 @@
 # Claude Code + Unity AI Gateway — User Setup
 
-> **Estimated time:** ~5 minutes
+> **Two ways to connect:**
 >
-> **Prerequisites:** Node.js installed (`node --version` to check)
+> - **Recommended — `ucode` (one command, OAuth):** installs, logs you in, and configures Claude Code automatically. No personal access token to manage.
+> - **Fallback — manual setup (PAT + `settings.json`):** for locked-down or offline machines where you can't install `ucode`.
 >
-> **Works on:** macOS, Linux, and Windows
+> **Works on:** macOS, Linux, and Windows.
 
 ---
 
-## Step 1: Install Claude Code
+## Recommended: set up Claude Code with `ucode`
+
+`ucode` (Unity AI Gateway Coding CLI) is a lightweight launcher from Databricks that configures and runs Claude Code against your workspace's Unity AI Gateway. All traffic routes through the gateway using your workspace credentials — **no API key or PAT required**.
+
+> **Prerequisites:** Python 3.12+ (install via [`uv`](https://docs.astral.sh/uv/getting-started/installation/)). `npm` is used to auto-install the Claude Code CLI if it isn't already present.
+
+### Step 1: Install ucode
+
+```bash
+uv tool install git+https://github.com/databricks/ucode
+```
+
+### Step 2: Launch Claude Code through the gateway
+
+```bash
+ucode claude
+```
+
+On first launch, `ucode` prompts for your Databricks workspace URL (`<YOUR_WORKSPACE_URL>`), runs an OAuth `databricks auth login`, and writes Claude Code's config (`~/.claude/settings.json`) automatically. Subsequent launches go straight into Claude Code.
+
+```bash
+ucode claude -r        # resume your last session
+```
+
+> **Non-interactive option:** `ucode configure --agents claude` configures Claude Code without the picker. To reuse an existing CLI profile, use `ucode configure --profiles DEFAULT --agents claude`.
+
+### Step 3 (optional): Add Databricks MCP servers
+
+```bash
+ucode configure mcp
+```
+
+Adds Databricks MCP servers (Vector Search, UC Functions, Databricks SQL, and any discovered external connections) to Claude Code.
+
+### Handy ucode commands
+
+| Command | What it does |
+|---------|--------------|
+| `ucode status` | Show current workspace, base URLs, managed config files, and selected models |
+| `ucode usage` | Show your Unity AI Gateway usage summary |
+| `ucode revert` | Clear saved state and restore backed-up config files |
+
+> `ucode` also drives other agents if you'd rather use them: `ucode codex`, `ucode gemini`, `ucode opencode`, `ucode copilot`, `ucode pi`.
+>
+> **Note:** `ucode` manages the same `~/.claude/settings.json` that the manual fallback below edits. Pick **one** path — if you've run `ucode claude`, you're already done. `ucode revert` restores any file it backed up.
+
+---
+
+## Fallback: manual setup (PAT + settings.json)
+
+Use this only if you can't install `uv`/`ucode` (for example, a locked-down or offline machine). This path uses a personal access token because the OAuth login is handled by the `ucode` CLI.
+
+> **Prerequisites:** Node.js installed (`node --version` to check).
+
+### Step 1: Install Claude Code
 
 Open your terminal (VS Code terminal works great):
 
@@ -24,7 +79,7 @@ claude --version
 
 ---
 
-## Step 2: Generate your personal access token
+### Step 2: Generate your personal access token
 
 1. Go to your Databricks workspace: `<YOUR_WORKSPACE_URL>`
 2. Click your profile icon (top right) → **Settings**
@@ -36,7 +91,7 @@ claude --version
 
 ---
 
-## Step 3: Create the settings file
+### Step 3: Create the settings file
 
 Create the Claude Code config directory and settings file:
 
@@ -126,7 +181,7 @@ Save the file.
 
 ---
 
-## Step 4: Set the onboarding bypass
+### Step 4: Set the onboarding bypass
 
 Claude Code may prompt you to log in with an Anthropic account. To skip this, open `~/.claude.json` in any text editor:
 
@@ -150,7 +205,7 @@ Save the file.
 
 ---
 
-## Step 5: Test it
+### Step 5: Test it
 
 1. **Open VS Code**
    - Launch Visual Studio Code from your Applications / Start menu, or run `code` from a terminal.
@@ -175,6 +230,12 @@ Save the file.
 ---
 
 ## Troubleshooting
+
+**`ucode: command not found`.**
+Make sure the `uv` tools bin directory is on your `PATH` (run `uv tool update-shell`, then open a new terminal) and that you're on Python 3.12+ (`python3 --version`).
+
+**ucode login or auth issues.**
+Re-run the workspace login and relaunch: `databricks auth login --host <YOUR_WORKSPACE_URL>`, then `ucode claude`. Use `ucode status` to confirm the active workspace and base URLs.
 
 **Claude Code asks me to log in with Anthropic.**
 Check that `~/.claude.json` contains `"hasCompletedOnboarding": true`.

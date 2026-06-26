@@ -1,22 +1,27 @@
 import { useEffect, useRef, useState } from 'react';
-import { BookOpen, ChevronDown, ShieldCheck, Sparkles, UserRound } from 'lucide-react';
+import { Activity, BookOpen, ChevronDown, Network, ShieldCheck, Sparkles, UserRound, Wallet } from 'lucide-react';
 import { MarkdownWithCopy } from './MarkdownWithCopy';
 import { ExpandableOutputModal } from './ExpandableOutputModal';
 import attendeeMd from '../content/ai-gateway-attendee.md?raw';
 import adminMd from '../content/ai-gateway-admin.md?raw';
-import whatsNewMd from '../content/ai-gateway-whatsnew.md?raw';
 
-type TabId = 'whatsnew' | 'user' | 'admin';
+type TabId = 'user' | 'admin';
 
 const TABS: { id: TabId; label: string; Icon: typeof UserRound }[] = [
-  { id: 'whatsnew', label: "What's new", Icon: Sparkles },
   { id: 'user', label: 'User setup', Icon: UserRound },
   { id: 'admin', label: 'Admin setup', Icon: ShieldCheck },
 ];
 
+const OVERVIEW_HIGHLIGHTS: { label: string; Icon: typeof UserRound }[] = [
+  { label: 'LLM Guardrails', Icon: ShieldCheck },
+  { label: 'AI Spend Controls', Icon: Wallet },
+  { label: 'Observability', Icon: Activity },
+  { label: 'MCP Governance', Icon: Network },
+];
+
 export function AiGatewaySetupGuide() {
   const [expanded, setExpanded] = useState(true);
-  const [activeTab, setActiveTab] = useState<TabId>('whatsnew');
+  const [activeTab, setActiveTab] = useState<TabId>('user');
   const [toast, setToast] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -32,20 +37,13 @@ export function AiGatewaySetupGuide() {
     }
   }, [activeTab]);
 
-  const activeContent =
-    activeTab === 'whatsnew' ? whatsNewMd : activeTab === 'user' ? attendeeMd : adminMd;
+  const activeContent = activeTab === 'user' ? attendeeMd : adminMd;
   const subtitle =
-    activeTab === 'whatsnew'
-      ? 'Recent announcements & capabilities of Unity AI Gateway'
-      : activeTab === 'user'
-        ? 'Step-by-step instructions to point Claude Code at your AI Gateway endpoint'
-        : 'Workspace admin: create the AI Gateway endpoint and grant user access';
+    activeTab === 'user'
+      ? 'Step-by-step instructions to point Claude Code at your AI Gateway endpoint'
+      : 'Workspace admin: create the AI Gateway endpoint and grant user access';
   const fullscreenTitle =
-    activeTab === 'whatsnew'
-      ? "Unity AI Gateway — What's new"
-      : activeTab === 'user'
-        ? 'Setup Guide — User setup'
-        : 'Setup Guide — Admin setup';
+    activeTab === 'user' ? 'Setup Guide — User setup' : 'Setup Guide — Admin setup';
 
   function handleCopy(ok: boolean) {
     setToast(ok ? 'Copied to clipboard' : 'Copy failed');
@@ -108,11 +106,35 @@ export function AiGatewaySetupGuide() {
 
       <div
         className={`transition-all duration-300 ease-in-out ${
-          expanded ? 'max-h-[500px] opacity-100' : 'max-h-0 opacity-0 overflow-hidden'
+          expanded ? 'max-h-[640px] opacity-100' : 'max-h-0 opacity-0 overflow-hidden'
         }`}
       >
         <div className="relative border-t border-emerald-500/20">
+          {/* Overview: Unity AI Gateway at a glance (blended in, always visible) */}
           <div className="px-4 pt-4">
+            <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/5 p-3">
+              <div className="flex items-start gap-2">
+                <Sparkles className="w-3.5 h-3.5 text-emerald-300 flex-shrink-0 mt-0.5" />
+                <p className="text-ui-xs text-muted-foreground leading-relaxed">
+                  <span className="font-medium text-foreground">Unity AI Gateway</span> is the central runtime
+                  governance layer for your AI estate, now part of Unity Catalog{' '}
+                  <span className="text-muted-foreground/80">(Beta)</span>.
+                </p>
+              </div>
+              <div className="mt-2.5 grid grid-cols-2 gap-1.5">
+                {OVERVIEW_HIGHLIGHTS.map(({ label, Icon }) => (
+                  <div
+                    key={label}
+                    className="flex items-center gap-1.5 rounded-md bg-background/40 border border-border/40 px-2 py-1"
+                  >
+                    <Icon className="w-3 h-3 text-emerald-300/80 flex-shrink-0" />
+                    <span className="text-ui-2xs text-muted-foreground truncate">{label}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+          <div className="px-4 pt-3">
             <div
               role="tablist"
               aria-label="Setup guide audience"
