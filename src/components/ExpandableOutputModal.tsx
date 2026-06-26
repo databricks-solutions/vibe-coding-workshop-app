@@ -5,8 +5,11 @@ import { MarkdownContent } from './MarkdownContent';
 import { useEscapeKey } from '../hooks/useEscapeKey';
 
 interface ExpandableOutputModalProps {
-  /** The content to display */
+  /** The content to display (also used for Copy All and line/char counts) */
   content: string;
+  /** Optional custom body. When provided, it renders instead of the default
+   *  markdown view (e.g. to embed interactive elements like collapsibles). */
+  children?: React.ReactNode;
   /** Title for the modal header */
   title?: string;
   /** Whether content is still streaming */
@@ -19,6 +22,7 @@ interface ExpandableOutputModalProps {
 
 export function ExpandableOutputModal({
   content,
+  children,
   title = 'Generated Output',
   isStreaming = false,
   isLoading = false,
@@ -62,8 +66,8 @@ export function ExpandableOutputModal({
     amber: 'text-amber-400 hover:bg-amber-900/30 border-amber-500/30',
   };
 
-  // Don't show expand button if loading or no content
-  if (isLoading || !content) {
+  // Don't show expand button if loading or there's nothing to show
+  if (isLoading || (!content && !children)) {
     return null;
   }
 
@@ -159,11 +163,13 @@ export function ExpandableOutputModal({
             {/* Scrollable Content - Large area for easy reading */}
             <div className="flex-1 overflow-y-auto px-6 py-5">
               <div className="max-w-none">
-                <MarkdownContent 
-                  content={content}
-                  isStreaming={isStreaming}
-                  maxPreviewLines={1000}
-                />
+                {children ?? (
+                  <MarkdownContent
+                    content={content}
+                    isStreaming={isStreaming}
+                    maxPreviewLines={1000}
+                  />
+                )}
               </div>
             </div>
 
