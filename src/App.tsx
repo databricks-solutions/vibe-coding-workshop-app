@@ -1,10 +1,15 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, lazy, Suspense } from 'react';
 import { Routes, Route, Link, useLocation, Navigate } from 'react-router-dom';
 import { WorkflowDiagram } from './components/WorkflowDiagram';
 import { ThemeToggle } from './components/ThemeToggle';
 import { ConfigurationPage } from './components/config/ConfigurationPage';
 import { LeaderboardPage } from './components/LeaderboardPage';
 import { AnalyticsDashboard } from './components/AnalyticsDashboard';
+
+// Skills Navigator is a large, self-contained feature (galaxy map + tours +
+// academy with a big static data module). Lazy-load it so it never weighs down
+// the initial workflow bundle that every workshop participant hits first.
+const SkillsNavigatorPage = lazy(() => import('./components/skills/SkillsNavigatorPage'));
 import { 
   HeaderSessionMenu,
   SaveSessionDialog, 
@@ -12,7 +17,7 @@ import {
   SessionListDialog 
 } from './components/session';
 import { apiClient } from './api/client';
-import { Zap, MessageSquare, Trophy, Plus, PanelLeftClose, PanelLeft, Menu, X, BarChart3, Eye } from 'lucide-react';
+import { Zap, MessageSquare, Trophy, Plus, PanelLeftClose, PanelLeft, Menu, X, BarChart3, Eye, Compass } from 'lucide-react';
 import { normalizeLevel, getFilteredSections, getCumulativeOverrides, USE_CASE_LEVEL_LOCK, isForwardProgression, getDisabledTagsForAIModules, ALL_AI_MODULES, getDisabledTagsForMedallionLayers, normalizeMedallionLayers, ALL_MEDALLION_LAYERS, computeChainContext, deriveInitialChainContext, type WorkshopLevel, type WorkflowDirection, type AIAgentModule, type MedallionLayer, type ChainContext } from './constants/workflowSections';
 import { DEFAULT_LEVEL_BY_ASSISTANT } from './constants/codingAssistants';
 
@@ -39,7 +44,8 @@ export default function App() {
   const isConfigPage = location.pathname.startsWith('/config');
   const isLeaderboardPage = location.pathname === '/leaderboard';
   const isAnalyticsPage = location.pathname === '/analytics';
-  const isWorkflowPage = !isConfigPage && !isLeaderboardPage && !isAnalyticsPage;
+  const isSkillsPage = location.pathname === '/skills';
+  const isWorkflowPage = !isConfigPage && !isLeaderboardPage && !isAnalyticsPage && !isSkillsPage;
   
   // Data refresh key - incremented when navigating from Config to Workflow
   // This forces PromptGenerator and other components to re-fetch data
@@ -836,6 +842,10 @@ export default function App() {
                   <Trophy className={`w-4 h-4 flex-shrink-0 ${isLeaderboardPage ? 'text-primary' : 'text-muted-foreground'}`} />
                   <span>Leaderboard</span>
                 </Link>
+                <Link to="/skills" onClick={() => setMobileSidebarOpen(false)} className={`w-full flex items-center gap-2.5 px-2.5 py-2 rounded-md text-ui-base font-medium transition-all duration-200 ${isSkillsPage ? 'bg-sidebar-accent text-sidebar-primary' : 'text-muted-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-foreground'}`}>
+                  <Compass className={`w-4 h-4 flex-shrink-0 ${isSkillsPage ? 'text-primary' : 'text-muted-foreground'}`} />
+                  <span>Skills Navigator</span>
+                </Link>
                 <Link to="/analytics" onClick={() => setMobileSidebarOpen(false)} className={`w-full flex items-center gap-2.5 px-2.5 py-2 rounded-md text-ui-base font-medium transition-all duration-200 ${isAnalyticsPage ? 'bg-sidebar-accent text-sidebar-primary' : 'text-muted-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-foreground'}`}>
                   <BarChart3 className={`w-4 h-4 flex-shrink-0 ${isAnalyticsPage ? 'text-primary' : 'text-muted-foreground'}`} />
                   <span>Analytics</span>
@@ -926,6 +936,19 @@ export default function App() {
             >
               <Trophy className={`w-4 h-4 flex-shrink-0 ${isLeaderboardPage ? 'text-primary' : 'text-muted-foreground'}`} />
               {!sidebarCollapsed && <span className="whitespace-nowrap">Leaderboard</span>}
+            </Link>
+
+            <Link
+              to="/skills"
+              title="Skills Navigator"
+              className={`w-full flex items-center ${sidebarCollapsed ? 'justify-center px-0 py-2.5' : 'gap-2.5 px-2.5 py-2'} rounded-md text-ui-base font-medium transition-all duration-200 ${
+                isSkillsPage
+                  ? 'bg-sidebar-accent text-sidebar-primary'
+                  : 'text-muted-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-foreground'
+              }`}
+            >
+              <Compass className={`w-4 h-4 flex-shrink-0 ${isSkillsPage ? 'text-primary' : 'text-muted-foreground'}`} />
+              {!sidebarCollapsed && <span className="whitespace-nowrap">Skills Navigator</span>}
             </Link>
 
             <Link
@@ -1084,8 +1107,8 @@ export default function App() {
               )}
 
               {/* Header Bar - Clean minimal styling */}
-              <div className="sticky top-0 z-10 bg-card/90 backdrop-blur-md border-b border-border px-3 sm:px-6 xl:px-12 2xl:px-20 py-3">
-                <div className="max-w-7xl xl:max-w-[82.5rem] 2xl:max-w-[87.5rem] mx-auto flex items-center justify-between gap-3">
+              <div className="sticky top-0 z-10 bg-card/90 backdrop-blur-md border-b border-border px-3 sm:px-6 xl:px-10 2xl:px-14 py-3">
+                <div className="max-w-7xl xl:max-w-[88rem] 2xl:max-w-[96rem] mx-auto flex items-center justify-between gap-3">
                   <div className="flex items-center gap-3 min-w-0">
                     {/* Mobile hamburger button */}
                     <button
@@ -1138,8 +1161,8 @@ export default function App() {
               </div>
               
               {/* Content Area */}
-              <div className="p-3 sm:p-6 xl:px-12 2xl:px-20">
-                <div className="max-w-7xl xl:max-w-[82.5rem] 2xl:max-w-[87.5rem] mx-auto">
+              <div className="p-3 sm:p-6 xl:px-10 2xl:px-14">
+                <div className="max-w-7xl xl:max-w-[88rem] 2xl:max-w-[96rem] mx-auto">
                   <WorkflowDiagram
                     sessionId={sessionId}
                     stepPrompts={stepPrompts}
@@ -1251,7 +1274,26 @@ export default function App() {
           
           {/* Analytics Page */}
           <Route path="/analytics" element={<AnalyticsDashboard />} />
-          
+
+          {/* Skills Navigator Page (lazy-loaded) */}
+          <Route
+            path="/skills"
+            element={
+              <Suspense
+                fallback={
+                  <div className="flex-1 flex items-center justify-center bg-background">
+                    <div className="flex items-center gap-3 text-muted-foreground">
+                      <div className="w-5 h-5 rounded-full border-2 border-primary/30 border-t-primary animate-spin" />
+                      <span className="text-ui-md font-medium">Loading Skills Navigator…</span>
+                    </div>
+                  </div>
+                }
+              >
+                <SkillsNavigatorPage onOpenMobileNav={() => setMobileSidebarOpen(true)} />
+              </Suspense>
+            }
+          />
+
           {/* Redirect any unknown routes to home */}
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
