@@ -16,7 +16,8 @@ export type AssistantId =
   | 'vscode'
   | 'ai-gateway'
   | 'coda'
-  | 'genie-code';
+  | 'genie-code'
+  | 'omnigent';
 
 export interface AssistantCatalogEntry {
   id: AssistantId;
@@ -30,6 +31,7 @@ export const ASSISTANT_CATALOG: AssistantCatalogEntry[] = [
   { id: 'ai-gateway', name: 'VS Code + Unity AI Gateway' },
   { id: 'coda', name: 'CoDA' },
   { id: 'genie-code', name: 'Genie Code' },
+  { id: 'omnigent', name: 'Omnigent' },
 ];
 
 export const ASSISTANT_IDS: AssistantId[] = ASSISTANT_CATALOG.map(a => a.id);
@@ -78,15 +80,17 @@ export function parseCodingAssistantsConfig(
 /**
  * Default config used as a seed fallback.
  * Order: Cursor, Genie Code, VS Code + Unity AI Gateway, CoDA (all recommended,
- * shown on the top row); then GitHub Copilot, VS Code (bottom row). This
- * mirrors the order admins see in the Workshop Parameters editor on a
- * fresh install. Genie Code is recommended and flagged "New" in the catalog.
+ * shown on the top row); then Omnigent, GitHub Copilot, VS Code (bottom row).
+ * This mirrors the order admins see in the Workshop Parameters editor on a
+ * fresh install. Genie Code is recommended and flagged "New" in the catalog;
+ * Omnigent leads the bottom row and is flagged "Beta".
  */
 export const DEFAULT_CODING_ASSISTANTS_CONFIG: CodingAssistantConfigEntry[] = [
   { id: 'cursor', recommended: true },
   { id: 'genie-code', recommended: true },
   { id: 'ai-gateway', recommended: true },
   { id: 'coda', recommended: true },
+  { id: 'omnigent', recommended: false },
   { id: 'copilot', recommended: false },
   { id: 'vscode', recommended: false },
 ];

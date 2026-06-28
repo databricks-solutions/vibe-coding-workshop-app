@@ -910,6 +910,7 @@ DEFAULT_CODING_ASSISTANTS_CONFIG_JSON = json.dumps([
     {"id": "genie-code", "recommended": True},
     {"id": "ai-gateway", "recommended": True},
     {"id": "coda", "recommended": True},
+    {"id": "omnigent", "recommended": False},
     {"id": "copilot", "recommended": False},
     {"id": "vscode", "recommended": False},
 ])
