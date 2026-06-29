@@ -34,9 +34,9 @@
      ------------------------------------------------------------------------- */
   --background: 220 20% 7%;
   --foreground: 210 20% 98%;
-  --card: 220 20% 10%;
+  --card: 220 20% 11%;
   --card-foreground: 210 20% 98%;
-  --popover: 220 20% 12%;
+  --popover: 220 20% 13%;
   --popover-foreground: 210 20% 98%;
   --primary: var(--brand-h) var(--brand-s) 50%;
   --primary-foreground: 220 20% 7%;
@@ -53,7 +53,7 @@
   --success-foreground: 210 20% 98%;
   --warning: 38 92% 55%;
   --warning-foreground: 220 20% 7%;
-  --border: 220 15% 22%;
+  --border: 220 15% 20%;
   --input: 220 15% 15%;
   --ring: var(--brand-h) var(--brand-s) 50%;
   --sidebar: 220 20% 8%;

@@ -1,5 +1,6 @@
 import { CheckCircle2 } from 'lucide-react';
 import type { SelectOption } from '../api/client';
+import { CertifiedBadge } from './CertifiedBadge';
 
 interface UseCaseCardGridProps {
   useCases: SelectOption[];
@@ -9,7 +10,11 @@ interface UseCaseCardGridProps {
 }
 
 export function UseCaseCardGrid({ useCases, selectedUseCase, onSelect, disabled }: UseCaseCardGridProps) {
-  const filtered = useCases.filter(uc => uc.value !== '' && uc.path_type !== 'skill');
+  // Certified use cases sort to the top of the flat grid; preserve the original
+  // (backend) order otherwise via a stable sort.
+  const filtered = useCases
+    .filter(uc => uc.value !== '' && uc.path_type !== 'skill')
+    .sort((a, b) => (a.is_certified ? 0 : 1) - (b.is_certified ? 0 : 1));
 
   if (filtered.length === 0) return null;
 
@@ -40,12 +45,11 @@ export function UseCaseCardGrid({ useCases, selectedUseCase, onSelect, disabled 
               }`}
               style={{ animationDelay: `${idx * 50}ms` }}
             >
-              {isSelected && (
-                <div className="absolute top-2.5 right-2.5 animate-scale-in">
-                  <CheckCircle2 className="w-4 h-4 text-primary" />
-                </div>
-              )}
-              <h4 className="text-ui-base font-semibold text-foreground pr-6">{uc.label}</h4>
+              <div className="absolute top-2.5 right-2.5 flex items-center gap-1.5">
+                {isSelected && <CheckCircle2 className="w-4 h-4 text-primary animate-scale-in" />}
+                {uc.is_certified && <CertifiedBadge size="md" className="animate-scale-in" />}
+              </div>
+              <h4 className={`text-ui-base font-semibold text-foreground ${uc.is_certified ? 'pr-12' : 'pr-6'}`}>{uc.label}</h4>
             </button>
           );
         })}

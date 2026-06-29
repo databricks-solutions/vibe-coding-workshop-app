@@ -13,8 +13,8 @@
  *   - 'coda':        Single clone command. CoDA runs in a Databricks App
  *                    browser terminal so auth + model are already wired.
  *   - 'genie-code':  Single clone command targeting /Workspace/Users/<email>/
- *                    v2v-in-geniecode/... with the email auto-injected from
- *                    apiClient.getCurrentUser().
+ *                    .assistant/skills/vibe-coding-workshop with the email
+ *                    auto-injected from apiClient.getCurrentUser().
  */
 
 import { useState, useEffect } from 'react';
@@ -44,8 +44,8 @@ interface SetUpProjectStepProps {
   /**
    * The signed-in user's email (already fetched once at the App level via
    * apiClient.getCurrentUser). Only consumed by the Genie Code variant to
-   * build the /Workspace/Users/<email>/v2v-in-geniecode/... clone target.
-   * Falls back to '<your_email>' placeholder when null / empty.
+   * build the /Workspace/Users/<email>/.assistant/skills/vibe-coding-workshop
+   * clone target. Falls back to '<your_email>' placeholder when null / empty.
    */
   currentUserEmail?: string | null;
 }
@@ -564,7 +564,7 @@ In **Cursor**, click on the model selector in the Agent panel and choose the lat
                       <p className="text-sm font-medium text-orange-300 mb-2">You're running inside CoDA &mdash; no extra setup needed</p>
                       <ul className="text-xs text-muted-foreground space-y-1 list-disc list-inside marker:text-orange-300/60">
                         <li>Already authenticated to your Databricks workspace (no <code className="bg-background/80 px-1 py-0.5 rounded text-primary font-mono text-ui-xs">databricks auth login</code>)</li>
-                        <li>Claude / Codex / Gemini / OpenCode are pre-wired through the Databricks AI Gateway (no model picker)</li>
+                        <li>Claude / Codex / Gemini / OpenCode are pre-wired through the Unity AI Gateway (no model picker)</li>
                         <li>39 pre-installed skills + MLflow session tracing already enabled</li>
                       </ul>
                     </div>
@@ -590,30 +590,34 @@ In **Cursor**, click on the model selector in the Agent panel and choose the lat
                =========================================================== */}
           {variant === 'genie-code' && (() => {
             const emailForPath = currentUserEmail || '<your_email>';
-            const genieCloneCmd = `git clone https://github.com/databricks-solutions/vibe-coding-workshop-template /Workspace/Users/${emailForPath}/v2v-in-geniecode/vibe-coding-workshop-template`;
+            // Skills the prompts reference (skills/genie-code-environment, 16 refs)
+            // only exist on this branch until it merges to main. Flip to '' after merge.
+            const CLONE_REF = 'genie-code-integration';
+            const refFlag = CLONE_REF ? `-b ${CLONE_REF} ` : '';
+            const genieCloneCmd = `git clone ${refFlag}https://github.com/databricks-solutions/vibe-coding-workshop-template.git /Workspace/Users/${emailForPath}/.assistant/skills/vibe-coding-workshop`;
             return (
               <div className="space-y-4">
                 <div className="flex items-center gap-2">
                   <div className="w-6 h-6 rounded-full bg-orange-900/50 text-orange-300 flex items-center justify-center text-xs font-bold">
                     A
                   </div>
-                  <h4 className="font-semibold text-foreground">Clone into your Databricks workspace</h4>
+                  <h4 className="font-semibold text-foreground">One-time setup</h4>
                 </div>
 
                 <div className="pl-8 space-y-4">
                   <div className="text-sm text-muted-foreground space-y-2">
-                    {renderDescription(`Clone the workshop template into your /Workspace path so Genie Code can read and operate on the files.
+                    {renderDescription(`You're inside Genie Code -- pre-authenticated and serverless. No \`databricks auth login\`, no model setup.
 
-**Step 1:** Open the Genie Code terminal panel.
+**Step 1 -- Clone into your skills folder** (run in the Genie Code terminal). This is the folder Genie Code reads skills from. Cloning anywhere else means the workshop skills will **NOT** load.
 
-**Step 2:** Run the clone command below. Run this **once per Genie Code session** -- the path includes your user email so each workshop attendee gets their own copy.`)}
+This folder is the **skill-load anchor only** -- Genie Code reads workshop skills from here. Your project artifacts (apps, bundles, docs) build separately under \`/Workspace/Users/${emailForPath}/vibe-coding-workshop\`, which the workshop creates for you on the first step.`)}
                   </div>
 
-                  {/* Single clone command (email auto-injected) */}
+                  {/* Step 1 clone command (email auto-injected, branch-pinned) */}
                   <div className="space-y-2">
                     <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Command</p>
                     <div>
-                      <p className="text-xs text-slate-400 mb-1">Clone into your /Workspace path</p>
+                      <p className="text-xs text-slate-400 mb-1">Clone into your skills folder</p>
                       <CommandBox
                         label="Clone"
                         cmd={genieCloneCmd}
@@ -626,6 +630,13 @@ In **Cursor**, click on the model selector in the Agent panel and choose the lat
                           : '💡 Your email will be auto-filled once the session loads, or replace `<your_email>` manually.'}
                       </p>
                     </div>
+                  </div>
+
+                  {/* Step 2 + Step 3 -- skills only activate on a new thread + manifest load */}
+                  <div className="text-sm text-muted-foreground space-y-2">
+                    {renderDescription(`**Step 2 -- Start a NEW Agent-mode chat thread.** Skills load on the next Agent-mode thread, not the current one. If they don't appear, hard-refresh the tab.
+
+**Step 3 -- Load the behavior manifest:** open \`skills/genie-code-environment\` so the agent knows how it runs here (page-context CLI via \`runDatabricksCli\`, serverless, files under the clone root -- never \`/tmp\`). The workshop then auto-detects your client and gates each step.`)}
                   </div>
 
                   {/* Why no further setup card -- replaces sub-sections B + C */}

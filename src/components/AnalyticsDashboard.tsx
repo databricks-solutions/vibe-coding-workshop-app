@@ -747,7 +747,7 @@ export function AnalyticsDashboard() {
     <div className="min-h-screen bg-background">
       {/* Header */}
       <header className="sticky top-0 z-20 bg-card border-b border-border">
-        <div className="max-w-7xl mx-auto px-6 h-[3.5rem] flex items-center justify-between">
+        <div className="max-w-7xl xl:max-w-[88rem] 2xl:max-w-[96rem] mx-auto px-6 h-[3.5rem] flex items-center justify-between">
           <div className="flex items-center gap-3">
             <button
               onClick={() => navigate('/')}
@@ -764,7 +764,7 @@ export function AnalyticsDashboard() {
         </div>
       </header>
 
-      <div className="max-w-7xl mx-auto px-6 py-6">
+      <div className="max-w-7xl xl:max-w-[88rem] 2xl:max-w-[96rem] mx-auto px-6 py-6">
         {/* Row 1: Usage metrics */}
         <div className="mb-2">
           <div className="text-ui-2xs font-bold text-muted-foreground uppercase tracking-[0.1em] mb-2 px-1">

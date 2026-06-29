@@ -80,6 +80,7 @@ interface WorkflowDiagramProps {
   selectedIndustryLabel: string;
   selectedUseCase: string;
   selectedUseCaseLabel: string;
+  selectedUseCaseCertified?: boolean;
   customUseCaseLabel?: string;
   customDescription?: string;
   initialBrandUrl?: string;
@@ -95,7 +96,7 @@ interface WorkflowDiagramProps {
   prerequisitesVisible?: boolean;
   onStepPromptGenerated: (stepNumber: number, promptText: string) => void;
   onIndustryChange: (value: string, label: string) => void;
-  onUseCaseChange: (value: string, label: string) => void;
+  onUseCaseChange: (value: string, label: string, isCertified?: boolean) => void;
   onCustomUseCaseChange?: (customLabel: string, customDescription: string) => void;
   onBrandUrlChange?: (url: string) => void;
   onCompletedStepsChange: (steps: Set<number>) => void;
@@ -163,6 +164,7 @@ export function WorkflowDiagram({
   selectedIndustryLabel,
   selectedUseCase,
   selectedUseCaseLabel,
+  selectedUseCaseCertified,
   customUseCaseLabel = '',
   customDescription = '',
   initialBrandUrl = '',
@@ -640,10 +642,10 @@ export function WorkflowDiagram({
     }, 350);
   }, [visibleSections, completedSteps, skippedSteps, scrollToStep]);
 
-  const handlePromptGenerated = (prompt: string, industry: string, useCase: string, industryLabel?: string, useCaseLabel?: string, customDesc?: string) => {
+  const handlePromptGenerated = (prompt: string, industry: string, useCase: string, industryLabel?: string, useCaseLabel?: string, customDesc?: string, isCertified?: boolean) => {
     if (readOnly) return;
     onIndustryChange(industry, industryLabel || industry);
-    onUseCaseChange(useCase, useCaseLabel || useCase);
+    onUseCaseChange(useCase, useCaseLabel || useCase, isCertified);
     
     // Notify parent of custom use case edits if provided
     if (onCustomUseCaseChange) {
@@ -3203,6 +3205,7 @@ export function WorkflowDiagram({
         selectedUseCase={selectedUseCase}
         selectedIndustryLabel={selectedIndustryLabel}
         selectedUseCaseLabel={selectedUseCaseLabel}
+        selectedUseCaseCertified={selectedUseCaseCertified}
         customUseCaseLabel={customUseCaseLabel}
         customDescription={customDescription}
         initialPrompt={stepPrompts[1]}

@@ -54,6 +54,14 @@ export interface SkillBlueprintConfig {
   sections: SkillSection[];
   consumes?: string;
   emits?: string[];
+  /**
+   * Optional per-blueprint Tier-1 foundation. When omitted, the renderer falls
+   * back to the DPA `TIER1_FOUNDATION` (AGENTS.md -> data_product_accelerator
+   * Skill Navigator + always-on commons). AppKit (Apps + Lakebase) blueprints
+   * set this to `APPKIT_FOUNDATION` so they show the AppKit Navigator router
+   * instead of the DPA one.
+   */
+  foundation?: SkillSection;
 }
 
 // ---------------------------------------------------------------------------
@@ -66,15 +74,40 @@ export const TIER1_FOUNDATION: SkillSection = {
   skills: [
     { name: 'AGENTS.md', shortPath: 'AGENTS.md', type: 'entry', description: 'Universal entry point — auto-loaded by the IDE for every task' },
     { name: 'Skill Navigator', shortPath: 'data_product_accelerator/AGENTS.md', type: 'router', description: 'Keyword detection routes to the correct stage orchestrator' },
-    { name: 'Expert Agent', shortPath: 'common/databricks-expert-agent', type: 'common', description: 'Core "Extract, Don\'t Generate" principle — loaded for every stage' },
+    { name: 'Expert Agent', shortPath: 'skills/databricks-expert-agent', type: 'common', description: 'Core "Extract, Don\'t Generate" principle — loaded for every stage' },
     { name: 'Naming & Tagging Standards', shortPath: 'common/naming-tagging-standards', type: 'common', description: 'Enterprise naming conventions — loaded for every stage' },
   ],
 };
 
 // ---------------------------------------------------------------------------
+// AppKit (Apps + Lakebase) foundation + skills
+//
+// The Apps + Lakebase chapters are driven by the AppKit skill family under
+// `apps_lakebase/skills/`. Unlike the DPA tree (rooted at
+// data_product_accelerator/skills), these shortPaths are FULLY ROOTED
+// (`apps_lakebase/skills/<dir>`) so SkillContentModal can resolve them as-is.
+// ---------------------------------------------------------------------------
+export const APPKIT_FOUNDATION: SkillSection = {
+  tier: 1,
+  label: 'Foundation — Always Loaded',
+  accent: 'cyan',
+  skills: [
+    { name: 'AGENTS.md', shortPath: 'AGENTS.md', type: 'entry', description: 'Universal entry point — auto-loaded by the IDE for every task' },
+    { name: 'AppKit Navigator', shortPath: 'apps_lakebase/skills/00-appkit-navigator', type: 'router', description: 'Reads your intent and loads exactly one AppKit skill — keeps the context window small across the branch-aware app lifecycle' },
+  ],
+};
+
+// AppKit skill items (rooted shortPaths). references[] use full paths too.
+const AK_SCAFFOLD: SkillItem = { name: 'Scaffold App', shortPath: 'apps_lakebase/skills/01-appkit-scaffold', type: 'orchestrator', description: 'Generates the TypeScript project skeleton (server + client + config/queries) with one CLI command' };
+const AK_BUILD: SkillItem = { name: 'Build from PRD', shortPath: 'apps_lakebase/skills/02-appkit-build', type: 'orchestrator', description: 'Translates the PRD into React UI with mock data arrays — design quality is non-negotiable' };
+const AK_DEPLOY: SkillItem = { name: 'Deploy App', shortPath: 'apps_lakebase/skills/03-appkit-deploy', type: 'orchestrator', description: 'Autonomous validate -> build -> deploy -> verify -> fix loop for Databricks Apps' };
+const AK_PLUGIN_ADD: SkillItem = { name: 'Add Plugin', shortPath: 'apps_lakebase/skills/04-appkit-plugin-add', type: 'orchestrator', description: 'Adds AppKit plugins + bundle resources (Lakebase, analytics, genie, files, serving) for the chosen branch' };
+const AK_LAKEBASE_WIRING: SkillItem = { name: 'Wire Lakebase', shortPath: 'apps_lakebase/skills/05-appkit-lakebase-wiring', type: 'orchestrator', description: 'Builds the full data flow: DDL -> API routes -> useLakebaseData hook -> ConnectionStatus badge, with mock fallback' };
+
+// ---------------------------------------------------------------------------
 // Reusable common skills (referenced by multiple stages)
 // ---------------------------------------------------------------------------
-const C_DAB: SkillItem = { name: 'Asset Bundles', shortPath: 'common/databricks-asset-bundles', type: 'common', description: 'Teaches the agent how to package and deploy your code using Databricks Asset Bundles' };
+const C_DAB: SkillItem = { name: 'Asset Bundles', shortPath: 'skills/databricks-asset-bundles', type: 'common', description: 'Teaches the agent how to package and deploy your code using Databricks Asset Bundles' };
 const C_AUTO_OPS: SkillItem = { name: 'Autonomous Operations', shortPath: 'common/databricks-autonomous-operations', type: 'common', description: 'Gives the agent a self-healing loop — deploy, check, diagnose, and auto-fix errors' };
 const C_TABLE_PROPS: SkillItem = { name: 'Table Properties', shortPath: 'common/databricks-table-properties', type: 'common', description: 'Ensures every table gets production-grade settings like clustering and change tracking' };
 const C_SCHEMA_MGMT: SkillItem = { name: 'Schema Management', shortPath: 'common/schema-management-patterns', type: 'common', description: 'Handles schema creation with proper governance tags and ownership' };
@@ -85,6 +118,93 @@ const C_UC_CONSTRAINTS: SkillItem = { name: 'UC Constraints', shortPath: 'common
 // SKILL_BLUEPRINTS — full traversal for known skill-connected steps
 // ---------------------------------------------------------------------------
 export const SKILL_BLUEPRINTS: Record<string, SkillBlueprintConfig> = {
+
+  // -------------------------------------------------------------------------
+  // Apps + Lakebase (AppKit) — Steps 4-8. These use APPKIT_FOUNDATION so the
+  // Tier-1 router is the AppKit Navigator instead of the DPA Skill Navigator.
+  // -------------------------------------------------------------------------
+
+  // Step 4: UI Design (scaffold + build from PRD)
+  cursor_copilot_ui_design: {
+    variant: 'orchestrator-cascade',
+    stageLabel: 'AppKit Phase 1: Scaffold + Build',
+    summary: 'The AppKit Navigator routes your intent to the scaffold and build skills: scaffold generates the TypeScript project skeleton, then build translates your PRD into a polished React UI backed by mock data arrays.',
+    foundation: APPKIT_FOUNDATION,
+    sections: [
+      { tier: 2, label: 'Stage Coordinator', description: 'Loaded first — generates the project, then builds the UI from your PRD', accent: 'purple', skills: [AK_SCAFFOLD, AK_BUILD] },
+      { tier: 4, label: 'Deep-Dive Reference', description: 'Detailed guidance pulled in by the build skill when it needs specific patterns', accent: 'orange', skills: [
+        { name: 'Design Quality', shortPath: 'apps_lakebase/skills/02-appkit-build/references/design-quality.md', type: 'reference', description: 'Aesthetic direction + AppKit UI component patterns for a non-negotiable design bar' },
+        { name: 'LLM Guardrails', shortPath: 'apps_lakebase/skills/02-appkit-build/references/llm-guardrails.md', type: 'reference', description: 'Guardrails the build skill follows to keep generated UI consistent and correct' },
+      ]},
+    ],
+    consumes: 'docs/prd.md',
+    emits: ['client/src/App.tsx', 'server/server.ts', 'config/queries/*.sql'],
+  },
+
+  // Step 5: Deploy App (deploy mock to validate the full pipeline)
+  deploy_databricks_app: {
+    variant: 'orchestrator-cascade',
+    stageLabel: 'AppKit Phase 2: Deploy Mock',
+    summary: 'The agent loads the Deploy skill, which runs an autonomous validate -> build -> deploy -> verify -> fix loop to ship your app (with mock data first) to Databricks Apps.',
+    foundation: APPKIT_FOUNDATION,
+    sections: [
+      { tier: 2, label: 'Stage Coordinator', description: 'Loaded first — validates, builds, and deploys the app', accent: 'purple', skills: [AK_DEPLOY] },
+      { tier: 4, label: 'Deep-Dive Reference', description: 'Detailed deployment docs pulled in when needed', accent: 'orange', skills: [
+        { name: 'App Management', shortPath: 'apps_lakebase/skills/03-appkit-deploy/references/app-management.md', type: 'reference', description: 'Managing deployed apps — status checks, logs, lifecycle' },
+        { name: 'Lockfile & Recreation', shortPath: 'apps_lakebase/skills/03-appkit-deploy/references/lockfile-and-recreation.md', type: 'reference', description: 'Lockfile handling and app recreation patterns' },
+      ]},
+    ],
+    emits: ['Deployed app URL', 'Service Principal'],
+  },
+
+  // Step 6: Setup Lakebase (add plugin + bundle resources)
+  setup_lakebase: {
+    variant: 'orchestrator-cascade',
+    stageLabel: 'AppKit Phase 3: Setup Lakebase',
+    summary: 'The agent loads the Plugin Add skill, which installs the Lakebase package and declares the postgres project + app env bindings in your bundle — configuration only, no server.ts changes yet.',
+    foundation: APPKIT_FOUNDATION,
+    sections: [
+      { tier: 2, label: 'Stage Coordinator', description: 'Loaded first — adds the Lakebase plugin and bundle resources', accent: 'purple', skills: [AK_PLUGIN_ADD] },
+      { tier: 4, label: 'Deep-Dive Reference', description: 'Plugin-specific configuration pulled in by the plugin-add skill', accent: 'orange', skills: [
+        { name: 'Lakebase Plugin', shortPath: 'apps_lakebase/skills/04-appkit-plugin-add/references/plugin-lakebase.md', type: 'reference', description: 'Lakebase plugin config — connection pool, OAuth token rotation, env injection' },
+      ]},
+    ],
+    emits: ['@databricks/lakebase dependency', 'postgres project resource', 'app env bindings'],
+  },
+
+  // Step 7: Wire UI to Lakebase (DDL -> API -> hook -> badge)
+  wire_ui_lakebase: {
+    variant: 'orchestrator-cascade',
+    stageLabel: 'AppKit Phase 4: Wire Lakebase',
+    summary: 'The agent loads the Lakebase Wiring skill, which builds the complete four-layer data flow: DDL tables -> Express CRUD routes -> useLakebaseData hook -> ConnectionStatus badge, with an automatic mock fallback.',
+    foundation: APPKIT_FOUNDATION,
+    sections: [
+      { tier: 2, label: 'Stage Coordinator', description: 'Loaded first — wires the database all the way to the UI', accent: 'purple', skills: [AK_LAKEBASE_WIRING] },
+      { tier: 4, label: 'Deep-Dive Reference', description: 'Detailed wiring patterns pulled in by the wiring skill', accent: 'orange', skills: [
+        { name: 'Database Design Guide', shortPath: 'apps_lakebase/skills/05-appkit-lakebase-wiring/references/database-design-guide.md', type: 'reference', description: 'Schema/DDL design guidance for Lakebase-backed apps' },
+        { name: 'Frontend Patterns', shortPath: 'apps_lakebase/skills/05-appkit-lakebase-wiring/references/frontend-patterns.md', type: 'reference', description: 'React data-fetching + ConnectionStatus patterns' },
+        { name: 'Multi-Table Example', shortPath: 'apps_lakebase/skills/05-appkit-lakebase-wiring/references/multi-table-example.md', type: 'reference', description: 'End-to-end multi-table wiring walkthrough' },
+      ]},
+    ],
+    consumes: 'Lakebase connection',
+    emits: ['DDL scripts', 'CRUD API routes', 'useLakebaseData hook', 'ConnectionStatus'],
+  },
+
+  // Step 8: Deploy and Test (redeploy with live Lakebase + E2E)
+  workspace_setup_deploy: {
+    variant: 'orchestrator-cascade',
+    stageLabel: 'AppKit Phase 5: Deploy + E2E',
+    summary: 'The agent re-runs the Deploy skill to ship the wired app with live Lakebase, then verifies end-to-end: the ConnectionStatus badge shows Live Data and records persist across refreshes.',
+    foundation: APPKIT_FOUNDATION,
+    sections: [
+      { tier: 2, label: 'Stage Coordinator', description: 'Re-runs the deploy loop with live data and verifies E2E', accent: 'purple', skills: [AK_DEPLOY] },
+      { tier: 4, label: 'Deep-Dive Reference', description: 'Detailed deployment docs pulled in when needed', accent: 'orange', skills: [
+        { name: 'App Management', shortPath: 'apps_lakebase/skills/03-appkit-deploy/references/app-management.md', type: 'reference', description: 'Managing deployed apps — status checks, logs, lifecycle' },
+      ]},
+    ],
+    consumes: 'Lakebase endpoint',
+    emits: ['Production app with live data', 'E2E test results'],
+  },
 
   // Step 11: Gold Layer Design
   gold_layer_design: {
@@ -108,7 +228,7 @@ export const SKILL_BLUEPRINTS: Record<string, SkillBlueprintConfig> = {
         { name: 'Design Validation', shortPath: 'gold/design-workers/07-design-validation', type: 'worker', description: 'Cross-checks YAML, ERD, lineage consistency (Phase 8)' },
       ]},
       { tier: 4, label: 'Deep-Dive Reference', description: 'Detailed documentation pulled in by a worker when it needs specific patterns', accent: 'orange', skills: [
-        { name: 'ERD Patterns Reference', shortPath: 'gold/design-workers/05-erd-diagrams/references/erd-patterns.md', type: 'reference', description: 'Detailed Mermaid syntax patterns — loaded by 05-erd-diagrams worker (~4K tokens)' },
+        { name: 'ERD Patterns Reference', shortPath: 'gold/design-workers/05-erd-diagrams/references/erd-syntax-reference.md', type: 'reference', description: 'Detailed Mermaid ERD syntax reference — loaded by 05-erd-diagrams worker' },
       ]},
     ],
     emits: ['gold_layer_design/yaml/*.yaml', 'gold_layer_design/COLUMN_LINEAGE.csv'],
@@ -135,7 +255,7 @@ export const SKILL_BLUEPRINTS: Record<string, SkillBlueprintConfig> = {
         { name: 'Design Validation', shortPath: 'gold/design-workers/07-design-validation', type: 'worker', description: 'Cross-checks YAML, ERD, lineage consistency (Phase 8)' },
       ]},
       { tier: 4, label: 'Deep-Dive Reference', description: 'Detailed documentation pulled in by a worker when it needs specific patterns', accent: 'orange', skills: [
-        { name: 'ERD Patterns Reference', shortPath: 'gold/design-workers/05-erd-diagrams/references/erd-patterns.md', type: 'reference', description: 'Detailed Mermaid syntax patterns — loaded by 05-erd-diagrams worker (~4K tokens)' },
+        { name: 'ERD Patterns Reference', shortPath: 'gold/design-workers/05-erd-diagrams/references/erd-syntax-reference.md', type: 'reference', description: 'Detailed Mermaid ERD syntax reference — loaded by 05-erd-diagrams worker' },
       ]},
     ],
     emits: ['gold_layer_design/yaml/*.yaml', 'gold_layer_design/COLUMN_LINEAGE.csv'],
@@ -165,7 +285,7 @@ export const SKILL_BLUEPRINTS: Record<string, SkillBlueprintConfig> = {
       ]},
       { tier: 3, label: 'Shared Tools', description: 'Reusable skills loaded by the orchestrator — shared across stages, activated only when this stage needs them', accent: 'emerald', skills: [C_DAB, C_TABLE_PROPS, C_SCHEMA_MGMT, C_PY_IMPORTS, C_AUTO_OPS] },
       { tier: 3, label: 'Specialist Workers', description: 'Dispatched by the orchestrator to handle specific tasks', accent: 'gold', skills: [
-        { name: 'Faker Data Generation', shortPath: 'bronze/workers/01-faker-data-generation', type: 'worker', description: 'Generates realistic test data with seeded Faker, non-linear distributions, 5% corruption rate' },
+        { name: 'Faker Data Generation', shortPath: 'bronze/01-faker-data-generation', type: 'worker', description: 'Generates realistic test data with seeded Faker, non-linear distributions, 5% corruption rate' },
       ]},
     ],
   },
@@ -181,8 +301,8 @@ export const SKILL_BLUEPRINTS: Record<string, SkillBlueprintConfig> = {
       ]},
       { tier: 3, label: 'Shared Tools', description: 'Reusable skills loaded by the orchestrator — shared across stages, activated only when this stage needs them', accent: 'emerald', skills: [C_DAB, C_TABLE_PROPS, C_PY_IMPORTS, C_UC_CONSTRAINTS, C_SCHEMA_MGMT, C_AUTO_OPS] },
       { tier: 3, label: 'Specialist Workers', description: 'Dispatched by the orchestrator to handle specific tasks', accent: 'gold', skills: [
-        { name: 'DLT Expectations Patterns', shortPath: 'silver/workers/01-dlt-expectations-patterns', type: 'worker', description: 'Portable DQ rules stored in Unity Catalog Delta tables' },
-        { name: 'DQX Patterns', shortPath: 'silver/workers/02-dqx-patterns', type: 'worker', description: 'Advanced DQX framework validation with detailed failure diagnostics' },
+        { name: 'DLT Expectations Patterns', shortPath: 'silver/01-dlt-expectations-patterns', type: 'worker', description: 'Portable DQ rules stored in Unity Catalog Delta tables' },
+        { name: 'DQX Patterns', shortPath: 'silver/02-dqx-patterns', type: 'worker', description: 'Advanced DQX framework validation with detailed failure diagnostics' },
       ]},
     ],
   },
@@ -205,7 +325,7 @@ export const SKILL_BLUEPRINTS: Record<string, SkillBlueprintConfig> = {
         { name: 'Schema Validation', shortPath: 'gold/pipeline-workers/05-schema-validation', type: 'worker', description: 'Validates schemas before deployment' },
       ]},
       { tier: 4, label: 'Deep-Dive Reference', description: 'Detailed documentation pulled in by a worker when it needs specific patterns', accent: 'orange', skills: [
-        { name: 'Merge SQL Patterns', shortPath: 'gold/pipeline-workers/02-merge-patterns/references/merge-sql-patterns.md', type: 'reference', description: 'SCD Type 1/2, accumulating snapshots, factless fact MERGE SQL — loaded by 02-merge-patterns worker' },
+        { name: 'Merge SQL Patterns', shortPath: 'gold/01-gold-layer-setup/references/advanced-merge-patterns.md', type: 'reference', description: 'SCD Type 1/2, accumulating snapshots, factless fact MERGE SQL — loaded by the Gold setup orchestrator' },
       ]},
     ],
     consumes: 'gold_layer_design/yaml/*.yaml',
@@ -328,18 +448,13 @@ export const SKILL_BLUEPRINTS: Record<string, SkillBlueprintConfig> = {
 
   // Step 25: Optimize Genie
   optimize_genie: {
-    variant: 'orchestrator-cascade',
-    stageLabel: 'Stage 6b: Genie Optimization',
-    summary: 'The agent loads the Genie Optimization orchestrator which evaluates benchmark accuracy with 8 scorers and tunes 6 control levers until quality targets are met.',
+    variant: 'direct-skills',
+    stageLabel: 'Stage 6: Semantic Layer (Genie)',
+    summary: 'The agent loads the Genie Space skills to refine your existing Genie Space — tightening General Instructions, benchmarks, and example SQL — then redeploys it programmatically via the export/import API.',
     sections: [
-      { tier: 2, label: 'Stage Coordinator', description: 'Loaded first — sets up the optimization experiment and routes to workers', accent: 'purple', skills: [
-        { name: 'Genie Optimization Orchestrator', shortPath: 'semantic-layer/05-genie-optimization-orchestrator', type: 'orchestrator', description: 'Resolves CLI profile, sets up MLflow experiment, routes to workers with mandatory session state persistence' },
-      ]},
-      { tier: 3, label: 'Specialist Workers', description: 'Dispatched by the orchestrator to handle specific tasks', accent: 'gold', skills: [
-        { name: 'Benchmark Generator', shortPath: 'semantic-layer/genie-optimization-workers/01-genie-benchmark-generator', type: 'worker', description: 'Create/validate benchmarks, sync to MLflow dataset' },
-        { name: 'Benchmark Evaluator', shortPath: 'semantic-layer/genie-optimization-workers/02-genie-benchmark-evaluator', type: 'worker', description: '8 scorers via mlflow.genai.evaluate(), eval scopes (full/slice/P0/held-out)' },
-        { name: 'Metadata Optimizer', shortPath: 'semantic-layer/genie-optimization-workers/03-genie-metadata-optimizer', type: 'worker', description: 'Lever-aware analysis (L1-L5 targeted, L6 GEPA), 6 control levers' },
-        { name: 'Optimization Applier', shortPath: 'semantic-layer/genie-optimization-workers/04-genie-optimization-applier', type: 'worker', description: 'Dual persistence — Genie API + repo files, rollback on regression' },
+      { tier: 2, label: 'Direct Skills', description: 'Invoked directly to refine and redeploy the Genie Space', accent: 'purple', skills: [
+        { name: 'Genie Space Patterns', shortPath: 'semantic-layer/03-genie-space-patterns', type: 'worker', description: '7-section deliverable, General Instructions ≤20 lines, 10+ benchmarks' },
+        { name: 'Export/Import API', shortPath: 'semantic-layer/04-genie-space-export-import-api', type: 'worker', description: 'REST API JSON schema for programmatic CI/CD (re)deployment of the Genie Space' },
       ]},
     ],
   },
@@ -369,6 +484,32 @@ function humanize(slug: string): string {
 }
 
 function classifyReference(rawPath: string): ParsedRef | null {
+  // AppKit (Apps + Lakebase) — shortPaths stay FULLY ROOTED at apps_lakebase/
+  // so SkillContentModal resolves them as-is (no data_product_accelerator prefix).
+  const appkitRefMatch = rawPath.match(/apps_lakebase\/skills\/([\w-]+)\/references\/([\w.-]+\.md)$/);
+  if (appkitRefMatch) {
+    const [, dir, file] = appkitRefMatch;
+    return { rawPath, type: 'reference', tier: 4, domain: 'appkit', name: humanize(file.replace(/\.md$/, '')), shortPath: `apps_lakebase/skills/${dir}/references/${file}` };
+  }
+  const appkitSkillMatch = rawPath.match(/apps_lakebase\/skills\/([\w-]+)(?:\/SKILL\.md)?$/);
+  if (appkitSkillMatch) {
+    const dir = appkitSkillMatch[1];
+    const isRouter = /^00-/.test(dir);
+    // ParsedRef only models tiers 2-4 (Tier-1 foundation skills are static, not
+    // discovered from templates). A referenced appkit navigator is grouped with
+    // the Tier-2 coordinators.
+    return { rawPath, type: isRouter ? 'router' : 'orchestrator', tier: 2, domain: 'appkit', name: humanize(dir.replace(/^appkit-/, '')), shortPath: `apps_lakebase/skills/${dir}` };
+  }
+
+  // Top-level shared skills registry (skills/<name>) — e.g. databricks-asset-bundles,
+  // databricks-expert-agent. These live at the repo root `skills/`, not under
+  // data_product_accelerator/skills/common/. shortPath stays rooted at skills/.
+  const sharedSkillMatch = rawPath.match(/^(?:vibe-coding-workshop-template\/)?skills\/([\w-]+)(?:\/SKILL\.md)?$/);
+  if (sharedSkillMatch) {
+    const dir = sharedSkillMatch[1];
+    return { rawPath, type: 'common', tier: 3, domain: 'common', name: humanize(dir.replace(/^databricks-/, '')), shortPath: `skills/${dir}` };
+  }
+
   const skillMatch = rawPath.match(/data_product_accelerator\/skills\/([\w-]+)\/([\w-]+(?:\/[\w-]+)*)\/SKILL\.md$/);
   if (skillMatch) {
     const [, domain, skillPath] = skillMatch;

@@ -147,7 +147,7 @@ def _refresh_lakebase_cache():
         usecase_desc_sql_with_category = f"""
             SELECT DISTINCT ON (industry, use_case)
                 industry, industry_label, use_case, use_case_label, prompt_template, version,
-                category, category_order, display_order
+                category, category_order, display_order, is_certified
             FROM {schema}.usecase_descriptions
             WHERE is_active = TRUE
             ORDER BY industry, use_case, version DESC
@@ -612,6 +612,7 @@ class PromptConfigCreate(BaseModel):
     category: Optional[str] = Field(default=None, description="Outcome-map column title (e.g. 'Agentic AI Operations'). NULL for Sample / legacy.")
     category_order: Optional[int] = Field(default=None, description="Outcome-map column position (1, 2, 3) within the industry.")
     display_order: Optional[int] = Field(default=None, description="Card order within the column.")
+    is_certified: Optional[bool] = Field(default=None, description="Certified flag. None = inherit from previous version; True/False sets it. Certified use cases sort to the top and show a Certified badge.")
 
 
 class PromptConfigResponse(BaseModel):
@@ -631,6 +632,7 @@ class PromptConfigResponse(BaseModel):
     category: Optional[str] = None
     category_order: Optional[int] = None
     display_order: Optional[int] = None
+    is_certified: bool = False
 
 
 class SectionInputCreate(BaseModel):
@@ -785,6 +787,7 @@ def get_use_cases_map() -> Dict[str, List[Dict]]:
                     "value": use_case,
                     "label": row.get("use_case_label", use_case.title()),
                     "path_type": _derive_path_type(row),
+                    "is_certified": bool(row.get("is_certified")),
                 }
                 # Outcome-map grouping (Travel & Hospitality). NULL/missing for
                 # Sample, legacy rows, and any database that hasn't run the
@@ -904,9 +907,10 @@ def format_use_case_name(use_case: str) -> str:
 # so backend bootstrap and frontend fallback stay in sync.
 DEFAULT_CODING_ASSISTANTS_CONFIG_JSON = json.dumps([
     {"id": "cursor", "recommended": True},
-    {"id": "coda", "recommended": True},
-    {"id": "ai-gateway", "recommended": True},
     {"id": "genie-code", "recommended": True},
+    {"id": "ai-gateway", "recommended": True},
+    {"id": "coda", "recommended": True},
+    {"id": "omnigent", "recommended": False},
     {"id": "copilot", "recommended": False},
     {"id": "vscode", "recommended": False},
 ])
@@ -1246,6 +1250,13 @@ def get_section_input_content(industry: str, use_case: str, section_tag: str, pr
         '{use_case_description}': use_case_description,
         '{section_tag}': section_tag,
     }
+
+    # Scoped strictly to the Iterate & Enhance step. Its template is the only one
+    # that uses the bare {industry}/{use_case} tokens; gating on section_tag
+    # guarantees no other step's substitution behavior changes.
+    if section_tag == 'iterate_enhance':
+        params['{industry}'] = industry_name
+        params['{use_case}'] = use_case_title
     
     # Add workshop parameters to substitution params
     for key, value in workshop_params.items():
@@ -2893,7 +2904,7 @@ async def get_latest_prompt_configs(response: Response) -> List[PromptConfigResp
     sql = f"""
         SELECT DISTINCT ON (industry, use_case)
             config_id, industry, industry_label, use_case, use_case_label, 
-            prompt_template, version, is_active, 
+            prompt_template, version, is_active, is_certified,
             TO_CHAR(inserted_at, 'YYYY-MM-DD HH24:MI:SS') as inserted_at, 
             TO_CHAR(updated_at, 'YYYY-MM-DD HH24:MI:SS') as updated_at, 
             created_by
@@ -3037,12 +3048,29 @@ async def create_prompt_config(request: PromptConfigCreate) -> PromptConfigRespo
     version_result = execute_query(version_sql, (request.industry, request.use_case))
     next_version = int(version_result[0].get('max_version', 0)) + 1 if version_result else 1
     
+    # Resolve is_certified: if the request omits it (None), carry forward the
+    # flag from the latest existing version so editing a prompt's text doesn't
+    # silently un-certify it. The dedicated toggle-certified endpoint is what
+    # flips the flag.
+    if request.is_certified is None:
+        prev_sql = f"""
+            SELECT is_certified
+            FROM {schema}.usecase_descriptions
+            WHERE industry = %s AND use_case = %s
+            ORDER BY version DESC
+            LIMIT 1
+        """
+        prev_result = execute_query(prev_sql, (request.industry, request.use_case))
+        resolved_certified = bool(prev_result[0].get('is_certified')) if prev_result else False
+    else:
+        resolved_certified = bool(request.is_certified)
+    
     # Insert new row with computed version
     insert_sql = f"""
         INSERT INTO {schema}.usecase_descriptions 
         (industry, industry_label, use_case, use_case_label, prompt_template, 
-         version, is_active, inserted_at, updated_at, created_by)
-        VALUES (%s, %s, %s, %s, %s, %s, TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, %s)
+         version, is_active, inserted_at, updated_at, created_by, is_certified)
+        VALUES (%s, %s, %s, %s, %s, %s, TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, %s, %s)
     """
     
     success = execute_insert(insert_sql, (
@@ -3052,7 +3080,8 @@ async def create_prompt_config(request: PromptConfigCreate) -> PromptConfigRespo
         request.use_case_label,
         request.prompt_template,
         next_version,
-        current_user
+        current_user,
+        resolved_certified
     ))
     
     if not success:
@@ -3071,7 +3100,8 @@ async def create_prompt_config(request: PromptConfigCreate) -> PromptConfigRespo
         prompt_template=request.prompt_template,
         version=next_version,
         is_active=True,
-        created_by=current_user
+        created_by=current_user,
+        is_certified=resolved_certified
     )
 
 
@@ -3201,6 +3231,58 @@ async def toggle_usecase_active(industry: str, use_case: str) -> Dict[str, Any]:
         "use_case": use_case,
         "is_active": new_status,
         "message": f"Use case is now {'active' if new_status else 'inactive'}"
+    }
+
+
+@router.patch("/config/prompts/{industry}/{use_case}/toggle-certified")
+async def toggle_usecase_certified(industry: str, use_case: str) -> Dict[str, Any]:
+    """
+    Toggle the is_certified flag for a use case.
+    Certified use cases sort to the top of each section in the workshop flow
+    and render a "Certified" badge on the card and workflow steps.
+    """
+    logger.info(f"[Config API] Toggling certified status for {industry}/{use_case}")
+    
+    schema = get_schema()
+    
+    # Get current is_certified status (latest version)
+    check_sql = f"""
+        SELECT is_certified FROM {schema}.usecase_descriptions
+        WHERE industry = %s AND use_case = %s
+        ORDER BY version DESC
+        LIMIT 1
+    """
+    existing = execute_query(check_sql, (industry, use_case))
+    
+    if not existing:
+        raise HTTPException(status_code=404, detail=f"Use case '{industry}/{use_case}' not found")
+    
+    current_status = bool(existing[0].get('is_certified', False))
+    new_status = not current_status
+    
+    # Update all versions of this use case so the flag is stable across edits
+    update_sql = f"""
+        UPDATE {schema}.usecase_descriptions
+        SET is_certified = %s, updated_at = CURRENT_TIMESTAMP
+        WHERE industry = %s AND use_case = %s
+    """
+    
+    success = execute_insert(update_sql, (new_status, industry, use_case))
+    
+    if not success:
+        raise HTTPException(status_code=500, detail="Failed to toggle certified status")
+    
+    # Invalidate cache
+    _invalidate_cache()
+    
+    logger.info(f"[Config API] Toggled {industry}/{use_case} to is_certified={new_status}")
+    
+    return {
+        "success": True,
+        "industry": industry,
+        "use_case": use_case,
+        "is_certified": new_status,
+        "message": f"Use case is now {'certified' if new_status else 'not certified'}"
     }
 
 

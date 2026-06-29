@@ -267,9 +267,8 @@ function SectionBlock({ section, sectionIndex, shouldAnimate, baseDelay, onViewS
   );
 }
 
-function FoundationBar({ shouldAnimate, onViewSkill }: { shouldAnimate: boolean; onViewSkill?: (skill: SkillItem) => void }) {
+function FoundationBar({ shouldAnimate, onViewSkill, foundation = TIER1_FOUNDATION }: { shouldAnimate: boolean; onViewSkill?: (skill: SkillItem) => void; foundation?: SkillSection }) {
   const [isExpanded, setIsExpanded] = useState(false);
-  const foundation = TIER1_FOUNDATION;
 
   return (
     <div
@@ -288,7 +287,7 @@ function FoundationBar({ shouldAnimate, onViewSkill }: { shouldAnimate: boolean;
             Tier 1
           </span>
           <span className="text-ui-xs font-semibold text-cyan-400 uppercase tracking-wider">
-            Foundation — Always Loaded
+            {foundation.label}
           </span>
           <span className="text-ui-2xs text-muted-foreground/40">
             {foundation.skills.length} skills
@@ -373,7 +372,7 @@ export function SkillBlueprintTab({ config, shouldAnimate, onMounted }: SkillBlu
     onMounted?.();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const totalSkills = TIER1_FOUNDATION.skills.length +
+  const totalSkills = (config.foundation ?? TIER1_FOUNDATION).skills.length +
     config.sections.reduce((sum, s) => sum + s.skills.length, 0);
 
   const handleViewSkill = (skill: SkillItem) => setSelectedSkill(skill);
@@ -415,7 +414,7 @@ export function SkillBlueprintTab({ config, shouldAnimate, onMounted }: SkillBlu
       )}
 
       {/* Tier 1: Foundation — always rendered */}
-      <FoundationBar shouldAnimate={shouldAnimate} onViewSkill={handleViewSkill} />
+      <FoundationBar shouldAnimate={shouldAnimate} onViewSkill={handleViewSkill} foundation={config.foundation ?? TIER1_FOUNDATION} />
 
       {/* Flow connector: Tier 1 → Tier 2 */}
       <FlowConnector shouldAnimate={shouldAnimate} delay={120} />
@@ -474,11 +473,11 @@ interface SkillBlueprintFullScreenModalProps {
 
 export function SkillBlueprintFullScreenModal({
   config,
-  title = 'Agent Skills',
+  title = 'Skills Navigator',
 }: SkillBlueprintFullScreenModalProps) {
   const [isOpen, setIsOpen] = useState(false);
 
-  const totalSkills = TIER1_FOUNDATION.skills.length +
+  const totalSkills = (config.foundation ?? TIER1_FOUNDATION).skills.length +
     config.sections.reduce((sum, s) => sum + s.skills.length, 0);
 
   const closeModal = useCallback(() => setIsOpen(false), []);

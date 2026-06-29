@@ -19,8 +19,8 @@ export function AiGatewayEndpointConfig({ onToast }: AiGatewayEndpointConfigProp
           <div className="flex-1">
             <h2 className="text-lg font-semibold text-foreground">Set up AI Gateway Endpoint</h2>
             <p className="text-sm text-muted-foreground mt-1">
-              Admin setup steps for configuring a Databricks AI Gateway endpoint that Claude Code will route through.
-              Once set up, users can select the <strong>VS Code + Databricks AI Gateway</strong> option in the workflow and follow the user setup guide.
+              Admin setup steps for configuring a Unity AI Gateway endpoint that Claude Code will route through.
+              Once set up, users can select the <strong>VS Code + Unity AI Gateway</strong> option in the workflow and follow the user setup guide.
             </p>
           </div>
           <div className="flex-shrink-0 pt-1">

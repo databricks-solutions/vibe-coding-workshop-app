@@ -60,6 +60,8 @@ export interface SelectOption {
   category_order?: number;
   /** Card order within the column. */
   display_order?: number;
+  /** Certified use cases sort to the top of each section and show a Certified badge. */
+  is_certified?: boolean;
 }
 
 export interface GeneratedContent {
@@ -139,6 +141,7 @@ export interface PromptConfig {
   prompt_template: string;
   version: number;
   is_active: boolean;
+  is_certified?: boolean;
   inserted_at?: string;
   updated_at?: string;
   created_by?: string;
@@ -1078,6 +1081,13 @@ class ApiClient {
   /** Toggle active status for a use case */
   async toggleUseCaseActive(industry: string, useCase: string): Promise<{ success: boolean; is_active: boolean; message: string }> {
     return this.fetch(`/config/prompts/${encodeURIComponent(industry)}/${encodeURIComponent(useCase)}/toggle-active`, {
+      method: 'PATCH',
+    });
+  }
+
+  /** Toggle certified status for a use case */
+  async toggleUseCaseCertified(industry: string, useCase: string): Promise<{ success: boolean; is_certified: boolean; message: string }> {
+    return this.fetch(`/config/prompts/${encodeURIComponent(industry)}/${encodeURIComponent(useCase)}/toggle-certified`, {
       method: 'PATCH',
     });
   }

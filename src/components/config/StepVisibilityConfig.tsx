@@ -2,13 +2,18 @@ import { useState, useEffect } from 'react';
 import { apiClient } from '../../api/client';
 import { WORKFLOW_SECTIONS, WORKSHOP_LEVELS, type WorkshopLevel } from '../../constants/workflowSections';
 import { BUTTON_LABELS } from '../LevelSelector';
-import { Loader2, AlertTriangle } from 'lucide-react';
+import { Loader2, AlertTriangle, Route, ListOrdered } from 'lucide-react';
 
 interface StepVisibilityConfigProps {
   onToast: (message: string, type: 'success' | 'error') => void;
 }
 
 type AssistantColumn = '__default__' | 'coda' | 'genie-code';
+
+// Secondary navigation within the Visibility tab. Paths (which tracks appear in
+// the picker) and Flow (Prerequisites + the ordered step sequence) are distinct
+// concerns; splitting them keeps each toggle group unambiguous.
+type SubTab = 'paths' | 'flow';
 
 interface MatrixItem {
   section_key: string;
@@ -96,6 +101,7 @@ export function StepVisibilityConfig({ onToast }: StepVisibilityConfigProps) {
   const [stepRows, setStepRows] = useState<StepRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [toggling, setToggling] = useState<string | null>(null);
+  const [subTab, setSubTab] = useState<SubTab>('paths');
 
   useEffect(() => {
     loadData();
@@ -274,91 +280,134 @@ export function StepVisibilityConfig({ onToast }: StepVisibilityConfigProps) {
   const grouped = groupByChapter(stepRows);
   const groupedPaths = groupByChapter(pathRows);
 
+  const SUB_TABS: Array<{ id: SubTab; label: string; icon: typeof Route }> = [
+    { id: 'paths', label: 'Workshop Paths', icon: Route },
+    { id: 'flow', label: 'Workshop Flow', icon: ListOrdered },
+  ];
+
+  const columnHeaderLabel = subTab === 'paths' ? 'Path' : 'Step';
+
   return (
     <div className="h-full overflow-y-auto">
       <div className="max-w-4xl mx-auto">
-        <div className="mb-6">
+        <div className="mb-5">
           <h2 className="text-lg font-semibold text-foreground">Visibility</h2>
           <p className="text-sm text-muted-foreground mt-1">
-            Workshop paths and steps each have three independent visibility toggles
-            &mdash; one per coding assistant. Newly added rows start with all three enabled.
-            Changing Default later does not flip CoDA or Genie Code.
+            Each row has three independent visibility toggles &mdash; one per coding assistant.
+            Newly added rows start with all three enabled. Changing Default later does not flip
+            CoDA or Genie Code.
           </p>
-          <div className="mt-3 flex items-start gap-2 rounded-md border border-amber-500/30 bg-amber-500/5 px-3 py-2">
+        </div>
+
+        {/* Secondary sub-tab bar — separates the two distinct concerns:
+            which path tracks appear in the picker (Paths) vs. the ordered
+            step sequence shown during the workshop (Flow). */}
+        <div className="mb-5 inline-flex items-center gap-1 rounded-lg border border-border bg-secondary/30 p-1">
+          {SUB_TABS.map(({ id, label, icon: Icon }) => (
+            <button
+              key={id}
+              onClick={() => setSubTab(id)}
+              className={`flex items-center gap-2 rounded-md px-3.5 py-1.5 text-ui-sm font-medium transition-colors ${
+                subTab === id
+                  ? 'bg-card text-foreground shadow-sm'
+                  : 'text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              <Icon className="w-4 h-4" />
+              {label}
+            </button>
+          ))}
+        </div>
+
+        {/* Sub-tab scoped guidance */}
+        {subTab === 'paths' ? (
+          <div className="mb-4 flex items-start gap-2 rounded-md border border-amber-500/30 bg-amber-500/5 px-3 py-2">
             <AlertTriangle className="w-4 h-4 text-amber-400 mt-0.5 shrink-0" />
             <p className="text-ui-sm text-amber-400/90">
-              Hiding a step (including Prerequisites) auto-advances the wizard to the next
-              visible step for that assistant. Hiding a workshop path greys it out in the
-              picker; the user&rsquo;s currently-selected path always remains clickable
-              even when hidden, so saved sessions never break.
+              These toggles control which tracks appear in the workshop path picker. Hiding a path
+              greys it out in the picker; the user&rsquo;s currently-selected path always remains
+              clickable even when hidden, so saved sessions never break.
             </p>
           </div>
-        </div>
+        ) : (
+          <div className="mb-4 flex items-start gap-2 rounded-md border border-amber-500/30 bg-amber-500/5 px-3 py-2">
+            <AlertTriangle className="w-4 h-4 text-amber-400 mt-0.5 shrink-0" />
+            <p className="text-ui-sm text-amber-400/90">
+              These toggles control the ordered step sequence shown during the workshop. Hiding a
+              step (including Prerequisites) auto-advances the wizard to the next visible step for
+              that assistant.
+            </p>
+          </div>
+        )}
 
         {/* Column header */}
         <div className="hidden sm:grid grid-cols-[minmax(0,1fr)_repeat(3,minmax(100px,120px))] gap-4 px-5 pb-2 text-ui-xs uppercase tracking-wide text-muted-foreground">
-          <div>Path / Step</div>
+          <div>{columnHeaderLabel}</div>
           {COLUMNS.map(c => (
             <div key={c.id} className="text-center">{c.label}</div>
           ))}
         </div>
 
-        <div className="space-y-6">
-          {/* Prerequisites — pinned row */}
-          {prereqRow && (
-            <div className="rounded-xl border border-border bg-card overflow-hidden">
-              <div className="px-5 py-3 bg-secondary/30 border-b border-border">
-                <h3 className="text-ui-base font-semibold text-foreground">{prereqRow.chapter}</h3>
+        {subTab === 'paths' ? (
+          <div className="space-y-6">
+            {/* Workshop paths. Sourced from WORKSHOP_LEVELS (frontend canonical
+                list); rows render even when no override row exists for them yet
+                (defaults to all-enabled). */}
+            {groupedPaths.map(([chapter, paths]) => (
+              <div key={chapter} className="rounded-xl border border-border bg-card overflow-hidden">
+                <div className="px-5 py-3 bg-secondary/30 border-b border-border">
+                  <h3 className="text-ui-base font-semibold text-foreground">{chapter}</h3>
+                </div>
+                <div className="divide-y divide-border/50">
+                  {paths.map(p => (
+                    <VisibilityRow
+                      key={p.sectionKey}
+                      row={p}
+                      toggling={toggling}
+                      onToggle={handleToggle}
+                    />
+                  ))}
+                </div>
               </div>
-              <div className="divide-y divide-border/50">
-                <VisibilityRow
-                  row={prereqRow}
-                  toggling={toggling}
-                  onToggle={handleToggle}
-                />
-              </div>
-            </div>
-          )}
-
-          {/* Workshop paths — pinned above steps. Sourced from WORKSHOP_LEVELS
-              (frontend canonical list); rows render even when no override row
-              exists for them yet (defaults to all-enabled). */}
-          {groupedPaths.map(([chapter, paths]) => (
-            <div key={chapter} className="rounded-xl border border-border bg-card overflow-hidden">
-              <div className="px-5 py-3 bg-secondary/30 border-b border-border">
-                <h3 className="text-ui-base font-semibold text-foreground">{chapter}</h3>
-              </div>
-              <div className="divide-y divide-border/50">
-                {paths.map(p => (
+            ))}
+          </div>
+        ) : (
+          <div className="space-y-6">
+            {/* Prerequisites — pinned at the top of the flow */}
+            {prereqRow && (
+              <div className="rounded-xl border border-border bg-card overflow-hidden">
+                <div className="px-5 py-3 bg-secondary/30 border-b border-border">
+                  <h3 className="text-ui-base font-semibold text-foreground">{prereqRow.chapter}</h3>
+                </div>
+                <div className="divide-y divide-border/50">
                   <VisibilityRow
-                    key={p.sectionKey}
-                    row={p}
+                    row={prereqRow}
                     toggling={toggling}
                     onToggle={handleToggle}
                   />
-                ))}
+                </div>
               </div>
-            </div>
-          ))}
+            )}
 
-          {grouped.map(([chapter, steps]) => (
-            <div key={chapter} className="rounded-xl border border-border bg-card overflow-hidden">
-              <div className="px-5 py-3 bg-secondary/30 border-b border-border">
-                <h3 className="text-ui-base font-semibold text-foreground">{chapter}</h3>
+            {grouped.map(([chapter, steps]) => (
+              <div key={chapter} className="rounded-xl border border-border bg-card overflow-hidden">
+                <div className="px-5 py-3 bg-secondary/30 border-b border-border">
+                  <h3 className="text-ui-base font-semibold text-foreground">{chapter}</h3>
+                </div>
+                <div className="divide-y divide-border/50">
+                  {steps.map(step => (
+                    <VisibilityRow
+                      key={step.sectionKey}
+                      row={step}
+                      toggling={toggling}
+                      onToggle={handleToggle}
+                    />
+                  ))}
+                </div>
               </div>
-              <div className="divide-y divide-border/50">
-                {steps.map(step => (
-                  <VisibilityRow
-                    key={step.sectionKey}
-                    row={step}
-                    toggling={toggling}
-                    onToggle={handleToggle}
-                  />
-                ))}
-              </div>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        )}
 
         <div className="mt-6 mb-10 p-4 rounded-lg bg-amber-500/5 border border-amber-500/20">
           <p className="text-ui-sm text-amber-400/90">

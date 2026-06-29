@@ -8,8 +8,13 @@
 --
 -- Seeding strategy:
 --   * Genie Code: disable the paths Genie Code does not yet support
---     (Apps + Lakebase paths, Skills/Agents accelerators, the end-to-end
---     workshop, and Reverse ETL paths that terminate in Lakebase/App).
+--     (the end-to-end workshop, the Skills accelerator, and the Reverse ETL
+--     paths that terminate in Lakebase/App).
+--   * The Apps and App + Lakebase paths (__path_app-only__,
+--     __path_app-database__) and the Agents Accelerator are intentionally
+--     LEFT ENABLED for Genie Code so they can be exercised. The reconciliation
+--     DELETE below clears any previously-seeded disable row for them so
+--     existing deployments pick up the change on redeploy.
 --   * Default and CoDA: NO seeded rows. Absence == enabled.
 --
 -- Idempotency contract:
@@ -26,11 +31,22 @@
 INSERT INTO ${catalog}.${schema}.step_visibility_overrides
   (section_key, coding_assistant, enabled, updated_at, updated_by)
 VALUES
-  ('__path_app-only__',                'genie-code', FALSE, CURRENT_TIMESTAMP, 'seed'),
-  ('__path_app-database__',            'genie-code', FALSE, CURRENT_TIMESTAMP, 'seed'),
   ('__path_end-to-end__',              'genie-code', FALSE, CURRENT_TIMESTAMP, 'seed'),
   ('__path_skills-accelerator__',      'genie-code', FALSE, CURRENT_TIMESTAMP, 'seed'),
-  ('__path_agents-accelerator__',      'genie-code', FALSE, CURRENT_TIMESTAMP, 'seed'),
   ('__path_reverse-lakebase__',        'genie-code', FALSE, CURRENT_TIMESTAMP, 'seed'),
   ('__path_reverse-app__',             'genie-code', FALSE, CURRENT_TIMESTAMP, 'seed')
 ON CONFLICT (section_key, coding_assistant) DO NOTHING;
+
+-- Reconciliation: keep the Apps, App + Lakebase, and Agents Accelerator paths
+-- enabled for Genie Code by deleting any previously-seeded disable row for them
+-- (absence == enabled). Guarded by updated_by='seed' so admin-made choices
+-- captured via the Configuration -> Visibility tab (updated_by=<admin email>)
+-- are never touched.
+DELETE FROM ${catalog}.${schema}.step_visibility_overrides
+WHERE coding_assistant = 'genie-code'
+  AND section_key IN (
+    '__path_app-only__',
+    '__path_app-database__',
+    '__path_agents-accelerator__'
+  )
+  AND updated_by = 'seed';

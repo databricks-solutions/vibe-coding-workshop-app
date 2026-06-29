@@ -95,9 +95,14 @@ export function OutcomeMapGrid({
         useCases: uncategorized,
       });
     }
-    // Sort cards within each column by display_order then label
+    // Sort cards within each column: certified first, then display_order, then label.
+    // Certified use cases rise to the top of every column so they land in the
+    // always-visible first three slots.
     for (const col of result) {
       col.useCases.sort((a, b) => {
+        const ac = a.is_certified ? 0 : 1;
+        const bc = b.is_certified ? 0 : 1;
+        if (ac !== bc) return ac - bc;
         const ao = a.display_order ?? Number.MAX_SAFE_INTEGER;
         const bo = b.display_order ?? Number.MAX_SAFE_INTEGER;
         if (ao !== bo) return ao - bo;

@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
-import { BookOpen, ChevronDown, ShieldCheck, UserRound } from 'lucide-react';
+import { Activity, BookOpen, ChevronDown, LifeBuoy, Network, ShieldCheck, Sparkles, UserRound, Wallet } from 'lucide-react';
 import { MarkdownWithCopy } from './MarkdownWithCopy';
 import { ExpandableOutputModal } from './ExpandableOutputModal';
 import attendeeMd from '../content/ai-gateway-attendee.md?raw';
+import attendeeManualMd from '../content/ai-gateway-attendee-manual.md?raw';
 import adminMd from '../content/ai-gateway-admin.md?raw';
 
 type TabId = 'user' | 'admin';
@@ -11,6 +12,57 @@ const TABS: { id: TabId; label: string; Icon: typeof UserRound }[] = [
   { id: 'user', label: 'User setup', Icon: UserRound },
   { id: 'admin', label: 'Admin setup', Icon: ShieldCheck },
 ];
+
+const OVERVIEW_HIGHLIGHTS: { label: string; Icon: typeof UserRound }[] = [
+  { label: 'LLM Guardrails', Icon: ShieldCheck },
+  { label: 'AI Spend Controls', Icon: Wallet },
+  { label: 'Observability', Icon: Activity },
+  { label: 'MCP Governance', Icon: Network },
+];
+
+/**
+ * User-setup body: the recommended ucode path, plus the manual fallback as a
+ * collapsed-by-default accordion. Used identically inline and in the fullscreen
+ * modal so both views stay consistent (manual hidden until the user opens it).
+ */
+function UserSetupBody({ onCopy }: { onCopy?: (ok: boolean) => void }) {
+  const [manualOpen, setManualOpen] = useState(false);
+  return (
+    <>
+      <MarkdownWithCopy content={attendeeMd} onCopy={onCopy} />
+
+      {/* Fallback path — collapsed by default, opened only if ucode didn't work */}
+      <div className="mt-4 rounded-lg border border-amber-500/30 bg-amber-500/5 overflow-hidden">
+        <button
+          type="button"
+          onClick={() => setManualOpen((v) => !v)}
+          aria-expanded={manualOpen}
+          className="w-full flex items-center gap-2.5 px-3 py-2.5 text-left hover:bg-amber-500/10 transition-colors"
+        >
+          <LifeBuoy className="w-4 h-4 text-amber-300 flex-shrink-0" />
+          <div className="flex-1 min-w-0">
+            <div className="text-ui-sm font-medium text-foreground">
+              Recommended setup didn't work? Open manual setup
+            </div>
+            <div className="text-ui-2xs text-muted-foreground">
+              Backup path using a personal access token + settings.json. Most attendees won't need this.
+            </div>
+          </div>
+          <ChevronDown
+            className={`w-4 h-4 text-amber-300/80 flex-shrink-0 transition-transform duration-200 ${
+              manualOpen ? 'rotate-180' : ''
+            }`}
+          />
+        </button>
+        {manualOpen && (
+          <div className="border-t border-amber-500/20 px-3 py-2">
+            <MarkdownWithCopy content={attendeeManualMd} onCopy={onCopy} />
+          </div>
+        )}
+      </div>
+    </>
+  );
+}
 
 export function AiGatewaySetupGuide() {
   const [expanded, setExpanded] = useState(true);
@@ -30,15 +82,15 @@ export function AiGatewaySetupGuide() {
     }
   }, [activeTab]);
 
+  // Fullscreen modal mirrors the default inline view: the recommended path only.
+  // The manual fallback stays behind the inline accordion, not the fullscreen.
   const activeContent = activeTab === 'user' ? attendeeMd : adminMd;
   const subtitle =
     activeTab === 'user'
       ? 'Step-by-step instructions to point Claude Code at your AI Gateway endpoint'
       : 'Workspace admin: create the AI Gateway endpoint and grant user access';
   const fullscreenTitle =
-    activeTab === 'user'
-      ? 'Setup Guide — User setup'
-      : 'Setup Guide — Admin setup';
+    activeTab === 'user' ? 'Setup Guide — User setup' : 'Setup Guide — Admin setup';
 
   function handleCopy(ok: boolean) {
     setToast(ok ? 'Copied to clipboard' : 'Copy failed');
@@ -58,7 +110,11 @@ export function AiGatewaySetupGuide() {
   function handleTabKeyDown(e: React.KeyboardEvent<HTMLButtonElement>, current: TabId) {
     if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
       e.preventDefault();
-      setActiveTab(current === 'user' ? 'admin' : 'user');
+      const order: TabId[] = TABS.map((t) => t.id);
+      const idx = order.indexOf(current);
+      const delta = e.key === 'ArrowRight' ? 1 : -1;
+      const next = order[(idx + delta + order.length) % order.length];
+      setActiveTab(next);
     }
   }
 
@@ -77,7 +133,7 @@ export function AiGatewaySetupGuide() {
         </div>
         <div className="flex-1 text-left">
           <div className="text-ui-base font-medium text-foreground">
-            Setup Guide — VS Code + Databricks AI Gateway
+            Setup Guide — VS Code + Unity AI Gateway
           </div>
           <div className="text-ui-xs text-muted-foreground">{subtitle}</div>
         </div>
@@ -86,7 +142,9 @@ export function AiGatewaySetupGuide() {
             content={activeContent}
             title={fullscreenTitle}
             buttonColor="emerald"
-          />
+          >
+            {activeTab === 'user' ? <UserSetupBody onCopy={handleCopy} /> : undefined}
+          </ExpandableOutputModal>
         </span>
         <ChevronDown
           className={`w-4 h-4 text-muted-foreground transition-transform duration-200 ${
@@ -97,11 +155,35 @@ export function AiGatewaySetupGuide() {
 
       <div
         className={`transition-all duration-300 ease-in-out ${
-          expanded ? 'max-h-[500px] opacity-100' : 'max-h-0 opacity-0 overflow-hidden'
+          expanded ? 'max-h-[640px] opacity-100' : 'max-h-0 opacity-0 overflow-hidden'
         }`}
       >
         <div className="relative border-t border-emerald-500/20">
+          {/* Overview: Unity AI Gateway at a glance (blended in, always visible) */}
           <div className="px-4 pt-4">
+            <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/5 p-3">
+              <div className="flex items-start gap-2">
+                <Sparkles className="w-3.5 h-3.5 text-emerald-300 flex-shrink-0 mt-0.5" />
+                <p className="text-ui-xs text-muted-foreground leading-relaxed">
+                  <span className="font-medium text-foreground">Unity AI Gateway</span> is the central runtime
+                  governance layer for your AI estate, now part of Unity Catalog{' '}
+                  <span className="text-muted-foreground/80">(Beta)</span>.
+                </p>
+              </div>
+              <div className="mt-2.5 grid grid-cols-2 gap-1.5">
+                {OVERVIEW_HIGHLIGHTS.map(({ label, Icon }) => (
+                  <div
+                    key={label}
+                    className="flex items-center gap-1.5 rounded-md bg-background/40 border border-border/40 px-2 py-1"
+                  >
+                    <Icon className="w-3 h-3 text-emerald-300/80 flex-shrink-0" />
+                    <span className="text-ui-2xs text-muted-foreground truncate">{label}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+          <div className="px-4 pt-3">
             <div
               role="tablist"
               aria-label="Setup guide audience"
@@ -141,7 +223,11 @@ export function AiGatewaySetupGuide() {
             ref={scrollRef}
             className="max-h-[380px] overflow-y-auto px-4 py-3 pr-5"
           >
-            <MarkdownWithCopy content={activeContent} onCopy={handleCopy} />
+            {activeTab === 'user' ? (
+              <UserSetupBody onCopy={handleCopy} />
+            ) : (
+              <MarkdownWithCopy content={adminMd} onCopy={handleCopy} />
+            )}
           </div>
           {toast && (
             <div className="absolute bottom-3 right-4 px-3 py-1.5 rounded-md bg-emerald-600 text-white text-ui-xs font-medium shadow-lg animate-fade-in">

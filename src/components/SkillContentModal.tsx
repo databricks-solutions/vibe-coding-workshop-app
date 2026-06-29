@@ -36,7 +36,19 @@ function resolveRawUrl(shortPath: string, type: SkillType): string | null {
   if (shortPath === 'AGENTS.md') return `${REPO_BASE}/AGENTS.md`;
   if (shortPath === 'data_product_accelerator/AGENTS.md') return `${REPO_BASE}/data_product_accelerator/AGENTS.md`;
 
-  if (type === 'agent-prompt') return `${REPO_BASE}/vibe-coding-workshop-template/${shortPath}`;
+  // AppKit (Apps + Lakebase) shortPaths are fully rooted at apps_lakebase/.
+  // Reference files already end in .md; skill dirs need /SKILL.md appended.
+  if (shortPath.startsWith('apps_lakebase/')) {
+    return shortPath.endsWith('.md') ? `${REPO_BASE}/${shortPath}` : `${REPO_BASE}/${shortPath}/SKILL.md`;
+  }
+
+  // Top-level shared skills registry (e.g. skills/databricks-asset-bundles,
+  // skills/databricks-expert-agent) — rooted at skills/, resolved as-is.
+  if (shortPath.startsWith('skills/')) {
+    return shortPath.endsWith('.md') ? `${REPO_BASE}/${shortPath}` : `${REPO_BASE}/${shortPath}/SKILL.md`;
+  }
+
+  if (type === 'agent-prompt') return `${REPO_BASE}/${shortPath}`;
 
   if (type === 'reference' && shortPath.endsWith('.md')) {
     return `${REPO_BASE}/data_product_accelerator/skills/${shortPath}`;
@@ -51,7 +63,17 @@ function resolveGitHubUrl(shortPath: string, type: SkillType): string | null {
   if (shortPath === 'AGENTS.md') return `${GITHUB_BASE}/AGENTS.md`;
   if (shortPath === 'data_product_accelerator/AGENTS.md') return `${GITHUB_BASE}/data_product_accelerator/AGENTS.md`;
 
-  if (type === 'agent-prompt') return `${GITHUB_BASE}/vibe-coding-workshop-template/${shortPath}`;
+  // AppKit (Apps + Lakebase) shortPaths are fully rooted at apps_lakebase/.
+  if (shortPath.startsWith('apps_lakebase/')) {
+    return shortPath.endsWith('.md') ? `${GITHUB_BASE}/${shortPath}` : `${GITHUB_BASE}/${shortPath}/SKILL.md`;
+  }
+
+  // Top-level shared skills registry (skills/...), resolved as-is.
+  if (shortPath.startsWith('skills/')) {
+    return shortPath.endsWith('.md') ? `${GITHUB_BASE}/${shortPath}` : `${GITHUB_BASE}/${shortPath}/SKILL.md`;
+  }
+
+  if (type === 'agent-prompt') return `${GITHUB_BASE}/${shortPath}`;
 
   if (type === 'reference' && shortPath.endsWith('.md')) {
     return `${GITHUB_BASE}/data_product_accelerator/skills/${shortPath}`;

@@ -9,7 +9,7 @@ import { useState, useEffect, useMemo, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { Lightbulb, X, Pencil, Layers, FileCode } from 'lucide-react';
+import { Lightbulb, X, Pencil, Layers, FileCode, BadgeCheck } from 'lucide-react';
 import { apiClient } from '../../api/client';
 import type { PromptConfig, ConfigVersionInfo } from '../../api/client';
 import { useUseCaseBuilder } from '../../hooks/useUseCaseBuilder';
@@ -124,6 +124,8 @@ export function PromptsConfig({ onToast }: PromptsConfigProps) {
   // Active status editing
   const [isEditingActive, setIsEditingActive] = useState(false);
   const [editingActiveStatus, setEditingActiveStatus] = useState(false);
+  const [isEditingCertified, setIsEditingCertified] = useState(false);
+  const [editingCertifiedStatus, setEditingCertifiedStatus] = useState(false);
 
   // Version state
   const [versions, setVersions] = useState<ConfigVersionInfo[]>([]);
@@ -186,6 +188,8 @@ export function PromptsConfig({ onToast }: PromptsConfigProps) {
       setIsViewingOldVersion(false);
       setEditingActiveStatus(config.is_active);
       setIsEditingActive(false);
+      setEditingCertifiedStatus(config.is_certified || false);
+      setIsEditingCertified(false);
     }
   }, [selectedIndustry, selectedUseCase, configs]);
 
@@ -228,7 +232,7 @@ export function PromptsConfig({ onToast }: PromptsConfigProps) {
   const useCases = useMemo(() => {
     return configs
       .filter(c => c.industry === selectedIndustry && c.use_case !== '_placeholder' && getPathType(c) === pathFilter)
-      .map(c => ({ value: c.use_case, label: c.use_case_label, is_active: c.is_active }));
+      .map(c => ({ value: c.use_case, label: c.use_case_label, is_active: c.is_active, is_certified: c.is_certified }));
   }, [configs, selectedIndustry, pathFilter, getPathType]);
 
   // Current config for selected industry/use case
@@ -459,6 +463,33 @@ export function PromptsConfig({ onToast }: PromptsConfigProps) {
     setIsEditingActive(false);
   }
 
+  async function handleSaveCertifiedStatus() {
+    if (!selectedIndustry || !selectedUseCase) return;
+    
+    // Only save if status actually changed
+    if ((currentConfig?.is_certified || false) === editingCertifiedStatus) {
+      setIsEditingCertified(false);
+      return;
+    }
+    
+    try {
+      setSaving(true);
+      const result = await apiClient.toggleUseCaseCertified(selectedIndustry, selectedUseCase);
+      onToast(result.message, 'success');
+      setIsEditingCertified(false);
+      await loadConfigs();
+    } catch (error: any) {
+      onToast(error?.message || 'Failed to update certified status', 'error');
+    } finally {
+      setSaving(false);
+    }
+  }
+  
+  function handleCancelCertifiedEdit() {
+    setEditingCertifiedStatus(currentConfig?.is_certified || false);
+    setIsEditingCertified(false);
+  }
+
   async function handleDelete() {
     if (!showDeleteConfirmModal || deleteConfirmText !== 'DELETE') return;
     
@@ -615,6 +646,9 @@ export function PromptsConfig({ onToast }: PromptsConfigProps) {
                   <span className="w-2 h-2 rounded-full bg-muted-foreground/30 flex-shrink-0" title="Inactive" />
                 )}
                 <span className="truncate">{uc.label}</span>
+                {uc.is_certified && (
+                  <BadgeCheck className="w-3.5 h-3.5 text-amber-500 flex-shrink-0" aria-label="Certified" />
+                )}
               </div>
               <button
                 onClick={(e) => {
@@ -746,6 +780,61 @@ export function PromptsConfig({ onToast }: PromptsConfigProps) {
                         onClick={handleSaveActiveStatus}
                         disabled={saving}
                         className="px-3 py-1 text-xs bg-emerald-500 text-white rounded hover:bg-emerald-600 disabled:opacity-50 transition-colors"
+                      >
+                        {saving ? 'Saving...' : 'Save'}
+                      </button>
+                    </>
+                  )}
+                </div>
+              </div>
+
+              {/* Certified Status Section */}
+              <div className="flex items-center justify-between pt-3 border-t border-border/50">
+                <div className="flex items-center gap-3">
+                  <span className="text-sm text-muted-foreground">Certified:</span>
+                  {!isEditingCertified ? (
+                    <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${
+                      currentConfig?.is_certified
+                        ? 'bg-amber-400/20 text-amber-700 dark:text-amber-300 border border-amber-500/45'
+                        : 'bg-muted-foreground/20 text-muted-foreground'
+                    }`}>
+                      <span className={`w-1.5 h-1.5 rounded-full ${currentConfig?.is_certified ? 'bg-amber-500' : 'bg-muted-foreground'}`} />
+                      {currentConfig?.is_certified ? 'Certified - Pinned to top with badge' : 'Not certified'}
+                    </span>
+                  ) : (
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={editingCertifiedStatus}
+                        onChange={(e) => setEditingCertifiedStatus(e.target.checked)}
+                        className="w-4 h-4 rounded border-muted-foreground text-amber-500 focus:ring-amber-500 focus:ring-offset-0 bg-background"
+                      />
+                      <span className={`text-sm ${editingCertifiedStatus ? 'text-amber-600 dark:text-amber-300' : 'text-muted-foreground'}`}>
+                        {editingCertifiedStatus ? 'Certified - Will pin to top with badge' : 'Not certified'}
+                      </span>
+                    </label>
+                  )}
+                </div>
+                <div className="flex items-center gap-2">
+                  {!isEditingCertified ? (
+                    <button
+                      onClick={() => setIsEditingCertified(true)}
+                      className="px-3 py-1 text-xs text-muted-foreground hover:text-foreground border border-border rounded hover:border-primary transition-colors"
+                    >
+                      Change
+                    </button>
+                  ) : (
+                    <>
+                      <button
+                        onClick={handleCancelCertifiedEdit}
+                        className="px-3 py-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        onClick={handleSaveCertifiedStatus}
+                        disabled={saving}
+                        className="px-3 py-1 text-xs bg-amber-500 text-white rounded hover:bg-amber-600 disabled:opacity-50 transition-colors"
                       >
                         {saving ? 'Saving...' : 'Save'}
                       </button>

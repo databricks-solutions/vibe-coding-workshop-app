@@ -237,7 +237,7 @@ INSERT INTO ${schema}.workshop_parameters
 VALUES
 ('coding_assistants_config', 
  'Coding Assistants (visibility, order, recommended)', 
- '[{"id":"cursor","recommended":true},{"id":"coda","recommended":true},{"id":"ai-gateway","recommended":true},{"id":"genie-code","recommended":true},{"id":"copilot","recommended":false},{"id":"vscode","recommended":false}]',
+ '[{"id":"cursor","recommended":true},{"id":"genie-code","recommended":true},{"id":"ai-gateway","recommended":true},{"id":"coda","recommended":true},{"id":"omnigent","recommended":false},{"id":"copilot","recommended":false},{"id":"vscode","recommended":false}]',
  'Ordered array of coding assistants shown on the workflow page. Controls which are visible, their display order, and which are flagged recommended.',
  'assistant_config',
  13,
