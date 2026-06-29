@@ -5,6 +5,9 @@ import { ThemeToggle } from './components/ThemeToggle';
 import { ConfigurationPage } from './components/config/ConfigurationPage';
 import { LeaderboardPage } from './components/LeaderboardPage';
 import { AnalyticsDashboard } from './components/AnalyticsDashboard';
+import { HackathonsPage } from './components/hackathon/HackathonsPage';
+import { HackathonDetailPage } from './components/hackathon/HackathonDetailPage';
+import { HackathonPlaybook } from './components/hackathon/HackathonPlaybook';
 
 // Skills Navigator is a large, self-contained feature (galaxy map + tours +
 // academy with a big static data module). Lazy-load it so it never weighs down
@@ -17,7 +20,7 @@ import {
   SessionListDialog 
 } from './components/session';
 import { apiClient } from './api/client';
-import { Zap, MessageSquare, Trophy, Plus, PanelLeftClose, PanelLeft, Menu, X, BarChart3, Eye, Compass } from 'lucide-react';
+import { Zap, MessageSquare, Trophy, Plus, PanelLeftClose, PanelLeft, Menu, X, BarChart3, Eye, Compass, Award, ChevronDown, List, BookOpen } from 'lucide-react';
 import { normalizeLevel, getFilteredSections, getCumulativeOverrides, USE_CASE_LEVEL_LOCK, isForwardProgression, getDisabledTagsForAIModules, ALL_AI_MODULES, getDisabledTagsForMedallionLayers, normalizeMedallionLayers, ALL_MEDALLION_LAYERS, computeChainContext, deriveInitialChainContext, type WorkshopLevel, type WorkflowDirection, type AIAgentModule, type MedallionLayer, type ChainContext } from './constants/workflowSections';
 import { DEFAULT_LEVEL_BY_ASSISTANT } from './constants/codingAssistants';
 
@@ -39,11 +42,20 @@ export default function App() {
 
   // Mobile sidebar overlay state (for screens < md)
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
-  
+
   // Determine current page from URL
   const isConfigPage = location.pathname.startsWith('/config');
   const isLeaderboardPage = location.pathname === '/leaderboard';
   const isAnalyticsPage = location.pathname === '/analytics';
+  const isHackathonsPage = location.pathname.startsWith('/hackathons');
+
+  // Accordion: Hackathons sub-links in the left sidebar. Auto-open on a
+  // hackathon route; otherwise user-toggleable.
+  const [hackathonsExpanded, setHackathonsExpanded] = useState(false);
+  useEffect(() => {
+    if (isHackathonsPage) setHackathonsExpanded(true);
+  }, [isHackathonsPage]);
+  const isWorkflowPage = !isConfigPage && !isLeaderboardPage && !isAnalyticsPage && !isHackathonsPage;
   const isSkillsPage = location.pathname === '/skills';
   const isWorkflowPage = !isConfigPage && !isLeaderboardPage && !isAnalyticsPage && !isSkillsPage;
   
@@ -850,6 +862,10 @@ export default function App() {
                   <BarChart3 className={`w-4 h-4 flex-shrink-0 ${isAnalyticsPage ? 'text-primary' : 'text-muted-foreground'}`} />
                   <span>Analytics</span>
                 </Link>
+                <Link to="/hackathons" onClick={() => setMobileSidebarOpen(false)} className={`w-full flex items-center gap-2.5 px-2.5 py-2 rounded-md text-ui-base font-medium transition-all duration-200 ${isHackathonsPage ? 'bg-sidebar-accent text-sidebar-primary' : 'text-muted-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-foreground'}`}>
+                  <Award className={`w-4 h-4 flex-shrink-0 ${isHackathonsPage ? 'text-primary' : 'text-muted-foreground'}`} />
+                  <span>Hackathons</span>
+                </Link>
                 <Link to="/config" onClick={() => setMobileSidebarOpen(false)} className={`w-full flex items-center gap-2.5 px-2.5 py-2 rounded-md text-ui-base font-medium transition-all duration-200 ${isConfigPage ? 'bg-sidebar-accent text-sidebar-primary' : 'text-muted-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-foreground'}`}>
                   <svg className={`w-4 h-4 flex-shrink-0 ${isConfigPage ? 'text-primary' : 'text-muted-foreground'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" /></svg>
                   <span>Configuration</span>
@@ -963,6 +979,66 @@ export default function App() {
               <BarChart3 className={`w-4 h-4 flex-shrink-0 ${isAnalyticsPage ? 'text-primary' : 'text-muted-foreground'}`} />
               {!sidebarCollapsed && <span className="whitespace-nowrap">Analytics</span>}
             </Link>
+
+            {/* Hackathons — accordion with sub-links when expanded */}
+            <div>
+              <div
+                className={`w-full flex items-center ${sidebarCollapsed ? 'justify-center px-0 py-2.5' : 'gap-2.5 px-2.5 py-2'} rounded-md text-ui-base font-medium transition-all duration-200 ${
+                  isHackathonsPage
+                    ? 'bg-sidebar-accent text-sidebar-primary'
+                    : 'text-muted-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-foreground'
+                }`}
+              >
+                <Link to="/hackathons" title="Hackathons" className="flex items-center gap-2.5 flex-1 min-w-0">
+                  <Award className={`w-4 h-4 flex-shrink-0 ${isHackathonsPage ? 'text-primary' : 'text-muted-foreground'}`} />
+                  {!sidebarCollapsed && <span className="whitespace-nowrap">Hackathons</span>}
+                </Link>
+                {!sidebarCollapsed && (
+                  <button
+                    onClick={() => setHackathonsExpanded((v) => !v)}
+                    className="p-0.5 rounded hover:bg-sidebar-accent/60 transition-colors"
+                    title={hackathonsExpanded ? 'Collapse' : 'Expand'}
+                  >
+                    <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-200 ${hackathonsExpanded ? 'rotate-180' : ''}`} />
+                  </button>
+                )}
+              </div>
+
+              {/* Sub-links */}
+              {!sidebarCollapsed && hackathonsExpanded && (
+                <div className="ml-3 mt-0.5 pl-3 border-l border-sidebar-border space-y-0.5">
+                  <Link
+                    to="/hackathons"
+                    className={`w-full flex items-center gap-2 px-2.5 py-1.5 rounded-md text-ui-sm transition-all duration-200 ${
+                      location.pathname === '/hackathons'
+                        ? 'text-sidebar-primary font-medium'
+                        : 'text-muted-foreground hover:text-sidebar-foreground'
+                    }`}
+                  >
+                    <List className="w-3.5 h-3.5 flex-shrink-0" />
+                    <span>All Hackathons</span>
+                  </Link>
+                  <Link
+                    to="/hackathons?create=1"
+                    className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-md text-ui-sm text-muted-foreground hover:text-sidebar-foreground transition-all duration-200"
+                  >
+                    <Plus className="w-3.5 h-3.5 flex-shrink-0" />
+                    <span>Create Hackathon</span>
+                  </Link>
+                  <Link
+                    to="/hackathons/playbook"
+                    className={`w-full flex items-center gap-2 px-2.5 py-1.5 rounded-md text-ui-sm transition-all duration-200 ${
+                      location.pathname === '/hackathons/playbook'
+                        ? 'text-sidebar-primary font-medium'
+                        : 'text-muted-foreground hover:text-sidebar-foreground'
+                    }`}
+                  >
+                    <BookOpen className="w-3.5 h-3.5 flex-shrink-0" />
+                    <span>Playbook</span>
+                  </Link>
+                </div>
+              )}
+            </div>
 
             <div className="relative">
               <Link
@@ -1275,6 +1351,10 @@ export default function App() {
           {/* Analytics Page */}
           <Route path="/analytics" element={<AnalyticsDashboard />} />
 
+          {/* Hackathons (playbook before :id so it isn't captured as an id) */}
+          <Route path="/hackathons" element={<HackathonsPage />} />
+          <Route path="/hackathons/playbook" element={<HackathonPlaybook />} />
+          <Route path="/hackathons/:id" element={<HackathonDetailPage />} />
           {/* Skills Navigator Page (lazy-loaded) */}
           <Route
             path="/skills"

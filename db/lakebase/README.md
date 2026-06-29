@@ -155,6 +155,23 @@ These parameters can be configured via the UI (Configuration → Workshop Parame
 - `lakebase_instance_name` - Lakebase project/instance name (used in Steps 6 and 7)
 - `lakebase_host_name` - Lakebase PostgreSQL endpoint DNS
 
+### 6. Hackathon tables (`10_hackathons.sql`, `11_hackathon_teams_submissions.sql`)
+Backs the Hackathons feature (reachable from the bottom of the front page). Per-hackathon
+self-serve roles — no global RBAC. When Lakebase is not configured the backend uses an
+in-memory store instead, so the feature is demoable locally.
+
+| Table | Purpose |
+|-------|---------|
+| hackathons | Hackathon events; `created_by` is the organizer; `judging_criteria` is a JSON array |
+| hackathon_judges | `(hackathon_id, judge_email)` judge assignments added by the organizer |
+| hackathon_teams | Teams within a hackathon; `leader_email` is the team leader |
+| hackathon_team_members | `(team_id, member_email)` roster with `role` (leader/member) |
+| hackathon_submissions | One submission per team (repo/demo/video/slides links) |
+| hackathon_scores | One judge score per submission (`uq_submission_judge`); `criteria` JSON + `overall` |
+| hackathon_votes | One community vote per `(submission_id, voter_email)` |
+
+Final rankings are **computed at read time** (avg judge `overall`, tie-broken by vote count) — no stored ranks.
+
 ## Adding New Use Cases
 
 1. Add a new INSERT statement to `dml_seed/01_seed_usecase_descriptions.sql`

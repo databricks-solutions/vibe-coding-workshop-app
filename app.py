@@ -23,6 +23,7 @@ from fastapi.responses import FileResponse, JSONResponse
 
 # Import the API router
 from src.backend.api.routes import router as api_router
+from src.backend.api.hackathon import router as hackathon_router
 
 # Get the directory where this script is located
 BASE_DIR = Path(__file__).resolve().parent
@@ -80,7 +81,14 @@ async def security_middleware(request: Request, call_next):
             origin = request.headers.get("origin") or request.headers.get("referer")
             if origin:
                 expected_host = request.headers.get("x-forwarded-host") or request.url.netloc
-                if urlparse(origin).netloc != expected_host:
+                origin_netloc = urlparse(origin).netloc
+                # Allow same-origin (prod, Databricks Apps) OR any origin explicitly
+                # listed in ALLOWED_ORIGINS (e.g. the Vite dev server in local
+                # two-server dev: ALLOWED_ORIGINS=http://localhost:5174).
+                allowed = origin_netloc == expected_host or origin in ALLOWED_ORIGINS or any(
+                    origin_netloc == urlparse(o).netloc for o in ALLOWED_ORIGINS
+                )
+                if not allowed:
                     return JSONResponse(
                         {"error": "cross-origin request blocked"}, status_code=403
                     )
@@ -105,6 +113,7 @@ app.add_middleware(
 
 # Include the API router with /api prefix
 app.include_router(api_router, prefix="/api", tags=["API"])
+app.include_router(hackathon_router, prefix="/api", tags=["Hackathons"])
 
 
 # ============== Health Check ==============

@@ -5,6 +5,49 @@
 
 const API_BASE_URL = '/api';
 
+// ============== Dev persona (local dev / Playwright only) ==============
+// A dev-only mechanism to act as a different user without real auth. The chosen
+// email is stored in localStorage and forwarded as `x-dev-persona`. The backend
+// honors it ONLY when its dev gate is open (USE_LAKEBASE=false / DEV_PERSONA_SWITCH),
+// so this is inert in production.
+
+const DEV_PERSONA_KEY = 'v2v.devPersona';
+
+export function getDevPersona(): string | null {
+  try {
+    return localStorage.getItem(DEV_PERSONA_KEY);
+  } catch {
+    return null;
+  }
+}
+
+export function setDevPersona(email: string | null): void {
+  try {
+    if (email) localStorage.setItem(DEV_PERSONA_KEY, email);
+    else localStorage.removeItem(DEV_PERSONA_KEY);
+  } catch {
+    /* ignore */
+  }
+}
+
+/** Header map carrying the selected dev persona (empty when none). */
+export function getDevPersonaHeader(): Record<string, string> {
+  const p = getDevPersona();
+  return p ? { 'x-dev-persona': p } : {};
+}
+
+export interface DevPersona {
+  email: string;
+  name: string;
+  hint?: string;
+}
+
+export interface DevPersonaConfig {
+  enabled: boolean;
+  current: string;
+  personas: DevPersona[];
+}
+
 // ============== Type Definitions ==============
 
 export interface SelectOption {
@@ -449,6 +492,168 @@ export interface AnalyticsData {
   recent_sessions: AnalyticsRecentSession[];
   user_activity: AnalyticsUserActivity[];
   feedback_details: AnalyticsFeedbackDetail[];
+}
+
+// ============== Hackathon API types ==============
+
+export type HackathonRole = 'organizer' | 'judge' | 'participant';
+export type HackathonStatus =
+  | 'draft'
+  | 'registration_open'
+  | 'in_progress'
+  | 'judging'
+  | 'completed';
+
+export interface HackathonSummary {
+  hackathon_id: string;
+  title: string;
+  short_description: string;
+  description: string;
+  status: HackathonStatus;
+  hackathon_type: string;
+  prize_description: string;
+  has_voting: boolean;
+  team_count: number;
+  submission_count: number;
+  your_role: HackathonRole;
+  created_by: string;
+  created_at: string | null;
+}
+
+export interface HackathonTeamMember {
+  email: string;
+  name: string;
+  role: 'leader' | 'member';
+}
+
+export interface HackathonTeam {
+  team_id: string;
+  name: string;
+  description: string;
+  leader_email: string;
+  leader_name: string;
+  max_members: number;
+  members: HackathonTeamMember[];
+  member_count: number;
+  has_submission: boolean;
+  is_mine: boolean;
+}
+
+export interface JudgeScore {
+  criteria: Record<string, number>;
+  feedback: string;
+  ai_assisted: boolean;
+}
+
+export interface HackathonSubmission {
+  submission_id: string;
+  team_id: string;
+  team_name: string;
+  title: string;
+  description: string;
+  repo_url: string;
+  demo_url: string;
+  video_url: string;
+  slides_url: string;
+  vote_count: number;
+  voted_by_me: boolean;
+  scored_by_me: boolean;
+  /** The current judge's own prior score (null if not a judge / not yet scored). */
+  my_score: JudgeScore | null;
+  /** How many judges AI-drafted their feedback (transparency). */
+  ai_assisted_count: number;
+  judge_count: number;
+}
+
+export interface HackathonJudge {
+  email: string;
+  name: string;
+}
+
+export interface JudgeCandidate {
+  email: string;
+  name: string;
+}
+
+export interface HackathonDetail {
+  hackathon_id: string;
+  title: string;
+  description: string;
+  short_description: string;
+  status: HackathonStatus;
+  hackathon_type: string;
+  location: string;
+  venue: string;
+  registration_start: string | null;
+  registration_end: string | null;
+  start_date: string | null;
+  end_date: string | null;
+  submission_deadline: string | null;
+  max_participants: number;
+  max_team_size: number;
+  min_team_size: number;
+  total_prize_pool: number;
+  prize_description: string;
+  rules: string;
+  topics: string[];
+  judging_criteria: string[];
+  has_team_matching: boolean;
+  has_chat: boolean;
+  has_voting: boolean;
+  created_by: string;
+  organizer_name: string;
+  your_role: HackathonRole;
+  your_email: string;
+  my_team_ids: string[];
+  teams: HackathonTeam[];
+  submissions: HackathonSubmission[];
+  judges: HackathonJudge[];
+}
+
+export interface HackathonCreateRequest {
+  title: string;
+  description?: string;
+  short_description?: string;
+  hackathon_type?: string;
+  location?: string;
+  venue?: string;
+  registration_start?: string | null;
+  registration_end?: string | null;
+  start_date?: string | null;
+  end_date?: string | null;
+  submission_deadline?: string | null;
+  max_participants?: number;
+  max_team_size?: number;
+  min_team_size?: number;
+  total_prize_pool?: number;
+  prize_description?: string;
+  rules?: string;
+  topics?: string[];
+  judging_criteria?: string[];
+  has_team_matching?: boolean;
+  has_chat?: boolean;
+  has_voting?: boolean;
+}
+
+export interface HackathonResultRow {
+  rank: number;
+  submission_id: string;
+  team_name: string;
+  title: string;
+  avg_score: number;
+  judge_count: number;
+  vote_count: number;
+  repo_url: string;
+  demo_url: string;
+}
+
+export interface HackathonResults {
+  hackathon_id: string;
+  title: string;
+  status: HackathonStatus;
+  your_role: HackathonRole;
+  has_voting: boolean;
+  results: HackathonResultRow[];
 }
 
 // ============== API Client ==============
@@ -1249,6 +1454,180 @@ class ApiClient {
   /** Get all sessions (saved + unsaved) for a specific user */
   async getUserSessionsByEmail(email: string): Promise<SessionListItem[]> {
     return this.fetch<SessionListItem[]>(`/workshop-users/sessions?email=${encodeURIComponent(email)}`);
+  }
+
+  // ============== Hackathon API ==============
+
+  /**
+   * Like `fetch`, but raises with the backend's `detail` message (e.g.
+   * "You are already on a team") instead of the bare HTTP status, so the
+   * hackathon UI can show actionable errors.
+   */
+  private async hkFetch<T>(endpoint: string, options?: RequestInit): Promise<T> {
+    // Dev-only: if a persona is selected (local dev / Playwright), forward it so
+    // the backend resolves the acting user. The backend ignores this header in
+    // production (Lakebase on), so it's a no-op there.
+    const devHeaders = getDevPersonaHeader();
+    const response = await fetch(`${this.baseUrl}${endpoint}`, {
+      ...options,
+      headers: { 'Content-Type': 'application/json', ...devHeaders, ...options?.headers },
+    });
+    if (!response.ok) {
+      let detail = `${response.status} ${response.statusText}`;
+      try {
+        const body = await response.json();
+        if (body?.detail) detail = typeof body.detail === 'string'
+          ? body.detail
+          : JSON.stringify(body.detail);
+      } catch {
+        // non-JSON error body; keep status text
+      }
+      throw new Error(detail);
+    }
+    return response.json();
+  }
+
+  /** List all hackathons (with your per-hackathon role + counts). */
+  async listHackathons(): Promise<HackathonSummary[]> {
+    return this.hkFetch<HackathonSummary[]>('/hackathons');
+  }
+
+  /** Create a hackathon (you become its organizer). */
+  async createHackathon(body: HackathonCreateRequest): Promise<{ hackathon_id: string }> {
+    return this.hkFetch('/hackathons', { method: 'POST', body: JSON.stringify(body) });
+  }
+
+  /** Full hackathon detail: teams, submissions, judges, your role. */
+  async getHackathon(hid: string): Promise<HackathonDetail> {
+    return this.hkFetch<HackathonDetail>(`/hackathons/${encodeURIComponent(hid)}`);
+  }
+
+  /** Organizer-only: edit config / advance status. */
+  async updateHackathon(
+    hid: string,
+    body: Partial<HackathonCreateRequest> & { status?: HackathonStatus },
+  ): Promise<{ success: boolean }> {
+    return this.hkFetch(`/hackathons/${encodeURIComponent(hid)}`, {
+      method: 'PATCH',
+      body: JSON.stringify(body),
+    });
+  }
+
+  /** Organizer-only: add a judge by email. */
+  async addJudge(hid: string, judgeEmail: string): Promise<{ success: boolean }> {
+    return this.hkFetch(`/hackathons/${encodeURIComponent(hid)}/judges`, {
+      method: 'POST',
+      body: JSON.stringify({ judge_email: judgeEmail }),
+    });
+  }
+
+  /** Organizer-only: bulk-assign judges by email. */
+  async assignJudges(hid: string, judgeEmails: string[]): Promise<{ success: boolean; added: number }> {
+    return this.hkFetch(`/hackathons/${encodeURIComponent(hid)}/judges`, {
+      method: 'POST',
+      body: JSON.stringify({ judge_emails: judgeEmails }),
+    });
+  }
+
+  /** Organizer-only: remove a judge by email. */
+  async removeJudge(hid: string, email: string): Promise<{ success: boolean }> {
+    return this.hkFetch(`/hackathons/${encodeURIComponent(hid)}/judges/${encodeURIComponent(email)}`, { method: 'DELETE' });
+  }
+
+  /** Organizer-only: list candidate users eligible to be judges. */
+  async getJudgeCandidates(hid: string): Promise<{ candidates: { email: string; name: string }[] }> {
+    return this.hkFetch(`/hackathons/${encodeURIComponent(hid)}/judge-candidates`);
+  }
+
+  /** Participant: create a team (you become leader). */
+  async createTeam(
+    hid: string,
+    body: { name: string; description?: string; max_members?: number; is_public?: boolean },
+  ): Promise<{ team_id: string }> {
+    return this.hkFetch(`/hackathons/${encodeURIComponent(hid)}/teams`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    });
+  }
+
+  /** Participant: join an existing team. */
+  async joinTeam(hid: string, teamId: string): Promise<{ success: boolean }> {
+    return this.hkFetch(
+      `/hackathons/${encodeURIComponent(hid)}/teams/${encodeURIComponent(teamId)}/join`,
+      { method: 'POST' },
+    );
+  }
+
+  /** Team leader: create or update the team's submission. */
+  async submitProject(
+    hid: string,
+    teamId: string,
+    body: {
+      title: string;
+      description?: string;
+      repo_url?: string;
+      demo_url?: string;
+      video_url?: string;
+      slides_url?: string;
+    },
+  ): Promise<{ success: boolean }> {
+    return this.hkFetch(
+      `/hackathons/${encodeURIComponent(hid)}/teams/${encodeURIComponent(teamId)}/submit`,
+      { method: 'POST', body: JSON.stringify(body) },
+    );
+  }
+
+  /** Judge: submit/update a score for a submission. */
+  async scoreSubmission(
+    hid: string,
+    submissionId: string,
+    body: { criteria: Record<string, number>; feedback?: string; ai_assisted?: boolean },
+  ): Promise<{ success: boolean; overall: number }> {
+    return this.hkFetch(
+      `/hackathons/${encodeURIComponent(hid)}/submissions/${encodeURIComponent(submissionId)}/score`,
+      { method: 'POST', body: JSON.stringify(body) },
+    );
+  }
+
+  /** Any user: toggle a community vote on a submission. */
+  async voteSubmission(
+    hid: string,
+    submissionId: string,
+  ): Promise<{ voted: boolean; vote_count: number }> {
+    return this.hkFetch(
+      `/hackathons/${encodeURIComponent(hid)}/submissions/${encodeURIComponent(submissionId)}/vote`,
+      { method: 'POST' },
+    );
+  }
+
+  /** Computed results leaderboard for a hackathon. */
+  async getHackathonResults(hid: string): Promise<HackathonResults> {
+    return this.hkFetch<HackathonResults>(`/hackathons/${encodeURIComponent(hid)}/results`);
+  }
+
+  /**
+   * AI-assist: draft text for a hackathon field with the LLM.
+   * `available: false` means no serving endpoint is configured (local dev);
+   * `notice` then carries the friendly message to show the user.
+   */
+  async hackathonAiGenerate(
+    field:
+      | 'hackathon_description'
+      | 'hackathon_short'
+      | 'team_description'
+      | 'submission_description'
+      | 'judge_feedback',
+    context: Record<string, unknown>,
+  ): Promise<{ text: string; model: string; available: boolean; notice: string }> {
+    return this.hkFetch('/hackathons/ai/generate', {
+      method: 'POST',
+      body: JSON.stringify({ field, context }),
+    });
+  }
+
+  /** Dev-only: whether the persona switcher is available + suggested personas. */
+  async getDevPersonaConfig(): Promise<DevPersonaConfig> {
+    return this.hkFetch<DevPersonaConfig>('/hackathons/dev/persona-config');
   }
 
   // ============== Analytics API ==============
