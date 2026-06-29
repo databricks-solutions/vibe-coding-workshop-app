@@ -12,8 +12,14 @@
  *     for the auth login command.
  *   - 'coda':        Single clone command. CoDA runs in a Databricks App
  *                    browser terminal so auth + model are already wired.
- *   - 'genie-code':  Single clone command targeting /Workspace/Users/<email>/
- *                    .assistant/skills/vibe-coding-workshop with the email
+ *   - 'genie-code':  Three gated terminal commands -- (1) clone the repo into the
+ *                    user project root /Workspace/Users/<email>/vibe-coding-workshop
+ *                    (a git working tree so generated bundles/apps are recognized
+ *                    as Databricks Asset Bundles), (2) copy the whole clone into
+ *                    /Workspace/Users/<email>/.assistant/skills/vibe-coding-workshop
+ *                    (the skill-load path Genie Code reads from), (3) validate both.
+ *                    A new Agent thread then pastes a verify-first prompt that
+ *                    re-checks setup before loading the behavior manifest. Email
  *                    auto-injected from apiClient.getCurrentUser().
  */
 
@@ -44,8 +50,9 @@ interface SetUpProjectStepProps {
   /**
    * The signed-in user's email (already fetched once at the App level via
    * apiClient.getCurrentUser). Only consumed by the Genie Code variant to
-   * build the /Workspace/Users/<email>/.assistant/skills/vibe-coding-workshop
-   * clone target. Falls back to '<your_email>' placeholder when null / empty.
+   * build the /Workspace/Users/<email>/vibe-coding-workshop clone target and
+   * the /Workspace/Users/<email>/.assistant/skills/vibe-coding-workshop copy
+   * path. Falls back to '<your_email>' placeholder when null / empty.
    */
   currentUserEmail?: string | null;
 }
@@ -138,6 +145,37 @@ function CommandBox({ label, cmd, copiedKey, onCopy }: {
           <Copy className="w-3.5 h-3.5 text-slate-400" />
         )}
       </button>
+    </div>
+  );
+}
+
+
+// Multi-line prompt box with copy functionality (preserves newlines, unlike CommandBox)
+function PromptBox({ label, prompt, copiedKey, onCopy }: {
+  label: string;
+  prompt: string;
+  copiedKey: string;
+  onCopy: (key: string, cmd: string) => void;
+}) {
+  const isCopied = copiedKey === `${label}-${prompt}`;
+
+  return (
+    <div className="relative bg-slate-900/70 rounded-lg border border-slate-700/50">
+      <button
+        onClick={() => onCopy(`${label}-${prompt}`, prompt)}
+        className="absolute top-2 right-2 flex items-center gap-1 px-2 py-1 rounded bg-slate-800/80 hover:bg-slate-700/70 transition-colors text-xs"
+        title={isCopied ? 'Copied!' : 'Copy prompt'}
+      >
+        {isCopied ? (
+          <Check className="w-3.5 h-3.5 text-emerald-400" />
+        ) : (
+          <Copy className="w-3.5 h-3.5 text-slate-400" />
+        )}
+        <span className={isCopied ? 'text-emerald-400' : 'text-slate-400'}>{isCopied ? 'Copied' : 'Copy'}</span>
+      </button>
+      <pre className="whitespace-pre-wrap break-words text-emerald-300/90 font-mono text-xs leading-relaxed px-3 py-2.5 pr-20 overflow-x-auto">
+        {prompt}
+      </pre>
     </div>
   );
 }
@@ -585,16 +623,38 @@ In **Cursor**, click on the model selector in the Agent panel and choose the lat
                Genie Code is native to Databricks and operates on /Workspace
                paths via Unity Catalog. User is already authenticated and the
                underlying model is already configured -- they just need to
-               clone the repo into the right /Workspace location so Genie
-               Code can see it. Email is auto-injected from getCurrentUser().
+               clone the repo into their project root, copy it into the
+               .assistant/skills load path, and validate. Email is
+               auto-injected from getCurrentUser().
                =========================================================== */}
           {variant === 'genie-code' && (() => {
             const emailForPath = currentUserEmail || '<your_email>';
-            // Skills the prompts reference (skills/genie-code-environment, 16 refs)
-            // only exist on this branch until it merges to main. Flip to '' after merge.
-            const CLONE_REF = 'genie-code-integration';
-            const refFlag = CLONE_REF ? `-b ${CLONE_REF} ` : '';
-            const genieCloneCmd = `git clone ${refFlag}https://github.com/databricks-solutions/vibe-coding-workshop-template.git /Workspace/Users/${emailForPath}/.assistant/skills/vibe-coding-workshop`;
+            const projectPath = `/Workspace/Users/${emailForPath}/vibe-coding-workshop`;
+            // 1) Clone the repo INTO the user project root (default branch: main) so it
+            //    is a real git working tree where generated bundles/apps are recognized
+            //    as Databricks Asset Bundles.
+            const genieCloneCmd = `git clone ${REPO_URL} ${projectPath}`;
+            // 2) Copy the ENTIRE clone into the Genie Code skill-load path. The copy
+            //    folder basename (vibe-coding-workshop) becomes skill_ref_root =
+            //    skills/vibe-coding-workshop, which every prompt references. rm -rf keeps
+            //    the copy clean + idempotent on re-runs.
+            const genieCopyCmd = `D=/Workspace/Users/${emailForPath}; rm -rf "$D/.assistant/skills/vibe-coding-workshop"; mkdir -p "$D/.assistant/skills"; cp -R "$D/vibe-coding-workshop" "$D/.assistant/skills/"`;
+            // 3) Gate: both the clone (.git) and the skills copy (a known SKILL.md) must
+            //    pass before the participant starts the Agent thread.
+            const genieValidateCmd = `D=/Workspace/Users/${emailForPath}; test -d "$D/vibe-coding-workshop/.git" && echo "✅ 1/2 project cloned" || echo "❌ 1/2 re-run command 1"; test -f "$D/.assistant/skills/vibe-coding-workshop/skills/genie-code-environment/SKILL.md" && echo "✅ 2/2 skills published" || echo "❌ 2/2 re-run command 2"`;
+            // First Agent-thread message: the agent re-validates setup (FUSE-safe
+            // os.path.exists, not listFiles), then loads the behavior manifest, then gates.
+            const genieVerifyPrompt = `You're running in Databricks Genie Code. Before anything else, in this exact order:
+
+1. Verify my setup in ONE executeCode block (use os.path.exists, NOT listFiles):
+   - ${projectPath}/.git
+   - /Workspace/Users/${emailForPath}/.assistant/skills/vibe-coding-workshop/skills/genie-code-environment/SKILL.md
+   If EITHER is missing, STOP and tell me which Step 1 command to re-run. Do not continue.
+
+2. Load the behavior manifest:
+   readSkillFile("skills/vibe-coding-workshop/skills/genie-code-environment/SKILL.md")
+
+3. Reply "Setup verified ✅" plus one line on how you'll operate here (runDatabricksCli, serverless, files under my project folder, never /tmp), then wait.`;
             return (
               <div className="space-y-4">
                 <div className="flex items-center gap-2">
@@ -608,36 +668,64 @@ In **Cursor**, click on the model selector in the Agent panel and choose the lat
                   <div className="text-sm text-muted-foreground space-y-2">
                     {renderDescription(`You're inside Genie Code -- pre-authenticated and serverless. No \`databricks auth login\`, no model setup.
 
-**Step 1 -- Clone into your skills folder** (run in the Genie Code terminal). This is the folder Genie Code reads skills from. Cloning anywhere else means the workshop skills will **NOT** load.
-
-This folder is the **skill-load anchor only** -- Genie Code reads workshop skills from here. Your project artifacts (apps, bundles, docs) build separately under \`/Workspace/Users/${emailForPath}/vibe-coding-workshop\`, which the workshop creates for you on the first step.`)}
+**Step 1 -- Set up your project** (run all three in the Genie Code terminal, in order). The validate check must show **two ✅** before you continue.`)}
                   </div>
 
-                  {/* Step 1 clone command (email auto-injected, branch-pinned) */}
-                  <div className="space-y-2">
-                    <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Command</p>
-                    <div>
-                      <p className="text-xs text-slate-400 mb-1">Clone into your skills folder</p>
+                  {/* Step 1 -- three gated commands: clone -> copy whole folder -> validate */}
+                  <div className="space-y-3">
+                    <div className="space-y-1.5">
+                      <p className="text-xs text-slate-400">1) Clone the workshop into your project folder</p>
                       <CommandBox
-                        label="Clone"
+                        label="genie-clone"
                         cmd={genieCloneCmd}
                         copiedKey={copiedCommand || ''}
                         onCopy={handleCopyCommand}
                       />
-                      <p className="text-xs text-slate-500 mt-1 italic">
-                        {currentUserEmail
-                          ? '💡 Auto-filled with your signed-in Databricks email. Swap it if you\'re cloning into someone else\'s workspace path.'
-                          : '💡 Your email will be auto-filled once the session loads, or replace `<your_email>` manually.'}
-                      </p>
+                      <p className="text-xs text-slate-500 italic">Your project folder &mdash; a real git repo, so the bundles/apps you build are recognized and deploy correctly.</p>
                     </div>
+
+                    <div className="space-y-1.5">
+                      <p className="text-xs text-slate-400">2) Copy the whole folder into your skills folder</p>
+                      <CommandBox
+                        label="genie-copy"
+                        cmd={genieCopyCmd}
+                        copiedKey={copiedCommand || ''}
+                        onCopy={handleCopyCommand}
+                      />
+                      <p className="text-xs text-slate-500 italic">Copies the entire clone into the folder Genie Code reads skills from. Safe to re-run.</p>
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <p className="text-xs text-slate-400">3) Validate (gate) &mdash; don't continue until you see two ✅</p>
+                      <CommandBox
+                        label="genie-validate"
+                        cmd={genieValidateCmd}
+                        copiedKey={copiedCommand || ''}
+                        onCopy={handleCopyCommand}
+                      />
+                      <p className="text-xs text-slate-500 italic">Two ✅ = ready. Any ❌ names the exact command to re-run.</p>
+                    </div>
+
+                    <p className="text-xs text-slate-500 italic">
+                      {currentUserEmail
+                        ? '💡 Paths are auto-filled with your signed-in Databricks email.'
+                        : '💡 Your email auto-fills once the session loads, or replace `<your_email>` manually.'}
+                    </p>
                   </div>
 
-                  {/* Step 2 + Step 3 -- skills only activate on a new thread + manifest load */}
+                  {/* Step 2 + Step 3 -- new thread, then a verify-first first message */}
                   <div className="text-sm text-muted-foreground space-y-2">
-                    {renderDescription(`**Step 2 -- Start a NEW Agent-mode chat thread.** Skills load on the next Agent-mode thread, not the current one. If they don't appear, hard-refresh the tab.
+                    {renderDescription(`**Step 2 -- Start a NEW Agent-mode chat thread.** Skills load on the next Agent-mode thread, not the current one.
 
-**Step 3 -- Load the behavior manifest:** open \`skills/genie-code-environment\` so the agent knows how it runs here (page-context CLI via \`runDatabricksCli\`, serverless, files under the clone root -- never \`/tmp\`). The workshop then auto-detects your client and gates each step.`)}
+**Step 3 -- Paste this as your first message.** The agent verifies your setup, loads the Genie Code behavior manifest, and only then continues:`)}
                   </div>
+
+                  <PromptBox
+                    label="genie-verify"
+                    prompt={genieVerifyPrompt}
+                    copiedKey={copiedCommand || ''}
+                    onCopy={handleCopyCommand}
+                  />
 
                   {/* Why no further setup card -- replaces sub-sections B + C */}
                   <div className="mt-4 p-3 bg-cyan-900/15 border border-cyan-700/30 rounded-lg">
