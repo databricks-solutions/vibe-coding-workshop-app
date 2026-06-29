@@ -3,6 +3,7 @@ import { ReadOnlyProvider } from '../contexts/ReadOnlyContext';
 import { WorkflowStep } from './WorkflowStep';
 import { Prerequisites } from './Prerequisites';
 import { WorkshopIntro } from './WorkshopIntro';
+import { HackathonEntryCard } from './hackathon/HackathonEntryCard';
 import { CodingAssistantSelector } from './CodingAssistantSelector';
 import { SectionedWorkflowSidebar } from './SectionedWorkflowSidebar';
 import { SectionDetailPanel } from './SectionDetailPanel';
@@ -3330,11 +3331,14 @@ export function WorkflowDiagram({
         </div>
       </div>
 
+      {/* Hackathons entry point -- bottom of the front page */}
+      <HackathonEntryCard />
+
       {/* Celebration Overlay */}
       {!readOnly && (
-        <CelebrationOverlay 
-          celebration={celebration} 
-          onComplete={handleCelebrationComplete} 
+        <CelebrationOverlay
+          celebration={celebration}
+          onComplete={handleCelebrationComplete}
         />
       )}
     </div>

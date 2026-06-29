@@ -39,3 +39,12 @@ public/brand-config.json
 
 # Databricks bundle state (local deployment metadata)
 .databricks/
+
+# Playwright transient artifacts (the curated docs media in public/hackathon-docs IS committed)
+test-results/
+tests/e2e/report/
+
+# Local Python virtualenvs
+venv/
+.venv/
+.venv-test/

@@ -1,0 +1,110 @@
+# V2V Hackathons — Feature Rundown
+
+Everything added to the V2V (Vibe-to-Value) Workshop app in this effort: a complete
+**Hackathons** capability that turns the individual guided-build workshop into a
+team-based, judged competition — modeled on real Hackathon-as-a-Service delivery
+(e.g. Oshkosh) and rebuilt natively in V2V's design system.
+
+> **Where it lives:** all changes are in the local working tree and run in the app
+> locally. **Nothing is committed to git yet** — so it is not yet pushed or deployed.
+
+---
+
+## 1. Entry points & navigation
+
+- **Front-page entry card** — a "Hackathons" CTA at the bottom of the workflow landing page (`HackathonEntryCard`), styled like the workshop-overview card.
+- **Sidebar accordion** — a "Hackathons" nav item that expands to sub-links: **All Hackathons**, **Create Hackathon**, **Playbook**.
+- **Routes** — `/hackathons`, `/hackathons/:id`, `/hackathons/playbook`.
+
+## 2. Four per-hackathon personas (self-serve roles)
+
+No global RBAC — roles are scoped per hackathon and derived from email identity:
+
+- **Organizer** — whoever creates the hackathon; manages it.
+- **Participant** — anyone; forms/joins a team and submits.
+- **Judge** — added by the organizer (by email); scores submissions.
+- **Voter** — anyone; casts community (people's-choice) votes.
+
+## 3. Organizer flow
+
+- **Create Hackathon** — a rich, sectioned form (matching HackathonHive's detail level): title, short description, description, format (online/in-person/hybrid), location/venue, full schedule (registration window, event start/end, submission deadline), max participants, min/max team size, prize pool + description, topics/tracks, judging criteria, and feature toggles (team matching, chat, voting).
+- **Manage tab** — advance the lifecycle (draft → registration open → in progress → judging → completed) and manage judges.
+- **Detail page shows everything entered at creation** — title + tagline in a gradient hero, plus a Details panel with format, where, team size, registration window, dates, prize, topics, criteria, rules, and feature flags.
+
+## 4. Judge selector (searchable, multi-select)
+
+- Search the directory of **workshop users**, or **invite anyone by email** if they're not listed.
+- **Multi-select and bulk-assign** in one click; assigned judges show as removable chips.
+- **Remove** judges (unassign).
+- Guardrails: emails normalized + de-duped; the **organizer can't self-assign** as a judge; candidates exclude the organizer and already-assigned judges.
+
+## 5. Participant flow
+
+- **Teams tab** — create a team (you become leader) or join an open one; team size is capped to the hackathon's max.
+- **Submissions tab** — the team leader submits one project (title, description, repo / demo / video / slides links); re-submitting updates rather than duplicating.
+
+## 6. Judging & scoring
+
+- **Judging tab** — judges score each submission 0–10 per criterion; the overall is the average; leave written feedback.
+- **Scores pre-fill** from the judge's prior score; re-scoring updates (no duplicates).
+- **AI-assisted judging transparency** — judges *may* AI-draft feedback, but it's **labeled "AI-assisted"** for honesty; the moment a judge edits the text themselves, the label clears (it's their own again). The flag is persisted and surfaced.
+
+## 7. Voting & results
+
+- **Community voting** — any user can toggle a vote on a submission (when voting is enabled).
+- **Results tab** — a live leaderboard ranking submissions by **average judge score, tie-broken by votes**, with a winner spotlight.
+
+## 8. AI text assist ("Draft with AI")
+
+- One-click AI drafting on text fields — hackathon description & tagline, team bio, submission summary, and judge feedback — via Databricks Model Serving (Claude). Degrades gracefully to a friendly notice when no serving endpoint is configured (local dev).
+
+## 9. Dev persona switcher (local-only)
+
+- An "act as" picker (organizer/participant/judge/voter) for **local development and testing only** — gated to `USE_LAKEBASE=false` / `DEV_PERSONA_SWITCH`, so it's **inert in production**. Lets one machine exercise every persona and powers the Playwright tests.
+
+## 10. Look & feel / liveliness
+
+- Fully rebuilt in V2V's Tailwind theme (no Material-UI): gradient hero banners, glow accents, status-colored cards, color-coded stat tiles, Framer Motion spring hover/entrance animations, dark-mode aware.
+
+## 11. Persistence
+
+- New **Lakebase tables** (`hackathons`, `hackathon_judges`, `hackathon_teams`, `hackathon_team_members`, `hackathon_submissions`, `hackathon_scores`, `hackathon_votes`) with an **in-memory fallback** so the whole feature is demoable locally without a database. One dispatch layer serves both modes identically.
+
+## 12. Hackathon Playbook (in-app docs)
+
+- A **/hackathons/playbook** page (under the Hackathons accordion) with persona how-tos, illustrated with **screenshots + a walkthrough video** that are **auto-generated by the Playwright suite** — so the docs never drift from the live app.
+
+---
+
+## Tests
+
+- **API suite — 34 tests, all passing.** stdlib `unittest` + FastAPI `TestClient` against the in-memory store (no install/DB needed). Covers every endpoint, all role guards (403s), edge cases, and the full journey. Caught + fixed two real bugs during development (a `judge-candidates` 500 and an unclamped team size).
+  - Run: `USE_LAKEBASE=false DEV_PERSONA_SWITCH=true /usr/bin/python3 -m unittest tests.api.test_hackathon_api -v`
+  - (Use `/usr/bin/python3` — the system Python has FastAPI; the default Homebrew `python3` may not.)
+- **Playwright e2e — 8 tests, all passing.** Drives all persona flows through the real UI via the dev persona switcher; produces the Playbook screenshots + walkthrough video.
+  - Run: `npx playwright test`
+  - Report: `npx playwright show-report tests/e2e/report` (interactive dashboard: pass/fail, per-step trace, screenshots, video).
+
+## Validation status
+
+TypeScript ✓ · ESLint ✓ (hackathon files + e2e) · API 34/34 ✓ · Playwright 8/8 ✓ · `npm run build` ✓
+
+## Companion docs
+
+- `docs/hackathon_leads_qa.md` — open product/eng questions for V2V leads (user management is the big one), with current defaults + recommendations.
+- `db/lakebase/README.md` — documents the new hackathon tables.
+
+## Files (high level)
+
+- **New backend:** `src/backend/api/hackathon.py`
+- **New DDL:** `db/lakebase/ddl/10_hackathons.sql`, `11_hackathon_teams_submissions.sql`
+- **New frontend:** `src/components/hackathon/` (pages, tabs, judge selector, persona picker, entry card, playbook, AI button)
+- **New tests:** `tests/api/`, `tests/e2e/`, `playwright.config.ts`
+- **New docs/media:** `docs/hackathon_leads_qa.md`, `public/hackathon-docs/`
+- **Modified:** `app.py` (router + CORS allowlist for local dev), `src/App.tsx` (routes + nav), `src/api/client.ts` (typed methods), `src/components/WorkflowDiagram.tsx` (entry card), `db/lakebase/README.md`, `.gitignore`, `package.json`
+
+## Not yet done
+
+- **Not committed to git** — everything is uncommitted local changes; nothing pushed or deployed.
+- **Lakebase parity not exercised** — verified end-to-end in in-memory mode; the new DDL has not been run against a live Lakebase instance yet.
+- Items deliberately deferred (see leads Q&A): certificates, notifications, multi-org, chat, judge invitation accept/decline lifecycle, configurable vote weighting.
