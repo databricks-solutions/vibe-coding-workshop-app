@@ -1850,3 +1850,254 @@ select option {
 .direction-toggle-press {
   transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
+
+
+/* =============================================================================
+   LIGHT MODE — AUTO-COMPLETED ACCENT OVERRIDES
+   Append-only block: fills every accent text-/border-/opacity-bg- class used in
+   src that previously fell through to its raw dark-palette value on white.
+   .light-scoped only; dark mode and base tokens are untouched.
+   ============================================================================= */
+
+/* amber */
+.light .bg-amber-400\/10 { background-color: hsla(38, 92%, 42%, 0.1); }
+.light .bg-amber-400\/15 { background-color: hsla(38, 92%, 42%, 0.15); }
+.light .bg-amber-400\/20 { background-color: hsla(38, 92%, 42%, 0.2); }
+.light .bg-amber-500\/5 { background-color: hsla(38, 92%, 45%, 0.05); }
+.light .bg-amber-500\/25 { background-color: hsla(38, 92%, 45%, 0.25); }
+.light .bg-amber-500\/30 { background-color: hsla(38, 92%, 45%, 0.3); }
+.light .bg-amber-500\/40 { background-color: hsla(38, 92%, 45%, 0.4); }
+.light .bg-amber-500\/50 { background-color: hsla(38, 92%, 45%, 0.5); }
+.light .bg-amber-500\/70 { background-color: hsla(38, 92%, 45%, 0.7); }
+.light .bg-amber-900\/10 { background-color: hsla(38, 92%, 30%, 0.1); }
+.light .bg-amber-900\/20 { background-color: hsla(38, 92%, 30%, 0.2); }
+.light .border-amber-400 { border-color: hsl(38, 92%, 42%); }
+.light .border-amber-400\/30 { border-color: hsla(38, 92%, 42%, 0.3); }
+.light .border-amber-400\/50 { border-color: hsla(38, 92%, 42%, 0.5); }
+.light .border-amber-400\/70 { border-color: hsla(38, 92%, 42%, 0.7); }
+.light .border-amber-500 { border-color: hsl(38, 92%, 45%); }
+.light .border-amber-500\/40 { border-color: hsla(38, 92%, 45%, 0.4); }
+.light .border-amber-500\/50 { border-color: hsla(38, 92%, 45%, 0.5); }
+.light .border-amber-500\/60 { border-color: hsla(38, 92%, 45%, 0.6); }
+.light .border-amber-700\/30 { border-color: hsla(38, 92%, 42%, 0.3); }
+.light .border-amber-700\/40 { border-color: hsla(38, 92%, 42%, 0.4); }
+.light .border-amber-700\/50 { border-color: hsla(38, 92%, 42%, 0.5); }
+.light .text-amber-200\/90 { color: hsla(38, 92%, 38%, 0.9); }
+.light .text-amber-300\/60 { color: hsla(38, 92%, 40%, 0.6); }
+.light .text-amber-300\/80 { color: hsla(38, 92%, 40%, 0.8); }
+.light .text-amber-400\/70 { color: hsla(38, 92%, 42%, 0.7); }
+.light .text-amber-400\/80 { color: hsla(38, 92%, 42%, 0.8); }
+.light .text-amber-400\/90 { color: hsla(38, 92%, 42%, 0.9); }
+.light .text-amber-500\/80 { color: hsla(38, 92%, 45%, 0.8); }
+.light .text-amber-600 { color: hsl(38, 92%, 45%); }
+.light .text-amber-700 { color: hsl(38, 92%, 42%); }
+
+/* blue */
+.light .bg-blue-400\/30 { background-color: hsla(210, 100%, 45%, 0.3); }
+.light .bg-blue-500\/5 { background-color: hsla(210, 100%, 42%, 0.05); }
+.light .bg-blue-500\/10 { background-color: hsla(210, 100%, 42%, 0.1); }
+.light .bg-blue-500\/20 { background-color: hsla(210, 100%, 42%, 0.2); }
+.light .bg-blue-500\/25 { background-color: hsla(210, 100%, 42%, 0.25); }
+.light .bg-blue-500\/40 { background-color: hsla(210, 100%, 42%, 0.4); }
+.light .bg-blue-600\/20 { background-color: hsla(210, 100%, 45%, 0.2); }
+.light .bg-blue-600\/30 { background-color: hsla(210, 100%, 45%, 0.3); }
+.light .bg-blue-600\/80 { background-color: hsla(210, 100%, 45%, 0.8); }
+.light .bg-blue-900\/15 { background-color: hsla(210, 100%, 30%, 0.15); }
+.light .border-blue-300\/70 { border-color: hsla(210, 100%, 42%, 0.7); }
+.light .border-blue-400 { border-color: hsl(210, 100%, 45%); }
+.light .border-blue-400\/30 { border-color: hsla(210, 100%, 45%, 0.3); }
+.light .border-blue-400\/40 { border-color: hsla(210, 100%, 45%, 0.4); }
+.light .border-blue-400\/50 { border-color: hsla(210, 100%, 45%, 0.5); }
+.light .border-blue-400\/70 { border-color: hsla(210, 100%, 45%, 0.7); }
+.light .border-blue-500 { border-color: hsl(210, 100%, 42%); }
+.light .border-blue-500\/20 { border-color: hsla(210, 100%, 42%, 0.2); }
+.light .border-blue-500\/50 { border-color: hsla(210, 100%, 42%, 0.5); }
+.light .border-blue-500\/60 { border-color: hsla(210, 100%, 42%, 0.6); }
+.light .border-blue-700\/25 { border-color: hsla(210, 100%, 42%, 0.25); }
+.light .border-blue-700\/50 { border-color: hsla(210, 100%, 42%, 0.5); }
+.light .text-blue-200\/90 { color: hsla(210, 100%, 40%, 0.9); }
+.light .text-blue-400\/60 { color: hsla(210, 100%, 45%, 0.6); }
+.light .text-blue-400\/70 { color: hsla(210, 100%, 45%, 0.7); }
+.light .text-blue-400\/80 { color: hsla(210, 100%, 45%, 0.8); }
+.light .text-blue-500 { color: hsl(210, 100%, 42%); }
+.light .text-blue-500\/60 { color: hsla(210, 100%, 42%, 0.6); }
+
+/* cyan */
+.light .bg-cyan-500\/5 { background-color: hsla(188, 94%, 35%, 0.05); }
+.light .bg-cyan-500\/10 { background-color: hsla(188, 94%, 35%, 0.1); }
+.light .bg-cyan-500\/20 { background-color: hsla(188, 94%, 35%, 0.2); }
+.light .bg-cyan-500\/25 { background-color: hsla(188, 94%, 35%, 0.25); }
+.light .bg-cyan-500\/30 { background-color: hsla(188, 94%, 35%, 0.3); }
+.light .bg-cyan-600\/20 { background-color: hsla(188, 94%, 35%, 0.2); }
+.light .bg-cyan-600\/30 { background-color: hsla(188, 94%, 35%, 0.3); }
+.light .bg-cyan-900\/15 { background-color: hsla(188, 94%, 30%, 0.15); }
+.light .bg-cyan-900\/30 { background-color: hsla(188, 94%, 30%, 0.3); }
+.light .border-cyan-400\/40 { border-color: hsla(188, 94%, 32%, 0.4); }
+.light .border-cyan-500 { border-color: hsl(188, 94%, 35%); }
+.light .border-cyan-500\/10 { border-color: hsla(188, 94%, 35%, 0.1); }
+.light .border-cyan-500\/20 { border-color: hsla(188, 94%, 35%, 0.2); }
+.light .border-cyan-500\/25 { border-color: hsla(188, 94%, 35%, 0.25); }
+.light .border-cyan-500\/40 { border-color: hsla(188, 94%, 35%, 0.4); }
+.light .border-cyan-500\/50 { border-color: hsla(188, 94%, 35%, 0.5); }
+.light .border-cyan-500\/60 { border-color: hsla(188, 94%, 35%, 0.6); }
+.light .border-cyan-700\/30 { border-color: hsla(188, 94%, 42%, 0.3); }
+.light .text-cyan-200\/90 { color: hsla(188, 94%, 32%, 0.9); }
+.light .text-cyan-300\/60 { color: hsla(188, 94%, 35%, 0.6); }
+.light .text-cyan-300\/70 { color: hsla(188, 94%, 35%, 0.7); }
+.light .text-cyan-400\/60 { color: hsla(188, 94%, 32%, 0.6); }
+.light .text-cyan-400\/80 { color: hsla(188, 94%, 32%, 0.8); }
+.light .text-cyan-700 { color: hsl(188, 94%, 42%); }
+
+/* emerald */
+.light .bg-emerald-500\/5 { background-color: hsla(160, 84%, 35%, 0.05); }
+.light .bg-emerald-500\/15 { background-color: hsla(160, 84%, 35%, 0.15); }
+.light .bg-emerald-500\/25 { background-color: hsla(160, 84%, 35%, 0.25); }
+.light .bg-emerald-500\/30 { background-color: hsla(160, 84%, 35%, 0.3); }
+.light .bg-emerald-500\/60 { background-color: hsla(160, 84%, 35%, 0.6); }
+.light .bg-emerald-500\/70 { background-color: hsla(160, 84%, 35%, 0.7); }
+.light .bg-emerald-500\/80 { background-color: hsla(160, 84%, 35%, 0.8); }
+.light .bg-emerald-900\/60 { background-color: hsla(160, 84%, 30%, 0.6); }
+.light .border-emerald-400\/40 { border-color: hsla(160, 84%, 32%, 0.4); }
+.light .border-emerald-500 { border-color: hsl(160, 84%, 35%); }
+.light .border-emerald-500\/20 { border-color: hsla(160, 84%, 35%, 0.2); }
+.light .border-emerald-500\/25 { border-color: hsla(160, 84%, 35%, 0.25); }
+.light .border-emerald-500\/30 { border-color: hsla(160, 84%, 35%, 0.3); }
+.light .border-emerald-500\/40 { border-color: hsla(160, 84%, 35%, 0.4); }
+.light .border-emerald-500\/60 { border-color: hsla(160, 84%, 35%, 0.6); }
+.light .border-emerald-700\/30 { border-color: hsla(160, 84%, 42%, 0.3); }
+.light .text-emerald-300\/80 { color: hsla(160, 84%, 30%, 0.8); }
+.light .text-emerald-400\/50 { color: hsla(160, 84%, 32%, 0.5); }
+.light .text-emerald-400\/70 { color: hsla(160, 84%, 32%, 0.7); }
+.light .text-emerald-400\/80 { color: hsla(160, 84%, 32%, 0.8); }
+.light .text-emerald-500 { color: hsl(160, 84%, 35%); }
+.light .text-emerald-600 { color: hsl(160, 84%, 35%); }
+.light .text-emerald-700 { color: hsl(160, 84%, 42%); }
+
+/* indigo */
+.light .bg-indigo-500\/5 { background-color: hsla(234, 89%, 48%, 0.05); }
+.light .text-indigo-400 { color: hsl(234, 89%, 48%); }
+
+/* orange */
+.light .bg-orange-500\/5 { background-color: hsla(25, 95%, 48%, 0.05); }
+.light .bg-orange-500\/10 { background-color: hsla(25, 95%, 48%, 0.1); }
+.light .bg-orange-500\/15 { background-color: hsla(25, 95%, 48%, 0.15); }
+.light .bg-orange-500\/20 { background-color: hsla(25, 95%, 48%, 0.2); }
+.light .bg-orange-900\/15 { background-color: hsla(25, 95%, 30%, 0.15); }
+.light .border-orange-500\/20 { border-color: hsla(25, 95%, 48%, 0.2); }
+.light .border-orange-500\/25 { border-color: hsla(25, 95%, 48%, 0.25); }
+.light .border-orange-500\/30 { border-color: hsla(25, 95%, 48%, 0.3); }
+.light .border-orange-500\/50 { border-color: hsla(25, 95%, 48%, 0.5); }
+.light .border-orange-500\/60 { border-color: hsla(25, 95%, 48%, 0.6); }
+.light .border-orange-700\/50 { border-color: hsla(25, 95%, 42%, 0.5); }
+.light .text-orange-300\/60 { color: hsla(25, 95%, 42%, 0.6); }
+
+/* pink */
+.light .border-pink-500\/20 { border-color: hsla(330, 80%, 50%, 0.2); }
+.light .border-pink-700\/50 { border-color: hsla(330, 80%, 42%, 0.5); }
+
+/* purple */
+.light .bg-purple-500\/5 { background-color: hsla(270, 70%, 50%, 0.05); }
+.light .bg-purple-500\/10 { background-color: hsla(270, 70%, 50%, 0.1); }
+.light .bg-purple-500\/15 { background-color: hsla(270, 70%, 50%, 0.15); }
+.light .bg-purple-500\/20 { background-color: hsla(270, 70%, 50%, 0.2); }
+.light .border-purple-500 { border-color: hsl(270, 70%, 50%); }
+.light .border-purple-500\/20 { border-color: hsla(270, 70%, 50%, 0.2); }
+.light .border-purple-500\/25 { border-color: hsla(270, 70%, 50%, 0.25); }
+.light .border-purple-500\/30 { border-color: hsla(270, 70%, 50%, 0.3); }
+.light .border-purple-500\/40 { border-color: hsla(270, 70%, 50%, 0.4); }
+.light .border-purple-500\/60 { border-color: hsla(270, 70%, 50%, 0.6); }
+.light .border-purple-700\/50 { border-color: hsla(270, 70%, 42%, 0.5); }
+
+/* red */
+.light .bg-red-400\/60 { background-color: hsla(0, 72%, 48%, 0.6); }
+.light .bg-red-400\/80 { background-color: hsla(0, 72%, 48%, 0.8); }
+.light .bg-red-500\/5 { background-color: hsla(0, 72%, 51%, 0.05); }
+.light .bg-red-500\/30 { background-color: hsla(0, 72%, 51%, 0.3); }
+.light .bg-red-600\/80 { background-color: hsla(0, 72%, 48%, 0.8); }
+.light .bg-red-600\/90 { background-color: hsla(0, 72%, 48%, 0.9); }
+.light .bg-red-900\/20 { background-color: hsla(0, 72%, 30%, 0.2); }
+.light .border-red-400\/40 { border-color: hsla(0, 72%, 48%, 0.4); }
+.light .border-red-400\/70 { border-color: hsla(0, 72%, 48%, 0.7); }
+.light .border-red-500 { border-color: hsl(0, 72%, 51%); }
+.light .border-red-500\/20 { border-color: hsla(0, 72%, 51%, 0.2); }
+.light .border-red-500\/40 { border-color: hsla(0, 72%, 51%, 0.4); }
+.light .border-red-500\/50 { border-color: hsla(0, 72%, 51%, 0.5); }
+.light .border-red-600\/40 { border-color: hsla(0, 72%, 48%, 0.4); }
+.light .text-red-300\/50 { color: hsla(0, 72%, 45%, 0.5); }
+.light .text-red-300\/80 { color: hsla(0, 72%, 45%, 0.8); }
+.light .text-red-400\/70 { color: hsla(0, 72%, 48%, 0.7); }
+.light .text-red-400\/80 { color: hsla(0, 72%, 48%, 0.8); }
+.light .text-red-500 { color: hsl(0, 72%, 51%); }
+
+/* rose */
+.light .bg-rose-500\/5 { background-color: hsla(350, 80%, 50%, 0.05); }
+.light .bg-rose-500\/10 { background-color: hsla(350, 80%, 50%, 0.1); }
+.light .bg-rose-500\/15 { background-color: hsla(350, 80%, 50%, 0.15); }
+.light .bg-rose-500\/25 { background-color: hsla(350, 80%, 50%, 0.25); }
+.light .bg-rose-500\/30 { background-color: hsla(350, 80%, 50%, 0.3); }
+.light .border-rose-500\/20 { border-color: hsla(350, 80%, 50%, 0.2); }
+.light .border-rose-500\/30 { border-color: hsla(350, 80%, 50%, 0.3); }
+.light .border-rose-500\/60 { border-color: hsla(350, 80%, 50%, 0.6); }
+.light .text-rose-200 { color: hsl(350, 80%, 42%); }
+.light .text-rose-400 { color: hsl(350, 80%, 48%); }
+.light .text-rose-700 { color: hsl(350, 80%, 42%); }
+
+/* sky */
+.light .bg-sky-500\/5 { background-color: hsla(199, 90%, 40%, 0.05); }
+.light .bg-sky-500\/10 { background-color: hsla(199, 90%, 40%, 0.1); }
+.light .bg-sky-500\/15 { background-color: hsla(199, 90%, 40%, 0.15); }
+.light .bg-sky-500\/25 { background-color: hsla(199, 90%, 40%, 0.25); }
+.light .bg-sky-500\/30 { background-color: hsla(199, 90%, 40%, 0.3); }
+.light .border-sky-500\/20 { border-color: hsla(199, 90%, 40%, 0.2); }
+.light .border-sky-500\/30 { border-color: hsla(199, 90%, 40%, 0.3); }
+.light .border-sky-500\/60 { border-color: hsla(199, 90%, 40%, 0.6); }
+.light .text-sky-200 { color: hsl(199, 90%, 38%); }
+.light .text-sky-400 { color: hsl(199, 90%, 42%); }
+.light .text-sky-500 { color: hsl(199, 90%, 40%); }
+.light .text-sky-700 { color: hsl(199, 90%, 42%); }
+
+/* slate */
+.light .bg-slate-300\/15 { background-color: hsla(217, 19%, 35%, 0.15); }
+.light .bg-slate-400\/40 { background-color: hsla(217, 19%, 45%, 0.4); }
+.light .bg-slate-500\/10 { background-color: hsla(217, 19%, 50%, 0.1); }
+.light .bg-slate-500\/15 { background-color: hsla(217, 19%, 50%, 0.15); }
+.light .bg-slate-700\/40 { background-color: hsla(217, 19%, 35%, 0.4); }
+.light .bg-slate-700\/50 { background-color: hsla(217, 19%, 35%, 0.5); }
+.light .bg-slate-800\/30 { background-color: hsla(217, 19%, 36%, 0.3); }
+.light .bg-slate-800\/70 { background-color: hsla(217, 19%, 36%, 0.7); }
+.light .bg-slate-900\/30 { background-color: hsla(217, 19%, 30%, 0.3); }
+.light .bg-slate-900\/60 { background-color: hsla(217, 19%, 30%, 0.6); }
+.light .border-slate-300\/50 { border-color: hsla(217, 19%, 35%, 0.5); }
+.light .border-slate-500\/30 { border-color: hsla(217, 19%, 50%, 0.3); }
+.light .border-slate-700\/40 { border-color: hsla(217, 19%, 35%, 0.4); }
+
+/* teal */
+.light .bg-teal-800\/80 { background-color: hsla(168, 76%, 36%, 0.8); }
+.light .bg-teal-900\/60 { background-color: hsla(168, 76%, 30%, 0.6); }
+.light .border-teal-300 { border-color: hsl(168, 76%, 35%); }
+.light .border-teal-500\/30 { border-color: hsla(168, 76%, 35%, 0.3); }
+.light .border-teal-500\/60 { border-color: hsla(168, 76%, 35%, 0.6); }
+.light .text-teal-300\/60 { color: hsla(168, 76%, 35%, 0.6); }
+.light .text-teal-400\/70 { color: hsla(168, 76%, 30%, 0.7); }
+.light .text-teal-500 { color: hsl(168, 76%, 35%); }
+
+/* violet */
+.light .bg-violet-500\/5 { background-color: hsla(263, 70%, 50%, 0.05); }
+.light .bg-violet-500\/10 { background-color: hsla(263, 70%, 50%, 0.1); }
+.light .bg-violet-500\/20 { background-color: hsla(263, 70%, 50%, 0.2); }
+.light .bg-violet-500\/25 { background-color: hsla(263, 70%, 50%, 0.25); }
+.light .bg-violet-500\/30 { background-color: hsla(263, 70%, 50%, 0.3); }
+.light .bg-violet-500\/40 { background-color: hsla(263, 70%, 50%, 0.4); }
+.light .border-violet-400 { border-color: hsl(263, 70%, 48%); }
+.light .border-violet-500 { border-color: hsl(263, 70%, 50%); }
+.light .border-violet-500\/20 { border-color: hsla(263, 70%, 50%, 0.2); }
+.light .border-violet-500\/25 { border-color: hsla(263, 70%, 50%, 0.25); }
+.light .border-violet-500\/40 { border-color: hsla(263, 70%, 50%, 0.4); }
+.light .border-violet-500\/60 { border-color: hsla(263, 70%, 50%, 0.6); }
+.light .border-violet-700\/50 { border-color: hsla(263, 70%, 42%, 0.5); }
+.light .text-violet-400\/70 { color: hsla(263, 70%, 48%, 0.7); }
+.light .text-violet-400\/80 { color: hsla(263, 70%, 48%, 0.8); }
+.light .text-violet-500 { color: hsl(263, 70%, 50%); }
+.light .text-violet-600 { color: hsl(263, 70%, 50%); }
+.light .text-violet-700 { color: hsl(263, 70%, 42%); }
+/* END LIGHT MODE AUTO-COMPLETED ACCENT OVERRIDES */
