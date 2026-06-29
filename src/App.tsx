@@ -9,7 +9,7 @@ import { HackathonsPage } from './components/hackathon/HackathonsPage';
 import { HackathonDetailPage } from './components/hackathon/HackathonDetailPage';
 import { HackathonPlaybook } from './components/hackathon/HackathonPlaybook';
 
-// Skills Navigator is a large, self-contained feature (galaxy map + tours +
+// Agent Skills Navigator is a large, self-contained feature (galaxy map + tours +
 // academy with a big static data module). Lazy-load it so it never weighs down
 // the initial workflow bundle that every workshop participant hits first.
 const SkillsNavigatorPage = lazy(() => import('./components/skills/SkillsNavigatorPage'));
@@ -55,9 +55,8 @@ export default function App() {
   useEffect(() => {
     if (isHackathonsPage) setHackathonsExpanded(true);
   }, [isHackathonsPage]);
-  const isWorkflowPage = !isConfigPage && !isLeaderboardPage && !isAnalyticsPage && !isHackathonsPage;
   const isSkillsPage = location.pathname === '/skills';
-  const isWorkflowPage = !isConfigPage && !isLeaderboardPage && !isAnalyticsPage && !isSkillsPage;
+  const isWorkflowPage = !isConfigPage && !isLeaderboardPage && !isAnalyticsPage && !isHackathonsPage && !isSkillsPage;
   
   // Data refresh key - incremented when navigating from Config to Workflow
   // This forces PromptGenerator and other components to re-fetch data
@@ -856,7 +855,7 @@ export default function App() {
                 </Link>
                 <Link to="/skills" onClick={() => setMobileSidebarOpen(false)} className={`w-full flex items-center gap-2.5 px-2.5 py-2 rounded-md text-ui-base font-medium transition-all duration-200 ${isSkillsPage ? 'bg-sidebar-accent text-sidebar-primary' : 'text-muted-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-foreground'}`}>
                   <Compass className={`w-4 h-4 flex-shrink-0 ${isSkillsPage ? 'text-primary' : 'text-muted-foreground'}`} />
-                  <span>Skills Navigator</span>
+                  <span>Agent Skills Navigator</span>
                 </Link>
                 <Link to="/analytics" onClick={() => setMobileSidebarOpen(false)} className={`w-full flex items-center gap-2.5 px-2.5 py-2 rounded-md text-ui-base font-medium transition-all duration-200 ${isAnalyticsPage ? 'bg-sidebar-accent text-sidebar-primary' : 'text-muted-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-foreground'}`}>
                   <BarChart3 className={`w-4 h-4 flex-shrink-0 ${isAnalyticsPage ? 'text-primary' : 'text-muted-foreground'}`} />
@@ -956,7 +955,7 @@ export default function App() {
 
             <Link
               to="/skills"
-              title="Skills Navigator"
+              title="Agent Skills Navigator"
               className={`w-full flex items-center ${sidebarCollapsed ? 'justify-center px-0 py-2.5' : 'gap-2.5 px-2.5 py-2'} rounded-md text-ui-base font-medium transition-all duration-200 ${
                 isSkillsPage
                   ? 'bg-sidebar-accent text-sidebar-primary'
@@ -964,7 +963,7 @@ export default function App() {
               }`}
             >
               <Compass className={`w-4 h-4 flex-shrink-0 ${isSkillsPage ? 'text-primary' : 'text-muted-foreground'}`} />
-              {!sidebarCollapsed && <span className="whitespace-nowrap">Skills Navigator</span>}
+              {!sidebarCollapsed && <span className="whitespace-nowrap">Agent Skills Navigator</span>}
             </Link>
 
             <Link
@@ -1355,7 +1354,7 @@ export default function App() {
           <Route path="/hackathons" element={<HackathonsPage />} />
           <Route path="/hackathons/playbook" element={<HackathonPlaybook />} />
           <Route path="/hackathons/:id" element={<HackathonDetailPage />} />
-          {/* Skills Navigator Page (lazy-loaded) */}
+          {/* Agent Skills Navigator Page (lazy-loaded) */}
           <Route
             path="/skills"
             element={
@@ -1364,7 +1363,7 @@ export default function App() {
                   <div className="flex-1 flex items-center justify-center bg-background">
                     <div className="flex items-center gap-3 text-muted-foreground">
                       <div className="w-5 h-5 rounded-full border-2 border-primary/30 border-t-primary animate-spin" />
-                      <span className="text-ui-md font-medium">Loading Skills Navigator…</span>
+                      <span className="text-ui-md font-medium">Loading Agent Skills Navigator…</span>
                     </div>
                   </div>
                 }

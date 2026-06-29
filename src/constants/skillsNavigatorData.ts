@@ -1,5 +1,5 @@
 /**
- * Skills Navigator data — ported verbatim from
+ * Agent Skills Navigator data — ported verbatim from
  * presentations/workshop-explorer.html (vibe-coding-workshop-template).
  *
  * GENERATED via scripts/extract (one-off). Edit the source HTML and re-extract

@@ -80,7 +80,7 @@ export function SkillsNavigatorPage({ onOpenMobileNav }: SkillsNavigatorPageProp
           <Menu className="w-5 h-5" />
         </button>
         <h1>
-          Skills <span>Navigator</span>
+          Agent Skills <span>Navigator</span>
         </h1>
         <div className="mode-tabs">
           {MODES.map((m) => (
