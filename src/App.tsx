@@ -863,7 +863,10 @@ export default function App() {
                 </Link>
                 <Link to="/hackathons" onClick={() => setMobileSidebarOpen(false)} className={`w-full flex items-center gap-2.5 px-2.5 py-2 rounded-md text-ui-base font-medium transition-all duration-200 ${isHackathonsPage ? 'bg-sidebar-accent text-sidebar-primary' : 'text-muted-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-foreground'}`}>
                   <Award className={`w-4 h-4 flex-shrink-0 ${isHackathonsPage ? 'text-primary' : 'text-muted-foreground'}`} />
-                  <span>Hackathons</span>
+                  <span className="flex items-center gap-1.5">
+                    Hackathons
+                    <span className="text-ui-2xs font-semibold uppercase tracking-wide text-amber-400 bg-amber-500/15 rounded px-1 py-0.5 leading-none">Beta</span>
+                  </span>
                 </Link>
                 <Link to="/config" onClick={() => setMobileSidebarOpen(false)} className={`w-full flex items-center gap-2.5 px-2.5 py-2 rounded-md text-ui-base font-medium transition-all duration-200 ${isConfigPage ? 'bg-sidebar-accent text-sidebar-primary' : 'text-muted-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-foreground'}`}>
                   <svg className={`w-4 h-4 flex-shrink-0 ${isConfigPage ? 'text-primary' : 'text-muted-foreground'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" /></svg>
@@ -988,9 +991,14 @@ export default function App() {
                     : 'text-muted-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-foreground'
                 }`}
               >
-                <Link to="/hackathons" title="Hackathons" className="flex items-center gap-2.5 flex-1 min-w-0">
+                <Link to="/hackathons" title="Hackathons (Beta)" className="flex items-center gap-2.5 flex-1 min-w-0">
                   <Award className={`w-4 h-4 flex-shrink-0 ${isHackathonsPage ? 'text-primary' : 'text-muted-foreground'}`} />
-                  {!sidebarCollapsed && <span className="whitespace-nowrap">Hackathons</span>}
+                  {!sidebarCollapsed && (
+                    <span className="whitespace-nowrap flex items-center gap-1.5">
+                      Hackathons
+                      <span className="text-ui-2xs font-semibold uppercase tracking-wide text-amber-400 bg-amber-500/15 rounded px-1 py-0.5 leading-none">Beta</span>
+                    </span>
+                  )}
                 </Link>
                 {!sidebarCollapsed && (
                   <button

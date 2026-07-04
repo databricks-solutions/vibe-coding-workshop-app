@@ -87,13 +87,16 @@ export function HackathonDetailPage() {
       <div className="sticky top-0 z-10 bg-card/90 backdrop-blur-md border-b border-border px-6 py-4">
         <div className="max-w-5xl mx-auto">
           <div className="flex items-center justify-between gap-3">
-            <button
-              onClick={() => navigate('/hackathons')}
-              className="flex items-center gap-1.5 text-ui-xs text-muted-foreground hover:text-foreground transition-colors"
-            >
-              <ArrowLeft className="w-4 h-4" />
-              All hackathons
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => navigate('/hackathons')}
+                className="flex items-center gap-1.5 text-ui-xs text-muted-foreground hover:text-foreground transition-colors"
+              >
+                <ArrowLeft className="w-4 h-4" />
+                All hackathons
+              </button>
+              <span className="text-ui-2xs font-semibold uppercase tracking-wide text-amber-400 bg-amber-500/15 border border-amber-500/30 rounded px-1.5 py-0.5 leading-none">Beta</span>
+            </div>
             <div className="flex items-center gap-3">
               <DevPersonaPicker />
               <ThemeToggle />

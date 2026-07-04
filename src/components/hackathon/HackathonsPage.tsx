@@ -74,7 +74,10 @@ export function HackathonsPage() {
               <Trophy className="w-5 h-5 text-white" />
             </div>
             <div>
-              <h1 className="text-xl font-bold text-foreground tracking-tight">Hackathons</h1>
+              <h1 className="text-xl font-bold text-foreground tracking-tight flex items-center gap-2">
+                Hackathons
+                <span className="text-ui-2xs font-semibold uppercase tracking-wide text-amber-400 bg-amber-500/15 border border-amber-500/30 rounded px-1.5 py-0.5 leading-none">Beta</span>
+              </h1>
               <p className="text-ui-xs text-muted-foreground">
                 Organize, build, judge, and crown a winner
               </p>
