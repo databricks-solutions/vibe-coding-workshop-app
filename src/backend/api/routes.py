@@ -2192,9 +2192,30 @@ def _sse_event(obj: Dict[str, Any]) -> str:
     return f"data: {json.dumps(obj)}\n\n"
 
 
+# Shared output token budget for all LLM streaming generation paths.
+# Kept as a single constant so the ceiling can be tuned in one place.
+LLM_MAX_OUTPUT_TOKENS = 8000
+
+
+def _max_tokens_for_section(section_tag: Optional[str]) -> int:
+    """Output token budget for a workflow section. Consistent across all sections."""
+    return LLM_MAX_OUTPUT_TOKENS
+
+
+def _length_warning_event() -> str:
+    return _sse_event({
+        "type": "warning",
+        "code": "max_tokens",
+        "message": (
+            "Generation stopped at the token limit. The output may be incomplete — "
+            "try regenerating or shortening the input."
+        ),
+    })
+
+
 async def _stream_with_retry(
     messages: list,
-    max_tokens: int = 4000,
+    max_tokens: int = LLM_MAX_OUTPUT_TOKENS,
     temperature: float = 0.5,
     timeout: float = 120.0,
     flush_chars: int = 100,
@@ -2210,6 +2231,7 @@ async def _stream_with_retry(
     - {"type": "start", "model": "..."}
     - {"type": "retry", "attempt": N, "max_attempts": 3, "delay": X, "reason": "..."}
     - {"type": "content", "content": "..."}
+    - {"type": "warning", "code": "max_tokens", "message": "..."}
     - {"type": "done"}
     - {"type": "error", "error": "..."}
 
@@ -2287,6 +2309,7 @@ async def _stream_with_retry(
 
                     content_buffer = ""
                     last_flush = time.monotonic()
+                    finish_reason: Optional[str] = None
 
                     async for line in response.aiter_lines():
                         if not line.startswith("data: "):
@@ -2295,12 +2318,17 @@ async def _stream_with_retry(
                         if data == "[DONE]":
                             if content_buffer:
                                 yield _sse_event({"type": "content", "content": content_buffer})
+                            if finish_reason == "length":
+                                yield _length_warning_event()
                             yield _sse_event({"type": "done"})
                             return
                         try:
                             chunk = json.loads(data)
                             if "choices" in chunk and chunk["choices"]:
-                                delta = chunk["choices"][0].get("delta", {})
+                                choice = chunk["choices"][0]
+                                if choice.get("finish_reason"):
+                                    finish_reason = choice.get("finish_reason")
+                                delta = choice.get("delta", {})
                                 content = delta.get("content", "")
                                 if content:
                                     content_buffer += content
@@ -2314,6 +2342,8 @@ async def _stream_with_retry(
 
                     if content_buffer:
                         yield _sse_event({"type": "content", "content": content_buffer})
+                    if finish_reason == "length":
+                        yield _length_warning_event()
                     yield _sse_event({"type": "done"})
                     return
 
@@ -2410,9 +2440,10 @@ async def stream_llm_response(
         _brand_label = f"**{_cd}**" if _cd else f"the company at {_brand_url}"
         _brand_appendix = f"\n\n---\n\n## Company Branding Reference\n\nThe PRD above should be contextualized for {_brand_label}. Reference {_brand_url} for official brand colors, logo, and visual identity. Ensure personas, workflows, and terminology align with this company's business domain."
         _done_sse = _sse_event({"type": "done"})
+        _prd_max_tokens = _max_tokens_for_section(section_tag)
 
         async for event in _stream_with_retry(
-            messages, max_tokens=4000, temperature=0.5,
+            messages, max_tokens=_prd_max_tokens, temperature=0.5,
             section_tag=section_tag, industry=industry, use_case=use_case,
         ):
             if event == _done_sse:
@@ -2420,7 +2451,7 @@ async def stream_llm_response(
             yield event
     else:
         async for event in _stream_with_retry(
-            messages, max_tokens=4000, temperature=0.5,
+            messages, max_tokens=_max_tokens_for_section(section_tag), temperature=0.5,
             section_tag=section_tag, industry=industry, use_case=use_case,
         ):
             yield event
@@ -2531,7 +2562,7 @@ async def stream_metadata_csv_response(
         {"role": "user", "content": f"Process this uploaded schema CSV ({table_count} tables, {row_count} column definitions) and generate the coding assistant prompt:\n\n{input_text}"}
     ]
 
-    async for event in _stream_with_retry(messages, max_tokens=8000, temperature=0.3, timeout=180.0):
+    async for event in _stream_with_retry(messages, max_tokens=LLM_MAX_OUTPUT_TOKENS, temperature=0.3, timeout=180.0):
         yield event
 
 
@@ -2643,7 +2674,7 @@ async def stream_test_prompt_response(
         {"role": "user", "content": f"Generate a detailed prompt based on: {processed_input}"}
     ]
 
-    async for event in _stream_with_retry(messages, max_tokens=4000, temperature=0.5):
+    async for event in _stream_with_retry(messages, max_tokens=LLM_MAX_OUTPUT_TOKENS, temperature=0.5):
         yield event
 
 
@@ -6879,7 +6910,7 @@ async def _stream_usecase_generation(
         logger.warning(f"[UseCase Builder] Payload {payload_estimate} bytes exceeds 3.8MB safety limit, falling back to text-only")
         messages = [{"role": "system", "content": system_prompt}, {"role": "user", "content": user_text}]
 
-    async for event in _stream_with_retry(messages, max_tokens=4000, temperature=0.5):
+    async for event in _stream_with_retry(messages, max_tokens=LLM_MAX_OUTPUT_TOKENS, temperature=0.5):
         yield event
 
 

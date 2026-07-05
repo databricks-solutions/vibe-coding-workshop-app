@@ -6,6 +6,7 @@ import { CopyButton } from './CopyButton';
 import { ExpandableOutputModal } from './ExpandableOutputModal';
 import { useCopyToClipboard } from '../hooks/useCopyToClipboard';
 import { ExpandableErrorBanner } from './ExpandableErrorBanner';
+import { TruncationWarningBanner } from './TruncationWarningBanner';
 import { apiClient, type GeneratedContent } from '../api/client';
 
 const REQUIRED_COLUMNS = ['table_name', 'column_name', 'data_type', 'ordinal_position', 'is_nullable', 'comment'] as const;
@@ -112,6 +113,7 @@ export function CsvUploadPanel({
   const [streamedPrompt, setStreamedPrompt] = useState('');
   const [promptError, setPromptError] = useState<string | null>(null);
   const [retryStatus, setRetryStatus] = useState<{ attempt: number; maxAttempts: number; reason: string } | null>(null);
+  const [truncationWarning, setTruncationWarning] = useState<string | null>(null);
   const [showOutput, setShowOutput] = useState(false);
   const [activeTab, setActiveTab] = useState<'prompt' | 'how_to_apply' | 'expected_output'>('prompt');
   const [metadata, setMetadata] = useState<{ how_to_apply: string; expected_output: string } | null>(null);
@@ -207,6 +209,7 @@ export function CsvUploadPanel({
     setStreamedPrompt('');
     setPromptError(null);
     setRetryStatus(null);
+    setTruncationWarning(null);
     setActiveTab('prompt');
 
     const controller = apiClient.processMetadataCsvStream(
@@ -245,6 +248,9 @@ export function CsvUploadPanel({
       },
       (attempt, maxAttempts, reason) => {
         setRetryStatus({ attempt, maxAttempts, reason });
+      },
+      (code, message) => {
+        if (code === 'max_tokens') setTruncationWarning(message);
       }
     );
 
@@ -264,6 +270,7 @@ export function CsvUploadPanel({
     setStreamedPrompt('');
     setPromptError(null);
     setRetryStatus(null);
+    setTruncationWarning(null);
     if (fileInputRef.current) fileInputRef.current.value = '';
   }, []);
 
@@ -411,6 +418,10 @@ export function CsvUploadPanel({
           <div className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse shrink-0" />
           Retrying ({retryStatus.attempt} of {retryStatus.maxAttempts}) &mdash; {retryStatus.reason}...
         </div>
+      )}
+      {/* Truncation warning */}
+      {!isStreaming && truncationWarning && (
+        <TruncationWarningBanner message={truncationWarning} />
       )}
       {/* Error */}
       {!isStreaming && promptError && !validation?.error && (

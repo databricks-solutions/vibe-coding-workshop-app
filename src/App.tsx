@@ -22,7 +22,7 @@ import {
 import { apiClient } from './api/client';
 import { Zap, MessageSquare, Trophy, Plus, PanelLeftClose, PanelLeft, Menu, X, BarChart3, Eye, Compass, Award, ChevronDown, List, BookOpen } from 'lucide-react';
 import { normalizeLevel, getFilteredSections, getCumulativeOverrides, USE_CASE_LEVEL_LOCK, isForwardProgression, getDisabledTagsForAIModules, ALL_AI_MODULES, getDisabledTagsForMedallionLayers, normalizeMedallionLayers, ALL_MEDALLION_LAYERS, computeChainContext, deriveInitialChainContext, type WorkshopLevel, type WorkflowDirection, type AIAgentModule, type MedallionLayer, type ChainContext } from './constants/workflowSections';
-import { DEFAULT_LEVEL_BY_ASSISTANT } from './constants/codingAssistants';
+import { DEFAULT_LEVEL_BY_ASSISTANT, parseCodingAssistantsConfig } from './constants/codingAssistants';
 
 export default function App() {
   const location = useLocation();
@@ -87,6 +87,15 @@ export default function App() {
   const [skippedSteps, setSkippedSteps] = useState<Set<number>>(new Set());
   const [prerequisitesCompleted, setPrerequisitesCompleted] = useState(false);
   const [codingAssistant, setCodingAssistant] = useState<string | null>(null);
+  // Whether the current coding assistant reflects an explicit user/session
+  // choice (true) vs a silent first-load default (false). Gates the "Completed"
+  // visual and the welcome-screen auto-acknowledge so a defaulted assistant is
+  // pre-selected without looking confirmed or skipping the welcome step.
+  const [codingAssistantExplicit, setCodingAssistantExplicit] = useState(false);
+  // First-load default target, resolved from the admin "preferred list"
+  // (coding_assistants_config). Falls back to 'cursor' until/if config loads.
+  const [defaultAssistantId, setDefaultAssistantId] = useState<string>('cursor');
+  const [assistantConfigLoaded, setAssistantConfigLoaded] = useState(false);
   // Default to end-to-end which includes all chapters (complete workshop)
   const [workshopLevel, setWorkshopLevel] = useState<WorkshopLevel>('end-to-end');
   // Explicit chain context for additive path selection. See ChainContext docs
@@ -260,6 +269,44 @@ export default function App() {
     }, 150);
   };
 
+  // Resolve the first-load default coding assistant from the admin "preferred
+  // list" (coding_assistants_config): the first recommended entry, else the
+  // first entry, else 'cursor'. Runs once on mount; keeps the 'cursor' fallback
+  // on any parse/fetch failure.
+  useEffect(() => {
+    let cancelled = false;
+    apiClient
+      .getWorkshopParametersDict()
+      .then(dict => {
+        if (cancelled) return;
+        const config = parseCodingAssistantsConfig(dict?.coding_assistants_config);
+        if (config && config.length > 0) {
+          const resolved = config.find(c => c.recommended)?.id ?? config[0].id;
+          setDefaultAssistantId(resolved);
+        }
+        setAssistantConfigLoaded(true);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setAssistantConfigLoaded(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Seed the default coding assistant on a fresh session (no saved/explicit
+  // choice). Gated on config load so we pick the true preferred default rather
+  // than prematurely seeding 'cursor'. `explicit` stays false so the selection
+  // is pre-highlighted without marking the step complete or skipping welcome.
+  // Skipped in read-only shared views so they stay identical to the owner's
+  // saved state (no seeded value the owner never chose).
+  useEffect(() => {
+    if (!readOnly && !isSessionLoading && assistantConfigLoaded && !codingAssistantExplicit && !codingAssistant) {
+      setCodingAssistant(defaultAssistantId);
+    }
+  }, [readOnly, isSessionLoading, assistantConfigLoaded, codingAssistantExplicit, codingAssistant, defaultAssistantId]);
+
   // Get or create the user's default session (continues where they left off)
   const getOrCreateDefaultSession = async () => {
     try {
@@ -308,6 +355,7 @@ export default function App() {
           setDirection(sessionParams.direction as WorkflowDirection);
         }
         setCodingAssistant(sessionParams.coding_assistant || null);
+        setCodingAssistantExplicit(!!sessionParams.coding_assistant);
         
         // Find the next incomplete step using the actual section order for this workshop level
         const nextStep = getNextIncompleteStep(Array.from(restoredCompleted), skippedStepsArray, restoredLevel);
@@ -457,6 +505,7 @@ export default function App() {
           setDirection(sessionParams.direction as WorkflowDirection);
         }
         setCodingAssistant(sessionParams.coding_assistant || null);
+        setCodingAssistantExplicit(!!sessionParams.coding_assistant);
         
         // Navigate to the next incomplete step using the actual section order
         const nextStep = getNextIncompleteStep(
@@ -591,6 +640,7 @@ export default function App() {
   const handleCodingAssistantChange = useCallback((assistantId: string) => {
     if (readOnly) return;
     setCodingAssistant(assistantId);
+    setCodingAssistantExplicit(true);
     const assistantDefault = DEFAULT_LEVEL_BY_ASSISTANT[assistantId as keyof typeof DEFAULT_LEVEL_BY_ASSISTANT];
     const shouldApplyAssistantDefault =
       !levelExplicitlySelected &&
@@ -1337,6 +1387,7 @@ export default function App() {
                     prerequisitesCompleted={prerequisitesCompleted}
                     onPrerequisitesComplete={handlePrerequisitesComplete}
                     codingAssistant={codingAssistant}
+                    codingAssistantExplicit={codingAssistantExplicit}
                     onCodingAssistantChange={handleCodingAssistantChange}
                     isSessionLoaded={!isSessionLoading}
                     currentUser={currentUser}

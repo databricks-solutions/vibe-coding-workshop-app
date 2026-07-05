@@ -106,6 +106,10 @@ interface WorkflowDiagramProps {
   prerequisitesCompleted?: boolean;
   onPrerequisitesComplete?: () => void;
   codingAssistant?: string | null;
+  /** True when the assistant reflects an explicit user/session choice (vs a
+   *  silent first-load default). Gates the welcome auto-acknowledge and the
+   *  selector's "Completed" visual. */
+  codingAssistantExplicit?: boolean;
   onCodingAssistantChange?: (id: string) => void;
   dataRefreshKey?: number; // Incremented when data needs to be refreshed (e.g., after config changes)
   isSessionLoaded?: boolean; // True once session data has been fetched from backend
@@ -187,6 +191,7 @@ export function WorkflowDiagram({
   prerequisitesCompleted = false,
   onPrerequisitesComplete,
   codingAssistant = null,
+  codingAssistantExplicit = false,
   onCodingAssistantChange,
   dataRefreshKey = 0,
   isSessionLoaded = false,
@@ -421,10 +426,10 @@ export function WorkflowDiagram({
 
   // Auto-acknowledge for returning users (they already have progress)
   useEffect(() => {
-    if (isSessionLoaded && (selectedIndustry || selectedUseCase || completedSteps.size > 0 || prerequisitesCompleted || codingAssistant)) {
+    if (isSessionLoaded && (selectedIndustry || selectedUseCase || completedSteps.size > 0 || prerequisitesCompleted || codingAssistantExplicit)) {
       setWelcomeAcknowledged(true);
     }
-    if (isSessionLoaded && codingAssistant && (prerequisitesCompleted || completedSteps.size > 0)) {
+    if (isSessionLoaded && codingAssistantExplicit && (prerequisitesCompleted || completedSteps.size > 0)) {
       setCodingAssistantConfirmed(true);
     }
     // Only auto-set pathAcknowledged when user has actual workshop progress (step 2+).
@@ -432,7 +437,7 @@ export function WorkflowDiagram({
     if (isSessionLoaded && completedSteps.size > 1) {
       setPathAcknowledged(true);
     }
-  }, [isSessionLoaded, selectedIndustry, selectedUseCase, completedSteps.size, prerequisitesCompleted, codingAssistant]);
+  }, [isSessionLoaded, selectedIndustry, selectedUseCase, completedSteps.size, prerequisitesCompleted, codingAssistantExplicit]);
 
   const deriveWizardStage = useCallback((): WizardStage => {
     const intentDefined = completedSteps.has(1) || (!!selectedIndustry && !!selectedUseCase);
@@ -3161,6 +3166,7 @@ export function WorkflowDiagram({
       <CodingAssistantSelector
         key={`assistant-${sessionId}`}
         selectedAssistant={codingAssistant}
+        selectionExplicit={codingAssistantExplicit}
         onSelect={(id) => onCodingAssistantChange?.(id)}
         onConfirm={() => {
           setCodingAssistantConfirmed(true);

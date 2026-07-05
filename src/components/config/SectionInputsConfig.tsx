@@ -16,6 +16,7 @@ import type { SectionInput, ConfigVersionInfo, ImageMetadata } from '../../api/c
 import { ImageGallery } from '../ImageGallery';
 import { WORKFLOW_SECTIONS } from '../../constants/workflowSections';
 import { ExpandableErrorBanner } from '../ExpandableErrorBanner';
+import { TruncationWarningBanner } from '../TruncationWarningBanner';
 import {
   DEFAULT_ASSISTANT_KEY,
   FORKABLE_ASSISTANTS,
@@ -225,6 +226,7 @@ export function SectionInputsConfig({ onToast }: SectionInputsConfigProps) {
   const [testModel, setTestModel] = useState<string | undefined>();
   const [testError, setTestError] = useState<string | null>(null);
   const [testRetryStatus, setTestRetryStatus] = useState<{ attempt: number; maxAttempts: number; reason: string } | null>(null);
+  const [testTruncationWarning, setTestTruncationWarning] = useState<string | null>(null);
   const [testCopied, setTestCopied] = useState(false);
   const testAbortRef = useRef<AbortController | null>(null);
 
@@ -640,6 +642,7 @@ export function SectionInputsConfig({ onToast }: SectionInputsConfigProps) {
     setTestOutput('');
     setTestError(null);
     setTestRetryStatus(null);
+    setTestTruncationWarning(null);
     setTestModel(undefined);
     setIsTestPanelOpen(true);
     
@@ -676,6 +679,10 @@ export function SectionInputsConfig({ onToast }: SectionInputsConfigProps) {
         setTestRetryStatus({ attempt, maxAttempts, reason });
       },
       selectedAssistant,
+      // onWarning
+      (code: string, message: string) => {
+        if (code === 'max_tokens') setTestTruncationWarning(message);
+      },
     );
   }
   
@@ -1154,6 +1161,9 @@ export function SectionInputsConfig({ onToast }: SectionInputsConfigProps) {
                         Retrying ({testRetryStatus.attempt} of {testRetryStatus.maxAttempts}) &mdash; {testRetryStatus.reason}...
                       </span>
                     </div>
+                  )}
+                  {!isTestRunning && testTruncationWarning && (
+                    <TruncationWarningBanner message={testTruncationWarning} className="mb-3" />
                   )}
                   {!isTestRunning && testError && (
                     <ExpandableErrorBanner

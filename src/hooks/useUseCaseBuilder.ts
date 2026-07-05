@@ -95,6 +95,7 @@ export function useUseCaseBuilder() {
   const [streamModel, setStreamModel] = useState<string | undefined>();
   const [error, setError] = useState<string | null>(null);
   const [retryStatus, setRetryStatus] = useState<{ attempt: number; maxAttempts: number; reason: string } | null>(null);
+  const [truncationWarning, setTruncationWarning] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
 
   // --- Refinement state ---
@@ -122,6 +123,7 @@ export function useUseCaseBuilder() {
     if (!hasInput || isStreaming) return;
     setError(null);
     setRetryStatus(null);
+    setTruncationWarning(null);
     setPreviousDraft(null);
     setShowDiff(false);
     setOutputText('');
@@ -168,6 +170,9 @@ export function useUseCaseBuilder() {
       (attempt, maxAttempts, reason) => {
         setRetryStatus({ attempt, maxAttempts, reason });
       },
+      (code, message) => {
+        if (code === 'max_tokens') setTruncationWarning(message);
+      },
     );
     abortRef.current = controller;
   }, [hasInput, isStreaming, industry, useCaseName, hints, attachments]);
@@ -180,6 +185,7 @@ export function useUseCaseBuilder() {
     setShowDiff(false);
     setError(null);
     setRetryStatus(null);
+    setTruncationWarning(null);
     setOutputText('');
     setIsEditing(false);
     setIsStreaming(true);
@@ -208,6 +214,9 @@ export function useUseCaseBuilder() {
       },
       (attempt, maxAttempts, reason) => {
         setRetryStatus({ attempt, maxAttempts, reason });
+      },
+      (code, message) => {
+        if (code === 'max_tokens') setTruncationWarning(message);
       },
     );
     abortRef.current = controller;
@@ -314,6 +323,7 @@ export function useUseCaseBuilder() {
     error,
     setError,
     retryStatus,
+    truncationWarning,
 
     // Refinement
     refineFeedback,

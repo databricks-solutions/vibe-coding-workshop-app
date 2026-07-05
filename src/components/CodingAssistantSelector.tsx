@@ -231,6 +231,11 @@ interface CodingAssistantSelectorProps {
   highlightConfirm?: boolean;
   /** When true, the selection is locked for this session -- cards are disabled and Continue is hidden */
   isLocked?: boolean;
+  /** When false, a set `selectedAssistant` is treated as a silent default: the
+   *  card still highlights, but the "Completed" green treatment is suppressed
+   *  until the user makes an explicit choice. Defaults to true (existing callers
+   *  unchanged). */
+  selectionExplicit?: boolean;
 }
 
 export function CodingAssistantSelector({
@@ -242,6 +247,7 @@ export function CodingAssistantSelector({
   hideConfirm = false,
   highlightConfirm = false,
   isLocked = false,
+  selectionExplicit = true,
 }: CodingAssistantSelectorProps) {
   const [userOverride, setUserOverride] = useState<boolean | null>(null);
   const prevForceCollapsed = useRef(forceCollapsed);
@@ -304,7 +310,10 @@ export function CodingAssistantSelector({
   }, [config, selectedAssistant]);
 
   const isExpanded = forceExpanded ? true : (userOverride ?? false);
-  const isComplete = !!selectedAssistant;
+  // A silently-defaulted assistant (selectionExplicit === false) still
+  // highlights its card via `isSelected`, but should not show the "Completed"
+  // treatment until the user makes an explicit choice.
+  const isComplete = !!selectedAssistant && selectionExplicit;
   const selected = selectedAssistant ? getAssistant(selectedAssistant) : null;
   // Bug fix: when 'ai-gateway' is selected, the inline AiGatewaySetupGuide
   // pushes the collapsible body past the default 800px cap, clipping the

@@ -6,7 +6,7 @@
  * Supports a `compact` mode for embedding inside Step 1's "Create Your Own".
  */
 
-import { useCallback, useEffect } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
   Sparkles,
   Send,
@@ -29,6 +29,8 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { DiffView } from './DiffView';
 import { ExpandableErrorBanner } from './ExpandableErrorBanner';
+import { OutputStatsFooter } from './OutputStatsFooter';
+import { TruncationWarningBanner } from './TruncationWarningBanner';
 import { useSpeechToText } from '../hooks/useSpeechToText';
 import type { UseCaseBuilderState } from '../hooks/useUseCaseBuilder';
 
@@ -157,6 +159,15 @@ export function UseCaseBuilderPanel({
   const outputMaxH = compact ? 'max-h-[40vh]' : 'max-h-[60vh]';
   const editMinH = compact ? 'min-h-[200px]' : 'min-h-[400px]';
 
+  // Required-field validation. Industry is only required when its field is
+  // shown (it's supplied externally when `hideIndustry`). Use Case Name is
+  // always required. The red highlight is derived from `attemptedGenerate`, so
+  // it clears automatically once the user fills the field.
+  const [attemptedGenerate, setAttemptedGenerate] = useState(false);
+  const missingIndustry = !hideIndustry && !b.industry;
+  const missingName = !b.useCaseName.trim();
+  const hasRequired = !missingIndustry && !missingName;
+
   const handleAppendTranscript = useCallback(
     (text: string) => b.setHints((prev: string) => (prev ? `${prev} ${text}` : text)),
     [b],
@@ -195,25 +206,32 @@ export function UseCaseBuilderPanel({
           {!hideIndustry && (
             <div>
               <label className="block text-ui-xs font-medium text-muted-foreground mb-1.5 uppercase tracking-wider">
-                Industry
+                Industry<span className="text-red-400 ml-0.5">*</span>
               </label>
               <select
                 value={b.industry}
                 onChange={(e) => b.setIndustry(e.target.value)}
-                className={`w-full bg-background border border-border rounded-lg px-3 ${compact ? 'py-1.5 text-ui-sm' : 'py-2 text-ui-base'} text-foreground focus:outline-none focus:ring-1 focus:ring-primary/50 focus:border-primary/50 transition-colors`}
+                className={`w-full bg-background border rounded-lg px-3 ${compact ? 'py-1.5 text-ui-sm' : 'py-2 text-ui-base'} text-foreground focus:outline-none focus:ring-1 transition-colors ${
+                  attemptedGenerate && missingIndustry
+                    ? 'border-red-400/70 focus:ring-red-400/50 focus:border-red-400/70'
+                    : 'border-border focus:ring-primary/50 focus:border-primary/50'
+                }`}
               >
                 <option value="">Select an industry...</option>
                 {INDUSTRY_OPTIONS.map((opt) => (
                   <option key={opt} value={opt}>{opt}</option>
                 ))}
               </select>
+              {attemptedGenerate && missingIndustry && (
+                <p className="text-ui-2xs text-red-500 mt-1">Industry is required</p>
+              )}
             </div>
           )}
 
           {/* Use case name */}
           <div>
             <label className="block text-ui-xs font-medium text-muted-foreground mb-1.5 uppercase tracking-wider">
-              Use Case Name
+              Use Case Name<span className="text-red-400 ml-0.5">*</span>
             </label>
             <input
               type="text"
@@ -222,15 +240,19 @@ export function UseCaseBuilderPanel({
               onChange={(e) => b.setUseCaseName(e.target.value)}
               placeholder="e.g., Customer 360, Fleet Mgmt..."
               className={`w-full bg-background border rounded-lg px-3 ${compact ? 'py-1.5 text-ui-sm' : 'py-2 text-ui-base'} text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-1 transition-colors ${
-                b.useCaseName.length >= 30
+                attemptedGenerate && missingName
                   ? 'border-red-400/70 focus:ring-red-400/50 focus:border-red-400/70'
-                  : b.useCaseName.length >= 25
-                    ? 'border-amber-400/70 focus:ring-amber-400/50 focus:border-amber-400/70'
-                    : 'border-border focus:ring-primary/50 focus:border-primary/50'
+                  : b.useCaseName.length >= 30
+                    ? 'border-red-400/70 focus:ring-red-400/50 focus:border-red-400/70'
+                    : b.useCaseName.length >= 25
+                      ? 'border-amber-400/70 focus:ring-amber-400/50 focus:border-amber-400/70'
+                      : 'border-border focus:ring-primary/50 focus:border-primary/50'
               }`}
             />
             <div className="flex items-center justify-between mt-1 min-h-[1.125rem]">
-              <span className="text-ui-2xs text-muted-foreground/60">Short, descriptive name</span>
+              <span className={`text-ui-2xs ${attemptedGenerate && missingName ? 'text-red-500' : 'text-muted-foreground/60'}`}>
+                {attemptedGenerate && missingName ? 'Use Case Name is required' : 'Short, descriptive name'}
+              </span>
               {b.useCaseName.length >= 20 && (
                 <span className={`text-ui-2xs font-medium transition-colors ${
                   b.useCaseName.length >= 30 ? 'text-red-500' : b.useCaseName.length >= 25 ? 'text-amber-500' : 'text-muted-foreground/60'
@@ -379,11 +401,20 @@ export function UseCaseBuilderPanel({
 
           {/* Generate button */}
           {(() => {
-            const isActive = b.hasInput && !b.isStreaming;
+            const isActive = hasRequired && !b.isStreaming;
+            const handleGenerateClick = () => {
+              if (b.isStreaming) return;
+              if (!hasRequired) {
+                setAttemptedGenerate(true);
+                return;
+              }
+              setAttemptedGenerate(false);
+              b.handleGenerate();
+            };
             const btn = (
               <button
-                onClick={b.handleGenerate}
-                disabled={!b.hasInput || b.isStreaming}
+                onClick={handleGenerateClick}
+                disabled={b.isStreaming}
                 className={`w-full flex items-center justify-center gap-2 px-4 ${compact ? 'py-2' : 'py-2.5'} text-ui-base font-medium transition-colors ${
                   isActive
                     ? 'relative z-10 rounded-[calc(0.5rem-2px)] bg-emerald-600 text-white hover:bg-emerald-500'
@@ -406,9 +437,11 @@ export function UseCaseBuilderPanel({
             return isActive ? <div className="border-beam-wrapper">{btn}</div> : btn;
           })()}
 
-          {!b.hasInput && (
+          {!hasRequired && (
             <p className="text-ui-xs text-muted-foreground/60 text-center">
-              Fill in at least one field to generate a use case description
+              {hideIndustry
+                ? 'Use Case Name is required to generate.'
+                : 'Industry and Use Case Name are required to generate.'}
             </p>
           )}
         </div>
@@ -439,13 +472,23 @@ export function UseCaseBuilderPanel({
             {b.outputText && (
               <div className="flex items-center gap-1.5">
                 {b.isStreaming && (
-                  <button
-                    onClick={b.handleStopStreaming}
-                    className="flex items-center gap-1 px-2.5 py-1 bg-destructive/10 text-destructive rounded-md text-ui-xs font-medium hover:bg-destructive/20 transition-colors"
-                  >
-                    <X className="w-3 h-3" />
-                    Stop
-                  </button>
+                  <>
+                    <button
+                      onClick={() => b.handleCopy(b.outputText)}
+                      disabled={!b.outputText}
+                      className="flex items-center gap-1 px-2.5 py-1 bg-secondary text-muted-foreground rounded-md text-ui-xs font-medium hover:text-foreground transition-colors disabled:opacity-40"
+                    >
+                      {b.copied ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
+                      {b.copied ? 'Copied' : 'Copy'}
+                    </button>
+                    <button
+                      onClick={b.handleStopStreaming}
+                      className="flex items-center gap-1 px-2.5 py-1 bg-destructive/10 text-destructive rounded-md text-ui-xs font-medium hover:bg-destructive/20 transition-colors"
+                    >
+                      <X className="w-3 h-3" />
+                      Stop
+                    </button>
+                  </>
                 )}
                 {!b.isStreaming && (
                   <>
@@ -510,6 +553,10 @@ export function UseCaseBuilderPanel({
               Retrying ({b.retryStatus.attempt} of {b.retryStatus.maxAttempts}) &mdash; {b.retryStatus.reason}...
             </div>
           )}
+          {/* Truncation warning */}
+          {!b.isStreaming && b.truncationWarning && (
+            <TruncationWarningBanner message={b.truncationWarning} className="mb-3" />
+          )}
           {/* Error */}
           {!b.isStreaming && b.error && (
             <ExpandableErrorBanner
@@ -561,6 +608,16 @@ export function UseCaseBuilderPanel({
               <p className="text-muted-foreground/50 text-ui-xs">
                 Fill in the inputs {compact ? 'above' : 'on the left'} and click <strong>Generate</strong>
               </p>
+            </div>
+          )}
+
+          {/* Output stats footer */}
+          {(b.outputText || b.isStreaming) && (
+            <div className="mt-2">
+              <OutputStatsFooter
+                content={b.isEditing ? b.editText : b.outputText}
+                isStreaming={b.isStreaming}
+              />
             </div>
           )}
 

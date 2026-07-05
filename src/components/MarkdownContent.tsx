@@ -3,9 +3,9 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { Maximize2, Minimize2 } from 'lucide-react';
 
-const REMARK_PLUGINS = [remarkGfm];
+export const REMARK_PLUGINS = [remarkGfm];
 
-const MARKDOWN_COMPONENTS = {
+export const MARKDOWN_COMPONENTS = {
   h1: ({ children }: any) => (
     <h1 className="text-ui-md2 font-semibold text-foreground border-b border-border pb-2 mb-3 mt-1">
       {children}

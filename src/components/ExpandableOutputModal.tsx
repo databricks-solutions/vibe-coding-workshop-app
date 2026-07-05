@@ -18,6 +18,8 @@ interface ExpandableOutputModalProps {
   isLoading?: boolean;
   /** Color theme for the expand button */
   buttonColor?: 'primary' | 'emerald' | 'violet' | 'amber';
+  /** Plain monospace text (PRD) vs markdown preview */
+  variant?: 'markdown' | 'plain';
 }
 
 export function ExpandableOutputModal({
@@ -27,6 +29,7 @@ export function ExpandableOutputModal({
   isStreaming = false,
   isLoading = false,
   buttonColor = 'primary',
+  variant = 'markdown',
 }: ExpandableOutputModalProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -128,11 +131,11 @@ export function ExpandableOutputModal({
                 {/* Copy Button - Original smaller size */}
                 <button
                   onClick={handleCopy}
-                  disabled={isStreaming}
+                  disabled={isStreaming && variant !== 'plain'}
                   className={`flex items-center gap-1.5 px-3 py-1.5 text-ui-sm font-medium rounded transition-all ${
                     copied
                       ? 'bg-emerald-900/40 text-emerald-400'
-                      : isStreaming
+                      : isStreaming && variant !== 'plain'
                       ? 'bg-secondary/50 text-muted-foreground cursor-not-allowed'
                       : 'bg-blue-600/20 text-blue-400 hover:bg-blue-600/30 animate-button-glow-copy'
                   }`}
@@ -162,13 +165,21 @@ export function ExpandableOutputModal({
 
             {/* Scrollable Content - Large area for easy reading */}
             <div className="flex-1 overflow-y-auto px-6 py-5">
-              <div className="max-w-none">
+              <div className="max-w-none h-full">
                 {children ?? (
-                  <MarkdownContent
-                    content={content}
-                    isStreaming={isStreaming}
-                    maxPreviewLines={1000}
-                  />
+                  variant === 'plain' ? (
+                    <textarea
+                      readOnly
+                      value={content}
+                      className="w-full h-full min-h-[60vh] bg-background border border-border rounded-lg px-4 py-3 text-ui-sm text-foreground font-mono leading-relaxed focus:outline-none resize-none"
+                    />
+                  ) : (
+                    <MarkdownContent
+                      content={content}
+                      isStreaming={isStreaming}
+                      maxPreviewLines={1000}
+                    />
+                  )
                 )}
               </div>
             </div>

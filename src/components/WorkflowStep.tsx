@@ -4,6 +4,8 @@ import { Sparkles, Loader2, RefreshCw, SkipForward, Undo2, CheckCircle, Workflow
 import { MarkdownContent, type MarkdownContentRef } from './MarkdownContent';
 import { CopyButton } from './CopyButton';
 import { ExpandableOutputModal } from './ExpandableOutputModal';
+import { PromptCopyPanel } from './PromptCopyPanel';
+import { TruncationWarningBanner } from './TruncationWarningBanner';
 import { ImageGallery } from './ImageGallery';
 import { useCopyToClipboard } from '../hooks/useCopyToClipboard';
 import { colorClasses } from '../constants/colorClasses';
@@ -111,6 +113,7 @@ export function WorkflowStep({
   const [retryStatus, setRetryStatus] = useState<{ attempt: number; maxAttempts: number; reason: string } | null>(null);
   const [isStreaming, setIsStreaming] = useState(false);
   const [streamedPrompt, setStreamedPrompt] = useState('');
+  const [truncationWarning, setTruncationWarning] = useState<string | null>(null);
   
   const [showGeneratedPrompt, setShowGeneratedPrompt] = useState(false);
   const [activeTab, setActiveTab] = useState<'prompt' | 'how_to_apply' | 'expected_output' | 'skill_blueprint'>('prompt');
@@ -137,6 +140,7 @@ export function WorkflowStep({
     streamBufferRef.current = '';
     setIsLoadingPrompt(true);
     setIsStreaming(true);
+    setTruncationWarning(null);
     setPromptError(null);
     setRetryStatus(null);
     setStreamedPrompt('');
@@ -209,6 +213,14 @@ export function WorkflowStep({
       sessionId,
       (attempt, maxAttempts, reason) => {
         setRetryStatus({ attempt, maxAttempts, reason });
+      },
+      undefined,
+      (code, message) => {
+        if (code === 'max_tokens') {
+          setTruncationWarning(
+            message || 'Generation stopped at the token limit. The PRD may be incomplete — try Re-generate or shorten the use case description.'
+          );
+        }
       }
     );
   }, [industry, useCase, sectionTag, previousOutputs, sessionId, onPromptGenerated, stepNumber]);
@@ -225,6 +237,7 @@ export function WorkflowStep({
     setRetryStatus(null);
     setStreamedPrompt('');
     setIsStreaming(false);
+    setTruncationWarning(null);
     
     setTimeout(() => {
       handleGeneratePrompt();
@@ -241,6 +254,7 @@ export function WorkflowStep({
     setRetryStatus(null);
     setStreamedPrompt('');
     setIsStreaming(false);
+    setTruncationWarning(null);
     metadataFetchedRef.current = false;
   }, [industry, useCase]);
 
@@ -312,6 +326,7 @@ export function WorkflowStep({
 
   const hasPrompt = !title.includes('Branding & Design Iteration') && !title.includes('Final Interactive Demo Experience');
   const showGenerateButton = hasPrompt && !isSkipped;
+  const isPrdStep = sectionTag === 'prd_generation';
   
   const isPromptComplete = showGeneratedPrompt && !isStreaming && !isLoadingPrompt && !!promptText;
   
@@ -543,7 +558,7 @@ export function WorkflowStep({
               {/* Action buttons for all tabs */}
               <div className="flex items-center gap-2">
                 {/* Review button - show for all tabs when content is available */}
-                {activeTab === 'prompt' && !isStreaming && !isLoadingPrompt && promptText && (
+                {activeTab === 'prompt' && !isPrdStep && !isStreaming && !isLoadingPrompt && promptText && (
                   <>
                     <ExpandableOutputModal
                       content={promptText}
@@ -589,13 +604,27 @@ export function WorkflowStep({
                   <Loader2 className="w-4 h-4 animate-spin text-primary" />
                   <span className="text-ui-base">Generating prompt...</span>
                 </div>
-              ) : (
-                <MarkdownContent 
-                  ref={promptContentRef}
-                  content={promptText} 
+              ) : isPrdStep ? (
+                <PromptCopyPanel
+                  content={promptText}
                   isStreaming={isStreaming}
-                  maxPreviewLines={8}
+                  copied={copied}
+                  onCopy={onCopy}
+                  title={`${title} - Generated Prompt`}
+                  truncationWarning={truncationWarning}
                 />
+              ) : (
+                <>
+                  {truncationWarning && !isStreaming && (
+                    <TruncationWarningBanner message={truncationWarning} className="mb-3" />
+                  )}
+                  <MarkdownContent 
+                    ref={promptContentRef}
+                    content={promptText} 
+                    isStreaming={isStreaming}
+                    maxPreviewLines={8}
+                  />
+                </>
               )
             )}
             {activeTab === 'how_to_apply' && (

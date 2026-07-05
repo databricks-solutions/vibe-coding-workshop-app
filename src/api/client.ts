@@ -763,6 +763,7 @@ class ApiClient {
     // fork without a session). When omitted, the backend reads the assistant from
     // the session — preserving every existing call site's behavior unchanged.
     codingAssistant?: string | null,
+    onWarning?: (code: string, message: string) => void,
   ): AbortController {
     const controller = new AbortController();
 
@@ -820,6 +821,8 @@ class ApiClient {
                   onRetry(data.attempt, data.max_attempts, data.reason);
                 } else if (data.type === 'content' && data.content) {
                   onContent(data.content);
+                } else if (data.type === 'warning' && onWarning) {
+                  onWarning(data.code || 'warning', data.message || '');
                 } else if (data.type === 'done') {
                   onComplete(model);
                   return;
@@ -856,7 +859,8 @@ class ApiClient {
     onContent: (content: string) => void,
     onComplete: (model?: string) => void,
     onError: (error: string) => void,
-    onRetry?: (attempt: number, maxAttempts: number, reason: string) => void
+    onRetry?: (attempt: number, maxAttempts: number, reason: string) => void,
+    onWarning?: (code: string, message: string) => void
   ): AbortController {
     const controller = new AbortController();
 
@@ -912,6 +916,8 @@ class ApiClient {
                   onRetry(data.attempt, data.max_attempts, data.reason);
                 } else if (data.type === 'content' && data.content) {
                   onContent(data.content);
+                } else if (data.type === 'warning' && onWarning) {
+                  onWarning(data.code || 'warning', data.message || '');
                 } else if (data.type === 'done') {
                   onComplete(model);
                   return;
@@ -951,6 +957,7 @@ class ApiClient {
     useCase: string = 'booking_app',
     onRetry?: (attempt: number, maxAttempts: number, reason: string) => void,
     codingAssistant?: string,
+    onWarning?: (code: string, message: string) => void,
   ): AbortController {
     const controller = new AbortController();
 
@@ -1010,6 +1017,8 @@ class ApiClient {
                   onRetry(data.attempt, data.max_attempts, data.reason);
                 } else if (data.type === 'content' && data.content) {
                   onContent(data.content);
+                } else if (data.type === 'warning' && onWarning) {
+                  onWarning(data.code || 'warning', data.message || '');
                 } else if (data.type === 'done') {
                   onComplete(model);
                   return;
@@ -1720,6 +1729,7 @@ class ApiClient {
     onComplete: (model?: string) => void,
     onError: (error: string) => void,
     onRetry?: (attempt: number, maxAttempts: number, reason: string) => void,
+    onWarning?: (code: string, message: string) => void,
   ): AbortController {
     const controller = new AbortController();
 
@@ -1769,6 +1779,8 @@ class ApiClient {
                   onRetry(data.attempt, data.max_attempts, data.reason);
                 } else if (data.type === 'content' && data.content) {
                   onContent(data.content);
+                } else if (data.type === 'warning' && onWarning) {
+                  onWarning(data.code || 'warning', data.message || '');
                 } else if (data.type === 'done') {
                   onComplete(model);
                   return;
