@@ -218,11 +218,25 @@ export function PromptsConfig({ onToast }: PromptsConfigProps) {
     return (c.path_type as PathFilter) || (SKILL_USE_CASES.has(c.use_case) ? 'skill' : 'use_case');
   }, []);
 
-  // Derive unique industries from configs, filtered by path type
+  // Derive unique industries from configs. An industry qualifies for the
+  // current tab when it either (a) has a real (non-placeholder) use case
+  // matching the active pathFilter - the original rule, unchanged for every
+  // existing industry - or (b) is brand-new / empty (only a `_placeholder`
+  // row, no real use cases at all). Empty industries are path-agnostic until
+  // their first use case defines the path, so they surface under BOTH tabs;
+  // this also keeps handleAddIndustry's auto-select from landing on an
+  // industry that isn't in the current tab's list.
   const industries = useMemo(() => {
-    const filtered = configs.filter(c => c.use_case !== '_placeholder' && getPathType(c) === pathFilter);
+    const industriesWithReal = new Set(
+      configs.filter(c => c.use_case !== '_placeholder').map(c => c.industry)
+    );
     const seen = new Set<string>();
-    return filtered
+    return configs
+      .filter(c => {
+        const hasRealForTab = c.use_case !== '_placeholder' && getPathType(c) === pathFilter;
+        const isEmptyIndustry = !industriesWithReal.has(c.industry);
+        return hasRealForTab || isEmptyIndustry;
+      })
       .filter(c => { if (seen.has(c.industry)) return false; seen.add(c.industry); return true; })
       .map(c => ({ value: c.industry, label: c.industry_label }))
       .filter(i => !searchQuery || i.label.toLowerCase().includes(searchQuery.toLowerCase()));
@@ -319,10 +333,11 @@ export function PromptsConfig({ onToast }: PromptsConfigProps) {
   async function handleAddIndustry() {
     if (!newIndustryId || !newIndustryLabel) return;
 
+    const normalizedId = newIndustryId.toLowerCase().replace(/\s+/g, '_');
     try {
       setSaving(true);
       await apiClient.addIndustry({
-        industry: newIndustryId.toLowerCase().replace(/\s+/g, '_'),
+        industry: normalizedId,
         industry_label: newIndustryLabel,
       });
       onToast(`Industry "${newIndustryLabel}" created`, 'success');
@@ -330,6 +345,12 @@ export function PromptsConfig({ onToast }: PromptsConfigProps) {
       setNewIndustryId('');
       setNewIndustryLabel('');
       await loadConfigs();
+      // Auto-select the new (empty) industry so the user lands ready to build
+      // its first use case instead of hunting for it in the list.
+      setSelectedIndustry(normalizedId);
+      setSelectedUseCase('');
+      setIsEditMode(false);
+      updateUrlParams(normalizedId, '');
     } catch (error: any) {
       onToast(error?.message || 'Failed to add industry', 'error');
     } finally {
@@ -920,6 +941,27 @@ export function PromptsConfig({ onToast }: PromptsConfigProps) {
               </div>
             </div>
           </>
+        ) : selectedIndustry && useCases.length === 0 ? (
+          <div className="flex-1 flex items-center justify-center text-muted-foreground">
+            <div className="text-center max-w-sm px-6">
+              <svg className="w-16 h-16 mx-auto mb-4 text-primary/40" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 9v3m0 0v3m0-3h3m-3 0H9m12 0a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              <h3 className="text-base font-semibold text-foreground mb-1">
+                No use cases in {selectedIndustryLabel} yet
+              </h3>
+              <p className="text-sm text-muted-foreground mb-5">
+                Build your first use case to start configuring this industry.
+              </p>
+              <button
+                onClick={openBuilderOverlay}
+                className="inline-flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg font-medium hover:bg-primary/90 transition-colors"
+              >
+                <Lightbulb className="w-4 h-4" />
+                Build your first use case
+              </button>
+            </div>
+          </div>
         ) : (
           <div className="flex-1 flex items-center justify-center text-muted-foreground">
             <div className="text-center">

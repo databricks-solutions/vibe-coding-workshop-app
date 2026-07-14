@@ -737,6 +737,11 @@ def get_industries() -> List[Dict]:
         # Extract unique industries from Lakebase (only active use cases are returned)
         industries_dict = {}
         for row in lakebase_data:
+            # Skip placeholder rows: a brand-new industry is represented by a
+            # single `_placeholder` use case until a real one is added. It must
+            # not surface in the workshop (nothing to run yet).
+            if row.get("use_case") == "_placeholder":
+                continue
             industry = row.get("industry")
             if industry and industry not in industries_dict:
                 # Use override label if available, otherwise use database label
@@ -780,6 +785,10 @@ def get_use_cases_map() -> Dict[str, List[Dict]]:
         for row in lakebase_data:
             industry = row.get("industry")
             use_case = row.get("use_case")
+            # Skip placeholder rows so a half-created industry never renders a
+            # "(No use cases yet)" card in the workshop grids.
+            if use_case == "_placeholder":
+                continue
             if industry and use_case:
                 if industry not in use_cases_map:
                     use_cases_map[industry] = [{"value": "", "label": "Select a use case..."}]
