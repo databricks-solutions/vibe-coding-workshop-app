@@ -266,6 +266,11 @@ $PYTHON_BIN -c "import requests" 2>/dev/null || {
     $PIP_BIN install -q requests
 }
 
+$PYTHON_BIN -c "import databricks.sdk" 2>/dev/null || {
+    echo -e "${YELLOW}Installing databricks-sdk...${NC}"
+    $PIP_BIN install -q databricks-sdk
+}
+
 # =============================================================================
 # Run Python script for database operations
 # =============================================================================
