@@ -119,8 +119,10 @@ def _run_sh(script_path, script_args, **kwargs):
     bash = _find_bash()
     if not bash:
         msg = (
-            "bash not found. On Windows install Git for Windows "
-            "(winget install Git.Git) and reopen your terminal."
+            "bash not found on PATH. On Windows the deploy step needs bash.exe "
+            "(ships with Git for Windows); git.exe on PATH is not enough because "
+            "bash.exe is in a separate folder (usually C:\\Program Files\\Git\\bin). "
+            "Install Git for Windows (winget install Git.Git) and reopen your terminal."
             if IS_WINDOWS
             else "bash not found at /bin/bash or on PATH."
         )
@@ -369,9 +371,13 @@ def check_prerequisites() -> bool:
             success("bash: found (Git Bash)")
         else:
             error(
-                "bash: NOT FOUND. Install Git for Windows: "
-                "winget install Git.Git  "
-                "(or run: powershell -ExecutionPolicy Bypass -File scripts\\install-prerequisites.ps1)"
+                "bash: NOT FOUND on PATH. The deploy step runs .sh scripts via "
+                "Git Bash (bash.exe), which ships with Git for Windows. Note: having "
+                "git.exe on PATH is not enough -- bash.exe lives in a separate folder "
+                "(usually C:\\Program Files\\Git\\bin) that some Git installs leave off "
+                "PATH. Install/repair Git for Windows: winget install Git.Git  "
+                "(or run: powershell -ExecutionPolicy Bypass -File scripts\\install-prerequisites.ps1), "
+                "then reopen your terminal."
             )
             all_ok = False
 
