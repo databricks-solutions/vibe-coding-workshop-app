@@ -834,6 +834,7 @@ def cmd_install(args):
     save_config(config)
     success(f"Saved {CONFIG_PATH.name}")
     cmd_configure(args, config=config)
+    config = preflight_lakebase_name(config)  # avoid autoscaling name-retention collisions
 
     # ── Step 6: Build frontend ────────────────────────────────────────
     step(6, TOTAL, "Building frontend")
@@ -935,6 +936,83 @@ def cmd_configure(args, config=None):
     print()
 
 
+def _lakebase_project_taken(slug: str, profile: str):
+    """Probe whether an autoscaling Lakebase project name is unavailable.
+
+    Returns None when the name is free (or can't be determined), else a dict
+    {'deleted': bool, 'purge_time': str}. A soft-deleted project stays inside a
+    multi-day retention window during which its name is still reserved yet is
+    invisible to list-projects and the UI -- the usual cause of Terraform's
+    opaque "project slug already exists". Any probe error is treated as "free"
+    so this check can never block a deploy that would otherwise succeed."""
+    if not slug:
+        return None
+    cmd = ["databricks", "api", "get", f"/api/2.0/postgres/projects/{slug}"]
+    if profile:
+        cmd += ["--profile", profile]
+    try:
+        r = _run_cmd(cmd, capture_output=True, text=True)
+    except Exception:
+        return None
+    if r.returncode != 0:
+        return None
+    try:
+        data = json.loads(r.stdout or "{}")
+    except (ValueError, TypeError):
+        return None
+    if not data.get("project_id"):
+        return None
+    return {"deleted": bool(data.get("delete_time")), "purge_time": data.get("purge_time", "")}
+
+
+def preflight_lakebase_name(config: dict) -> dict:
+    """Ensure the autoscaling Lakebase project name is free before a full deploy.
+
+    Autoscaling project names can't be reused until Databricks purges a deleted
+    project (a multi-day retention window), so an uninstall+reinstall or a retry
+    after a partial deploy can fail with an opaque Terraform error. This resolves
+    a free name up front: interactive users confirm/override a suggestion,
+    non-interactive runs auto-select it. No-op for provisioned mode or when the
+    name is already free; fully fault-isolated."""
+    lb = config.get("lakebase", {})
+    if lb.get("mode", "autoscaling") != "autoscaling":
+        return config
+    profile = config.get("workspace", {}).get("profile", "")
+    slug = lb.get("instance_name", "")
+    state = _lakebase_project_taken(slug, profile)
+    if state is None:
+        return config
+
+    suggestion = f"{slug}-{int(time.time())}"
+    for n in range(2, 12):
+        cand = f"{slug}-v{n}"
+        if _lakebase_project_taken(cand, profile) is None:
+            suggestion = cand
+            break
+
+    print()
+    if state["deleted"]:
+        warn(f"Lakebase project name '{slug}' is in a post-delete retention window.")
+        if state["purge_time"]:
+            print(f"  The name frees up on {CYAN}{state['purge_time']}{NC} and can't be reused until then.")
+    else:
+        warn(f"Lakebase project name '{slug}' already exists in this workspace.")
+
+    new_name = suggestion
+    if sys.stdin.isatty():
+        resp = input(f"  Use '{suggestion}' instead? [Enter to accept / type another name]: ").strip()
+        if resp:
+            new_name = resp
+    else:
+        info(f"Non-interactive run: auto-selecting '{suggestion}'.")
+
+    config.setdefault("lakebase", {})["instance_name"] = new_name
+    save_config(config)
+    cmd_configure(None, config=config)
+    success(f"Using Lakebase project name '{new_name}'.")
+    return config
+
+
 def cmd_deploy(args):
     """Deploy code changes. Default is code-only."""
     config = load_config()
@@ -957,7 +1035,8 @@ def cmd_deploy(args):
 
     # Deploy mode
     if getattr(args, "full", False):
-        pass  # Full deploy (no extra flags)
+        if config:
+            config = preflight_lakebase_name(config)  # avoid autoscaling name-retention collisions
     elif getattr(args, "tables", False):
         deploy_args.append("--tables-only")
     elif getattr(args, "watch", False):
