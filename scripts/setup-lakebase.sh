@@ -64,6 +64,13 @@ else
     PIP_BIN="$PYTHON_BIN -m pip"
 fi
 
+# Install pip package(s): normal install first (unchanged behavior); fall back to
+# the PEP 668 override for externally-managed interpreters (Homebrew python@3.12,
+# recent Debian/Ubuntu). Honors PIP_INDEX_URL / PIP_EXTRA_INDEX_URL automatically.
+pip_install() {
+    $PIP_BIN install -q "$@" || $PIP_BIN install -q --break-system-packages "$@"
+}
+
 PROJECT_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$PROJECT_ROOT"
 
@@ -258,17 +265,17 @@ fi
 # Check if required Python packages are available (prefer psycopg3, fall back to psycopg2)
 $PYTHON_BIN -c "import psycopg" 2>/dev/null || $PYTHON_BIN -c "import psycopg2" 2>/dev/null || {
     echo -e "${YELLOW}Installing psycopg[binary]...${NC}"
-    $PIP_BIN install -q "psycopg[binary]" || $PIP_BIN install -q psycopg2-binary
+    pip_install "psycopg[binary]" || pip_install psycopg2-binary
 }
 
 $PYTHON_BIN -c "import requests" 2>/dev/null || {
     echo -e "${YELLOW}Installing requests...${NC}"
-    $PIP_BIN install -q requests
+    pip_install requests
 }
 
 $PYTHON_BIN -c "import databricks.sdk" 2>/dev/null || {
     echo -e "${YELLOW}Installing databricks-sdk...${NC}"
-    $PIP_BIN install -q databricks-sdk
+    pip_install databricks-sdk
 }
 
 # =============================================================================

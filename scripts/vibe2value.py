@@ -16,6 +16,7 @@ import os
 import shutil
 import subprocess
 import sys
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -836,16 +837,31 @@ def cmd_install(args):
 
     # ── Step 6: Build frontend ────────────────────────────────────────
     step(6, TOTAL, "Building frontend")
-    info("Running npm install...")
-    npm_result = _run_cmd(["npm", "install", "--include=dev"], cwd=PROJECT_ROOT, capture_output=True, text=True)
-    if npm_result.returncode != 0:
-        warn("npm install had issues, continuing...")
-    info("Running npm build...")
-    build_result = _run_cmd(["npm", "run", "build"], cwd=PROJECT_ROOT)
-    if build_result.returncode != 0:
-        error("Frontend build failed")
+    tsc = PROJECT_ROOT / "node_modules" / ".bin" / ("tsc.cmd" if IS_WINDOWS else "tsc")
+    dist = PROJECT_ROOT / "dist"
+
+    # Honor the user's configured npm registry over the lockfile's baked host, so
+    # customers (public npmjs) and restricted networks (an org mirror set in their
+    # own .npmrc/env) both resolve packages. NPM_CONFIG_OMIT="" ensures dev deps
+    # (typescript/vite) install even under a global omit=dev / NODE_ENV=production.
+    npm_env = {**os.environ, "NPM_CONFIG_REPLACE_REGISTRY_HOST": "always", "NPM_CONFIG_OMIT": ""}
+    info("Installing frontend dependencies...")
+    _run_cmd(["npm", "install", "--include=dev"], cwd=PROJECT_ROOT, env=npm_env)
+
+    if tsc.exists():
+        info("Running npm build...")
+        if _run_cmd(["npm", "run", "build"], cwd=PROJECT_ROOT).returncode != 0:
+            error("Frontend build failed")
+            sys.exit(1)
+        success("Frontend built")
+    elif dist.is_dir() and any(dist.iterdir()):
+        warn("npm dependencies incomplete (registry unreachable?) - using existing dist/ build.")
+    else:
+        error("Frontend dependencies did not install and no prebuilt dist/ exists.\n"
+              "  If your network blocks the public npm registry, point npm at your\n"
+              "  organization's mirror:  npm config set registry <your-registry-url>\n"
+              "  then re-run. (Customers on open networks need no change.)")
         sys.exit(1)
-    success("Frontend built")
 
     # ── Step 7: Full deploy ─────────────────────────────────────────
     step(7, TOTAL, "Deploying to Databricks")
@@ -1055,50 +1071,94 @@ def cmd_uninstall(args):
             sys.exit(0)
     print()
 
-    profile_flag = ["--profile", ws["profile"]] if ws.get("profile") else []
+    profile = ws.get("profile", "")
+    profile_flag = ["--profile", profile] if profile else []
+    destroy_failed = False
 
-    # Step 1: Drop tables
+    def _tail(s):
+        s = (s or "").strip()
+        return s.splitlines()[-1] if s else "unknown error"
+
+    # Step 1: Drop tables (best-effort; Step 3 also removes them with the bundle)
     if not getattr(args, "keep_data", False):
         info("Step 1: Dropping Lakebase tables...")
         setup_lakebase_sh = PROJECT_ROOT / "scripts" / "setup-lakebase.sh"
-        _run_sh(setup_lakebase_sh, ["--drop"], cwd=PROJECT_ROOT,
-                env={**os.environ, "DATABRICKS_HOST": ws.get("host", "")})
+        drop_env = {**os.environ, "DATABRICKS_HOST": ws.get("host", "")}
+        if profile:
+            drop_env["DATABRICKS_CONFIG_PROFILE"] = profile  # match deploy.sh so CLI auth resolves
+        if _run_sh(setup_lakebase_sh, ["--drop"], cwd=PROJECT_ROOT, env=drop_env).returncode == 0:
+            success("Lakebase tables dropped")
+        else:
+            warn("Could not drop tables now; they will be removed when the bundle is destroyed.")
     else:
         info("Step 1: Skipping table drop (--keep-data)")
 
-    # Step 2: Delete app
+    # Step 2: Delete app (best-effort; Step 3 is authoritative for teardown)
     info("Step 2: Deleting Databricks App...")
     app_name = app_cfg.get("name", "")
     if app_name:
-        del_cmd = ["databricks", "apps", "delete", app_name] + profile_flag
-        _run_cmd(del_cmd, capture_output=True)
-        success(f"Deleted app: {app_name}")
+        r = _run_cmd(["databricks", "apps", "delete", app_name] + profile_flag,
+                     capture_output=True, text=True)
+        if r.returncode == 0:
+            success(f"Deleted app: {app_name}")
+        elif "does not exist" in (r.stderr or "").lower():
+            info(f"App '{app_name}' was already gone.")
+        else:
+            warn(f"App delete reported: {_tail(r.stderr)} (bundle destroy below will remove it).")
 
-    # Step 3: Destroy bundle
+    # Step 3: Destroy bundle (authoritative teardown). Retry a few times because
+    # a resource freshly deleted in Step 2 can still be mid-teardown, making the
+    # first destroy fail transiently ("please try again"). Only returncode 0 counts
+    # as success -- a persistent failure is reported honestly rather than masked,
+    # because masking it is what silently orphans cloud resources.
     info("Step 3: Destroying DAB bundle...")
-    target = meta.get("target", "production")
+    target = meta.get("target", "user")
     destroy_cmd = ["databricks", "bundle", "destroy", "-t", target, "--auto-approve"] + profile_flag
-    _run_cmd(destroy_cmd, cwd=PROJECT_ROOT, capture_output=True)
-    success("Bundle destroyed")
+    for attempt in (1, 2, 3):
+        r = _run_cmd(destroy_cmd, cwd=PROJECT_ROOT, capture_output=True, text=True)
+        if r.returncode == 0:
+            success("Bundle destroyed")
+            break
+        if attempt < 3:
+            warn(f"Destroy attempt {attempt} did not complete ({_tail(r.stderr)}); retrying...")
+            time.sleep(15)
+        else:
+            destroy_failed = True
+            warn(f"Could not destroy bundle after {attempt} attempts: {_tail(r.stderr)}")
 
-    # Step 4: Clean local files and bundle state
+    # Step 4: Clean local bundle state (always safe to remove locally)
     info("Step 4: Cleaning local generated files and bundle state...")
-    bundle_state = PROJECT_ROOT / ".databricks"
-    if bundle_state.exists():
-        shutil.rmtree(bundle_state)
-        success("Removed .databricks/ bundle state directory")
+    try:
+        bundle_state = PROJECT_ROOT / ".databricks"
+        if bundle_state.exists():
+            shutil.rmtree(bundle_state)
+            success("Removed .databricks/ bundle state directory")
+    except OSError as e:
+        warn(f"Could not remove .databricks/: {e}")
 
-    generated_files = [
+    # If the bundle destroy did not complete, KEEP the config and generated files so
+    # the user can retry the teardown -- deleting them would orphan the remaining
+    # cloud resources with no local config left to target them.
+    if destroy_failed:
+        print()
+        warn("Kept user-config.yaml and generated files because the bundle destroy did not "
+             "complete. Resolve the issue above, then re-run './vibe2value uninstall'.")
+        header("UNINSTALL INCOMPLETE")
+        return 1
+
+    for f in [
         CONFIG_PATH,
         PROJECT_ROOT / "databricks.yml",
         PROJECT_ROOT / "app.yaml",
         PROJECT_ROOT / "db" / "lakebase" / "dml_seed" / "03_seed_workshop_parameters.sql",
         PROJECT_ROOT / "public" / "brand-config.json",
-    ]
-    for f in generated_files:
-        if f.exists():
-            f.unlink()
-            success(f"Removed {f.name}")
+    ]:
+        try:
+            if f.exists():
+                f.unlink()
+                success(f"Removed {f.name}")
+        except OSError as e:
+            warn(f"Could not remove {f.name}: {e}")
 
     print()
     header("UNINSTALL COMPLETE")
