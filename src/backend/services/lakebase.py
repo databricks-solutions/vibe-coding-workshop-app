@@ -1433,11 +1433,135 @@ CHAPTERS = {
 AVATAR_EMOJIS = ['🦊', '🐙', '🦄', '🐼', '🦉', '🐬', '🦁', '🐸', '🦋', '🐯', '🦈', '🐨', '🦩', '🐻', '🦖']
 
 
-def _calculate_score(completed_steps: List[int], skipped_steps: List[int] = None) -> int:
-    """Calculate total score from completed steps. Skipped steps earn 0."""
+def _calculate_score(
+    completed_steps: List[int],
+    skipped_steps: List[int] = None,
+    quality_points: Dict[int, int] = None,
+) -> int:
+    """
+    Calculate total score from completed steps. Skipped steps earn 0.
+
+    The fallback is per step, not per session: a step with a quality score uses it,
+    and a step without one falls back to the flat STEP_SCORES value. So a session
+    that spans the change scores correctly on both halves, a session predating
+    quality scoring scores exactly as it did before, and no backfill is needed.
+
+    Args:
+        quality_points: step_number -> awarded_points from session_step_scores.
+    """
     skipped = set(skipped_steps) if skipped_steps else set()
+    quality = quality_points or {}
     unique_steps = set(completed_steps)
-    return sum(STEP_SCORES.get(step, 0) for step in unique_steps if step not in skipped)
+    return sum(
+        quality.get(step, STEP_SCORES.get(step, 0))
+        for step in unique_steps
+        if step not in skipped
+    )
+
+
+def upsert_step_score(
+    session_id: str,
+    step_number: int,
+    section_tag: str,
+    step_kind: str,
+    score: Dict,
+) -> bool:
+    """
+    Record (or replace) one step's quality score.
+
+    `score` is the dict produced by services.step_scoring — criteria, overall,
+    max_points, awarded_points, verification, ai_assisted.
+    """
+    if not is_lakebase_configured():
+        return False
+
+    if not 1 <= step_number <= MAX_STEP_NUMBER:
+        logger.error(f"Invalid step number for score: {step_number}")
+        return False
+
+    schema = get_schema()
+    now = datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')
+
+    try:
+        with get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                f"""
+                INSERT INTO {schema}.session_step_scores
+                    (session_id, step_number, section_tag, step_kind, criteria,
+                     overall, max_points, awarded_points, verification, ai_assisted,
+                     payload, created_at, updated_at)
+                VALUES (%s,%s,%s,%s,%s::jsonb,%s,%s,%s,%s,%s,%s::jsonb,%s,%s)
+                ON CONFLICT (session_id, step_number) DO UPDATE SET
+                    section_tag = EXCLUDED.section_tag,
+                    step_kind = EXCLUDED.step_kind,
+                    criteria = EXCLUDED.criteria,
+                    overall = EXCLUDED.overall,
+                    max_points = EXCLUDED.max_points,
+                    awarded_points = EXCLUDED.awarded_points,
+                    verification = EXCLUDED.verification,
+                    ai_assisted = EXCLUDED.ai_assisted,
+                    payload = EXCLUDED.payload,
+                    updated_at = EXCLUDED.updated_at
+                """,
+                (
+                    session_id, step_number, section_tag, step_kind,
+                    json.dumps(score.get('criteria', {})),
+                    score.get('overall', 0),
+                    score.get('max_points', 0),
+                    score.get('awarded_points', 0),
+                    score.get('verification', 'none'),
+                    score.get('ai_assisted', False),
+                    json.dumps(score.get('payload', {})),
+                    now, now,
+                ),
+            )
+            conn.commit()
+            cursor.close()
+            return True
+    except Exception as e:
+        # A lost score must not break step completion — the attendee keeps their
+        # progress and simply falls back to the flat points for that step.
+        logger.error(f"Error saving step score: {e}", exc_info=True)
+        return False
+
+
+def get_step_quality_points(session_ids: List[str]) -> Dict[str, Dict[int, int]]:
+    """
+    Fetch awarded points for many sessions at once.
+
+    Batched because the leaderboard scores every session in one pass; a per-session
+    query would turn one read into dozens.
+
+    Returns: session_id -> {step_number: awarded_points}
+    """
+    if not is_lakebase_configured() or not session_ids:
+        return {}
+
+    schema = get_schema()
+    try:
+        with get_connection() as conn:
+            cursor = _dict_cursor(conn)
+            cursor.execute(
+                f"""
+                SELECT session_id, step_number, awarded_points
+                FROM {schema}.session_step_scores
+                WHERE session_id = ANY(%s)
+                """,
+                (list(session_ids),),
+            )
+            rows = cursor.fetchall()
+            cursor.close()
+
+        out: Dict[str, Dict[int, int]] = {}
+        for row in rows:
+            out.setdefault(row['session_id'], {})[row['step_number']] = row['awarded_points']
+        return out
+    except Exception as e:
+        # Missing table (pre-migration) or a read error: fall back to flat scoring
+        # rather than showing an empty leaderboard.
+        logger.info(f"Quality points unavailable, using flat scores: {e}")
+        return {}
 
 
 def _get_chapter_status(completed_steps: List[int], skipped_steps: List[int] = None) -> tuple:
@@ -1554,10 +1678,17 @@ def get_leaderboard(limit: int = 10) -> List[Dict]:
             cursor.execute(query)
             rows = cursor.fetchall()
             cursor.close()
-            
+
+            # Fetch every session's quality scores in one read rather than per row.
+            # Empty for sessions predating quality scoring, which then fall back to
+            # the flat per-step points.
+            all_quality = get_step_quality_points(
+                [r.get('session_id') for r in rows if r.get('session_id')]
+            )
+
             # Aggregate by user - keep session with highest score
             user_scores = {}  # email -> {score, completed_steps, updated_at}
-            
+
             for row in rows:
                 email = row.get('created_by', '')
                 if not email:
@@ -1586,7 +1717,8 @@ def get_leaderboard(limit: int = 10) -> List[Dict]:
                 except:
                     skipped_steps = []
                 
-                score = _calculate_score(completed_steps, skipped_steps)
+                quality = all_quality.get(row.get('session_id'), {})
+                score = _calculate_score(completed_steps, skipped_steps, quality)
                 updated_at = row.get('updated_at')
                 
                 workshop_level = row.get('workshop_level')
