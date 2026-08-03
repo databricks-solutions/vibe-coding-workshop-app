@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { Sparkles, Loader2, RefreshCw, SkipForward, Undo2, CheckCircle, Workflow } from 'lucide-react';
+import { Sparkles, Loader2, RefreshCw, SkipForward, Undo2, CheckCircle } from 'lucide-react';
 import { MarkdownContent, type MarkdownContentRef } from './MarkdownContent';
 import { CopyButton } from './CopyButton';
 import { ExpandableOutputModal } from './ExpandableOutputModal';
@@ -19,6 +19,7 @@ import {
 } from '../api/client';
 import { DecisionPanel } from './steps/DecisionPanel';
 import { VerifyPanel } from './steps/VerifyPanel';
+import { StepTabs, type StepTabId } from './steps/StepTabs';
 import { VerificationLinks } from './VerificationLinks';
 import { SkillBlueprintTab, SkillBlueprintFullScreenModal } from './SkillBlueprintTab';
 import { useSkillBlueprint } from '../hooks/useSkillBlueprint';
@@ -134,11 +135,13 @@ export function WorkflowStep({
   const [isVerified, setIsVerified] = useState(false);
   
   const [showGeneratedPrompt, setShowGeneratedPrompt] = useState(false);
-  const [activeTab, setActiveTab] = useState<'prompt' | 'how_to_apply' | 'expected_output' | 'skill_blueprint'>('prompt');
+  const [activeTab, setActiveTab] = useState<StepTabId>('prompt');
   const { copied, handleCopy } = useCopyToClipboard();
   
   const skillBlueprint = useSkillBlueprint(sectionTag);
-  const skillAnimPlayedRef = useRef(false);
+  // Play the skills-navigator intro animation once per mount. This is read during
+  // render to pick a prop, so it has to be state rather than a ref.
+  const [skillAnimPlayed, setSkillAnimPlayed] = useState(false);
 
   // Handle Mark Complete - collapse content
   const handleMarkComplete = () => {
@@ -572,68 +575,12 @@ export function WorkflowStep({
       )}
 
       {showGeneratedPrompt && (isStreaming || streamedPrompt || generatedContent) && (
-        <div className="mt-4 bg-secondary/40 rounded-lg border border-border overflow-hidden">
-          {/* Tabs - Clean minimal styling */}
-          <div className="flex border-b border-border">
-            <button
-              onClick={() => setActiveTab('prompt')}
-              className={`flex-1 px-3 py-2 text-ui-sm font-medium transition-all ${
-                activeTab === 'prompt'
-                  ? 'text-foreground bg-secondary/60 border-b-2 border-primary -mb-[1px]'
-                  : 'text-muted-foreground hover:text-foreground hover:bg-secondary/40'
-              }`}
-            >
-              Generated Prompt
-            </button>
-            <button
-              onClick={() => setActiveTab('how_to_apply')}
-              className={`flex-1 px-3 py-2 text-ui-sm font-medium transition-all ${
-                activeTab === 'how_to_apply'
-                  ? 'text-foreground bg-secondary/60 border-b-2 border-emerald-500 -mb-[1px]'
-                  : 'text-muted-foreground hover:text-foreground hover:bg-secondary/40'
-              }`}
-            >
-              How to Apply
-            </button>
-            <button
-              onClick={() => setActiveTab('expected_output')}
-              className={`flex-1 px-3 py-2 text-ui-sm font-medium transition-all ${
-                activeTab === 'expected_output'
-                  ? 'text-foreground bg-secondary/60 border-b-2 border-amber-500 -mb-[1px]'
-                  : 'text-muted-foreground hover:text-foreground hover:bg-secondary/40'
-              }`}
-            >
-              <CheckCircle className="w-3.5 h-3.5 inline mr-1" /> Verify Results
-            </button>
-            {skillBlueprint && (
-              <button
-                onClick={() => setActiveTab('skill_blueprint')}
-                className={`flex-1 px-3 py-2 text-ui-sm font-medium transition-all ${
-                  activeTab === 'skill_blueprint'
-                    ? 'text-foreground bg-secondary/60 border-b-2 border-cyan-500 -mb-[1px]'
-                    : 'text-muted-foreground hover:text-foreground hover:bg-secondary/40'
-                }`}
-              >
-                <Workflow className="w-3.5 h-3.5 inline mr-1" /> Agent Skills Navigator
-              </button>
-            )}
-          </div>
-
-          {/* Content */}
-          <div className="p-3">
-            <div className="flex items-center justify-between mb-2">
-              <span className={`text-ui-sm font-medium ${
-                activeTab === 'prompt' ? 'text-primary' : 
-                activeTab === 'how_to_apply' ? 'text-emerald-400' :
-                activeTab === 'skill_blueprint' ? 'text-cyan-400' : 'text-amber-400'
-              }`}>
-                {activeTab === 'prompt' && '💡 Generated Prompt:'}
-                {activeTab === 'how_to_apply' && '🚀 Steps to Apply:'}
-                {activeTab === 'expected_output' && '✅ Verify Your Results:'}
-                {activeTab === 'skill_blueprint' && '⚡ How the Agent Skills Navigator Powers This Prompt:'}
-              </span>
-              {/* Action buttons for all tabs */}
-              <div className="flex items-center gap-2">
+        <StepTabs
+          activeTab={activeTab}
+          onTabChange={setActiveTab}
+          showSkillBlueprint={!!skillBlueprint}
+          actions={
+            <>
                 {/* Review button - show for all tabs when content is available */}
                 {activeTab === 'prompt' && !isPrdStep && !isStreaming && !isLoadingPrompt && promptText && (
                   <>
@@ -673,8 +620,9 @@ export function WorkflowStep({
                     title={`${title} - Agent Skills Navigator`}
                   />
                 )}
-              </div>
-            </div>
+            </>
+          }
+        >
             {activeTab === 'prompt' && (
               isLoadingPrompt && !promptText ? (
                 <div className="flex items-center gap-2 py-4 text-muted-foreground">
@@ -769,12 +717,11 @@ export function WorkflowStep({
             {activeTab === 'skill_blueprint' && skillBlueprint && (
               <SkillBlueprintTab
                 config={skillBlueprint}
-                shouldAnimate={!skillAnimPlayedRef.current}
-                onMounted={() => { skillAnimPlayedRef.current = true; }}
+                shouldAnimate={!skillAnimPlayed}
+                onMounted={() => setSkillAnimPlayed(true)}
               />
             )}
-          </div>
-        </div>
+        </StepTabs>
       )}
 
           {/* Footer bar: Skip + Mark Done (read-only shows status only) */}
