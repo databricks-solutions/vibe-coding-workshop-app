@@ -1145,6 +1145,52 @@ def get_workshop_parameters_sync() -> Dict[str, str]:
     return out
 
 
+def _decision_params(step_decisions: Dict[str, Any]) -> Dict[str, str]:
+    """
+    Flatten committed decisions into substitutable prompt parameters.
+
+    This is what makes a decision consequential rather than a quiz: the values the
+    attendee committed to are injected into the prompt their coding assistant
+    receives, so the agent implements their design instead of inventing its own.
+
+    Each field becomes a parameter named after its key, so a field `fact_grain`
+    committed on any step is available to templates as {fact_grain}. Lists render as
+    a numbered list (order carries the attendee's priority); radio_per_row keys
+    ("scd_decisions::dim_customer") are grouped into one readable block per field.
+
+    Later steps can therefore reference earlier commitments — committed_features from
+    step 3 is available in step 4's template.
+
+    Returns bare keys (no braces); the caller wraps them, as it does for every other
+    workshop parameter.
+    """
+    if not isinstance(step_decisions, dict):
+        return {}
+
+    flat: Dict[str, str] = {}
+    per_row: Dict[str, list] = {}
+
+    for entry in step_decisions.values():
+        decision = (entry or {}).get('decision') if isinstance(entry, dict) else None
+        if not isinstance(decision, dict):
+            continue
+
+        for key, value in decision.items():
+            if '::' in key:
+                field, row = key.split('::', 1)
+                per_row.setdefault(field, []).append(f"- {row}: {value}")
+            elif isinstance(value, list):
+                items = [str(v).strip() for v in value if str(v).strip()]
+                flat[key] = '\n'.join(f"{i}. {v}" for i, v in enumerate(items, 1))
+            elif value not in (None, ''):
+                flat[key] = str(value)
+
+    for field, lines in per_row.items():
+        flat[field] = '\n'.join(lines)
+
+    return flat
+
+
 def get_effective_workshop_parameters(session_id: Optional[str] = None) -> Dict[str, str]:
     """
     Get effective workshop parameters, with session overrides applied if session_id is provided.
@@ -1185,10 +1231,16 @@ def get_effective_workshop_parameters(session_id: Optional[str] = None) -> Dict[
             except json.JSONDecodeError:
                 session_overrides = {}
         
-        # Overlay session overrides on top of global parameters
+        # Overlay session overrides on top of global parameters.
+        # step_decisions is a nested object, not a scalar parameter — it is turned into
+        # {committed_*} tokens by _decision_params instead of being substituted raw.
         if session_overrides:
-            params.update(session_overrides)
-            logger.debug(f"[Session Params] Applied {len(session_overrides)} session overrides for session {session_id}")
+            scalar_overrides = {
+                k: v for k, v in session_overrides.items() if k != 'step_decisions'
+            }
+            params.update(scalar_overrides)
+            params.update(_decision_params(session_overrides.get('step_decisions') or {}))
+            logger.debug(f"[Session Params] Applied {len(scalar_overrides)} session overrides for session {session_id}")
     
     # Derive user_schema_prefix, user_app_name, use_case_slug, and use_case_file_prefix on-the-fly if any is missing
     _needs_schema = results and 'user_schema_prefix' not in params
@@ -2316,6 +2368,31 @@ async def get_step_content_endpoint(
         # Withheld deliberately: the expert answer must not reach the browser before
         # the attendee commits, or the reveal is worthless. Served by
         # POST /step/{tag}/reveal instead.
+    }
+
+
+@router.get("/session/{session_id}/decisions", summary="Get decisions committed in a session")
+async def get_session_decisions(session_id: str):
+    """
+    Return every decision the attendee has committed in this session.
+
+    Lets a decision step restore its locked-in state after a refresh, and gives the
+    step protocol a single place to read committed values from.
+    """
+    session_data = load_session(session_id)
+    if not session_data:
+        return {"session_id": session_id, "decisions": {}}
+
+    params = session_data.get("session_parameters") or {}
+    if isinstance(params, str):
+        try:
+            params = json.loads(params)
+        except json.JSONDecodeError:
+            params = {}
+
+    return {
+        "session_id": session_id,
+        "decisions": (params or {}).get("step_decisions", {}),
     }
 
 

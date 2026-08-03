@@ -215,3 +215,88 @@ SET step_kind = 'verify',
 WHERE section_tag = 'agent_framework'
   AND is_active = TRUE
   AND step_kind = 'instant_prompt';
+
+-- =============================================================================
+-- FEED COMMITTED DECISIONS INTO THE PROMPTS
+-- =============================================================================
+-- A decision only matters if the coding assistant acts on it. Each committed field
+-- is substituted as {field_key} (see _decision_params in routes.py), so appending a
+-- block that references those tokens makes the agent build the attendee's design
+-- rather than inventing its own.
+--
+-- Appended with `||` and guarded by a NOT LIKE check so re-running is a no-op and
+-- any admin edits to the body of the template are preserved.
+-- =============================================================================
+
+UPDATE ${schema}.section_input_prompts
+SET input_template = input_template || '
+
+## Scope the Attendee Committed To
+
+The attendee has already decided what v1 must do. Treat this as the source of truth
+and do NOT substitute your own feature list.
+
+**The three features v1 ships, in priority order:**
+{committed_features}
+
+**The metric that defines success:** {success_metric}
+
+Write the PRD around exactly these three features and this metric. If something the
+attendee chose looks unwise, build it anyway and note the concern in a short
+"Risks" subsection — do not silently replace their decision.',
+    updated_at = CURRENT_TIMESTAMP
+WHERE section_tag = 'prd_generation'
+  AND is_active = TRUE
+  AND input_template NOT LIKE '%Scope the Attendee Committed To%';
+
+UPDATE ${schema}.section_input_prompts
+SET input_template = input_template || '
+
+## Design Decisions the Attendee Committed To
+
+**Primary screen:** {primary_screen}
+**The action that must be one click away:** {primary_action}
+**Navigation shape:** {nav_shape}
+
+Build this screen first and make that action reachable in a single click from the
+landing view. Use the chosen navigation shape even if you would have picked another.',
+    updated_at = CURRENT_TIMESTAMP
+WHERE section_tag = 'cursor_copilot_ui_design'
+  AND is_active = TRUE
+  AND input_template NOT LIKE '%Design Decisions the Attendee Committed To%';
+
+UPDATE ${schema}.section_input_prompts
+SET input_template = input_template || '
+
+## Source Scope the Attendee Committed To
+
+**Tables in scope:**
+{in_scope_tables}
+
+**Join key:** {join_key}
+
+Restrict the metadata extract to these tables. If the join key is not unique in one
+of them, say so explicitly rather than silently choosing a different key.',
+    updated_at = CURRENT_TIMESTAMP
+WHERE section_tag = 'bronze_table_metadata'
+  AND is_active = TRUE
+  AND input_template NOT LIKE '%Source Scope the Attendee Committed To%';
+
+UPDATE ${schema}.section_input_prompts
+SET input_template = input_template || '
+
+## Model the Attendee Committed To
+
+**Fact grain — one row represents:** {fact_grain}
+
+**SCD strategy per dimension:**
+{scd_decisions}
+
+Implement exactly this grain and these SCD types. The grain statement governs every
+measure: if a measure cannot be expressed at this grain, flag it instead of quietly
+re-graining the fact table. If a chosen SCD type will lose history the use case needs,
+implement the attendee''s choice and note the trade-off.',
+    updated_at = CURRENT_TIMESTAMP
+WHERE section_tag = 'gold_layer_design'
+  AND is_active = TRUE
+  AND input_template NOT LIKE '%Model the Attendee Committed To%';

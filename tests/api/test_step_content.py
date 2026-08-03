@@ -240,6 +240,84 @@ class DecisionRevealTest(unittest.TestCase):
         self.assertEqual(result["expert_answer"], "still shown")
 
 
+class DecisionParamsTest(unittest.TestCase):
+    """
+    Committed decisions become prompt parameters.
+
+    This is the step that makes a decision consequential instead of a quiz: the
+    coding assistant must receive the attendee's choices.
+    """
+
+    def test_returns_bare_keys_for_the_caller_to_wrap(self):
+        """
+        get_effective_workshop_parameters wraps every key in braces itself, so
+        returning '{fact_grain}' here would produce '{{fact_grain}}' and never match.
+        """
+        params = routes._decision_params({
+            "gold_layer_design": {"decision": {"fact_grain": "one row per booking"}}
+        })
+
+        self.assertIn("fact_grain", params)
+        self.assertNotIn("{fact_grain}", params)
+
+    def test_lists_keep_the_attendees_priority_order(self):
+        params = routes._decision_params({
+            "prd_generation": {
+                "decision": {"committed_features": ["Search", "Booking", "Receipts"]}
+            }
+        })
+
+        self.assertEqual(
+            params["committed_features"], "1. Search\n2. Booking\n3. Receipts"
+        )
+
+    def test_blank_list_slots_are_dropped(self):
+        params = routes._decision_params({
+            "s": {"decision": {"features": ["Search", "", "  ", "Booking"]}}
+        })
+
+        self.assertEqual(params["features"], "1. Search\n2. Booking")
+
+    def test_per_row_decisions_group_into_one_block(self):
+        params = routes._decision_params({
+            "gold_layer_design": {
+                "decision": {
+                    "scd_decisions::dim_customer": "Type 2",
+                    "scd_decisions::dim_product": "Type 1",
+                }
+            }
+        })
+
+        self.assertIn("- dim_customer: Type 2", params["scd_decisions"])
+        self.assertIn("- dim_product: Type 1", params["scd_decisions"])
+
+    def test_decisions_from_several_steps_all_available(self):
+        """A later step's template can reference an earlier step's commitment."""
+        params = routes._decision_params({
+            "prd_generation": {"decision": {"success_metric": "bookings per week"}},
+            "gold_layer_design": {"decision": {"fact_grain": "one row per night"}},
+        })
+
+        self.assertEqual(params["success_metric"], "bookings per week")
+        self.assertEqual(params["fact_grain"], "one row per night")
+
+    def test_malformed_input_degrades_quietly(self):
+        # Session JSONB is user-influenced, so never raise on an odd shape.
+        self.assertEqual(routes._decision_params({}), {})
+        self.assertEqual(routes._decision_params(None), {})
+        self.assertEqual(routes._decision_params({"s": None}), {})
+        self.assertEqual(routes._decision_params({"s": {"decision": "nope"}}), {})
+
+    def test_empty_values_are_skipped(self):
+        params = routes._decision_params({
+            "s": {"decision": {"filled": "yes", "blank": "", "missing": None}}
+        })
+
+        self.assertIn("filled", params)
+        self.assertNotIn("blank", params)
+        self.assertNotIn("missing", params)
+
+
 class StaticContentBuilderTest(unittest.TestCase):
     """build_static_step_content is shared by the REST and MCP surfaces."""
 
