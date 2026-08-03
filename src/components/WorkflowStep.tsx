@@ -10,7 +10,14 @@ import { ImageGallery } from './ImageGallery';
 import { useCopyToClipboard } from '../hooks/useCopyToClipboard';
 import { colorClasses } from '../constants/colorClasses';
 import type { ColorType } from '../constants/colorClasses';
-import { apiClient, type GeneratedContent } from '../api/client';
+import {
+  apiClient,
+  type GeneratedContent,
+  type StepKind,
+  type StepConfig,
+  type DecisionValues,
+} from '../api/client';
+import { DecisionPanel } from './steps/DecisionPanel';
 import { VerificationLinks } from './VerificationLinks';
 import { SkillBlueprintTab, SkillBlueprintFullScreenModal } from './SkillBlueprintTab';
 import { useSkillBlueprint } from '../hooks/useSkillBlueprint';
@@ -117,6 +124,10 @@ export function WorkflowStep({
   // null until the step's content is resolved; true for templated steps, which need
   // no Generate click because there is nothing to generate.
   const [isStaticStep, setIsStaticStep] = useState<boolean | null>(null);
+  // Decision steps: how the step is presented, and what the attendee committed to.
+  const [stepKind, setStepKind] = useState<StepKind>('instant_prompt');
+  const [stepConfig, setStepConfig] = useState<StepConfig | null>(null);
+  const [committedDecision, setCommittedDecision] = useState<DecisionValues | null>(null);
   
   const [showGeneratedPrompt, setShowGeneratedPrompt] = useState(false);
   const [activeTab, setActiveTab] = useState<'prompt' | 'how_to_apply' | 'expected_output' | 'skill_blueprint'>('prompt');
@@ -300,6 +311,8 @@ export function WorkflowStep({
     apiClient.getStepContent(sectionTag, industry, useCase, sessionId)
       .then(step => {
         setIsStaticStep(step.is_static);
+        setStepKind(step.step_kind ?? 'instant_prompt');
+        setStepConfig(step.step_config ?? null);
         setGeneratedContent(prev => {
           const base: GeneratedContent = prev ?? { prompt: '', input: '', source: 'llm_generated' };
           return {
@@ -355,7 +368,13 @@ export function WorkflowStep({
   const showGenerateButton = hasPrompt && !isSkipped && isStaticStep === false;
   const isPrdStep = sectionTag === 'prd_generation';
 
+  const isDecisionStep = stepKind === 'decision' && !!stepConfig?.fields?.length;
+
   const isPromptComplete = showGeneratedPrompt && !isStreaming && !isLoadingPrompt && !!promptText;
+
+  // A decision step is not finished until the attendee has actually made the call;
+  // otherwise it collapses back into a step you click past.
+  const isDecisionSatisfied = !isDecisionStep || committedDecision !== null;
   
   // Determine why the Generate button might be disabled
   const prerequisiteReason = !isPreviousStepComplete
@@ -367,7 +386,7 @@ export function WorkflowStep({
   const canClickGeneratePrompt = isPreviousStepComplete && industry && useCase && !showGeneratedPrompt && !isLoadingPrompt && !isStreaming && !generateDisabledReason;
   
   // Mark Complete button is enabled only if prompt is fully generated for this step
-  const canClickMarkComplete = isPromptComplete && !isComplete;
+  const canClickMarkComplete = isPromptComplete && isDecisionSatisfied && !isComplete;
 
   return (
     <div className={`${containerClasses} ${isExpanded ? 'ring-1 ring-primary/30' : ''}`}>
@@ -520,6 +539,24 @@ export function WorkflowStep({
               className="mt-3"
             />
           )}
+
+      {/* Decision steps ask for the attendee's call before showing the prompt, so this
+          sits above the tabs and gates the Done button below. */}
+      {isExpanded && isDecisionStep && stepConfig && (
+        <div className="mt-4 bg-secondary/40 rounded-lg border border-border p-4">
+          <DecisionPanel
+            sectionTag={sectionTag}
+            stepConfig={stepConfig}
+            industry={industry}
+            useCase={useCase}
+            sessionId={sessionId}
+            stepNumber={stepNumber}
+            initialCommitted={committedDecision}
+            onCommitted={setCommittedDecision}
+            readOnly={readOnly}
+          />
+        </div>
+      )}
 
       {showGeneratedPrompt && (isStreaming || streamedPrompt || generatedContent) && (
         <div className="mt-4 bg-secondary/40 rounded-lg border border-border overflow-hidden">
@@ -757,13 +794,21 @@ export function WorkflowStep({
                     <CheckCircle className="w-3.5 h-3.5" /> Done
                   </div>
                 ) : !readOnly ? (
-                  <BorderBeamButton
-                    active={canClickMarkComplete}
-                    onClick={(e) => { e.stopPropagation(); handleMarkComplete(); }}
-                    disabled={!canClickMarkComplete}
+                  <div
+                    title={
+                      !isDecisionSatisfied
+                        ? 'Make your call above before marking this step done'
+                        : undefined
+                    }
                   >
-                    Done
-                  </BorderBeamButton>
+                    <BorderBeamButton
+                      active={canClickMarkComplete}
+                      onClick={(e) => { e.stopPropagation(); handleMarkComplete(); }}
+                      disabled={!canClickMarkComplete}
+                    >
+                      Done
+                    </BorderBeamButton>
+                  </div>
                 ) : null}
               </div>
             </div>

@@ -179,6 +179,53 @@ export interface StepContent extends SectionMetadata {
   is_static: boolean;
   content: string;
   source: 'static' | 'llm_required';
+  /** How the step is presented. Defaults to 'instant_prompt' for untouched steps. */
+  step_kind?: StepKind;
+  step_config?: StepConfig;
+  /** The gate the coding agent reports when it finishes this step. */
+  gate_label?: string;
+}
+
+export type StepKind =
+  | 'instant_prompt'
+  | 'decision'
+  | 'prediction'
+  | 'verify'
+  | 'critique'
+  | 'composite';
+
+/** One input in a decision step. The `kind` picks the control to render. */
+export interface DecisionField {
+  key: string;
+  label: string;
+  kind: 'text' | 'list' | 'radio' | 'radio_per_row';
+  /** Enforced so a decision cannot be waved through with "idk". */
+  min_chars?: number;
+  max_items?: number;
+  options?: string[];
+  placeholder?: string;
+  required?: boolean;
+}
+
+export interface StepConfig {
+  widget?: 'freeform' | 'choice_set';
+  fields?: DecisionField[];
+  rubric?: { criteria?: string[] };
+  /** verify steps */
+  check?: string;
+  blocking?: boolean;
+  escape_hatch_points_pct?: number;
+}
+
+/** What the attendee committed, keyed by field. Lists arrive as string[]. */
+export type DecisionValues = Record<string, string | string[]>;
+
+export interface DecisionReveal {
+  section_tag: string;
+  expert_answer: string;
+  source: 'static' | 'llm_generated' | 'unavailable';
+  committed: DecisionValues;
+  rubric?: { criteria?: string[] };
 }
 
 export interface SectionInput {
@@ -766,6 +813,43 @@ class ApiClient {
     const params = new URLSearchParams({ industry, use_case: useCase });
     if (sessionId) params.set('session_id', sessionId);
     return this.fetch<StepContent>(`/step/${encodeURIComponent(sectionTag)}/content?${params}`);
+  }
+
+  /**
+   * Commit a decision and get the expert answer back.
+   *
+   * The answer is deliberately not part of `getStepContent`: it is served only
+   * after a commitment is recorded, so the attendee cannot read the expert view
+   * and then backfill a matching choice.
+   */
+  async revealStepExpertAnswer(
+    sectionTag: string,
+    decision: DecisionValues,
+    industry: string = '',
+    useCase: string = '',
+    sessionId?: string | null,
+    stepNumber?: number
+  ): Promise<DecisionReveal> {
+    return this.fetch<DecisionReveal>(`/step/${encodeURIComponent(sectionTag)}/reveal`, {
+      method: 'POST',
+      body: JSON.stringify({
+        industry,
+        use_case: useCase,
+        session_id: sessionId ?? null,
+        step_number: stepNumber ?? null,
+        decision,
+      }),
+    });
+  }
+
+  /**
+   * Decisions already committed in this session, keyed by section_tag.
+   * Used to restore a decision step's locked-in state after a refresh.
+   */
+  async getSessionDecisions(
+    sessionId: string
+  ): Promise<{ session_id: string; decisions: Record<string, { decision: DecisionValues; committed_at: string }> }> {
+    return this.fetch(`/session/${encodeURIComponent(sessionId)}/decisions`);
   }
 
   /** Get workflow steps configuration */
