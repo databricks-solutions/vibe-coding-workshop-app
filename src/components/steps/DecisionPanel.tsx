@@ -155,6 +155,27 @@ export function DecisionPanel({
     .filter(f => f.kind === 'text' && (f.min_chars ?? 0) >= 20)
     .sort((a, b) => (b.min_chars ?? 0) - (a.min_chars ?? 0))[0];
 
+  /**
+   * A word-level diff only reads well against a comparable statement. Expert answers
+   * are often several paragraphs, so pull out the first bolded line (which is where
+   * the headline answer lives) and fall back to the opening sentence. If neither is
+   * short enough, skip the diff rather than show a wall of churn.
+   */
+  const comparableExpertText = (() => {
+    if (!expertAnswer) return null;
+    const bolded = expertAnswer.match(/\*\*(.+?)\*\*/);
+    const candidate = bolded
+      ? bolded[1]
+      : expertAnswer.split(/(?<=[.!?])\s/)[0] ?? '';
+    const cleaned = candidate.replace(/[*_`#]/g, '').trim();
+    return cleaned && cleaned.length <= 220 ? cleaned : null;
+  })();
+
+  const showDiff =
+    !!diffField &&
+    !!comparableExpertText &&
+    typeof committed?.[diffField.key] === 'string';
+
   return (
     <div className="space-y-4">
       {!isLocked && (
@@ -231,7 +252,7 @@ export function DecisionPanel({
                 )}
               </div>
 
-              {diffField && typeof committed[diffField.key] === 'string' && (
+              {showDiff && diffField && comparableExpertText && (
                 <div className="space-y-1">
                   <p className="text-ui-xs text-muted-foreground">
                     Your {diffField.label.toLowerCase()}, compared:
@@ -239,7 +260,7 @@ export function DecisionPanel({
                   <div className="bg-background/60 rounded p-2">
                     <DiffView
                       oldText={String(committed[diffField.key])}
-                      newText={expertAnswer}
+                      newText={comparableExpertText}
                       compact
                     />
                   </div>
