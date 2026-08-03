@@ -220,6 +220,29 @@ export interface StepConfig {
 /** What the attendee committed, keyed by field. Lists arrive as string[]. */
 export type DecisionValues = Record<string, string | string[]>;
 
+/**
+ * Outcome of one verification check.
+ *
+ * `ok: null` means the check could not be run (no permission, timeout, missing
+ * parameter). That is reported as 'unknown', never as failure — a permission gap
+ * must not block a room full of attendees.
+ */
+export interface VerificationCheck {
+  name: string;
+  ok: boolean | null;
+  detail: string;
+}
+
+export interface StepVerification {
+  status: 'pass' | 'fail' | 'unknown';
+  method: 'workspace' | 'agent_reported' | 'self_attested' | 'none';
+  checks: VerificationCheck[];
+  /** Human-actionable next step, e.g. "app exists but is STOPPED — start it". */
+  hint?: string;
+  cached_at?: string;
+  ttl_s?: number;
+}
+
 export interface DecisionReveal {
   section_tag: string;
   expert_answer: string;
@@ -850,6 +873,23 @@ class ApiClient {
     sessionId: string
   ): Promise<{ session_id: string; decisions: Record<string, { decision: DecisionValues; committed_at: string }> }> {
     return this.fetch(`/session/${encodeURIComponent(sessionId)}/decisions`);
+  }
+
+  /**
+   * Ask the app to confirm a step's artifact really exists in the workspace.
+   *
+   * Advisory by default: a 'fail' or 'unknown' result informs the attendee but does
+   * not prevent them completing the step.
+   */
+  async verifyStep(
+    sectionTag: string,
+    sessionId?: string | null,
+    force = false
+  ): Promise<StepVerification> {
+    return this.fetch<StepVerification>(`/step/${encodeURIComponent(sectionTag)}/verify`, {
+      method: 'POST',
+      body: JSON.stringify({ session_id: sessionId ?? null, force }),
+    });
   }
 
   /** Get workflow steps configuration */

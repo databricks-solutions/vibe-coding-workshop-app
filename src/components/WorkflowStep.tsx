@@ -18,6 +18,7 @@ import {
   type DecisionValues,
 } from '../api/client';
 import { DecisionPanel } from './steps/DecisionPanel';
+import { VerifyPanel } from './steps/VerifyPanel';
 import { VerificationLinks } from './VerificationLinks';
 import { SkillBlueprintTab, SkillBlueprintFullScreenModal } from './SkillBlueprintTab';
 import { useSkillBlueprint } from '../hooks/useSkillBlueprint';
@@ -128,6 +129,9 @@ export function WorkflowStep({
   const [stepKind, setStepKind] = useState<StepKind>('instant_prompt');
   const [stepConfig, setStepConfig] = useState<StepConfig | null>(null);
   const [committedDecision, setCommittedDecision] = useState<DecisionValues | null>(null);
+  // Verify steps: whether the artifact was confirmed (or self-attested). Advisory —
+  // it surfaces a badge but never gates Done.
+  const [isVerified, setIsVerified] = useState(false);
   
   const [showGeneratedPrompt, setShowGeneratedPrompt] = useState(false);
   const [activeTab, setActiveTab] = useState<'prompt' | 'how_to_apply' | 'expected_output' | 'skill_blueprint'>('prompt');
@@ -369,6 +373,7 @@ export function WorkflowStep({
   const isPrdStep = sectionTag === 'prd_generation';
 
   const isDecisionStep = stepKind === 'decision' && !!stepConfig?.fields?.length;
+  const isVerifyStep = stepKind === 'verify' && !!stepConfig?.check;
 
   const isPromptComplete = showGeneratedPrompt && !isStreaming && !isLoadingPrompt && !!promptText;
 
@@ -408,6 +413,14 @@ export function WorkflowStep({
             </h3>
             {isComplete && (
               <span className="text-emerald-400 text-ui-xs font-medium bg-emerald-900/30 px-1.5 py-0.5 rounded">✓ Done</span>
+            )}
+            {isVerified && (
+              <span
+                className="text-ui-2xs font-medium px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-300 border border-emerald-500/30"
+                title="This step's artifact was confirmed to exist"
+              >
+                Verified
+              </span>
             )}
             {isStreaming && !isExpanded && retryStatus && (
               <span className="text-ui-2xs font-medium px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-400 animate-pulse inline-flex items-center gap-1">
@@ -724,6 +737,18 @@ export function WorkflowStep({
                 </div>
               ) : (
                 <>
+                  {/* For verify steps the app checks the workspace itself, so the
+                      automated result sits above the manual links. */}
+                  {isVerifyStep && (
+                    <div className="mb-3">
+                      <VerifyPanel
+                        sectionTag={sectionTag}
+                        sessionId={sessionId || null}
+                        onVerified={() => setIsVerified(true)}
+                        readOnly={readOnly}
+                      />
+                    </div>
+                  )}
                   <VerificationLinks sectionTag={sectionTag} sessionId={sessionId || null} />
                   {/* Images for Expected Output */}
                   {Array.isArray(generatedContent?.expected_output_images) && generatedContent.expected_output_images.length > 0 && (

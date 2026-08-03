@@ -2466,6 +2466,108 @@ async def reveal_step_expert_answer(section_tag: str, request: DecisionCommitReq
     }
 
 
+class VerifyStepRequest(BaseModel):
+    """Request to verify a step's completion via workspace artifact checks."""
+    session_id: str = Field(..., description="Session ID")
+    force: bool = Field(False, description="Bypass cache and force fresh check")
+
+
+class VerifyCheckResult(BaseModel):
+    """Result of a single verification check."""
+    name: str = Field(..., description="Check key")
+    ok: Optional[bool] = Field(None, description="True=pass, False=fail, None=unknown")
+    detail: str = Field(..., description="Human-actionable detail")
+
+
+class VerifyStepResponse(BaseModel):
+    """Response from step verification endpoint."""
+    status: str = Field(..., description="pass|fail|unknown")
+    method: str = Field(..., description="workspace|agent_reported|self_attested|none")
+    checks: List[VerifyCheckResult] = Field(default_factory=list, description="Per-check results")
+    hint: str = Field(..., description="Human-actionable next step")
+    cached_at: Optional[float] = Field(None, description="Timestamp when result was cached")
+    ttl_s: int = Field(60, description="Cache TTL in seconds")
+
+
+@router.post("/step/{section_tag}/verify", response_model=VerifyStepResponse, summary="Verify step completion via workspace checks")
+async def verify_step_endpoint(section_tag: str, request: VerifyStepRequest) -> VerifyStepResponse:
+    """
+    Verify a step's completion by checking for real workspace artifacts.
+
+    For steps with no check configured, returns status=unknown, method=agent_reported
+    (the attendee self-attests they completed it).
+
+    Returns a detailed report with per-check results. Use the `hint` field to guide
+    the attendee on what to fix. The `ok` field in each check is tri-state:
+      - True: artifact found and valid
+      - False: artifact not found or invalid (actionable hint provided)
+      - None: unknown state (permission denied, timeout, missing parameter)
+
+    Only the App Service Principal is used — no OBO.
+    """
+    # Validate section_tag (path traversal guard)
+    _validate_section_tag(section_tag)
+
+    # Get section config to find the check key
+    section_content = get_section_input_content(
+        industry="sample",  # Not used for step_config, just for resolver
+        use_case="booking",
+        section_tag=section_tag,
+        session_id=request.session_id,
+    )
+
+    check_key = (section_content.get("step_config") or {}).get("check")
+
+    # If no check configured, return unknown/agent_reported (self-attestation step)
+    if not check_key:
+        return VerifyStepResponse(
+            status="unknown",
+            method="agent_reported",
+            checks=[],
+            hint="Step verification not configured — completion depends on attendee confirmation",
+            cached_at=None,
+            ttl_s=60,
+        )
+
+    # Get workspace client (App SP only)
+    client = get_workspace_client()
+    if not client:
+        return VerifyStepResponse(
+            status="unknown",
+            method="workspace",
+            checks=[],
+            hint="Verification service unavailable — Databricks SDK not initialized",
+            cached_at=None,
+            ttl_s=60,
+        )
+
+    # Resolve workshop + session parameters
+    params = get_effective_workshop_parameters(request.session_id)
+
+    # Import and run verification
+    try:
+        from src.backend.services.verification import verify_step_checks
+        result = await verify_step_checks(
+            workspace_client=client,
+            session_id=request.session_id,
+            section_tag=section_tag,
+            check_keys=[check_key],
+            params=params,
+            force=request.force,
+        )
+        return VerifyStepResponse(**result)
+    except Exception as e:
+        logger.error(f"Verification failed for {section_tag}: {e}", exc_info=True)
+        return VerifyStepResponse(
+            status="unknown",
+            method="workspace",
+            checks=[],
+            hint=f"Verification error: {type(e).__name__}",
+            cached_at=None,
+            ttl_s=60,
+        )
+
+
 @router.post("/generate-prompt", response_model=GeneratedContent, summary="Generate prompt for a workflow section")
 async def generate_prompt(request: PromptRequest):
     """
