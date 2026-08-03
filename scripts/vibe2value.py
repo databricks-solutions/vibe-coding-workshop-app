@@ -989,6 +989,14 @@ def preflight_lakebase_name(config: dict) -> dict:
     if state is None:
         return config
 
+    # A live project under our own name is this install's project, not a clash.
+    # Renaming here would point the bundle at a name its state doesn't know, and it
+    # would then plan to destroy and recreate the real project — losing every
+    # session and leaderboard standing in it. Only a name stuck in the post-delete
+    # retention window is a genuine blocker, because it cannot be reused yet.
+    if not state["deleted"]:
+        return config
+
     suggestion = f"{slug}-{int(time.time())}"
     for n in range(2, 12):
         cand = f"{slug}-v{n}"
@@ -997,12 +1005,9 @@ def preflight_lakebase_name(config: dict) -> dict:
             break
 
     print()
-    if state["deleted"]:
-        warn(f"Lakebase project name '{slug}' is in a post-delete retention window.")
-        if state["purge_time"]:
-            print(f"  The name frees up on {CYAN}{state['purge_time']}{NC} and can't be reused until then.")
-    else:
-        warn(f"Lakebase project name '{slug}' already exists in this workspace.")
+    warn(f"Lakebase project name '{slug}' is in a post-delete retention window.")
+    if state["purge_time"]:
+        print(f"  The name frees up on {CYAN}{state['purge_time']}{NC} and can't be reused until then.")
 
     new_name = suggestion
     if sys.stdin.isatty():
