@@ -8,9 +8,14 @@
 -- exists is silently skipped. Editing seed 02 therefore has NO effect on any
 -- existing install — it only changes fresh ones. UPDATE works on both.
 --
--- Every statement is guarded by `WHERE step_kind = 'instant_prompt'` so an admin who
--- has since changed a step's kind through the Configuration page is never clobbered
--- when this file is re-run on redeploy.
+-- Every statement is guarded by `WHERE step_kind = 'instant_prompt'`, so re-running on
+-- redeploy is a no-op and an admin who has retuned a step's step_config, rubric or
+-- expert answer keeps their edits.
+--
+-- One case is deliberately NOT preserved: an admin who sets a step all the way back to
+-- 'instant_prompt' will see it promoted again on the next deploy, because that is
+-- indistinguishable from a step this file has not yet touched. To take a step out of
+-- the flow permanently, set step_enabled = FALSE instead of changing its kind.
 --
 -- Decision steps (commit-before-reveal): the attendee has to make the real call
 -- before the coding assistant acts, and their committed values are substituted into
@@ -153,6 +158,11 @@ WHERE section_tag IN (
   AND is_active = TRUE
   AND step_kind = 'instant_prompt';
 
+-- setup_lakebase, silver_layer_sdp and genie_space each carry a real decision AND
+-- produce a verifiable artifact. step_kind can only be one value, and the decision is
+-- the teaching moment, so those three are promoted to 'decision' in seed 13 and get
+-- their `check` merged into step_config below rather than a step_kind of 'verify'.
+-- The panel keys off step_config.check, so verification still runs on them.
 UPDATE ${schema}.section_input_prompts
 SET step_kind = 'verify',
     gate_label = 'Lakebase project reachable',
