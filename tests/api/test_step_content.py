@@ -33,9 +33,9 @@ if str(REPO_ROOT) not in sys.path:
 from src.backend.api import routes  # noqa: E402
 
 
-def _section(bypass_llm: bool):
+def _section(bypass_llm: bool, **overrides):
     """Minimal section-content dict as get_section_input_content would return."""
-    return {
+    section = {
         "input": "Do the thing.",
         "input_template": "Do the thing.",
         "system_prompt": "You are a senior data engineer.",
@@ -45,7 +45,14 @@ def _section(bypass_llm: bool):
         "expected_output_images": [],
         "bypass_llm": bypass_llm,
         "coding_assistant_variant": "__default__",
+        "step_kind": "instant_prompt",
+        "step_config": {},
+        "gate_label": "",
+        "expert_answer": "",
+        "expert_system_prompt": "",
     }
+    section.update(overrides)
+    return section
 
 
 class StepContentEndpointTest(unittest.TestCase):
@@ -107,6 +114,130 @@ class StepContentEndpointTest(unittest.TestCase):
         self.assertEqual(result["how_to_apply"], "Paste it.")
         self.assertEqual(result["expected_output"], "A thing exists.")
         self.assertEqual(result["coding_assistant_variant"], "__default__")
+
+
+class StepKindTest(unittest.TestCase):
+    """
+    step_kind decides how a step is presented.
+
+    Every seeded row defaults to 'instant_prompt', so the migration is inert until a
+    step is deliberately upgraded.
+    """
+
+    def setUp(self):
+        self._original = routes.get_section_input_content
+
+    def tearDown(self):
+        routes.get_section_input_content = self._original
+
+    def _content(self, **overrides):
+        routes.get_section_input_content = lambda *a, **k: _section(True, **overrides)
+        return asyncio.run(
+            routes.get_step_content_endpoint(section_tag="gold_layer_design")
+        )
+
+    def test_defaults_to_instant_prompt(self):
+        self.assertEqual(self._content()["step_kind"], "instant_prompt")
+
+    def test_legacy_rows_without_kind_still_resolve(self):
+        """Databases that predate the migration have no step_kind column at all."""
+        template = routes._section_row_to_template({"input_template": "x"})
+
+        self.assertEqual(template["step_kind"], "instant_prompt")
+        self.assertEqual(template["step_config"], {})
+
+    def test_step_config_travels_to_the_client(self):
+        config = {"widget": "freeform", "min_chars": 40}
+        result = self._content(step_kind="decision", step_config=config, gate_label="Scope committed")
+
+        self.assertEqual(result["step_kind"], "decision")
+        self.assertEqual(result["step_config"], config)
+        self.assertEqual(result["gate_label"], "Scope committed")
+
+    def test_expert_answer_is_never_sent_with_content(self):
+        """
+        The whole value of commit-before-reveal is that the attendee cannot peek, so
+        the answer must not ride along on the content response.
+        """
+        result = self._content(
+            step_kind="decision",
+            expert_answer="The grain is one row per booking per night.",
+        )
+
+        self.assertNotIn("expert_answer", result)
+        self.assertNotIn("expert_system_prompt", result)
+        serialized = str(result)
+        self.assertNotIn("one row per booking per night", serialized)
+
+
+class DecisionRevealTest(unittest.TestCase):
+    """POST /step/{tag}/reveal trades a commitment for the expert answer."""
+
+    def setUp(self):
+        self._original = routes.get_section_input_content
+        self._original_save = routes.save_step_decision
+        self.saved = []
+        routes.save_step_decision = lambda **kw: self.saved.append(kw) or True
+
+    def tearDown(self):
+        routes.get_section_input_content = self._original
+        routes.save_step_decision = self._original_save
+
+    def _reveal(self, decision, **overrides):
+        routes.get_section_input_content = lambda *a, **k: _section(True, **overrides)
+        request = routes.DecisionCommitRequest(
+            session_id="sess-1", decision=decision
+        )
+        return asyncio.run(
+            routes.reveal_step_expert_answer("gold_layer_design", request)
+        )
+
+    def test_reveals_static_expert_answer_after_commit(self):
+        result = self._reveal(
+            {"fact_grain": "one row per booking"},
+            step_kind="decision",
+            expert_answer="One row per booking per night.",
+        )
+
+        self.assertEqual(result["expert_answer"], "One row per booking per night.")
+        self.assertEqual(result["source"], "static")
+        self.assertEqual(result["committed"], {"fact_grain": "one row per booking"})
+
+    def test_commitment_is_recorded_before_revealing(self):
+        self._reveal(
+            {"fact_grain": "one row per booking"},
+            step_kind="decision",
+            expert_answer="anything",
+        )
+
+        self.assertEqual(len(self.saved), 1)
+        self.assertEqual(self.saved[0]["section_tag"], "gold_layer_design")
+        self.assertEqual(self.saved[0]["decision"], {"fact_grain": "one row per booking"})
+
+    def test_empty_decision_is_rejected(self):
+        """No commitment, no reveal — otherwise the step is just a spoiler button."""
+        with self.assertRaises(routes.HTTPException) as ctx:
+            self._reveal({}, step_kind="decision", expert_answer="secret")
+
+        self.assertEqual(ctx.exception.status_code, 400)
+
+    def test_non_decision_step_is_rejected(self):
+        with self.assertRaises(routes.HTTPException) as ctx:
+            self._reveal({"x": 1}, step_kind="instant_prompt")
+
+        self.assertEqual(ctx.exception.status_code, 400)
+
+    def test_reveal_survives_a_failed_session_write(self):
+        """Losing a session write must not strand the attendee mid-step."""
+        def boom(**kw):
+            raise RuntimeError("lakebase down")
+
+        routes.save_step_decision = boom
+        result = self._reveal(
+            {"fact_grain": "g"}, step_kind="decision", expert_answer="still shown"
+        )
+
+        self.assertEqual(result["expert_answer"], "still shown")
 
 
 class StaticContentBuilderTest(unittest.TestCase):

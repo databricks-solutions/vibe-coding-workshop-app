@@ -171,18 +171,40 @@ def _refresh_lakebase_cache():
             # Fetch latest section_input_prompts (PostgreSQL syntax with DISTINCT ON)
             # Keyed by (section_tag, coding_assistant) so we cache the latest active row
             # for both the Default and any per-assistant forks.
-            section_prompts_sql = f"""
+            #
+            # Includes the step-kind fields (step_kind, step_config, gate_label,
+            # expert_answer, expert_system_prompt). On databases that haven't run
+            # 12_add_step_kind.sql yet — a code-only deploy skips DDL — retry without
+            # them so existing deployments keep working and simply see every step as
+            # an instant_prompt.
+            section_prompts_sql_with_kind = f"""
                 SELECT DISTINCT ON (section_tag, coding_assistant)
                     section_tag, coding_assistant, input_template, system_prompt,
                     section_title, section_description,
                     order_number, version, how_to_apply, expected_output, bypass_llm,
-                    how_to_apply_images, expected_output_images
+                    how_to_apply_images, expected_output_images,
+                    step_kind, step_config, gate_label, expert_answer, expert_system_prompt
                 FROM {schema}.section_input_prompts
                 WHERE is_active = TRUE
                 ORDER BY section_tag, coding_assistant, version DESC
             """
-            section_prompts = execute_query(section_prompts_sql)
-            
+            try:
+                section_prompts = execute_query(section_prompts_sql_with_kind)
+            except Exception as kind_err:
+                logger.info(f"Step-kind columns not yet present ({kind_err}); falling back to legacy SELECT. Run 12_add_step_kind.sql to enable decision steps.")
+                section_prompts_sql_legacy = f"""
+                    SELECT DISTINCT ON (section_tag, coding_assistant)
+                        section_tag, coding_assistant, input_template, system_prompt,
+                        section_title, section_description,
+                        order_number, version, how_to_apply, expected_output, bypass_llm,
+                        how_to_apply_images, expected_output_images
+                    FROM {schema}.section_input_prompts
+                    WHERE is_active = TRUE
+                    ORDER BY section_tag, coding_assistant, version DESC
+                """
+                section_prompts = execute_query(section_prompts_sql_legacy)
+
+
             if section_prompts:
                 _lakebase_cache["section_input_prompts"] = section_prompts
             
@@ -301,6 +323,23 @@ def _parse_image_field(value: Any) -> List[Any]:
     return value if isinstance(value, list) else []
 
 
+def _parse_json_field(value: Any) -> Dict[str, Any]:
+    """Normalize a possibly-JSON-encoded object field into a dict.
+
+    psycopg may hand back JSONB already decoded or as a string depending on driver
+    and column type, so accept both and degrade to {} rather than raising.
+    """
+    if not value:
+        return {}
+    if isinstance(value, str):
+        try:
+            parsed = json.loads(value)
+            return parsed if isinstance(parsed, dict) else {}
+        except json.JSONDecodeError:
+            return {}
+    return value if isinstance(value, dict) else {}
+
+
 def _section_row_to_template(row: Dict[str, Any]) -> Dict[str, Any]:
     """Convert a section_input_prompts row into the legacy template dict shape."""
     return {
@@ -314,6 +353,13 @@ def _section_row_to_template(row: Dict[str, Any]) -> Dict[str, Any]:
         "section_description": row.get("section_description", ""),
         "order_number": row.get("order_number", 99),
         "bypass_llm": row.get("bypass_llm", False),
+        # Absent on databases that predate 12_add_step_kind.sql, so default to the
+        # behaviour every step had before decision steps existed.
+        "step_kind": row.get("step_kind") or "instant_prompt",
+        "step_config": _parse_json_field(row.get("step_config")),
+        "gate_label": row.get("gate_label") or "",
+        "expert_answer": row.get("expert_answer") or "",
+        "expert_system_prompt": row.get("expert_system_prompt") or "",
     }
 
 
@@ -574,6 +620,21 @@ class PromptRequest(BaseModel):
     # session_parameters.coding_assistant (or DEFAULT when there is no session).
     # The Test Scenario tab uses this to pick a fork without creating a session.
     coding_assistant: Optional[str] = None
+
+class DecisionCommitRequest(BaseModel):
+    """A committed decision, exchanged for the expert answer.
+
+    The commitment is recorded before the reveal is returned, so the attendee cannot
+    read the expert answer and then backfill a matching choice.
+    """
+    industry: str = ""
+    use_case: str = ""
+    session_id: Optional[str] = None
+    step_number: Optional[int] = None
+    # Free-form because each decision widget captures a different shape (ranked
+    # feature list, per-dimension SCD picks, prose grain statement, ...).
+    decision: Dict[str, Any] = Field(default_factory=dict)
+
 
 class TestPromptRequest(BaseModel):
     """Request model for testing prompt generation with custom values (used in Configuration page)"""
@@ -1289,7 +1350,12 @@ def get_section_input_content(industry: str, use_case: str, section_tag: str, pr
     how_to_apply_images = template.get('how_to_apply_images', [])
     expected_output_images = template.get('expected_output_images', [])
     bypass_llm = template.get('bypass_llm', False)  # Check if this section bypasses LLM
-    
+    step_kind = template.get('step_kind') or 'instant_prompt'
+    step_config = template.get('step_config') or {}
+    gate_label = template.get('gate_label', '')
+    expert_answer = template.get('expert_answer', '')
+    expert_system_prompt = template.get('expert_system_prompt', '')
+
     # Substitute all parameters including use_case_description
     params = {
         '{industry_name}': industry_name,
@@ -1323,7 +1389,12 @@ def get_section_input_content(industry: str, use_case: str, section_tag: str, pr
         system_prompt = system_prompt.replace(key, str(value))
         how_to_apply = how_to_apply.replace(key, str(value))
         expected_output = expected_output.replace(key, str(value))
-    
+        # Expert reveal text is shown to the attendee after they commit, so it needs
+        # the same industry / use-case / workshop-parameter substitution.
+        expert_answer = expert_answer.replace(key, str(value))
+        expert_system_prompt = expert_system_prompt.replace(key, str(value))
+
+
     # Conditional branding injection -- only when company_brand_url is specified
     # Session overrides may store empty string for brand URL (e.g. from initial
     # "Get Started" before URL was populated). Fall back to the global workshop
@@ -1424,6 +1495,11 @@ Generate a detailed, actionable prompt for {section_tag} in a {industry_name} {u
         "bypass_llm": bypass_llm,
         "_brand_url": brand_url,
         "coding_assistant_variant": resolved_variant,
+        "step_kind": step_kind,
+        "step_config": step_config,
+        "gate_label": gate_label,
+        "expert_answer": expert_answer,
+        "expert_system_prompt": expert_system_prompt,
     }
 
 
@@ -2232,6 +2308,84 @@ async def get_step_content_endpoint(
         "coding_assistant_variant": section_content.get(
             "coding_assistant_variant", DEFAULT_CODING_ASSISTANT_KEY
         ),
+        # How the step should be presented. 'instant_prompt' everywhere until a step
+        # is upgraded, so this is inert for untouched steps.
+        "step_kind": section_content.get("step_kind", "instant_prompt"),
+        "step_config": section_content.get("step_config", {}),
+        "gate_label": section_content.get("gate_label", ""),
+        # Withheld deliberately: the expert answer must not reach the browser before
+        # the attendee commits, or the reveal is worthless. Served by
+        # POST /step/{tag}/reveal instead.
+    }
+
+
+@router.post("/step/{section_tag}/reveal", summary="Commit a decision and get the expert answer")
+async def reveal_step_expert_answer(section_tag: str, request: DecisionCommitRequest):
+    """
+    Exchange a committed decision for the step's expert answer.
+
+    Commit-before-reveal only teaches if the attendee cannot peek: the expert answer
+    is therefore never included in GET /step/{tag}/content, and is returned only
+    here, after the commitment has been recorded against the session.
+
+    The reveal comes from `expert_answer` when it is static text. When a step sets
+    `expert_system_prompt` instead, the answer has to be grounded in the attendee's
+    own PRD or schema, so it is generated on demand — this is one of the few places
+    an LLM call is genuinely warranted.
+    """
+    section_content = get_section_input_content(
+        request.industry, request.use_case, section_tag, None, request.session_id
+    )
+
+    if section_content.get("step_kind") != "decision":
+        raise HTTPException(
+            status_code=400,
+            detail=f"Section '{section_tag}' is not a decision step",
+        )
+
+    if not request.decision:
+        raise HTTPException(status_code=400, detail="A decision is required before the reveal")
+
+    # Record the commitment first. If this fails we still reveal — losing a session
+    # write should not strand the attendee mid-step — but the failure is logged.
+    if request.session_id:
+        try:
+            save_step_decision(
+                session_id=request.session_id,
+                section_tag=section_tag,
+                decision=request.decision,
+            )
+        except Exception as e:
+            logger.error(f"Failed to persist decision for {section_tag}: {e}", exc_info=True)
+
+    expert_answer = section_content.get("expert_answer", "")
+    expert_system_prompt = section_content.get("expert_system_prompt", "")
+    source = "static"
+
+    if not expert_answer and expert_system_prompt:
+        try:
+            llm_result = await call_databricks_serving_endpoint(
+                prompt=section_content.get("input", ""),
+                system_prompt=expert_system_prompt,
+                max_tokens=1200,
+                # Low temperature: the reveal is meant to be the considered answer, not
+                # a creative one, and two attendees on the same step should see the same
+                # guidance.
+                temperature=0.2,
+            )
+            expert_answer = (llm_result or {}).get("response", "")
+            source = "llm_generated"
+        except Exception as e:
+            logger.error(f"Expert answer generation failed for {section_tag}: {e}", exc_info=True)
+            expert_answer = ""
+            source = "unavailable"
+
+    return {
+        "section_tag": section_tag,
+        "expert_answer": expert_answer,
+        "source": source,
+        "committed": request.decision,
+        "rubric": (section_content.get("step_config") or {}).get("rubric", {}),
     }
 
 
@@ -5550,6 +5704,7 @@ try:
     from src.backend.services.lakebase import (
         save_session,
         save_chapter_feedback,
+        save_step_decision,
         load_session,
         delete_session,
         get_user_sessions,
@@ -5583,6 +5738,15 @@ except ImportError:
         return 0
     def update_step_prompt(*args, **kwargs):
         return False
+    def save_step_decision(*args, **kwargs):
+        return False
+    # save_chapter_feedback and get_analytics are imported above but were missing
+    # from this fallback block, so touching either one raised NameError instead of
+    # degrading, whenever the lakebase service failed to import.
+    def save_chapter_feedback(*args, **kwargs):
+        return False
+    def get_analytics(*args, **kwargs):
+        return {}
 
 
 # Session Pydantic Models

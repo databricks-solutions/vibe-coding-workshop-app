@@ -807,6 +807,80 @@ def save_chapter_feedback(session_id: str, chapter_name: str, rating: str) -> bo
         return False
 
 
+def save_step_decision(session_id: str, section_tag: str, decision: Dict) -> bool:
+    """
+    Record the decision an attendee committed to on a step.
+
+    Stored under the `step_decisions` key of session_parameters so no schema change
+    is needed, and so committed values are available for prompt substitution — the
+    point of commit-before-reveal is that the coding agent then implements the
+    attendee's design rather than inventing its own.
+
+    Uses a nested JSONB merge so committing one step never disturbs another, matching
+    save_chapter_feedback's approach.
+
+    Args:
+        session_id: Session identifier
+        section_tag: Step the decision belongs to (e.g. 'gold_layer_design')
+        decision: Widget-specific payload; shape varies per step
+
+    Returns:
+        True if a session row was updated, False otherwise
+    """
+    if not is_lakebase_configured():
+        logger.warning("Lakebase not configured, cannot save step decision")
+        return False
+
+    table_name = _get_sessions_table_name()
+
+    try:
+        now = datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ')
+        decision_patch = json.dumps({
+            "step_decisions": {
+                section_tag: {
+                    "decision": decision,
+                    "committed_at": now,
+                }
+            }
+        })
+
+        with get_connection() as conn:
+            cursor = conn.cursor()
+
+            # Merge at two levels: `||` is shallow, so merging {"step_decisions": {...}}
+            # would replace all prior decisions. jsonb_set on the nested key preserves
+            # the siblings.
+            update_sql = f"""
+            UPDATE {table_name}
+            SET session_parameters = jsonb_set(
+                    COALESCE(session_parameters, '{{}}'::jsonb),
+                    '{{step_decisions}}',
+                    COALESCE(session_parameters -> 'step_decisions', '{{}}'::jsonb)
+                        || (%s::jsonb -> 'step_decisions'),
+                    true
+                ),
+                updated_at = CURRENT_TIMESTAMP
+            WHERE session_id = %s
+            """
+
+            cursor.execute(update_sql, (decision_patch, session_id))
+            conn.commit()
+
+            rows_affected = cursor.rowcount
+            cursor.close()
+
+            if rows_affected > 0:
+                logger.info(f"Step decision saved: session={session_id}, step={section_tag}")
+                return True
+
+            logger.warning(f"No session found for step decision: {session_id}")
+            return False
+
+    except Exception as e:
+        logger.error(f"Error saving step decision: {e}", exc_info=True)
+        return False
+
+
 def load_session(session_id: str) -> Optional[Dict]:
     """
     Load a session from Lakebase by session_id.
