@@ -114,6 +114,9 @@ export function WorkflowStep({
   const [isStreaming, setIsStreaming] = useState(false);
   const [streamedPrompt, setStreamedPrompt] = useState('');
   const [truncationWarning, setTruncationWarning] = useState<string | null>(null);
+  // null until the step's content is resolved; true for templated steps, which need
+  // no Generate click because there is nothing to generate.
+  const [isStaticStep, setIsStaticStep] = useState<boolean | null>(null);
   
   const [showGeneratedPrompt, setShowGeneratedPrompt] = useState(false);
   const [activeTab, setActiveTab] = useState<'prompt' | 'how_to_apply' | 'expected_output' | 'skill_blueprint'>('prompt');
@@ -282,32 +285,54 @@ export function WorkflowStep({
     return () => clearInterval(interval);
   }, [isStreaming, onPromptGenerated, stepNumber]);
 
-  // Fetch metadata (how_to_apply, expected_output, images) only when step is expanded
+  // Load step content as soon as the step is expanded.
+  //
+  // Most steps are static: their text is templated server-side, not generated, so
+  // there is nothing to wait for. Those render immediately here — no Generate click,
+  // no spinner. Only genuinely generative sections (is_static === false) still need
+  // the Generate button, and for those this call just primes the metadata tabs.
   useEffect(() => {
     if (!isExpanded || metadataFetchedRef.current) return;
-    if (!initialPrompt || !industry || !useCase) return;
-    if (generatedContent?.how_to_apply) return;
+    if (!industry || !useCase) return;
 
     metadataFetchedRef.current = true;
     setIsLoadingMetadata(true);
-    apiClient.getSectionMetadata(sectionTag, industry, useCase, sessionId)
-      .then(meta => {
-        setGeneratedContent(prev => ({
-          ...prev!,
-          how_to_apply: meta.how_to_apply || '',
-          expected_output: meta.expected_output || '',
-          how_to_apply_images: meta.how_to_apply_images || [],
-          expected_output_images: meta.expected_output_images || [],
-          coding_assistant_variant: meta.coding_assistant_variant,
-        }));
+    apiClient.getStepContent(sectionTag, industry, useCase, sessionId)
+      .then(step => {
+        setIsStaticStep(step.is_static);
+        setGeneratedContent(prev => {
+          const base: GeneratedContent = prev ?? { prompt: '', input: '', source: 'llm_generated' };
+          return {
+            ...base,
+            how_to_apply: step.how_to_apply || '',
+            expected_output: step.expected_output || '',
+            how_to_apply_images: step.how_to_apply_images || [],
+            expected_output_images: step.expected_output_images || [],
+            coding_assistant_variant: step.coding_assistant_variant,
+            ...(step.is_static
+              ? { prompt: step.content, source: 'static' as const }
+              : {}),
+          };
+        });
+
+        // Static content is ready to use straight away. Persist it so it survives a
+        // refresh and can chain into later steps via previousOutputs, exactly as
+        // generated prompts do.
+        if (step.is_static && step.content && !initialPrompt) {
+          setStreamedPrompt(step.content);
+          setShowGeneratedPrompt(true);
+          if (onPromptGenerated && stepNumber) {
+            onPromptGenerated(stepNumber, step.content);
+          }
+        }
         setIsLoadingMetadata(false);
       })
       .catch(err => {
-        console.error('Failed to fetch section metadata:', err);
+        console.error('Failed to load step content:', err);
         metadataFetchedRef.current = false;
         setIsLoadingMetadata(false);
       });
-  }, [isExpanded, initialPrompt, industry, useCase, sectionTag, sessionId]);
+  }, [isExpanded, industry, useCase, sectionTag, sessionId, initialPrompt, onPromptGenerated, stepNumber]);
 
   // Use streamed content when available, otherwise fall back to generated content
   const promptText = streamedPrompt || generatedContent?.prompt || '';
@@ -325,9 +350,11 @@ export function WorkflowStep({
   };
 
   const hasPrompt = !title.includes('Branding & Design Iteration') && !title.includes('Final Interactive Demo Experience');
-  const showGenerateButton = hasPrompt && !isSkipped;
+  // Static steps render their content on expand, so a Generate button would be a
+  // no-op that only adds a click. Show it only where a model is really invoked.
+  const showGenerateButton = hasPrompt && !isSkipped && isStaticStep === false;
   const isPrdStep = sectionTag === 'prd_generation';
-  
+
   const isPromptComplete = showGeneratedPrompt && !isStreaming && !isLoadingPrompt && !!promptText;
   
   // Determine why the Generate button might be disabled

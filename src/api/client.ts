@@ -74,7 +74,8 @@ export interface GeneratedContent {
   expected_output_images?: ImageMetadata[];
   /** Which assistant variant supplied the prompt for this step ('__default__', 'genie-code', 'coda'). */
   coding_assistant_variant?: string;
-  source?: 'llm_generated' | 'mock_llm' | 'input_only_no_llm' | 'fallback_due_to_error';
+  /** 'static' means templated server-side with no LLM call — resolved instantly. */
+  source?: 'static' | 'llm_generated' | 'mock_llm' | 'input_only_no_llm' | 'fallback_due_to_error';
   model?: string;
   usage?: {
     prompt_tokens: number;
@@ -163,6 +164,21 @@ export interface SectionMetadata {
   expected_output_images: ImageMetadata[];
   /** Which assistant variant supplied the prompt for this step ('__default__', 'genie-code', 'coda'). */
   coding_assistant_variant?: string;
+}
+
+/**
+ * A step's ready-to-use content, resolved in one request.
+ *
+ * Most steps are static (templated, not generated), so `is_static` is true and
+ * `content` is populated immediately — no streaming, no waiting. When `is_static`
+ * is false the section genuinely calls an LLM and the caller should fall back to
+ * `generatePromptStream`.
+ */
+export interface StepContent extends SectionMetadata {
+  section_tag: string;
+  is_static: boolean;
+  content: string;
+  source: 'static' | 'llm_required';
 }
 
 export interface SectionInput {
@@ -733,6 +749,23 @@ class ApiClient {
     const params = new URLSearchParams({ industry, use_case: useCase });
     if (sessionId) params.set('session_id', sessionId);
     return this.fetch<SectionMetadata>(`/section-metadata/${encodeURIComponent(sectionTag)}?${params}`);
+  }
+
+  /**
+   * Get a step's content in one request.
+   *
+   * Static steps resolve instantly here; only genuinely generative sections need
+   * `generatePromptStream` afterwards (check `is_static`).
+   */
+  async getStepContent(
+    sectionTag: string,
+    industry: string = '',
+    useCase: string = '',
+    sessionId?: string | null
+  ): Promise<StepContent> {
+    const params = new URLSearchParams({ industry, use_case: useCase });
+    if (sessionId) params.set('session_id', sessionId);
+    return this.fetch<StepContent>(`/step/${encodeURIComponent(sectionTag)}/content?${params}`);
   }
 
   /** Get workflow steps configuration */

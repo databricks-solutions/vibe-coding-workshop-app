@@ -1236,13 +1236,16 @@ def delete_user_unsaved_sessions(created_by: str, keep_session_id: str = None) -
 def update_step_prompt(session_id: str, step_number: int, prompt_text: str, workshop_level: str = None) -> bool:
     """
     Update a specific step's generated prompt for a session.
-    Step 1 is stored in step_1_prompt column, steps 2-30 are stored in step_prompts JSONB.
+    Step 1 is stored in step_1_prompt column, later steps in the step_prompts JSONB.
     Optionally updates workshop_level if provided (to piggyback on progress saves).
     """
     if not is_lakebase_configured():
         return False
-    
-    if not 1 <= step_number <= 30:
+
+    # Upper bound must track MAX_STEP_NUMBER, not the original 30-step workshop:
+    # Activation (32-37), Agents Accelerator (38-48) and MLflow (49-56) all live
+    # above 30, and a stale cap here silently discarded their per-step state.
+    if not 1 <= step_number <= MAX_STEP_NUMBER:
         logger.error(f"Invalid step number: {step_number}")
         return False
     
@@ -1330,9 +1333,13 @@ STEP_SCORES = {
     31: 10,
     # Agents Accelerator — Agents on Apps (steps 38-46): 50 points each
     38: 50, 39: 50, 40: 50, 41: 50, 42: 50, 43: 50, 44: 50, 45: 50, 46: 50,
-    # Agents Accelerator — MLflow for Gen-AI (steps 47-54): 50 points each
-    47: 50, 48: 50, 49: 50, 50: 50, 51: 50, 52: 50, 53: 50, 54: 50,
+    # Agents Accelerator — MLflow for Gen-AI (steps 47-56): 50 points each
+    47: 50, 48: 50, 49: 50, 50: 50, 51: 50, 52: 50, 53: 50, 54: 50, 55: 50, 56: 50,
 }
+
+# Highest step number the workflow defines (see src/constants/workflowSections.ts).
+# Used to validate per-step writes; keep in sync when steps are added.
+MAX_STEP_NUMBER = 56
 
 # Chapter definitions for progress tracking (must match src/constants/scoring.ts)
 CHAPTERS = {

@@ -396,8 +396,11 @@ except ImportError:
 # - databricks-dbrx-instruct (Foundation Model API)
 # - databricks-mixtral-8x7b-instruct (Foundation Model API)
 # - Custom endpoints deployed in your workspace
-# Default endpoint (Claude Sonnet 4.5)
-SERVING_ENDPOINT_NAME = os.getenv("DATABRICKS_SERVING_ENDPOINT", "databricks-claude-sonnet-4-5")
+# Default endpoint (Claude Sonnet 4.6)
+# NOTE: databricks-claude-opus-5 is deliberately NOT the default. It rejects the
+# `temperature` parameter that this module sends on every LLM call, so selecting
+# it fails with "Model ... does not support the temperature parameter".
+SERVING_ENDPOINT_NAME = os.getenv("DATABRICKS_SERVING_ENDPOINT", "databricks-claude-sonnet-4-6")
 
 # Fallback endpoints to try if the configured/default endpoint is not deployed in
 # the current workspace (e.g. Claude is unavailable on Databricks Free Edition).
@@ -1424,6 +1427,26 @@ Generate a detailed, actionable prompt for {section_tag} in a {industry_name} {u
     }
 
 
+def build_static_step_content(section_content: Dict[str, Any]) -> str:
+    """
+    Render a bypass_llm section as the single markdown blob the UI displays.
+
+    The system prompt supplies context and the input template supplies the task,
+    joined by a separator. This wording is load-bearing: it is what attendees have
+    been copying into their coding assistant, so it must stay byte-identical to the
+    output the old streaming bypass branch produced.
+    """
+    system_prompt = section_content.get("system_prompt", "You are a helpful assistant.")
+    input_text = section_content.get("input", "")
+    return f"""## Context
+
+{system_prompt}
+
+---
+
+{input_text}"""
+
+
 async def generate_prompt_content_with_llm(
     industry: str, 
     use_case: str, 
@@ -2173,6 +2196,45 @@ async def get_section_metadata_endpoint(
     }
 
 
+@router.get("/step/{section_tag}/content", summary="Get step content (instant, no streaming)")
+async def get_step_content_endpoint(
+    section_tag: str,
+    industry: str = "",
+    use_case: str = "",
+    session_id: Optional[str] = None,
+):
+    """
+    Return a step's ready-to-use content in one response.
+
+    Most steps are static (bypass_llm=TRUE): their text is templated, not generated,
+    so there is nothing to stream and no reason to make the attendee wait or click
+    Generate. This endpoint serves those instantly, together with the metadata the
+    step panel needs, so the UI can render a step the moment it is expanded.
+
+    For the handful of sections that genuinely call an LLM, `is_static` is False and
+    `content` is empty — the caller should fall back to /generate-prompt-stream.
+    Shared with the MCP step protocol so both surfaces resolve content identically.
+    """
+    section_content = get_section_input_content(
+        industry, use_case, section_tag, None, session_id
+    )
+    is_static = bool(section_content.get("bypass_llm", False))
+
+    return {
+        "section_tag": section_tag,
+        "is_static": is_static,
+        "content": build_static_step_content(section_content) if is_static else "",
+        "source": "static" if is_static else "llm_required",
+        "how_to_apply": section_content.get("how_to_apply", ""),
+        "expected_output": section_content.get("expected_output", ""),
+        "how_to_apply_images": section_content.get("how_to_apply_images", []),
+        "expected_output_images": section_content.get("expected_output_images", []),
+        "coding_assistant_variant": section_content.get(
+            "coding_assistant_variant", DEFAULT_CODING_ASSISTANT_KEY
+        ),
+    }
+
+
 @router.post("/generate-prompt", response_model=GeneratedContent, summary="Generate prompt for a workflow section")
 async def generate_prompt(request: PromptRequest):
     """
@@ -2438,24 +2500,20 @@ async def stream_llm_response(
     input_text = section_content["input"]
     system_prompt = section_content.get("system_prompt", "You are a helpful assistant.")
     bypass_llm = section_content.get("bypass_llm", False)
-    
-    # If bypass_llm is True, return system prompt + input text combined (no LLM call)
+
+    # bypass_llm sections are static text — there is nothing to stream. Callers
+    # should use GET /step/{section_tag}/content instead; this branch stays only
+    # so older clients keep working, and it emits the payload in one shot.
     if bypass_llm:
-        logger.info(f"[Bypass LLM] Section {section_tag} has bypass_llm=True, returning combined output")
+        logger.info(
+            f"[Bypass LLM] Section {section_tag} is static; serving via legacy stream path. "
+            "Prefer GET /step/{section_tag}/content."
+        )
         yield f"data: {json.dumps({'type': 'start', 'model': 'bypass_llm'})}\n\n"
-        # Combine system prompt (context) and input text (task) with separator
-        # System prompt provides context, input text provides the actual instructions
-        combined_output = f"""## Context
-
-{system_prompt}
-
----
-
-{input_text}"""
-        yield f"data: {json.dumps({'type': 'content', 'content': combined_output})}\n\n"
+        yield f"data: {json.dumps({'type': 'content', 'content': build_static_step_content(section_content)})}\n\n"
         yield f"data: {json.dumps({'type': 'done'})}\n\n"
         return
-    
+
     messages = [
         {"role": "system", "content": system_prompt},
         {"role": "user", "content": f"Generate a detailed prompt based on: {input_text}"}
