@@ -203,7 +203,13 @@ export interface DecisionField {
   min_chars?: number;
   max_items?: number;
   options?: string[];
+  /**
+   * Example answer. For `list` fields, `|`-separate one example per row — an empty
+   * numbered box gives the attendee no idea what shape of answer is wanted.
+   */
   placeholder?: string;
+  /** One line of guidance under the label, for fields where the label cannot say enough. */
+  hint?: string;
   required?: boolean;
 }
 

@@ -305,6 +305,14 @@ function DecisionFieldInput({
     const slots = Array.from({ length: max }, (_, i) => items[i] ?? '');
     const filled = items.filter(v => v.trim()).length;
 
+    // Show a worked example per row where the step supplies one. An empty box
+    // numbered "1." tells the attendee nothing about the shape of answer expected,
+    // which is the difference between a decision and a guess.
+    const examples = (field.placeholder ?? '')
+      .split('|')
+      .map(e => e.trim())
+      .filter(Boolean);
+
     return (
       <div className="space-y-1.5">
         <label className="block text-ui-sm font-medium">
@@ -315,13 +323,16 @@ function DecisionFieldInput({
             </span>
           )}
         </label>
+        {field.hint && (
+          <p className="text-ui-xs text-muted-foreground">{field.hint}</p>
+        )}
         {slots.map((value, idx) => (
           <input
             key={idx}
             type="text"
             value={value}
             disabled={disabled}
-            placeholder={`${idx + 1}.`}
+            placeholder={examples[idx] ? `e.g. ${examples[idx]}` : `${idx + 1}.`}
             className={inputClasses}
             onChange={e => {
               const next = [...slots];
@@ -338,6 +349,7 @@ function DecisionFieldInput({
     return (
       <div className="space-y-1.5">
         <label className="block text-ui-sm font-medium">{field.label}</label>
+        {field.hint && <p className="text-ui-xs text-muted-foreground">{field.hint}</p>}
         <div className="flex flex-wrap gap-2">
           {(field.options ?? []).map(option => (
             <button
@@ -369,6 +381,7 @@ function DecisionFieldInput({
     return (
       <div className="space-y-1.5">
         <label className="block text-ui-sm font-medium">{field.label}</label>
+        {field.hint && <p className="text-ui-xs text-muted-foreground">{field.hint}</p>}
         <div className="space-y-1">
           {rows.map(row => (
             <div key={row} className="flex items-center justify-between gap-2">
@@ -404,6 +417,7 @@ function DecisionFieldInput({
   return (
     <div className="space-y-1.5">
       <label className="block text-ui-sm font-medium">{field.label}</label>
+      {field.hint && <p className="text-ui-xs text-muted-foreground">{field.hint}</p>}
       <textarea
         value={text}
         disabled={disabled}

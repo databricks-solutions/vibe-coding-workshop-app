@@ -738,6 +738,7 @@ try:
                 # copy-through-verbatim guard is keyed on the step's kind, so it has to
                 # be re-applied after 16 has changed them.
                 '15_fix_llm_placeholder_leak.sql',
+                '17_add_decision_examples.sql',
             ]
             print(f"  Applying idempotent post-seed migrations...")
             for mig in POST_SEED_MIGRATIONS:
