@@ -460,6 +460,47 @@ FALLBACK_ENDPOINTS = [
     "databricks-gpt-oss-120b",
 ]
 
+# Reveal model defaults. The expert reveal is short, low-temperature and read while
+# the attendee waits, so it is latency-critical in a way the long-form generation
+# steps are not. Measured on a live workspace with a real reveal prompt (streaming,
+# median of 3): gemini-3-1-flash-lite 1.3s to first words / 3.8s complete;
+# haiku-4-5 0.7s / 6.6s; sonnet-4-6 (the previous default) 1.0s / 12.0s.
+#
+# gemini-3-5-flash is deliberately NOT the default despite being a newer model: it
+# is a reasoning model that emits nothing for ~8.6s while thinking, so streaming
+# cannot hide the wait. Reasoning tokens also count against max_tokens.
+#
+# Both values are overridable per workshop via the reveal_model /
+# reveal_model_fallbacks parameters, because endpoint availability is region- and
+# rollout-gated — any hardcoded default is wrong on some workspace.
+REVEAL_ENDPOINT_DEFAULT = "databricks-gemini-3-1-flash-lite"
+REVEAL_ENDPOINT_FALLBACKS_DEFAULT = [
+    "databricks-claude-haiku-4-5",
+    "databricks-claude-sonnet-4-6",
+]
+
+try:
+    from src.backend.services.llm_content import text_from_content as _llm_text
+except ImportError:  # pragma: no cover - keeps the module importable standalone
+    def _llm_text(content: Any) -> str:
+        """Fallback: handle the string case only, which is every Claude model."""
+        return content if isinstance(content, str) else ""
+
+
+# Model families that reject the `extra_params.usage_context` telemetry field this app
+# attaches for attribution. Gemini validates its generation_config strictly and fails
+# the whole request with HTTP 400 ("Unknown name \"extra_params\" at
+# 'generation_config'"), so sending it is not merely ignored — it loses the call.
+# Claude was already excluded; the check used to be "not claude", which silently
+# assumed every other family tolerates the field.
+_NO_USAGE_CONTEXT_FAMILIES = ("claude", "gemini")
+
+
+def _supports_usage_context(endpoint: str) -> bool:
+    """True when an endpoint accepts the extra_params.usage_context attribution field."""
+    ep = (endpoint or "").lower()
+    return not any(family in ep for family in _NO_USAGE_CONTEXT_FAMILIES)
+
 # Initialize WorkspaceClient - automatically handles auth when running as Databricks App
 # Uses OAuth from environment when deployed, falls back to config file for local dev
 _workspace_client = None
@@ -2037,6 +2078,10 @@ async def call_databricks_serving_endpoint(
                 logger.info(f"  Choice type: {type(choice).__name__}")
                 
                 # Handle choice as dict
+                # content is a plain string on Claude but a list of content parts on
+                # Gemini ([{"type":"text","text":...}]), so it goes through
+                # text_from_content rather than being used directly — otherwise a
+                # Gemini reveal renders as an empty panel.
                 if isinstance(choice, dict):
                     message = choice.get("message", {})
                     if isinstance(message, dict):
@@ -2450,6 +2495,50 @@ def _build_reveal_prompt(
     return "\n\n".join(parts) if parts else section_content.get("input", "")
 
 
+def _reveal_endpoints(session_id: Optional[str] = None) -> List[str]:
+    """
+    Ordered list of serving endpoints to try for a reveal: preferred first.
+
+    Read from the `reveal_model` / `reveal_model_fallbacks` workshop parameters so a
+    facilitator can change the model live, with no deploy. That matters more than the
+    specific default here, because endpoint availability is region- and rollout-gated:
+    several documented Gemini endpoints 404 on a eu-central-1 workspace. The same
+    switch covers an endpoint being quota-limited or down mid-workshop.
+
+    Always ends with the general-purpose endpoint, so a workshop whose configured
+    reveal models are all unavailable still produces an answer, just more slowly.
+    """
+    params: Dict[str, str] = {}
+    try:
+        params = get_effective_workshop_parameters(session_id)
+    except Exception as e:
+        logger.warning(f"[Reveal] Could not read workshop parameters, using defaults: {e}")
+
+    preferred = (params.get('reveal_model') or '').strip() or REVEAL_ENDPOINT_DEFAULT
+
+    raw_fallbacks = (params.get('reveal_model_fallbacks') or '').strip()
+    if raw_fallbacks:
+        fallbacks = [f.strip() for f in raw_fallbacks.split(',') if f.strip()]
+    else:
+        fallbacks = list(REVEAL_ENDPOINT_FALLBACKS_DEFAULT)
+
+    chain = [preferred, *fallbacks]
+
+    general = get_best_available_endpoint()
+    if general:
+        chain.append(general)
+
+    # De-duplicate, preserving order: a facilitator naming the same model twice, or
+    # naming the general endpoint explicitly, should not cause a repeated attempt.
+    seen: set = set()
+    ordered: List[str] = []
+    for name in chain:
+        if name and name not in seen:
+            seen.add(name)
+            ordered.append(name)
+    return ordered
+
+
 @router.post("/step/{section_tag}/reveal", summary="Commit a decision and get the expert answer")
 async def reveal_step_expert_answer(section_tag: str, request: DecisionCommitRequest):
     """
@@ -2498,6 +2587,10 @@ async def reveal_step_expert_answer(section_tag: str, request: DecisionCommitReq
             llm_result = await call_databricks_serving_endpoint(
                 prompt=_build_reveal_prompt(section_content, request),
                 system_prompt=expert_system_prompt,
+                # The reveal is latency-critical (the attendee is waiting on it), so it
+                # uses the fast reveal model rather than the workshop's general-purpose
+                # generation endpoint.
+                endpoint_name=_reveal_endpoints(request.session_id)[0],
                 max_tokens=1200,
                 # Low temperature: the reveal is meant to be the considered answer, not
                 # a creative one, and two attendees on the same step should see the same
@@ -2518,6 +2611,160 @@ async def reveal_step_expert_answer(section_tag: str, request: DecisionCommitReq
         "committed": request.decision,
         "rubric": (section_content.get("step_config") or {}).get("rubric", {}),
     }
+
+
+@router.post("/step/{section_tag}/reveal/stream", summary="Commit a decision and stream the expert answer")
+async def reveal_step_expert_answer_stream(section_tag: str, request: DecisionCommitRequest):
+    """
+    Streaming twin of POST /step/{tag}/reveal.
+
+    The JSON endpoint stays: MCP `submit_decision` wants one payload, and the frontend
+    falls back to it if a stream fails. This variant exists purely for perceived
+    latency — the attendee is waiting on this answer to know whether they are thinking
+    along the right lines, and words appearing in ~1s reads completely differently from
+    a spinner that sits for 12.
+
+    Commit-before-reveal is unchanged: the commitment is recorded before the first
+    token is streamed, exactly as in the JSON path.
+
+    Static reveals are emitted as a single content event rather than being faked into a
+    stream — the app deliberately removed simulated streaming, and reproducing it here
+    to look consistent would reintroduce it.
+    """
+    section_content = get_section_input_content(
+        request.industry, request.use_case, section_tag, None, request.session_id
+    )
+
+    if section_content.get("step_kind") != "decision":
+        raise HTTPException(
+            status_code=400,
+            detail=f"Section '{section_tag}' is not a decision step",
+        )
+
+    if not request.decision:
+        raise HTTPException(status_code=400, detail="A decision is required before the reveal")
+
+    # Record the commitment BEFORE any streaming begins. Same contract as the JSON
+    # endpoint: a failed write must not strand the attendee, but it is logged.
+    if request.session_id:
+        try:
+            save_step_decision(
+                session_id=request.session_id,
+                section_tag=section_tag,
+                decision=request.decision,
+            )
+        except Exception as e:
+            logger.error(f"Failed to persist decision for {section_tag}: {e}", exc_info=True)
+
+    expert_answer = section_content.get("expert_answer", "")
+    expert_system_prompt = section_content.get("expert_system_prompt", "")
+    rubric = (section_content.get("step_config") or {}).get("rubric", {})
+
+    async def event_stream() -> AsyncGenerator[str, None]:
+        yield _sse_event({"type": "meta", "section_tag": section_tag, "rubric": rubric})
+
+        if expert_answer:
+            yield _sse_event({"type": "start", "model": "static", "source": "static"})
+            yield _sse_event({"type": "content", "content": expert_answer})
+            yield _sse_event({"type": "done", "source": "static"})
+            return
+
+        if not expert_system_prompt:
+            yield _sse_event({"type": "error", "error": "No expert answer configured for this step"})
+            return
+
+        messages = [
+            {"role": "system", "content": expert_system_prompt},
+            {"role": "user", "content": _build_reveal_prompt(section_content, request)},
+        ]
+
+        # Walk the endpoint chain. A configured model can be absent entirely (404 —
+        # documented endpoints are region- and rollout-gated), so "missing" has to be
+        # as recoverable as "slow". _stream_with_retry handles transient failures
+        # within one endpoint and reports a terminal one as an error event, which is
+        # the signal to try the next model.
+        endpoints = _reveal_endpoints(request.session_id)
+        last_error = ""
+
+        for index, endpoint in enumerate(endpoints):
+            produced_content = False
+            failed = False
+
+            async for event in _stream_with_retry(
+                messages,
+                max_tokens=1200,
+                temperature=0.2,
+                timeout=60.0,
+                # Flush eagerly: the whole point is early feedback, and a reveal is
+                # short enough that per-chunk overhead is irrelevant.
+                flush_chars=24,
+                flush_interval=0.03,
+                section_tag=section_tag,
+                industry=request.industry,
+                use_case=request.use_case,
+                endpoint_override=endpoint,
+            ):
+                # Inspect events to decide whether to fall through to the next model,
+                # while passing the useful ones straight to the client.
+                try:
+                    payload = json.loads(event[6:]) if event.startswith("data: ") else {}
+                except (json.JSONDecodeError, IndexError):
+                    payload = {}
+
+                kind = payload.get("type")
+
+                if kind == "error":
+                    failed = True
+                    last_error = payload.get("error", "unknown error")
+                    logger.warning(
+                        f"[Reveal] {endpoint} failed for {section_tag}: {last_error}"
+                    )
+                    break
+
+                if kind == "start":
+                    # Suppress the retry/start chatter of a model we are only trying
+                    # because an earlier one was unavailable; the attendee does not
+                    # need to see the app's endpoint shopping.
+                    if produced_content or index == 0:
+                        yield event
+                    continue
+
+                if kind == "content":
+                    produced_content = True
+
+                yield event
+
+            if not failed:
+                # Reached the end of a stream without a terminal error.
+                if produced_content:
+                    return
+                # An endpoint that returns 200 and no text is still a failure for our
+                # purposes — this is exactly what a reasoning model does when its
+                # thinking exhausts max_tokens.
+                last_error = f"{endpoint} returned no content"
+                logger.warning(f"[Reveal] {last_error} for {section_tag}")
+
+            if produced_content:
+                # Partial output already reached the client; restarting on another model
+                # would duplicate text mid-answer.
+                yield _sse_event({"type": "done"})
+                return
+
+        logger.error(f"[Reveal] All endpoints failed for {section_tag}: {last_error}")
+        yield _sse_event({
+            "type": "error",
+            "error": f"Could not generate the expert view. Last error: {last_error}",
+        })
+
+    return StreamingResponse(
+        event_stream(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
 
 
 class VerifyStepRequest(BaseModel):
@@ -2713,6 +2960,7 @@ async def _stream_with_retry(
     section_tag: Optional[str] = None,
     industry: Optional[str] = None,
     use_case: Optional[str] = None,
+    endpoint_override: Optional[str] = None,
 ) -> AsyncGenerator[str, None]:
     """
     Stream LLM response as SSE events with automatic retry on transient errors.
@@ -2732,7 +2980,7 @@ async def _stream_with_retry(
     from src.backend.identity import build_user_agent
 
     client = get_workspace_client()
-    endpoint = get_best_available_endpoint()
+    endpoint = endpoint_override or get_best_available_endpoint()
 
     if not client or not endpoint:
         yield _sse_event({"type": "error", "error": "LLM not available"})

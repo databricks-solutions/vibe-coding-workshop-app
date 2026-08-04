@@ -11,7 +11,7 @@
  * the step content — so it cannot be read ahead of the commitment.
  */
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Lock, Sparkles, Loader2, CheckCircle2 } from 'lucide-react';
 import { DiffView } from '../DiffView';
 import { MarkdownContent } from '../MarkdownContent';
@@ -57,6 +57,10 @@ export function DecisionPanel({
   const [revealSource, setRevealSource] = useState<string>('');
   const [isRevealing, setIsRevealing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const streamControllerRef = useRef<AbortController | null>(null);
+
+  // Abort an in-flight reveal if the step is collapsed or the page navigates away.
+  useEffect(() => () => streamControllerRef.current?.abort(), []);
 
   // Restore a commitment made in an earlier visit so a refresh doesn't ask the
   // attendee to decide twice. Runs only while still uncommitted in this session.
@@ -120,10 +124,11 @@ export function DecisionPanel({
 
   const allSatisfied = fields.every(fieldSatisfied);
 
-  const handleCommit = async () => {
-    if (!allSatisfied || isRevealing) return;
-    setIsRevealing(true);
-    setError(null);
+  /**
+   * Fetch the reveal in one payload. Used when the stream fails, and by static
+   * reveals restored from a previous visit.
+   */
+  const revealViaJson = async () => {
     try {
       const reveal = await apiClient.revealStepExpertAnswer(
         sectionTag,
@@ -135,17 +140,62 @@ export function DecisionPanel({
       );
       setExpertAnswer(reveal.expert_answer);
       setRevealSource(reveal.source);
-      setCommitted(values);
-      onCommitted?.(values);
     } catch (err) {
-      // Never trap the attendee: record the commitment locally and let them move on
-      // even when the reveal could not be fetched.
+      // Never trap the attendee: the commitment is already recorded, so let them move
+      // on even when no expert view could be fetched.
       setError(err instanceof Error ? err.message : 'Could not load the expert view');
-      setCommitted(values);
-      onCommitted?.(values);
-    } finally {
-      setIsRevealing(false);
     }
+  };
+
+  const handleCommit = async () => {
+    if (!allSatisfied || isRevealing) return;
+    setIsRevealing(true);
+    setError(null);
+
+    // Lock the panel immediately. The commitment is recorded server-side before the
+    // first token streams, so it is already final — and waiting for the answer to
+    // arrive before showing "locked in" would make a fast reveal feel slower than it is.
+    setCommitted(values);
+    onCommitted?.(values);
+    setExpertAnswer('');
+
+    // Stream so the first words land in about a second rather than after ten. The
+    // attendee is waiting on this to know whether they are on the right track, which
+    // is exactly the case where perceived latency is the whole feature.
+    await new Promise<void>(resolve => {
+      let receivedAny = false;
+
+      const controller = apiClient.revealStepExpertAnswerStream(
+        sectionTag,
+        values,
+        chunk => {
+          receivedAny = true;
+          setExpertAnswer(prev => prev + chunk);
+        },
+        source => {
+          if (source) setRevealSource(source);
+          setIsRevealing(false);
+          resolve();
+        },
+        async message => {
+          // Only fall back when nothing arrived. Retrying after partial output would
+          // duplicate text mid-answer.
+          if (receivedAny) {
+            setError(message);
+          } else {
+            await revealViaJson();
+          }
+          setIsRevealing(false);
+          resolve();
+        },
+        industry,
+        useCase,
+        sessionId,
+        stepNumber
+      );
+
+      streamControllerRef.current = controller;
+    });
   };
 
   const isLocked = committed !== null;
@@ -239,20 +289,29 @@ export function DecisionPanel({
             </p>
           )}
 
-          {expertAnswer && (
+          {(expertAnswer || isRevealing) && (
             <div className="border border-primary/30 bg-primary/5 rounded-md p-3 space-y-3">
               <div className="flex items-center justify-between gap-2">
                 <h4 className="text-ui-sm font-semibold text-primary">
                   How an experienced practitioner would answer
                 </h4>
-                {revealSource === 'llm_generated' && (
-                  <span className="text-ui-2xs text-muted-foreground">
-                    generated for your schema
+                {isRevealing ? (
+                  <span className="flex items-center gap-1 text-ui-2xs text-muted-foreground">
+                    <Loader2 className="w-3 h-3 animate-spin" />
+                    thinking about your answer
                   </span>
+                ) : (
+                  revealSource === 'llm_generated' && (
+                    <span className="text-ui-2xs text-muted-foreground">
+                      generated for your schema
+                    </span>
+                  )
                 )}
               </div>
 
-              {showDiff && diffField && comparableExpertText && (
+              {/* The diff waits for the full answer: it keys off the first bolded line,
+                  which would otherwise churn on every chunk as it streams in. */}
+              {!isRevealing && showDiff && diffField && comparableExpertText && (
                 <div className="space-y-1">
                   <p className="text-ui-xs text-muted-foreground">
                     Your {diffField.label.toLowerCase()}, compared:

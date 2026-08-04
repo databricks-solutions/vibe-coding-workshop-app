@@ -872,6 +872,106 @@ class ApiClient {
   }
 
   /**
+   * Streaming twin of revealStepExpertAnswer.
+   *
+   * The reveal is the one place in the workshop where the attendee is actively
+   * waiting on a model, so first words matter more than total time. Callers should
+   * fall back to the JSON endpoint on error — a reveal must never be lost just
+   * because a stream broke.
+   *
+   * Returns an AbortController so an unmounting panel can cancel in flight.
+   */
+  revealStepExpertAnswerStream(
+    sectionTag: string,
+    decision: DecisionValues,
+    onContent: (chunk: string) => void,
+    onComplete: (source?: string) => void,
+    onError: (error: string) => void,
+    industry: string = '',
+    useCase: string = '',
+    sessionId?: string | null,
+    stepNumber?: number
+  ): AbortController {
+    const controller = new AbortController();
+
+    (async () => {
+      try {
+        const response = await fetch(
+          `${this.baseUrl}/step/${encodeURIComponent(sectionTag)}/reveal/stream`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              industry,
+              use_case: useCase,
+              session_id: sessionId ?? null,
+              step_number: stepNumber ?? null,
+              decision,
+            }),
+            signal: controller.signal,
+          }
+        );
+
+        if (!response.ok) {
+          throw new Error(`API error: ${response.status}`);
+        }
+
+        const reader = response.body?.getReader();
+        if (!reader) {
+          throw new Error('No response body');
+        }
+
+        const decoder = new TextDecoder();
+        let source: string | undefined;
+        let buffer = '';
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) {
+            onComplete(source);
+            break;
+          }
+
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split('\n');
+          buffer = lines.pop() || '';
+
+          for (const line of lines) {
+            if (!line.startsWith('data: ')) continue;
+            const jsonStr = line.slice(6).trim();
+            if (!jsonStr || jsonStr === '[DONE]') continue;
+
+            try {
+              const data = JSON.parse(jsonStr);
+              if (data.type === 'start') {
+                source = data.source || 'llm_generated';
+              } else if (data.type === 'content' && data.content) {
+                onContent(data.content);
+              } else if (data.type === 'done') {
+                onComplete(data.source || source);
+                return;
+              } else if (data.type === 'error') {
+                onError(data.error || 'Unknown error');
+                return;
+              }
+              // 'meta', 'retry' and 'warning' are intentionally ignored here: the
+              // panel shows the answer, not the app's endpoint bookkeeping.
+            } catch {
+              // Skip malformed JSON chunks
+            }
+          }
+        }
+      } catch (err) {
+        if ((err as Error).name !== 'AbortError') {
+          onError((err as Error).message || 'Streaming failed');
+        }
+      }
+    })();
+
+    return controller;
+  }
+
+  /**
    * Decisions already committed in this session, keyed by section_tag.
    * Used to restore a decision step's locked-in state after a refresh.
    */
