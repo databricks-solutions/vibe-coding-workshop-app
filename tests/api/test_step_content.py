@@ -318,6 +318,68 @@ class DecisionParamsTest(unittest.TestCase):
         self.assertNotIn("missing", params)
 
 
+class RevealPromptTest(unittest.TestCase):
+    """
+    The generated expert answer must be grounded in the attendee's actual answer.
+
+    It used to receive the step's whole input_template — a page of instructions about
+    how to write a PRD, with no use case and no sight of what the attendee committed.
+    With nothing concrete to react to the model produced filler: asked for a success
+    metric, it replied "metric: Industry".
+    """
+
+    def _prompt(self, decision, industry="cpg", use_case="retailer_insights"):
+        request = routes.DecisionCommitRequest(
+            industry=industry, use_case=use_case, decision=decision
+        )
+        return routes._build_reveal_prompt({"input": "TEMPLATE BOILERPLATE"}, request)
+
+    def test_the_attendees_answer_is_included(self):
+        prompt = self._prompt({
+            "success_metric": "Show me the impact of selling more refreshments on sunny days",
+        })
+
+        self.assertIn("Show me the impact of selling more refreshments", prompt)
+
+    def test_the_product_context_is_included(self):
+        prompt = self._prompt({"success_metric": "x" * 40})
+
+        self.assertIn("Retailer Insights", prompt)
+        self.assertIn("Cpg", prompt.replace("CPG", "Cpg"))
+
+    def test_the_model_is_told_to_engage_with_their_wording(self):
+        prompt = self._prompt({"success_metric": "Profitability per region"})
+
+        # Without this the reveal restates generic advice instead of comparing.
+        self.assertIn("where you would differ", prompt)
+        self.assertIn("do not restate it back", prompt)
+
+    def test_ranked_lists_keep_their_order(self):
+        prompt = self._prompt({
+            "committed_features": ["Regional insights", "Category insights", "Seasonality"],
+        })
+
+        self.assertIn("1. Regional insights", prompt)
+        self.assertIn("3. Seasonality", prompt)
+
+    def test_per_row_keys_are_readable(self):
+        prompt = self._prompt({"scd_decisions::dim_customer": "Type 2"})
+
+        # 'scd_decisions::dim_customer' would read as noise to the model.
+        self.assertIn("scd decisions → dim customer", prompt)
+
+    def test_boilerplate_template_is_not_the_payload(self):
+        prompt = self._prompt({"success_metric": "Revenue per category"})
+
+        self.assertNotIn("TEMPLATE BOILERPLATE", prompt)
+
+    def test_falls_back_to_the_template_when_there_is_nothing_else(self):
+        request = routes.DecisionCommitRequest(industry="", use_case="", decision={})
+        prompt = routes._build_reveal_prompt({"input": "TEMPLATE BOILERPLATE"}, request)
+
+        self.assertEqual(prompt, "TEMPLATE BOILERPLATE")
+
+
 class StaticContentBuilderTest(unittest.TestCase):
     """build_static_step_content is shared by the REST and MCP surfaces."""
 

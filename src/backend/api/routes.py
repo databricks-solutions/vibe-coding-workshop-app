@@ -2396,6 +2396,60 @@ async def get_session_decisions(session_id: str):
     }
 
 
+def _build_reveal_prompt(
+    section_content: Dict[str, Any], request: "DecisionCommitRequest"
+) -> str:
+    """
+    Build the user message for a generated expert answer.
+
+    Previously this passed the step's whole input_template, which is a page of
+    instructions about how to write a PRD — not the use case, and crucially not the
+    attendee's answer. The model had nothing concrete to react to, so it produced
+    generic filler ("metric: Industry").
+
+    Give it the two things that actually matter: what the product is, and what the
+    attendee committed to. Naming their answer explicitly also lets the reveal engage
+    with it — agreeing, or saying plainly where it would differ and why — which is the
+    whole point of comparing.
+    """
+    parts: List[str] = []
+
+    industry = format_industry_name(request.industry) if request.industry else ""
+    use_case = format_use_case_name(request.use_case) if request.use_case else ""
+    if industry or use_case:
+        parts.append(f"## Product\n\nIndustry: {industry}\nUse case: {use_case}")
+
+    templates = get_prompt_templates_map() or {}
+    description = (
+        templates.get((request.industry or "").lower(), {})
+        .get((request.use_case or "").lower(), "")
+    )
+    if description:
+        parts.append(f"## What this product is\n\n{description}")
+
+    if request.decision:
+        lines = []
+        for key, value in request.decision.items():
+            label = key.replace("::", " → ").replace("_", " ")
+            if isinstance(value, list):
+                items = [str(v).strip() for v in value if str(v).strip()]
+                if items:
+                    lines.append(f"**{label}:**")
+                    lines.extend(f"  {i}. {v}" for i, v in enumerate(items, 1))
+            elif str(value).strip():
+                lines.append(f"**{label}:** {value}")
+        if lines:
+            parts.append(
+                "## What the attendee committed to\n\n"
+                + "\n".join(lines)
+                + "\n\nGive your own answer first. Then say briefly where you agree with "
+                "theirs and where you would differ, and why. Be specific about their "
+                "actual wording — do not restate it back to them as advice."
+            )
+
+    return "\n\n".join(parts) if parts else section_content.get("input", "")
+
+
 @router.post("/step/{section_tag}/reveal", summary="Commit a decision and get the expert answer")
 async def reveal_step_expert_answer(section_tag: str, request: DecisionCommitRequest):
     """
@@ -2442,7 +2496,7 @@ async def reveal_step_expert_answer(section_tag: str, request: DecisionCommitReq
     if not expert_answer and expert_system_prompt:
         try:
             llm_result = await call_databricks_serving_endpoint(
-                prompt=section_content.get("input", ""),
+                prompt=_build_reveal_prompt(section_content, request),
                 system_prompt=expert_system_prompt,
                 max_tokens=1200,
                 # Low temperature: the reveal is meant to be the considered answer, not

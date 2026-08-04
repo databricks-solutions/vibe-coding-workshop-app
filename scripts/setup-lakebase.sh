@@ -726,6 +726,14 @@ try:
             POST_SEED_MIGRATIONS = [
                 '08_seed_step_visibility_overrides.sql',
                 '09_seed_path_visibility_overrides.sql',
+                # Step kinds. Each UPDATE is guarded (step_kind='instant_prompt' for
+                # promotions, NOT LIKE for template appends), so re-running is a no-op
+                # and admin edits survive. Listing them here is what lets decision
+                # steps reach an existing install without a destructive --recreate.
+                '12_seed_step_kinds.sql',
+                '13_seed_more_decisions.sql',
+                '14_reconcile_decision_and_verify.sql',
+                '15_fix_llm_placeholder_leak.sql',
             ]
             print(f"  Applying idempotent post-seed migrations...")
             for mig in POST_SEED_MIGRATIONS:

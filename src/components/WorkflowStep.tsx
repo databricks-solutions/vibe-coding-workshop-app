@@ -384,6 +384,21 @@ export function WorkflowStep({
   // otherwise it collapses back into a step you click past.
   const isDecisionSatisfied = !isDecisionStep || committedDecision !== null;
   
+  /**
+   * Once the attendee commits, generate straight away on the steps that need a model.
+   *
+   * Their committed values are substituted into the prompt, so a prompt produced before
+   * the commitment is stale. Leaving them to notice a Generate button in the header
+   * after deciding is exactly the busywork this rework removes — and on a static step
+   * there is nothing to generate, so the content is already correct.
+   */
+  const handleDecisionCommitted = useCallback((values: DecisionValues) => {
+    setCommittedDecision(values);
+    if (isStaticStep === false && !isStreaming && !isLoadingPrompt) {
+      handleGeneratePrompt();
+    }
+  }, [isStaticStep, isStreaming, isLoadingPrompt, handleGeneratePrompt]);
+
   // Determine why the Generate button might be disabled
   const prerequisiteReason = !isPreviousStepComplete
     ? 'Complete the previous steps first'
@@ -568,7 +583,7 @@ export function WorkflowStep({
             sessionId={sessionId}
             stepNumber={stepNumber}
             initialCommitted={committedDecision}
-            onCommitted={setCommittedDecision}
+            onCommitted={handleDecisionCommitted}
             readOnly={readOnly}
           />
         </div>
