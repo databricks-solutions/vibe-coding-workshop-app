@@ -1240,8 +1240,16 @@ def get_effective_workshop_parameters(session_id: Optional[str] = None) -> Dict[
         return params
     
     # Get session-specific overrides + fields needed for user_schema_prefix derivation.
-    # The LATERAL join pulls the use case's own sample dataset in the same round trip:
-    # usecase_descriptions is versioned, so take the latest active row for the pair.
+    # The LATERAL join pulls the use case's own sample dataset in the same round trip.
+    #
+    # Deliberately NOT filtered on is_active. Seed 01 ships most product content with
+    # is_active = FALSE — on a live workspace only 16 of 47 rows are active, and every
+    # cpg and retail row is inactive — yet those use cases are selectable and were
+    # exactly the ones reading the wrong dataset. Requiring is_active here matched only
+    # the `sample` rows, so the fix silently did nothing for the industries that needed
+    # it. Take the newest row for the (industry, use_case) pair regardless: the columns
+    # describe which dataset suits the use case, which does not depend on whether an
+    # admin has activated that revision.
     schema = get_schema()
     sql = f"""
         SELECT COALESCE(s.session_parameters, '{{}}') as session_parameters,
@@ -1253,7 +1261,7 @@ def get_effective_workshop_parameters(session_id: Optional[str] = None) -> Dict[
             FROM {schema}.usecase_descriptions
             WHERE industry = s.industry
               AND use_case = s.use_case
-              AND is_active = TRUE
+              AND sample_schema IS NOT NULL
             ORDER BY version DESC
             LIMIT 1
         ) uc ON TRUE

@@ -220,6 +220,47 @@ class SeedCoverageTest(unittest.TestCase):
     def test_seed_is_guarded_so_admin_choices_survive_redeploy(self):
         self.assertIn("sample_catalog IS NULL", self.datasets)
 
+    def test_resolution_does_not_require_is_active(self):
+        """
+        Regression guard for a bug that only a live database revealed.
+
+        The lookup originally joined on `is_active = TRUE`, which reads as obviously
+        correct and passes every stubbed test. But seed 01 ships most product content
+        INACTIVE: on a real workspace only 16 of 47 rows are active, and every cpg and
+        retail row is inactive — precisely the industries reading the wrong dataset. The
+        filter matched only the `sample` rows, so the fix silently did nothing for the
+        use cases that reported the bug, while the whole unit suite stayed green.
+
+        The dataset columns describe which sample data suits a use case; that does not
+        depend on whether an admin has activated that revision.
+        """
+        routes_src = (REPO_ROOT / "src" / "backend" / "api" / "routes.py").read_text()
+
+        start = routes_src.index("def get_effective_workshop_parameters")
+        end = routes_src.index("def get_section_input_content", start)
+        body = routes_src[start:end]
+
+        lookup_start = body.index("LEFT JOIN LATERAL")
+        lookup = body[lookup_start:body.index(") uc ON TRUE", lookup_start)]
+
+        self.assertNotIn(
+            "is_active",
+            lookup,
+            "the dataset lookup must not filter on is_active — most seeded use cases "
+            "are inactive, so it would resolve nothing for cpg/retail",
+        )
+
+    def test_seed_covers_inactive_rows_too(self):
+        """
+        The seed must not filter on is_active either, for the same reason: the rows that
+        need a dataset most are the inactive ones. Comments legitimately discuss the
+        column while explaining why, so only the executable SQL is checked.
+        """
+        sql_only = "\n".join(
+            line for line in self.datasets.splitlines() if not line.strip().startswith("--")
+        )
+        self.assertNotIn("is_active", sql_only)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
