@@ -739,6 +739,12 @@ try:
                 # be re-applied after 16 has changed them.
                 '15_fix_llm_placeholder_leak.sql',
                 '17_add_decision_examples.sql',
+                # Per-use-case sample dataset. Guarded on sample_catalog IS NULL,
+                # so it only ever fills a blank and an admin's own catalog choice
+                # survives. This is what stops a Retail workshop sourcing the
+                # wanderbricks booking dataset.
+                '18_seed_usecase_datasets.sql',
+                '19_allow_lakehouse_param_override.sql',
                 # Fast reveal model. INSERT ... WHERE NOT EXISTS, so a facilitator's
                 # chosen endpoint survives redeploys.
                 '20_seed_reveal_model_params.sql',

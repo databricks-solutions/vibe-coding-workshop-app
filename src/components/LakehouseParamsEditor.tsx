@@ -36,10 +36,13 @@ export function LakehouseParamsEditor({ sessionId, isExpanded, label = 'Source:'
       setError(null);
       onParamsLoaded?.(true);
     } catch (err) {
+      // Never invent a dataset here. This used to fall back to a hardcoded
+      // samples.wanderbricks, which showed a tourism dataset to a retail attendee
+      // and looked authoritative while doing it — the same class of bug as the
+      // global default this release fixes. Say we could not load it instead.
       console.error('Failed to fetch lakehouse params:', err);
-      setParams({ catalog: 'samples', schema_name: 'wanderbricks', is_overridden: false });
-      setEditCatalog('samples');
-      setEditSchema('wanderbricks');
+      setParams(null);
+      setError('Could not load the source dataset. Retry, or set it explicitly.');
       onParamsLoaded?.(true);
     }
   };
@@ -84,6 +87,29 @@ export function LakehouseParamsEditor({ sessionId, isExpanded, label = 'Source:'
     setIsEditing(false);
     setError(null);
   };
+
+  // Failed to load and nothing to show. Offer a retry rather than spinning forever,
+  // and say plainly that the dataset is unknown — guessing one is what caused the
+  // retail-workshop-reads-tourism-data bug.
+  if (!params && error) {
+    return (
+      <div className="mt-3 px-4 py-3 bg-muted/20 rounded-md border border-amber-500/40">
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2.5">
+            <Database className="w-4 h-4 text-amber-500 shrink-0" />
+            <span className="text-ui-base text-muted-foreground">{error}</span>
+          </div>
+          <button
+            onClick={fetchParams}
+            className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-muted/50 rounded-md transition-colors shrink-0"
+          >
+            <RefreshCw className="w-3.5 h-3.5" />
+            Retry
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   if (!params) {
     return (

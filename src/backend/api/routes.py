@@ -1239,16 +1239,67 @@ def get_effective_workshop_parameters(session_id: Optional[str] = None) -> Dict[
     if not session_id:
         return params
     
-    # Get session-specific overrides + fields needed for user_schema_prefix derivation
+    # Get session-specific overrides + fields needed for user_schema_prefix derivation.
+    # The LATERAL join pulls the use case's own sample dataset in the same round trip:
+    # usecase_descriptions is versioned, so take the latest active row for the pair.
     schema = get_schema()
     sql = f"""
-        SELECT COALESCE(session_parameters, '{{}}') as session_parameters,
-               created_by, use_case_label, use_case, workshop_level
-        FROM {schema}.sessions
-        WHERE session_id = %s
+        SELECT COALESCE(s.session_parameters, '{{}}') as session_parameters,
+               s.created_by, s.use_case_label, s.use_case, s.workshop_level,
+               uc.sample_catalog, uc.sample_schema
+        FROM {schema}.sessions s
+        LEFT JOIN LATERAL (
+            SELECT sample_catalog, sample_schema
+            FROM {schema}.usecase_descriptions
+            WHERE industry = s.industry
+              AND use_case = s.use_case
+              AND is_active = TRUE
+            ORDER BY version DESC
+            LIMIT 1
+        ) uc ON TRUE
+        WHERE s.session_id = %s
     """
-    results = execute_query(sql, (session_id,))
-    
+    try:
+        results = execute_query(sql, (session_id,))
+    except Exception as e:
+        # sample_catalog/sample_schema arrive in ddl/14. An install that has not run
+        # it yet must keep working on the global defaults rather than losing every
+        # session parameter, so fall back to the pre-migration query.
+        logger.warning(f"[Session Params] Dataset lookup unavailable, using globals: {e}")
+        results = execute_query(
+            f"""
+            SELECT COALESCE(session_parameters, '{{}}') as session_parameters,
+                   created_by, use_case_label, use_case, workshop_level
+            FROM {schema}.sessions
+            WHERE session_id = %s
+            """,
+            (session_id,),
+        )
+
+    # Accelerator paths name their OUTPUT schema after the global lakehouse schema
+    # (see _suffix below), which is a naming rule and nothing to do with which sample
+    # data a use case reads. Capture the global before the use-case default overwrites
+    # it, so pointing Retail at bakehouse cannot silently rename an accelerator
+    # attendee's target schema.
+    _global_lakehouse_schema = params.get('chapter_3_lakehouse_schema', 'vibe_coding')
+
+    # Use-case default sits between the global default and the session override:
+    # applied here so an explicit session value (written by step 9, or by a
+    # facilitator) still wins, but a session that never got one gets a dataset that
+    # matches its industry instead of whatever the global default happens to be.
+    if results:
+        _uc_catalog = results[0].get('sample_catalog')
+        _uc_schema = results[0].get('sample_schema')
+        if _uc_catalog:
+            params['chapter_3_lakehouse_catalog'] = _uc_catalog
+        if _uc_schema:
+            params['chapter_3_lakehouse_schema'] = _uc_schema
+        if _uc_catalog or _uc_schema:
+            logger.debug(
+                f"[Session Params] Use-case dataset "
+                f"{_uc_catalog or '-'}.{_uc_schema or '-'} for session {session_id}"
+            )
+
     if results and results[0].get('session_parameters'):
         session_overrides = results[0]['session_parameters']
         if isinstance(session_overrides, str):
@@ -1292,7 +1343,7 @@ def get_effective_workshop_parameters(session_id: Optional[str] = None) -> Dict[
         
         _is_accelerator = results[0].get('workshop_level') in ('accelerator', 'genie-accelerator')
         if _is_accelerator:
-            _suffix = params.get('chapter_3_lakehouse_schema', 'vibe_coding')
+            _suffix = _global_lakehouse_schema
         elif _uc_name.strip():
             _suffix = _re.sub(r'[^a-z0-9]+', '_', _uc_name.strip().lower()).strip('_')
         else:
@@ -5965,24 +6016,15 @@ async def get_lakehouse_params(session_id: str) -> LakehouseParamsResponse:
         else:
             session_params = raw or {}
     
-    # Get global defaults
-    global_params = {}
-    params_sql = f"""
-        SELECT param_key, param_value
-        FROM {schema}.workshop_parameters
-        WHERE param_key IN ('chapter_3_lakehouse_catalog', 'chapter_3_lakehouse_schema')
-        AND is_active = TRUE
-    """
-    params_result = execute_query(params_sql, ())
-    if params_result:
-        for row in params_result:
-            global_params[row['param_key']] = row['param_value']
-    
-    # Determine effective values (session override > global default)
-    catalog = session_params.get('chapter_3_lakehouse_catalog', global_params.get('chapter_3_lakehouse_catalog', 'samples'))
-    schema_name = session_params.get('chapter_3_lakehouse_schema', global_params.get('chapter_3_lakehouse_schema', 'wanderbricks'))
+    # Resolve through the shared path so this endpoint cannot drift from what the
+    # prompts actually substitute. It applies session override > use-case default >
+    # global default; reading workshop_parameters directly here is what used to make
+    # the editor display a tourism dataset for a retail session.
+    effective = get_effective_workshop_parameters(session_id)
+    catalog = effective.get('chapter_3_lakehouse_catalog') or 'samples'
+    schema_name = effective.get('chapter_3_lakehouse_schema') or 'wanderbricks'
     is_overridden = 'chapter_3_lakehouse_catalog' in session_params or 'chapter_3_lakehouse_schema' in session_params
-    
+
     return LakehouseParamsResponse(
         catalog=catalog,
         schema_name=schema_name,
