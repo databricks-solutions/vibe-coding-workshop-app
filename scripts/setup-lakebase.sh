@@ -733,6 +733,10 @@ try:
                 '12_seed_step_kinds.sql',
                 '13_seed_more_decisions.sql',
                 '14_reconcile_decision_and_verify.sql',
+                '16_assess_scope_decisions.sql',
+                # Runs last: 16 turns four more steps into generated reveals, and 15's
+                # copy-through-verbatim guard is keyed on the step's kind, so it has to
+                # be re-applied after 16 has changed them.
                 '15_fix_llm_placeholder_leak.sql',
             ]
             print(f"  Applying idempotent post-seed migrations...")

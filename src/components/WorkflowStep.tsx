@@ -309,11 +309,9 @@ export function WorkflowStep({
   // there is nothing to wait for. Those render immediately here — no Generate click,
   // no spinner. Only genuinely generative sections (is_static === false) still need
   // the Generate button, and for those this call just primes the metadata tabs.
-  useEffect(() => {
-    if (!isExpanded || metadataFetchedRef.current) return;
+  const loadStepContent = useCallback((force = false) => {
     if (!industry || !useCase) return;
 
-    metadataFetchedRef.current = true;
     setIsLoadingMetadata(true);
     apiClient.getStepContent(sectionTag, industry, useCase, sessionId)
       .then(step => {
@@ -337,8 +335,9 @@ export function WorkflowStep({
 
         // Static content is ready to use straight away. Persist it so it survives a
         // refresh and can chain into later steps via previousOutputs, exactly as
-        // generated prompts do.
-        if (step.is_static && step.content && !initialPrompt) {
+        // generated prompts do. `force` re-reads after a decision is committed, when
+        // the previously rendered text still held the raw {token} placeholders.
+        if (step.is_static && step.content && (force || !initialPrompt)) {
           setStreamedPrompt(step.content);
           setShowGeneratedPrompt(true);
           if (onPromptGenerated && stepNumber) {
@@ -352,7 +351,14 @@ export function WorkflowStep({
         metadataFetchedRef.current = false;
         setIsLoadingMetadata(false);
       });
-  }, [isExpanded, industry, useCase, sectionTag, sessionId, initialPrompt, onPromptGenerated, stepNumber]);
+  }, [industry, useCase, sectionTag, sessionId, initialPrompt, onPromptGenerated, stepNumber]);
+
+  useEffect(() => {
+    if (!isExpanded || metadataFetchedRef.current) return;
+    if (!industry || !useCase) return;
+    metadataFetchedRef.current = true;
+    loadStepContent();
+  }, [isExpanded, industry, useCase, loadStepContent]);
 
   // Use streamed content when available, otherwise fall back to generated content
   const promptText = streamedPrompt || generatedContent?.prompt || '';
@@ -385,19 +391,25 @@ export function WorkflowStep({
   const isDecisionSatisfied = !isDecisionStep || committedDecision !== null;
   
   /**
-   * Once the attendee commits, generate straight away on the steps that need a model.
+   * Refresh the prompt once the attendee commits.
    *
-   * Their committed values are substituted into the prompt, so a prompt produced before
-   * the commitment is stale. Leaving them to notice a Generate button in the header
-   * after deciding is exactly the busywork this rework removes — and on a static step
-   * there is nothing to generate, so the content is already correct.
+   * Their committed values are substituted into the prompt server-side, so whatever was
+   * rendered *before* they decided is stale — on a static step it still contains the raw
+   * {in_scope_tables} style tokens, because the commitment had not reached
+   * session_parameters when the text was first fetched.
+   *
+   * Static steps re-read the substituted text; generative steps re-run the model. Either
+   * way the attendee does not have to notice a Generate button after deciding, which is
+   * exactly the busywork this rework removes.
    */
   const handleDecisionCommitted = useCallback((values: DecisionValues) => {
     setCommittedDecision(values);
-    if (isStaticStep === false && !isStreaming && !isLoadingPrompt) {
-      handleGeneratePrompt();
+    if (isStaticStep === false) {
+      if (!isStreaming && !isLoadingPrompt) handleGeneratePrompt();
+    } else if (isStaticStep === true) {
+      loadStepContent(true);
     }
-  }, [isStaticStep, isStreaming, isLoadingPrompt, handleGeneratePrompt]);
+  }, [isStaticStep, isStreaming, isLoadingPrompt, handleGeneratePrompt, loadStepContent]);
 
   // Determine why the Generate button might be disabled
   const prerequisiteReason = !isPreviousStepComplete
