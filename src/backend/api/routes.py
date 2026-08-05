@@ -7780,6 +7780,119 @@ async def usecase_builder_save(request_body: UseCaseSaveRequest, request: Reques
     return {"success": True, "id": new_id, "message": "Use case saved successfully"}
 
 
+@router.post("/usecase-builder/promote", summary="Promote a use case so it can carry a dataset")
+async def usecase_builder_promote(request_body: UseCaseSaveRequest, request: Request):
+    """
+    Make an attendee-defined use case a first-class row in `usecase_descriptions`.
+
+    Why this exists: the dataset a use case reads resolves as
+    session override -> usecase_descriptions.sample_schema -> global default. A use case
+    that lives only in `saved_usecase_descriptions` has no row in that chain, so it
+    inherits the product default — the silent fallback that had a retail workshop
+    modelling hotel bookings. Promoting gives it somewhere to record its OWN dataset,
+    which the data pre-work then fills in.
+
+    `sample_catalog`/`sample_schema` are deliberately left NULL here. Guessing a dataset
+    is the bug; the row reports `dataset_status='unset'` until the attendee connects
+    existing data or generates some.
+
+    Append-only and versioned, matching the admin prompt-config endpoint: a second
+    promotion of the same (industry, use_case) adds a version rather than mutating
+    history, so an attendee who refines their idea does not invalidate a session already
+    running against the earlier text.
+    """
+    industry = (request_body.industry or "").strip()
+    use_case_name = (request_body.use_case_name or "").strip()
+    description = (request_body.description or "").strip()
+
+    if not industry or not use_case_name:
+        raise HTTPException(
+            status_code=400,
+            detail="Both an industry and a use case name are required to promote",
+        )
+    if not description:
+        raise HTTPException(status_code=400, detail="Description cannot be empty")
+
+    # Slugs must match what the frontend derives (PromptGenerator's toSlug), because the
+    # session stores the slug and resolution joins on it.
+    industry_slug = re.sub(r'[^a-z0-9]+', '_', industry.lower()).strip('_')
+    use_case_slug = re.sub(r'[^a-z0-9]+', '_', use_case_name.lower()).strip('_')
+    if not industry_slug or not use_case_slug:
+        raise HTTPException(
+            status_code=400,
+            detail="Industry and use case name must contain at least one letter or digit",
+        )
+
+    user_email = _get_session_user(request)
+    schema = get_schema()
+
+    try:
+        version_result = execute_query(
+            f"""
+            SELECT COALESCE(MAX(version), 0) as max_version
+            FROM {schema}.usecase_descriptions
+            WHERE industry = %s AND use_case = %s
+            """,
+            (industry_slug, use_case_slug),
+        )
+        next_version = (
+            int(version_result[0].get('max_version', 0)) + 1 if version_result else 1
+        )
+
+        # is_active=TRUE matters: seed 01 ships most product content inactive, and
+        # /api/industries filters on it, so a promoted use case that defaulted to
+        # inactive would be invisible in the very picker it was created for.
+        success = execute_insert(
+            f"""
+            INSERT INTO {schema}.usecase_descriptions
+            (industry, industry_label, use_case, use_case_label, prompt_template,
+             version, is_active, inserted_at, updated_at, created_by,
+             origin, created_by_email)
+            VALUES (%s, %s, %s, %s, %s, %s, TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP,
+                    %s, 'attendee', %s)
+            """,
+            (
+                industry_slug,
+                industry,
+                use_case_slug,
+                use_case_name,
+                description,
+                next_version,
+                user_email,
+                user_email,
+            ),
+        )
+    except Exception as e:
+        # The origin columns arrive in ddl/15. An install that has not run it yet should
+        # get a clear message rather than a 500 with a column error.
+        logger.error(f"[UseCase Builder] Promote failed for {industry_slug}/{use_case_slug}: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail="Could not promote the use case. If this persists, the workshop "
+                   "database may need the latest migrations applied.",
+        )
+
+    if not success:
+        raise HTTPException(status_code=500, detail="Failed to promote the use case")
+
+    # The industry/use-case lists are cached for 30s; without this the attendee would not
+    # see their own use case in the picker they just created it from.
+    clear_lakebase_cache()
+
+    logger.info(
+        f"[UseCase Builder] Promoted {industry_slug}/{use_case_slug} v{next_version} "
+        f"by {user_email} (dataset intentionally unset)"
+    )
+    return {
+        "success": True,
+        "industry": industry_slug,
+        "use_case": use_case_slug,
+        "version": next_version,
+        "dataset_status": "unset",
+        "message": "Use case promoted. Choose or generate its dataset in the data pre-work.",
+    }
+
+
 @router.get("/usecase-builder/list", summary="List all saved use cases (community library)")
 async def usecase_builder_list():
     """Get all saved use case descriptions from all users (public community library)."""
