@@ -142,7 +142,18 @@ def _get_config() -> Dict[str, Any]:
         user = os.getenv("DATABRICKS_CLIENT_ID", "")
         if user:
             logger.info(f"Using DATABRICKS_CLIENT_ID as Lakebase user: {user[:20]}...")
-    if not user:
+    # Resolving identity from the SDK constructs a WorkspaceClient, which performs a
+    # BLOCKING network call to the workspace OIDC endpoint. Only do that when there is
+    # actually a Lakebase to connect to: without a host and database the resolved user is
+    # unused, since is_lakebase_configured() returns False regardless.
+    #
+    # This guard is what makes the test suite runnable. With USE_LAKEBASE=false and no
+    # LAKEBASE_HOST, every is_lakebase_configured() call still reached out over SSL and
+    # hung until the SDK's retries gave up — so tests appeared to freeze with no output.
+    _host = os.getenv("LAKEBASE_HOST", "")
+    _database = os.getenv("LAKEBASE_DATABASE", "")
+
+    if not user and _host and _database:
         logger.warning(
             "PGUSER, LAKEBASE_USER, and DATABRICKS_CLIENT_ID all unset. "
             "Attempting to get identity from Databricks SDK..."
@@ -157,8 +168,8 @@ def _get_config() -> Dict[str, Any]:
             logger.warning(f"Could not get identity from SDK: {e}")
 
     return {
-        "host": os.getenv("LAKEBASE_HOST", ""),
-        "database": os.getenv("LAKEBASE_DATABASE", ""),
+        "host": _host,
+        "database": _database,
         "schema": os.getenv("LAKEBASE_SCHEMA", ""),
         "port": int(os.getenv("LAKEBASE_PORT", "5432")),
         "user": user,
