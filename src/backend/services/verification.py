@@ -284,6 +284,85 @@ async def _check_bronze_tables_exist(
         return {"name": "bronze_tables_exist", "ok": None, "detail": f"Error: {error_name}"}
 
 
+async def _check_provisioned_tables_exist(
+    workspace_client: Any, params: Dict[str, str]
+) -> Dict[str, Any]:
+    """
+    Check: provisioned_tables_exist
+    Verify the data pre-work actually produced tables the workshop can read.
+
+    Covers both branches of step 59: an attendee who connected existing data and one
+    whose agent generated a dataset both end up with `chapter_3_lakehouse_*` pointing at
+    a schema, so this checks whichever they landed on.
+
+    Two failure modes worth separating. A missing schema means the work did not happen.
+    A schema with tables but a `dataset_status` still reporting `unset` means the tables
+    exist but nobody told the workshop about them — the report_gate call was skipped — so
+    every later step would silently read the product default instead. The second is the
+    one that quietly ruins Chapter 3, and the hint says which it is.
+
+    Returns:
+        {"name": "provisioned_tables_exist", "ok": True|False|None, "detail": "..."}
+    """
+    name = "provisioned_tables_exist"
+    try:
+        catalog = params.get("chapter_3_lakehouse_catalog")
+        schema = params.get("chapter_3_lakehouse_schema")
+        if not catalog or not schema:
+            return {
+                "name": name,
+                "ok": None,
+                "detail": "No source catalog/schema resolved yet — set one on Step 10",
+            }
+
+        # Nothing has claimed a dataset, so catalog/schema are the product default. The
+        # tables there DO exist, so a bare table check would pass and give false comfort.
+        if params.get("dataset_status") == "unset":
+            return {
+                "name": name,
+                "ok": False,
+                "detail": (
+                    f"Still pointing at the workshop default ({catalog}.{schema}). "
+                    f"Connect your own tables on Step 10, or have your agent call "
+                    f"report_gate with the catalog and schema it generated."
+                ),
+            }
+
+        tables = list(
+            workspace_client.tables.list(catalog_name=catalog, schema_name=schema)
+        )
+        if not tables:
+            return {
+                "name": name,
+                "ok": False,
+                "detail": f"{catalog}.{schema} has no tables — generation may have failed part-way",
+            }
+
+        return {
+            "name": name,
+            "ok": True,
+            "detail": f"{catalog}.{schema} has {len(tables)} table(s)",
+        }
+    except Exception as e:
+        error_name = type(e).__name__
+        if "PermissionDenied" in error_name or "Unauthenticated" in error_name:
+            # The App SP often cannot see an attendee's own catalog, and that must never
+            # block them — unknown, not fail.
+            return {
+                "name": name,
+                "ok": None,
+                "detail": "Cannot see that catalog from the workshop app — carry on if the tables are there",
+            }
+        if "NotFound" in error_name or "not found" in str(e).lower():
+            return {
+                "name": name,
+                "ok": False,
+                "detail": "That schema does not exist yet — connect or generate your dataset first",
+            }
+        logger.warning(f"[Verification] Error checking {name}: {e}")
+        return {"name": name, "ok": None, "detail": f"Error: {error_name}"}
+
+
 async def _check_silver_pipeline_succeeded(
     workspace_client: Any, params: Dict[str, str]
 ) -> Dict[str, Any]:
@@ -538,6 +617,7 @@ _CHECK_REGISTRY = {
     "app_running": _check_app_running,
     "lakebase_project_exists": _check_lakebase_project_exists,
     "uc_catalog_active": _check_uc_catalog_active,
+    "provisioned_tables_exist": _check_provisioned_tables_exist,
     "bronze_tables_exist": _check_bronze_tables_exist,
     "silver_pipeline_succeeded": _check_silver_pipeline_succeeded,
     "gold_tables_exist": _check_gold_tables_exist,

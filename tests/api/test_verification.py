@@ -459,3 +459,124 @@ class RealSdkEnumTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ProvisionedTablesCheckTest(unittest.TestCase):
+    """
+    The data pre-work gate (step 59).
+
+    Both branches of step 59 — connect existing tables, or have your agent generate a
+    dataset — end with `chapter_3_lakehouse_*` pointing at a schema, so one check covers
+    both. The interesting case is the one a naive table check gets wrong: if nobody told
+    the workshop where the data is, those parameters still hold the PRODUCT DEFAULT, whose
+    tables really do exist. Passing there would give false comfort and let every later step
+    silently read the sample dataset.
+    """
+
+    class _Client:
+        def __init__(self, tables=None, error=None):
+            self._tables = tables if tables is not None else []
+            self._error = error
+            outer = self
+
+            class _Tables:
+                def list(self, catalog_name=None, schema_name=None):
+                    if outer._error:
+                        raise outer._error
+                    return outer._tables
+
+            self.tables = _Tables()
+
+    @staticmethod
+    def _run(client, params):
+        return asyncio.run(
+            verification._check_provisioned_tables_exist(client, params)
+        )
+
+    def test_registered_in_the_check_registry(self):
+        """Step 59's step_config names this key; an unregistered check silently no-ops."""
+        self.assertIn("provisioned_tables_exist", verification._CHECK_REGISTRY)
+
+    def test_passes_when_the_attendees_own_tables_exist(self):
+        result = self._run(
+            self._Client(tables=["deliveries", "carriers"]),
+            {
+                "chapter_3_lakehouse_catalog": "my_catalog",
+                "chapter_3_lakehouse_schema": "luis_c_sla_raw",
+                "dataset_status": "session",
+            },
+        )
+
+        self.assertTrue(result["ok"])
+        self.assertIn("2 table", result["detail"])
+
+    def test_fails_when_still_pointing_at_the_workshop_default(self):
+        """
+        The subtle one. The default schema is full of tables, so a bare existence check
+        would pass while every later step read the wrong data.
+        """
+        result = self._run(
+            self._Client(tables=["bookings", "hosts", "properties"]),
+            {
+                "chapter_3_lakehouse_catalog": "samples",
+                "chapter_3_lakehouse_schema": "wanderbricks",
+                "dataset_status": "unset",
+            },
+        )
+
+        self.assertFalse(result["ok"])
+        self.assertIn("report_gate", result["detail"])
+
+    def test_fails_when_the_schema_is_empty(self):
+        """A generation run that errored part-way leaves an empty schema behind."""
+        result = self._run(
+            self._Client(tables=[]),
+            {
+                "chapter_3_lakehouse_catalog": "my_catalog",
+                "chapter_3_lakehouse_schema": "luis_c_sla_raw",
+                "dataset_status": "session",
+            },
+        )
+
+        self.assertFalse(result["ok"])
+        self.assertIn("no tables", result["detail"])
+
+    def test_unknown_when_nothing_resolved_yet(self):
+        result = self._run(self._Client(), {})
+
+        self.assertIsNone(result["ok"])
+
+    def test_permission_denied_is_unknown_not_failure(self):
+        """
+        The App SP usually cannot see an attendee's own catalog. That must never block
+        them — the three-state contract exists for exactly this.
+        """
+        class PermissionDenied(Exception):
+            pass
+
+        result = self._run(
+            self._Client(error=PermissionDenied("no access")),
+            {
+                "chapter_3_lakehouse_catalog": "their_catalog",
+                "chapter_3_lakehouse_schema": "their_schema",
+                "dataset_status": "session",
+            },
+        )
+
+        self.assertIsNone(result["ok"], "a permission gap must not read as a failure")
+
+    def test_missing_schema_is_an_actionable_failure(self):
+        class NotFound(Exception):
+            pass
+
+        result = self._run(
+            self._Client(error=NotFound("schema not found")),
+            {
+                "chapter_3_lakehouse_catalog": "my_catalog",
+                "chapter_3_lakehouse_schema": "never_created",
+                "dataset_status": "session",
+            },
+        )
+
+        self.assertFalse(result["ok"])
+        self.assertIn("does not exist", result["detail"])

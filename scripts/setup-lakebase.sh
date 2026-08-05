@@ -751,6 +751,7 @@ try:
                 # Data pre-work steps. INSERT ... WHERE NOT EXISTS on section_tag, so an
                 # admin who edits the prompt text keeps it across redeploys.
                 '21_seed_prework_steps.sql',
+                '22_seed_prework_params.sql',
             ]
             print(f"  Applying idempotent post-seed migrations...")
             for mig in POST_SEED_MIGRATIONS:
