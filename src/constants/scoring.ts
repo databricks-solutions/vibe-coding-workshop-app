@@ -30,11 +30,16 @@ export const STEP_SCORES: Record<number, number> = {
   38: 50, 39: 50, 40: 50, 41: 50, 42: 50, 43: 50, 44: 50, 45: 50, 46: 50,
   // Agents Accelerator — MLflow for Gen-AI (steps 47-56): 50 points each
   47: 50, 48: 50, 49: 50, 50: 50, 51: 50, 52: 50, 53: 50, 54: 50, 55: 50, 56: 50,
+  // Data pre-work (steps 57-59): 20 points each. Priced above Foundation because two of
+  // the three are real decisions with a rubric, and below the Lakehouse chapters because
+  // the heavy lifting happens there.
+  57: 20, 58: 20, 59: 20,
 };
 
 // Chapter definitions for milestone detection
 export const CHAPTERS: Record<string, { steps: Set<number>; display: string }> = {
   'Foundation': { steps: new Set([1, 2, 3]), display: 'Foundation' },
+  'Your Data': { steps: new Set([57, 58, 59]), display: 'Your Data' },
   'Chapter 1': { steps: new Set([4, 5]), display: 'Databricks App' },
   'Chapter 2': { steps: new Set([6, 7, 8]), display: 'Lakebase' },
   'Chapter 3': { steps: new Set([9, 10, 11, 12, 13, 14, 22, 23]), display: 'Lakehouse' },

@@ -229,85 +229,85 @@ export const WORKSHOP_LEVELS: Record<WorkshopLevel, LevelConfig> = {
     label: 'Databricks Apps',
     tooltip: 'Build and deploy a web app on Databricks Apps',
     description: 'Build and deploy a web application using Databricks Apps.',
-    sectionIds: ['define-usecase', 'databricks-app', 'iterate-enhance', 'cleanup'],
+    sectionIds: ['define-usecase', 'pre-work', 'databricks-app', 'iterate-enhance', 'cleanup'],
   },
   'app-database': {
     label: '+ Lakebase',
     tooltip: 'Add a PostgreSQL database to your web app',
     description: 'Connect your Databricks App to a PostgreSQL database for data persistence.',
-    sectionIds: ['define-usecase', 'databricks-app', 'lakebase', 'iterate-enhance', 'cleanup'],
+    sectionIds: ['define-usecase', 'pre-work', 'databricks-app', 'lakebase', 'iterate-enhance', 'cleanup'],
   },
   'lakehouse': {
     label: 'Lakehouse',
     tooltip: 'Build Bronze/Silver/Gold data pipelines',
     description: 'Build a Lakehouse data foundation with Bronze, Silver, and Gold layer pipelines.',
-    sectionIds: ['define-usecase', 'lakehouse', 'iterate-enhance', 'cleanup'],
+    sectionIds: ['define-usecase', 'pre-work', 'lakehouse', 'iterate-enhance', 'cleanup'],
   },
   'lakehouse-di': {
     label: '+ AI and Agents',
     tooltip: 'Add Genie Spaces, Agents & AI/BI Dashboards',
     description: 'Add AI capabilities with Genie Spaces, Agents & AI/BI Dashboards on top of your Lakehouse.',
-    sectionIds: ['define-usecase', 'lakehouse', 'data-intelligence', 'iterate-enhance', 'cleanup'],
+    sectionIds: ['define-usecase', 'pre-work', 'lakehouse', 'data-intelligence', 'iterate-enhance', 'cleanup'],
   },
   'end-to-end': {
     label: 'Complete Workshop',
     tooltip: 'All chapters: App, Database, Lakehouse & AI and Agents',
     description: 'The full end-to-end workshop covering every chapter — from Databricks App to AI and Agents.',
-    sectionIds: ['define-usecase', 'databricks-app', 'lakebase', 'lakehouse', 'data-intelligence', 'activation', 'iterate-enhance', 'cleanup'],
+    sectionIds: ['define-usecase', 'pre-work', 'databricks-app', 'lakebase', 'lakehouse', 'data-intelligence', 'activation', 'iterate-enhance', 'cleanup'],
   },
   'accelerator': {
     label: 'Data Product Accelerator',
     tooltip: 'Focus on Lakehouse + AI and Agents',
     description: 'Start with table metadata and build end-to-end Bronze/Silver/Gold layers that power your AI and agents.',
-    sectionIds: ['define-usecase', 'lakehouse', 'data-intelligence', 'iterate-enhance', 'cleanup'],
+    sectionIds: ['define-usecase', 'pre-work', 'lakehouse', 'data-intelligence', 'iterate-enhance', 'cleanup'],
   },
   'genie-accelerator': {
     label: 'Genie Accelerator',
     tooltip: 'Analyze silver metadata, build Gold layer, and create Genie Spaces',
     description: 'Analyze your silver layer metadata, design and build a Gold layer, then create Genie Spaces with Metric Views and TVFs.',
-    sectionIds: ['define-usecase', 'lakehouse', 'data-intelligence', 'iterate-enhance', 'cleanup'],
+    sectionIds: ['define-usecase', 'pre-work', 'lakehouse', 'data-intelligence', 'iterate-enhance', 'cleanup'],
   },
   'data-engineering-accelerator': {
     label: 'Data Engineering Accelerator',
     tooltip: 'Build Bronze/Silver/Gold data pipelines with best practices',
     description: 'Focus on building production-ready Bronze, Silver, and Gold data pipelines using Databricks Lakehouse best practices.',
-    sectionIds: ['define-usecase', 'lakehouse', 'iterate-enhance', 'cleanup'],
+    sectionIds: ['define-usecase', 'pre-work', 'lakehouse', 'iterate-enhance', 'cleanup'],
   },
   'skills-accelerator': {
     label: 'Agent Skills Accelerator',
     tooltip: 'Build a custom Agent Skill guided by your use case',
     description: 'Learn to build an Agent Skill following the agentskills.io standard — explore existing skills, define a strategy, generate SKILL.md, apply it, and validate.',
-    sectionIds: ['define-usecase', 'agent-skills', 'iterate-enhance', 'cleanup'],
+    sectionIds: ['define-usecase', 'pre-work', 'agent-skills', 'iterate-enhance', 'cleanup'],
   },
   'agents-accelerator': {
     label: 'Agents Accelerator',
     tooltip: 'Build, evaluate, and deploy a production agent app',
     description: 'Build a production-ready agent app — Databricks App + Lakebase + Mosaic AI Agent Framework + MLflow for Gen-AI lifecycle.',
-    sectionIds: ['define-usecase', 'databricks-app', 'lakebase', 'agents-on-apps', 'mlflow-genai', 'iterate-enhance', 'cleanup'],
+    sectionIds: ['define-usecase', 'pre-work', 'databricks-app', 'lakebase', 'agents-on-apps', 'mlflow-genai', 'iterate-enhance', 'cleanup'],
   },
   'reverse-lakehouse': {
     label: 'Lakehouse',
     tooltip: 'Build Bronze/Silver/Gold data pipelines (reverse ETL start)',
     description: 'Start with Lakehouse data engineering, then sync analytics into Lakebase.',
-    sectionIds: ['define-usecase', 'lakehouse', 'iterate-enhance', 'cleanup'],
+    sectionIds: ['define-usecase', 'pre-work', 'lakehouse', 'iterate-enhance', 'cleanup'],
   },
   'reverse-lakehouse-di': {
     label: '+ AI and Agents',
     tooltip: 'Add DI outputs on top of your Lakehouse (reverse ETL)',
     description: 'Build Gold layer analytics and Genie Spaces, then sync into Lakebase.',
-    sectionIds: ['define-usecase', 'lakehouse', 'data-intelligence', 'iterate-enhance', 'cleanup'],
+    sectionIds: ['define-usecase', 'pre-work', 'lakehouse', 'data-intelligence', 'iterate-enhance', 'cleanup'],
   },
   'reverse-lakebase': {
     label: '+ Lakebase (Synced)',
     tooltip: 'Sync Gold layer data into Lakebase via Synced Tables',
     description: 'Push curated analytics data into Lakebase PostgreSQL using Databricks Synced Tables.',
-    sectionIds: ['define-usecase', 'lakehouse', 'data-intelligence', 'activation', 'iterate-enhance', 'cleanup'],
+    sectionIds: ['define-usecase', 'pre-work', 'lakehouse', 'data-intelligence', 'activation', 'iterate-enhance', 'cleanup'],
   },
   'reverse-app': {
     label: '+ Analytics App',
     tooltip: 'Build an analytics-serving app on top of synced Lakebase data',
     description: 'Design and deploy an analytics application powered by synced Lakebase data.',
-    sectionIds: ['define-usecase', 'lakehouse', 'data-intelligence', 'activation', 'iterate-enhance', 'cleanup'],
+    sectionIds: ['define-usecase', 'pre-work', 'lakehouse', 'data-intelligence', 'activation', 'iterate-enhance', 'cleanup'],
   },
 };
 
@@ -370,6 +370,13 @@ export const ALL_STEPS: Record<number, WorkflowStep> = {
   54: { number: 54, title: 'Logged Model & UC Registration', description: 'Optionally hand-author prompt improvements, then log and register the approved agent model in Unity Catalog', icon: Database, color: 'text-violet-500', sectionTag: 'mlflow_logged_model_uc_registration' },
   55: { number: 55, title: 'AI Gateway + Deployment', description: 'Govern the registered agent behind AI Gateway, wire guardrails and rate limits, and automate promotion through Asset Bundles', icon: Rocket, color: 'text-violet-400', sectionTag: 'mlflow_gateway_and_deployment' },
   56: { number: 56, title: 'Production Monitoring + Debugging', description: 'Configure continuous evaluation, SQL alerts, and agent-as-judge debugging that routes production failures to the right follow-up track', icon: BarChart3, color: 'text-violet-500', sectionTag: 'mlflow_production_monitoring_and_debugging' },
+  // Data pre-work (57-59). Appended rather than inserted at 2/3/4 because sessions store
+  // completed_steps as raw integers — renumbering would invalidate every stored session
+  // and every leaderboard standing. The section's POSITION in the workflow is set by
+  // sectionIds ordering, not by step number, so these still render early.
+  57: { number: 57, title: 'Data Source', description: 'Decide whether to build on data you already have, or generate a dataset for your use case', icon: Database, color: 'text-sky-400', sectionTag: 'data_source_decision' },
+  58: { number: 58, title: 'Data Model', description: 'Commit the minimum viable model: the entities, the grain of your main fact, and the story the data has to tell', icon: GitBranch, color: 'text-sky-500', sectionTag: 'data_model_design' },
+  59: { number: 59, title: 'Provision Data', description: 'Connect your existing tables, or generate a governed synthetic dataset in your own catalog', icon: HardDrive, color: 'text-sky-400', sectionTag: 'data_provision' },
 };
 
 // The logical sections with their step groupings (4-chapter structure + activation + skills)
@@ -385,6 +392,22 @@ export const WORKFLOW_SECTIONS: WorkflowSection[] = [
     bgColor: 'bg-blue-500/15',
     borderColor: 'border-blue-500/30',
     steps: [2, 3].map(n => ALL_STEPS[n]),
+  },
+  {
+    // Data pre-work. Sits between defining the intent and building anything, because
+    // every downstream chapter needs data: the app path currently tells the agent to
+    // invent "static mock data arrays", and the Lakebase path to invent its own seed
+    // rows. Deciding the data up front is what stops the assistant choosing it.
+    id: 'pre-work',
+    chapter: 'Foundation',
+    title: 'Your Data',
+    focus: 'Get a dataset that matches the use case you just defined',
+    description: 'Decide whether to build on data you already have or generate a dataset for your use case, commit the minimum viable data model, and provision it in your own catalog. Everything after this — the app, the Lakebase tables, and the Bronze/Silver/Gold pipelines — is built on what you choose here.',
+    icon: Database,
+    color: 'text-sky-400',
+    bgColor: 'bg-sky-500/15',
+    borderColor: 'border-sky-500/30',
+    steps: visibleStepNumbers([57, 58, 59]).map(n => ALL_STEPS[n]),
   },
   {
     id: 'databricks-app',

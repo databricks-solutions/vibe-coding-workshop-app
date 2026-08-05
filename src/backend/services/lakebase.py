@@ -1409,15 +1409,20 @@ STEP_SCORES = {
     38: 50, 39: 50, 40: 50, 41: 50, 42: 50, 43: 50, 44: 50, 45: 50, 46: 50,
     # Agents Accelerator — MLflow for Gen-AI (steps 47-56): 50 points each
     47: 50, 48: 50, 49: 50, 50: 50, 51: 50, 52: 50, 53: 50, 54: 50, 55: 50, 56: 50,
+    # Data pre-work (steps 57-59): 20 points each
+    57: 20, 58: 20, 59: 20,
 }
 
 # Highest step number the workflow defines (see src/constants/workflowSections.ts).
 # Used to validate per-step writes; keep in sync when steps are added.
-MAX_STEP_NUMBER = 56
+# 59 covers the data pre-work steps; a stale value here silently drops their per-step
+# writes, which is exactly the bug that hid steps 31-56 when this cap was 30.
+MAX_STEP_NUMBER = 59
 
 # Chapter definitions for progress tracking (must match src/constants/scoring.ts)
 CHAPTERS = {
     'Foundation': {'steps': {1, 2, 3}, 'display': 'Foundation'},
+    'Your Data': {'steps': {57, 58, 59}, 'display': 'Your Data'},
     'Chapter 1': {'steps': {4, 5}, 'display': 'Databricks App'},
     'Chapter 2': {'steps': {6, 7, 8}, 'display': 'Lakebase'},
     'Chapter 3': {'steps': {9, 10, 11, 12, 13, 14, 22, 23}, 'display': 'Lakehouse'},
