@@ -257,13 +257,19 @@ Ask your coding assistant to run the **`databricks-synthetic-data-gen`** skill f
 ```
 Use the databricks-synthetic-data-gen skill to generate a dataset.
 
-Target:    {user_catalog}.{user_schema_prefix}_raw     <- create the schema if needed
+Catalog:   resolve it READ-ONLY first — list what exists and pick one you can write to
+           ([c.name for c in w.catalogs.list()], or SHOW CATALOGS). NEVER create a
+           catalog: CREATE CATALOG fails on Default-Storage workspaces, and
+           pre-provisioned catalogs are the practice being demonstrated. The workshop
+           default is {lakehouse_default_catalog} — use it only if it actually exists.
+Schema:    <resolved catalog>.{user_schema_prefix}_raw   <- create the SCHEMA if needed
 Rows:      about {synthetic_row_target} in the main fact table
 Model:     start from the closest industry model in
            databricks-industry-solutions/lakehouse-industry-data-models
            (data-models/<industry>/v1/mvm/) and use its MVM tier, not ECM
-Entities:  {entities}
 Grain:     {fact_grain}
+Entities:
+{entities}
 Story:     {story_anomaly}
            Give the incident a measurable cost, and make it visible at my grain.
 
@@ -330,3 +336,58 @@ SET input_template = replace(input_template, '{committed_key_question}', '{key_q
 WHERE section_tag = 'data_model_design'
   AND created_by = 'seed'
   AND input_template LIKE '%{committed_key_question}%';
+
+-- -----------------------------------------------------------------------------
+-- Repair 2: the generation brief targeted {user_catalog}, which is not a workshop
+-- parameter — the real one is {lakehouse_default_catalog}. So the agent was handed a
+-- literal "{user_catalog}.luis_c_..._raw" as its write target. Found by reading the brief
+-- the DEPLOYED app serves while setting up a real agent run, not by inspecting the seed.
+--
+-- Also moves the Entities label onto its own line: list fields substitute as a numbered
+-- multi-line block ("1. stores\n2. products"), which mangled the layout when inlined
+-- after "Entities:  ".
+--
+-- Guarded on the broken token AND created_by='seed', so it runs at most once and never
+-- touches an admin-edited prompt.
+-- -----------------------------------------------------------------------------
+UPDATE ${schema}.section_input_prompts
+SET input_template = replace(
+      replace(input_template,
+        'Entities:  {entities}
+Grain:     {fact_grain}',
+        'Grain:     {fact_grain}
+Entities:
+{entities}'),
+      '{user_catalog}', '{lakehouse_default_catalog}'),
+    updated_at = CURRENT_TIMESTAMP
+WHERE section_tag = 'data_provision'
+  AND created_by = 'seed'
+  AND input_template LIKE '%{user_catalog}%';
+
+-- -----------------------------------------------------------------------------
+-- Repair 3: the brief named {lakehouse_default_catalog} as a write target with "create
+-- the schema if needed", but that parameter's value need not exist — on this workspace
+-- vibe_coding_workshop_catalog is absent, and the generation failed with
+-- NO_SUCH_CATALOG_EXCEPTION when run for real.
+--
+-- The workshop has a HARD INVARIANT (seed 02, step 0.5): never create a catalog.
+-- CREATE CATALOG fails on Default-Storage workspaces, and pre-provisioned catalogs are
+-- the practice being demonstrated. Attendees create SCHEMAS inside an existing catalog.
+-- The brief now says to resolve the catalog read-only first and treat the parameter as a
+-- preference rather than a guarantee.
+--
+-- Found by actually running the generation as an agent would, not by reading the prompt.
+-- -----------------------------------------------------------------------------
+UPDATE ${schema}.section_input_prompts
+SET input_template = replace(input_template,
+      'Target:    {lakehouse_default_catalog}.{user_schema_prefix}_raw     <- create the schema if needed',
+      'Catalog:   resolve it READ-ONLY first — list what exists and pick one you can write to
+           ([c.name for c in w.catalogs.list()], or SHOW CATALOGS). NEVER create a
+           catalog: CREATE CATALOG fails on Default-Storage workspaces, and
+           pre-provisioned catalogs are the practice being demonstrated. The workshop
+           default is {lakehouse_default_catalog} — use it only if it actually exists.
+Schema:    <resolved catalog>.{user_schema_prefix}_raw   <- create the SCHEMA if needed'),
+    updated_at = CURRENT_TIMESTAMP
+WHERE section_tag = 'data_provision'
+  AND created_by = 'seed'
+  AND input_template LIKE '%Target:    {lakehouse_default_catalog}%';

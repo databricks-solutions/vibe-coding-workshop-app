@@ -91,7 +91,7 @@ class PreworkTokenTest(unittest.TestCase):
         # Tokens the session supplies rather than a decision step.
         session_tokens = {
             "industry_name", "use_case_title", "use_case_description",
-            "user_catalog", "user_schema_prefix", "synthetic_row_target",
+            "lakehouse_default_catalog", "user_schema_prefix", "synthetic_row_target",
             "industry_model_repo", "schema",
         }
 
@@ -127,6 +127,63 @@ class PreworkTokenTest(unittest.TestCase):
     def test_repair_update_is_guarded_against_clobbering_admin_edits(self):
         """The one UPDATE in this seed must never overwrite an edited prompt."""
         self.assertIn("created_by = 'seed'", SEED)
+
+
+class GenerationBriefRealismTest(unittest.TestCase):
+    """
+    Guards learned from running the brief against a real agent on real serverless compute.
+
+    Both of these shipped and only surfaced on execution:
+      * the brief targeted {user_catalog}, which is not a workshop parameter at all, so
+        the agent was handed a literal placeholder as its write target;
+      * it then targeted {lakehouse_default_catalog} with "create the schema if needed",
+        but that parameter's VALUE need not exist — the run died with
+        NO_SUCH_CATALOG_EXCEPTION because vibe_coding_workshop_catalog is absent here.
+    """
+
+    def test_brief_only_uses_parameters_that_exist(self):
+        """
+        {user_catalog} does not exist. The catalog parameters that do are
+        lakehouse_default_catalog, chapter_3_lakehouse_catalog, lakebase_uc_catalog_name
+        and agent_sql_catalog.
+        """
+        self.assertNotIn(
+            "{user_catalog}", SEED_INSERTS,
+            "{user_catalog} is not a workshop parameter — the agent receives it verbatim",
+        )
+
+    def test_brief_respects_the_no_create_catalog_invariant(self):
+        """
+        Seed 02 step 0.5 states the invariant: never create a catalog, because
+        CREATE CATALOG fails on Default-Storage workspaces. Attendees create SCHEMAS in an
+        existing catalog, so the brief must tell the agent to resolve one read-only rather
+        than assume the default exists.
+        """
+        self.assertIn("NEVER create", SEED_INSERTS)
+        self.assertIn("resolve it READ-ONLY first", SEED_INSERTS)
+
+    def test_brief_does_not_promise_a_catalog_will_exist(self):
+        prose = SEED_INSERTS
+        self.assertNotIn(
+            "Target:    {lakehouse_default_catalog}", prose,
+            "naming a catalog as a guaranteed write target is what broke the real run",
+        )
+
+    def test_every_repair_update_is_guarded(self):
+        """
+        Three repair UPDATEs now exist. Each must be guarded on created_by='seed' AND on
+        the broken text still being present, or a redeploy would clobber admin edits or
+        re-apply endlessly.
+        """
+        sql_only = "\n".join(
+            l for l in SEED.splitlines() if not l.strip().startswith("--")
+        )
+        updates = [u for u in sql_only.split("UPDATE ")[1:] if "section_input_prompts" in u]
+        self.assertGreaterEqual(len(updates), 3)
+        for u in updates:
+            stmt = u[: u.index(";")]
+            self.assertIn("created_by = 'seed'", stmt)
+            self.assertIn("LIKE", stmt, "an unguarded UPDATE re-applies on every redeploy")
 
 
 if __name__ == "__main__":
