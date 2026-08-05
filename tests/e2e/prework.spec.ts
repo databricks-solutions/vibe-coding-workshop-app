@@ -10,6 +10,7 @@
  * Pure data assertions, so no browser navigation or seeded database is needed.
  */
 
+import { readFileSync } from 'node:fs';
 import { test, expect } from '@playwright/test';
 import {
   ALL_STEPS,
@@ -100,5 +101,36 @@ test.describe('pre-work section', () => {
       const sum = Object.values(entry.segments).reduce((a, b) => a + (b ?? 0), 0);
       expect(entry.totalMinutes, `${level} total does not match its segments`).toBe(sum);
     }
+  });
+
+  test('every pre-work step has a case in the render switch', () => {
+    /**
+     * The bug this caught, in a real browser: renderSectionSteps is a switch ending in
+     * `default: return null`, so a step that is in a section but missing a case renders
+     * NOTHING. Steps 57-59 appeared in the sidebar and in the "0/17 done" count while
+     * their cards silently did not exist — no error, no warning.
+     *
+     * Asserted against the source because the failure is a missing branch, which no
+     * amount of config inspection reveals.
+     */
+    const source = readFileSync(
+      new URL('../../src/components/WorkflowDiagram.tsx', import.meta.url),
+      'utf8'
+    );
+
+    // Checked for EVERY step in EVERY section, not just the pre-work ones: the same
+    // omission would silently hide any step added in future.
+    const sectioned = new Set(
+      WORKFLOW_SECTIONS.flatMap(s => s.steps.map(step => step.number))
+    );
+    const missing = [...sectioned]
+      .filter(n => !new RegExp(`case ${n}:`).test(source))
+      .sort((a, b) => a - b);
+
+    expect(
+      missing,
+      `these steps are in a section but have no case in renderSectionSteps, so their ` +
+      `cards never render: ${missing.join(', ')}`
+    ).toEqual([]);
   });
 });

@@ -1958,6 +1958,18 @@ export function WorkflowDiagram({
 
               return renderUniformStep(56);
 
+            // Steps 57-59: data pre-work (Data Source, Data Model, Provision Data).
+            // The switch ends in `default: return null`, so a step missing a case here is
+            // silently never rendered — it appears in the sidebar and in the step count,
+            // but its card never exists. Caught by counting rendered data-step-number
+            // attributes in a real browser rather than trusting the section config.
+            case 57:
+              return renderUniformStep(57);
+            case 58:
+              return renderUniformStep(58);
+            case 59:
+              return renderUniformStep(59);
+
             // Step 21: Redeploy & Test (Refinement)
             case 21:
 
