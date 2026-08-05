@@ -1295,9 +1295,11 @@ def get_effective_workshop_parameters(session_id: Optional[str] = None) -> Dict[
     # applied here so an explicit session value (written by step 9, or by a
     # facilitator) still wins, but a session that never got one gets a dataset that
     # matches its industry instead of whatever the global default happens to be.
+    _has_usecase_dataset = False
     if results:
         _uc_catalog = results[0].get('sample_catalog')
         _uc_schema = results[0].get('sample_schema')
+        _has_usecase_dataset = bool(_uc_schema)
         if _uc_catalog:
             params['chapter_3_lakehouse_catalog'] = _uc_catalog
         if _uc_schema:
@@ -1308,6 +1310,7 @@ def get_effective_workshop_parameters(session_id: Optional[str] = None) -> Dict[
                 f"{_uc_catalog or '-'}.{_uc_schema or '-'} for session {session_id}"
             )
 
+    _session_has_dataset = False
     if results and results[0].get('session_parameters'):
         session_overrides = results[0]['session_parameters']
         if isinstance(session_overrides, str):
@@ -1321,13 +1324,39 @@ def get_effective_workshop_parameters(session_id: Optional[str] = None) -> Dict[
         # step_decisions is a nested object, not a scalar parameter — it is turned into
         # {committed_*} tokens by _decision_params instead of being substituted raw.
         if session_overrides:
+            # Captured by the agent via report_gate, or set by step 9 / the facilitator.
+            # An explicit session value is the strongest signal there is.
+            _session_has_dataset = bool(session_overrides.get('chapter_3_lakehouse_schema'))
             scalar_overrides = {
                 k: v for k, v in session_overrides.items() if k != 'step_decisions'
             }
             params.update(scalar_overrides)
             params.update(_decision_params(session_overrides.get('step_decisions') or {}))
             logger.debug(f"[Session Params] Applied {len(scalar_overrides)} session overrides for session {session_id}")
-    
+
+    # Say out loud whether this session actually HAS a dataset, or is merely sitting on
+    # the product default.
+    #
+    # A use case the attendee defined themselves has no usecase_descriptions row at all,
+    # so it resolves neither a session override nor a use-case default and lands on the
+    # global `samples.wanderbricks`. That is the same silent fallback that had a retail
+    # workshop modelling hotel bookings — fixed for seeded industries in R2.1, but still
+    # wide open for anyone who builds their own use case.
+    #
+    # Rather than guess a dataset for them, the prompts and the source editor read this
+    # flag and say the dataset is not chosen yet. A wrong dataset that looks authoritative
+    # is far worse than an obviously missing one.
+    if _session_has_dataset:
+        params['dataset_status'] = 'session'
+    elif _has_usecase_dataset:
+        params['dataset_status'] = 'use_case'
+    else:
+        params['dataset_status'] = 'unset'
+        logger.info(
+            f"[Session Params] No dataset resolved for session {session_id}; "
+            f"falling back to the global default and reporting dataset_status=unset"
+        )
+
     # Derive user_schema_prefix, user_app_name, use_case_slug, and use_case_file_prefix on-the-fly if any is missing
     _needs_schema = results and 'user_schema_prefix' not in params
     _needs_app_name = results and 'user_app_name' not in params
@@ -5992,6 +6021,10 @@ class LakehouseParamsResponse(BaseModel):
     catalog: str
     schema_name: str  # Using schema_name to avoid conflict with Pydantic's schema
     is_overridden: bool = False
+    # Where the value came from: 'session' (explicit override, incl. agent-captured),
+    # 'use_case' (the use case's own dataset), or 'unset' (nothing chose one, so these
+    # values are the product default and almost certainly wrong for this use case).
+    dataset_status: str = 'use_case'
 
 class LakehouseParamsUpdate(BaseModel):
     """Request model for updating lakehouse parameters."""
@@ -6036,7 +6069,8 @@ async def get_lakehouse_params(session_id: str) -> LakehouseParamsResponse:
     return LakehouseParamsResponse(
         catalog=catalog,
         schema_name=schema_name,
-        is_overridden=is_overridden
+        is_overridden=is_overridden,
+        dataset_status=effective.get('dataset_status', 'use_case'),
     )
 
 

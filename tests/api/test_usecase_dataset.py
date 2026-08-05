@@ -264,3 +264,85 @@ class SeedCoverageTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
+
+
+class DatasetStatusTest(unittest.TestCase):
+    """
+    A session must say out loud whether it actually has a dataset.
+
+    R2.1 gave every SEEDED use case a dataset. A use case the attendee defines themselves
+    has no row in usecase_descriptions at all, so it resolves neither a session override
+    nor a use-case default and lands on the global `samples.wanderbricks` — the same
+    silent fallback that had a retail workshop modelling hotel bookings. Reporting
+    `dataset_status` is what lets the UI and the prompts say "not chosen yet" instead of
+    presenting the tourism sample as though it belonged to this use case.
+    """
+
+    def setUp(self):
+        self._orig_globals = routes.get_workshop_parameters_sync
+        self._orig_query = routes.execute_query
+        self._orig_insert = routes.execute_insert
+        routes.get_workshop_parameters_sync = lambda: dict(GLOBALS)
+        routes.execute_insert = lambda *a, **k: 1
+
+    def tearDown(self):
+        routes.get_workshop_parameters_sync = self._orig_globals
+        routes.execute_query = self._orig_query
+        routes.execute_insert = self._orig_insert
+
+    def _session(self, *, session_params=None, sample_catalog=None, sample_schema=None):
+        row = {
+            "session_parameters": json.dumps(session_params or {}),
+            "created_by": "attendee@example.com",
+            "use_case_label": "My Own Idea",
+            "use_case": "my_own_idea",
+            "workshop_level": "end-to-end",
+            "sample_catalog": sample_catalog,
+            "sample_schema": sample_schema,
+        }
+        routes.execute_query = lambda sql, params=None: [row]
+
+    def test_custom_use_case_reports_unset(self):
+        """The reported bug, one layer up: no dataset anywhere means say so."""
+        self._session()
+        params = routes.get_effective_workshop_parameters("s1")
+
+        self.assertEqual(params["dataset_status"], "unset")
+
+    def test_seeded_use_case_reports_use_case(self):
+        self._session(sample_catalog="samples", sample_schema="bakehouse")
+        params = routes.get_effective_workshop_parameters("s1")
+
+        self.assertEqual(params["dataset_status"], "use_case")
+
+    def test_agent_captured_dataset_reports_session(self):
+        """
+        report_gate merges captured values into session_parameters, so a dataset the
+        attendee's agent generated must read as the strongest signal there is.
+        """
+        self._session(
+            session_params={
+                "chapter_3_lakehouse_catalog": "my_catalog",
+                "chapter_3_lakehouse_schema": "luis_c_my_own_idea_raw",
+            }
+        )
+        params = routes.get_effective_workshop_parameters("s1")
+
+        self.assertEqual(params["dataset_status"], "session")
+        self.assertEqual(params["chapter_3_lakehouse_schema"], "luis_c_my_own_idea_raw")
+
+    def test_session_override_beats_a_use_case_default(self):
+        self._session(
+            session_params={"chapter_3_lakehouse_schema": "generated_raw"},
+            sample_catalog="samples",
+            sample_schema="bakehouse",
+        )
+        params = routes.get_effective_workshop_parameters("s1")
+
+        self.assertEqual(params["dataset_status"], "session")
+
+    def test_status_is_always_present(self):
+        """Downstream code reads this key unconditionally, so it must never be missing."""
+        for kwargs in ({}, {"sample_schema": "bakehouse"}):
+            self._session(**kwargs)
+            self.assertIn("dataset_status", routes.get_effective_workshop_parameters("s1"))

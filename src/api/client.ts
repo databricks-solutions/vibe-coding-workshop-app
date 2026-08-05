@@ -371,6 +371,12 @@ export interface LakehouseParams {
   catalog: string;
   schema_name: string;
   is_overridden: boolean;
+  /**
+   * Where the value came from. 'unset' means nothing chose a dataset for this use case,
+   * so catalog/schema are the product default and almost certainly wrong — a use case
+   * the attendee defined themselves has no dataset of its own.
+   */
+  dataset_status?: 'session' | 'use_case' | 'unset';
 }
 
 // ============== Session Types ==============
