@@ -752,6 +752,21 @@ try:
                 # admin who edits the prompt text keeps it across redeploys.
                 '21_seed_prework_steps.sql',
                 '22_seed_prework_params.sql',
+                # Solution Builder practices: a named protagonist and a currency figure
+                # on step 3, the catalyst's temporal anchor on 58 (which is what stops a
+                # generating agent putting the spike at max(date)), the story threaded
+                # into 59's generation brief, and the 5-second test on 16. Field adds are
+                # guarded on the new key being absent, prose appends on their heading, so
+                # a re-run is a no-op and admin edits survive. Must run AFTER 17, which
+                # is the current authority on step 3's and step 11's field arrays.
+                '23_seed_story_fields.sql',
+                # Coherence gate: one field on step 15, which leads data-intelligence on
+                # every path that has it, so the chain gets checked before the dashboards
+                # and Genie space are built rather than after.
+                '24_seed_coherence_gate.sql',
+                # Leave with the story rather than the resources. Prepends to step 31, so
+                # it is read before the irreversible part.
+                '25_seed_handoff_before_cleanup.sql',
             ]
             print(f"  Applying idempotent post-seed migrations...")
             for mig in POST_SEED_MIGRATIONS:
