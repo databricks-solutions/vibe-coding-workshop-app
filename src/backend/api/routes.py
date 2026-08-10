@@ -1188,6 +1188,18 @@ def _decision_params(step_decisions: Dict[str, Any]) -> Dict[str, str]:
     Later steps can therefore reference earlier commitments — committed_features from
     step 3 is available in step 4's template.
 
+    **Every field is ALSO emitted scoped to its step**, as `<section_tag>__<key>`, so
+    `{gold_layer_design__fact_grain}` and `{data_model_design__fact_grain}` name one
+    specific commitment and can never be confused for each other. Prefer the scoped
+    token in any prompt where the distinction matters.
+
+    That exists because two steps legitimately declare `fact_grain` — step 58 commits
+    the grain of the source model, step 11 the grain of the gold fact built from it —
+    and the bare token used to resolve by dict insertion order, so which one a prompt
+    received was not defined by anything the attendee did. Bare keys are still emitted
+    (every shipped prompt uses them) but are now resolved by the LATEST commitment,
+    tie-broken on section_tag so the result is deterministic either way.
+
     Returns bare keys (no braces); the caller wraps them, as it does for every other
     workshop parameter.
     """
@@ -1195,12 +1207,33 @@ def _decision_params(step_decisions: Dict[str, Any]) -> Dict[str, str]:
         return {}
 
     flat: Dict[str, str] = {}
-    per_row: Dict[str, list] = {}
+    # key -> (sort_key, section_tag, rendered value) for the bare-token winner.
+    unscoped: Dict[str, tuple] = {}
 
-    for entry in step_decisions.values():
+    def _remember(key: str, tag: str, committed_at: str, rendered: str) -> None:
+        """Scoped token always; bare token only if this is the latest commitment."""
+        if tag:
+            flat[f"{tag}__{key}"] = rendered
+        # Sort on (committed_at, section_tag): committed_at orders by what the attendee
+        # actually did, and the tag breaks ties so a missing or identical timestamp still
+        # produces one stable answer rather than whatever the dict happened to yield.
+        rank = (committed_at or "", tag or "")
+        prior = unscoped.get(key)
+        if prior is None or rank >= prior[0]:
+            unscoped[key] = (rank, tag, rendered)
+            if prior is not None and prior[1] != tag:
+                logger.debug(
+                    f"[Decision Params] '{key}' is committed on both '{prior[1]}' and "
+                    f"'{tag}'; the bare token resolves to '{tag}'. Use "
+                    f"{{{tag}__{key}}} to name one explicitly."
+                )
+
+    for tag, entry in step_decisions.items():
         decision = (entry or {}).get('decision') if isinstance(entry, dict) else None
         if not isinstance(decision, dict):
             continue
+        committed_at = (entry or {}).get('committed_at') or ''
+        per_row: Dict[str, list] = {}
 
         for key, value in decision.items():
             if '::' in key:
@@ -1208,12 +1241,19 @@ def _decision_params(step_decisions: Dict[str, Any]) -> Dict[str, str]:
                 per_row.setdefault(field, []).append(f"- {row}: {value}")
             elif isinstance(value, list):
                 items = [str(v).strip() for v in value if str(v).strip()]
-                flat[key] = '\n'.join(f"{i}. {v}" for i, v in enumerate(items, 1))
+                _remember(
+                    key, tag, committed_at,
+                    '\n'.join(f"{i}. {v}" for i, v in enumerate(items, 1)),
+                )
             elif value not in (None, ''):
-                flat[key] = str(value)
+                _remember(key, tag, committed_at, str(value))
 
-    for field, lines in per_row.items():
-        flat[field] = '\n'.join(lines)
+        # Grouped per-step, so two steps using radio_per_row cannot interleave rows.
+        for field, lines in per_row.items():
+            _remember(field, tag, committed_at, '\n'.join(lines))
+
+    for key, (_rank, _tag, rendered) in unscoped.items():
+        flat[key] = rendered
 
     return flat
 

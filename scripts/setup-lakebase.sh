@@ -767,6 +767,13 @@ try:
                 # Leave with the story rather than the resources. Prepends to step 31, so
                 # it is read before the irreversible part.
                 '25_seed_handoff_before_cleanup.sql',
+                # Point each fact_grain consumer at the step it means. Two steps commit a
+                # field of that name (58 the source grain, 11 the gold grain) and the bare
+                # token used to resolve by dict insertion order, so step 59's generation
+                # brief could receive the coarser gold grain and have the agent generate
+                # pre-aggregated data. Runs last: it rewrites blocks that 12, 21 and 24
+                # append, so those must already be in place.
+                '26_scope_fact_grain_tokens.sql',
             ]
             print(f"  Applying idempotent post-seed migrations...")
             for mig in POST_SEED_MIGRATIONS:

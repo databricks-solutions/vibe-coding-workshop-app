@@ -114,16 +114,14 @@ class FieldKeyNamespaceTest(unittest.TestCase):
     """
 
     # `fact_grain` is declared by BOTH gold_layer_design (step 11, seeds 12/17) and
-    # data_model_design (step 58, seed 21), so whichever the attendee committed most
-    # recently wins everywhere.
+    # data_model_design (step 58, seed 21), and both are correct: 58 commits the grain of
+    # the SOURCE model, 11 the grain of the GOLD fact built from it.
     #
-    # Deliberately allow-listed rather than fixed. The two steps mean nearly the same
-    # thing by it — step 58 commits the grain of the source model, step 11 the grain of
-    # the gold fact built from it — so in the common case the collision is harmless and
-    # arguably desirable. Renaming 58's key would mean editing its already-shipped
-    # generation brief in lockstep, which is not a change to make days before a pilot.
-    # The real fix is namespacing tokens by section_tag, and that breaks every {token} in
-    # seed 02.
+    # No longer papered over. _decision_params emits a scoped `<section_tag>__<key>` token
+    # for every field, and seed 26 points each consumer at the one it means, so the shared
+    # name no longer makes any prompt ambiguous. Kept in the allow-list because the two
+    # steps genuinely both need a field by that name — the guarantee is enforced by
+    # ScopedDecisionTokenTest below rather than by forbidding the name.
     KNOWN_COLLISIONS = {"fact_grain"}
 
     def _declared_keys_by_seed(self):
@@ -183,6 +181,7 @@ class FieldKeyNamespaceTest(unittest.TestCase):
         """
         If a second collision gets allow-listed without thought this fails, which is the
         point: the allow-list is a record of one deliberate decision, not a dumping ground.
+        A new shared name must either be renamed or given the scoped-token treatment.
         """
         self.assertEqual(self.KNOWN_COLLISIONS, {"fact_grain"})
 
@@ -200,6 +199,200 @@ class FieldKeyNamespaceTest(unittest.TestCase):
                 owners[key], {seed},
                 f"{key} is declared outside {seed} too: {sorted(owners[key])}",
             )
+
+
+class ScopedDecisionTokenTest(unittest.TestCase):
+    """
+    The fix for the fact_grain ambiguity.
+
+    Two steps commit a field called `fact_grain` and both are right — step 58 the grain of
+    the SOURCE model, step 11 the grain of the GOLD fact built from it. The bug was that
+    the bare `{fact_grain}` token resolved to whichever the dict happened to yield last,
+    i.e. by Python insertion order rather than by anything the attendee did.
+
+    The damage was quiet: step 59's brief tells a generating agent what grain to produce
+    rows at. Receiving the coarser gold grain there means the agent generates
+    pre-aggregated data and every layer built on it re-grains rows that were never at the
+    grain they claim. Nothing errors; the numbers are just wrong.
+    """
+
+    SRC = {
+        "decision": {"fact_grain": "SOURCE: one sale line, per store, per day"},
+        "committed_at": "2026-08-10T10:00:00Z",
+    }
+    GOLD = {
+        "decision": {"fact_grain": "GOLD: one order line per day"},
+        "committed_at": "2026-08-10T11:00:00Z",
+    }
+
+    def test_each_step_gets_its_own_scoped_token(self):
+        params = routes._decision_params({
+            "data_model_design": self.SRC, "gold_layer_design": self.GOLD,
+        })
+        self.assertEqual(
+            params["data_model_design__fact_grain"],
+            "SOURCE: one sale line, per store, per day",
+        )
+        self.assertEqual(
+            params["gold_layer_design__fact_grain"], "GOLD: one order line per day",
+        )
+
+    def test_the_bare_token_no_longer_depends_on_insertion_order(self):
+        """The exact regression: same decisions, different dict order, same answer."""
+        a = routes._decision_params({
+            "data_model_design": self.SRC, "gold_layer_design": self.GOLD,
+        })
+        b = routes._decision_params({
+            "gold_layer_design": self.GOLD, "data_model_design": self.SRC,
+        })
+        self.assertEqual(a["fact_grain"], b["fact_grain"])
+        # Latest commitment wins, which is the only defensible reading of a bare token.
+        self.assertEqual(a["fact_grain"], "GOLD: one order line per day")
+
+    def test_it_is_deterministic_without_timestamps(self):
+        """
+        Sessions saved before committed_at existed have no timestamp, and a decision
+        submitted over MCP could in principle lack one too. Those must still resolve to one
+        stable answer rather than falling back to dict order.
+        """
+        one = routes._decision_params({
+            "data_model_design": {"decision": {"fact_grain": "SRC"}},
+            "gold_layer_design": {"decision": {"fact_grain": "GOLD"}},
+        })
+        two = routes._decision_params({
+            "gold_layer_design": {"decision": {"fact_grain": "GOLD"}},
+            "data_model_design": {"decision": {"fact_grain": "SRC"}},
+        })
+        self.assertEqual(one["fact_grain"], two["fact_grain"])
+
+    def test_a_scoped_token_cannot_be_corrupted_by_the_bare_one(self):
+        """
+        Substitution is an unordered chain of str.replace calls, so if the bare token were
+        a substring of the scoped one, replacing it first would mangle the scoped token.
+        The leading brace prevents it — asserted because it is the kind of thing a later
+        rename (to `fact_grain_gold_layer_design`, say) would silently break.
+        """
+        for tag in ("gold_layer_design", "data_model_design"):
+            scoped = "{" + f"{tag}__fact_grain" + "}"
+            self.assertNotIn("{fact_grain}", scoped)
+
+    def test_scoping_preserves_list_and_per_row_rendering(self):
+        params = routes._decision_params({"gold_layer_design": {
+            "decision": {
+                "scd_decisions::dim_customer": "Type 2",
+                "scd_decisions::dim_store": "Type 1",
+                "committed_features": ["A", "B"],
+            },
+            "committed_at": "2026-01-01T00:00:00Z",
+        }})
+        self.assertEqual(params["committed_features"], "1. A\n2. B")
+        self.assertEqual(
+            params["gold_layer_design__scd_decisions"],
+            "- dim_customer: Type 2\n- dim_store: Type 1",
+        )
+
+    def test_per_row_fields_do_not_interleave_across_steps(self):
+        """
+        radio_per_row rows used to accumulate into one shared bucket keyed by field name,
+        so two steps both using `scd_decisions` would merge their rows into a single
+        block. Grouping is now per step.
+        """
+        params = routes._decision_params({
+            "gold_layer_design": {"decision": {"scd_decisions::dim_a": "Type 1"},
+                                  "committed_at": "2026-01-01T00:00:00Z"},
+            "activation_table_design": {"decision": {"scd_decisions::dim_b": "Type 2"},
+                                        "committed_at": "2026-01-02T00:00:00Z"},
+        })
+        self.assertEqual(params["gold_layer_design__scd_decisions"], "- dim_a: Type 1")
+        self.assertEqual(params["activation_table_design__scd_decisions"], "- dim_b: Type 2")
+
+    def test_consumers_that_care_use_the_scoped_token(self):
+        """
+        The half that makes the guarantee real. Emitting a scoped token is useless if the
+        prompts keep using the ambiguous one, so assert the four rewrites in seed 26.
+        """
+        seed = _sql_only((SEED_DIR / "26_scope_fact_grain_tokens.sql").read_text())
+        # Both of step 59's references (the recap header and the generation brief) live on
+        # data_provision, NOT on data_model_design — the step that COLLECTS the field is
+        # not the step whose prompt quotes it back. Asserting the wrong owner here is what
+        # the replay caught.
+        for tag, expected in (
+            ("gold_layer_design", "{gold_layer_design__fact_grain}"),
+            ("data_provision", "{data_model_design__fact_grain}"),
+            ("usecase_plan", "{data_model_design__fact_grain}"),
+        ):
+            stmts = [s for s in _statements(seed) if f"section_tag = '{tag}'" in s]
+            self.assertEqual(len(stmts), 1, f"expected one rewrite for {tag}")
+            self.assertIn(expected, stmts[0], f"{tag} does not use {expected}")
+
+    def test_no_rewrite_targets_a_step_that_does_not_use_the_token(self):
+        """
+        A replace() aimed at the wrong step matches nothing, and ignore_errors=True hides
+        it. data_model_design collects fact_grain but never substitutes it, so a rewrite
+        naming it would be silently dead.
+        """
+        seed = _sql_only((SEED_DIR / "26_scope_fact_grain_tokens.sql").read_text())
+        prework = (SEED_DIR / "21_seed_prework_steps.sql").read_text()
+
+        # Prove the premise rather than trusting it: the 58 INSERT must not contain the
+        # token, and the 59 INSERT must.
+        insert_58 = prework.split("'data_model_design',")[1].split("WHERE NOT EXISTS")[0]
+        insert_59 = prework.split("'data_provision',")[1].split("WHERE NOT EXISTS")[0]
+        self.assertNotIn("{fact_grain}", insert_58)
+        self.assertIn("{fact_grain}", insert_59)
+
+        self.assertEqual(
+            [s for s in _statements(seed) if "section_tag = 'data_model_design'" in s],
+            [],
+            "data_model_design never substitutes {fact_grain}, so a rewrite for it is dead",
+        )
+
+    def test_the_generation_brief_asks_for_the_source_grain(self):
+        """
+        The one that was actually exposed. Step 59 hands this to
+        databricks-synthetic-data-gen as the grain to generate at, so it must never be the
+        gold grain — that would produce pre-aggregated data.
+        """
+        seed = _sql_only((SEED_DIR / "26_scope_fact_grain_tokens.sql").read_text())
+        stmt = [s for s in _statements(seed) if "section_tag = 'data_provision'" in s][0]
+        self.assertIn("{data_model_design__fact_grain}", stmt)
+        self.assertNotIn("{gold_layer_design__fact_grain}", stmt)
+
+    def test_the_rewrites_are_idempotent(self):
+        """
+        These are replace() calls, so a re-run must find nothing left to replace. Guarded
+        on the bare token still being present.
+        """
+        seed = _sql_only((SEED_DIR / "26_scope_fact_grain_tokens.sql").read_text())
+        for stmt in _statements(seed):
+            if "UPDATE" not in stmt.upper():
+                continue
+            self.assertIn("{fact_grain}", stmt, "rewrite is not guarded on the old token")
+            self.assertIn("is_active = TRUE", stmt)
+
+    def test_guards_match_literally_not_by_wildcard(self):
+        """
+        In SQL LIKE, `_` is a single-character wildcard, so '%__fact_grain}%' would match
+        far more than the double-prefixed token it is meant to detect. These guards compare
+        literally with position() for that reason.
+        """
+        seed = _sql_only((SEED_DIR / "26_scope_fact_grain_tokens.sql").read_text())
+        for stmt in _statements(seed):
+            if "UPDATE" not in stmt.upper():
+                continue
+            self.assertNotIn(
+                "LIKE '%{fact_grain}", stmt,
+                "use position() — LIKE treats the underscores in these tokens as wildcards",
+            )
+
+    def test_the_global_rewrite_cannot_double_prefix(self):
+        """
+        data_provision's rewrite is an unanchored global replace, so without a guard a
+        second pass would produce {data_model_design__data_model_design__fact_grain}.
+        """
+        seed = _sql_only((SEED_DIR / "26_scope_fact_grain_tokens.sql").read_text())
+        stmt = [s for s in _statements(seed) if "section_tag = 'data_provision'" in s][0]
+        self.assertIn("position('__fact_grain}' in input_template) = 0", stmt)
 
 
 class StoryTokenTest(unittest.TestCase):
