@@ -18,20 +18,26 @@ a browser with an agent doing the work. That is what this plan is for.
 Both were found on this machine while writing this plan, and both silently break the
 generate branch rather than erroring usefully.
 
-**A. The synthetic-data dependencies are not installed.** Verified missing in `.venv`:
-`faker`, `pandas`, `numpy`, `holidays`, `databricks-connect`.
+**Both are now done on this machine** — recorded here because anyone else running this plan
+has to repeat them, and each fails in a way that does not point at the cause.
+
+**A. The synthetic-data environment.** It cannot share the app's venv: the app is on Python
+3.11 and `databricks-connect` UDFs require the client's minor version to match serverless
+(3.12). Plain SQL works on 3.11, so a naive smoke test passes and tells you nothing.
 
 ```bash
-uv pip install faker pandas numpy holidays databricks-connect
+uv venv .venv-datagen --python 3.12
+VIRTUAL_ENV=.venv-datagen uv pip install "databricks-connect>=16.4,<17.4" faker numpy pandas holidays
 ```
 
-**B. The profile has no `serverless_compute_id`.** Without it `databricks-connect` cannot
-get compute and the generation run dies on connect, not on anything to do with the
-workshop. Add to the `genie-workbench` block in `~/.databrickscfg`:
+The pin matters — unpinned resolves to 19.0.0, which rejects serverless outright. There is a
+third trap (serverless executors cannot see your local `faker`); the working fix is in
+[docs/synthetic_data_setup.md](synthetic_data_setup.md). **Read that before §5.**
 
-```ini
-serverless_compute_id = auto
-```
+**B. `serverless_compute_id = auto`** in the `genie-workbench` block of `~/.databrickscfg`.
+Without it `databricks-connect` cannot acquire compute and dies on connect.
+
+Verified working end to end: 15,000 rows with real Faker city names on serverless DBR 18.x.
 
 Then confirm readiness:
 

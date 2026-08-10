@@ -774,6 +774,12 @@ try:
                 # pre-aggregated data. Runs last: it rewrites blocks that 12, 21 and 24
                 # append, so those must already be in place.
                 '26_scope_fact_grain_tokens.sql',
+                # Correct step 59's synthetic-data prerequisites. The old text named only
+                # serverless_compute_id and "local dependencies", which is true and
+                # insufficient: UDFs need a Python 3.12 client, a pinned
+                # databricks-connect, and faker shipped to the executors. Found by getting
+                # the branch working on a real workspace.
+                '27_fix_datagen_prereqs.sql',
             ]
             print(f"  Applying idempotent post-seed migrations...")
             for mig in POST_SEED_MIGRATIONS:
