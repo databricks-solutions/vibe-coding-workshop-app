@@ -607,6 +607,91 @@ class HandoffTest(unittest.TestCase):
             self.assertIn(artefact, HANDOFF)
 
 
+class ConnectBranchDefaultTest(unittest.TestCase):
+    """
+    The generate branch needs a Python 3.12 venv, a pinned databricks-connect and faker
+    shipped to the serverless executors. Each fails somewhere other than its cause, so a
+    participant who picks it unprepared loses the part of the session they came for.
+    Seeds 27 and 28 make connect the recommended default and state the cost up front.
+    """
+
+    SEED_27 = (SEED_DIR / "27_fix_datagen_prereqs.sql").read_text()
+    SEED_28 = (SEED_DIR / "28_default_to_connect_branch.sql").read_text()
+
+    def test_the_option_strings_are_never_reworded(self):
+        """
+        Load-bearing. Step 59's branch headings switch on the literal option text
+        ('## If you chose "I have existing tables"'), and every committed decision so far
+        is stored against these exact strings. Rewording them would orphan saved sessions
+        and silently break both headings.
+        """
+        # Match on the jsonb PATH rather than on the literal option text, because that is
+        # what any rewrite has to name however it is spaced or quoted. An earlier version
+        # of this test looked for '"options": [' and a guarded rewrite using
+        # jsonb_set(..., '{fields,0,options}', ...) sailed straight past it.
+        normalised = re.sub(r"\s+", "", self.SEED_28)
+        self.assertNotIn(
+            "options}", normalised,
+            "seed 28 must not write the radio options — step 59's headings switch on the "
+            "literal option text and committed sessions are stored against it. Only the "
+            "hint and the prose may change.",
+        )
+        # And the seed must say why, so the next person does not try.
+        self.assertIn("not change the OPTION STRINGS", self.SEED_28)
+
+    def test_the_generate_option_still_exists(self):
+        """
+        Steering is not removing. Some attendees have no usable data, and a question with
+        one answer is not a decision.
+        """
+        prework = (SEED_DIR / "21_seed_prework_steps.sql").read_text()
+        self.assertIn('"Generate a dataset for me"', prework)
+        self.assertNotIn("DELETE FROM", self.SEED_28)
+
+    def test_the_cost_is_stated_where_the_choice_is_made(self):
+        """Step 57, not three steps later once they have already committed."""
+        self.assertIn("Before you pick this, know what it costs", self.SEED_28)
+        self.assertIn("Python 3.12", self.SEED_28)
+        self.assertIn("recommended default", self.SEED_28)
+
+    def test_step_59_prereqs_name_all_three_traps(self):
+        for required in ("--python 3.12", "16.4,<17.4", "addArtifacts"):
+            self.assertIn(
+                required, self.SEED_27,
+                f"step 59's prerequisites lost {required!r} — the trap it guards is silent",
+            )
+
+    def test_both_seeds_are_guarded_and_registered(self):
+        setup = (REPO_ROOT / "scripts" / "setup-lakebase.sh").read_text()
+        block = setup.split("POST_SEED_MIGRATIONS = [")[1].split("]")[0]
+        for name, sql in (
+            ("27_fix_datagen_prereqs.sql", self.SEED_27),
+            ("28_default_to_connect_branch.sql", self.SEED_28),
+        ):
+            self.assertIn(name, block, f"{name} never reaches an existing install")
+            for stmt in _statements(_sql_only(sql)):
+                if "UPDATE" not in stmt.upper():
+                    continue
+                guarded = "position(" in stmt or "NOT LIKE" in stmt
+                self.assertTrue(guarded, f"{name}: unguarded UPDATE re-applies every deploy")
+                self.assertIn("is_active = TRUE", stmt)
+
+    def test_doctor_reports_the_generate_branch_without_failing(self):
+        """
+        The check must be advisory. Connecting existing data is the default and needs none
+        of this, so a missing .venv-datagen must never fail doctor for the whole room.
+        """
+        src = (REPO_ROOT / "scripts" / "vibe2value.py").read_text()
+        self.assertIn("def check_datagen_readiness", src)
+        body = src.split("def check_datagen_readiness")[1].split("\ndef ")[0]
+        self.assertNotIn(
+            "all_ok = False", body,
+            "the datagen check must never fail doctor — the connect branch is the default",
+        )
+        for signal in ("3.12", "16.4", "serverless_compute_id"):
+            self.assertIn(signal, body, f"the check does not look at {signal}")
+
+
 class SeedDisciplineTest(unittest.TestCase):
     """
     execute_sql_file(..., ignore_errors=True) swallows failures silently, and these seeds

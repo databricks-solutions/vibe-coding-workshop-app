@@ -1063,6 +1063,115 @@ def cmd_deploy(args):
     sys.exit(result.returncode)
 
 
+def check_datagen_readiness(profile: str = "") -> bool:
+    """
+    Report whether the OPTIONAL synthetic-data branch (step 59) could run here.
+
+    Deliberately advisory — it never fails `doctor`, because connecting existing data is
+    the recommended default and needs none of this. The point is that a facilitator can
+    find out before a session whether anyone can take the generate branch, instead of a
+    participant discovering it mid-session.
+
+    Checks the three things that each fail somewhere other than their cause:
+      1. A Python 3.12 environment. databricks-connect UDFs need the client's minor
+         version to match serverless. Plain SQL works on 3.11, so a naive connectivity
+         test passes and proves nothing about the UDFs generation actually uses.
+      2. databricks-connect pinned to >=16.4,<17.4. Unpinned resolves to a release that
+         rejects serverless outright.
+      3. serverless_compute_id in the profile, without which there is no compute.
+
+    Shipping faker to the executors (spark.addArtifacts) cannot be checked statically —
+    it is a property of the generation script, so the hint points at the doc instead.
+    """
+    info("Checking synthetic data generation (optional branch)...")
+
+    venv = PROJECT_ROOT / ".venv-datagen"
+    py = venv / "bin" / "python"
+    if not py.exists():
+        info("No .venv-datagen — the generate branch is not set up (this is fine)")
+        print("      Attendees can use the connect branch, which is the recommended default.")
+        print("      To enable it, see docs/synthetic_data_setup.md")
+        return False
+
+    ok = True
+
+    # 1. Interpreter minor version must match serverless.
+    try:
+        ver = subprocess.run(
+            [str(py), "-c", "import sys; print('%d.%d' % sys.version_info[:2])"],
+            capture_output=True, text=True, timeout=30,
+        ).stdout.strip()
+    except Exception:
+        ver = ""
+    if ver == "3.12":
+        success(f"Python {ver} in .venv-datagen")
+    else:
+        warn(
+            f"Python {ver or '(unknown)'} in .venv-datagen — serverless UDFs need 3.12. "
+            f"Plain SQL will still work, so this fails only once Faker runs."
+        )
+        ok = False
+
+    # 2. Client version must be in the range that supports serverless.
+    try:
+        cv = subprocess.run(
+            [str(py), "-c",
+             "import importlib.metadata as m; print(m.version('databricks-connect'))"],
+            capture_output=True, text=True, timeout=30,
+        ).stdout.strip()
+    except Exception:
+        cv = ""
+    if cv:
+        try:
+            major, minor = (int(x) for x in cv.split(".")[:2])
+            in_range = (major, minor) >= (16, 4) and (major, minor) < (17, 4)
+        except Exception:
+            in_range = False
+        if in_range:
+            success(f"databricks-connect {cv}")
+        else:
+            warn(
+                f"databricks-connect {cv} is outside >=16.4,<17.4 — newer releases reject "
+                f"serverless with 'Serverless mode is not yet supported'."
+            )
+            ok = False
+    else:
+        warn("databricks-connect not installed in .venv-datagen")
+        ok = False
+
+    # 3. Serverless compute must be enabled for the profile.
+    cfg = Path.home() / ".databrickscfg"
+    profile = profile or "DEFAULT"
+    has_serverless = False
+    if cfg.exists():
+        try:
+            in_block = False
+            for line in cfg.read_text().splitlines():
+                s = line.strip()
+                if s.startswith("["):
+                    in_block = s == f"[{profile}]"
+                elif in_block and s.replace(" ", "").startswith("serverless_compute_id="):
+                    has_serverless = True
+        except Exception:
+            pass
+    if has_serverless:
+        success(f"serverless_compute_id set for profile '{profile}'")
+    else:
+        warn(
+            f"No serverless_compute_id in the '{profile}' profile — databricks-connect "
+            f"cannot get compute. Add `serverless_compute_id = auto` to ~/.databrickscfg."
+        )
+        ok = False
+
+    if ok:
+        success("Generate branch looks ready")
+        print("      Note: faker must still be shipped to the executors at runtime —")
+        print("      installing it locally is not enough. See docs/synthetic_data_setup.md")
+    else:
+        print("      This never blocks the workshop: use the connect branch instead.")
+    return ok
+
+
 def cmd_doctor(args):
     """Validate prerequisites and configuration."""
     header("VIBE2VALUE DOCTOR")
@@ -1121,6 +1230,13 @@ def cmd_doctor(args):
         all_ok = False
     print()
 
+    # Optional generate-branch readiness. Never fails the run: connecting existing
+    # data is the recommended default and needs none of this. It reports so a
+    # facilitator can find out BEFORE a session whether anyone can take that branch,
+    # rather than a participant finding out during one.
+    if user_info and CONFIG_PATH.exists():
+        check_datagen_readiness(profile)
+        print()
     if all_ok:
         print(f"{GREEN}{BOLD}All checks passed!{NC}")
     else:

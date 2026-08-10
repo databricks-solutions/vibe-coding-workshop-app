@@ -780,6 +780,11 @@ try:
                 # databricks-connect, and faker shipped to the executors. Found by getting
                 # the branch working on a real workspace.
                 '27_fix_datagen_prereqs.sql',
+                # Make connecting existing data the recommended default and state what the
+                # generate branch costs at the moment of choosing, rather than three steps
+                # later. Keeps both options and does NOT touch the option strings, which
+                # step 59's headings switch on and committed sessions are stored against.
+                '28_default_to_connect_branch.sql',
             ]
             print(f"  Applying idempotent post-seed migrations...")
             for mig in POST_SEED_MIGRATIONS:
