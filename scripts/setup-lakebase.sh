@@ -790,6 +790,9 @@ try:
                 # affected grain, 3.9% on the top-line weekly chart. Names the grain and
                 # makes the agent verify on the chart rather than assert.
                 '29_contrast_needs_a_grain.sql',
+                # Say the generate-branch cost once, in the body, not twice. Runs after 28,
+                # which wrote the long hint this trims.
+                '30_trim_the_data_source_hint.sql',
             ]
             print(f"  Applying idempotent post-seed migrations...")
             for mig in POST_SEED_MIGRATIONS:
