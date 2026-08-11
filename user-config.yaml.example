@@ -30,7 +30,7 @@ lakebase:
 
 app:
   name: "vibe-coding-workshop-app"
-  serving_endpoint: "databricks-claude-sonnet-4-5"
+  serving_endpoint: "databricks-claude-sonnet-4-6"
 
 user:
   email: ""                           # Auto-discovered during install
