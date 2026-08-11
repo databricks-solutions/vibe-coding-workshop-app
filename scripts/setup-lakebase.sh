@@ -785,6 +785,11 @@ try:
                 # later. Keeps both options and does NOT touch the option strings, which
                 # step 59's headings switch on and committed sessions are stored against.
                 '28_default_to_connect_branch.sql',
+                # "Make the incident dominate" was satisfiable at one grain and invisible
+                # at another. Found by generating for real and charting it: 22% at the
+                # affected grain, 3.9% on the top-line weekly chart. Names the grain and
+                # makes the agent verify on the chart rather than assert.
+                '29_contrast_needs_a_grain.sql',
             ]
             print(f"  Applying idempotent post-seed migrations...")
             for mig in POST_SEED_MIGRATIONS:
