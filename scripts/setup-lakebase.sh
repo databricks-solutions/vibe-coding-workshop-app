@@ -793,6 +793,13 @@ try:
                 # Say the generate-branch cost once, in the body, not twice. Runs after 28,
                 # which wrote the long hint this trims.
                 '30_trim_the_data_source_hint.sql',
+                # The step 57 reveal was static, so it argued for connecting even to
+                # someone who chose to generate because the data does not exist yet.
+                # Generated now, so it answers the branch actually chosen. Clears
+                # expert_answer to NULL, which is load-bearing: static text wins.
+                '31_reveal_stops_lecturing.sql',
+                # The hint should point, not argue. Reasoning moved to the reveal.
+                '32_shorten_hint_further.sql',
             ]
             print(f"  Applying idempotent post-seed migrations...")
             for mig in POST_SEED_MIGRATIONS:
