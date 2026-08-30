@@ -8,13 +8,14 @@
 --
 -- Seeding strategy:
 --   * Genie Code: disable the paths Genie Code does not yet support
---     (the end-to-end workshop, the Skills accelerator, and the Reverse ETL
---     paths that terminate in Lakebase/App).
+--     (the end-to-end workshop and the Skills accelerator).
 --   * The Apps and App + Lakebase paths (__path_app-only__,
---     __path_app-database__) and the Agents Accelerator are intentionally
---     LEFT ENABLED for Genie Code so they can be exercised. The reconciliation
---     DELETE below clears any previously-seeded disable row for them so
---     existing deployments pick up the change on redeploy.
+--     __path_app-database__), the Agents Accelerator, and the Reverse ETL
+--     paths (__path_reverse-lakebase__, __path_reverse-app__) are intentionally
+--     LEFT ENABLED for Genie Code so they can be exercised (the Reverse ETL
+--     Genie Code prompt forks now exist). The reconciliation DELETE below clears
+--     any previously-seeded disable row for them so existing deployments pick up
+--     the change on redeploy.
 --   * Default and CoDA: NO seeded rows. Absence == enabled.
 --
 -- Idempotency contract:
@@ -32,21 +33,21 @@ INSERT INTO ${catalog}.${schema}.step_visibility_overrides
   (section_key, coding_assistant, enabled, updated_at, updated_by)
 VALUES
   ('__path_end-to-end__',              'genie-code', FALSE, CURRENT_TIMESTAMP, 'seed'),
-  ('__path_skills-accelerator__',      'genie-code', FALSE, CURRENT_TIMESTAMP, 'seed'),
-  ('__path_reverse-lakebase__',        'genie-code', FALSE, CURRENT_TIMESTAMP, 'seed'),
-  ('__path_reverse-app__',             'genie-code', FALSE, CURRENT_TIMESTAMP, 'seed')
+  ('__path_skills-accelerator__',      'genie-code', FALSE, CURRENT_TIMESTAMP, 'seed')
 ON CONFLICT (section_key, coding_assistant) DO NOTHING;
 
--- Reconciliation: keep the Apps, App + Lakebase, and Agents Accelerator paths
--- enabled for Genie Code by deleting any previously-seeded disable row for them
--- (absence == enabled). Guarded by updated_by='seed' so admin-made choices
--- captured via the Configuration -> Visibility tab (updated_by=<admin email>)
--- are never touched.
+-- Reconciliation: keep the Apps, App + Lakebase, Agents Accelerator, and
+-- Reverse ETL paths enabled for Genie Code by deleting any previously-seeded
+-- disable row for them (absence == enabled). Guarded by updated_by='seed' so
+-- admin-made choices captured via the Configuration -> Visibility tab
+-- (updated_by=<admin email>) are never touched.
 DELETE FROM ${catalog}.${schema}.step_visibility_overrides
 WHERE coding_assistant = 'genie-code'
   AND section_key IN (
     '__path_app-only__',
     '__path_app-database__',
-    '__path_agents-accelerator__'
+    '__path_agents-accelerator__',
+    '__path_reverse-lakebase__',
+    '__path_reverse-app__'
   )
   AND updated_by = 'seed';
