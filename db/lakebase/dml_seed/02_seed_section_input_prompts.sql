@@ -2164,6 +2164,8 @@ IMPORTANT: Use the EXISTING catalog `{lakehouse_default_catalog}` -- do NOT crea
 
 NOTE: Before creating the schema, check if `{lakehouse_default_catalog}.{user_schema_prefix}_bronze` already exists. If it does, DROP the schema with CASCADE and recreate it from scratch. These are user-specific schemas so dropping is safe.
 
+NOTE: This is a shared workshop workspace. Declare a `user_prefix` variable (default `${workspace.current_user.short_name}`) and include it in every job `name:` field (e.g., `"[${bundle.target} ${var.user_prefix}] Bronze Layer - Clone"`) to avoid `job name is already used` collisions with other attendees. Keep the project/domain name in the title. `databricks bundle deploy --force` does NOT resolve these — see `common/databricks-asset-bundles` → "Shared Workspace Naming".
+
 **State-lock (`skills/vibecoding-state`) — run this prompt between an `enter` and an `exit` so workshop state is resolved and locked:**
 
 1. **Phase 0 — first, before any step below:** `skills/vibecoding-state` op `enter` — params: `prompt_id: "bronze_layer_creation"`. `enter` resolves the `## Environment Capabilities` triple (deploy verb, CLI channel, `state_file_root`) so every deploy/run step below uses the resolved channel — `runDatabricksCli` on Genie Code — and writes state under `state_file_root`, never a bare-local assumption.
@@ -2393,6 +2395,7 @@ When you paste the prompt, the AI reads `@data_product_accelerator/skills/bronze
 - [ ] `databricks bundle validate` passes with no errors
 - [ ] `databricks bundle deploy` completes successfully
 - [ ] Job appears in Databricks Workflows UI
+- [ ] Job name includes `${var.user_prefix}` and renders as `[dev <short_name>] ...` with the project name retained (no collisions in shared workspace)
 
 **Job Execution:**
 - [ ] Bronze clone job runs without errors
@@ -2488,6 +2491,8 @@ IMPORTANT: Use the EXISTING catalog `{lakehouse_default_catalog}` — do NOT cre
 
 NOTE: The job notebook checks whether `{lakehouse_default_catalog}.{user_schema_prefix}_bronze` already exists and, if so, DROPs it with CASCADE and recreates it from scratch (user-specific schema — safe to drop). This DROP/CREATE runs INSIDE the job, not as a direct statement you execute.
 
+NOTE: This is a shared workshop workspace. Put a `user_prefix` variable in every job `name:` field (e.g. `"[${bundle.target} ${var.user_prefix}] Bronze Layer - Clone"`) to avoid `job name is already used` collisions — `bundle deploy --force` does NOT resolve these (see `databricks-asset-bundles` → "Shared Workspace Naming").
+
 ### Step 3 — Write bundle files to `<DP_BUNDLE_ROOT>`, then deploy FROM that page
 
 - Write every generated file UNDER `<DP_BUNDLE_ROOT>` — never the project root (writing at the project root is the "one level too high" bug), never `/tmp`, never a bare relative path (Genie Code''s CWD is page-type-dependent):
@@ -2505,6 +2510,7 @@ targets:
 
   Rationale: with source-linked deployment ON, a `notebook_task` whose source is a workspace file resolves to the in-place editor file rather than the uploaded bundle artifact — which fails at run time with "Unable to access the notebook" (a live Bronze failure). `false` uploads a real notebook artifact, which is the customer best practice you are demonstrating. **Verify after deploy:** `databricks bundle validate --target dev` reports no source-linked warning, and the deployed job task points at the bundle''s uploaded artifact path (under `…/.bundle/…/files/`), not your editor file path.
 - 🔴 **The bundle `name:` MUST match the username-prefixed folder name** so concurrent workshop users in a shared workspace never collide. Set `bundle: { name: {user_schema_prefix}_{use_case_slug}_dab }` (the same `{user_schema_prefix}_{use_case_slug}_dab` as `<DP_BUNDLE_ROOT>`''s folder). Databricks already isolates deploys per user under `/Workspace/Users/<email>/.bundle/…`; the prefix additionally disambiguates the source folder AND the bundle name in shared catalogs/UIs.
+- 🔴 **The job `name:` in `resources/bronze/bronze_clone_job.yml` MUST carry the per-user prefix.** Declare a `user_prefix` variable (default `${workspace.current_user.short_name}`) and set the job name to `"[${bundle.target} ${var.user_prefix}] Bronze Layer - Clone"` — keeping the project/domain name in the title. Also set `presets: { name_prefix: "" }` under `targets.dev` so DAB''s `mode: development` auto-prefix does not double the prefix. Without the `${var.user_prefix}` token every attendee''s job deploys as `[dev] Bronze Clone …` and collides — `--force` does NOT resolve this (see `common/databricks-asset-bundles` → "Shared Workspace Naming").
 - **Open the bundle editor BEFORE any `bundle` command — and surface its link.** As soon as `<DP_BUNDLE_ROOT>/databricks.yml` exists, the workspace file browser shows an **"Open in bundle editor"** affordance on that folder (and an **"Open in editor"** button at the top of the folder view). Its page CWD IS `<DP_BUNDLE_ROOT>` — the bundle-root page `bundle deploy`/`run` require, where Genie Code runs deploy/run pre-approved. **Do not make the operator hunt for the icon** — build a clickable link with the pre-authenticated `WorkspaceClient` (`w`) and print it:
   - `host = w.config.host`; `o = w.get_workspace_id()`
   - `file_id = w.workspace.get_status("<DP_BUNDLE_ROOT>/databricks.yml").object_id`
@@ -3185,6 +3191,8 @@ IMPORTANT: Use the EXISTING catalog `{lakehouse_default_catalog}` -- do NOT crea
 
 NOTE: Before creating the schema, check if `{lakehouse_default_catalog}.{user_schema_prefix}_gold` already exists. If it does, DROP the schema with CASCADE and recreate it from scratch. These are user-specific schemas so dropping is safe.
 
+NOTE: This is a shared workshop workspace. Declare a `user_prefix` variable (default `${workspace.current_user.short_name}`) and include it in every job `name:` field (e.g., `"[${bundle.target} ${var.user_prefix}] Gold Layer - Setup"` and `"[${bundle.target} ${var.user_prefix}] Gold Layer - MERGE Updates"`) to avoid `job name is already used` collisions with other attendees. Keep the project/domain name in the title. `databricks bundle deploy --force` does NOT resolve these — see `common/databricks-asset-bundles` → "Shared Workspace Naming".
+
 **State-lock (`skills/vibecoding-state`) — run this prompt between an `enter` and an `exit` so workshop state is resolved and locked:**
 
 1. **Phase 0 — first, before any step below:** `skills/vibecoding-state` op `enter` — params: `prompt_id: "gold_layer_pipeline"`, `require_prior_gate: {prompt_id: "silver_layer_sdp", gate: "Silver layer live"}`. `enter` resolves the `## Environment Capabilities` triple (deploy verb, CLI channel, `state_file_root`) so every deploy/run step below uses the resolved channel — `runDatabricksCli` on Genie Code — and writes state under `state_file_root`, never a bare-local assumption.
@@ -3688,7 +3696,8 @@ LIMIT 10;
 - [ ] Jobs use `notebook_task` (never `python_task`)
 - [ ] Parameters use `base_parameters` dict (never CLI-style `parameters`)
 - [ ] Serverless: `environments` block with `environment_version: "4"`
-- [ ] Tags applied: `environment`, `layer=gold`, `job_type`',
+- [ ] Tags applied: `environment`, `layer=gold`, `job_type`
+- [ ] Job names include `${var.user_prefix}` and render as `[dev <short_name>] ...` with the project name retained (no collisions in shared workspace)',
 true, 1, true, current_timestamp(), current_timestamp(), current_user());
 
 -- gold_layer_pipeline (genie-code fork) — prescriptive paths + directives; bundle-job-only; reads YAML from <DP_BUNDLE_ROOT>/gold_layer_design; bypass_LLM = TRUE
@@ -7522,11 +7531,16 @@ databricks catalogs get {lakebase_uc_catalog_name}
 
 ### Step 2: Create the Database Catalog (only if it does not exist)
 
-Register the Lakebase PostgreSQL database as a read-only Unity Catalog catalog:
+Register the Lakebase PostgreSQL database as a read-only Unity Catalog catalog. This workshop is **Autoscaling**, so use the `databricks postgres` group (the `databricks database` group is Provisioned Lakebase only):
 
 ```bash
-databricks database create-database-catalog {lakebase_uc_catalog_name} {user_app_name} databricks_postgres
+databricks postgres create-catalog {lakebase_uc_catalog_name} --json ''{
+  "database_name": "databricks_postgres",
+  "branch": "projects/{user_app_name}/branches/production"
+}''
 ```
+
+> Confirm the exact body fields for your CLI version with `databricks postgres create-catalog --help` (the catalog object is flat: `database_name`, `branch`, `create_database_if_not_exists`; it is not `spec`-wrapped).
 
 After creation, verify the catalog state:
 
@@ -8014,6 +8028,8 @@ VALUES
 This is a **deployment checkpoint** — it validates and runs the complete Lakehouse pipeline in dependency order.
 
 **Bundle root:** Run every `bundle` command from the SAME data-product bundle folder the Lakehouse steps built — its dedicated top-level directory `{user_schema_prefix}_{use_case_slug}_dab/` at the repo root (`dp_bundle_root`). `databricks.yml`, `src/`, and `resources/` all live UNDER `{user_schema_prefix}_{use_case_slug}_dab/`; `cd` there before deploying (on Genie Code, be on that folder''s bundle-editor page). Same folder on every coding agent.
+
+NOTE: This is a shared workshop workspace. Every job/pipeline `name:` authored in the Bronze/Silver/Gold steps MUST already carry the `[${bundle.target} ${var.user_prefix}]` prefix (with a `user_prefix` variable defaulting to `${workspace.current_user.short_name}`) so `bundle deploy` here does not hit `name is already used` collisions with other attendees. If a deploy fails on a name conflict, fix the offending resource `name:` to include `${var.user_prefix}` (keeping the project name) — `--force` does NOT resolve these. See `common/databricks-asset-bundles` → "Shared Workspace Naming".
 
 ## Deployment Order (Mandatory)
 
@@ -9766,7 +9782,7 @@ Plan which Gold layer assets to sync from the Lakehouse into Lakebase PostgreSQL
 
 ### Mandatory Reads
 
-- `@docs/gold_layer_design.md` -- Gold tables, Metric Views, TVFs, and relationships
+- `@docs/gold_layer_design.md` -- Gold tables, Metric Views, TVFs, and relationships **(Mode A input; optional when the user provides a direct table list — Mode B, see Step 3)**
 - `@docs/usecase_plan.md` -- which artifacts the app needs
 - `@docs/design_prd.md` -- personas and analytics use cases the app must serve
 
@@ -9814,11 +9830,15 @@ Plan which Gold layer assets to sync from the Lakehouse into Lakebase PostgreSQL
 
    If `get-endpoint` comes back with `autoscaling_limit_max_cu > 2.0`, `suspend_timeout_duration` unset, or `suspend_timeout_duration < 1800s` or `> 1800s`, re-run `update-endpoint` -- do not proceed to Step 3 until the endpoint reports the workshop defaults (including the 30-minute suspend window). Record the actual host (`status.hosts.host`) into `@docs/reverse_etl.md` as `lakebase_host`.
 
-3. Inventory sync candidates from the Gold design (tables, Metric Views, TVFs) and map each to a stable primary key.
+3. Inventory sync candidates from ONE of two input modes -- record which mode at the top of `@docs/activation_sync_plan.md`:
+   - **Mode A -- Gold design (default):** inventory from `@docs/gold_layer_design.md`, using the Gold model for PKs, relationships (dependency order), and column types.
+   - **Mode B -- direct table list:** the user provides an explicit list of fully-qualified Unity Catalog tables (`<catalog>.<schema>.<table>`) -- no Gold design to lean on. Introspect each FQN live (read-only) to reconstruct the same fields: `DESCRIBE TABLE <fqn>` for columns/types, `DESCRIBE DETAIL <fqn>` for `format` (Delta -> CDF-eligible / TRIGGERED allowed; non-Delta -> SNAPSHOT only), and `<catalog>.information_schema.table_constraints` joined to `key_column_usage` for the PK. If UC declares no PK, the user MUST supply `primary_key_columns` (synced tables require a non-null unique key; use a `timeseries_key` when duplicates are possible). If the user gave neither a list nor a Gold design, STOP and ask for one.
+
+   **Valid synced-table sources are Delta tables, Iceberg tables, and standard views / materialized views only** (both modes). Table-Valued Functions (TVFs) and metric views are **not** syncable -- resolve any analytics need served by a TVF or metric view to its **underlying Gold table(s)** or a standard view over them before adding it to the plan. In either mode, map each candidate to a stable primary key, and **capture the full column list (each column name + its Unity Catalog type)** so the app-design/build/wire steps have a concrete schema contract to author against.
 4. Choose a sync mode per candidate -- **SNAPSHOT or TRIGGERED only** (see Technical Guardrails; CONTINUOUS is banned as a cost control).
 5. Flag columns that need type mitigation (ARRAY/MAP/STRUCT -> JSONB; GEOGRAPHY/GEOMETRY/VARIANT/OBJECT unsupported -- drop or cast).
 6. Order the candidates so dependencies (dims) are created before dependents (facts).
-7. Save the plan to `@docs/activation_sync_plan.md`. Reference `@docs/reverse_etl.md` for the environment block instead of re-inlining values. Include a candidate table (source object, synced name, PK, mode, type notes), creation order, and CDF enablement notes per candidate. Every TRIGGERED candidate must cite a cron expression `>= 24h`.
+7. Save the plan to `@docs/activation_sync_plan.md`. Reference `@docs/reverse_etl.md` for the environment block instead of re-inlining values. Include a candidate table (source object, synced name, PK, mode, column list [name + UC type], type notes), creation order, and CDF enablement notes per candidate. Every TRIGGERED candidate must cite a cron expression `>= 24h`.
 
 ---
 
@@ -9827,8 +9847,9 @@ Plan which Gold layer assets to sync from the Lakehouse into Lakebase PostgreSQL
 - **Autoscaling-only workshop.** Students each own one Lakebase project identified by `project_id = {user_app_name}`; the root branch is `production`. Do not design around Provisioned Lakebase, resource links, or PGPASSWORD flows.
 - **Target Postgres schema is `{user_schema_prefix}`** (no `_gold` suffix, not `public`). Lakebase creates a default `public` schema per database but this workshop uses a custom schema; record this in `@docs/reverse_etl.md` and reference it from every later step.
 - **Synced table names MUST differ from source** -- append a `_synced` suffix (e.g., `fact_flights` -> `fact_flights_synced`). Names must be `[A-Za-z0-9_]+` only.
-- **SNAPSHOT is the only valid mode for non-Delta sources.** Metric Views, Table-Valued Functions (TVFs), and Iceberg sources do NOT support Change Data Feed and therefore cannot be TRIGGERED. Mark these as SNAPSHOT in the sync plan and add a one-line note "non-Delta; SNAPSHOT only; CDF not applicable" so Step 33 will not attempt to enable CDF on them.
-- **TRIGGERED** for Delta tables that change on a known cadence (CDF required on the source Delta table).
+- **TVFs and metric views are not valid sources.** A TVF is a function and a metric view is a semantic object -- neither can back a synced table. Resolve them to their underlying Gold Delta/Iceberg tables (or a standard view) before adding them to the plan.
+- **Non-Delta sources default to SNAPSHOT.** Iceberg tables and materialized views ARE valid sources; without write-time Change Data Feed they sync as SNAPSHOT. Automatic Change Data Feed (Public Preview) can enable TRIGGERED for Iceberg / materialized views, but this workshop defaults them to SNAPSHOT. Add a one-line note "SNAPSHOT (no write-time CDF)" so Step 33 does not attempt `ALTER TABLE ... enableChangeDataFeed` on a non-Delta source.
+- **TRIGGERED** for Delta tables that change on a known cadence (write-time CDF required on the source Delta table).
 - Type map and unsupported types are in this step''s "How to Apply" reference -- use it, do not guess.
 
 ---
@@ -9840,6 +9861,7 @@ Plan which Gold layer assets to sync from the Lakehouse into Lakebase PostgreSQL
 - **Scale-to-zero must stay on, but must not trigger mid-workshop.** `suspend_timeout_duration = 1800s` (30 minutes). This window is intentionally long enough that a student reading docs, watching a demo video, or stepping away briefly will NOT hit a cold start in the middle of their workshop -- a 5-minute window would cause repeated mid-session cold-starts and is not acceptable. It is still short enough that a forgotten endpoint suspends within half an hour of true idle. Never set it to `0s` / `never` / any value other than `1800s`. A suspended Lakebase project costs $0 compute; a non-suspending one can idle-bill the whole workshop.
 - **TRIGGERED cron floor is 24h.** Sub-daily schedules multiply sync compute and Lakebase write cost.
 - **One project per student.** Do not create additional projects/branches/endpoints beyond the required `production` branch + `primary` endpoint -- each extra endpoint is independently billable.
+- **Bin-pack synced tables into one pipeline.** Each synced table can spawn its own Lakeflow sync pipeline (compute). In Step 33, create the first table with the default pipeline, then reuse its `pipeline_id` via `existing_pipeline_id` for the rest so the workshop runs one sync pipeline, not one per table.
 
 ---
 
@@ -9847,7 +9869,7 @@ Plan which Gold layer assets to sync from the Lakehouse into Lakebase PostgreSQL
 
 - `@docs/reverse_etl.md` exists with all fields listed above, including the cost-control block and the actual `lakebase_host` from `get-endpoint`.
 - The Lakebase project `{user_app_name}` exists and `get-endpoint` returns `autoscaling_limit_min_cu=0.5`, `autoscaling_limit_max_cu=2.0`, `suspend_timeout_duration=1800s` (30 minutes).
-- `@docs/activation_sync_plan.md` exists with: candidate table, per-candidate PK + sync mode + type notes, creation order, and per-candidate CDF notes (including explicit "CDF not applicable" rows for Metric Views / TVFs / Iceberg).
+- `@docs/activation_sync_plan.md` exists with: candidate table, per-candidate PK + sync mode + type notes, creation order, and per-candidate CDF notes (including explicit "SNAPSHOT (no write-time CDF)" rows for Iceberg / materialized-view sources). No TVF or metric view is listed as a source -- each is resolved to an underlying Gold table or standard view.
 - Every synced name uses the `_synced` suffix.
 - No candidate is marked CONTINUOUS. Every TRIGGERED candidate cites a `>=24h` cron.
 - STOP after saving -- do not create synced tables in this step.
@@ -9874,6 +9896,7 @@ Copy the prompt above, start a **new Agent chat** in your coding assistant, and 
 
 Ensure you have:
 - ✅ Completed Gold layer design, use-case plan, and PRD
+- ✅ **Materialized Gold tables** — the Gold pipeline has run and `{lakehouse_default_catalog}.{user_schema_prefix}` holds populated Delta/Iceberg tables (synced tables replicate real rows, not the `gold_layer_design.md` design doc)
 - ✅ Access to your `{lakehouse_default_catalog}.{user_schema_prefix}` Gold schema
 - ✅ Permission to create a Lakebase project (one per student, `{user_app_name}`)
 
@@ -9909,8 +9932,8 @@ flowchart LR
 
 | Mode | Use for | Cadence | CDF on source |
 |------|---------|---------|---------------|
-| **SNAPSHOT** | Metric Views, TVFs, Iceberg, any non-Delta source; full refresh | full copy on demand/schedule | not applicable |
-| **TRIGGERED** | Delta tables that change on a known cadence | cron **≥ 24h** | required |
+| **SNAPSHOT** | Iceberg / materialized views / any source without write-time CDF; full refresh | full copy on demand/schedule | not required |
+| **TRIGGERED** | Delta tables that change on a known cadence | cron **≥ 24h** | write-time CDF (or Automatic CDF, preview) |
 | ~~**CONTINUOUS**~~ | **Banned** — 24/7 streaming compute blows the budget | — | — |
 
 > **The plan also captures two practical rules:** complex Lakehouse types (arrays, maps, structs, geospatial) get a mapping note for Postgres, and every synced table gets a `_synced` suffix (`fact_flights` → `fact_flights_synced`) so it never collides with its source.
@@ -9950,10 +9973,10 @@ flowchart LR
 - Lakebase project `{user_app_name}` exists with `get-endpoint` reporting min_cu=0.5, max_cu=2.0, suspend_timeout=1800s (30 minutes)
 
 - `@docs/activation_sync_plan.md` with:
-  - [ ] List of Gold tables, Metric Views, and TVFs targeted for sync
+  - [ ] List of Gold Delta/Iceberg tables and standard/materialized views targeted for sync (TVFs and metric views resolved to underlying tables)
   - [ ] Primary key strategy per synced object
   - [ ] Sync mode (SNAPSHOT / TRIGGERED) per object — no CONTINUOUS (hard cost control)
-  - [ ] SNAPSHOT forced for Metric Views / TVFs / Iceberg (CDF not applicable)
+  - [ ] SNAPSHOT default for Iceberg / materialized-view sources (no write-time CDF); TVFs and metric views excluded as sources
   - [ ] Each TRIGGERED entry cites a `>=24h` cron
   - [ ] Data type mapping notes and mitigations
   - [ ] Ordered creation checklist',
@@ -9976,16 +9999,16 @@ Environment values (workspace, project, root branch, endpoint, Postgres database
 
 - `@docs/reverse_etl.md` -- authoritative environment block (workspace, catalog, schema, project, branch, endpoint, mode)
 - `@docs/activation_sync_plan.md` -- the source of truth for which objects to sync, PKs, and modes
-- `@docs/gold_layer_design.md` -- confirm source table names and columns actually exist
+- `@docs/gold_layer_design.md` -- confirm source table names and columns, then confirm the tables are **materialized** in `{lakehouse_default_catalog}.{user_schema_prefix}` (query the real UC tables, not just the design doc). If a source is missing or empty, STOP and finish the Gold pipeline first -- synced tables copy live rows, not the design
 
 ---
 
 ### Steps
 
 1. Authenticate to Databricks (`databricks auth login --host {workspace_url}`) and fetch a bearer token for API calls via `databricks auth token`.
-2. For every **Delta-sourced TRIGGERED** candidate, enable Change Data Feed on the source Delta table (`ALTER TABLE ... SET TBLPROPERTIES (delta.enableChangeDataFeed = true)`). Skip for SNAPSHOT and skip for any non-Delta source (Metric Views, TVFs, Iceberg) -- these must be SNAPSHOT per Step 32.
-3. In dependency order (dims before facts), create one synced table per candidate by POSTing to the synced tables endpoint (see API Contract below).
-4. After each create, poll the GET endpoint on a 10-second interval until `status.detailed_state` is a terminal healthy value (`ONLINE_TRIGGERED_UPDATE` / `ONLINE_NO_PENDING_UPDATE` / `ONLINE_SNAPSHOT_UPDATED`). Cap the wait at 15 minutes per table; if still not healthy, DELETE and recreate or surface the `status` payload for troubleshooting.
+2. For every **Delta-sourced TRIGGERED** candidate, enable write-time Change Data Feed on the source Delta table (`ALTER TABLE ... SET TBLPROPERTIES (delta.enableChangeDataFeed = true)`). Skip for SNAPSHOT, and skip for any non-Delta source (Iceberg / materialized view) -- those sync as SNAPSHOT here per Step 32 (Automatic CDF is the preview path for non-Delta TRIGGERED and is out of scope for this workshop). TVFs and metric views are not valid sources and must have been resolved to underlying tables in Step 32.
+3. In dependency order (dims before facts), create one synced table per candidate by POSTing to the synced tables endpoint (see API Contract below). Create the **first** table with the default pipeline, capture its `pipeline_id`, and pass `existing_pipeline_id` for the rest (see Pipeline bin-packing).
+4. After each create, poll the returned long-running operation to `done: true`, then read the synced table''s `status.detailed_state` for a terminal healthy value (`SYNCED_TABLE_ONLINE` / `SYNCED_TABLE_ONLINE_NO_PENDING_UPDATE` / `SYNCED_TABLE_ONLINE_TRIGGERED_UPDATE` / `SYNCED_TABLE_ONLINE_CONTINUOUS_UPDATE`). Treat `SYNCED_TABLE_OFFLINE_FAILED` / `SYNCED_TABLE_ONLINE_PIPELINE_FAILED` as failures. Cap the wait at 15 minutes per table; if still not healthy, DELETE and recreate or surface the `status` payload for troubleshooting.
 5. Query each synced table in Lakebase Postgres (`SELECT count(*) FROM {user_schema_prefix}.<synced_table>`) and confirm rows match expectations from the Gold source.
 6. If a definition is wrong, DELETE the synced table and recreate -- do not edit in place.
 
@@ -10004,33 +10027,43 @@ Environment values (workspace, project, root branch, endpoint, Postgres database
 - Request body is `{"spec": {...}}` at the root. Do NOT nest under `"synced_table"`.
 - Required `spec` fields (Autoscaling, one project per student):
   - `source_table_full_name` -- three-level UC name of the Gold source
-  - `project` -- `projects/{user_app_name}` (one project per student; matches `@docs/reverse_etl.md`)
-  - `branch` -- `projects/{user_app_name}/branches/production` (root branch is always `production` for Autoscaling)
-  - `primary_key_columns` -- list
+  - `branch` -- `projects/{user_app_name}/branches/production` (encodes the project; root branch is always `production` for Autoscaling; there is no separate `project` spec field)
+  - `primary_key_columns` -- list. PK columns are non-nullable in the synced table: **rows with a NULL in any PK column are silently excluded from the sync**, and **duplicate PKs in the source fail the sync** unless you set `timeseries_key` (below). Pick a key with no NULLs and no dupes, or add a `timeseries_key`.
   - `scheduling_policy` -- `SNAPSHOT` or `TRIGGERED` (no `CONTINUOUS`). Must match `@docs/activation_sync_plan.md`.
   - `postgres_database` -- `databricks_postgres` (Lakebase''s default database)
-  - `postgres_schema` -- `{user_schema_prefix}` (NOT `public`, NOT `_gold`)
   - `create_database_objects_if_missing` -- `true`
+  - `timeseries_key` (optional) -- only if the source can have **duplicate** `primary_key_columns`. Set it to the column that decides "latest wins" (e.g. an updated-at timestamp); the synced table then keeps only the newest row per PK. Adds a dedupe cost, so omit it when PKs are already unique.
+- There is **no** `postgres_schema` spec field. The Postgres schema is taken from the **middle component of `synced_table_id`** (`{lakehouse_default_catalog}.{user_schema_prefix}.<table>_synced` -> Postgres schema `{user_schema_prefix}`, NOT `public`, NOT `_gold`). Control the schema by setting that middle component, not a spec field.
 - GET status: `GET {workspace_url}/api/2.0/postgres/synced_tables/{synced_table_id}` -- read `status.detailed_state`.
 - DELETE: `DELETE {workspace_url}/api/2.0/postgres/synced_tables/{synced_table_id}`.
 
-**Polling pattern (required):**
+**Pipeline bin-packing (cost):** do not spawn one Lakeflow pipeline per synced table. Create the FIRST candidate with the default pipeline (omit `existing_pipeline_id`), read its top-level `pipeline_id` from the GET response once healthy, then add `"existing_pipeline_id": "<pid>"` to `spec` for every remaining candidate so all synced tables share one pipeline. (Do not also set `new_pipeline_spec` when `existing_pipeline_id` is set -- at most one of the two.)
+
+**Polling pattern (required):** the create POST returns a long-running `Operation` (`{"name": "operations/{id}", "done": bool}`). Poll it to `done`, then read the synced table''s `detailed_state`. (`create_url` = `{workspace_url}/api/2.0/postgres/synced_tables`; `auth` = the bearer header; `synced_table_id` and `body` are as defined in the API contract above.)
 ```
 import time, requests
-deadline = time.time() + 900   # 15 minutes
+op = requests.post(create_url, headers=auth,
+                   params={"synced_table_id": synced_table_id}, json=body).json()
+op_name = op.get("name")                     # "operations/{id}"
+deadline = time.time() + 900                 # 15 minutes
 while time.time() < deadline:
-    state = requests.get(url, headers=auth).json()["status"]["detailed_state"]
-    if state in {"ONLINE_TRIGGERED_UPDATE", "ONLINE_NO_PENDING_UPDATE", "ONLINE_SNAPSHOT_UPDATED"}:
+    if requests.get(f"{workspace_url}/api/2.0/{op_name}", headers=auth).json().get("done"):
         break
-    if state.startswith("FAILED") or state == "OFFLINE_FAILED":
-        raise RuntimeError(state)
     time.sleep(10)
+st = requests.get(f"{workspace_url}/api/2.0/postgres/synced_tables/{synced_table_id}", headers=auth).json()
+state = st.get("status", {}).get("detailed_state", "")
+HEALTHY = {"SYNCED_TABLE_ONLINE", "SYNCED_TABLE_ONLINE_NO_PENDING_UPDATE",
+           "SYNCED_TABLE_ONLINE_TRIGGERED_UPDATE", "SYNCED_TABLE_ONLINE_CONTINUOUS_UPDATE"}
+FAILED  = {"SYNCED_TABLE_OFFLINE_FAILED", "SYNCED_TABLE_ONLINE_PIPELINE_FAILED"}
+if state in FAILED:
+    raise RuntimeError(state)
+assert state in HEALTHY, f"not healthy: {state}"
 ```
 
 **Workshop overrides (override the sync plan if it conflicts):**
 - Synced table names must differ from source and end in `_synced`.
-- Per-synced-table limits: up to 16 Lakebase connections; 8 TB total logical data across all synced tables; schema evolution is additive-only for TRIGGERED.
-- **CDF is Delta-only.** Never attempt `ALTER TABLE ... SET TBLPROPERTIES (delta.enableChangeDataFeed = true)` on a Metric View, TVF, or Iceberg table -- it will fail. These must be SNAPSHOT.
+- Limits: up to 16 Lakebase connections per synced table; **16 TB total logical data across all synced tables**; up to **20 synced tables per source** table; a full refresh temporarily double-counts the old + new copies toward the 16 TB quota until it completes; schema evolution is additive-only for TRIGGERED.
+- **Write-time CDF is Delta-only.** Never attempt `ALTER TABLE ... SET TBLPROPERTIES (delta.enableChangeDataFeed = true)` on an Iceberg table, materialized view, TVF, or metric view -- it will fail. Iceberg / materialized views sync as SNAPSHOT here (Automatic CDF, preview, is the non-Delta TRIGGERED path and is out of scope); TVFs and metric views are not valid sources at all and must have been resolved to underlying tables in Step 32.
 
 **Cost Controls (hard limits -- re-checked here in case Step 32 was skipped):**
 - **CONTINUOUS sync mode is banned** (per `@docs/reverse_etl.md` `sync_mode_allowlist`). If a candidate in `@docs/activation_sync_plan.md` says CONTINUOUS, convert it to SNAPSHOT (or TRIGGERED with a cron at the `triggered_min_cron_interval` floor from `@docs/reverse_etl.md` for a Delta source) and update the plan before calling the API. Do NOT POST a synced table with `scheduling_policy: "CONTINUOUS"`.
@@ -10053,7 +10086,7 @@ while time.time() < deadline:
 - Pre-flight `get-endpoint` confirms `min_cu=0.5`, `max_cu=2.0`, `suspend_timeout=1800s` (matches `@docs/reverse_etl.md`).
 - CDF is enabled on every Delta source that a TRIGGERED candidate points at; no CDF attempts were made on non-Delta sources.
 - No synced table was created with `scheduling_policy: "CONTINUOUS"`; every TRIGGERED entry uses a `>=24h` cron.
-- Every candidate in `@docs/activation_sync_plan.md` has been created via the REST API contract above, with `spec.project = projects/{user_app_name}` and `spec.branch = projects/{user_app_name}/branches/production`, in dependency order.
+- Every candidate in `@docs/activation_sync_plan.md` has been created via the REST API contract above, with `spec.branch = projects/{user_app_name}/branches/production` (which encodes the project), in dependency order.
 - Polling shows a healthy `detailed_state` for each synced table within the 15-minute cap.
 - `SELECT count(*) FROM {user_schema_prefix}.<synced_table>` returns non-zero row counts consistent with the Gold source.
 - STOP after verification -- analytics app design is the next step.
@@ -10083,6 +10116,7 @@ Copy the prompt above, start a **new Agent chat** in your coding assistant, and 
 
 Ensure you have:
 - ✅ Completed **Plan Synced Tables** (Step 32) — `reverse_etl.md` + `activation_sync_plan.md` exist and the Lakebase project is provisioned
+- ✅ **Materialized Gold tables** — the Gold pipeline has run and the `{user_schema_prefix}` Gold tables referenced in `activation_sync_plan.md` hold real rows (synced tables copy live data, not `gold_layer_design.md`)
 - ✅ The cost-capped `primary` endpoint reachable (sizing unchanged from Step 32)
 
 ### Steps to Apply
@@ -10121,7 +10155,7 @@ A synced table is **healthy** once its state reaches a terminal "online" value �
 
 | Practice | How It''s Used Here |
 |----------|--------------------|
-| **CDF only where valid** | Change Data Feed is enabled only on Delta sources backing TRIGGERED candidates — never on Metric Views, TVFs, or Iceberg (it fails there) |
+| **Write-time CDF only where valid** | Write-time Change Data Feed is enabled only on Delta sources backing TRIGGERED candidates — never on Iceberg, materialized views, TVFs, or metric views (it fails there); non-Delta sources sync as SNAPSHOT |
 | **DELETE + recreate** | A wrong definition is deleted and recreated, never edited in place, so state stays consistent |
 | **Cost re-checks** | CONTINUOUS stays banned, the ≥24h cron floor is honored, and no new branch/endpoint is created — re-enforced here in case Step 32 was skipped |
 | **Dependency ordering** | Dims sync before facts so foreign-key targets land first |
@@ -10139,7 +10173,9 @@ A synced table is **healthy** once its state reaches a terminal "online" value �
 ### Reference: Capacity Constraints
 
 - Each synced table uses up to **16 connections** to the Lakebase database
-- Total logical data limit: **8 TB** across all synced tables
+- Total logical data limit: **16 TB** across all synced tables (recommended <1 TB per table that needs refreshes)
+- Up to **20 synced tables per source** table
+- A **full refresh temporarily double-counts** the old + new copies toward the 16 TB quota until the new sync completes
 - Schema evolution: only **additive changes** for Triggered mode
 - Throughput: ~150 rows/sec/CU (Triggered), ~2,000 rows/sec/CU (Snapshot)
 
@@ -14968,7 +15004,36 @@ sync_mode_allowlist:         ["SNAPSHOT", "TRIGGERED"]   # CONTINUOUS is banned 
 triggered_min_cron_interval: 24h                    # TRIGGERED cadence floor
 ```
 
-**(b) `<artifact_root>/docs/activation_sync_plan.md`** — per-candidate sync plan. Reference `reverse_etl.md` for the environment block instead of re-inlining values. Inventory sync candidates from the Gold design (tables, Metric Views, TVFs), and for each record: source object, `_synced` target name, primary key, sync mode, type-mitigation notes, and a per-candidate CDF note. Ordering rules:
+**(b) `<artifact_root>/docs/activation_sync_plan.md`** — per-candidate sync plan. Reference `reverse_etl.md` for the environment block instead of re-inlining values. **Inventory the sync candidates from ONE of two input modes** — record which mode you used at the TOP of the plan doc:
+
+- **Mode A — Gold design (default):** inventory candidates from `<artifact_root>/docs/gold_layer_design.md` (tables, Metric Views, TVFs), using the Gold model for PKs, relationships (dependency order), and column types.
+- **Mode B — direct table list:** the operator hands you an explicit list of fully-qualified Unity Catalog tables (`<catalog>.<schema>.<table>`) to sync — no Gold design to lean on. **Introspect each FQN live (read-only)** to reconstruct the same fields. If the operator gave neither a list nor a Gold design, STOP and ask for one.
+
+For each candidate record: source object, `_synced` target name, primary key, sync mode, **the full column list (each column name + its Unity Catalog type)**, type-mitigation notes, and a per-candidate CDF note. The column list is the design-time contract the app-build/wire steps author their mock shapes and SELECTs against (the Wire step then reconciles it against a live `information_schema` introspection of the landed synced tables).
+
+**Mode B — live introspection (read-only: `DESCRIBE` / `information_schema` only, NO DDL, NO mutation).** For every provided FQN, derive columns/types, format, and PK so the plan is complete without a Gold design (warm compute first with `print("ready")`):
+
+```python
+for fqn in provided_tables:                                   # ["<cat>.<schema>.<table>", ...]
+    cat, sch, tbl = fqn.split(".")
+    cols = spark.sql(f"DESCRIBE TABLE {fqn}").collect()        # col_name, data_type -> column list + JSONB/unsupported-type mitigations
+    fmt = spark.sql(f"DESCRIBE DETAIL {fqn}").collect()[0].asDict().get("format")  # ''delta'' -> CDF-eligible; else SNAPSHOT-only
+    pk = spark.sql(f"""
+        SELECT kcu.column_name
+        FROM {cat}.information_schema.table_constraints  tc
+        JOIN {cat}.information_schema.key_column_usage   kcu
+          ON  tc.constraint_catalog = kcu.constraint_catalog
+          AND tc.constraint_schema  = kcu.constraint_schema
+          AND tc.constraint_name    = kcu.constraint_name
+        WHERE tc.constraint_type = ''PRIMARY KEY''
+          AND tc.table_schema = ''{sch}'' AND tc.table_name = ''{tbl}''
+        ORDER BY kcu.ordinal_position
+    """).collect()
+```
+
+Mode-B rules: only **Delta / Iceberg tables and standard / materialized views** are valid FQNs — reject a TVF or metric view and ask the operator for the underlying table (validate the object type read-only, e.g. `w.tables.get(fqn)` `table_type`, before adding it). If UC declares **no** PK (the `pk` query returns empty), the operator MUST supply `primary_key_columns` — synced tables require a non-null unique key; use a `timeseries_key` if duplicates are possible. `format != ''delta''` forces SNAPSHOT (no write-time CDF). Everything below (ordering, cost controls, gate) is identical regardless of mode.
+
+Ordering rules:
 - **SNAPSHOT or TRIGGERED only** (CONTINUOUS is banned — convert any CONTINUOUS candidate and note the conversion).
 - **SNAPSHOT forced for Metric Views / TVFs / Iceberg** (non-Delta; CDF not applicable — add a one-line "CDF not applicable" note so Step 33 skips them).
 - **TRIGGERED** only for Delta tables that change on a known cadence; each TRIGGERED candidate cites a cron `>= 24h`.
@@ -15085,7 +15150,7 @@ Read these back at runtime; do NOT restate their values in the prompt:
 
 - `<artifact_root>/docs/reverse_etl.md` — authoritative environment block (workspace, catalog, `user_app_name`/project, `production` branch, endpoint, `databricks_postgres` database, `{user_schema_prefix}` Postgres schema, mode, and the cost-control block).
 - `<artifact_root>/docs/activation_sync_plan.md` — the source of truth for which objects to sync, PKs, sync modes, type notes, and dependency order.
-- `<artifact_root>/docs/gold_layer_design.md` — confirm the Gold source table names and columns actually exist.
+- `<artifact_root>/docs/gold_layer_design.md` — confirm the Gold source table names and columns, then confirm the tables are **materialized** in `{lakehouse_default_catalog}.{user_schema_prefix}` (the Gold pipeline has run and the tables hold real rows — synced tables copy live data, not the design doc). If a source table is missing or empty, STOP and finish the Gold pipeline first.
 
 ### Step 2 — Pre-flight: confirm the endpoint caps did not drift (read-only)
 
@@ -15103,7 +15168,7 @@ If sizing has drifted, STOP and re-apply from Step 32 (re-run the **Plan Synced 
 
 ### Step 3 — Enable CDF on Delta sources for TRIGGERED candidates only (gated)
 
-For every **Delta-sourced TRIGGERED** candidate, enable Change Data Feed. **Skip SNAPSHOT, and skip any non-Delta source** (Metric Views, TVFs, Iceberg) — those are SNAPSHOT-only per Step 32 and `ALTER TABLE … delta.enableChangeDataFeed` fails on them. Gate each with a format check so you never attempt CDF on a non-Delta source:
+For every **Delta-sourced TRIGGERED** candidate, enable write-time Change Data Feed. **Skip SNAPSHOT, and skip any non-Delta source** (Iceberg / materialized view) — those sync as SNAPSHOT here and `ALTER TABLE … delta.enableChangeDataFeed` fails on them (Automatic CDF is the preview path for non-Delta TRIGGERED, out of scope for this workshop). TVFs and metric views are not valid sources and must have been resolved to underlying tables in Step 32. Gate each with a format check so you never attempt CDF on a non-Delta source:
 
 ```python
 fmt = spark.sql("DESCRIBE DETAIL <cat>.<schema>.<source>").collect()[0].asDict().get("format")
@@ -15127,10 +15192,12 @@ body = {
         "primary_key_columns": [ ... ],                              # from the sync plan
         "scheduling_policy": "SNAPSHOT",   # or "TRIGGERED"; NEVER "CONTINUOUS"
         "postgres_database": "databricks_postgres",
-        "postgres_schema": "{user_schema_prefix}",                   # NOT public, NOT _gold
         "create_database_objects_if_missing": True,
     },
 }
+# NOTE: there is no `postgres_schema` field. The Postgres schema is taken from the
+# middle component of synced_table_id ({lakehouse_default_catalog}.{user_schema_prefix}.<table>_synced
+# -> Postgres schema {user_schema_prefix}, NOT public, NOT _gold). Set it via that middle component.
 op = w.api_client.do(
     "POST", "/api/2.0/postgres/synced_tables",
     query={"synced_table_id": synced_table_id}, body=body,
@@ -15138,6 +15205,8 @@ op = w.api_client.do(
 ```
 
 🔴 **Confirm field-exactness on the FIRST create.** The body shape is pinned from probing, but if the first POST returns a validation error, advance it (read the error, adjust the offending field) BEFORE looping the rest — do not blast the whole candidate list against an unverified body. Synced names MUST differ from source, end in `_synced`, and be `[A-Za-z0-9_]+` only.
+
+**Bin-pack into one pipeline (cost):** create the FIRST table with the default pipeline (omit `existing_pipeline_id`); once it is healthy, read its top-level `pipeline_id` from the GET (`st.get("pipeline_id")`), then add `"existing_pipeline_id": pid` to `spec` for every remaining candidate so all synced tables share one Lakeflow pipeline instead of spawning one per table (set at most one of `existing_pipeline_id` / `new_pipeline_spec`).
 
 ### Step 5 — Poll the long-running operation to a healthy state
 
@@ -15154,11 +15223,13 @@ while time.time() < deadline:
     time.sleep(10)
 st = w.api_client.do("GET", f"/api/2.0/postgres/synced_tables/{synced_table_id}")
 state = (st.get("status") or {}).get("detailed_state", "")
-# healthy terminal states: SYNCED_TABLE_ONLINE_TRIGGERED_UPDATE /
-#   SYNCED_TABLE_ONLINE_NO_PENDING_UPDATE / SYNCED_TABLE_ONLINE_SNAPSHOT_UPDATED (and ONLINE_*)
+# healthy terminal states: SYNCED_TABLE_ONLINE / SYNCED_TABLE_ONLINE_NO_PENDING_UPDATE /
+#   SYNCED_TABLE_ONLINE_TRIGGERED_UPDATE / SYNCED_TABLE_ONLINE_CONTINUOUS_UPDATE
+# failed states: SYNCED_TABLE_OFFLINE_FAILED / SYNCED_TABLE_ONLINE_PIPELINE_FAILED
+# (there is NO *_SNAPSHOT_UPDATED state — a completed SNAPSHOT lands in ONLINE_NO_PENDING_UPDATE)
 ```
 
-If `detailed_state` reaches a `FAILED` / `OFFLINE_FAILED` value, surface the full `status` payload, then DELETE and recreate — never edit in place:
+If `detailed_state` reaches `SYNCED_TABLE_OFFLINE_FAILED` or `SYNCED_TABLE_ONLINE_PIPELINE_FAILED`, surface the full `status` payload, then DELETE and recreate — never edit in place:
 
 ```python
 w.api_client.do("DELETE", f"/api/2.0/postgres/synced_tables/{synced_table_id}")
@@ -15456,7 +15527,8 @@ This will involve the following steps:
 
 - **Confirm context** — `APP_NAME`, `<APP_ROOT>`, and the synced binding target.
 - **Load the wiring skill** — full `skill_ref_root`-prefixed path.
-- **Register `lakebase()`** — author READ-ONLY routes via `onPluginsReady`.
+- **Introspect the synced schema** — read-only `information_schema` dump → `synced_schema.md`.
+- **Register `lakebase()`** — author READ-ONLY routes via `onPluginsReady`, from the introspected columns.
 - **Wire the frontend** — `useLakebaseData` and `ConnectionStatus`.
 - **Run the static gate** — the build is proven server-side at deploy.
 
@@ -15511,6 +15583,37 @@ Load with `readSkillFile` — NEVER a bare `@…` mention, NEVER a repo-relative
 1. `readSkillFile("skills/vibe-coding-workshop/apps_lakebase/skills/05-appkit-lakebase-wiring/SKILL.md")` — use Step 2 (the `{ data, source }` route contract with mock fallback) and Step 3 (the `useLakebaseData` / `ConnectionStatus` frontend hooks). **SKIP its Step 1 (schema design) and Step 1e (count-check seed)** — this fork is read-only over pre-synced tables, so there is no DDL or seed.
 2. When the skill names further references, load EACH the same way (repo-relative path prefixed with `skill_ref_root`). Apply the skill''s `onPluginsReady` Server Setup Pattern verbatim.
 
+### Step 2.5 — Introspect the synced schema (read-only) → `synced_schema.md`
+
+Before authoring any route, discover the **real** Postgres columns/types the synced tables actually landed — do NOT infer them from `gold_layer_design.md`. This is a **read-only `SELECT` against `information_schema`** (no DDL, no data mutation), so it is fully consistent with this fork''s read-only contract. Mint a short-lived token the same way the **Create Synced Tables** step does, connect with `psycopg2` (pre-installed), and dump the column catalog for every `*_synced` table in `{user_schema_prefix}` (read `lakebase_host` + `endpoint_name` from `<artifact_root>/docs/reverse_etl.md`, and your identity from `databricks current-user me`):
+
+```python
+print("ready")  # warm the serverless compute first (absorb the ~3–5 min cold start)
+import psycopg2
+cred = w.api_client.do(
+    "POST", "/api/2.0/postgres/credentials",
+    body={"endpoint": "projects/{user_app_name}/branches/production/endpoints/primary"},
+)
+conn = psycopg2.connect(
+    host="<lakebase_host>", port=5432, dbname="databricks_postgres",
+    user="<your Databricks identity from current-user me>", password=cred.get("token"),
+    sslmode="require",
+)
+cur = conn.cursor()
+cur.execute("""
+    SELECT table_name, column_name, data_type, is_nullable
+    FROM information_schema.columns
+    WHERE table_schema = %s AND table_name LIKE %s
+    ORDER BY table_name, ordinal_position
+""", ("{user_schema_prefix}", "%\\_synced"))
+cols = cur.fetchall()
+# OPTIONAL, per string/enum column, to harden the UI filters (still read-only):
+#   SELECT DISTINCT <col> FROM "{user_schema_prefix}".<table>_synced LIMIT 50
+#   SELECT count(*) FILTER (WHERE <col> IS NULL) FROM "{user_schema_prefix}".<table>_synced
+```
+
+Write the result to `<artifact_root>/docs/synced_schema.md` via `executeCode` `open(path,"w").write(...)` — one section per synced table listing its `column_name / data_type / is_nullable` rows (plus any sampled enum values / NULL counts). 🔴 Verify the write with `os.path.exists(path)` in the SAME block — NOT `listFiles`. This doc is the **source of truth for column names, Postgres types, and NULLability** in Steps 3–4; it overrides any column guessed from the Gold design. If a synced table is missing or has zero columns here, STOP and return to the **Create Synced Tables** step — you cannot wire a table that did not land.
+
 ### Step 3 — Register `lakebase()` and author READ-ONLY routes via `onPluginsReady`
 
 Replace `<APP_ROOT>/server/server.ts` so the plugin is registered and the analytics routes (from the build step) re-point at the synced schema inside `onPluginsReady` — **no DDL, no seed**:
@@ -15534,6 +15637,7 @@ await createApp({
 
 Rules the agent cannot guess:
 
+- **Author every query from `<artifact_root>/docs/synced_schema.md`** (the Step 2.5 introspection) — use its exact `column_name`s and `data_type`s; never guess a column from `gold_layer_design.md`. A column not listed there does not exist in Postgres, so selecting it forces the route to its mock fallback (and the deploy-step envelope check will flag it as `source: "mock"`).
 - **Qualify every query with the synced Postgres schema `{user_schema_prefix}`** (not `public`, not the Gold-layer schema) — prefix tables (`FROM "{user_schema_prefix}".<synced_table>`) or `SET search_path`.
 - **Reference synced objects EXACTLY as the sync plan writes them** (names include the `_synced` suffix). SELECT-only.
 - **Keep the `{ data, source }` envelope from the build step** — set `source: "live"` on a successful query; on any DB error fall back to the existing mock branch and set `source: "mock"`. Never delete the mock branch.
@@ -15543,7 +15647,7 @@ Rules the agent cannot guess:
 
 ### Step 4 — Wire the frontend + ConnectionStatus
 
-Follow skill Step 3: `useLakebaseData` hook, `ConnectionStatus` component, DECIMAL/DATE coercion, snake_case → camelCase mapping. The ConnectionStatus indicator reads each page''s `source` and flips from "Mock Data" to "Live Data" when the synced reads succeed; it degrades cleanly back to "Mock Data" if Lakebase is unreachable. When you remove a static mock import, audit any UI element that depended on it. Write files via `executeCode` `open(path,"w").write(...)`; prefer Python triple-quoted raw strings and write literal `''`/`"` (never `\uXXXX`).
+Follow skill Step 3: `useLakebaseData` hook, `ConnectionStatus` component, DECIMAL/DATE coercion (driven by the `data_type`s in `synced_schema.md` — e.g. `numeric` arrives as a string, `timestamp with time zone` needs date parsing, `jsonb` is already an object), snake_case → camelCase mapping. The ConnectionStatus indicator reads each page''s `source` and flips from "Mock Data" to "Live Data" when the synced reads succeed; it degrades cleanly back to "Mock Data" if Lakebase is unreachable. When you remove a static mock import, audit any UI element that depended on it. Write files via `executeCode` `open(path,"w").write(...)`; prefer Python triple-quoted raw strings and write literal `''`/`"` (never `\uXXXX`).
 
 ### Step 5 — Static gate (the only local check) + deploy-time build
 
@@ -15575,7 +15679,7 @@ Fix every **BLOCKING** hit before declaring this step complete. `BLOCKING: OK` h
 
 **State-lock:** this prompt runs between an `enter` (Step 0) and an `exit`. After the gate passes, run `skills/vibecoding-state` op `exit` — params: `prompt_id: "activation_wire_lakebase"`, `gate: "Analytics app live data (local)"`, `captured: {lakebase_service}`. **This `enter`/`exit` pair is a mandatory ritual, not advisory.** Step 0''s `enter` MUST locate — or, if this is the first prompt of the track, bootstrap-create — the canonical live state file at `<app_root>/.vibecoding-state.md` (never the temporary `example/…` bootstrap path). The closing `exit` MUST append this prompt''s Per-Step Log entry, Gate result, and `captured` vars to that file, then **re-read it and echo the appended section to prove the write landed**. **Gate completion rule:** this prompt is NOT complete until that re-read confirms the appended entry — the chat summary is NOT the state store.
 
-**Gate:** `Analytics app live data (local)` — `<APP_ROOT>/server/server.ts` registers `lakebase()` from `@databricks/appkit` with READ-ONLY analytics routes (`SELECT` from `"{user_schema_prefix}".<synced_table>` only, NO DDL/seed) inside `onPluginsReady`, the frontend fetches via `useLakebaseData` with mock fallback so ConnectionStatus flips to "Live Data", and the wiring static scan prints `BLOCKING: OK`. (On Genie Code "local" = the authored, statically-gated pre-deploy milestone — there is NO `http://localhost:8000` run; live synced reads are proven against the deployed app at the **Deploy & Validate** step.) NO local `python app.py`/`npm run build` was attempted; NO table was created, seeded, or mutated.
+**Gate:** `Analytics app live data (local)` — `<artifact_root>/docs/synced_schema.md` exists (read-only `information_schema` introspection of the `*_synced` tables), `<APP_ROOT>/server/server.ts` registers `lakebase()` from `@databricks/appkit` with READ-ONLY analytics routes (`SELECT` from `"{user_schema_prefix}".<synced_table>` only, using columns that exist in `synced_schema.md`, NO DDL/seed) inside `onPluginsReady`, the frontend fetches via `useLakebaseData` with mock fallback so ConnectionStatus flips to "Live Data", and the wiring static scan prints `BLOCKING: OK`. (On Genie Code "local" = the authored, statically-gated pre-deploy milestone — there is NO `http://localhost:8000` run; live synced reads are proven against the deployed app at the **Deploy & Validate** step.) NO local `python app.py`/`npm run build` was attempted; NO table was created, seeded, or mutated.
 
 **➡️ Next step.** The **Deploy & Validate** step ships `<APP_ROOT>` via the SDK SNAPSHOT path, grants the app''s service principal SELECT on the synced schema `{user_schema_prefix}`, re-checks the endpoint cost caps read-only, and verifies the live synced reads behind the OAuth gate.',
 '',
