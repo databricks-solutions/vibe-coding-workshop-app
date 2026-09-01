@@ -399,13 +399,16 @@ except ImportError:
 # Default endpoint (Claude Sonnet 4.5)
 SERVING_ENDPOINT_NAME = os.getenv("DATABRICKS_SERVING_ENDPOINT", "databricks-claude-sonnet-4-5")
 
-# Fallback endpoints to try if the default doesn't work
+# Fallback endpoints to try if the configured/default endpoint is not deployed in
+# the current workspace (e.g. Claude is unavailable on Databricks Free Edition).
+# Ordered instruct-first (plain string content) then reasoning models.
 FALLBACK_ENDPOINTS = [
-    "databricks-meta-llama-3-1-70b-instruct",
-    "databricks-meta-llama-3-70b-instruct", 
-    "databricks-dbrx-instruct",
-    "databricks-mixtral-8x7b-instruct",
-    "databricks-llama-2-70b-chat",
+    "databricks-meta-llama-3-3-70b-instruct",
+    "databricks-llama-4-maverick",
+    "databricks-gemma-3-12b",
+    "databricks-meta-llama-3-1-8b-instruct",
+    "databricks-qwen3-next-80b-a3b-instruct",
+    "databricks-gpt-oss-120b",
 ]
 
 # Initialize WorkspaceClient - automatically handles auth when running as Databricks App
@@ -460,34 +463,66 @@ def get_available_serving_endpoints() -> List[str]:
 
 def get_best_available_endpoint() -> Optional[str]:
     """
-    Find the best available endpoint to use.
-    Priority:
-    1. Environment variable DATABRICKS_SERVING_ENDPOINT
-    2. First available endpoint from FALLBACK_ENDPOINTS list
-    3. Any available endpoint in the workspace
+    Resolve the serving endpoint to use, with environment-aware fallback.
+
+    The configured/default endpoint (``SERVING_ENDPOINT_NAME``) is the primary.
+    When fallback is enabled (default) and the primary is not deployed in this
+    workspace - e.g. Claude on Databricks Free Edition - the first available
+    endpoint from ``FALLBACK_ENDPOINTS`` is used instead. If endpoints cannot be
+    listed, the primary is returned unchanged (identical to prior behavior).
+
+    Set ``DATABRICKS_ENDPOINT_FALLBACK=false`` to disable and always return the
+    primary (kill-switch).
     """
-    # Check if configured endpoint is set
-    if SERVING_ENDPOINT_NAME:
-        logger.info(f"Using configured endpoint: {SERVING_ENDPOINT_NAME}")
-        return SERVING_ENDPOINT_NAME
-    
-    # Get available endpoints
-    available = get_available_serving_endpoints()
-    
-    if not available:
-        logger.warning("No serving endpoints available in workspace")
-        return None
-    
-    # Try fallback endpoints in order
+    primary = SERVING_ENDPOINT_NAME
+
+    # Kill-switch: preserve prior behavior exactly (return the configured primary).
+    if os.getenv("DATABRICKS_ENDPOINT_FALLBACK", "true").strip().lower() == "false":
+        return primary
+
+    available = get_available_serving_endpoints()  # cached; [] on any failure
+
+    # If we cannot list endpoints, or the primary is deployed here, use the primary.
+    if not available or primary in available:
+        return primary
+
+    # Primary not deployed in this workspace: fall back to a known available model.
     for fallback in FALLBACK_ENDPOINTS:
         if fallback in available:
-            logger.info(f"Using fallback endpoint: {fallback}")
+            logger.info(
+                f"Primary endpoint '{primary}' not available; using fallback: {fallback}"
+            )
             return fallback
-    
-    # Use first available endpoint
+
     first_available = available[0]
-    logger.info(f"Using first available endpoint: {first_available}")
+    logger.info(
+        f"Primary endpoint '{primary}' not available and no known fallback present; "
+        f"using first available endpoint: {first_available}"
+    )
     return first_available
+
+
+def _extract_text(content: Any) -> str:
+    """Normalize a serving-endpoint message/delta ``content`` to a plain string.
+
+    Reasoning models (e.g. gpt-oss, qwen35 on Free Edition) return ``content`` as
+    a list of parts such as
+    ``[{"type": "reasoning", ...}, {"type": "text", "text": "Hi"}]``; only the
+    ``text`` parts are user-facing. Plain chat models return a string, which
+    passes through unchanged so existing (Claude/Llama/Gemma) behavior is
+    identical.
+    """
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        return "".join(
+            part["text"]
+            for part in content
+            if isinstance(part, dict)
+            and part.get("type") == "text"
+            and isinstance(part.get("text"), str)
+        )
+    return "" if content is None else str(content)
 
 # ============== Data Models ==============
 
@@ -1724,17 +1759,14 @@ async def call_databricks_serving_endpoint(
         query_response = None
         last_error = None
         
-        # Build payload for OpenAI-compatible endpoint
-        from src.backend.identity import build_usage_context
+        # Build payload for OpenAI-compatible endpoint.
+        # Send the minimal Chat Completions body accepted by every Databricks-served
+        # chat model; do NOT send extra_params (strict FM chat schemas reject it).
         openai_request_body: Dict[str, Any] = {
             "messages": messages,
             "max_tokens": max_tokens,
         }
         ep_lower = endpoint.lower()
-        if "claude" not in ep_lower:
-            openai_request_body["extra_params"] = {
-                "usage_context": build_usage_context(),
-            }
         if "mini" not in ep_lower:
             openai_request_body["temperature"] = temperature
         
@@ -1857,16 +1889,16 @@ async def call_databricks_serving_endpoint(
                 if isinstance(choice, dict):
                     message = choice.get("message", {})
                     if isinstance(message, dict):
-                        content = message.get("content", "")
+                        content = _extract_text(message.get("content", ""))
                     elif hasattr(message, 'content'):
-                        content = getattr(message, 'content', '')
+                        content = _extract_text(getattr(message, 'content', ''))
                 # Handle choice as SDK object
                 elif hasattr(choice, 'message'):
                     message = choice.message
                     if isinstance(message, dict):
-                        content = message.get("content", "")
+                        content = _extract_text(message.get("content", ""))
                     elif hasattr(message, 'content'):
-                        content = getattr(message, 'content', '')
+                        content = _extract_text(getattr(message, 'content', ''))
                 
                 if "usage" in response:
                     usage_data = response["usage"]
@@ -2248,7 +2280,7 @@ async def _stream_with_retry(
     start flowing, any failure is final (retrying would produce duplicates).
     """
     import httpx
-    from src.backend.identity import build_user_agent, build_usage_context
+    from src.backend.identity import build_user_agent
 
     client = get_workspace_client()
     endpoint = get_best_available_endpoint()
@@ -2257,18 +2289,14 @@ async def _stream_with_retry(
         yield _sse_event({"type": "error", "error": "LLM not available"})
         return
 
+    # Minimal Chat Completions body accepted by every Databricks-served chat model;
+    # do NOT send extra_params (strict FM chat schemas reject it with a 400).
     request_body: Dict[str, Any] = {
         "messages": messages,
         "max_tokens": max_tokens,
         "stream": True,
     }
     ep_lower = endpoint.lower()
-    if "claude" not in ep_lower:
-        request_body["extra_params"] = {
-            "usage_context": build_usage_context(
-                section_tag=section_tag, industry=industry, use_case=use_case,
-            ),
-        }
     if "mini" not in ep_lower:
         request_body["temperature"] = temperature
 
@@ -2338,7 +2366,7 @@ async def _stream_with_retry(
                                 if choice.get("finish_reason"):
                                     finish_reason = choice.get("finish_reason")
                                 delta = choice.get("delta", {})
-                                content = delta.get("content", "")
+                                content = _extract_text(delta.get("content", ""))
                                 if content:
                                     content_buffer += content
                                     now = time.monotonic()
