@@ -1,3 +1,8 @@
+> [!TIP]
+> **This app deploys on [Databricks Free Edition](https://www.databricks.com/learn/free-edition)** — no paid workspace required.
+>
+> [How do you get started with Databricks Free Edition?](https://docs.databricks.com/aws/en/getting-started/free-edition)
+
 <div align="center">
   <h1>Vibe to Value</h1>
   <h3>Vibe Coding Workshop</h3>
