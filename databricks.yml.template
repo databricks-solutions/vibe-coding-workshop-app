@@ -10,6 +10,11 @@
 
 bundle:
   name: vibe-coding-workshop-app
+  # Use the direct (Go SDK) deployment engine instead of Terraform.
+  # Required on workspaces using OAuth token federation (e.g. Azure AD),
+  # where the bundled Terraform provider fails apps/postgres reads with
+  # "received HTML response instead of JSON" (login redirect).
+  engine: direct
 
 # =============================================================================
 # Variables
