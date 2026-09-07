@@ -94,6 +94,7 @@ SKIP_BUILD=false
 BUNDLE_ONLY=false
 PERMISSIONS_ONLY=false
 PROFILE=""
+AUTO_APPROVE=false
 
 # Parse arguments
 while [[ $# -gt 0 ]]; do
@@ -139,6 +140,10 @@ while [[ $# -gt 0 ]]; do
             SKIP_BUILD=true
             shift
             ;;
+        --yes|--auto-approve)
+            AUTO_APPROVE=true
+            shift
+            ;;
         --help|-h)
             echo "Usage: $0 [options]"
             echo ""
@@ -153,6 +158,7 @@ while [[ $# -gt 0 ]]; do
             echo "  --code-only, --sync      Quick code sync only (auto-builds frontend first)"
             echo "  --skip-build             Skip frontend build (for backend-only changes)"
             echo "  --watch, -w              Continuous sync mode (auto-syncs on file changes)"
+            echo "  --yes, --auto-approve    Skip the destructive-action confirmation prompt"
             echo "  --help, -h               Show this help"
             echo ""
             echo "Quick UI Update Examples:"
@@ -810,6 +816,31 @@ if [[ "$TABLES_ONLY" != true && "$PERMISSIONS_ONLY" != true ]]; then
                 echo -e "  2. Delete integrations for apps that no longer exist"
                 echo -e "  3. Or use: ${CYAN}databricks account custom-app-integration list${NC}"
                 echo ""
+                exit 1
+            fi
+        elif echo "$DEPLOY_OUTPUT" | grep -q "the deployment requires destructive actions"; then
+            print_warning "The CLI blocked a destructive action (see the warning above)."
+            print_warning "Approving will permanently delete or recreate those resources."
+            if [[ "$AUTO_APPROVE" == true ]]; then
+                print_step "Retrying bundle deploy with --auto-approve (--yes)..."
+            elif [[ -r /dev/tty ]]; then
+                echo ""
+                confirmation=""
+                # </dev/tty so a human can answer even if stdin is a pipe (vibe2value,
+                # tee). || true so EOF/Ctrl-D does not trip set -e with no message.
+                read -r -p "Type 'YES' to proceed with this destructive action, or anything else to abort: " confirmation </dev/tty || true
+                if [[ "$confirmation" != "YES" ]]; then
+                    print_error "Aborted. No resources were recreated."
+                    exit 1
+                fi
+                print_step "Retrying bundle deploy with approval..."
+            else
+                print_error "No terminal to confirm this destructive action."
+                echo -e "  Re-run with ${CYAN}--yes${NC} if you intend to recreate these resources."
+                exit 1
+            fi
+            if ! databricks bundle deploy -t "$TARGET" $PROFILE_FLAG --auto-approve 2>&1; then
+                print_error "Bundle deploy failed after approval"
                 exit 1
             fi
         else
