@@ -262,9 +262,12 @@ export const WORKSHOP_LEVELS: Record<WorkshopLevel, LevelConfig> = {
   },
   'genie-accelerator': {
     label: 'Genie Accelerator',
-    tooltip: 'Analyze silver metadata, build Gold layer, and create Genie Spaces',
-    description: 'Analyze your silver layer metadata, design and build a Gold layer, then create Genie Spaces with Metric Views and TVFs.',
-    sectionIds: ['define-usecase', 'lakehouse', 'data-intelligence', 'iterate-enhance', 'cleanup'],
+    tooltip: 'Build a governed Metric View, a Genie Agent, an ontology, and activate it',
+    description: 'Locate data and build a governed Metric View, stand up and tune a Genie Agent, model the Discover ontology, then activate with a dashboard, Lakebase sync, and a deployable bundle.',
+    // The new track sections (semantic-layer, genie-agent, genie-ontology, genie-activate)
+    // REPLACE the legacy AI/BI beats; data-intelligence is emptied in getFilteredSections
+    // and dropped by the empty-steps filter. Section display order follows WORKFLOW_SECTIONS.
+    sectionIds: ['define-usecase', 'lakehouse', 'data-intelligence', 'semantic-layer', 'genie-agent', 'genie-ontology', 'genie-activate', 'iterate-enhance', 'cleanup'],
   },
   'data-engineering-accelerator': {
     label: 'Data Engineering Accelerator',
@@ -398,6 +401,24 @@ export const ALL_STEPS: Record<number, WorkflowStep> = {
   54: { number: 54, title: 'Logged Model & UC Registration', icon: Database, color: 'text-violet-500', sectionTag: 'mlflow_logged_model_uc_registration' },
   55: { number: 55, title: 'AI Gateway + Deployment', icon: Rocket, color: 'text-violet-400', sectionTag: 'mlflow_gateway_and_deployment' },
   56: { number: 56, title: 'Production Monitoring + Debugging', icon: BarChart3, color: 'text-violet-500', sectionTag: 'mlflow_production_monitoring_and_debugging' },
+  // --- Genie Accelerator track (steps 57-73). Bound to seed rows by sectionTag ONLY. ---
+  57: { number: 57, title: 'Locate Data & Bring Context', icon: Search, color: 'text-cyan-400', sectionTag: 'semlayer_locate' },
+  58: { number: 58, title: 'Profile Your Schema', icon: Table2, color: 'text-cyan-400', sectionTag: 'semlayer_profile' },
+  59: { number: 59, title: 'Measures Analysis', icon: BarChart3, color: 'text-cyan-400', sectionTag: 'semlayer_measures' },
+  60: { number: 60, title: 'Draft the Metric View', icon: FileCode, color: 'text-cyan-400', sectionTag: 'semlayer_metric_view' },
+  61: { number: 61, title: 'Review & Expand Synonyms', icon: Tag, color: 'text-cyan-400', sectionTag: 'semlayer_synonyms' },
+  62: { number: 62, title: 'Describe the Agent', icon: MessageSquareText, color: 'text-sky-400', sectionTag: 'gagent_describe' },
+  63: { number: 63, title: 'Author Instructions', icon: FileText, color: 'text-sky-400', sectionTag: 'gagent_instructions' },
+  64: { number: 64, title: 'Add Verified Queries', icon: ShieldCheck, color: 'text-sky-400', sectionTag: 'gagent_verified' },
+  65: { number: 65, title: 'Load Benchmarks', icon: Target, color: 'text-sky-400', sectionTag: 'gagent_benchmarks' },
+  66: { number: 66, title: 'Optimize Loop', icon: RefreshCw, color: 'text-sky-400', sectionTag: 'gagent_optimize' },
+  67: { number: 67, title: 'Model the Domain + Subdomains', icon: Globe, color: 'text-teal-400', sectionTag: 'ontology_domain' },
+  68: { number: 68, title: 'Author Pages', icon: BookOpen, color: 'text-teal-400', sectionTag: 'ontology_pages' },
+  69: { number: 69, title: 'Write the Routing Page', icon: GitBranch, color: 'text-teal-400', sectionTag: 'ontology_routing' },
+  70: { number: 70, title: 'Show Your Agent', icon: Sparkles, color: 'text-emerald-400', sectionTag: 'gagent_share' },
+  71: { number: 71, title: 'Dashboard on the Metric View', icon: LayoutDashboard, color: 'text-emerald-400', sectionTag: 'gaccel_dashboard' },
+  72: { number: 72, title: 'Synced Tables → Lakebase → App', icon: Link2, color: 'text-emerald-400', sectionTag: 'gaccel_activation' },
+  73: { number: 73, title: 'Productionize as a Bundle', icon: Rocket, color: 'text-emerald-400', sectionTag: 'gaccel_productionize' },
 };
 
 // The logical sections with their step groupings (4-chapter structure + activation + skills)
@@ -461,6 +482,55 @@ export const WORKFLOW_SECTIONS: WorkflowSection[] = [
     bgColor: 'bg-cyan-500/15',
     borderColor: 'border-cyan-500/30',
     steps: [15, 16, 17, 24, 25, 18, 19].map(n => ALL_STEPS[n]),
+  },
+  // --- Genie Accelerator track sections (scoped to genie-accelerator level) ---
+  {
+    id: 'semantic-layer',
+    chapter: 'AI and Agents',
+    title: 'Semantic Layer',
+    focus: 'Locate data, analyze measures, and build a governed Metric View',
+    description: 'Point Genie Code at your data (existing, uploaded, or synthetic), profile the schema, analyze the measures and reconcile definitional conflicts, then author a governed Metric View with synonyms.',
+    icon: FileCode,
+    color: 'text-cyan-400',
+    bgColor: 'bg-cyan-500/15',
+    borderColor: 'border-cyan-500/30',
+    steps: [57, 58, 59, 60, 61].map(n => ALL_STEPS[n]),
+  },
+  {
+    id: 'genie-agent',
+    chapter: 'AI and Agents',
+    title: 'Genie Agent',
+    focus: 'Stand up a Genie Agent on the Metric View and tune it with benchmarks',
+    description: 'Create a Genie space bound to the Metric View, add lean instructions and verified queries, load benchmarks with expected SQL, then run the GC-native optimize loop until it clears the target pass rate.',
+    icon: MessageSquareText,
+    color: 'text-sky-400',
+    bgColor: 'bg-sky-500/15',
+    borderColor: 'border-sky-500/30',
+    steps: [62, 63, 64, 65, 66].map(n => ALL_STEPS[n]),
+  },
+  {
+    id: 'genie-ontology',
+    chapter: 'AI and Agents',
+    title: 'Genie Ontology',
+    focus: 'Model the Discover domain, pages, and routing (Genie One)',
+    description: 'Model the domain and subdomains (UI-preferred), author Pages, and write the routing page so Genie One routes questions to the right space. Beta features — mostly UI-driven with Genie Code drafting content.',
+    icon: Globe,
+    color: 'text-teal-400',
+    bgColor: 'bg-teal-500/15',
+    borderColor: 'border-teal-500/30',
+    steps: [67, 68, 69].map(n => ALL_STEPS[n]),
+  },
+  {
+    id: 'genie-activate',
+    chapter: 'AI and Agents',
+    title: 'Activate & Productionize',
+    focus: 'Prove the agent, add a dashboard, sync to Lakebase, and bundle it',
+    description: 'Show the working agent, build an AI/BI dashboard on the Metric View, sync the Gold dimensions + facts into Lakebase to power an app, and optionally package the whole track as a Databricks Asset Bundle.',
+    icon: Rocket,
+    color: 'text-emerald-400',
+    bgColor: 'bg-emerald-500/15',
+    borderColor: 'border-emerald-500/30',
+    steps: [70, 71, 72, 73].map(n => ALL_STEPS[n]),
   },
   {
     id: 'activation',
@@ -579,9 +649,20 @@ export function getFilteredSections(
   const isGenie = normalizedLevel === 'genie-accelerator';
   const isSkillsAccelerator = normalizedLevel === 'skills-accelerator';
 
+  // Genie Accelerator track sections. Bound to seed rows by sectionTag only.
+  // (These ids are added to the genie-accelerator sectionIds; the guard below is a
+  // defensive belt-and-braces so they never leak into any other level.)
+  const GENIE_TRACK_SECTION_IDS = new Set([
+    'semantic-layer', 'genie-agent', 'genie-ontology', 'genie-activate',
+  ]);
+
   let filtered = WORKFLOW_SECTIONS
     .filter(section => sectionIds.includes(section.id))
     .map(section => {
+      // The Genie Accelerator track only exists for the genie-accelerator level.
+      if (GENIE_TRACK_SECTION_IDS.has(section.id) && !isGenie) {
+        return { ...section, steps: [] };
+      }
       // Skills Accelerator: remove PRD step from foundation
       if (section.id === 'define-usecase' && isSkillsAccelerator) {
         return {
@@ -596,12 +677,10 @@ export function getFilteredSections(
           steps: section.steps.filter(step => [22, 11, 14, 23].includes(step.number))
         };
       }
-      // Genie Accelerator: data-intelligence section shows only steps 15, 17, 24, 25
+      // Genie Accelerator: the new track (semantic-layer → genie-agent → genie-ontology
+      // → genie-activate) REPLACES the legacy AI/BI beats. Empty steps drop this section.
       if (section.id === 'data-intelligence' && isGenie) {
-        return {
-          ...section,
-          steps: section.steps.filter(step => [15, 17, 24, 25].includes(step.number))
-        };
+        return { ...section, steps: [] };   // was: filter to [15, 17, 24, 25]
       }
       // Non-genie paths: always hide step 22 and conditionally hide step 9
       if (section.id === 'lakehouse' && !isGenie) {

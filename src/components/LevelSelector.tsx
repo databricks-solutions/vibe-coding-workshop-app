@@ -136,7 +136,7 @@ const LEVEL_DESCRIPTIONS: Record<WorkshopLevel, string> = {
   'lakehouse-di': 'Add Genie Spaces, Agents & AI/BI Dashboards on top of your Lakehouse',
   'end-to-end': 'The complete end-to-end workshop covering all chapters',
   'accelerator': 'Start with table metadata and build end-to-end Bronze/Silver/Gold layers that power your AI and agents',
-  'genie-accelerator': 'Analyze silver metadata, design Gold layer, and build Genie Spaces with Metric Views and TVFs',
+  'genie-accelerator': 'Build a governed Metric View, stand up a Genie Agent, model the ontology, then activate with a dashboard, Lakebase sync, and a bundle',
   'data-engineering-accelerator': 'Build production-ready Bronze, Silver, and Gold data pipelines using Databricks Lakehouse best practices',
   'skills-accelerator': 'Build a Data Contract Governance Skill that tags gold-layer tables and validates compliance for certification',
   'agents-accelerator': 'Build, evaluate, and deploy a production-ready agent app — Databricks App + Lakebase + Mosaic AI Agent Framework + MLflow for Gen-AI lifecycle.',
@@ -1103,7 +1103,7 @@ export function LevelSelector({
       case 'lakehouse-di': return 'Foundation → Lakehouse → AI and Agents → Refinement';
       case 'end-to-end': return 'Foundation → All Sections (App, Lakebase, Lakehouse, AI and Agents) → Refinement';
       case 'accelerator': return 'Foundation → Lakehouse → AI and Agents → Refinement';
-      case 'genie-accelerator': return 'Foundation → Silver Metadata → Gold Layer → Use-Case Plan → Genie Space → Refinement';
+      case 'genie-accelerator': return 'Foundation → Lakehouse → Semantic Layer → Genie Agent → Genie Ontology → Activate & Productionize → Refinement';
       case 'data-engineering-accelerator': return 'Foundation → Lakehouse (Bronze → Silver → Gold) → Refinement';
       case 'skills-accelerator': return 'Foundation → Build Agent Skill (Explore, Strategy, SKILL.md, Apply & Test, Validate) → Refinement';
       case 'agents-accelerator': return 'Foundation → Databricks App → Lakebase → Agents on Apps → MLflow for Gen-AI → Refinement';

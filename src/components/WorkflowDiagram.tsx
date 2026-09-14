@@ -1,4 +1,6 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import type { ReactNode } from 'react';
+import type { ColorType } from '../constants/colorClasses';
 import { ReadOnlyProvider } from '../contexts/ReadOnlyContext';
 import { WorkflowStep } from './WorkflowStep';
 import { Prerequisites } from './Prerequisites';
@@ -59,6 +61,8 @@ import {
   FileCode,
   Tag,
   ShieldCheck,
+  Globe,
+  Target,
   Trash2
 } from 'lucide-react';
 import { apiClient } from '../api/client';
@@ -239,6 +243,10 @@ export function WorkflowDiagram({
   const [step10Mode, setStep10Mode] = useState<'extract' | 'upload' | 'generate'>('extract');
   const [step12Mode, setStep12Mode] = useState<'clone' | 'generate'>('clone');
   const [step22Mode, setStep22Mode] = useState<'silver' | 'upload' | 'generate'>('silver');
+  // Genie Accelerator — Semantic Layer interactive panels (gated by sectionTag).
+  // semlayer_locate: data-mode toggle; semlayer_metric_view: Import BI tab.
+  const [semlayerLocateMode, setSemlayerLocateMode] = useState<'existing' | 'upload' | 'synthetic'>('existing');
+  const [metricViewImportMode, setMetricViewImportMode] = useState<'inventory' | 'importbi'>('inventory');
 
   // Gold table target for Agent Skills Accelerator (Step 26+)
   const [goldTableTarget, setGoldTableTarget] = useState<GoldTableTarget>({
@@ -976,6 +984,195 @@ export function WorkflowDiagram({
   const renderSectionSteps = (sectionId: string) => {
     const section = visibleSections.find(s => s.id === sectionId);
     if (!section) return null;
+
+    // -------------------------------------------------------------------------
+    // Genie Accelerator track (steps 57-73). Everything here is bound to the seed
+    // rows by the step's sectionTag ONLY — the switch's numeric key is incidental.
+    // -------------------------------------------------------------------------
+    const GENIE_STEP_META: Record<string, { title: string; description: string; icon: ReactNode; color: ColorType }> = {
+      semlayer_locate:      { title: 'Locate Data & Bring Context',       description: 'Point Genie Code at your data (existing, uploaded, or synthetic), bring any existing definitions, and seed the Genie brief from the PRD — no building yet.', icon: <Search className="w-5 h-5" />,            color: 'cyan' },
+      semlayer_profile:     { title: 'Profile Your Schema',               description: 'Profile the schema Genie Code located: cardinality, nulls, grain, and candidate keys — the evidence for the measures analysis.',                       icon: <Table2 className="w-5 h-5" />,            color: 'cyan' },
+      semlayer_measures:    { title: 'Measures Analysis (sign-off gate)', description: 'Analyze candidate measures, reconcile definitional conflicts, and get your explicit sign-off before any assets are authored.',                        icon: <BarChart3 className="w-5 h-5" />,         color: 'cyan' },
+      semlayer_metric_view: { title: 'Draft the Metric View',            description: 'Author a governed Metric View from the signed-off inventory (Path B) or import an existing BI semantic model and promote it to UC (Path A).',        icon: <FileCode className="w-5 h-5" />,          color: 'cyan' },
+      semlayer_synonyms:    { title: 'Review & Expand Synonyms',          description: 'Review and expand the synonyms on the Metric View so Genie resolves the words your users actually type.',                                          icon: <Tag className="w-5 h-5" />,               color: 'cyan' },
+      gagent_describe:      { title: 'Describe the Agent',               description: 'Create a Genie space bound to the Metric View and describe what the agent is for.',                                                                icon: <MessageSquareText className="w-5 h-5" />, color: 'blue' },
+      gagent_instructions:  { title: 'Author Instructions',             description: 'Author lean, high-signal instructions for the Genie Agent.',                                                                                        icon: <FileText className="w-5 h-5" />,          color: 'blue' },
+      gagent_verified:      { title: 'Add Verified Queries',            description: 'Add verified queries so the agent answers the highest-value questions deterministically.',                                                          icon: <ShieldCheck className="w-5 h-5" />,       color: 'blue' },
+      gagent_benchmarks:    { title: 'Load Benchmarks',                 description: 'Load a benchmark set with expected SQL to measure the agent objectively.',                                                                          icon: <Target className="w-5 h-5" />,            color: 'blue' },
+      gagent_optimize:      { title: 'Optimize Loop',                   description: 'Run the Genie-Code-native optimize loop until the agent clears the target pass rate.',                                                              icon: <RefreshCw className="w-5 h-5" />,         color: 'blue' },
+      ontology_domain:      { title: 'Model the Domain + Subdomains',   description: 'Model the Discover domain and subdomains (UI-preferred; Genie Code drafts the content).',                                                            icon: <Globe className="w-5 h-5" />,             color: 'teal' },
+      ontology_pages:       { title: 'Author Pages',                    description: 'Author the ontology Pages that describe your domain to Genie One.',                                                                                 icon: <BookOpen className="w-5 h-5" />,          color: 'teal' },
+      ontology_routing:     { title: 'Write the Routing Page',          description: 'Write the routing page so Genie One routes questions to the right space.',                                                                           icon: <GitBranch className="w-5 h-5" />,         color: 'teal' },
+      gagent_share:         { title: 'Show Your Agent',                 description: 'Proof beat: show the working Genie Agent answering real questions before you activate it.',                                                          icon: <Sparkles className="w-5 h-5" />,          color: 'emerald' },
+      gaccel_dashboard:     { title: 'Dashboard on the Metric View',    description: 'Build an AI/BI dashboard on the same governed Metric View that powers the agent.',                                                                  icon: <LayoutDashboard className="w-5 h-5" />,   color: 'emerald' },
+      gaccel_activation:    { title: 'Synced Tables → Lakebase → App',   description: 'Sync the Gold dimensions + facts into Lakebase via Synced Tables to power an app.',                                                                 icon: <Link2 className="w-5 h-5" />,             color: 'emerald' },
+      gaccel_productionize: { title: 'Productionize as a Bundle',        description: 'Package the whole track as a Databricks Asset Bundle for repeatable deploys.',                                                                      icon: <Rocket className="w-5 h-5" />,            color: 'emerald' },
+    };
+
+    // Write-target editor bound to the Semantic Layer steps so learners set the
+    // governed-asset destination (lakehouse_default_catalog + user_schema_prefix) once.
+    const goldTargetHeader: ReactNode = (
+      <div onClick={(e) => e.stopPropagation()}>
+        <GoldTableTargetEditor
+          value={goldTableTarget}
+          onChange={(v) => { goldTargetManuallyEdited.current = true; setGoldTableTarget(v); }}
+          defaultValues={{
+            catalog: defaultCatalog,
+            schema: (currentUser && (customUseCaseLabel || selectedUseCaseLabel))
+              ? deriveSchemaName(currentUser, customUseCaseLabel || selectedUseCaseLabel, 'gold')
+              : '',
+          }}
+        />
+      </div>
+    );
+
+    const modeButtonClass = (active: boolean) =>
+      `px-3 py-1.5 rounded-md text-ui-xs font-medium transition-colors ${
+        active ? 'bg-primary/15 text-primary border border-primary/40' : 'text-muted-foreground hover:text-foreground border border-transparent'
+      }`;
+
+    // A step surface bound to a sectionTag. Special panels are gated on the
+    // sectionTag (not the step number), per the track spec.
+    const renderGenieStep = (step: { number: number; sectionTag?: string }): ReactNode => {
+      const n = step.number;
+      const tag = step.sectionTag ?? '';
+      const meta = GENIE_STEP_META[tag];
+      if (!meta) return null;
+
+      const baseProps = {
+        stepNumber: n,
+        title: meta.title,
+        description: meta.description,
+        icon: meta.icon,
+        color: meta.color,
+        isComplete: completedSteps.has(n),
+        isSkipped: skippedSteps.has(n),
+        onToggleComplete: () => toggleStepComplete(n),
+        onToggleSkip: () => toggleStepSkip(n),
+        onNavigateNext: () => navigateToNextStep(n),
+        sectionTag: tag,
+        industry: selectedIndustry,
+        useCase: selectedUseCase,
+        onPromptGenerated: onStepPromptGenerated,
+        initialPrompt: stepPrompts[n],
+        isPreviousStepComplete: isPreviousStepComplete(n),
+        isExpanded: expandedStep === n,
+        onToggleExpand: () => toggleExpand(n),
+        sessionId,
+      } as const;
+
+      // Semantic Layer steps all carry the write-target editor.
+      const isSemlayer = tag.startsWith('semlayer_');
+
+      // Step 1 (semlayer_locate): data-mode toggle (Existing / Upload / Synthetic).
+      if (tag === 'semlayer_locate') {
+        const dataModeToggle = (
+          <div onClick={(e) => e.stopPropagation()} className="flex flex-wrap items-center gap-2 mb-3">
+            <span className="text-ui-xs text-muted-foreground mr-1">Data mode:</span>
+            <button type="button" className={modeButtonClass(semlayerLocateMode === 'existing')} onClick={() => setSemlayerLocateMode('existing')}>Extract from existing tables</button>
+            <button type="button" className={modeButtonClass(semlayerLocateMode === 'upload')} onClick={() => setSemlayerLocateMode('upload')}>Upload a data dictionary</button>
+            <button type="button" className={modeButtonClass(semlayerLocateMode === 'synthetic')} onClick={() => setSemlayerLocateMode('synthetic')}>Generate (synthetic)</button>
+          </div>
+        );
+        if (semlayerLocateMode === 'upload') {
+          return (
+            <div key={n} className="relative mt-5" data-step-number={n}>
+              <div className="mb-2">{dataModeToggle}</div>
+              <CsvUploadPanel
+                sessionId={sessionId}
+                industry={selectedIndustry}
+                useCase={selectedUseCase}
+                stepNumber={n}
+                sectionTag={tag}
+                onPromptGenerated={onStepPromptGenerated}
+                initialPrompt={stepPrompts[n]}
+                isComplete={completedSteps.has(n)}
+                onToggleComplete={() => toggleStepComplete(n)}
+                isSkipped={skippedSteps.has(n)}
+                onToggleSkip={() => toggleStepSkip(n)}
+                onNavigateNext={() => navigateToNextStep(n)}
+                isPreviousStepComplete={isPreviousStepComplete(n)}
+              />
+            </div>
+          );
+        }
+        return (
+          <div key={n} className="relative mt-5" data-step-number={n}>
+            <WorkflowStep
+              {...baseProps}
+              customHeaderContent={
+                <div onClick={(e) => e.stopPropagation()} className="space-y-3">
+                  {dataModeToggle}
+                  {semlayerLocateMode === 'existing' && (
+                    <LakehouseParamsEditor
+                      sessionId={sessionId}
+                      isExpanded={true}
+                      refreshKey={lakehouseParamsRefreshKey}
+                    />
+                  )}
+                  {goldTargetHeader}
+                </div>
+              }
+            />
+          </div>
+        );
+      }
+
+      // Step 4 (semlayer_metric_view): Import BI tab (Path B author [default] / Path A import).
+      if (tag === 'semlayer_metric_view') {
+        const importTabs = (
+          <div onClick={(e) => e.stopPropagation()} className="flex flex-wrap items-center gap-2 mb-3">
+            <span className="text-ui-xs text-muted-foreground mr-1">Metric View source:</span>
+            <button type="button" className={modeButtonClass(metricViewImportMode === 'inventory')} onClick={() => setMetricViewImportMode('inventory')}>Path B — author from inventory</button>
+            <button type="button" className={modeButtonClass(metricViewImportMode === 'importbi')} onClick={() => setMetricViewImportMode('importbi')}>Path A — import BI + promote to UC</button>
+          </div>
+        );
+        if (metricViewImportMode === 'importbi') {
+          return (
+            <div key={n} className="relative mt-5" data-step-number={n}>
+              <div className="mb-2">{importTabs}</div>
+              <CsvUploadPanel
+                sessionId={sessionId}
+                industry={selectedIndustry}
+                useCase={selectedUseCase}
+                stepNumber={n}
+                sectionTag={tag}
+                onPromptGenerated={onStepPromptGenerated}
+                initialPrompt={stepPrompts[n]}
+                isComplete={completedSteps.has(n)}
+                onToggleComplete={() => toggleStepComplete(n)}
+                isSkipped={skippedSteps.has(n)}
+                onToggleSkip={() => toggleStepSkip(n)}
+                onNavigateNext={() => navigateToNextStep(n)}
+                isPreviousStepComplete={isPreviousStepComplete(n)}
+              />
+            </div>
+          );
+        }
+        return (
+          <div key={n} className="relative mt-5" data-step-number={n}>
+            <WorkflowStep
+              {...baseProps}
+              customHeaderContent={
+                <div onClick={(e) => e.stopPropagation()} className="space-y-3">
+                  {importTabs}
+                  {goldTargetHeader}
+                </div>
+              }
+            />
+          </div>
+        );
+      }
+
+      return (
+        <div key={n} className="relative mt-5" data-step-number={n}>
+          <WorkflowStep
+            {...baseProps}
+            customHeaderContent={isSemlayer ? goldTargetHeader : undefined}
+          />
+        </div>
+      );
+    };
 
     return (
       <div className="space-y-4">
@@ -3117,6 +3314,13 @@ export function WorkflowDiagram({
                   />
                 </div>
               );
+
+            // Genie Accelerator track (steps 57-73) — bound to seed rows by sectionTag.
+            case 57: case 58: case 59: case 60: case 61:
+            case 62: case 63: case 64: case 65: case 66:
+            case 67: case 68: case 69:
+            case 70: case 71: case 72: case 73:
+              return renderGenieStep(step);
 
             default:
               return null;

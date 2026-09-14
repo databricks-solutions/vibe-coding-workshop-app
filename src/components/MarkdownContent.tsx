@@ -5,6 +5,51 @@ import { Maximize2, Minimize2 } from 'lucide-react';
 
 export const REMARK_PLUGINS = [remarkGfm];
 
+// Lazily-rendered Mermaid diagram. `mermaid` is dynamically imported so it stays
+// out of the initial bundle and only loads when a diagram is actually present.
+// On any parse/render error it degrades gracefully to the raw Mermaid source.
+let mermaidIdCounter = 0;
+function Mermaid({ chart }: { chart: string }) {
+  const [svg, setSvg] = useState<string>('');
+  const [error, setError] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    const id = `mermaid-diagram-${mermaidIdCounter++}`;
+    (async () => {
+      try {
+        const mermaid = (await import('mermaid')).default;
+        mermaid.initialize({ startOnLoad: false, theme: 'dark', securityLevel: 'strict' });
+        const { svg } = await mermaid.render(id, chart);
+        if (!cancelled) { setSvg(svg); setError(false); }
+      } catch {
+        if (!cancelled) setError(true);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [chart]);
+
+  if (error) {
+    // Graceful degradation — show the readable Mermaid source.
+    return (
+      <pre className="bg-background text-foreground p-3 rounded overflow-x-auto my-2 border border-border text-ui-sm font-mono">
+        {chart}
+      </pre>
+    );
+  }
+  if (!svg) {
+    return (
+      <div className="my-3 text-ui-sm text-muted-foreground italic">Rendering diagram…</div>
+    );
+  }
+  return (
+    <div
+      className="mermaid-diagram my-3 flex justify-center overflow-x-auto"
+      dangerouslySetInnerHTML={{ __html: svg }}
+    />
+  );
+}
+
 export const MARKDOWN_COMPONENTS = {
   h1: ({ children }: any) => (
     <h1 className="text-ui-md2 font-semibold text-foreground border-b border-border pb-2 mb-3 mt-1">
@@ -50,17 +95,29 @@ export const MARKDOWN_COMPONENTS = {
         </code>
       );
     }
+    // Render ```mermaid fences as diagrams; all other fences stay on the styled path.
+    if (className === 'language-mermaid') {
+      return <Mermaid chart={String(children).replace(/\n$/, '')} />;
+    }
     return (
       <code className="block bg-background text-foreground p-3 rounded overflow-x-auto text-ui-sm font-mono my-2 border border-border">
         {children}
       </code>
     );
   },
-  pre: ({ children }: any) => (
-    <pre className="bg-background text-foreground p-3 rounded overflow-x-auto my-2 border border-border">
-      {children}
-    </pre>
-  ),
+  pre: ({ children }: any) => {
+    // Mermaid diagrams render as a block <div>; don't wrap them in <pre> (invalid
+    // nesting + double border). Let the code component handle them directly.
+    const child = Array.isArray(children) ? children[0] : children;
+    if (child?.props?.className === 'language-mermaid') {
+      return <>{children}</>;
+    }
+    return (
+      <pre className="bg-background text-foreground p-3 rounded overflow-x-auto my-2 border border-border">
+        {children}
+      </pre>
+    );
+  },
   blockquote: ({ children }: any) => (
     <blockquote className="border-l-3 border-primary bg-primary/10 pl-3 py-1.5 my-2 text-ui-base italic text-muted-foreground">
       {children}

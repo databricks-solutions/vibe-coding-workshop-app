@@ -41,6 +41,10 @@ export type SegmentKey =
   | 'lakebase'
   | 'lakehouse'
   | 'data-intelligence'
+  | 'semantic-layer'
+  | 'genie-agent'
+  | 'genie-ontology'
+  | 'genie-activate'
   | 'activation'
   | 'agents-on-apps'
   | 'mlflow-genai'
@@ -66,6 +70,10 @@ export const SEGMENT_TO_BUCKET: Record<SegmentKey, PersonaBucket> = {
   'agents-on-apps':    'apps-lakebase',
   'lakehouse':         'lakehouse',
   'data-intelligence': 'ai-agents',
+  'semantic-layer':    'ai-agents',
+  'genie-agent':       'ai-agents',
+  'genie-ontology':    'ai-agents',
+  'genie-activate':    'activation',
   'mlflow-genai':      'ai-agents',
   'agent-skills':      'ai-agents',
   'activation':        'activation',
@@ -144,7 +152,7 @@ export const PATH_DURATIONS: Record<WorkshopLevel, PathDuration> = {
   // Accelerators keep their 4h budget and Foundation/Tail trim, since they
   // run as standalone single-domain workshops outside the additive chain.
   'accelerator':                  { totalMinutes: 240, segments: { 'define-usecase':  10, 'lakehouse':     120, 'data-intelligence':  95,                                                                  'iterate-enhance': 10, 'cleanup': 5 } },
-  'genie-accelerator':            { totalMinutes: 240, segments: { 'define-usecase':  10, 'lakehouse':      90, 'data-intelligence': 125,                                                                  'iterate-enhance': 10, 'cleanup': 5 } },
+  'genie-accelerator':            { totalMinutes: 260, segments: { 'define-usecase':  10, 'lakehouse':      90, 'semantic-layer': 45, 'genie-agent': 45, 'genie-ontology': 25, 'genie-activate': 30, 'iterate-enhance': 10, 'cleanup': 5 } },
   'data-engineering-accelerator': { totalMinutes: 240, segments: { 'define-usecase':  10, 'lakehouse':     215,                                                                                            'iterate-enhance': 10, 'cleanup': 5 } },
   'skills-accelerator':           { totalMinutes: 240, segments: { 'define-usecase':  10, 'agent-skills':  215,                                                                                            'iterate-enhance': 10, 'cleanup': 5 } },
   'agents-accelerator':           { totalMinutes: 240, segments: { 'define-usecase':  10, 'databricks-app': 20, 'lakebase':           20, 'agents-on-apps': 110, 'mlflow-genai': 65,                       'iterate-enhance': 10, 'cleanup': 5 } },

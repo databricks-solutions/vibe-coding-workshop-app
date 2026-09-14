@@ -106,6 +106,18 @@ const AGENTS_RIGHT_OBJECTIVES: LearningObjective[] = [
   { id: 'a5', chapters: ['ch4'], content: <>Manage the lifecycle with <strong className="text-foreground">MLflow for Gen-AI</strong>: prompts, evaluation, monitoring</> },
 ];
 
+// Genie Accelerator — replaces the right (ch4) column bullets with the Genie
+// track arc: governed Metric View → Genie Agent → Discover Ontology → AI/BI
+// Dashboard → Synced Tables → Lakebase → App. ch3 (Bronze/Silver/Gold) is kept
+// as the default data foundation feeding the Metric View.
+const GENIE_RIGHT_OBJECTIVES: LearningObjective[] = [
+  { id: 'g1', chapters: ['ch4'], content: <>Author governed <strong className="text-foreground">Metric Views</strong> with synonyms as the semantic foundation</> },
+  { id: 'g2', chapters: ['ch4'], content: <>Stand up a <strong className="text-foreground">Genie Agent</strong> — instructions, verified queries, benchmarks, optimize loop</> },
+  { id: 'g3', chapters: ['ch4'], content: <>Model the <strong className="text-foreground">Discover Ontology</strong> — domains, pages, and routing</> },
+  { id: 'g4', chapters: ['ch4'], content: <>Build an <strong className="text-foreground">AI/BI Dashboard</strong> on the Metric View</> },
+  { id: 'g5', chapters: ['ch4'], content: <>Sync to <strong className="text-foreground">Lakebase</strong> via Synced Tables and power an <strong className="text-foreground">App</strong></> },
+];
+
 // Replaces the middle (ch3) column bullets — just the Bronze layer for agents.
 const AGENTS_MIDDLE_OBJECTIVES: LearningObjective[] = [
   { id: 'am1', chapters: ['ch3'], content: <>Sync operational data into the <strong className="text-foreground">Lakehouse</strong></> },
@@ -766,6 +778,8 @@ export function ArchitectureDiagramContent({
       );
   const rightObjectives = isAgentsAccelerator
     ? (visibleChapters.has('ch4') ? AGENTS_RIGHT_OBJECTIVES : [])
+    : isGenie
+    ? (visibleChapters.has('ch4') ? GENIE_RIGHT_OBJECTIVES : [])
     : LEARNING_OBJECTIVES.filter(obj =>
         obj.chapters.some(ch => ch === 'ch4' && visibleChapters.has(ch))
       );
@@ -1463,6 +1477,8 @@ export function ArchitectureDiagram({ forceCollapsed = false, workshopLevel = 'e
       );
   const rightObjectives = isAgentsAccelerator
     ? (visibleChapters.has('ch4') ? AGENTS_RIGHT_OBJECTIVES : [])
+    : isGenie
+    ? (visibleChapters.has('ch4') ? GENIE_RIGHT_OBJECTIVES : [])
     : LEARNING_OBJECTIVES.filter(obj =>
         obj.chapters.some(ch => ch === 'ch4' && visibleChapters.has(ch))
       );
