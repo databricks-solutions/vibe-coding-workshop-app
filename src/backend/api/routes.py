@@ -487,20 +487,6 @@ except ImportError:  # pragma: no cover - keeps the module importable standalone
         return content if isinstance(content, str) else ""
 
 
-# Model families that reject the `extra_params.usage_context` telemetry field this app
-# attaches for attribution. Gemini validates its generation_config strictly and fails
-# the whole request with HTTP 400 ("Unknown name \"extra_params\" at
-# 'generation_config'"), so sending it is not merely ignored — it loses the call.
-# Claude was already excluded; the check used to be "not claude", which silently
-# assumed every other family tolerates the field.
-_NO_USAGE_CONTEXT_FAMILIES = ("claude", "gemini")
-
-
-def _supports_usage_context(endpoint: str) -> bool:
-    """True when an endpoint accepts the extra_params.usage_context attribution field."""
-    ep = (endpoint or "").lower()
-    return not any(family in ep for family in _NO_USAGE_CONTEXT_FAMILIES)
-
 # Initialize WorkspaceClient - automatically handles auth when running as Databricks App
 # Uses OAuth from environment when deployed, falls back to config file for local dev
 _workspace_client = None

@@ -123,40 +123,10 @@ class RevealEndpointChainTest(unittest.TestCase):
         self.assertNotEqual(routes._reveal_endpoints(None)[0], "databricks-gemini-3-5-flash")
 
 
-class UsageContextCompatibilityTest(unittest.TestCase):
-    """
-    Gemini rejects the extra_params.usage_context attribution field outright:
-
-        HTTP 400 Invalid JSON payload received. Unknown name "extra_params"
-        at 'generation_config': Cannot find field.
-
-    So sending it is not harmless — it loses the entire call. The guard used to be
-    `if "claude" not in endpoint`, which assumed every non-Claude family tolerates the
-    field. Caught only by an end-to-end call, since the shape is valid JSON and no unit
-    test of the payload builder would notice.
-    """
-
-    def test_gemini_does_not_receive_usage_context(self):
-        for endpoint in (
-            "databricks-gemini-3-1-flash-lite",
-            "databricks-gemini-3-5-flash",
-            "databricks-gemini-3-6-pro",
-        ):
-            self.assertFalse(
-                routes._supports_usage_context(endpoint),
-                f"{endpoint} would fail with HTTP 400",
-            )
-
-    def test_claude_still_excluded(self):
-        self.assertFalse(routes._supports_usage_context("databricks-claude-sonnet-4-6"))
-
-    def test_other_families_keep_attribution(self):
-        """Llama and friends accept the field, and attribution is worth keeping."""
-        for endpoint in ("databricks-meta-llama-3-1-70b-instruct", "databricks-dbrx-instruct"):
-            self.assertTrue(routes._supports_usage_context(endpoint))
-
-    def test_empty_endpoint_is_safe(self):
-        self.assertTrue(routes._supports_usage_context(""))
+# NOTE: this branch targets upstream main, whose serving refactor never sends the
+# extra_params.usage_context field (strict Foundation Model chat schemas reject it with a
+# 400). There is therefore no _supports_usage_context guard to test here; the earlier
+# UsageContextCompatibilityTest was dropped along with that dead code.
 
 
 class GeminiContentShapeTest(unittest.TestCase):
