@@ -36,10 +36,13 @@ export function LakehouseParamsEditor({ sessionId, isExpanded, label = 'Source:'
       setError(null);
       onParamsLoaded?.(true);
     } catch (err) {
+      // Never invent a dataset here. This used to fall back to a hardcoded
+      // samples.wanderbricks, which showed a tourism dataset to a retail attendee
+      // and looked authoritative while doing it — the same class of bug as the
+      // global default this release fixes. Say we could not load it instead.
       console.error('Failed to fetch lakehouse params:', err);
-      setParams({ catalog: 'samples', schema_name: 'wanderbricks', is_overridden: false });
-      setEditCatalog('samples');
-      setEditSchema('wanderbricks');
+      setParams(null);
+      setError('Could not load the source dataset. Retry, or set it explicitly.');
       onParamsLoaded?.(true);
     }
   };
@@ -85,6 +88,29 @@ export function LakehouseParamsEditor({ sessionId, isExpanded, label = 'Source:'
     setError(null);
   };
 
+  // Failed to load and nothing to show. Offer a retry rather than spinning forever,
+  // and say plainly that the dataset is unknown — guessing one is what caused the
+  // retail-workshop-reads-tourism-data bug.
+  if (!params && error) {
+    return (
+      <div className="mt-3 px-4 py-3 bg-muted/20 rounded-md border border-amber-500/40">
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2.5">
+            <Database className="w-4 h-4 text-amber-500 shrink-0" />
+            <span className="text-ui-base text-muted-foreground">{error}</span>
+          </div>
+          <button
+            onClick={fetchParams}
+            className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-muted/50 rounded-md transition-colors shrink-0"
+          >
+            <RefreshCw className="w-3.5 h-3.5" />
+            Retry
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   if (!params) {
     return (
       <div className="mt-3 px-4 py-3 bg-muted/20 rounded-md border border-border/40">
@@ -100,28 +126,53 @@ export function LakehouseParamsEditor({ sessionId, isExpanded, label = 'Source:'
     );
   }
 
+  // Nothing chose a dataset for this use case, so what we would display is the product
+  // default — the tourism sample. Showing it as though it were this use case's data is
+  // how a retail workshop ended up modelling hotel bookings, so say it is unchosen
+  // instead and point at the fix.
+  const datasetUnset = params.dataset_status === 'unset';
+
   return (
-    <div className="mt-3 px-4 py-3 bg-muted/30 rounded-md border border-border/50">
+    <div
+      className={`mt-3 px-4 py-3 rounded-md border ${
+        datasetUnset
+          ? 'bg-amber-500/5 border-amber-500/40'
+          : 'bg-muted/30 border-border/50'
+      }`}
+    >
       {!isEditing ? (
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Database className="w-4 h-4 text-amber-500" />
-            <span className="text-sm text-muted-foreground">{label}</span>
-            <span className="text-sm font-medium text-foreground">
-              {params.catalog}.{params.schema_name}
-            </span>
-            {params.is_overridden && (
-              <span className="text-ui-2xs px-1.5 py-0.5 bg-amber-500/20 text-amber-600 dark:text-amber-400 rounded-full font-medium">
-                Custom
+          <div className="flex items-center gap-2 min-w-0">
+            <Database className="w-4 h-4 text-amber-500 shrink-0" />
+            {datasetUnset ? (
+              <span className="text-sm text-muted-foreground">
+                No dataset chosen for this use case yet — set one here, or complete the
+                data pre-work.
               </span>
+            ) : (
+              <>
+                <span className="text-sm text-muted-foreground">{label}</span>
+                <span className="text-sm font-medium text-foreground">
+                  {params.catalog}.{params.schema_name}
+                </span>
+                {params.is_overridden && (
+                  <span className="text-ui-2xs px-1.5 py-0.5 bg-amber-500/20 text-amber-600 dark:text-amber-400 rounded-full font-medium">
+                    Custom
+                  </span>
+                )}
+              </>
             )}
           </div>
           <button
             onClick={() => setIsEditing(true)}
-            className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-muted/50 rounded-md transition-colors"
+            className={`flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded-md transition-colors shrink-0 ${
+              datasetUnset
+                ? 'bg-primary text-primary-foreground hover:bg-primary/90'
+                : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
+            }`}
           >
             <Lock className="w-3.5 h-3.5" />
-            Edit
+            {datasetUnset ? 'Set source' : 'Edit'}
           </button>
         </div>
       ) : (

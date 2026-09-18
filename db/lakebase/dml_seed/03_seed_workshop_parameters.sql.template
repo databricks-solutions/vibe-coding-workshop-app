@@ -119,7 +119,7 @@ VALUES
 ('model_serving_endpoint', 
  'Model Serving Endpoint', 
  '__SERVING_ENDPOINT__',
- 'The default model serving endpoint for calling LLMs. This endpoint should be configured in your workspace under Serving. Common options: databricks-meta-llama-3-1-70b-instruct, databricks-claude-sonnet-4-5.',
+ 'The default model serving endpoint for calling LLMs. This endpoint should be configured in your workspace under Serving. Common options: databricks-claude-sonnet-4-6, databricks-claude-sonnet-4-5, databricks-claude-opus-5 (note: opus-5 rejects the temperature parameter this app sends).',
  'endpoint',
  6,
  TRUE,
@@ -141,7 +141,7 @@ VALUES
  7,
  TRUE,
  TRUE,
- FALSE,
+ TRUE,
  CURRENT_TIMESTAMP,
  CURRENT_TIMESTAMP,
  CURRENT_USER);
@@ -158,7 +158,7 @@ VALUES
  8,
  TRUE,
  TRUE,
- FALSE,
+ TRUE,
  CURRENT_TIMESTAMP,
  CURRENT_TIMESTAMP,
  CURRENT_USER);

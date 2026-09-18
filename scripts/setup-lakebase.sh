@@ -56,6 +56,36 @@ else
     exit 1
 fi
 
+# Prefer an interpreter that already has a Postgres driver, so we never reach for
+# pip. The default python3 is often the system one (3.9 on macOS) with no driver,
+# and installing it needs PyPI — which fails outright behind a proxy that
+# intercepts TLS ("SSLV3_ALERT_HANDSHAKE_FAILURE"). A project venv, or any newer
+# interpreter the user already provisioned, usually has psycopg present.
+# VIBE2VALUE_PYTHON overrides everything for the awkward cases.
+_has_pg_driver() {
+    "$1" -c "import psycopg" >/dev/null 2>&1 || "$1" -c "import psycopg2" >/dev/null 2>&1
+}
+
+# PROJECT_ROOT is assigned further down, so derive the repo root locally here.
+_repo_root="$(cd "$(dirname "$0")/.." && pwd)"
+
+if [ -n "${VIBE2VALUE_PYTHON:-}" ] && _has_pg_driver "$VIBE2VALUE_PYTHON"; then
+    PYTHON_BIN="$VIBE2VALUE_PYTHON"
+elif ! _has_pg_driver "$PYTHON_BIN"; then
+    for _cand in \
+        "$_repo_root/.venv/bin/python" \
+        "${VIRTUAL_ENV:-}/bin/python" \
+        python3.13 python3.12 python3.11 python3.10
+    do
+        [ -n "$_cand" ] || continue
+        if command -v "$_cand" >/dev/null 2>&1 && _has_pg_driver "$_cand"; then
+            echo "Using $_cand (has a Postgres driver; $PYTHON_BIN does not)."
+            PYTHON_BIN="$_cand"
+            break
+        fi
+    done
+fi
+
 if command -v pip3 >/dev/null 2>&1; then
     PIP_BIN="pip3"
 elif command -v pip >/dev/null 2>&1; then
@@ -696,6 +726,80 @@ try:
             POST_SEED_MIGRATIONS = [
                 '08_seed_step_visibility_overrides.sql',
                 '09_seed_path_visibility_overrides.sql',
+                # Step kinds. Each UPDATE is guarded (step_kind='instant_prompt' for
+                # promotions, NOT LIKE for template appends), so re-running is a no-op
+                # and admin edits survive. Listing them here is what lets decision
+                # steps reach an existing install without a destructive --recreate.
+                '12_seed_step_kinds.sql',
+                '13_seed_more_decisions.sql',
+                '14_reconcile_decision_and_verify.sql',
+                '16_assess_scope_decisions.sql',
+                # Runs last: 16 turns four more steps into generated reveals, and 15's
+                # copy-through-verbatim guard is keyed on the step's kind, so it has to
+                # be re-applied after 16 has changed them.
+                '15_fix_llm_placeholder_leak.sql',
+                '17_add_decision_examples.sql',
+                # Per-use-case sample dataset. Guarded on sample_catalog IS NULL,
+                # so it only ever fills a blank and an admin's own catalog choice
+                # survives. This is what stops a Retail workshop sourcing the
+                # wanderbricks booking dataset.
+                '18_seed_usecase_datasets.sql',
+                '19_allow_lakehouse_param_override.sql',
+                # Fast reveal model. INSERT ... WHERE NOT EXISTS, so a facilitator's
+                # chosen endpoint survives redeploys.
+                '20_seed_reveal_model_params.sql',
+                # Data pre-work steps. INSERT ... WHERE NOT EXISTS on section_tag, so an
+                # admin who edits the prompt text keeps it across redeploys.
+                '21_seed_prework_steps.sql',
+                '22_seed_prework_params.sql',
+                # Solution Builder practices: a named protagonist and a currency figure
+                # on step 3, the catalyst's temporal anchor on 58 (which is what stops a
+                # generating agent putting the spike at max(date)), the story threaded
+                # into 59's generation brief, and the 5-second test on 16. Field adds are
+                # guarded on the new key being absent, prose appends on their heading, so
+                # a re-run is a no-op and admin edits survive. Must run AFTER 17, which
+                # is the current authority on step 3's and step 11's field arrays.
+                '23_seed_story_fields.sql',
+                # Coherence gate: one field on step 15, which leads data-intelligence on
+                # every path that has it, so the chain gets checked before the dashboards
+                # and Genie space are built rather than after.
+                '24_seed_coherence_gate.sql',
+                # Leave with the story rather than the resources. Prepends to step 31, so
+                # it is read before the irreversible part.
+                '25_seed_handoff_before_cleanup.sql',
+                # Point each fact_grain consumer at the step it means. Two steps commit a
+                # field of that name (58 the source grain, 11 the gold grain) and the bare
+                # token used to resolve by dict insertion order, so step 59's generation
+                # brief could receive the coarser gold grain and have the agent generate
+                # pre-aggregated data. Runs last: it rewrites blocks that 12, 21 and 24
+                # append, so those must already be in place.
+                '26_scope_fact_grain_tokens.sql',
+                # Correct step 59's synthetic-data prerequisites. The old text named only
+                # serverless_compute_id and "local dependencies", which is true and
+                # insufficient: UDFs need a Python 3.12 client, a pinned
+                # databricks-connect, and faker shipped to the executors. Found by getting
+                # the branch working on a real workspace.
+                '27_fix_datagen_prereqs.sql',
+                # Make connecting existing data the recommended default and state what the
+                # generate branch costs at the moment of choosing, rather than three steps
+                # later. Keeps both options and does NOT touch the option strings, which
+                # step 59's headings switch on and committed sessions are stored against.
+                '28_default_to_connect_branch.sql',
+                # "Make the incident dominate" was satisfiable at one grain and invisible
+                # at another. Found by generating for real and charting it: 22% at the
+                # affected grain, 3.9% on the top-line weekly chart. Names the grain and
+                # makes the agent verify on the chart rather than assert.
+                '29_contrast_needs_a_grain.sql',
+                # Say the generate-branch cost once, in the body, not twice. Runs after 28,
+                # which wrote the long hint this trims.
+                '30_trim_the_data_source_hint.sql',
+                # The step 57 reveal was static, so it argued for connecting even to
+                # someone who chose to generate because the data does not exist yet.
+                # Generated now, so it answers the branch actually chosen. Clears
+                # expert_answer to NULL, which is load-bearing: static text wins.
+                '31_reveal_stops_lecturing.sql',
+                # The hint should point, not argue. Reasoning moved to the reveal.
+                '32_shorten_hint_further.sql',
             ]
             print(f"  Applying idempotent post-seed migrations...")
             for mig in POST_SEED_MIGRATIONS:

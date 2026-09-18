@@ -1,16 +1,16 @@
 /**
- * Per-step previousOutputs builder for the Test Scenario tab.
+ * Per-step previousOutputs builder — SINGLE SOURCE OF TRUTH for all chaining rules.
  *
- * This file is consumed only by `src/components/config/TestScenarioConfig.tsx`
- * (the test tab) to drive the sequential Run All loop. The real workflow
- * uses inline `previousOutputs={...}` literals inside
- * `src/components/WorkflowDiagram.tsx` — those literals are the source of
- * truth.
+ * This file is consumed by:
+ *  1. `src/components/config/TestScenarioConfig.tsx` (the test tab) to drive Run All
+ *  2. `src/components/WorkflowDiagram.tsx` to populate WorkflowStep previousOutputs props
  *
- * Keep this helper in sync with WorkflowDiagram.tsx. If you change a
- * per-step chaining rule there, mirror it here. If a step is not listed
- * here, it falls back to `undefined`, which matches the WorkflowStep's
- * default behavior (no chained context).
+ * When a step's chaining rule changes (e.g., step 40 now requires output from step 39),
+ * update getPreviousOutputsForStep() here. WorkflowDiagram automatically reads from this
+ * function via renderUniformStep(), ensuring all consumers stay in sync.
+ *
+ * If a step is not listed here, it falls back to `undefined`, which matches the
+ * WorkflowStep's default behavior (no chained context).
  */
 import type { WorkshopLevel } from '../constants/workflowSections';
 

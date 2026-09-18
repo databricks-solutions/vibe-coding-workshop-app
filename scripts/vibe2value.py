@@ -10,6 +10,12 @@ Commands:
     uninstall   Tear down all provisioned resources
 """
 
+# Defer annotation evaluation so `X | None` hints work on Python 3.9, which the
+# README lists as supported and which is the system python3 on macOS. Without this,
+# 3.9 evaluates the annotation at def time and raises
+# "TypeError: unsupported operand type(s) for |" before the CLI can even start.
+from __future__ import annotations
+
 import argparse
 import json
 import os
@@ -255,7 +261,7 @@ def get_placeholder_map(config: dict) -> dict:
         "__LAKEBASE_USER__": user.get("email", ""),
         "__LAKEBASE_UC_CATALOG__": lb.get("uc_catalog", lb.get("catalog", "") + "_lakebase"),
         "__APP_NAME__": app.get("name", ""),
-        "__SERVING_ENDPOINT__": app.get("serving_endpoint", "databricks-claude-sonnet-4-5"),
+        "__SERVING_ENDPOINT__": app.get("serving_endpoint", "databricks-claude-sonnet-4-6"),
         "__DEFAULT_WAREHOUSE__": lb.get("warehouse", ""),
         "__ENDPOINT_NAME__": lb.get("endpoint_name", ""),
         "__LAKEBASE_MODE__": lb.get("mode", "autoscaling"),
@@ -609,7 +615,7 @@ def cmd_install(args):
         "instance_name": existing_config.get("lakebase", {}).get("instance_name", "vibe-coding-workshop-lakebase"),
         "catalog": existing_config.get("lakebase", {}).get("catalog", "vibe_coding_workshop_catalog"),
         "schema": existing_config.get("lakebase", {}).get("schema", "vibe_coding_workshop"),
-        "endpoint": existing_config.get("app", {}).get("serving_endpoint", "databricks-claude-sonnet-4-5"),
+        "endpoint": existing_config.get("app", {}).get("serving_endpoint", "databricks-claude-sonnet-4-6"),
         "warehouse": existing_config.get("lakebase", {}).get("warehouse", ""),
         "lakebase_mode": existing_config.get("lakebase", {}).get("mode", "autoscaling"),
         "min_cu": existing_config.get("lakebase", {}).get("min_cu", "0.5"),
@@ -983,6 +989,14 @@ def preflight_lakebase_name(config: dict) -> dict:
     if state is None:
         return config
 
+    # A live project under our own name is this install's project, not a clash.
+    # Renaming here would point the bundle at a name its state doesn't know, and it
+    # would then plan to destroy and recreate the real project — losing every
+    # session and leaderboard standing in it. Only a name stuck in the post-delete
+    # retention window is a genuine blocker, because it cannot be reused yet.
+    if not state["deleted"]:
+        return config
+
     suggestion = f"{slug}-{int(time.time())}"
     for n in range(2, 12):
         cand = f"{slug}-v{n}"
@@ -991,12 +1005,9 @@ def preflight_lakebase_name(config: dict) -> dict:
             break
 
     print()
-    if state["deleted"]:
-        warn(f"Lakebase project name '{slug}' is in a post-delete retention window.")
-        if state["purge_time"]:
-            print(f"  The name frees up on {CYAN}{state['purge_time']}{NC} and can't be reused until then.")
-    else:
-        warn(f"Lakebase project name '{slug}' already exists in this workspace.")
+    warn(f"Lakebase project name '{slug}' is in a post-delete retention window.")
+    if state["purge_time"]:
+        print(f"  The name frees up on {CYAN}{state['purge_time']}{NC} and can't be reused until then.")
 
     new_name = suggestion
     if sys.stdin.isatty():
@@ -1050,6 +1061,115 @@ def cmd_deploy(args):
     print()
     result = _run_sh(deploy_sh, deploy_args, cwd=PROJECT_ROOT)
     sys.exit(result.returncode)
+
+
+def check_datagen_readiness(profile: str = "") -> bool:
+    """
+    Report whether the OPTIONAL synthetic-data branch (step 59) could run here.
+
+    Deliberately advisory — it never fails `doctor`, because connecting existing data is
+    the recommended default and needs none of this. The point is that a facilitator can
+    find out before a session whether anyone can take the generate branch, instead of a
+    participant discovering it mid-session.
+
+    Checks the three things that each fail somewhere other than their cause:
+      1. A Python 3.12 environment. databricks-connect UDFs need the client's minor
+         version to match serverless. Plain SQL works on 3.11, so a naive connectivity
+         test passes and proves nothing about the UDFs generation actually uses.
+      2. databricks-connect pinned to >=16.4,<17.4. Unpinned resolves to a release that
+         rejects serverless outright.
+      3. serverless_compute_id in the profile, without which there is no compute.
+
+    Shipping faker to the executors (spark.addArtifacts) cannot be checked statically —
+    it is a property of the generation script, so the hint points at the doc instead.
+    """
+    info("Checking synthetic data generation (optional branch)...")
+
+    venv = PROJECT_ROOT / ".venv-datagen"
+    py = venv / "bin" / "python"
+    if not py.exists():
+        info("No .venv-datagen — the generate branch is not set up (this is fine)")
+        print("      Attendees can use the connect branch, which is the recommended default.")
+        print("      To enable it, see docs/synthetic_data_setup.md")
+        return False
+
+    ok = True
+
+    # 1. Interpreter minor version must match serverless.
+    try:
+        ver = subprocess.run(
+            [str(py), "-c", "import sys; print('%d.%d' % sys.version_info[:2])"],
+            capture_output=True, text=True, timeout=30,
+        ).stdout.strip()
+    except Exception:
+        ver = ""
+    if ver == "3.12":
+        success(f"Python {ver} in .venv-datagen")
+    else:
+        warn(
+            f"Python {ver or '(unknown)'} in .venv-datagen — serverless UDFs need 3.12. "
+            f"Plain SQL will still work, so this fails only once Faker runs."
+        )
+        ok = False
+
+    # 2. Client version must be in the range that supports serverless.
+    try:
+        cv = subprocess.run(
+            [str(py), "-c",
+             "import importlib.metadata as m; print(m.version('databricks-connect'))"],
+            capture_output=True, text=True, timeout=30,
+        ).stdout.strip()
+    except Exception:
+        cv = ""
+    if cv:
+        try:
+            major, minor = (int(x) for x in cv.split(".")[:2])
+            in_range = (major, minor) >= (16, 4) and (major, minor) < (17, 4)
+        except Exception:
+            in_range = False
+        if in_range:
+            success(f"databricks-connect {cv}")
+        else:
+            warn(
+                f"databricks-connect {cv} is outside >=16.4,<17.4 — newer releases reject "
+                f"serverless with 'Serverless mode is not yet supported'."
+            )
+            ok = False
+    else:
+        warn("databricks-connect not installed in .venv-datagen")
+        ok = False
+
+    # 3. Serverless compute must be enabled for the profile.
+    cfg = Path.home() / ".databrickscfg"
+    profile = profile or "DEFAULT"
+    has_serverless = False
+    if cfg.exists():
+        try:
+            in_block = False
+            for line in cfg.read_text().splitlines():
+                s = line.strip()
+                if s.startswith("["):
+                    in_block = s == f"[{profile}]"
+                elif in_block and s.replace(" ", "").startswith("serverless_compute_id="):
+                    has_serverless = True
+        except Exception:
+            pass
+    if has_serverless:
+        success(f"serverless_compute_id set for profile '{profile}'")
+    else:
+        warn(
+            f"No serverless_compute_id in the '{profile}' profile — databricks-connect "
+            f"cannot get compute. Add `serverless_compute_id = auto` to ~/.databrickscfg."
+        )
+        ok = False
+
+    if ok:
+        success("Generate branch looks ready")
+        print("      Note: faker must still be shipped to the executors at runtime —")
+        print("      installing it locally is not enough. See docs/synthetic_data_setup.md")
+    else:
+        print("      This never blocks the workshop: use the connect branch instead.")
+    return ok
 
 
 def cmd_doctor(args):
@@ -1110,6 +1230,13 @@ def cmd_doctor(args):
         all_ok = False
     print()
 
+    # Optional generate-branch readiness. Never fails the run: connecting existing
+    # data is the recommended default and needs none of this. It reports so a
+    # facilitator can find out BEFORE a session whether anyone can take that branch,
+    # rather than a participant finding out during one.
+    if user_info and CONFIG_PATH.exists():
+        check_datagen_readiness(profile)
+        print()
     if all_ok:
         print(f"{GREEN}{BOLD}All checks passed!{NC}")
     else:

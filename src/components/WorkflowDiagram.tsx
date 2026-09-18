@@ -29,37 +29,21 @@ import {
   calculateTotalScore,
   getLeaderboardMessage 
 } from '../constants/scoring';
-import { 
-  ArrowDown, 
+import {
+  ArrowDown,
   ChevronDown,
-  Code, 
-  Palette, 
-  RefreshCw,
+  Code,
+  Palette,
   FileText,
   Table2,
   GitBranch,
   FlaskConical,
-  Shield,
-  Merge,
-  BarChart3,
-  MessageSquareText,
-  Bot,
-  LayoutDashboard,
-  Rocket,
-  Server,
-  Play,
-  Link2,
   Database,
-  Plug,
   Search,
   Sparkles,
   Lock,
   Upload,
-  BookOpen,
-  FileCode,
-  Tag,
-  ShieldCheck,
-  Trash2
+  BookOpen
 } from 'lucide-react';
 import { apiClient } from '../api/client';
 
@@ -68,6 +52,8 @@ import { AgentToolInputsEditor } from './AgentToolInputsEditor';
 import { CsvUploadPanel } from './CsvUploadPanel';
 import { GoldTableTargetEditor, type GoldTableTarget } from './GoldTableTargetEditor';
 import { deriveSchemaName } from '../utils/naming';
+import { getPreviousOutputsForStep } from '../utils/stepPreviousOutputs';
+import type { ColorType } from '../constants/colorClasses';
 
 // Step 2 (Set Up Project) uses a unique ID (2) for completion tracking
 const SET_UP_PROJECT_STEP_ID = 2;
@@ -972,6 +958,111 @@ export function WorkflowDiagram({
     return true;
   }, [visibleSections, completedSteps, skippedSteps]);
 
+  /**
+   * Render a uniform workflow step with standard props and previousOutputs from stepPreviousOutputs.ts.
+   * Used for ~35+ structurally identical steps that differ only in metadata (title, description, icon, etc.)
+   * and chaining rules. This function replaces massive switch case duplication.
+   *
+   * Explicit cases remain for steps with:
+   *  - Complex state machines (tabs, modes) — steps 10, 11, 12, 22
+   *  - Custom rendering logic — steps 2 (SetUpProjectStep), 4 (custom header UI)
+   *
+   * All other steps flow through here, reading metadata from ALL_STEPS and chaining rules
+   * from getPreviousOutputsForStep().
+   */
+  const renderUniformStep = (stepNumber: number): React.ReactNode => {
+    const stepMetadata = ALL_STEPS[stepNumber];
+    if (!stepMetadata || !stepMetadata.sectionTag) return null;
+
+    // Get previousOutputs from the single source of truth
+    const previousOutputsCtx = { goldTableTarget, workshopLevel };
+    const previousOutputs = getPreviousOutputsForStep(stepNumber, stepPrompts, previousOutputsCtx);
+
+    // For steps with semi-special needs (customHeaderContent)
+    const customHeaderContentMap: Record<number, React.ReactNode> = {
+      39: (
+        <div onClick={(e) => e.stopPropagation()}>
+          <AgentToolInputsEditor
+            sessionId={sessionId}
+            isExpanded={expandedStep === 39}
+          />
+        </div>
+      ),
+    };
+
+    // Extract title, description from ALL_STEPS (single source of truth)
+    const title = stepMetadata.title;
+    const description = stepMetadata.description;
+    // ALL_STEPS already carries the step's icon component, so render it directly.
+    // Deriving an icon from the colour class was lossy — colours repeat across steps,
+    // which silently gave 30 of 56 steps the wrong icon.
+    const IconComponent = stepMetadata.icon;
+    const icon = <IconComponent className="w-5 h-5" />;
+
+    // Map tailwind color to ColorType
+    const colorMap: Record<string, string> = {
+      'text-indigo-400': 'indigo',
+      'text-green-400': 'green',
+      'text-cyan-400': 'cyan',
+      'text-teal-400': 'teal',
+      'text-lime-400': 'lime',
+      'text-cyan-500': 'cyan',
+      'text-amber-400': 'amber',
+      'text-yellow-400': 'yellow',
+      'text-orange-400': 'orange',
+      'text-slate-400': 'slate',
+      'text-amber-500': 'amber',
+      'text-violet-400': 'violet',
+      'text-emerald-400': 'emerald',
+      'text-blue-400': 'blue',
+      'text-pink-400': 'pink',
+      'text-red-400': 'red',
+      'text-amber-300': 'amber',
+      'text-emerald-500': 'emerald',
+      'text-sky-400': 'blue',
+      'text-sky-500': 'blue',
+      'text-blue-500': 'blue',
+      'text-violet-500': 'violet',
+      'text-rose-400': 'red',
+      'text-primary': 'purple',
+    };
+    const colorClass = (colorMap[stepMetadata.color] || 'purple') as ColorType;
+
+    // Determine whether this step has onStepReset
+    // Early workflow steps (3-9, 13-25, 31) support reset; later steps don't
+    const hasResetSupport = [3, 5, 6, 7, 8, 9, 13, 14, 15, 16, 17, 18, 19, 20, 21, 23, 24, 25, 31].includes(stepNumber);
+
+    return (
+      <div key={stepNumber} className="relative mt-5" data-step-number={stepNumber}>
+        <StepBadge number={stepNumber} />
+        <WorkflowStep
+          stepNumber={stepNumber}
+          title={title}
+          description={description}
+          icon={icon}
+          color={colorClass}
+          isComplete={completedSteps.has(stepNumber)}
+          isSkipped={skippedSteps.has(stepNumber)}
+          onToggleComplete={() => toggleStepComplete(stepNumber)}
+          onToggleSkip={() => toggleStepSkip(stepNumber)}
+          onNavigateNext={() => navigateToNextStep(stepNumber)}
+          onStepReset={hasResetSupport ? () => resetStepComplete(stepNumber) : undefined}
+          sectionTag={stepMetadata.sectionTag}
+          industry={selectedIndustry}
+          useCase={selectedUseCase}
+          onPromptGenerated={onStepPromptGenerated}
+          initialPrompt={stepPrompts[stepNumber]}
+          previousOutputs={previousOutputs}
+          isPreviousStepComplete={isPreviousStepComplete(stepNumber)}
+          isExpanded={expandedStep === stepNumber}
+          onToggleExpand={() => toggleExpand(stepNumber)}
+          sessionId={sessionId}
+          customHeaderContent={customHeaderContentMap[stepNumber]}
+        />
+      </div>
+    );
+  };
+
   // Render steps for a specific section (uses filtered visibleSections so hidden steps are excluded)
   const renderSectionSteps = (sectionId: string) => {
     const section = visibleSections.find(s => s.id === sectionId);
@@ -1025,31 +1116,8 @@ export function WorkflowDiagram({
                 </div>
               );
             case 3:
-              return (
-                <div key={3} className="relative mt-5" data-step-number="3">
-                  <StepBadge number={3} />
-                  <WorkflowStep
-                    icon={<FileText className="w-5 h-5" />}
-                    title="Product Requirements Document (PRD)"
-                    description="Generate a simple, focused PRD defining your application and its key high-value features"
-                    color="indigo"
 
-                    isComplete={completedSteps.has(3)}
-                    onToggleComplete={() => toggleStepComplete(3)}
-                    onStepReset={() => resetStepComplete(3)}
-                    sectionTag="prd_generation"
-                    industry={selectedIndustry}
-                    useCase={selectedUseCase}
-                    stepNumber={3}
-                    onPromptGenerated={onStepPromptGenerated}
-                    initialPrompt={stepPrompts[3]}
-                    isPreviousStepComplete={isPreviousStepComplete(3)}
-                    isExpanded={expandedStep === 3}
-                    onToggleExpand={() => toggleExpand(3)}
-                    sessionId={sessionId}
-                  />
-                </div>
-              );
+              return renderUniformStep(3);
             case 4:
               return (
                 <div key={4} className="relative mt-5" data-step-number="4">
@@ -1109,143 +1177,24 @@ export function WorkflowDiagram({
               );
             // Step 5: Deploy App (Chapter 1)
             case 5:
-              return (
-                <div key={5} className="relative mt-5" data-step-number="5">
-                  <StepBadge number={5} />
-                  <WorkflowStep
-                    icon={<Rocket className="w-5 h-5" />}
-                    title="Deploy App"
-                    description="Deploy your locally-tested application to Databricks Apps"
-                    color="green"
 
-                    isComplete={completedSteps.has(5)}
-                    onToggleComplete={() => toggleStepComplete(5)}
-                    onStepReset={() => resetStepComplete(5)}
-                    sectionTag="deploy_databricks_app"
-                    industry={selectedIndustry}
-                    useCase={selectedUseCase}
-                    stepNumber={5}
-                    onPromptGenerated={onStepPromptGenerated}
-                    initialPrompt={stepPrompts[5]}
-                    isPreviousStepComplete={isPreviousStepComplete(5)}
-                    isExpanded={expandedStep === 5}
-                    onToggleExpand={() => toggleExpand(5)}
-                    sessionId={sessionId}
-                  />
-                </div>
-              );
+              return renderUniformStep(5);
             // Step 6: Setup Lakebase (Chapter 2)
             case 6:
-              return (
-                <div key={6} className="relative mt-5" data-step-number="6">
-                  <StepBadge number={6} />
-                  <WorkflowStep
-                    icon={<Server className="w-5 h-5" />}
-                    title="Setup Lakebase"
-                    description="Create and deploy Lakebase database tables from your UI design document"
-                    color="cyan"
 
-                    isComplete={completedSteps.has(6)}
-                    onToggleComplete={() => toggleStepComplete(6)}
-                    onStepReset={() => resetStepComplete(6)}
-                    sectionTag="setup_lakebase"
-                    industry={selectedIndustry}
-                    useCase={selectedUseCase}
-                    stepNumber={6}
-                    onPromptGenerated={onStepPromptGenerated}
-                    initialPrompt={stepPrompts[6]}
-                    isPreviousStepComplete={isPreviousStepComplete(6)}
-                    isExpanded={expandedStep === 6}
-                    onToggleExpand={() => toggleExpand(6)}
-                    sessionId={sessionId}
-                  />
-                </div>
-              );
+              return renderUniformStep(6);
             // Step 7: Wire UI to Lakebase (Chapter 2) - LOCAL DEVELOPMENT ONLY
             case 7:
-              return (
-                <div key={7} className="relative mt-5" data-step-number="7">
-                  <StepBadge number={7} />
-                  <WorkflowStep
-                    icon={<Link2 className="w-5 h-5" />}
-                    title="Wire UI to Lakebase"
-                    description="Connect frontend to Lakebase backend, build locally, and test at localhost"
-                    color="teal"
 
-                    isComplete={completedSteps.has(7)}
-                    onToggleComplete={() => toggleStepComplete(7)}
-                    onStepReset={() => resetStepComplete(7)}
-                    sectionTag="wire_ui_lakebase"
-                    industry={selectedIndustry}
-                    useCase={selectedUseCase}
-                    stepNumber={7}
-                    onPromptGenerated={onStepPromptGenerated}
-                    initialPrompt={stepPrompts[7]}
-                    isPreviousStepComplete={isPreviousStepComplete(7)}
-                    isExpanded={expandedStep === 7}
-                    onToggleExpand={() => toggleExpand(7)}
-                    sessionId={sessionId}
-                  />
-                </div>
-              );
+              return renderUniformStep(7);
             // Step 8: Deploy and Test (Chapter 2) - FULL DEPLOYMENT TO DATABRICKS
             case 8:
-              return (
-                <div key={8} className="relative mt-5" data-step-number="8">
-                  <StepBadge number={8} />
-                  <WorkflowStep
-                    icon={<Play className="w-5 h-5" />}
-                    title="Deploy and Test"
-                    description="Deploy to Databricks Apps and run full end-to-end testing with live data"
-                    color="lime"
 
-                    isComplete={completedSteps.has(8)}
-                    onToggleComplete={() => toggleStepComplete(8)}
-                    onStepReset={() => resetStepComplete(8)}
-                    sectionTag="workspace_setup_deploy"
-                    industry={selectedIndustry}
-                    useCase={selectedUseCase}
-                    stepNumber={8}
-                    onPromptGenerated={onStepPromptGenerated}
-                    initialPrompt={stepPrompts[8]}
-                    isPreviousStepComplete={isPreviousStepComplete(8)}
-                    isExpanded={expandedStep === 8}
-                    onToggleExpand={() => toggleExpand(8)}
-                    sessionId={sessionId}
-                  />
-                </div>
-              );
+              return renderUniformStep(8);
             // Step 9: Register Lakebase in Unity Catalog (Chapter 3) - Only visible when Lakebase chapter is included
             case 9:
-              // This step only shows when Lakebase (Chapter 2) is in the workflow
-              return (
-                <div key={9} className="relative mt-5" data-step-number="9">
-                  <StepBadge number={9} />
-                  <WorkflowStep
-                    icon={<Database className="w-5 h-5" />}
-                    title="Register Lakebase in Unity Catalog"
-                    description="Register Lakebase as a read-only Unity Catalog database catalog"
-                    color="cyan"
 
-                    isComplete={completedSteps.has(9)}
-                    onToggleComplete={() => toggleStepComplete(9)}
-                    onStepReset={() => resetStepComplete(9)}
-                    isSkipped={skippedSteps.has(9)}
-                    onToggleSkip={() => toggleStepSkip(9)}
-                    onNavigateNext={() => navigateToNextStep(9)}
-                    sectionTag="sync_from_lakebase"
-                    industry={selectedIndustry}
-                    useCase={selectedUseCase}
-                    stepNumber={9}
-                    onPromptGenerated={onStepPromptGenerated}
-                    initialPrompt={stepPrompts[9]}
-                    isPreviousStepComplete={isPreviousStepComplete(9)}
-                    isExpanded={expandedStep === 9}
-                    onToggleExpand={() => toggleExpand(9)}
-                    sessionId={sessionId}
-                  />
-                </div>
-              );
+              return renderUniformStep(9);
             // Step 10: Table Metadata (Chapter 3) - tabbed: Extract from Tables OR Upload CSV
             case 10: {
               const showUploadTab = !disabledSectionTags.has('bronze_table_metadata_upload');
@@ -1606,67 +1555,11 @@ export function WorkflowDiagram({
             }
             // Step 13: Silver Layer (Chapter 3)
             case 13:
-              return (
-                <div key={13} className="relative mt-5" data-step-number="13">
-                  <StepBadge number={13} />
-                  <WorkflowStep
-                    icon={<Shield className="w-5 h-5" />}
-                    title="Silver Layer Pipelines"
-                    description="Create Silver layer using Spark Declarative Pipelines with centralized data quality rules"
-                    color="slate"
 
-                    isComplete={completedSteps.has(13)}
-                    onToggleComplete={() => toggleStepComplete(13)}
-                    onStepReset={() => resetStepComplete(13)}
-                    isSkipped={skippedSteps.has(13)}
-                    onToggleSkip={() => toggleStepSkip(13)}
-                    onNavigateNext={() => navigateToNextStep(13)}
-                    sectionTag="silver_layer_sdp"
-                    industry={selectedIndustry}
-                    useCase={selectedUseCase}
-                    stepNumber={13}
-                    onPromptGenerated={onStepPromptGenerated}
-                    initialPrompt={stepPrompts[13]}
-                    previousOutputs={stepPrompts[12] ? { synthetic_data: stepPrompts[12] } : undefined}
-                    isPreviousStepComplete={isPreviousStepComplete(13)}
-                    isExpanded={expandedStep === 13}
-                    onToggleExpand={() => toggleExpand(13)}
-                    sessionId={sessionId}
-                  />
-                </div>
-              );
+              return renderUniformStep(13);
             // Step 14: Gold Pipeline (Chapter 3) - depends on step 11 (Gold Design)
-            case 14: {
-              return (
-                <div key={14} className="relative mt-5" data-step-number="14">
-                  <StepBadge number={14} />
-                  <WorkflowStep
-                    icon={<Merge className="w-5 h-5" />}
-                    title="Gold Layer Pipelines"
-                    description="Build Gold layer tables from YAML schemas with PK/FK constraints and merge from Silver"
-                    color="amber"
-
-                    isComplete={completedSteps.has(14)}
-                    onToggleComplete={() => toggleStepComplete(14)}
-                    onStepReset={() => resetStepComplete(14)}
-                    isSkipped={skippedSteps.has(14)}
-                    onToggleSkip={() => toggleStepSkip(14)}
-                    onNavigateNext={() => navigateToNextStep(14)}
-                    sectionTag="gold_layer_pipeline"
-                    industry={selectedIndustry}
-                    useCase={selectedUseCase}
-                    stepNumber={14}
-                    onPromptGenerated={onStepPromptGenerated}
-                    initialPrompt={stepPrompts[14]}
-                    previousOutputs={stepPrompts[11] ? { gold_layer_design: stepPrompts[11] } : undefined}
-                    isPreviousStepComplete={isPreviousStepComplete(14)}
-                    isExpanded={expandedStep === 14}
-                    onToggleExpand={() => toggleExpand(14)}
-                    sessionId={sessionId}
-                  />
-                </div>
-              );
-            }
+            case 14:
+              return renderUniformStep(14);
             // Step 22: Analyze Silver Metadata (Genie Accelerator only) -- tabbed: Point to Silver / Upload CSV / Design from PRD
             case 22: {
               const showUploadTab22 = !disabledSectionTags.has('genie_silver_metadata_upload');
@@ -1847,301 +1740,56 @@ export function WorkflowDiagram({
             }
             // Step 23: Deploy Lakehouse Assets (Chapter 3)
             case 23:
-              return (
-                <div key={23} className="relative mt-5" data-step-number="23">
-                  <StepBadge number={23} />
-                  <WorkflowStep
-                    icon={<Rocket className="w-5 h-5" />}
-                    title="Deploy Assets"
-                    description="Validate, deploy, and run Bronze, Silver, and Gold layer jobs in dependency order using Asset Bundles"
-                    color="emerald"
 
-                    isComplete={completedSteps.has(23)}
-                    onToggleComplete={() => toggleStepComplete(23)}
-                    onStepReset={() => resetStepComplete(23)}
-                    isSkipped={skippedSteps.has(23)}
-                    onToggleSkip={() => toggleStepSkip(23)}
-                    onNavigateNext={() => navigateToNextStep(23)}
-                    sectionTag="deploy_lakehouse_assets"
-                    industry={selectedIndustry}
-                    useCase={selectedUseCase}
-                    stepNumber={23}
-                    onPromptGenerated={onStepPromptGenerated}
-                    initialPrompt={stepPrompts[23]}
-                    isPreviousStepComplete={isPreviousStepComplete(23)}
-                    isExpanded={expandedStep === 23}
-                    onToggleExpand={() => toggleExpand(23)}
-                    sessionId={sessionId}
-                  />
-                </div>
-              );
+              return renderUniformStep(23);
             // Step 15: Use-Case Plan (Chapter 4)
             case 15:
-              return (
-                <div key={15} className="relative mt-5" data-step-number="15">
-                  <StepBadge number={15} />
-                  <WorkflowStep
-                    icon={<BarChart3 className="w-5 h-5" />}
-                    title="Create Use-Case Plan"
-                    description="Generate operationalization plans for your use cases with YAML manifests and supporting artifacts"
-                    color="violet"
 
-                    isComplete={completedSteps.has(15)}
-                    onToggleComplete={() => toggleStepComplete(15)}
-                    onStepReset={() => resetStepComplete(15)}
-                    isSkipped={skippedSteps.has(15)}
-                    onToggleSkip={() => toggleStepSkip(15)}
-                    onNavigateNext={() => navigateToNextStep(15)}
-                    sectionTag="usecase_plan"
-                    industry={selectedIndustry}
-                    useCase={selectedUseCase}
-                    stepNumber={15}
-                    onPromptGenerated={onStepPromptGenerated}
-                    initialPrompt={stepPrompts[15]}
-                    previousOutputs={{
-                      ...(stepPrompts[3] ? { prd_document: stepPrompts[3] } : {}),
-                      ...(stepPrompts[11] ? { gold_layer_design: stepPrompts[11] } : {})
-                    }}
-                    isPreviousStepComplete={isPreviousStepComplete(15)}
-                    isExpanded={expandedStep === 15}
-                    onToggleExpand={() => toggleExpand(15)}
-                    sessionId={sessionId}
-                  />
-                </div>
-              );
+              return renderUniformStep(15);
             // Step 16: Build AI/BI Dashboard (Chapter 4)
             case 16:
-              return (
-                <div key={16} className="relative mt-5" data-step-number="16">
-                  <StepBadge number={16} />
-                  <WorkflowStep
-                    icon={<LayoutDashboard className="w-5 h-5" />}
-                    title="Build AI/BI Dashboard"
-                    description="Create an AI/BI Lakeview dashboard with KPIs, charts, and filters from Gold layer data"
-                    color="emerald"
 
-                    isComplete={completedSteps.has(16)}
-                    onToggleComplete={() => toggleStepComplete(16)}
-                    onStepReset={() => resetStepComplete(16)}
-                    isSkipped={skippedSteps.has(16)}
-                    onToggleSkip={() => toggleStepSkip(16)}
-                    onNavigateNext={() => navigateToNextStep(16)}
-                    sectionTag="aibi_dashboard"
-                    industry={selectedIndustry}
-                    useCase={selectedUseCase}
-                    stepNumber={16}
-                    onPromptGenerated={onStepPromptGenerated}
-                    initialPrompt={stepPrompts[16]}
-                    previousOutputs={{
-                      ...(stepPrompts[3] ? { prd_document: stepPrompts[3] } : {}),
-                      ...(stepPrompts[11] ? { gold_layer_design: stepPrompts[11] } : {})
-                    }}
-                    isPreviousStepComplete={isPreviousStepComplete(16)}
-                    isExpanded={expandedStep === 16}
-                    onToggleExpand={() => toggleExpand(16)}
-                    sessionId={sessionId}
-                  />
-                </div>
-              );
+              return renderUniformStep(16);
             // Step 17: Build Genie Space (Chapter 4)
             case 17:
-              return (
-                <div key={17} className="relative mt-5" data-step-number="17">
-                  <StepBadge number={17} />
-                  <WorkflowStep
-                    icon={<MessageSquareText className="w-5 h-5" />}
-                    title="Build Genie Space [Metric View/TVF]"
-                    description="Build semantic layer with TVFs, Metric Views, and Genie Space for natural language analytics"
-                    color="cyan"
 
-                    isComplete={completedSteps.has(17)}
-                    onToggleComplete={() => toggleStepComplete(17)}
-                    onStepReset={() => resetStepComplete(17)}
-                    isSkipped={skippedSteps.has(17)}
-                    onToggleSkip={() => toggleStepSkip(17)}
-                    onNavigateNext={() => navigateToNextStep(17)}
-                    sectionTag="genie_space"
-                    industry={selectedIndustry}
-                    useCase={selectedUseCase}
-                    stepNumber={17}
-                    onPromptGenerated={onStepPromptGenerated}
-                    initialPrompt={stepPrompts[17]}
-                    previousOutputs={
-                      workshopLevel === 'agents-accelerator'
-                        ? {
-                            ...(stepPrompts[3]  ? { prd_document: stepPrompts[3] } : {}),
-                            ...(stepPrompts[10] ? { table_metadata: stepPrompts[10] } : {}),
-                          }
-                        : (stepPrompts[15] ? { usecase_plan: stepPrompts[15] } : undefined)
-                    }
-                    isPreviousStepComplete={isPreviousStepComplete(17)}
-                    isExpanded={expandedStep === 17}
-                    onToggleExpand={() => toggleExpand(17)}
-                    sessionId={sessionId}
-                  />
-                </div>
-              );
+              return renderUniformStep(17);
             // Step 24: Deploy AI and Agents Assets (Chapter 4)
             case 24:
-              return (
-                <div key={24} className="relative mt-5" data-step-number="24">
-                  <StepBadge number={24} />
-                  <WorkflowStep
-                    icon={<Rocket className="w-5 h-5" />}
-                    title="Deploy Assets"
-                    description="Deploy TVFs, Metric Views, Genie Spaces, and AI/BI Dashboards in dependency order"
-                    color="violet"
 
-                    isComplete={completedSteps.has(24)}
-                    onToggleComplete={() => toggleStepComplete(24)}
-                    onStepReset={() => resetStepComplete(24)}
-                    isSkipped={skippedSteps.has(24)}
-                    onToggleSkip={() => toggleStepSkip(24)}
-                    onNavigateNext={() => navigateToNextStep(24)}
-                    sectionTag="deploy_di_assets"
-                    industry={selectedIndustry}
-                    useCase={selectedUseCase}
-                    stepNumber={24}
-                    onPromptGenerated={onStepPromptGenerated}
-                    initialPrompt={stepPrompts[24]}
-                    isPreviousStepComplete={isPreviousStepComplete(24)}
-                    isExpanded={expandedStep === 24}
-                    onToggleExpand={() => toggleExpand(24)}
-                    sessionId={sessionId}
-                  />
-                </div>
-              );
+              return renderUniformStep(24);
             // Step 25: Optimize Genie (Chapter 4)
             case 25:
-              return (
-                <div key={25} className="relative mt-5" data-step-number="25">
-                  <StepBadge number={25} />
-                  <WorkflowStep
-                    icon={<Sparkles className="w-5 h-5" />}
-                    title="Optimize Genie"
-                    description="Systematically optimize Genie Space accuracy using benchmark evaluation and 6 control levers"
-                    color="amber"
 
-                    isComplete={completedSteps.has(25)}
-                    onToggleComplete={() => toggleStepComplete(25)}
-                    onStepReset={() => resetStepComplete(25)}
-                    isSkipped={skippedSteps.has(25)}
-                    onToggleSkip={() => toggleStepSkip(25)}
-                    onNavigateNext={() => navigateToNextStep(25)}
-                    sectionTag="optimize_genie"
-                    industry={selectedIndustry}
-                    useCase={selectedUseCase}
-                    stepNumber={25}
-                    onPromptGenerated={onStepPromptGenerated}
-                    initialPrompt={stepPrompts[25]}
-                    isPreviousStepComplete={isPreviousStepComplete(25)}
-                    isExpanded={expandedStep === 25}
-                    onToggleExpand={() => toggleExpand(25)}
-                    sessionId={sessionId}
-                  />
-                </div>
-              );
+              return renderUniformStep(25);
             // Step 18: Build Agent (Chapter 4)
             case 18:
-              return (
-                <div key={18} className="relative mt-5" data-step-number="18">
-                  <StepBadge number={18} highlight={true} />
-                  <WorkflowStep
-                    icon={<Bot className="w-5 h-5" />}
-                    title="Build Agent"
-                    description="Build a multi-agent orchestrator with Genie integration, LLM rewrite, and web search fallback"
-                    color="blue"
 
-                    isComplete={completedSteps.has(18)}
-                    onToggleComplete={() => toggleStepComplete(18)}
-                    onStepReset={() => resetStepComplete(18)}
-                    isSkipped={skippedSteps.has(18)}
-                    onToggleSkip={() => toggleStepSkip(18)}
-                    onNavigateNext={() => navigateToNextStep(18)}
-                    sectionTag="agent_framework"
-                    industry={selectedIndustry}
-                    useCase={selectedUseCase}
-                    stepNumber={18}
-                    onPromptGenerated={onStepPromptGenerated}
-                    initialPrompt={stepPrompts[18]}
-                    previousOutputs={{
-                      ...(stepPrompts[3] ? { prd_document: stepPrompts[3] } : {}),
-                      ...(stepPrompts[11] ? { gold_layer_design: stepPrompts[11] } : {})
-                    }}
-                    isPreviousStepComplete={isPreviousStepComplete(18)}
-                    isExpanded={expandedStep === 18}
-                    onToggleExpand={() => toggleExpand(18)}
-                    sessionId={sessionId}
-                  />
-                </div>
-              );
+              return renderUniformStep(18);
             // Step 19: Wire UI to Agent (Chapter 4)
             case 19:
-              return (
-                <div key={19} className="relative mt-5" data-step-number="19">
-                  <StepBadge number={19} />
-                  <WorkflowStep
-                    icon={<Plug className="w-5 h-5" />}
-                    title="Wire UI to Agent"
-                    description="Connect your frontend UI to the Agent serving endpoint for end-to-end natural language search"
-                    color="teal"
 
-                    isComplete={completedSteps.has(19)}
-                    onToggleComplete={() => toggleStepComplete(19)}
-                    onStepReset={() => resetStepComplete(19)}
-                    isSkipped={skippedSteps.has(19)}
-                    onToggleSkip={() => toggleStepSkip(19)}
-                    onNavigateNext={() => navigateToNextStep(19)}
-                    sectionTag="wire_ui_agent"
-                    industry={selectedIndustry}
-                    useCase={selectedUseCase}
-                    stepNumber={19}
-                    onPromptGenerated={onStepPromptGenerated}
-                    initialPrompt={stepPrompts[19]}
-                    previousOutputs={stepPrompts[18] ? { agent_framework: stepPrompts[18] } : undefined}
-                    isPreviousStepComplete={isPreviousStepComplete(19)}
-                    isExpanded={expandedStep === 19}
-                    onToggleExpand={() => toggleExpand(19)}
-                    sessionId={sessionId}
-                  />
-                </div>
-              );
+              return renderUniformStep(19);
             // Step 20: Iterate & Enhance (Refinement)
             case 20:
-              return (
-                <div key={20} className="relative mt-5" data-step-number="20">
-                  <StepBadge number={20} />
-                  <WorkflowStep
-                    icon={<Rocket className="w-5 h-5" />}
-                    title="Iterate & Enhance App"
-                    description="Iterate on the application to add new features, update functionality, and improve user experience"
-                    color="pink"
 
-                    isComplete={completedSteps.has(20)}
-                    onToggleComplete={() => toggleStepComplete(20)}
-                    onStepReset={() => resetStepComplete(20)}
-                    sectionTag="iterate_enhance"
-                    industry={selectedIndustry}
-                    useCase={selectedUseCase}
-                    stepNumber={20}
-                    onPromptGenerated={onStepPromptGenerated}
-                    initialPrompt={stepPrompts[20]}
-                    isPreviousStepComplete={isPreviousStepComplete(20)}
-                    isExpanded={expandedStep === 20}
-                    onToggleExpand={() => toggleExpand(20)}
-                    sessionId={sessionId}
-                  />
-                </div>
-              );
+              return renderUniformStep(20);
 
             // Step 26: Explore Existing Skills (Agent Skills Accelerator)
-            case 26:
+            // Step 26: Explore Existing Skills (Agent Skills Accelerator)
+            // Kept explicit because it has specialized customHeaderContent (GoldTableTargetEditor)
+            case 26: {
+              const stepMetadata = ALL_STEPS[26];
+              if (!stepMetadata || !stepMetadata.sectionTag) return null;
+              const previousOutputsCtx = { goldTableTarget, workshopLevel };
+              const previousOutputs = getPreviousOutputsForStep(26, stepPrompts, previousOutputsCtx);
               return (
                 <div key={26} className="relative mt-5" data-step-number="26">
+                  <StepBadge number={26} />
                   <WorkflowStep
                     stepNumber={26}
-                    title="Explore Existing Skills"
-                    description="Explore existing skills in your template repo and identify the gap your new skill will fill"
+                    title={stepMetadata.title}
+                    description={stepMetadata.description}
                     icon={<BookOpen className="w-5 h-5" />}
                     color="violet"
                     isComplete={completedSteps.has(26)}
@@ -2149,12 +1797,12 @@ export function WorkflowDiagram({
                     onToggleComplete={() => toggleStepComplete(26)}
                     onToggleSkip={() => toggleStepSkip(26)}
                     onNavigateNext={() => navigateToNextStep(26)}
-                    sectionTag="skill_install_explore"
+                    sectionTag={stepMetadata.sectionTag}
                     industry={selectedIndustry}
                     useCase={selectedUseCase}
                     onPromptGenerated={onStepPromptGenerated}
                     initialPrompt={stepPrompts[26]}
-                    previousOutputs={{ gold_table_target: `Catalog: ${goldTableTarget.catalog}, Schema: ${goldTableTarget.schema}${goldTableTarget.prefix ? `, Table Prefix: ${goldTableTarget.prefix}` : ''}` }}
+                    previousOutputs={previousOutputs}
                     isPreviousStepComplete={isPreviousStepComplete(26)}
                     isExpanded={expandedStep === 26}
                     onToggleExpand={() => toggleExpand(26)}
@@ -2179,134 +1827,27 @@ export function WorkflowDiagram({
                   />
                 </div>
               );
+            }
 
             // Step 27: Define Skill Strategy (Agent Skills Accelerator)
             case 27:
-              return (
-                <div key={27} className="relative mt-5" data-step-number="27">
-                  <WorkflowStep
-                    stepNumber={27}
-                    title="Define Skill Strategy"
-                    description="Generate a comprehensive strategy for your Agent Skill based on your use case specification"
-                    icon={<FileText className="w-5 h-5" />}
-                    color="indigo"
-                    isComplete={completedSteps.has(27)}
-                    isSkipped={skippedSteps.has(27)}
-                    onToggleComplete={() => toggleStepComplete(27)}
-                    onToggleSkip={() => toggleStepSkip(27)}
-                    onNavigateNext={() => navigateToNextStep(27)}
-                    sectionTag="skill_define_strategy"
-                    industry={selectedIndustry}
-                    useCase={selectedUseCase}
-                    onPromptGenerated={onStepPromptGenerated}
-                    initialPrompt={stepPrompts[27]}
-                    previousOutputs={{
-                      gold_table_target: `Catalog: ${goldTableTarget.catalog}, Schema: ${goldTableTarget.schema}${goldTableTarget.prefix ? `, Table Prefix: ${goldTableTarget.prefix}` : ''}`,
-                      ...(stepPrompts[26] ? { exploration_findings: stepPrompts[26] } : {}),
-                    }}
-                    isPreviousStepComplete={isPreviousStepComplete(27)}
-                    isExpanded={expandedStep === 27}
-                    onToggleExpand={() => toggleExpand(27)}
-                    sessionId={sessionId}
-                  />
-                </div>
-              );
+
+              return renderUniformStep(27);
 
             // Step 28: Create SKILL.md (Agent Skills Accelerator)
             case 28:
-              return (
-                <div key={28} className="relative mt-5" data-step-number="28">
-                  <WorkflowStep
-                    stepNumber={28}
-                    title="Create SKILL.md"
-                    description="Generate the complete SKILL.md package with references and assets based on your skill strategy"
-                    icon={<FileCode className="w-5 h-5" />}
-                    color="purple"
-                    isComplete={completedSteps.has(28)}
-                    isSkipped={skippedSteps.has(28)}
-                    onToggleComplete={() => toggleStepComplete(28)}
-                    onToggleSkip={() => toggleStepSkip(28)}
-                    onNavigateNext={() => navigateToNextStep(28)}
-                    sectionTag="skill_create_skillmd"
-                    industry={selectedIndustry}
-                    useCase={selectedUseCase}
-                    onPromptGenerated={onStepPromptGenerated}
-                    initialPrompt={stepPrompts[28]}
-                    previousOutputs={{
-                      gold_table_target: `Catalog: ${goldTableTarget.catalog}, Schema: ${goldTableTarget.schema}${goldTableTarget.prefix ? `, Table Prefix: ${goldTableTarget.prefix}` : ''}`,
-                      ...(stepPrompts[27] ? { skill_strategy: stepPrompts[27] } : {}),
-                    }}
-                    isPreviousStepComplete={isPreviousStepComplete(28)}
-                    isExpanded={expandedStep === 28}
-                    onToggleExpand={() => toggleExpand(28)}
-                    sessionId={sessionId}
-                  />
-                </div>
-              );
+
+              return renderUniformStep(28);
 
             // Step 29: Apply & Test Skill (Agent Skills Accelerator)
             case 29:
-              return (
-                <div key={29} className="relative mt-5" data-step-number="29">
-                  <WorkflowStep
-                    stepNumber={29}
-                    title="Apply & Test Skill"
-                    description="Save your generated skill to the project and test it against your target assets"
-                    icon={<Tag className="w-5 h-5" />}
-                    color="teal"
-                    isComplete={completedSteps.has(29)}
-                    isSkipped={skippedSteps.has(29)}
-                    onToggleComplete={() => toggleStepComplete(29)}
-                    onToggleSkip={() => toggleStepSkip(29)}
-                    onNavigateNext={() => navigateToNextStep(29)}
-                    sectionTag="skill_apply_contracts"
-                    industry={selectedIndustry}
-                    useCase={selectedUseCase}
-                    onPromptGenerated={onStepPromptGenerated}
-                    initialPrompt={stepPrompts[29]}
-                    previousOutputs={{
-                      gold_table_target: `Catalog: ${goldTableTarget.catalog}, Schema: ${goldTableTarget.schema}${goldTableTarget.prefix ? `, Table Prefix: ${goldTableTarget.prefix}` : ''}`,
-                      ...(stepPrompts[28] ? { skill_definition: stepPrompts[28] } : {}),
-                    }}
-                    isPreviousStepComplete={isPreviousStepComplete(29)}
-                    isExpanded={expandedStep === 29}
-                    onToggleExpand={() => toggleExpand(29)}
-                    sessionId={sessionId}
-                  />
-                </div>
-              );
+
+              return renderUniformStep(29);
 
             // Step 30: Validate & Automate (Agent Skills Accelerator)
             case 30:
-              return (
-                <div key={30} className="relative mt-5" data-step-number="30">
-                  <WorkflowStep
-                    stepNumber={30}
-                    title="Validate & Automate"
-                    description="Build a validation notebook and scheduled job to automate compliance checking for your skill"
-                    icon={<ShieldCheck className="w-5 h-5" />}
-                    color="emerald"
-                    isComplete={completedSteps.has(30)}
-                    isSkipped={skippedSteps.has(30)}
-                    onToggleComplete={() => toggleStepComplete(30)}
-                    onToggleSkip={() => toggleStepSkip(30)}
-                    onNavigateNext={() => navigateToNextStep(30)}
-                    sectionTag="skill_certify_tables"
-                    industry={selectedIndustry}
-                    useCase={selectedUseCase}
-                    onPromptGenerated={onStepPromptGenerated}
-                    initialPrompt={stepPrompts[30]}
-                    previousOutputs={{
-                      gold_table_target: `Catalog: ${goldTableTarget.catalog}, Schema: ${goldTableTarget.schema}${goldTableTarget.prefix ? `, Table Prefix: ${goldTableTarget.prefix}` : ''}`,
-                      ...(stepPrompts[29] ? { applied_skill: stepPrompts[29] } : {}),
-                    }}
-                    isPreviousStepComplete={isPreviousStepComplete(30)}
-                    isExpanded={expandedStep === 30}
-                    onToggleExpand={() => toggleExpand(30)}
-                    sessionId={sessionId}
-                  />
-                </div>
-              );
+
+              return renderUniformStep(30);
 
             // ----------------------------------------------------------------
             // Agents Accelerator — Agents on Apps (Steps 38–48)
@@ -2317,331 +1858,60 @@ export function WorkflowDiagram({
 
             // Step 38: 00 - Agent Spec Design
             case 38:
-              return (
-                <div key={38} className="relative mt-5" data-step-number="38">
-                  <WorkflowStep
-                    stepNumber={38}
-                    title="Agent Spec Design"
-                    description="Author docs/agent_spec.yaml capturing the agent's purpose, personas, capabilities, model endpoint, MCP recommendations, eval seeds, and governance — before any code or Databricks resources are created"
-                    icon={<FileText className="w-5 h-5" />}
-                    color="blue"
-                    isComplete={completedSteps.has(38)}
-                    isSkipped={skippedSteps.has(38)}
-                    onToggleComplete={() => toggleStepComplete(38)}
-                    onToggleSkip={() => toggleStepSkip(38)}
-                    onNavigateNext={() => navigateToNextStep(38)}
-                    sectionTag="agent_spec_design"
-                    industry={selectedIndustry}
-                    useCase={selectedUseCase}
-                    onPromptGenerated={onStepPromptGenerated}
-                    initialPrompt={stepPrompts[38]}
-                    isPreviousStepComplete={isPreviousStepComplete(38)}
-                    isExpanded={expandedStep === 38}
-                    onToggleExpand={() => toggleExpand(38)}
-                    sessionId={sessionId}
-                  />
-                </div>
-              );
+
+              return renderUniformStep(38);
 
             // Step 39: 01 - Agent Tool Selection
             case 39:
-              return (
-                <div key={39} className="relative mt-5" data-step-number="39">
-                  <WorkflowStep
-                    stepNumber={39}
-                    title="Agent Tool Selection"
-                    description="Author docs/agent_tool_plan.yaml — pin user-confirmed tool backends (managed MCPs, optional Knowledge Assistant, dynamic SQL MCP) and preserve the agent's model endpoint under a Gateway-ready runtime route"
-                    icon={<Tag className="w-5 h-5" />}
-                    color="blue"
-                    isComplete={completedSteps.has(39)}
-                    isSkipped={skippedSteps.has(39)}
-                    onToggleComplete={() => toggleStepComplete(39)}
-                    onToggleSkip={() => toggleStepSkip(39)}
-                    onNavigateNext={() => navigateToNextStep(39)}
-                    sectionTag="agent_tool_selection"
-                    industry={selectedIndustry}
-                    useCase={selectedUseCase}
-                    onPromptGenerated={onStepPromptGenerated}
-                    initialPrompt={stepPrompts[39]}
-                    previousOutputs={stepPrompts[38] ? { agent_spec_design: stepPrompts[38] } : undefined}
-                    isPreviousStepComplete={isPreviousStepComplete(39)}
-                    isExpanded={expandedStep === 39}
-                    onToggleExpand={() => toggleExpand(39)}
-                    sessionId={sessionId}
-                    customHeaderContent={
-                      <div onClick={(e) => e.stopPropagation()}>
-                        <AgentToolInputsEditor
-                          sessionId={sessionId}
-                          isExpanded={expandedStep === 39}
-                        />
-                      </div>
-                    }
-                  />
-                </div>
-              );
+
+              return renderUniformStep(39);
 
             // Step 40: 02 - UC Resources Foundation
             case 40:
-              return (
-                <div key={40} className="relative mt-5" data-step-number="40">
-                  <WorkflowStep
-                    stepNumber={40}
-                    title="UC Resources Foundation"
-                    description="Create the agent and ops Unity Catalog schemas plus managed volumes that downstream agent, tracing, memory, and monitoring steps depend on"
-                    icon={<Database className="w-5 h-5" />}
-                    color="blue"
-                    isComplete={completedSteps.has(40)}
-                    isSkipped={skippedSteps.has(40)}
-                    onToggleComplete={() => toggleStepComplete(40)}
-                    onToggleSkip={() => toggleStepSkip(40)}
-                    onNavigateNext={() => navigateToNextStep(40)}
-                    sectionTag="uc_resources_foundation"
-                    industry={selectedIndustry}
-                    useCase={selectedUseCase}
-                    onPromptGenerated={onStepPromptGenerated}
-                    initialPrompt={stepPrompts[40]}
-                    previousOutputs={stepPrompts[39] ? { agent_tool_selection: stepPrompts[39] } : undefined}
-                    isPreviousStepComplete={isPreviousStepComplete(40)}
-                    isExpanded={expandedStep === 40}
-                    onToggleExpand={() => toggleExpand(40)}
-                    sessionId={sessionId}
-                  />
-                </div>
-              );
+
+              return renderUniformStep(40);
 
             // Step 41: 03 - MLflow Tracing + UC OTel
             case 41:
-              return (
-                <div key={41} className="relative mt-5" data-step-number="41">
-                  <WorkflowStep
-                    stepNumber={41}
-                    title="MLflow Tracing + UC OTel"
-                    description="Install MLflow tracing, create the experiment, and route GenAI trace data into governed Unity Catalog OTel tables"
-                    icon={<FlaskConical className="w-5 h-5" />}
-                    color="blue"
-                    isComplete={completedSteps.has(41)}
-                    isSkipped={skippedSteps.has(41)}
-                    onToggleComplete={() => toggleStepComplete(41)}
-                    onToggleSkip={() => toggleStepSkip(41)}
-                    onNavigateNext={() => navigateToNextStep(41)}
-                    sectionTag="mlflow_agent_tracing_uc"
-                    industry={selectedIndustry}
-                    useCase={selectedUseCase}
-                    onPromptGenerated={onStepPromptGenerated}
-                    initialPrompt={stepPrompts[41]}
-                    previousOutputs={stepPrompts[40] ? { uc_resources_foundation: stepPrompts[40] } : undefined}
-                    isPreviousStepComplete={isPreviousStepComplete(41)}
-                    isExpanded={expandedStep === 41}
-                    onToggleExpand={() => toggleExpand(41)}
-                    sessionId={sessionId}
-                  />
-                </div>
-              );
+
+              return renderUniformStep(41);
 
             // Step 42: 04 - Knowledge Assistant
             case 42:
-              return (
-                <div key={42} className="relative mt-5" data-step-number="42">
-                  <WorkflowStep
-                    stepNumber={42}
-                    title="Knowledge Assistant"
-                    description="Create or sync a Databricks Knowledge Assistant so the agent has a governed document Q&A backend with citations"
-                    icon={<BookOpen className="w-5 h-5" />}
-                    color="blue"
-                    isComplete={completedSteps.has(42)}
-                    isSkipped={skippedSteps.has(42)}
-                    onToggleComplete={() => toggleStepComplete(42)}
-                    onToggleSkip={() => toggleStepSkip(42)}
-                    onNavigateNext={() => navigateToNextStep(42)}
-                    sectionTag="knowledge_assistant_create"
-                    industry={selectedIndustry}
-                    useCase={selectedUseCase}
-                    onPromptGenerated={onStepPromptGenerated}
-                    initialPrompt={stepPrompts[42]}
-                    previousOutputs={stepPrompts[41] ? { mlflow_agent_tracing_uc: stepPrompts[41] } : undefined}
-                    isPreviousStepComplete={isPreviousStepComplete(42)}
-                    isExpanded={expandedStep === 42}
-                    onToggleExpand={() => toggleExpand(42)}
-                    sessionId={sessionId}
-                  />
-                </div>
-              );
+
+              return renderUniformStep(42);
 
             // Step 43: 05 - Clone + Framework
             case 43:
-              return (
-                <div key={43} className="relative mt-5" data-step-number="43">
-                  <WorkflowStep
-                    stepNumber={43}
-                    title="Clone + Framework"
-                    description="Clone the canonical agent app template, install dependencies, run the local app, and wire module-level invoke and stream handlers"
-                    icon={<GitBranch className="w-5 h-5" />}
-                    color="blue"
-                    isComplete={completedSteps.has(43)}
-                    isSkipped={skippedSteps.has(43)}
-                    onToggleComplete={() => toggleStepComplete(43)}
-                    onToggleSkip={() => toggleStepSkip(43)}
-                    onNavigateNext={() => navigateToNextStep(43)}
-                    sectionTag="track_a_agent_app_clone_framework"
-                    industry={selectedIndustry}
-                    useCase={selectedUseCase}
-                    onPromptGenerated={onStepPromptGenerated}
-                    initialPrompt={stepPrompts[43]}
-                    previousOutputs={stepPrompts[42] ? { knowledge_assistant_create: stepPrompts[42] } : undefined}
-                    isPreviousStepComplete={isPreviousStepComplete(43)}
-                    isExpanded={expandedStep === 43}
-                    onToggleExpand={() => toggleExpand(43)}
-                    sessionId={sessionId}
-                  />
-                </div>
-              );
+
+              return renderUniformStep(43);
 
             // Step 44: 06 - Tools and MCP
             case 44:
-              return (
-                <div key={44} className="relative mt-5" data-step-number="44">
-                  <WorkflowStep
-                    stepNumber={44}
-                    title="Tools and MCP"
-                    description="Wire Knowledge Assistant, Genie Space, UC functions, and Lakebase domain tools as agent tools with the required app resource grants"
-                    icon={<Plug className="w-5 h-5" />}
-                    color="blue"
-                    isComplete={completedSteps.has(44)}
-                    isSkipped={skippedSteps.has(44)}
-                    onToggleComplete={() => toggleStepComplete(44)}
-                    onToggleSkip={() => toggleStepSkip(44)}
-                    onNavigateNext={() => navigateToNextStep(44)}
-                    sectionTag="track_a_agent_ka_genie_tools"
-                    industry={selectedIndustry}
-                    useCase={selectedUseCase}
-                    onPromptGenerated={onStepPromptGenerated}
-                    initialPrompt={stepPrompts[44]}
-                    previousOutputs={stepPrompts[43] ? { track_a_agent_app_clone_framework: stepPrompts[43] } : undefined}
-                    isPreviousStepComplete={isPreviousStepComplete(44)}
-                    isExpanded={expandedStep === 44}
-                    onToggleExpand={() => toggleExpand(44)}
-                    sessionId={sessionId}
-                  />
-                </div>
-              );
+
+              return renderUniformStep(44);
 
             // Step 45: 07 - Auth + Memory
             case 45:
-              return (
-                <div key={45} className="relative mt-5" data-step-number="45">
-                  <WorkflowStep
-                    stepNumber={45}
-                    title="Auth + Memory"
-                    description="Add service-principal and on-behalf-of-user authentication plus short-term and long-term Lakebase-backed agent memory"
-                    icon={<Shield className="w-5 h-5" />}
-                    color="blue"
-                    isComplete={completedSteps.has(45)}
-                    isSkipped={skippedSteps.has(45)}
-                    onToggleComplete={() => toggleStepComplete(45)}
-                    onToggleSkip={() => toggleStepSkip(45)}
-                    onNavigateNext={() => navigateToNextStep(45)}
-                    sectionTag="track_a_agent_auth_memory"
-                    industry={selectedIndustry}
-                    useCase={selectedUseCase}
-                    onPromptGenerated={onStepPromptGenerated}
-                    initialPrompt={stepPrompts[45]}
-                    previousOutputs={stepPrompts[44] ? { track_a_agent_ka_genie_tools: stepPrompts[44] } : undefined}
-                    isPreviousStepComplete={isPreviousStepComplete(45)}
-                    isExpanded={expandedStep === 45}
-                    onToggleExpand={() => toggleExpand(45)}
-                    sessionId={sessionId}
-                  />
-                </div>
-              );
+
+              return renderUniformStep(45);
 
             // Step 46: 08 - Smoke Eval + Deploy
             case 46:
-              return (
-                <div key={46} className="relative mt-5" data-step-number="46">
-                  <WorkflowStep
-                    stepNumber={46}
-                    title="Smoke Eval + Deploy"
-                    description="Run developer-loop smoke evaluations, deploy the agent to Databricks Apps, and verify it is queryable end-to-end"
-                    icon={<Rocket className="w-5 h-5" />}
-                    color="blue"
-                    isComplete={completedSteps.has(46)}
-                    isSkipped={skippedSteps.has(46)}
-                    onToggleComplete={() => toggleStepComplete(46)}
-                    onToggleSkip={() => toggleStepSkip(46)}
-                    onNavigateNext={() => navigateToNextStep(46)}
-                    sectionTag="track_a_agent_eval_deploy"
-                    industry={selectedIndustry}
-                    useCase={selectedUseCase}
-                    onPromptGenerated={onStepPromptGenerated}
-                    initialPrompt={stepPrompts[46]}
-                    previousOutputs={stepPrompts[45] ? { track_a_agent_auth_memory: stepPrompts[45] } : undefined}
-                    isPreviousStepComplete={isPreviousStepComplete(46)}
-                    isExpanded={expandedStep === 46}
-                    onToggleExpand={() => toggleExpand(46)}
-                    sessionId={sessionId}
-                  />
-                </div>
-              );
+
+              return renderUniformStep(46);
 
             // Step 47: 09 - AppKit Agent Proxy
             case 47:
-              return (
-                <div key={47} className="relative mt-5" data-step-number="47">
-                  <WorkflowStep
-                    stepNumber={47}
-                    title="AppKit Agent Proxy"
-                    description="Wire the AppKit dashboard to the deployed Agent App through a streaming proxy with service-principal and OBO auth"
-                    icon={<Link2 className="w-5 h-5" />}
-                    color="blue"
-                    isComplete={completedSteps.has(47)}
-                    isSkipped={skippedSteps.has(47)}
-                    onToggleComplete={() => toggleStepComplete(47)}
-                    onToggleSkip={() => toggleStepSkip(47)}
-                    onNavigateNext={() => navigateToNextStep(47)}
-                    sectionTag="appkit_agent_app_proxy_chat"
-                    industry={selectedIndustry}
-                    useCase={selectedUseCase}
-                    onPromptGenerated={onStepPromptGenerated}
-                    initialPrompt={stepPrompts[47]}
-                    previousOutputs={stepPrompts[46] ? { track_a_agent_eval_deploy: stepPrompts[46] } : undefined}
-                    isPreviousStepComplete={isPreviousStepComplete(47)}
-                    isExpanded={expandedStep === 47}
-                    onToggleExpand={() => toggleExpand(47)}
-                    sessionId={sessionId}
-                  />
-                </div>
-              );
+
+              return renderUniformStep(47);
 
             // ----------------------------------------------------------------
             // Step 48: 10 - Chat Feedback to MLflow
             // ----------------------------------------------------------------
             case 48:
-              return (
-                <div key={48} className="relative mt-5" data-step-number="48">
-                  <WorkflowStep
-                    stepNumber={48}
-                    title="Chat Feedback to MLflow"
-                    description="Add chat history and thumbs feedback so end-user ratings are captured as MLflow trace assessments"
-                    icon={<MessageSquareText className="w-5 h-5" />}
-                    color="blue"
-                    isComplete={completedSteps.has(48)}
-                    isSkipped={skippedSteps.has(48)}
-                    onToggleComplete={() => toggleStepComplete(48)}
-                    onToggleSkip={() => toggleStepSkip(48)}
-                    onNavigateNext={() => navigateToNextStep(48)}
-                    sectionTag="appkit_chat_feedback_mlflow"
-                    industry={selectedIndustry}
-                    useCase={selectedUseCase}
-                    onPromptGenerated={onStepPromptGenerated}
-                    initialPrompt={stepPrompts[48]}
-                    previousOutputs={stepPrompts[47] ? { appkit_agent_app_proxy_chat: stepPrompts[47] } : undefined}
-                    isPreviousStepComplete={isPreviousStepComplete(48)}
-                    isExpanded={expandedStep === 48}
-                    onToggleExpand={() => toggleExpand(48)}
-                    sessionId={sessionId}
-                  />
-                </div>
-              );
+
+              return renderUniformStep(48);
 
             // ----------------------------------------------------------------
             // Agents Accelerator — MLflow for Gen-AI (Steps 49-56)
@@ -2650,473 +1920,95 @@ export function WorkflowDiagram({
 
             // Step 49: 01 - Prompt Registry
             case 49:
-              return (
-                <div key={49} className="relative mt-5" data-step-number="49">
-                  <WorkflowStep
-                    stepNumber={49}
-                    title="Prompt Registry"
-                    description="Register the agent's prompts in Unity Catalog with git-style aliases (@production, @staging) for safe evaluation and promotion"
-                    icon={<BookOpen className="w-5 h-5" />}
-                    color="violet"
-                    isComplete={completedSteps.has(49)}
-                    isSkipped={skippedSteps.has(49)}
-                    onToggleComplete={() => toggleStepComplete(49)}
-                    onToggleSkip={() => toggleStepSkip(49)}
-                    onNavigateNext={() => navigateToNextStep(49)}
-                    sectionTag="mlflow_prompt_registry"
-                    industry={selectedIndustry}
-                    useCase={selectedUseCase}
-                    onPromptGenerated={onStepPromptGenerated}
-                    initialPrompt={stepPrompts[49]}
-                    previousOutputs={stepPrompts[48] ? { appkit_chat_feedback_mlflow: stepPrompts[48] } : undefined}
-                    isPreviousStepComplete={isPreviousStepComplete(49)}
-                    isExpanded={expandedStep === 49}
-                    onToggleExpand={() => toggleExpand(49)}
-                    sessionId={sessionId}
-                  />
-                </div>
-              );
+
+              return renderUniformStep(49);
 
             // Step 50: 02 - Evaluation Datasets
             case 50:
-              return (
-                <div key={50} className="relative mt-5" data-step-number="50">
-                  <WorkflowStep
-                    stepNumber={50}
-                    title="Evaluation Datasets"
-                    description="Generate a benchmark table with coverage across agent journeys, seed examples, and expected outputs for repeatable evaluation"
-                    icon={<Table2 className="w-5 h-5" />}
-                    color="violet"
-                    isComplete={completedSteps.has(50)}
-                    isSkipped={skippedSteps.has(50)}
-                    onToggleComplete={() => toggleStepComplete(50)}
-                    onToggleSkip={() => toggleStepSkip(50)}
-                    onNavigateNext={() => navigateToNextStep(50)}
-                    sectionTag="mlflow_evaluation_datasets"
-                    industry={selectedIndustry}
-                    useCase={selectedUseCase}
-                    onPromptGenerated={onStepPromptGenerated}
-                    initialPrompt={stepPrompts[50]}
-                    previousOutputs={stepPrompts[49] ? { mlflow_prompt_registry: stepPrompts[49] } : undefined}
-                    isPreviousStepComplete={isPreviousStepComplete(50)}
-                    isExpanded={expandedStep === 50}
-                    onToggleExpand={() => toggleExpand(50)}
-                    sessionId={sessionId}
-                  />
-                </div>
-              );
+
+              return renderUniformStep(50);
 
             // Step 51: 03 - Scorers and Judges
             case 51:
-              return (
-                <div key={51} className="relative mt-5" data-step-number="51">
-                  <WorkflowStep
-                    stepNumber={51}
-                    title="Scorers and Judges"
-                    description="Register built-in scorers, Guidelines, custom code scorers, and LLM judges with thresholds for the benchmark suite"
-                    icon={<ShieldCheck className="w-5 h-5" />}
-                    color="violet"
-                    isComplete={completedSteps.has(51)}
-                    isSkipped={skippedSteps.has(51)}
-                    onToggleComplete={() => toggleStepComplete(51)}
-                    onToggleSkip={() => toggleStepSkip(51)}
-                    onNavigateNext={() => navigateToNextStep(51)}
-                    sectionTag="mlflow_scorers_and_judges"
-                    industry={selectedIndustry}
-                    useCase={selectedUseCase}
-                    onPromptGenerated={onStepPromptGenerated}
-                    initialPrompt={stepPrompts[51]}
-                    previousOutputs={stepPrompts[50] ? { mlflow_evaluation_datasets: stepPrompts[50] } : undefined}
-                    isPreviousStepComplete={isPreviousStepComplete(51)}
-                    isExpanded={expandedStep === 51}
-                    onToggleExpand={() => toggleExpand(51)}
-                    sessionId={sessionId}
-                  />
-                </div>
-              );
+
+              return renderUniformStep(51);
 
             // Step 52: 04 - Evaluation Runs + Iteration
             case 52:
-              return (
-                <div key={52} className="relative mt-5" data-step-number="52">
-                  <WorkflowStep
-                    stepNumber={52}
-                    title="Evaluation Runs + Iteration"
-                    description="Run the first scored eval, capture failure-shape classification, and route regressions to the right iteration path"
-                    icon={<FlaskConical className="w-5 h-5" />}
-                    color="violet"
-                    isComplete={completedSteps.has(52)}
-                    isSkipped={skippedSteps.has(52)}
-                    onToggleComplete={() => toggleStepComplete(52)}
-                    onToggleSkip={() => toggleStepSkip(52)}
-                    onNavigateNext={() => navigateToNextStep(52)}
-                    sectionTag="mlflow_evaluation_runs_and_iteration"
-                    industry={selectedIndustry}
-                    useCase={selectedUseCase}
-                    onPromptGenerated={onStepPromptGenerated}
-                    initialPrompt={stepPrompts[52]}
-                    previousOutputs={stepPrompts[51] ? { mlflow_scorers_and_judges: stepPrompts[51] } : undefined}
-                    isPreviousStepComplete={isPreviousStepComplete(52)}
-                    isExpanded={expandedStep === 52}
-                    onToggleExpand={() => toggleExpand(52)}
-                    sessionId={sessionId}
-                  />
-                </div>
-              );
+
+              return renderUniformStep(52);
 
             // Step 53: 05 - Human Review + Sign-off
             case 53:
-              return (
-                <div key={53} className="relative mt-5" data-step-number="53">
-                  <WorkflowStep
-                    stepNumber={53}
-                    title="Human Review + Sign-off"
-                    description="Run SME labeling, sync human assessments into benchmarks, and capture the stakeholder approval decision for promotion"
-                    icon={<Tag className="w-5 h-5" />}
-                    color="violet"
-                    isComplete={completedSteps.has(53)}
-                    isSkipped={skippedSteps.has(53)}
-                    onToggleComplete={() => toggleStepComplete(53)}
-                    onToggleSkip={() => toggleStepSkip(53)}
-                    onNavigateNext={() => navigateToNextStep(53)}
-                    sectionTag="mlflow_human_review_and_signoff"
-                    industry={selectedIndustry}
-                    useCase={selectedUseCase}
-                    onPromptGenerated={onStepPromptGenerated}
-                    initialPrompt={stepPrompts[53]}
-                    previousOutputs={stepPrompts[52] ? { mlflow_evaluation_runs_and_iteration: stepPrompts[52] } : undefined}
-                    isPreviousStepComplete={isPreviousStepComplete(53)}
-                    isExpanded={expandedStep === 53}
-                    onToggleExpand={() => toggleExpand(53)}
-                    sessionId={sessionId}
-                  />
-                </div>
-              );
+
+              return renderUniformStep(53);
 
             // Step 54: 06 - Logged Model & UC Registration
             case 54:
-              return (
-                <div key={54} className="relative mt-5" data-step-number="54">
-                  <WorkflowStep
-                    stepNumber={54}
-                    title="Logged Model & UC Registration"
-                    description="Optionally hand-author prompt improvements, then log and register the approved agent model in Unity Catalog"
-                    icon={<Database className="w-5 h-5" />}
-                    color="violet"
-                    isComplete={completedSteps.has(54)}
-                    isSkipped={skippedSteps.has(54)}
-                    onToggleComplete={() => toggleStepComplete(54)}
-                    onToggleSkip={() => toggleStepSkip(54)}
-                    onNavigateNext={() => navigateToNextStep(54)}
-                    sectionTag="mlflow_logged_model_uc_registration"
-                    industry={selectedIndustry}
-                    useCase={selectedUseCase}
-                    onPromptGenerated={onStepPromptGenerated}
-                    initialPrompt={stepPrompts[54]}
-                    previousOutputs={stepPrompts[53] ? { mlflow_human_review_and_signoff: stepPrompts[53] } : undefined}
-                    isPreviousStepComplete={isPreviousStepComplete(54)}
-                    isExpanded={expandedStep === 54}
-                    onToggleExpand={() => toggleExpand(54)}
-                    sessionId={sessionId}
-                  />
-                </div>
-              );
+
+              return renderUniformStep(54);
 
             // Step 55: 07 - AI Gateway + Deployment
             case 55:
-              return (
-                <div key={55} className="relative mt-5" data-step-number="55">
-                  <WorkflowStep
-                    stepNumber={55}
-                    title="AI Gateway + Deployment"
-                    description="Govern the registered agent behind AI Gateway, wire guardrails and rate limits, and automate promotion through Asset Bundles"
-                    icon={<Rocket className="w-5 h-5" />}
-                    color="violet"
-                    isComplete={completedSteps.has(55)}
-                    isSkipped={skippedSteps.has(55)}
-                    onToggleComplete={() => toggleStepComplete(55)}
-                    onToggleSkip={() => toggleStepSkip(55)}
-                    onNavigateNext={() => navigateToNextStep(55)}
-                    sectionTag="mlflow_gateway_and_deployment"
-                    industry={selectedIndustry}
-                    useCase={selectedUseCase}
-                    onPromptGenerated={onStepPromptGenerated}
-                    initialPrompt={stepPrompts[55]}
-                    previousOutputs={stepPrompts[54] ? { mlflow_logged_model_uc_registration: stepPrompts[54] } : undefined}
-                    isPreviousStepComplete={isPreviousStepComplete(55)}
-                    isExpanded={expandedStep === 55}
-                    onToggleExpand={() => toggleExpand(55)}
-                    sessionId={sessionId}
-                  />
-                </div>
-              );
+
+              return renderUniformStep(55);
 
             // Step 56: 08 - Production Monitoring + Debugging
             case 56:
-              return (
-                <div key={56} className="relative mt-5" data-step-number="56">
-                  <WorkflowStep
-                    stepNumber={56}
-                    title="Production Monitoring + Debugging"
-                    description="Configure continuous evaluation, SQL alerts, and agent-as-judge debugging that routes production failures to the right follow-up track"
-                    icon={<BarChart3 className="w-5 h-5" />}
-                    color="violet"
-                    isComplete={completedSteps.has(56)}
-                    isSkipped={skippedSteps.has(56)}
-                    onToggleComplete={() => toggleStepComplete(56)}
-                    onToggleSkip={() => toggleStepSkip(56)}
-                    onNavigateNext={() => navigateToNextStep(56)}
-                    sectionTag="mlflow_production_monitoring_and_debugging"
-                    industry={selectedIndustry}
-                    useCase={selectedUseCase}
-                    onPromptGenerated={onStepPromptGenerated}
-                    initialPrompt={stepPrompts[56]}
-                    previousOutputs={stepPrompts[55] ? { mlflow_gateway_and_deployment: stepPrompts[55] } : undefined}
-                    isPreviousStepComplete={isPreviousStepComplete(56)}
-                    isExpanded={expandedStep === 56}
-                    onToggleExpand={() => toggleExpand(56)}
-                    sessionId={sessionId}
-                  />
-                </div>
-              );
+
+              return renderUniformStep(56);
+
+            // Steps 57-59: data pre-work (Data Source, Data Model, Provision Data).
+            // The switch ends in `default: return null`, so a step missing a case here is
+            // silently never rendered — it appears in the sidebar and in the step count,
+            // but its card never exists. Caught by counting rendered data-step-number
+            // attributes in a real browser rather than trusting the section config.
+            case 57:
+              return renderUniformStep(57);
+            case 58:
+              return renderUniformStep(58);
+            case 59:
+              return renderUniformStep(59);
 
             // Step 21: Redeploy & Test (Refinement)
             case 21:
-              return (
-                <div key={21} className="relative mt-5" data-step-number="21">
-                  <StepBadge number={21} highlight={true} />
-                  <WorkflowStep
-                    icon={<RefreshCw className="w-5 h-5" />}
-                    title="Redeploy & Test Application"
-                    description="Build, deploy, and test with self-healing operations, then document the full repository"
-                    color="red"
 
-                    isComplete={completedSteps.has(21)}
-                    onToggleComplete={() => toggleStepComplete(21)}
-                    onStepReset={() => resetStepComplete(21)}
-                    sectionTag="redeploy_test"
-                    industry={selectedIndustry}
-                    useCase={selectedUseCase}
-                    stepNumber={21}
-                    onPromptGenerated={onStepPromptGenerated}
-                    initialPrompt={stepPrompts[21]}
-                    previousOutputs={stepPrompts[20] ? { iteration_plan: stepPrompts[20] } : undefined}
-                    isPreviousStepComplete={isPreviousStepComplete(21)}
-                    isExpanded={expandedStep === 21}
-                    onToggleExpand={() => toggleExpand(21)}
-                    sessionId={sessionId}
-                  />
-                </div>
-              );
+              return renderUniformStep(21);
 
             // Step 31: Workspace Clean Up (Clean Up section)
             case 31:
-              return (
-                <div key={31} className="relative mt-5" data-step-number="31">
-                  <WorkflowStep
-                    stepNumber={31}
-                    title="Workspace Clean Up"
-                    description="Safely delete all Databricks resources created during the workshop"
-                    icon={<Trash2 className="w-5 h-5" />}
-                    color="red"
-                    isComplete={completedSteps.has(31)}
-                    onToggleComplete={() => toggleStepComplete(31)}
-                    onStepReset={() => resetStepComplete(31)}
-                    sectionTag="workspace_cleanup"
-                    industry={selectedIndustry}
-                    useCase={selectedUseCase}
-                    onPromptGenerated={onStepPromptGenerated}
-                    initialPrompt={stepPrompts[31]}
-                    isPreviousStepComplete={isPreviousStepComplete(31)}
-                    isExpanded={expandedStep === 31}
-                    onToggleExpand={() => toggleExpand(31)}
-                    sessionId={sessionId}
-                  />
-                </div>
-              );
+
+              return renderUniformStep(31);
 
             // Step 32: Plan Synced Tables (Activation / Reverse ETL)
             case 32:
-              return (
-                <div key={32} className="relative mt-5" data-step-number="32">
-                  <WorkflowStep
-                    stepNumber={32}
-                    title="Plan Synced Tables"
-                    description="Design which Gold assets to sync into Lakebase via Synced Tables, including keys, modes, and types"
-                    icon={<Table2 className="w-5 h-5" />}
-                    color="emerald"
-                    isComplete={completedSteps.has(32)}
-                    isSkipped={skippedSteps.has(32)}
-                    onToggleComplete={() => toggleStepComplete(32)}
-                    onToggleSkip={() => toggleStepSkip(32)}
-                    onNavigateNext={() => navigateToNextStep(32)}
-                    sectionTag="activation_table_design"
-                    industry={selectedIndustry}
-                    useCase={selectedUseCase}
-                    onPromptGenerated={onStepPromptGenerated}
-                    initialPrompt={stepPrompts[32]}
-                    previousOutputs={{
-                      ...(stepPrompts[11] ? { gold_layer_design: stepPrompts[11] } : {}),
-                      ...(stepPrompts[15] ? { usecase_plan: stepPrompts[15] } : {}),
-                      ...(stepPrompts[3] ? { prd_document: stepPrompts[3] } : {}),
-                    }}
-                    isPreviousStepComplete={isPreviousStepComplete(32)}
-                    isExpanded={expandedStep === 32}
-                    onToggleExpand={() => toggleExpand(32)}
-                    sessionId={sessionId}
-                  />
-                </div>
-              );
+
+              return renderUniformStep(32);
 
             // Step 33: Create Synced Tables (Activation / Reverse ETL)
             case 33:
-              return (
-                <div key={33} className="relative mt-5" data-step-number="33">
-                  <WorkflowStep
-                    stepNumber={33}
-                    title="Create Synced Tables"
-                    description="Create Synced Tables from Gold layer into Lakebase using the Databricks REST API"
-                    icon={<RefreshCw className="w-5 h-5" />}
-                    color="emerald"
-                    isComplete={completedSteps.has(33)}
-                    isSkipped={skippedSteps.has(33)}
-                    onToggleComplete={() => toggleStepComplete(33)}
-                    onToggleSkip={() => toggleStepSkip(33)}
-                    onNavigateNext={() => navigateToNextStep(33)}
-                    sectionTag="activation_reverse_sync"
-                    industry={selectedIndustry}
-                    useCase={selectedUseCase}
-                    onPromptGenerated={onStepPromptGenerated}
-                    initialPrompt={stepPrompts[33]}
-                    previousOutputs={undefined}
-                    isPreviousStepComplete={isPreviousStepComplete(33)}
-                    isExpanded={expandedStep === 33}
-                    onToggleExpand={() => toggleExpand(33)}
-                    sessionId={sessionId}
-                  />
-                </div>
-              );
+
+              return renderUniformStep(33);
 
             // Step 34: Design Analytics App (Activation / Reverse ETL)
             case 34:
-              return (
-                <div key={34} className="relative mt-5" data-step-number="34">
-                  <WorkflowStep
-                    stepNumber={34}
-                    title="Design Analytics App"
-                    description="Design analytics dashboards and exploration UI on top of synced Lakebase data"
-                    icon={<Palette className="w-5 h-5" />}
-                    color="emerald"
-                    isComplete={completedSteps.has(34)}
-                    isSkipped={skippedSteps.has(34)}
-                    onToggleComplete={() => toggleStepComplete(34)}
-                    onToggleSkip={() => toggleStepSkip(34)}
-                    onNavigateNext={() => navigateToNextStep(34)}
-                    sectionTag="activation_app_design"
-                    industry={selectedIndustry}
-                    useCase={selectedUseCase}
-                    onPromptGenerated={onStepPromptGenerated}
-                    initialPrompt={stepPrompts[34]}
-                    previousOutputs={{
-                      ...(stepPrompts[11] ? { gold_layer_design: stepPrompts[11] } : {}),
-                      ...(stepPrompts[3] ? { prd_document: stepPrompts[3] } : {}),
-                    }}
-                    isPreviousStepComplete={isPreviousStepComplete(34)}
-                    isExpanded={expandedStep === 34}
-                    onToggleExpand={() => toggleExpand(34)}
-                    sessionId={sessionId}
-                  />
-                </div>
-              );
+
+              return renderUniformStep(34);
 
             // Step 35: Build & Wire App (Activation / Reverse ETL)
             case 35:
-              return (
-                <div key={35} className="relative mt-5" data-step-number="35">
-                  <WorkflowStep
-                    stepNumber={35}
-                    title="Build Analytics App"
-                    description="Build FastAPI + React analytics app with placeholder data and ConnectionStatus indicator"
-                    icon={<Plug className="w-5 h-5" />}
-                    color="emerald"
-                    isComplete={completedSteps.has(35)}
-                    isSkipped={skippedSteps.has(35)}
-                    onToggleComplete={() => toggleStepComplete(35)}
-                    onToggleSkip={() => toggleStepSkip(35)}
-                    onNavigateNext={() => navigateToNextStep(35)}
-                    sectionTag="activation_build_wire"
-                    industry={selectedIndustry}
-                    useCase={selectedUseCase}
-                    onPromptGenerated={onStepPromptGenerated}
-                    initialPrompt={stepPrompts[35]}
-                    previousOutputs={{
-                      ...(stepPrompts[34] ? { activation_app_design: stepPrompts[34] } : {}),
-                    }}
-                    isPreviousStepComplete={isPreviousStepComplete(35)}
-                    isExpanded={expandedStep === 35}
-                    onToggleExpand={() => toggleExpand(35)}
-                    sessionId={sessionId}
-                  />
-                </div>
-              );
+
+              return renderUniformStep(35);
 
             // Step 36: Wire to Lakebase (Activation / Reverse ETL)
             case 36:
-              return (
-                <div key={36} className="relative mt-5" data-step-number="36">
-                  <WorkflowStep
-                    stepNumber={36}
-                    title="Wire to Lakebase"
-                    description="Replace placeholder API data with real PostgreSQL queries against synced Lakebase tables"
-                    icon={<Link2 className="w-5 h-5" />}
-                    color="emerald"
-                    isComplete={completedSteps.has(36)}
-                    isSkipped={skippedSteps.has(36)}
-                    onToggleComplete={() => toggleStepComplete(36)}
-                    onToggleSkip={() => toggleStepSkip(36)}
-                    onNavigateNext={() => navigateToNextStep(36)}
-                    sectionTag="activation_wire_lakebase"
-                    industry={selectedIndustry}
-                    useCase={selectedUseCase}
-                    onPromptGenerated={onStepPromptGenerated}
-                    initialPrompt={stepPrompts[36]}
-                    previousOutputs={undefined}
-                    isPreviousStepComplete={isPreviousStepComplete(36)}
-                    isExpanded={expandedStep === 36}
-                    onToggleExpand={() => toggleExpand(36)}
-                    sessionId={sessionId}
-                  />
-                </div>
-              );
+
+              return renderUniformStep(36);
 
             // Step 37: Deploy & Validate (Activation / Reverse ETL)
             case 37:
-              return (
-                <div key={37} className="relative mt-5" data-step-number="37">
-                  <WorkflowStep
-                    stepNumber={37}
-                    title="Deploy & Validate"
-                    description="Deploy analytics app to Databricks Apps and validate the full reverse ETL pipeline"
-                    icon={<Rocket className="w-5 h-5" />}
-                    color="emerald"
-                    isComplete={completedSteps.has(37)}
-                    isSkipped={skippedSteps.has(37)}
-                    onToggleComplete={() => toggleStepComplete(37)}
-                    onToggleSkip={() => toggleStepSkip(37)}
-                    onNavigateNext={() => navigateToNextStep(37)}
-                    sectionTag="activation_deploy_validate"
-                    industry={selectedIndustry}
-                    useCase={selectedUseCase}
-                    onPromptGenerated={onStepPromptGenerated}
-                    initialPrompt={stepPrompts[37]}
-                    previousOutputs={undefined}
-                    isPreviousStepComplete={isPreviousStepComplete(37)}
-                    isExpanded={expandedStep === 37}
-                    onToggleExpand={() => toggleExpand(37)}
-                    sessionId={sessionId}
-                  />
-                </div>
-              );
+
+              return renderUniformStep(37);
 
             default:
               return null;

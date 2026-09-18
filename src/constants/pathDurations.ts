@@ -37,6 +37,7 @@ import {
 
 export type SegmentKey =
   | 'define-usecase'
+  | 'pre-work'
   | 'databricks-app'
   | 'lakebase'
   | 'lakehouse'
@@ -61,6 +62,7 @@ export type PersonaBucket =
 // the column captions immediately below them.
 export const SEGMENT_TO_BUCKET: Record<SegmentKey, PersonaBucket> = {
   'define-usecase':    'foundation',
+  'pre-work':          'foundation',
   'databricks-app':    'apps-lakebase',
   'lakebase':          'apps-lakebase',
   'agents-on-apps':    'apps-lakebase',
@@ -135,26 +137,26 @@ export interface PathDuration {
 
 export const PATH_DURATIONS: Record<WorkshopLevel, PathDuration> = {
   // Forward main path — Foundation + Tail folded into the 2h-per-bucket spec.
-  'app-only':                     { totalMinutes:  60, segments: { 'databricks-app':  60                                                                                              } },
-  'app-database':                 { totalMinutes: 120, segments: { 'databricks-app':  60, 'lakebase':       60                                                                        } },
-  'lakehouse':                    { totalMinutes: 120, segments: {                                          'lakehouse': 120                                                          } },
-  'lakehouse-di':                 { totalMinutes: 240, segments: {                                          'lakehouse': 120, 'data-intelligence': 120                                } },
-  'end-to-end':                   { totalMinutes: 360, segments: { 'databricks-app':  60, 'lakebase':       60, 'lakehouse': 120, 'data-intelligence': 120                            } },
+  'app-only':                     { totalMinutes:  80, segments: { 'pre-work': 20, 'databricks-app':  60                                                                                              } },
+  'app-database':                 { totalMinutes: 140, segments: { 'pre-work': 20, 'databricks-app':  60, 'lakebase':       60                                                                        } },
+  'lakehouse':                    { totalMinutes: 140, segments: { 'pre-work': 20,                                          'lakehouse': 120                                                          } },
+  'lakehouse-di':                 { totalMinutes: 260, segments: { 'pre-work': 20,                                          'lakehouse': 120, 'data-intelligence': 120                                } },
+  'end-to-end':                   { totalMinutes: 380, segments: { 'pre-work': 20, 'databricks-app':  60, 'lakebase':       60, 'lakehouse': 120, 'data-intelligence': 120                            } },
 
   // Accelerators keep their 4h budget and Foundation/Tail trim, since they
   // run as standalone single-domain workshops outside the additive chain.
-  'accelerator':                  { totalMinutes: 240, segments: { 'define-usecase':  10, 'lakehouse':     120, 'data-intelligence':  95,                                                                  'iterate-enhance': 10, 'cleanup': 5 } },
-  'genie-accelerator':            { totalMinutes: 240, segments: { 'define-usecase':  10, 'lakehouse':      90, 'data-intelligence': 125,                                                                  'iterate-enhance': 10, 'cleanup': 5 } },
-  'data-engineering-accelerator': { totalMinutes: 240, segments: { 'define-usecase':  10, 'lakehouse':     215,                                                                                            'iterate-enhance': 10, 'cleanup': 5 } },
-  'skills-accelerator':           { totalMinutes: 240, segments: { 'define-usecase':  10, 'agent-skills':  215,                                                                                            'iterate-enhance': 10, 'cleanup': 5 } },
-  'agents-accelerator':           { totalMinutes: 240, segments: { 'define-usecase':  10, 'databricks-app': 20, 'lakebase':           20, 'agents-on-apps': 110, 'mlflow-genai': 65,                       'iterate-enhance': 10, 'cleanup': 5 } },
+  'accelerator':                  { totalMinutes: 260, segments: { 'pre-work': 20, 'define-usecase':  10, 'lakehouse':     120, 'data-intelligence':  95,                                                                  'iterate-enhance': 10, 'cleanup': 5 } },
+  'genie-accelerator':            { totalMinutes: 260, segments: { 'pre-work': 20, 'define-usecase':  10, 'lakehouse':      90, 'data-intelligence': 125,                                                                  'iterate-enhance': 10, 'cleanup': 5 } },
+  'data-engineering-accelerator': { totalMinutes: 260, segments: { 'pre-work': 20, 'define-usecase':  10, 'lakehouse':     215,                                                                                            'iterate-enhance': 10, 'cleanup': 5 } },
+  'skills-accelerator':           { totalMinutes: 260, segments: { 'pre-work': 20, 'define-usecase':  10, 'agent-skills':  215,                                                                                            'iterate-enhance': 10, 'cleanup': 5 } },
+  'agents-accelerator':           { totalMinutes: 260, segments: { 'pre-work': 20, 'define-usecase':  10, 'databricks-app': 20, 'lakebase':           20, 'agents-on-apps': 110, 'mlflow-genai': 65,                       'iterate-enhance': 10, 'cleanup': 5 } },
 
   // Reverse direction mirrors forward bucket totals: each section = 2h,
   // capped at 6h for the full reverse-app flow.
-  'reverse-lakehouse':            { totalMinutes: 120, segments: {                                          'lakehouse': 120                                                                              } },
-  'reverse-lakehouse-di':         { totalMinutes: 240, segments: {                                          'lakehouse': 120, 'data-intelligence': 120                                                    } },
-  'reverse-lakebase':             { totalMinutes: 300, segments: {                                          'lakehouse': 120, 'data-intelligence': 120, 'activation':  60                                  } },
-  'reverse-app':                  { totalMinutes: 360, segments: { 'databricks-app':  30, 'lakebase':       30, 'lakehouse': 120, 'data-intelligence': 120, 'activation':  60                              } },
+  'reverse-lakehouse':            { totalMinutes: 140, segments: { 'pre-work': 20,                                          'lakehouse': 120                                                                              } },
+  'reverse-lakehouse-di':         { totalMinutes: 260, segments: { 'pre-work': 20,                                          'lakehouse': 120, 'data-intelligence': 120                                                    } },
+  'reverse-lakebase':             { totalMinutes: 320, segments: { 'pre-work': 20,                                          'lakehouse': 120, 'data-intelligence': 120, 'activation':  60                                  } },
+  'reverse-app':                  { totalMinutes: 380, segments: { 'pre-work': 20, 'databricks-app':  30, 'lakebase':       30, 'lakehouse': 120, 'data-intelligence': 120, 'activation':  60                              } },
 };
 
 // ---------------------------------------------------------------------------

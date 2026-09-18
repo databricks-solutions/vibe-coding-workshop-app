@@ -171,18 +171,40 @@ def _refresh_lakebase_cache():
             # Fetch latest section_input_prompts (PostgreSQL syntax with DISTINCT ON)
             # Keyed by (section_tag, coding_assistant) so we cache the latest active row
             # for both the Default and any per-assistant forks.
-            section_prompts_sql = f"""
+            #
+            # Includes the step-kind fields (step_kind, step_config, gate_label,
+            # expert_answer, expert_system_prompt). On databases that haven't run
+            # 12_add_step_kind.sql yet — a code-only deploy skips DDL — retry without
+            # them so existing deployments keep working and simply see every step as
+            # an instant_prompt.
+            section_prompts_sql_with_kind = f"""
                 SELECT DISTINCT ON (section_tag, coding_assistant)
                     section_tag, coding_assistant, input_template, system_prompt,
                     section_title, section_description,
                     order_number, version, how_to_apply, expected_output, bypass_llm,
-                    how_to_apply_images, expected_output_images
+                    how_to_apply_images, expected_output_images,
+                    step_kind, step_config, gate_label, expert_answer, expert_system_prompt
                 FROM {schema}.section_input_prompts
                 WHERE is_active = TRUE
                 ORDER BY section_tag, coding_assistant, version DESC
             """
-            section_prompts = execute_query(section_prompts_sql)
-            
+            try:
+                section_prompts = execute_query(section_prompts_sql_with_kind)
+            except Exception as kind_err:
+                logger.info(f"Step-kind columns not yet present ({kind_err}); falling back to legacy SELECT. Run 12_add_step_kind.sql to enable decision steps.")
+                section_prompts_sql_legacy = f"""
+                    SELECT DISTINCT ON (section_tag, coding_assistant)
+                        section_tag, coding_assistant, input_template, system_prompt,
+                        section_title, section_description,
+                        order_number, version, how_to_apply, expected_output, bypass_llm,
+                        how_to_apply_images, expected_output_images
+                    FROM {schema}.section_input_prompts
+                    WHERE is_active = TRUE
+                    ORDER BY section_tag, coding_assistant, version DESC
+                """
+                section_prompts = execute_query(section_prompts_sql_legacy)
+
+
             if section_prompts:
                 _lakebase_cache["section_input_prompts"] = section_prompts
             
@@ -301,6 +323,23 @@ def _parse_image_field(value: Any) -> List[Any]:
     return value if isinstance(value, list) else []
 
 
+def _parse_json_field(value: Any) -> Dict[str, Any]:
+    """Normalize a possibly-JSON-encoded object field into a dict.
+
+    psycopg may hand back JSONB already decoded or as a string depending on driver
+    and column type, so accept both and degrade to {} rather than raising.
+    """
+    if not value:
+        return {}
+    if isinstance(value, str):
+        try:
+            parsed = json.loads(value)
+            return parsed if isinstance(parsed, dict) else {}
+        except json.JSONDecodeError:
+            return {}
+    return value if isinstance(value, dict) else {}
+
+
 def _section_row_to_template(row: Dict[str, Any]) -> Dict[str, Any]:
     """Convert a section_input_prompts row into the legacy template dict shape."""
     return {
@@ -314,6 +353,13 @@ def _section_row_to_template(row: Dict[str, Any]) -> Dict[str, Any]:
         "section_description": row.get("section_description", ""),
         "order_number": row.get("order_number", 99),
         "bypass_llm": row.get("bypass_llm", False),
+        # Absent on databases that predate 12_add_step_kind.sql, so default to the
+        # behaviour every step had before decision steps existed.
+        "step_kind": row.get("step_kind") or "instant_prompt",
+        "step_config": _parse_json_field(row.get("step_config")),
+        "gate_label": row.get("gate_label") or "",
+        "expert_answer": row.get("expert_answer") or "",
+        "expert_system_prompt": row.get("expert_system_prompt") or "",
     }
 
 
@@ -396,8 +442,11 @@ except ImportError:
 # - databricks-dbrx-instruct (Foundation Model API)
 # - databricks-mixtral-8x7b-instruct (Foundation Model API)
 # - Custom endpoints deployed in your workspace
-# Default endpoint (Claude Sonnet 4.5)
-SERVING_ENDPOINT_NAME = os.getenv("DATABRICKS_SERVING_ENDPOINT", "databricks-claude-sonnet-4-5")
+# Default endpoint (Claude Sonnet 4.6)
+# NOTE: databricks-claude-opus-5 is deliberately NOT the default. It rejects the
+# `temperature` parameter that this module sends on every LLM call, so selecting
+# it fails with "Model ... does not support the temperature parameter".
+SERVING_ENDPOINT_NAME = os.getenv("DATABRICKS_SERVING_ENDPOINT", "databricks-claude-sonnet-4-6")
 
 # Fallback endpoints to try if the configured/default endpoint is not deployed in
 # the current workspace (e.g. Claude is unavailable on Databricks Free Edition).
@@ -410,6 +459,33 @@ FALLBACK_ENDPOINTS = [
     "databricks-qwen3-next-80b-a3b-instruct",
     "databricks-gpt-oss-120b",
 ]
+
+# Reveal model defaults. The expert reveal is short, low-temperature and read while
+# the attendee waits, so it is latency-critical in a way the long-form generation
+# steps are not. Measured on a live workspace with a real reveal prompt (streaming,
+# median of 3): gemini-3-1-flash-lite 1.3s to first words / 3.8s complete;
+# haiku-4-5 0.7s / 6.6s; sonnet-4-6 (the previous default) 1.0s / 12.0s.
+#
+# gemini-3-5-flash is deliberately NOT the default despite being a newer model: it
+# is a reasoning model that emits nothing for ~8.6s while thinking, so streaming
+# cannot hide the wait. Reasoning tokens also count against max_tokens.
+#
+# Both values are overridable per workshop via the reveal_model /
+# reveal_model_fallbacks parameters, because endpoint availability is region- and
+# rollout-gated — any hardcoded default is wrong on some workspace.
+REVEAL_ENDPOINT_DEFAULT = "databricks-gemini-3-1-flash-lite"
+REVEAL_ENDPOINT_FALLBACKS_DEFAULT = [
+    "databricks-claude-haiku-4-5",
+    "databricks-claude-sonnet-4-6",
+]
+
+try:
+    from src.backend.services.llm_content import text_from_content as _llm_text
+except ImportError:  # pragma: no cover - keeps the module importable standalone
+    def _llm_text(content: Any) -> str:
+        """Fallback: handle the string case only, which is every Claude model."""
+        return content if isinstance(content, str) else ""
+
 
 # Initialize WorkspaceClient - automatically handles auth when running as Databricks App
 # Uses OAuth from environment when deployed, falls back to config file for local dev
@@ -571,6 +647,21 @@ class PromptRequest(BaseModel):
     # session_parameters.coding_assistant (or DEFAULT when there is no session).
     # The Test Scenario tab uses this to pick a fork without creating a session.
     coding_assistant: Optional[str] = None
+
+class DecisionCommitRequest(BaseModel):
+    """A committed decision, exchanged for the expert answer.
+
+    The commitment is recorded before the reveal is returned, so the attendee cannot
+    read the expert answer and then backfill a matching choice.
+    """
+    industry: str = ""
+    use_case: str = ""
+    session_id: Optional[str] = None
+    step_number: Optional[int] = None
+    # Free-form because each decision widget captures a different shape (ranked
+    # feature list, per-dimension SCD picks, prose grain statement, ...).
+    decision: Dict[str, Any] = Field(default_factory=dict)
+
 
 class TestPromptRequest(BaseModel):
     """Request model for testing prompt generation with custom values (used in Configuration page)"""
@@ -1081,6 +1172,92 @@ def get_workshop_parameters_sync() -> Dict[str, str]:
     return out
 
 
+def _decision_params(step_decisions: Dict[str, Any]) -> Dict[str, str]:
+    """
+    Flatten committed decisions into substitutable prompt parameters.
+
+    This is what makes a decision consequential rather than a quiz: the values the
+    attendee committed to are injected into the prompt their coding assistant
+    receives, so the agent implements their design instead of inventing its own.
+
+    Each field becomes a parameter named after its key, so a field `fact_grain`
+    committed on any step is available to templates as {fact_grain}. Lists render as
+    a numbered list (order carries the attendee's priority); radio_per_row keys
+    ("scd_decisions::dim_customer") are grouped into one readable block per field.
+
+    Later steps can therefore reference earlier commitments — committed_features from
+    step 3 is available in step 4's template.
+
+    **Every field is ALSO emitted scoped to its step**, as `<section_tag>__<key>`, so
+    `{gold_layer_design__fact_grain}` and `{data_model_design__fact_grain}` name one
+    specific commitment and can never be confused for each other. Prefer the scoped
+    token in any prompt where the distinction matters.
+
+    That exists because two steps legitimately declare `fact_grain` — step 58 commits
+    the grain of the source model, step 11 the grain of the gold fact built from it —
+    and the bare token used to resolve by dict insertion order, so which one a prompt
+    received was not defined by anything the attendee did. Bare keys are still emitted
+    (every shipped prompt uses them) but are now resolved by the LATEST commitment,
+    tie-broken on section_tag so the result is deterministic either way.
+
+    Returns bare keys (no braces); the caller wraps them, as it does for every other
+    workshop parameter.
+    """
+    if not isinstance(step_decisions, dict):
+        return {}
+
+    flat: Dict[str, str] = {}
+    # key -> (sort_key, section_tag, rendered value) for the bare-token winner.
+    unscoped: Dict[str, tuple] = {}
+
+    def _remember(key: str, tag: str, committed_at: str, rendered: str) -> None:
+        """Scoped token always; bare token only if this is the latest commitment."""
+        if tag:
+            flat[f"{tag}__{key}"] = rendered
+        # Sort on (committed_at, section_tag): committed_at orders by what the attendee
+        # actually did, and the tag breaks ties so a missing or identical timestamp still
+        # produces one stable answer rather than whatever the dict happened to yield.
+        rank = (committed_at or "", tag or "")
+        prior = unscoped.get(key)
+        if prior is None or rank >= prior[0]:
+            unscoped[key] = (rank, tag, rendered)
+            if prior is not None and prior[1] != tag:
+                logger.debug(
+                    f"[Decision Params] '{key}' is committed on both '{prior[1]}' and "
+                    f"'{tag}'; the bare token resolves to '{tag}'. Use "
+                    f"{{{tag}__{key}}} to name one explicitly."
+                )
+
+    for tag, entry in step_decisions.items():
+        decision = (entry or {}).get('decision') if isinstance(entry, dict) else None
+        if not isinstance(decision, dict):
+            continue
+        committed_at = (entry or {}).get('committed_at') or ''
+        per_row: Dict[str, list] = {}
+
+        for key, value in decision.items():
+            if '::' in key:
+                field, row = key.split('::', 1)
+                per_row.setdefault(field, []).append(f"- {row}: {value}")
+            elif isinstance(value, list):
+                items = [str(v).strip() for v in value if str(v).strip()]
+                _remember(
+                    key, tag, committed_at,
+                    '\n'.join(f"{i}. {v}" for i, v in enumerate(items, 1)),
+                )
+            elif value not in (None, ''):
+                _remember(key, tag, committed_at, str(value))
+
+        # Grouped per-step, so two steps using radio_per_row cannot interleave rows.
+        for field, lines in per_row.items():
+            _remember(field, tag, committed_at, '\n'.join(lines))
+
+    for key, (_rank, _tag, rendered) in unscoped.items():
+        flat[key] = rendered
+
+    return flat
+
+
 def get_effective_workshop_parameters(session_id: Optional[str] = None) -> Dict[str, str]:
     """
     Get effective workshop parameters, with session overrides applied if session_id is provided.
@@ -1102,16 +1279,78 @@ def get_effective_workshop_parameters(session_id: Optional[str] = None) -> Dict[
     if not session_id:
         return params
     
-    # Get session-specific overrides + fields needed for user_schema_prefix derivation
+    # Get session-specific overrides + fields needed for user_schema_prefix derivation.
+    # The LATERAL join pulls the use case's own sample dataset in the same round trip.
+    #
+    # Deliberately NOT filtered on is_active. Seed 01 ships most product content with
+    # is_active = FALSE — on a live workspace only 16 of 47 rows are active, and every
+    # cpg and retail row is inactive — yet those use cases are selectable and were
+    # exactly the ones reading the wrong dataset. Requiring is_active here matched only
+    # the `sample` rows, so the fix silently did nothing for the industries that needed
+    # it. Take the newest row for the (industry, use_case) pair regardless: the columns
+    # describe which dataset suits the use case, which does not depend on whether an
+    # admin has activated that revision.
     schema = get_schema()
     sql = f"""
-        SELECT COALESCE(session_parameters, '{{}}') as session_parameters,
-               created_by, use_case_label, use_case, workshop_level
-        FROM {schema}.sessions
-        WHERE session_id = %s
+        SELECT COALESCE(s.session_parameters, '{{}}') as session_parameters,
+               s.created_by, s.use_case_label, s.use_case, s.workshop_level,
+               uc.sample_catalog, uc.sample_schema
+        FROM {schema}.sessions s
+        LEFT JOIN LATERAL (
+            SELECT sample_catalog, sample_schema
+            FROM {schema}.usecase_descriptions
+            WHERE industry = s.industry
+              AND use_case = s.use_case
+              AND sample_schema IS NOT NULL
+            ORDER BY version DESC
+            LIMIT 1
+        ) uc ON TRUE
+        WHERE s.session_id = %s
     """
-    results = execute_query(sql, (session_id,))
-    
+    try:
+        results = execute_query(sql, (session_id,))
+    except Exception as e:
+        # sample_catalog/sample_schema arrive in ddl/14. An install that has not run
+        # it yet must keep working on the global defaults rather than losing every
+        # session parameter, so fall back to the pre-migration query.
+        logger.warning(f"[Session Params] Dataset lookup unavailable, using globals: {e}")
+        results = execute_query(
+            f"""
+            SELECT COALESCE(session_parameters, '{{}}') as session_parameters,
+                   created_by, use_case_label, use_case, workshop_level
+            FROM {schema}.sessions
+            WHERE session_id = %s
+            """,
+            (session_id,),
+        )
+
+    # Accelerator paths name their OUTPUT schema after the global lakehouse schema
+    # (see _suffix below), which is a naming rule and nothing to do with which sample
+    # data a use case reads. Capture the global before the use-case default overwrites
+    # it, so pointing Retail at bakehouse cannot silently rename an accelerator
+    # attendee's target schema.
+    _global_lakehouse_schema = params.get('chapter_3_lakehouse_schema', 'vibe_coding')
+
+    # Use-case default sits between the global default and the session override:
+    # applied here so an explicit session value (written by step 9, or by a
+    # facilitator) still wins, but a session that never got one gets a dataset that
+    # matches its industry instead of whatever the global default happens to be.
+    _has_usecase_dataset = False
+    if results:
+        _uc_catalog = results[0].get('sample_catalog')
+        _uc_schema = results[0].get('sample_schema')
+        _has_usecase_dataset = bool(_uc_schema)
+        if _uc_catalog:
+            params['chapter_3_lakehouse_catalog'] = _uc_catalog
+        if _uc_schema:
+            params['chapter_3_lakehouse_schema'] = _uc_schema
+        if _uc_catalog or _uc_schema:
+            logger.debug(
+                f"[Session Params] Use-case dataset "
+                f"{_uc_catalog or '-'}.{_uc_schema or '-'} for session {session_id}"
+            )
+
+    _session_has_dataset = False
     if results and results[0].get('session_parameters'):
         session_overrides = results[0]['session_parameters']
         if isinstance(session_overrides, str):
@@ -1121,11 +1360,43 @@ def get_effective_workshop_parameters(session_id: Optional[str] = None) -> Dict[
             except json.JSONDecodeError:
                 session_overrides = {}
         
-        # Overlay session overrides on top of global parameters
+        # Overlay session overrides on top of global parameters.
+        # step_decisions is a nested object, not a scalar parameter — it is turned into
+        # {committed_*} tokens by _decision_params instead of being substituted raw.
         if session_overrides:
-            params.update(session_overrides)
-            logger.debug(f"[Session Params] Applied {len(session_overrides)} session overrides for session {session_id}")
-    
+            # Captured by the agent via report_gate, or set by step 9 / the facilitator.
+            # An explicit session value is the strongest signal there is.
+            _session_has_dataset = bool(session_overrides.get('chapter_3_lakehouse_schema'))
+            scalar_overrides = {
+                k: v for k, v in session_overrides.items() if k != 'step_decisions'
+            }
+            params.update(scalar_overrides)
+            params.update(_decision_params(session_overrides.get('step_decisions') or {}))
+            logger.debug(f"[Session Params] Applied {len(scalar_overrides)} session overrides for session {session_id}")
+
+    # Say out loud whether this session actually HAS a dataset, or is merely sitting on
+    # the product default.
+    #
+    # A use case the attendee defined themselves has no usecase_descriptions row at all,
+    # so it resolves neither a session override nor a use-case default and lands on the
+    # global `samples.wanderbricks`. That is the same silent fallback that had a retail
+    # workshop modelling hotel bookings — fixed for seeded industries in R2.1, but still
+    # wide open for anyone who builds their own use case.
+    #
+    # Rather than guess a dataset for them, the prompts and the source editor read this
+    # flag and say the dataset is not chosen yet. A wrong dataset that looks authoritative
+    # is far worse than an obviously missing one.
+    if _session_has_dataset:
+        params['dataset_status'] = 'session'
+    elif _has_usecase_dataset:
+        params['dataset_status'] = 'use_case'
+    else:
+        params['dataset_status'] = 'unset'
+        logger.info(
+            f"[Session Params] No dataset resolved for session {session_id}; "
+            f"falling back to the global default and reporting dataset_status=unset"
+        )
+
     # Derive user_schema_prefix, user_app_name, use_case_slug, and use_case_file_prefix on-the-fly if any is missing
     _needs_schema = results and 'user_schema_prefix' not in params
     _needs_app_name = results and 'user_app_name' not in params
@@ -1149,7 +1420,7 @@ def get_effective_workshop_parameters(session_id: Optional[str] = None) -> Dict[
         
         _is_accelerator = results[0].get('workshop_level') in ('accelerator', 'genie-accelerator')
         if _is_accelerator:
-            _suffix = params.get('chapter_3_lakehouse_schema', 'vibe_coding')
+            _suffix = _global_lakehouse_schema
         elif _uc_name.strip():
             _suffix = _re.sub(r'[^a-z0-9]+', '_', _uc_name.strip().lower()).strip('_')
         else:
@@ -1286,7 +1557,12 @@ def get_section_input_content(industry: str, use_case: str, section_tag: str, pr
     how_to_apply_images = template.get('how_to_apply_images', [])
     expected_output_images = template.get('expected_output_images', [])
     bypass_llm = template.get('bypass_llm', False)  # Check if this section bypasses LLM
-    
+    step_kind = template.get('step_kind') or 'instant_prompt'
+    step_config = template.get('step_config') or {}
+    gate_label = template.get('gate_label', '')
+    expert_answer = template.get('expert_answer', '')
+    expert_system_prompt = template.get('expert_system_prompt', '')
+
     # Substitute all parameters including use_case_description
     params = {
         '{industry_name}': industry_name,
@@ -1320,7 +1596,12 @@ def get_section_input_content(industry: str, use_case: str, section_tag: str, pr
         system_prompt = system_prompt.replace(key, str(value))
         how_to_apply = how_to_apply.replace(key, str(value))
         expected_output = expected_output.replace(key, str(value))
-    
+        # Expert reveal text is shown to the attendee after they commit, so it needs
+        # the same industry / use-case / workshop-parameter substitution.
+        expert_answer = expert_answer.replace(key, str(value))
+        expert_system_prompt = expert_system_prompt.replace(key, str(value))
+
+
     # Conditional branding injection -- only when company_brand_url is specified
     # Session overrides may store empty string for brand URL (e.g. from initial
     # "Get Started" before URL was populated). Fall back to the global workshop
@@ -1421,7 +1702,32 @@ Generate a detailed, actionable prompt for {section_tag} in a {industry_name} {u
         "bypass_llm": bypass_llm,
         "_brand_url": brand_url,
         "coding_assistant_variant": resolved_variant,
+        "step_kind": step_kind,
+        "step_config": step_config,
+        "gate_label": gate_label,
+        "expert_answer": expert_answer,
+        "expert_system_prompt": expert_system_prompt,
     }
+
+
+def build_static_step_content(section_content: Dict[str, Any]) -> str:
+    """
+    Render a bypass_llm section as the single markdown blob the UI displays.
+
+    The system prompt supplies context and the input template supplies the task,
+    joined by a separator. This wording is load-bearing: it is what attendees have
+    been copying into their coding assistant, so it must stay byte-identical to the
+    output the old streaming bypass branch produced.
+    """
+    system_prompt = section_content.get("system_prompt", "You are a helpful assistant.")
+    input_text = section_content.get("input", "")
+    return f"""## Context
+
+{system_prompt}
+
+---
+
+{input_text}"""
 
 
 async def generate_prompt_content_with_llm(
@@ -1886,6 +2192,10 @@ async def call_databricks_serving_endpoint(
                 logger.info(f"  Choice type: {type(choice).__name__}")
                 
                 # Handle choice as dict
+                # content is a plain string on Claude but a list of content parts on
+                # Gemini ([{"type":"text","text":...}]), so it goes through
+                # text_from_content rather than being used directly — otherwise a
+                # Gemini reveal renders as an empty panel.
                 if isinstance(choice, dict):
                     message = choice.get("message", {})
                     if isinstance(message, dict):
@@ -2173,6 +2483,506 @@ async def get_section_metadata_endpoint(
     }
 
 
+@router.get("/step/{section_tag}/content", summary="Get step content (instant, no streaming)")
+async def get_step_content_endpoint(
+    section_tag: str,
+    industry: str = "",
+    use_case: str = "",
+    session_id: Optional[str] = None,
+):
+    """
+    Return a step's ready-to-use content in one response.
+
+    Most steps are static (bypass_llm=TRUE): their text is templated, not generated,
+    so there is nothing to stream and no reason to make the attendee wait or click
+    Generate. This endpoint serves those instantly, together with the metadata the
+    step panel needs, so the UI can render a step the moment it is expanded.
+
+    For the handful of sections that genuinely call an LLM, `is_static` is False and
+    `content` is empty — the caller should fall back to /generate-prompt-stream.
+    Shared with the MCP step protocol so both surfaces resolve content identically.
+    """
+    section_content = get_section_input_content(
+        industry, use_case, section_tag, None, session_id
+    )
+    is_static = bool(section_content.get("bypass_llm", False))
+
+    return {
+        "section_tag": section_tag,
+        "is_static": is_static,
+        "content": build_static_step_content(section_content) if is_static else "",
+        "source": "static" if is_static else "llm_required",
+        "how_to_apply": section_content.get("how_to_apply", ""),
+        "expected_output": section_content.get("expected_output", ""),
+        "how_to_apply_images": section_content.get("how_to_apply_images", []),
+        "expected_output_images": section_content.get("expected_output_images", []),
+        "coding_assistant_variant": section_content.get(
+            "coding_assistant_variant", DEFAULT_CODING_ASSISTANT_KEY
+        ),
+        # How the step should be presented. 'instant_prompt' everywhere until a step
+        # is upgraded, so this is inert for untouched steps.
+        "step_kind": section_content.get("step_kind", "instant_prompt"),
+        "step_config": section_content.get("step_config", {}),
+        "gate_label": section_content.get("gate_label", ""),
+        # Withheld deliberately: the expert answer must not reach the browser before
+        # the attendee commits, or the reveal is worthless. Served by
+        # POST /step/{tag}/reveal instead.
+    }
+
+
+@router.get("/session/{session_id}/decisions", summary="Get decisions committed in a session")
+async def get_session_decisions(session_id: str):
+    """
+    Return every decision the attendee has committed in this session.
+
+    Lets a decision step restore its locked-in state after a refresh, and gives the
+    step protocol a single place to read committed values from.
+    """
+    session_data = load_session(session_id)
+    if not session_data:
+        return {"session_id": session_id, "decisions": {}}
+
+    params = session_data.get("session_parameters") or {}
+    if isinstance(params, str):
+        try:
+            params = json.loads(params)
+        except json.JSONDecodeError:
+            params = {}
+
+    return {
+        "session_id": session_id,
+        "decisions": (params or {}).get("step_decisions", {}),
+    }
+
+
+def _build_reveal_prompt(
+    section_content: Dict[str, Any], request: "DecisionCommitRequest"
+) -> str:
+    """
+    Build the user message for a generated expert answer.
+
+    Previously this passed the step's whole input_template, which is a page of
+    instructions about how to write a PRD — not the use case, and crucially not the
+    attendee's answer. The model had nothing concrete to react to, so it produced
+    generic filler ("metric: Industry").
+
+    Give it the two things that actually matter: what the product is, and what the
+    attendee committed to. Naming their answer explicitly also lets the reveal engage
+    with it — agreeing, or saying plainly where it would differ and why — which is the
+    whole point of comparing.
+    """
+    parts: List[str] = []
+
+    industry = format_industry_name(request.industry) if request.industry else ""
+    use_case = format_use_case_name(request.use_case) if request.use_case else ""
+    if industry or use_case:
+        parts.append(f"## Product\n\nIndustry: {industry}\nUse case: {use_case}")
+
+    templates = get_prompt_templates_map() or {}
+    description = (
+        templates.get((request.industry or "").lower(), {})
+        .get((request.use_case or "").lower(), "")
+    )
+    if description:
+        parts.append(f"## What this product is\n\n{description}")
+
+    if request.decision:
+        lines = []
+        for key, value in request.decision.items():
+            label = key.replace("::", " → ").replace("_", " ")
+            if isinstance(value, list):
+                items = [str(v).strip() for v in value if str(v).strip()]
+                if items:
+                    lines.append(f"**{label}:**")
+                    lines.extend(f"  {i}. {v}" for i, v in enumerate(items, 1))
+            elif str(value).strip():
+                lines.append(f"**{label}:** {value}")
+        if lines:
+            parts.append(
+                "## What the attendee committed to\n\n"
+                + "\n".join(lines)
+                + "\n\nGive your own answer first. Then say briefly where you agree with "
+                "theirs and where you would differ, and why. Be specific about their "
+                "actual wording — do not restate it back to them as advice."
+            )
+
+    return "\n\n".join(parts) if parts else section_content.get("input", "")
+
+
+def _reveal_endpoints(session_id: Optional[str] = None) -> List[str]:
+    """
+    Ordered list of serving endpoints to try for a reveal: preferred first.
+
+    Read from the `reveal_model` / `reveal_model_fallbacks` workshop parameters so a
+    facilitator can change the model live, with no deploy. That matters more than the
+    specific default here, because endpoint availability is region- and rollout-gated:
+    several documented Gemini endpoints 404 on a eu-central-1 workspace. The same
+    switch covers an endpoint being quota-limited or down mid-workshop.
+
+    Always ends with the general-purpose endpoint, so a workshop whose configured
+    reveal models are all unavailable still produces an answer, just more slowly.
+    """
+    params: Dict[str, str] = {}
+    try:
+        params = get_effective_workshop_parameters(session_id)
+    except Exception as e:
+        logger.warning(f"[Reveal] Could not read workshop parameters, using defaults: {e}")
+
+    preferred = (params.get('reveal_model') or '').strip() or REVEAL_ENDPOINT_DEFAULT
+
+    raw_fallbacks = (params.get('reveal_model_fallbacks') or '').strip()
+    if raw_fallbacks:
+        fallbacks = [f.strip() for f in raw_fallbacks.split(',') if f.strip()]
+    else:
+        fallbacks = list(REVEAL_ENDPOINT_FALLBACKS_DEFAULT)
+
+    chain = [preferred, *fallbacks]
+
+    general = get_best_available_endpoint()
+    if general:
+        chain.append(general)
+
+    # De-duplicate, preserving order: a facilitator naming the same model twice, or
+    # naming the general endpoint explicitly, should not cause a repeated attempt.
+    seen: set = set()
+    ordered: List[str] = []
+    for name in chain:
+        if name and name not in seen:
+            seen.add(name)
+            ordered.append(name)
+    return ordered
+
+
+@router.post("/step/{section_tag}/reveal", summary="Commit a decision and get the expert answer")
+async def reveal_step_expert_answer(section_tag: str, request: DecisionCommitRequest):
+    """
+    Exchange a committed decision for the step's expert answer.
+
+    Commit-before-reveal only teaches if the attendee cannot peek: the expert answer
+    is therefore never included in GET /step/{tag}/content, and is returned only
+    here, after the commitment has been recorded against the session.
+
+    The reveal comes from `expert_answer` when it is static text. When a step sets
+    `expert_system_prompt` instead, the answer has to be grounded in the attendee's
+    own PRD or schema, so it is generated on demand — this is one of the few places
+    an LLM call is genuinely warranted.
+    """
+    section_content = get_section_input_content(
+        request.industry, request.use_case, section_tag, None, request.session_id
+    )
+
+    if section_content.get("step_kind") != "decision":
+        raise HTTPException(
+            status_code=400,
+            detail=f"Section '{section_tag}' is not a decision step",
+        )
+
+    if not request.decision:
+        raise HTTPException(status_code=400, detail="A decision is required before the reveal")
+
+    # Record the commitment first. If this fails we still reveal — losing a session
+    # write should not strand the attendee mid-step — but the failure is logged.
+    if request.session_id:
+        try:
+            save_step_decision(
+                session_id=request.session_id,
+                section_tag=section_tag,
+                decision=request.decision,
+            )
+        except Exception as e:
+            logger.error(f"Failed to persist decision for {section_tag}: {e}", exc_info=True)
+
+    expert_answer = section_content.get("expert_answer", "")
+    expert_system_prompt = section_content.get("expert_system_prompt", "")
+    source = "static"
+
+    if not expert_answer and expert_system_prompt:
+        try:
+            llm_result = await call_databricks_serving_endpoint(
+                prompt=_build_reveal_prompt(section_content, request),
+                system_prompt=expert_system_prompt,
+                # The reveal is latency-critical (the attendee is waiting on it), so it
+                # uses the fast reveal model rather than the workshop's general-purpose
+                # generation endpoint.
+                endpoint_name=_reveal_endpoints(request.session_id)[0],
+                max_tokens=1200,
+                # Low temperature: the reveal is meant to be the considered answer, not
+                # a creative one, and two attendees on the same step should see the same
+                # guidance.
+                temperature=0.2,
+            )
+            expert_answer = (llm_result or {}).get("response", "")
+            source = "llm_generated"
+        except Exception as e:
+            logger.error(f"Expert answer generation failed for {section_tag}: {e}", exc_info=True)
+            expert_answer = ""
+            source = "unavailable"
+
+    return {
+        "section_tag": section_tag,
+        "expert_answer": expert_answer,
+        "source": source,
+        "committed": request.decision,
+        "rubric": (section_content.get("step_config") or {}).get("rubric", {}),
+    }
+
+
+@router.post("/step/{section_tag}/reveal/stream", summary="Commit a decision and stream the expert answer")
+async def reveal_step_expert_answer_stream(section_tag: str, request: DecisionCommitRequest):
+    """
+    Streaming twin of POST /step/{tag}/reveal.
+
+    The JSON endpoint stays: MCP `submit_decision` wants one payload, and the frontend
+    falls back to it if a stream fails. This variant exists purely for perceived
+    latency — the attendee is waiting on this answer to know whether they are thinking
+    along the right lines, and words appearing in ~1s reads completely differently from
+    a spinner that sits for 12.
+
+    Commit-before-reveal is unchanged: the commitment is recorded before the first
+    token is streamed, exactly as in the JSON path.
+
+    Static reveals are emitted as a single content event rather than being faked into a
+    stream — the app deliberately removed simulated streaming, and reproducing it here
+    to look consistent would reintroduce it.
+    """
+    section_content = get_section_input_content(
+        request.industry, request.use_case, section_tag, None, request.session_id
+    )
+
+    if section_content.get("step_kind") != "decision":
+        raise HTTPException(
+            status_code=400,
+            detail=f"Section '{section_tag}' is not a decision step",
+        )
+
+    if not request.decision:
+        raise HTTPException(status_code=400, detail="A decision is required before the reveal")
+
+    # Record the commitment BEFORE any streaming begins. Same contract as the JSON
+    # endpoint: a failed write must not strand the attendee, but it is logged.
+    if request.session_id:
+        try:
+            save_step_decision(
+                session_id=request.session_id,
+                section_tag=section_tag,
+                decision=request.decision,
+            )
+        except Exception as e:
+            logger.error(f"Failed to persist decision for {section_tag}: {e}", exc_info=True)
+
+    expert_answer = section_content.get("expert_answer", "")
+    expert_system_prompt = section_content.get("expert_system_prompt", "")
+    rubric = (section_content.get("step_config") or {}).get("rubric", {})
+
+    async def event_stream() -> AsyncGenerator[str, None]:
+        yield _sse_event({"type": "meta", "section_tag": section_tag, "rubric": rubric})
+
+        if expert_answer:
+            yield _sse_event({"type": "start", "model": "static", "source": "static"})
+            yield _sse_event({"type": "content", "content": expert_answer})
+            yield _sse_event({"type": "done", "source": "static"})
+            return
+
+        if not expert_system_prompt:
+            yield _sse_event({"type": "error", "error": "No expert answer configured for this step"})
+            return
+
+        messages = [
+            {"role": "system", "content": expert_system_prompt},
+            {"role": "user", "content": _build_reveal_prompt(section_content, request)},
+        ]
+
+        # Walk the endpoint chain. A configured model can be absent entirely (404 —
+        # documented endpoints are region- and rollout-gated), so "missing" has to be
+        # as recoverable as "slow". _stream_with_retry handles transient failures
+        # within one endpoint and reports a terminal one as an error event, which is
+        # the signal to try the next model.
+        endpoints = _reveal_endpoints(request.session_id)
+        last_error = ""
+
+        for index, endpoint in enumerate(endpoints):
+            produced_content = False
+            failed = False
+
+            async for event in _stream_with_retry(
+                messages,
+                max_tokens=1200,
+                temperature=0.2,
+                timeout=60.0,
+                # Flush eagerly: the whole point is early feedback, and a reveal is
+                # short enough that per-chunk overhead is irrelevant.
+                flush_chars=24,
+                flush_interval=0.03,
+                section_tag=section_tag,
+                industry=request.industry,
+                use_case=request.use_case,
+                endpoint_override=endpoint,
+            ):
+                # Inspect events to decide whether to fall through to the next model,
+                # while passing the useful ones straight to the client.
+                try:
+                    payload = json.loads(event[6:]) if event.startswith("data: ") else {}
+                except (json.JSONDecodeError, IndexError):
+                    payload = {}
+
+                kind = payload.get("type")
+
+                if kind == "error":
+                    failed = True
+                    last_error = payload.get("error", "unknown error")
+                    logger.warning(
+                        f"[Reveal] {endpoint} failed for {section_tag}: {last_error}"
+                    )
+                    break
+
+                if kind == "start":
+                    # Suppress the retry/start chatter of a model we are only trying
+                    # because an earlier one was unavailable; the attendee does not
+                    # need to see the app's endpoint shopping.
+                    if produced_content or index == 0:
+                        yield event
+                    continue
+
+                if kind == "content":
+                    produced_content = True
+
+                yield event
+
+            if not failed:
+                # Reached the end of a stream without a terminal error.
+                if produced_content:
+                    return
+                # An endpoint that returns 200 and no text is still a failure for our
+                # purposes — this is exactly what a reasoning model does when its
+                # thinking exhausts max_tokens.
+                last_error = f"{endpoint} returned no content"
+                logger.warning(f"[Reveal] {last_error} for {section_tag}")
+
+            if produced_content:
+                # Partial output already reached the client; restarting on another model
+                # would duplicate text mid-answer.
+                yield _sse_event({"type": "done"})
+                return
+
+        logger.error(f"[Reveal] All endpoints failed for {section_tag}: {last_error}")
+        yield _sse_event({
+            "type": "error",
+            "error": f"Could not generate the expert view. Last error: {last_error}",
+        })
+
+    return StreamingResponse(
+        event_stream(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
+
+
+class VerifyStepRequest(BaseModel):
+    """Request to verify a step's completion via workspace artifact checks."""
+    session_id: str = Field(..., description="Session ID")
+    force: bool = Field(False, description="Bypass cache and force fresh check")
+
+
+class VerifyCheckResult(BaseModel):
+    """Result of a single verification check."""
+    name: str = Field(..., description="Check key")
+    ok: Optional[bool] = Field(None, description="True=pass, False=fail, None=unknown")
+    detail: str = Field(..., description="Human-actionable detail")
+
+
+class VerifyStepResponse(BaseModel):
+    """Response from step verification endpoint."""
+    status: str = Field(..., description="pass|fail|unknown")
+    method: str = Field(..., description="workspace|agent_reported|self_attested|none")
+    checks: List[VerifyCheckResult] = Field(default_factory=list, description="Per-check results")
+    hint: str = Field(..., description="Human-actionable next step")
+    cached_at: Optional[float] = Field(None, description="Timestamp when result was cached")
+    ttl_s: int = Field(60, description="Cache TTL in seconds")
+
+
+@router.post("/step/{section_tag}/verify", response_model=VerifyStepResponse, summary="Verify step completion via workspace checks")
+async def verify_step_endpoint(section_tag: str, request: VerifyStepRequest) -> VerifyStepResponse:
+    """
+    Verify a step's completion by checking for real workspace artifacts.
+
+    For steps with no check configured, returns status=unknown, method=agent_reported
+    (the attendee self-attests they completed it).
+
+    Returns a detailed report with per-check results. Use the `hint` field to guide
+    the attendee on what to fix. The `ok` field in each check is tri-state:
+      - True: artifact found and valid
+      - False: artifact not found or invalid (actionable hint provided)
+      - None: unknown state (permission denied, timeout, missing parameter)
+
+    Only the App Service Principal is used — no OBO.
+    """
+    # Validate section_tag (path traversal guard)
+    _validate_section_tag(section_tag)
+
+    # Get section config to find the check key
+    section_content = get_section_input_content(
+        industry="sample",  # Not used for step_config, just for resolver
+        use_case="booking",
+        section_tag=section_tag,
+        session_id=request.session_id,
+    )
+
+    check_key = (section_content.get("step_config") or {}).get("check")
+
+    # If no check configured, return unknown/agent_reported (self-attestation step)
+    if not check_key:
+        return VerifyStepResponse(
+            status="unknown",
+            method="agent_reported",
+            checks=[],
+            hint="Step verification not configured — completion depends on attendee confirmation",
+            cached_at=None,
+            ttl_s=60,
+        )
+
+    # Get workspace client (App SP only)
+    client = get_workspace_client()
+    if not client:
+        return VerifyStepResponse(
+            status="unknown",
+            method="workspace",
+            checks=[],
+            hint="Verification service unavailable — Databricks SDK not initialized",
+            cached_at=None,
+            ttl_s=60,
+        )
+
+    # Resolve workshop + session parameters
+    params = get_effective_workshop_parameters(request.session_id)
+
+    # Import and run verification
+    try:
+        from src.backend.services.verification import verify_step_checks
+        result = await verify_step_checks(
+            workspace_client=client,
+            session_id=request.session_id,
+            section_tag=section_tag,
+            check_keys=[check_key],
+            params=params,
+            force=request.force,
+        )
+        return VerifyStepResponse(**result)
+    except Exception as e:
+        logger.error(f"Verification failed for {section_tag}: {e}", exc_info=True)
+        return VerifyStepResponse(
+            status="unknown",
+            method="workspace",
+            checks=[],
+            hint=f"Verification error: {type(e).__name__}",
+            cached_at=None,
+            ttl_s=60,
+        )
+
+
 @router.post("/generate-prompt", response_model=GeneratedContent, summary="Generate prompt for a workflow section")
 async def generate_prompt(request: PromptRequest):
     """
@@ -2264,6 +3074,7 @@ async def _stream_with_retry(
     section_tag: Optional[str] = None,
     industry: Optional[str] = None,
     use_case: Optional[str] = None,
+    endpoint_override: Optional[str] = None,
 ) -> AsyncGenerator[str, None]:
     """
     Stream LLM response as SSE events with automatic retry on transient errors.
@@ -2283,7 +3094,7 @@ async def _stream_with_retry(
     from src.backend.identity import build_user_agent
 
     client = get_workspace_client()
-    endpoint = get_best_available_endpoint()
+    endpoint = endpoint_override or get_best_available_endpoint()
 
     if not client or not endpoint:
         yield _sse_event({"type": "error", "error": "LLM not available"})
@@ -2438,24 +3249,20 @@ async def stream_llm_response(
     input_text = section_content["input"]
     system_prompt = section_content.get("system_prompt", "You are a helpful assistant.")
     bypass_llm = section_content.get("bypass_llm", False)
-    
-    # If bypass_llm is True, return system prompt + input text combined (no LLM call)
+
+    # bypass_llm sections are static text — there is nothing to stream. Callers
+    # should use GET /step/{section_tag}/content instead; this branch stays only
+    # so older clients keep working, and it emits the payload in one shot.
     if bypass_llm:
-        logger.info(f"[Bypass LLM] Section {section_tag} has bypass_llm=True, returning combined output")
+        logger.info(
+            f"[Bypass LLM] Section {section_tag} is static; serving via legacy stream path. "
+            "Prefer GET /step/{section_tag}/content."
+        )
         yield f"data: {json.dumps({'type': 'start', 'model': 'bypass_llm'})}\n\n"
-        # Combine system prompt (context) and input text (task) with separator
-        # System prompt provides context, input text provides the actual instructions
-        combined_output = f"""## Context
-
-{system_prompt}
-
----
-
-{input_text}"""
-        yield f"data: {json.dumps({'type': 'content', 'content': combined_output})}\n\n"
+        yield f"data: {json.dumps({'type': 'content', 'content': build_static_step_content(section_content)})}\n\n"
         yield f"data: {json.dumps({'type': 'done'})}\n\n"
         return
-    
+
     messages = [
         {"role": "system", "content": system_prompt},
         {"role": "user", "content": f"Generate a detailed prompt based on: {input_text}"}
@@ -5254,6 +6061,10 @@ class LakehouseParamsResponse(BaseModel):
     catalog: str
     schema_name: str  # Using schema_name to avoid conflict with Pydantic's schema
     is_overridden: bool = False
+    # Where the value came from: 'session' (explicit override, incl. agent-captured),
+    # 'use_case' (the use case's own dataset), or 'unset' (nothing chose one, so these
+    # values are the product default and almost certainly wrong for this use case).
+    dataset_status: str = 'use_case'
 
 class LakehouseParamsUpdate(BaseModel):
     """Request model for updating lakehouse parameters."""
@@ -5286,28 +6097,20 @@ async def get_lakehouse_params(session_id: str) -> LakehouseParamsResponse:
         else:
             session_params = raw or {}
     
-    # Get global defaults
-    global_params = {}
-    params_sql = f"""
-        SELECT param_key, param_value
-        FROM {schema}.workshop_parameters
-        WHERE param_key IN ('chapter_3_lakehouse_catalog', 'chapter_3_lakehouse_schema')
-        AND is_active = TRUE
-    """
-    params_result = execute_query(params_sql, ())
-    if params_result:
-        for row in params_result:
-            global_params[row['param_key']] = row['param_value']
-    
-    # Determine effective values (session override > global default)
-    catalog = session_params.get('chapter_3_lakehouse_catalog', global_params.get('chapter_3_lakehouse_catalog', 'samples'))
-    schema_name = session_params.get('chapter_3_lakehouse_schema', global_params.get('chapter_3_lakehouse_schema', 'wanderbricks'))
+    # Resolve through the shared path so this endpoint cannot drift from what the
+    # prompts actually substitute. It applies session override > use-case default >
+    # global default; reading workshop_parameters directly here is what used to make
+    # the editor display a tourism dataset for a retail session.
+    effective = get_effective_workshop_parameters(session_id)
+    catalog = effective.get('chapter_3_lakehouse_catalog') or 'samples'
+    schema_name = effective.get('chapter_3_lakehouse_schema') or 'wanderbricks'
     is_overridden = 'chapter_3_lakehouse_catalog' in session_params or 'chapter_3_lakehouse_schema' in session_params
-    
+
     return LakehouseParamsResponse(
         catalog=catalog,
         schema_name=schema_name,
-        is_overridden=is_overridden
+        is_overridden=is_overridden,
+        dataset_status=effective.get('dataset_status', 'use_case'),
     )
 
 
@@ -5492,6 +6295,7 @@ try:
     from src.backend.services.lakebase import (
         save_session,
         save_chapter_feedback,
+        save_step_decision,
         load_session,
         delete_session,
         get_user_sessions,
@@ -5525,6 +6329,15 @@ except ImportError:
         return 0
     def update_step_prompt(*args, **kwargs):
         return False
+    def save_step_decision(*args, **kwargs):
+        return False
+    # save_chapter_feedback and get_analytics are imported above but were missing
+    # from this fallback block, so touching either one raised NameError instead of
+    # degrading, whenever the lakebase service failed to import.
+    def save_chapter_feedback(*args, **kwargs):
+        return False
+    def get_analytics(*args, **kwargs):
+        return {}
 
 
 # Session Pydantic Models
@@ -7005,6 +7818,119 @@ async def usecase_builder_save(request_body: UseCaseSaveRequest, request: Reques
     
     logger.info(f"[UseCase Builder] Saved use case id={new_id} by {user_email}")
     return {"success": True, "id": new_id, "message": "Use case saved successfully"}
+
+
+@router.post("/usecase-builder/promote", summary="Promote a use case so it can carry a dataset")
+async def usecase_builder_promote(request_body: UseCaseSaveRequest, request: Request):
+    """
+    Make an attendee-defined use case a first-class row in `usecase_descriptions`.
+
+    Why this exists: the dataset a use case reads resolves as
+    session override -> usecase_descriptions.sample_schema -> global default. A use case
+    that lives only in `saved_usecase_descriptions` has no row in that chain, so it
+    inherits the product default — the silent fallback that had a retail workshop
+    modelling hotel bookings. Promoting gives it somewhere to record its OWN dataset,
+    which the data pre-work then fills in.
+
+    `sample_catalog`/`sample_schema` are deliberately left NULL here. Guessing a dataset
+    is the bug; the row reports `dataset_status='unset'` until the attendee connects
+    existing data or generates some.
+
+    Append-only and versioned, matching the admin prompt-config endpoint: a second
+    promotion of the same (industry, use_case) adds a version rather than mutating
+    history, so an attendee who refines their idea does not invalidate a session already
+    running against the earlier text.
+    """
+    industry = (request_body.industry or "").strip()
+    use_case_name = (request_body.use_case_name or "").strip()
+    description = (request_body.description or "").strip()
+
+    if not industry or not use_case_name:
+        raise HTTPException(
+            status_code=400,
+            detail="Both an industry and a use case name are required to promote",
+        )
+    if not description:
+        raise HTTPException(status_code=400, detail="Description cannot be empty")
+
+    # Slugs must match what the frontend derives (PromptGenerator's toSlug), because the
+    # session stores the slug and resolution joins on it.
+    industry_slug = re.sub(r'[^a-z0-9]+', '_', industry.lower()).strip('_')
+    use_case_slug = re.sub(r'[^a-z0-9]+', '_', use_case_name.lower()).strip('_')
+    if not industry_slug or not use_case_slug:
+        raise HTTPException(
+            status_code=400,
+            detail="Industry and use case name must contain at least one letter or digit",
+        )
+
+    user_email = _get_session_user(request)
+    schema = get_schema()
+
+    try:
+        version_result = execute_query(
+            f"""
+            SELECT COALESCE(MAX(version), 0) as max_version
+            FROM {schema}.usecase_descriptions
+            WHERE industry = %s AND use_case = %s
+            """,
+            (industry_slug, use_case_slug),
+        )
+        next_version = (
+            int(version_result[0].get('max_version', 0)) + 1 if version_result else 1
+        )
+
+        # is_active=TRUE matters: seed 01 ships most product content inactive, and
+        # /api/industries filters on it, so a promoted use case that defaulted to
+        # inactive would be invisible in the very picker it was created for.
+        success = execute_insert(
+            f"""
+            INSERT INTO {schema}.usecase_descriptions
+            (industry, industry_label, use_case, use_case_label, prompt_template,
+             version, is_active, inserted_at, updated_at, created_by,
+             origin, created_by_email)
+            VALUES (%s, %s, %s, %s, %s, %s, TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP,
+                    %s, 'attendee', %s)
+            """,
+            (
+                industry_slug,
+                industry,
+                use_case_slug,
+                use_case_name,
+                description,
+                next_version,
+                user_email,
+                user_email,
+            ),
+        )
+    except Exception as e:
+        # The origin columns arrive in ddl/15. An install that has not run it yet should
+        # get a clear message rather than a 500 with a column error.
+        logger.error(f"[UseCase Builder] Promote failed for {industry_slug}/{use_case_slug}: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail="Could not promote the use case. If this persists, the workshop "
+                   "database may need the latest migrations applied.",
+        )
+
+    if not success:
+        raise HTTPException(status_code=500, detail="Failed to promote the use case")
+
+    # The industry/use-case lists are cached for 30s; without this the attendee would not
+    # see their own use case in the picker they just created it from.
+    clear_lakebase_cache()
+
+    logger.info(
+        f"[UseCase Builder] Promoted {industry_slug}/{use_case_slug} v{next_version} "
+        f"by {user_email} (dataset intentionally unset)"
+    )
+    return {
+        "success": True,
+        "industry": industry_slug,
+        "use_case": use_case_slug,
+        "version": next_version,
+        "dataset_status": "unset",
+        "message": "Use case promoted. Choose or generate its dataset in the data pre-work.",
+    }
 
 
 @router.get("/usecase-builder/list", summary="List all saved use cases (community library)")

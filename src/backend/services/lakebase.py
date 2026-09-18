@@ -142,7 +142,18 @@ def _get_config() -> Dict[str, Any]:
         user = os.getenv("DATABRICKS_CLIENT_ID", "")
         if user:
             logger.info(f"Using DATABRICKS_CLIENT_ID as Lakebase user: {user[:20]}...")
-    if not user:
+    # Resolving identity from the SDK constructs a WorkspaceClient, which performs a
+    # BLOCKING network call to the workspace OIDC endpoint. Only do that when there is
+    # actually a Lakebase to connect to: without a host and database the resolved user is
+    # unused, since is_lakebase_configured() returns False regardless.
+    #
+    # This guard is what makes the test suite runnable. With USE_LAKEBASE=false and no
+    # LAKEBASE_HOST, every is_lakebase_configured() call still reached out over SSL and
+    # hung until the SDK's retries gave up — so tests appeared to freeze with no output.
+    _host = os.getenv("LAKEBASE_HOST", "")
+    _database = os.getenv("LAKEBASE_DATABASE", "")
+
+    if not user and _host and _database:
         logger.warning(
             "PGUSER, LAKEBASE_USER, and DATABRICKS_CLIENT_ID all unset. "
             "Attempting to get identity from Databricks SDK..."
@@ -157,8 +168,8 @@ def _get_config() -> Dict[str, Any]:
             logger.warning(f"Could not get identity from SDK: {e}")
 
     return {
-        "host": os.getenv("LAKEBASE_HOST", ""),
-        "database": os.getenv("LAKEBASE_DATABASE", ""),
+        "host": _host,
+        "database": _database,
         "schema": os.getenv("LAKEBASE_SCHEMA", ""),
         "port": int(os.getenv("LAKEBASE_PORT", "5432")),
         "user": user,
@@ -807,6 +818,80 @@ def save_chapter_feedback(session_id: str, chapter_name: str, rating: str) -> bo
         return False
 
 
+def save_step_decision(session_id: str, section_tag: str, decision: Dict) -> bool:
+    """
+    Record the decision an attendee committed to on a step.
+
+    Stored under the `step_decisions` key of session_parameters so no schema change
+    is needed, and so committed values are available for prompt substitution — the
+    point of commit-before-reveal is that the coding agent then implements the
+    attendee's design rather than inventing its own.
+
+    Uses a nested JSONB merge so committing one step never disturbs another, matching
+    save_chapter_feedback's approach.
+
+    Args:
+        session_id: Session identifier
+        section_tag: Step the decision belongs to (e.g. 'gold_layer_design')
+        decision: Widget-specific payload; shape varies per step
+
+    Returns:
+        True if a session row was updated, False otherwise
+    """
+    if not is_lakebase_configured():
+        logger.warning("Lakebase not configured, cannot save step decision")
+        return False
+
+    table_name = _get_sessions_table_name()
+
+    try:
+        now = datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ')
+        decision_patch = json.dumps({
+            "step_decisions": {
+                section_tag: {
+                    "decision": decision,
+                    "committed_at": now,
+                }
+            }
+        })
+
+        with get_connection() as conn:
+            cursor = conn.cursor()
+
+            # Merge at two levels: `||` is shallow, so merging {"step_decisions": {...}}
+            # would replace all prior decisions. jsonb_set on the nested key preserves
+            # the siblings.
+            update_sql = f"""
+            UPDATE {table_name}
+            SET session_parameters = jsonb_set(
+                    COALESCE(session_parameters, '{{}}'::jsonb),
+                    '{{step_decisions}}',
+                    COALESCE(session_parameters -> 'step_decisions', '{{}}'::jsonb)
+                        || (%s::jsonb -> 'step_decisions'),
+                    true
+                ),
+                updated_at = CURRENT_TIMESTAMP
+            WHERE session_id = %s
+            """
+
+            cursor.execute(update_sql, (decision_patch, session_id))
+            conn.commit()
+
+            rows_affected = cursor.rowcount
+            cursor.close()
+
+            if rows_affected > 0:
+                logger.info(f"Step decision saved: session={session_id}, step={section_tag}")
+                return True
+
+            logger.warning(f"No session found for step decision: {session_id}")
+            return False
+
+    except Exception as e:
+        logger.error(f"Error saving step decision: {e}", exc_info=True)
+        return False
+
+
 def load_session(session_id: str) -> Optional[Dict]:
     """
     Load a session from Lakebase by session_id.
@@ -1236,13 +1321,16 @@ def delete_user_unsaved_sessions(created_by: str, keep_session_id: str = None) -
 def update_step_prompt(session_id: str, step_number: int, prompt_text: str, workshop_level: str = None) -> bool:
     """
     Update a specific step's generated prompt for a session.
-    Step 1 is stored in step_1_prompt column, steps 2-30 are stored in step_prompts JSONB.
+    Step 1 is stored in step_1_prompt column, later steps in the step_prompts JSONB.
     Optionally updates workshop_level if provided (to piggyback on progress saves).
     """
     if not is_lakebase_configured():
         return False
-    
-    if not 1 <= step_number <= 30:
+
+    # Upper bound must track MAX_STEP_NUMBER, not the original 30-step workshop:
+    # Activation (32-37), Agents Accelerator (38-48) and MLflow (49-56) all live
+    # above 30, and a stale cap here silently discarded their per-step state.
+    if not 1 <= step_number <= MAX_STEP_NUMBER:
         logger.error(f"Invalid step number: {step_number}")
         return False
     
@@ -1330,13 +1418,22 @@ STEP_SCORES = {
     31: 10,
     # Agents Accelerator — Agents on Apps (steps 38-46): 50 points each
     38: 50, 39: 50, 40: 50, 41: 50, 42: 50, 43: 50, 44: 50, 45: 50, 46: 50,
-    # Agents Accelerator — MLflow for Gen-AI (steps 47-54): 50 points each
-    47: 50, 48: 50, 49: 50, 50: 50, 51: 50, 52: 50, 53: 50, 54: 50,
+    # Agents Accelerator — MLflow for Gen-AI (steps 47-56): 50 points each
+    47: 50, 48: 50, 49: 50, 50: 50, 51: 50, 52: 50, 53: 50, 54: 50, 55: 50, 56: 50,
+    # Data pre-work (steps 57-59): 20 points each
+    57: 20, 58: 20, 59: 20,
 }
+
+# Highest step number the workflow defines (see src/constants/workflowSections.ts).
+# Used to validate per-step writes; keep in sync when steps are added.
+# 59 covers the data pre-work steps; a stale value here silently drops their per-step
+# writes, which is exactly the bug that hid steps 31-56 when this cap was 30.
+MAX_STEP_NUMBER = 59
 
 # Chapter definitions for progress tracking (must match src/constants/scoring.ts)
 CHAPTERS = {
     'Foundation': {'steps': {1, 2, 3}, 'display': 'Foundation'},
+    'Your Data': {'steps': {57, 58, 59}, 'display': 'Your Data'},
     'Chapter 1': {'steps': {4, 5}, 'display': 'Databricks App'},
     'Chapter 2': {'steps': {6, 7, 8}, 'display': 'Lakebase'},
     'Chapter 3': {'steps': {9, 10, 11, 12, 13, 14, 22, 23}, 'display': 'Lakehouse'},
@@ -1352,11 +1449,135 @@ CHAPTERS = {
 AVATAR_EMOJIS = ['🦊', '🐙', '🦄', '🐼', '🦉', '🐬', '🦁', '🐸', '🦋', '🐯', '🦈', '🐨', '🦩', '🐻', '🦖']
 
 
-def _calculate_score(completed_steps: List[int], skipped_steps: List[int] = None) -> int:
-    """Calculate total score from completed steps. Skipped steps earn 0."""
+def _calculate_score(
+    completed_steps: List[int],
+    skipped_steps: List[int] = None,
+    quality_points: Dict[int, int] = None,
+) -> int:
+    """
+    Calculate total score from completed steps. Skipped steps earn 0.
+
+    The fallback is per step, not per session: a step with a quality score uses it,
+    and a step without one falls back to the flat STEP_SCORES value. So a session
+    that spans the change scores correctly on both halves, a session predating
+    quality scoring scores exactly as it did before, and no backfill is needed.
+
+    Args:
+        quality_points: step_number -> awarded_points from session_step_scores.
+    """
     skipped = set(skipped_steps) if skipped_steps else set()
+    quality = quality_points or {}
     unique_steps = set(completed_steps)
-    return sum(STEP_SCORES.get(step, 0) for step in unique_steps if step not in skipped)
+    return sum(
+        quality.get(step, STEP_SCORES.get(step, 0))
+        for step in unique_steps
+        if step not in skipped
+    )
+
+
+def upsert_step_score(
+    session_id: str,
+    step_number: int,
+    section_tag: str,
+    step_kind: str,
+    score: Dict,
+) -> bool:
+    """
+    Record (or replace) one step's quality score.
+
+    `score` is the dict produced by services.step_scoring — criteria, overall,
+    max_points, awarded_points, verification, ai_assisted.
+    """
+    if not is_lakebase_configured():
+        return False
+
+    if not 1 <= step_number <= MAX_STEP_NUMBER:
+        logger.error(f"Invalid step number for score: {step_number}")
+        return False
+
+    schema = get_schema()
+    now = datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')
+
+    try:
+        with get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                f"""
+                INSERT INTO {schema}.session_step_scores
+                    (session_id, step_number, section_tag, step_kind, criteria,
+                     overall, max_points, awarded_points, verification, ai_assisted,
+                     payload, created_at, updated_at)
+                VALUES (%s,%s,%s,%s,%s::jsonb,%s,%s,%s,%s,%s,%s::jsonb,%s,%s)
+                ON CONFLICT (session_id, step_number) DO UPDATE SET
+                    section_tag = EXCLUDED.section_tag,
+                    step_kind = EXCLUDED.step_kind,
+                    criteria = EXCLUDED.criteria,
+                    overall = EXCLUDED.overall,
+                    max_points = EXCLUDED.max_points,
+                    awarded_points = EXCLUDED.awarded_points,
+                    verification = EXCLUDED.verification,
+                    ai_assisted = EXCLUDED.ai_assisted,
+                    payload = EXCLUDED.payload,
+                    updated_at = EXCLUDED.updated_at
+                """,
+                (
+                    session_id, step_number, section_tag, step_kind,
+                    json.dumps(score.get('criteria', {})),
+                    score.get('overall', 0),
+                    score.get('max_points', 0),
+                    score.get('awarded_points', 0),
+                    score.get('verification', 'none'),
+                    score.get('ai_assisted', False),
+                    json.dumps(score.get('payload', {})),
+                    now, now,
+                ),
+            )
+            conn.commit()
+            cursor.close()
+            return True
+    except Exception as e:
+        # A lost score must not break step completion — the attendee keeps their
+        # progress and simply falls back to the flat points for that step.
+        logger.error(f"Error saving step score: {e}", exc_info=True)
+        return False
+
+
+def get_step_quality_points(session_ids: List[str]) -> Dict[str, Dict[int, int]]:
+    """
+    Fetch awarded points for many sessions at once.
+
+    Batched because the leaderboard scores every session in one pass; a per-session
+    query would turn one read into dozens.
+
+    Returns: session_id -> {step_number: awarded_points}
+    """
+    if not is_lakebase_configured() or not session_ids:
+        return {}
+
+    schema = get_schema()
+    try:
+        with get_connection() as conn:
+            cursor = _dict_cursor(conn)
+            cursor.execute(
+                f"""
+                SELECT session_id, step_number, awarded_points
+                FROM {schema}.session_step_scores
+                WHERE session_id = ANY(%s)
+                """,
+                (list(session_ids),),
+            )
+            rows = cursor.fetchall()
+            cursor.close()
+
+        out: Dict[str, Dict[int, int]] = {}
+        for row in rows:
+            out.setdefault(row['session_id'], {})[row['step_number']] = row['awarded_points']
+        return out
+    except Exception as e:
+        # Missing table (pre-migration) or a read error: fall back to flat scoring
+        # rather than showing an empty leaderboard.
+        logger.info(f"Quality points unavailable, using flat scores: {e}")
+        return {}
 
 
 def _get_chapter_status(completed_steps: List[int], skipped_steps: List[int] = None) -> tuple:
@@ -1473,10 +1694,17 @@ def get_leaderboard(limit: int = 10) -> List[Dict]:
             cursor.execute(query)
             rows = cursor.fetchall()
             cursor.close()
-            
+
+            # Fetch every session's quality scores in one read rather than per row.
+            # Empty for sessions predating quality scoring, which then fall back to
+            # the flat per-step points.
+            all_quality = get_step_quality_points(
+                [r.get('session_id') for r in rows if r.get('session_id')]
+            )
+
             # Aggregate by user - keep session with highest score
             user_scores = {}  # email -> {score, completed_steps, updated_at}
-            
+
             for row in rows:
                 email = row.get('created_by', '')
                 if not email:
@@ -1505,7 +1733,8 @@ def get_leaderboard(limit: int = 10) -> List[Dict]:
                 except:
                     skipped_steps = []
                 
-                score = _calculate_score(completed_steps, skipped_steps)
+                quality = all_quality.get(row.get('session_id'), {})
+                score = _calculate_score(completed_steps, skipped_steps, quality)
                 updated_at = row.get('updated_at')
                 
                 workshop_level = row.get('workshop_level')

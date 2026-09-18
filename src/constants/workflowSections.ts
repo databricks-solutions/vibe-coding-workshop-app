@@ -50,6 +50,7 @@ import type { LucideIcon } from 'lucide-react';
 export interface WorkflowStep {
   number: number;
   title: string;
+  description: string;
   icon: LucideIcon;
   color: string;
   sectionTag?: string;
@@ -228,176 +229,154 @@ export const WORKSHOP_LEVELS: Record<WorkshopLevel, LevelConfig> = {
     label: 'Databricks Apps',
     tooltip: 'Build and deploy a web app on Databricks Apps',
     description: 'Build and deploy a web application using Databricks Apps.',
-    sectionIds: ['define-usecase', 'databricks-app', 'iterate-enhance', 'cleanup'],
+    sectionIds: ['define-usecase', 'pre-work', 'databricks-app', 'iterate-enhance', 'cleanup'],
   },
   'app-database': {
     label: '+ Lakebase',
     tooltip: 'Add a PostgreSQL database to your web app',
     description: 'Connect your Databricks App to a PostgreSQL database for data persistence.',
-    sectionIds: ['define-usecase', 'databricks-app', 'lakebase', 'iterate-enhance', 'cleanup'],
+    sectionIds: ['define-usecase', 'pre-work', 'databricks-app', 'lakebase', 'iterate-enhance', 'cleanup'],
   },
   'lakehouse': {
     label: 'Lakehouse',
     tooltip: 'Build Bronze/Silver/Gold data pipelines',
     description: 'Build a Lakehouse data foundation with Bronze, Silver, and Gold layer pipelines.',
-    sectionIds: ['define-usecase', 'lakehouse', 'iterate-enhance', 'cleanup'],
+    sectionIds: ['define-usecase', 'pre-work', 'lakehouse', 'iterate-enhance', 'cleanup'],
   },
   'lakehouse-di': {
     label: '+ AI and Agents',
     tooltip: 'Add Genie Spaces, Agents & AI/BI Dashboards',
     description: 'Add AI capabilities with Genie Spaces, Agents & AI/BI Dashboards on top of your Lakehouse.',
-    sectionIds: ['define-usecase', 'lakehouse', 'data-intelligence', 'iterate-enhance', 'cleanup'],
+    sectionIds: ['define-usecase', 'pre-work', 'lakehouse', 'data-intelligence', 'iterate-enhance', 'cleanup'],
   },
   'end-to-end': {
     label: 'Complete Workshop',
     tooltip: 'All chapters: App, Database, Lakehouse & AI and Agents',
     description: 'The full end-to-end workshop covering every chapter — from Databricks App to AI and Agents.',
-    sectionIds: ['define-usecase', 'databricks-app', 'lakebase', 'lakehouse', 'data-intelligence', 'activation', 'iterate-enhance', 'cleanup'],
+    sectionIds: ['define-usecase', 'pre-work', 'databricks-app', 'lakebase', 'lakehouse', 'data-intelligence', 'activation', 'iterate-enhance', 'cleanup'],
   },
   'accelerator': {
     label: 'Data Product Accelerator',
     tooltip: 'Focus on Lakehouse + AI and Agents',
     description: 'Start with table metadata and build end-to-end Bronze/Silver/Gold layers that power your AI and agents.',
-    sectionIds: ['define-usecase', 'lakehouse', 'data-intelligence', 'iterate-enhance', 'cleanup'],
+    sectionIds: ['define-usecase', 'pre-work', 'lakehouse', 'data-intelligence', 'iterate-enhance', 'cleanup'],
   },
   'genie-accelerator': {
     label: 'Genie Accelerator',
     tooltip: 'Analyze silver metadata, build Gold layer, and create Genie Spaces',
     description: 'Analyze your silver layer metadata, design and build a Gold layer, then create Genie Spaces with Metric Views and TVFs.',
-    sectionIds: ['define-usecase', 'lakehouse', 'data-intelligence', 'iterate-enhance', 'cleanup'],
+    sectionIds: ['define-usecase', 'pre-work', 'lakehouse', 'data-intelligence', 'iterate-enhance', 'cleanup'],
   },
   'data-engineering-accelerator': {
     label: 'Data Engineering Accelerator',
     tooltip: 'Build Bronze/Silver/Gold data pipelines with best practices',
     description: 'Focus on building production-ready Bronze, Silver, and Gold data pipelines using Databricks Lakehouse best practices.',
-    sectionIds: ['define-usecase', 'lakehouse', 'iterate-enhance', 'cleanup'],
+    sectionIds: ['define-usecase', 'pre-work', 'lakehouse', 'iterate-enhance', 'cleanup'],
   },
   'skills-accelerator': {
     label: 'Agent Skills Accelerator',
     tooltip: 'Build a custom Agent Skill guided by your use case',
     description: 'Learn to build an Agent Skill following the agentskills.io standard — explore existing skills, define a strategy, generate SKILL.md, apply it, and validate.',
-    sectionIds: ['define-usecase', 'agent-skills', 'iterate-enhance', 'cleanup'],
+    sectionIds: ['define-usecase', 'pre-work', 'agent-skills', 'iterate-enhance', 'cleanup'],
   },
   'agents-accelerator': {
     label: 'Agents Accelerator',
     tooltip: 'Build, evaluate, and deploy a production agent app',
     description: 'Build a production-ready agent app — Databricks App + Lakebase + Mosaic AI Agent Framework + MLflow for Gen-AI lifecycle.',
-    sectionIds: ['define-usecase', 'databricks-app', 'lakebase', 'agents-on-apps', 'mlflow-genai', 'iterate-enhance', 'cleanup'],
+    sectionIds: ['define-usecase', 'pre-work', 'databricks-app', 'lakebase', 'agents-on-apps', 'mlflow-genai', 'iterate-enhance', 'cleanup'],
   },
   'reverse-lakehouse': {
     label: 'Lakehouse',
     tooltip: 'Build Bronze/Silver/Gold data pipelines (reverse ETL start)',
     description: 'Start with Lakehouse data engineering, then sync analytics into Lakebase.',
-    sectionIds: ['define-usecase', 'lakehouse', 'iterate-enhance', 'cleanup'],
+    sectionIds: ['define-usecase', 'pre-work', 'lakehouse', 'iterate-enhance', 'cleanup'],
   },
   'reverse-lakehouse-di': {
     label: '+ AI and Agents',
     tooltip: 'Add DI outputs on top of your Lakehouse (reverse ETL)',
     description: 'Build Gold layer analytics and Genie Spaces, then sync into Lakebase.',
-    sectionIds: ['define-usecase', 'lakehouse', 'data-intelligence', 'iterate-enhance', 'cleanup'],
+    sectionIds: ['define-usecase', 'pre-work', 'lakehouse', 'data-intelligence', 'iterate-enhance', 'cleanup'],
   },
   'reverse-lakebase': {
     label: '+ Lakebase (Synced)',
     tooltip: 'Sync Gold layer data into Lakebase via Synced Tables',
     description: 'Push curated analytics data into Lakebase PostgreSQL using Databricks Synced Tables.',
-    sectionIds: ['define-usecase', 'lakehouse', 'data-intelligence', 'activation', 'iterate-enhance', 'cleanup'],
+    sectionIds: ['define-usecase', 'pre-work', 'lakehouse', 'data-intelligence', 'activation', 'iterate-enhance', 'cleanup'],
   },
   'reverse-app': {
     label: '+ Analytics App',
     tooltip: 'Build an analytics-serving app on top of synced Lakebase data',
     description: 'Design and deploy an analytics application powered by synced Lakebase data.',
-    sectionIds: ['define-usecase', 'lakehouse', 'data-intelligence', 'activation', 'iterate-enhance', 'cleanup'],
+    sectionIds: ['define-usecase', 'pre-work', 'lakehouse', 'data-intelligence', 'activation', 'iterate-enhance', 'cleanup'],
   },
 };
 
 // Define all steps with their properties
 // IMPORTANT: sectionTag must match exactly with backend section_input_prompts.section_tag
 export const ALL_STEPS: Record<number, WorkflowStep> = {
-  // Step 1: Define Your Intent (standalone top-level section, not part of Foundation workflow)
-  1: { number: 1, title: 'Define Your Intent', icon: Sparkles, color: 'text-primary', sectionTag: 'usecase_selection' },
-  2: { number: 2, title: 'Set Up Project', icon: FolderGit2, color: 'text-orange-400', sectionTag: 'project_setup' },
-  3: { number: 3, title: 'PRD Generation', icon: FileText, color: 'text-indigo-400', sectionTag: 'prd_generation' },
-  
-  // Section: Chapter 1 - Databricks App (Steps 4-5)
-  4: { number: 4, title: 'UI Design', icon: Palette, color: 'text-purple-400', sectionTag: 'cursor_copilot_ui_design' },
-  5: { number: 5, title: 'Deploy App', icon: Rocket, color: 'text-green-400', sectionTag: 'deploy_databricks_app' },
-  
-  // Section: Chapter 2 - Lakebase (Steps 6-8)
-  6: { number: 6, title: 'Setup Lakebase', icon: Server, color: 'text-cyan-400', sectionTag: 'setup_lakebase' },
-  7: { number: 7, title: 'Wire UI to Lakebase', icon: Link2, color: 'text-teal-400', sectionTag: 'wire_ui_lakebase' },
-  8: { number: 8, title: 'Deploy and Test', icon: Play, color: 'text-lime-400', sectionTag: 'workspace_setup_deploy' },
-  
-  // Section: Chapter 3 - Lakehouse (Steps 9-14)
-  // NOTE: Step 9 only shows when Lakebase (Chapter 2) is in the workflow
-  9: { number: 9, title: 'Register Lakebase in UC', icon: Database, color: 'text-cyan-500', sectionTag: 'sync_from_lakebase' },
-  10: { number: 10, title: 'Bring your Metadata', icon: Table2, color: 'text-amber-400', sectionTag: 'bronze_table_metadata' },
-  11: { number: 11, title: 'Gold Layer Design', icon: GitBranch, color: 'text-yellow-400', sectionTag: 'gold_layer_design' },
-  12: { number: 12, title: 'Bronze Layer Creation', icon: FlaskConical, color: 'text-orange-400', sectionTag: 'bronze_layer_creation' },
-  13: { number: 13, title: 'Silver Layer', icon: Shield, color: 'text-slate-400', sectionTag: 'silver_layer_sdp' },
-  14: { number: 14, title: 'Gold Pipeline', icon: Merge, color: 'text-amber-500', sectionTag: 'gold_layer_pipeline' },
-  
-  // Section: Chapter 4 - AI and Agents (Steps 15-19)
-  15: { number: 15, title: 'Use-Case Plan', icon: BarChart3, color: 'text-violet-400', sectionTag: 'usecase_plan' },
-  16: { number: 16, title: 'AI/BI Dashboard', icon: LayoutDashboard, color: 'text-emerald-400', sectionTag: 'aibi_dashboard' },
-  17: { number: 17, title: 'Genie Space', icon: MessageSquareText, color: 'text-cyan-400', sectionTag: 'genie_space' },
-  18: { number: 18, title: 'Build Agent', icon: Bot, color: 'text-blue-400', sectionTag: 'agent_framework' },
-  19: { number: 19, title: 'Wire UI to Agent', icon: Plug, color: 'text-teal-400', sectionTag: 'wire_ui_agent' },
-  
-  // Section: Refinement (Steps 20-21)
-  20: { number: 20, title: 'Iterate & Enhance', icon: Rocket, color: 'text-pink-400', sectionTag: 'iterate_enhance' },
-  21: { number: 21, title: 'Redeploy & Test', icon: RefreshCw, color: 'text-red-400', sectionTag: 'redeploy_test' },
-
-  // Genie Accelerator - Step 22 (lives in Lakehouse section, only visible for genie-accelerator path)
-  22: { number: 22, title: 'Analyze Silver Metadata', icon: Search, color: 'text-amber-300', sectionTag: 'genie_silver_metadata' },
-
-  // Deployment & Optimization (Steps 23-25)
-  23: { number: 23, title: 'Deploy Assets', icon: Rocket, color: 'text-emerald-400', sectionTag: 'deploy_lakehouse_assets' },
-  24: { number: 24, title: 'Deploy Assets', icon: Rocket, color: 'text-violet-400', sectionTag: 'deploy_di_assets' },
-  25: { number: 25, title: 'Optimize Genie', icon: Sparkles, color: 'text-amber-400', sectionTag: 'optimize_genie' },
-
-  // Agent Skills Accelerator (Steps 26-30)
-  26: { number: 26, title: 'Explore Existing Skills', icon: BookOpen, color: 'text-violet-400', sectionTag: 'skill_install_explore' },
-  27: { number: 27, title: 'Define Skill Strategy', icon: FileText, color: 'text-indigo-400', sectionTag: 'skill_define_strategy' },
-  28: { number: 28, title: 'Create SKILL.md', icon: FileCode, color: 'text-purple-400', sectionTag: 'skill_create_skillmd' },
-  29: { number: 29, title: 'Apply & Test Skill', icon: Tag, color: 'text-teal-400', sectionTag: 'skill_apply_contracts' },
-  30: { number: 30, title: 'Validate & Automate', icon: ShieldCheck, color: 'text-emerald-400', sectionTag: 'skill_certify_tables' },
-
-  // Section: Clean Up (Step 31)
-  31: { number: 31, title: 'Workspace Clean Up', icon: Trash2, color: 'text-rose-400', sectionTag: 'workspace_cleanup' },
-
-  // Activation: Reverse ETL (Steps 32-37) - Only visible in reverse direction
-  32: { number: 32, title: 'Plan Synced Tables', icon: Table2, color: 'text-emerald-400', sectionTag: 'activation_table_design' },
-  33: { number: 33, title: 'Create Synced Tables', icon: RefreshCw, color: 'text-emerald-500', sectionTag: 'activation_reverse_sync' },
-  34: { number: 34, title: 'Design Analytics App', icon: Palette, color: 'text-emerald-400', sectionTag: 'activation_app_design' },
-  35: { number: 35, title: 'Build Analytics App', icon: Plug, color: 'text-emerald-500', sectionTag: 'activation_build_wire' },
-  36: { number: 36, title: 'Wire to Lakebase', icon: Link2, color: 'text-emerald-500', sectionTag: 'activation_wire_lakebase' },
-  37: { number: 37, title: 'Deploy & Validate', icon: Rocket, color: 'text-emerald-400', sectionTag: 'activation_deploy_validate' },
-
-  // Agents Accelerator — Agents on Apps (Steps 38-48)
-  // Steps 38 and 39 are the design phase; they produce docs/agent_spec.yaml and
-  // docs/agent_tool_plan.yaml so uc_resources_foundation (Step 40) can satisfy
-  // its require_prior_gate of "Agent tool plan ready".
-  38: { number: 38, title: 'Agent Spec Design', icon: FileText, color: 'text-sky-400', sectionTag: 'agent_spec_design' },
-  39: { number: 39, title: 'Agent Tool Selection', icon: Tag, color: 'text-sky-500', sectionTag: 'agent_tool_selection' },
-  40: { number: 40, title: 'UC Resources Foundation', icon: Database, color: 'text-blue-400', sectionTag: 'uc_resources_foundation' },
-  41: { number: 41, title: 'MLflow Tracing + UC OTel', icon: FlaskConical, color: 'text-blue-500', sectionTag: 'mlflow_agent_tracing_uc' },
-  42: { number: 42, title: 'Knowledge Assistant', icon: BookOpen, color: 'text-blue-400', sectionTag: 'knowledge_assistant_create' },
-  43: { number: 43, title: 'Clone + Framework', icon: GitBranch, color: 'text-blue-500', sectionTag: 'track_a_agent_app_clone_framework' },
-  44: { number: 44, title: 'Tools and MCP', icon: Plug, color: 'text-blue-400', sectionTag: 'track_a_agent_ka_genie_tools' },
-  45: { number: 45, title: 'Auth + Memory', icon: Shield, color: 'text-blue-500', sectionTag: 'track_a_agent_auth_memory' },
-  46: { number: 46, title: 'Smoke Eval + Deploy', icon: Rocket, color: 'text-blue-400', sectionTag: 'track_a_agent_eval_deploy' },
-  47: { number: 47, title: 'AppKit Agent Proxy', icon: Link2, color: 'text-blue-500', sectionTag: 'appkit_agent_app_proxy_chat' },
-  48: { number: 48, title: 'Chat Feedback to MLflow', icon: MessageSquareText, color: 'text-blue-400', sectionTag: 'appkit_chat_feedback_mlflow' },
-
-  // Agents Accelerator — MLflow for Gen-AI (Steps 49-56)
-  49: { number: 49, title: 'Prompt Registry', icon: BookOpen, color: 'text-violet-400', sectionTag: 'mlflow_prompt_registry' },
-  50: { number: 50, title: 'Evaluation Datasets', icon: Table2, color: 'text-violet-500', sectionTag: 'mlflow_evaluation_datasets' },
-  51: { number: 51, title: 'Scorers and Judges', icon: ShieldCheck, color: 'text-violet-400', sectionTag: 'mlflow_scorers_and_judges' },
-  52: { number: 52, title: 'Evaluation Runs + Iteration', icon: FlaskConical, color: 'text-violet-500', sectionTag: 'mlflow_evaluation_runs_and_iteration' },
-  53: { number: 53, title: 'Human Review + Sign-off', icon: Tag, color: 'text-violet-400', sectionTag: 'mlflow_human_review_and_signoff' },
-  54: { number: 54, title: 'Logged Model & UC Registration', icon: Database, color: 'text-violet-500', sectionTag: 'mlflow_logged_model_uc_registration' },
-  55: { number: 55, title: 'AI Gateway + Deployment', icon: Rocket, color: 'text-violet-400', sectionTag: 'mlflow_gateway_and_deployment' },
-  56: { number: 56, title: 'Production Monitoring + Debugging', icon: BarChart3, color: 'text-violet-500', sectionTag: 'mlflow_production_monitoring_and_debugging' },
+  1: { number: 1, title: 'Define Your Intent', description: 'Select a use case or define a custom scenario', icon: Sparkles, color: 'text-primary', sectionTag: 'usecase_selection' },
+  2: { number: 2, title: 'Set Up Project', description: 'Clone the template repository and configure for your workspace', icon: FolderGit2, color: 'text-orange-400', sectionTag: 'project_setup' },
+  3: { number: 3, title: 'PRD Generation', description: 'Generate a simple, focused PRD defining your application and its key high-value features', icon: FileText, color: 'text-indigo-400', sectionTag: 'prd_generation' },
+  4: { number: 4, title: 'UI Design', description: 'Build UI and backend APIs from PRD, then test locally before deployment', icon: Palette, color: 'text-purple-400', sectionTag: 'cursor_copilot_ui_design' },
+  5: { number: 5, title: 'Deploy App', description: 'Deploy your locally-tested application to Databricks Apps', icon: Rocket, color: 'text-green-400', sectionTag: 'deploy_databricks_app' },
+  6: { number: 6, title: 'Setup Lakebase', description: 'Create and deploy Lakebase database tables from your UI design document', icon: Server, color: 'text-cyan-400', sectionTag: 'setup_lakebase' },
+  7: { number: 7, title: 'Wire UI to Lakebase', description: 'Connect frontend to Lakebase backend, build locally, and test at localhost', icon: Link2, color: 'text-teal-400', sectionTag: 'wire_ui_lakebase' },
+  8: { number: 8, title: 'Deploy and Test', description: 'Deploy to Databricks Apps and run full end-to-end testing with live data', icon: Play, color: 'text-lime-400', sectionTag: 'workspace_setup_deploy' },
+  9: { number: 9, title: 'Register Lakebase in UC', description: 'Register Lakebase as a read-only Unity Catalog database catalog', icon: Database, color: 'text-cyan-500', sectionTag: 'sync_from_lakebase' },
+  10: { number: 10, title: 'Bring your Metadata', description: 'Extract table schema metadata from Databricks catalog', icon: Table2, color: 'text-amber-400', sectionTag: 'bronze_table_metadata' },
+  11: { number: 11, title: 'Gold Layer Design', description: 'Design Gold layer using project skills with YAML definitions and Mermaid ERD', icon: GitBranch, color: 'text-yellow-400', sectionTag: 'gold_layer_design' },
+  12: { number: 12, title: 'Bronze Layer Creation', description: 'Create Bronze layer by copying sample data from the landing zone', icon: FlaskConical, color: 'text-orange-400', sectionTag: 'bronze_layer_creation' },
+  13: { number: 13, title: 'Silver Layer', description: 'Create Silver layer using Spark Declarative Pipelines with centralized data quality controls', icon: Shield, color: 'text-slate-400', sectionTag: 'silver_layer_sdp' },
+  14: { number: 14, title: 'Gold Pipeline', description: 'Build Gold layer tables from YAML schemas with PK/FK constraints and merge from Silver', icon: Merge, color: 'text-amber-500', sectionTag: 'gold_layer_pipeline' },
+  15: { number: 15, title: 'Use-Case Plan', description: 'Generate operationalization plans for your use cases with YAML manifests and supporting TV/Metrics', icon: BarChart3, color: 'text-violet-400', sectionTag: 'usecase_plan' },
+  16: { number: 16, title: 'AI/BI Dashboard', description: 'Create an AI/BI Lakeview dashboard with KPIs, charts, and filters from Gold layer assets', icon: LayoutDashboard, color: 'text-emerald-400', sectionTag: 'aibi_dashboard' },
+  17: { number: 17, title: 'Genie Space', description: 'Build semantic layer with TVFs, Metric Views, and Genie Space for natural language queries', icon: MessageSquareText, color: 'text-cyan-400', sectionTag: 'genie_space' },
+  18: { number: 18, title: 'Build Agent', description: 'Build a multi-agent orchestrator with Genie integration, LLM rewrite, and web search', icon: Bot, color: 'text-blue-400', sectionTag: 'agent_framework' },
+  19: { number: 19, title: 'Wire UI to Agent', description: 'Connect your frontend UI to the Agent serving endpoint for end-to-end natural language automation', icon: Plug, color: 'text-teal-400', sectionTag: 'wire_ui_agent' },
+  20: { number: 20, title: 'Iterate & Enhance', description: 'Iterate on the application to add new features, update functionality, and improve performance', icon: Rocket, color: 'text-pink-400', sectionTag: 'iterate_enhance' },
+  21: { number: 21, title: 'Redeploy & Test', description: 'Build, deploy, and test with self-healing operations, then document the full reproducible setup', icon: RefreshCw, color: 'text-red-400', sectionTag: 'redeploy_test' },
+  22: { number: 22, title: 'Analyze Silver Metadata', description: 'Extract table/column metadata from your silver layer catalog', icon: Search, color: 'text-amber-300', sectionTag: 'genie_silver_metadata' },
+  23: { number: 23, title: 'Deploy Assets', description: 'Validate, deploy, and run Bronze, Silver, and Gold layer jobs in dependency order', icon: Rocket, color: 'text-emerald-400', sectionTag: 'deploy_lakehouse_assets' },
+  24: { number: 24, title: 'Deploy Assets', description: 'Deploy TVFs, Metric Views, Genie Spaces, and AI/BI Dashboards in dependency order', icon: Rocket, color: 'text-violet-400', sectionTag: 'deploy_di_assets' },
+  25: { number: 25, title: 'Optimize Genie', description: 'Systematically optimize Genie Space accuracy using benchmark evaluation and 6 common refinements', icon: Sparkles, color: 'text-amber-400', sectionTag: 'optimize_genie' },
+  26: { number: 26, title: 'Explore Existing Skills', description: 'Explore existing skills in your template repo and identify the gap your new skill will fill', icon: BookOpen, color: 'text-violet-400', sectionTag: 'skill_install_explore' },
+  27: { number: 27, title: 'Define Skill Strategy', description: 'Generate a comprehensive strategy for your Agent Skill based on your use case specification', icon: FileText, color: 'text-indigo-400', sectionTag: 'skill_define_strategy' },
+  28: { number: 28, title: 'Create SKILL.md', description: 'Generate the complete SKILL.md package with references and assets based on your skill strategy', icon: FileCode, color: 'text-purple-400', sectionTag: 'skill_create_skillmd' },
+  29: { number: 29, title: 'Apply & Test Skill', description: 'Save your generated skill to the project and test it against your target assets', icon: Tag, color: 'text-teal-400', sectionTag: 'skill_apply_contracts' },
+  30: { number: 30, title: 'Validate & Automate', description: 'Build a validation notebook and scheduled job to automate compliance checking for your skill', icon: ShieldCheck, color: 'text-emerald-400', sectionTag: 'skill_certify_tables' },
+  31: { number: 31, title: 'Workspace Clean Up', description: 'Safely delete all Databricks resources created during the workshop', icon: Trash2, color: 'text-rose-400', sectionTag: 'workspace_cleanup' },
+  32: { number: 32, title: 'Plan Synced Tables', description: 'Design which Gold assets to sync into Lakebase via Synced Tables, including keys, modes, and types', icon: Table2, color: 'text-emerald-400', sectionTag: 'activation_table_design' },
+  33: { number: 33, title: 'Create Synced Tables', description: 'Create Synced Tables from Gold layer into Lakebase using the Databricks REST API', icon: RefreshCw, color: 'text-emerald-500', sectionTag: 'activation_reverse_sync' },
+  34: { number: 34, title: 'Design Analytics App', description: 'Design analytics dashboards and exploration UI on top of synced Lakebase data', icon: Palette, color: 'text-emerald-400', sectionTag: 'activation_app_design' },
+  35: { number: 35, title: 'Build Analytics App', description: 'Build FastAPI + React analytics app with placeholder data and ConnectionStatus indicator', icon: Plug, color: 'text-emerald-500', sectionTag: 'activation_build_wire' },
+  36: { number: 36, title: 'Wire to Lakebase', description: 'Replace placeholder API data with real PostgreSQL queries against synced Lakebase tables', icon: Link2, color: 'text-emerald-500', sectionTag: 'activation_wire_lakebase' },
+  37: { number: 37, title: 'Deploy & Validate', description: 'Deploy analytics app to Databricks Apps and validate the full reverse ETL pipeline', icon: Rocket, color: 'text-emerald-400', sectionTag: 'activation_deploy_validate' },
+  38: { number: 38, title: 'Agent Spec Design', description: 'Author docs/agent_spec.yaml capturing the agent\'s purpose, personas, capabilities, model endpoint, MCP recommendations, eval seeds, and governance — before any code or Databricks resources are created', icon: FileText, color: 'text-sky-400', sectionTag: 'agent_spec_design' },
+  39: { number: 39, title: 'Agent Tool Selection', description: 'Author docs/agent_tool_plan.yaml — pin user-confirmed tool backends (managed MCPs, optional Knowledge Assistant, dynamic SQL MCP) and preserve the agent\'s model endpoint under a Gateway-ready runtime route', icon: Tag, color: 'text-sky-500', sectionTag: 'agent_tool_selection' },
+  40: { number: 40, title: 'UC Resources Foundation', description: 'Create the agent and ops Unity Catalog schemas plus managed volumes that downstream agent, tracing, memory, and monitoring steps depend on', icon: Database, color: 'text-blue-400', sectionTag: 'uc_resources_foundation' },
+  41: { number: 41, title: 'MLflow Tracing + UC OTel', description: 'Install MLflow tracing, create the experiment, and route GenAI trace data into governed Unity Catalog OTel tables', icon: FlaskConical, color: 'text-blue-500', sectionTag: 'mlflow_agent_tracing_uc' },
+  42: { number: 42, title: 'Knowledge Assistant', description: 'Create or sync a Databricks Knowledge Assistant so the agent has a governed document Q&A backend with citations', icon: BookOpen, color: 'text-blue-400', sectionTag: 'knowledge_assistant_create' },
+  43: { number: 43, title: 'Clone + Framework', description: 'Clone the canonical agent app template, install dependencies, run the local app, and wire module-level invoke and stream handlers', icon: GitBranch, color: 'text-blue-500', sectionTag: 'track_a_agent_app_clone_framework' },
+  44: { number: 44, title: 'Tools and MCP', description: 'Wire Knowledge Assistant, Genie Space, UC functions, and Lakebase domain tools as agent tools with the required app resource grants', icon: Plug, color: 'text-blue-400', sectionTag: 'track_a_agent_ka_genie_tools' },
+  45: { number: 45, title: 'Auth + Memory', description: 'Add service-principal and on-behalf-of-user authentication plus short-term and long-term Lakebase-backed agent memory', icon: Shield, color: 'text-blue-500', sectionTag: 'track_a_agent_auth_memory' },
+  46: { number: 46, title: 'Smoke Eval + Deploy', description: 'Run developer-loop smoke evaluations, deploy the agent to Databricks Apps, and verify it is queryable end-to-end', icon: Rocket, color: 'text-blue-400', sectionTag: 'track_a_agent_eval_deploy' },
+  47: { number: 47, title: 'AppKit Agent Proxy', description: 'Wire the AppKit dashboard to the deployed Agent App through a streaming proxy with service-principal and OBO auth', icon: Link2, color: 'text-blue-500', sectionTag: 'appkit_agent_app_proxy_chat' },
+  48: { number: 48, title: 'Chat Feedback to MLflow', description: 'Add chat history and thumbs feedback so end-user ratings are captured as MLflow trace assessments', icon: MessageSquareText, color: 'text-blue-400', sectionTag: 'appkit_chat_feedback_mlflow' },
+  49: { number: 49, title: 'Prompt Registry', description: 'Register the agent\'s prompts in Unity Catalog with git-style aliases (@production, @staging) for safe evaluation and promotion', icon: BookOpen, color: 'text-violet-400', sectionTag: 'mlflow_prompt_registry' },
+  50: { number: 50, title: 'Evaluation Datasets', description: 'Generate a benchmark table with coverage across agent journeys, seed examples, and expected outputs for repeatable evaluation', icon: Table2, color: 'text-violet-500', sectionTag: 'mlflow_evaluation_datasets' },
+  51: { number: 51, title: 'Scorers and Judges', description: 'Register built-in scorers, Guidelines, custom code scorers, and LLM judges with thresholds for the benchmark suite', icon: ShieldCheck, color: 'text-violet-400', sectionTag: 'mlflow_scorers_and_judges' },
+  52: { number: 52, title: 'Evaluation Runs + Iteration', description: 'Run the first scored eval, capture failure-shape classification, and route regressions to the right iteration path', icon: FlaskConical, color: 'text-violet-500', sectionTag: 'mlflow_evaluation_runs_and_iteration' },
+  53: { number: 53, title: 'Human Review + Sign-off', description: 'Run SME labeling, sync human assessments into benchmarks, and capture the stakeholder approval decision for promotion', icon: Tag, color: 'text-violet-400', sectionTag: 'mlflow_human_review_and_signoff' },
+  54: { number: 54, title: 'Logged Model & UC Registration', description: 'Optionally hand-author prompt improvements, then log and register the approved agent model in Unity Catalog', icon: Database, color: 'text-violet-500', sectionTag: 'mlflow_logged_model_uc_registration' },
+  55: { number: 55, title: 'AI Gateway + Deployment', description: 'Govern the registered agent behind AI Gateway, wire guardrails and rate limits, and automate promotion through Asset Bundles', icon: Rocket, color: 'text-violet-400', sectionTag: 'mlflow_gateway_and_deployment' },
+  56: { number: 56, title: 'Production Monitoring + Debugging', description: 'Configure continuous evaluation, SQL alerts, and agent-as-judge debugging that routes production failures to the right follow-up track', icon: BarChart3, color: 'text-violet-500', sectionTag: 'mlflow_production_monitoring_and_debugging' },
+  // Data pre-work (57-59). Appended rather than inserted at 2/3/4 because sessions store
+  // completed_steps as raw integers — renumbering would invalidate every stored session
+  // and every leaderboard standing. The section's POSITION in the workflow is set by
+  // sectionIds ordering, not by step number, so these still render early.
+  57: { number: 57, title: 'Data Source', description: 'Decide whether to build on data you already have, or generate a dataset for your use case', icon: Database, color: 'text-sky-400', sectionTag: 'data_source_decision' },
+  58: { number: 58, title: 'Data Model', description: 'Commit the minimum viable model: the entities, the grain of your main fact, and the story the data has to tell', icon: GitBranch, color: 'text-sky-500', sectionTag: 'data_model_design' },
+  59: { number: 59, title: 'Provision Data', description: 'Connect your existing tables, or generate a governed synthetic dataset in your own catalog', icon: HardDrive, color: 'text-sky-400', sectionTag: 'data_provision' },
 };
 
 // The logical sections with their step groupings (4-chapter structure + activation + skills)
@@ -413,6 +392,22 @@ export const WORKFLOW_SECTIONS: WorkflowSection[] = [
     bgColor: 'bg-blue-500/15',
     borderColor: 'border-blue-500/30',
     steps: [2, 3].map(n => ALL_STEPS[n]),
+  },
+  {
+    // Data pre-work. Sits between defining the intent and building anything, because
+    // every downstream chapter needs data: the app path currently tells the agent to
+    // invent "static mock data arrays", and the Lakebase path to invent its own seed
+    // rows. Deciding the data up front is what stops the assistant choosing it.
+    id: 'pre-work',
+    chapter: 'Foundation',
+    title: 'Your Data',
+    focus: 'Get a dataset that matches the use case you just defined',
+    description: 'Decide whether to build on data you already have or generate a dataset for your use case, commit the minimum viable data model, and provision it in your own catalog. Everything after this — the app, the Lakebase tables, and the Bronze/Silver/Gold pipelines — is built on what you choose here.',
+    icon: Database,
+    color: 'text-sky-400',
+    bgColor: 'bg-sky-500/15',
+    borderColor: 'border-sky-500/30',
+    steps: [57, 58, 59].map(n => ALL_STEPS[n]),
   },
   {
     id: 'databricks-app',

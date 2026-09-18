@@ -74,7 +74,8 @@ export interface GeneratedContent {
   expected_output_images?: ImageMetadata[];
   /** Which assistant variant supplied the prompt for this step ('__default__', 'genie-code', 'coda'). */
   coding_assistant_variant?: string;
-  source?: 'llm_generated' | 'mock_llm' | 'input_only_no_llm' | 'fallback_due_to_error';
+  /** 'static' means templated server-side with no LLM call — resolved instantly. */
+  source?: 'static' | 'llm_generated' | 'mock_llm' | 'input_only_no_llm' | 'fallback_due_to_error';
   model?: string;
   usage?: {
     prompt_tokens: number;
@@ -163,6 +164,97 @@ export interface SectionMetadata {
   expected_output_images: ImageMetadata[];
   /** Which assistant variant supplied the prompt for this step ('__default__', 'genie-code', 'coda'). */
   coding_assistant_variant?: string;
+}
+
+/**
+ * A step's ready-to-use content, resolved in one request.
+ *
+ * Most steps are static (templated, not generated), so `is_static` is true and
+ * `content` is populated immediately — no streaming, no waiting. When `is_static`
+ * is false the section genuinely calls an LLM and the caller should fall back to
+ * `generatePromptStream`.
+ */
+export interface StepContent extends SectionMetadata {
+  section_tag: string;
+  is_static: boolean;
+  content: string;
+  source: 'static' | 'llm_required';
+  /** How the step is presented. Defaults to 'instant_prompt' for untouched steps. */
+  step_kind?: StepKind;
+  step_config?: StepConfig;
+  /** The gate the coding agent reports when it finishes this step. */
+  gate_label?: string;
+}
+
+export type StepKind =
+  | 'instant_prompt'
+  | 'decision'
+  | 'prediction'
+  | 'verify'
+  | 'critique'
+  | 'composite';
+
+/** One input in a decision step. The `kind` picks the control to render. */
+export interface DecisionField {
+  key: string;
+  label: string;
+  kind: 'text' | 'list' | 'radio' | 'radio_per_row';
+  /** Enforced so a decision cannot be waved through with "idk". */
+  min_chars?: number;
+  max_items?: number;
+  options?: string[];
+  /**
+   * Example answer. For `list` fields, `|`-separate one example per row — an empty
+   * numbered box gives the attendee no idea what shape of answer is wanted.
+   */
+  placeholder?: string;
+  /** One line of guidance under the label, for fields where the label cannot say enough. */
+  hint?: string;
+  required?: boolean;
+}
+
+export interface StepConfig {
+  widget?: 'freeform' | 'choice_set';
+  fields?: DecisionField[];
+  rubric?: { criteria?: string[] };
+  /** verify steps */
+  check?: string;
+  blocking?: boolean;
+  escape_hatch_points_pct?: number;
+}
+
+/** What the attendee committed, keyed by field. Lists arrive as string[]. */
+export type DecisionValues = Record<string, string | string[]>;
+
+/**
+ * Outcome of one verification check.
+ *
+ * `ok: null` means the check could not be run (no permission, timeout, missing
+ * parameter). That is reported as 'unknown', never as failure — a permission gap
+ * must not block a room full of attendees.
+ */
+export interface VerificationCheck {
+  name: string;
+  ok: boolean | null;
+  detail: string;
+}
+
+export interface StepVerification {
+  status: 'pass' | 'fail' | 'unknown';
+  method: 'workspace' | 'agent_reported' | 'self_attested' | 'none';
+  checks: VerificationCheck[];
+  /** Human-actionable next step, e.g. "app exists but is STOPPED — start it". */
+  hint?: string;
+  cached_at?: string;
+  ttl_s?: number;
+}
+
+export interface DecisionReveal {
+  section_tag: string;
+  expert_answer: string;
+  source: 'static' | 'llm_generated' | 'unavailable';
+  committed: DecisionValues;
+  rubric?: { criteria?: string[] };
 }
 
 export interface SectionInput {
@@ -279,6 +371,12 @@ export interface LakehouseParams {
   catalog: string;
   schema_name: string;
   is_overridden: boolean;
+  /**
+   * Where the value came from. 'unset' means nothing chose a dataset for this use case,
+   * so catalog/schema are the product default and almost certainly wrong — a use case
+   * the attendee defined themselves has no dataset of its own.
+   */
+  dataset_status?: 'session' | 'use_case' | 'unset';
 }
 
 // ============== Session Types ==============
@@ -733,6 +831,177 @@ class ApiClient {
     const params = new URLSearchParams({ industry, use_case: useCase });
     if (sessionId) params.set('session_id', sessionId);
     return this.fetch<SectionMetadata>(`/section-metadata/${encodeURIComponent(sectionTag)}?${params}`);
+  }
+
+  /**
+   * Get a step's content in one request.
+   *
+   * Static steps resolve instantly here; only genuinely generative sections need
+   * `generatePromptStream` afterwards (check `is_static`).
+   */
+  async getStepContent(
+    sectionTag: string,
+    industry: string = '',
+    useCase: string = '',
+    sessionId?: string | null
+  ): Promise<StepContent> {
+    const params = new URLSearchParams({ industry, use_case: useCase });
+    if (sessionId) params.set('session_id', sessionId);
+    return this.fetch<StepContent>(`/step/${encodeURIComponent(sectionTag)}/content?${params}`);
+  }
+
+  /**
+   * Commit a decision and get the expert answer back.
+   *
+   * The answer is deliberately not part of `getStepContent`: it is served only
+   * after a commitment is recorded, so the attendee cannot read the expert view
+   * and then backfill a matching choice.
+   */
+  async revealStepExpertAnswer(
+    sectionTag: string,
+    decision: DecisionValues,
+    industry: string = '',
+    useCase: string = '',
+    sessionId?: string | null,
+    stepNumber?: number
+  ): Promise<DecisionReveal> {
+    return this.fetch<DecisionReveal>(`/step/${encodeURIComponent(sectionTag)}/reveal`, {
+      method: 'POST',
+      body: JSON.stringify({
+        industry,
+        use_case: useCase,
+        session_id: sessionId ?? null,
+        step_number: stepNumber ?? null,
+        decision,
+      }),
+    });
+  }
+
+  /**
+   * Streaming twin of revealStepExpertAnswer.
+   *
+   * The reveal is the one place in the workshop where the attendee is actively
+   * waiting on a model, so first words matter more than total time. Callers should
+   * fall back to the JSON endpoint on error — a reveal must never be lost just
+   * because a stream broke.
+   *
+   * Returns an AbortController so an unmounting panel can cancel in flight.
+   */
+  revealStepExpertAnswerStream(
+    sectionTag: string,
+    decision: DecisionValues,
+    onContent: (chunk: string) => void,
+    onComplete: (source?: string) => void,
+    onError: (error: string) => void,
+    industry: string = '',
+    useCase: string = '',
+    sessionId?: string | null,
+    stepNumber?: number
+  ): AbortController {
+    const controller = new AbortController();
+
+    (async () => {
+      try {
+        const response = await fetch(
+          `${this.baseUrl}/step/${encodeURIComponent(sectionTag)}/reveal/stream`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              industry,
+              use_case: useCase,
+              session_id: sessionId ?? null,
+              step_number: stepNumber ?? null,
+              decision,
+            }),
+            signal: controller.signal,
+          }
+        );
+
+        if (!response.ok) {
+          throw new Error(`API error: ${response.status}`);
+        }
+
+        const reader = response.body?.getReader();
+        if (!reader) {
+          throw new Error('No response body');
+        }
+
+        const decoder = new TextDecoder();
+        let source: string | undefined;
+        let buffer = '';
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) {
+            onComplete(source);
+            break;
+          }
+
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split('\n');
+          buffer = lines.pop() || '';
+
+          for (const line of lines) {
+            if (!line.startsWith('data: ')) continue;
+            const jsonStr = line.slice(6).trim();
+            if (!jsonStr || jsonStr === '[DONE]') continue;
+
+            try {
+              const data = JSON.parse(jsonStr);
+              if (data.type === 'start') {
+                source = data.source || 'llm_generated';
+              } else if (data.type === 'content' && data.content) {
+                onContent(data.content);
+              } else if (data.type === 'done') {
+                onComplete(data.source || source);
+                return;
+              } else if (data.type === 'error') {
+                onError(data.error || 'Unknown error');
+                return;
+              }
+              // 'meta', 'retry' and 'warning' are intentionally ignored here: the
+              // panel shows the answer, not the app's endpoint bookkeeping.
+            } catch {
+              // Skip malformed JSON chunks
+            }
+          }
+        }
+      } catch (err) {
+        if ((err as Error).name !== 'AbortError') {
+          onError((err as Error).message || 'Streaming failed');
+        }
+      }
+    })();
+
+    return controller;
+  }
+
+  /**
+   * Decisions already committed in this session, keyed by section_tag.
+   * Used to restore a decision step's locked-in state after a refresh.
+   */
+  async getSessionDecisions(
+    sessionId: string
+  ): Promise<{ session_id: string; decisions: Record<string, { decision: DecisionValues; committed_at: string }> }> {
+    return this.fetch(`/session/${encodeURIComponent(sessionId)}/decisions`);
+  }
+
+  /**
+   * Ask the app to confirm a step's artifact really exists in the workspace.
+   *
+   * Advisory by default: a 'fail' or 'unknown' result informs the attendee but does
+   * not prevent them completing the step.
+   */
+  async verifyStep(
+    sectionTag: string,
+    sessionId?: string | null,
+    force = false
+  ): Promise<StepVerification> {
+    return this.fetch<StepVerification>(`/step/${encodeURIComponent(sectionTag)}/verify`, {
+      method: 'POST',
+      body: JSON.stringify({ session_id: sessionId ?? null, force }),
+    });
   }
 
   /** Get workflow steps configuration */

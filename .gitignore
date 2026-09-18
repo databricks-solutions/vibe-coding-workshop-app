@@ -48,3 +48,6 @@ tests/e2e/report/
 venv/
 .venv/
 .venv-test/
+# Synthetic data generation runs on Python 3.12 with a pinned databricks-connect,
+# so it cannot share the app's 3.11 venv. See docs/synthetic_data_setup.md.
+.venv-datagen/
