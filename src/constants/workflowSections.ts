@@ -407,7 +407,7 @@ export const WORKFLOW_SECTIONS: WorkflowSection[] = [
     color: 'text-sky-400',
     bgColor: 'bg-sky-500/15',
     borderColor: 'border-sky-500/30',
-    steps: visibleStepNumbers([57, 58, 59]).map(n => ALL_STEPS[n]),
+    steps: [57, 58, 59].map(n => ALL_STEPS[n]),
   },
   {
     id: 'databricks-app',
