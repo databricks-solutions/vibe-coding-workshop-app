@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { Sparkles, Loader2, RefreshCw, SkipForward, Undo2, CheckCircle, Workflow } from 'lucide-react';
+import { Sparkles, Loader2, RefreshCw, SkipForward, Undo2, CheckCircle } from 'lucide-react';
 import { MarkdownContent, type MarkdownContentRef } from './MarkdownContent';
 import { CopyButton } from './CopyButton';
 import { ExpandableOutputModal } from './ExpandableOutputModal';
@@ -10,7 +10,16 @@ import { ImageGallery } from './ImageGallery';
 import { useCopyToClipboard } from '../hooks/useCopyToClipboard';
 import { colorClasses } from '../constants/colorClasses';
 import type { ColorType } from '../constants/colorClasses';
-import { apiClient, type GeneratedContent } from '../api/client';
+import {
+  apiClient,
+  type GeneratedContent,
+  type StepKind,
+  type StepConfig,
+  type DecisionValues,
+} from '../api/client';
+import { DecisionPanel } from './steps/DecisionPanel';
+import { VerifyPanel } from './steps/VerifyPanel';
+import { StepTabs, type StepTabId } from './steps/StepTabs';
 import { VerificationLinks } from './VerificationLinks';
 import { SkillBlueprintTab, SkillBlueprintFullScreenModal } from './SkillBlueprintTab';
 import { useSkillBlueprint } from '../hooks/useSkillBlueprint';
@@ -114,13 +123,25 @@ export function WorkflowStep({
   const [isStreaming, setIsStreaming] = useState(false);
   const [streamedPrompt, setStreamedPrompt] = useState('');
   const [truncationWarning, setTruncationWarning] = useState<string | null>(null);
+  // null until the step's content is resolved; true for templated steps, which need
+  // no Generate click because there is nothing to generate.
+  const [isStaticStep, setIsStaticStep] = useState<boolean | null>(null);
+  // Decision steps: how the step is presented, and what the attendee committed to.
+  const [stepKind, setStepKind] = useState<StepKind>('instant_prompt');
+  const [stepConfig, setStepConfig] = useState<StepConfig | null>(null);
+  const [committedDecision, setCommittedDecision] = useState<DecisionValues | null>(null);
+  // Verify steps: whether the artifact was confirmed (or self-attested). Advisory —
+  // it surfaces a badge but never gates Done.
+  const [isVerified, setIsVerified] = useState(false);
   
   const [showGeneratedPrompt, setShowGeneratedPrompt] = useState(false);
-  const [activeTab, setActiveTab] = useState<'prompt' | 'how_to_apply' | 'expected_output' | 'skill_blueprint'>('prompt');
+  const [activeTab, setActiveTab] = useState<StepTabId>('prompt');
   const { copied, handleCopy } = useCopyToClipboard();
   
   const skillBlueprint = useSkillBlueprint(sectionTag);
-  const skillAnimPlayedRef = useRef(false);
+  // Play the skills-navigator intro animation once per mount. This is read during
+  // render to pick a prop, so it has to be state rather than a ref.
+  const [skillAnimPlayed, setSkillAnimPlayed] = useState(false);
 
   // Handle Mark Complete - collapse content
   const handleMarkComplete = () => {
@@ -282,32 +303,62 @@ export function WorkflowStep({
     return () => clearInterval(interval);
   }, [isStreaming, onPromptGenerated, stepNumber]);
 
-  // Fetch metadata (how_to_apply, expected_output, images) only when step is expanded
-  useEffect(() => {
-    if (!isExpanded || metadataFetchedRef.current) return;
-    if (!initialPrompt || !industry || !useCase) return;
-    if (generatedContent?.how_to_apply) return;
+  // Load step content as soon as the step is expanded.
+  //
+  // Most steps are static: their text is templated server-side, not generated, so
+  // there is nothing to wait for. Those render immediately here — no Generate click,
+  // no spinner. Only genuinely generative sections (is_static === false) still need
+  // the Generate button, and for those this call just primes the metadata tabs.
+  const loadStepContent = useCallback((force = false) => {
+    if (!industry || !useCase) return;
 
-    metadataFetchedRef.current = true;
     setIsLoadingMetadata(true);
-    apiClient.getSectionMetadata(sectionTag, industry, useCase, sessionId)
-      .then(meta => {
-        setGeneratedContent(prev => ({
-          ...prev!,
-          how_to_apply: meta.how_to_apply || '',
-          expected_output: meta.expected_output || '',
-          how_to_apply_images: meta.how_to_apply_images || [],
-          expected_output_images: meta.expected_output_images || [],
-          coding_assistant_variant: meta.coding_assistant_variant,
-        }));
+    apiClient.getStepContent(sectionTag, industry, useCase, sessionId)
+      .then(step => {
+        setIsStaticStep(step.is_static);
+        setStepKind(step.step_kind ?? 'instant_prompt');
+        setStepConfig(step.step_config ?? null);
+        setGeneratedContent(prev => {
+          const base: GeneratedContent = prev ?? { prompt: '', input: '', source: 'llm_generated' };
+          return {
+            ...base,
+            how_to_apply: step.how_to_apply || '',
+            expected_output: step.expected_output || '',
+            how_to_apply_images: step.how_to_apply_images || [],
+            expected_output_images: step.expected_output_images || [],
+            coding_assistant_variant: step.coding_assistant_variant,
+            ...(step.is_static
+              ? { prompt: step.content, source: 'static' as const }
+              : {}),
+          };
+        });
+
+        // Static content is ready to use straight away. Persist it so it survives a
+        // refresh and can chain into later steps via previousOutputs, exactly as
+        // generated prompts do. `force` re-reads after a decision is committed, when
+        // the previously rendered text still held the raw {token} placeholders.
+        if (step.is_static && step.content && (force || !initialPrompt)) {
+          setStreamedPrompt(step.content);
+          setShowGeneratedPrompt(true);
+          if (onPromptGenerated && stepNumber) {
+            onPromptGenerated(stepNumber, step.content);
+          }
+        }
         setIsLoadingMetadata(false);
       })
       .catch(err => {
-        console.error('Failed to fetch section metadata:', err);
+        console.error('Failed to load step content:', err);
         metadataFetchedRef.current = false;
         setIsLoadingMetadata(false);
       });
-  }, [isExpanded, initialPrompt, industry, useCase, sectionTag, sessionId]);
+  }, [industry, useCase, sectionTag, sessionId, initialPrompt, onPromptGenerated, stepNumber]);
+
+  useEffect(() => {
+    if (!isExpanded || metadataFetchedRef.current) return;
+    if (!industry || !useCase) return;
+    metadataFetchedRef.current = true;
+    loadStepContent();
+  }, [isExpanded, industry, useCase, loadStepContent]);
 
   // Use streamed content when available, otherwise fall back to generated content
   const promptText = streamedPrompt || generatedContent?.prompt || '';
@@ -325,11 +376,41 @@ export function WorkflowStep({
   };
 
   const hasPrompt = !title.includes('Branding & Design Iteration') && !title.includes('Final Interactive Demo Experience');
-  const showGenerateButton = hasPrompt && !isSkipped;
+  // Static steps render their content on expand, so a Generate button would be a
+  // no-op that only adds a click. Show it only where a model is really invoked.
+  const showGenerateButton = hasPrompt && !isSkipped && isStaticStep === false;
   const isPrdStep = sectionTag === 'prd_generation';
-  
+
+  const isDecisionStep = stepKind === 'decision' && !!stepConfig?.fields?.length;
+  const isVerifyStep = stepKind === 'verify' && !!stepConfig?.check;
+
   const isPromptComplete = showGeneratedPrompt && !isStreaming && !isLoadingPrompt && !!promptText;
+
+  // A decision step is not finished until the attendee has actually made the call;
+  // otherwise it collapses back into a step you click past.
+  const isDecisionSatisfied = !isDecisionStep || committedDecision !== null;
   
+  /**
+   * Refresh the prompt once the attendee commits.
+   *
+   * Their committed values are substituted into the prompt server-side, so whatever was
+   * rendered *before* they decided is stale — on a static step it still contains the raw
+   * {in_scope_tables} style tokens, because the commitment had not reached
+   * session_parameters when the text was first fetched.
+   *
+   * Static steps re-read the substituted text; generative steps re-run the model. Either
+   * way the attendee does not have to notice a Generate button after deciding, which is
+   * exactly the busywork this rework removes.
+   */
+  const handleDecisionCommitted = useCallback((values: DecisionValues) => {
+    setCommittedDecision(values);
+    if (isStaticStep === false) {
+      if (!isStreaming && !isLoadingPrompt) handleGeneratePrompt();
+    } else if (isStaticStep === true) {
+      loadStepContent(true);
+    }
+  }, [isStaticStep, isStreaming, isLoadingPrompt, handleGeneratePrompt, loadStepContent]);
+
   // Determine why the Generate button might be disabled
   const prerequisiteReason = !isPreviousStepComplete
     ? 'Complete the previous steps first'
@@ -340,7 +421,7 @@ export function WorkflowStep({
   const canClickGeneratePrompt = isPreviousStepComplete && industry && useCase && !showGeneratedPrompt && !isLoadingPrompt && !isStreaming && !generateDisabledReason;
   
   // Mark Complete button is enabled only if prompt is fully generated for this step
-  const canClickMarkComplete = isPromptComplete && !isComplete;
+  const canClickMarkComplete = isPromptComplete && isDecisionSatisfied && !isComplete;
 
   return (
     <div className={`${containerClasses} ${isExpanded ? 'ring-1 ring-primary/30' : ''}`}>
@@ -362,6 +443,14 @@ export function WorkflowStep({
             </h3>
             {isComplete && (
               <span className="text-emerald-400 text-ui-xs font-medium bg-emerald-900/30 px-1.5 py-0.5 rounded">✓ Done</span>
+            )}
+            {isVerified && (
+              <span
+                className="text-ui-2xs font-medium px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-300 border border-emerald-500/30"
+                title="This step's artifact was confirmed to exist"
+              >
+                Verified
+              </span>
             )}
             {isStreaming && !isExpanded && retryStatus && (
               <span className="text-ui-2xs font-medium px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-400 animate-pulse inline-flex items-center gap-1">
@@ -494,69 +583,31 @@ export function WorkflowStep({
             />
           )}
 
-      {showGeneratedPrompt && (isStreaming || streamedPrompt || generatedContent) && (
-        <div className="mt-4 bg-secondary/40 rounded-lg border border-border overflow-hidden">
-          {/* Tabs - Clean minimal styling */}
-          <div className="flex border-b border-border">
-            <button
-              onClick={() => setActiveTab('prompt')}
-              className={`flex-1 px-3 py-2 text-ui-sm font-medium transition-all ${
-                activeTab === 'prompt'
-                  ? 'text-foreground bg-secondary/60 border-b-2 border-primary -mb-[1px]'
-                  : 'text-muted-foreground hover:text-foreground hover:bg-secondary/40'
-              }`}
-            >
-              Generated Prompt
-            </button>
-            <button
-              onClick={() => setActiveTab('how_to_apply')}
-              className={`flex-1 px-3 py-2 text-ui-sm font-medium transition-all ${
-                activeTab === 'how_to_apply'
-                  ? 'text-foreground bg-secondary/60 border-b-2 border-emerald-500 -mb-[1px]'
-                  : 'text-muted-foreground hover:text-foreground hover:bg-secondary/40'
-              }`}
-            >
-              How to Apply
-            </button>
-            <button
-              onClick={() => setActiveTab('expected_output')}
-              className={`flex-1 px-3 py-2 text-ui-sm font-medium transition-all ${
-                activeTab === 'expected_output'
-                  ? 'text-foreground bg-secondary/60 border-b-2 border-amber-500 -mb-[1px]'
-                  : 'text-muted-foreground hover:text-foreground hover:bg-secondary/40'
-              }`}
-            >
-              <CheckCircle className="w-3.5 h-3.5 inline mr-1" /> Verify Results
-            </button>
-            {skillBlueprint && (
-              <button
-                onClick={() => setActiveTab('skill_blueprint')}
-                className={`flex-1 px-3 py-2 text-ui-sm font-medium transition-all ${
-                  activeTab === 'skill_blueprint'
-                    ? 'text-foreground bg-secondary/60 border-b-2 border-cyan-500 -mb-[1px]'
-                    : 'text-muted-foreground hover:text-foreground hover:bg-secondary/40'
-                }`}
-              >
-                <Workflow className="w-3.5 h-3.5 inline mr-1" /> Agent Skills Navigator
-              </button>
-            )}
-          </div>
+      {/* Decision steps ask for the attendee's call before showing the prompt, so this
+          sits above the tabs and gates the Done button below. */}
+      {isExpanded && isDecisionStep && stepConfig && (
+        <div className="mt-4 bg-secondary/40 rounded-lg border border-border p-4">
+          <DecisionPanel
+            sectionTag={sectionTag}
+            stepConfig={stepConfig}
+            industry={industry}
+            useCase={useCase}
+            sessionId={sessionId}
+            stepNumber={stepNumber}
+            initialCommitted={committedDecision}
+            onCommitted={handleDecisionCommitted}
+            readOnly={readOnly}
+          />
+        </div>
+      )}
 
-          {/* Content */}
-          <div className="p-3">
-            <div className="flex items-center justify-between mb-2">
-              <span className={`text-ui-sm font-medium ${
-                activeTab === 'prompt' ? 'text-primary' : 
-                activeTab === 'how_to_apply' ? 'text-emerald-400' :
-                activeTab === 'skill_blueprint' ? 'text-cyan-400' : 'text-amber-400'
-              }`}>
-                {activeTab === 'prompt' && '💡 Generated Prompt:'}
-                {activeTab === 'how_to_apply' && '🚀 Steps to Apply:'}
-                {activeTab === 'expected_output' && '✅ Verify Your Results:'}
-                {activeTab === 'skill_blueprint' && '⚡ How the Agent Skills Navigator Powers This Prompt:'}
-              </span>
-              {/* Action buttons for all tabs */}
-              <div className="flex items-center gap-2">
+      {showGeneratedPrompt && (isStreaming || streamedPrompt || generatedContent) && (
+        <StepTabs
+          activeTab={activeTab}
+          onTabChange={setActiveTab}
+          showSkillBlueprint={!!skillBlueprint}
+          actions={
+            <>
                 {/* Review button - show for all tabs when content is available */}
                 {activeTab === 'prompt' && !isPrdStep && !isStreaming && !isLoadingPrompt && promptText && (
                   <>
@@ -596,8 +647,9 @@ export function WorkflowStep({
                     title={`${title} - Agent Skills Navigator`}
                   />
                 )}
-              </div>
-            </div>
+            </>
+          }
+        >
             {activeTab === 'prompt' && (
               isLoadingPrompt && !promptText ? (
                 <div className="flex items-center gap-2 py-4 text-muted-foreground">
@@ -660,6 +712,18 @@ export function WorkflowStep({
                 </div>
               ) : (
                 <>
+                  {/* For verify steps the app checks the workspace itself, so the
+                      automated result sits above the manual links. */}
+                  {isVerifyStep && (
+                    <div className="mb-3">
+                      <VerifyPanel
+                        sectionTag={sectionTag}
+                        sessionId={sessionId || null}
+                        onVerified={() => setIsVerified(true)}
+                        readOnly={readOnly}
+                      />
+                    </div>
+                  )}
                   <VerificationLinks sectionTag={sectionTag} sessionId={sessionId || null} />
                   {/* Images for Expected Output */}
                   {Array.isArray(generatedContent?.expected_output_images) && generatedContent.expected_output_images.length > 0 && (
@@ -680,12 +744,11 @@ export function WorkflowStep({
             {activeTab === 'skill_blueprint' && skillBlueprint && (
               <SkillBlueprintTab
                 config={skillBlueprint}
-                shouldAnimate={!skillAnimPlayedRef.current}
-                onMounted={() => { skillAnimPlayedRef.current = true; }}
+                shouldAnimate={!skillAnimPlayed}
+                onMounted={() => setSkillAnimPlayed(true)}
               />
             )}
-          </div>
-        </div>
+        </StepTabs>
       )}
 
           {/* Footer bar: Skip + Mark Done (read-only shows status only) */}
@@ -730,13 +793,21 @@ export function WorkflowStep({
                     <CheckCircle className="w-3.5 h-3.5" /> Done
                   </div>
                 ) : !readOnly ? (
-                  <BorderBeamButton
-                    active={canClickMarkComplete}
-                    onClick={(e) => { e.stopPropagation(); handleMarkComplete(); }}
-                    disabled={!canClickMarkComplete}
+                  <div
+                    title={
+                      !isDecisionSatisfied
+                        ? 'Make your call above before marking this step done'
+                        : undefined
+                    }
                   >
-                    Done
-                  </BorderBeamButton>
+                    <BorderBeamButton
+                      active={canClickMarkComplete}
+                      onClick={(e) => { e.stopPropagation(); handleMarkComplete(); }}
+                      disabled={!canClickMarkComplete}
+                    >
+                      Done
+                    </BorderBeamButton>
+                  </div>
                 ) : null}
               </div>
             </div>

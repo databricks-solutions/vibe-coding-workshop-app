@@ -10,6 +10,12 @@ Commands:
     uninstall   Tear down all provisioned resources
 """
 
+# Defer annotation evaluation so `X | None` hints work on Python 3.9, which the
+# README lists as supported and which is the system python3 on macOS. Without this,
+# 3.9 evaluates the annotation at def time and raises
+# "TypeError: unsupported operand type(s) for |" before the CLI can even start.
+from __future__ import annotations
+
 import argparse
 import json
 import os
@@ -255,7 +261,7 @@ def get_placeholder_map(config: dict) -> dict:
         "__LAKEBASE_USER__": user.get("email", ""),
         "__LAKEBASE_UC_CATALOG__": lb.get("uc_catalog", lb.get("catalog", "") + "_lakebase"),
         "__APP_NAME__": app.get("name", ""),
-        "__SERVING_ENDPOINT__": app.get("serving_endpoint", "databricks-claude-sonnet-4-5"),
+        "__SERVING_ENDPOINT__": app.get("serving_endpoint", "databricks-claude-sonnet-4-6"),
         "__DEFAULT_WAREHOUSE__": lb.get("warehouse", ""),
         "__ENDPOINT_NAME__": lb.get("endpoint_name", ""),
         "__LAKEBASE_MODE__": lb.get("mode", "autoscaling"),
@@ -609,7 +615,7 @@ def cmd_install(args):
         "instance_name": existing_config.get("lakebase", {}).get("instance_name", "vibe-coding-workshop-lakebase"),
         "catalog": existing_config.get("lakebase", {}).get("catalog", "vibe_coding_workshop_catalog"),
         "schema": existing_config.get("lakebase", {}).get("schema", "vibe_coding_workshop"),
-        "endpoint": existing_config.get("app", {}).get("serving_endpoint", "databricks-claude-sonnet-4-5"),
+        "endpoint": existing_config.get("app", {}).get("serving_endpoint", "databricks-claude-sonnet-4-6"),
         "warehouse": existing_config.get("lakebase", {}).get("warehouse", ""),
         "lakebase_mode": existing_config.get("lakebase", {}).get("mode", "autoscaling"),
         "min_cu": existing_config.get("lakebase", {}).get("min_cu", "0.5"),
@@ -983,6 +989,14 @@ def preflight_lakebase_name(config: dict) -> dict:
     if state is None:
         return config
 
+    # A live project under our own name is this install's project, not a clash.
+    # Renaming here would point the bundle at a name its state doesn't know, and it
+    # would then plan to destroy and recreate the real project — losing every
+    # session and leaderboard standing in it. Only a name stuck in the post-delete
+    # retention window is a genuine blocker, because it cannot be reused yet.
+    if not state["deleted"]:
+        return config
+
     suggestion = f"{slug}-{int(time.time())}"
     for n in range(2, 12):
         cand = f"{slug}-v{n}"
@@ -991,12 +1005,9 @@ def preflight_lakebase_name(config: dict) -> dict:
             break
 
     print()
-    if state["deleted"]:
-        warn(f"Lakebase project name '{slug}' is in a post-delete retention window.")
-        if state["purge_time"]:
-            print(f"  The name frees up on {CYAN}{state['purge_time']}{NC} and can't be reused until then.")
-    else:
-        warn(f"Lakebase project name '{slug}' already exists in this workspace.")
+    warn(f"Lakebase project name '{slug}' is in a post-delete retention window.")
+    if state["purge_time"]:
+        print(f"  The name frees up on {CYAN}{state['purge_time']}{NC} and can't be reused until then.")
 
     new_name = suggestion
     if sys.stdin.isatty():

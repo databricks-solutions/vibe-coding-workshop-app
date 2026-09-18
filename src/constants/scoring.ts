@@ -28,8 +28,8 @@ export const STEP_SCORES: Record<number, number> = {
   31: 10,
   // Agents Accelerator — Agents on Apps (steps 38-46): 50 points each
   38: 50, 39: 50, 40: 50, 41: 50, 42: 50, 43: 50, 44: 50, 45: 50, 46: 50,
-  // Agents Accelerator — MLflow for Gen-AI (steps 47-54): 50 points each
-  47: 50, 48: 50, 49: 50, 50: 50, 51: 50, 52: 50, 53: 50, 54: 50,
+  // Agents Accelerator — MLflow for Gen-AI (steps 47-56): 50 points each
+  47: 50, 48: 50, 49: 50, 50: 50, 51: 50, 52: 50, 53: 50, 54: 50, 55: 50, 56: 50,
 };
 
 // Chapter definitions for milestone detection

@@ -56,6 +56,36 @@ else
     exit 1
 fi
 
+# Prefer an interpreter that already has a Postgres driver, so we never reach for
+# pip. The default python3 is often the system one (3.9 on macOS) with no driver,
+# and installing it needs PyPI — which fails outright behind a proxy that
+# intercepts TLS ("SSLV3_ALERT_HANDSHAKE_FAILURE"). A project venv, or any newer
+# interpreter the user already provisioned, usually has psycopg present.
+# VIBE2VALUE_PYTHON overrides everything for the awkward cases.
+_has_pg_driver() {
+    "$1" -c "import psycopg" >/dev/null 2>&1 || "$1" -c "import psycopg2" >/dev/null 2>&1
+}
+
+# PROJECT_ROOT is assigned further down, so derive the repo root locally here.
+_repo_root="$(cd "$(dirname "$0")/.." && pwd)"
+
+if [ -n "${VIBE2VALUE_PYTHON:-}" ] && _has_pg_driver "$VIBE2VALUE_PYTHON"; then
+    PYTHON_BIN="$VIBE2VALUE_PYTHON"
+elif ! _has_pg_driver "$PYTHON_BIN"; then
+    for _cand in \
+        "$_repo_root/.venv/bin/python" \
+        "${VIRTUAL_ENV:-}/bin/python" \
+        python3.13 python3.12 python3.11 python3.10
+    do
+        [ -n "$_cand" ] || continue
+        if command -v "$_cand" >/dev/null 2>&1 && _has_pg_driver "$_cand"; then
+            echo "Using $_cand (has a Postgres driver; $PYTHON_BIN does not)."
+            PYTHON_BIN="$_cand"
+            break
+        fi
+    done
+fi
+
 if command -v pip3 >/dev/null 2>&1; then
     PIP_BIN="pip3"
 elif command -v pip >/dev/null 2>&1; then
@@ -696,6 +726,22 @@ try:
             POST_SEED_MIGRATIONS = [
                 '08_seed_step_visibility_overrides.sql',
                 '09_seed_path_visibility_overrides.sql',
+                # Step kinds. Each UPDATE is guarded (step_kind='instant_prompt' for
+                # promotions, NOT LIKE for template appends), so re-running is a no-op
+                # and admin edits survive. Listing them here is what lets decision
+                # steps reach an existing install without a destructive --recreate.
+                '12_seed_step_kinds.sql',
+                '13_seed_more_decisions.sql',
+                '14_reconcile_decision_and_verify.sql',
+                '16_assess_scope_decisions.sql',
+                # Runs last: 16 turns four more steps into generated reveals, and 15's
+                # copy-through-verbatim guard is keyed on the step's kind, so it has to
+                # be re-applied after 16 has changed them.
+                '15_fix_llm_placeholder_leak.sql',
+                '17_add_decision_examples.sql',
+                # Fast reveal model. INSERT ... WHERE NOT EXISTS, so a facilitator's
+                # chosen endpoint survives redeploys.
+                '20_seed_reveal_model_params.sql',
             ]
             print(f"  Applying idempotent post-seed migrations...")
             for mig in POST_SEED_MIGRATIONS:
