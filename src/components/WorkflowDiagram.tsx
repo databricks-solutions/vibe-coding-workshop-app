@@ -3357,6 +3357,37 @@ export function WorkflowDiagram({
                 </div>
               );
 
+            // Step 73: Wire Genie (Genie Accelerator only) — register genie() + add a themed GenieChat panel
+            case 73:
+              return (
+                <div key={73} className="relative mt-5" data-step-number="73">
+                  <WorkflowStep
+                    stepNumber={73}
+                    title="Wire Genie"
+                    description="Register the AppKit genie() plugin and add a themed GenieChat panel so the app answers plain-English questions from your Genie space"
+                    icon={<MessageSquareText className="w-5 h-5" />}
+                    color="emerald"
+                    isComplete={completedSteps.has(73)}
+                    isSkipped={skippedSteps.has(73)}
+                    onToggleComplete={() => toggleStepComplete(73)}
+                    onToggleSkip={() => toggleStepSkip(73)}
+                    onNavigateNext={() => navigateToNextStep(73)}
+                    sectionTag="activation_wire_genie"
+                    industry={selectedIndustry}
+                    useCase={selectedUseCase}
+                    onPromptGenerated={onStepPromptGenerated}
+                    initialPrompt={stepPrompts[73]}
+                    previousOutputs={{
+                      ...(stepPrompts[36] ? { activation_wire_lakebase: stepPrompts[36] } : {}),
+                    }}
+                    isPreviousStepComplete={isPreviousStepComplete(73)}
+                    isExpanded={expandedStep === 73}
+                    onToggleExpand={() => toggleExpand(73)}
+                    sessionId={sessionId}
+                  />
+                </div>
+              );
+
             // Step 37: Deploy & Validate (Activation / Reverse ETL)
             case 37:
               return (

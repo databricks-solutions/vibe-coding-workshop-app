@@ -10257,9 +10257,9 @@ Before writing the design doc, echo BOTH: (1) the design-quality conventions you
 1. Decide **extend vs greenfield** using the explicit rule below, then record the decision and the evidence (files you looked at) at the top of `@docs/analytics_ui_design.md`.
 2. Design analytics pages (dashboards with KPIs/charts/summary cards; exploration views with filters, sort, drill-downs) assuming a **mock-data-first** contract -- every page must work with placeholder data before any DB is wired.
 3. Map each visualization back to a specific synced Lakebase table and column from `@docs/activation_sync_plan.md`. No UI element is allowed that cannot cite its source.
-4. If a Genie-powered Agent exists from earlier in the workshop, include a natural-language search bar that calls the Agent endpoint alongside the structured dashboards.
+4. Because this track produced a Genie space, design a **Genie chat/assistant panel** alongside the structured dashboards — a first-class, on-brand conversational surface (a docked "Ask your data" side panel, a dedicated **Ask** nav tab, or an inline panel under the KPIs), NOT a bolted-on search box. It is wired later at the **Wire Genie** step (Step 37) via the AppKit `genie()` plugin and the `GenieChat` component from `@databricks/appkit-ui/react`; theme it to the SAME design tokens as the dashboards (the oklch `--primary`/`--secondary`/`--accent` variables, the typography pairing, and the light/dark themes from the Visual and Brand section) so the chat reads as one product with the dashboards. It answers as the app''s own service principal by default (SP-served); note drop-in `GenieChat` for the standard chat UI, or the headless `useGenieChat` hook when the design calls for a fully custom search-bar/drawer that matches bespoke components. (On a non-Genie reverse-ETL path with no Genie space, omit this panel.)
 5. **Author a "Visual and Brand" section** (do NOT skip — this is the difference between a generic dashboard and a branded one): commit to ONE deliberate aesthetic direction (per the design-quality skill); map the primary/secondary/accent colors from the `## Branding Guidelines` section of this prompt (if present) to the oklch CSS variables (`--primary`/`--secondary`/`--accent`) the build step sets in the app''s `index.css` (every color flows through CSS variables — no inline hex; choose a cohesive non-cliché palette if none provided); pick a distinctive display + body typography pairing (avoid Inter/Roboto/Arial/system defaults); place the brand logo in the header/navbar and favicon; and define light/dark themes plus empty/loading/error states for every data surface (WCAG-AA contrast on brand-colored backgrounds).
-6. Save `@docs/analytics_ui_design.md` with: page/route list, per-page KPIs + charts + data sources, component hierarchy, navigation flow, the extend-vs-greenfield note from Step 1, and the "Visual and Brand" section from Step 5.
+6. Save `@docs/analytics_ui_design.md` with: page/route list, per-page KPIs + charts + data sources, component hierarchy, navigation flow, the extend-vs-greenfield note from Step 1, the Genie chat/assistant panel from Step 4 (its placement, theming to the brand tokens, and empty/loading/error states), and the "Visual and Brand" section from Step 5.
 
 ---
 
@@ -10279,6 +10279,7 @@ Before writing the design doc, echo BOTH: (1) the design-quality conventions you
 
 - `@docs/analytics_ui_design.md` exists with pages, per-page KPIs/charts, data sources (`{user_schema_prefix}.<synced_table>` + columns), navigation, and the extend-vs-greenfield decision with file evidence.
 - Every visualization cites a synced Lakebase table from the sync plan.
+- If this track produced a Genie space, the design includes an on-brand Genie chat/assistant panel (deliberate placement, theming to the brand tokens, and empty/loading/error states) that the **Wire Genie** step wires via the `genie()` plugin.
 - A "Visual and Brand" section defines the aesthetic direction, the brand palette (as oklch CSS variables), a non-default typography pairing, logo placement, light/dark theme, and per-surface empty/loading/error states.
 - STOP after saving -- do not build the app in this step.
 
@@ -10323,7 +10324,7 @@ Ensure you have:
 
 ## 2️⃣ What Are We Building?
 
-A **design document** for the analytics app — not code yet. It defines the dashboards and exploration views that will sit on top of your synced Lakebase tables, with every visualization traced to a real synced source. This is the contract the next three steps build, wire, and deploy.
+A **design document** for the analytics app — not code yet. It defines the dashboards and exploration views that will sit on top of your synced Lakebase tables — plus an on-brand Genie chat panel for plain-English questions — with every visualization traced to a real synced source. This is the contract the next steps build, wire (Lakebase, then Genie), and deploy.
 
 ```mermaid
 flowchart LR
@@ -10375,6 +10376,7 @@ Every UI element must cite its synced source:
   - [ ] KPIs and charts per page with data sources (synced tables + columns)
   - [ ] Exploration patterns (filters, sort, detail panels)
   - [ ] Clear note of extensions to existing app vs greenfield
+  - [ ] Genie chat/assistant panel: placement, theming to the brand tokens, and empty/loading/error states (wired later at the Wire Genie step via the `genie()` plugin)
   - [ ] Visual and Brand section: aesthetic direction, brand palette (oklch CSS variables), typography pairing, logo placement, light/dark theme, empty/loading/error states',
 true, 1, true, current_timestamp(), current_timestamp(), current_user());
 
@@ -10856,7 +10858,7 @@ Ensure you have:
 **Step 3:** Review the change as the app gains a **natural-language chat** panel backed by your Genie space
 **Step 4:** Ask a question and confirm the answer renders with the **SQL Genie ran** before moving on
 
-> **Client note:** both tracks reach the same result — a chat endpoint backed by your Genie space — using their app framework (the IDE''s FastAPI service calling the Genie Conversation API, or the Genie track''s AppKit `genie()` plugin). By default the app asks Genie as its own identity (the service principal); flipping the on-behalf-of toggle asks Genie as the signed-in user instead. You do not manage the Genie session by hand; the framework owns it.
+> **Client note:** both tracks reach the same result — a chat endpoint backed by your Genie space — using their app framework, but the identity mechanics differ. The IDE''s **FastAPI service** calls the Conversation API as the app''s **service principal** by default, with a one-flag on-behalf-of toggle. The Genie track''s **AppKit `genie()` plugin** runs **on-behalf-of the signed-in user** by design, so it declares `user_api_scopes: [dashboards.genie]` in `app.yaml`. Either way you do not manage the Genie session by hand; the framework owns it.
 
 ---
 
@@ -10873,7 +10875,7 @@ flowchart LR
   app -.->|"Genie unreachable"| mock["falls back to mock answer"]
 ```
 
-By default the app calls Genie as its **own service principal** — a clean, auditable identity. A one-flag **on-behalf-of** toggle switches the call to run as the logged-in user, so answers respect that user''s own permissions. Either way the panel shows the SQL Genie ran, and the app degrades gracefully to a mock answer if Genie is briefly unavailable.
+By default the FastAPI app calls Genie as its **own service principal** — a clean, auditable identity — with a one-flag **on-behalf-of** toggle that runs the call as the logged-in user so answers respect that user''s own permissions. (On the Genie Code track the AppKit `genie()` plugin runs on-behalf-of the signed-in user by design, declaring `user_api_scopes: [dashboards.genie]`.) Either way the panel shows the SQL Genie ran, and the app degrades gracefully to a mock answer if Genie is briefly unavailable.
 
 ---
 
@@ -15565,7 +15567,7 @@ Design dashboards (KPIs, charts, summary cards) and exploration views (filters, 
 - **Map each visualization back to a specific synced Lakebase table and column** from `<artifact_root>/docs/activation_sync_plan.md`, qualified with the Postgres schema `{user_schema_prefix}` from `reverse_etl.md`. No UI element is allowed that cannot cite its synced source.
 - Reference synced objects EXACTLY as written in the sync plan (names include the `_synced` suffix). Do not invent names or restate `reverse_etl.md` values inline.
 - Only candidates listed in `activation_sync_plan.md` are available — no CONTINUOUS-mode data, no Gold objects that were not synced.
-- If a Genie-powered Agent exists from earlier in the workshop, you MAY include a natural-language search bar that calls the Agent endpoint alongside the structured dashboards (the wiring of that chat path is the separate `appkit_agent_app_proxy_chat` step — here you only note it in the design). Optional.
+- Because this track produced a Genie space, design a **Genie chat/assistant panel** alongside the structured dashboards — a first-class, on-brand conversational surface (a docked "Ask your data" side panel, a dedicated **Ask** nav tab, or an inline panel under the KPIs), NOT a bolted-on search box. Here you ONLY note it in the design; it is wired later at the **Wire Genie** step via the AppKit `genie()` plugin and the `GenieChat` component from `@databricks/appkit-ui/react`. Theme it to the SAME design tokens as the dashboards (the oklch `--primary`/`--secondary`/`--accent` variables, the typography pairing, and the light/dark themes from the Visual and Brand section) so the chat reads as one product with the dashboards. The `genie()` plugin runs on-behalf-of the signed-in user (Wire Genie declares `user_api_scopes: [dashboards.genie]`); the drop-in `GenieChat` gives the standard chat UI, or the headless `useGenieChat` hook a fully custom search-bar/drawer.
 
 **Visual and brand direction (author this into the design doc — do NOT skip; this is the difference between a generic dashboard and a branded one):** the design doc MUST include a dedicated "Visual and Brand" section capturing:
 
@@ -15578,7 +15580,7 @@ Design dashboards (KPIs, charts, summary cards) and exploration views (filters, 
 
 ### Step 5 — Save the analytics design doc (write only — no build)
 
-Write `<artifact_root>/docs/analytics_ui_design.md` via `executeCode` `open(path,"w").write(...)` against warm compute (first `executeCode` = a trivial `print("ready")` to absorb the serverless cold start; keep `timeoutMinutes` generous). 🔴 Verify the write with `os.path.exists(path)` in the SAME block — NOT `listFiles`. The doc MUST contain: the page/route list, per-page KPIs + charts + data sources (`{user_schema_prefix}.<synced_table>` + columns), component hierarchy, navigation flow, the extend-vs-greenfield note from Step 3, and the "Visual and Brand" section from Step 4 (aesthetic direction, brand palette mapped to oklch CSS variables, typography pairing, logo placement, light/dark theme, and per-surface empty/loading/error states). STOP after saving — do NOT build the app in this step.
+Write `<artifact_root>/docs/analytics_ui_design.md` via `executeCode` `open(path,"w").write(...)` against warm compute (first `executeCode` = a trivial `print("ready")` to absorb the serverless cold start; keep `timeoutMinutes` generous). 🔴 Verify the write with `os.path.exists(path)` in the SAME block — NOT `listFiles`. The doc MUST contain: the page/route list, per-page KPIs + charts + data sources (`{user_schema_prefix}.<synced_table>` + columns), component hierarchy, navigation flow, the extend-vs-greenfield note from Step 3, the Genie chat/assistant panel from Step 4 (its placement, theming to the brand tokens, and empty/loading/error states), and the "Visual and Brand" section from Step 4 (aesthetic direction, brand palette mapped to oklch CSS variables, typography pairing, logo placement, light/dark theme, and per-surface empty/loading/error states). STOP after saving — do NOT build the app in this step.
 
 **State-lock:** this prompt runs between an `enter` (Step 0) and an `exit`. After the gate passes, run `skills/vibecoding-state` op `exit` — params: `prompt_id: "activation_app_design"`, `gate: "Analytics app designed"`, `captured: {analytics_ui_design}`. **This `enter`/`exit` pair is a mandatory ritual, not advisory.** Step 0''s `enter` MUST locate — or, if this is the first prompt of the track, bootstrap-create — the canonical live state file at `<app_root>/.vibecoding-state.md` (never the temporary `example/…` bootstrap path). The closing `exit` MUST append this prompt''s Per-Step Log entry, Gate result, and `captured` vars to that file, then **re-read it and echo the appended section to prove the write landed**. **Gate completion rule:** this prompt is NOT complete until that re-read confirms the appended entry — the chat summary is NOT the state store.
 
@@ -15690,7 +15692,7 @@ Rules the agent cannot guess:
 - Skip the IDE''s SQL-warehouse build paths (`config/queries/`, `npm run typegen`, `useAnalyticsQuery`) — synced-table reads arrive via the `lakebase()` plugin in the next step.
 - **Theme to the brand (do NOT ship the scaffold''s default look).** Apply the design doc''s "Visual and Brand" section and the `## Branding Guidelines` section of this prompt (if present): uncomment and set the `--primary`/`--secondary`/`--accent` oklch custom properties in `client/src/index.css`, load the chosen display + body fonts via `client/index.html`, and place the brand logo in the header/navbar and as the favicon. Every color flows through CSS variables referenced by Tailwind classes (`bg-primary`, `text-primary-foreground`) — never inline hex. This is an incremental edit of the scaffold''s `index.css`, not a regeneration.
 
-Write files with `executeCode` `open(path,"w").write(...)` against warm compute (warm up once with a trivial `print("ready")` to absorb the serverless cold start; keep `timeoutMinutes` generous). 🔴 **Write literal characters — do not over-escape**; prefer Python triple-quoted raw strings (`r"""…"""`) and write the real `''`/`"`, never `\uXXXX`. 🔴 **Preserve the scaffold''s import specifiers verbatim** (`@databricks/appkit-ui/react`, `@import "@databricks/appkit-ui/styles.css";`) — edit `App.tsx`/`index.css` incrementally, never regenerate them from memory, and keep the scaffold''s `client/src/ErrorBoundary.tsx`.
+Write files with `executeCode` `open(path,"w").write(...)` against warm compute (warm up once with a trivial `print("ready")` to absorb the serverless cold start; keep `timeoutMinutes` generous). 🔴 **Write literal characters — do not over-escape**; prefer Python triple-quoted raw strings (`r"""…"""`) and write the real `''`/`"`, never `\uXXXX`. 🔴 **Preserve the scaffold''s import specifiers verbatim** (`@databricks/appkit-ui/react`, `@import "@databricks/appkit-ui/styles.css";`) — edit `App.tsx`/`index.css` incrementally, never regenerate them from memory, and keep the scaffold''s `client/src/ErrorBoundary.tsx`. The scaffold baseline is Tailwind **v4** (`@tailwindcss/vite` wired into `client/vite.config.ts`; no `postcss.config`/`tailwind.config`; `index.css` uses the `@import "@databricks/appkit-ui/styles.css";` above, NOT `@tailwind` directives) — the `@import` is correct as-is, so do NOT "fix" it into v3 `@tailwind base/components/utilities`.
 
 ### Step 5b — Pre-handoff static gate (the only static check here)
 
@@ -15704,6 +15706,9 @@ There is **no local `tsc`/`npm`/`eslint`** on Genie Code, so a regex scan is the
 - **REVIEW (D) — unused named import:** flagged when a symbol appears only on its import line. The scaffold''s `noUnusedLocals` turns an unused import into a hard `TS6133` build failure. Heuristic only — confirm before removing.
 - **REVIEW (G) — unthemed `index.css`:** `client/src/index.css` still ships the scaffold''s commented-out defaults (no uncommented `--primary` oklch variable). The app renders in the generic AppKit look instead of the brand. **If the `## Branding Guidelines` section above provided colors, treat this as BLOCKING** — set the palette before handoff.
 - **REVIEW (H) — no logo/favicon reference:** nothing under `client/` references a logo or favicon, so the brand mark is missing from the header/navbar. Escalate to BLOCKING when a logo URL was provided in `## Branding Guidelines`.
+- **BLOCKING (I) — a needed build tool is entirely missing:** the server-side build needs `vite`, `typescript`, and a `@vitejs/plugin-react[-swc]`. Flag one ONLY if it is absent from BOTH `dependencies` and `devDependencies`. `devDependencies` is the scaffold-correct home — the platform build installs devDeps (the pristine v4 scaffold ships every build tool in `devDependencies` and deploys), so do NOT move build tools to `dependencies`.
+- **BLOCKING (J) — incomplete Tailwind toolchain (toolchain-aware):** if CSS uses `@tailwind`/`@layer` (or imports the AppKit stylesheet), the toolchain must be complete for EITHER Tailwind generation — **v3:** `tailwind.config.*` + `postcss.config.*` present AND `tailwindcss`/`postcss`/`autoprefixer` in `dependencies` (not `devDependencies`); **v4:** `@tailwindcss/vite` in `dependencies` AND wired into the vite `plugins`. The one combination that FAILS the server-side Vite build is a **v3 PostCSS setup that also `@import`s `@databricks/appkit-ui/styles.css` (a v4 stylesheet)** — pick one generation, do not mix.
+- **BLOCKING (K) — client bundle not in a `server()`-auto-detected dir:** `server()` serves the built client only from `dist`, `client/dist`, `build`, `public`, or `out` (project-root-relative — `build/` is **NOT** reserved, verified in Phase 0). If the vite `outDir` resolves anywhere else the app deploys GREEN but returns **"Cannot GET /"**. The classic trap is a **root-level `vite.config.*` with `root: "client"` + `outDir: "../dist/client"`** (emits `dist/client/`, which is in none of the auto-detected dirs). Fix: leave `outDir` at the scaffold default (`client/dist`) or pass `server({ staticPath: "<resolved-dir>" })`.
 
 ```python
 import re, pathlib
@@ -15751,6 +15756,71 @@ if cdir.exists():
             break
 if not logo_seen:
     review.append("client/: no logo/favicon reference found -> place the brand logo in the header/navbar and as the favicon (from ''## Branding Guidelines'', if provided).")
+# (I) BUILD TOOLS must be PRESENT — devDependencies is the scaffold-correct home (the platform build installs devDeps).
+# Flag ONLY a build tool absent from BOTH dependencies and devDependencies; NEVER flag devDependencies placement
+# (the pristine v4 scaffold ships vite/typescript/@tailwindcss/vite/@vitejs-plugin-react in devDependencies and deploys).
+import json
+pkg = pathlib.Path("<APP_ROOT>/package.json")
+deps, dev = {}, {}
+if pkg.exists():
+    pj = json.loads(pkg.read_text())
+    deps = pj.get("dependencies", {}) or {}
+    dev = pj.get("devDependencies", {}) or {}
+    present = set(deps) | set(dev)
+    missing = [t for t in ("vite", "typescript") if t not in present]
+    if not ({"@vitejs/plugin-react", "@vitejs/plugin-react-swc"} & present):
+        missing.append("@vitejs/plugin-react (or -swc)")
+    if missing:
+        bad.append(f"package.json: build tool(s) {sorted(missing)} absent from BOTH dependencies and devDependencies -> the server-side build cannot run; add them (devDependencies is fine, do NOT move to dependencies)")
+# (J) TAILWIND toolchain — toolchain-aware: accept v3 (tailwind.config + postcss.config + deps) OR v4 (@tailwindcss/vite)
+cdir = pathlib.Path("<APP_ROOT>/client")
+css_files = list(cdir.rglob("*.css")) if cdir.exists() else []
+uses_tw = any(re.search(r''@tailwind\b|@layer\b'', p.read_text()) for p in css_files)
+imports_appkit_styles = any(re.search(r''@import\s+["\'']@databricks/appkit-ui/styles\.css["\'']'', p.read_text()) for p in css_files)
+has_v4_plugin = ("@tailwindcss/vite" in deps) or ("@tailwindcss/vite" in dev)  # devDependencies is the scaffold-correct home
+if uses_tw and not has_v4_plugin:
+    # v3 PostCSS path
+    has_tw_cfg = any(pathlib.Path("<APP_ROOT>/" + n).exists() for n in ("tailwind.config.js", "tailwind.config.ts", "tailwind.config.cjs"))
+    has_pc_cfg = any(pathlib.Path("<APP_ROOT>/" + n).exists() for n in ("postcss.config.js", "postcss.config.cjs", "postcss.config.mjs"))
+    if not has_tw_cfg:
+        bad.append("client CSS uses @tailwind/@layer (v3 path, no @tailwindcss/vite) but no tailwind.config.* -> add it; Vite will not process Tailwind without it")
+    if not has_pc_cfg:
+        bad.append("client CSS uses @tailwind/@layer (v3 path, no @tailwindcss/vite) but no postcss.config.* -> add it")
+    for t in ("tailwindcss", "postcss", "autoprefixer"):
+        if t not in deps:
+            bad.append(f"Tailwind v3 in use but ''{t}'' not in package.json dependencies -> add it to dependencies (prod install skips devDependencies)")
+    if imports_appkit_styles and has_pc_cfg:
+        bad.append("client CSS @import \"@databricks/appkit-ui/styles.css\" (a v4 stylesheet) under a v3 PostCSS setup -> toolchain conflict that FAILS the server-side Vite build; move to the v4 toolchain (@tailwindcss/vite) OR drop the v4 @import and keep v3 @tailwind directives")
+elif has_v4_plugin:
+    # v4 path — @tailwindcss/vite must be a prod dep (see (I)) and wired into a vite config''s plugins
+    vite_cfgs = [pathlib.Path("<APP_ROOT>/" + n) for n in ("client/vite.config.ts", "client/vite.config.js", "client/vite.config.mjs", "vite.config.ts", "vite.config.js", "vite.config.mjs")]
+    if not any(c.exists() and "@tailwindcss/vite" in c.read_text() for c in vite_cfgs):
+        bad.append("@tailwindcss/vite present but not wired into any vite.config plugins -> add tailwindcss() to the vite plugins (v4)")
+# (K) CLIENT BUNDLE must land in a server()-auto-detected static dir — else "Cannot GET /" (Phase 0: L8 refuted, L9 root cause)
+# server() auto-detects (project-root-relative): dist, client/dist, build, public, out. build/ is NOT reserved.
+import os
+AUTO_DETECT = {"dist", "client/dist", "build", "public", "out"}
+vcfg = next((pathlib.Path("<APP_ROOT>/" + n) for n in
+             ("client/vite.config.ts", "client/vite.config.js", "client/vite.config.mjs",
+              "vite.config.ts", "vite.config.js", "vite.config.mjs")
+             if pathlib.Path("<APP_ROOT>/" + n).exists()), None)
+if vcfg is not None:
+    vt = vcfg.read_text()
+    om = re.search(r''outDir\s*:\s*["\'']([^"\'']+)["\'']'', vt)
+    if om:
+        approot = str(pathlib.Path("<APP_ROOT>"))
+        rootm = re.search(r''\broot\s*:\s*["\'']([^"\'']+)["\'']'', vt)
+        vroot = os.path.join(approot, rootm.group(1)) if rootm else str(vcfg.parent)
+        resolved_abs = os.path.normpath(os.path.join(vroot, om.group(1)))
+        try:
+            resolved = os.path.relpath(resolved_abs, approot).replace(os.sep, "/")
+        except ValueError:
+            resolved = resolved_abs
+        srvp = pathlib.Path("<APP_ROOT>/server/server.ts")
+        spm = re.search(r''server\(\s*\{[^}]*staticPath\s*:\s*["\'']([^"\'']+)["\'']'', srvp.read_text()) if srvp.exists() else None
+        sp = os.path.normpath(spm.group(1)).replace(os.sep, "/") if spm else None
+        if resolved not in AUTO_DETECT and resolved != sp:
+            bad.append(f"{vcfg}: client bundle resolves to ''{resolved}'', not a server()-auto-detected dir {sorted(AUTO_DETECT)} and no matching server(staticPath) -> deploys GREEN but returns ''Cannot GET /''. Set outDir to the scaffold default (client/dist) or pass server({{ staticPath: ''{resolved}'' }}). (Classic trap: root-level vite.config with root:''client'' + outDir:''../dist/client'' emits dist/client.)")
 print("BLOCKING:\n" + ("\n".join(bad) or "OK"))
 print("REVIEW:\n" + ("\n".join(review) or "none"))
 ```
@@ -15894,6 +15964,7 @@ Rules the agent cannot guess:
 - **No DDL/seed/mutations** — drop the IDE''s `lakebase.py`, `ConnectionPool`, `_OAuthConnection`, and `create_database_objects_if_missing`; the `lakebase()` plugin generates and rotates the OAuth credential and owns the pool. The app''s service principal needs SELECT on the synced schema (granted at the **Deploy & Validate** step).
 - **Handle NULLs explicitly** (`COALESCE`, filtered aggregates) and use `LOWER()` for enum/string filters — synced data can contain NULLs/casing the mock layer did not.
 - **No hardcoded date ranges or SLO assertions** — drive date filters from UI-supplied params.
+- **`server()` auto-serves the built client — do NOT author static serving.** `server()` serves the client from a project-root-relative auto-detected dir (`dist`, `client/dist`, `build`, `public`, `out`); do NOT add `express.static` / `sendFile` / an `app.get("*")` handler here (Phase 0 confirmed `server()` serves the client with none of that code present). The ONLY requirement is that the vite `outDir` resolve into one of those dirs — the build/deploy static gate''s check (K) enforces it, and the scaffold default (`client/dist`) satisfies it. **SPA deep-link fallback is built in too:** AppKit''s `StaticServer.setup()` registers `app.get("*", serveIndex)` for every non-`/api`/`/query` GET, so client-side routes (react-router) survive a hard refresh with no code from you (verified in AppKit source). The only override is `server({ staticPath })` when `outDir` lands outside the auto-detect list.
 
 ### Step 4 — Wire the frontend + ConnectionStatus
 
@@ -15935,7 +16006,7 @@ Fix every **BLOCKING** hit before declaring this step complete. `BLOCKING: OK` h
 '',
 true, 1, true, current_timestamp(), current_timestamp(), current_user());
 
--- activation_wire_genie (genie-code fork) — register genie() in server.ts (canonical @databricks/appkit import) so /api/genie/* is served and a GenieChat panel renders; SP-served by DEFAULT (app SP calls the Conversation API), OBO available via user_api_scopes; STATIC DATABRICKS_GENIE_SPACE_ID env (no databricks.yml resources: binding — inert on the SDK SNAPSHOT path); READ-ONLY, no DDL/seed; the app-SP CAN_RUN + warehouse/UC grants are applied at Deploy & Validate; no local npm/localhost; app under <APP_ROOT>; bypass_LLM = TRUE
+-- activation_wire_genie (genie-code fork) — register genie() in server.ts (canonical @databricks/appkit import) so /api/genie/* is served and a GenieChat panel renders; OBO-served — the genie() plugin runs on-behalf-of the signed-in user, so app.yaml MUST declare user_api_scopes: [dashboards.genie] (gated here); STATIC DATABRICKS_GENIE_SPACE_ID env (no databricks.yml resources: binding — inert on the SDK SNAPSHOT path); READ-ONLY, no DDL/seed; the app-SP CAN_RUN + warehouse/UC grants are applied at Deploy & Validate; no local npm/localhost; app under <APP_ROOT>; bypass_LLM = TRUE
 INSERT INTO ${catalog}.${schema}.section_input_prompts
 (input_id, section_tag, coding_assistant, input_template, system_prompt,
  bypass_llm, version, is_active, inserted_at, updated_at, created_by)
@@ -15948,13 +16019,13 @@ This will involve the following steps:
 - **Confirm context** — `APP_NAME`, `<APP_ROOT>`, and the Genie space id (`{genie_space_id}`).
 - **Load the plugin skill** — full `skill_ref_root`-prefixed path for the AppKit Genie plugin.
 - **Register `genie()`** — canonical `@databricks/appkit` import, added to the `plugins` array.
-- **Set the space id + identity** — a STATIC `DATABRICKS_GENIE_SPACE_ID` env; SP-served by default, OBO one scope away.
+- **Set the space id + identity** — a STATIC `DATABRICKS_GENIE_SPACE_ID` env plus `user_api_scopes: [dashboards.genie]` (the `genie()` plugin runs OBO — this scope is REQUIRED).
 - **Wire the frontend** — the `GenieChat` panel from `@databricks/appkit-ui/react`.
 - **Run the static gate** — the build is proven server-side at deploy.
 
 The steps below are the prescriptive runbook for those actions; follow them in order.
 
-**Genie Code — this is a prescriptive runbook for wiring a Genie chat panel into the AppKit analytics app. Follow the steps in order. Do NOT improvise paths, do NOT use bare relative paths, do NOT use `@`-mentions. This step registers the `genie()` plugin in `server.ts` (added to the same `plugins` array as `server()`/`lakebase()`) so the plugin auto-mounts its `/api/genie/*` routes, and adds a `GenieChat` panel to the client — it does NOT create, seed, or mutate any table. There is no local Node toolchain: the build is proven server-side by the Deploy & Validate step, not by a local `npm run build`/`python app.py`. By DEFAULT the app calls Genie as its own service principal (SP-served); OBO (run as the logged-in user) is a one-line `user_api_scopes` toggle. The app-SP `CAN_RUN` on the space plus warehouse/UC grants are applied at the Deploy & Validate step — not here. The app is anchored to `<APP_ROOT>`; every skill is named by its full `skill_ref_root`-prefixed path.**
+**Genie Code — this is a prescriptive runbook for wiring a Genie chat panel into the AppKit analytics app. Follow the steps in order. Do NOT improvise paths, do NOT use bare relative paths, do NOT use `@`-mentions. This step registers the `genie()` plugin in `server.ts` (added to the same `plugins` array as `server()`/`lakebase()`) so the plugin auto-mounts its `/api/genie/*` routes, and adds a `GenieChat` panel to the client — it does NOT create, seed, or mutate any table. There is no local Node toolchain: the build is proven server-side by the Deploy & Validate step, not by a local `npm run build`/`python app.py`. The `genie()` plugin executes the Conversation API **on-behalf-of the signed-in user** (its tools require user context), so `app.yaml` MUST declare `user_api_scopes: [dashboards.genie]` — without it the deployed chat fails with `Provided OAuth token does not have required scopes: genie`. The app-SP `CAN_RUN` on the space plus warehouse/UC grants are applied at the Deploy & Validate step — not here. The app is anchored to `<APP_ROOT>`; every skill is named by its full `skill_ref_root`-prefixed path.**
 
 ### 🔴 Non-negotiable execution rules (read before anything)
 
@@ -16025,18 +16096,20 @@ Rules the agent cannot guess:
 - **The plugin owns `/api/genie/*`.** Do NOT author your own conversation routes — registering `genie()` mounts create-conversation / send-message / get-conversation for you.
 - **No DDL/seed/mutations** — this step wires a plugin and a UI panel only.
 
-### Step 3.5 — Set the space id (static) + choose the execution identity
+### Step 3.5 — Set the space id (static) + declare the OBO scope (both required)
 
-Add a **static** `DATABRICKS_GENIE_SPACE_ID` to `<APP_ROOT>/app.yaml` (value = `{genie_space_id}`) — NOT a `valueFrom: genie-space` resource binding (the `databricks.yml` `resources:` block is inert on the SDK SNAPSHOT path):
+Add a **static** `DATABRICKS_GENIE_SPACE_ID` to `<APP_ROOT>/app.yaml` (value = `{genie_space_id}`) — NOT a `valueFrom: genie-space` resource binding (the `databricks.yml` `resources:` block is inert on the SDK SNAPSHOT path) — AND declare the Genie user scope in the same file:
 
 ```yaml
 env:
   - name: DATABRICKS_GENIE_SPACE_ID
     value: "{genie_space_id}"
+user_api_scopes:
+  - dashboards.genie
 ```
 
-- **SP-served is the DEFAULT.** With no extra scope, the plugin calls the Conversation API as the app''s own service principal. This is the default posture for this workshop and matches the app''s Lakebase wiring — one identity to grant and audit. The app SP is granted `CAN_RUN` on the space (plus warehouse `CAN_USE` and UC `SELECT`) at the **Deploy & Validate** step; without that grant the chat cannot reach the space in either mode.
-- **OBO is one line away.** To run each question as the logged-in user instead, add `user_api_scopes: [dashboards.genie]` to `app.yaml`; the plugin then executes the Conversation API on-behalf-of the signed-in user, honoring that user''s own Unity Catalog grants. Do NOT put `DATABRICKS_HOST`/`DATABRICKS_CLIENT_ID`/`DATABRICKS_CLIENT_SECRET` in `app.yaml` — they are auto-injected for the app SP; any override is silent OAuth poison.
+- **The `genie()` plugin runs OBO — the scope is REQUIRED, not optional.** The plugin''s tools require user context, so it always calls the Conversation API with the signed-in user''s forwarded token. That forwarded token only exists when `app.yaml` declares `user_api_scopes: [dashboards.genie]`; omit it and the deployed chat fails with `Provided OAuth token does not have required scopes: genie` even while the analytics dashboards stay live. Answers then honor the **signed-in user''s** own Unity Catalog grants (the user needs `CAN_RUN` on the space and `SELECT` on its data sources).
+- **The app SP still needs `CAN_RUN` on the space** to reach the Conversation API at all — granted (with warehouse `CAN_USE` and UC `SELECT`) at the **Deploy & Validate** step, which also re-applies the scope after each deploy (a full-replacement deploy can wipe `user_api_scopes`). Do NOT put `DATABRICKS_HOST`/`DATABRICKS_CLIENT_ID`/`DATABRICKS_CLIENT_SECRET` in `app.yaml` — they are auto-injected for the app SP; any override is silent OAuth poison.
 
 ### Step 4 — Wire the `GenieChat` frontend panel
 
@@ -16072,6 +16145,9 @@ if "DATABRICKS_GENIE_SPACE_ID" not in appyaml:
     bad.append("DATABRICKS_GENIE_SPACE_ID missing from app.yaml -> add it as a static env value")
 if re.search(r''DATABRICKS_GENIE_SPACE_ID[\s\S]{0,40}valueFrom'', appyaml):
     bad.append("DATABRICKS_GENIE_SPACE_ID bound via valueFrom -> use a STATIC value ({genie_space_id}); resources: is inert on SNAPSHOT")
+# the genie() plugin runs OBO -> app.yaml MUST declare the Genie user scope
+if not re.search(r''user_api_scopes:[\s\S]{0,80}dashboards\.genie'', appyaml):
+    bad.append("user_api_scopes: [dashboards.genie] missing from app.yaml -> the genie() plugin runs OBO; without it the deployed chat fails with ''required scopes: genie''")
 # GenieChat must come from the /react subpath
 for f in pathlib.Path("<APP_ROOT>/client/src").rglob("*.tsx"):
     t = f.read_text()
@@ -16080,17 +16156,17 @@ for f in pathlib.Path("<APP_ROOT>/client/src").rglob("*.tsx"):
 print("BLOCKING:\n" + ("\n".join(bad) or "OK"))
 ```
 
-Fix every **BLOCKING** hit before declaring this step complete. `BLOCKING: OK` hands off to the Deploy & Validate step, which runs the server-side build and (with the app SP granted `CAN_RUN` on the space) serves real Genie answers.
+Fix every **BLOCKING** hit before declaring this step complete. `BLOCKING: OK` hands off to the Deploy & Validate step, which runs the server-side build and (with `user_api_scopes: [dashboards.genie]` declared and the app SP granted `CAN_RUN` on the space) serves real Genie answers.
 
 **State-lock:** this prompt runs between an `enter` (Step 0) and an `exit`. After the gate passes, run `skills/vibecoding-state` op `exit` — params: `prompt_id: "activation_wire_genie"`, `gate: "Genie wired to app"`, `captured: {genie_chat_service}`. **This `enter`/`exit` pair is a mandatory ritual, not advisory.** Step 0''s `enter` MUST locate — or, if this is the first prompt of the track, bootstrap-create — the canonical live state file at `<app_root>/.vibecoding-state.md` (never the temporary `example/…` bootstrap path). The closing `exit` MUST append this prompt''s Per-Step Log entry, Gate result, and `captured` vars to that file, then **re-read it and echo the appended section to prove the write landed**. **Gate completion rule:** this prompt is NOT complete until that re-read confirms the appended entry — the chat summary is NOT the state store.
 
-**Gate:** `Genie wired to app` — `<APP_ROOT>/server/server.ts` imports `genie` from `@databricks/appkit` and registers `genie()` in the `plugins` array (no hand-mounted `/api/genie/*`, no manual `start()`), `app.yaml` carries a STATIC `DATABRICKS_GENIE_SPACE_ID` (= `{genie_space_id}`, no `valueFrom` binding), the client renders `GenieChat` from `@databricks/appkit-ui/react`, and the wiring static scan prints `BLOCKING: OK`. SP-served is the default (OBO available via `user_api_scopes: [dashboards.genie]`). (On Genie Code "local" = the authored, statically-gated pre-deploy milestone — there is NO `http://localhost:8000` run; real Genie answers are proven against the deployed app at the Deploy & Validate step.) NO local `npm run build`/`python app.py` was attempted; NO table was created, seeded, or mutated; NO permission grant was made here.
+**Gate:** `Genie wired to app` — `<APP_ROOT>/server/server.ts` imports `genie` from `@databricks/appkit` and registers `genie()` in the `plugins` array (no hand-mounted `/api/genie/*`, no manual `start()`), `app.yaml` carries a STATIC `DATABRICKS_GENIE_SPACE_ID` (= `{genie_space_id}`, no `valueFrom` binding), the client renders `GenieChat` from `@databricks/appkit-ui/react`, `app.yaml` declares `user_api_scopes: [dashboards.genie]` (the `genie()` plugin runs OBO — this scope is required), and the wiring static scan prints `BLOCKING: OK`. (On Genie Code "local" = the authored, statically-gated pre-deploy milestone — there is NO `http://localhost:8000` run; real Genie answers are proven against the deployed app at the Deploy & Validate step.) NO local `npm run build`/`python app.py` was attempted; NO table was created, seeded, or mutated; NO permission grant was made here.
 
-**➡️ Next step.** The **Deploy & Validate** step ships `<APP_ROOT>` via the SDK SNAPSHOT path, grants the app''s service principal `CAN_RUN` on the Genie space `{genie_space_id}` (via PATCH), plus warehouse `CAN_USE` and UC `USE_CATALOG`/`USE_SCHEMA`/`SELECT`, and verifies the deployed chat returns real answers behind the OAuth gate.',
+**➡️ Next step.** The **Deploy & Validate** step ships `<APP_ROOT>` via the SDK SNAPSHOT path, re-applies `user_api_scopes: [dashboards.genie]` (a full-replacement deploy can wipe it), grants the app''s service principal `CAN_RUN` on the Genie space `{genie_space_id}` (via PATCH), plus warehouse `CAN_USE` and UC `USE_CATALOG`/`USE_SCHEMA`/`SELECT`, and probes the deployed chat to confirm it returns real answers behind the OAuth gate (no `required scopes: genie`).',
 '',
 true, 1, true, current_timestamp(), current_timestamp(), current_user());
 
--- activation_deploy_validate (genie-code fork) — deploy the analytics app under <APP_ROOT> via the SDK SNAPSHOT path (w.apps.deploy; build server-side); verify live synced reads behind the 3-hop OAuth session; READ-ONLY get-endpoint cost re-check + list-roles (NO mutating update-endpoint/delete-role); app-SP grants on the SYNCED schema; idempotent re-assert + verify of app-SP Genie CAN_RUN (PATCH, not PUT) + warehouse CAN_USE + UC USE/SELECT now that Wire Genie added the chat path; no local npm/localhost/sync; bypass_LLM = TRUE
+-- activation_deploy_validate (genie-code fork) — deploy the analytics app under <APP_ROOT> via the SDK SNAPSHOT path (w.apps.deploy; build server-side); verify live synced reads behind the 3-hop OAuth session; READ-ONLY get-endpoint cost re-check + list-roles (NO mutating update-endpoint/delete-role); app-SP grants on the SYNCED schema; idempotent re-assert + verify of app-SP Genie CAN_RUN (PATCH, not PUT) + warehouse CAN_USE + UC USE/SELECT + re-apply of user_api_scopes: [dashboards.genie] (a full-replacement deploy can wipe it) with a live /api/genie scope probe, now that Wire Genie added the OBO chat path; no local npm/localhost/sync; bypass_LLM = TRUE
 INSERT INTO ${catalog}.${schema}.section_input_prompts
 (input_id, section_tag, coding_assistant, input_template, system_prompt,
  bypass_llm, version, is_active, inserted_at, updated_at, created_by)
@@ -16120,14 +16196,16 @@ The steps below are the prescriptive runbook for those actions; follow them in o
 
 ❌ **DO NOT** rely on `databricks apps deploy` via `runDatabricksCli` — it is page-dependent (hard-blocked on dashboard/file-editor pages) and CWD-defeated. If it is blocked, **do not declare deployment impossible** — fall through to the SDK path below. *blocked ≠ impossible — try the next path.*
 
-❌ **READ-ONLY cost/role checks only.** Use `databricks postgres get-endpoint` and `databricks postgres list-roles` to ASSERT the recorded sizing and role state — do NOT run the mutating `update-endpoint`, `delete-role`, or the IDE''s role re-provision flip-flop. If sizing has drifted or the app-SP role is `NO_LOGIN`, STOP and report; remediation belongs to the provisioning step (`activation_table_design`), not here.
+❌ **READ-ONLY cost/role checks only.** Use `postgres get-endpoint` and `postgres list-roles` to ASSERT the recorded sizing and role state — do NOT run the mutating `update-endpoint`, `delete-role`, or the IDE''s role re-provision flip-flop. If sizing has drifted or the app-SP role is `NO_LOGIN`, STOP and report; remediation belongs to the provisioning step (`activation_table_design`), not here.
+
+🔧 **Postgres/Lakebase reads run through `executeCode`, NOT the `runDatabricksCli` tool (P41).** The `runDatabricksCli` tool is **blocked for the `postgres`/`lakebase` subcommands** on Genie Code, and `w.postgres.*` is **not in the pre-installed SDK** — so run the read-only CLI *inside* `executeCode` (`import subprocess; subprocess.run(["databricks","postgres","get-endpoint", …, "--output","json"], capture_output=True, text=True)`) or call REST via the pre-authenticated client `w.api_client.do("GET"/"POST", …)` (the same surface Step 2.5''s credential mint uses). Never route a `postgres`/`lakebase` command through the `runDatabricksCli` tool — it will be denied.
 
 ✅ The canonical deploy mechanism here is the **SDK SNAPSHOT** call run through `executeCode`:
 `w.apps.deploy(<APP_NAME>, AppDeployment(source_code_path="<APP_ROOT>", mode=AppDeploymentMode.SNAPSHOT))`, then poll the deployment + compute state.
 
 🛑 **NEVER delete or regenerate `<APP_ROOT>/package-lock.json`.** On the SDK SNAPSHOT path a missing lockfile **hard-fails the source-export phase in ~10s** (`RESOURCE_DOES_NOT_EXIST`), before `npm install` ever runs.
 
-💰 **Optimize for the fewest deploys, not the fewest edits.** A deploy costs **~50s cold / ~30s warm** and emits **no compute-readable build error**. Front-load the static gate (Step 2b) and batch fixes rather than burning blind deploy-fail cycles.
+💰 **Optimize for the fewest deploys, not the fewest edits.** A deploy costs **~50s cold / ~30s warm** and emits **no compute-readable build error** — the server-side Vite/tsc failure never comes back to compute, so a blind deploy tells you nothing you can act on. That makes the **Step 2b static gate the only cheap pre-deploy signal there is**: front-load it, run it after EVERY batch of edits, and reach `BLOCKING: OK` before spending a single deploy — batch fixes rather than burning blind deploy-fail cycles.
 
 ### Step 0 — Resolve your environment (once, before anything else)
 
@@ -16160,7 +16238,7 @@ Validate the project (read-only checks via `executeCode`, not the IDE''s `ls`/`g
 
 ### Step 1b — Pre-deploy cost re-check (READ-ONLY)
 
-Run `databricks postgres get-endpoint projects/{user_app_name}/branches/production/endpoints/primary --output json` via `runDatabricksCli` and ASSERT `autoscaling_limit_min_cu`, `autoscaling_limit_max_cu`, and `suspend_timeout_duration` match `<artifact_root>/docs/reverse_etl.md`. A running App keeps the endpoint warm and bills against whatever ceiling is in place — so do NOT deploy on top of a drifted (larger) ceiling or a disabled suspend. **If any value has drifted, STOP** and return to the **Create Synced Tables / provisioning** step to re-apply the caps (this fork does NOT mutate the endpoint).
+Read the endpoint **inside `executeCode`** (the `runDatabricksCli` tool is blocked for `postgres`, P41): `subprocess.run(["databricks","postgres","get-endpoint","projects/{user_app_name}/branches/production/endpoints/primary","--output","json"], capture_output=True, text=True)` (or `w.api_client.do("GET", …)`), then ASSERT `autoscaling_limit_min_cu`, `autoscaling_limit_max_cu`, and `suspend_timeout_duration` match `<artifact_root>/docs/reverse_etl.md`. A running App keeps the endpoint warm and bills against whatever ceiling is in place — so do NOT deploy on top of a drifted (larger) ceiling or a disabled suspend. **If any value has drifted, STOP** and return to the **Create Synced Tables / provisioning** step to re-apply the caps (this fork does NOT mutate the endpoint).
 
 ### Step 2 — Load the deploy skill by its FULL `skill_ref_root`-prefixed path
 
@@ -16180,7 +16258,7 @@ There is **no local `tsc`/`npm`/`eslint`** on Genie Code, so a static regex scan
 - **BLOCKING (C) — stray `\uXXXX` escape artifact:** renders as garbage; write the real character.
 - **BLOCKING (E) — stale server-wiring shape (`server/server.ts`):** `server({ autoStart: false })` / manual `start()` double-`listen()`s; register routes inside `onPluginsReady(appkit)`.
 - **BLOCKING (F) — wrong Lakebase plugin import (`server/server.ts`):** importing `lakebase` `from "@databricks/lakebase"` fails the build; import it `from "@databricks/appkit"`.
-- **BLOCKING (G) — Lakebase binding config (`app.yaml` + `databricks.yml`):** `app.yaml` missing `LAKEBASE_ENDPOINT` (needs `valueFrom: postgres` for the bound resource, or a static `value:` fallback); a `databricks.yml` app `resources:` block (inert on the SNAPSHOT path — bind via the Step 3 REST PATCH instead, P35); or a resource `database:` FQN written with the underscore PG dbname `databricks_postgres` rather than the hyphenated resource id `databricks-postgres`.
+- **BLOCKING (G) — Lakebase binding config (`app.yaml` + `databricks.yml`):** `app.yaml` missing `LAKEBASE_ENDPOINT` (needs `valueFrom: postgres` for the bound resource, or a static `value:` fallback); a **dotted `DB_SCHEMA`** (a UC `catalog.schema` FQN is not a Postgres schema name — use the single introspected synced schema name); a `databricks.yml` app `resources:` block (inert on the SNAPSHOT path — bind via the Step 3 REST PATCH instead, P35); or a resource `database:` FQN written with the underscore PG dbname `databricks_postgres` rather than the hyphenated resource id `databricks-postgres`.
 - **REVIEW (D) — unused named import:** `noUnusedLocals` turns it into a hard `TS6133` build failure. Heuristic — confirm before removing.
 
 ```python
@@ -16222,6 +16300,10 @@ if ay.exists():
     le = env.get("LAKEBASE_ENDPOINT")
     if not le or not (le.get("valueFrom") == "postgres" or le.get("value")):
         bad.append("app.yaml: LAKEBASE_ENDPOINT missing -> add valueFrom: postgres (when the postgres resource is bound) or a static value: projects/.../endpoints/primary")
+    ds = env.get("DB_SCHEMA")
+    dsv = ds.get("value") if isinstance(ds, dict) else None
+    if dsv and "." in dsv:
+        bad.append(f"app.yaml: DB_SCHEMA=''{dsv}'' contains a ''.'' -> that is a UC catalog.schema FQN, NOT a Postgres schema name; use the single introspected synced schema name (see synced_schema.md), never the dotted UC identifier")
 dy = pathlib.Path("<APP_ROOT>/databricks.yml")
 if dy.exists():
     dtext = dy.read_text()
@@ -16232,6 +16314,66 @@ if dy.exists():
             bad.append(f"databricks.yml: app {aname} declares a resources: block -> INERT on the SDK SNAPSHOT path (P35); bind the postgres resource via PATCH /api/2.0/apps/{{name}} in Step 3, not databricks.yml")
     if re.search(r"/databases/databricks_postgres\b", dtext):
         bad.append("databricks.yml: /databases/databricks_postgres uses the underscore PG dbname -> the resource FQN id is RFC 1123 (hyphenated databricks-postgres); read the real .name from postgres list-databases")
+# (I/J/K) build-surface drift — mirror of the build step''s gate (needed build tool present in deps OR devDeps; toolchain-aware Tailwind; client-bundle in a server()-auto-detected dir)
+import json
+pkg = pathlib.Path("<APP_ROOT>/package.json")
+deps, dev = {}, {}
+if pkg.exists():
+    pj = json.loads(pkg.read_text())
+    deps = pj.get("dependencies", {}) or {}
+    dev = pj.get("devDependencies", {}) or {}
+    present = set(deps) | set(dev)
+    missing = [t for t in ("vite", "typescript") if t not in present]
+    if not ({"@vitejs/plugin-react", "@vitejs/plugin-react-swc"} & present):
+        missing.append("@vitejs/plugin-react (or -swc)")
+    if missing:
+        bad.append(f"package.json: build tool(s) {sorted(missing)} absent from BOTH dependencies and devDependencies -> the server-side build cannot run; add them (devDependencies is fine, do NOT move to dependencies)")
+# (J) TAILWIND toolchain — toolchain-aware: accept v3 (tailwind.config + postcss.config + deps) OR v4 (@tailwindcss/vite)
+cdir = pathlib.Path("<APP_ROOT>/client")
+css_files = list(cdir.rglob("*.css")) if cdir.exists() else []
+uses_tw = any(re.search(r''@tailwind\b|@layer\b'', p.read_text()) for p in css_files)
+imports_appkit_styles = any(re.search(r''@import\s+["\'']@databricks/appkit-ui/styles\.css["\'']'', p.read_text()) for p in css_files)
+has_v4_plugin = ("@tailwindcss/vite" in deps) or ("@tailwindcss/vite" in dev)  # devDependencies is the scaffold-correct home
+if uses_tw and not has_v4_plugin:
+    has_tw_cfg = any(pathlib.Path("<APP_ROOT>/" + n).exists() for n in ("tailwind.config.js", "tailwind.config.ts", "tailwind.config.cjs"))
+    has_pc_cfg = any(pathlib.Path("<APP_ROOT>/" + n).exists() for n in ("postcss.config.js", "postcss.config.cjs", "postcss.config.mjs"))
+    if not has_tw_cfg:
+        bad.append("client CSS uses @tailwind/@layer (v3 path, no @tailwindcss/vite) but no tailwind.config.* -> add it; Vite will not process Tailwind without it")
+    if not has_pc_cfg:
+        bad.append("client CSS uses @tailwind/@layer (v3 path, no @tailwindcss/vite) but no postcss.config.* -> add it")
+    for t in ("tailwindcss", "postcss", "autoprefixer"):
+        if t not in deps:
+            bad.append(f"Tailwind v3 in use but ''{t}'' not in package.json dependencies -> add it to dependencies")
+    if imports_appkit_styles and has_pc_cfg:
+        bad.append("client CSS @import \"@databricks/appkit-ui/styles.css\" (a v4 stylesheet) under a v3 PostCSS setup -> toolchain conflict that FAILS the server-side Vite build; move to the v4 toolchain (@tailwindcss/vite) OR drop the v4 @import and keep v3 @tailwind directives")
+elif has_v4_plugin:
+    vite_cfgs = [pathlib.Path("<APP_ROOT>/" + n) for n in ("client/vite.config.ts", "client/vite.config.js", "client/vite.config.mjs", "vite.config.ts", "vite.config.js", "vite.config.mjs")]
+    if not any(c.exists() and "@tailwindcss/vite" in c.read_text() for c in vite_cfgs):
+        bad.append("@tailwindcss/vite present but not wired into any vite.config plugins -> add tailwindcss() to the vite plugins (v4)")
+# (K) CLIENT BUNDLE must land in a server()-auto-detected static dir — else "Cannot GET /" (Phase 0: L8 refuted, L9 root cause)
+import os
+AUTO_DETECT = {"dist", "client/dist", "build", "public", "out"}
+vcfg = next((pathlib.Path("<APP_ROOT>/" + n) for n in
+             ("client/vite.config.ts", "client/vite.config.js", "client/vite.config.mjs",
+              "vite.config.ts", "vite.config.js", "vite.config.mjs")
+             if pathlib.Path("<APP_ROOT>/" + n).exists()), None)
+if vcfg is not None:
+    vt = vcfg.read_text()
+    om = re.search(r''outDir\s*:\s*["\'']([^"\'']+)["\'']'', vt)
+    if om:
+        approot = str(pathlib.Path("<APP_ROOT>"))
+        rootm = re.search(r''\broot\s*:\s*["\'']([^"\'']+)["\'']'', vt)
+        vroot = os.path.join(approot, rootm.group(1)) if rootm else str(vcfg.parent)
+        resolved_abs = os.path.normpath(os.path.join(vroot, om.group(1)))
+        try:
+            resolved = os.path.relpath(resolved_abs, approot).replace(os.sep, "/")
+        except ValueError:
+            resolved = resolved_abs
+        srvp = pathlib.Path("<APP_ROOT>/server/server.ts")
+        spm = re.search(r''server\(\s*\{[^}]*staticPath\s*:\s*["\'']([^"\'']+)["\'']'', srvp.read_text()) if srvp.exists() else None
+        sp = os.path.normpath(spm.group(1)).replace(os.sep, "/") if spm else None
+        if resolved not in AUTO_DETECT and resolved != sp:
+            bad.append(f"{vcfg}: client bundle resolves to ''{resolved}'', not a server()-auto-detected dir {sorted(AUTO_DETECT)} and no matching server(staticPath) -> deploys GREEN but returns ''Cannot GET /''. Set outDir to the scaffold default (client/dist) or pass server({{ staticPath: ''{resolved}'' }}). (Classic trap: root-level vite.config with root:''client'' + outDir:''../dist/client'' emits dist/client.)")
 print("BLOCKING:\n" + ("\n".join(bad) or "OK"))
 print("REVIEW:\n" + ("\n".join(review) or "none"))
 ```
@@ -16254,24 +16396,31 @@ The app runs as a dedicated service principal that is **not** in the `users` gro
 Then deploy via `executeCode` against warm compute (warm up once with `print("ready")`):
 
 1. Ensure the app exists — `w.apps.get(APP_NAME)`; if it 404s, `w.apps.create(...)` and wait for the compute to be `ACTIVE`. Confirm the `postgres` resource is **bound** to the SYNCED endpoint before deploying (inspect `w.apps.get(APP_NAME).resources` for a `postgres` entry; if absent, apply the bind recipe above) — with the binding in place the plugin-bearing app boots straight to `RUNNING` (no CRASHED hop), whereas an unbound app carrying `valueFrom: postgres` boots `CRASHED` because the env var cannot resolve. [TESTED P37b/P37d]
-2. Deploy source directly (build runs server-side):
+2. **Flush-verify the source BEFORE deploying (P40 — deterministic; do NOT rely on a blind `sleep(15)`).** A SNAPSHOT deploy captures `<APP_ROOT>` through the workspace **export** path, which can race un-flushed `open().write()`s and ship a STALE source — the failure that poisoned the last spiral. So for **every file you edited this session**, read it BACK through the workspace export API (the same surface the snapshot reads — `w.workspace.download(<path>).read()`, or `w.api_client.do("GET", "/api/2.0/workspace/export", query={"path": <path>, "format": "SOURCE", "direct_download": "true"})`), and assert its content hash equals what you intended to write. Loop with a short backoff (e.g. 2s, up to ~30s) until every changed file matches; if a file will not converge, STOP and report it — never deploy on an unverified source.
+3. Deploy source directly (build runs server-side):
    `w.apps.deploy(APP_NAME, AppDeployment(source_code_path="<APP_ROOT>", mode=AppDeploymentMode.SNAPSHOT))`.
-3. Poll the returned deployment until `SUCCEEDED`; confirm `w.apps.get(APP_NAME).compute_status.state == "ACTIVE"`.
+4. Poll the returned deployment until `SUCCEEDED`; confirm `w.apps.get(APP_NAME).compute_status.state == "ACTIVE"`. **Then verify the DEPLOYED snapshot matches local (P40 / post-deploy check).** A green `SUCCEEDED` on stale source is a **phantom success** — re-export the changed files (same workspace export API) and assert their hashes/sizes equal your local copies; on any mismatch the SNAPSHOT captured stale source, so redeploy (do NOT declare the deploy done). Only once the deployed source matches do you proceed to Step 3b/4.
 
-**On `FAILED` → `/logz`-human escalation (build logs are NOT readable from compute).** The server-side Vite/tsc error is not retrievable programmatically (`databricks apps logs` returns an OAuth-token error; raw `/logz` hits PKCE/401). Print `f"{w.apps.get(APP_NAME).url}/logz"`, ask the operator to open it and paste the exact failing `file(line,col): error TS####` line, fix that file:line, and redeploy. No-browser fallback: the 2–3-file batch ladder (revert to last `SUCCEEDED`, re-apply 2–3 files at a time, redeploy ~50s each, bisect the batch that flips green→`FAILED`).
+**On `FAILED` → baseline-first bisect, THEN `/logz`-human escalation (build logs are NOT readable from compute).** Because the write-race (P40) is **suspect #1** for a `FAILED` that "should have worked", first **re-deploy the last-known-good source UNCHANGED** — if the same bytes now deploy green, the earlier failure was a stale-source capture, not your edit; record the recovered good deploy and move on. Persist a `last_known_good` pointer (deployment id + the changed-file hashes) in `<APP_ROOT>/.vibecoding-state.md` on every `SUCCEEDED` so this baseline is always available. If the unchanged redeploy still `FAILED`, THEN escalate: the server-side Vite/tsc error is not retrievable programmatically (`databricks apps logs` returns an OAuth-token error; raw `/logz` hits PKCE/401), so print `f"{w.apps.get(APP_NAME).url}/logz"`, ask the operator to open it and paste the exact failing `file(line,col): error TS####` line, fix that file:line, and redeploy. No-browser fallback: the 2–3-file batch ladder (revert to last `SUCCEEDED`, re-apply 2–3 files at a time, redeploy ~50s each, bisect the batch that flips green→`FAILED`). If the source is lost or corrupted, **reconstruct the changed files from `<artifact_root>/docs/analytics_ui_design.md` + `<APP_ROOT>/.vibecoding-state.md`** (the sanctioned recovery) — NEVER reach for an unnamed snapshot-copy hack and NEVER delete/regenerate `package-lock.json`.
 
 If `runDatabricksCli databricks apps deploy` happens to be available on the current AppKit project page, it is an acceptable equivalent — but the SDK SNAPSHOT call is the cross-page-reliable mechanism. Do NOT fall back to creating UI assets by hand.
 
-### Step 3b — Re-assert and verify the app-SP Genie grants (idempotent)
+### Step 3b — Re-assert the app-SP Genie grants + re-apply the OBO scope (idempotent)
 
-The **Wire Genie** step (Step 37) added a `/api/genie/*` chat path to this app, so the app SP MUST hold the Genie grants for the deployed chat to answer. These grants are **idempotent** — re-assert them here on every deploy (a PATCH/GRANT that is already in place is a harmless no-op), then verify. Grant the app SP `CAN_RUN` on the Genie space via **PATCH (not PUT — PUT clobbers the ACL)**:
+The **Wire Genie** step (Step 37) added a `/api/genie/*` chat path to this app, so the app SP MUST hold the Genie grants for the deployed chat to answer. These grants are **idempotent** — re-assert them here on every deploy (a PATCH/GRANT that is already in place is a harmless no-op), then verify.
+
+🔴 **First resolve `{genie_space_id}` to a concrete id and assert it is non-empty** — read it from `<APP_ROOT>/.vibecoding-state.md` / `<artifact_root>/docs/genie_brief.md` and confirm it matches the space-id shape before building the request. A blank `{genie_space_id}` renders the URL as `/api/2.0/permissions/genie/` (no id) and either 404s or silently grants nothing while looking successful; if the id cannot be resolved, STOP and report — do NOT issue the PATCH with an empty id.
+
+Grant the app SP `CAN_RUN` on the Genie space via **PATCH (not PUT — PUT clobbers the ACL)**:
 
 ```
 PATCH /api/2.0/permissions/genie/{genie_space_id}
 {"access_control_list":[{"service_principal_name":"<app_sp_client_id>","permission_level":"CAN_RUN"}]}
 ```
 
-(The generic permissions path is `/api/2.0/permissions/genie/{id}` where `{id}` = `{genie_space_id}`.) Also re-assert, for the app SP: the backing warehouse `CAN_USE`, and UC `USE_CATALOG`/`USE_SCHEMA`/`SELECT` (+ `EXECUTE` on TVF schemas) on both data-source schemas — do not rely on `users`-group inheritance. **Verify (read-only):** re-`GET /api/2.0/permissions/genie/{genie_space_id}` and confirm the app SP appears with `CAN_RUN`; a missing grant surfaces at Step 4 as the `/api/genie` chat failing while the analytics routes stay live. SP-served is the default; if the app opted into OBO (`user_api_scopes: [dashboards.genie]`), the space `CAN_RUN` on the app SP is still required while the warehouse/UC reads run as the signed-in user. This step is **mandatory** now that Wire Genie is part of the track — it is no longer optional.
+(The generic permissions path is `/api/2.0/permissions/genie/{id}` where `{id}` = `{genie_space_id}`.) Also re-assert, for the app SP: the backing warehouse `CAN_USE`, and UC `USE_CATALOG`/`USE_SCHEMA`/`SELECT` (+ `EXECUTE` on TVF schemas) on both data-source schemas — do not rely on `users`-group inheritance. **Verify (read-only):** re-`GET /api/2.0/permissions/genie/{genie_space_id}` and confirm the app SP appears with `CAN_RUN`; a missing grant surfaces at Step 4 as the `/api/genie` chat failing while the analytics routes stay live.
+
+**Re-apply the OBO scope (the `genie()` plugin runs on-behalf-of the signed-in user).** Wire Genie declared `user_api_scopes: [dashboards.genie]` in `app.yaml`, but a full-replacement deploy (`w.apps.deploy`/`apps update`) can wipe it — so confirm it survived: `w.apps.get(APP_NAME)` and check the effective user API scopes include `genie`. If absent, restore the scope (PATCH the app / re-add `user_api_scopes: [dashboards.genie]` to `app.yaml`) and redeploy; without it the deployed chat fails with `Provided OAuth token does not have required scopes: genie` even while the analytics routes stay live. The space `CAN_RUN` on the app SP is required regardless (it lets the app reach the Conversation API), while the warehouse/UC reads run as the signed-in user''s own grants. This step is **mandatory** now that Wire Genie is part of the track — it is no longer optional.
 
 ### Step 4 — Verify the DEPLOYED app via envelope semantics (not localhost, not HTTP status)
 
@@ -16280,15 +16429,17 @@ PATCH /api/2.0/permissions/genie/{genie_space_id}
 - **Browser (required for the render check)** — print `w.apps.get(APP_NAME).url`, have the operator open it (OAuth flow establishes the session) and confirm the React UI renders with **ConnectionStatus showing "Live Data"** and real synced rows, no `ErrorBoundary` stack. For deeper errors, open `<app-url>/logz` in the same browser.
 - **Programmatic (best-effort — may fail from serverless)** — replay the **3-hop Apps OAuth handshake in one `requests.Session()`** (CSRF cookie persists through the PKCE callback), then reuse the session for `/api/*`. Reusable snippet: `readSkillFile("skills/vibe-coding-workshop/skills/genie-code-environment/references/app-verification.md")`. This 3-hop replay is **not reliable from Genie Code serverless compute** (the PKCE/redirect handshake frequently fails there); if it cannot establish a session, do NOT treat that as a deploy failure — fall back to the **browser** check above, which is the authoritative verification path on Genie Code.
 
-**Envelope-level verification:** every analytics route wraps its live path and falls back to a mock envelope with HTTP 200 on any exception, so parse `envelope.source` from the JSON body — `"mock"` is a deployment failure, not a warning. Each `/api/analytics/*` (and `/api/health/lakebase`, and `/api/chat` if present) must return `"source":"live"`. If a route falls back to `"mock"` with a Postgres auth error, check `databricks postgres list-roles` (READ-ONLY) for the app-SP client ID — if `auth_method=NO_LOGIN`, STOP and report (the role re-provision flip-flop is the provisioning step''s job, not this fork''s). Spot-check synced-table row counts against the Gold source for freshness, and confirm ConnectionStatus stays "Live Data" on a later reload. Remove any debug/diagnostic routes (`/api/debug/*`, `/api/_introspect`) before declaring done.
+**Envelope-level verification:** every analytics route wraps its live path and falls back to a mock envelope with HTTP 200 on any exception, so parse `envelope.source` from the JSON body — `"mock"` is a deployment failure, not a warning. Each `/api/analytics/*` (and `/api/health/lakebase`, and `/api/chat` if present) must return `"source":"live"`. If a route falls back to `"mock"` with a Postgres auth error, check `postgres list-roles` (READ-ONLY, run inside `executeCode` via `subprocess`/`w.api_client.do` — NOT the blocked `runDatabricksCli` tool, P41) for the app-SP client ID — if `auth_method=NO_LOGIN`, STOP and report (the role re-provision flip-flop is the provisioning step''s job, not this fork''s). Spot-check synced-table row counts against the Gold source for freshness, and confirm ConnectionStatus stays "Live Data" on a later reload. Remove any debug/diagnostic routes (`/api/debug/*`, `/api/_introspect`) before declaring done.
+
+**Genie chat probe (the OBO scope gate).** The `genie()` plugin mounts `/api/genie/*` as an SSE stream, not an envelope route, so verify it separately in the same authenticated session: `POST /api/genie/default/messages` with a trivial question (e.g. `{"content":"How many rows are available?"}`) and read the SSE events — the stream MUST reach a `message_result` and MUST NOT emit an `error` event carrying `Provided OAuth token does not have required scopes: genie`. That specific error means `user_api_scopes: [dashboards.genie]` is missing from the deployed `app.yaml` — re-apply it per Step 3b and redeploy. A `CAN_RUN`/permission error instead means the app-SP space grant (Step 3b) or the signed-in user''s own access to the space is missing.
 
 ### Step 5 — Post-deploy cost re-check (READ-ONLY)
 
-Re-run `databricks postgres get-endpoint projects/{user_app_name}/branches/production/endpoints/primary --output json` after the app has been up a few minutes and confirm `autoscaling_limit_min_cu`, `autoscaling_limit_max_cu`, and `suspend_timeout_duration` still match `<artifact_root>/docs/reverse_etl.md` (scale-to-zero preserved). Do NOT add a warmup cron or keep-alive ping — it defeats scale-to-zero and is a cost regression. If sizing drifted, STOP and report (re-sizing is the provisioning step).
+Re-run the read-only `postgres get-endpoint projects/{user_app_name}/branches/production/endpoints/primary --output json` (again **inside `executeCode`** via `subprocess`/`w.api_client.do`, not the blocked `runDatabricksCli` tool — P41) after the app has been up a few minutes and confirm `autoscaling_limit_min_cu`, `autoscaling_limit_max_cu`, and `suspend_timeout_duration` still match `<artifact_root>/docs/reverse_etl.md` (scale-to-zero preserved). Do NOT add a warmup cron or keep-alive ping — it defeats scale-to-zero and is a cost regression. If sizing drifted, STOP and report (re-sizing is the provisioning step).
 
 **State-lock:** this prompt runs between an `enter` (Step 0) and an `exit`. After the gate passes, run `skills/vibecoding-state` op `exit` — params: `prompt_id: "activation_deploy_validate"`, `gate: "Activation app deployed + validated"`, `captured: {user_app_name, app_url}`. **This `enter`/`exit` pair is a mandatory ritual, not advisory.** Step 0''s `enter` MUST locate — or, if this is the first prompt of the track, bootstrap-create — the canonical live state file at `<app_root>/.vibecoding-state.md` (never the temporary `example/…` bootstrap path). The closing `exit` MUST append this prompt''s Per-Step Log entry, Gate result, and `captured` vars to that file, then **re-read it and echo the appended section to prove the write landed**. **Gate completion rule:** this prompt is NOT complete until that re-read confirms the appended entry — the chat summary is NOT the state store.
 
-**Gate:** `Activation app deployed + validated` — `w.apps.get(APP_NAME)` reports `compute_status.state: "ACTIVE"` with the latest deployment `SUCCEEDED`, the deployed `url` was reached through the OAuth session (browser or 3-hop `requests.Session()`) showing the React UI with ConnectionStatus "Live Data", every `/api/analytics/*` (and `/api/chat` if present) returns `envelope.source == "live"`, the app SP holds `CAN_CONNECT_AND_CREATE` + `USAGE`/`SELECT` on `{user_schema_prefix}`, and the READ-ONLY `get-endpoint` cost re-check matches `reverse_etl.md` both pre- and post-deploy. Verification used the DEPLOYED URL — NO `http://localhost:8000` check, NO `databricks sync`, NO mutating `update-endpoint`/`delete-role`, and NO UI assets hand-created as a workaround.
+**Gate:** `Activation app deployed + validated` — `w.apps.get(APP_NAME)` reports `compute_status.state: "ACTIVE"` with the latest deployment `SUCCEEDED`, the deployed `url` was reached through the OAuth session (browser or 3-hop `requests.Session()`) showing the React UI with ConnectionStatus "Live Data", every `/api/analytics/*` (and `/api/chat` if present) returns `envelope.source == "live"`, the Genie chat probe (`POST /api/genie/default/messages`) reaches a `message_result` with no `required scopes: genie` error (the deployed `app.yaml` carries `user_api_scopes: [dashboards.genie]` and the app SP holds `CAN_RUN` on the space), the app SP holds `CAN_CONNECT_AND_CREATE` + `USAGE`/`SELECT` on `{user_schema_prefix}`, and the READ-ONLY `get-endpoint` cost re-check matches `reverse_etl.md` both pre- and post-deploy. Verification used the DEPLOYED URL — NO `http://localhost:8000` check, NO `databricks sync`, NO mutating `update-endpoint`/`delete-role`, and NO UI assets hand-created as a workaround.
 
 **🛑 STOP — do not work around a blocked deploy.** If the SDK SNAPSHOT deploy or the OAuth verification fails, STOP and report the exact error and which path (CLI vs SDK) was attempted. Do NOT hand-create the app, do NOT fabricate a URL, do NOT skip verification, and do NOT mutate the endpoint/role to force a pass. Only take an alternate path if the user explicitly authorizes it.',
 '',
@@ -19036,7 +19187,7 @@ VALUES
 (941, 'gaccel_activation', 'genie-code',
 '**Choose what to activate — decide which Gold dimension + fact tables (and why) should feed the app and dashboard, never the Metric View itself — and record the approved selection for the Synced Tables sequence. Business selection only; keys, grain, dependency order, and sync modes are the next step''s job.**
 
-**Genie Code navigation:** this is a read + select beat — inspect the Metric View source, the Gold schema, and the dashboard''s table inventory (e.g. `DESCRIBE` / `information_schema`, the ERD) just to see which base tables exist. Do NOT call the synced-tables REST API, `apps init`, or any deploy here, and do NOT work out PKs, grain, dependency order, or sync modes — the next step (`activation_reverse_sync`, Design & Provision Synced Tables) owns all of that. Skills: `databricks-lakebase` (reference only at this beat — for the resource model + the auto-created branch/endpoint fact; it is NOT a provisioning driver, and provisioning is bundle-only in the next step, never its `databricks postgres` CLI / `w.postgres.*` path).
+**Genie Code navigation:** this is a read + select beat — inspect the Metric View source, the Gold schema, and the dashboard''s table inventory (e.g. `DESCRIBE` / `information_schema`, the ERD) just to see which base tables exist. Do NOT call the synced-tables REST API, `apps init`, or any deploy here, and do NOT work out PKs, grain, dependency order, or sync modes — the next step (`activation_reverse_sync`, Design & Provision Synced Tables) owns all of that. Skills: `databricks-lakebase` (reference only at this beat).
 
 Read `docs/genie_brief.md`, `docs/design_prd.md`, and `.vibecoding-state.md` first. Produce an ACTIVATION SELECTION (business selection only — do NOT create synced tables, an app, or deploy anything, and do NOT record keys/grain/modes):
 

@@ -489,6 +489,7 @@ export const ALL_STEPS: Record<number, WorkflowStep> = {
   69: { number: 69, title: 'Write the Routing Page', icon: GitBranch, color: 'text-teal-400', sectionTag: 'ontology_routing' },
   71: { number: 71, title: 'AI/BI Dashboard', icon: LayoutDashboard, color: 'text-emerald-400', sectionTag: 'gaccel_dashboard' },
   72: { number: 72, title: 'Choose What to Activate', icon: ClipboardList, color: 'text-emerald-400', sectionTag: 'gaccel_activation' },
+  73: { number: 73, title: 'Wire Genie', icon: MessageSquareText, color: 'text-emerald-500', sectionTag: 'activation_wire_genie' },
 };
 
 // The logical sections with their step groupings (4-chapter structure + activation + skills)
@@ -592,10 +593,12 @@ export const WORKFLOW_SECTIONS: WorkflowSection[] = [
     bgColor: 'bg-emerald-500/15',
     borderColor: 'border-emerald-500/30',
     // Choose What to Activate wrapper (72) → the reused reverse-ETL activation sequence
-    // (32-37: Synced Tables → Design → Build → Wire → Deploy). This mirrors the
-    // master "Reverse ETL" section (32-37) with just a thin planning lead-in.
+    // (32-37: Synced Tables → Design → Build → Wire → Deploy), with Wire Genie (73)
+    // inserted after Wire to Lakebase so the app gains a Genie chat panel before Deploy.
+    // This mirrors the master "Reverse ETL" section (32-37) plus a thin planning lead-in
+    // and the genie-accelerator-only Wire Genie step.
     // Step numbers are incidental; order follows this list.
-    steps: [72, 32, 33, 34, 35, 36, 37].map(n => ALL_STEPS[n]),
+    steps: [72, 32, 33, 34, 35, 36, 73, 37].map(n => ALL_STEPS[n]),
   },
   {
     // Genie Ontology now follows Activation: the domain-scoping arc is an
