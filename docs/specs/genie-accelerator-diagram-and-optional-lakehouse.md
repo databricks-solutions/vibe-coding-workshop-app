@@ -1,0 +1,263 @@
+# Genie Accelerator — Diagram Parity & Optional Lakehouse (handoff spec)
+
+**Status:** Ready to execute · **Author:** pairing session (Ask-mode plan → spec) · **Date:** 2026-09-14
+**Target repo:** `vibe-coding-workshop-app`
+**Depends on:** the Genie Accelerator track already shipped per [`PLAN.md`](./PLAN.md) (branch `feat/genie-accelerator-track`, deployed to `fevm-serverless`).
+**Companion:** the architecture-diagram discussion that produced the two decisions recorded in §A.0.
+
+---
+
+## 0. Why this spec exists
+
+Two related refinements to the **Genie Accelerator** track, both about how the track is
+*presented and scoped* (no prompt-content changes):
+
+1. **Part A — Diagram parity.** The architecture diagram rendered for `genie-accelerator`
+   is sparse and generic compared with the "gold standard" reverse-ETL diagram
+   (`reverse-app`). It must be brought to par: show the real Genie arc and the
+   App & Lakebase endpoint.
+2. **Part B — Optional Lakehouse.** The **Lakehouse** section (Bronze → Gold) is currently
+   in the **default** Genie path. It should **not** be in the default path — instead it
+   becomes an **optional toggle** on the selector screen, **OFF by default**. When off, the
+   learner starts from existing / uploaded / synthetic data (the semantic-layer step
+   already supports these data modes); when on, they build Bronze → Gold first.
+
+The two parts interact: once Lakehouse is optional, the diagram's Lakehouse column must be
+conditional on the toggle (Part A must respect Part B).
+
+### Golden rules (carried from PLAN.md)
+- The only binding between a UI step and its prompt row is the **`sectionTag`** string.
+  Do not touch seed rows; this spec changes **UI/config only**.
+- Do **not** run `databricks bundle init`. Reseed only through the app's own scripts.
+- **STOP and ask** before deploying to any real workspace.
+- Keep `pyproject`/lockfile policy and existing lint baseline intact (no new lint errors).
+
+---
+
+# PART A — Diagram parity for `genie-accelerator`
+
+## A.0 Decisions already made (do not re-litigate)
+
+- **Layout:** *Force the reverse flip-card layout for Genie* and reuse `reverse-app`'s right
+  column + Synced-Tables / Genie-Embed arrows. (Chosen over a forward restructure or a fully
+  dedicated view.)
+- **Scope:** *Full parity* — enable the App/Lakebase endpoint, render the reverse arc, add a
+  bespoke middle panel, add the missing `ServicePopover` entries, and polish legend/objectives.
+
+## A.1 Current state (as of 2026-09-14)
+
+- `ARCH_VISIBILITY['genie-accelerator'] = { ch1:false, ch2:false, ch3:true, ch4:true }`
+  (`src/constants/workflowSections.ts:788`) → **App & Database column is hidden**, so the
+  diagram has no endpoint even though the track ends at Lakebase → App.
+- Genie is a **forward** accelerator (`App.tsx:679-688` bounces accelerators to
+  `app-database` on reverse), so it renders the **front face**. Combined with the hidden
+  App column, the diagram is effectively just *Lakehouse → a generic "Genie" box*.
+- The middle "AI and Agents" column reuses the **generic** Genie box (TVF / Metric Views /
+  Genie Spaces), and the AI/BI-Dashboard + Agent tiles are hidden by `!isGenie`
+  (`ArchitectureDiagram.tsx:979`, `:1189`). None of this reflects the actual Genie arc.
+- The gold standard is the reverse flip-card **back face** (`ArchitectureDiagram.tsx:1140-1316`):
+  Lakehouse → AI and Agents → *Synced Tables / Genie Embed* → App & Database (Lakebase →
+  Analytics App → User), used by `reverse-app`.
+
+## A.2 Target Genie arc (already described by our own metadata)
+
+`pathDescriptions.ts:92` and `GENIE_RIGHT_OBJECTIVES` (`ArchitectureDiagram.tsx:113-119`):
+
+> Lakehouse *(optional, see Part B)* → **Semantic Layer** (Metric View + synonyms) →
+> **Genie Agent** (instructions, verified queries, benchmarks, optimize) →
+> **Discover Ontology** (domains, pages, routing) → **AI/BI Dashboard** →
+> **Synced Tables → Lakebase → App**
+
+## A.3 Changes (file-by-file)
+
+1. **Enable the endpoint.** `src/constants/workflowSections.ts`
+   - `ARCH_VISIBILITY['genie-accelerator']` → `{ ch1:true, ch2:true, ch3:<see Part B>, ch4:true }`.
+   - Align `CHAPTER_VISIBILITY['genie-accelerator']` (`:770`) to include `ch1, ch2` so the
+     column-aligned objectives render under the App column.
+
+2. **Force reverse layout (contained).** `src/components/ArchitectureDiagram.tsx`
+   - In `ArchitectureDiagramContent` (after `const isGenie` at `:751`) compute
+     `const effectiveDirection = isGenie ? 'reverse' : direction;` and use it for the
+     interactive-hint text (`:802`) and the flip class (`:808`).
+   - **Guard:** because App-level `direction` stays `'forward'` for Genie, the accelerator
+     bounce in `App.tsx:686-688` is never triggered — no change to `ACCELERATOR_LEVELS`
+     needed.
+
+3. **Bespoke `GenieAcceleratorPanel`.** `src/components/ArchitectureDiagram.tsx`
+   - Add a component next to `AgentsAcceleratorPanel` (`:181`) rendering grouped, clickable
+     sub-tiles: **Semantic Layer** (chip `Metric View` [+ `Synonyms`], reuse
+     `serviceKey="metricViews"`) → **Genie Agent** (chips `Instructions`, `Verified Queries`,
+     `Benchmarks`, `Optimize`, new `serviceKey="genieAgent"`) → **Discover Ontology** (chips
+     `Domains`, `Pages`, `Routing`, new `serviceKey="discoverOntology"`) → **AI/BI Dashboard**
+     (reuse `serviceKey="aiBIDashboards"`).
+   - Branch to it in the **reverse back-face middle column** (`:1166-1218`) the way
+     `isAgentsAccelerator` branches on the front face (`:953-955`):
+     `isGenie ? <GenieAcceleratorPanel/> : (existing)`. This replaces the generic Genie box
+     and the `!isGenie` hidden tiles.
+
+4. **New `ServicePopover` entries.** `src/components/ServicePopover.tsx`
+   - Add `genieAgent`, `discoverOntology`, and (if we make the "Synced Tables" arrow label
+     clickable) `syncedTables`, each following the `ServiceInfo` shape (`:33-40`).
+     `metricViews`, `aiBIDashboards`, `lakebase`, `databricksApp` already exist.
+
+5. **Polish.** Reverse legend (`:1290-1315`) reads Lakehouse / AI and Agents / Genie /
+   Synced Tables (Reverse ETL) / Lakebase / Analytics App; reuse the reverse objectives block
+   (already wired to `GENIE_RIGHT_OBJECTIVES`); keep chip styling/animations identical to
+   `AgentsAcceleratorPanel`.
+
+6. **Standalone `ArchitectureDiagram` (line 1403).** A second, collapsible copy of the layout
+   (~`:1445-1900`) with **no `direction` prop**. Decide in review whether Genie is surfaced
+   there; if yes, apply the same `isGenie` panel branch + forced-reverse handling, otherwise
+   explicitly note it as out of scope so a second inconsistent diagram doesn't linger.
+
+---
+
+# PART B — Make the Lakehouse optional (default OFF)
+
+## B.1 Current state
+
+- `WORKSHOP_LEVELS['genie-accelerator'].sectionIds` includes `'lakehouse'`
+  (`src/constants/workflowSections.ts:270`).
+- `getFilteredSections` filters that section for Genie to steps **[22, 11, 14, 23]**
+  (`:673-678`):
+  | Step | Title | `sectionTag` |
+  |--:|---|---|
+  | 22 | Analyze Silver Metadata | `genie_silver_metadata` |
+  | 11 | Gold Layer Design | `gold_layer_design` |
+  | 14 | Gold Pipeline | `gold_layer_pipeline` |
+  | 23 | Deploy Assets | `deploy_lakehouse_assets` |
+- Accelerators are excluded from the existing optional toggles: the selector renders the
+  medallion / AI-module chips only when `!isAcceleratorSelected`
+  (`LevelSelector.tsx:622,649`), and the medallion comment explicitly excludes
+  `genie-accelerator` (`workflowSections.ts:143-145`). So Genie currently shows **no**
+  optional toggles.
+- Durations: `pathDurations.ts:155` gives Genie `totalMinutes: 260` with a `lakehouse: 90`
+  segment.
+
+## B.2 Design — reuse the existing "disable-by-tag" toggle mechanism
+
+Follow the exact pattern used by `getDisabledTagsForAIModules` /
+`getDisabledTagsForMedallionLayers` (`workflowSections.ts:126-202`), where a UI selection is
+translated into `section_tag`s to disable, unioned into `effectiveDisabledTags`
+(`App.tsx:148-152`), and empty sections are dropped by `getFilteredSections`
+(`:731`).
+
+Because the desired default is **OFF** (unlike medallion/AI toggles which default ON), model
+it as a single boolean rather than a Set.
+
+### B.2.a `src/constants/workflowSections.ts`
+- Add:
+  ```ts
+  export const LEVELS_WITH_LAKEHOUSE_TOGGLE: ReadonlySet<WorkshopLevel> =
+    new Set<WorkshopLevel>(['genie-accelerator']);
+
+  export const GENIE_LAKEHOUSE_TAGS = [
+    'genie_silver_metadata', 'gold_layer_design',
+    'gold_layer_pipeline', 'deploy_lakehouse_assets',
+  ] as const;
+
+  export function levelSupportsLakehouseToggle(level: WorkshopLevel): boolean {
+    return LEVELS_WITH_LAKEHOUSE_TOGGLE.has(level);
+  }
+
+  // includeLakehouse === false → disable the Genie lakehouse steps (default path).
+  export function getDisabledTagsForLakehouse(
+    level: WorkshopLevel,
+    includeLakehouse: boolean,
+  ): string[] {
+    if (!levelSupportsLakehouseToggle(level)) return [];
+    return includeLakehouse ? [] : [...GENIE_LAKEHOUSE_TAGS];
+  }
+  ```
+- Leave `WORKSHOP_LEVELS['genie-accelerator'].sectionIds` **as-is** (still lists
+  `'lakehouse'`). The default-OFF behavior comes from the disabled tags + the empty-section
+  drop, not from removing the id. This keeps the toggle-ON path trivial (clear the tags).
+
+### B.2.b `src/App.tsx`
+- Add state `const [includeLakehouse, setIncludeLakehouse] = useState(false);` (default OFF).
+  Reset to `false` wherever accelerator defaults are (re)initialised (mirror the
+  `setMedallionLayers(new Set(ALL_MEDALLION_LAYERS))` sites at `:403,:554`).
+- Fold into `effectiveDisabledTags` (`:148-152`):
+  ```ts
+  const lakeTags = getDisabledTagsForLakehouse(workshopLevel, includeLakehouse);
+  ...new Set([...disabledSectionTags, ...aiTags, ...medTags, ...lakeTags]);
+  ```
+- Persist `include_lakehouse` in session metadata alongside `direction` (save at
+  `saveSession`/`updateSessionMetadata`; restore where `direction` is restored,
+  `:354,:504`).
+- Pass `includeLakehouse` + `setIncludeLakehouse` down to `PathAndArchitecture`
+  (`:1315-1325`) and onward to `LevelSelector` and the diagram.
+
+### B.2.c Selector UI — `src/components/LevelSelector.tsx`
+- The medallion/AI chips are gated by `!isAcceleratorSelected` (`:622,:649`). Add a **new,
+  narrow branch** that renders a single **"Include Lakehouse (Bronze → Gold)"** toggle when
+  `levelSupportsLakehouseToggle(selectedLevel)` — i.e., specifically for
+  `genie-accelerator`, even though it is an accelerator.
+- Placement: in the Genie Accelerator's selected/detail panel (the same region where other
+  levels show their chips). Style it as an unchecked-by-default switch/checkbox with a short
+  helper: *"Off: start from existing / uploaded / synthetic data. On: build Bronze → Gold
+  first."*
+- Wire `checked={includeLakehouse}` / `onChange={onIncludeLakehouseChange}`.
+
+### B.2.d Durations — `src/constants/pathDurations.ts` + `PathDurationBar`
+- The default (OFF) Genie total should exclude the `lakehouse` 90-min segment
+  (260 → **170**). Confirm how `PathDurationBar.tsx` already subtracts disabled
+  segments for medallion/AI toggles and make the `lakehouse` segment respond to
+  `includeLakehouse` the same way. If durations are purely static today, add the same
+  disabled-tag-aware adjustment; do not hardcode two totals.
+
+### B.2.e Diagram interaction (ties Part A ↔ Part B)
+- Pass `includeLakehouse` into the diagram and make the **Lakehouse column conditional**:
+  - **OFF (default):** replace the Bronze/Silver/Gold column with a compact **"Data Source"**
+    node reflecting the semantic-layer data modes (Existing UC table / Uploaded CSV /
+    Synthetic), feeding directly into the Semantic Layer tile. Optionally show a faded
+    "Lakehouse (optional)" hint.
+  - **ON:** render the full Bronze → Silver → Gold Lakehouse column (reverse gold-standard
+    look) upstream of the Semantic Layer.
+- Practically: for Genie, drive the diagram's `ch3` visibility from `includeLakehouse`
+  (e.g., override `ARCH_VISIBILITY` via the existing `cumOverrides?.archVisibility` hook at
+  `ArchitectureDiagram.tsx:747`, or a dedicated prop) rather than a static `ch3:true`.
+
+## B.3 Behavioral expectations
+- **Default Genie path (toggle OFF):** no LAKEHOUSE section in the left nav; the track starts
+  at Foundation → Semantic Layer → Genie Agent → Genie Ontology → Activate → Refinement →
+  Clean Up. Diagram shows Data Source → Semantic Layer → … → App. Estimated ~170 min.
+- **Toggle ON:** LAKEHOUSE section (steps 22, 11, 14, 23) reappears before Semantic Layer;
+  diagram shows Bronze → Gold upstream; estimated ~260 min.
+- Toggling mid-session must not corrupt progress: disabling re-hides not-yet-started steps;
+  guard against a step being "active" when its section is toggled off (mirror how
+  medallion/AI toggles behave today).
+
+---
+
+## C. Verification checklist (fill in the PR)
+
+- [ ] `npm run build` (frontend) passes; no new lint errors vs. baseline.
+- [ ] **Part A:** Genie diagram renders the reverse arc with the App & Lakebase endpoint;
+      bespoke `GenieAcceleratorPanel` shows Semantic Layer → Genie Agent → Ontology →
+      Dashboard; new popovers open with content; legend/objectives correct.
+- [ ] Genie is **not** bounced to `app-database` (forced-reverse is contained to the diagram).
+- [ ] **Part B:** selector shows a single "Include Lakehouse" toggle for Genie, **OFF by
+      default**; default nav has **no** LAKEHOUSE section.
+- [ ] Toggling ON restores steps 22/11/14/23 before Semantic Layer; OFF removes them again.
+- [ ] Duration bar reflects ~170 min (off) / ~260 min (on); no hardcoded dual totals.
+- [ ] Diagram Lakehouse column is conditional on the toggle (Data Source when off, Bronze→Gold
+      when on).
+- [ ] `include_lakehouse` persists/restores with the session.
+- [ ] No seed / prompt-content changes; `sectionTag` bindings untouched.
+- [ ] Standalone `ArchitectureDiagram` (line 1403) decision recorded (updated or explicitly
+      out of scope).
+
+## D. Out of scope
+- Any change to prompt seed rows or `section_tag` strings.
+- Reordering the Genie track beats or adding/removing steps beyond toggling the Lakehouse set.
+- Non-Genie levels' diagrams or toggles.
+
+## E. Open questions for confirmation
+1. **Toggle label/copy** — "Include Lakehouse (Bronze → Gold)"? Any preferred wording?
+2. **Naming** — panel/legend should standardize on **"Genie Agent"** (metadata) vs. the
+   existing **"Genie Spaces"** legend term; confirm the rename.
+3. **Standalone diagram** — is `ArchitectureDiagram` (line 1403) surfaced for Genie anywhere?
+   If not, we leave it out of scope.
+4. **Deploy** — after implementation, redeploy to `fevm-serverless` via
+   `./scripts/deploy.sh --update` (STOP-and-ask gate still applies).

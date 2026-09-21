@@ -1,0 +1,49 @@
+%%{init: {'theme':'dark','themeVariables':{'fontFamily':'DM Sans, sans-serif','fontSize':'15px'}}}%%
+flowchart TB
+  subgraph CLIENTS["Clients (two surfaces, one session_id)"]
+    direction LR
+    UI["React UI<br/><i>browser</i><br/>companion + progress mirror"]
+    GC["Genie Code<br/><i>workspace · Agent mode</i><br/>fetch · explain · execute"]
+  end
+
+  subgraph ADAPTERS["Thin transport adapters (no workshop logic)"]
+    direction LR
+    REST["REST adapter<br/><code>/api/*</code><br/>FastAPI router"]
+    MCP["MCP adapter<br/><code>/mcp/</code> · FastMCP<br/>stateless_http=True · Streamable HTTP"]
+  end
+
+  subgraph ENGINE["Workshop Engine (single domain core)"]
+    direction TB
+    MANIFEST["Track Manifest<br/>order · sections · gating · chaining<br/><i>generated single source of truth</i>"]
+    PROG["Progression Engine<br/>next_step · can_start · complete_step"]
+    ASM["Prompt Assembler<br/>get_section_input_content<br/>bypass_llm verbatim + token subst."]
+    EXPL["Explainability payload<br/>why · how_to_apply · expected · gate"]
+    STATE["Capture / State store<br/>completed_steps · captured outputs"]
+  end
+
+  LB[("Lakebase<br/>sessions · params ·<br/>section_input_prompts")]
+  VSTATE[[".vibecoding-state.md<br/><i>shared narrative ledger</i>"]]
+
+  UI <--> REST
+  GC <--> MCP
+  REST --> ENGINE
+  MCP --> ENGINE
+
+  PROG --> MANIFEST
+  ASM --> MANIFEST
+  EXPL --> MANIFEST
+  PROG --> STATE
+  ASM --> STATE
+  STATE --> LB
+  ASM --> LB
+  GC -. records gates .-> VSTATE
+  STATE -. mirrors gates .-> VSTATE
+
+  classDef client fill:#1f2937,stroke:#38bdf8,color:#e5e7eb;
+  classDef adapter fill:#0f2a2a,stroke:#2dd4bf,color:#e5e7eb;
+  classDef engine fill:#1e1b2e,stroke:#a78bfa,color:#e5e7eb;
+  classDef store fill:#2a1f10,stroke:#f59e0b,color:#e5e7eb;
+  class UI,GC client;
+  class REST,MCP adapter;
+  class MANIFEST,PROG,ASM,EXPL,STATE engine;
+  class LB,VSTATE store;

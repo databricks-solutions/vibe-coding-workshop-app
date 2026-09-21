@@ -296,6 +296,8 @@ export interface SessionSaveRequest {
   current_step: number;
   workshop_level?: string;
   direction?: string;
+  include_lakehouse?: boolean;
+  include_genie_ontology?: boolean;
   completed_steps: number[];
   step_prompts: Record<number, string>;
 }
@@ -372,6 +374,8 @@ export interface UpdateSessionMetadataRequest {
   company_brand_url?: string;
   direction?: 'forward' | 'reverse';
   coding_assistant?: string;
+  include_lakehouse?: boolean;
+  include_genie_ontology?: boolean;
 }
 
 export interface SessionListItem {

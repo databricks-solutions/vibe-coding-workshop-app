@@ -10,7 +10,7 @@
  * - Service popovers (click for details + chat) via shared ServicePopover component
  */
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, Fragment } from 'react';
 import { 
   ChevronDown,
   Users, 
@@ -47,6 +47,7 @@ import {
   type ChainContext,
 } from '../constants/workflowSections';
 import { ServicePopover } from './ServicePopover';
+import { CHAPTER_BLOCKS, genieAcceleratorServices, type ChapterBlockId } from '../constants/chapterBlocks';
 
 // Learning objectives tagged by chapter - dynamically filtered by workshop level
 interface LearningObjective {
@@ -116,6 +117,22 @@ const GENIE_RIGHT_OBJECTIVES: LearningObjective[] = [
   { id: 'g3', chapters: ['ch4'], content: <>Model the <strong className="text-foreground">Discover Ontology</strong> — domains, pages, and routing</> },
   { id: 'g4', chapters: ['ch4'], content: <>Build an <strong className="text-foreground">AI/BI Dashboard</strong> on the Metric View</> },
   { id: 'g5', chapters: ['ch4'], content: <>Sync to <strong className="text-foreground">Lakebase</strong> via Synced Tables and power an <strong className="text-foreground">App</strong></> },
+];
+
+// Genie Accelerator — reverse (back-face) column objectives. The Genie track
+// renders the reverse flip-card layout (Lakehouse → AI and Agents → App), so it
+// needs reverse-shaped objective lists distinct from reverse-app's generic ones.
+// Middle column = the Genie arc; right column = activation (Lakebase + App + bundle).
+const GENIE_REVERSE_DI_OBJECTIVES: ReverseObjective[] = [
+  { id: 'gr1', content: <>Author a governed <strong className="text-foreground">Metric View</strong> with synonyms (semantic layer)</> },
+  { id: 'gr2', content: <>Stand up a <strong className="text-foreground">Genie Agent</strong> — instructions, verified queries, benchmarks, optimize</> },
+  { id: 'gr3', content: <>Model the <strong className="text-foreground">Discover Ontology</strong> — domains, pages, and routing</> },
+  { id: 'gr4', content: <>Build an <strong className="text-foreground">AI/BI Dashboard</strong> on the Metric View</> },
+];
+
+const GENIE_REVERSE_ACTIVATION_OBJECTIVES: ReverseObjective[] = [
+  { id: 'ga1', content: <>Sync Gold dimensions + facts into <strong className="text-foreground">Lakebase</strong> via Synced Tables</> },
+  { id: 'ga2', content: <>Power an <strong className="text-foreground">analytics app</strong> with the embedded <strong className="text-foreground">Genie Agent</strong></> },
 ];
 
 // Replaces the middle (ch3) column bullets — just the Bronze layer for agents.
@@ -229,6 +246,53 @@ function AgentsAcceleratorPanel({ mlflowFaded }: AgentsAcceleratorPanelProps) {
           </ServicePopover>
         </div>
       </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// GenieAcceleratorPanel — the "AI and Agents" middle column body for the Genie
+// Accelerator. It composes the SHARED chapter blocks from CHAPTER_BLOCKS so it
+// reads identically to the "Your Genie Accelerator Path" strip in the selector:
+// Semantic Layer → AI and Agents (the canonical Genie · Agent · Dashboard trio)
+// → [Ontology, when the toggle is on]. Each block is a titled colour box of
+// ServicePopover sub-chips joined by an accent ArrowDown; the block content
+// (title / icon / colours / chips) lives in one place, the registry.
+// ---------------------------------------------------------------------------
+function GenieAcceleratorPanel({ includeGenieOntology }: { includeGenieOntology: boolean }) {
+  const blocks: ChapterBlockId[] = ['semantic-layer', 'ai-agents'];
+  if (includeGenieOntology) blocks.push('ontology');
+
+  return (
+    <div className="flex flex-col gap-3">
+      {blocks.map((id, blockIdx) => {
+        const block = CHAPTER_BLOCKS[id];
+        const BlockIcon = block.icon;
+        const services = genieAcceleratorServices(block);
+        const cols = services.length >= 3 ? 'grid-cols-3' : 'grid-cols-2';
+        return (
+          <Fragment key={block.id}>
+            {blockIdx > 0 && (
+              <div className="flex justify-center"><ArrowDown className={`w-4 h-4 ${block.colors.arrow}`} /></div>
+            )}
+            <div className={`bg-slate-800 border-2 ${block.colors.border} rounded-lg p-3 shadow-lg`}>
+              <p className={`text-ui-xs font-bold ${block.colors.title} mb-2 text-center flex items-center justify-center gap-1`}>
+                <BlockIcon className="w-3.5 h-3.5 flex-shrink-0" />
+                <span>{block.title}</span>
+              </p>
+              <div className={`grid ${cols} gap-1.5`}>
+                {services.map((s, i) => (
+                  <ServicePopover key={s.label} serviceKey={s.serviceKey} position={i === 0 ? 'left' : 'top'} block>
+                    <div className={`rounded px-1.5 py-1.5 border transition-all duration-200 hover:scale-105 ${block.colors.chip}`}>
+                      <p className={`text-ui-3xs font-semibold text-center leading-tight ${block.colors.chipText}`}>{s.label}</p>
+                    </div>
+                  </ServicePopover>
+                ))}
+              </div>
+            </div>
+          </Fragment>
+        );
+      })}
     </div>
   );
 }
@@ -654,6 +718,12 @@ interface ArchitectureDiagramContentProps {
   direction?: 'forward' | 'reverse';
   aiAgentsModules?: Set<AIAgentModule>;
   medallionLayers?: Set<MedallionLayer>;
+  /** Genie Accelerator only: when false (default) the optional Lakehouse
+   *  (Bronze → Gold) column is replaced by a "Data Source" node. */
+  includeLakehouse?: boolean;
+  /** Genie Accelerator only: when false (default) the Discover Ontology box
+   *  is omitted from the AI and Agents column (arc collapses to the dashboard). */
+  includeGenieOntology?: boolean;
 }
 
 /**
@@ -695,6 +765,8 @@ export function ArchitectureDiagramContent({
   direction = 'forward',
   aiAgentsModules,
   medallionLayers,
+  includeLakehouse = false,
+  includeGenieOntology = false,
 }: ArchitectureDiagramContentProps) {
   const showGenieModule = shouldShowAIModule(workshopLevel, 'genie', aiAgentsModules);
   const showAgentModule = shouldShowAIModule(workshopLevel, 'agent', aiAgentsModules);
@@ -743,12 +815,21 @@ export function ArchitectureDiagramContent({
     if (!isSkillsAccelerator) setExpandedCard(null);
   }, [isSkillsAccelerator]);
 
+  const isGenie = workshopLevel === 'genie-accelerator';
+  // Genie Accelerator is a reverse-ETL arc (Lakehouse → AI and Agents → App),
+  // so it always renders the reverse flip-card face regardless of the global
+  // forward accelerator direction.
+  const effectiveDirection: 'forward' | 'reverse' = isGenie ? 'reverse' : direction;
   const cumOverrides = completedSteps ? getCumulativeOverrides(workshopLevel, completedSteps, chainContext) : null;
-  const visibility = cumOverrides?.archVisibility ?? ARCH_VISIBILITY[workshopLevel];
+  const baseVisibility = cumOverrides?.archVisibility ?? ARCH_VISIBILITY[workshopLevel];
+  // Genie: App + Lakebase endpoint (ch1/ch2) is always shown; the Lakehouse
+  // (ch3) column is driven by the optional "Include Lakehouse" toggle.
+  const visibility = isGenie
+    ? { ch1: true, ch2: true, ch3: includeLakehouse, ch4: true }
+    : baseVisibility;
   const showAppLakebase = visibility.ch1 || visibility.ch2;
   const showLakehouse = visibility.ch3;
   const showDataIntel = visibility.ch4;
-  const isGenie = workshopLevel === 'genie-accelerator';
 
   const appLakebaseFade = useFadeTransition(showAppLakebase);
   const lakehouseFade = useFadeTransition(showLakehouse);
@@ -764,7 +845,11 @@ export function ArchitectureDiagramContent({
     );
   }
 
-  const visibleChapters = cumOverrides?.chapterVisibility ?? CHAPTER_VISIBILITY[workshopLevel];
+  const visibleChapters = isGenie
+    ? new Set<'ch1' | 'ch2' | 'ch3' | 'ch4'>(
+        includeLakehouse ? ['ch1', 'ch2', 'ch3', 'ch4'] : ['ch1', 'ch2', 'ch4'],
+      )
+    : (cumOverrides?.chapterVisibility ?? CHAPTER_VISIBILITY[workshopLevel]);
   const leftObjectives = LEARNING_OBJECTIVES.filter(obj =>
     obj.chapters.some(ch => (ch === 'ch1' || ch === 'ch2') && visibleChapters.has(ch))
   );
@@ -787,6 +872,13 @@ export function ArchitectureDiagramContent({
   const rightStaggerOffset = leftObjectives.length + middleObjectives.length;
   const hasAnyObjectives = leftObjectives.length > 0 || middleObjectives.length > 0 || rightObjectives.length > 0;
 
+  // Reverse (back-face) objective lists. Genie swaps in its arc-specific copy.
+  // When the optional Discover Ontology is off, drop its bullet (gr3) so the
+  // copy matches the collapsed arc.
+  const reverseDiObjectives = (isGenie ? GENIE_REVERSE_DI_OBJECTIVES : REVERSE_DI_OBJECTIVES)
+    .filter(obj => includeGenieOntology || obj.id !== 'gr3');
+  const reverseActivationObjectives = isGenie ? GENIE_REVERSE_ACTIVATION_OBJECTIVES : REVERSE_ACTIVATION_OBJECTIVES;
+
   const fadeClass = (isVisible: boolean) =>
     `transition-all ease-out ${isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-2'}`;
 
@@ -799,13 +891,13 @@ export function ArchitectureDiagramContent({
           <span className="font-medium text-slate-300">Interactive hint</span>
           {' — '}
           Click on any service to learn more about it
-          {direction === 'reverse' ? ' (Reverse ETL flow)' : ''}
+          {effectiveDirection === 'reverse' ? ' (Reverse ETL flow)' : ''}
         </span>
       </div>
 
       {/* Architecture Diagram Container - 3D Flip */}
       <div className="arch-perspective">
-        <div className={`arch-card relative ${direction === 'reverse' ? 'flipped' : ''}`}>
+        <div className={`arch-card relative ${effectiveDirection === 'reverse' ? 'flipped' : ''}`}>
           {/* FRONT FACE - Forward Layout */}
           <div className="arch-face w-full bg-slate-900 p-8 rounded-xl">
             <div className="max-w-6xl mx-auto">
@@ -1098,6 +1190,27 @@ export function ArchitectureDiagramContent({
           <div className="arch-face arch-face-back w-full bg-slate-900 p-8 rounded-xl overflow-y-auto">
             <div className="max-w-6xl mx-auto">
               <div className="relative flex items-stretch gap-4 justify-center">
+                {/* LEFT (Genie, Lakehouse off): start from existing / uploaded / synthetic data */}
+                {isGenie && !showLakehouse && (
+                  <div className="border-2 border-teal-500/60 rounded-xl p-4 bg-slate-800/50 flex-1">
+                    <div className="bg-teal-600 text-center py-2 px-3 rounded-lg mb-4">
+                      <div className="flex items-center justify-center gap-2 mb-1">
+                        <Database className="w-4 h-4 text-white" />
+                      </div>
+                      <p className="text-[13px] font-bold text-white">Data Source</p>
+                    </div>
+                    <div className="flex flex-col gap-2">
+                      <div className="bg-gradient-to-br from-teal-700 to-teal-800 rounded-lg p-3.5 shadow-lg">
+                        <div className="flex items-center gap-2 mb-1">
+                          <Database className="w-5 h-5 text-teal-100" />
+                          <p className="text-[13px] font-bold text-white">Existing Tables</p>
+                        </div>
+                        <p className="text-[11px] text-teal-200">Uploaded, synthetic, or governed UC data</p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
                 {/* LEFT: Lakehouse */}
                 {lakehouseFade.shouldRender && (
                   <div className={`border-2 border-teal-500/60 rounded-xl p-4 bg-slate-800/50 flex-1 duration-300 ${fadeClass(lakehouseFade.isVisible)}`}>
@@ -1147,8 +1260,8 @@ export function ArchitectureDiagramContent({
                   </div>
                 )}
 
-                {/* Arrow: Lakehouse → DI */}
-                {showLakehouse && showDataIntel && (
+                {/* Arrow: Lakehouse (or Genie Data Source) → DI */}
+                {(showLakehouse || isGenie) && showDataIntel && (
                   <div className="flex flex-col items-center justify-center">
                     <ChevronRight className="w-12 h-12 text-amber-400" strokeWidth={3} />
                   </div>
@@ -1163,6 +1276,9 @@ export function ArchitectureDiagramContent({
                       </div>
                       <p className="text-[13px] font-bold text-white">AI and Agents</p>
                     </div>
+                    {isGenie ? (
+                      <GenieAcceleratorPanel includeGenieOntology={includeGenieOntology} />
+                    ) : (
                     <div className="flex flex-col gap-3">
                       {showGenieModule && (
                         <div className="bg-slate-800 border-2 border-amber-500/60 rounded-lg p-3.5 shadow-lg">
@@ -1186,7 +1302,7 @@ export function ArchitectureDiagramContent({
                           </div>
                         </div>
                       )}
-                      {!isGenie && (showDashboardModule || showAgentModule) && (<>
+                      {(showDashboardModule || showAgentModule) && (<>
                         {showGenieModule && (
                           <div className="flex justify-center gap-2">
                             {showDashboardModule && <ArrowDown className="w-4 h-4 text-green-400" />}
@@ -1217,6 +1333,7 @@ export function ArchitectureDiagramContent({
                         </div>
                       </>)}
                     </div>
+                    )}
                   </div>
                 )}
 
@@ -1245,7 +1362,7 @@ export function ArchitectureDiagramContent({
                         {visibility.ch1 && <Globe className="w-4 h-4 text-white" />}
                       </div>
                       <p className="text-[13px] font-bold text-white">
-                        {visibility.ch1 && visibility.ch2 ? 'App & Database' : visibility.ch1 ? 'Databricks App' : 'Lakebase'}
+                        {isGenie ? 'Activation' : visibility.ch1 && visibility.ch2 ? 'App & Database' : visibility.ch1 ? 'Databricks App' : 'Lakebase'}
                       </p>
                     </div>
                     <div className="flex flex-col items-center gap-3">
@@ -1291,7 +1408,7 @@ export function ArchitectureDiagramContent({
               <div className="mt-6 flex flex-wrap justify-center gap-5 md:gap-8">
                 <div className="flex items-center gap-2">
                   <Database className="w-4 h-4 text-teal-500" />
-                  <p className="text-[11px] text-slate-400">Lakehouse</p>
+                  <p className="text-[11px] text-slate-400">{isGenie && !showLakehouse ? 'Data Source' : 'Lakehouse'}</p>
                 </div>
                 <div className="flex items-center gap-2">
                   <Brain className="w-4 h-4 text-blue-500" />
@@ -1299,7 +1416,7 @@ export function ArchitectureDiagramContent({
                 </div>
                 <div className="flex items-center gap-2">
                   <Sparkles className="w-4 h-4 text-amber-400" />
-                  <p className="text-[11px] text-slate-400">Genie Spaces</p>
+                  <p className="text-[11px] text-slate-400">{isGenie ? 'Genie Agent' : 'Genie Spaces'}</p>
                 </div>
                 <div className="flex items-center gap-2">
                   <RefreshCw className="w-4 h-4 text-emerald-500" />
@@ -1345,11 +1462,11 @@ export function ArchitectureDiagramContent({
                 )}
 
                 {/* Middle: AI and Agents objectives */}
-                {dataIntelFade.shouldRender && REVERSE_DI_OBJECTIVES.length > 0 && (
+                {dataIntelFade.shouldRender && reverseDiObjectives.length > 0 && (
                   <div className={`flex-1 duration-300 ${fadeClass(dataIntelFade.isVisible)}`}>
                     <div className="rounded-lg bg-slate-800/40 border border-blue-500/20 p-3">
                       <ul className="space-y-1.5">
-                        {REVERSE_DI_OBJECTIVES.map((obj, idx) => (
+                        {reverseDiObjectives.map((obj, idx) => (
                           <li
                             key={obj.id}
                             className={`flex items-start gap-1.5 text-[11px] text-slate-300 transition-all duration-300 ease-out ${
@@ -1372,17 +1489,17 @@ export function ArchitectureDiagramContent({
                 )}
 
                 {/* Right: Activation / App & Database objectives */}
-                {appLakebaseFade.shouldRender && REVERSE_ACTIVATION_OBJECTIVES.length > 0 && (
+                {appLakebaseFade.shouldRender && reverseActivationObjectives.length > 0 && (
                   <div className={`w-[220px] flex-shrink-0 duration-300 ${fadeClass(appLakebaseFade.isVisible)}`}>
                     <div className="rounded-lg bg-slate-800/40 border border-emerald-500/20 p-3">
                       <ul className="space-y-1.5">
-                        {REVERSE_ACTIVATION_OBJECTIVES.map((obj, idx) => (
+                        {reverseActivationObjectives.map((obj, idx) => (
                           <li
                             key={obj.id}
                             className={`flex items-start gap-1.5 text-[11px] text-slate-300 transition-all duration-300 ease-out ${
                               bulletsRevealed ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-1'
                             }`}
-                            style={{ transitionDelay: bulletsRevealed ? `${(REVERSE_LAKEHOUSE_OBJECTIVES.length + REVERSE_DI_OBJECTIVES.length + idx) * BULLET_STAGGER_MS}ms` : '0ms' }}
+                            style={{ transitionDelay: bulletsRevealed ? `${(REVERSE_LAKEHOUSE_OBJECTIVES.length + reverseDiObjectives.length + idx) * BULLET_STAGGER_MS}ms` : '0ms' }}
                           >
                             <span className="text-emerald-400/70 mt-0.5 shrink-0">&#x2022;</span>
                             <span>{obj.content}</span>

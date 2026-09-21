@@ -72,7 +72,9 @@ export const SEGMENT_TO_BUCKET: Record<SegmentKey, PersonaBucket> = {
   'data-intelligence': 'ai-agents',
   'semantic-layer':    'ai-agents',
   'genie-agent':       'ai-agents',
-  'genie-ontology':    'ai-agents',
+  // Genie Ontology now follows Activation in the track order, so its minutes
+  // belong to the Activation bucket on the build-time bar (genie-only key).
+  'genie-ontology':    'activation',
   'genie-activate':    'activation',
   'mlflow-genai':      'ai-agents',
   'agent-skills':      'ai-agents',
@@ -152,7 +154,11 @@ export const PATH_DURATIONS: Record<WorkshopLevel, PathDuration> = {
   // Accelerators keep their 4h budget and Foundation/Tail trim, since they
   // run as standalone single-domain workshops outside the additive chain.
   'accelerator':                  { totalMinutes: 240, segments: { 'define-usecase':  10, 'lakehouse':     120, 'data-intelligence':  95,                                                                  'iterate-enhance': 10, 'cleanup': 5 } },
-  'genie-accelerator':            { totalMinutes: 260, segments: { 'define-usecase':  10, 'lakehouse':      90, 'semantic-layer': 45, 'genie-agent': 45, 'genie-ontology': 25, 'genie-activate': 30, 'iterate-enhance': 10, 'cleanup': 5 } },
+  // genie-activate now surfaces the full reused activation sequence (AI/BI
+  // Dashboard → Choose What to Activate → Synced Tables → Design → Build → Wire → Deploy),
+  // so it carries a fuller budget (matches reverse-app's 60m activation) rather
+  // than the earlier single-step estimate.
+  'genie-accelerator':            { totalMinutes: 290, segments: { 'define-usecase':  10, 'lakehouse':      90, 'semantic-layer': 45, 'genie-agent': 45, 'genie-activate': 60, 'genie-ontology': 25, 'iterate-enhance': 10, 'cleanup': 5 } },
   'data-engineering-accelerator': { totalMinutes: 240, segments: { 'define-usecase':  10, 'lakehouse':     215,                                                                                            'iterate-enhance': 10, 'cleanup': 5 } },
   'skills-accelerator':           { totalMinutes: 240, segments: { 'define-usecase':  10, 'agent-skills':  215,                                                                                            'iterate-enhance': 10, 'cleanup': 5 } },
   'agents-accelerator':           { totalMinutes: 240, segments: { 'define-usecase':  10, 'databricks-app': 20, 'lakebase':           20, 'agents-on-apps': 110, 'mlflow-genai': 65,                       'iterate-enhance': 10, 'cleanup': 5 } },
@@ -266,8 +272,14 @@ export function computeBuildTime(args: {
   medallionLayers: Set<MedallionLayer>;
   completedSteps: Set<number>;
   chainContext?: ChainContext;
+  /** Genie Accelerator only: when false (default), the optional Lakehouse
+   *  (Bronze → Gold) segment is excluded from the estimate. */
+  includeLakehouse?: boolean;
+  /** Genie Accelerator only: when false (default), the optional Genie Ontology
+   *  segment is excluded from the estimate. */
+  includeGenieOntology?: boolean;
 }): ComputedBuildTime {
-  const { level, aiModules, medallionLayers, completedSteps, chainContext } = args;
+  const { level, aiModules, medallionLayers, completedSteps, chainContext, includeLakehouse = true, includeGenieOntology = true } = args;
 
   // 1. Effective per-segment minutes — chain-aware. The explicit chainContext
   // (when provided) wins over step-based inference so additive climbs from
@@ -279,6 +291,19 @@ export function computeBuildTime(args: {
     segments = idx >= 0 ? aggregateChainSegments(chain, idx) : { ...PATH_DURATIONS[level]?.segments };
   } else {
     segments = { ...(PATH_DURATIONS[level]?.segments ?? PATH_DURATIONS['end-to-end'].segments) };
+  }
+
+  // Genie Accelerator: the Lakehouse (Bronze → Gold) block is optional and OFF
+  // by default. When excluded, drop its segment so the estimate reflects the
+  // shorter path that starts from existing / uploaded / synthetic data.
+  if (level === 'genie-accelerator' && !includeLakehouse) {
+    delete segments.lakehouse;
+  }
+
+  // Genie Accelerator: the Genie Ontology block is optional and OFF by default.
+  // When excluded, drop its segment so the estimate reflects the shorter path.
+  if (level === 'genie-accelerator' && !includeGenieOntology) {
+    delete segments['genie-ontology'];
   }
 
   // 2. Apply chip deltas — only for chips that are off AND applicable on level.

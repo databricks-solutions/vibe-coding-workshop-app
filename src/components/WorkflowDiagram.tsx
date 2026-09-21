@@ -51,6 +51,7 @@ import {
   Server,
   Play,
   Link2,
+  ClipboardList,
   Database,
   Plug,
   Search,
@@ -127,6 +128,10 @@ interface WorkflowDiagramProps {
   onAIModulesChange?: (modules: Set<AIAgentModule>) => void;
   medallionLayers?: Set<MedallionLayer>;
   onMedallionLayersChange?: (layers: Set<MedallionLayer>) => void;
+  includeLakehouse?: boolean;
+  onIncludeLakehouseChange?: (next: boolean) => void;
+  includeGenieOntology?: boolean;
+  onIncludeGenieOntologyChange?: (next: boolean) => void;
   readOnly?: boolean;
 }
 
@@ -209,6 +214,10 @@ export function WorkflowDiagram({
   onAIModulesChange,
   medallionLayers,
   onMedallionLayersChange,
+  includeLakehouse = false,
+  onIncludeLakehouseChange,
+  includeGenieOntology = false,
+  onIncludeGenieOntologyChange,
   readOnly = false,
 }: WorkflowDiagramProps) {
   // UI option is now always cursor (Figma option removed from UI)
@@ -373,6 +382,18 @@ export function WorkflowDiagram({
     return rawSections;
   }, [rawSections, workshopLevel, step22Mode]);
 
+  // Steps 32-37 are reused by both the reverse-ETL `activation` section and the
+  // Genie Accelerator `genie-activate` section, so the global getSectionForStep()
+  // can resolve to the wrong (off-screen) section. Route in-component lookups
+  // through the currently visible sections via a ref so this stays stable without
+  // churning every useCallback dependency array.
+  const visibleSectionsRef = useRef(visibleSections);
+  visibleSectionsRef.current = visibleSections;
+  const sectionForStep = useCallback(
+    (stepNumber: number) => getSectionForStep(stepNumber, visibleSectionsRef.current),
+    [],
+  );
+
   // Step 9 (Register Lakebase in UC) means schemas are already in Unity Catalog;
   // lock the CSV upload path in Steps 10 and 12.
   const hasLakebaseRegistration = useMemo(
@@ -522,7 +543,7 @@ export function WorkflowDiagram({
 
     // Batch the state updates: expand the right section, show the step list
     // (not the section detail panel), and expand the target step.
-    const section = getSectionForStep(initialExpandedStep);
+    const section = sectionForStep(initialExpandedStep);
     if (section) {
       setExpandedSectionId(section.id);
       setSelectedSectionId(section.id);
@@ -578,19 +599,19 @@ export function WorkflowDiagram({
       cancelled = true;
       cancelAnimationFrame(outerRaf);
     };
-  }, [isSessionLoaded, sessionId, initialExpandedStep, completedSteps.size]);
+  }, [isSessionLoaded, sessionId, initialExpandedStep, completedSteps.size, sectionForStep]);
 
   // Auto-expand section when a step becomes active
   useEffect(() => {
     if (expandedStep) {
-      const section = getSectionForStep(expandedStep);
+      const section = sectionForStep(expandedStep);
       if (section && expandedSectionId !== section.id) {
         setExpandedSectionId(section.id);
         setSelectedSectionId(section.id);
       }
       setShowSectionDetail(false);
     }
-  }, [expandedStep]);
+  }, [expandedStep, expandedSectionId, sectionForStep]);
 
   // Clamp `expandedStep` to a visible step when AI module toggles (or any other
   // visibility change) hide the currently-expanded one. Lands on the next visible
@@ -637,7 +658,7 @@ export function WorkflowDiagram({
       if (targetStep !== SET_UP_PROJECT_STEP_ID || !completedSteps.has(SET_UP_PROJECT_STEP_ID)) break;
     }
 
-    const targetSection = getSectionForStep(targetStep);
+    const targetSection = sectionForStep(targetStep);
     setExpandedSectionId(targetSection?.id ?? visibleSections[0]?.id);
     setSelectedSectionId(targetSection?.id ?? visibleSections[0]?.id);
     setExpandedStep(targetStep);
@@ -653,7 +674,7 @@ export function WorkflowDiagram({
         scrollToStep(targetStep);
       }, 400);
     }, 350);
-  }, [visibleSections, completedSteps, skippedSteps, scrollToStep]);
+  }, [visibleSections, completedSteps, skippedSteps, scrollToStep, sectionForStep]);
 
   const handlePromptGenerated = (prompt: string, industry: string, useCase: string, industryLabel?: string, useCaseLabel?: string, customDesc?: string, isCertified?: boolean) => {
     if (readOnly) return;
@@ -814,8 +835,8 @@ export function WorkflowDiagram({
     if (shouldExpandNext) {
       const nextStep = getNextStep(stepId);
       if (nextStep) {
-        const currentSection = getSectionForStep(stepId);
-        const nextSection = getSectionForStep(nextStep);
+        const currentSection = sectionForStep(stepId);
+        const nextSection = sectionForStep(nextStep);
         
         if (currentSection?.id !== nextSection?.id && nextSection) {
           setExpandedSectionId(nextSection.id);
@@ -830,7 +851,7 @@ export function WorkflowDiagram({
       }
     }
     onCompletedStepsChange(newSet);
-  }, [completedSteps, skippedSteps, sessionId, onCompletedStepsChange, onSkippedStepsChange, triggerCelebration, getNextStep, scrollToStep]);
+  }, [completedSteps, skippedSteps, sessionId, onCompletedStepsChange, onSkippedStepsChange, triggerCelebration, getNextStep, scrollToStep, sectionForStep]);
   
   // Handle celebration complete
   const handleCelebrationComplete = useCallback(() => {
@@ -851,7 +872,7 @@ export function WorkflowDiagram({
   const navigateToNextStep = useCallback((currentStep: number) => {
     const nextStep = getNextStep(currentStep);
     if (nextStep) {
-      const nextSection = getSectionForStep(nextStep);
+      const nextSection = sectionForStep(nextStep);
       if (nextSection) {
         setExpandedSectionId(nextSection.id);
         setSelectedSectionId(nextSection.id);
@@ -860,7 +881,7 @@ export function WorkflowDiagram({
       setShowSectionDetail(false);
       scrollToStep(nextStep);
     }
-  }, [getNextStep, getSectionForStep, scrollToStep]);
+  }, [getNextStep, sectionForStep, scrollToStep]);
 
   // Toggle skip state for a step (Ch3/Ch4 only)
   const toggleStepSkip = useCallback((stepId: number) => {
@@ -899,7 +920,7 @@ export function WorkflowDiagram({
     setExpandedStep(prev => {
       const newExpandedStep = prev === stepNumber ? null : stepNumber;
       if (newExpandedStep) {
-        const section = getSectionForStep(newExpandedStep);
+        const section = sectionForStep(newExpandedStep);
         if (section) {
           setExpandedSectionId(section.id);
           setSelectedSectionId(section.id);
@@ -909,20 +930,20 @@ export function WorkflowDiagram({
       }
       return newExpandedStep;
     });
-  }, [scrollToStepInContainer]);
+  }, [scrollToStepInContainer, sectionForStep]);
 
   const handleSidebarStepClick = useCallback((stepNumber: number) => {
     setExpandedStep(stepNumber);
     setShowSectionDetail(false);
     
-    const section = getSectionForStep(stepNumber);
+    const section = sectionForStep(stepNumber);
     if (section) {
       setExpandedSectionId(section.id);
       setSelectedSectionId(section.id);
     }
     
     scrollToStepInContainer(stepNumber);
-  }, [scrollToStepInContainer]);
+  }, [scrollToStepInContainer, sectionForStep]);
 
   const handleSectionClick = (sectionId: string) => {
     setSelectedSectionId(sectionId);
@@ -990,10 +1011,10 @@ export function WorkflowDiagram({
     // rows by the step's sectionTag ONLY — the switch's numeric key is incidental.
     // -------------------------------------------------------------------------
     const GENIE_STEP_META: Record<string, { title: string; description: string; icon: ReactNode; color: ColorType }> = {
-      semlayer_locate:      { title: 'Locate Data & Bring Context',       description: 'Point Genie Code at your data (existing, uploaded, or synthetic), bring any existing definitions, and seed the Genie brief from the PRD — no building yet.', icon: <Search className="w-5 h-5" />,            color: 'cyan' },
+      semlayer_locate:      { title: 'Locate Data & Bring Context',       description: 'Point Genie Code at your data, bring any definitions you have, and seed the Genie brief from the PRD. No building yet.', icon: <Search className="w-5 h-5" />,            color: 'cyan' },
       semlayer_profile:     { title: 'Profile Your Schema',               description: 'Profile the schema Genie Code located: cardinality, nulls, grain, and candidate keys — the evidence for the measures analysis.',                       icon: <Table2 className="w-5 h-5" />,            color: 'cyan' },
       semlayer_measures:    { title: 'Measures Analysis (sign-off gate)', description: 'Analyze candidate measures, reconcile definitional conflicts, and get your explicit sign-off before any assets are authored.',                        icon: <BarChart3 className="w-5 h-5" />,         color: 'cyan' },
-      semlayer_metric_view: { title: 'Draft the Metric View',            description: 'Author a governed Metric View from the signed-off inventory (Path B) or import an existing BI semantic model and promote it to UC (Path A).',        icon: <FileCode className="w-5 h-5" />,          color: 'cyan' },
+      semlayer_metric_view: { title: 'Draft the Metric View',            description: 'Author a governed Metric View from your signed-off inventory. Genie Code shows you the YAML first, then creates it and proves each measure with MEASURE().',        icon: <FileCode className="w-5 h-5" />,          color: 'cyan' },
       semlayer_synonyms:    { title: 'Review & Expand Synonyms',          description: 'Review and expand the synonyms on the Metric View so Genie resolves the words your users actually type.',                                          icon: <Tag className="w-5 h-5" />,               color: 'cyan' },
       gagent_describe:      { title: 'Describe the Agent',               description: 'Create a Genie space bound to the Metric View and describe what the agent is for.',                                                                icon: <MessageSquareText className="w-5 h-5" />, color: 'blue' },
       gagent_instructions:  { title: 'Author Instructions',             description: 'Author lean, high-signal instructions for the Genie Agent.',                                                                                        icon: <FileText className="w-5 h-5" />,          color: 'blue' },
@@ -1003,28 +1024,9 @@ export function WorkflowDiagram({
       ontology_domain:      { title: 'Model the Domain + Subdomains',   description: 'Model the Discover domain and subdomains (UI-preferred; Genie Code drafts the content).',                                                            icon: <Globe className="w-5 h-5" />,             color: 'teal' },
       ontology_pages:       { title: 'Author Pages',                    description: 'Author the ontology Pages that describe your domain to Genie One.',                                                                                 icon: <BookOpen className="w-5 h-5" />,          color: 'teal' },
       ontology_routing:     { title: 'Write the Routing Page',          description: 'Write the routing page so Genie One routes questions to the right space.',                                                                           icon: <GitBranch className="w-5 h-5" />,         color: 'teal' },
-      gagent_share:         { title: 'Show Your Agent',                 description: 'Proof beat: show the working Genie Agent answering real questions before you activate it.',                                                          icon: <Sparkles className="w-5 h-5" />,          color: 'emerald' },
-      gaccel_dashboard:     { title: 'Dashboard on the Metric View',    description: 'Build an AI/BI dashboard on the same governed Metric View that powers the agent.',                                                                  icon: <LayoutDashboard className="w-5 h-5" />,   color: 'emerald' },
-      gaccel_activation:    { title: 'Synced Tables → Lakebase → App',   description: 'Sync the Gold dimensions + facts into Lakebase via Synced Tables to power an app.',                                                                 icon: <Link2 className="w-5 h-5" />,             color: 'emerald' },
-      gaccel_productionize: { title: 'Productionize as a Bundle',        description: 'Package the whole track as a Databricks Asset Bundle for repeatable deploys.',                                                                      icon: <Rocket className="w-5 h-5" />,            color: 'emerald' },
+      gaccel_dashboard:     { title: 'AI/BI Dashboard',                 description: 'Build an AI/BI dashboard across the PRD-relevant Gold tables (via the governed Metric View), and inventory the tables/data the app will need.',      icon: <LayoutDashboard className="w-5 h-5" />,   color: 'emerald' },
+      gaccel_activation:    { title: 'Choose What to Activate',        description: 'Decide which Gold dimensions + facts (and why) should feed the app and dashboard — a pure business-selection beat that hands off to the Synced Tables sequence for the keys/grain/mode mechanics.', icon: <ClipboardList className="w-5 h-5" />,   color: 'emerald' },
     };
-
-    // Write-target editor bound to the Semantic Layer steps so learners set the
-    // governed-asset destination (lakehouse_default_catalog + user_schema_prefix) once.
-    const goldTargetHeader: ReactNode = (
-      <div onClick={(e) => e.stopPropagation()}>
-        <GoldTableTargetEditor
-          value={goldTableTarget}
-          onChange={(v) => { goldTargetManuallyEdited.current = true; setGoldTableTarget(v); }}
-          defaultValues={{
-            catalog: defaultCatalog,
-            schema: (currentUser && (customUseCaseLabel || selectedUseCaseLabel))
-              ? deriveSchemaName(currentUser, customUseCaseLabel || selectedUseCaseLabel, 'gold')
-              : '',
-          }}
-        />
-      </div>
-    );
 
     const modeButtonClass = (active: boolean) =>
       `px-3 py-1.5 rounded-md text-ui-xs font-medium transition-colors ${
@@ -1061,11 +1063,65 @@ export function WorkflowDiagram({
         sessionId,
       } as const;
 
-      // Semantic Layer steps all carry the write-target editor.
-      const isSemlayer = tag.startsWith('semlayer_');
+      // Light chaining for the two Activate wrapper steps so the
+      // Test Scenario "Run All" loop and the prompt context carry forward. The
+      // AI/BI Dashboard (71) sees the PRD + Metric View; Choose What to Activate
+      // (72) sees the dashboard's table inventory + PRD, which it hands to Design &
+      // Provision Synced Tables (32). Other genie steps rely on placeholder /
+      // state-file context.
+      const geniePreviousOutputs: Record<string, string> | undefined =
+        tag === 'gaccel_dashboard'
+          ? {
+              ...(stepPrompts[3] ? { prd_document: stepPrompts[3] } : {}),
+              ...(stepPrompts[60] ? { metric_view: stepPrompts[60] } : {}),
+            }
+          : tag === 'gaccel_activation'
+          ? {
+              ...(stepPrompts[71] ? { aibi_dashboard: stepPrompts[71] } : {}),
+              ...(stepPrompts[3] ? { prd_document: stepPrompts[3] } : {}),
+            }
+          : undefined;
+
+      // The Gold-target write destination is set once, on the first Semantic Layer
+      // step (semlayer_locate). Downstream steps resolve it via placeholders
+      // (lakehouse_default_catalog + user_schema_prefix), so the editor is not
+      // repeated on every semantic-layer step.
 
       // Step 1 (semlayer_locate): data-mode toggle (Existing / Upload / Synthetic).
+      // When the Lakehouse track ran first (includeLakehouse), there is nothing to
+      // locate: we daisy-chain onto the Gold already built and fetch the prebuilt
+      // prompt instead of showing the data-mode tabs. Each mode resolves to its own
+      // section tag so the fetched prompt is specific to the chosen method; keying
+      // the child on that tag forces a fresh fetch when the learner switches modes.
       if (tag === 'semlayer_locate') {
+        const prebuilt = includeLakehouse === true;
+        const effectiveTag = prebuilt
+          ? 'semlayer_locate_prebuilt'
+          : semlayerLocateMode === 'upload'
+            ? 'semlayer_locate_upload'
+            : semlayerLocateMode === 'synthetic'
+              ? 'semlayer_locate_synthetic'
+              : 'semlayer_locate';
+
+        if (prebuilt) {
+          return (
+            <div key={n} className="relative mt-5" data-step-number={n}>
+              <WorkflowStep
+                key={effectiveTag}
+                {...baseProps}
+                sectionTag={effectiveTag}
+                customHeaderContent={
+                  <div onClick={(e) => e.stopPropagation()} className="space-y-3">
+                    <div className="text-ui-xs text-muted-foreground rounded-md border border-primary/30 bg-primary/5 px-3 py-2">
+                      Lakehouse track detected: Genie Code points at the Gold you already built. No data mode to choose here.
+                    </div>
+                  </div>
+                }
+              />
+            </div>
+          );
+        }
+
         const dataModeToggle = (
           <div onClick={(e) => e.stopPropagation()} className="flex flex-wrap items-center gap-2 mb-3">
             <span className="text-ui-xs text-muted-foreground mr-1">Data mode:</span>
@@ -1079,11 +1135,12 @@ export function WorkflowDiagram({
             <div key={n} className="relative mt-5" data-step-number={n}>
               <div className="mb-2">{dataModeToggle}</div>
               <CsvUploadPanel
+                key={effectiveTag}
                 sessionId={sessionId}
                 industry={selectedIndustry}
                 useCase={selectedUseCase}
                 stepNumber={n}
-                sectionTag={tag}
+                sectionTag={effectiveTag}
                 onPromptGenerated={onStepPromptGenerated}
                 initialPrompt={stepPrompts[n]}
                 isComplete={completedSteps.has(n)}
@@ -1099,7 +1156,9 @@ export function WorkflowDiagram({
         return (
           <div key={n} className="relative mt-5" data-step-number={n}>
             <WorkflowStep
+              key={effectiveTag}
               {...baseProps}
+              sectionTag={effectiveTag}
               customHeaderContent={
                 <div onClick={(e) => e.stopPropagation()} className="space-y-3">
                   {dataModeToggle}
@@ -1110,7 +1169,6 @@ export function WorkflowDiagram({
                       refreshKey={lakehouseParamsRefreshKey}
                     />
                   )}
-                  {goldTargetHeader}
                 </div>
               }
             />
@@ -1118,8 +1176,16 @@ export function WorkflowDiagram({
         );
       }
 
-      // Step 4 (semlayer_metric_view): Import BI tab (Path B author [default] / Path A import).
+      // Step 4 (semlayer_metric_view): Metric View source tabs (Path B author from
+      // inventory [default] / Path A import BI). Each path resolves to its own
+      // section tag so the fetched prompt is copy-clean and scoped to one path
+      // (Fix A); keying the child on that tag forces a fresh fetch on tab switch.
+      // Completion/skip/gate still key on the step number (n), not the fetched tag.
       if (tag === 'semlayer_metric_view') {
+        const effectiveTag =
+          metricViewImportMode === 'importbi'
+            ? 'semlayer_metric_view_importbi'
+            : 'semlayer_metric_view';
         const importTabs = (
           <div onClick={(e) => e.stopPropagation()} className="flex flex-wrap items-center gap-2 mb-3">
             <span className="text-ui-xs text-muted-foreground mr-1">Metric View source:</span>
@@ -1132,11 +1198,12 @@ export function WorkflowDiagram({
             <div key={n} className="relative mt-5" data-step-number={n}>
               <div className="mb-2">{importTabs}</div>
               <CsvUploadPanel
+                key={effectiveTag}
                 sessionId={sessionId}
                 industry={selectedIndustry}
                 useCase={selectedUseCase}
                 stepNumber={n}
-                sectionTag={tag}
+                sectionTag={effectiveTag}
                 onPromptGenerated={onStepPromptGenerated}
                 initialPrompt={stepPrompts[n]}
                 isComplete={completedSteps.has(n)}
@@ -1152,11 +1219,12 @@ export function WorkflowDiagram({
         return (
           <div key={n} className="relative mt-5" data-step-number={n}>
             <WorkflowStep
+              key={effectiveTag}
               {...baseProps}
+              sectionTag={effectiveTag}
               customHeaderContent={
                 <div onClick={(e) => e.stopPropagation()} className="space-y-3">
                   {importTabs}
-                  {goldTargetHeader}
                 </div>
               }
             />
@@ -1168,7 +1236,7 @@ export function WorkflowDiagram({
         <div key={n} className="relative mt-5" data-step-number={n}>
           <WorkflowStep
             {...baseProps}
-            customHeaderContent={isSemlayer ? goldTargetHeader : undefined}
+            previousOutputs={geniePreviousOutputs}
           />
         </div>
       );
@@ -3132,13 +3200,13 @@ export function WorkflowDiagram({
                 </div>
               );
 
-            // Step 32: Plan Synced Tables (Activation / Reverse ETL)
+            // Step 32: Design & Provision Synced Tables (Activation / Reverse ETL)
             case 32:
               return (
                 <div key={32} className="relative mt-5" data-step-number="32">
                   <WorkflowStep
                     stepNumber={32}
-                    title="Plan Synced Tables"
+                    title="Design & Provision Synced Tables"
                     description="Design which Gold assets to sync into Lakebase via Synced Tables, including keys, modes, and types"
                     icon={<Table2 className="w-5 h-5" />}
                     color="emerald"
@@ -3156,6 +3224,9 @@ export function WorkflowDiagram({
                       ...(stepPrompts[11] ? { gold_layer_design: stepPrompts[11] } : {}),
                       ...(stepPrompts[15] ? { usecase_plan: stepPrompts[15] } : {}),
                       ...(stepPrompts[3] ? { prd_document: stepPrompts[3] } : {}),
+                      // Genie Accelerator: Choose What to Activate (72) hands off its sync plan.
+                      // Empty for the reverse-ETL track (step 72 is not present there).
+                      ...(stepPrompts[72] ? { activation_plan: stepPrompts[72] } : {}),
                     }}
                     isPreviousStepComplete={isPreviousStepComplete(32)}
                     isExpanded={expandedStep === 32}
@@ -3319,7 +3390,7 @@ export function WorkflowDiagram({
             case 57: case 58: case 59: case 60: case 61:
             case 62: case 63: case 64: case 65: case 66:
             case 67: case 68: case 69:
-            case 70: case 71: case 72: case 73:
+            case 71: case 72:
               return renderGenieStep(step);
 
             default:
@@ -3451,6 +3522,10 @@ export function WorkflowDiagram({
           onAIModulesChange={onAIModulesChange}
           medallionLayers={medallionLayers}
           onMedallionLayersChange={onMedallionLayersChange}
+          includeLakehouse={includeLakehouse}
+          onIncludeLakehouseChange={onIncludeLakehouseChange}
+          includeGenieOntology={includeGenieOntology}
+          onIncludeGenieOntologyChange={onIncludeGenieOntologyChange}
           disabledWorkshopLevels={disabledWorkshopLevels}
         />
       )}

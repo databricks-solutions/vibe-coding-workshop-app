@@ -27,6 +27,10 @@ interface PathAndArchitectureProps {
   onAIModulesChange?: (modules: Set<AIAgentModule>) => void;
   medallionLayers?: Set<MedallionLayer>;
   onMedallionLayersChange?: (layers: Set<MedallionLayer>) => void;
+  includeLakehouse?: boolean;
+  onIncludeLakehouseChange?: (next: boolean) => void;
+  includeGenieOntology?: boolean;
+  onIncludeGenieOntologyChange?: (next: boolean) => void;
   /** Workshop levels disabled for the active coding assistant. The currently-
    * selected level is grandfathered (still clickable) inside LevelSelector
    * so saved/shared sessions never break and mid-session assistant changes
@@ -51,6 +55,10 @@ export function PathAndArchitecture({
   onAIModulesChange,
   medallionLayers,
   onMedallionLayersChange,
+  includeLakehouse = false,
+  onIncludeLakehouseChange,
+  includeGenieOntology = false,
+  onIncludeGenieOntologyChange,
   disabledWorkshopLevels,
 }: PathAndArchitectureProps) {
   const [userOverride, setUserOverride] = useState<boolean | null>(null);
@@ -100,6 +108,8 @@ export function PathAndArchitecture({
             medallionLayers={effectiveMedallionLayers}
             completedSteps={completedSteps}
             chainContext={chainContext}
+            includeLakehouse={includeLakehouse}
+            includeGenieOntology={includeGenieOntology}
             variant="compact"
           />
         )}
@@ -258,6 +268,10 @@ export function PathAndArchitecture({
             onAIModulesChange={onAIModulesChange}
             medallionLayers={medallionLayers}
             onMedallionLayersChange={onMedallionLayersChange}
+            includeLakehouse={includeLakehouse}
+            onIncludeLakehouseChange={onIncludeLakehouseChange}
+            includeGenieOntology={includeGenieOntology}
+            onIncludeGenieOntologyChange={onIncludeGenieOntologyChange}
             disabledWorkshopLevels={disabledWorkshopLevels}
           />
 
@@ -275,6 +289,8 @@ export function PathAndArchitecture({
             direction={direction}
             aiAgentsModules={aiAgentsModules}
             medallionLayers={medallionLayers}
+            includeLakehouse={includeLakehouse}
+            includeGenieOntology={includeGenieOntology}
           />
 
           {/* Continue CTA */}

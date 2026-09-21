@@ -266,6 +266,11 @@ def get_placeholder_map(config: dict) -> dict:
         "__DEPLOYER_EMAIL__": user.get("email", ""),
         "__INSTALLER_VERSION__": meta.get("installer_version", "2.0.0"),
         "__COMPANY_BRAND_URL__": branding.get("customer_url", ""),
+        "__COMPANY_NAME__": branding.get("company_name", ""),
+        "__COMPANY_PRIMARY_COLOR__": branding.get("primary_color", ""),
+        "__COMPANY_SECONDARY_COLOR__": branding.get("secondary_color", ""),
+        "__COMPANY_ACCENT_COLOR__": branding.get("accent_color", ""),
+        "__COMPANY_LOGO_URL__": branding.get("logo_url", ""),
     }
 
 
