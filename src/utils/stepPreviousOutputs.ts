@@ -140,6 +140,8 @@ export function getPreviousOutputsForStep(
       if (stepPrompts[11]) out.gold_layer_design = stepPrompts[11];
       if (stepPrompts[15]) out.usecase_plan = stepPrompts[15];
       if (stepPrompts[3]) out.prd_document = stepPrompts[3];
+      // Genie Accelerator: Choose What to Activate (72) hands off its sync plan.
+      if (stepPrompts[72]) out.activation_plan = stepPrompts[72];
       return Object.keys(out).length > 0 ? out : {};
     }
 
@@ -213,6 +215,21 @@ export function getPreviousOutputsForStep(
 
     case 56:
       return stepPrompts[55] ? { mlflow_gateway_and_deployment: stepPrompts[55] } : undefined;
+
+    // Genie Accelerator · Activate wrappers.
+    case 71: {
+      const out: Record<string, string> = {};
+      if (stepPrompts[3]) out.prd_document = stepPrompts[3];
+      if (stepPrompts[60]) out.metric_view = stepPrompts[60];
+      return Object.keys(out).length > 0 ? out : undefined;
+    }
+
+    case 72: {
+      const out: Record<string, string> = {};
+      if (stepPrompts[71]) out.aibi_dashboard = stepPrompts[71];
+      if (stepPrompts[3]) out.prd_document = stepPrompts[3];
+      return Object.keys(out).length > 0 ? out : undefined;
+    }
 
     default:
       return undefined;

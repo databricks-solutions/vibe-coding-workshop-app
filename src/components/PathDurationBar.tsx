@@ -39,6 +39,8 @@ interface PathDurationBarProps {
   medallionLayers: Set<MedallionLayer>;
   completedSteps: Set<number>;
   chainContext?: ChainContext;
+  includeLakehouse?: boolean;
+  includeGenieOntology?: boolean;
   variant?: 'full' | 'compact';
 }
 
@@ -70,9 +72,11 @@ function FullBar({
   medallionLayers,
   completedSteps,
   chainContext,
+  includeLakehouse,
+  includeGenieOntology,
 }: PathDurationBarProps) {
   const reduceMotion = useReducedMotion();
-  const result = computeBuildTime({ level, direction, aiModules, medallionLayers, completedSteps, chainContext });
+  const result = computeBuildTime({ level, direction, aiModules, medallionLayers, completedSteps, chainContext, includeLakehouse, includeGenieOntology });
   const { total, classification, scaleMaxMinutes, ticks, isEverythingSelected } = result;
 
   const orderedBuckets = orderBuckets(result.buckets, direction);
@@ -206,9 +210,11 @@ function CompactBar({
   medallionLayers,
   completedSteps,
   chainContext,
+  includeLakehouse,
+  includeGenieOntology,
 }: PathDurationBarProps) {
   const reduceMotion = useReducedMotion();
-  const result = computeBuildTime({ level, direction, aiModules, medallionLayers, completedSteps, chainContext });
+  const result = computeBuildTime({ level, direction, aiModules, medallionLayers, completedSteps, chainContext, includeLakehouse, includeGenieOntology });
   const orderedBuckets = orderBuckets(result.buckets, direction);
   const fillPercent = Math.min(100, (result.total / result.scaleMaxMinutes) * 100);
 

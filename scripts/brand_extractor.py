@@ -23,6 +23,7 @@ escapes.
 """
 
 import colorsys
+import math
 import re
 import ssl
 import urllib.request
@@ -220,6 +221,45 @@ def hex_to_hsl(hex_color):
         r, g, b = int(h[0:2], 16) / 255, int(h[2:4], 16) / 255, int(h[4:6], 16) / 255
         hue, light, sat = colorsys.rgb_to_hls(r, g, b)
         return f"{round(hue * 360)} {round(sat * 100)}% {round(light * 100)}%"
+    except Exception:
+        return ""
+
+
+def hex_to_oklch(hex_color):
+    """Convert '#RRGGBB' or '#RGB' to the 'L C H' triple used inside CSS
+    ``oklch(...)`` custom properties (e.g. ``0.6300 0.1600 145.0``).
+
+    The AppKit scaffold themes via oklch CSS variables (see the design-quality
+    skill), so emitting oklch lets the generated prompt hand the coding agent a
+    drop-in value.  Returns '' on any error or malformed input -- never raises.
+    """
+    if not hex_color or not isinstance(hex_color, str) or not _HEX_RE.match(hex_color):
+        return ""
+    try:
+        h = hex_color.lstrip("#")
+        if len(h) == 3:
+            h = "".join(c * 2 for c in h)
+        srgb = [int(h[i:i + 2], 16) / 255 for i in (0, 2, 4)]
+
+        # sRGB -> linear light
+        def _lin(c):
+            return c / 12.92 if c <= 0.04045 else ((c + 0.055) / 1.055) ** 2.4
+
+        r, g, b = (_lin(c) for c in srgb)
+
+        # linear sRGB -> OKLab (Bjorn Ottosson's matrices)
+        l = 0.4122214708 * r + 0.5363325363 * g + 0.0514459929 * b
+        m = 0.2119034982 * r + 0.6806995451 * g + 0.1073969566 * b
+        s = 0.0883024619 * r + 0.2817188376 * g + 0.6299787005 * b
+        l_, m_, s_ = (v ** (1.0 / 3.0) if v > 0 else 0.0 for v in (l, m, s))
+
+        L = 0.2104542553 * l_ + 0.7936177850 * m_ - 0.0040720468 * s_
+        a = 1.9779984951 * l_ - 2.4285922050 * m_ + 0.4505937099 * s_
+        bb = 0.0259040371 * l_ + 0.7827717662 * m_ - 0.8086757660 * s_
+
+        C = math.sqrt(a * a + bb * bb)
+        H = math.degrees(math.atan2(bb, a)) % 360.0
+        return f"{L:.4f} {C:.4f} {H:.1f}"
     except Exception:
         return ""
 

@@ -104,21 +104,21 @@ export function LakehouseParamsEditor({ sessionId, isExpanded, label = 'Source:'
     <div className="mt-3 px-4 py-3 bg-muted/30 rounded-md border border-border/50">
       {!isEditing ? (
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Database className="w-4 h-4 text-amber-500" />
-            <span className="text-sm text-muted-foreground">{label}</span>
-            <span className="text-sm font-medium text-foreground">
+          <div className="flex items-center gap-2 min-w-0">
+            <Database className="w-4 h-4 text-amber-500 flex-shrink-0" />
+            <span className="text-sm text-muted-foreground flex-shrink-0">{label}</span>
+            <span className="text-sm font-medium text-foreground truncate" title={`${params.catalog}.${params.schema_name}`}>
               {params.catalog}.{params.schema_name}
             </span>
             {params.is_overridden && (
-              <span className="text-ui-2xs px-1.5 py-0.5 bg-amber-500/20 text-amber-600 dark:text-amber-400 rounded-full font-medium">
+              <span className="text-ui-2xs px-1.5 py-0.5 bg-amber-500/20 text-amber-600 dark:text-amber-400 rounded-full font-medium flex-shrink-0">
                 Custom
               </span>
             )}
           </div>
           <button
             onClick={() => setIsEditing(true)}
-            className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-muted/50 rounded-md transition-colors"
+            className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-muted/50 rounded-md transition-colors flex-shrink-0"
           >
             <Lock className="w-3.5 h-3.5" />
             Edit

@@ -21,7 +21,7 @@ import {
 } from './components/session';
 import { apiClient } from './api/client';
 import { Zap, MessageSquare, Trophy, Plus, PanelLeftClose, PanelLeft, Menu, X, BarChart3, Eye, Compass, Award, ChevronDown, List, BookOpen } from 'lucide-react';
-import { normalizeLevel, getFilteredSections, getCumulativeOverrides, USE_CASE_LEVEL_LOCK, isForwardProgression, getDisabledTagsForAIModules, ALL_AI_MODULES, getDisabledTagsForMedallionLayers, normalizeMedallionLayers, ALL_MEDALLION_LAYERS, computeChainContext, deriveInitialChainContext, type WorkshopLevel, type WorkflowDirection, type AIAgentModule, type MedallionLayer, type ChainContext } from './constants/workflowSections';
+import { normalizeLevel, getFilteredSections, getCumulativeOverrides, USE_CASE_LEVEL_LOCK, isForwardProgression, getDisabledTagsForAIModules, ALL_AI_MODULES, getDisabledTagsForMedallionLayers, normalizeMedallionLayers, ALL_MEDALLION_LAYERS, getDisabledTagsForLakehouse, getDisabledTagsForGenieOntology, computeChainContext, deriveInitialChainContext, type WorkshopLevel, type WorkflowDirection, type AIAgentModule, type MedallionLayer, type ChainContext } from './constants/workflowSections';
 import { DEFAULT_LEVEL_BY_ASSISTANT, parseCodingAssistantsConfig } from './constants/codingAssistants';
 
 export default function App() {
@@ -141,15 +141,25 @@ export default function App() {
     setMedallionLayersRaw(normalizeMedallionLayers(next));
   }, []);
 
+  // Genie Accelerator only: opt-in Lakehouse (Bronze -> Gold) block. Defaults OFF
+  // so the default Genie path starts from existing / uploaded / synthetic data.
+  const [includeLakehouse, setIncludeLakehouse] = useState<boolean>(false);
+
+  // Genie Accelerator only: opt-in Genie Ontology block. Defaults OFF so the
+  // default Genie path skips the Beta Discover ontology arc.
+  const [includeGenieOntology, setIncludeGenieOntology] = useState<boolean>(false);
+
   // Combined disabled-tag set used everywhere downstream. The backend visibility
   // set is unioned with tags derived from chip state; this keeps both sources of
   // truth independent and idempotent.
   const effectiveDisabledTags = useMemo(() => {
     const aiTags = getDisabledTagsForAIModules(workshopLevel, aiAgentsModules);
     const medTags = getDisabledTagsForMedallionLayers(workshopLevel, medallionLayers);
-    if (aiTags.length === 0 && medTags.length === 0) return disabledSectionTags;
-    return new Set<string>([...disabledSectionTags, ...aiTags, ...medTags]);
-  }, [workshopLevel, aiAgentsModules, medallionLayers, disabledSectionTags]);
+    const lakeTags = getDisabledTagsForLakehouse(workshopLevel, includeLakehouse);
+    const ontologyTags = getDisabledTagsForGenieOntology(workshopLevel, includeGenieOntology);
+    if (aiTags.length === 0 && medTags.length === 0 && lakeTags.length === 0 && ontologyTags.length === 0) return disabledSectionTags;
+    return new Set<string>([...disabledSectionTags, ...aiTags, ...medTags, ...lakeTags, ...ontologyTags]);
+  }, [workshopLevel, aiAgentsModules, medallionLayers, includeLakehouse, includeGenieOntology, disabledSectionTags]);
 
   // Selected options
   const [selectedIndustry, setSelectedIndustry] = useState<string>('');
@@ -354,6 +364,8 @@ export default function App() {
         if (sessionParams.direction) {
           setDirection(sessionParams.direction as WorkflowDirection);
         }
+        setIncludeLakehouse(!!sessionParams.include_lakehouse);
+        setIncludeGenieOntology(!!sessionParams.include_genie_ontology);
         setCodingAssistant(sessionParams.coding_assistant || null);
         setCodingAssistantExplicit(!!sessionParams.coding_assistant);
         
@@ -409,6 +421,8 @@ export default function App() {
       setCustomUseCaseLabel('');
       setCustomDescription('');
       setDirection('forward');
+      setIncludeLakehouse(false);
+      setIncludeGenieOntology(false);
       window.history.replaceState({}, '', `?sessionId=${response.session_id}`);
     } catch (err) {
       console.error('Error creating session:', err);
@@ -504,6 +518,8 @@ export default function App() {
         if (sessionParams.direction) {
           setDirection(sessionParams.direction as WorkflowDirection);
         }
+        setIncludeLakehouse(!!sessionParams.include_lakehouse);
+        setIncludeGenieOntology(!!sessionParams.include_genie_ontology);
         setCodingAssistant(sessionParams.coding_assistant || null);
         setCodingAssistantExplicit(!!sessionParams.coding_assistant);
         
@@ -552,6 +568,10 @@ export default function App() {
     if (level !== workshopLevel) {
       setAiAgentsModules(new Set(ALL_AI_MODULES));
       setMedallionLayers(new Set(ALL_MEDALLION_LAYERS));
+      // Genie Accelerator's optional Lakehouse defaults OFF on (re)entry.
+      setIncludeLakehouse(false);
+      // Genie Accelerator's optional Genie Ontology defaults OFF on (re)entry.
+      setIncludeGenieOntology(false);
     }
     if (!levelExplicitlySelected) {
       setLevelExplicitlySelected(true);
@@ -694,6 +714,30 @@ export default function App() {
     }
   }, [directionLocked, sessionId, workshopLevel]);
 
+  // Genie Accelerator: toggle the optional Lakehouse (Bronze -> Gold) block.
+  const handleIncludeLakehouseChange = useCallback((next: boolean) => {
+    if (readOnly) return;
+    setIncludeLakehouse(next);
+    if (sessionId) {
+      apiClient.updateSessionMetadata({
+        session_id: sessionId,
+        include_lakehouse: next,
+      }).catch(err => console.error('Error persisting include_lakehouse:', err));
+    }
+  }, [readOnly, sessionId]);
+
+  // Genie Accelerator: toggle the optional Genie Ontology block.
+  const handleIncludeGenieOntologyChange = useCallback((next: boolean) => {
+    if (readOnly) return;
+    setIncludeGenieOntology(next);
+    if (sessionId) {
+      apiClient.updateSessionMetadata({
+        session_id: sessionId,
+        include_genie_ontology: next,
+      }).catch(err => console.error('Error persisting include_genie_ontology:', err));
+    }
+  }, [readOnly, sessionId]);
+
   const handleSaveSession = async (name: string, description: string, rating?: 'thumbs_up' | 'thumbs_down', comment?: string) => {
     if (!sessionId || readOnly) return;
     
@@ -712,6 +756,8 @@ export default function App() {
         current_step: Math.max(...Array.from(completedSteps), 1),
         workshop_level: workshopLevel,
         direction,
+        include_lakehouse: includeLakehouse,
+        include_genie_ontology: includeGenieOntology,
         completed_steps: Array.from(completedSteps),
         step_prompts: stepPrompts
       });
@@ -1323,6 +1369,10 @@ export default function App() {
                     onAIModulesChange={setAiAgentsModules}
                     medallionLayers={medallionLayers}
                     onMedallionLayersChange={setMedallionLayers}
+                    includeLakehouse={includeLakehouse}
+                    onIncludeLakehouseChange={handleIncludeLakehouseChange}
+                    includeGenieOntology={includeGenieOntology}
+                    onIncludeGenieOntologyChange={handleIncludeGenieOntologyChange}
                     dataRefreshKey={dataRefreshKey}
                     onStepPromptGenerated={handleStepPromptGenerated}
                     onIndustryChange={(val, label) => { 

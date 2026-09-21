@@ -23,6 +23,7 @@ import {
   Palette,
   Server,
   Link2,
+  ClipboardList,
   Play,
   Table2,
   GitBranch,
@@ -202,6 +203,77 @@ export function getDisabledTagsForMedallionLayers(
 }
 
 // ---------------------------------------------------------------------------
+// Optional Lakehouse toggle (Genie Accelerator only).
+// Unlike the medallion / AI-module toggles (which default ON), the Genie
+// Accelerator's Lakehouse block is OFF by default: the learner starts from
+// existing / uploaded / synthetic data via the semantic-layer step, and only
+// opts into building Bronze -> Gold first. Because the default is OFF, this is
+// modelled as a single boolean rather than a Set.
+// ---------------------------------------------------------------------------
+export const LEVELS_WITH_LAKEHOUSE_TOGGLE: ReadonlySet<WorkshopLevel> =
+  new Set<WorkshopLevel>(['genie-accelerator']);
+
+// The four Genie Accelerator lakehouse steps (see getFilteredSections: the
+// lakehouse section is filtered to [22, 11, 14, 23] for genie-accelerator).
+// Disabling these tags removes the whole LAKEHOUSE section from the default path.
+export const GENIE_LAKEHOUSE_TAGS = [
+  'genie_silver_metadata', // step 22 — Analyze Silver Metadata
+  'gold_layer_design',     // step 11 — Gold Layer Design
+  'gold_layer_pipeline',   // step 14 — Gold Pipeline
+  'deploy_lakehouse_assets', // step 23 — Deploy Assets
+] as const;
+
+export function levelSupportsLakehouseToggle(level: WorkshopLevel): boolean {
+  return LEVELS_WITH_LAKEHOUSE_TOGGLE.has(level);
+}
+
+// Translate the Lakehouse toggle into section_tag strings to disable.
+// includeLakehouse === false (the default) disables the Genie lakehouse steps.
+export function getDisabledTagsForLakehouse(
+  level: WorkshopLevel,
+  includeLakehouse: boolean,
+): string[] {
+  if (!levelSupportsLakehouseToggle(level)) return [];
+  return includeLakehouse ? [] : [...GENIE_LAKEHOUSE_TAGS];
+}
+
+// ---------------------------------------------------------------------------
+// Optional Genie Ontology toggle (Genie Accelerator only).
+// Same shape as the Lakehouse toggle: a single boolean that defaults OFF. The
+// Genie Ontology arc (Model the Domain, Author Pages, Write Routing) is a Beta,
+// mostly-UI-driven block that follows the Activate section (it is an optional
+// domain-scoping refinement layered on after the app is built).
+// Because these three tags cover the entire `genie-ontology` section,
+// disabling them drops the whole section via the empty-section filter in
+// getFilteredSections.
+// ---------------------------------------------------------------------------
+export const LEVELS_WITH_ONTOLOGY_TOGGLE: ReadonlySet<WorkshopLevel> =
+  new Set<WorkshopLevel>(['genie-accelerator']);
+
+// The three Genie Ontology steps (67, 68, 69) — see the `genie-ontology`
+// section definition. Disabling these tags removes the whole ONTOLOGY section
+// from the default path.
+export const GENIE_ONTOLOGY_TAGS = [
+  'ontology_domain',  // step 67 — Model the Domain + Subdomains
+  'ontology_pages',   // step 68 — Author Pages
+  'ontology_routing', // step 69 — Write the Routing Page
+] as const;
+
+export function levelSupportsOntologyToggle(level: WorkshopLevel): boolean {
+  return LEVELS_WITH_ONTOLOGY_TOGGLE.has(level);
+}
+
+// Translate the Genie Ontology toggle into section_tag strings to disable.
+// includeGenieOntology === false (the default) disables the ontology steps.
+export function getDisabledTagsForGenieOntology(
+  level: WorkshopLevel,
+  includeGenieOntology: boolean,
+): string[] {
+  if (!levelSupportsOntologyToggle(level)) return [];
+  return includeGenieOntology ? [] : [...GENIE_ONTOLOGY_TAGS];
+}
+
+// ---------------------------------------------------------------------------
 // Feature flag for the Agent Skills Accelerator
 // ---------------------------------------------------------------------------
 export type AcceleratorStatus = 'enabled' | 'beta' | 'coming-soon';
@@ -262,9 +334,12 @@ export const WORKSHOP_LEVELS: Record<WorkshopLevel, LevelConfig> = {
   },
   'genie-accelerator': {
     label: 'Genie Accelerator',
-    tooltip: 'Analyze silver metadata, build Gold layer, and create Genie Spaces',
-    description: 'Analyze your silver layer metadata, design and build a Gold layer, then create Genie Spaces with Metric Views and TVFs.',
-    sectionIds: ['define-usecase', 'lakehouse', 'data-intelligence', 'iterate-enhance', 'cleanup'],
+    tooltip: 'Build a governed Metric View, a Genie Agent, an ontology, and activate it',
+    description: 'Locate data and build a governed Metric View, stand up and tune a Genie Agent, model the Discover ontology, then activate with a dashboard, Lakebase sync, and a deployable bundle.',
+    // The new track sections (semantic-layer, genie-agent, genie-ontology, genie-activate)
+    // REPLACE the legacy AI/BI beats; data-intelligence is emptied in getFilteredSections
+    // and dropped by the empty-steps filter. Section display order follows WORKFLOW_SECTIONS.
+    sectionIds: ['define-usecase', 'lakehouse', 'data-intelligence', 'semantic-layer', 'genie-agent', 'genie-activate', 'genie-ontology', 'iterate-enhance', 'cleanup'],
   },
   'data-engineering-accelerator': {
     label: 'Data Engineering Accelerator',
@@ -366,7 +441,7 @@ export const ALL_STEPS: Record<number, WorkflowStep> = {
   31: { number: 31, title: 'Workspace Clean Up', icon: Trash2, color: 'text-rose-400', sectionTag: 'workspace_cleanup' },
 
   // Activation: Reverse ETL (Steps 32-37) - Only visible in reverse direction
-  32: { number: 32, title: 'Plan Synced Tables', icon: Table2, color: 'text-emerald-400', sectionTag: 'activation_table_design' },
+  32: { number: 32, title: 'Design & Provision Synced Tables', icon: Table2, color: 'text-emerald-400', sectionTag: 'activation_table_design' },
   33: { number: 33, title: 'Create Synced Tables', icon: RefreshCw, color: 'text-emerald-500', sectionTag: 'activation_reverse_sync' },
   34: { number: 34, title: 'Design Analytics App', icon: Palette, color: 'text-emerald-400', sectionTag: 'activation_app_design' },
   35: { number: 35, title: 'Build Analytics App', icon: Plug, color: 'text-emerald-500', sectionTag: 'activation_build_wire' },
@@ -398,6 +473,23 @@ export const ALL_STEPS: Record<number, WorkflowStep> = {
   54: { number: 54, title: 'Logged Model & UC Registration', icon: Database, color: 'text-violet-500', sectionTag: 'mlflow_logged_model_uc_registration' },
   55: { number: 55, title: 'AI Gateway + Deployment', icon: Rocket, color: 'text-violet-400', sectionTag: 'mlflow_gateway_and_deployment' },
   56: { number: 56, title: 'Production Monitoring + Debugging', icon: BarChart3, color: 'text-violet-500', sectionTag: 'mlflow_production_monitoring_and_debugging' },
+  // --- Genie Accelerator track (steps 57-73). Bound to seed rows by sectionTag ONLY. ---
+  57: { number: 57, title: 'Locate Data & Bring Context', icon: Search, color: 'text-cyan-400', sectionTag: 'semlayer_locate' },
+  58: { number: 58, title: 'Profile Your Schema', icon: Table2, color: 'text-cyan-400', sectionTag: 'semlayer_profile' },
+  59: { number: 59, title: 'Measures Analysis', icon: BarChart3, color: 'text-cyan-400', sectionTag: 'semlayer_measures' },
+  60: { number: 60, title: 'Draft the Metric View', icon: FileCode, color: 'text-cyan-400', sectionTag: 'semlayer_metric_view' },
+  61: { number: 61, title: 'Review & Expand Synonyms', icon: Tag, color: 'text-cyan-400', sectionTag: 'semlayer_synonyms' },
+  62: { number: 62, title: 'Describe the Agent', icon: MessageSquareText, color: 'text-sky-400', sectionTag: 'gagent_describe' },
+  63: { number: 63, title: 'Author Instructions', icon: FileText, color: 'text-sky-400', sectionTag: 'gagent_instructions' },
+  64: { number: 64, title: 'Add Verified Queries', icon: ShieldCheck, color: 'text-sky-400', sectionTag: 'gagent_verified' },
+  65: { number: 65, title: 'Load Benchmarks', icon: Target, color: 'text-sky-400', sectionTag: 'gagent_benchmarks' },
+  66: { number: 66, title: 'Optimize Loop', icon: RefreshCw, color: 'text-sky-400', sectionTag: 'gagent_optimize' },
+  67: { number: 67, title: 'Model the Domain + Subdomains', icon: Globe, color: 'text-teal-400', sectionTag: 'ontology_domain' },
+  68: { number: 68, title: 'Author Pages', icon: BookOpen, color: 'text-teal-400', sectionTag: 'ontology_pages' },
+  69: { number: 69, title: 'Write the Routing Page', icon: GitBranch, color: 'text-teal-400', sectionTag: 'ontology_routing' },
+  71: { number: 71, title: 'AI/BI Dashboard', icon: LayoutDashboard, color: 'text-emerald-400', sectionTag: 'gaccel_dashboard' },
+  72: { number: 72, title: 'Choose What to Activate', icon: ClipboardList, color: 'text-emerald-400', sectionTag: 'gaccel_activation' },
+  73: { number: 73, title: 'Wire Genie', icon: MessageSquareText, color: 'text-emerald-500', sectionTag: 'activation_wire_genie' },
 };
 
 // The logical sections with their step groupings (4-chapter structure + activation + skills)
@@ -461,6 +553,67 @@ export const WORKFLOW_SECTIONS: WorkflowSection[] = [
     bgColor: 'bg-cyan-500/15',
     borderColor: 'border-cyan-500/30',
     steps: [15, 16, 17, 24, 25, 18, 19].map(n => ALL_STEPS[n]),
+  },
+  // --- Genie Accelerator track sections (scoped to genie-accelerator level) ---
+  {
+    id: 'semantic-layer',
+    chapter: 'AI and Agents',
+    title: 'Semantic Layer',
+    focus: 'Locate data, analyze measures, and build a governed Metric View',
+    description: 'Point Genie Code at your data (existing, uploaded, or synthetic), profile the schema, analyze the measures and reconcile definitional conflicts, then author a governed Metric View with synonyms.',
+    icon: FileCode,
+    color: 'text-cyan-400',
+    bgColor: 'bg-cyan-500/15',
+    borderColor: 'border-cyan-500/30',
+    steps: [57, 58, 59, 60, 61].map(n => ALL_STEPS[n]),
+  },
+  {
+    id: 'genie-agent',
+    chapter: 'AI and Agents',
+    title: 'Genie Agent',
+    focus: 'Stand up a Genie Agent on the Metric View, tune it, and prove it with an AI/BI dashboard',
+    description: 'Create a Genie space bound to the Metric View, add lean instructions and verified queries, load benchmarks with expected SQL, run the GC-native optimize loop until it clears the target pass rate, then build an AI/BI dashboard on the same governed Metric View.',
+    icon: MessageSquareText,
+    color: 'text-sky-400',
+    bgColor: 'bg-sky-500/15',
+    borderColor: 'border-sky-500/30',
+    // The AI/BI Dashboard (71) shares the governed Metric View with the agent, so
+    // it lives here (matching the master path, where the dashboard sits in the
+    // AI/Data-Intelligence chapter — not in activation).
+    steps: [62, 63, 64, 65, 66, 71].map(n => ALL_STEPS[n]),
+  },
+  {
+    id: 'genie-activate',
+    chapter: 'Activation',
+    title: 'Activate',
+    focus: 'Plan activation, then sync to Lakebase and stand up an app',
+    description: 'Plan which Gold dimensions + facts to activate, then run the proven Synced Tables → Design → Build → Wire → Deploy sequence to stand up an app on Lakebase.',
+    icon: Rocket,
+    color: 'text-emerald-400',
+    bgColor: 'bg-emerald-500/15',
+    borderColor: 'border-emerald-500/30',
+    // Choose What to Activate wrapper (72) → the reused reverse-ETL activation sequence
+    // (32-37: Synced Tables → Design → Build → Wire → Deploy), with Wire Genie (73)
+    // inserted after Wire to Lakebase so the app gains a Genie chat panel before Deploy.
+    // This mirrors the master "Reverse ETL" section (32-37) plus a thin planning lead-in
+    // and the genie-accelerator-only Wire Genie step.
+    // Step numbers are incidental; order follows this list.
+    steps: [72, 32, 33, 34, 35, 36, 73, 37].map(n => ALL_STEPS[n]),
+  },
+  {
+    // Genie Ontology now follows Activation: the domain-scoping arc is an
+    // optional refinement layered on AFTER the agent is live and the app is
+    // built, not a prerequisite for activation.
+    id: 'genie-ontology',
+    chapter: 'AI and Agents',
+    title: 'Genie Ontology',
+    focus: 'Model the Discover domain, pages, and routing (Genie One)',
+    description: 'Model the domain and subdomains (UI-preferred), author Pages, and write the routing page so Genie One routes questions to the right space. Beta features — mostly UI-driven with Genie Code drafting content.',
+    icon: Globe,
+    color: 'text-teal-400',
+    bgColor: 'bg-teal-500/15',
+    borderColor: 'border-teal-500/30',
+    steps: [67, 68, 69].map(n => ALL_STEPS[n]),
   },
   {
     id: 'activation',
@@ -536,9 +689,17 @@ export const WORKFLOW_SECTIONS: WorkflowSection[] = [
   },
 ];
 
-// Helper to find which section a step belongs to
-export function getSectionForStep(stepNumber: number): WorkflowSection | null {
-  return WORKFLOW_SECTIONS.find(section => 
+// Helper to find which section a step belongs to.
+// Some steps (e.g. the activation steps 32-37) are reused across tracks and thus
+// appear in more than one section definition (the reverse-ETL `activation` section
+// AND the Genie Accelerator `genie-activate` section). Callers that know which
+// sections are actually on-screen should pass their filtered `sections` list so the
+// lookup resolves to the visible section rather than the first static match.
+export function getSectionForStep(
+  stepNumber: number,
+  sections: WorkflowSection[] = WORKFLOW_SECTIONS,
+): WorkflowSection | null {
+  return sections.find(section =>
     section.steps.some(step => step.number === stepNumber)
   ) || null;
 }
@@ -579,9 +740,20 @@ export function getFilteredSections(
   const isGenie = normalizedLevel === 'genie-accelerator';
   const isSkillsAccelerator = normalizedLevel === 'skills-accelerator';
 
+  // Genie Accelerator track sections. Bound to seed rows by sectionTag only.
+  // (These ids are added to the genie-accelerator sectionIds; the guard below is a
+  // defensive belt-and-braces so they never leak into any other level.)
+  const GENIE_TRACK_SECTION_IDS = new Set([
+    'semantic-layer', 'genie-agent', 'genie-ontology', 'genie-activate',
+  ]);
+
   let filtered = WORKFLOW_SECTIONS
     .filter(section => sectionIds.includes(section.id))
     .map(section => {
+      // The Genie Accelerator track only exists for the genie-accelerator level.
+      if (GENIE_TRACK_SECTION_IDS.has(section.id) && !isGenie) {
+        return { ...section, steps: [] };
+      }
       // Skills Accelerator: remove PRD step from foundation
       if (section.id === 'define-usecase' && isSkillsAccelerator) {
         return {
@@ -596,12 +768,10 @@ export function getFilteredSections(
           steps: section.steps.filter(step => [22, 11, 14, 23].includes(step.number))
         };
       }
-      // Genie Accelerator: data-intelligence section shows only steps 15, 17, 24, 25
+      // Genie Accelerator: the new track (semantic-layer → genie-agent → genie-ontology
+      // → genie-activate) REPLACES the legacy AI/BI beats. Empty steps drop this section.
       if (section.id === 'data-intelligence' && isGenie) {
-        return {
-          ...section,
-          steps: section.steps.filter(step => [15, 17, 24, 25].includes(step.number))
-        };
+        return { ...section, steps: [] };   // was: filter to [15, 17, 24, 25]
       }
       // Non-genie paths: always hide step 22 and conditionally hide step 9
       if (section.id === 'lakehouse' && !isGenie) {
@@ -688,7 +858,9 @@ export const CHAPTER_VISIBILITY: Record<WorkshopLevel, Set<'ch1' | 'ch2' | 'ch3'
   'lakehouse-di': new Set(['ch3', 'ch4']),
   'end-to-end': new Set(['ch1', 'ch2', 'ch3', 'ch4']),
   'accelerator': new Set(['ch3', 'ch4']),
-  'genie-accelerator': new Set(['ch3', 'ch4']),
+  // Genie Accelerator renders the App endpoint (ch1/ch2) and the Genie arc (ch4)
+  // by default; the Lakehouse chapter (ch3) is opt-in via the Include Lakehouse toggle.
+  'genie-accelerator': new Set(['ch1', 'ch2', 'ch4']),
   'data-engineering-accelerator': new Set(['ch3']),
   'skills-accelerator': new Set([]),
   'agents-accelerator': new Set(['ch1', 'ch2', 'ch4']),
@@ -706,7 +878,9 @@ export const ARCH_VISIBILITY: Record<WorkshopLevel, { ch1: boolean; ch2: boolean
   'lakehouse-di': { ch1: false, ch2: false, ch3: true, ch4: true },
   'end-to-end': { ch1: true, ch2: true, ch3: true, ch4: true },
   'accelerator': { ch1: false, ch2: false, ch3: true, ch4: true },
-  'genie-accelerator': { ch1: false, ch2: false, ch3: true, ch4: true },
+  // App endpoint always shown; Lakehouse (ch3) is opt-in (component overrides
+  // ch3 from the includeLakehouse toggle for the embedded diagram).
+  'genie-accelerator': { ch1: true, ch2: true, ch3: false, ch4: true },
   'data-engineering-accelerator': { ch1: false, ch2: false, ch3: true, ch4: false },
   'skills-accelerator': { ch1: false, ch2: false, ch3: false, ch4: false },
   'agents-accelerator': { ch1: true, ch2: true, ch3: false, ch4: true },

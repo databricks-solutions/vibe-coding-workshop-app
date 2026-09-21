@@ -423,6 +423,10 @@ Review `@docs/design_prd.md` (parent `docs/` folder at repo root) to understand:
 
 Read and follow the `02-appkit-build` skill at `@apps_lakebase/skills/02-appkit-build/SKILL.md`. The skill covers frontend components, design quality, routing, and testing. **Read every reference file the skill points to** — especially `references/llm-guardrails.md` and `references/design-quality.md` — before writing component code.
 
+**🔴 Preflight acknowledgement (before writing components).** Echo BOTH: (1) the skill''s design-quality rule in one line, AND (2) the brand identity you will theme to — the primary/secondary/accent colors and logo from the `## Branding Guidelines` section of this prompt (if present) or `@docs/design_prd.md`, plus the ONE deliberate aesthetic direction you are committing to. If no brand assets are provided, still state the aesthetic direction you are choosing.
+
+**Theme to the brand — do not ship the scaffold''s default look.** Apply the design-quality skill and the `## Branding Guidelines` section of this prompt (if present): set the `--primary`/`--secondary`/`--accent` oklch custom properties in `client/src/index.css` (edit the scaffold''s file incrementally — never regenerate it), load a distinctive display + body font pairing via `client/index.html` (avoid Inter/Roboto/Arial/system defaults), and place the brand logo in the header/navbar and as the favicon. Every color flows through CSS variables referenced by Tailwind classes (`bg-primary`, `text-primary-foreground`) — never inline hex.
+
 **Demo data strategy:** Use static mock data arrays directly in your components. All charts, tables, and data-driven components should use the `data` prop with hardcoded representative sample data. There is no live backend, no SQL warehouse, and no database at this stage — the goal is a fully functional UI with realistic-looking mock data.
 
 **Skip these parts of the build skill** (they are not relevant for a blank app):
@@ -452,6 +456,7 @@ Save a design overview to `@docs/ui_design.md` (parent `docs/` folder at repo ro
 - Core components and their mock data sources
 - Navigation flow
 - Design direction and aesthetic choices
+- Visual and Brand: the aesthetic direction, brand palette (as `--primary`/`--secondary`/`--accent` oklch variables), typography pairing, and logo placement
 
 ---
 
@@ -495,6 +500,7 @@ Your job is complete when:
 - [ ] Backend (`server/server.ts`) uses `await createApp({ plugins: [server()] })` (not `.catch(console.error)`)
 - [ ] Frontend (`client/src/`) implements key pages with mock data
 - [ ] Loading/error/empty states on every data-driven component
+- [ ] Themed to the brand — `--primary`/`--secondary`/`--accent` oklch variables set in `client/src/index.css`, brand fonts loaded, logo in header/navbar + favicon (no inline hex)
 - [ ] `tests/smoke.spec.ts` uses `data-testid` selectors (not text/role); key page elements have `data-testid` attributes
 - [ ] `@docs/ui_design.md` is created (parent docs folder)
 - [ ] `npm run dev` runs cleanly at `http://localhost:8000`
@@ -720,6 +726,8 @@ Load each skill with `readSkillFile` using its fully-qualified `<skill_ref_root>
 
 When either skill lists further mandatory references, load EACH the same way: take its repo-relative path and prefix it with `skill_ref_root`. Genie Code has no repo-root-relative resolution and `AGENTS.md` does not carry across threads — so always prefix with `skill_ref_root`.
 
+**🔴 Preflight acknowledgement (hard gate).** Before authoring any component, echo BOTH: (1) the skill''s design-quality rule in one line, AND (2) the brand identity you will theme to — the primary/secondary/accent colors and logo from the `## Branding Guidelines` section of this prompt (if present) or `<artifact_root>/docs/design_prd.md`, plus the ONE deliberate aesthetic direction you are committing to (per the design-quality skill). If no brand assets are provided, still state the aesthetic direction you are choosing. If you cannot state these, you have not read the inputs — read them first.
+
 ### Step 3 — Scaffold the blank app INTO `<APP_ROOT>` (no local npm)
 
 Scaffold via `runDatabricksCli`, pinning the output directory so the project lands at `<APP_ROOT>` (a top-level sibling of `apps_lakebase/`, NOT inside it) — never `/Workspace/<name>`:
@@ -752,6 +760,8 @@ Write files with `executeCode` `open(path,"w").write(...)` against warm compute 
 
 🔴 **Preserve the scaffold''s import specifiers verbatim.** `apps init` ships `client/src/index.css` with `@import "@databricks/appkit-ui/styles.css";` and every `.tsx` importing components from `@databricks/appkit-ui/react`. **Edit these files incrementally — never regenerate `App.tsx`/`index.css` from memory**, which is how the wrong specifiers (bare `@databricks/appkit-ui`, extension-less `…/styles`) get reintroduced and the server-side build fails. Likewise keep the scaffold''s `client/src/ErrorBoundary.tsx` (it is what surfaces a client runtime crash in the browser at step 05). See `02-appkit-build` "Hard Rules" + `references/llm-guardrails.md` rules 11–12.
 
+🔴 **Theme to the brand — do not ship the scaffold''s default look.** Apply the design-quality skill and the `## Branding Guidelines` section of this prompt (if present): uncomment and set the `--primary`/`--secondary`/`--accent` oklch custom properties in `client/src/index.css`, load a distinctive display + body font pairing via `client/index.html` (avoid Inter/Roboto/Arial/system defaults), and place the brand logo in the header/navbar and as the favicon. Every color flows through CSS variables referenced by Tailwind classes (`bg-primary`, `text-primary-foreground`) — never inline hex. This is an incremental edit of the scaffold''s `index.css`, not a regeneration.
+
 ### Step 5b — Pre-handoff static gate (the only static check here)
 
 There is **no local `tsc`/`npm`/`eslint`** on Genie Code, so a regex scan is the **only** way to catch the common, statically-detectable build/runtime killers before this step hands off to deploy. Run via `executeCode` (read files in Python + regex — do NOT depend on the IDE''s shell `grep`). It splits hits into **BLOCKING** (must fix) and **REVIEW** (a heuristic — confirm each, then fix):
@@ -763,6 +773,8 @@ There is **no local `tsc`/`npm`/`eslint`** on Genie Code, so a regex scan is the
 - **BLOCKING (E) — stale server-wiring shape (`server/server.ts`):** `server({ autoStart: false })` (or a manual `AppKit.server.start()`) double-`listen()`s and crashes the app on boot; register routes inside `onPluginsReady(appkit)` + `appkit.server.extend(...)` and let `server()` own the listener.
 - **BLOCKING (F) — wrong Lakebase plugin import (`server/server.ts`):** importing the `lakebase` plugin `from "@databricks/lakebase"` (the driver package) fails the build; import it `from "@databricks/appkit"`.
 - **REVIEW (D) — unused named import:** flagged when a symbol appears only on its import line. The scaffold''s `noUnusedLocals` turns an unused import into a hard `TS6133` build failure. Heuristic only (can false-positive on comment/string-only use or re-exports), so confirm before removing.
+- **REVIEW (G) — unthemed `index.css`:** `client/src/index.css` still ships the scaffold''s commented-out defaults (no uncommented `--primary` oklch variable), so the app renders in the generic AppKit look instead of the brand. **If the `## Branding Guidelines` section above provided colors, treat this as BLOCKING** — set the palette before handoff.
+- **REVIEW (H) — no logo/favicon reference:** nothing under `client/` references a logo or favicon, so the brand mark is missing. Escalate to BLOCKING when a logo URL was provided in `## Branding Guidelines`.
 
 ```python
 import re, pathlib
@@ -800,6 +812,22 @@ if srv.exists():
         bad.append(f"{srv}: lakebase plugin imported from ''@databricks/lakebase'' -> import from ''@databricks/appkit''")
     if re.search(r''autoStart\s*:\s*false'', st) or re.search(r''\.server\.start\s*\('', st):
         bad.append(f"{srv}: autoStart:false / manual server.start() -> register routes in onPluginsReady, let server() own the listener")
+# (G) THEMING — client/src/index.css still shipping the scaffold defaults (unthemed)
+css = pathlib.Path("<APP_ROOT>/client/src/index.css")
+if css.exists():
+    ct = css.read_text()
+    if re.search(r''^\s*--primary\s*:'', ct, re.MULTILINE) is None:
+        review.append(f"{css}: no uncommented --primary oklch variable -> app is UNTHEMED; set the brand palette (uncomment + fill the oklch vars) from the ''## Branding Guidelines'' section. If brand colors were provided, treat this as BLOCKING.")
+# (H) LOGO — no logo/favicon reference anywhere under client/
+logo_seen = False
+cdir = pathlib.Path("<APP_ROOT>/client")
+if cdir.exists():
+    for lf in cdir.rglob("*"):
+        if lf.suffix in {".ts", ".tsx", ".css", ".html"} and re.search(r''logo|favicon'', lf.read_text(), re.IGNORECASE):
+            logo_seen = True
+            break
+if not logo_seen:
+    review.append("client/: no logo/favicon reference found -> place the brand logo in the header/navbar and as the favicon (from ''## Branding Guidelines'', if provided).")
 print("BLOCKING:\n" + ("\n".join(bad) or "OK"))
 print("REVIEW:\n" + ("\n".join(review) or "none"))
 ```
@@ -808,11 +836,11 @@ Fix every **BLOCKING** hit and triage every **REVIEW** hit before declaring this
 
 ### Step 6 — Create the UI design document
 
-Write `<artifact_root>/docs/ui_design.md` (`<artifact_root>`-anchored, NOT `@docs/...`) describing key screens/pages, core components and their mock-data sources, navigation flow, and design direction.
+Write `<artifact_root>/docs/ui_design.md` (`<artifact_root>`-anchored, NOT `@docs/...`) describing key screens/pages, core components and their mock-data sources, navigation flow, and design direction — including the "Visual and Brand" treatment applied (aesthetic direction, the brand palette as `--primary`/`--secondary`/`--accent` oklch variables, the typography pairing, and logo placement).
 
 **State-lock:** this prompt runs between an `enter` (Step 0) and an `exit`. After the gate passes, run `skills/vibecoding-state` op `exit` — params: `prompt_id: "cursor_copilot_ui_design"`, `gate: "App scaffolded + UI authored (deploy + verify deferred to step 05)"`, `captured: {app_name, app_root}`. **This `enter`/`exit` pair is a mandatory ritual, not advisory.** Step 0''s `enter` MUST locate — or, if this is the first prompt of the track, bootstrap-create — the canonical live state file at `<app_root>/.vibecoding-state.md` (never the temporary `example/…` bootstrap path). The closing `exit` MUST append this prompt''s Per-Step Log entry, Gate result, and `captured` vars to that file, then **re-read it and echo the appended section to prove the write landed**. **Gate completion rule:** this prompt is NOT complete until that re-read confirms the appended entry — the chat summary is NOT the state store.
 
-**Gate:** `App scaffolded + UI authored (deploy + verify deferred to step 05)` — `<APP_ROOT>` contains a scaffolded blank AppKit project (`app.yaml`, `databricks.yml` with `name: <APP_NAME>`, `server/server.ts` using `await createApp({ plugins: [server()] })`, and `client/` pages built from the PRD with mock data), and `<artifact_root>/docs/ui_design.md` exists. NO local server was run, NO `http://localhost:8000` check was attempted, and NOTHING was deployed or validated — deploy + deployed-URL verification are step 05.
+**Gate:** `App scaffolded + UI authored (deploy + verify deferred to step 05)` — `<APP_ROOT>` contains a scaffolded blank AppKit project (`app.yaml`, `databricks.yml` with `name: <APP_NAME>`, `server/server.ts` using `await createApp({ plugins: [server()] })`, and `client/` pages built from the PRD with mock data), the app is themed to the brand (`--primary`/`--secondary`/`--accent` oklch variables set in `client/src/index.css`, brand fonts loaded, logo in header/navbar + favicon; static-gate REVIEW items G/H resolved), and `<artifact_root>/docs/ui_design.md` exists. NO local server was run, NO `http://localhost:8000` check was attempted, and NOTHING was deployed or validated — deploy + deployed-URL verification are step 05.
 
 **➡️ Next step.** The app now lives under `<APP_ROOT>`. Step 05 (**Deploy to Databricks Apps**) deploys it via the SDK SNAPSHOT path (`w.apps.deploy(...)`, build runs server-side) and verifies the deployed URL with the 3-hop OAuth session — keep `<APP_ROOT>` as your working anchor.',
 '',
@@ -9883,7 +9911,7 @@ Plan which Gold layer assets to sync from the Lakehouse into Lakebase PostgreSQL
 'You are a data architect planning reverse ETL sync from Databricks Lakehouse to Lakebase PostgreSQL using Synced Tables.
 
 This prompt is returned as-is for direct use in Cursor/Copilot. No LLM processing.',
-'Plan Synced Tables',
+'Design & Provision Synced Tables',
 'Design which Gold assets to sync into Lakebase via Synced Tables, including keys, modes, and types',
 32,
 '## 1️⃣ How To Apply
@@ -10115,7 +10143,7 @@ Copy the prompt above, start a **new Agent chat** in your coding assistant, and 
 **Run this in your cloned Template Repository.**
 
 Ensure you have:
-- ✅ Completed **Plan Synced Tables** (Step 32) — `reverse_etl.md` + `activation_sync_plan.md` exist and the Lakebase project is provisioned
+- ✅ Completed **Design & Provision Synced Tables** (Step 32) — `reverse_etl.md` + `activation_sync_plan.md` exist and the Lakebase project is provisioned
 - ✅ **Materialized Gold tables** — the Gold pipeline has run and the `{user_schema_prefix}` Gold tables referenced in `activation_sync_plan.md` hold real rows (synced tables copy live data, not `gold_layer_design.md`)
 - ✅ The cost-capped `primary` endpoint reachable (sizing unchanged from Step 32)
 
@@ -10218,13 +10246,20 @@ Synced data location (project, Postgres database, schema, Lakehouse source) come
 
 ---
 
+### Before you design (acknowledge first)
+
+Before writing the design doc, echo BOTH: (1) the design-quality conventions you will follow in one line, and (2) the brand identity you will theme to — the primary/secondary/accent colors and logo from the `## Branding Guidelines` section of this prompt (if present) or `@docs/design_prd.md`, plus the ONE deliberate aesthetic direction you are committing to. If no brand assets are provided, still state the aesthetic direction you are choosing.
+
+---
+
 ### Steps
 
 1. Decide **extend vs greenfield** using the explicit rule below, then record the decision and the evidence (files you looked at) at the top of `@docs/analytics_ui_design.md`.
 2. Design analytics pages (dashboards with KPIs/charts/summary cards; exploration views with filters, sort, drill-downs) assuming a **mock-data-first** contract -- every page must work with placeholder data before any DB is wired.
 3. Map each visualization back to a specific synced Lakebase table and column from `@docs/activation_sync_plan.md`. No UI element is allowed that cannot cite its source.
-4. If a Genie-powered Agent exists from earlier in the workshop, include a natural-language search bar that calls the Agent endpoint alongside the structured dashboards.
-5. Save `@docs/analytics_ui_design.md` with: page/route list, per-page KPIs + charts + data sources, component hierarchy, navigation flow, and the extend-vs-greenfield note from Step 1.
+4. Because this track produced a Genie space, design a **Genie chat/assistant panel** alongside the structured dashboards — a first-class, on-brand conversational surface (a docked "Ask your data" side panel, a dedicated **Ask** nav tab, or an inline panel under the KPIs), NOT a bolted-on search box. It is wired later at the **Wire Genie** step (Step 37) via the AppKit `genie()` plugin and the `GenieChat` component from `@databricks/appkit-ui/react`; theme it to the SAME design tokens as the dashboards (the oklch `--primary`/`--secondary`/`--accent` variables, the typography pairing, and the light/dark themes from the Visual and Brand section) so the chat reads as one product with the dashboards. It answers as the app''s own service principal by default (SP-served); note drop-in `GenieChat` for the standard chat UI, or the headless `useGenieChat` hook when the design calls for a fully custom search-bar/drawer that matches bespoke components. (On a non-Genie reverse-ETL path with no Genie space, omit this panel.)
+5. **Author a "Visual and Brand" section** (do NOT skip — this is the difference between a generic dashboard and a branded one): commit to ONE deliberate aesthetic direction (per the design-quality skill); map the primary/secondary/accent colors from the `## Branding Guidelines` section of this prompt (if present) to the oklch CSS variables (`--primary`/`--secondary`/`--accent`) the build step sets in the app''s `index.css` (every color flows through CSS variables — no inline hex; choose a cohesive non-cliché palette if none provided); pick a distinctive display + body typography pairing (avoid Inter/Roboto/Arial/system defaults); place the brand logo in the header/navbar and favicon; and define light/dark themes plus empty/loading/error states for every data surface (WCAG-AA contrast on brand-colored backgrounds).
+6. Save `@docs/analytics_ui_design.md` with: page/route list, per-page KPIs + charts + data sources, component hierarchy, navigation flow, the extend-vs-greenfield note from Step 1, the Genie chat/assistant panel from Step 4 (its placement, theming to the brand tokens, and empty/loading/error states), and the "Visual and Brand" section from Step 5.
 
 ---
 
@@ -10244,6 +10279,8 @@ Synced data location (project, Postgres database, schema, Lakehouse source) come
 
 - `@docs/analytics_ui_design.md` exists with pages, per-page KPIs/charts, data sources (`{user_schema_prefix}.<synced_table>` + columns), navigation, and the extend-vs-greenfield decision with file evidence.
 - Every visualization cites a synced Lakebase table from the sync plan.
+- If this track produced a Genie space, the design includes an on-brand Genie chat/assistant panel (deliberate placement, theming to the brand tokens, and empty/loading/error states) that the **Wire Genie** step wires via the `genie()` plugin.
+- A "Visual and Brand" section defines the aesthetic direction, the brand palette (as oklch CSS variables), a non-default typography pairing, logo placement, light/dark theme, and per-surface empty/loading/error states.
 - STOP after saving -- do not build the app in this step.
 
 **State-lock (`skills/vibecoding-state`) — run this prompt between an `enter` and an `exit` so workshop state is resolved and locked:**
@@ -10287,7 +10324,7 @@ Ensure you have:
 
 ## 2️⃣ What Are We Building?
 
-A **design document** for the analytics app — not code yet. It defines the dashboards and exploration views that will sit on top of your synced Lakebase tables, with every visualization traced to a real synced source. This is the contract the next three steps build, wire, and deploy.
+A **design document** for the analytics app — not code yet. It defines the dashboards and exploration views that will sit on top of your synced Lakebase tables — plus an on-brand Genie chat panel for plain-English questions — with every visualization traced to a real synced source. This is the contract the next steps build, wire (Lakebase, then Genie), and deploy.
 
 ```mermaid
 flowchart LR
@@ -10297,7 +10334,8 @@ flowchart LR
   prd["design_prd.md (personas + journeys)"] --> design
   design["analytics_ui_design.md (pages, KPIs, sources)"] --> build["Build Analytics App"]
   build --> wire["Wire to Lakebase"]
-  wire --> deploy["Deploy & Validate"]
+  wire --> wireGenie["Wire Genie"]
+  wireGenie --> deploy["Deploy & Validate"]
 ```
 
 Every UI element must cite its synced source:
@@ -10337,7 +10375,9 @@ Every UI element must cite its synced source:
   - [ ] Page or route list for the analytics experience
   - [ ] KPIs and charts per page with data sources (synced tables + columns)
   - [ ] Exploration patterns (filters, sort, detail panels)
-  - [ ] Clear note of extensions to existing app vs greenfield',
+  - [ ] Clear note of extensions to existing app vs greenfield
+  - [ ] Genie chat/assistant panel: placement, theming to the brand tokens, and empty/loading/error states (wired later at the Wire Genie step via the `genie()` plugin)
+  - [ ] Visual and Brand section: aesthetic direction, brand palette (oklch CSS variables), typography pairing, logo placement, light/dark theme, empty/loading/error states',
 true, 1, true, current_timestamp(), current_timestamp(), current_user());
 
 -- Build Analytics App
@@ -10422,8 +10462,9 @@ Do NOT add `psycopg2-binary` -- Lakebase Autoscaling uses `psycopg3` with a cust
 3. Add analytics API routes in `apps_lakebase/src/backend/api/routes.py`. Every route returns a `{ data, source }` envelope with `source: "mock"` -- realistic shapes that match the design, no database calls yet.
 4. Build React components under `apps_lakebase/src/components/` (and route-level pages under `apps_lakebase/src/pages/`) for the design. UI must call the backend APIs -- no hardcoded data in components. Include loading and error states.
 5. Add a ConnectionStatus indicator at the top center of the page header. Render "Mock Data" when any page''s `source` is `"mock"`; it will flip to "Live Data" after Step 36.
-6. Wire navigation -- extend the existing router if a Chapter 1 app exists, else add a minimal navigation component for the greenfield app.
-7. Test locally from `apps_lakebase/`: `pip install -r requirements.txt && npm install`, then boot the backend (`python app.py`) and frontend (`npm run dev`). Open `http://localhost:8000` and confirm pages render, ConnectionStatus shows "Mock Data", and there are no console errors.
+6. **Theme the app to the brand (do NOT ship a generic default look).** Apply the "Visual and Brand" section of `@docs/analytics_ui_design.md` and the `## Branding Guidelines` section of this prompt (if present): set the primary/secondary/accent brand colors as CSS variables in the app''s global stylesheet and reference them throughout (no inline hex), load the chosen display + body fonts, and place the brand logo in the header/navbar and as the favicon. Ensure text on brand-colored backgrounds meets WCAG-AA contrast and both light and dark themes are handled.
+7. Wire navigation -- extend the existing router if a Chapter 1 app exists, else add a minimal navigation component for the greenfield app.
+8. Test locally from `apps_lakebase/`: `pip install -r requirements.txt && npm install`, then boot the backend (`python app.py`) and frontend (`npm run dev`). Open `http://localhost:8000` and confirm pages render, ConnectionStatus shows "Mock Data", the app is themed to the brand, and there are no console errors.
 
 ---
 
@@ -10446,6 +10487,7 @@ Do NOT add `psycopg2-binary` -- Lakebase Autoscaling uses `psycopg3` with a cust
 - React components match the analytics design and call the backend APIs.
 - ConnectionStatus is visible at the top center and shows "Mock Data".
 - Navigation works (extending existing app or greenfield).
+- The app is themed to the brand — brand colors applied as CSS variables (no inline hex), brand fonts loaded, and the logo placed in the header/navbar + favicon (per the design doc''s "Visual and Brand" section and `## Branding Guidelines`).
 - Local dev passes at `http://localhost:8000` with zero external dependencies.
 - STOP -- proceed to Step 36 to wire Lakebase.
 
@@ -10525,6 +10567,7 @@ A **ConnectionStatus** badge shows "Mock Data" now and will flip to "Live Data" 
 - [ ] React components matching the analytics design
 - [ ] ConnectionStatus indicator showing "Mock Data" at top of page
 - [ ] Navigation wired (extending existing app or greenfield)
+- [ ] Brand theming applied — brand colors as CSS variables, brand fonts, logo in header/navbar + favicon
 - [ ] Local testing passes at `http://localhost:8000`',
 true, 1, true, current_timestamp(), current_timestamp(), current_user());
 
@@ -10630,7 +10673,7 @@ Environment values (workspace, project, endpoint, Postgres database/schema) come
 - Every analytics endpoint queries `{user_schema_prefix}.*` synced tables and returns `source: "live"` on success with a working mock fallback on error.
 - `/api/health/lakebase` exists and returns `{connected, mode: "autoscaling", schema: "{user_schema_prefix}", error?}`.
 - ConnectionStatus shows "Live Data" on the local app at `http://localhost:8000` and degrades gracefully to "Mock Data" if Lakebase is unreachable.
-- STOP -- deployment is the next step.
+- STOP -- wiring the Genie chat panel is the next step.
 
 **State-lock (`skills/vibecoding-state`) — run this prompt between an `enter` and an `exit` so workshop state is resolved and locked:**
 
@@ -10699,7 +10742,7 @@ The app reads Lakebase **read-only** — it never changes the data. A small Conn
 2.  **Each page''s data call** is re-pointed from placeholder data to a live read of the synced tables.
 3.  **Every result is labelled** live or mock, and the ConnectionStatus badge reflects it.
 4.  **On any connection issue**, the page quietly returns mock data so the experience stays intact.
-5.  **Handoff:** the next step deploys the app and grants it permission to read the synced data in production.',
+5.  **Handoff:** the next step wires a Genie chat panel into the app; deployment then grants it permission to read the synced data (and run the Genie space) in production.',
 '## Expected Output
 
 - [ ] `apps_lakebase/src/backend/services/lakebase.py` uses `ConnectionPool` + `_OAuthConnection` (Autoscaling-only; OAuth token rotation)
@@ -10712,6 +10755,160 @@ The app reads Lakebase **read-only** — it never changes the data. A small Conn
 - [ ] App still functions with placeholder data if Lakebase is unreachable',
 true, 1, true, current_timestamp(), current_timestamp(), current_user());
 
+-- Wire Genie
+INSERT INTO ${catalog}.${schema}.section_input_prompts 
+(input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
+VALUES
+(147, 'activation_wire_genie',
+'## Your Task
+
+Add a Genie-backed natural-language chat endpoint to the analytics app so users can ask questions of the data in plain English alongside the structured dashboards. Before this step the app serves only dashboards and exploration views wired to Lakebase; after it, a `/api/chat` route proxies to the Genie Conversation API and a chat panel renders the answer together with the SQL Genie ran.
+
+By default the app calls Genie as its own **service principal** (SP-served); a documented **on-behalf-of (OBO)** toggle lets each call run as the logged-in user instead. Environment values (workspace, Genie space id, warehouse, data-source schemas) come from `@docs/reverse_etl.md` and `@docs/genie_brief.md`. Working directory is `apps_lakebase/`.
+
+---
+
+### Mandatory Reads
+
+- `@docs/reverse_etl.md` -- authoritative environment block (workspace, schemas, auth rules)
+- `@docs/genie_brief.md` -- the Genie space id (`{genie_space_id}`), the warehouse it runs on, and the data sources (metric views + tables) it answers over
+- `@docs/analytics_ui_design.md` -- where the natural-language search bar / chat panel belongs in the app
+- `apps_lakebase/src/backend/api/routes.py` -- the analytics endpoints from Step 36 to sit alongside the new `/api/chat` route
+- `apps_lakebase/src/backend/services/lakebase.py` -- the Step 36 connection service, as the pattern for a new sibling `genie.py` service module
+
+---
+
+### Steps
+
+1. Refresh auth: `databricks auth login --host {workspace_url}`. Confirm `databricks auth describe` resolves a profile for `{workspace_url}`.
+2. Create `apps_lakebase/src/backend/services/genie.py` with a Genie Conversation API client built on the Databricks SDK (see "Genie chat service" below). Do not top-level-import the SDK from routes; import inside the request handler or inside service functions.
+3. Add a `POST /api/chat` endpoint in `apps_lakebase/src/backend/api/routes.py`. It accepts `{ "message": str, "conversation_id": str | null }`, calls the Genie chat service, and returns the `{ data, source }` envelope from Step 36: on success `{ "data": { "answer", "sql", "conversation_id" }, "source": "live" }`; on any error fall back to a placeholder response with `source: "mock"` -- do not invent a second envelope shape.
+4. Wire the frontend chat panel (per `@docs/analytics_ui_design.md`): a text box that posts to `/api/chat`, renders the answer, shows the **SQL Genie ran** (from `data.sql`), and threads follow-up questions with the returned `conversation_id`. Keep it mock-compatible so the page still renders if `/api/chat` returns `source: "mock"`.
+5. Test locally (`python app.py` + `npm run dev`, then `http://localhost:8000`). Ask a question from `@docs/genie_brief.md`; confirm the response returns `source: "live"`, the answer renders, and `data.sql` shows the SQL Genie generated. An empty result set is NOT a failure -- confirm wiring via the presence of `data.sql`, not row count.
+
+---
+
+### Genie chat service (`apps_lakebase/src/backend/services/genie.py`)
+
+- **Identity is the whole point of this module.** Default to **SP-served**: build the client with the app''s own credentials (in the Databricks Apps runtime the SP is auto-injected; locally the SDK resolves your `databricks auth login` profile). Read a single flag, e.g. `GENIE_EXECUTION_MODE` (`sp` default, `obo` opt-in). In `obo` mode, read the forwarded user token (`x-forwarded-access-token` header) and build a per-request client with it, so Genie runs on-behalf-of the logged-in user.
+
+  ```
+  from databricks.sdk import WorkspaceClient
+
+  def _client(user_token: str | None):
+      if user_token:                       # OBO: run as the logged-in user
+          return WorkspaceClient(host=os.environ["DATABRICKS_HOST"], token=user_token)
+      return WorkspaceClient()             # SP-served default (app service principal)
+  ```
+
+- Drive the conversation through the Genie Conversation API: start a conversation (or continue one with `conversation_id`), send the user message, then **poll the message to completion** with bounded backoff (the API is asynchronous -- the message moves through states before an answer is ready). Cap the poll; never block indefinitely.
+- Extract two things from the completed message: the natural-language **answer text**, and the **generated SQL** from the query attachment (this is what the panel shows as "the SQL Genie ran"). Return `{ answer, sql, conversation_id }`.
+- The Genie space id comes from `DATABRICKS_GENIE_SPACE_ID` (bound from `{genie_space_id}`); never hardcode the literal id in code. The space already knows which warehouse and data sources to use -- you do not pass a warehouse to the API call.
+- Expose a single `ask(message, conversation_id=None, user_token=None)` helper for the `/api/chat` route to call.
+
+---
+
+### Technical Guardrails (IDE agent cannot guess these)
+
+- **SP-served is the default; OBO is a toggle, not a rewrite.** The app SP must hold `CAN_RUN` on the Genie space for the Conversation API to work in EITHER mode (that grant is applied at the Deploy & Validate step). SP mode additionally needs the SP to have warehouse `CAN_USE` and UC `SELECT` on the space''s data sources; OBO mode instead relies on the logged-in user''s own grants and requires the `dashboards.genie` OAuth scope on the app.
+- **Never hardcode the space id.** Read `DATABRICKS_GENIE_SPACE_ID` (bound from `{genie_space_id}`) at runtime. Do not paste the literal id into `genie.py` or the frontend.
+- **No PAT, no user-authorization flow you build by hand.** SP identity is auto-injected by the runtime; OBO identity arrives as the forwarded `x-forwarded-access-token` header. Do not set `DATABRICKS_TOKEN`/`PGPASSWORD` manually and do not add a login screen.
+- **The Conversation API is asynchronous.** Poll the message with bounded backoff until it completes; a first response can take several seconds while the space warms its warehouse. Do not treat a `PENDING`/`EXECUTING` state as an error.
+- **Empty results are not a failure.** Metric-view/TVF-backed spaces often default to `CURRENT_DATE` and legitimately return zero rows. Confirm wiring from `data.sql` (the generated SQL), never from row count.
+- **Envelope stays intact:** keep the `{ data, source }` contract from Step 36; set `source: "live"` on a successful Genie answer and fall back to `source: "mock"` on any error. Never delete the mock branch.
+- **No literals or PII in logs.** Log the conversation id and message state, never the raw answer rows or the user''s full question payload.
+- **CLI sandbox note:** run `databricks auth login` outside the IDE sandbox to avoid SSL/TLS certificate errors.
+
+---
+
+### Done When
+
+- `apps_lakebase/src/backend/services/genie.py` exists with an SDK-based `ask()` helper that defaults to SP identity and honors an OBO toggle via the forwarded user token.
+- `POST /api/chat` returns the `{ data, source }` envelope with `data.answer` + `data.sql` + `data.conversation_id` and a working mock fallback on error.
+- The frontend chat panel posts to `/api/chat`, renders the answer, shows the SQL Genie ran, and threads follow-ups by `conversation_id`.
+- Locally, a question from `@docs/genie_brief.md` returns `source: "live"` with `data.sql` populated (empty rows are acceptable).
+- STOP -- deployment (and the app-SP Genie grants) is the next step.
+
+**State-lock (`skills/vibecoding-state`) — run this prompt between an `enter` and an `exit` so workshop state is resolved and locked:**
+
+1. **Phase 0 — first, before any step below:** `skills/vibecoding-state` op `enter` — params: `prompt_id: "activation_wire_genie"`, `require_prior_gate: {prompt_id: "activation_wire_lakebase", gate: "Analytics app live data (local)"}`. `enter` resolves the `## Environment Capabilities` triple (deploy verb, CLI channel, `state_file_root`) so every deploy/run step below uses the resolved channel — `runDatabricksCli` on Genie Code — and writes state under `state_file_root`, never a bare-local assumption.
+2. **Final — after the step succeeds:** `skills/vibecoding-state` op `exit` — params: `prompt_id: "activation_wire_genie"`, `gate: "Genie wired to app"`, `captured: {genie_chat_service}`.
+
+**Gate:** `Genie wired to app` — the analytics app has a `/api/chat` endpoint wired to the Genie Conversation API (SP-served by default, OBO toggle available) and a chat panel that renders the answer with the SQL Genie ran.',
+'You are a backend developer adding a Genie-backed natural-language chat endpoint to a Databricks analytics app.
+
+This prompt is returned as-is for direct use in Cursor/Copilot. No LLM processing.',
+'Wire Genie',
+'Add a Genie-backed natural-language chat endpoint to the analytics app, service-principal-served by default with an on-behalf-of toggle',
+37,
+'## 1️⃣ How To Apply
+
+Copy the prompt above, start a **new Agent chat** in your coding assistant, and paste it.
+
+### Prerequisite
+
+Ensure you have:
+- ✅ Completed **Wire to Lakebase** (Step 36) — the app shows **"Live Data"** locally
+- ✅ A Genie space from earlier in the workshop, with its id recorded in `@docs/genie_brief.md`
+
+### Steps to Apply
+
+**Step 1:** Start a new Agent thread in your coding assistant
+**Step 2:** Copy the prompt and paste it into your coding assistant
+**Step 3:** Review the change as the app gains a **natural-language chat** panel backed by your Genie space
+**Step 4:** Ask a question and confirm the answer renders with the **SQL Genie ran** before moving on
+
+> **Client note:** both tracks reach the same result — a chat endpoint backed by your Genie space — using their app framework, but the identity mechanics differ. The IDE''s **FastAPI service** calls the Conversation API as the app''s **service principal** by default, with a one-flag on-behalf-of toggle. The Genie track''s **AppKit `genie()` plugin** runs **on-behalf-of the signed-in user** by design, so it declares `user_api_scopes: [dashboards.genie]` in `app.yaml`. Either way you do not manage the Genie session by hand; the framework owns it.
+
+---
+
+## 2️⃣ What Are We Building?
+
+This is the moment the analytics app gains a **conversation**. Until now users read dashboards; here they can also *ask* — a chat box posts to a `/api/chat` route that calls your **Genie space**, and the panel shows both the plain-English answer and the SQL Genie generated to produce it.
+
+```mermaid
+flowchart LR
+  user["User question"] --> chat["Chat panel"]
+  chat -->|"/api/chat"| app["Analytics App"]
+  app -->|"Conversation API (SP-served, OBO toggle)"| genie["Genie space"]
+  genie -->|"answer + SQL"| app
+  app -.->|"Genie unreachable"| mock["falls back to mock answer"]
+```
+
+By default the FastAPI app calls Genie as its **own service principal** — a clean, auditable identity — with a one-flag **on-behalf-of** toggle that runs the call as the logged-in user so answers respect that user''s own permissions. (On the Genie Code track the AppKit `genie()` plugin runs on-behalf-of the signed-in user by design, declaring `user_api_scopes: [dashboards.genie]`.) Either way the panel shows the SQL Genie ran, and the app degrades gracefully to a mock answer if Genie is briefly unavailable.
+
+---
+
+## 3️⃣ Why Are We Building It This Way? (Databricks Best Practices)
+
+| Principle | Why it matters |
+|-----------|----------------|
+| **Genie is the semantic front door** | The app reuses the governed Genie space you already tuned — questions resolve against its metric views and verified answers, not ad-hoc SQL the app invents |
+| **SP-served by default** | The app asks Genie as its own service principal, so the chat works consistently for every user and matches the app''s Lakebase posture — one identity to grant and audit |
+| **On-behalf-of is one toggle away** | For row-level governance, flipping to OBO runs each question as the signed-in user, so answers honor that user''s own Unity Catalog grants |
+| **Show the SQL, not just the answer** | Surfacing the generated SQL keeps the assistant transparent and lets users trust (and verify) what Genie ran |
+| **Graceful degradation** | A brief Genie hiccup falls back to a mock answer instead of erroring, so the experience never breaks |
+
+---
+
+## 4️⃣ What Happens Behind the Scenes?
+
+1.  **The app calls Genie** through the Conversation API, authenticated as its own service principal by default (or as the logged-in user when the OBO toggle is on).
+2.  **The question becomes a conversation** — the app starts or continues a Genie conversation and polls the message until Genie has an answer.
+3.  **The answer and its SQL come back** — the app extracts the plain-English answer and the SQL Genie generated, and returns them in the `{ data, source }` envelope.
+4.  **The panel renders both** — the chat shows the answer and the SQL Genie ran, and threads follow-up questions on the same conversation.
+5.  **Handoff:** the next step deploys the app and grants its service principal `CAN_RUN` on the Genie space (plus warehouse and Unity Catalog access) so chat works in production.',
+'## Expected Output
+
+- [ ] `apps_lakebase/src/backend/services/genie.py` exists with an SDK-based `ask()` helper (SP-served default, OBO toggle via forwarded user token)
+- [ ] Space id read from `DATABRICKS_GENIE_SPACE_ID` (bound from `{genie_space_id}`) — never hardcoded
+- [ ] `POST /api/chat` returns `{ data: { answer, sql, conversation_id }, source }` with a mock fallback on error
+- [ ] The Conversation API call polls the message to completion with bounded backoff (no indefinite blocking)
+- [ ] Frontend chat panel posts to `/api/chat`, renders the answer, shows the SQL Genie ran, and threads follow-ups by `conversation_id`
+- [ ] Locally, a question from `@docs/genie_brief.md` returns `source: "live"` with `data.sql` populated (empty rows OK)
+- [ ] Chat panel still renders cleanly if `/api/chat` returns `source: "mock"`',
+true, 1, true, current_timestamp(), current_timestamp(), current_user());
+
 -- Deploy & Validate
 INSERT INTO ${catalog}.${schema}.section_input_prompts 
 (input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
@@ -10721,7 +10918,7 @@ VALUES
 
 Deploy the locally-tested analytics application to Databricks Apps and validate the end-to-end reverse ETL pipeline: Lakehouse Gold -> Synced Tables -> Lakebase -> App.
 
-Environment values (workspace, app name / Lakebase project, endpoint, Postgres database/schema, cost-control targets) come from `@docs/reverse_etl.md`; `apps_lakebase/app.yaml` values below MUST match that doc. **Prerequisite:** Step 36 local testing passed with ConnectionStatus showing "Live Data" at `http://localhost:8000`.
+Environment values (workspace, app name / Lakebase project, endpoint, Postgres database/schema, cost-control targets) come from `@docs/reverse_etl.md`; `apps_lakebase/app.yaml` values below MUST match that doc. **Prerequisite:** Wire Genie (Step 37) completed after Step 36 local testing passed with ConnectionStatus showing "Live Data" at `http://localhost:8000`.
 
 ---
 
@@ -10853,7 +11050,7 @@ The deployed app passes envelope-level verification: every `/api/analytics/*` an
 
 **State-lock (`skills/vibecoding-state`) — run this prompt between an `enter` and an `exit` so workshop state is resolved and locked:**
 
-1. **Phase 0 — first, before any step below:** `skills/vibecoding-state` op `enter` — params: `prompt_id: "activation_deploy_validate"`, `require_prior_gate: {prompt_id: "activation_wire_lakebase", gate: "Analytics app live data (local)"}`. `enter` resolves the `## Environment Capabilities` triple (deploy verb, CLI channel, `state_file_root`) so every deploy/run step below uses the resolved channel — `runDatabricksCli` on Genie Code — and writes state under `state_file_root`, never a bare-local assumption.
+1. **Phase 0 — first, before any step below:** `skills/vibecoding-state` op `enter` — params: `prompt_id: "activation_deploy_validate"`, `require_prior_gate: {prompt_id: "activation_wire_genie", gate: "Genie wired to app"}`. `enter` resolves the `## Environment Capabilities` triple (deploy verb, CLI channel, `state_file_root`) so every deploy/run step below uses the resolved channel — `runDatabricksCli` on Genie Code — and writes state under `state_file_root`, never a bare-local assumption.
 2. **Final — after the step succeeds:** `skills/vibecoding-state` op `exit` — params: `prompt_id: "activation_deploy_validate"`, `gate: "Activation app deployed + validated"`, `captured: {user_app_name, app_url}`.
 
 **Gate:** `Activation app deployed + validated` — the deployed app''s analytics and chat routes all report source live and the app service principal holds the required permissions.',
@@ -10866,7 +11063,7 @@ CLI Best Practices:
 This prompt is returned as-is for direct use in Cursor/Copilot. No LLM processing.',
 'Deploy & Validate',
 'Deploy analytics app to Databricks Apps and validate the full reverse ETL pipeline',
-37,
+38,
 '## 1️⃣ How To Apply
 
 Copy the prompt above, start a **new Agent chat** in your coding assistant, and paste it.
@@ -10874,7 +11071,7 @@ Copy the prompt above, start a **new Agent chat** in your coding assistant, and 
 ### Prerequisite
 
 Ensure you have:
-- ✅ Completed **Wire to Lakebase** (Step 36) — the app shows **"Live Data"** locally
+- ✅ Completed **Wire Genie** (Step 37) — the app has a Genie chat panel and still shows **"Live Data"** locally
 - ✅ `@docs/reverse_etl.md` available — the deploy must match its IDs and cost caps
 
 ### Steps to Apply
@@ -11118,7 +11315,7 @@ Key requirements:
 This prompt is returned as-is for direct use in Cursor/Copilot. No LLM processing.',
 'Agent Spec Design',
 'Generate docs/agent_spec.yaml from docs/design_prd.md with optional MCP web research',
-38,
+39,
 '## 1️⃣ How To Apply
 
 ### Prerequisite
@@ -11363,7 +11560,7 @@ Key requirements:
 This prompt is returned as-is for direct use in Cursor/Copilot. No LLM processing.',
 'Agent Tool Selection',
 'Select final MCPs and tool backends, including dynamic SQL MCP catalog/schema, and save docs/agent_tool_plan.yaml',
-39,
+40,
 '## 1️⃣ How To Apply
 
 ### Prerequisite
@@ -11528,7 +11725,7 @@ If a PRD exists at @docs/design_prd.md, reference it for business requirements, 
 '',
 'Phase 1 / Agent Foundation — UC Resources Foundation',
 'Create the agent + ops UC schemas and managed volumes once for any downstream skill (MLflow OTeL, KA, memory, benchmarks, monitoring)',
-40,
+41,
 '## 1️⃣ How To Apply
 
 Copy the prompt above, start a **new Agent thread** in your Coding Assistant, and paste it. The agent will load `genai-agents/foundation/00-uc-resources-foundation/SKILL.md` and create the agent + ops schemas plus the canonical managed volumes for this `{use_case_slug}`.
@@ -11683,7 +11880,7 @@ This will involve the following steps:
 '',
 'Phase 1 / Agent Foundation — MLflow Tracing + UC OTel Storage',
 'Install MLflow, enable autolog, create experiment, route traces into UC OTel Delta tables',
-41,
+42,
 '## 1️⃣ How To Apply
 
 Open a **new Agent thread in your Coding Assistant** and paste the prompt above. This is the **tracing foundation phase** of the SDLC story arc — the moment your locally-working GenAI app gets observability that survives across deploy targets and into governed UC storage.
@@ -11816,7 +12013,7 @@ If a PRD exists at @docs/design_prd.md, reference it for business requirements, 
 '',
 'Phase 1 / Agent Foundation — Create Knowledge Assistant',
 'Create or sync a user-scoped Databricks Knowledge Assistant for the agent doc-Q&A tool',
-42,
+43,
 '## 1️⃣ How To Apply
 
 Copy the prompt above, start a **new Agent thread** in your Coding Assistant, and paste it. The agent will load `genai-agents/foundation/05-knowledge-assistant/SKILL.md` and create a user-scoped KA that the Track A agent will wire as a tool in the next prompt.
@@ -12082,7 +12279,7 @@ If a PRD exists at @docs/design_prd.md, reference it for business requirements, 
 '',
 'Phase 2 / Agent Build — Clone + Framework',
 'Clone the agent-openai-advanced template, install deps, run dev server, wire module-level invoke/stream handlers (Option B)',
-43,
+44,
 '## 1️⃣ How To Apply
 
 **Run this in your cloned Template Repository.** Copy the prompt above into a new Agent thread in your Coding Assistant. The AI will execute `01-clone-and-run` then `02-agent-framework` in order, leaving you with a running local Agent App that emits MLflow AGENT spans.
@@ -12296,7 +12493,7 @@ If a PRD exists at @docs/design_prd.md, reference it for business requirements, 
 '',
 'Phase 2 / Agent Build - Wire Selected Tools and MCP',
 'Wire the tools selected in docs/agent_tool_plan.yaml, including optional KA, Genie, Vector Search, SQL MCP, UC Functions, and external MCPs',
-44,
+45,
 '## 1️⃣ How To Apply
 
 Open a **new Agent thread in your Coding Assistant** and paste the prompt above. The AI invokes `03-tools-and-mcp` which reads `docs/agent_spec.yaml`, `docs/agent_tool_plan.yaml`, and `$APP_ROOT/.vibecoding-state.md` (AppKit + Lakebase context from steps 04-07) to materialize every tool declared in the Tool Plan. `state://DataSpec` is optional — only consulted when the Lakehouse track has produced one and is not a prerequisite for this prompt.
@@ -12540,7 +12737,7 @@ This will involve the following steps:
 '',
 'Phase 2 / Agent Build — Auth + Lakebase Memory',
 'Add SP + OBO auth and short-term + long-term Lakebase memory to the agent',
-45,
+46,
 '## 1️⃣ How To Apply
 
 Open a **new Agent thread in your Coding Assistant** and paste the prompt above. The AI runs `04-authentication` then `05-lakebase-memory` end-to-end in one pass.
@@ -12757,7 +12954,7 @@ This prompt maps to the canonical `local_eval_smoke` role. The smoke Gate **fail
 '',
 'Phase 2 / Agent Build — Smoke Eval + Deploy',
 'Run developer-loop smoke evaluation, deploy the agent to Databricks Apps, verify queryable end-to-end',
-46,
+47,
 '## 1️⃣ How To Apply
 
 Open a **new Agent thread in your Coding Assistant** and paste the prompt above. The AI runs `06-evaluation` then `07-deploy-and-query` and finishes with the explicit `databricks apps get` health check before exiting state.
@@ -12998,7 +13195,7 @@ This will involve the following steps:
 '',
 'Phase 3 / AppKit Integration — AppKit ↔ Agent App Proxy (streaming chat)',
 'Wire AppKit dashboard to a Databricks Agent App via server.extend() proxy with SP + OBO and dual-format streaming',
-47,
+48,
 '## 1️⃣ How To Apply
 
 Open a **new Agent thread in your Coding Assistant** and paste the prompt above. This installs the new `06d-appkit-agent-app-proxy` skill which is purpose-built for Agent App backends — distinct from the legacy Serving plugin which only targets Model Serving endpoints.
@@ -13221,7 +13418,7 @@ This prompt assumes the canonical two-app path: AppKit `/api/chat` → Agent App
 '',
 'Phase 3 / AppKit Integration — Chatbot Feedback → MLflow Trace Assessments (Expert-in-the-Loop, End-User)',
 'Chat history sidebar + thumbs up/down captured as MLflow user_feedback assessments (HUMAN source)',
-48,
+49,
 '## 1️⃣ How To Apply
 
 Open a **new Agent thread in your Coding Assistant** and paste the prompt above. This is the user-facing landing of the **expert-in-the-loop phase** — every end-user thumbs click becomes a `user_feedback` assessment (`source_type=HUMAN`) on the underlying MLflow trace, feeding the same monitoring + dataset pipeline as SME labels from `mlflow_agent_human_review`.
@@ -13479,7 +13676,7 @@ This will involve the following steps:
 '',
 'Phase 1 / Build the Quality Suite — Register Prompts in Unity Catalog',
 'Register the agent''s prompts as UC-governed assets with @production / @staging aliases (upstream of eval datasets and scorers)',
-49,
+50,
 '## 1️⃣ How To Apply
 
 Open a **new Agent thread in your Coding Assistant** and paste the prompt above. This is the entry point for the quality and scoring suite phase — every downstream step (datasets, scorers, eval runs, sign-off, promotion) reads prompts back via `prompts://...@alias`.
@@ -13616,7 +13813,7 @@ This will involve the following steps:
 '',
 'Phase 1 / Build the Quality Suite — Evaluation Dataset',
 'Generate ≥ 20 benchmark rows that cover every coverage bucket and user journey from the AgentSpec',
-50,
+51,
 '## 1️⃣ How To Apply
 
 Open a **new Agent thread in your Coding Assistant** and paste the prompt above. The benchmark table populated here is the substrate the scorers (input_id 211) and the first scored eval (input_id 212) read against.
@@ -13749,7 +13946,7 @@ This will involve the following steps:
 '',
 'Phase 1 / Build the Quality Suite — Scorers and Judges',
 'Register builtin scorers, Guidelines, custom code scorers, and LLM judges with thresholds (judge calls route via llm_judge_default role)',
-51,
+52,
 '## 1️⃣ How To Apply
 
 Open a **new Agent thread in your Coding Assistant** and paste the prompt above. The scorer suite registered here is what input_id 212''s first scored eval grades against.
@@ -13928,7 +14125,7 @@ mlflow_eval_predict_fn_signature: string
 '',
 'Phase 1 / Build the Quality Suite — First Scored Eval + Iteration Entry',
 'Run mlflow.genai.evaluate against the benchmark table; capture failure-shape classification + routing decision (owns System Prompt Review preflight contract)',
-52,
+53,
 '## 1️⃣ How To Apply
 
 Open a **new Agent thread in your Coding Assistant** and paste the prompt above. This is the entry point to the **iteration phase** of the SDLC arc — it grades the agent against the benchmark table, then either green-lights human review or hands off to the right iteration loop based on the captured `failure_shape_classification`.
@@ -14095,7 +14292,7 @@ This will involve the following steps:
 '',
 'Phase 2 / Human Review — Labeling + Stakeholder Sign-Off (Expert-in-the-Loop)',
 'SME labeling session syncs into benchmarks; stakeholder sign-off gate decides promotion (Decision: APPROVED hard-asserts downstream)',
-53,
+54,
 '## 1️⃣ How To Apply
 
 Open a **new Agent thread in your Coding Assistant** and paste the prompt above. The **expert-in-the-loop phase** of the SDLC story arc lands as two passes in one thread: SME labeling first, then the sign-off gate.
@@ -14262,7 +14459,7 @@ If the prior scored eval (input_id 212) produced `Eval regressed — iterate` an
 '',
 'Phase 3 / Promote with Governance — Logged Model + UC Registration',
 'Optional 08b hand-author iteration on instruction-shaped failures, then log + register the agent at @champion in UC (gated on signoff_decision == APPROVED)',
-54,
+55,
 '## 1️⃣ How To Apply
 
 Open a **new Agent thread in your Coding Assistant** and paste the prompt above. This carries the **iteration phase conclusion** (optional Skill 08b for instruction-shaped failures) plus the **logged model registration** at `@champion`. Hard-gated on `signoff_decision == APPROVED` from input_id 213.
@@ -14420,7 +14617,7 @@ This will involve the following steps:
 '',
 'Optional Hardening — Pre-Provisioned AI Gateway + Asset-Bundle Deployment',
 'Optional future governance layer: use a pre-provisioned AI Gateway endpoint or public admin APIs when available; core Track A does not depend on this step',
-55,
+56,
 '## 1️⃣ How To Apply
 
 Open a **new Agent thread in your Coding Assistant** and paste the prompt above. This wraps the registered agent in an AI Gateway and automates promotion via Databricks Asset Bundles. Promotion is hard-blocked unless the captured `signoff_decision` is `APPROVED`.
@@ -14917,7 +15114,7 @@ Fix every **BLOCKING** hit before declaring this step complete. `BLOCKING: OK` h
 '',
 true, 1, true, current_timestamp(), current_timestamp(), current_user());
 
--- activation_table_design (genie-code fork) — bundle-native Lakebase provisioning (postgres_projects + postgres_endpoints with caps); bundle-page deploy/validate/summary; bypass_LLM = TRUE
+-- activation_table_design (genie-code fork) — bundle-native Lakebase provisioning (postgres_projects + default_endpoint_settings caps; NO postgres_endpoints — auto-created); bundle-page deploy/validate/summary; bypass_LLM = TRUE
 INSERT INTO ${catalog}.${schema}.section_input_prompts
 (input_id, section_tag, coding_assistant, input_template, system_prompt,
  bypass_llm, version, is_active, inserted_at, updated_at, created_by)
@@ -14940,9 +15137,13 @@ The steps below are the prescriptive runbook for those actions; follow them in o
 
 ### 🔴 Non-negotiable execution rule (read before anything)
 
-❌ **NEVER** create or size the Lakebase project/endpoint with `databricks postgres create-project` / `update-endpoint` (the `postgres` CLI group is **blocked** on Genie Code), nor with a raw REST `POST`/`PATCH` create, nor with the `databricks.sdk.service.postgres` module (**absent** in this runtime — SDK 0.67.0). Provisioning is the **body of the bundle**: you declare `postgres_projects` + `postgres_endpoints` resources and let `bundle deploy` create them. The bundle **is** the execution mechanism — never bypass it, even though a direct CLI/REST call is faster. A live project with no versioned bundle behind it (no `bundle destroy` cleanup, no cost caps under source control) is the regression this fork exists to prevent.
+❌ **NEVER** create or size the Lakebase project/endpoint with `databricks postgres create-project` / `update-endpoint` (the `postgres` CLI group is **blocked** on Genie Code), nor with a raw REST `POST`/`PATCH` create, nor with the `databricks.sdk.service.postgres` module (**absent** in this runtime — SDK 0.67.0). Provisioning is the **body of the bundle**: you declare a `postgres_projects` resource (with `default_endpoint_settings` carrying the caps) and let `bundle deploy` create it; the `production` branch and `primary` endpoint are auto-created and sized by those settings. The bundle **is** the execution mechanism — never bypass it, even though a direct CLI/REST call is faster. A live project with no versioned bundle behind it (no `bundle destroy` cleanup, no cost caps under source control) is the regression this fork exists to prevent.
 
 ✅ The ONLY things you run directly are (a) **read-only** inspection (`w.catalogs.list()`, REST `GET …/endpoints/primary`) and (b) `databricks bundle validate` / `summary` / `deploy` through `runDatabricksCli`. If `bundle deploy` is blocked, FIX the page context (open the bundle editor — Step 3) — do **not** fall back to the `postgres` CLI, REST create, or the SDK.
+
+> **Do NOT upgrade the SDK.** Provisioning is the bundle; the only SDK call in this step is the **read-only** `w.api_client.do("GET", …)` in Step 4, which needs no `w.postgres` wrapper. `pip install -U databricks-sdk` is unnecessary here — on serverless the ephemeral install just burns a cold-start timeout and does not change the bundle path.
+
+> **P35 reconciliation (two different Lakebase paths — do not confuse them).** `genie-code-environment` P35 says a `postgres_projects` in `databricks.yml` is inert — that is TRUE **only** for the AppKit **app SNAPSHOT** deploy (`w.apps.deploy(…, mode=SNAPSHOT)`, which does not apply Terraform resources), the path the `setup_lakebase` fork uses. THIS step deploys the **DP bundle** with `bundle deploy --target dev` (the Terraform path), where `postgres_projects` DOES materialize. Do NOT switch to a REST/SDK create here.
 
 ### Step 0 — Resolve your environment (once, before anything else)
 
@@ -14973,8 +15174,9 @@ Load each skill with `readSkillFile` using its fully-qualified `<skill_ref_root>
 
 1. `readSkillFile("skills/vibe-coding-workshop/skills/databricks-asset-bundles/SKILL.md")` — bundle structure, the `include:` glob list, `targets.dev`, serverless config, and the multi-user `${var.user_prefix}` "Shared Workspace Naming" pattern. **You will not write any resource YAML or touch `databricks.yml` until you have read this.**
 2. `readSkillFile("skills/vibe-coding-workshop/skills/genie-code-environment/SKILL.md")` — Genie Code runtime facts: the `postgres`/`database` CLI groups are blocked; `runDatabricksCli` and `w` are pre-authenticated; the file-write tiers; and the bundle-page requirement for any `databricks bundle …` command.
+3. **Reference only — the Genie Code runtime built-in `databricks-lakebase` skill** (a native Databricks skill in the runtime registry, NOT part of the workshop `skill_ref_root` tree, so load it by its runtime name, not a `skill_ref_root` path). Consult it for the Lakebase resource model, the **auto-created `production` branch + `primary` endpoint** fact, the cap defaults, and the read-only verify GET. **Scope: reference + the downstream connection / reverse-ETL patterns ONLY — this skill is CLI/SDK-first and knows nothing about DAB `postgres_*`, so do NOT follow its `databricks postgres` CLI or `w.postgres.*` create/update path (blocked on Genie Code). Provisioning here is bundle-only; the DAB `postgres_projects` resource in Step 2(c) is the create path.**
 
-**🔴 Preflight acknowledgement (hard gate — do this BEFORE writing any file).** Echo a one-line acknowledgement of EACH skill''s rule. If you cannot state a skill''s rule, you have not read it — STOP and read it before writing anything. Do not author `reverse_etl.md`, the sync plan, or the resource YAML until both skills are acknowledged.
+**🔴 Preflight acknowledgement (hard gate — do this BEFORE writing any file).** Echo a one-line acknowledgement of EACH governing skill''s rule (items 1 and 2). If you cannot state a skill''s rule, you have not read it — STOP and read it before writing anything. Do not author `reverse_etl.md`, the sync plan, or the resource YAML until both governing skills are acknowledged.
 
 ### Step 2 — Author the planning docs AND the Lakebase bundle resource (write only — do NOT deploy yet)
 
@@ -15041,7 +15243,7 @@ Ordering rules:
 - Order candidates so dependencies (dims) are created before dependents (facts).
 - Synced names MUST differ from source, end in `_synced`, and be `[A-Za-z0-9_]+` only.
 
-**(c) `<DP_BUNDLE_ROOT>/resources/lakebase/lakebase_project.yml`** — the declarative Lakebase provisioning, cost caps baked in. `postgres_projects` and `postgres_endpoints` are first-class, schema-validated DAB resource types (confirmed via `bundle validate` + `bundle summary` — see Step 3):
+**(c) `<DP_BUNDLE_ROOT>/resources/lakebase/lakebase_project.yml`** — the declarative Lakebase provisioning, cost caps baked in. `postgres_projects` is a first-class, schema-validated DAB resource type; its `default_endpoint_settings` sizes the AUTO-created `primary` endpoint, so you do NOT declare a separate `postgres_endpoints` resource (confirmed via `bundle validate` + `bundle summary` — see Step 3):
 
 ```yaml
 resources:
@@ -15050,15 +15252,13 @@ resources:
       project_id: {user_app_name}
       display_name: {user_app_name}
       pg_version: 17
-  postgres_endpoints:
-    primary:
-      endpoint_id: primary
-      endpoint_type: ENDPOINT_TYPE_READ_WRITE
-      parent: projects/{user_app_name}/branches/production
-      autoscaling_limit_min_cu: 0.5
-      autoscaling_limit_max_cu: 2.0
-      suspend_timeout_duration: "1800s"
+      default_endpoint_settings:          # caps applied to the auto-created primary endpoint
+        autoscaling_limit_min_cu: 0.5
+        autoscaling_limit_max_cu: 2.0
+        suspend_timeout_duration: "1800s"
 ```
+
+🔴 **Do NOT declare a separate `postgres_endpoints` resource.** Creating the project AUTO-provisions the `production` branch and the `primary` READ_WRITE endpoint; a `postgres_endpoints.primary` block then makes `bundle deploy` try to create a duplicate and fail with `read_write endpoint already exists` (Terraform cannot adopt it). Size the auto-created endpoint through the project''s `default_endpoint_settings` above — the same pattern the Setup Lakebase step uses. (If some later need forces an explicit endpoint resource, the ONLY safe form is `postgres_endpoints.primary` with `replace_existing: true`, which takes over the auto-created endpoint instead of duplicating it.)
 
 🔴 **The caps above are workshop hard limits.** Do NOT raise `autoscaling_limit_max_cu` above `2.0`, do NOT change `suspend_timeout_duration` away from `1800s` (a suspended project costs $0 compute; the 30-minute window is long enough that a student reading docs will not cold-start mid-workshop), and do NOT declare any extra branches or endpoints — each extra endpoint is independently billable. One project, one `production` branch, one `primary` endpoint per student.
 
@@ -15078,11 +15278,11 @@ The DP bundle pulls resources via **subdirectory globs** (`resources/bronze/*.ym
 
   Tell the operator to open the **bundle-editor link**, then run every `databricks bundle …` command below from that page. Edit the EXISTING on-page `databricks.yml` — files created via the workspace API may not reach the CLI''s FUSE mount.
 - Run through `runDatabricksCli`, **from the bundle-editor page**, each with `--target dev` (mandatory — a target-less deploy is guardrail-blocked):
-  - `databricks bundle validate --target dev` — expect **zero** warnings on the lakebase resources. A `Warning: unknown field …` on `postgres_projects`/`postgres_endpoints` means a typo (the schema is strict) — fix the field name and re-validate.
-  - `databricks bundle summary --target dev` — confirm `Postgres projects: activation` and `Postgres endpoints: primary` appear in the resolved resource graph. A silently-ignored resource never shows in `summary`; their appearance proves the bundle will manage them.
-  - `databricks bundle deploy --target dev` — creates the project + primary endpoint with the caps.
+  - `databricks bundle validate --target dev` — expect **zero** warnings on the lakebase resources. A `Warning: unknown field …` on `postgres_projects` / `default_endpoint_settings` means a typo (the schema is strict) — fix the field name and re-validate.
+  - `databricks bundle summary --target dev` — confirm `Postgres projects: activation` appears in the resolved resource graph. A silently-ignored resource never shows in `summary`; its appearance proves the bundle will manage the project (and, via `default_endpoint_settings`, its primary endpoint).
+  - `databricks bundle deploy --target dev` — creates the project and its auto-created `primary` endpoint, sized by `default_endpoint_settings`.
 - **🛑 If a `bundle` command is blocked or fails, STOP — do not work around it.** A `databricks.yml not found` error or a "blocked by safety guardrails" message means you are NOT on the bundle page: open the **bundle-editor link** above and retry (CONFIRMED — the same `bundle` command that is "blocked" from a file page succeeds from the bundle editor). If it STILL fails from the bundle editor, STOP and report the blocker. Do **NOT** provision via the `postgres` CLI, the REST create API, or the SDK to "get it done" — that silently defeats the bundle and FAILS the gate. The REST/SDK route is an **escape hatch available only if the operator explicitly authorizes it.**
-- 🔴 **Adoption residual — settle it here, at deploy.** Declaring `endpoint_id: primary` may adopt the auto-created primary endpoint, and deploying a `project_id` that already exists may adopt or conflict. If `bundle deploy` errors with an "already exists" / ownership conflict, **STOP and report the exact message** — do NOT delete the live project and do NOT fall to a REST create. Adoption/import is an operator decision.
+- 🔴 **Re-run / already-exists residual.** With `default_endpoint_settings` on the project there is no separate endpoint create, so the `read_write endpoint already exists` 400 cannot occur. The remaining case is a **project** that already exists from a prior run with no Terraform state behind it — `bundle deploy` then errors `project already exists`. If so, **STOP and report the exact message** — do NOT delete the live project and do NOT fall to a REST create; adoption is an operator decision (`databricks bundle deployment bind activation <project_id>` is the sanctioned adopt path).
 
 ### Step 4 — Verify the endpoint caps (read-only) and record the host
 
@@ -15097,7 +15297,7 @@ ep = w.api_client.do(
 
 Assert the round-tripped settings: `autoscaling_limit_min_cu == 0.5`, `autoscaling_limit_max_cu == 2.0`, `suspend_timeout_duration == "1800s"`, `endpoint_type == "ENDPOINT_TYPE_READ_WRITE"`. If anything drifted, fix the YAML and re-deploy (Step 3) — do NOT call `update-endpoint`. Record the actual host (`status.hosts[...].host` / `status.host`) into `<artifact_root>/docs/reverse_etl.md` as `lakebase_host`.
 
-**State-lock:** this prompt runs between an `enter` (Step 0) and an `exit`. After the gate passes, run `skills/vibecoding-state` op `exit` — params: `prompt_id: "activation_table_design"`, `gate: "Synced tables planned"`, `captured: {user_app_name, endpoint_name, lakebase_host}`. **This `enter`/`exit` pair is a mandatory ritual, not advisory.** The closing `exit` MUST append this prompt''s Per-Step Log entry, Gate result, and `captured` vars to the canonical live state file at `<dp_bundle_root>/.vibecoding-state.md`, then **re-read it and echo the appended section to prove the write landed**. **Gate completion rule:** this prompt is NOT complete until that re-read confirms the appended entry — the chat summary is NOT the state store.
+**State-lock:** this prompt runs between an `enter` (Step 0) and an `exit`. After the gate passes, run `skills/vibecoding-state` op `exit` — params: `prompt_id: "activation_table_design"`, `gate: "Synced tables planned"`, `captured: {user_app_name, endpoint_name, lakebase_host}`. **This `enter`/`exit` pair is a mandatory ritual, not advisory.** The closing `exit` MUST append this prompt''s Per-Step Log entry, Gate result, and `captured` vars to the canonical live state file at `<dp_bundle_root>/.vibecoding-state.md`, then **re-read it and echo the appended section to prove the write landed**. Perform the `enter`/`exit` writes with `executeCode` `open(path,"w").write(...)` — NOT `editAsset`/`workspaceUpdateFile`, which are scoped to the current page''s folder tree; the state file lives INSIDE `<dp_bundle_root>` so it is reachable from the bundle-editor page. **Gate completion rule:** this prompt is NOT complete until that re-read confirms the appended entry — the chat summary is NOT the state store.
 
 **Gate:** `Synced tables planned` — `<artifact_root>/docs/reverse_etl.md` and `<artifact_root>/docs/activation_sync_plan.md` exist with all required fields (including the cost-control block and the `lakebase_host` from the endpoint GET), AND the Lakebase project + primary endpoint were **created by `bundle deploy`** (visible in `bundle summary`) with a read-only GET confirming `min_cu=0.5, max_cu=2.0, suspend=1800s`. Docs existing is **necessary but NOT sufficient** — if the project/endpoint were provisioned by the `postgres` CLI, REST create, or SDK instead of the deployed bundle, the gate FAILS and you must redo it via the bundle.
 
@@ -15105,7 +15305,7 @@ Assert the round-tripped settings: `autoscaling_limit_min_cu == 0.5`, `autoscali
 '',
 true, 1, true, current_timestamp(), current_timestamp(), current_user());
 
--- activation_reverse_sync (genie-code fork) — synced tables via pre-authenticated REST (w.api_client.do POST /api/2.0/postgres/synced_tables); LRO poll to done:true; CDF spark.sql gate; psycopg2/synced_row_count verify; bypass_LLM = TRUE
+-- activation_reverse_sync (genie-code fork) — synced tables via pre-authenticated REST (w.api_client.do POST /api/2.0/postgres/synced_tables); poll detailed_state (operation GET best-effort/may 404); trigger shared pipeline once after bin-pack; CDF spark.sql gate; synced_row_count/Spark verify (psycopg2 with full recipe); bypass_LLM = TRUE
 INSERT INTO ${catalog}.${schema}.section_input_prompts
 (input_id, section_tag, coding_assistant, input_template, system_prompt,
  bypass_llm, version, is_active, inserted_at, updated_at, created_by)
@@ -15140,7 +15340,7 @@ Run `skills/vibecoding-state` operation `enter` with `prompt_id: "activation_rev
 - `skill_ref_root` = `skills/vibe-coding-workshop`
 - `dp_bundle_root` = `<artifact_root>/{user_schema_prefix}_{use_case_slug}_dab` — the data-product bundle whose `.vibecoding-state.md` is the activation track''s live state file (the SAME one Step 32 wrote). Referred to below as `<DP_BUNDLE_ROOT>`.
 
-If `enter` reports the prior gate is not `Synced tables planned`, STOP — finish the **Plan Synced Tables** step (32) first. If `enter` has not run in this thread, run it now.
+If `enter` reports the prior gate is not `Synced tables planned`, STOP — finish the **Design & Provision Synced Tables** step (32) first. If `enter` has not run in this thread, run it now. (Resilience: if that gate is absent yet `<artifact_root>/docs/reverse_etl.md` AND a provisioned `primary` endpoint both exist, provisioning already happened and the gate write was likely missed — reconcile by re-running Step 32''s `exit` to record it, rather than silently proceeding or re-provisioning.)
 
 **On resume after a context reset:** trust the live state file over any chat summary — a synced table already created and healthy is DONE; before recreating, GET it first (`/api/2.0/postgres/synced_tables/{synced_table_id}`) and skip if already `ONLINE`.
 
@@ -15164,7 +15364,7 @@ ep = w.api_client.do(
 # assert min_cu == 0.5, max_cu == 2.0, suspend_timeout_duration == "1800s"
 ```
 
-If sizing has drifted, STOP and re-apply from Step 32 (re-run the **Plan Synced Tables** provisioning step) — do NOT call `update-endpoint` here.
+If sizing has drifted, STOP and re-apply from Step 32 (re-run the **Design & Provision Synced Tables** provisioning step) — do NOT call `update-endpoint` here.
 
 ### Step 3 — Enable CDF on Delta sources for TRIGGERED candidates only (gated)
 
@@ -15177,6 +15377,8 @@ if fmt == "delta":
 else:
     print(f"skip CDF — <source> is {fmt}, not delta (SNAPSHOT only)")
 ```
+
+If every candidate in `activation_sync_plan.md` is SNAPSHOT (the workshop default), Step 3 is a no-op — skip it entirely and go to Step 4.
 
 ### Step 4 — Create each synced table via the REST client (dependency order)
 
@@ -15206,23 +15408,35 @@ op = w.api_client.do(
 
 🔴 **Confirm field-exactness on the FIRST create.** The body shape is pinned from probing, but if the first POST returns a validation error, advance it (read the error, adjust the offending field) BEFORE looping the rest — do not blast the whole candidate list against an unverified body. Synced names MUST differ from source, end in `_synced`, and be `[A-Za-z0-9_]+` only.
 
-**Bin-pack into one pipeline (cost):** create the FIRST table with the default pipeline (omit `existing_pipeline_id`); once it is healthy, read its top-level `pipeline_id` from the GET (`st.get("pipeline_id")`), then add `"existing_pipeline_id": pid` to `spec` for every remaining candidate so all synced tables share one Lakeflow pipeline instead of spawning one per table (set at most one of `existing_pipeline_id` / `new_pipeline_spec`).
+**Bin-pack into one pipeline (cost) — then trigger it ONCE:**
+1. Create the FIRST candidate WITHOUT `existing_pipeline_id` (default pipeline); poll it to healthy, then read `pid = st.get("pipeline_id")` (top-level field on the synced-table GET).
+2. Create every REMAINING candidate WITH `"existing_pipeline_id": pid` in `spec` (do NOT also set `new_pipeline_spec` — at most one of the two).
+3. 🔴 **A bin-packed table does NOT auto-run.** Once the first table finished, the shared pipeline is IDLE, so a table added via `existing_pipeline_id` stays `SYNCED_TABLE_OFFLINE` forever if you only wait (this is the 15-minute stall). After the LAST create, trigger the shared pipeline exactly ONCE, THEN poll the rest to healthy:
+
+```python
+w.api_client.do("POST", f"/api/2.0/pipelines/{pid}/updates", body={"full_refresh": False})
+```
+
+(This POST is permitted by the executeCode action-safety checker — it is a pipeline run, not a `postgres` project/endpoint mutation.)
 
 ### Step 5 — Poll the long-running operation to a healthy state
 
-The create returns a long-running `Operation`. Poll it until `done: true` (the API guide''s LRO contract — do NOT rely on `detailed_state` alone), then read the synced table''s `status.detailed_state` for a terminal healthy `SYNCED_TABLE_*` value. Cap at 15 minutes per table:
+Poll the synced table''s OWN `status.detailed_state` until a terminal healthy `SYNCED_TABLE_*` value — it is the source of truth on the Autoscaling `/postgres/` route. The create response also returns a long-running `Operation`, but `GET /api/2.0/{op_name}` MAY 404 on this route, so treat it as best-effort and gate on `detailed_state`, NOT on the operation. Cap at 15 minutes per table:
 
 ```python
 import time
-op_name = (op.get("operation") or {}).get("name") or op.get("name")   # operations/{id}
+HEALTHY = {"SYNCED_TABLE_ONLINE", "SYNCED_TABLE_ONLINE_NO_PENDING_UPDATE",
+           "SYNCED_TABLE_ONLINE_TRIGGERED_UPDATE", "SYNCED_TABLE_ONLINE_CONTINUOUS_UPDATE"}
+FAILED  = {"SYNCED_TABLE_OFFLINE_FAILED", "SYNCED_TABLE_ONLINE_PIPELINE_FAILED"}
 deadline = time.time() + 900
+state = ""
 while time.time() < deadline:
-    o = w.api_client.do("GET", f"/api/2.0/{op_name}")
-    if o.get("done"):
+    st = w.api_client.do("GET", f"/api/2.0/postgres/synced_tables/{synced_table_id}")
+    state = (st.get("status") or {}).get("detailed_state", "")   # authoritative signal
+    if state in HEALTHY or state in FAILED:
         break
     time.sleep(10)
-st = w.api_client.do("GET", f"/api/2.0/postgres/synced_tables/{synced_table_id}")
-state = (st.get("status") or {}).get("detailed_state", "")
+# (the create''s Operation name is best-effort only: GET /api/2.0/{op_name} MAY 404 on this route)
 # healthy terminal states: SYNCED_TABLE_ONLINE / SYNCED_TABLE_ONLINE_NO_PENDING_UPDATE /
 #   SYNCED_TABLE_ONLINE_TRIGGERED_UPDATE / SYNCED_TABLE_ONLINE_CONTINUOUS_UPDATE
 # failed states: SYNCED_TABLE_OFFLINE_FAILED / SYNCED_TABLE_ONLINE_PIPELINE_FAILED
@@ -15235,24 +15449,34 @@ If `detailed_state` reaches `SYNCED_TABLE_OFFLINE_FAILED` or `SYNCED_TABLE_ONLIN
 w.api_client.do("DELETE", f"/api/2.0/postgres/synced_tables/{synced_table_id}")
 ```
 
-(The `Operation` carries its own `name`/path in the create response — poll exactly that path; adjust the `operations/{id}` shape to whatever the response returns.)
+(The `Operation` path is best-effort and may 404 on the `/postgres/` route — `status.detailed_state` from the synced-table GET is authoritative; gate on it, not on the operation.)
 
 ### Step 6 — Verify row counts in Lakebase
 
-Confirm each synced table actually landed rows. Two equivalent paths:
+Confirm each synced table landed rows. Prefer the no-connection paths; drop to Postgres only if you need a live read:
 
-- **API-only (no DB connection):** read `status.synced_row_count` from the GET in Step 5 and confirm it is non-zero and consistent with the Gold source `SELECT count(*)`.
-- **Postgres via `psycopg2` (pre-installed):** mint a short-lived OAuth token and connect to the endpoint host:
+1. **PRIMARY (authoritative, no DB connection):** read `status.synced_row_count` from the Step 5 GET and confirm it is non-zero and matches the Gold source `SELECT count(*)`.
+2. **FALLBACK (no DB connection):** Spark SQL on the synced UC object — `spark.sql("SELECT count(*) FROM {lakehouse_default_catalog}.{user_schema_prefix}.<table>_synced").collect()`.
+3. **Live Postgres read (`psycopg2`, pre-installed):** this DOES work from serverless, but the credentials response returns a token with **no username**, so you MUST supply the full recipe or it fails with a SASL auth error:
 
 ```python
 cred = w.api_client.do(
     "POST", "/api/2.0/postgres/credentials",
     body={"endpoint": "projects/{user_app_name}/branches/production/endpoints/primary"},
 )
-# use the returned token as the Postgres password against lakebase_host:5432,
-# dbname=databricks_postgres, then:
+import psycopg2
+conn = psycopg2.connect(
+    host=lakebase_host,                    # from reverse_etl.md
+    port=5432,
+    dbname="databricks_postgres",
+    user=w.current_user.me().user_name,    # NOT in the credential payload — you must supply it
+    password=cred.get("token"),
+    sslmode="require",
+)
 #   SELECT count(*) FROM {user_schema_prefix}.<table>_synced
 ```
+
+Use path 3 only for a live Postgres read; for a row-count check, paths 1-2 are faster and cannot SASL-fail. (Do NOT conclude "psycopg2 does not work from serverless" — downstream steps, the app build and CDF discovery, use `psycopg2` with this exact recipe, so it must be correct, not avoided.)
 
 Confirm counts are non-zero and consistent with the Gold source row counts.
 
@@ -15263,9 +15487,9 @@ Confirm counts are non-zero and consistent with the Gold source row counts.
 - **Do NOT create new branches or endpoints.** Reuse the existing `production` branch and `primary` endpoint only — each extra endpoint is independently billable.
 - **Do NOT call `update-endpoint`** — endpoint sizing was set by Step 32''s bundle and must stay at the recorded values.
 
-**State-lock:** this prompt runs between an `enter` (Step 0) and an `exit`. After the gate passes, run `skills/vibecoding-state` op `exit` — params: `prompt_id: "activation_reverse_sync"`, `gate: "Synced tables live"`, `captured: {synced_schema, synced_tables}`. **This `enter`/`exit` pair is a mandatory ritual, not advisory.** The closing `exit` MUST append this prompt''s Per-Step Log entry, Gate result, and `captured` vars to the canonical live state file at `<dp_bundle_root>/.vibecoding-state.md`, then **re-read it and echo the appended section to prove the write landed**. **Gate completion rule:** this prompt is NOT complete until that re-read confirms the appended entry — the chat summary is NOT the state store.
+**State-lock:** this prompt runs between an `enter` (Step 0) and an `exit`. After the gate passes, run `skills/vibecoding-state` op `exit` — params: `prompt_id: "activation_reverse_sync"`, `gate: "Synced tables live"`, `captured: {synced_schema, synced_tables}`. **This `enter`/`exit` pair is a mandatory ritual, not advisory.** The closing `exit` MUST append this prompt''s Per-Step Log entry, Gate result, and `captured` vars to the canonical live state file at `<dp_bundle_root>/.vibecoding-state.md`, then **re-read it and echo the appended section to prove the write landed**. Perform the `enter`/`exit` writes with `executeCode` `open(path,"w").write(...)` — NOT `editAsset`/`workspaceUpdateFile`, which are scoped to the current page''s folder tree; the state file lives INSIDE `<dp_bundle_root>` so it is reachable from the bundle-editor page. **Gate completion rule:** this prompt is NOT complete until that re-read confirms the appended entry — the chat summary is NOT the state store.
 
-**Gate:** `Synced tables live` — every candidate in `<artifact_root>/docs/activation_sync_plan.md` was created via `w.api_client.do POST /api/2.0/postgres/synced_tables` (unwrapped `SyncedTable` body, `synced_table_id` query param), polled to a healthy `detailed_state` within the 15-minute cap, and `SELECT count(*)` (or `status.synced_row_count`) returns non-zero rows consistent with the Gold source. No synced table used `CONTINUOUS`; CDF was enabled only on Delta TRIGGERED sources (never on Metric Views / TVFs / Iceberg); no new branch/endpoint was created; `update-endpoint` and `auth login` were never run.',
+**Gate:** `Synced tables live` — every candidate in `<artifact_root>/docs/activation_sync_plan.md` was created via `w.api_client.do POST /api/2.0/postgres/synced_tables` (unwrapped `SyncedTable` body, `synced_table_id` query param), polled to a healthy `detailed_state` within the 15-minute cap (any bin-packed table triggered its shared pipeline once via `POST /api/2.0/pipelines/{pid}/updates`), and `SELECT count(*)` (or `status.synced_row_count`) returns non-zero rows consistent with the Gold source. No synced table used `CONTINUOUS`; CDF was enabled only on Delta TRIGGERED sources (never on Metric Views / TVFs / Iceberg); no new branch/endpoint was created; `update-endpoint` and `auth login` were never run.',
 '',
 true, 1, true, current_timestamp(), current_timestamp(), current_user());
 
@@ -15326,7 +15550,7 @@ Load with `readSkillFile` — NEVER a bare `@…` mention, NEVER a repo-relative
 
 1. `readSkillFile("skills/vibe-coding-workshop/apps_lakebase/skills/02-appkit-build/SKILL.md")` — UI/page patterns and design quality; read its referenced `references/design-quality.md` for the analytics-dashboard conventions before describing pages.
 
-**🔴 Preflight acknowledgement (hard gate).** Echo a one-line acknowledgement of the skill''s design-quality rule before writing the design doc. If you cannot state it, you have not read it — read it first.
+**🔴 Preflight acknowledgement (hard gate).** Before writing the design doc, echo BOTH: (1) the skill''s design-quality rule in one line, AND (2) the resolved brand identity you will theme to — the primary/secondary/accent colors and logo taken from the `## Branding Guidelines` section of this prompt (if present) or `<artifact_root>/docs/design_prd.md`, plus the ONE deliberate aesthetic direction you are committing to (per the design-quality skill). If no brand assets are provided, still state the aesthetic direction you are choosing. If you cannot state these, you have not read the inputs — read them first.
 
 ### Step 3 — Decide extend vs greenfield (genie-rekeyed; apply it mechanically)
 
@@ -15343,15 +15567,24 @@ Design dashboards (KPIs, charts, summary cards) and exploration views (filters, 
 - **Map each visualization back to a specific synced Lakebase table and column** from `<artifact_root>/docs/activation_sync_plan.md`, qualified with the Postgres schema `{user_schema_prefix}` from `reverse_etl.md`. No UI element is allowed that cannot cite its synced source.
 - Reference synced objects EXACTLY as written in the sync plan (names include the `_synced` suffix). Do not invent names or restate `reverse_etl.md` values inline.
 - Only candidates listed in `activation_sync_plan.md` are available — no CONTINUOUS-mode data, no Gold objects that were not synced.
-- If a Genie-powered Agent exists from earlier in the workshop, you MAY include a natural-language search bar that calls the Agent endpoint alongside the structured dashboards (the wiring of that chat path is the separate `appkit_agent_app_proxy_chat` step — here you only note it in the design). Optional.
+- Because this track produced a Genie space, design a **Genie chat/assistant panel** alongside the structured dashboards — a first-class, on-brand conversational surface (a docked "Ask your data" side panel, a dedicated **Ask** nav tab, or an inline panel under the KPIs), NOT a bolted-on search box. Here you ONLY note it in the design; it is wired later at the **Wire Genie** step via the AppKit `genie()` plugin and the `GenieChat` component from `@databricks/appkit-ui/react`. Theme it to the SAME design tokens as the dashboards (the oklch `--primary`/`--secondary`/`--accent` variables, the typography pairing, and the light/dark themes from the Visual and Brand section) so the chat reads as one product with the dashboards. The `genie()` plugin runs on-behalf-of the signed-in user (Wire Genie declares `user_api_scopes: [dashboards.genie]`); the drop-in `GenieChat` gives the standard chat UI, or the headless `useGenieChat` hook a fully custom search-bar/drawer.
+
+**Visual and brand direction (author this into the design doc — do NOT skip; this is the difference between a generic dashboard and a branded one):** the design doc MUST include a dedicated "Visual and Brand" section capturing:
+
+- **Aesthetic direction** — commit to ONE deliberate tone per the design-quality skill (e.g. refined/minimal, editorial, industrial/utilitarian) and say why it fits the brand and use case. Not "generic AI dashboard".
+- **Palette mapped to the brand** — map the primary/secondary/accent colors from the `## Branding Guidelines` section of this prompt (if present) to the oklch CSS variables (`--primary`/`--secondary`/`--accent`) the build step will set in `client/src/index.css`. Every color flows through CSS variables — no inline hex. If no brand colors were provided, choose a cohesive non-cliché palette and note it.
+- **Typography** — a distinctive display + body font pairing loaded via `client/index.html`; avoid generic defaults (Inter, Roboto, Arial, system fonts).
+- **Logo** — placement in the header/navbar and as the favicon, using the logo URL from `## Branding Guidelines` (if present).
+- **Theme** — light and dark treatment.
+- **States** — empty, loading (skeletons), and error states for every data surface; text on brand-colored backgrounds meets WCAG AA contrast.
 
 ### Step 5 — Save the analytics design doc (write only — no build)
 
-Write `<artifact_root>/docs/analytics_ui_design.md` via `executeCode` `open(path,"w").write(...)` against warm compute (first `executeCode` = a trivial `print("ready")` to absorb the serverless cold start; keep `timeoutMinutes` generous). 🔴 Verify the write with `os.path.exists(path)` in the SAME block — NOT `listFiles`. The doc MUST contain: the page/route list, per-page KPIs + charts + data sources (`{user_schema_prefix}.<synced_table>` + columns), component hierarchy, navigation flow, and the extend-vs-greenfield note from Step 3. STOP after saving — do NOT build the app in this step.
+Write `<artifact_root>/docs/analytics_ui_design.md` via `executeCode` `open(path,"w").write(...)` against warm compute (first `executeCode` = a trivial `print("ready")` to absorb the serverless cold start; keep `timeoutMinutes` generous). 🔴 Verify the write with `os.path.exists(path)` in the SAME block — NOT `listFiles`. The doc MUST contain: the page/route list, per-page KPIs + charts + data sources (`{user_schema_prefix}.<synced_table>` + columns), component hierarchy, navigation flow, the extend-vs-greenfield note from Step 3, the Genie chat/assistant panel from Step 4 (its placement, theming to the brand tokens, and empty/loading/error states), and the "Visual and Brand" section from Step 4 (aesthetic direction, brand palette mapped to oklch CSS variables, typography pairing, logo placement, light/dark theme, and per-surface empty/loading/error states). STOP after saving — do NOT build the app in this step.
 
 **State-lock:** this prompt runs between an `enter` (Step 0) and an `exit`. After the gate passes, run `skills/vibecoding-state` op `exit` — params: `prompt_id: "activation_app_design"`, `gate: "Analytics app designed"`, `captured: {analytics_ui_design}`. **This `enter`/`exit` pair is a mandatory ritual, not advisory.** Step 0''s `enter` MUST locate — or, if this is the first prompt of the track, bootstrap-create — the canonical live state file at `<app_root>/.vibecoding-state.md` (never the temporary `example/…` bootstrap path). The closing `exit` MUST append this prompt''s Per-Step Log entry, Gate result, and `captured` vars to that file, then **re-read it and echo the appended section to prove the write landed**. **Gate completion rule:** this prompt is NOT complete until that re-read confirms the appended entry — the chat summary is NOT the state store.
 
-**Gate:** `Analytics app designed` — `<artifact_root>/docs/analytics_ui_design.md` exists with pages, per-page KPIs/charts, data sources (`{user_schema_prefix}.<synced_table>` + columns), navigation, and the extend-vs-greenfield decision with file evidence; every visualization cites a synced Lakebase table from the sync plan. NOTHING was scaffolded, built, or deployed in this step.
+**Gate:** `Analytics app designed` — `<artifact_root>/docs/analytics_ui_design.md` exists with pages, per-page KPIs/charts, data sources (`{user_schema_prefix}.<synced_table>` + columns), navigation, and the extend-vs-greenfield decision with file evidence; every visualization cites a synced Lakebase table from the sync plan; and a "Visual and Brand" section defines the aesthetic direction, the brand palette (as `--primary`/`--secondary`/`--accent` oklch CSS variables), a non-default typography pairing, logo placement, light/dark theme, and per-surface empty/loading/error states. NOTHING was scaffolded, built, or deployed in this step.
 
 **➡️ Next step.** The **Build Analytics App** step scaffolds/extends the AppKit app under `<APP_ROOT>` and authors the analytics pages with mock data; **Wire to Lakebase** then points them at the synced project read-only.',
 '',
@@ -15457,8 +15690,9 @@ Rules the agent cannot guess:
 - **ConnectionStatus** sits at the top-center of the page header; it renders "Mock Data" while any page''s `source === "mock"`.
 - Mock shapes must match the columns the **Wire to Lakebase** step will serve from the synced tables (per `<artifact_root>/docs/activation_sync_plan.md`, qualified with schema `{user_schema_prefix}`), so the swap to live data is shape-compatible.
 - Skip the IDE''s SQL-warehouse build paths (`config/queries/`, `npm run typegen`, `useAnalyticsQuery`) — synced-table reads arrive via the `lakebase()` plugin in the next step.
+- **Theme to the brand (do NOT ship the scaffold''s default look).** Apply the design doc''s "Visual and Brand" section and the `## Branding Guidelines` section of this prompt (if present): uncomment and set the `--primary`/`--secondary`/`--accent` oklch custom properties in `client/src/index.css`, load the chosen display + body fonts via `client/index.html`, and place the brand logo in the header/navbar and as the favicon. Every color flows through CSS variables referenced by Tailwind classes (`bg-primary`, `text-primary-foreground`) — never inline hex. This is an incremental edit of the scaffold''s `index.css`, not a regeneration.
 
-Write files with `executeCode` `open(path,"w").write(...)` against warm compute (warm up once with a trivial `print("ready")` to absorb the serverless cold start; keep `timeoutMinutes` generous). 🔴 **Write literal characters — do not over-escape**; prefer Python triple-quoted raw strings (`r"""…"""`) and write the real `''`/`"`, never `\uXXXX`. 🔴 **Preserve the scaffold''s import specifiers verbatim** (`@databricks/appkit-ui/react`, `@import "@databricks/appkit-ui/styles.css";`) — edit `App.tsx`/`index.css` incrementally, never regenerate them from memory, and keep the scaffold''s `client/src/ErrorBoundary.tsx`.
+Write files with `executeCode` `open(path,"w").write(...)` against warm compute (warm up once with a trivial `print("ready")` to absorb the serverless cold start; keep `timeoutMinutes` generous). 🔴 **Write literal characters — do not over-escape**; prefer Python triple-quoted raw strings (`r"""…"""`) and write the real `''`/`"`, never `\uXXXX`. 🔴 **Preserve the scaffold''s import specifiers verbatim** (`@databricks/appkit-ui/react`, `@import "@databricks/appkit-ui/styles.css";`) — edit `App.tsx`/`index.css` incrementally, never regenerate them from memory, and keep the scaffold''s `client/src/ErrorBoundary.tsx`. The scaffold baseline is Tailwind **v4** (`@tailwindcss/vite` wired into `client/vite.config.ts`; no `postcss.config`/`tailwind.config`; `index.css` uses the `@import "@databricks/appkit-ui/styles.css";` above, NOT `@tailwind` directives) — the `@import` is correct as-is, so do NOT "fix" it into v3 `@tailwind base/components/utilities`.
 
 ### Step 5b — Pre-handoff static gate (the only static check here)
 
@@ -15470,6 +15704,11 @@ There is **no local `tsc`/`npm`/`eslint`** on Genie Code, so a regex scan is the
 - **BLOCKING (C) — stray `\uXXXX` escape artifact:** a literal unicode escape renders as garbage; write the real character.
 - **BLOCKING (E) — stale server-wiring shape (`server/server.ts`):** `server({ autoStart: false })` (or a manual `AppKit.server.start()`) double-`listen()`s and crashes on boot; register routes inside `onPluginsReady(appkit)` + `appkit.server.extend(...)` and let `server()` own the listener.
 - **REVIEW (D) — unused named import:** flagged when a symbol appears only on its import line. The scaffold''s `noUnusedLocals` turns an unused import into a hard `TS6133` build failure. Heuristic only — confirm before removing.
+- **REVIEW (G) — unthemed `index.css`:** `client/src/index.css` still ships the scaffold''s commented-out defaults (no uncommented `--primary` oklch variable). The app renders in the generic AppKit look instead of the brand. **If the `## Branding Guidelines` section above provided colors, treat this as BLOCKING** — set the palette before handoff.
+- **REVIEW (H) — no logo/favicon reference:** nothing under `client/` references a logo or favicon, so the brand mark is missing from the header/navbar. Escalate to BLOCKING when a logo URL was provided in `## Branding Guidelines`.
+- **BLOCKING (I) — a needed build tool is entirely missing:** the server-side build needs `vite`, `typescript`, and a `@vitejs/plugin-react[-swc]`. Flag one ONLY if it is absent from BOTH `dependencies` and `devDependencies`. `devDependencies` is the scaffold-correct home — the platform build installs devDeps (the pristine v4 scaffold ships every build tool in `devDependencies` and deploys), so do NOT move build tools to `dependencies`.
+- **BLOCKING (J) — incomplete Tailwind toolchain (toolchain-aware):** if CSS uses `@tailwind`/`@layer` (or imports the AppKit stylesheet), the toolchain must be complete for EITHER Tailwind generation — **v3:** `tailwind.config.*` + `postcss.config.*` present AND `tailwindcss`/`postcss`/`autoprefixer` in `dependencies` (not `devDependencies`); **v4:** `@tailwindcss/vite` in `dependencies` AND wired into the vite `plugins`. The one combination that FAILS the server-side Vite build is a **v3 PostCSS setup that also `@import`s `@databricks/appkit-ui/styles.css` (a v4 stylesheet)** — pick one generation, do not mix.
+- **BLOCKING (K) — client bundle not in a `server()`-auto-detected dir:** `server()` serves the built client only from `dist`, `client/dist`, `build`, `public`, or `out` (project-root-relative — `build/` is **NOT** reserved, verified in Phase 0). If the vite `outDir` resolves anywhere else the app deploys GREEN but returns **"Cannot GET /"**. The classic trap is a **root-level `vite.config.*` with `root: "client"` + `outDir: "../dist/client"`** (emits `dist/client/`, which is in none of the auto-detected dirs). Fix: leave `outDir` at the scaffold default (`client/dist`) or pass `server({ staticPath: "<resolved-dir>" })`.
 
 ```python
 import re, pathlib
@@ -15501,6 +15740,87 @@ if srv.exists():
         bad.append(f"{srv}: autoStart:false / manual server.start() -> register routes in onPluginsReady, let server() own the listener")
     if "onPluginsReady" not in st:
         bad.append(f"{srv}: routes not inside onPluginsReady(appkit) -> the wiring step expects this shape")
+# (G) THEMING — client/src/index.css still shipping the scaffold defaults (unthemed)
+css = pathlib.Path("<APP_ROOT>/client/src/index.css")
+if css.exists():
+    ct = css.read_text()
+    if re.search(r''^\s*--primary\s*:'', ct, re.MULTILINE) is None:
+        review.append(f"{css}: no uncommented --primary oklch variable -> app is UNTHEMED; set the brand palette (uncomment + fill the oklch vars) from the ''## Branding Guidelines'' section / design doc. If brand colors were provided, treat this as BLOCKING.")
+# (H) LOGO — no logo/favicon reference anywhere under client/
+logo_seen = False
+cdir = pathlib.Path("<APP_ROOT>/client")
+if cdir.exists():
+    for lf in cdir.rglob("*"):
+        if lf.suffix in {".ts", ".tsx", ".css", ".html"} and re.search(r''logo|favicon'', lf.read_text(), re.IGNORECASE):
+            logo_seen = True
+            break
+if not logo_seen:
+    review.append("client/: no logo/favicon reference found -> place the brand logo in the header/navbar and as the favicon (from ''## Branding Guidelines'', if provided).")
+# (I) BUILD TOOLS must be PRESENT — devDependencies is the scaffold-correct home (the platform build installs devDeps).
+# Flag ONLY a build tool absent from BOTH dependencies and devDependencies; NEVER flag devDependencies placement
+# (the pristine v4 scaffold ships vite/typescript/@tailwindcss/vite/@vitejs-plugin-react in devDependencies and deploys).
+import json
+pkg = pathlib.Path("<APP_ROOT>/package.json")
+deps, dev = {}, {}
+if pkg.exists():
+    pj = json.loads(pkg.read_text())
+    deps = pj.get("dependencies", {}) or {}
+    dev = pj.get("devDependencies", {}) or {}
+    present = set(deps) | set(dev)
+    missing = [t for t in ("vite", "typescript") if t not in present]
+    if not ({"@vitejs/plugin-react", "@vitejs/plugin-react-swc"} & present):
+        missing.append("@vitejs/plugin-react (or -swc)")
+    if missing:
+        bad.append(f"package.json: build tool(s) {sorted(missing)} absent from BOTH dependencies and devDependencies -> the server-side build cannot run; add them (devDependencies is fine, do NOT move to dependencies)")
+# (J) TAILWIND toolchain — toolchain-aware: accept v3 (tailwind.config + postcss.config + deps) OR v4 (@tailwindcss/vite)
+cdir = pathlib.Path("<APP_ROOT>/client")
+css_files = list(cdir.rglob("*.css")) if cdir.exists() else []
+uses_tw = any(re.search(r''@tailwind\b|@layer\b'', p.read_text()) for p in css_files)
+imports_appkit_styles = any(re.search(r''@import\s+["\'']@databricks/appkit-ui/styles\.css["\'']'', p.read_text()) for p in css_files)
+has_v4_plugin = ("@tailwindcss/vite" in deps) or ("@tailwindcss/vite" in dev)  # devDependencies is the scaffold-correct home
+if uses_tw and not has_v4_plugin:
+    # v3 PostCSS path
+    has_tw_cfg = any(pathlib.Path("<APP_ROOT>/" + n).exists() for n in ("tailwind.config.js", "tailwind.config.ts", "tailwind.config.cjs"))
+    has_pc_cfg = any(pathlib.Path("<APP_ROOT>/" + n).exists() for n in ("postcss.config.js", "postcss.config.cjs", "postcss.config.mjs"))
+    if not has_tw_cfg:
+        bad.append("client CSS uses @tailwind/@layer (v3 path, no @tailwindcss/vite) but no tailwind.config.* -> add it; Vite will not process Tailwind without it")
+    if not has_pc_cfg:
+        bad.append("client CSS uses @tailwind/@layer (v3 path, no @tailwindcss/vite) but no postcss.config.* -> add it")
+    for t in ("tailwindcss", "postcss", "autoprefixer"):
+        if t not in deps:
+            bad.append(f"Tailwind v3 in use but ''{t}'' not in package.json dependencies -> add it to dependencies (prod install skips devDependencies)")
+    if imports_appkit_styles and has_pc_cfg:
+        bad.append("client CSS @import \"@databricks/appkit-ui/styles.css\" (a v4 stylesheet) under a v3 PostCSS setup -> toolchain conflict that FAILS the server-side Vite build; move to the v4 toolchain (@tailwindcss/vite) OR drop the v4 @import and keep v3 @tailwind directives")
+elif has_v4_plugin:
+    # v4 path — @tailwindcss/vite must be a prod dep (see (I)) and wired into a vite config''s plugins
+    vite_cfgs = [pathlib.Path("<APP_ROOT>/" + n) for n in ("client/vite.config.ts", "client/vite.config.js", "client/vite.config.mjs", "vite.config.ts", "vite.config.js", "vite.config.mjs")]
+    if not any(c.exists() and "@tailwindcss/vite" in c.read_text() for c in vite_cfgs):
+        bad.append("@tailwindcss/vite present but not wired into any vite.config plugins -> add tailwindcss() to the vite plugins (v4)")
+# (K) CLIENT BUNDLE must land in a server()-auto-detected static dir — else "Cannot GET /" (Phase 0: L8 refuted, L9 root cause)
+# server() auto-detects (project-root-relative): dist, client/dist, build, public, out. build/ is NOT reserved.
+import os
+AUTO_DETECT = {"dist", "client/dist", "build", "public", "out"}
+vcfg = next((pathlib.Path("<APP_ROOT>/" + n) for n in
+             ("client/vite.config.ts", "client/vite.config.js", "client/vite.config.mjs",
+              "vite.config.ts", "vite.config.js", "vite.config.mjs")
+             if pathlib.Path("<APP_ROOT>/" + n).exists()), None)
+if vcfg is not None:
+    vt = vcfg.read_text()
+    om = re.search(r''outDir\s*:\s*["\'']([^"\'']+)["\'']'', vt)
+    if om:
+        approot = str(pathlib.Path("<APP_ROOT>"))
+        rootm = re.search(r''\broot\s*:\s*["\'']([^"\'']+)["\'']'', vt)
+        vroot = os.path.join(approot, rootm.group(1)) if rootm else str(vcfg.parent)
+        resolved_abs = os.path.normpath(os.path.join(vroot, om.group(1)))
+        try:
+            resolved = os.path.relpath(resolved_abs, approot).replace(os.sep, "/")
+        except ValueError:
+            resolved = resolved_abs
+        srvp = pathlib.Path("<APP_ROOT>/server/server.ts")
+        spm = re.search(r''server\(\s*\{[^}]*staticPath\s*:\s*["\'']([^"\'']+)["\'']'', srvp.read_text()) if srvp.exists() else None
+        sp = os.path.normpath(spm.group(1)).replace(os.sep, "/") if spm else None
+        if resolved not in AUTO_DETECT and resolved != sp:
+            bad.append(f"{vcfg}: client bundle resolves to ''{resolved}'', not a server()-auto-detected dir {sorted(AUTO_DETECT)} and no matching server(staticPath) -> deploys GREEN but returns ''Cannot GET /''. Set outDir to the scaffold default (client/dist) or pass server({{ staticPath: ''{resolved}'' }}). (Classic trap: root-level vite.config with root:''client'' + outDir:''../dist/client'' emits dist/client.)")
 print("BLOCKING:\n" + ("\n".join(bad) or "OK"))
 print("REVIEW:\n" + ("\n".join(review) or "none"))
 ```
@@ -15509,7 +15829,7 @@ Fix every **BLOCKING** hit and triage every **REVIEW** hit before declaring this
 
 **State-lock:** this prompt runs between an `enter` (Step 0) and an `exit`. After the gate passes, run `skills/vibecoding-state` op `exit` — params: `prompt_id: "activation_build_wire"`, `gate: "Analytics app built (mock)"`, `captured: {app_dir}`. **This `enter`/`exit` pair is a mandatory ritual, not advisory.** Step 0''s `enter` MUST locate — or, if this is the first prompt of the track, bootstrap-create — the canonical live state file at `<app_root>/.vibecoding-state.md` (never the temporary `example/…` bootstrap path). The closing `exit` MUST append this prompt''s Per-Step Log entry, Gate result, and `captured` vars to that file, then **re-read it and echo the appended section to prove the write landed**. **Gate completion rule:** this prompt is NOT complete until that re-read confirms the appended entry — the chat summary is NOT the state store.
 
-**Gate:** `Analytics app built (mock)` — `<APP_ROOT>` contains a scaffolded/extended AppKit project (`app.yaml`, `databricks.yml` with `name: <APP_NAME>`, `server/server.ts` registering routes inside `onPluginsReady` and returning the `{ data, source: "mock" }` envelope, and `client/` analytics pages that fetch from those routes with loading/error states), ConnectionStatus shows "Mock Data", and the static gate prints `BLOCKING: OK`. NO local server was run, NO `http://localhost:8000` check was attempted, and NOTHING was deployed — deploy is the **Deploy & Validate** step.
+**Gate:** `Analytics app built (mock)` — `<APP_ROOT>` contains a scaffolded/extended AppKit project (`app.yaml`, `databricks.yml` with `name: <APP_NAME>`, `server/server.ts` registering routes inside `onPluginsReady` and returning the `{ data, source: "mock" }` envelope, and `client/` analytics pages that fetch from those routes with loading/error states), ConnectionStatus shows "Mock Data", the app is themed to the brand (the design doc''s "Visual and Brand" section is applied — `--primary`/`--secondary`/`--accent` oklch variables set in `client/src/index.css`, brand fonts loaded, logo in header/navbar + favicon), and the static gate prints `BLOCKING: OK` with theming REVIEW items (G/H) resolved. NO local server was run, NO `http://localhost:8000` check was attempted, and NOTHING was deployed — deploy is the **Deploy & Validate** step.
 
 **➡️ Next step.** The **Wire to Lakebase** step registers `lakebase()` and re-points the mock routes at the SYNCED Lakebase project (read-only), flipping `source` from `"mock"` to `"live"`; the **Deploy & Validate** step then ships `<APP_ROOT>` via the SDK SNAPSHOT path.',
 '',
@@ -15612,7 +15932,7 @@ cols = cur.fetchall()
 #   SELECT count(*) FILTER (WHERE <col> IS NULL) FROM "{user_schema_prefix}".<table>_synced
 ```
 
-Write the result to `<artifact_root>/docs/synced_schema.md` via `executeCode` `open(path,"w").write(...)` — one section per synced table listing its `column_name / data_type / is_nullable` rows (plus any sampled enum values / NULL counts). 🔴 Verify the write with `os.path.exists(path)` in the SAME block — NOT `listFiles`. This doc is the **source of truth for column names, Postgres types, and NULLability** in Steps 3–4; it overrides any column guessed from the Gold design. If a synced table is missing or has zero columns here, STOP and return to the **Create Synced Tables** step — you cannot wire a table that did not land.
+Write the result to `<artifact_root>/docs/synced_schema.md` via `executeCode` `open(path,"w").write(...)` — one section per synced table listing its `column_name / data_type / is_nullable` rows (plus any sampled enum values / NULL counts). 🔴 Verify the write with `os.path.exists(path)` in the SAME block — NOT `listFiles`. This doc is the **source of truth for column names, Postgres types, and NULLability** in Steps 3–4; it overrides any column guessed from the Gold design. The **schema NAME** is authoritative from the runtime too: the synced tables'' actual `table_schema` (recorded in `reverse_etl.md` / `activation_sync_plan.md`) wins over the template `{user_schema_prefix}` — if they differ, use the introspected/recorded value as the `table_schema` query parameter and everywhere downstream, never a hardcoded literal. If a synced table is missing or has zero columns here, STOP and return to the **Create Synced Tables** step — you cannot wire a table that did not land.
 
 ### Step 3 — Register `lakebase()` and author READ-ONLY routes via `onPluginsReady`
 
@@ -15644,6 +15964,7 @@ Rules the agent cannot guess:
 - **No DDL/seed/mutations** — drop the IDE''s `lakebase.py`, `ConnectionPool`, `_OAuthConnection`, and `create_database_objects_if_missing`; the `lakebase()` plugin generates and rotates the OAuth credential and owns the pool. The app''s service principal needs SELECT on the synced schema (granted at the **Deploy & Validate** step).
 - **Handle NULLs explicitly** (`COALESCE`, filtered aggregates) and use `LOWER()` for enum/string filters — synced data can contain NULLs/casing the mock layer did not.
 - **No hardcoded date ranges or SLO assertions** — drive date filters from UI-supplied params.
+- **`server()` auto-serves the built client — do NOT author static serving.** `server()` serves the client from a project-root-relative auto-detected dir (`dist`, `client/dist`, `build`, `public`, `out`); do NOT add `express.static` / `sendFile` / an `app.get("*")` handler here (Phase 0 confirmed `server()` serves the client with none of that code present). The ONLY requirement is that the vite `outDir` resolve into one of those dirs — the build/deploy static gate''s check (K) enforces it, and the scaffold default (`client/dist`) satisfies it. **SPA deep-link fallback is built in too:** AppKit''s `StaticServer.setup()` registers `app.get("*", serveIndex)` for every non-`/api`/`/query` GET, so client-side routes (react-router) survive a hard refresh with no code from you (verified in AppKit source). The only override is `server({ staticPath })` when `outDir` lands outside the auto-detect list.
 
 ### Step 4 — Wire the frontend + ConnectionStatus
 
@@ -15681,11 +16002,171 @@ Fix every **BLOCKING** hit before declaring this step complete. `BLOCKING: OK` h
 
 **Gate:** `Analytics app live data (local)` — `<artifact_root>/docs/synced_schema.md` exists (read-only `information_schema` introspection of the `*_synced` tables), `<APP_ROOT>/server/server.ts` registers `lakebase()` from `@databricks/appkit` with READ-ONLY analytics routes (`SELECT` from `"{user_schema_prefix}".<synced_table>` only, using columns that exist in `synced_schema.md`, NO DDL/seed) inside `onPluginsReady`, the frontend fetches via `useLakebaseData` with mock fallback so ConnectionStatus flips to "Live Data", and the wiring static scan prints `BLOCKING: OK`. (On Genie Code "local" = the authored, statically-gated pre-deploy milestone — there is NO `http://localhost:8000` run; live synced reads are proven against the deployed app at the **Deploy & Validate** step.) NO local `python app.py`/`npm run build` was attempted; NO table was created, seeded, or mutated.
 
-**➡️ Next step.** The **Deploy & Validate** step ships `<APP_ROOT>` via the SDK SNAPSHOT path, grants the app''s service principal SELECT on the synced schema `{user_schema_prefix}`, re-checks the endpoint cost caps read-only, and verifies the live synced reads behind the OAuth gate.',
+**➡️ Next step.** The **Wire Genie** step registers the AppKit `genie()` plugin so the app gains a natural-language chat panel; the **Deploy & Validate** step then ships `<APP_ROOT>` via the SDK SNAPSHOT path, grants the app''s service principal SELECT on the synced schema `{user_schema_prefix}` (and `CAN_RUN` on the Genie space), re-checks the endpoint cost caps read-only, and verifies the live synced reads behind the OAuth gate.',
 '',
 true, 1, true, current_timestamp(), current_timestamp(), current_user());
 
--- activation_deploy_validate (genie-code fork) — deploy the analytics app under <APP_ROOT> via the SDK SNAPSHOT path (w.apps.deploy; build server-side); verify live synced reads behind the 3-hop OAuth session; READ-ONLY get-endpoint cost re-check + list-roles (NO mutating update-endpoint/delete-role); app-SP grants on the SYNCED schema; optional Genie CAN_RUN only if a chat path exists; no local npm/localhost/sync; bypass_LLM = TRUE
+-- activation_wire_genie (genie-code fork) — register genie() in server.ts (canonical @databricks/appkit import) so /api/genie/* is served and a GenieChat panel renders; OBO-served — the genie() plugin runs on-behalf-of the signed-in user, so app.yaml MUST declare user_api_scopes: [dashboards.genie] (gated here); STATIC DATABRICKS_GENIE_SPACE_ID env (no databricks.yml resources: binding — inert on the SDK SNAPSHOT path); READ-ONLY, no DDL/seed; the app-SP CAN_RUN + warehouse/UC grants are applied at Deploy & Validate; no local npm/localhost; app under <APP_ROOT>; bypass_LLM = TRUE
+INSERT INTO ${catalog}.${schema}.section_input_prompts
+(input_id, section_tag, coding_assistant, input_template, system_prompt,
+ bypass_llm, version, is_active, inserted_at, updated_at, created_by)
+VALUES
+(957, 'activation_wire_genie', 'genie-code',
+'Wire a Genie-backed natural-language chat panel into the AppKit analytics app. Before this step the app serves only the Lakebase-backed dashboards; after it, `server.ts` registers the `genie()` plugin (so `/api/genie/*` is served) and the frontend renders a `GenieChat` panel that answers plain-English questions from your Genie space.
+
+This will involve the following steps:
+
+- **Confirm context** — `APP_NAME`, `<APP_ROOT>`, and the Genie space id (`{genie_space_id}`).
+- **Load the plugin skill** — full `skill_ref_root`-prefixed path for the AppKit Genie plugin.
+- **Register `genie()`** — canonical `@databricks/appkit` import, added to the `plugins` array.
+- **Set the space id + identity** — a STATIC `DATABRICKS_GENIE_SPACE_ID` env plus `user_api_scopes: [dashboards.genie]` (the `genie()` plugin runs OBO — this scope is REQUIRED).
+- **Wire the frontend** — the `GenieChat` panel from `@databricks/appkit-ui/react`.
+- **Run the static gate** — the build is proven server-side at deploy.
+
+The steps below are the prescriptive runbook for those actions; follow them in order.
+
+**Genie Code — this is a prescriptive runbook for wiring a Genie chat panel into the AppKit analytics app. Follow the steps in order. Do NOT improvise paths, do NOT use bare relative paths, do NOT use `@`-mentions. This step registers the `genie()` plugin in `server.ts` (added to the same `plugins` array as `server()`/`lakebase()`) so the plugin auto-mounts its `/api/genie/*` routes, and adds a `GenieChat` panel to the client — it does NOT create, seed, or mutate any table. There is no local Node toolchain: the build is proven server-side by the Deploy & Validate step, not by a local `npm run build`/`python app.py`. The `genie()` plugin executes the Conversation API **on-behalf-of the signed-in user** (its tools require user context), so `app.yaml` MUST declare `user_api_scopes: [dashboards.genie]` — without it the deployed chat fails with `Provided OAuth token does not have required scopes: genie`. The app-SP `CAN_RUN` on the space plus warehouse/UC grants are applied at the Deploy & Validate step — not here. The app is anchored to `<APP_ROOT>`; every skill is named by its full `skill_ref_root`-prefixed path.**
+
+### 🔴 Non-negotiable execution rules (read before anything)
+
+❌ **NEVER** run `npm run build` / `npm run dev` / `python app.py` or open `http://localhost:8000` — Genie Code is serverless with **no local Node toolchain** (`genie-code-environment` "AppKit/Node reality"). Build correctness is proven server-side by the Deploy & Validate step''s SNAPSHOT build; read any error from `<app-url>/logz` in a browser. Author files here; the deploy step compiles them.
+
+🔑 **Canonical plugin import — import `genie` from `@databricks/appkit`, alongside `server` and `lakebase`:** `import { createApp, server, lakebase, genie } from "@databricks/appkit";`. Do NOT import it from a driver package and do NOT hand-mount `/api/genie/*` routes — the plugin auto-mounts them. Register it by adding `genie()` to the existing `plugins` array, NOT via a second `createApp` or a manual `server.start()`. [TESTED P37]
+
+🔑 **STATIC space id, not a `resources:` binding.** On the SDK SNAPSHOT deploy path the `databricks.yml` `resources:` block is **inert**, so a `valueFrom: genie-space` resource binding never resolves. Set a **static** `DATABRICKS_GENIE_SPACE_ID` in `app.yaml` (value = `{genie_space_id}`). The `genie()` plugin reads this env at boot.
+
+🛑 **READ-ONLY — NEVER author DDL, seed, or `CREATE`/`INSERT`/`UPDATE`/`DELETE`.** This step only registers a plugin and a UI panel. It also does NOT grant permissions — the app-SP `CAN_RUN` on the Genie space (and warehouse `CAN_USE` + UC `SELECT`) are applied at the Deploy & Validate step.
+
+✅ The CLI you run here is **read-only** identity via `runDatabricksCli`. You are pre-authenticated — do **NOT** run `databricks auth login`. File writes go through `executeCode` against warm compute.
+
+### Step 0 — Resolve your environment (once, before anything else)
+
+Run `skills/vibecoding-state` operation `enter` with `prompt_id: "activation_wire_genie"` and `require_prior_gate: {prompt_id: "activation_wire_lakebase", gate: "Analytics app live data (local)"}`. Read the resolved `## Environment Capabilities` values and use them literally:
+
+- `client_context` = `genie_code`
+- `artifact_root` = your workshop project root (e.g. `/Workspace/Users/<your-email>/vibe-coding-workshop`), a **git clone** of the workshop repo so generated bundles/apps/docs build in a git working tree and are recognized as Databricks Asset Bundles; the skill tree is **copied** to `/Workspace/Users/<your-email>/.assistant/skills/vibe-coding-workshop` for discovery (skills load from there via `skill_ref_root`, NOT from `artifact_root`)
+- `skill_ref_root` = `skills/vibe-coding-workshop` (substitute your clone folder if different)
+- `app_root` = `<artifact_root>/<app_name>` — the self-contained AppKit app project (a TOP-LEVEL sibling of any `{use_case_slug}_dab` bundle, NOT under `apps_lakebase/`). Referred to below as `<APP_ROOT>`; `<APP_ROOT>/.vibecoding-state.md`, `app.yaml`, `databricks.yml`, `server/`, and `client/` all live here.
+
+**First:** read `<APP_ROOT>/.vibecoding-state.md` (full `<artifact_root>`-anchored path — NOT a bare `@…` mention) and `<artifact_root>/docs/genie_brief.md` for the Genie space id (`{genie_space_id}`), the warehouse it runs on, and the data sources it answers over.
+
+**Precondition (from the wire-lakebase step, gate `Analytics app live data (local)`):** `<APP_ROOT>/server/server.ts` already registers `lakebase()` from `@databricks/appkit` and the analytics routes read live synced data. If it does not, return to the **Wire to Lakebase** step before wiring Genie.
+
+### Step 1 — Confirm `APP_NAME`, `<APP_ROOT>`, and the Genie space id
+
+You are pre-authenticated — do **NOT** run `databricks auth login`:
+
+```bash
+databricks current-user me --output json
+```
+
+- `APP_NAME` = `<FIRSTNAME>-<LASTINITIAL>-{use_case_slug}` (must match earlier steps); `<APP_ROOT>` = `<artifact_root>/<APP_NAME>`.
+- Genie space id `{genie_space_id}` from `<artifact_root>/docs/genie_brief.md` / `.vibecoding-state.md`. The space already knows its warehouse and data sources — you do NOT pass a warehouse here.
+
+> Workspace target: `{workspace_url}`. The session profile placeholder `{databricks_cli_profile}` is **inert on Genie Code** — runDatabricksCli/SDK are pre-authenticated, so omit `--profile`.
+
+### Step 2 — Load the plugin skill by its FULL `skill_ref_root`-prefixed path
+
+Load with `readSkillFile` — NEVER a bare `@…` mention, NEVER a repo-relative path. The root-level `skills/` come FIRST as the highest-priority guardrails:
+
+1. `readSkillFile("skills/vibe-coding-workshop/apps_lakebase/skills/04-appkit-plugin-add/SKILL.md")` — how to add an AppKit plugin package and register it. Then `readSkillFile("skills/vibe-coding-workshop/apps_lakebase/skills/04-appkit-plugin-add/references/plugin-genie.md")` for the `genie()` import/registration shape, the `DATABRICKS_GENIE_SPACE_ID` env, the SP-vs-OBO execution note, and the `GenieChat` frontend export.
+2. When the skill names further references, load EACH the same way (repo-relative path prefixed with `skill_ref_root`).
+
+### Step 3 — Register `genie()` in `server.ts` (canonical import; add to the plugins array)
+
+Edit `<APP_ROOT>/server/server.ts` so `genie` is imported from `@databricks/appkit` and added to the existing `plugins` array next to `server()` and `lakebase()`. Do NOT hand-mount `/api/genie/*` — the plugin auto-mounts its own routes:
+
+```typescript
+import { createApp, server, lakebase, genie } from "@databricks/appkit";
+
+const DB_SCHEMA = process.env.DB_SCHEMA || "{user_schema_prefix}";
+
+await createApp({
+  plugins: [server(), lakebase(), genie()],
+  async onPluginsReady(appkit) {
+    // existing lakebase analytics routes stay here — do NOT hand-mount /api/genie/*;
+    // the genie() plugin auto-mounts its own conversation routes.
+  },
+});
+```
+
+Rules the agent cannot guess:
+
+- **Import `genie` from `@databricks/appkit`** — never from a driver package. It goes in the SAME import and the SAME `plugins` array as `lakebase()`; do not add a second `createApp` or a manual `appkit.server.start()`.
+- **The plugin owns `/api/genie/*`.** Do NOT author your own conversation routes — registering `genie()` mounts create-conversation / send-message / get-conversation for you.
+- **No DDL/seed/mutations** — this step wires a plugin and a UI panel only.
+
+### Step 3.5 — Set the space id (static) + declare the OBO scope (both required)
+
+Add a **static** `DATABRICKS_GENIE_SPACE_ID` to `<APP_ROOT>/app.yaml` (value = `{genie_space_id}`) — NOT a `valueFrom: genie-space` resource binding (the `databricks.yml` `resources:` block is inert on the SDK SNAPSHOT path) — AND declare the Genie user scope in the same file:
+
+```yaml
+env:
+  - name: DATABRICKS_GENIE_SPACE_ID
+    value: "{genie_space_id}"
+user_api_scopes:
+  - dashboards.genie
+```
+
+- **The `genie()` plugin runs OBO — the scope is REQUIRED, not optional.** The plugin''s tools require user context, so it always calls the Conversation API with the signed-in user''s forwarded token. That forwarded token only exists when `app.yaml` declares `user_api_scopes: [dashboards.genie]`; omit it and the deployed chat fails with `Provided OAuth token does not have required scopes: genie` even while the analytics dashboards stay live. Answers then honor the **signed-in user''s** own Unity Catalog grants (the user needs `CAN_RUN` on the space and `SELECT` on its data sources).
+- **The app SP still needs `CAN_RUN` on the space** to reach the Conversation API at all — granted (with warehouse `CAN_USE` and UC `SELECT`) at the **Deploy & Validate** step, which also re-applies the scope after each deploy (a full-replacement deploy can wipe `user_api_scopes`). Do NOT put `DATABRICKS_HOST`/`DATABRICKS_CLIENT_ID`/`DATABRICKS_CLIENT_SECRET` in `app.yaml` — they are auto-injected for the app SP; any override is silent OAuth poison.
+
+### Step 4 — Wire the `GenieChat` frontend panel
+
+Add the chat panel to the client using the framework component — never hand-roll a Conversation API client in the browser. Import `GenieChat` from `@databricks/appkit-ui/react` (the `/react` subpath — a bare `@databricks/appkit-ui` import fails the build) and render it where `analytics_ui_design.md` places the natural-language search bar:
+
+```tsx
+import { GenieChat } from "@databricks/appkit-ui/react";
+
+// ...
+<GenieChat alias="default" basePath="/api/genie" />
+```
+
+Write files via `executeCode` `open(path,"w").write(...)`; prefer Python triple-quoted raw strings and write literal `''`/`"` (never `\uXXXX`).
+
+### Step 5 — Static gate (the only local check) + deploy-time build
+
+There is **no local `tsc`/`npm`** on Genie Code, so the build is validated server-side by the Deploy & Validate step''s SNAPSHOT build; surface any error via `<app-url>/logz`. Before handing off, run the wiring-specific static scan with `executeCode` (read the files in Python + regex — do NOT depend on the IDE''s shell `grep`):
+
+```python
+import re, pathlib
+srv = pathlib.Path("<APP_ROOT>/server/server.ts").read_text()
+bad = []
+# genie plugin must be imported from @databricks/appkit and registered
+if "genie" not in srv:
+    bad.append("genie() not registered in server.ts -> import { ..., genie } and add genie() to plugins[]")
+if re.search(r''import\s*\{[^}]*\bgenie\b[^}]*\}\s*from\s*(?!["\'']@databricks/appkit["\''])'', srv):
+    bad.append("genie imported from the wrong package -> import it from ''@databricks/appkit''")
+if re.search(r''autoStart\s*:\s*false'', srv) or re.search(r''\.server\.start\s*\('', srv):
+    bad.append("autoStart:false / manual server.start() -> register in the plugins array, no manual start()")
+# app.yaml must carry a static space id (no valueFrom binding)
+appyaml = pathlib.Path("<APP_ROOT>/app.yaml").read_text()
+if "DATABRICKS_GENIE_SPACE_ID" not in appyaml:
+    bad.append("DATABRICKS_GENIE_SPACE_ID missing from app.yaml -> add it as a static env value")
+if re.search(r''DATABRICKS_GENIE_SPACE_ID[\s\S]{0,40}valueFrom'', appyaml):
+    bad.append("DATABRICKS_GENIE_SPACE_ID bound via valueFrom -> use a STATIC value ({genie_space_id}); resources: is inert on SNAPSHOT")
+# the genie() plugin runs OBO -> app.yaml MUST declare the Genie user scope
+if not re.search(r''user_api_scopes:[\s\S]{0,80}dashboards\.genie'', appyaml):
+    bad.append("user_api_scopes: [dashboards.genie] missing from app.yaml -> the genie() plugin runs OBO; without it the deployed chat fails with ''required scopes: genie''")
+# GenieChat must come from the /react subpath
+for f in pathlib.Path("<APP_ROOT>/client/src").rglob("*.tsx"):
+    t = f.read_text()
+    if "GenieChat" in t and re.search(r''from\s+["\'']@databricks/appkit-ui["\'']'', t):
+        bad.append(f"{f}: GenieChat imported from bare ''@databricks/appkit-ui'' -> use ''@databricks/appkit-ui/react''")
+print("BLOCKING:\n" + ("\n".join(bad) or "OK"))
+```
+
+Fix every **BLOCKING** hit before declaring this step complete. `BLOCKING: OK` hands off to the Deploy & Validate step, which runs the server-side build and (with `user_api_scopes: [dashboards.genie]` declared and the app SP granted `CAN_RUN` on the space) serves real Genie answers.
+
+**State-lock:** this prompt runs between an `enter` (Step 0) and an `exit`. After the gate passes, run `skills/vibecoding-state` op `exit` — params: `prompt_id: "activation_wire_genie"`, `gate: "Genie wired to app"`, `captured: {genie_chat_service}`. **This `enter`/`exit` pair is a mandatory ritual, not advisory.** Step 0''s `enter` MUST locate — or, if this is the first prompt of the track, bootstrap-create — the canonical live state file at `<app_root>/.vibecoding-state.md` (never the temporary `example/…` bootstrap path). The closing `exit` MUST append this prompt''s Per-Step Log entry, Gate result, and `captured` vars to that file, then **re-read it and echo the appended section to prove the write landed**. **Gate completion rule:** this prompt is NOT complete until that re-read confirms the appended entry — the chat summary is NOT the state store.
+
+**Gate:** `Genie wired to app` — `<APP_ROOT>/server/server.ts` imports `genie` from `@databricks/appkit` and registers `genie()` in the `plugins` array (no hand-mounted `/api/genie/*`, no manual `start()`), `app.yaml` carries a STATIC `DATABRICKS_GENIE_SPACE_ID` (= `{genie_space_id}`, no `valueFrom` binding), the client renders `GenieChat` from `@databricks/appkit-ui/react`, `app.yaml` declares `user_api_scopes: [dashboards.genie]` (the `genie()` plugin runs OBO — this scope is required), and the wiring static scan prints `BLOCKING: OK`. (On Genie Code "local" = the authored, statically-gated pre-deploy milestone — there is NO `http://localhost:8000` run; real Genie answers are proven against the deployed app at the Deploy & Validate step.) NO local `npm run build`/`python app.py` was attempted; NO table was created, seeded, or mutated; NO permission grant was made here.
+
+**➡️ Next step.** The **Deploy & Validate** step ships `<APP_ROOT>` via the SDK SNAPSHOT path, re-applies `user_api_scopes: [dashboards.genie]` (a full-replacement deploy can wipe it), grants the app''s service principal `CAN_RUN` on the Genie space `{genie_space_id}` (via PATCH), plus warehouse `CAN_USE` and UC `USE_CATALOG`/`USE_SCHEMA`/`SELECT`, and probes the deployed chat to confirm it returns real answers behind the OAuth gate (no `required scopes: genie`).',
+'',
+true, 1, true, current_timestamp(), current_timestamp(), current_user());
+
+-- activation_deploy_validate (genie-code fork) — deploy the analytics app under <APP_ROOT> via the SDK SNAPSHOT path (w.apps.deploy; build server-side); verify live synced reads behind the 3-hop OAuth session; READ-ONLY get-endpoint cost re-check + list-roles (NO mutating update-endpoint/delete-role); app-SP grants on the SYNCED schema; idempotent re-assert + verify of app-SP Genie CAN_RUN (PATCH, not PUT) + warehouse CAN_USE + UC USE/SELECT + re-apply of user_api_scopes: [dashboards.genie] (a full-replacement deploy can wipe it) with a live /api/genie scope probe, now that Wire Genie added the OBO chat path; no local npm/localhost/sync; bypass_LLM = TRUE
 INSERT INTO ${catalog}.${schema}.section_input_prompts
 (input_id, section_tag, coding_assistant, input_template, system_prompt,
  bypass_llm, version, is_active, inserted_at, updated_at, created_by)
@@ -15711,20 +16192,24 @@ The steps below are the prescriptive runbook for those actions; follow them in o
 
 ❌ **DO NOT** use `databricks sync` / `databricks workspace import-dir` or toggle the repo-root `.gitignore` `dist/` line — those are the IDE FastAPI flow. The SDK SNAPSHOT path uploads `<APP_ROOT>` source directly; the build emits `dist/` server-side.
 
+❌ **DO NOT bind the `postgres` resource via `databricks.yml`.** On the SDK SNAPSHOT path an app `resources:` block in `databricks.yml` is **inert** — it never attaches the resource (P35). The binding MUST go through the REST/SDK PATCH in Step 3 (`w.apps.update(APP_NAME, ...)` / `PATCH /api/2.0/apps/{APP_NAME}`), applied BEFORE the plugin-bearing deploy; an unbound app carrying `valueFrom: postgres` boots `CRASHED`.
+
 ❌ **DO NOT** rely on `databricks apps deploy` via `runDatabricksCli` — it is page-dependent (hard-blocked on dashboard/file-editor pages) and CWD-defeated. If it is blocked, **do not declare deployment impossible** — fall through to the SDK path below. *blocked ≠ impossible — try the next path.*
 
-❌ **READ-ONLY cost/role checks only.** Use `databricks postgres get-endpoint` and `databricks postgres list-roles` to ASSERT the recorded sizing and role state — do NOT run the mutating `update-endpoint`, `delete-role`, or the IDE''s role re-provision flip-flop. If sizing has drifted or the app-SP role is `NO_LOGIN`, STOP and report; remediation belongs to the provisioning step (`activation_table_design`), not here.
+❌ **READ-ONLY cost/role checks only.** Use `postgres get-endpoint` and `postgres list-roles` to ASSERT the recorded sizing and role state — do NOT run the mutating `update-endpoint`, `delete-role`, or the IDE''s role re-provision flip-flop. If sizing has drifted or the app-SP role is `NO_LOGIN`, STOP and report; remediation belongs to the provisioning step (`activation_table_design`), not here.
+
+🔧 **Postgres/Lakebase reads run through `executeCode`, NOT the `runDatabricksCli` tool (P41).** The `runDatabricksCli` tool is **blocked for the `postgres`/`lakebase` subcommands** on Genie Code, and `w.postgres.*` is **not in the pre-installed SDK** — so run the read-only CLI *inside* `executeCode` (`import subprocess; subprocess.run(["databricks","postgres","get-endpoint", …, "--output","json"], capture_output=True, text=True)`) or call REST via the pre-authenticated client `w.api_client.do("GET"/"POST", …)` (the same surface Step 2.5''s credential mint uses). Never route a `postgres`/`lakebase` command through the `runDatabricksCli` tool — it will be denied.
 
 ✅ The canonical deploy mechanism here is the **SDK SNAPSHOT** call run through `executeCode`:
 `w.apps.deploy(<APP_NAME>, AppDeployment(source_code_path="<APP_ROOT>", mode=AppDeploymentMode.SNAPSHOT))`, then poll the deployment + compute state.
 
 🛑 **NEVER delete or regenerate `<APP_ROOT>/package-lock.json`.** On the SDK SNAPSHOT path a missing lockfile **hard-fails the source-export phase in ~10s** (`RESOURCE_DOES_NOT_EXIST`), before `npm install` ever runs.
 
-💰 **Optimize for the fewest deploys, not the fewest edits.** A deploy costs **~50s cold / ~30s warm** and emits **no compute-readable build error**. Front-load the static gate (Step 2b) and batch fixes rather than burning blind deploy-fail cycles.
+💰 **Optimize for the fewest deploys, not the fewest edits.** A deploy costs **~50s cold / ~30s warm** and emits **no compute-readable build error** — the server-side Vite/tsc failure never comes back to compute, so a blind deploy tells you nothing you can act on. That makes the **Step 2b static gate the only cheap pre-deploy signal there is**: front-load it, run it after EVERY batch of edits, and reach `BLOCKING: OK` before spending a single deploy — batch fixes rather than burning blind deploy-fail cycles.
 
 ### Step 0 — Resolve your environment (once, before anything else)
 
-Run `skills/vibecoding-state` operation `enter` with `prompt_id: "activation_deploy_validate"` and `require_prior_gate: {prompt_id: "activation_wire_lakebase", gate: "Analytics app live data (local)"}`. Read the resolved `## Environment Capabilities` values and use them literally:
+Run `skills/vibecoding-state` operation `enter` with `prompt_id: "activation_deploy_validate"` and `require_prior_gate: {prompt_id: "activation_wire_genie", gate: "Genie wired to app"}`. Read the resolved `## Environment Capabilities` values and use them literally:
 
 - `client_context` = `genie_code`
 - `artifact_root` = your workshop project root (e.g. `/Workspace/Users/<your-email>/vibe-coding-workshop`), a **git clone** of the workshop repo so generated bundles/apps/docs build in a git working tree and are recognized as Databricks Asset Bundles; the skill tree is **copied** to `/Workspace/Users/<your-email>/.assistant/skills/vibe-coding-workshop` for discovery (skills load from there via `skill_ref_root`, NOT from `artifact_root`)
@@ -15749,11 +16234,11 @@ databricks current-user me --output json
 
 Validate the project (read-only checks via `executeCode`, not the IDE''s `ls`/`grep`): `<APP_ROOT>/databricks.yml` (`host:` matches the runtime, `name: <APP_NAME>`), `<APP_ROOT>/app.yaml`, `<APP_ROOT>/server/server.ts` (registers `lakebase()` from `@databricks/appkit`), and `<APP_ROOT>/client/` are present.
 
-**`app.yaml` for the AppKit + `lakebase()` app:** the binding is declared as the app''s `postgres` resource (bound to the SYNCED project endpoint `projects/{user_app_name}/branches/production/endpoints/primary`), and `app.yaml` carries `LAKEBASE_ENDPOINT: valueFrom: postgres` + a static `DB_SCHEMA: {user_schema_prefix}`. Do NOT put `DATABRICKS_HOST`/`DATABRICKS_CLIENT_ID`/`DATABRICKS_CLIENT_SECRET` in `app.yaml` — they are auto-injected by the runtime for the app SP; any override is silent OAuth poison (symptom: synced reads return `source: "mock"` with `fe_sendauth: no password supplied`).
+**`app.yaml` for the AppKit + `lakebase()` app:** the binding is the app''s `postgres` resource (bound to the SYNCED project endpoint `projects/{user_app_name}/branches/production/endpoints/primary` via the Step 3 REST/SDK PATCH), and `app.yaml` carries `LAKEBASE_ENDPOINT: valueFrom: postgres` + a static `DB_SCHEMA: {user_schema_prefix}`. **`valueFrom: postgres` resolves ONLY when that `postgres` resource is bound (Step 3).** On the SDK SNAPSHOT path a `databricks.yml` app-`resources` block is inert (P35), so an app deployed **unbound** with `valueFrom: postgres` boots `CRASHED` (the env var cannot resolve) — the bind must precede the deploy (P37b/P37d). Only if you cannot confirm the bind, fall back to a static `LAKEBASE_ENDPOINT: value: projects/{user_app_name}/branches/production/endpoints/primary` (fallback only — a bound `valueFrom: postgres` is preferred). Do NOT put `DATABRICKS_HOST`/`DATABRICKS_CLIENT_ID`/`DATABRICKS_CLIENT_SECRET` in `app.yaml` — they are auto-injected by the runtime for the app SP; any override is silent OAuth poison (symptom: synced reads return `source: "mock"` with `fe_sendauth: no password supplied`).
 
 ### Step 1b — Pre-deploy cost re-check (READ-ONLY)
 
-Run `databricks postgres get-endpoint projects/{user_app_name}/branches/production/endpoints/primary --output json` via `runDatabricksCli` and ASSERT `autoscaling_limit_min_cu`, `autoscaling_limit_max_cu`, and `suspend_timeout_duration` match `<artifact_root>/docs/reverse_etl.md`. A running App keeps the endpoint warm and bills against whatever ceiling is in place — so do NOT deploy on top of a drifted (larger) ceiling or a disabled suspend. **If any value has drifted, STOP** and return to the **Create Synced Tables / provisioning** step to re-apply the caps (this fork does NOT mutate the endpoint).
+Read the endpoint **inside `executeCode`** (the `runDatabricksCli` tool is blocked for `postgres`, P41): `subprocess.run(["databricks","postgres","get-endpoint","projects/{user_app_name}/branches/production/endpoints/primary","--output","json"], capture_output=True, text=True)` (or `w.api_client.do("GET", …)`), then ASSERT `autoscaling_limit_min_cu`, `autoscaling_limit_max_cu`, and `suspend_timeout_duration` match `<artifact_root>/docs/reverse_etl.md`. A running App keeps the endpoint warm and bills against whatever ceiling is in place — so do NOT deploy on top of a drifted (larger) ceiling or a disabled suspend. **If any value has drifted, STOP** and return to the **Create Synced Tables / provisioning** step to re-apply the caps (this fork does NOT mutate the endpoint).
 
 ### Step 2 — Load the deploy skill by its FULL `skill_ref_root`-prefixed path
 
@@ -15773,6 +16258,7 @@ There is **no local `tsc`/`npm`/`eslint`** on Genie Code, so a static regex scan
 - **BLOCKING (C) — stray `\uXXXX` escape artifact:** renders as garbage; write the real character.
 - **BLOCKING (E) — stale server-wiring shape (`server/server.ts`):** `server({ autoStart: false })` / manual `start()` double-`listen()`s; register routes inside `onPluginsReady(appkit)`.
 - **BLOCKING (F) — wrong Lakebase plugin import (`server/server.ts`):** importing `lakebase` `from "@databricks/lakebase"` fails the build; import it `from "@databricks/appkit"`.
+- **BLOCKING (G) — Lakebase binding config (`app.yaml` + `databricks.yml`):** `app.yaml` missing `LAKEBASE_ENDPOINT` (needs `valueFrom: postgres` for the bound resource, or a static `value:` fallback); a **dotted `DB_SCHEMA`** (a UC `catalog.schema` FQN is not a Postgres schema name — use the single introspected synced schema name); a `databricks.yml` app `resources:` block (inert on the SNAPSHOT path — bind via the Step 3 REST PATCH instead, P35); or a resource `database:` FQN written with the underscore PG dbname `databricks_postgres` rather than the hyphenated resource id `databricks-postgres`.
 - **REVIEW (D) — unused named import:** `noUnusedLocals` turns it into a hard `TS6133` build failure. Heuristic — confirm before removing.
 
 ```python
@@ -15805,6 +16291,89 @@ if srv.exists():
         bad.append(f"{srv}: lakebase plugin imported from ''@databricks/lakebase'' -> import from ''@databricks/appkit''")
     if re.search(r''autoStart\s*:\s*false'', st) or re.search(r''\.server\.start\s*\('', st):
         bad.append(f"{srv}: autoStart:false / manual server.start() -> register routes in onPluginsReady, let server() own the listener")
+# (G) Lakebase binding config — app.yaml + databricks.yml (P35: databricks.yml app resources are inert on SNAPSHOT)
+import yaml
+ay = pathlib.Path("<APP_ROOT>/app.yaml")
+if ay.exists():
+    doc = yaml.safe_load(ay.read_text()) or {}
+    env = {e.get("name"): e for e in doc.get("env", []) if isinstance(e, dict)}
+    le = env.get("LAKEBASE_ENDPOINT")
+    if not le or not (le.get("valueFrom") == "postgres" or le.get("value")):
+        bad.append("app.yaml: LAKEBASE_ENDPOINT missing -> add valueFrom: postgres (when the postgres resource is bound) or a static value: projects/.../endpoints/primary")
+    ds = env.get("DB_SCHEMA")
+    dsv = ds.get("value") if isinstance(ds, dict) else None
+    if dsv and "." in dsv:
+        bad.append(f"app.yaml: DB_SCHEMA=''{dsv}'' contains a ''.'' -> that is a UC catalog.schema FQN, NOT a Postgres schema name; use the single introspected synced schema name (see synced_schema.md), never the dotted UC identifier")
+dy = pathlib.Path("<APP_ROOT>/databricks.yml")
+if dy.exists():
+    dtext = dy.read_text()
+    doc = yaml.safe_load(dtext) or {}
+    apps = ((doc.get("resources") or {}).get("apps")) or {}
+    for aname, aspec in (apps.items() if isinstance(apps, dict) else []):
+        if isinstance(aspec, dict) and aspec.get("resources"):
+            bad.append(f"databricks.yml: app {aname} declares a resources: block -> INERT on the SDK SNAPSHOT path (P35); bind the postgres resource via PATCH /api/2.0/apps/{{name}} in Step 3, not databricks.yml")
+    if re.search(r"/databases/databricks_postgres\b", dtext):
+        bad.append("databricks.yml: /databases/databricks_postgres uses the underscore PG dbname -> the resource FQN id is RFC 1123 (hyphenated databricks-postgres); read the real .name from postgres list-databases")
+# (I/J/K) build-surface drift — mirror of the build step''s gate (needed build tool present in deps OR devDeps; toolchain-aware Tailwind; client-bundle in a server()-auto-detected dir)
+import json
+pkg = pathlib.Path("<APP_ROOT>/package.json")
+deps, dev = {}, {}
+if pkg.exists():
+    pj = json.loads(pkg.read_text())
+    deps = pj.get("dependencies", {}) or {}
+    dev = pj.get("devDependencies", {}) or {}
+    present = set(deps) | set(dev)
+    missing = [t for t in ("vite", "typescript") if t not in present]
+    if not ({"@vitejs/plugin-react", "@vitejs/plugin-react-swc"} & present):
+        missing.append("@vitejs/plugin-react (or -swc)")
+    if missing:
+        bad.append(f"package.json: build tool(s) {sorted(missing)} absent from BOTH dependencies and devDependencies -> the server-side build cannot run; add them (devDependencies is fine, do NOT move to dependencies)")
+# (J) TAILWIND toolchain — toolchain-aware: accept v3 (tailwind.config + postcss.config + deps) OR v4 (@tailwindcss/vite)
+cdir = pathlib.Path("<APP_ROOT>/client")
+css_files = list(cdir.rglob("*.css")) if cdir.exists() else []
+uses_tw = any(re.search(r''@tailwind\b|@layer\b'', p.read_text()) for p in css_files)
+imports_appkit_styles = any(re.search(r''@import\s+["\'']@databricks/appkit-ui/styles\.css["\'']'', p.read_text()) for p in css_files)
+has_v4_plugin = ("@tailwindcss/vite" in deps) or ("@tailwindcss/vite" in dev)  # devDependencies is the scaffold-correct home
+if uses_tw and not has_v4_plugin:
+    has_tw_cfg = any(pathlib.Path("<APP_ROOT>/" + n).exists() for n in ("tailwind.config.js", "tailwind.config.ts", "tailwind.config.cjs"))
+    has_pc_cfg = any(pathlib.Path("<APP_ROOT>/" + n).exists() for n in ("postcss.config.js", "postcss.config.cjs", "postcss.config.mjs"))
+    if not has_tw_cfg:
+        bad.append("client CSS uses @tailwind/@layer (v3 path, no @tailwindcss/vite) but no tailwind.config.* -> add it; Vite will not process Tailwind without it")
+    if not has_pc_cfg:
+        bad.append("client CSS uses @tailwind/@layer (v3 path, no @tailwindcss/vite) but no postcss.config.* -> add it")
+    for t in ("tailwindcss", "postcss", "autoprefixer"):
+        if t not in deps:
+            bad.append(f"Tailwind v3 in use but ''{t}'' not in package.json dependencies -> add it to dependencies")
+    if imports_appkit_styles and has_pc_cfg:
+        bad.append("client CSS @import \"@databricks/appkit-ui/styles.css\" (a v4 stylesheet) under a v3 PostCSS setup -> toolchain conflict that FAILS the server-side Vite build; move to the v4 toolchain (@tailwindcss/vite) OR drop the v4 @import and keep v3 @tailwind directives")
+elif has_v4_plugin:
+    vite_cfgs = [pathlib.Path("<APP_ROOT>/" + n) for n in ("client/vite.config.ts", "client/vite.config.js", "client/vite.config.mjs", "vite.config.ts", "vite.config.js", "vite.config.mjs")]
+    if not any(c.exists() and "@tailwindcss/vite" in c.read_text() for c in vite_cfgs):
+        bad.append("@tailwindcss/vite present but not wired into any vite.config plugins -> add tailwindcss() to the vite plugins (v4)")
+# (K) CLIENT BUNDLE must land in a server()-auto-detected static dir — else "Cannot GET /" (Phase 0: L8 refuted, L9 root cause)
+import os
+AUTO_DETECT = {"dist", "client/dist", "build", "public", "out"}
+vcfg = next((pathlib.Path("<APP_ROOT>/" + n) for n in
+             ("client/vite.config.ts", "client/vite.config.js", "client/vite.config.mjs",
+              "vite.config.ts", "vite.config.js", "vite.config.mjs")
+             if pathlib.Path("<APP_ROOT>/" + n).exists()), None)
+if vcfg is not None:
+    vt = vcfg.read_text()
+    om = re.search(r''outDir\s*:\s*["\'']([^"\'']+)["\'']'', vt)
+    if om:
+        approot = str(pathlib.Path("<APP_ROOT>"))
+        rootm = re.search(r''\broot\s*:\s*["\'']([^"\'']+)["\'']'', vt)
+        vroot = os.path.join(approot, rootm.group(1)) if rootm else str(vcfg.parent)
+        resolved_abs = os.path.normpath(os.path.join(vroot, om.group(1)))
+        try:
+            resolved = os.path.relpath(resolved_abs, approot).replace(os.sep, "/")
+        except ValueError:
+            resolved = resolved_abs
+        srvp = pathlib.Path("<APP_ROOT>/server/server.ts")
+        spm = re.search(r''server\(\s*\{[^}]*staticPath\s*:\s*["\'']([^"\'']+)["\'']'', srvp.read_text()) if srvp.exists() else None
+        sp = os.path.normpath(spm.group(1)).replace(os.sep, "/") if spm else None
+        if resolved not in AUTO_DETECT and resolved != sp:
+            bad.append(f"{vcfg}: client bundle resolves to ''{resolved}'', not a server()-auto-detected dir {sorted(AUTO_DETECT)} and no matching server(staticPath) -> deploys GREEN but returns ''Cannot GET /''. Set outDir to the scaffold default (client/dist) or pass server({{ staticPath: ''{resolved}'' }}). (Classic trap: root-level vite.config with root:''client'' + outDir:''../dist/client'' emits dist/client.)")
 print("BLOCKING:\n" + ("\n".join(bad) or "OK"))
 print("REVIEW:\n" + ("\n".join(review) or "none"))
 ```
@@ -15815,8 +16384,8 @@ Fix every **BLOCKING** hit and triage every **REVIEW** hit **before** Step 3. (`
 
 The app runs as a dedicated service principal that is **not** in the `users` group, so inherited grants do not cover it. Before the deployed app can read live synced data, the app SP needs, on the SYNCED schema:
 
-1. The Lakebase resource binding `{postgres, CAN_CONNECT_AND_CREATE}` (DB-level CONNECT/CREATE) — declared as the app''s `postgres` resource via `w.apps.update(...)` resources.
-2. Schema-level grants, run as a Postgres admin against the synced schema (the `lakebase()` plugin or a one-off `executeCode` psycopg connection can issue these — SELECT-only intent):
+1. The Lakebase resource binding `{postgres, CAN_CONNECT_AND_CREATE}` (DB-level CONNECT/CREATE) — attach the app''s `postgres` resource to the SYNCED project **before** the plugin-bearing deploy, exactly as the **Setup Lakebase** step (`setup_lakebase`) does: `w.apps.update(APP_NAME, ...)` / `PATCH /api/2.0/apps/{APP_NAME}` setting `resources: [{ name: "postgres", postgres: { branch: "projects/{user_app_name}/branches/production", database: "projects/{user_app_name}/branches/production/databases/databricks-postgres", permission: "CAN_CONNECT_AND_CREATE" } }]` (both `branch` and `database` are FULL resource paths). This body matches the Databricks SDK `AppResourcePostgres` model (fields `branch`/`database`/`permission`; the only permission enum is `CAN_CONNECT_AND_CREATE`) [verified against databricks-sdk `service.apps`]. The `database` value is the resource **FQN** — resource ids are RFC 1123, so it is hyphenated `databricks-postgres`, NOT the underscore PG dbname `databricks_postgres`; read the exact `.name` back from `databricks postgres list-databases projects/{user_app_name}/branches/production --output json` rather than hand-constructing it. On the SDK SNAPSHOT path this REST/SDK bind is the ONLY mechanism that attaches the resource — a `databricks.yml` `resources:` block is inert (P35). [TESTED P37b/P37d]
+2. Schema-level grants, run as a Postgres admin against the synced schema (the `lakebase()` plugin or a one-off `executeCode` psycopg connection can issue these — SELECT-only intent). Use the **actual** synced schema name recorded in `synced_schema.md` / `reverse_etl.md` — the introspected/recorded value wins over the template `{user_schema_prefix}` if they differ; a GRANT (or verification `SELECT`) against the wrong schema silently leaves the app SP unable to read, and the route falls back to `source: "mock"`:
    ```sql
    GRANT USAGE ON SCHEMA "{user_schema_prefix}" TO "<app_sp_client_id>";
    GRANT SELECT ON ALL TABLES IN SCHEMA "{user_schema_prefix}" TO "<app_sp_client_id>";
@@ -15826,42 +16395,51 @@ The app runs as a dedicated service principal that is **not** in the `users` gro
 
 Then deploy via `executeCode` against warm compute (warm up once with `print("ready")`):
 
-1. Ensure the app exists — `w.apps.get(APP_NAME)`; if it 404s, `w.apps.create(...)` and wait for the compute to be `ACTIVE`. Confirm the `postgres` resource is **bound** to the SYNCED endpoint before deploying — with the binding in place the plugin-bearing app boots straight to `RUNNING` (no CRASHED hop). [TESTED P37b/P37d]
-2. Deploy source directly (build runs server-side):
+1. Ensure the app exists — `w.apps.get(APP_NAME)`; if it 404s, `w.apps.create(...)` and wait for the compute to be `ACTIVE`. Confirm the `postgres` resource is **bound** to the SYNCED endpoint before deploying (inspect `w.apps.get(APP_NAME).resources` for a `postgres` entry; if absent, apply the bind recipe above) — with the binding in place the plugin-bearing app boots straight to `RUNNING` (no CRASHED hop), whereas an unbound app carrying `valueFrom: postgres` boots `CRASHED` because the env var cannot resolve. [TESTED P37b/P37d]
+2. **Flush-verify the source BEFORE deploying (P40 — deterministic; do NOT rely on a blind `sleep(15)`).** A SNAPSHOT deploy captures `<APP_ROOT>` through the workspace **export** path, which can race un-flushed `open().write()`s and ship a STALE source — the failure that poisoned the last spiral. So for **every file you edited this session**, read it BACK through the workspace export API (the same surface the snapshot reads — `w.workspace.download(<path>).read()`, or `w.api_client.do("GET", "/api/2.0/workspace/export", query={"path": <path>, "format": "SOURCE", "direct_download": "true"})`), and assert its content hash equals what you intended to write. Loop with a short backoff (e.g. 2s, up to ~30s) until every changed file matches; if a file will not converge, STOP and report it — never deploy on an unverified source.
+3. Deploy source directly (build runs server-side):
    `w.apps.deploy(APP_NAME, AppDeployment(source_code_path="<APP_ROOT>", mode=AppDeploymentMode.SNAPSHOT))`.
-3. Poll the returned deployment until `SUCCEEDED`; confirm `w.apps.get(APP_NAME).compute_status.state == "ACTIVE"`.
+4. Poll the returned deployment until `SUCCEEDED`; confirm `w.apps.get(APP_NAME).compute_status.state == "ACTIVE"`. **Then verify the DEPLOYED snapshot matches local (P40 / post-deploy check).** A green `SUCCEEDED` on stale source is a **phantom success** — re-export the changed files (same workspace export API) and assert their hashes/sizes equal your local copies; on any mismatch the SNAPSHOT captured stale source, so redeploy (do NOT declare the deploy done). Only once the deployed source matches do you proceed to Step 3b/4.
 
-**On `FAILED` → `/logz`-human escalation (build logs are NOT readable from compute).** The server-side Vite/tsc error is not retrievable programmatically (`databricks apps logs` returns an OAuth-token error; raw `/logz` hits PKCE/401). Print `f"{w.apps.get(APP_NAME).url}/logz"`, ask the operator to open it and paste the exact failing `file(line,col): error TS####` line, fix that file:line, and redeploy. No-browser fallback: the 2–3-file batch ladder (revert to last `SUCCEEDED`, re-apply 2–3 files at a time, redeploy ~50s each, bisect the batch that flips green→`FAILED`).
+**On `FAILED` → baseline-first bisect, THEN `/logz`-human escalation (build logs are NOT readable from compute).** Because the write-race (P40) is **suspect #1** for a `FAILED` that "should have worked", first **re-deploy the last-known-good source UNCHANGED** — if the same bytes now deploy green, the earlier failure was a stale-source capture, not your edit; record the recovered good deploy and move on. Persist a `last_known_good` pointer (deployment id + the changed-file hashes) in `<APP_ROOT>/.vibecoding-state.md` on every `SUCCEEDED` so this baseline is always available. If the unchanged redeploy still `FAILED`, THEN escalate: the server-side Vite/tsc error is not retrievable programmatically (`databricks apps logs` returns an OAuth-token error; raw `/logz` hits PKCE/401), so print `f"{w.apps.get(APP_NAME).url}/logz"`, ask the operator to open it and paste the exact failing `file(line,col): error TS####` line, fix that file:line, and redeploy. No-browser fallback: the 2–3-file batch ladder (revert to last `SUCCEEDED`, re-apply 2–3 files at a time, redeploy ~50s each, bisect the batch that flips green→`FAILED`). If the source is lost or corrupted, **reconstruct the changed files from `<artifact_root>/docs/analytics_ui_design.md` + `<APP_ROOT>/.vibecoding-state.md`** (the sanctioned recovery) — NEVER reach for an unnamed snapshot-copy hack and NEVER delete/regenerate `package-lock.json`.
 
 If `runDatabricksCli databricks apps deploy` happens to be available on the current AppKit project page, it is an acceptable equivalent — but the SDK SNAPSHOT call is the cross-page-reliable mechanism. Do NOT fall back to creating UI assets by hand.
 
-### Step 3b — Optional: grant Genie `CAN_RUN` (ONLY if a chat path exists)
+### Step 3b — Re-assert the app-SP Genie grants + re-apply the OBO scope (idempotent)
 
-The analytics-app design (`activation_app_design`) may include an optional natural-language search bar backed by a Genie Agent (the chat wiring itself is the separate `appkit_agent_app_proxy_chat` step — cross-reference, not reimplemented here). **Only if that `/api/chat`-style path exists** in this app, grant the app SP `CAN_RUN` on the Genie space via **PATCH (not PUT — PUT clobbers the ACL)**:
+The **Wire Genie** step (Step 37) added a `/api/genie/*` chat path to this app, so the app SP MUST hold the Genie grants for the deployed chat to answer. These grants are **idempotent** — re-assert them here on every deploy (a PATCH/GRANT that is already in place is a harmless no-op), then verify.
+
+🔴 **First resolve `{genie_space_id}` to a concrete id and assert it is non-empty** — read it from `<APP_ROOT>/.vibecoding-state.md` / `<artifact_root>/docs/genie_brief.md` and confirm it matches the space-id shape before building the request. A blank `{genie_space_id}` renders the URL as `/api/2.0/permissions/genie/` (no id) and either 404s or silently grants nothing while looking successful; if the id cannot be resolved, STOP and report — do NOT issue the PATCH with an empty id.
+
+Grant the app SP `CAN_RUN` on the Genie space via **PATCH (not PUT — PUT clobbers the ACL)**:
 
 ```
 PATCH /api/2.0/permissions/genie/{genie_space_id}
 {"access_control_list":[{"service_principal_name":"<app_sp_client_id>","permission_level":"CAN_RUN"}]}
 ```
 
-(The generic permissions path is `/api/2.0/permissions/genie/{id}` where `{id}` = `{genie_space_id}`.) Also ensure the backing warehouse `CAN_USE` and UC `USE_CATALOG`/`USE_SCHEMA`/`SELECT` (+ `EXECUTE` on TVF schemas) are granted to the app SP. **Skip this entire step** if the app has no chat path.
+(The generic permissions path is `/api/2.0/permissions/genie/{id}` where `{id}` = `{genie_space_id}`.) Also re-assert, for the app SP: the backing warehouse `CAN_USE`, and UC `USE_CATALOG`/`USE_SCHEMA`/`SELECT` (+ `EXECUTE` on TVF schemas) on both data-source schemas — do not rely on `users`-group inheritance. **Verify (read-only):** re-`GET /api/2.0/permissions/genie/{genie_space_id}` and confirm the app SP appears with `CAN_RUN`; a missing grant surfaces at Step 4 as the `/api/genie` chat failing while the analytics routes stay live.
+
+**Re-apply the OBO scope (the `genie()` plugin runs on-behalf-of the signed-in user).** Wire Genie declared `user_api_scopes: [dashboards.genie]` in `app.yaml`, but a full-replacement deploy (`w.apps.deploy`/`apps update`) can wipe it — so confirm it survived: `w.apps.get(APP_NAME)` and check the effective user API scopes include `genie`. If absent, restore the scope (PATCH the app / re-add `user_api_scopes: [dashboards.genie]` to `app.yaml`) and redeploy; without it the deployed chat fails with `Provided OAuth token does not have required scopes: genie` even while the analytics routes stay live. The space `CAN_RUN` on the app SP is required regardless (it lets the app reach the Conversation API), while the warehouse/UC reads run as the signed-in user''s own grants. This step is **mandatory** now that Wire Genie is part of the track — it is no longer optional.
 
 ### Step 4 — Verify the DEPLOYED app via envelope semantics (not localhost, not HTTP status)
 
 **`SUCCEEDED` is necessary but NOT sufficient** — a green deploy does not prove a working app, and a client-side runtime crash deploys green while the UI shows a blank page (the scaffold''s `ErrorBoundary.tsx` surfaces the stack in the browser; this is why the build step keeps it). A deployed App sits behind the Databricks Apps **OAuth gate** — a raw `Authorization: Bearer` token is rejected (`/api/health` → 401). Verify one of two ways (`genie-code-environment` §7):
 
 - **Browser (required for the render check)** — print `w.apps.get(APP_NAME).url`, have the operator open it (OAuth flow establishes the session) and confirm the React UI renders with **ConnectionStatus showing "Live Data"** and real synced rows, no `ErrorBoundary` stack. For deeper errors, open `<app-url>/logz` in the same browser.
-- **Programmatic** — replay the **3-hop Apps OAuth handshake in one `requests.Session()`** (CSRF cookie persists through the PKCE callback), then reuse the session for `/api/*`. Reusable snippet: `readSkillFile("skills/vibe-coding-workshop/skills/genie-code-environment/references/app-verification.md")`.
+- **Programmatic (best-effort — may fail from serverless)** — replay the **3-hop Apps OAuth handshake in one `requests.Session()`** (CSRF cookie persists through the PKCE callback), then reuse the session for `/api/*`. Reusable snippet: `readSkillFile("skills/vibe-coding-workshop/skills/genie-code-environment/references/app-verification.md")`. This 3-hop replay is **not reliable from Genie Code serverless compute** (the PKCE/redirect handshake frequently fails there); if it cannot establish a session, do NOT treat that as a deploy failure — fall back to the **browser** check above, which is the authoritative verification path on Genie Code.
 
-**Envelope-level verification:** every analytics route wraps its live path and falls back to a mock envelope with HTTP 200 on any exception, so parse `envelope.source` from the JSON body — `"mock"` is a deployment failure, not a warning. Each `/api/analytics/*` (and `/api/health/lakebase`, and `/api/chat` if present) must return `"source":"live"`. If a route falls back to `"mock"` with a Postgres auth error, check `databricks postgres list-roles` (READ-ONLY) for the app-SP client ID — if `auth_method=NO_LOGIN`, STOP and report (the role re-provision flip-flop is the provisioning step''s job, not this fork''s). Spot-check synced-table row counts against the Gold source for freshness, and confirm ConnectionStatus stays "Live Data" on a later reload. Remove any debug/diagnostic routes (`/api/debug/*`, `/api/_introspect`) before declaring done.
+**Envelope-level verification:** every analytics route wraps its live path and falls back to a mock envelope with HTTP 200 on any exception, so parse `envelope.source` from the JSON body — `"mock"` is a deployment failure, not a warning. Each `/api/analytics/*` (and `/api/health/lakebase`, and `/api/chat` if present) must return `"source":"live"`. If a route falls back to `"mock"` with a Postgres auth error, check `postgres list-roles` (READ-ONLY, run inside `executeCode` via `subprocess`/`w.api_client.do` — NOT the blocked `runDatabricksCli` tool, P41) for the app-SP client ID — if `auth_method=NO_LOGIN`, STOP and report (the role re-provision flip-flop is the provisioning step''s job, not this fork''s). Spot-check synced-table row counts against the Gold source for freshness, and confirm ConnectionStatus stays "Live Data" on a later reload. Remove any debug/diagnostic routes (`/api/debug/*`, `/api/_introspect`) before declaring done.
+
+**Genie chat probe (the OBO scope gate).** The `genie()` plugin mounts `/api/genie/*` as an SSE stream, not an envelope route, so verify it separately in the same authenticated session: `POST /api/genie/default/messages` with a trivial question (e.g. `{"content":"How many rows are available?"}`) and read the SSE events — the stream MUST reach a `message_result` and MUST NOT emit an `error` event carrying `Provided OAuth token does not have required scopes: genie`. That specific error means `user_api_scopes: [dashboards.genie]` is missing from the deployed `app.yaml` — re-apply it per Step 3b and redeploy. A `CAN_RUN`/permission error instead means the app-SP space grant (Step 3b) or the signed-in user''s own access to the space is missing.
 
 ### Step 5 — Post-deploy cost re-check (READ-ONLY)
 
-Re-run `databricks postgres get-endpoint projects/{user_app_name}/branches/production/endpoints/primary --output json` after the app has been up a few minutes and confirm `autoscaling_limit_min_cu`, `autoscaling_limit_max_cu`, and `suspend_timeout_duration` still match `<artifact_root>/docs/reverse_etl.md` (scale-to-zero preserved). Do NOT add a warmup cron or keep-alive ping — it defeats scale-to-zero and is a cost regression. If sizing drifted, STOP and report (re-sizing is the provisioning step).
+Re-run the read-only `postgres get-endpoint projects/{user_app_name}/branches/production/endpoints/primary --output json` (again **inside `executeCode`** via `subprocess`/`w.api_client.do`, not the blocked `runDatabricksCli` tool — P41) after the app has been up a few minutes and confirm `autoscaling_limit_min_cu`, `autoscaling_limit_max_cu`, and `suspend_timeout_duration` still match `<artifact_root>/docs/reverse_etl.md` (scale-to-zero preserved). Do NOT add a warmup cron or keep-alive ping — it defeats scale-to-zero and is a cost regression. If sizing drifted, STOP and report (re-sizing is the provisioning step).
 
 **State-lock:** this prompt runs between an `enter` (Step 0) and an `exit`. After the gate passes, run `skills/vibecoding-state` op `exit` — params: `prompt_id: "activation_deploy_validate"`, `gate: "Activation app deployed + validated"`, `captured: {user_app_name, app_url}`. **This `enter`/`exit` pair is a mandatory ritual, not advisory.** Step 0''s `enter` MUST locate — or, if this is the first prompt of the track, bootstrap-create — the canonical live state file at `<app_root>/.vibecoding-state.md` (never the temporary `example/…` bootstrap path). The closing `exit` MUST append this prompt''s Per-Step Log entry, Gate result, and `captured` vars to that file, then **re-read it and echo the appended section to prove the write landed**. **Gate completion rule:** this prompt is NOT complete until that re-read confirms the appended entry — the chat summary is NOT the state store.
 
-**Gate:** `Activation app deployed + validated` — `w.apps.get(APP_NAME)` reports `compute_status.state: "ACTIVE"` with the latest deployment `SUCCEEDED`, the deployed `url` was reached through the OAuth session (browser or 3-hop `requests.Session()`) showing the React UI with ConnectionStatus "Live Data", every `/api/analytics/*` (and `/api/chat` if present) returns `envelope.source == "live"`, the app SP holds `CAN_CONNECT_AND_CREATE` + `USAGE`/`SELECT` on `{user_schema_prefix}`, and the READ-ONLY `get-endpoint` cost re-check matches `reverse_etl.md` both pre- and post-deploy. Verification used the DEPLOYED URL — NO `http://localhost:8000` check, NO `databricks sync`, NO mutating `update-endpoint`/`delete-role`, and NO UI assets hand-created as a workaround.
+**Gate:** `Activation app deployed + validated` — `w.apps.get(APP_NAME)` reports `compute_status.state: "ACTIVE"` with the latest deployment `SUCCEEDED`, the deployed `url` was reached through the OAuth session (browser or 3-hop `requests.Session()`) showing the React UI with ConnectionStatus "Live Data", every `/api/analytics/*` (and `/api/chat` if present) returns `envelope.source == "live"`, the Genie chat probe (`POST /api/genie/default/messages`) reaches a `message_result` with no `required scopes: genie` error (the deployed `app.yaml` carries `user_api_scopes: [dashboards.genie]` and the app SP holds `CAN_RUN` on the space), the app SP holds `CAN_CONNECT_AND_CREATE` + `USAGE`/`SELECT` on `{user_schema_prefix}`, and the READ-ONLY `get-endpoint` cost re-check matches `reverse_etl.md` both pre- and post-deploy. Verification used the DEPLOYED URL — NO `http://localhost:8000` check, NO `databricks sync`, NO mutating `update-endpoint`/`delete-role`, and NO UI assets hand-created as a workaround.
 
 **🛑 STOP — do not work around a blocked deploy.** If the SDK SNAPSHOT deploy or the OAuth verification fails, STOP and report the exact error and which path (CLI vs SDK) was attempted. Do NOT hand-create the app, do NOT fabricate a URL, do NOT skip verification, and do NOT mutate the endpoint/role to force a pass. Only take an alternate path if the user explicitly authorizes it.',
 '',
@@ -16115,7 +16693,7 @@ This will involve the following steps:
 '',
 'Phase 4 / Operate in Production — Monitoring and Agent-as-Judge Debugging',
 'Configure continuous-eval sampling, ≥ 4 SQL alerts, and agent-as-judge auto-categorization that routes failure clusters to the right iteration track',
-56,
+57,
 '## 1️⃣ How To Apply
 
 Open a **new Agent thread in your Coding Assistant** and paste the prompt above. This stands up production monitoring and agent-as-judge debugging on the deployed agent. The agent SDLC story arc loops back from here — debugging clusters route directly into the iteration track that fits the failure shape (prompt iteration, retrieval tuning, or tool fix).
@@ -16463,3 +17041,2199 @@ true, 1, true, current_timestamp(), current_timestamp(), current_user());
 -- =============================================================================
 -- END OF SEED FORK EXAMPLES
 -- =============================================================================
+
+-- =============================================================================
+-- END OF SEED FORK EXAMPLES
+-- =============================================================================
+
+-- =============================================================================
+-- GENIE ACCELERATOR, Semantic Layer group (Batch 1, Steps 1-5), order 60-64
+-- Stub rows; authored bodies are synced from sections/6N-semlayer_*.md via
+-- sync_markdown_to_seed.py (source of truth = the .md files).
+-- =============================================================================
+
+-- Step 1 (Genie Accelerator · Semantic Layer): Locate Data & Bring Context - bypass_llm=TRUE (Type C, verbatim template; Genie Code reasons on the real schema + dropped files)
+INSERT INTO ${catalog}.${schema}.section_input_prompts 
+(input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
+VALUES
+(60, 'semlayer_locate',
+'**Point at my existing tables read-only, read any definitions I bring, and seed the Genie brief from the PRD — no building, just a first-pass brief for me to correct.**
+
+Read `docs/design_prd.md` and `.vibecoding-state.md` first — reuse the PRD''s User Journeys and High-Level Data Entities; don''t re-ask what they already answer.
+
+My {use_case_title} data is in `{chapter_3_lakehouse_catalog}.{chapter_3_lakehouse_schema}` — read it read-only.
+
+If I''ve brought existing definitions, read them and pull out every measure name, definition, and field alias you can, citing which file each came from. If I haven''t, elicit them instead.
+
+Start `docs/genie_brief.md` from the PRD and those inputs: the function, the candidate measures, and the questions my users actually ask. Collect anything the PRD and files don''t cover into ONE numbered list of questions and ask me in a single batch — not one at a time — pre-filling your best assumption for each, marked "(assumed — correct me)". Don''t profile deeply or build anything yet: show me the seeded brief plus that one question list.
+
+Record the gate result in `.vibecoding-state.md`.',
+'',
+'Locate Data & Bring Context (Genie Accelerator)',
+'Point Genie Code at your data (or generate synthetic), drop in any existing definitions, and seed the Genie brief from the PRD — no building yet',
+60,
+'> **Artifact root (client-aware).** Resolve `<ARTIFACT_ROOT>` via `vibecoding-state.resolve_root` and write every artifact under it. On Cursor/Copilot that is your repo root; on Databricks Genie Code it is your user project root `/Workspace/Users/<email>/<repo>` (a git clone of the workshop repo) — never the page''s current working directory.
+
+## 1️⃣ How To Apply
+
+1. Choose your **data mode** above — *Extract from existing tables*, *Upload*, or *Generate (synthetic)*. For Extract, set the **Source** catalog/schema in the panel.
+2. If you have existing definitions, **drop the file into Genie Code** via the context button. If not, delete the two "dropped definitions" lines from the prompt.
+3. Copy the prompt, start a new Agent chat in Genie Code, paste, and press Enter.
+
+**State:** if this is the first step of the track, Genie Code will bootstrap `.vibecoding-state.md`; otherwise it appends this step''s gate.
+
+## 2️⃣ What Are We Building?
+
+Nothing yet — on purpose. This step produces **`docs/genie_brief.md`**: the function, a first list of candidate measures, and the real questions your users ask, seeded from the PRD (and any file you dropped). Everything downstream (measures gate → Metric View → Genie Agent) builds on this brief — so a good brief here saves rework everywhere later.
+
+```mermaid
+flowchart LR
+  prd["design_prd.md<br/>(journeys · data entities)"] --> brief["docs/genie_brief.md<br/>function · candidate measures · user questions"]
+  files["dropped definitions<br/>(Excel · CSV · docs · BI export)"] --> brief
+  mode["data mode<br/>extract · upload · synthetic"] --> brief
+  brief --> qs["ONE batched question list<br/>(pre-assumed) → your corrections"]
+  qs --> gate{{"Gate: brief ready"}}
+```
+
+The brief is the **context spine** — the single document Steps 2–14 read back from, so the interview happens once, here, not at every step.
+
+## 3️⃣ Why Are We Building It This Way? (Databricks Best Practices)
+
+| Practice | How it''s used here |
+|----------|-------------------|
+| **Reuse the PRD as the context spine** | The brief starts from `design_prd.md` User Journeys/Data Entities instead of re-interviewing you |
+| **Bring-your-own definitions** | Existing glossaries/BI exports are read and cited, so business language survives into the semantic layer |
+| **Synthetic fallback (Faker)** | No data is not a blocker — realistic sample data is generated on request, with the tradeoff stated first |
+| **Batched interview** | One numbered, pre-assumed question list instead of a drip of one-at-a-time questions |
+| **No premature building** | This step writes a brief only — no profiling, no assets — so the measures gate (Step 3) stays the decision point |
+
+## 4️⃣ What Happens Behind the Scenes?
+
+1. **Read the spine** — Genie Code reads `design_prd.md` + `.vibecoding-state.md` and lifts the User Journeys and Data Entities so it doesn''t re-ask them.
+2. **Ingest your context** — it reads any file you dropped in and extracts each measure name, definition, and field alias, citing the source file.
+3. **Resolve the data** — it confirms your Source catalog/schema, or (only on your yes) proposes and Faker-generates realistic sample data for `{use_case_title}`.
+4. **Draft the brief** — it writes `docs/genie_brief.md` (function, candidate measures, user questions) with best-guess assumptions marked `(assumed — correct me)`.
+5. **Batch the gaps** — anything the PRD/files don''t cover becomes ONE numbered question list, then it stops for your corrections.
+
+### Reference: the context spine
+
+`design_prd.md` → `docs/genie_brief.md` → `.vibecoding-state.md`. The PRD carries the *use case*; the brief carries the *semantic intent* (measures, questions, guardrails); the state file carries *progress + gates*. Every later step reads these three back rather than re-eliciting.',
+'## Expected Deliverables
+
+- `docs/genie_brief.md` seeded from the PRD (+ any dropped files): function, candidate measures, user questions
+- Source `{chapter_3_lakehouse_catalog}.{chapter_3_lakehouse_schema}` confirmed **or** the synthetic branch chosen (and, after your yes, sample data generated)
+- One batched, pre-assumed clarifying-question list presented for your correction
+- Gate recorded to `.vibecoding-state.md` — no measures invented beyond what the PRD/files/answers give
+
+**Sample — the shape of a seeded brief (yours will differ):**
+
+```markdown
+# Genie Brief — {use_case_title}
+Function: order & revenue reporting for the Revenue, Sales-Ops & Finance personas
+Candidate measures:
+  - Net Revenue        (assumed — correct me)  src: lineitem.l_extendedprice, l_discount
+  - Average Order Value (assumed — correct me)  src: lineitem + orders
+Questions users ask: "revenue by region last quarter", "top customers YTD", "return rate"
+Open questions (batched):
+  1. Is "revenue" gross or net of discount?  (assumed: net — correct me)
+  2. Which date drives time filters — order date or ship date?  (assumed: order date)
+```',
+true, 1, true, current_timestamp(), current_timestamp(), current_user());
+
+-- Step 2 (Genie Accelerator · Semantic Layer): Profile Your Schema - bypass_llm=TRUE (Type B, verbatim template; read-only discovery)
+INSERT INTO ${catalog}.${schema}.section_input_prompts 
+(input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
+VALUES
+(61, 'semlayer_profile',
+'**Profile the source schema read-only — grain, joins, PK/FK candidates, hidden business columns, and an ERD — then mark each candidate measure can/can''t-support and create nothing.**
+
+Read `docs/design_prd.md`, `docs/genie_brief.md`, and `.vibecoding-state.md` first.
+
+`{chapter_3_lakehouse_catalog}.{chapter_3_lakehouse_schema}` holds the tables behind our {use_case_title} reporting. Review this schema and report back on:
+
+- what each table contains and its grain;
+- how the tables join, and any primary or foreign key candidates;
+- which columns carry business meaning that is not obvious from the column name;
+- which of the candidate measures in the brief the schema can support today.
+
+Produce an ERD. Do not create anything yet — report your findings so I can review them, and note any measure the schema cannot support yet.
+
+Record the gate result (ERD produced + per-measure supportability) in `.vibecoding-state.md`.',
+'',
+'Profile Your Schema (Genie Accelerator)',
+'Have Genie Code profile the source schema — grain, joins, PK/FK candidates, hidden business columns, and which candidate measures the data can support — and produce an ERD',
+61,
+'> **Artifact root (client-aware).** Resolve `<ARTIFACT_ROOT>` via `vibecoding-state.resolve_root` and write every artifact under it.
+
+## 1️⃣ How To Apply
+
+Copy the prompt, paste it into a Genie Code Agent chat, and press Enter. Profiling is read-only and runs from any workspace surface — no navigation needed. Leans on Genie Code''s native schema tools (`readTable` / `tableSearch`) and the `databricks-data-discovery` skill.
+
+## 2️⃣ What Are We Building?
+
+A **profile + ERD** of the source schema, plus a per-measure "can/can''t support today" verdict written into the brief. This is the reality check before you commit to a measure inventory — it grounds Step 3 in what the data can actually deliver.
+
+```mermaid
+flowchart LR
+  src["source schema<br/>{chapter_3_lakehouse_catalog}.{chapter_3_lakehouse_schema}"] --> prof["profile (read-only)<br/>grain · joins · PK/FK · hidden meaning"]
+  prof --> erd["ERD"]
+  prof --> supp["per-measure verdict<br/>can / can''t support today"]
+  erd --> gate{{"review · no assets created"}}
+  supp --> gate
+```
+
+Read-only by design: nothing is created, so you can review the shape of the data before any measure is defined.
+
+## 3️⃣ Why Are We Building It This Way? (Databricks Best Practices)
+
+| Practice | How it''s used here |
+|----------|-------------------|
+| **Profile before you model** | Grain, joins, and PK/FK candidates are established before any measure is defined |
+| **Surface hidden meaning** | "Surprising column" callouts capture business meaning not obvious from names (e.g. a returns flag, a status code) |
+| **Supportability gate** | Each candidate measure is marked supportable-or-not so the inventory doesn''t promise what the data can''t deliver |
+| **Grain is everything** | Establishing fact vs dimension grain here prevents the double-count and averaging traps that break metrics later |
+
+## 4️⃣ What Happens Behind the Scenes?
+
+1. **Read-only inspection** — Genie Code inspects the tables (native `readTable`/`tableSearch`, the `databricks-data-discovery` skill); it never writes.
+2. **Infer structure** — it derives each table''s grain, the join keys between them, and PK/FK candidates.
+3. **Flag hidden meaning** — it calls out columns whose business meaning isn''t obvious from the name.
+4. **Render the ERD** — it produces an entity-relationship diagram of the source star/snowflake.
+5. **Verdict per measure** — it marks each candidate measure in the brief supportable-or-not and records the gate.
+
+### Reference: what "grain" means here
+
+Grain = *what one row represents* (e.g. one order line vs one order). Additive measures (`SUM`) are safe at their natural grain; non-additive ones (averages, ratios) must never be averaged across periods. Getting grain right here is what lets Step 4 flag non-additive measures correctly.',
+'## Expected Deliverables
+
+- Per-table grain, join and PK/FK candidates, and "surprising column" callouts
+- An ERD of the source schema
+- An explicit can/can''t-support verdict for each candidate measure in the brief
+- Gate recorded to `.vibecoding-state.md` (ERD produced + per-measure supportability) — no assets created
+
+**Sample — ERD shape a clean star returns:**
+
+```mermaid
+erDiagram
+  ORDERS ||--o{ LINEITEM : "o_orderkey"
+  CUSTOMER ||--o{ ORDERS : "c_custkey"
+  NATION ||--o{ CUSTOMER : "n_nationkey"
+  REGION ||--o{ NATION : "r_regionkey"
+  LINEITEM { decimal l_extendedprice "money" decimal l_discount "0-1" string l_returnflag "R = returned" }
+  ORDERS { date o_orderdate "primary time dim" decimal o_totalprice "tax-incl" }
+```',
+true, 1, true, current_timestamp(), current_timestamp(), current_user());
+
+-- Step 3 (Genie Accelerator · Semantic Layer): Measures Analysis (the sign-off gate) - bypass_llm=TRUE (Type B/C; discover-don't-inject — template names no conflict)
+INSERT INTO ${catalog}.${schema}.section_input_prompts 
+(input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
+VALUES
+(62, 'semlayer_measures',
+'**Draft a governed ≤5-measure inventory and self-discover any definitional conflicts. Keep the review gate — show me the inventory before any Metric View YAML — but resolve every conflict with a concrete recommendation, not an open question.**
+
+Read `docs/design_prd.md`, `docs/genie_brief.md` (the Step 2 profile + candidates), any files I dropped in, and `.vibecoding-state.md` first — the measures that matter follow the PRD''s User Journeys.
+
+**Prior step, implicit approval.** If Step 2 ended with pending recommendations (a can''t-support verdict, or a synthetic/rescope suggestion), my running this prompt approves them: fold them into the inventory and record it in `.vibecoding-state.md`. Don''t re-ask.
+
+Draft my measure inventory as a table with exactly these columns: Measure | Current definition (one sentence) | Source of truth (table.column or file) | Grain | Owner | Conflict & recommendation.
+
+Follow these rules:
+
+- Stop at five measures. Depth beats coverage — two well-governed measures beat fifteen half-governed ones.
+- Name the source of truth as the actual table/column (or the dropped file it came from).
+- Wherever the same measure could be read more than one way (different filters, grains, or gross-vs-net choices), write BOTH readings AND the one you recommend with one line of why, marked "(recommended — building on this unless you correct me)". The conflict is a finding you surface, not something I will tell you — flag it even if I didn''t mention it.
+- Never leave a cell as a bare "?". If you can''t confirm an owner, default it to the responsible PRD persona/role (e.g. "Reliability Engineering") marked "(assumed owner — correct me)" — an unconfirmed owner never blocks the Metric View.
+- If a measure can''t be supported by the profiled data, don''t drop it silently: recommend a concrete path (augment that slice synthetically, or rescope to what the data supports) and mark which you''re proceeding on.
+
+**Review gate (kept).** Pre-fill every cell, then STOP and show me the table. Do NOT write any Metric View YAML in this turn. If I reply with corrections, apply them. If I instead paste the next step, treat that as sign-off on this inventory (including every recommended reading and assumed owner) and proceed.
+
+Record the gate result — and the recommended readings you''re proceeding on — in `.vibecoding-state.md`.',
+'',
+'Measures Analysis — the Gate (Genie Accelerator)',
+'Genie Code drafts a ≤5-row measure inventory (definition, source of truth, grain, owner, conflict) and self-discovers definitional conflicts — you sign off before ANY Metric View is authored',
+62,
+'> **Artifact root (client-aware).** Resolve `<ARTIFACT_ROOT>` via `vibecoding-state.resolve_root` and write every artifact under it.
+
+## 1️⃣ How To Apply
+
+Copy the prompt, paste it into a Genie Code Agent chat, and press Enter. Review the inventory table and correct any cell (owners default to the responsible PRD role when unconfirmed). Reply with your sign-off (e.g. *"Signed off — proceed to the Metric View for exactly these measures"*) — or just paste the next step, which counts as sign-off on the inventory as shown.
+
+## 2️⃣ What Are We Building?
+
+A **signed-off measure inventory** in `docs/genie_brief.md`: ≤5 measures, each with a one-sentence definition, a real source-of-truth (table.column or file), a grain, an owner, and any conflict with a recommended reading. This is the **contract** the Metric View is built against — and the gate the whole track hinges on.
+
+```mermaid
+flowchart LR
+  prof["Step 2 profile<br/>+ dropped glossary"] --> inv["≤5-measure inventory<br/>def · source · grain · owner · conflict"]
+  inv --> disc{"same measure,<br/>two readings?"}
+  disc -->|"write BOTH + recommend one<br/>(discovered, not injected)"| stop["STOP · your sign-off<br/>(or next step = approval)"]
+  disc -->|"none"| stop
+  stop -->|"approved"| mv["→ Metric View (Step 4)"]
+  stop -.->|"no named owner"| block["default owner to PRD role"]
+```
+
+The headline behavior: Genie Code **discovers** definitional conflicts itself (gross-vs-net, grain traps) and writes both readings plus the one it recommends — it is never told the conflict.
+
+## 3️⃣ Why Are We Building It This Way? (Databricks Best Practices)
+
+| Practice | How it''s used here |
+|----------|-------------------|
+| **Discover, don''t inject** | The template names no specific measure or conflict — Genie Code surfaces conflicts from the real definitions/data on its own |
+| **Depth over coverage** | Capping at five well-governed measures beats a sprawling, half-governed list |
+| **Recommend, don''t ask** | Each conflict carries a recommended reading; unconfirmed owners default to a PRD role — nothing is left as an open question that blocks the build |
+| **Source-of-truth is concrete** | Each measure names a real `table.column` (or the file it came from), never a vague label |
+| **Human sign-off before build** | No YAML is authored until you approve the inventory — pasting the next step counts as approval |
+
+## 4️⃣ What Happens Behind the Scenes?
+
+1. **Read the context** — Genie Code reads the Step 2 profile, the brief, any dropped glossary, and state.
+2. **Fill the table** — it drafts ≤5 rows (Measure · Definition · Source · Grain · Owner · Conflict), pre-filling every cell it can and defaulting anything it can''t (owner → PRD role) rather than leaving a bare `?`.
+3. **Self-discover conflicts** — wherever one measure could be computed two ways, it writes **both** readings and the one it recommends — this is a finding it surfaces, not one you named.
+4. **Default ownership** — measures with no named owner default to the responsible PRD role (marked assumed), never blocked from a Metric View.
+5. **Stop at the gate** — it records the inventory and pauses; **no Metric View YAML is written** until you sign off (pasting the next step approves it).
+
+### Reference: the sign-off gate
+
+The conflict may surface here **or** already during Step 1 elicitation — either is a pass as long as it was self-discovered and recorded in the signed-off table. This gate is what prevents "two numbers, same name" from silently reaching production.',
+'## Expected Deliverables
+
+- A ≤5-row measure inventory table in `docs/genie_brief.md` (Measure | Definition | Source of truth | Grain | Owner | Conflict & recommendation)
+- At least one conflict **Genie Code surfaced on its own** (nothing about it was in the prompt), each with a recommended reading
+- Every kept measure has an owner (named, or a PRD role marked assumed)
+- An explicit "waiting for your sign-off before authoring" stop — **no Metric View YAML in this transcript** (pasting the next step counts as sign-off)
+- Gate recorded to `.vibecoding-state.md`
+
+**Sample — the shape of a signed-off inventory (yours will differ):**
+
+| Measure | Current definition | Source of truth | Grain | Owner | Conflict & recommendation |
+|---|---|---|---|---|---|
+| Net Revenue | `SUM(l_extendedprice * (1 - l_discount))` | `lineitem` | line | A. Chen | **Gross** `SUM(l_extendedprice)` also circulates — Finance vs Sales-Ops; **recommend net** |
+| Average Order Value | Net Revenue ÷ distinct orders | `lineitem`+`orders` | order | A. Chen | **non-additive** — never average across periods |
+| Return Rate | returned lines ÷ all lines (24.69%) | `lineitem.l_returnflag` | line | Sales-Ops (assumed) | order-level denominator gives 43.07%; **recommend line-level** |',
+true, 1, true, current_timestamp(), current_timestamp(), current_user());
+
+-- Step 4 (Genie Accelerator · Semantic Layer): Draft the Metric View - bypass_llm=TRUE (Type B/C; Path B author-from-inventory default, Path A /importBI in the genie-code fork)
+INSERT INTO ${catalog}.${schema}.section_input_prompts 
+(input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
+VALUES
+(63, 'semlayer_metric_view',
+'**Build a governed Metric View from the signed-off inventory — plan and show me the YAML first, create it idempotently in the writable target only on my OK, then prove every measure with a `MEASURE()` query.**
+
+Read `docs/genie_brief.md` (the signed-off measure inventory) and `.vibecoding-state.md` first. Use only the measures I approved, with the exact definitions in the brief — don''t re-invent them.
+
+**Step 4a — plan first, save nothing yet.** `{chapter_3_lakehouse_catalog}.{chapter_3_lakehouse_schema}` holds the tables behind our {use_case_title} reporting. Work out which tables, joins, and grain each measure needs, then show me the Metric View YAML (including the dimensions people would want to slice by). Explain why you chose each grain and flag any non-additive measure. (Nested snowflake joins work natively; a pre-joined SQL subquery in the `source:` block is the simpler recommended pattern.)
+
+**Step 4b — create it once the YAML matches the inventory.** Create the Metric View in `{lakehouse_default_catalog}.{user_schema_prefix}_gold` (my source data may be read-only, so build it in the writable target) — you can suggest the name. Use `CREATE OR REPLACE VIEW … WITH METRICS LANGUAGE YAML`, and first check `.vibecoding-state.md` and the target schema for an existing Metric View of this name — replace it rather than duplicate. Use business-friendly display names, then run a `MEASURE()` query to prove each approved measure returns. If you describe the Metric View without creating it, create it now — don''t just describe it.
+
+Record the Metric View name and the gate result in `.vibecoding-state.md`.',
+'',
+'Draft the Metric View (Genie Accelerator)',
+'Author a governed Metric View from the signed-off inventory (Path B) or import a Tableau/Power BI model and promote it to Unity Catalog (Path A) — review the YAML before creating',
+63,
+'> **Artifact root (client-aware).** Resolve `<ARTIFACT_ROOT>` via `vibecoding-state.resolve_root` and write every artifact under it.
+
+## 1️⃣ How To Apply
+
+1. **Path B (default):** run Step 4a, review the YAML against your inventory, then run Step 4b to create it.
+2. **Path A (Import BI):** switch to the **Import BI** tab, run `/importBI` in Genie Code with your `.twb`/`.twbx`/`.tds`/`.tdsx`/`.pbit`, then **promote** the inventory-matching local view to Unity Catalog (`{lakehouse_default_catalog}.{user_schema_prefix}_gold`) via "Export to a Unity Catalog metric view". Keep only what matches the brief. See `references/import-bi-to-metric-view.md`.
+
+## 2️⃣ What Are We Building?
+
+One **governed Metric View** in `{lakehouse_default_catalog}.{user_schema_prefix}_gold` covering exactly the approved measures, with business-friendly display names and non-additive measures flagged. A `MEASURE()` query proves each measure returns.
+
+```mermaid
+flowchart LR
+  inv["signed-off inventory"] --> pb["Path B: author YAML<br/>(review 4a → create 4b)"]
+  bi["Tableau / Power BI file"] --> pa["Path A: /importBI<br/>→ promote local view to UC"]
+  pb --> mv["governed Metric View<br/>{lakehouse_default_catalog}.{user_schema_prefix}_gold"]
+  pa --> mv
+  mv --> proof["MEASURE() query<br/>proves each measure returns"]
+  proof --> gate{{"Gate: MV live"}}
+```
+
+This is the **one definition** Genie, dashboards, and BI all share — the heart of the governed semantic layer.
+
+## 3️⃣ Why Are We Building It This Way? (Databricks Best Practices)
+
+| Practice | How it''s used here |
+|----------|-------------------|
+| **Governed semantic layer** | Measures live in a UC Metric View — one definition shared by Genie, dashboards, and BI |
+| **Review before create** | The YAML is reviewed against the signed-off inventory before anything is saved |
+| **Writable target ≠ source** | Assets are built in the writable target because the source schema may be read-only |
+| **Idempotent** | `CREATE OR REPLACE` + a state/schema check avoids duplicate Metric Views |
+| **Nested joins work; pre-joined recommended** | Multi-hop snowflake joins resolve on live Genie Code; a pre-joined subquery `source:` is the simpler recommended pattern (parity confirmed) |
+| **Non-additive flagged in YAML** | Averages/ratios carry a note so they''re never summed or averaged across periods |
+
+## 4️⃣ What Happens Behind the Scenes?
+
+1. **Plan the shape (4a)** — Genie Code works out the tables, joins, and grain each approved measure needs and shows you the YAML, explaining each grain choice and flagging non-additive measures. Nothing is saved yet.
+2. **Create in the writable target (4b)** — on your OK it runs `CREATE OR REPLACE VIEW … WITH METRICS LANGUAGE YAML` in `{lakehouse_default_catalog}.{user_schema_prefix}_gold` (source may be read-only), checking state/schema first to avoid a duplicate.
+3. **Prove it** — it runs a `SELECT MEASURE(...) … GROUP BY ALL` so every approved measure returns a real number, then records the MV name to state.
+
+### Reference: Metric View YAML v1.1
+
+`synonyms:`, `display_name:`, and `format:` require **v1.1**. A minimal measure looks like:
+
+```yaml
+measures:
+  - name: net_revenue
+    expr: SUM(l_extendedprice * (1 - l_discount))
+    display_name: "Net Revenue"
+    synonyms: ["revenue", "net sales", "top line"]
+    format: { type: currency }
+```
+
+`/importBI` (Path A) creates **local** metric views that must be promoted to UC before a Genie Agent can use them — full procedure in `semantic-layer/01-metric-views-patterns/references/import-bi-to-metric-view.md`.',
+'## Expected Deliverables
+
+- A live Metric View in `{lakehouse_default_catalog}.{user_schema_prefix}_gold` for exactly the approved measures
+- YAML reviewed **before** creation; grain justified per measure; non-additive measures flagged
+- A `SELECT MEASURE(...) ... GROUP BY ALL` returns a number for each measure
+- Metric View name + gate recorded to `.vibecoding-state.md`
+
+**Sample — the MEASURE() proof (validated on `samples.tpch`):**
+
+```
+SELECT MEASURE(net_revenue), MEASURE(gross_revenue), MEASURE(order_count)
+FROM {lakehouse_default_catalog}.{user_schema_prefix}_gold.order_revenue_metrics;
+-- net_revenue = 1,089,835,179,247 | gross = 1,147,191,013,439 | orders = 7,500,000
+```',
+true, 1, true, current_timestamp(), current_timestamp(), current_user());
+
+-- Step 5 (Genie Accelerator · Semantic Layer): Review & Expand Synonyms - bypass_llm=TRUE (Type B; review-and-expand, not first-time add)
+INSERT INTO ${catalog}.${schema}.section_input_prompts 
+(input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
+VALUES
+(64, 'semlayer_synonyms',
+'**Review the synonyms already on the Metric View and expand them — acronyms, informal phrasing, legacy names (and any imported BI field aliases). Keep the diff-review gate; recommend the full set rather than asking me which to add.**
+
+Read `docs/design_prd.md`, `docs/genie_brief.md`, and `.vibecoding-state.md` first — the brief''s user questions tell you the language people actually use.
+
+**Prior step, implicit approval.** If Step 4 left the Metric View planned but not yet created (YAML shown, awaiting approval), my running this prompt approves it: create it idempotently (`CREATE OR REPLACE`) and record it in `.vibecoding-state.md` first, then do the synonym work.
+
+Review the synonyms on the Metric View in `{lakehouse_default_catalog}.{user_schema_prefix}_gold` — you likely added some while creating it. For every measure and each key dimension, propose a `synonyms:` list (YAML v1.1, up to 10 each) covering any acronym, the informal phrasing people in {use_case_title} actually use, and any legacy name from our old reporting. If I imported from a BI file, also pull the original field aliases from the imported workbook. Recommend the full set — don''t ask me which terms to include.
+
+**Review gate (kept).** Show me the diff of what you''re adding, then pause — don''t start the next step this turn. If I reply with cuts, apply them; if I paste the next step instead, treat the diff as approved and rebuild the view.
+
+Record the gate result in `.vibecoding-state.md`.',
+'',
+'Review & Expand Synonyms (Genie Accelerator)',
+'Review the synonyms Genie Code added while building the Metric View and expand them to cover acronyms, informal phrasing, and legacy names (and BI field aliases if you imported)',
+64,
+'> **Artifact root (client-aware).** Resolve `<ARTIFACT_ROOT>` via `vibecoding-state.resolve_root` and write every artifact under it.
+
+## 1️⃣ How To Apply
+
+Copy the prompt, paste it into a Genie Code Agent chat, and press Enter. Review the proposed synonym diff, then let Genie Code rebuild the Metric View (native SQL — no special page); pasting the next step counts as approval of the diff as shown. If you used the Import BI path in Step 4, confirm at least one synonym traces back to an imported field alias.
+
+## 2️⃣ What Are We Building?
+
+An **expanded synonym set** on the Metric View — acronyms, informal phrasing, and legacy names for each measure and key dimension — so users'' natural-language questions resolve to the governed measures instead of falling through to raw-table guessing.
+
+```mermaid
+flowchart LR
+  mv["Metric View<br/>(synonyms from Step 4)"] --> review["review current synonyms"]
+  review --> expand["expand per field:<br/>acronym · informal · legacy"]
+  bi["imported BI file?"] -.->|"field aliases"| expand
+  expand --> diff["show diff (≤10 per field)"]
+  diff -->|"approve (or next step)"| rebuild["rebuild MV natively"]
+  rebuild --> gate{{"Gate: synonyms reviewed"}}
+```
+
+Because synonyms live on the **Metric View** (not just the Genie space), Genie *and* BI share the same term discovery.
+
+## 3️⃣ Why Are We Building It This Way? (Databricks Best Practices)
+
+| Practice | How it''s used here |
+|----------|-------------------|
+| **Synonyms on the Metric View** | v1.1 `synonyms:` (≤10 each) live on the MV, so Genie **and** BI share term discovery — not only the Genie space |
+| **Review, don''t re-add** | Builds on synonyms Genie Code already added in Step 4 rather than starting over |
+| **Cover real language** | Acronyms + informal phrasing + legacy names map how people actually ask |
+| **BI aliases survive** | If you imported from Tableau/Power BI, the original field aliases are folded in as synonyms |
+| **Diff before save** | You review the additions before the MV is rebuilt |
+
+## 4️⃣ What Happens Behind the Scenes?
+
+1. **Read current synonyms** — Genie Code reads the `synonyms:` already on the Metric View from Step 4.
+2. **Propose additions** — for every measure and key dimension it drafts acronym / informal / legacy phrasings (plus imported BI field aliases), capped at 10 per field, and recommends the full set.
+3. **Show the diff** — it prints what it would add before touching the view.
+4. **Rebuild on approval** — on your OK (or when you paste the next step) it rebuilds the Metric View natively (SQL — no special page) and records the gate.
+
+### Reference: what makes a good synonym list
+
+Cover the three ways people drift from the canonical name: the **acronym** ("AOV"), the **informal** phrasing ("spend per order"), and the **legacy** name from the old report ("avg basket"). Skip near-duplicates — 10 well-chosen synonyms beat 10 spelling variants.',
+'## Expected Deliverables
+
+- Reviewed + expanded `synonyms:` (≤10 per measure/key dimension) written to the Metric View YAML
+- Coverage of acronyms, informal phrasing, and legacy names; BI field aliases folded in when the Import BI path was used
+- A diff reviewed before save
+- Gate recorded to `.vibecoding-state.md`
+
+**Sample — the synonym diff you approve:**
+
+```diff
+  measures:
+    - name: average_order_value
+      display_name: "Average Order Value"
+-     synonyms: ["aov"]
++     synonyms: ["aov", "avg order value", "spend per order", "revenue per order", "avg basket"]
+```',
+true, 1, true, current_timestamp(), current_timestamp(), current_user());
+
+-- semlayer_locate (genie-code fork) — data-mode navigation + synthetic branch + file-drop; bypass_LLM = TRUE
+INSERT INTO ${catalog}.${schema}.section_input_prompts
+(input_id, section_tag, coding_assistant, input_template, system_prompt,
+ bypass_llm, version, is_active, inserted_at, updated_at, created_by)
+VALUES
+(932, 'semlayer_locate', 'genie-code',
+'**Point at my existing tables in `{chapter_3_lakehouse_catalog}.{chapter_3_lakehouse_schema}`, read any definitions I bring, and seed the Genie brief — no building, just a first-pass brief for me to correct.**
+
+Read `docs/design_prd.md` and `.vibecoding-state.md` first — reuse the PRD''s User Journeys and High-Level Data Entities; don''t re-ask what they already answer.
+
+My {use_case_title} data is in `{chapter_3_lakehouse_catalog}.{chapter_3_lakehouse_schema}` — read it read-only.
+
+If I''ve dropped my current definitions into the repo, read them and pull out every measure name, definition, and field alias you can, citing which file each came from. If I haven''t, elicit them instead.
+
+Start `docs/genie_brief.md` from the PRD and those inputs: the function, candidate measures, and the questions my users actually ask. Collect anything the PRD and files don''t cover into ONE numbered list of questions and ask me in a single batch — not one at a time — pre-filling your best assumption for each, marked "(assumed — correct me)". Don''t profile deeply or build anything yet: show me the seeded brief plus that one question list, and record the gate result in `.vibecoding-state.md`.
+
+**State-lock:** if this is the first step of the track, Genie Code bootstraps `.vibecoding-state.md`; otherwise it appends this step''s Per-Step Log entry and gate result, then re-reads to confirm the write landed.
+
+**Gate:** `Brief seeded` — `docs/genie_brief.md` exists with function + candidate measures + the questions users ask; the source `{chapter_3_lakehouse_catalog}.{chapter_3_lakehouse_schema}` is confirmed OR the synthetic branch was chosen; one batched, pre-assumed question list was presented; the gate result is recorded in `.vibecoding-state.md`.
+
+**➡️ Next step.** Profile the schema (Step 2) so the measure inventory is grounded in what the data can actually support.',
+'',
+true, 1, true, current_timestamp(), current_timestamp(), current_user());
+
+-- =============================================================================
+-- GENIE ACCELERATOR, Locate Data per-mode variants for step 57 (semlayer_locate).
+-- The base row (semlayer_locate / 60 / 932) is the "existing tables" mode.
+-- These rows serve the other tabs so each prompt is specific to the chosen method:
+--   semlayer_locate_upload    , the Upload tab (folds the CSV in at {csv_content})
+--   semlayer_locate_synthetic , the Generate (synthetic) tab (Faker into the gold target)
+--   semlayer_locate_prebuilt  , daisy-chain when the Lakehouse track built Gold first
+-- Each has a default row (how_to_apply/expected_output) and a genie-code fork.
+-- =============================================================================
+
+-- semlayer_locate_upload (default), save uploaded dictionary + seed brief; bypass_llm = TRUE
+INSERT INTO ${catalog}.${schema}.section_input_prompts 
+(input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
+VALUES
+(943, 'semlayer_locate_upload',
+'**Save my uploaded data dictionary, then seed the Genie brief from it and the PRD — no building yet, just a first-pass brief for me to correct.**
+
+Save the following CSV to `<ARTIFACT_ROOT>/docs/context/{use_case_file_prefix}_dictionary.csv`:
+
+--- CSV CONTENT START ---
+{csv_content}
+--- CSV CONTENT END ---
+
+Then read `docs/design_prd.md` and `.vibecoding-state.md` first — reuse the PRD''s User Journeys and High-Level Data Entities; don''t re-ask what they already answer.
+
+From the dictionary, pull out every measure name, definition, and field alias, and note the table and column each maps to.
+
+Start `docs/genie_brief.md` from the PRD and the dictionary: the function, candidate measures, and the questions my users actually ask. Collect anything they don''t cover into ONE numbered list of questions and ask me in a single batch — not one at a time — pre-filling your best assumption for each, marked "(assumed — correct me)". Don''t profile deeply or build anything yet: show me the seeded brief plus that one question list.
+
+Record the gate result in `.vibecoding-state.md`.',
+'',
+'Locate Data & Bring Context (Upload)',
+'Upload a data dictionary CSV; Genie Code saves it and seeds the Genie brief from it and the PRD. No building yet',
+60,
+'> **Artifact root (client-aware).** Resolve `<ARTIFACT_ROOT>` via `vibecoding-state.resolve_root` and write every artifact under it. On Cursor/Copilot that is your repo root; on Databricks Genie Code it is your user project root `/Workspace/Users/<email>/<repo>` (a git clone of the workshop repo), not the page''s current working directory.
+
+## How to apply
+
+1. On the **Upload** tab, drop your data dictionary CSV and click **Process & Generate**. The app folds the file into the prompt at `{csv_content}`.
+2. Copy the generated prompt, start a new Agent chat in Genie Code, paste, and press Enter.
+
+**State:** on the first step of the track Genie Code bootstraps `.vibecoding-state.md`; otherwise it appends this step''s gate.
+
+## What this produces
+
+`docs/genie_brief.md` seeded from your dictionary and the PRD: function, candidate measures, and the questions your users ask. Every later step reads this brief back, so a good brief here saves rework later.',
+'## Expected deliverables
+
+- Your dictionary saved under `<ARTIFACT_ROOT>/docs/context/`
+- `docs/genie_brief.md` seeded from the dictionary and the PRD: function, candidate measures, user questions
+- One batched, pre-assumed clarifying-question list presented for your correction
+- Gate recorded to `.vibecoding-state.md`',
+true, 1, true, current_timestamp(), current_timestamp(), current_user());
+
+-- semlayer_locate_upload (genie-code fork), save uploaded dictionary + seed brief; bypass_llm = TRUE
+INSERT INTO ${catalog}.${schema}.section_input_prompts
+(input_id, section_tag, coding_assistant, input_template, system_prompt,
+ bypass_llm, version, is_active, inserted_at, updated_at, created_by)
+VALUES
+(944, 'semlayer_locate_upload', 'genie-code',
+'**Save my uploaded data dictionary, then seed the Genie brief from it and the PRD — no building yet, just a first-pass brief for me to correct.**
+
+Save the following CSV to `<ARTIFACT_ROOT>/docs/context/{use_case_file_prefix}_dictionary.csv`:
+
+--- CSV CONTENT START ---
+{csv_content}
+--- CSV CONTENT END ---
+
+Then read `docs/design_prd.md` and `.vibecoding-state.md` first — reuse the PRD''s User Journeys and High-Level Data Entities; don''t re-ask what they already answer.
+
+From the dictionary, pull out every measure name, definition, and field alias, and note the table and column each maps to.
+
+Start `docs/genie_brief.md` from the PRD and the dictionary: the function, candidate measures, and the questions my users actually ask. Collect anything they don''t cover into ONE numbered list of questions and ask me in a single batch — not one at a time — pre-filling your best assumption for each, marked "(assumed — correct me)". Don''t profile deeply or build anything yet: show me the seeded brief plus that one question list, and record the gate result in `.vibecoding-state.md`.
+
+**State-lock:** on the first step of the track Genie Code bootstraps `.vibecoding-state.md`; otherwise it appends this step''s Per-Step Log entry and gate result, then re-reads to confirm the write landed.
+
+**Gate:** `Brief seeded` — the dictionary is saved under `docs/context/`; `docs/genie_brief.md` exists with function, candidate measures, and the questions users ask; one batched, pre-assumed question list was presented; the gate result is recorded in `.vibecoding-state.md`.
+
+**➡️ Next step.** Profile the schema so the measure inventory is grounded in what the data can actually support.',
+'',
+true, 1, true, current_timestamp(), current_timestamp(), current_user());
+
+-- semlayer_locate_synthetic (default), Faker into the gold target + seed brief; bypass_llm = TRUE
+INSERT INTO ${catalog}.${schema}.section_input_prompts 
+(input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
+VALUES
+(945, 'semlayer_locate_synthetic',
+'**Propose a PRD-grounded star schema, Faker-generate sample data into `{lakehouse_default_catalog}.{user_schema_prefix}_gold` on my yes, then seed the Genie brief — the only Locate mode that writes data.**
+
+Read `docs/design_prd.md` and `.vibecoding-state.md` first — reuse the PRD''s User Journeys and High-Level Data Entities; don''t re-ask what they already answer.
+
+I have no usable data for {use_case_title}. Propose a small star schema grounded in the PRD''s Data Entities: name the tables, the grain, and the key measures. Show me the plan and the row counts you intend, tell me the tradeoff of synthetic data, and wait for my yes.
+
+On my yes, generate realistic sample data with Faker and write it to `{lakehouse_default_catalog}.{user_schema_prefix}_gold`. Keep volumes small enough to iterate quickly.
+
+Then start `docs/genie_brief.md`: the function, candidate measures, and the questions my users actually ask. Collect open points into ONE numbered list of questions and ask me in a single batch — not one at a time — pre-filling your best assumption for each, marked "(assumed — correct me)".
+
+Record the gate result in `.vibecoding-state.md`.',
+'',
+'Locate Data & Bring Context (Synthetic)',
+'No data yet? Genie Code proposes a schema, Faker-generates sample data into your gold target, and seeds the Genie brief. No other building yet',
+60,
+'> **Artifact root (client-aware).** Resolve `<ARTIFACT_ROOT>` via `vibecoding-state.resolve_root` and write every artifact under it. On Cursor/Copilot that is your repo root; on Databricks Genie Code it is your user project root `/Workspace/Users/<email>/<repo>` (a git clone of the workshop repo), not the page''s current working directory.
+
+## How to apply
+
+1. Confirm your writable target (`{lakehouse_default_catalog}.{user_schema_prefix}_gold`) in the panel above.
+2. Copy the prompt, start a new Agent chat in Genie Code, paste, and press Enter.
+3. Review the proposed schema and row counts, then reply **yes** to generate.
+
+**State:** on the first step of the track Genie Code bootstraps `.vibecoding-state.md`; otherwise it appends this step''s gate.
+
+## What this produces
+
+A small Faker-generated dataset in `{lakehouse_default_catalog}.{user_schema_prefix}_gold`, plus `docs/genie_brief.md` seeded from the PRD and that schema. Every later step reads the brief back, so a good brief here saves rework later.',
+'## Expected deliverables
+
+- A schema proposal (tables, grain, measures) you approved before any data was written
+- Realistic sample data generated with Faker in `{lakehouse_default_catalog}.{user_schema_prefix}_gold`
+- `docs/genie_brief.md` seeded from the PRD and the generated schema
+- One batched, pre-assumed clarifying-question list presented for your correction
+- Gate recorded to `.vibecoding-state.md`',
+true, 1, true, current_timestamp(), current_timestamp(), current_user());
+
+-- semlayer_locate_synthetic (genie-code fork), Faker into the gold target + seed brief; bypass_llm = TRUE
+INSERT INTO ${catalog}.${schema}.section_input_prompts
+(input_id, section_tag, coding_assistant, input_template, system_prompt,
+ bypass_llm, version, is_active, inserted_at, updated_at, created_by)
+VALUES
+(946, 'semlayer_locate_synthetic', 'genie-code',
+'**Propose a PRD-grounded star schema, Faker-generate sample data into `{lakehouse_default_catalog}.{user_schema_prefix}_gold` via `executeCode` on my yes, then seed the Genie brief — the only Locate mode that writes data.**
+
+Read `docs/design_prd.md` and `.vibecoding-state.md` first — reuse the PRD''s User Journeys and High-Level Data Entities; don''t re-ask what they already answer.
+
+I have no usable data for {use_case_title}. Propose a small star schema grounded in the PRD''s Data Entities: name the tables, the grain, and the key measures. Show me the plan and the row counts you intend, tell me the tradeoff of synthetic data, and wait for my yes.
+
+On my yes, generate realistic sample data with Faker and write it to `{lakehouse_default_catalog}.{user_schema_prefix}_gold` via `executeCode`. Keep volumes small enough to iterate quickly.
+
+Then start `docs/genie_brief.md`: the function, candidate measures, and the questions my users actually ask. Collect open points into ONE numbered list of questions and ask me in a single batch — not one at a time — pre-filling your best assumption for each, marked "(assumed — correct me)". Record the gate result in `.vibecoding-state.md`.
+
+**State-lock:** on the first step of the track Genie Code bootstraps `.vibecoding-state.md`; otherwise it appends this step''s Per-Step Log entry and gate result, then re-reads to confirm the write landed.
+
+**Gate:** `Brief seeded` — sample data exists in `{lakehouse_default_catalog}.{user_schema_prefix}_gold`; `docs/genie_brief.md` exists with function, candidate measures, and the questions users ask; one batched, pre-assumed question list was presented; the gate result is recorded in `.vibecoding-state.md`.
+
+**➡️ Next step.** Profile the schema so the measure inventory is grounded in what the data can actually support.',
+'',
+true, 1, true, current_timestamp(), current_timestamp(), current_user());
+
+-- semlayer_locate_prebuilt (default), daisy-chain from the Lakehouse track's Gold; bypass_llm = TRUE
+INSERT INTO ${catalog}.${schema}.section_input_prompts 
+(input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
+VALUES
+(947, 'semlayer_locate_prebuilt',
+'**Point at the Gold I already built in `{lakehouse_default_catalog}.{user_schema_prefix}_gold` and seed the Genie brief from it and the PRD, reusing the measures the Gold model implies — no building, just a first-pass brief for me to correct.**
+
+Read `docs/design_prd.md` and `.vibecoding-state.md` first — reuse the PRD''s User Journeys and the Gold you already built; don''t re-ask what they already answer.
+
+Use the Gold tables I built in `{lakehouse_default_catalog}.{user_schema_prefix}_gold` as the source. Read them read-only, including table and column comments.
+
+Start `docs/genie_brief.md` from the PRD and those tables: the function, candidate measures, and the questions my users actually ask. Reuse the measure definitions the Gold model already implies rather than inventing new ones. Collect anything left open into ONE numbered list of questions and ask me in a single batch — not one at a time — pre-filling your best assumption for each, marked "(assumed — correct me)". Don''t profile deeply or build anything yet: show me the seeded brief plus that one question list.
+
+Record the gate result in `.vibecoding-state.md`.',
+'',
+'Locate Data & Bring Context (from your Gold)',
+'You built Gold in the Lakehouse steps; Genie Code points at it and seeds the Genie brief. No re-locating',
+60,
+'> **Artifact root (client-aware).** Resolve `<ARTIFACT_ROOT>` via `vibecoding-state.resolve_root` and write every artifact under it. On Cursor/Copilot that is your repo root; on Databricks Genie Code it is your user project root `/Workspace/Users/<email>/<repo>` (a git clone of the workshop repo), not the page''s current working directory.
+
+## How to apply
+
+You reached this step with the Lakehouse track on, so Genie Code targets the Gold you already built. There is no data mode to choose here.
+
+1. Confirm the Gold location (`{lakehouse_default_catalog}.{user_schema_prefix}_gold`) in the panel above.
+2. Copy the prompt, start a new Agent chat in Genie Code, paste, and press Enter.
+
+**State:** Genie Code appends this step''s gate to `.vibecoding-state.md`.
+
+## What this produces
+
+`docs/genie_brief.md` seeded from the PRD and your Gold tables, reusing the measures the Gold model already implies. Every later step reads this brief back.',
+'## Expected deliverables
+
+- Source confirmed as the Gold you built, `{lakehouse_default_catalog}.{user_schema_prefix}_gold`
+- `docs/genie_brief.md` seeded from the PRD and your Gold tables, reusing measures the Gold model implies
+- One batched, pre-assumed clarifying-question list presented for your correction
+- Gate recorded to `.vibecoding-state.md`',
+true, 1, true, current_timestamp(), current_timestamp(), current_user());
+
+-- semlayer_locate_prebuilt (genie-code fork), daisy-chain from the Lakehouse track's Gold; bypass_llm = TRUE
+INSERT INTO ${catalog}.${schema}.section_input_prompts
+(input_id, section_tag, coding_assistant, input_template, system_prompt,
+ bypass_llm, version, is_active, inserted_at, updated_at, created_by)
+VALUES
+(948, 'semlayer_locate_prebuilt', 'genie-code',
+'**Point at the Gold I already built in `{lakehouse_default_catalog}.{user_schema_prefix}_gold` and seed the Genie brief from it and the PRD, reusing the measures the Gold model implies — no building, just a first-pass brief for me to correct.**
+
+Read `docs/design_prd.md` and `.vibecoding-state.md` first — reuse the PRD''s User Journeys and the Gold you already built; don''t re-ask what they already answer.
+
+Use the Gold tables I built in `{lakehouse_default_catalog}.{user_schema_prefix}_gold` as the source. Read them read-only, including table and column comments.
+
+Start `docs/genie_brief.md` from the PRD and those tables: the function, candidate measures, and the questions my users actually ask. Reuse the measure definitions the Gold model already implies rather than inventing new ones. Collect anything left open into ONE numbered list of questions and ask me in a single batch — not one at a time — pre-filling your best assumption for each, marked "(assumed — correct me)". Don''t profile deeply or build anything yet: show me the seeded brief plus that one question list, and record the gate result in `.vibecoding-state.md`.
+
+**State-lock:** Genie Code appends this step''s Per-Step Log entry and gate result to `.vibecoding-state.md`, then re-reads to confirm the write landed.
+
+**Gate:** `Brief seeded` — the source is confirmed as `{lakehouse_default_catalog}.{user_schema_prefix}_gold`; `docs/genie_brief.md` exists with function, candidate measures, and the questions users ask; one batched, pre-assumed question list was presented; the gate result is recorded in `.vibecoding-state.md`.
+
+**➡️ Next step.** Profile the schema so the measure inventory is grounded in what the data can actually support.',
+'',
+true, 1, true, current_timestamp(), current_timestamp(), current_user());
+
+-- semlayer_metric_view (genie-code fork) — author from the signed-off inventory (Path B only); the /importBI promote-to-UC path lives in the semlayer_metric_view_importbi variant; bypass_LLM = TRUE
+INSERT INTO ${catalog}.${schema}.section_input_prompts
+(input_id, section_tag, coding_assistant, input_template, system_prompt,
+ bypass_llm, version, is_active, inserted_at, updated_at, created_by)
+VALUES
+(933, 'semlayer_metric_view', 'genie-code',
+'**Build a governed Metric View in `{lakehouse_default_catalog}.{user_schema_prefix}_gold` from the signed-off inventory — keep the plan-review gate, then create it and prove each measure with a `MEASURE()` query.**
+
+Read `docs/genie_brief.md` (the signed-off measure inventory) and `.vibecoding-state.md` first. Use only the inventory measures, with the exact definitions and recommended readings recorded there — don''t re-invent them.
+
+**Prior step, implicit approval.** My running this prompt is my sign-off on the Step 3 inventory, including every "(recommended)" conflict reading and any "(assumed owner)". Treat it as approved and build on it; don''t re-open it.
+
+**Step 4a — plan, don''t save yet (review gate kept).** `{chapter_3_lakehouse_catalog}.{chapter_3_lakehouse_schema}` holds the tables behind our {use_case_title} reporting. Work out which tables, joins, and grain each measure needs, then show me the Metric View YAML (including slice-by dimensions). Explain each grain and flag any non-additive measure. Nested (snowflake) joins work natively; a pre-joined SQL subquery in the `source:` block is the simpler recommended pattern. Confirm the writable target `{lakehouse_default_catalog}.{user_schema_prefix}_gold` exists; if it doesn''t, recommend and fall back to my accessible gold schema and note the substitution — don''t stall on it. Then STOP and pause on the YAML, recording in `.vibecoding-state.md` that the Metric View is planned and awaiting approval.
+
+**Step 4b — create on approval.** Create the Metric View when I approve — either I reply "approved"/"create it", OR I paste the next step, which is itself approval. On approval, create it in `{lakehouse_default_catalog}.{user_schema_prefix}_gold` via `executeCode` using `CREATE OR REPLACE VIEW … WITH METRICS LANGUAGE YAML` (source data may be read-only, so build it in the writable target) — you can suggest the name. First check `.vibecoding-state.md` and the target schema for an existing Metric View of this name, and replace it rather than duplicate. Use business-friendly display names, then run a `MEASURE()` query to prove each measure returns. Once I''ve approved, never end a turn with the YAML shown but the view uncreated. (Bundle extract-back later uses `readTable → metadata.view_query_text`.)
+
+Record the Metric View name and the gate result in `.vibecoding-state.md`.
+
+**State-lock:** after the gate passes, append this step''s Per-Step Log entry, gate result, and the captured Metric View name to `.vibecoding-state.md`, then re-read to confirm the write landed.
+
+**Gate:** `Metric View live` — one governed Metric View exists in `{lakehouse_default_catalog}.{user_schema_prefix}_gold` for exactly the approved measures; the YAML was reviewed before creation; a `SELECT MEASURE(...) ... GROUP BY ALL` returns a number for each measure; non-additive measures are flagged; the Metric View name + gate are recorded in `.vibecoding-state.md`.
+
+**➡️ Next step.** Review and expand the Metric View''s synonyms (Step 5) so users'' natural-language questions resolve to the governed measures.',
+'',
+true, 1, true, current_timestamp(), current_timestamp(), current_user());
+
+-- semlayer_profile (genie-code fork) — read-only profile + ERD + per-measure supportability with concrete recommendations; bypass_LLM = TRUE
+INSERT INTO ${catalog}.${schema}.section_input_prompts
+(input_id, section_tag, coding_assistant, input_template, system_prompt,
+ bypass_llm, version, is_active, inserted_at, updated_at, created_by)
+VALUES
+(951, 'semlayer_profile', 'genie-code',
+'**Profile the source schema read-only — grain, joins, PK/FK candidates, hidden business columns, and an ERD — then mark each candidate measure can/can''t-support. Create nothing, but for every can''t-support give a concrete recommendation, not an open question.**
+
+Read `docs/design_prd.md`, `docs/genie_brief.md`, and `.vibecoding-state.md` first.
+
+**Prior step, implicit approval.** My running this prompt approves the Step 1 brief (function, candidate measures, user questions) as seeded, including its "(assumed — correct me)" answers. Build on it; don''t re-run the interview.
+
+`{chapter_3_lakehouse_catalog}.{chapter_3_lakehouse_schema}` holds the tables behind our {use_case_title} reporting. Review this schema (read-only) and report:
+
+- what each table contains and its grain;
+- how the tables join, and any primary or foreign key candidates;
+- which columns carry business meaning that is not obvious from the column name;
+- which of the candidate measures in the brief the schema can support today.
+
+Produce an ERD. Create nothing.
+
+**Recommend, don''t leave open.** For every measure the data can''t support, or any PRD User Journey the schema can''t serve (a key dimension entirely NULL, a placeholder text column, a missing detection table), state the concrete path you recommend — augment that slice synthetically, or rescope to what the data supports — marked "(recommended — building on this unless you correct me)". If overall supportability is low enough that the PRD''s primary journeys can''t be met on this data, say so plainly and recommend the synthetic-augmentation branch as the way forward.
+
+**State-lock:** append this step''s Per-Step Log entry, the ERD-produced + per-measure supportability result, and your recommended paths to `.vibecoding-state.md`, then re-read to confirm the write landed.
+
+**Gate:** `Schema profiled` — per-table grain/joins/PK-FK and hidden-column callouts reported; an ERD is produced; every candidate measure carries a can/can''t-support verdict; every can''t-support carries a concrete recommendation; nothing was created; the gate is recorded in `.vibecoding-state.md`. Reply with corrections, or paste the next step to approve these verdicts and recommendations.
+
+**➡️ Next step.** Draft the governed ≤5-measure inventory (Step 3), grounded in what the data can actually support.',
+'',
+true, 1, true, current_timestamp(), current_timestamp(), current_user());
+
+-- semlayer_measures (genie-code fork) — ≤5-measure inventory, self-discovered conflicts with recommended readings, kept sign-off gate; bypass_LLM = TRUE
+INSERT INTO ${catalog}.${schema}.section_input_prompts
+(input_id, section_tag, coding_assistant, input_template, system_prompt,
+ bypass_llm, version, is_active, inserted_at, updated_at, created_by)
+VALUES
+(952, 'semlayer_measures', 'genie-code',
+'**Draft a governed ≤5-measure inventory and self-discover any definitional conflicts. Keep the review gate — show me the inventory before any Metric View YAML — but resolve every conflict with a concrete recommendation, not an open question.**
+
+Read `docs/design_prd.md`, `docs/genie_brief.md` (the Step 2 profile + candidates), any files I dropped in, and `.vibecoding-state.md` first — the measures that matter follow the PRD''s User Journeys.
+
+**Prior step, implicit approval.** My running this prompt approves Step 2''s supportability verdicts and recommended paths (synthetic/rescope). Fold them into the inventory; don''t re-ask.
+
+Draft my measure inventory as a table with exactly these columns: Measure | Current definition (one sentence) | Source of truth (table.column or file) | Grain | Owner | Conflict & recommendation.
+
+Follow these rules:
+
+- Stop at five measures. Depth beats coverage — two well-governed measures beat fifteen half-governed ones.
+- Name the source of truth as the actual table/column (or the dropped file it came from).
+- Wherever the same measure could be read more than one way (different filters, grains, or gross-vs-net), write BOTH readings AND the one you recommend with one line of why, marked "(recommended — building on this unless you correct me)". The conflict is a finding you surface, not one I''ll name — flag it even if I didn''t mention it.
+- Never leave a cell as a bare "?". If you can''t confirm an owner, default it to the responsible PRD persona/role marked "(assumed owner — correct me)" — an unconfirmed owner never blocks the Metric View.
+- If a measure can''t be supported, don''t drop it silently: recommend a concrete path (augment synthetically, or rescope) and mark which you''re proceeding on.
+
+**Review gate (kept).** Pre-fill every cell, then STOP and show me the table. Write no Metric View YAML this turn. If I correct it, apply the corrections; if I paste the next step instead, treat that as sign-off on this inventory (including every recommended reading and assumed owner) and proceed.
+
+**State-lock:** append this step''s Per-Step Log entry, the gate result, and the recommended readings you''re proceeding on to `.vibecoding-state.md`, then re-read to confirm the write landed.
+
+**Gate:** `Inventory signed off` — a ≤5-row inventory exists in `docs/genie_brief.md` with definition, concrete source of truth, grain, an owner (named or assumed-role), and for each conflict both readings plus a recommended one; at least one conflict was self-discovered; no Metric View YAML was written this turn; the gate is recorded in `.vibecoding-state.md`.
+
+**➡️ Next step.** Build the governed Metric View (Step 4) from this inventory.',
+'',
+true, 1, true, current_timestamp(), current_timestamp(), current_user());
+
+-- semlayer_synonyms (genie-code fork) — review + expand synonyms, kept diff gate, implicit-approval commit of a pending Metric View; bypass_LLM = TRUE
+INSERT INTO ${catalog}.${schema}.section_input_prompts
+(input_id, section_tag, coding_assistant, input_template, system_prompt,
+ bypass_llm, version, is_active, inserted_at, updated_at, created_by)
+VALUES
+(953, 'semlayer_synonyms', 'genie-code',
+'**Review the synonyms already on the Metric View and expand them — acronyms, informal phrasing, legacy names (and any imported BI field aliases). Keep the diff-review gate; recommend the full set rather than asking me which to add.**
+
+Read `docs/design_prd.md`, `docs/genie_brief.md`, and `.vibecoding-state.md` first — the brief''s user questions tell you the language people actually use.
+
+**Prior step, implicit approval.** If Step 4 left the Metric View planned but uncreated (YAML shown, awaiting approval), my running this prompt approves it: create it idempotently (`CREATE OR REPLACE`) and record it in `.vibecoding-state.md` first, then do the synonym work.
+
+Review the synonyms on the Metric View in `{lakehouse_default_catalog}.{user_schema_prefix}_gold` — you likely added some while creating it. For every measure and each key dimension, propose a `synonyms:` list (YAML v1.1, up to 10 each) covering any acronym, the informal phrasing people in {use_case_title} actually use, and any legacy name from our old reporting. If I imported from a BI file, also pull the original field aliases from the imported workbook. Recommend the full set — don''t ask me which terms to include.
+
+**Review gate (kept).** Show me the diff of what you''re adding, then pause — don''t start the next step this turn. If I reply with cuts, apply them; if I paste the next step instead, treat the diff as approved and rebuild the view natively.
+
+**State-lock:** append this step''s Per-Step Log entry and the gate result to `.vibecoding-state.md`, then re-read to confirm the write landed.
+
+**Gate:** `Synonyms reviewed` — reviewed + expanded `synonyms:` (≤10 per measure/key dimension) proposed as a diff covering acronyms, informal phrasing, and legacy names (plus BI aliases when imported); the diff was shown before rebuild; on approval the Metric View was rebuilt; the gate is recorded in `.vibecoding-state.md`.
+
+**➡️ Next step.** Create the Genie Agent (Step 6) with the governed Metric View as its only data source.',
+'',
+true, 1, true, current_timestamp(), current_timestamp(), current_user());
+
+-- gagent_instructions (genie-code fork) — one lean text_instructions block via PATCH; MEASURE()-vs-detail routing rule + scope boundary; recommend-and-proceed; bypass_LLM = TRUE
+INSERT INTO ${catalog}.${schema}.section_input_prompts
+(input_id, section_tag, coding_assistant, input_template, system_prompt,
+ bypass_llm, version, is_active, inserted_at, updated_at, created_by)
+VALUES
+(954, 'gagent_instructions', 'genie-code',
+'**Author one lean, rule-shaped instruction block for the Genie space — every brief guardrail as one plain-English rule — always including a `MEASURE()`-vs-detail routing rule and an explicit scope boundary, and cut anything that isn''t load-bearing.**
+
+**Genie Code navigation:** write instructions with `PATCH /api/2.0/genie/spaces/{id}` — the live API stores ONE `text_instructions` entry (a single consolidated block, id-bearing, arrays sorted by id). Validate with `_assert_sql_arrays` and `sort_genie_config` before the PATCH. **Never `PATCH /api/2.0/data-rooms/{id}`.** Leans on `semantic-layer/04-genie-space-export-import-api` + `03-genie-space-patterns` (lean instructions).
+
+Read `docs/design_prd.md`, `docs/genie_brief.md`, and `.vibecoding-state.md` first.
+
+**Prior step, implicit approval.** My running this prompt approves the Step 6 space as created (its data sources and scope). Build on it; don''t re-open it.
+
+Turn every guardrail in `docs/genie_brief.md` into one short rule in a single consolidated instruction block. Always include:
+
+- Routing: metrics/counts/breakdowns → query the Metric View with `MEASURE()`; row-level detail (show/list/export individual records, descriptions, free text) → the attached base detail table; never re-derive a governed metric off the detail table.
+- Scope: what this agent covers; decline what it does not.
+
+Recommend the final block rather than asking me which rules to keep; cut anything not load-bearing (formula internals / data facts already live on the Metric View). Show it, then pause. If I reply with cuts, apply them; if I paste the next step instead, treat the block as approved and PATCH it.
+
+Record the gate result in `.vibecoding-state.md`.
+
+**State-lock:** after the PATCH, append this step''s Per-Step Log entry and gate result to `.vibecoding-state.md`, then re-read to confirm the write landed.
+
+**Gate:** `Instructions authored` — one lean consolidated `text_instructions` block on the space; a `MEASURE()`-vs-detail routing rule and an explicit scope boundary are present; non-load-bearing lines were cut; the config validated (`_assert_sql_arrays`); the gate is recorded in `.vibecoding-state.md`.
+
+**➡️ Next step.** Add 2-3 verified example queries (Step 8) for the questions users ask most.',
+'',
+true, 1, true, current_timestamp(), current_timestamp(), current_user());
+
+-- gagent_verified (genie-code fork) — 2-3 example_question_sqls via PATCH, each MEASURE() query proved to return; recommend-and-proceed, real-entity substitution, anchored time; bypass_LLM = TRUE
+INSERT INTO ${catalog}.${schema}.section_input_prompts
+(input_id, section_tag, coding_assistant, input_template, system_prompt,
+ bypass_llm, version, is_active, inserted_at, updated_at, created_by)
+VALUES
+(955, 'gagent_verified', 'genie-code',
+'**Add 2-3 verified example queries for the questions my users ask most — each exact SQL over the governed Metric View via `MEASURE()`, run once to prove it returns before you save it to the space.**
+
+**Genie Code navigation:** save them into `instructions.example_question_sqls` (each `{id: uuid4.hex, question: List[str], sql: List[str]}`) via `PATCH /api/2.0/genie/spaces/{id}`; validate with `_assert_sql_arrays` + `sort_genie_config` first. **Never `PATCH /api/2.0/data-rooms/{id}`.**
+
+Read `docs/design_prd.md`, `docs/genie_brief.md`, and `.vibecoding-state.md` first.
+
+**Prior step, implicit approval.** My running this prompt approves the Step 7 instruction block as authored. Build on it; don''t re-open it.
+
+Add verified example queries (question → SQL) for the two or three questions our {use_case_title} users ask most often — pull them from the brief. Each metric query goes through the governed Metric View in `{lakehouse_default_catalog}.{user_schema_prefix}_gold` via `MEASURE()` with the correct filters. Recommend the questions and exact SQL — don''t ask me to pick. If the brief''s example identifier isn''t in the data, substitute a real one with recent rows and note it; anchor any relative-time filter to the latest data date.
+
+Show me each question/SQL pair, run each once to prove it returns, then pause. If I reply with corrections, apply them; if I paste the next step instead, treat the pairs as approved and save them.
+
+Record the gate result in `.vibecoding-state.md`.
+
+**State-lock:** after the save, append this step''s Per-Step Log entry and gate result to `.vibecoding-state.md`, then re-read to confirm the write landed.
+
+**Gate:** `Verified queries saved` — 2-3 `example_question_sqls` saved to the space, each a `MEASURE()` query (metrics) or detail query with correct filters, each proved to return (real entity substituted if the brief''s example is absent; relative time anchored); the gate is recorded in `.vibecoding-state.md`.
+
+**➡️ Next step.** Load 15 benchmark questions with expected answers (Step 9), then verify the flagged answers.',
+'',
+true, 1, true, current_timestamp(), current_timestamp(), current_user());
+
+-- gagent_benchmarks (genie-code fork) — 15 benchmarks via PATCH, expected SQL in answer[].content, confidence pre-check, KEPT hard stop for owner verification; bypass_LLM = TRUE
+INSERT INTO ${catalog}.${schema}.section_input_prompts
+(input_id, section_tag, coding_assistant, input_template, system_prompt,
+ bypass_llm, version, is_active, inserted_at, updated_at, created_by)
+VALUES
+(956, 'gagent_benchmarks', 'genie-code',
+'**Load 15 benchmark questions onto the space, attach an expected SQL answer to every one, self-check each answer''s confidence, then STOP so I can verify the low-confidence ones before any is treated as validated.**
+
+**Genie Code navigation:** save to `benchmarks.questions` (each `{id: uuid4.hex, question: List[str], answer: [{format: "SQL", content: List[str]}]}`) via `PATCH /api/2.0/genie/spaces/{id}`; validate with `_assert_sql_arrays` + `sort_genie_config` first (the SQL lives in `answer[].content`, never a top-level field). **Never `PATCH /api/2.0/data-rooms/{id}`.**
+
+Read `docs/design_prd.md`, `docs/genie_brief.md`, and `.vibecoding-state.md` first — the questions to benchmark are the PRD''s User Journeys.
+
+**Prior step, implicit approval.** My running this prompt approves the Step 8 verified queries as saved. Build on them; don''t re-open them.
+
+Suggest 15 benchmark questions a {use_case_title} user would ask — single-measure lookups to time/dimension comparisons. Include at least one pure-metric question (`MEASURE()` on the Metric View) AND at least one row-level detail question (from the base detail table) so Step 10 proves the routing. For EACH question, attach the expected SQL as the answer. Run each once to prove it executes, and rate your confidence that the expected answer is correct per the brief (high / low), flagging the low-confidence ones.
+
+Then STOP: the questions are a starting point, the answers are a guess. I verify the flagged answers before any is validated — a set validated against itself means nothing. Advancing to Step 10 does NOT auto-validate these answers.
+
+Record the gate result in `.vibecoding-state.md`.
+
+**State-lock:** after loading, append this step''s Per-Step Log entry, gate result, and the count of high/low-confidence answers to `.vibecoding-state.md`, then re-read to confirm the write landed.
+
+**Gate:** `Benchmarks loaded (pending verification)` — 15 benchmarks on the space, each with expected SQL in `answer[].content`; a metric question and a detail question are both present; each expected SQL executes; low-confidence answers are flagged for owner verification; nothing is treated as validated yet; the gate is recorded in `.vibecoding-state.md`.
+
+**➡️ Next step.** Run the optimize loop (Step 10) on the Genie Space page once you''ve verified the flagged answers.',
+'',
+true, 1, true, current_timestamp(), current_timestamp(), current_user());
+
+-- Step 4 alt (Genie Accelerator · Semantic Layer): Draft the Metric View, Path A (Import BI) - bypass_llm=TRUE
+-- Alternate tab for semlayer_metric_view; same step/order (63), separate section_tag so the Import BI
+-- tab fetches its own copy-clean prompt (Fix A). Import BI is Genie-Code-only.
+INSERT INTO ${catalog}.${schema}.section_input_prompts 
+(input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
+VALUES
+(949, 'semlayer_metric_view_importbi',
+'Run `/importBI` in Genie Code and attach your Tableau or Power BI file, then paste this into the same Agent chat:
+
+```
+Using the AI/BI dashboard and local metric views /importBI just built, show me the local metric view
+that matches docs/genie_brief.md (the signed-off inventory).
+
+Once I confirm it matches, promote that metric view to Unity Catalog at
+{lakehouse_default_catalog}.{user_schema_prefix}_gold via "Export to a Unity Catalog metric view".
+Keep only the measures that match the brief, drop the rest, and use business-friendly display names.
+
+Then run a MEASURE() query on the promoted Metric View to prove each approved measure returns, and
+save the Metric View name and the gate result to .vibecoding-state.md.
+```',
+'',
+'Draft the Metric View (Path A, import BI)',
+'Import a Tableau or Power BI model with /importBI, then promote the inventory-matching metric view to Unity Catalog and prove it with MEASURE()',
+63,
+'> **Artifact root (client-aware).** Resolve `<ARTIFACT_ROOT>` via `vibecoding-state.resolve_root` and write every artifact under it.
+
+> **Import BI is Genie-Code-only** and needs partner-powered AI features. Files up to ~100 MB attach directly, or reference a UC volume path.
+
+## How to apply
+
+1. In Genie Code, run `/importBI` and attach your `.twb`/`.twbx`/`.tds`/`.tdsx`/`.pbit`. It builds an AI/BI dashboard plus **local, dashboard-scoped** metric views and relationships.
+2. Local metric views are **not** usable by a Genie Agent. Paste the prompt so Genie Code finds the one that matches your brief, then **promote** it to Unity Catalog via **"Export to a Unity Catalog metric view"** into `{lakehouse_default_catalog}.{user_schema_prefix}_gold`. Keep only what matches the brief.
+3. Confirm with a `MEASURE()` query and save the Metric View name to `.vibecoding-state.md`.
+
+Prefer to author from your signed-off inventory instead? Switch to the **Path B, author from inventory** tab.
+
+## What are we building?
+
+The **same governed Metric View** as Path B, one definition in `{lakehouse_default_catalog}.{user_schema_prefix}_gold` covering exactly the approved measures, but sourced from your existing BI model instead of authored from scratch.
+
+```mermaid
+flowchart LR
+  bi["Tableau / Power BI file"] --> imp["/importBI<br/>dashboard + LOCAL metric views"]
+  imp --> promote["promote matching view to UC<br/>Export to a Unity Catalog metric view"]
+  promote --> mv["governed Metric View<br/>{lakehouse_default_catalog}.{user_schema_prefix}_gold"]
+  mv --> proof["MEASURE() query<br/>proves each measure returns"]
+  proof --> gate{{"Gate: MV live"}}
+```
+
+Full procedure and gotchas: `semantic-layer/01-metric-views-patterns/references/import-bi-to-metric-view.md`.',
+'## Expected Deliverables
+
+- A live Metric View in `{lakehouse_default_catalog}.{user_schema_prefix}_gold` for exactly the approved measures, promoted from your BI model
+- Only the inventory-matching measures kept; business-friendly display names
+- A `SELECT MEASURE(...) ... GROUP BY ALL` returns a number for each measure
+- Metric View name + gate recorded to `.vibecoding-state.md`',
+true, 1, true, current_timestamp(), current_timestamp(), current_user());
+
+-- semlayer_metric_view_importbi (genie-code fork): /importBI + promote-to-UC (Path A, Genie-Code-only); bypass_llm=TRUE
+INSERT INTO ${catalog}.${schema}.section_input_prompts
+(input_id, section_tag, coding_assistant, input_template, system_prompt,
+ bypass_llm, version, is_active, inserted_at, updated_at, created_by)
+VALUES
+(950, 'semlayer_metric_view_importbi', 'genie-code',
+'Run `/importBI` in Genie Code and attach your Tableau or Power BI file, then paste this into the same Agent chat:
+
+```
+Using the AI/BI dashboard and local metric views /importBI just built, show me the local metric view
+that matches docs/genie_brief.md (the signed-off inventory).
+
+Once I confirm it matches, promote that metric view to Unity Catalog at
+{lakehouse_default_catalog}.{user_schema_prefix}_gold via "Export to a Unity Catalog metric view".
+Keep only the measures that match the brief, drop the rest, and use business-friendly display names.
+Then run a MEASURE() query to prove each approved measure returns.
+
+Gate (Metric View live): one governed Metric View exists in
+{lakehouse_default_catalog}.{user_schema_prefix}_gold for exactly the approved measures; a
+SELECT MEASURE(...) ... GROUP BY ALL returns a number for each measure; non-additive measures are
+flagged. Append this step''s Per-Step Log entry, the gate result, and the Metric View name to
+.vibecoding-state.md, then re-read to confirm the write landed.
+```',
+'',
+true, 1, true, current_timestamp(), current_timestamp(), current_user());
+
+-- =============================================================================
+-- GENIE ACCELERATOR, Genie Agent group (Batch 2, Steps 6-10, 14), order 65-69, 73
+-- Stub rows; authored bodies are synced from sections/6N/73-gagent_*.md via the
+-- scoped per-id sync (source of truth = the .md files).
+-- =============================================================================
+
+-- Step 6 (Genie Accelerator · Genie Agent): Describe the Agent - bypass_llm=TRUE (Type B; native createAsset shell + PATCH serialized_space)
+INSERT INTO ${catalog}.${schema}.section_input_prompts 
+(input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
+VALUES
+(65, 'gagent_describe',
+'**Create a Genie Agent scoped from the PRD personas. Attach the governed Metric View for measures AND its base detail table(s) one grain below for row-level questions, then review the serialized config before you create the space.**
+
+Read `docs/design_prd.md`, `docs/genie_brief.md`, and `.vibecoding-state.md` first — the agent''s users and topics come straight from the PRD''s personas and User Journeys, and the exact Metric View name is the one recorded in state.
+
+**Prior step, implicit approval.** If Step 5 left a synonym diff shown but not yet applied to the Metric View, my running this prompt approves it: apply those synonyms to the Metric View first, then create the agent.
+
+Create a Genie space (Genie Agent) for {use_case_title}. This agent answers questions about what my team reviews for {use_case_title}. Its users are the PRD personas, and they typically ask about the top two or three topics in the brief.
+
+Attach two kinds of data source, both read from `.vibecoding-state.md`:
+
+- The governed **Metric View** (the FQN recorded in state) — the source for every measure/metric.
+- The **base detail table(s) one grain below** that Metric View (the fact table(s) it aggregates from), which still carry the row-level and narrative columns — individual records, descriptions, free text — the Metric View drops. Attach these so the agent can answer "show / list / export the individual records" questions the Metric View structurally can''t.
+
+Do NOT attach the whole raw `{chapter_3_lakehouse_catalog}.{chapter_3_lakehouse_schema}` schema — only the Metric View plus the one-grain-below detail table(s). On the detail table''s lookup columns (the identifiers and categories users name), enable entity matching so user-named values resolve.
+
+Validate the config and, after creation, confirm the Metric View actually resolved before you call the step done. The live workspace may store the Metric View under `data_sources.tables` rather than `data_sources.metric_views` — either is fine as long as it validates and resolves; don''t fail the step over the slot name.
+
+Show me the space''s serialized config before you create it, then create it.
+
+Once the space is created and confirmed, print a clickable link to it — `{host}/genie/rooms/{genie_space_id}?o={o}` (`host` = your workspace URL, `o` = the workspace id) — so I can open it directly for the next steps.
+
+Record the space id and the gate result in `.vibecoding-state.md`.',
+'',
+'Describe the Genie Agent (Genie Accelerator)',
+'Create a Genie space (Genie Agent) from the PRD personas, attach the governed Metric View for measures plus its base detail table(s) one grain below for row-level questions, validate the config, and review before creating',
+65,
+'> **Artifact root (client-aware).** Resolve `<ARTIFACT_ROOT>` via `vibecoding-state.resolve_root` and write every artifact under it.
+
+## 1️⃣ How To Apply
+
+Copy the prompt, paste it into a Genie Code Agent chat, and press Enter. Review the serialized config (that the Metric View is attached for measures and the base detail table(s) for row-level questions, and that the config validates and the Metric View resolves), then let Genie Code create the space and capture its id.
+
+## 2️⃣ What Are We Building?
+
+A **Genie Agent** (space) scoped to `{use_case_title}`, with the governed Metric View as its measure source **and** the base detail table(s) one grain below for row-level questions, plus a plain-language description of what it answers. Its space id is saved to `.vibecoding-state.md` for the next steps.
+
+```mermaid
+flowchart LR
+  mv["governed Metric View<br/>(measures)"] --> space["Genie space (Agent)"]
+  detail["base detail table(s)<br/>one grain below (row detail)"] --> space
+  prd["PRD personas<br/>+ User Journeys"] --> space
+  space --> cfg["validate + review config<br/>(MV resolves; slot-agnostic)"]
+  cfg -->|"create"| id["space id → .vibecoding-state.md"]
+```
+
+The agent answers **metrics** from the governed Metric View (never re-deriving them off raw tables) and **row-level detail** from the one-grain-below table — the two together cover the PRD journeys the Metric View alone can''t.
+
+## 3️⃣ Why Are We Building It This Way? (Databricks Best Practices)
+
+| Practice | How it''s used here |
+|----------|-------------------|
+| **MV for measures, detail for rows** | The governed Metric View answers every metric via `MEASURE()`; the base detail table(s) one grain below answer row-level/listing questions the MV can''t |
+| **Not the whole raw schema** | Only the Metric View + its one-grain-below detail table(s) are attached, never the upstream raw schema |
+| **Entity matching on lookups** | Entity matching on the detail table''s identifier/category columns resolves the values users name |
+| **PRD-driven scope** | Users and topics come from PRD personas/journeys, not invented |
+| **Validate + confirm resolves** | The config is validated and the Metric View is confirmed to resolve before the step is done — the slot key (`metric_views` vs `tables`) is not asserted |
+
+## 4️⃣ What Happens Behind the Scenes?
+
+1. **Read the scope + sources** — Genie Code reads `design_prd.md` + brief for the personas/topics, and reads the Metric View FQN and its base detail table(s) from `.vibecoding-state.md`.
+2. **Mint the shell** — it creates the space with `createAsset(assetType:"genie", …)`.
+3. **Attach + describe** — it attaches the Metric View (measures) and the one-grain-below detail table(s) (row detail), enables entity matching on the detail lookup columns, and writes a plain-language scope.
+4. **Validate, review, create** — it validates the config, shows it, creates on your OK, then confirms the Metric View resolved and saves the space id to state.
+
+### Reference: the PATCH gotcha (and the slot)
+
+Populate the space with `PATCH /api/2.0/genie/spaces/{id}` — **never** `PATCH /api/2.0/data-rooms/{id}`, which wipes the config. This runs from a workspace/Genie surface, not a bundle-editor page. The live API may return the Metric View under `data_sources.tables`; validate and confirm it resolves rather than asserting the slot.',
+'## Expected Deliverables
+
+- A live Genie space (Genie Agent) for `{use_case_title}` with a plain-language scope
+- The governed Metric View attached for measures AND the base detail table(s) one grain below for row-level questions (not the whole raw schema)
+- Entity matching enabled on the detail table''s lookup columns
+- Config validated and the Metric View confirmed to resolve (slot-agnostic — `metric_views` or `tables`)
+- Space id saved to `.vibecoding-state.md`
+
+**Sample — the data_sources shape (yours will differ):**
+
+```json
+{
+  "data_sources": {
+    "metric_views": ["{lakehouse_default_catalog}.{user_schema_prefix}_gold.fleet_defect_history_metrics"],
+    "tables": [
+      {
+        "identifier": "{chapter_3_lakehouse_catalog}.{chapter_3_lakehouse_schema}.defect_report",
+        "column_configs": [
+          {"column_name": "aircraft_registration", "enable_entity_matching": true, "build_value_dictionary": true}
+        ]
+      }
+    ]
+  },
+  "title": "{use_case_title} — Agent"
+}
+```
+
+Some workspaces return the Metric View under `tables` instead of `metric_views` — validate and confirm it resolves rather than asserting the slot.',
+true, 1, true, current_timestamp(), current_timestamp(), current_user());
+
+-- Step 7 (Genie Accelerator · Genie Agent): Author Instructions - bypass_llm=TRUE (Type B; PATCH serialized_space, one lean text_instructions entry)
+INSERT INTO ${catalog}.${schema}.section_input_prompts 
+(input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
+VALUES
+(66, 'gagent_instructions',
+'**Author one lean, rule-shaped instruction block — every brief guardrail as one plain-English rule — always including a `MEASURE()`-vs-detail routing rule and an explicit scope boundary, and cut anything that isn''t load-bearing.**
+
+Read `docs/design_prd.md`, `docs/genie_brief.md`, and `.vibecoding-state.md` first.
+
+**Prior step, implicit approval.** My running this prompt approves the Step 6 space as created (its data sources and scope). Build on it; don''t re-open it.
+
+Add general instructions to the Genie space as a SINGLE consolidated instruction entry (the live API stores one `text_instructions` entry, not a long list) — a compact block of rules. Keep it lean — it loads on every turn, so every line must be a rule, not description. Turn every guardrail recorded in `docs/genie_brief.md` into one short, plain-English rule. Always include these two:
+
+- Routing: answer any metric/count/breakdown by querying the Metric View with `MEASURE()`; answer any row-level request (show / list / export individual records, descriptions, free text) from the attached base detail table; never re-derive a governed metric off the detail table.
+- Scope: what this agent covers. Decline questions about what it does not cover.
+
+Recommend the final block rather than asking me which rules to keep. Show me the block, cut anything that isn''t load-bearing, then pause. If I reply with cuts, apply them; if I paste the next step instead, treat the block as approved and PATCH it.
+
+Record the gate result in `.vibecoding-state.md`.',
+'',
+'Author Agent Instructions (Genie Accelerator)',
+'Turn the brief''s guardrails into one lean, rule-shaped instruction block (a single text_instructions entry) — including a MEASURE()-vs-detail routing rule and an explicit scope boundary',
+66,
+'> **Artifact root (client-aware).** Resolve `<ARTIFACT_ROOT>` via `vibecoding-state.resolve_root` and write every artifact under it.
+
+## 1️⃣ How To Apply
+
+Copy the prompt, paste it into a Genie Code Agent chat, and press Enter. Review the instruction block, cut anything that isn''t a load-bearing rule, and let Genie Code PATCH the space as a single `text_instructions` entry; pasting the next step counts as approval.
+
+## 2️⃣ What Are We Building?
+
+A **short, rule-shaped instruction block** on the agent (one consolidated `text_instructions` entry, ≤~20 lines): each brief guardrail as one plain-English rule, plus a `MEASURE()`-vs-detail routing rule and a clear scope boundary.
+
+```mermaid
+flowchart LR
+  brief["brief guardrails"] --> rules["lean rules<br/>(one text_instructions entry)"]
+  routing["MEASURE()-vs-detail routing rule"] --> rules
+  scope["scope boundary<br/>(what it does NOT cover)"] --> rules
+  rules --> cut["cut anything not load-bearing"]
+  cut --> patch["PATCH serialized_space"]
+```
+
+Instructions load on **every** turn, so every line has to earn its place as a rule — descriptions and formula internals belong on the Metric View, not here.
+
+## 3️⃣ Why Are We Building It This Way? (Databricks Best Practices)
+
+| Practice | How it''s used here |
+|----------|-------------------|
+| **Rules, not prose** | Instructions load every turn — lean rules beat descriptive paragraphs |
+| **Routing rule** | Metrics go to the Metric View via `MEASURE()`; row-level detail goes to the attached detail table; a governed metric is never re-derived off the detail table |
+| **Scope boundary** | An explicit "does not cover" line prevents out-of-scope guessing |
+| **One instruction entry** | The live API stores a single `text_instructions` entry — author one consolidated block, not a long list |
+| **Cut non-load-bearing lines** | Formula internals / data facts already live on the Metric View, so they''re trimmed |
+
+## 4️⃣ What Happens Behind the Scenes?
+
+1. **Collect guardrails** — Genie Code reads every guardrail in `docs/genie_brief.md`.
+2. **Rewrite as rules** — it turns each into one short, plain-English rule, and always adds the routing rule (`MEASURE()` for metrics, detail table for rows) and the scope boundary.
+3. **Trim** — it cuts anything that isn''t load-bearing (formula internals, data facts) so the block stays lean.
+4. **Show, then PATCH** — it shows the final block and pauses; on your OK (or when you paste the next step) it writes the single consolidated `text_instructions` entry via `PATCH`, then records the gate.
+
+### Reference: load-bearing vs not
+
+*Load-bearing* (keep): "Metrics → `MEASURE()` on the Metric View; row detail → the detail table." *Not load-bearing* (cut): "Net Revenue is extended price times one minus discount" — that formula already lives in the MV. Leans on `semantic-layer/03-genie-space-patterns` (lean instructions).',
+'## Expected Deliverables
+
+- One lean, consolidated `text_instructions` block (≤~20 lines) of plain-English rules
+- A `MEASURE()`-vs-detail routing rule and an explicit scope boundary present; no contradictions
+- Non-load-bearing lines cut (formula internals / data facts left on the Metric View)
+- Gate recorded to `.vibecoding-state.md`
+
+**Sample — a lean instruction block:**
+
+```
+- Metrics/counts/breakdowns: query the Metric View with MEASURE(); never re-derive from raw tables.
+- Row-level detail (show/list/export individual records, descriptions, free text): use the attached base detail table; never compute a governed metric off it.
+- For relative time ("this month", "YTD"), anchor to the latest data date and state the date used.
+- Scope: <use-case> reporting only. Decline out-of-scope questions cleanly.
+- Never average a measure flagged non-additive across periods.
+```',
+true, 1, true, current_timestamp(), current_timestamp(), current_user());
+
+-- Step 8 (Genie Accelerator · Genie Agent): Add Verified Queries - bypass_llm=TRUE (Type B; instructions.example_question_sqls on the space, not the MV)
+INSERT INTO ${catalog}.${schema}.section_input_prompts 
+(input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
+VALUES
+(67, 'gagent_verified',
+'**Add 2-3 verified example queries to the Genie space for the questions my users ask most — each exact SQL querying the governed Metric View via `MEASURE()`, run once to prove it returns before you save it to the space.**
+
+Read `docs/design_prd.md`, `docs/genie_brief.md`, and `.vibecoding-state.md` first.
+
+**Prior step, implicit approval.** My running this prompt approves the Step 7 instruction block as authored. Build on it; don''t re-open it.
+
+For my Genie space, add verified example queries (question → SQL) for the two or three questions our {use_case_title} users ask most often — pull them from the brief. Each SQL must query the governed Metric View in `{lakehouse_default_catalog}.{user_schema_prefix}_gold` via `MEASURE()` with the correct filters. These are answers Genie will reuse instead of reasoning from scratch, so make them exact.
+
+Recommend the questions and the exact SQL — don''t ask me to pick. If the brief''s example identifier isn''t present in the data, substitute a real one that has recent rows and note the substitution (don''t stall). Anchor any relative-time filter ("last 30 days", "this year") to the latest data date so the query returns.
+
+Show me each question/SQL pair, run each once to prove it returns, then pause. If I reply with corrections, apply them; if I paste the next step instead, treat the pairs as approved and save them to the space.
+
+Record the gate result in `.vibecoding-state.md`.',
+'',
+'Add Verified Queries (Genie Accelerator)',
+'Add 2-3 verified example queries (question → MEASURE()-based SQL) to the Genie space for the questions users ask most, each run once to prove it returns',
+67,
+'> **Artifact root (client-aware).** Resolve `<ARTIFACT_ROOT>` via `vibecoding-state.resolve_root` and write every artifact under it.
+
+## 1️⃣ How To Apply
+
+Copy the prompt, paste it into a Genie Code Agent chat, and press Enter. Review each question/SQL pair, confirm each returns, then let Genie Code save them to the space; pasting the next step counts as approval.
+
+## 2️⃣ What Are We Building?
+
+**2–3 verified example queries** on the Genie space, each mapping a real user question to exact `MEASURE()`-based SQL over the governed Metric View — precomputed answers Genie reuses instead of reasoning from scratch.
+
+```mermaid
+flowchart LR
+  q["top 2-3 questions<br/>(from the brief)"] --> sql["exact MEASURE() SQL<br/>+ correct filters"]
+  sql --> run["run each once<br/>(proves it returns)"]
+  run --> save["example_question_sqls<br/>on the SPACE"]
+  save --> gate{{"Gate: verified queries saved"}}
+```
+
+These live on the **space** (`instructions.example_question_sqls`), not the Metric View — which is why this step comes *after* the space exists (Step 6).
+
+## 3️⃣ Why Are We Building It This Way? (Databricks Best Practices)
+
+| Practice | How it''s used here |
+|----------|-------------------|
+| **Verified queries on the space** | They live in `instructions.example_question_sqls`, not the Metric View |
+| **MEASURE() over the MV** | Every example query goes through the governed Metric View, not raw tables |
+| **Prove it returns** | Each SQL is run once so a broken example never ships |
+| **Recommend, don''t ask** | Genie Code picks the top questions and exact SQL, substituting a real entity when the brief''s example is absent |
+| **Anchor relative time** | Relative-time filters anchor to the latest data date so the example returns |
+
+## 4️⃣ What Happens Behind the Scenes?
+
+1. **Pick the questions** — Genie Code selects the top 2–3 questions users actually ask from the brief and recommends them.
+2. **Write exact SQL** — it authors `MEASURE()`-based SQL over the Metric View with the correct filters, substituting a real identifier when the brief''s example isn''t in the data and anchoring relative time to the latest data date.
+3. **Run once** — it executes each query once to confirm it returns (a broken example never ships).
+4. **Save to the space** — it shows the pairs and pauses; on your review (or when you paste the next step) it PATCHes them into `instructions.example_question_sqls` and records the gate.
+
+### Reference: verified queries vs benchmarks
+
+Verified queries (this step) are *trusted answers Genie reuses*. Benchmarks (Step 9) are *tests Genie is scored against*. Both use `MEASURE()`, but verified queries ship into the space''s instructions while benchmarks drive the optimize loop.',
+'## Expected Deliverables
+
+- 2–3 `example_question_sqls` saved to the **space** (not the Metric View)
+- Each SQL queries the governed Metric View via `MEASURE()` with correct filters (real entity substituted if the brief''s example is absent; relative time anchored to the latest data date)
+- Each executed once to prove it returns
+- Gate recorded to `.vibecoding-state.md`
+
+**Sample — a verified question → SQL pair:**
+
+```
+Q: "What was net revenue by region last year?"
+SQL: SELECT region, MEASURE(net_revenue)
+     FROM {lakehouse_default_catalog}.{user_schema_prefix}_gold.order_revenue_metrics
+     WHERE order_year = 1997 GROUP BY region;   -- ✓ ran, returned 5 rows
+```',
+true, 1, true, current_timestamp(), current_timestamp(), current_user());
+
+-- Step 9 (Genie Accelerator · Genie Agent): Load Benchmarks (expected answers required) - bypass_llm=TRUE (Type B; Rule 12 - expected SQL per benchmark enables the optimize loop)
+INSERT INTO ${catalog}.${schema}.section_input_prompts 
+(input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
+VALUES
+(68, 'gagent_benchmarks',
+'**Load 15 benchmark questions onto the space, attach an expected SQL answer to every one (an unanswered benchmark can''t be scored), self-check each answer''s confidence, then STOP so I can verify the low-confidence ones before any is treated as validated.**
+
+Read `docs/design_prd.md`, `docs/genie_brief.md`, and `.vibecoding-state.md` first — the questions to benchmark are the PRD''s User Journeys.
+
+**Prior step, implicit approval.** My running this prompt approves the Step 8 verified queries as saved. Build on them; don''t re-open them.
+
+Based on the data sources attached to this space, suggest 15 benchmark questions a {use_case_title} user would ask — from simple single-measure lookups to comparisons across time and dimensions. Include at least one pure-metric question (answered via `MEASURE()` on the Metric View) AND at least one row-level detail question (answered from the base detail table), so the optimize loop later proves the routing works. For EACH question include the expected SQL (correct filter + `MEASURE()` for metrics, or a detail query for row-level) as the expected answer — a benchmark with a question but no expected answer cannot be scored, so the optimizer has nothing to work against.
+
+Run each expected SQL once to prove it executes, and for each one rate your confidence that the expected answer is the CORRECT answer per the brief''s definitions (high / low), flagging the low-confidence ones.
+
+Then STOP: the generated QUESTIONS are a starting point, but the generated ANSWERS are a guess. I will verify the flagged (low-confidence) answers before we treat any as validated — a benchmark set validated against itself scores well and means nothing. Advancing to the next step does NOT auto-validate these answers.
+
+Record the gate result in `.vibecoding-state.md`.',
+'',
+'Load Benchmarks with Expected Answers (Genie Accelerator)',
+'Generate 15 benchmark questions with expected SQL (correct filter + MEASURE()) as the expected answers, self-check each answer''s confidence, then STOP so you can verify the low-confidence ones before treating any as validated',
+68,
+'> **Artifact root (client-aware).** Resolve `<ARTIFACT_ROOT>` via `vibecoding-state.resolve_root` and write every artifact under it.
+
+## 1️⃣ How To Apply
+
+Copy the prompt, paste it into a Genie Code Agent chat, and press Enter. Genie Code proposes 15 questions **each with expected SQL** (with a confidence flag) and stops. **Verify the flagged (low-confidence) answers yourself** before you treat any as validated — that verification is what makes the Step 10 optimize loop meaningful. Advancing does not auto-validate.
+
+## 2️⃣ What Are We Building?
+
+A **benchmark set** (15 questions) on the space, spanning single-measure lookups to time/dimension comparisons — **each with expected SQL** as its expected answer, and each with a confidence flag.
+
+```mermaid
+flowchart LR
+  mv["Metric View + detail table<br/>+ PRD User Journeys"] --> gen["15 questions<br/>lookups → comparisons<br/>(≥1 metric, ≥1 detail)"]
+  gen --> exp["expected SQL per question<br/>(MEASURE() or detail) + confidence"]
+  exp --> stop["STOP · you verify the flagged answers"]
+  stop --> opt["→ optimize loop (Step 10)"]
+```
+
+The critical rule: **every** benchmark carries an expected answer. A question with no expected SQL can''t be scored, so the optimizer would have nothing to work against.
+
+## 3️⃣ Why Are We Building It This Way? (Databricks Best Practices)
+
+| Practice | How it''s used here |
+|----------|-------------------|
+| **Expected answer per benchmark** | Without expected SQL a benchmark can''t be scored — this is what enables Step 10 |
+| **User verifies flagged answers** | Generated answers are a guess; a confidence flag focuses your verification on the low-confidence ones so the set isn''t graded against itself |
+| **Questions from the PRD** | Benchmark questions follow the PRD''s User Journeys |
+| **Metric + detail coverage** | At least one `MEASURE()` question and one row-level detail question, so Step 10 proves the routing |
+| **Stop before scoring** | The run halts for your verification — a self-validated set scores well and means nothing; advancing does not auto-validate |
+
+## 4️⃣ What Happens Behind the Scenes?
+
+1. **Generate questions** — from the attached Metric View + detail table and PRD journeys, Genie Code drafts 15 questions spanning single-measure lookups to time/dimension comparisons, including at least one pure-metric and one row-level detail question.
+2. **Attach expected SQL** — it writes the expected SQL (`MEASURE()` for metrics, a detail query for row-level) for **each** question as its expected answer.
+3. **Prove + rate** — it runs each expected SQL once to prove it executes, and rates its confidence that the expected answer is correct per the brief, flagging the low-confidence ones.
+4. **Stop for verification** — it halts so **you** confirm the flagged answers before any is treated as validated, then records the gate. Advancing does not auto-validate.
+
+### Reference: why you verify the answers
+
+Genie generated both the questions *and* the guessed answers. If you skip verification, the optimize loop grades Genie against Genie — a meaningless 100%. Verifying the flagged (low-confidence) answers against the real numbers is what makes Step 10''s pass rate trustworthy (`03-genie-space-patterns` Rule 12).',
+'## Expected Deliverables
+
+- 15 benchmarks on the space, **each with expected SQL** (correct filter + `MEASURE()` for metrics, or a detail query for row-level)
+- At least one pure-metric question and one row-level detail question present
+- Each expected SQL executed once to prove it runs; each rated high/low confidence, low-confidence flagged for your verification
+- An explicit "verify the flagged answers yourself" stop (advancing does not auto-validate)
+- Gate recorded to `.vibecoding-state.md`
+
+**Sample — a benchmark row with its expected answer:**
+
+```
+Q12: "Which region had the highest net revenue in 1997?"
+Expected SQL: SELECT region, MEASURE(net_revenue)
+              FROM {lakehouse_default_catalog}.{user_schema_prefix}_gold.order_revenue_metrics
+              WHERE order_year = 1997 GROUP BY region ORDER BY 2 DESC LIMIT 1;
+Confidence: low → e.g. "ASIA, 231.4B"   ← flagged; confirm before validating
+```',
+true, 1, true, current_timestamp(), current_timestamp(), current_user());
+
+-- Step 10 (Genie Accelerator · Genie Agent): Optimize the Agent - bypass_llm=TRUE (Type B; native benchmark scorer + append-only 6-mode fix loop, 2-3 iterations)
+INSERT INTO ${catalog}.${schema}.section_input_prompts 
+(input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
+VALUES
+(69, 'gagent_optimize',
+'**Run the space''s built-in benchmark scorer, read the per-question results, triage each miss to ONE append-only curation fix, then re-run — 2-3 iterations — and report the before/after pass rate. Aim for ~85%, don''t chase 100%.**
+
+Read `docs/design_prd.md`, `docs/genie_brief.md`, and `.vibecoding-state.md` first.
+
+**Prior step, implicit approval.** My running this prompt approves the Step 9 benchmark set — but only the answers I verified in Step 9 count as ground truth; unverified answers stay unverified.
+
+Run all the benchmark questions against this Genie space with the space''s built-in benchmark scorer (the native run-benchmarks tool, not ad-hoc re-asking — that''s the only way you see the SQL Genie actually generated vs. the expected answer). For each one, show: the question, the SQL Genie chose, the answer, whether it matched the expected answer, and whether it obeyed the brief''s guardrails. Report the overall pass rate.
+
+For every miss, diagnose the root cause and map it to ONE curation fix:
+
+- Right measure not found → add synonyms on the measure/column — most common.
+- Value/entity not resolving (a named id, tail, category) → enable entity matching (value indexing) on that column.
+- Wrong source chosen (raw table instead of the Metric View, or vice-versa) → tighten the routing rule in the instructions.
+- Critical filter missed → add it to the instructions.
+- Tables joined wrongly → add a join hint or a verified query.
+- Outdated pattern used → mark the asset deprecated.
+
+Show me the fixes before applying them. APPEND new rules to the existing instruction block — never replace it (existing rules were already validated). Then re-run the benchmarks and show me the before/after pass rates. Run 2-3 iterations until the rate stabilizes; aim for ~85% on the questions I verified — don''t chase 100%.
+
+Record each iteration''s before/after pass rate and the gate result in `.vibecoding-state.md`.',
+'',
+'Optimize the Agent (Genie Accelerator)',
+'Run the space''s built-in benchmark scorer, triage each miss to ONE append-only curation fix (6 fix modes), re-run 2-3 iterations, and report the before/after pass rate',
+69,
+'> **Artifact root (client-aware).** Resolve `<ARTIFACT_ROOT>` via `vibecoding-state.resolve_root` and write every artifact under it.
+
+## 1️⃣ How To Apply
+
+Copy the prompt, paste it into a Genie Code Agent chat, and press Enter. Genie Code runs the space''s benchmark scorer, shows the misses and its proposed one-per-miss fixes, applies them append-only on your OK, and re-runs — 2–3 iterations — reporting the before/after pass rate each time.
+
+## 2️⃣ What Are We Building?
+
+An **optimization loop**: score the benchmarks with the space''s built-in scorer, diagnose each miss to ONE curation fix, append it, and re-score — 2–3 times — driving the pass rate up without overfitting.
+
+```mermaid
+flowchart LR
+  score["run built-in scorer<br/>(SQL chosen vs expected)"] --> miss["cluster misses"]
+  miss --> fix["ONE fix per miss<br/>(6 fix modes)"]
+  fix --> append["APPEND to instructions<br/>(never replace)"]
+  append --> rerun["re-run scorer"]
+  rerun -->|"2-3 iterations, ~85%"| done{{"Gate: agent optimized"}}
+```
+
+Fixes are **append-only** — validated rules are never overwritten — and each miss maps to exactly one of the six fix modes.
+
+## 3️⃣ Why Are We Building It This Way? (Databricks Best Practices)
+
+| Practice | How it''s used here |
+|----------|-------------------|
+| **Built-in scorer, not re-asking** | The space''s native benchmark scorer shows the SQL Genie actually generated vs. the expected answer — ad-hoc re-asking doesn''t |
+| **One fix per miss** | Each miss maps to exactly one of six modes, so cause and cure stay legible |
+| **Append-only curation** | New rules are appended; already-validated rules are never replaced |
+| **2-3 iterations, ~85%** | A few passes stabilize the rate; chasing 100% overfits the benchmark |
+| **Verified answers only** | Only the answers you verified in Step 9 count as ground truth |
+
+The six fix modes:
+
+1. Right measure not found → **add synonyms** on the measure/column (most common).
+2. Value/entity not resolving → **enable entity matching** (value indexing) on that column.
+3. Wrong source chosen → **tighten the routing rule** in the instructions.
+4. Critical filter missed → **add the filter** to the instructions.
+5. Tables joined wrongly → **add a join hint / verified query**.
+6. Outdated pattern used → **mark the asset deprecated**.
+
+## 4️⃣ What Happens Behind the Scenes?
+
+1. **Score** — Genie Code runs the space''s built-in benchmark scorer and reads per-question pass/fail with the SQL Genie generated vs. the expected answer.
+2. **Diagnose** — it clusters misses and maps each to ONE of the six fix modes.
+3. **Fix (append-only)** — it shows the fixes, and on your OK appends new rules / synonyms / entity-matching / verified queries — never replacing validated rules.
+4. **Re-score & repeat** — it re-runs the scorer, reports before/after, and iterates 2–3 times toward ~85%, recording each iteration in state.
+
+### Reference: why append-only
+
+Overwriting instructions can regress questions that already passed. Appending keeps prior fixes intact so the pass rate is monotonic across iterations (`03-genie-space-patterns` Rule 17).',
+'## Expected Deliverables
+
+- The benchmark set scored with the space''s **built-in scorer** (SQL chosen vs. expected, per question)
+- Each miss triaged to ONE of the six fix modes, applied **append-only**
+- 2–3 iterations run, with each iteration''s before/after pass rate recorded in `.vibecoding-state.md`
+- A stabilized pass rate (~85% guidance on the verified answers, not a hard gate)
+
+**Sample — an iteration summary:**
+
+```
+Iteration 1: 9/15 (60%) → fixes: +2 synonyms, +1 entity-match, +1 routing rule
+Iteration 2: 13/15 (87%) → 2 remaining misses are ambiguous phrasings; stop (don''t overfit)
+```',
+true, 1, true, current_timestamp(), current_timestamp(), current_user());
+
+-- Step 14 (Genie Accelerator · Genie Agent): Show Your Agent (proof beat, no new asset) - bypass_llm=TRUE (Type B)
+INSERT INTO ${catalog}.${schema}.section_input_prompts 
+(input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
+VALUES
+(73, 'gagent_share',
+'The **proof beat** — no new asset. Ask your agent **one real question you actually needed answered this quarter** (not one you know it can handle) and confirm it behaves. Note what it got right and the one thing you''d curate next (that feeds the next benchmark round).
+
+Do this in the Genie space chat surface, then record your note:
+
+```
+Open the Genie space chat and ask one real question you genuinely needed answered this quarter —
+not a softball you know it can handle.
+
+Confirm the agent:
+- uses MEASURE() on the governed Metric View (not the raw tables),
+- discloses the reference date when the question uses a relative time expression ("this month", "YTD"),
+- respects the scope boundary (declines cleanly if the question is out of scope).
+
+Write down what it got right and the ONE thing you''d curate next, and save that note to
+.vibecoding-state.md.
+```',
+'',
+'Show Your Agent (Genie Accelerator)',
+'The proof beat — ask the agent one real question you actually needed answered, and confirm it uses MEASURE() on the governed Metric View, discloses the time anchor, and respects scope',
+73,
+'> **Artifact root (client-aware).** Resolve `<ARTIFACT_ROOT>` via `vibecoding-state.resolve_root` and write every artifact under it.
+
+## 1️⃣ How To Apply
+
+Open the Genie space chat surface, ask your real question, and check the three behaviors above. Record what it got right and your next curation target in `.vibecoding-state.md`.
+
+## 2️⃣ What Are We Building?
+
+Nothing new — this is **evidence**: a live, real question answered correctly through the governed Metric View, with the time-anchor disclosure and scope behavior visible, plus a note of the next thing to curate.
+
+```mermaid
+flowchart LR
+  q["one real question<br/>(you needed this quarter)"] --> agent["Genie Agent"]
+  agent --> check["check 3 behaviors:<br/>MEASURE()? · time anchor? · scope?"]
+  check --> note["note: what it got right<br/>+ ONE thing to curate next"]
+  note --> next["→ seeds the next optimize round"]
+```
+
+The test of a governed agent isn''t a rehearsed demo — it''s a question you genuinely needed answered, handled correctly through the Metric View.
+
+## 3️⃣ Why Are We Building It This Way? (Databricks Best Practices)
+
+| Practice | How it''s used here |
+|----------|-------------------|
+| **A real question, not a softball** | Proves the agent on something you actually needed, not a rehearsed demo |
+| **Governed behavior visible** | `MEASURE()` use, time-anchor disclosure, and scope decline are all checked |
+| **Feed the next round** | The "one thing to curate next" seeds the next benchmark/optimize cycle |
+| **Evidence over vibes** | You record what happened, so improvement is tracked, not felt |
+
+## 4️⃣ What Happens Behind the Scenes?
+
+1. **Ask for real** — you open the Genie space chat and ask one question you genuinely needed answered this quarter.
+2. **Observe the three behaviors** — that it used `MEASURE()` on the Metric View (not raw tables), disclosed the reference date for any relative-time phrasing, and respected the scope boundary.
+3. **Record the note** — you write down what it got right and the ONE thing you''d curate next, and save it to state — no API calls, just observation.
+
+### Reference: the three governed behaviors
+
+`MEASURE()` on the MV proves the numbers are governed; the **time-anchor disclosure** ("using latest data date 1998-08-02 as today") proves relative time is transparent; the **clean scope decline** proves it won''t guess outside its lane. All three come from the instructions authored in Step 7.',
+'## Expected Deliverables
+
+- A live, real question answered correctly through the governed Metric View
+- Time-anchor disclosure shown for relative-time questions; scope boundary respected
+- A recorded note (what it got right + the one thing to curate next) in `.vibecoding-state.md`
+
+**Sample — the note you record:**
+
+```markdown
+## Show Your Agent
+Q asked: "How did net revenue trend by quarter this year?"
+Got right: used MEASURE(net_revenue); disclosed anchor (latest date = 1998-08-02); grouped by quarter.
+Curate next: add synonym "top line" → net_revenue (I had to rephrase once).
+```',
+true, 1, false, current_timestamp(), current_timestamp(), current_user());
+
+-- gagent_describe (genie-code fork) — native createAsset(genie) shell + PATCH /api/2.0/genie/spaces/{id}; bypass_LLM = TRUE
+INSERT INTO ${catalog}.${schema}.section_input_prompts
+(input_id, section_tag, coding_assistant, input_template, system_prompt,
+ bypass_llm, version, is_active, inserted_at, updated_at, created_by)
+VALUES
+(934, 'gagent_describe', 'genie-code',
+'**Create a Genie Agent scoped from the PRD personas. Attach the governed Metric View (for measures) AND its base detail table(s) one grain below (for row-level questions), validate the serialized config, and review it before you create the space.**
+
+**Genie Code navigation:** the space is minted with the native `createAsset(assetType:"genie", tableIdentifiers=[…])` shell, then populated with `PATCH /api/2.0/genie/spaces/{id}` using the full body. **Never `PATCH /api/2.0/data-rooms/{id}`** — it silently wipes the space. Run this from a **workspace / Genie surface**, not a bundle-editor page. Leans on `semantic-layer/04-genie-space-export-import-api` (the `serialized_space` contract, the `_assert_sql_arrays` validator, and `sort_genie_config`) and `03-genie-space-patterns`.
+
+Read `docs/design_prd.md`, `docs/genie_brief.md`, and `.vibecoding-state.md` first — the agent''s users and the topics it covers come straight from the PRD''s personas and User Journeys, and the exact Metric View FQN is the one recorded in state.
+
+**Prior step, implicit approval.** If Step 5 left a synonym diff shown but not yet applied to the Metric View, my running this prompt approves it: rebuild the Metric View with those synonyms (`CREATE OR REPLACE`) and record it in `.vibecoding-state.md` first, then create the agent. Don''t re-ask about the previous step.
+
+Create a Genie space (Genie Agent) for {use_case_title}. This agent answers questions about what my team reviews for {use_case_title}. Its users are the PRD personas, and they typically ask about the top two or three topics in the brief.
+
+Attach two kinds of data source, read from `.vibecoding-state.md`:
+
+- The governed **Metric View** (the FQN recorded in state) — the source for every measure/metric.
+- The **base detail table(s) one grain below** that Metric View (the fact table(s) it aggregates from), which still carry the row-level and narrative columns — individual records, descriptions, free text — the Metric View drops. Attach these so the agent can answer "show / list / export the individual records" questions the Metric View structurally can''t.
+
+Do NOT attach the whole raw `{chapter_3_lakehouse_catalog}.{chapter_3_lakehouse_schema}` schema — only the Metric View plus the one-grain-below detail table(s). On the detail table''s lookup columns (the identifiers and categories users name), set `column_configs` with `enable_entity_matching` (and `build_value_dictionary` for high-cardinality categoricals).
+
+Build the full `serialized_space`, run `_assert_sql_arrays` and `sort_genie_config` on it before the POST/PATCH, then after creation GET it back with `?include_serialized_space=true` and confirm the Metric View resolved. The live workspace may return the Metric View under `data_sources.tables` rather than `data_sources.metric_views` — accept either as long as it validates and resolves; do not fail the step over the slot name.
+
+Show me the space''s serialized config before you create it, then create it.
+
+**Open + auto-navigate (so the space-scoped tools/skills load).** Once the space is created and GET-confirmed, call `openAsset(assetType:"genie", assetId=<genie_space_id>)` to navigate me onto the new space''s page — Genie Code''s space-scoped native tools/skills only load on the asset page, and the next steps (Author Instructions → Verified Queries → Optimize) run there. `openAsset` is best-effort for `genie` assets, so ALWAYS print a clickable link as the guaranteed fallback: `{host}/genie/rooms/{genie_space_id}?o={o}`, built with the pre-authenticated `w` (`host = w.config.host`, `o = w.get_workspace_id()`).
+
+Record the space id and the gate result in `.vibecoding-state.md`.
+
+**State-lock:** after the space is created, append this step''s Per-Step Log entry, gate result, and the captured `genie_space_id` to `.vibecoding-state.md`, then re-read to confirm the write landed.
+
+**Gate:** `Agent scaffolded` — a live Genie space exists for `{use_case_title}` with a plain-language scope; the governed Metric View is attached for measures AND the base detail table(s) one grain below are attached for row-level questions (the whole raw schema is NOT attached); the config was validated (`_assert_sql_arrays`) and the Metric View is GET-confirmed to resolve (slot-agnostic); the serialized config was reviewed before creation; the space id is recorded in `.vibecoding-state.md`.
+
+**➡️ Next step.** Author lean general instructions (Step 7) — a `MEASURE()`-vs-detail routing rule and a scope boundary.',
+'',
+true, 1, true, current_timestamp(), current_timestamp(), current_user());
+
+-- gagent_optimize (genie-code fork) — native page-locked benchmark loop (runBenchmarks/getBenchmarkResults + benchmark-failure-analysis skill), append-only 6-mode fixers, 2-3 iterations, ask_genie fallback; bypass_LLM = TRUE
+INSERT INTO ${catalog}.${schema}.section_input_prompts
+(input_id, section_tag, coding_assistant, input_template, system_prompt,
+ bypass_llm, version, is_active, inserted_at, updated_at, created_by)
+VALUES
+(935, 'gagent_optimize', 'genie-code',
+'**On the Genie Space page, run the native benchmark scorer, read per-question results, load the benchmark-failure-analysis skill, triage each miss to ONE append-only curation fix via the native tools, then re-run — 2-3 iterations — and report before/after. Aim for ~85%, don''t chase 100%.**
+
+**Genie Code navigation — page precondition:** you MUST be on the Genie Space page for the `genie_space_id` recorded in `.vibecoding-state.md`. The native tools (`runBenchmarks`, `getBenchmarkResults`, `readInstructions`, `readTableConfig`, `addInstructionsToSpace`, `addKnowledgeSnippetsToSpace`, `updateColumnSynonyms`, `updateColumnDescriptions`, `configureEntityMatching`) only load there — they are NOT available on a notebook/editor surface. Load the `benchmark-failure-analysis` skill for the triage methodology. Only if the native scorer is unavailable, fall back to `ask_genie` (Conversation API). Never `PATCH /api/2.0/data-rooms/{id}`.
+
+Read `docs/genie_brief.md` and `.vibecoding-state.md` first.
+
+**Prior step, implicit approval.** My running this prompt approves the Step 9 benchmark set — but only the answers I verified in Step 9 are ground truth; unverified answers stay unverified.
+
+Run the benchmarks with `runBenchmarks`, then pull per-question pass/fail with `getBenchmarkResults` (the SQL Genie generated vs. the expected answer). For each one, show whether it matched and whether it obeyed the brief''s guardrails. Report the overall pass rate.
+
+For every miss, diagnose the root cause and map it to ONE curation fix, applied with the matching native tool:
+
+- Right measure not found → add synonyms (`updateColumnSynonyms`) — most common.
+- Value/entity not resolving (a named id, tail, category) → `configureEntityMatching` (value indexing) on that column.
+- Wrong source chosen (raw table instead of the Metric View, or vice-versa) → tighten the routing rule (`addInstructionsToSpace`).
+- Critical filter missed → add the filter (`addInstructionsToSpace`).
+- Tables joined wrongly → add a verified query / knowledge snippet (`addKnowledgeSnippetsToSpace`).
+- Outdated pattern used → mark the asset deprecated.
+
+Show me the fixes before applying them. APPEND to the existing instructions with `addInstructionsToSpace` — never replace validated rules. Then re-run `runBenchmarks` and show me the before/after pass rates. Run 2-3 iterations until the rate stabilizes; aim for ~85% on the questions I verified — don''t chase 100%.
+
+Record each iteration''s before/after pass rate and the gate result in `.vibecoding-state.md`.
+
+**State-lock:** after the final re-run, append this step''s Per-Step Log entry, gate result, and the per-iteration before/after pass rates to `.vibecoding-state.md`, then re-read to confirm the write landed.
+
+**Gate:** `Agent optimized` — benchmarks ran via the native scorer (`runBenchmarks`/`getBenchmarkResults`) on the Genie Space page (or the documented `ask_genie` fallback); each miss was triaged to ONE of the 6 fix modes applied with its native tool; fixes were **appended** (validated rules untouched); 2-3 iterations were run and the per-iteration before/after pass rates are recorded in `.vibecoding-state.md` (~85% guidance, not a hard gate).
+
+**➡️ Next step.** Build the AI/BI Dashboard across the PRD-relevant Gold data (governed `MEASURE()` tiles + supporting detail), which also inventories the tables the app will activate.',
+'',
+true, 1, true, current_timestamp(), current_timestamp(), current_user());
+
+-- =============================================================================
+-- GENIE ACCELERATOR, Genie Ontology group (Batch 3, Steps 11-13), order 70-72
+-- Stub rows; authored bodies are synced from sections/7N-ontology_*.md via the
+-- scoped per-id sync (source of truth = the .md files). Discover UI-preferred; Beta.
+-- =============================================================================
+
+-- Step 11 (Genie Accelerator · Genie Ontology): Model the Domain + Subdomains - bypass_llm=TRUE (Type B; UI-preferred, pre-created fallback; Beta)
+INSERT INTO ${catalog}.${schema}.section_input_prompts 
+(input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
+VALUES
+(70, 'ontology_domain',
+'**Model a Genie Ontology domain with 3-5 subdomains in Databricks Discover (UI-preferred, or reuse a pre-created domain) and capture the domain and subdomain IDs.**
+
+**Preferred — create it in the Discover UI (a few clicks).** Navigate to **Catalog → Discover → New domain**, name the domain for `{use_case_title}`, add 3–5 subdomains covering your reporting areas, and note the **domain ID** and **subdomain IDs**. If a domain is pre-created for the workshop, use it — just open it in Discover and capture its IDs.
+
+**Optional — Genie Code assist (fallback only; prefer the UI above).** Read `docs/design_prd.md` and `.vibecoding-state.md` first — the domain scope follows the PRD. If a domain called `<domain>` already exists, use it and show me its domain and subdomain IDs. Otherwise create a domain called `<domain>` with these subdomains — `<subdomain_1>`, `<subdomain_2>`, `<subdomain_3>` — with a one-sentence scope for {use_case_title}. Either way, show me the domain and subdomain IDs.
+
+Record the domain and subdomain IDs and the gate result in `.vibecoding-state.md`.',
+'',
+'Model the Domain + Subdomains (Genie Accelerator)',
+'Create (or reuse a pre-created) Discover domain with 3-5 subdomains in the UI, capture the domain and subdomain IDs — UI-preferred, with an optional Genie Code assist',
+70,
+'> **Artifact root (client-aware).** Resolve `<ARTIFACT_ROOT>` via `vibecoding-state.resolve_root` and write every artifact under it.
+
+> **Beta + permissions.** Discover ontology (domains/Pages) is **Beta**. You need **Manage Discovery** permission on the domain. Pages currently ground **Genie One** answers (as citations); Genie Agent / Genie Code integration is on the roadmap. Skill: `data_product_accelerator/skills/semantic-layer/06-genie-discover-ontology`.
+
+## 1️⃣ How To Apply
+
+1. **Preferred:** in the Discover UI, create the domain + 3–5 subdomains (or open the pre-created workshop domain).
+2. Capture the **domain ID** and **subdomain IDs** into `.vibecoding-state.md` — later steps route by ID.
+3. Only if the UI isn''t available, use the optional Genie Code assist prompt above.
+
+## 2️⃣ What Are We Building?
+
+A **Discover domain** with 3–5 **subdomains** for `{use_case_title}` — the taxonomy that later Pages (Step 12) and the Routing Page (Step 13) hang off. No Pages are authored yet.
+
+```mermaid
+flowchart LR
+  prd["PRD scope"] --> dom["Discover domain<br/>(UI · or pre-created)"]
+  dom --> sub["3-5 subdomains"]
+  sub --> ids["capture domain ID<br/>+ subdomain IDs → state"]
+  ids --> pages["→ Pages (Step 12)"]
+  ids --> routing["→ Routing Page (Step 13)"]
+```
+
+The Genie **Ontology** is the taxonomy layer of Databricks Discover — think of the domain as the folder and subdomains as its sections; Pages later fill it with business definitions.
+
+## 3️⃣ Why Are We Building It This Way? (Databricks Best Practices)
+
+| Practice | How it''s used here |
+|----------|-------------------|
+| **UI-preferred** | Domains/subdomains are a few clicks and easiest to see in Discover |
+| **Reuse pre-created** | If the workshop ships a domain, everyone shares one clean taxonomy |
+| **Capture IDs, not names** | Later steps (Pages, bulk import) route by internal ID — the #1 gotcha is passing a name |
+| **Scope from the PRD** | The domain scope follows the PRD, not an invented taxonomy |
+
+## 4️⃣ What Happens Behind the Scenes?
+
+1. **Create or open (UI)** — you create the domain in **Catalog → Discover → New domain** (or open the pre-created workshop domain).
+2. **Add subdomains** — 3–5 subdomains covering your reporting areas, scoped from the PRD.
+3. **Capture the IDs** — you record the domain ID and each subdomain ID to `.vibecoding-state.md`; Genie Code can look these up but a human owns the clicks.
+4. **Unlock downstream** — those IDs are what Steps 12–13 route by.
+
+### Reference: Beta limits + the #1 gotcha
+
+Discover ontology is **Beta** with **no public create/update API** for domains — the UI is the authoring surface, and you need **Manage Discovery** permission. Later steps route by internal **ID**, not name; passing a domain *name* where an *ID* is expected is the most common failure. Pages currently ground **Genie One** citations; Genie Agent/Code integration is on the roadmap. Skill: `data_product_accelerator/skills/semantic-layer/06-genie-discover-ontology`.',
+'## Expected Deliverables
+
+- A Discover domain with 3–5 subdomains (newly created or reused from the workshop)
+- Domain ID + subdomain IDs captured to `.vibecoding-state.md`
+- No Pages authored yet
+
+**Sample — the taxonomy + IDs you capture:**
+
+```
+Domain: "Revenue Analytics"  (id: dom_a1b2c3…)
+  ├─ Orders     (id: sub_11…)
+  ├─ Returns    (id: sub_22…)
+  └─ Customers  (id: sub_33…)
+```',
+true, 1, true, current_timestamp(), current_timestamp(), current_user());
+
+-- Step 12 (Genie Accelerator · Genie Ontology): Author Pages - bypass_llm=TRUE (Type B/C; Discover UI Page editor, no public API; Beta)
+INSERT INTO ${catalog}.${schema}.section_input_prompts 
+(input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
+VALUES
+(71, 'ontology_pages',
+'**Draft Discover Pages for my top measures — plain-language definition, exact formula naming the Metric View, synonyms, at least one negative rule, chunk-safe sentences — for me to review and publish, then capture the Page IDs.**
+
+Read `docs/genie_brief.md` and `.vibecoding-state.md` first. In the Discover UI, navigate to your `<domain>` → the `<subdomain>` → **New Page**, then have Genie Code draft the fields.
+
+Create a Page in the `<subdomain_1>` subdomain of `<domain>` for the measure "`<measure>`". Use `docs/genie_brief.md` (and any file I dropped in) as the source. The Page needs:
+
+- a definition in plain business language, one paragraph;
+- the exact formula, naming the governed Metric View in `{lakehouse_default_catalog}.{user_schema_prefix}_gold` and the measure;
+- synonyms covering every way someone might ask — acronym, informal phrasing, legacy name;
+- at least one negative rule (a "never do this");
+- the governed Metric View as a related asset.
+
+Write every rule sentence so it names the table or measure inside the sentence itself — the Page is split into chunks before it is read, so a sentence that leans on the title arrives orphaned. Show me the draft before publishing, then repeat for my second most important measure.
+
+**Bulk import (optional — if you have a glossary you dropped in).** Import the glossary terms as Pages into the domain with ID `<domain_id from Step 11>`, mapping each term to a Page with a definition, synonyms, and related assets. Show me the first three before creating all of them.
+
+Record the published Page IDs and the gate result in `.vibecoding-state.md`.',
+'',
+'Author Pages (Genie Accelerator)',
+'Draft Discover Pages for your top measures in the Page editor — plain-language definition, exact formula naming the Metric View, synonyms, at least one negative rule, chunk-safe sentences',
+71,
+'> **Artifact root (client-aware).** Resolve `<ARTIFACT_ROOT>` via `vibecoding-state.resolve_root` and write every artifact under it.
+
+> **Beta + permissions.** Pages are **Beta** with **no public create/update API** — authored in the Discover UI editor; Genie Code drafts, a human publishes. Needs **Manage Discovery**. Bulk-import failures usually mean the domain **name** was passed where the internal **ID** is required. Skill: `data_product_accelerator/skills/semantic-layer/06-genie-discover-ontology`.
+
+## 1️⃣ How To Apply
+
+1. In Discover, open your `<domain>` → `<subdomain>` → **New Page**.
+2. Paste the draft prompt into Genie Code; review the drafted fields; **publish** in the UI.
+3. Repeat for your second measure. Save the published Page IDs to `.vibecoding-state.md`.
+
+## 2️⃣ What Are We Building?
+
+**Two published Pages**, one per top measure — each with a business-language definition, the exact formula naming the Metric View, a full synonym list, ≥1 negative rule, and the Metric View as a related asset.
+
+```mermaid
+flowchart LR
+  brief["brief measure"] --> draft["GC drafts Page fields<br/>definition · formula(MV) · synonyms · ≥1 negative rule · related asset"]
+  draft --> review["you review the draft"]
+  review -->|"publish in UI"| page["published Page<br/>(grounds Genie One citations)"]
+  page --> repeat["repeat for 2nd measure → save IDs"]
+```
+
+A **Page** is the business definition of one measure — the human-authored ground truth Genie One cites when it answers.
+
+## 3️⃣ Why Are We Building It This Way? (Databricks Best Practices)
+
+| Practice | How it''s used here |
+|----------|-------------------|
+| **Chunk-safe sentences** | Every rule names its table/measure inline, so a chunked sentence doesn''t arrive orphaned |
+| **Formula anchored to the MV** | The Page points at the governed Metric View, not raw tables |
+| **Full synonyms** | Acronym + informal + legacy phrasing so questions resolve |
+| **≥1 negative rule** | A "never do this" prevents a common wrong answer |
+| **Draft, then human-publish** | No public API — Genie Code drafts, you publish |
+
+## 4️⃣ What Happens Behind the Scenes?
+
+1. **Open the editor** — you navigate Discover → `<domain>` → `<subdomain>` → **New Page**.
+2. **Draft the fields** — Genie Code drafts the definition, the exact formula naming the Metric View, the synonym list, ≥1 negative rule, and the MV as a related asset — all from the brief.
+3. **Review + publish** — you review the draft and publish in the UI (Genie Code cannot create Pages headlessly).
+4. **Repeat + record** — repeat for your second measure and save the published Page IDs to state.
+
+### Reference: the chunk-safe rule
+
+Pages are split into chunks before they''re read, so a sentence that leans on the Page title arrives orphaned. Write every rule to name its table/measure **inside the sentence** ("Never average Average Order Value across periods" — not "Never average it"). The skill (`06-genie-discover-ontology`) codifies this plus the ID-vs-name gotcha and what a good Page contains. Bulk-import failures usually mean a domain **name** was passed where the internal **ID** is required.',
+'## Expected Deliverables
+
+- Two published Pages, each: plain-language definition, exact formula naming the Metric View, synonym list (acronym/informal/legacy), ≥1 negative rule, MV as related asset
+- Chunk-safe sentences; drafts reviewed before publishing
+- Published Page IDs recorded to `.vibecoding-state.md`
+
+**Sample — a drafted Page (before you publish):**
+
+```markdown
+# Net Revenue
+Definition: revenue net of line-item discount, across all order lines.
+Formula: MEASURE(net_revenue) on {lakehouse_default_catalog}.{user_schema_prefix}_gold.order_revenue_metrics
+Synonyms: net sales, top line, revenue (net)
+Negative rule: Net Revenue never includes tax; do not use o_totalprice for Net Revenue.
+Related asset: order_revenue_metrics (Metric View)
+```',
+true, 1, true, current_timestamp(), current_timestamp(), current_user());
+
+-- Step 13 (Genie Accelerator · Genie Ontology): Write the Routing Page - bypass_llm=TRUE (Type B; Discover UI Page editor, no public API; deck's highest-return exercise)
+INSERT INTO ${catalog}.${schema}.section_input_prompts 
+(input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
+VALUES
+(72, 'ontology_routing',
+'**Author one Question-to-Metric-View Routing Page covering every inventory measure — four or five phrasings each (formal, acronym, informal, legacy) routed to the governed Metric View and exact measure — then name an owner, publish, and capture the Page ID.**
+
+Read `docs/genie_brief.md` and `.vibecoding-state.md` first (use the domain ID saved in state). In the Discover UI, navigate to your `<domain>` → **New Page**, then draft with Genie Code.
+
+Create a Page in `<domain>` called "Question to Metric View Routing". Its purpose is to map the ways people ask questions to the governed Metric View and measure that should answer them. For each measure in my signed-off inventory (`docs/genie_brief.md`), list four or five phrasings — the formal name, the acronym, the informal phrasing, and any legacy name from an old system — and route each to the governed Metric View in `{lakehouse_default_catalog}.{user_schema_prefix}_gold` and the exact measure. Format the mappings as a table, add a short introduction saying this Page routes questions to governed sources and should be checked before querying raw tables, link the Metric View as a related asset, name an owner, and show me the draft before publishing.
+
+Record the Page ID + owner and the gate result in `.vibecoding-state.md`.',
+'',
+'Write the Routing Page (Genie Accelerator)',
+'Author one Question→Metric View Routing Page in Discover mapping every inventory measure''s phrasings (formal, acronym, informal, legacy) to the governed Metric View + measure',
+72,
+'> **Artifact root (client-aware).** Resolve `<ARTIFACT_ROOT>` via `vibecoding-state.resolve_root` and write every artifact under it.
+
+> **Beta + permissions.** Pages are **Beta** with **no public create/update API** — authored in the Discover UI editor; Genie Code drafts, a human publishes. Needs **Manage Discovery**. Skill: `data_product_accelerator/skills/semantic-layer/06-genie-discover-ontology`.
+
+## 1️⃣ How To Apply
+
+1. In Discover, open your `<domain>` → **New Page**.
+2. Paste the draft prompt into Genie Code; review the phrasing→(Metric View, measure) table; name an owner; **publish**.
+3. Save the Page ID + owner to `.vibecoding-state.md`.
+
+## 2️⃣ What Are We Building?
+
+One **Routing Page** covering every inventory measure: a flat table mapping four or five phrasings per measure (formal, acronym, informal, legacy) to the governed Metric View + exact measure, with a named owner.
+
+```mermaid
+flowchart LR
+  inv["signed-off inventory"] --> tbl["phrasing → (Metric View, measure)<br/>formal · acronym · informal · legacy"]
+  tbl --> review["review draft + name owner"]
+  review -->|"publish in UI"| rp["Routing Page<br/>lookup beats inference"]
+```
+
+This is the deck''s **highest-return** exercise: it replaces Genie''s guess-the-table inference with a lookup a person already got right.
+
+## 3️⃣ Why Are We Building It This Way? (Databricks Best Practices)
+
+| Practice | How it''s used here |
+|----------|-------------------|
+| **Lookup beats inference** | A human-authored phrasing→source map replaces Genie''s table-inference — the deck''s highest-return move |
+| **Every measure covered** | The Page spans the whole signed-off inventory, not a subset |
+| **All the sloppy phrasings** | Acronyms and legacy names are included, since that''s how people actually ask |
+| **Named owner** | Someone owns keeping the routing current |
+
+## 4️⃣ What Happens Behind the Scenes?
+
+1. **Open the editor** — you navigate Discover → `<domain>` → **New Page** (using the domain ID from state).
+2. **Draft the table** — Genie Code drafts, for each inventory measure, 4–5 phrasings (formal, acronym, informal, legacy) each routed to the governed Metric View + exact measure.
+3. **Add intro + owner** — a short intro says "check this before querying raw tables"; the MV is linked as a related asset; you name an owner.
+4. **Review + publish** — you review the draft and publish in the UI, then record the Page ID + owner to state.
+
+### Reference: why routing is the highest-return beat
+
+Most Genie misses are *right answer, wrong source* — it inferred a raw table instead of the governed measure. A Routing Page turns that inference into a lookup, so "top line", "net sales", and "revenue" all resolve to the same governed measure. Pages ground **Genie One** citations. Skill: `06-genie-discover-ontology`.',
+'## Expected Deliverables
+
+- One published Routing Page ("Question to Metric View Routing") covering every inventory measure
+- A flat phrasing→(Metric View, measure) table including acronyms and legacy phrasings
+- A short intro + the Metric View linked as a related asset + a named owner
+- Draft reviewed before publish; Page ID + owner recorded to `.vibecoding-state.md`
+
+**Sample — the routing table you publish:**
+
+| Phrasing | Metric View | Measure |
+|---|---|---|
+| revenue, net sales, top line, "sales $" | `order_revenue_metrics` | `net_revenue` |
+| AOV, avg order value, spend per order | `order_revenue_metrics` | `average_order_value` |
+| return rate, returns %, "% returned" | `order_revenue_metrics` | `return_rate` |',
+true, 1, true, current_timestamp(), current_timestamp(), current_user());
+
+-- ontology_domain (genie-code fork) — Discover UI preferred + pre-created fallback + optional GC assist; bypass_LLM = TRUE
+INSERT INTO ${catalog}.${schema}.section_input_prompts
+(input_id, section_tag, coding_assistant, input_template, system_prompt,
+ bypass_llm, version, is_active, inserted_at, updated_at, created_by)
+VALUES
+(936, 'ontology_domain', 'genie-code',
+'**Model a Genie Ontology domain with 3-5 subdomains in Databricks Discover (UI-preferred, or reuse a pre-created domain) and capture the domain and subdomain IDs.**
+
+You reach this after the agent is live and the app is built: modeling the domain layers domain-scoping onto the working agent as an extra retrieval lever — you can re-run the optimize loop afterward to capture the gain.
+
+**Genie Code navigation:** open **Catalog → Discover**. Genie Code can look up an existing domain and read its IDs, but domain/subdomain creation is done in the UI. Needs **Manage Discovery** permission. Skill: `data_product_accelerator/skills/semantic-layer/06-genie-discover-ontology`.
+
+**Optional Genie Code assist (fallback only — prefer the UI).** Read `docs/design_prd.md` and `.vibecoding-state.md` first — the domain scope follows the PRD. If a domain called `<domain>` already exists, use it and show me its domain and subdomain IDs. Otherwise create a domain called `<domain>` with these subdomains — `<subdomain_1>`, `<subdomain_2>`, `<subdomain_3>` — with a one-sentence scope for {use_case_title}. Either way, show me the domain and subdomain IDs and save them to `.vibecoding-state.md`.
+
+**State-lock:** append this step''s Per-Step Log entry, gate result, and the captured domain + subdomain IDs to `.vibecoding-state.md`, then re-read to confirm the write landed.
+
+**Gate:** `Domain modeled` — a Discover domain with 3–5 subdomains exists (created in the UI or reused from the workshop); its domain ID + subdomain IDs are recorded in `.vibecoding-state.md`; no Pages authored yet.
+
+**➡️ Next step.** Author Pages (Step 12) for your top measures in the Discover Page editor.',
+'',
+true, 1, true, current_timestamp(), current_timestamp(), current_user());
+
+-- ontology_pages (genie-code fork) — Discover UI Page editor (no public API); GC drafts, human publishes; chunk-safe; bypass_LLM = TRUE
+INSERT INTO ${catalog}.${schema}.section_input_prompts
+(input_id, section_tag, coding_assistant, input_template, system_prompt,
+ bypass_llm, version, is_active, inserted_at, updated_at, created_by)
+VALUES
+(937, 'ontology_pages', 'genie-code',
+'**Draft Discover Pages for my top measures — plain-language definition, exact formula naming the Metric View, synonyms, at least one negative rule, chunk-safe sentences — for me to review and publish, then capture the Page IDs.**
+
+**Genie Code navigation:** Genie Code drafts Page field contents inside the Discover editor — it does **not** create Pages headlessly (Beta, no API). Needs **Manage Discovery**. Bulk-import misses usually mean the domain **name** was passed where the internal **ID** is required. Skill: `data_product_accelerator/skills/semantic-layer/06-genie-discover-ontology`.
+
+Read `docs/genie_brief.md` and `.vibecoding-state.md` first. Then, inside the Page editor, have Genie Code draft the fields.
+
+Create a Page in the `<subdomain_1>` subdomain of `<domain>` for the measure "`<measure>`". Use `docs/genie_brief.md` (and any file I dropped in) as the source. The Page needs:
+
+- a definition in plain business language, one paragraph;
+- the exact formula, naming the governed Metric View in `{lakehouse_default_catalog}.{user_schema_prefix}_gold` and the measure;
+- synonyms covering every way someone might ask — acronym, informal phrasing, legacy name;
+- at least one negative rule (a "never do this");
+- the governed Metric View as a related asset.
+
+Write every rule sentence so it names the table or measure inside the sentence itself — the Page is split into chunks before it is read, so a sentence that leans on the title arrives orphaned. Show me the draft before publishing, then repeat for my second most important measure, and save the published Page IDs to `.vibecoding-state.md`.
+
+**Bulk import (optional — if you dropped in a glossary).** Import the glossary terms as Pages into the domain with ID `<domain_id from Step 11>`, mapping each term to a Page with a definition, synonyms, and related assets. Show me the first three before creating all of them.
+
+**State-lock:** append this step''s Per-Step Log entry, gate result, and the captured Page IDs to `.vibecoding-state.md`, then re-read to confirm the write landed.
+
+**Gate:** `Pages published` — two published Pages, each with a business-language definition, the exact formula naming the Metric View, a full synonym list (acronym/informal/legacy), ≥1 negative rule, and the Metric View as a related asset; every rule sentence is chunk-safe; drafts were reviewed before publish; Page IDs recorded in `.vibecoding-state.md`.
+
+**➡️ Next step.** Write the Question→Metric View Routing Page (Step 13) covering every inventory measure.',
+'',
+true, 1, true, current_timestamp(), current_timestamp(), current_user());
+
+-- ontology_routing (genie-code fork) — Discover UI Page editor (no public API); Question->MV routing table; bypass_LLM = TRUE
+INSERT INTO ${catalog}.${schema}.section_input_prompts
+(input_id, section_tag, coding_assistant, input_template, system_prompt,
+ bypass_llm, version, is_active, inserted_at, updated_at, created_by)
+VALUES
+(938, 'ontology_routing', 'genie-code',
+'**Author one Question-to-Metric-View Routing Page covering every inventory measure — four or five phrasings each (formal, acronym, informal, legacy) routed to the governed Metric View and exact measure — then name an owner, publish, and capture the Page ID.**
+
+**Genie Code navigation:** Genie Code drafts the routing table inside the Discover Page editor (Beta, no public API — a human publishes). Uses the domain ID saved in Step 11. Needs **Manage Discovery**. Skill: `data_product_accelerator/skills/semantic-layer/06-genie-discover-ontology`.
+
+Read `docs/genie_brief.md` and `.vibecoding-state.md` first (use the domain ID saved in state). Then, inside the Page editor, draft with Genie Code.
+
+Create a Page in `<domain>` called "Question to Metric View Routing". Its purpose is to map the ways people ask questions to the governed Metric View and measure that should answer them. For each measure in my signed-off inventory (`docs/genie_brief.md`), list four or five phrasings — the formal name, the acronym, the informal phrasing, and any legacy name from an old system — and route each to the governed Metric View in `{lakehouse_default_catalog}.{user_schema_prefix}_gold` and the exact measure. Format the mappings as a table, add a short introduction saying this Page routes questions to governed sources and should be checked before querying raw tables, link the Metric View as a related asset, name an owner, show me the draft before publishing, then record the Page ID + owner in `.vibecoding-state.md`.
+
+**State-lock:** append this step''s Per-Step Log entry, gate result, and the captured Page ID + owner to `.vibecoding-state.md`, then re-read to confirm the write landed.
+
+**Gate:** `Routing Page published` — one published Routing Page covering every inventory measure as a flat phrasing→(Metric View, measure) table (including acronyms and legacy phrasings), with a short intro, the Metric View linked as a related asset, and a named owner; the draft was reviewed before publish; Page ID + owner recorded in `.vibecoding-state.md`.
+
+**➡️ Next step.** Return to the Optimize loop (Step 10) to capture domain-scoping gains, or continue to the AI/BI Dashboard and the optional Activation tail.',
+'',
+true, 1, true, current_timestamp(), current_timestamp(), current_user());
+
+-- Step 15 (Genie Accelerator · Tail): AI/BI Dashboard - bypass_llm=TRUE (Type C; LIGHT router to Genie Code's native AI/BI dashboard skill; inventories tables for Choose What to Activate)
+INSERT INTO ${catalog}.${schema}.section_input_prompts 
+(input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
+VALUES
+(74, 'gaccel_dashboard',
+'**Build an AI/BI dashboard across the PRD-relevant Gold data using your native dashboard capability — governed `MEASURE()` tiles plus supporting detail — review the tile plan first, then inventory the tables it uses so Choose What to Activate knows what to sync.**
+
+Read `docs/genie_brief.md`, `docs/design_prd.md`, and `.vibecoding-state.md` first.
+
+Using your built-in AI/BI dashboard capability, create a dashboard for {use_case_title} covering the PRD-relevant data in `{lakehouse_default_catalog}.{user_schema_prefix}_gold`: governed measures from the Metric View recorded in `.vibecoding-state.md`, plus the key dimensions and facts the PRD calls for. Add a tile per governed measure (via `MEASURE()`) sliced by the key dimensions in the brief, plus any supporting detail tiles the PRD needs from the underlying Gold tables. Show me the tile plan first, then create the dashboard, open it on the canvas, give me the link, and save the dashboard id to `.vibecoding-state.md`. Finally, write a TABLE INVENTORY to `.vibecoding-state.md` — every Gold dimension + fact the dashboard uses — so the next step (Choose What to Activate) knows what to sync.
+
+Record the dashboard id, the table inventory, and the gate result in `.vibecoding-state.md`.',
+'',
+'AI/BI Dashboard (Genie Accelerator)',
+'Light-touch — have Genie Code use its native AI/BI dashboard capability to build a dashboard across the PRD-relevant Gold data (governed MEASURE() tiles + supporting detail), and inventory the tables it uses so Choose What to Activate knows what to sync',
+74,
+'> **Artifact root (client-aware).** Resolve `<ARTIFACT_ROOT>` via `vibecoding-state.resolve_root` and write every artifact under it.
+
+## 1️⃣ How To Apply
+
+Copy the prompt, paste it into a Genie Code Agent chat, and press Enter. Review the tile plan, then let Genie Code create the dashboard and open it on the canvas. Make sure the dashboard covers the **PRD-relevant** dimensions and facts (not just headline measures) and that Genie Code writes the **table inventory** to state — the next beat (Choose What to Activate) uses it to decide what to sync to Lakebase.
+
+## 2️⃣ What Are We Building?
+
+An **AI/BI dashboard** across the PRD-relevant Gold data — governed measures via `MEASURE()` over the Metric View plus supporting detail from the underlying tables — created with Genie Code''s native dashboard tooling and opened on the canvas.
+
+```mermaid
+flowchart LR
+  mv["governed Metric View"] --> plan["tile plan<br/>(measures + detail)"]
+  gold["PRD-relevant Gold tables"] --> plan
+  plan --> create["create dashboard<br/>(Genie Code native skill)"]
+  create --> canvas["open on canvas<br/>(author widgets)"]
+  canvas --> link["share link + save id → state"]
+  canvas --> inv["table inventory → state<br/>(feeds Choose What to Activate)"]
+```
+
+Because the governed tiles read the **same** Metric View the agent uses, the dashboard and the Genie Agent always show matching numbers.
+
+## 3️⃣ Why Are We Building It This Way? (Databricks Best Practices)
+
+| Practice | How it''s used here |
+|----------|-------------------|
+| **Lean on Genie Code''s native dashboard skill** | It authors AI/BI dashboards better than a hand-rolled runbook — this section just routes to it |
+| **MEASURE() over the MV** | Governed tiles read the Metric View, so the dashboard matches the agent''s numbers |
+| **PRD-relevant coverage** | Supporting detail tiles from the underlying Gold tables, not just headline measures |
+| **Canvas authoring** | Widget editing happens on the dashboard canvas (there is no reliable remote widget edit) |
+| **Inventory for activation** | The table inventory written to state tells Choose What to Activate exactly what to sync |
+
+## 4️⃣ What Happens Behind the Scenes?
+
+1. **Plan the tiles** — Genie Code reads the brief and PRD for governed measures, key dimensions, and supporting detail, and shows a tile plan first.
+2. **Create via the native skill** — it mints the dashboard with `createAsset(assetType:"dashboard")`, no bundle, no extract-back at this beat.
+3. **Open on the canvas** — `openAsset` auto-navigates to the canvas where widgets are authored (there''s no reliable remote widget API), and it prints a clickable link.
+4. **Save the id + inventory** — the dashboard id and a table inventory (every Gold dim + fact used) are recorded to `.vibecoding-state.md`.
+
+### Reference: light-touch by design
+
+This beat is deliberately light — a live dashboard for exploration that also inventories the Gold tables it uses, so the next beat (**Choose What to Activate**) knows what to sync to Lakebase. Widget authoring happens on the canvas; there is no bundle/extract-back step in this track.',
+'## Expected Deliverables
+
+- A live AI/BI dashboard for `{use_case_title}` covering the PRD-relevant Gold data (governed `MEASURE()` tiles + supporting detail from the underlying tables)
+- Tiles sliced by the brief''s key dimensions; tile plan reviewed before build; dashboard opened on the canvas; link shared
+- Dashboard id saved to `.vibecoding-state.md`
+- A **table inventory** (every Gold dimension + fact the dashboard uses) written to `.vibecoding-state.md` for the next step (Choose What to Activate)
+
+**Sample — the tile plan you review before build:**
+
+```
+Dashboard: {use_case_title} — Revenue
+  KPI    Net Revenue            MEASURE(net_revenue)
+  KPI    Average Order Value    MEASURE(average_order_value)
+  Line   Net Revenue by quarter MEASURE(net_revenue) x order_quarter
+  Bar    Net Revenue by region  MEASURE(net_revenue) x region
+  Filter order_year (default: latest)
+```',
+true, 1, true, current_timestamp(), current_timestamp(), current_user());
+
+-- Step 16 (Genie Accelerator · Activate): Choose What to Activate - bypass_llm=TRUE (Type C; SELECTION-ONLY wrapper, decide which Gold dims+facts feed the app/dashboard (business reason only; keys/grain/mode deferred to step 32), then hand off to the reused Synced Tables → … → Deploy sequence)
+INSERT INTO ${catalog}.${schema}.section_input_prompts 
+(input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
+VALUES
+(75, 'gaccel_activation',
+'**Choose what to activate — decide which Gold dimension + fact tables (and why) should feed the app and dashboard, never the Metric View itself — and record the approved selection for the Synced Tables sequence. Business selection only; keys, grain, order, and modes are the next step''s job.**
+
+Read `docs/genie_brief.md`, `docs/design_prd.md`, and `.vibecoding-state.md` first.
+
+Produce an ACTIVATION SELECTION (business selection only — do NOT create synced tables, an app, or deploy anything, and do NOT work out keys/grain/modes):
+
+1. List the Gold BASE TABLES to activate — the dimension and fact tables in `{lakehouse_default_catalog}.{user_schema_prefix}_gold` behind my Metric View and the tables the AI/BI dashboard uses (use the ERD, the Metric View''s source, and the dashboard inventory). Do NOT select the Metric View itself — a view syncs nothing. Include every dim + fact the app needs, not just one.
+2. For each table, give a one-line reason it earns a place — the app screen, dashboard tile, or PRD journey it serves. Leave primary keys, grain, dependency order, and sync mode alone; the next step works those out.
+3. Summarize the selection as a table I can approve.
+
+Record the approved table selection and the gate result in `.vibecoding-state.md` so the next step (Design & Provision Synced Tables) picks them up.',
+'',
+'Choose What to Activate (Genie Accelerator)',
+'Selection-only — decide which Gold dimension + fact TABLES (and why) feed the app and dashboard; a Metric View is a view and cannot be synced. Keys, grain, order, and modes are the next step''s job. Hands the approved table selection to the Synced Tables → Design → Build → Wire → Deploy sequence',
+75,
+'> **Selection only.** This beat produces an approved list of tables to activate, each with a one-line business reason — it does not create synced tables, an app, or deploy anything, and it does not work out keys/grain/modes. The next steps (Design & Provision Synced Tables → Design → Build → Wire → Deploy) do the building and the sync mechanics; this just chooses what goes in.
+
+## 1️⃣ How To Apply
+
+1. Copy the prompt, paste it into a Genie Code Agent chat, and press Enter.
+2. Confirm the **table list** covers the dims + facts your app + dashboard need — not just one table, and never the Metric View — and that each has a clear business reason.
+3. Approve the selection; the next step (Design & Provision Synced Tables) reads the recorded tables and works out the keys, grain, order, and modes.
+
+## 2️⃣ What Are We Building?
+
+Nothing yet — an **activation selection**: the set of Gold dimension + fact tables to activate, each with a one-line reason it feeds the app or dashboard. This is the hand-off into the proven activation sequence, which figures out the sync mechanics.
+
+```mermaid
+flowchart LR
+  mv["Metric View<br/>(a VIEW — not syncable)"] --> base["resolve base tables<br/>dims + facts in _gold"]
+  dash["AI/BI dashboard<br/>table inventory"] --> base
+  base --> plan["activation selection<br/>tables + why"]
+  plan --> next["→ Design & Provision Synced Tables<br/>(keys · grain · order · mode)"]
+```
+
+Because you choose the **dimension + fact tables** (not the view), the downstream synced tables give the app real, meaningful rows.
+
+## 3️⃣ Why Are We Building It This Way? (Databricks Best Practices)
+
+| Practice | How it''s used here |
+|----------|-------------------|
+| **Choose before you sync** | Deciding which tables (and why) up front keeps the next step focused on the sync mechanics, not the scope debate |
+| **Sync tables, not views** | Metric Views/TVFs are not syncable — the selection targets the underlying dimension + fact tables |
+| **Enough tables** | Every dim + fact the app + dashboard need is listed, not just one, so joins and slices work |
+| **Business-reason first** | Each table earns its place from an app screen / dashboard tile / PRD journey, so nothing is synced "just in case" |
+| **Separation of concerns** | Keys, grain, order, and sync modes are the next step''s job — this beat stays a pure business selection |
+
+## 4️⃣ What Happens Behind the Scenes?
+
+1. **Resolve base tables** — Genie Code reads the Metric View''s source, the ERD, and the AI/BI dashboard inventory to list every Gold dimension + fact to activate (not the MV).
+2. **Attach a reason** — a one-line justification per table (the app screen / dashboard tile / PRD journey it serves). No PK/grain/mode here — that is the next step.
+3. **Summarize + record** — it prints an approvable selection and writes the chosen tables to `.vibecoding-state.md` for the next step.
+
+### Reference: what happens next
+
+The approved selection feeds **Design & Provision Synced Tables** (`activation_reverse_sync`) and the rest of the reused activation sequence — Design → Build → Wire → Deploy — which work out the keys/grain/modes, stand up the synced tables, and build the app. The synced-table REST contract, PK/CDF rules, and cost caps live there. Skills: `databricks-lakebase`, `apps_lakebase`.',
+'## Expected Deliverables
+
+- An approved **activation selection** listing every Gold dimension + fact to activate (not the Metric View)
+- Per table: a one-line business reason (the app screen / dashboard tile / PRD journey it serves) — no keys/grain/modes at this beat
+- The chosen tables recorded to `.vibecoding-state.md` for the next step (Design & Provision Synced Tables)
+
+**Sample — the activation selection you approve (business selection only):**
+
+```
+Activate from Metric View order_revenue_metrics + dashboard inventory → base tables:
+  dim_customer   — customer filter + "Top customers" tile (PRD: account review)
+  dim_region     — region slicer on every dashboard page (PRD: regional rollup)
+  fact_lineitem  — revenue + margin measures, the app''s line-item detail screen
+→ next: Design & Provision Synced Tables (works out PK · grain · order · mode)
+```',
+true, 1, true, current_timestamp(), current_timestamp(), current_user());
+
+-- Step 17 (Genie Accelerator · Tail): Productionize as a DAB - bypass_llm=TRUE (Type C; LIGHT hand-off to databricks-asset-bundles / deploy_di_assets)
+INSERT INTO ${catalog}.${schema}.section_input_prompts 
+(input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
+VALUES
+(76, 'gaccel_productionize',
+'Optional, soft-recommended: package the track''s assets as a **Databricks Asset Bundle** so the whole thing redeploys reproducibly. This is a **light hand-off** — it reuses the workshop''s DAB skills and the existing "Deploy Semantic Layer Assets" flow. Keep the dev-files vs. prod-bundle boundary explicit.
+
+Copy and paste this prompt to Genie Code:
+
+```
+Read .vibecoding-state.md first.
+
+Package my Genie Accelerator assets as a Databricks Asset Bundle under my bundle root: the Metric
+View definition, the Genie space serialized_space export, the AI/BI dashboard .lvdash.json, and the
+synced-table specs. Extend the existing bundle if one already exists — do not create a second one.
+
+Keep dev files vs the prod bundle boundary explicit. Show me the databricks.yml and resource files
+before deploying. Then validate and deploy --target dev from the bundle-editor page, and record the
+bundle deploy target + result to .vibecoding-state.md.
+```',
+'',
+'Productionize as a Databricks Asset Bundle (Genie Accelerator)',
+'Optional hand-off — package the Metric View, Genie space export, dashboard, and synced-table specs as a DAB so the whole track redeploys reproducibly; reuses the workshop''s bundle skills',
+76,
+'> **Artifact root (client-aware).** Resolve `<ARTIFACT_ROOT>` via `vibecoding-state.resolve_root` and write every artifact under it. The bundle lives under your `dp_bundle_root` (see AGENTS.md artifact rules).
+
+> **Reuses the workshop''s DAB path.** The bundle mechanics (resources, jobs, `${var.user_prefix}` naming, `bundle validate/deploy --target dev` from the bundle-editor page) are the same as the workshop''s **Deploy Semantic Layer Assets** (`deploy_di_assets`) flow. Skill: `skills/databricks-asset-bundles`.
+
+## 1️⃣ How To Apply
+
+Copy the prompt, paste it into a Genie Code Agent chat, and press Enter. Review the `databricks.yml` + resource files, then let Genie Code validate and deploy from the bundle-editor page. This step is optional — skip it if you only needed the conversational build.
+
+## 2️⃣ What Are We Building?
+
+A **Databricks Asset Bundle** that packages the Metric View, Genie space export, dashboard, and synced-table specs so the whole track redeploys with `bundle deploy` — turning the conversational build into a reproducible, version-controlled artifact.
+
+```mermaid
+flowchart LR
+  mv["Metric View"] --> bundle["Databricks Asset Bundle<br/>(extend existing — don''t fork)"]
+  space["Genie space export"] --> bundle
+  dash[".lvdash.json dashboard"] --> bundle
+  sync["synced-table specs"] --> bundle
+  bundle --> deploy["validate → deploy --target dev<br/>(from the bundle-editor page)"]
+```
+
+This is the bridge from a hand-built track to a **repeatable** one — the same assets, now deployable to any target by bundle alone.
+
+## 3️⃣ Why Are We Building It This Way? (Databricks Best Practices)
+
+| Practice | How it''s used here |
+|----------|-------------------|
+| **Reuse the DAB skill** | The bundle path is the workshop''s existing `deploy_di_assets` / `databricks-asset-bundles` flow — no new machinery |
+| **Extend, don''t fork** | The assets extend the existing bundle rather than spawning a second one |
+| **Dev vs prod boundary** | Dev files stay separate from the prod bundle so promotion is clean |
+| **Optional** | The tail is soft-recommended; the conversational build stands on its own |
+
+## 4️⃣ What Happens Behind the Scenes?
+
+1. **Gather the assets** — Genie Code collects the Metric View definition, the Genie space `serialized_space` export, the dashboard `.lvdash.json`, and the synced-table specs.
+2. **Write bundle resources** — it writes them under your `dp_bundle_root`, extending the existing `databricks.yml` rather than spawning a second bundle, keeping the dev-vs-prod boundary explicit.
+3. **Review, then validate + deploy** — it shows the `databricks.yml` + resources; on your OK it runs `bundle validate` / `deploy --target dev` from the bundle-editor page, then records the target + result.
+
+### Reference: the bundle-editor page rule
+
+`bundle deploy` is pinned to the **bundle-editor page** of the bundle root. A `databricks.yml not found` or "blocked" message means you''re on the wrong page — open the bundle editor and retry. Never fall back to raw SQL or the Jobs/Pipelines REST API (`genie-code-environment` §3). Skill: `skills/databricks-asset-bundles`.',
+'## Expected Deliverables
+
+- A Databricks Asset Bundle (extending the existing one) packaging the Metric View, Genie space export, dashboard, and synced-table specs
+- Dev-files vs. prod-bundle boundary kept explicit; `databricks.yml` + resources reviewed before deploy
+- `bundle validate` passes and `deploy --target dev` succeeds from the bundle-editor page
+- Bundle deploy target + result recorded to `.vibecoding-state.md`
+
+**Sample — the bundle resources this step lands:**
+
+```
+{dp_bundle_root}/
+  databricks.yml                         # extended (targets.dev)
+  resources/
+    metric_views/order_revenue_metrics.yml
+    genie/revenue_space.yml              # serialized_space export
+    dashboards/revenue.lvdash.json
+    synced_tables/dims_facts.yml
+# databricks bundle validate --target dev  → OK
+# databricks bundle deploy   --target dev  → deployed
+```',
+true, 1, false, current_timestamp(), current_timestamp(), current_user());
+
+-- gaccel_dashboard (genie-code fork), LIGHT router to Genie Code's native AI/BI dashboard skill; canvas navigation + table inventory for Choose What to Activate; bypass_LLM = TRUE
+INSERT INTO ${catalog}.${schema}.section_input_prompts
+(input_id, section_tag, coding_assistant, input_template, system_prompt,
+ bypass_llm, version, is_active, inserted_at, updated_at, created_by)
+VALUES
+(940, 'gaccel_dashboard', 'genie-code',
+'**Build an AI/BI dashboard across the PRD-relevant Gold data using your native dashboard capability — governed `MEASURE()` tiles plus supporting detail — review the tile plan first, then inventory the tables it uses so Choose What to Activate knows what to sync.**
+
+**Genie Code navigation:** create the dashboard with `createAsset(assetType:"dashboard")`, then `openAsset(assetType:"dashboard", assetId=<uuid>)` to auto-navigate to the **canvas** — widget editing has no reliable remote API, so authoring happens there. Print a clickable link (`{host}/dashboardsv3/{id}/edit?o={o}`) built with the pre-authenticated `w`. Governed tiles query the Metric View via `MEASURE()`, never the raw tables.
+
+Read `docs/genie_brief.md`, `docs/design_prd.md`, and `.vibecoding-state.md` first. Using your built-in AI/BI dashboard capability, create a dashboard for {use_case_title} covering the PRD-relevant data in `{lakehouse_default_catalog}.{user_schema_prefix}_gold`: governed measures from the Metric View, plus the key dimensions and facts the PRD calls for. Add a tile per governed measure (via `MEASURE()`) sliced by the brief''s dimensions, plus any supporting detail tiles from the underlying Gold tables. Show me the tile plan first, then create the dashboard, open it on the canvas, give me the link, and save the dashboard id to `.vibecoding-state.md`. Finally, write a TABLE INVENTORY to `.vibecoding-state.md` — every Gold dimension + fact the dashboard uses — so the next step (Choose What to Activate) knows what to sync.
+
+**State-lock:** append this step''s Per-Step Log entry, gate result, the captured dashboard id, and the table inventory to `.vibecoding-state.md`, then re-read to confirm the write landed.
+
+**Gate:** `Dashboard live` — an AI/BI dashboard covering the PRD-relevant Gold data exists; governed measures use `MEASURE()`; the dashboard was opened on the canvas; the dashboard id and a table inventory (Gold dims + facts used) are recorded in `.vibecoding-state.md`.
+
+**➡️ Next step.** Choose What to Activate — decide which Gold dimensions + facts feed the app and dashboard. The table inventory you just recorded feeds that selection, which then hands off to the Synced Tables sequence.',
+'',
+true, 1, true, current_timestamp(), current_timestamp(), current_user());
+
+-- gaccel_activation (genie-code fork), SELECTION-ONLY wrapper: decide which Gold dims+facts feed the app/dashboard (business reason only; keys/grain/mode deferred to step 32), then hand off to Design & Provision Synced Tables; bypass_LLM = TRUE
+INSERT INTO ${catalog}.${schema}.section_input_prompts
+(input_id, section_tag, coding_assistant, input_template, system_prompt,
+ bypass_llm, version, is_active, inserted_at, updated_at, created_by)
+VALUES
+(941, 'gaccel_activation', 'genie-code',
+'**Choose what to activate — decide which Gold dimension + fact tables (and why) should feed the app and dashboard, never the Metric View itself — and record the approved selection for the Synced Tables sequence. Business selection only; keys, grain, dependency order, and sync modes are the next step''s job.**
+
+**Genie Code navigation:** this is a read + select beat — inspect the Metric View source, the Gold schema, and the dashboard''s table inventory (e.g. `DESCRIBE` / `information_schema`, the ERD) just to see which base tables exist. Do NOT call the synced-tables REST API, `apps init`, or any deploy here, and do NOT work out PKs, grain, dependency order, or sync modes — the next step (`activation_reverse_sync`, Design & Provision Synced Tables) owns all of that. Skills: `databricks-lakebase` (reference only at this beat).
+
+Read `docs/genie_brief.md`, `docs/design_prd.md`, and `.vibecoding-state.md` first. Produce an ACTIVATION SELECTION (business selection only — do NOT create synced tables, an app, or deploy anything, and do NOT record keys/grain/modes):
+
+1. List the Gold BASE TABLES to activate — the dims + facts in `{lakehouse_default_catalog}.{user_schema_prefix}_gold` behind my Metric View and the tables the AI/BI dashboard uses. Do NOT select the Metric View itself (a view syncs nothing); include every dim + fact the app needs.
+2. For each table, give a one-line reason it earns a place — the app screen, dashboard tile, or PRD journey it serves. Leave PK / grain / dependency order / sync mode alone; that is worked out in the next step.
+3. Summarize the selection as a table I can approve, and record the approved tables to `.vibecoding-state.md` so the next step (Design & Provision Synced Tables) picks them up and works out the sync mechanics.
+
+**State-lock:** append this step''s Per-Step Log entry, gate result, and the captured table selection (table list + one-line reasons) to `.vibecoding-state.md`, then re-read to confirm the write landed.
+
+**Gate:** `Activation planned` — an approved list of Gold dims + facts to activate (not the MV), each with a one-line business reason, is recorded in `.vibecoding-state.md`. Keys, grain, dependency order, and sync modes are deliberately deferred to Design & Provision Synced Tables. No synced tables, app, or deploy at this beat.
+
+**➡️ Next step.** Design & Provision Synced Tables — run the reused activation sequence (Synced Tables → Design → Build → Wire → Deploy) against these selected tables.',
+'',
+true, 1, true, current_timestamp(), current_timestamp(), current_user());
+
+-- gaccel_productionize (genie-code fork) — LIGHT hand-off to databricks-asset-bundles; bundle-editor page navigation; bypass_LLM = TRUE
+INSERT INTO ${catalog}.${schema}.section_input_prompts
+(input_id, section_tag, coding_assistant, input_template, system_prompt,
+ bypass_llm, version, is_active, inserted_at, updated_at, created_by)
+VALUES
+(942, 'gaccel_productionize', 'genie-code',
+'Optional: package the track''s assets as a **Databricks Asset Bundle** so it redeploys reproducibly. This is a **light hand-off** — reuse the workshop''s bundle path; do not invent new machinery.
+
+This will involve the following steps:
+
+- **Gather the assets** — Metric View definition, Genie space `serialized_space` export, dashboard `.lvdash.json`, and synced-table specs.
+- **Write bundle resources** — under your `dp_bundle_root`; extend the existing bundle, don''t fork a second one; keep dev vs prod boundary explicit.
+- **Validate + deploy** — `bundle validate` / `deploy --target dev` from the bundle-editor page.
+
+**Genie Code navigation:** `bundle deploy` is pinned to the **bundle-editor page** of the bundle root — write `databricks.yml` under the bundle root, open that folder''s bundle editor, then run `bundle validate` / `deploy --target dev` there. A `databricks.yml not found` or "blocked" message means you''re on the wrong page — open the bundle editor; never fall back to raw SQL or the Jobs/Pipelines REST API (`genie-code-environment` §3). Skill: `skills/databricks-asset-bundles`.
+
+```
+Read .vibecoding-state.md first.
+
+Package my Genie Accelerator assets as a Databricks Asset Bundle under my bundle root: the Metric
+View definition, the Genie space serialized_space export, the dashboard .lvdash.json, and the
+synced-table specs. Extend the existing bundle if one exists. Keep dev files vs the prod bundle
+boundary explicit. Show me the databricks.yml + resource files before deploying, then validate and
+deploy --target dev from the bundle-editor page. Record the bundle deploy target + result to
+.vibecoding-state.md.
+```
+
+**State-lock:** append this step''s Per-Step Log entry, gate result, and the captured bundle deploy target + result to `.vibecoding-state.md`, then re-read to confirm the write landed.
+
+**Gate:** `Track productionized` — the Metric View, Genie space export, dashboard, and synced-table specs are packaged in the (extended) bundle; `bundle validate` passes and `deploy --target dev` succeeds from the bundle-editor page; the bundle deploy target + result are recorded in `.vibecoding-state.md`.
+
+**➡️ Next step.** The Genie Accelerator track is complete — the whole build now redeploys from the bundle.',
+'',
+true, 1, false, current_timestamp(), current_timestamp(), current_user());

@@ -42,10 +42,13 @@ import {
   type MedallionLayer,
   type ChainContext,
 } from '../constants/workflowSections';
-import { Check, Info, Globe, HardDrive, Brain, Database, Lock, Layers, MessageSquareText, BookOpen, Bot, LayoutDashboard, Code2 } from 'lucide-react';
+import { Check, Info, Globe, HardDrive, Brain, Database, Lock, Layers, MessageSquareText, BookOpen, Bot, Code2 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
+import { CHAPTER_BLOCKS, genieAcceleratorServices, type ChapterBlock, type ChapterBlockId, type ChipTone } from '../constants/chapterBlocks';
 import { NewBadge } from './NewBadge';
 import { PathDurationBar } from './PathDurationBar';
+import { ServicePopover } from './ServicePopover';
+import { ModuleBox, ModuleChip } from './ModuleBox';
 
 // Reasons a path button can be locked. Drives the tooltip wording so the user
 // always knows *why* a path is unavailable. 'workflow-started' is the default
@@ -106,6 +109,10 @@ interface LevelSelectorProps {
   onAIModulesChange?: (modules: Set<AIAgentModule>) => void;
   medallionLayers?: Set<MedallionLayer>;
   onMedallionLayersChange?: (layers: Set<MedallionLayer>) => void;
+  includeLakehouse?: boolean;
+  onIncludeLakehouseChange?: (next: boolean) => void;
+  includeGenieOntology?: boolean;
+  onIncludeGenieOntologyChange?: (next: boolean) => void;
   /** Workshop levels disabled for the active coding assistant. The currently-
    * selected level is grandfathered (always clickable) inside the picker so
    * shared sessions and mid-session assistant changes never lose state. */
@@ -136,7 +143,7 @@ const LEVEL_DESCRIPTIONS: Record<WorkshopLevel, string> = {
   'lakehouse-di': 'Add Genie Spaces, Agents & AI/BI Dashboards on top of your Lakehouse',
   'end-to-end': 'The complete end-to-end workshop covering all chapters',
   'accelerator': 'Start with table metadata and build end-to-end Bronze/Silver/Gold layers that power your AI and agents',
-  'genie-accelerator': 'Analyze silver metadata, design Gold layer, and build Genie Spaces with Metric Views and TVFs',
+  'genie-accelerator': 'Build a governed Metric View, stand up a Genie Agent, model the ontology, then activate with a dashboard, Lakebase sync, and a bundle',
   'data-engineering-accelerator': 'Build production-ready Bronze, Silver, and Gold data pipelines using Databricks Lakehouse best practices',
   'skills-accelerator': 'Build a Data Contract Governance Skill that tags gold-layer tables and validates compliance for certification',
   'agents-accelerator': 'Build, evaluate, and deploy a production-ready agent app — Databricks App + Lakebase + Mosaic AI Agent Framework + MLflow for Gen-AI lifecycle.',
@@ -231,6 +238,10 @@ export function LevelSelectorContent({
   onAIModulesChange,
   medallionLayers,
   onMedallionLayersChange,
+  includeLakehouse,
+  onIncludeLakehouseChange,
+  includeGenieOntology,
+  onIncludeGenieOntologyChange,
   disabledWorkshopLevels,
 }: LevelSelectorProps) {
   return (
@@ -246,10 +257,43 @@ export function LevelSelectorContent({
       onAIModulesChange={onAIModulesChange}
       medallionLayers={medallionLayers}
       onMedallionLayersChange={onMedallionLayersChange}
+      includeLakehouse={includeLakehouse}
+      onIncludeLakehouseChange={onIncludeLakehouseChange}
+      includeGenieOntology={includeGenieOntology}
+      onIncludeGenieOntologyChange={onIncludeGenieOntologyChange}
       disabledWorkshopLevels={disabledWorkshopLevels}
     />
   );
 }
+
+// ---------------------------------------------------------------------------
+// Genie Accelerator path strip
+//
+// The genie-accelerator level has its OWN flow and does not climb the generic
+// Apps → Lakehouse → AI chapter chain, so when it's selected the three persona
+// chapter columns are replaced by this stage strip. It composes the SHARED
+// chapter blocks from CHAPTER_BLOCKS (title / service chips) so the strip and
+// the persona columns read from one definition.
+//
+// PRESENTATION: the stage cards deliberately mirror the persona-chapter columns
+// (muted `bg-card/50` chrome, uppercase muted headers) and the chips mirror the
+// interactive Medallion / AI-module toggle chips (icon-on-top, per-item colour)
+// so the shared tracks — Bronze/Silver/Gold and Genie/Agent/Dashboard — render
+// IDENTICALLY on both surfaces. The stages sit as separated parallel cards (no
+// connector arrows); each chip is wrapped in a ServicePopover for
+// click-for-details, with its corner info-dot badge suppressed for the clean
+// chip look.
+// ---------------------------------------------------------------------------
+
+// The Genie strip order. Lakehouse and Ontology are conditional (their toggles
+// gate them); the rest are always present.
+const GENIE_STRIP_ORDER: ChapterBlockId[] = [
+  'lakehouse',
+  'semantic-layer',
+  'ai-agents',
+  'activation',
+  'ontology',
+];
 
 function LevelSelectorGrid({
   selectedLevel,
@@ -263,6 +307,10 @@ function LevelSelectorGrid({
   onAIModulesChange,
   medallionLayers,
   onMedallionLayersChange,
+  includeLakehouse = false,
+  onIncludeLakehouseChange,
+  includeGenieOntology = false,
+  onIncludeGenieOntologyChange,
   disabledWorkshopLevels,
 }: LevelSelectorProps) {
   const highlightedButtons = getHighlightedButtons(selectedLevel, completedSteps, chainContext);
@@ -518,6 +566,86 @@ function LevelSelectorGrid({
   const effectiveAIModules = aiAgentsModules ?? new Set(ALL_AI_MODULES);
   const effectiveMedallionLayers = medallionLayers ?? new Set(ALL_MEDALLION_LAYERS);
 
+  // Genie Accelerator has its own path — it does NOT climb the generic
+  // Apps → Lakehouse → AI chapter chain. When it's selected we replace the
+  // three persona chapter columns with a stage strip that composes the shared
+  // chapter blocks (Semantic Layer → AI and Agents → [Ontology] → Activation),
+  // with an optional Lakehouse (Bronze → Gold) lead-in when the toggle is on.
+  // This stops a lit "Lakehouse" chapter button from making the track look
+  // like a Lakehouse flow. Block metadata is sourced from CHAPTER_BLOCKS so
+  // titles, icons, colours and service chips never drift from the flip card.
+  const isGeniePathView = selectedLevel === 'genie-accelerator';
+  const geniePathStages: ChapterBlock[] = [];
+  if (isGeniePathView) {
+    for (const id of GENIE_STRIP_ORDER) {
+      if (id === 'lakehouse' && !includeLakehouse) continue;
+      if (id === 'ontology' && !includeGenieOntology) continue;
+      geniePathStages.push(CHAPTER_BLOCKS[id]);
+    }
+  }
+
+  const geniePathStrip = (
+    <motion.div
+      key="col-genie-path"
+      layout
+      layoutId="col-genie-path"
+      className="flex-[3] flex flex-col"
+      transition={{ type: 'spring', stiffness: 250, damping: 22, mass: 0.9 }}
+    >
+      <div className="text-ui-xs font-bold text-primary uppercase tracking-wider mb-2 text-center">
+        Your Genie Accelerator Path
+      </div>
+      {/* Each stage is a shared ModuleBox — same card chrome, header, tinted
+          container, name-button and icon-on-top chips as the persona columns,
+          so the common Lakehouse / AI-and-Agents modules are identical across
+          both surfaces. Genie chips are display-only (click = info popover);
+          the name-button is a static label (selection already happened). */}
+      <div className="flex gap-3">
+        {geniePathStages.map(stage => {
+          const services = genieAcceleratorServices(stage);
+          const cols = services.length >= 3 ? 'grid-cols-3' : 'grid-cols-2';
+          const StageIcon = stage.icon;
+          return (
+            <ModuleBox
+              key={stage.id}
+              layoutId={`genie-stage-${stage.id}`}
+              cardClassName={`${getBoxClass(false, false, false)} min-w-0`}
+              transition={{ type: 'spring', stiffness: 280, damping: 26, mass: 0.8 }}
+              header={
+                <div className="text-ui-xs font-bold text-muted-foreground uppercase tracking-wider mb-2 text-center">
+                  {stage.title}
+                </div>
+              }
+              accentContainer={stage.accent.container}
+              button={
+                <div className="px-4 py-2.5 rounded-lg text-ui-sm font-medium w-full bg-secondary/60 text-foreground">
+                  <div className="flex items-center gap-2.5">
+                    <StageIcon className="w-4 h-4 flex-shrink-0" />
+                    <span className="flex-1 text-left">{stage.title}</span>
+                  </div>
+                </div>
+              }
+            >
+              <div className={`grid ${cols} gap-1`}>
+                {services.map(ss => {
+                  // Lakehouse chips carry the per-layer palette (Bronze/Silver/
+                  // Gold); every other stage falls back to its block accent.
+                  const tone: ChipTone = ss.chipTone ?? stage.accent.chip;
+                  const ChipIcon = stage.id === 'lakehouse' ? Layers : (ss.icon ?? stage.icon);
+                  return (
+                    <ServicePopover key={ss.label} serviceKey={ss.serviceKey} position="top" block hideBadge>
+                      <ModuleChip label={ss.label} icon={ChipIcon} tone={tone} className="hover:scale-105" />
+                    </ServicePopover>
+                  );
+                })}
+              </div>
+            </ModuleBox>
+          );
+        })}
+      </div>
+    </motion.div>
+  );
+
   return (
     <>
       {/* Header */}
@@ -553,6 +681,8 @@ function LevelSelectorGrid({
           medallionLayers={effectiveMedallionLayers}
           completedSteps={completedSteps}
           chainContext={chainContext}
+          includeLakehouse={includeLakehouse}
+          includeGenieOntology={includeGenieOntology}
           variant="full"
         />
       </div>
@@ -561,7 +691,10 @@ function LevelSelectorGrid({
           target audience. The 4th slot (over Accelerators) is intentionally
           blank so the role-agnostic specialized tracks stay visually distinct.
           In reverse direction, columns reorder (Lakehouse leads), so the
-          persona captions reorder to keep the alignment correct. */}
+          persona captions reorder to keep the alignment correct. Hidden for the
+          Genie Accelerator path view — its stage strip carries its own header
+          and the persona captions don't map to its stages. */}
+      {!isGeniePathView && (
       <div className="flex gap-3 mb-1.5 px-1">
         {(direction === 'reverse'
           ? [COLUMN_PERSONAS[1], COLUMN_PERSONAS[2], COLUMN_PERSONAS[0]]
@@ -578,11 +711,17 @@ function LevelSelectorGrid({
         ))}
         {direction !== 'reverse' && <div className="flex-1" aria-hidden="true" />}
       </div>
+      )}
 
       {/* 4-Column Box Layout */}
       <LayoutGroup>
         <div className="flex gap-3">
           {(() => {
+            // Genie Accelerator: swap the three persona chapter columns for the
+            // Genie path stage strip (Semantic Layer → Genie Agent → …). The
+            // Accelerators column below still renders as the chooser.
+            if (isGeniePathView) return geniePathStrip;
+
             // Build the three persona-aligned chapter columns. Each column
             // renders the same way regardless of direction; only the levels
             // they reference and the column ordering differ.
@@ -613,55 +752,53 @@ function LevelSelectorGrid({
             // Lakehouse column: medallion chips only render when on a
             // progression-chain level. When an accelerator is selected, this
             // column shows the plain Lakehouse button without chips.
+            const showMedallion =
+              !isAcceleratorSelected && levelSupportsMedallionToggles(selectedLevel) && !!medallionLayers && !!onMedallionLayersChange;
             const lakehouseColumn = (
-              <motion.div key="col-lakehouse" layout layoutId="col-lakehouse"
-                className={getBoxClass(isLakehouseSelected, lakehouseHasHighlight && !isLakehouseSelected, isColumnLocked('lakehouse'))}
-                transition={{ type: 'spring', stiffness: 250, damping: 22, mass: 0.9 }}>
-                {columnHeader('lakehouse')}
-                <div className="space-y-2">
-                  {!isAcceleratorSelected && levelSupportsMedallionToggles(selectedLevel) && medallionLayers && onMedallionLayersChange ? (
-                    <div className="rounded-lg border border-teal-500/30 bg-teal-500/[0.05] p-1.5 space-y-1.5">
-                      {renderButton(lakehouseLevel, <Database className="w-4 h-4 flex-shrink-0" />)}
-                      <MedallionLayerSelector
-                        level={selectedLevel}
-                        layers={medallionLayers}
-                        onChange={onMedallionLayersChange}
-                        onLevelChange={onLevelChange}
-                        hasStartedWorkflow={hasStartedWorkflow}
-                        useCaseLockedLevel={useCaseLockedLevel ?? null}
-                      />
-                    </div>
-                  ) : (
-                    renderButton(lakehouseLevel, <Database className="w-4 h-4 flex-shrink-0" />)
-                  )}
-                </div>
-              </motion.div>
+              <ModuleBox
+                key="col-lakehouse"
+                layoutId="col-lakehouse"
+                cardClassName={getBoxClass(isLakehouseSelected, lakehouseHasHighlight && !isLakehouseSelected, isColumnLocked('lakehouse'))}
+                header={columnHeader('lakehouse')}
+                accentContainer={showMedallion ? CHAPTER_BLOCKS.lakehouse.accent.container : undefined}
+                button={renderButton(lakehouseLevel, <Database className="w-4 h-4 flex-shrink-0" />)}
+              >
+                {showMedallion ? (
+                  <MedallionLayerSelector
+                    level={selectedLevel}
+                    layers={medallionLayers!}
+                    onChange={onMedallionLayersChange!}
+                    onLevelChange={onLevelChange}
+                    hasStartedWorkflow={hasStartedWorkflow}
+                    useCaseLockedLevel={useCaseLockedLevel ?? null}
+                  />
+                ) : null}
+              </ModuleBox>
             );
 
             // AI and Agents column: AI module chips only render when on a
             // progression-chain level (same rationale as Lakehouse column).
+            const showAIModules =
+              !isAcceleratorSelected && levelSupportsAIModuleToggles(selectedLevel) && !!aiAgentsModules && !!onAIModulesChange;
             const aiAgentsColumn = (
-              <motion.div key="col-ai-agents" layout layoutId="col-ai-agents"
-                className={getBoxClass(isAiAgentsSelected, aiAgentsHasHighlight && !isAiAgentsSelected, isColumnLocked('ai-agents'))}
-                transition={{ type: 'spring', stiffness: 250, damping: 22, mass: 0.9 }}>
-                {columnHeader('ai-agents')}
-                <div className="space-y-2">
-                  {!isAcceleratorSelected && levelSupportsAIModuleToggles(selectedLevel) && aiAgentsModules && onAIModulesChange ? (
-                    <div className="rounded-lg border border-cyan-500/30 bg-cyan-500/[0.05] p-1.5 space-y-1.5">
-                      {renderButton(aiLevel, <Brain className="w-4 h-4 flex-shrink-0" />)}
-                      <AIAgentsModuleSelector
-                        level={selectedLevel}
-                        modules={aiAgentsModules}
-                        onChange={onAIModulesChange}
-                        onLevelChange={onLevelChange}
-                        hasStartedWorkflow={hasStartedWorkflow}
-                      />
-                    </div>
-                  ) : (
-                    renderButton(aiLevel, <Brain className="w-4 h-4 flex-shrink-0" />)
-                  )}
-                </div>
-              </motion.div>
+              <ModuleBox
+                key="col-ai-agents"
+                layoutId="col-ai-agents"
+                cardClassName={getBoxClass(isAiAgentsSelected, aiAgentsHasHighlight && !isAiAgentsSelected, isColumnLocked('ai-agents'))}
+                header={columnHeader('ai-agents')}
+                accentContainer={showAIModules ? CHAPTER_BLOCKS['ai-agents'].accent.container : undefined}
+                button={renderButton(aiLevel, <Brain className="w-4 h-4 flex-shrink-0" />)}
+              >
+                {showAIModules ? (
+                  <AIAgentsModuleSelector
+                    level={selectedLevel}
+                    modules={aiAgentsModules!}
+                    onChange={onAIModulesChange!}
+                    onLevelChange={onLevelChange}
+                    hasStartedWorkflow={hasStartedWorkflow}
+                  />
+                ) : null}
+              </ModuleBox>
             );
 
             // Reverse direction reorders the persona-aligned columns:
@@ -739,6 +876,46 @@ function LevelSelectorGrid({
                 </div>
               );
             })()}
+
+            {/* Genie Accelerator — optional Lakehouse (Bronze → Gold). OFF by
+                default: the learner starts from existing / uploaded / synthetic
+                data. Turning it on prepends the medallion build. */}
+            {selectedLevel === 'genie-accelerator' && onIncludeLakehouseChange && (
+              <label className="flex items-start gap-2 rounded-lg border border-teal-500/30 bg-teal-500/[0.05] px-2.5 py-2 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={includeLakehouse}
+                  onChange={(e) => onIncludeLakehouseChange(e.target.checked)}
+                  className="mt-0.5 h-3.5 w-3.5 shrink-0 rounded border-border accent-teal-500 cursor-pointer"
+                />
+                <span className="flex-1">
+                  <span className="block text-ui-2xs font-semibold text-foreground">Include Lakehouse (Bronze → Gold)</span>
+                  <span className="block text-ui-3xs text-muted-foreground leading-tight mt-0.5">
+                    Off by default — start from existing, uploaded, or synthetic data. Turn on to build the medallion layers first (+90 min).
+                  </span>
+                </span>
+              </label>
+            )}
+
+            {/* Genie Accelerator — optional Genie Ontology (Discover domain,
+                Pages, routing). OFF by default: the Beta ontology arc is skipped
+                unless the learner opts in. */}
+            {selectedLevel === 'genie-accelerator' && onIncludeGenieOntologyChange && (
+              <label className="flex items-start gap-2 rounded-lg border border-teal-500/30 bg-teal-500/[0.05] px-2.5 py-2 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={includeGenieOntology}
+                  onChange={(e) => onIncludeGenieOntologyChange(e.target.checked)}
+                  className="mt-0.5 h-3.5 w-3.5 shrink-0 rounded border-border accent-teal-500 cursor-pointer"
+                />
+                <span className="flex-1">
+                  <span className="block text-ui-2xs font-semibold text-foreground">Include Genie Ontology (Beta)</span>
+                  <span className="block text-ui-3xs text-muted-foreground leading-tight mt-0.5">
+                    Off by default — skip the Discover ontology arc. Turn on to model the domain, author Pages, and write the routing page (+25 min).
+                  </span>
+                </span>
+              </label>
+            )}
 
             {/* Data Engineering Accelerator */}
             {(() => {
@@ -823,11 +1000,19 @@ interface AIAgentsModuleSelectorProps {
   hasStartedWorkflow: boolean;
 }
 
-const AI_MODULE_ITEMS: { id: AIAgentModule; label: string; icon: React.ComponentType<{ className?: string }> }[] = [
-  { id: 'genie',     label: 'Genie',     icon: MessageSquareText },
-  { id: 'agent',     label: 'Agent',     icon: Bot               },
-  { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard   },
-];
+// Derived from the shared registry so the persona AI-module chips read the same
+// trio (Genie · Agent · Dashboard) as the flip card and the Genie path strip.
+// Only the interactive toggle behaviour lives here; the label/icon/membership
+// are the registry's.
+const AI_MODULE_ITEMS: { id: AIAgentModule; label: string; icon: LucideIcon }[] =
+  CHAPTER_BLOCKS['ai-agents'].services.map(s => ({
+    id: s.toggleId as AIAgentModule,
+    label: s.label,
+    icon: s.icon ?? Brain,
+  }));
+
+// All AI-module chips share the block's cyan tone (single source: the registry).
+const AI_CHIP_TONE: ChipTone = CHAPTER_BLOCKS['ai-agents'].accent.chip;
 
 function AIAgentsModuleSelector({
   level,
@@ -890,20 +1075,19 @@ function AIAgentsModuleSelector({
       title="Customize the AI section. Use-Case Plan and Deploy Assets are always included."
     >
       {items.map(item => {
-        const Icon = item.icon;
         const isOn = effective.has(item.id);
         const isShaking = shakeId === item.id;
         const wouldBlockClick = isOn && onlyOneActive && willBlockOnLastOff;
 
         return (
-          <motion.button
+          <ModuleChip
             key={item.id}
-            type="button"
-            layout
+            label={item.label}
+            icon={item.icon}
+            tone={AI_CHIP_TONE}
+            on={isOn}
             onClick={() => handleToggle(item.id)}
-            whileTap={{ scale: 0.94 }}
-            animate={isShaking ? { x: [0, -2, 2, -2, 2, 0] } : { x: 0 }}
-            transition={{ duration: 0.32 }}
+            shaking={isShaking}
             title={
               wouldBlockClick
                 ? 'At least one module required for this path'
@@ -911,15 +1095,7 @@ function AIAgentsModuleSelector({
                 ? `Click to remove ${item.label}`
                 : `Click to add ${item.label}`
             }
-            className={`group flex flex-col items-center justify-center gap-0.5 rounded-md border px-1 py-1.5 transition-colors duration-150 ${
-              isOn
-                ? 'bg-cyan-500/15 border-cyan-500/50 text-foreground shadow-sm'
-                : 'bg-secondary/40 border-border/40 text-muted-foreground hover:bg-secondary/70 hover:border-border/70 hover:text-foreground'
-            }`}
-          >
-            <Icon className={`w-3.5 h-3.5 flex-shrink-0 ${isOn ? 'text-cyan-400' : ''}`} />
-            <span className="text-ui-3xs font-medium leading-tight">{item.label}</span>
-          </motion.button>
+          />
         );
       })}
     </motion.div>
@@ -945,11 +1121,15 @@ interface MedallionLayerSelectorProps {
   useCaseLockedLevel: WorkshopLevel | null;
 }
 
-const MEDALLION_ITEMS: { id: MedallionLayer; label: string; activeClass: string; iconActiveClass: string }[] = [
-  { id: 'bronze', label: 'Bronze', activeClass: 'bg-orange-500/15 border-orange-500/50',  iconActiveClass: 'text-orange-400' },
-  { id: 'silver', label: 'Silver', activeClass: 'bg-slate-300/15 border-slate-300/50',    iconActiveClass: 'text-slate-200' },
-  { id: 'gold',   label: 'Gold',   activeClass: 'bg-amber-400/15 border-amber-400/50',    iconActiveClass: 'text-amber-300' },
-];
+// Per-layer active styling (Bronze/Silver/Gold palette) now lives in the
+// registry as each service's `chipTone`, so the interactive selector and the
+// Genie path read the same colours from one source.
+const MEDALLION_ITEMS: { id: MedallionLayer; label: string; tone: ChipTone }[] =
+  CHAPTER_BLOCKS.lakehouse.services.map(s => ({
+    id: s.toggleId as MedallionLayer,
+    label: s.label,
+    tone: s.chipTone ?? CHAPTER_BLOCKS.lakehouse.accent.chip,
+  }));
 
 function MedallionLayerSelector({
   level,
@@ -1032,14 +1212,14 @@ function MedallionLayerSelector({
         const wouldBlockClick = isOn && onlyOneActive && willBlockOnLastOff;
 
         return (
-          <motion.button
+          <ModuleChip
             key={item.id}
-            type="button"
-            layout
+            label={item.label}
+            icon={Layers}
+            tone={item.tone}
+            on={isOn}
             onClick={() => handleToggle(item.id)}
-            whileTap={{ scale: 0.94 }}
-            animate={isShaking ? { x: [0, -2, 2, -2, 2, 0] } : { x: 0 }}
-            transition={{ duration: 0.32 }}
+            shaking={isShaking}
             title={
               wouldBlockClick
                 ? 'At least one medallion layer required for this path'
@@ -1047,15 +1227,7 @@ function MedallionLayerSelector({
                 ? `Click to remove ${item.label}`
                 : `Click to add ${item.label}`
             }
-            className={`group flex flex-col items-center justify-center gap-0.5 rounded-md border px-1 py-1.5 transition-colors duration-150 ${
-              isOn
-                ? `${item.activeClass} text-foreground shadow-sm`
-                : 'bg-secondary/40 border-border/40 text-muted-foreground hover:bg-secondary/70 hover:border-border/70 hover:text-foreground'
-            }`}
-          >
-            <Layers className={`w-3.5 h-3.5 flex-shrink-0 ${isOn ? item.iconActiveClass : ''}`} />
-            <span className="text-ui-3xs font-medium leading-tight">{item.label}</span>
-          </motion.button>
+          />
         );
       })}
     </motion.div>
@@ -1103,7 +1275,7 @@ export function LevelSelector({
       case 'lakehouse-di': return 'Foundation → Lakehouse → AI and Agents → Refinement';
       case 'end-to-end': return 'Foundation → All Sections (App, Lakebase, Lakehouse, AI and Agents) → Refinement';
       case 'accelerator': return 'Foundation → Lakehouse → AI and Agents → Refinement';
-      case 'genie-accelerator': return 'Foundation → Silver Metadata → Gold Layer → Use-Case Plan → Genie Space → Refinement';
+      case 'genie-accelerator': return 'Foundation → Lakehouse → Semantic Layer → Genie Agent → Genie Ontology → Activate → Refinement';
       case 'data-engineering-accelerator': return 'Foundation → Lakehouse (Bronze → Silver → Gold) → Refinement';
       case 'skills-accelerator': return 'Foundation → Build Agent Skill (Explore, Strategy, SKILL.md, Apply & Test, Validate) → Refinement';
       case 'agents-accelerator': return 'Foundation → Databricks App → Lakebase → Agents on Apps → MLflow for Gen-AI → Refinement';

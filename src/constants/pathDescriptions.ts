@@ -90,16 +90,16 @@ export const PATH_DESCRIPTIONS: Record<WorkshopLevel, PathDescription> = {
   },
 
   'genie-accelerator': {
-    tagline: 'Analyze Silver metadata, design Gold, and ship a Genie Space',
-    techStack: ['Unity Catalog', 'Delta Lake', 'Metric Views', 'TVFs', 'Genie Spaces'],
+    tagline: 'Data → Metric View → Genie Agent → Ontology → Dashboard → Lakebase → App',
+    techStack: ['Metric Views', 'Genie Agent', 'Discover Ontology', 'AI/BI Dashboards', 'Lakebase', 'Asset Bundles'],
     bullets: [
-      'Extract and analyze comprehensive metadata from your Silver layer schema',
-      'Design a Gold layer schema with business-aligned aggregations',
-      'Build the Gold pipeline with quality enforcement',
-      'Define Metric Views (YAML-syntax) and TVFs for the semantic layer',
-      'Create and optimize a Genie Space with governed natural-language queries',
+      'Locate your data (existing, uploaded, or synthetic) and build a governed Metric View with synonyms',
+      'Stand up a Genie Agent with instructions, verified queries, and benchmarks — then run the optimize loop',
+      'Model the Discover ontology: domains, pages, and routing (Genie One)',
+      'Prove the agent, then build an AI/BI dashboard on the Metric View',
+      'Sync Gold dimensions + facts into Lakebase to power an app, and productionize as a bundle',
     ],
-    estimatedMinutes: 45,
+    estimatedMinutes: 260,
     accentColor: 'amber',
   },
 

@@ -234,6 +234,60 @@ export const serviceData: Record<string, ServiceInfo> = {
     docUrl: 'https://docs.databricks.com/en/genie/index.html',
     docLabel: 'Genie Spaces Documentation'
   },
+  genieAgent: {
+    name: 'Genie Agent',
+    description: 'A governed conversational analytics agent grounded on a curated Metric View and verified queries. You author instructions, add verified queries, benchmark accuracy, and run an optimize loop to steadily improve answer quality.',
+    benefits: [
+      'Natural language questions over governed metrics',
+      'Verified queries pin known-good SQL for accuracy',
+      'Benchmarks measure and track answer quality',
+      'Optimize loop iteratively improves instructions',
+      'Inherits Unity Catalog permissions and lineage'
+    ],
+    limitations: [
+      'Answer quality depends on Metric View + synonyms',
+      'Verified queries and benchmarks need curation',
+      'Ambiguous questions may need routing/ontology'
+    ],
+    docUrl: 'https://docs.databricks.com/aws/en/genie/',
+    docLabel: 'Genie Documentation'
+  },
+  discoverOntology: {
+    name: 'Discover Ontology',
+    description: 'Model the business ontology that routes questions to the right data: domains, pages, and routing rules. The ontology helps the Genie Agent disambiguate intent and direct each query to the correct governed asset.',
+    benefits: [
+      'Organizes metrics into business domains',
+      'Pages group related questions and assets',
+      'Routing sends questions to the right space',
+      'Improves accuracy on ambiguous questions',
+      'Scales governed analytics across teams'
+    ],
+    limitations: [
+      'Requires upfront domain modeling',
+      'Routing rules need maintenance as data evolves',
+      'Overlapping domains can complicate routing'
+    ],
+    docUrl: 'https://docs.databricks.com/aws/en/genie/',
+    docLabel: 'Genie Documentation'
+  },
+  syncedTables: {
+    name: 'Synced Tables',
+    description: 'Continuously sync curated Gold tables from the Lakehouse into Lakebase (managed Postgres) so operational apps can serve governed analytics with low latency — the reverse-ETL activation step of the Genie arc.',
+    benefits: [
+      'Low-latency reads for apps from Postgres',
+      'Keeps Lakebase in sync with governed Gold data',
+      'Powers Databricks Apps + embedded Genie',
+      'Managed sync — no custom pipelines to maintain',
+      'Preserves Unity Catalog governance upstream'
+    ],
+    limitations: [
+      'Sync cadence introduces some data latency',
+      'Requires a Lakebase (Postgres) instance',
+      'Best for curated Gold, not raw/high-churn tables'
+    ],
+    docUrl: 'https://docs.databricks.com/aws/en/oltp/',
+    docLabel: 'Lakebase Documentation'
+  },
   aiBIDashboards: {
     name: 'AI/BI Dashboards',
     description: 'Native business intelligence dashboards built into Databricks. Create interactive visualizations, reports, and analytics directly on your Lakehouse data.',
@@ -963,13 +1017,17 @@ export interface ServicePopoverProps {
   position?: 'top' | 'bottom' | 'left' | 'right';
   /** When true, uses block-level display and hides the Info icon (for architecture diagram boxes) */
   block?: boolean;
+  /** When true (with block), suppresses the corner info-dot badge so the trigger
+   *  reads as a clean chip. The click-for-details popover still works. */
+  hideBadge?: boolean;
 }
 
 export function ServicePopover({ 
   children, 
   serviceKey,
   position = 'top',
-  block = false
+  block = false,
+  hideBadge = false
 }: ServicePopoverProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [shouldRender, setShouldRender] = useState(false);
@@ -1170,7 +1228,7 @@ export function ServicePopover({
         {!block && <Info className="w-3 h-3 text-blue-400/60 shrink-0" />}
       </div>
 
-      {block && (
+      {block && !hideBadge && (
         <div className="absolute -top-1.5 -right-1.5 z-10 pointer-events-none">
           <div className="relative flex items-center justify-center w-5 h-5 rounded-full bg-blue-500/20 border border-blue-400/40 backdrop-blur-sm transition-all duration-200 group-hover/sp:bg-blue-500/40 group-hover/sp:border-blue-400/70 group-hover/sp:scale-110">
             <Info className="w-2.5 h-2.5 text-blue-400/80 group-hover/sp:text-blue-300" />

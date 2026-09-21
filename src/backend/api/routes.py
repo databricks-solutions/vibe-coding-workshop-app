@@ -13,6 +13,7 @@ import os
 import re
 import json
 import logging
+import math
 import time
 import asyncio
 import yaml
@@ -36,6 +37,45 @@ def _validate_section_tag(section_tag: str) -> None:
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
+
+_HEX_COLOR_RE = re.compile(r"^#(?:[0-9a-fA-F]{3}){1,2}$")
+
+
+def _hex_to_oklch(hex_color: str) -> str:
+    """Convert '#RRGGBB' or '#RGB' to the 'L C H' triple used inside CSS
+    ``oklch(...)`` custom properties (e.g. ``0.6300 0.1600 145.0``).
+
+    Mirrors ``scripts/brand_extractor.hex_to_oklch`` so the branding block can
+    emit drop-in oklch values without importing the installer-only module.
+    Returns '' on any error or malformed input -- never raises.
+    """
+    if not hex_color or not isinstance(hex_color, str) or not _HEX_COLOR_RE.match(hex_color):
+        return ""
+    try:
+        h = hex_color.lstrip("#")
+        if len(h) == 3:
+            h = "".join(c * 2 for c in h)
+        srgb = [int(h[i:i + 2], 16) / 255 for i in (0, 2, 4)]
+
+        def _lin(c: float) -> float:
+            return c / 12.92 if c <= 0.04045 else ((c + 0.055) / 1.055) ** 2.4
+
+        r, g, b = (_lin(c) for c in srgb)
+
+        l = 0.4122214708 * r + 0.5363325363 * g + 0.0514459929 * b
+        m = 0.2119034982 * r + 0.6806995451 * g + 0.1073969566 * b
+        s = 0.0883024619 * r + 0.2817188376 * g + 0.6299787005 * b
+        l_, m_, s_ = (v ** (1.0 / 3.0) if v > 0 else 0.0 for v in (l, m, s))
+
+        L = 0.2104542553 * l_ + 0.7936177850 * m_ - 0.0040720468 * s_
+        a = 1.9779984951 * l_ - 2.4285922050 * m_ + 0.4505937099 * s_
+        bb = 0.0259040371 * l_ + 0.7827717662 * m_ - 0.8086757660 * s_
+
+        C = math.sqrt(a * a + bb * bb)
+        H = math.degrees(math.atan2(bb, a)) % 360.0
+        return f"{L:.4f} {C:.4f} {H:.1f}"
+    except Exception:
+        return ""
 
 # =============================================================================
 # CONFIGURATION SOURCE (Lakebase + YAML fallback)
@@ -1328,7 +1368,10 @@ def get_section_input_content(industry: str, use_case: str, section_tag: str, pr
     brand_url = (workshop_params.get('company_brand_url') or '').strip()
     if not brand_url and session_id:
         brand_url = (get_workshop_parameters_sync().get('company_brand_url') or '').strip()
-    if brand_url and section_tag in ('prd_generation', 'figma_ui_design', 'cursor_copilot_ui_design'):
+    if brand_url and section_tag in (
+        'prd_generation', 'figma_ui_design', 'cursor_copilot_ui_design',
+        'activation_app_design', 'activation_build_wire', 'gaccel_dashboard',
+    ):
         _company_display = ''
         try:
             from urllib.parse import urlparse
@@ -1369,16 +1412,75 @@ This application is being built for the company defined at the following URL.
 - User journeys should reflect realistic scenarios within the company's industry and operations
 - Include brand identity considerations (name, logo, color palette) in any UI-related requirements sections"""
         else:
-            if _company_display:
+            # Concrete brand assets extracted at install time (may be blank).
+            # Fall back to the global workshop parameters when the session copy
+            # is empty, mirroring the brand_url resolution above.
+            def _brand_param(key: str) -> str:
+                val = (workshop_params.get(key) or '').strip()
+                if not val and session_id:
+                    val = (get_workshop_parameters_sync().get(key) or '').strip()
+                return val
+
+            _primary = _brand_param('company_primary_color')
+            _secondary = _brand_param('company_secondary_color')
+            _accent = _brand_param('company_accent_color')
+            _logo = _brand_param('company_logo_url')
+            _name = _brand_param('company_name') or _company_display
+
+            _brand_label = f"**{_name}**" if _name else "the brand defined at the following URL"
+
+            # Build the concrete-color palette lines only for colors we actually
+            # have. Each carries the oklch triple so the agent can drop it
+            # straight into the AppKit scaffold's client/src/index.css variables.
+            _palette_lines = []
+            for _label, _var, _hex in (
+                ("Primary", "--primary", _primary),
+                ("Secondary", "--secondary", _secondary),
+                ("Accent", "--accent", _accent),
+            ):
+                if _hex:
+                    _oklch = _hex_to_oklch(_hex)
+                    _oklch_str = f" -> `oklch({_oklch})`" if _oklch else ""
+                    _palette_lines.append(f"- {_label}: `{_hex}`{_oklch_str} (set the `{_var}` CSS variable)")
+
+            if _palette_lines:
+                _palette_block = "\n".join(_palette_lines)
+                _logo_line = (
+                    f"- Logo: place `{_logo}` in the header/navbar and use it as the favicon"
+                    if _logo else
+                    f"- Logo: use the company logo from {brand_url} in the header/navbar and as the favicon"
+                )
                 branding_section = f"""
 
 ---
 
 ## Branding Guidelines
 
-Use **{_company_display}** as the brand for this application.
+Theme this application for {_brand_label} using the concrete brand assets below (extracted from {brand_url}).
+
+### Brand palette (exact values)
+{_palette_block}
+
+Uncomment and set these as the oklch CSS custom properties in the AppKit scaffold's `client/src/index.css` (the scaffold ships them commented out). Every brand color MUST flow through these CSS variables and be referenced via Tailwind classes (e.g. `bg-primary`, `text-primary-foreground`) — never inline hex, which bypasses dark mode.
+
+### Logo
+{_logo_line}
+
+### Apply throughout
+- Apply the primary and secondary brand colors to the theme, buttons, headers, chart series, and accents
+- Ensure text on brand-colored backgrounds meets WCAG AA contrast (4.5:1 normal, 3:1 large)
+- Ensure all UI elements, buttons, and accents align with the brand's visual identity"""
+            elif _name or _company_display:
+                _label = _name or _company_display
+                branding_section = f"""
+
+---
+
+## Branding Guidelines
+
+Use **{_label}** as the brand for this application.
 - Reference {brand_url} for the official brand color codes and assets
-- Apply the company's primary and secondary brand colors throughout the UI (theme, buttons, headers, accents)
+- Apply the company's primary and secondary brand colors throughout the UI as oklch CSS variables in `client/src/index.css` (theme, buttons, headers, accents)
 - Use the company's logo where appropriate (e.g., header/navbar, favicon)
 - Ensure all UI elements, buttons, and accents align with the brand's visual identity"""
             else:
@@ -1390,7 +1492,7 @@ Use **{_company_display}** as the brand for this application.
 
 Use the brand defined at the following URL for this application.
 - Reference {brand_url} for the official brand color codes and assets
-- Apply the brand's primary and secondary colors throughout the UI (theme, buttons, headers, accents)
+- Apply the brand's primary and secondary colors throughout the UI as oklch CSS variables in `client/src/index.css` (theme, buttons, headers, accents)
 - Use the brand's logo where appropriate (e.g., header/navbar, favicon)
 - Ensure all UI elements, buttons, and accents align with the brand's visual identity"""
         input_text += branding_section
@@ -4615,6 +4717,61 @@ async def get_workshop_parameters(response: Response) -> List[WorkshopParameter]
                 allow_session_override=True
             ),
             WorkshopParameter(
+                param_key="company_name",
+                param_label="Company Display Name",
+                param_value="",
+                param_description="Company/brand display name extracted from the brand URL at install time. Injected into UI design prompts so the generated app is named and voiced for the brand. Leave blank to skip.",
+                param_type="text",
+                display_order=9,
+                is_required=False,
+                is_active=True,
+                allow_session_override=True
+            ),
+            WorkshopParameter(
+                param_key="company_primary_color",
+                param_label="Company Primary Brand Color",
+                param_value="",
+                param_description="Primary brand color as a hex string (e.g. #01426A) extracted from the brand URL at install time. Injected into UI design prompts as the app theme's primary color. Leave blank to skip.",
+                param_type="text",
+                display_order=9,
+                is_required=False,
+                is_active=True,
+                allow_session_override=True
+            ),
+            WorkshopParameter(
+                param_key="company_secondary_color",
+                param_label="Company Secondary Brand Color",
+                param_value="",
+                param_description="Secondary brand color as a hex string extracted from the brand URL at install time. Injected into UI design prompts as the app theme's secondary color. Leave blank to skip.",
+                param_type="text",
+                display_order=9,
+                is_required=False,
+                is_active=True,
+                allow_session_override=True
+            ),
+            WorkshopParameter(
+                param_key="company_accent_color",
+                param_label="Company Accent Brand Color",
+                param_value="",
+                param_description="Accent brand color as a hex string extracted from the brand URL at install time. Injected into UI design prompts as the app theme's accent color. Leave blank to skip.",
+                param_type="text",
+                display_order=9,
+                is_required=False,
+                is_active=True,
+                allow_session_override=True
+            ),
+            WorkshopParameter(
+                param_key="company_logo_url",
+                param_label="Company Logo URL",
+                param_value="",
+                param_description="Absolute URL to the company logo extracted from the brand URL at install time. Injected into UI design prompts so the generated app can place the logo in the header/navbar and favicon. Leave blank to skip.",
+                param_type="text",
+                display_order=9,
+                is_required=False,
+                is_active=True,
+                allow_session_override=True
+            ),
+            WorkshopParameter(
                 param_key="lakebase_uc_catalog_name",
                 param_label="Lakebase UC Catalog Name",
                 param_value=os.getenv('LAKEBASE_UC_CATALOG', ''),
@@ -5542,6 +5699,8 @@ class SessionSaveRequest(BaseModel):
     current_step: int = Field(1, description="Current step number (1-22)")
     workshop_level: Optional[str] = Field(None, description="Workshop level: app-only, app-database, lakehouse, lakehouse-di, end-to-end, accelerator, or genie-accelerator")
     direction: Optional[str] = Field(None, description="Workflow direction: forward or reverse")
+    include_lakehouse: Optional[bool] = Field(None, description="Genie Accelerator: include the optional Lakehouse (Bronze -> Gold) block")
+    include_genie_ontology: Optional[bool] = Field(None, description="Genie Accelerator: include the optional Genie Ontology block")
     completed_steps: List[int] = Field(default_factory=list, description="List of completed step numbers")
     step_prompts: Dict[int, str] = Field(default_factory=dict, description="Map of step number to generated prompt")
 
@@ -5823,8 +5982,15 @@ async def save_session_endpoint(request_body: SessionSaveRequest, request: Reque
             created_by=current_user,
         )
         
-        # Persist direction in session_parameters if provided
-        if success and request_body.direction:
+        # Persist direction / include_lakehouse / include_genie_ontology in session_parameters if provided
+        _save_param_patch = {}
+        if request_body.direction:
+            _save_param_patch["direction"] = request_body.direction
+        if request_body.include_lakehouse is not None:
+            _save_param_patch["include_lakehouse"] = request_body.include_lakehouse
+        if request_body.include_genie_ontology is not None:
+            _save_param_patch["include_genie_ontology"] = request_body.include_genie_ontology
+        if success and _save_param_patch:
             try:
                 schema = get_schema()
                 execute_insert(f"""
@@ -5832,9 +5998,9 @@ async def save_session_endpoint(request_body: SessionSaveRequest, request: Reque
                     SET session_parameters = COALESCE(session_parameters, '{{}}'::jsonb) || %s::jsonb,
                         updated_at = CURRENT_TIMESTAMP
                     WHERE session_id = %s
-                """, (json.dumps({"direction": request_body.direction}), request_body.session_id))
+                """, (json.dumps(_save_param_patch), request_body.session_id))
             except Exception as e:
-                logger.warning(f"[Session API] Failed to persist direction: {e}")
+                logger.warning(f"[Session API] Failed to persist session params: {e}")
         
         if success:
             share_url = f"{base_url}?sessionId={request_body.session_id}"
@@ -5968,6 +6134,8 @@ class SessionUpdateMetadataRequest(BaseModel):
     company_brand_url: Optional[str] = Field(None, description="URL to company brand colors/assets page")
     direction: Optional[str] = Field(None, description="Workflow direction: forward or reverse")
     coding_assistant: Optional[str] = Field(None, description="Selected coding assistant: cursor, copilot, or vscode")
+    include_lakehouse: Optional[bool] = Field(None, description="Genie Accelerator: include the optional Lakehouse (Bronze -> Gold) block")
+    include_genie_ontology: Optional[bool] = Field(None, description="Genie Accelerator: include the optional Genie Ontology block")
 
 
 @router.post("/session/update-metadata")
@@ -6032,6 +6200,10 @@ async def update_session_metadata_endpoint(request_body: SessionUpdateMetadataRe
             _session_param_patch['direction'] = request_body.direction
         if request_body.coding_assistant is not None:
             _session_param_patch['coding_assistant'] = request_body.coding_assistant
+        if request_body.include_lakehouse is not None:
+            _session_param_patch['include_lakehouse'] = request_body.include_lakehouse
+        if request_body.include_genie_ontology is not None:
+            _session_param_patch['include_genie_ontology'] = request_body.include_genie_ontology
         
         # Derive user_schema_prefix from email + use case name (or source schema for accelerator)
         # Triggered when use case is selected, custom label is edited, or workshop_level changes
