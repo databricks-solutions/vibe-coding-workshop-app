@@ -17,7 +17,10 @@ docs.** Read in the order below.
 | 2 | [`mcp-research-and-findings.md`](./mcp-research-and-findings.md) | Reference | Written (2026-09-21) | The research that grounds the design: MCP `2026-07-28` protocol landscape, the interactivity thesis, and code-grounded corrections — **reconciled against the live probe** (probe wins on conflict). |
 | 3 | [`mcp-interactive-track-doc-plan.md`](./mcp-interactive-track-doc-plan.md) | Build plan | Written (2026-09-21) | **§1 = the authoritative probe findings.** Then the D1–D10 document set to build, with content, dependencies, and write order. |
 | 4 | [`designing-mcp-servers-for-genie-code.md`](./designing-mcp-servers-for-genie-code.md) | Generic spec | Written (2026-09-22) | **Product-agnostic.** How *any* agent should design, deploy, and verify an MCP server that works with Genie Code — client ground truth, deployment requirements, tool/prompt/resource design, in-band interaction patterns, a reusable capability probe, and a checklist. |
-| 5 | D1–D10 design docs | Specs | **Not yet written** | The workshop-specific specifications to author next, per the plan. See below. |
+| 5 | [`workshop-engine-domain.md`](./workshop-engine-domain.md) | Spec (D3) | **Draft (2026-09-22)** | The backend domain: manifest JSON Schema, progression functions, assembler-parity contract, state model. Transport-agnostic keystone. |
+| 6 | [`mcp-workshop-interactivity.md`](./mcp-workshop-interactivity.md) | Spec (D1) | **Draft (2026-09-22)** | The no-elicitation interaction model: the four in-band patterns, the `interaction` payload block, capability negotiation, the Step-9 hard-stop, and the elicitation upgrade path. |
+| 7 | [`mcp-interface-contract.md`](./mcp-interface-contract.md) | Spec (D2) | **Draft (2026-09-22)** | The IDL: 6 tools (name, description-as-prompt, input/output schemas, all four annotations, error taxonomy), 3 resources, 2 prompts, and the tool-budget accounting. |
+| 8 | D4–D10 design docs | Specs | **Not yet written** | The remaining workshop-specific specifications, per the plan. See below. |
 
 ---
 
@@ -38,11 +41,11 @@ the reasoning and reconciliation are in [research §2–§3](./mcp-research-and-
 
 ## Documents to build next (from the plan)
 
-Write order: **D1 + D3** → **D2 + D5** → **D4 + D6 + D7** → **D8 + D9** → **D10**.
+Write order: **D1 + D3** ✅ → **D2** ✅ **+ D5** → **D4 + D6 + D7** → **D8 + D9** → **D10**.
 
-- **D1** `mcp-workshop-interactivity.md` — keystone: the no-elicitation interaction model + four patterns.
-- **D3** `workshop-engine-domain.md` — manifest schema, progression semantics, assembler-parity contract.
-- **D2** `mcp-interface-contract.md` — the tool/resource/prompt IDL.
+- **D1** ✅ [`mcp-workshop-interactivity.md`](./mcp-workshop-interactivity.md) — keystone: the no-elicitation interaction model + four patterns. *(Draft)*
+- **D3** ✅ [`workshop-engine-domain.md`](./workshop-engine-domain.md) — manifest schema, progression semantics, assembler-parity contract. *(Draft)*
+- **D2** ✅ [`mcp-interface-contract.md`](./mcp-interface-contract.md) — the tool/resource/prompt IDL. *(Draft)*
 - **D5** `mcp-workshop-pedagogy.md` — learning model + question authoring.
 - **D4** `mcp-workshop-architecture.md` — components + sequences + deployment topology.
 - **D6** `mcp-workshop-data-model.md` — Lakebase DDL incl. the interaction/decision log.
