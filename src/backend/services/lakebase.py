@@ -607,6 +607,8 @@ def save_session(
     skipped_steps: List[int] = None,
     step_prompts: Dict[int, str] = None,
     created_by: str = None,
+    captured_outputs: Dict[str, str] = None,
+    completed_gates: List[str] = None,
 ) -> bool:
     """
     Save or update a session in Lakebase.
@@ -632,6 +634,8 @@ def save_session(
         skipped_steps: List of skipped step numbers (None preserves existing)
         step_prompts: Dict mapping step number to generated prompt text
         created_by: User email
+        captured_outputs: Dict mapping produces keys to captured output text
+        completed_gates: List of completed section tags
     
     Returns:
         True if successful, False otherwise
@@ -652,6 +656,8 @@ def save_session(
     if use_case is not None: _fields_being_set.append("use_case")
     if prerequisites_completed is not None: _fields_being_set.append(f"prerequisites_completed={prerequisites_completed}")
     if step_prompts is not None: _fields_being_set.append(f"step_prompts({len(step_prompts)} keys)")
+    if captured_outputs is not None: _fields_being_set.append(f"captured_outputs({len(captured_outputs)} keys)")
+    if completed_gates is not None: _fields_being_set.append(f"completed_gates({len(completed_gates)} items)")
     if session_name is not None: _fields_being_set.append(f"session_name={session_name}")
     if feedback_rating is not None: _fields_being_set.append("feedback")
     logger.info(f"Saving session {session_id}: fields=[{', '.join(_fields_being_set) or 'none'}]")
@@ -675,6 +681,8 @@ def save_session(
             completed_steps = list(set(completed_steps))
         completed_steps_json = json.dumps(completed_steps) if completed_steps is not None else None
         skipped_steps_json = json.dumps(skipped_steps) if skipped_steps is not None else None
+        captured_outputs_json = json.dumps(captured_outputs) if captured_outputs is not None else None
+        completed_gates_json = json.dumps(completed_gates) if completed_gates is not None else None
         
         # Current timestamp
         now = datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')
@@ -691,6 +699,7 @@ def save_session(
                 feedback_rating, feedback_comment, feedback_request_followup,
                 step_1_prompt, step_prompts,
                 prerequisites_completed, current_step, workshop_level, completed_steps, skipped_steps,
+                captured_outputs, completed_gates,
                 created_at, updated_at
             ) VALUES (
                 %s, %s,
@@ -699,6 +708,7 @@ def save_session(
                 %s, %s, %s,
                 %s, %s,
                 %s, %s, %s, %s, %s,
+                %s, %s,
                 %s, %s
             )
             ON CONFLICT (session_id) DO UPDATE SET
@@ -716,6 +726,8 @@ def save_session(
                 workshop_level = COALESCE(EXCLUDED.workshop_level, {table_name}.workshop_level),
                 completed_steps = COALESCE(EXCLUDED.completed_steps, {table_name}.completed_steps),
                 skipped_steps = COALESCE(EXCLUDED.skipped_steps, {table_name}.skipped_steps),
+                captured_outputs = COALESCE(EXCLUDED.captured_outputs, {table_name}.captured_outputs),
+                completed_gates = COALESCE(EXCLUDED.completed_gates, {table_name}.completed_gates),
                 step_1_prompt = COALESCE(EXCLUDED.step_1_prompt, {table_name}.step_1_prompt),
                 step_prompts = COALESCE({table_name}.step_prompts, '{{}}'::jsonb) || COALESCE(EXCLUDED.step_prompts, '{{}}'::jsonb),
                 updated_at = EXCLUDED.updated_at
@@ -728,6 +740,7 @@ def save_session(
                 feedback_rating, feedback_comment, feedback_request_followup,
                 step_1_prompt_value, step_prompts_json,
                 prerequisites_completed, current_step, workshop_level, completed_steps_json, skipped_steps_json,
+                captured_outputs_json, completed_gates_json,
                 now,
                 now,
             )
@@ -829,6 +842,8 @@ def load_session(session_id: str) -> Optional[Dict]:
                 session_name, session_description, feedback_rating, feedback_comment,
                 prerequisites_completed, current_step, workshop_level, completed_steps, skipped_steps,
                 step_1_prompt, step_prompts,
+                COALESCE(captured_outputs, '{{}}') as captured_outputs,
+                COALESCE(completed_gates, '[]') as completed_gates,
                 COALESCE(session_parameters, '{{}}') as session_parameters,
                 created_by, created_at, updated_at
             FROM {table_name}
@@ -899,6 +914,24 @@ def load_session(session_id: str) -> Optional[Dict]:
                         session_params = json.loads(session_params) if session_params else {}
                     except:
                         session_params = {}
+
+                captured_outputs = row.get("captured_outputs", {})
+                if isinstance(captured_outputs, str):
+                    try:
+                        captured_outputs = json.loads(captured_outputs) if captured_outputs else {}
+                    except:
+                        captured_outputs = {}
+                if not isinstance(captured_outputs, dict):
+                    captured_outputs = {}
+
+                completed_gates = row.get("completed_gates", [])
+                if isinstance(completed_gates, str):
+                    try:
+                        completed_gates = json.loads(completed_gates) if completed_gates else []
+                    except:
+                        completed_gates = []
+                if not isinstance(completed_gates, list):
+                    completed_gates = []
                 
                 return {
                     "session_id": row["session_id"],
@@ -916,6 +949,8 @@ def load_session(session_id: str) -> Optional[Dict]:
                     "completed_steps": completed_steps,
                     "skipped_steps": skipped_steps,
                     "step_prompts": step_prompts,
+                    "captured_outputs": captured_outputs,
+                    "completed_gates": completed_gates,
                     "session_parameters": session_params,
                     "created_by": row.get("created_by"),
                     "created_at": created_at,
@@ -925,10 +960,59 @@ def load_session(session_id: str) -> Optional[Dict]:
             
             logger.info(f"Session {session_id} not found in Lakebase")
             return None
-            
+
+
     except Exception as e:
         logger.error(f"Error loading session from Lakebase: {e}", exc_info=True)
         return None
+
+
+def append_session_interaction(
+    session_id: str,
+    section_tag: str,
+    interaction_id: str,
+    kind: str,
+    answer: str = None,
+    recommended: str = None,
+    was_default: bool = False,
+    coaching_shown: str = None,
+    surface: str = "mcp",
+) -> bool:
+    """Append one MCP/UI interaction provenance row to Lakebase."""
+    if not is_lakebase_configured():
+        logger.info(f"Lakebase not configured, cannot append interaction for {session_id}")
+        return False
+
+    table_name = f"{get_schema()}.session_interactions"
+    try:
+        with get_connection() as conn:
+            cursor = conn.cursor()
+            query = f"""
+            INSERT INTO {table_name} (
+                session_id, section_tag, interaction_id, kind,
+                answer, recommended, was_default, coaching_shown, surface, created_at
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, CURRENT_TIMESTAMP)
+            """
+            cursor.execute(
+                query,
+                (
+                    session_id,
+                    section_tag,
+                    interaction_id,
+                    kind,
+                    answer,
+                    recommended,
+                    was_default,
+                    coaching_shown,
+                    surface,
+                ),
+            )
+            conn.commit()
+            cursor.close()
+            return True
+    except Exception as e:
+        logger.error(f"Error appending session interaction to Lakebase: {e}", exc_info=True)
+        return False
 
 
 def delete_session(session_id: str) -> bool:
@@ -2214,4 +2298,3 @@ def delete_saved_usecase(uc_id: int) -> bool:
     except Exception as e:
         logger.error(f"Error deleting use case id={uc_id}: {e}", exc_info=True)
         return False
-
