@@ -17,7 +17,7 @@ database:
 
 lakebase:
   mode: "autoscaling"                 # "autoscaling" (default, scale-to-zero) or "provisioned" (fixed CU)
-  instance_name: "vibe-coding-workshop-lakebase"   # Project name (Autoscaling) or instance name (Provisioned)
+  instance_name: "mcp-vibe-workshop-lb"   # Project name (Autoscaling) or instance name (Provisioned). "mcp-" prefixed to match the MCP app (see app.name) so it never shares state with a plain workshop deployment.
   catalog: "vibe_coding_workshop_catalog"
   create_catalog: "false"             # Set to "true" to register Lakebase as a UC catalog (needs CREATE CATALOG permission; defaults to "true" if omitted)
   schema: "vibe_coding_workshop"
@@ -29,7 +29,12 @@ lakebase:
   endpoint_name: ""                   # Auto-discovered during deploy (Autoscaling only)
 
 app:
-  name: "vibe-coding-workshop-app"
+  # NOTE: this branch enables the MCP mount by default (MCP_MOUNT_ENABLED="true" in
+  # app.yaml.template), so this app IS the MCP-enabled workshop variant. Keep the
+  # "mcp-" prefix: it isolates this deployment (and its Lakebase, below) from a plain
+  # vibe-coding-workshop-app so the two never clobber each other's app or state. If you
+  # deploy the non-MCP workshop from a different branch, use the unprefixed name there.
+  name: "mcp-vibe-coding-workshop-app"
   serving_endpoint: "databricks-claude-sonnet-4-5"
 
 user:
