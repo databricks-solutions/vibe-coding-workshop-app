@@ -27,7 +27,8 @@ reasons, all avoidable:
 1. They assume **server→client interaction** (elicitation, sampling, MRTR) that Genie Code does not
    offer.
 2. They trip a **deployment gotcha** specific to Databricks Apps (naming, routing, lifespan, and the
-   browser-origin **"won't save" triad** — CORS, Origin, Accept — in §4.4).
+   browser-origin **"won't save" cluster** — CORS, Origin, Accept, and the hanging `GET` SSE — in
+   §4.4).
 3. They over-spend the **20-tool budget** or write tool descriptions the agent can't act on.
 
 This spec removes all three.
@@ -197,12 +198,33 @@ Verify (the check a green server-side smoke *misses* because it hand-sends the d
 "method":"initialize","params":{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":
 {"name":"x","version":"1"}}}'` → expect `200`, **not** `406`.
 
+**(d) The hanging `GET /mcp` stream — a `200` that never returns.**
+After a *successful* `initialize` + `tools/list`, Genie Code opens a `GET /mcp` **SSE stream** for
+server→client messages. A **stateless** server has no such stream, but FastMCP still answers `GET`
+with `200 Content-Type: text/event-stream` and **holds it open with zero bytes** (verified: `curl`
+gets 0 bytes and times out). Genie Code stalls waiting on that stream and the entry **never persists
+— even though every other request returned `200`.** This is the gate that survives all of (a)–(c):
+your server-side logs look perfect (`OPTIONS 200`, `POST 200`, `tools/list 200`) yet Save fails.
+Fix by rejecting `GET`/`DELETE` on `/mcp` with **`405`** (there is no stream to open and no session
+to tear down in stateless mode), so the client proceeds instead of waiting:
+
+```python
+# ASGI middleware over /mcp, before the mount:
+if scope["method"] in {"GET", "DELETE"}:
+    # 405 JSON-RPC error; CORS headers still added by CORSMiddleware
+    return _method_not_allowed(send)
+```
+
+Verify: `curl -i "$APP_URL/mcp" -H "Accept: text/event-stream" -H "Authorization: Bearer $TOKEN"`
+→ expect a **fast `405`**, not a `200 text/event-stream` that hangs.
+
 > **Reference implementation (proven working).** The Databricks field-eng
 > `external-to-managed-table-migration-toolkit` custom MCP server
-> (`app/server/mcp/register-mcp.ts`) documents and fixes all three: `normalizeAcceptHeader` (the 406
-> fix), `normalizeOrigin` (scheme-forcing), and `setCors` (reflect `Access-Control-Request-Headers`,
-> expose `mcp-session-id`), with `enableJsonResponse: true`. The Python guidance here mirrors that
-> Node reference one-for-one.
+> (`app/server/mcp/register-mcp.ts`) documents and fixes all four: `normalizeAcceptHeader` (the 406
+> fix), `normalizeOrigin` (scheme-forcing), `setCors` (reflect `Access-Control-Request-Headers`,
+> expose `mcp-session-id`), `enableJsonResponse: true`, and `app.get/delete('/mcp', noSession)` →
+> `405` (the hanging-stream fix, (d)). The Python guidance here mirrors that Node reference
+> one-for-one.
 
 ### 4.5 The auth proxy handles user auth — MCP session ≠ auth
 The Databricks Apps auth proxy authenticates the user before the request reaches your app.
@@ -410,6 +432,9 @@ tool result. **Tear the probe down when done.**
     Origin header`.
   - **Accept 406 gate:** `POST /mcp` with `Accept: application/json` (and with `*/*`) → `200`, not
     `406`. This is the one a hand-crafted smoke hides by sending the dual `Accept`.
+  - **Hanging GET stream:** `GET /mcp` (and `DELETE /mcp`) → a fast `405`, **not** a
+    `200 text/event-stream` that returns zero bytes and hangs. This survives all the above — a
+    server-side log full of `200`s can still fail Save on this one.
 - **Two-session concurrency:** two identities never observe each other's state.
 - **Contract tests:** every tool validates against its `inputSchema` / `outputSchema` and sets all
   four annotations.
@@ -430,10 +455,11 @@ tool result. **Tear the probe down when done.**
 **Deployment**
 - [ ] App name starts with `mcp-`
 - [ ] `POST /mcp` returns 200 (no 307) — regression test present
-- [ ] **"Won't save" triad handled (§4.4):** CORS allows the scheme-qualified workspace origin with
-      credentials + `expose_headers` `mcp-session-id`; transport `Origin` check won't `403`; incoming
-      `Accept` is normalized to the dual value and `json_response=True` — each covered by a test that
-      sends the exposing header (`Origin`, JSON-only `Accept`)
+- [ ] **"Won't save" gates handled (§4.4):** (a) CORS allows the scheme-qualified workspace origin
+      with credentials + `expose_headers` `mcp-session-id`; (b) transport `Origin` check won't `403`;
+      (c) incoming `Accept` normalized to the dual value + `json_response=True`; (d) `GET`/`DELETE`
+      `/mcp` return a fast `405`, not a hanging SSE — each covered by a test that sends the exposing
+      header/method (`Origin`, JSON-only `Accept`, `GET`)
 - [ ] MCP app lifespan wired into the parent FastAPI app
 - [ ] Stateless; durable state in an external store keyed by resolved identity
 - [ ] MCP/FastMCP versions pinned in the lockfile
@@ -462,6 +488,8 @@ tool result. **Tear the probe down when done.**
   browser's headers.
 - ❌ Requiring the dual `Accept` from browser clients — normalize JSON-only/`*/*` to the dual value
   and enable JSON responses (§4.4c).
+- ❌ Leaving a stateless `GET /mcp` as FastMCP's default hanging `200` SSE — return `405` so Genie
+  Code's save-time validation doesn't stall on a stream that never delivers (§4.4d).
 - ❌ Mounting the MCP app without wiring its lifespan (§4.3).
 - ❌ Asking the user for input via the protocol (elicitation/MRTR) as a hard requirement.
 - ❌ Shipping 10+ tools and starving the shared 20-tool budget.
@@ -478,8 +506,9 @@ Derived from:
 - A live Genie Code MCP **capability probe** (`fevm-serverless`, 2026-09-21) and MCP `2026-07-28`
   protocol research (§2).
 - A live **"lists but won't save" investigation** (`fevm-serverless`, 2026-09-22) that reproduced
-  and fixed the three save-time gates in §4.4 (`400` CORS origin → `403` Invalid Origin → `406`
-  Accept), cross-checked against the working Databricks field-eng reference
+  and fixed the four save-time gates in §4.4 (`400` CORS origin → `403` Invalid Origin → `406`
+  Accept → the hanging `GET` SSE, fixed with `405`), cross-checked against the working Databricks
+  field-eng reference
   `external-to-managed-table-migration-toolkit` (`app/server/mcp/register-mcp.ts`:
   `normalizeAcceptHeader`, `normalizeOrigin`, `setCors`) and the official docs
   [Connect Genie Code to MCP servers](https://docs.databricks.com/aws/en/genie-code/mcp).
