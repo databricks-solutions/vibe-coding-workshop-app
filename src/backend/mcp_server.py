@@ -16,6 +16,7 @@ from mcp.server.transport_security import TransportSecuritySettings
 from mcp.types import (
     CallToolRequest,
     CallToolResult,
+    ListToolsRequest,
     ServerResult,
     TextContent,
     ToolAnnotations,
@@ -226,6 +227,28 @@ class WorkshopFastMCP(FastMCP):
                 )
 
         self._mcp_server.request_handlers[CallToolRequest] = handle
+
+        # Genie Code's save-time validation (protocolVersion 2025-11-25) rejects
+        # a tools/list whose entries carry `outputSchema` / `annotations`: the
+        # server lists but the "Add MCP server" Save silently fails (the client
+        # re-runs initialize + tools/list in a loop and never persists). The
+        # proven Genie Code reference returns ONLY name/description/inputSchema
+        # (external-to-managed-table-migration-toolkit register-mcp.ts). Mirror
+        # that by stripping the two optional fields from the tools/list result.
+        # Structured output still flows to tolerant clients at tools/call time
+        # (CallToolResult.structuredContent above); only the *listing* is slimmed.
+        original_list_tools = self._mcp_server.request_handlers.get(ListToolsRequest)
+
+        if original_list_tools is not None:
+
+            async def list_tools(request: ListToolsRequest) -> ServerResult:
+                result = await original_list_tools(request)
+                for tool in result.root.tools:
+                    tool.outputSchema = None
+                    tool.annotations = None
+                return result
+
+            self._mcp_server.request_handlers[ListToolsRequest] = list_tools
 
 
 # FastMCP defaults host to 127.0.0.1 and, for localhost, auto-enables DNS-
