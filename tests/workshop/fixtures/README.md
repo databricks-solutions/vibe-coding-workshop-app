@@ -27,15 +27,16 @@ source positions.
 
 ## Chaining source
 
-Manifest `consumes` values are hand-transcribed from the actual
-`previousOutputs` literals in `src/components/WorkflowDiagram.tsx` and their
-mirror in `src/utils/stepPreviousOutputs.ts`. The generator stores those
-literals as consumer-step-number to `{ keyName: producerStepNumber }` entries,
-then translates producer numbers to `sectionTag` records parsed from
-`workflowSections.ts`. `produces` is reverse-derived only when one of those
-literal keys references the step; it is otherwise `null`. The Genie wrapper
-literals are at `WorkflowDiagram.tsx:1066-1083`. The ontology steps are
-intentionally not special-cased: `renderGenieStep` passes the shared
-`geniePreviousOutputs`, which is undefined for steps 67–69, so their
-`consumes` and `produces` values remain empty/null to match the live UI rather
-than the conceptual D3 chain.
+`golden_chaining_genie.json` is a full-track 31-step `consumes` map for the
+Genie Accelerator. Every row is independently hand-derived from the per-step
+`previousOutputs` literals in `src/components/WorkflowDiagram.tsx`, which is
+the authoritative chaining source, and source step numbers are translated to
+`sectionTag` values using `src/constants/workflowSections.ts`.
+
+The shared `geniePreviousOutputs` value is undefined for grouped ontology steps
+67–69, so `ontology_domain`, `ontology_pages`, and `ontology_routing` correctly
+have empty `consumes` lists and no D3-specific handoff carve-out. Case 73 is
+also taken directly from `WorkflowDiagram.tsx`: `activation_wire_genie` consumes
+`activation_wire_lakebase`. `src/utils/stepPreviousOutputs.ts` is only an
+incomplete mirror whose switch stops at case 72. The fixture is not generated
+from `manifest.json`.

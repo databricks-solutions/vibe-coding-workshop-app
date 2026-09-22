@@ -1,0 +1,61 @@
+{
+  "project_setup": [],
+  "prd_generation": [],
+  "genie_silver_metadata": [],
+  "gold_layer_design": [
+    "table_metadata",
+    "prd_document"
+  ],
+  "gold_layer_pipeline": [
+    "gold_layer_design"
+  ],
+  "deploy_lakehouse_assets": [],
+  "semlayer_locate": [],
+  "semlayer_profile": [],
+  "semlayer_measures": [],
+  "semlayer_metric_view": [],
+  "semlayer_synonyms": [],
+  "gagent_describe": [],
+  "gagent_instructions": [],
+  "gagent_verified": [],
+  "gagent_benchmarks": [],
+  "gagent_optimize": [],
+  "gaccel_dashboard": [
+    "metric_view",
+    "prd_document"
+  ],
+  "gaccel_activation": [
+    "aibi_dashboard",
+    "prd_document"
+  ],
+  "activation_table_design": [
+    "gold_layer_design",
+    "usecase_plan",
+    "prd_document",
+    "activation_plan"
+  ],
+  "activation_reverse_sync": [],
+  "activation_app_design": [
+    "gold_layer_design",
+    "prd_document"
+  ],
+  "activation_build_wire": [
+    "activation_app_design"
+  ],
+  "activation_wire_lakebase": [],
+  "activation_wire_genie": [
+    "activation_wire_lakebase"
+  ],
+  "activation_deploy_validate": [],
+  "ontology_domain": [
+  ],
+  "ontology_pages": [
+  ],
+  "ontology_routing": [
+  ],
+  "iterate_enhance": [],
+  "redeploy_test": [
+    "iteration_plan"
+  ],
+  "workspace_cleanup": []
+}
