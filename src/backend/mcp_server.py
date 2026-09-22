@@ -250,6 +250,12 @@ mcp = WorkshopFastMCP(
         "verbatim before narrating it. All interactions stay in-band."
     ),
     stateless_http=True,
+    # Reply with plain JSON instead of an SSE stream for maximum client
+    # tolerance. Genie Code's browser save-time validation is happier with a
+    # JSON body. Note: this does NOT relax the transport's Accept gate (see the
+    # Accept-header normalization in app.py) — the POST handler still requires
+    # both application/json and text/event-stream in Accept regardless.
+    json_response=True,
     transport_security=_MCP_TRANSPORT_SECURITY,
 )
 

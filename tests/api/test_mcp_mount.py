@@ -101,6 +101,44 @@ def test_mcp_path_rewrite_accepts_app_kwarg(monkeypatch):
     assert mw.app is _noop
 
 
+def test_normalize_mcp_accept_widens_intolerant_values(monkeypatch):
+    """The Streamable HTTP transport 406s unless Accept lists BOTH
+    application/json and text/event-stream. Genie Code's browser save-time probe
+    sends a JSON-only / wildcard / empty Accept, so the middleware must widen it
+    to the dual value; a client that already lists both is left untouched."""
+    app_module = load_app(monkeypatch, enabled=True)
+    dual = b"application/json, text/event-stream"
+
+    def accept_of(headers):
+        return dict(app_module._normalize_mcp_accept(headers)).get(b"accept")
+
+    # JSON-only, wildcard, and a bare accept are all widened to the dual value.
+    assert accept_of([(b"accept", b"application/json")]) == dual
+    assert accept_of([(b"accept", b"*/*")]) == dual
+    assert accept_of([(b"accept", b"")]) == dual
+    # Missing Accept entirely -> the dual value is injected.
+    assert accept_of([(b"content-type", b"application/json")]) == dual
+    # Already-tolerant Accept is preserved verbatim (case-insensitive match).
+    preserved = b"text/event-stream, application/json"
+    assert accept_of([(b"accept", preserved)]) == preserved
+
+
+def test_post_mcp_with_json_only_accept_is_not_406(monkeypatch):
+    """End-to-end guard for the root cause: a JSON-only Accept (what Genie Code's
+    browser save-time validation sends) must NOT 406 — the middleware widens it
+    so the initialize handshake succeeds and the server can be saved."""
+    app_module = load_app(monkeypatch, enabled=True)
+
+    with TestClient(app_module.app, base_url="http://127.0.0.1:8000", follow_redirects=False) as client:
+        response = client.post(
+            "/mcp",
+            headers={"Accept": "application/json", "Content-Type": "application/json"},
+            json=INITIALIZE_REQUEST,
+        )
+
+    assert response.status_code == 200, response.text
+
+
 def test_mcp_mount_is_ordered_before_spa_catch_all(monkeypatch):
     """The /mcp mount must precede the SPA catch-all so /mcp is never resolved
     by index.html. Guards route ordering structurally (method-independent),

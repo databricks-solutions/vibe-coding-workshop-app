@@ -48,8 +48,39 @@ else:
     app_lifespan = None
 
 
+_MCP_DUAL_ACCEPT = b"application/json, text/event-stream"
+
+
+def _normalize_mcp_accept(headers):
+    """Widen a JSON-only / wildcard / empty Accept to the dual MCP value.
+
+    The Streamable HTTP transport's POST handler returns 406 unless Accept lists
+    BOTH application/json and text/event-stream. Genie Code's browser save-time
+    validation (and gateway probes) send Accept: application/json or */*, so the
+    handshake 406s and the "Add MCP server" entry silently fails to persist.
+    Since the server runs with json_response=True, replying with plain JSON is
+    always valid, so widening the Accept is safe. A client that already lists
+    text/event-stream is left untouched. Ref:
+    https://docs.databricks.com/aws/en/genie-code/mcp
+    """
+    result = []
+    seen = False
+    for name, value in headers:
+        if name == b"accept":
+            seen = True
+            lower = value.lower()
+            has_json = b"application/json" in lower or b"*/*" in lower
+            has_event_stream = b"text/event-stream" in lower
+            if not (has_json and has_event_stream):
+                value = _MCP_DUAL_ACCEPT
+        result.append((name, value))
+    if not seen:
+        result.append((b"accept", _MCP_DUAL_ACCEPT))
+    return result
+
+
 class _MCPPathRewrite:
-    """Rewrite the exact MCP path before Starlette resolves mounted routes."""
+    """Rewrite the exact MCP path + normalize Accept before Starlette routes."""
 
     def __init__(self, app):
         # Param MUST be named `app`: Starlette instantiates middleware as
@@ -58,13 +89,17 @@ class _MCPPathRewrite:
         self.app = app
 
     async def __call__(self, scope, receive, send):
-        if scope["type"] == "http" and scope.get("path") == "/mcp":
+        path = scope.get("path", "") if scope["type"] == "http" else ""
+        if path == "/mcp" or path.startswith("/mcp/"):
             scope = dict(scope)
-            scope["path"] = "/mcp/"
-            # Deterministic + idempotent: we only reach here when path == "/mcp",
-            # so the rewritten raw_path is unambiguously b"/mcp/". Appending
-            # instead would double-slash if this middleware ran twice.
-            scope["raw_path"] = b"/mcp/"
+            if path == "/mcp":
+                scope["path"] = "/mcp/"
+                # Deterministic + idempotent: we only reach here when
+                # path == "/mcp", so the rewritten raw_path is unambiguously
+                # b"/mcp/". Appending would double-slash if this ran twice.
+                scope["raw_path"] = b"/mcp/"
+            # Clear the transport's 406 Accept gate for JSON-only/`*/*` clients.
+            scope["headers"] = _normalize_mcp_accept(scope.get("headers", []))
         await self.app(scope, receive, send)
 
 # Get the directory where this script is located
