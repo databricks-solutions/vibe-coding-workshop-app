@@ -21,7 +21,10 @@ docs.** Read in the order below.
 | 6 | [`mcp-workshop-interactivity.md`](./mcp-workshop-interactivity.md) | Spec (D1) | **Draft (2026-09-22)** | The no-elicitation interaction model: the four in-band patterns, the `interaction` payload block, capability negotiation, the Step-9 hard-stop, and the elicitation upgrade path. |
 | 7 | [`mcp-interface-contract.md`](./mcp-interface-contract.md) | Spec (D2) | **Draft (2026-09-22)** | The IDL: 6 tools (name, description-as-prompt, input/output schemas, all four annotations, error taxonomy), 3 resources, 2 prompts, and the tool-budget accounting. |
 | 8 | [`mcp-workshop-pedagogy.md`](./mcp-workshop-pedagogy.md) | Spec (D5) | **Draft (2026-09-22)** | The learning model, where comprehension checks + decision points sit per section, the recommend-and-proceed doctrine, question-bank authoring via the `sections/*.md` pipeline, in-band phrasing, and the tone contract. |
-| 9 | D4, D6–D10 design docs | Specs | **Not yet written** | The remaining workshop-specific specifications, per the plan. See below. |
+| 9 | [`mcp-workshop-architecture.md`](./mcp-workshop-architecture.md) | Spec (D4) | **Draft (2026-09-22)** | Components, the Databricks Apps deployment topology (probe gotchas encoded), and the sequence diagrams (start/param intake, step walk + gate, cross-surface sync, Step-9 hard-stop). |
+| 10 | [`mcp-workshop-data-model.md`](./mcp-workshop-data-model.md) | Spec (D6) | **Draft (2026-09-22)** | Additive Lakebase changes: `captured_outputs` / `completed_gates` columns, the `session_interactions` log, session-parameter keys, number↔tag migration, and the migration DDL. |
+| 11 | [`mcp-workshop-security.md`](./mcp-workshop-security.md) | Spec (D7) | **Draft (2026-09-22)** | Identity → `session_id`, MCP-session≠auth, managed-proxy identity nuance, CORS reconciliation, the `/mcp` rate-limit decision, and stateless-concurrency isolation. |
+| 12 | D8–D10 design docs | Specs | **Not yet written** | Execution & verification tier, per the plan. See below. |
 
 ---
 
@@ -42,16 +45,15 @@ the reasoning and reconciliation are in [research §2–§3](./mcp-research-and-
 
 ## Documents to build next (from the plan)
 
-Write order: **D1 + D3** ✅ → **D2** ✅ **+ D5** ✅ → **D4 + D6 + D7** → **D8 + D9** → **D10**.
+Write order: **D1 + D3** ✅ → **D2** ✅ **+ D5** ✅ → **D4** ✅ **+ D6** ✅ **+ D7** ✅ → **D8 + D9** → **D10**.
 
 - **D1** ✅ [`mcp-workshop-interactivity.md`](./mcp-workshop-interactivity.md) — keystone: the no-elicitation interaction model + four patterns. *(Draft)*
 - **D3** ✅ [`workshop-engine-domain.md`](./workshop-engine-domain.md) — manifest schema, progression semantics, assembler-parity contract. *(Draft)*
 - **D2** ✅ [`mcp-interface-contract.md`](./mcp-interface-contract.md) — the tool/resource/prompt IDL. *(Draft)*
 - **D5** ✅ [`mcp-workshop-pedagogy.md`](./mcp-workshop-pedagogy.md) — learning model + question authoring. *(Draft)*
-- **D5** `mcp-workshop-pedagogy.md` — learning model + question authoring.
-- **D4** `mcp-workshop-architecture.md` — components + sequences + deployment topology.
-- **D6** `mcp-workshop-data-model.md` — Lakebase DDL incl. the interaction/decision log.
-- **D7** `mcp-workshop-security.md` — identity, CORS reconciliation, `/mcp` rate-limit decision.
+- **D4** ✅ [`mcp-workshop-architecture.md`](./mcp-workshop-architecture.md) — components + sequences + deployment topology. *(Draft)*
+- **D6** ✅ [`mcp-workshop-data-model.md`](./mcp-workshop-data-model.md) — Lakebase DDL incl. the interaction/decision log. *(Draft)*
+- **D7** ✅ [`mcp-workshop-security.md`](./mcp-workshop-security.md) — identity, CORS reconciliation, `/mcp` rate-limit decision. *(Draft)*
 - **D8** `mcp-workshop-test-plan.md` — parity, contract, 307-regression, re-probe harness.
 - **D9** `mcp-workshop-rollout.md` — phasing (Phase 1 ships now), version pinning, deploy gates.
 - **D10** `mcp-workshop-facilitator-guide.md` — setup + troubleshooting (optional).
