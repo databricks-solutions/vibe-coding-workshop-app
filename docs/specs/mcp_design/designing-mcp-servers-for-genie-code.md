@@ -26,7 +26,8 @@ reasons, all avoidable:
 
 1. They assume **server→client interaction** (elicitation, sampling, MRTR) that Genie Code does not
    offer.
-2. They trip a **deployment gotcha** specific to Databricks Apps (naming, routing, lifespan).
+2. They trip a **deployment gotcha** specific to Databricks Apps (naming, routing, lifespan, and the
+   browser-origin **"won't save" triad** — CORS, Origin, Accept — in §4.4).
 3. They over-spend the **20-tool budget** or write tool descriptions the agent can't act on.
 
 This spec removes all three.
@@ -114,12 +115,94 @@ app.mount("/mcp", mcp_app)
 If the parent app already exists with its own lifespan, **compose** the two lifespans explicitly —
 this is a real integration step, not a one-liner.
 
-### 4.4 CORS is (usually) a non-issue — don't over-engineer it
-Genie Code reaches `/mcp` **through the Databricks Apps auth proxy** (effectively server-to-server),
-so browser CORS rarely applies. If you do set CORS, note that Starlette's `CORSMiddleware` with
-`allow_origins=["*"]` + `allow_credentials=True` **echoes the request origin** (it does not send
-literal `*`), so it is valid. **Do not** conclude a failed connection is "a CORS problem" — check
-§4.2 (the 307) first; that is the usual culprit.
+### 4.4 The "lists but won't save" cluster — browser CORS, Origin, and the Accept 406 gate
+> **This supersedes an earlier claim in this doc that "CORS is usually a non-issue."** A live
+> save-failure investigation (2026-09-22, `fevm-serverless`) proved the opposite.
+
+Genie Code's **"Add MCP server → Save"** runs a **browser-side** `initialize` + `tools/list`
+validation **from the workspace origin** (`https://<workspace-host>` on `*.cloud.databricks.com` /
+`*.azuredatabricks.net`) to your app origin (`*.databricksapps.com`). That is a genuine
+**cross-origin, credentialed** request. (The *runtime* agent path is proxied; the *save-time*
+validation is not — this is why it can list yet refuse to save.) **Three independent gates** can each
+make the entry **list but silently fail to persist on Save**, each with a *different* status code you
+only see if you send the matching header:
+
+**(a) CORS preflight — `400 Disallowed CORS origin`.**
+The browser sends an `OPTIONS` preflight to `/mcp`. The Apps auth proxy lets `OPTIONS` through
+unauthenticated, so it reaches your app; if the workspace origin is not allow-listed, the preflight
+fails and Save aborts. Configure Starlette exactly:
+
+```python
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[WORKSPACE_URL],       # full origin WITH scheme, never "*"
+    allow_credentials=True,              # the request is credentialed
+    allow_methods=["*"],
+    allow_headers=["*"],                 # reflects Access-Control-Request-Headers
+    expose_headers=["mcp-session-id", "mcp-protocol-version"],
+)
+```
+
+- The origin must carry the **scheme** (`https://…`). A bare hostname (a common `DATABRICKS_HOST`
+  value) yields an `Access-Control-Allow-Origin` that never matches byte-for-byte and the preflight
+  fails — normalize it (`https://` + strip path/trailing slash) before use.
+- `allow_credentials=True` **requires** an explicit origin; `"*"` + credentials is rejected by
+  browsers. (The earlier "`*` echoes the origin" claim does not hold for the save-time path.)
+- **Expose `mcp-session-id`** so the client can read it.
+
+Verify: `curl -i -X OPTIONS "$APP_URL/mcp" -H "Origin: https://<workspace-host>" -H
+"Access-Control-Request-Method: POST" -H "Access-Control-Request-Headers:
+content-type,authorization,mcp-protocol-version,mcp-session-id,accept"` → expect `200/204` with
+`access-control-allow-origin: https://<workspace-host>` (**with scheme**) and
+`access-control-allow-headers` reflecting your requested headers.
+
+**(b) MCP transport Origin check — `403 Invalid Origin header`.**
+The MCP Python SDK's `TransportSecurityMiddleware` (DNS-rebinding protection) validates `Origin`
+**separately from CORS**. FastMCP **defaults `host="127.0.0.1"` and auto-enables this protection for
+localhost**, allow-listing only `http://127.0.0.1:*` / `localhost`. Behind the Apps proxy your app
+binds to 127.0.0.1, so the *Host* check passes but the real workspace `Origin` is rejected with
+`403`. It is **invisible to a bare `curl`** (no `Origin` header ⇒ the check is skipped), so it hides
+behind a green server-side smoke. Fix by passing explicit transport security:
+
+```python
+from mcp.server.transport_security import TransportSecuritySettings
+
+mcp = FastMCP(..., transport_security=TransportSecuritySettings(
+    enable_dns_rebinding_protection=False,   # or keep True + allowed_origins=[WORKSPACE_URL]
+))
+```
+
+Disabling is safe in this topology: the app is a public HTTPS endpoint gated by the Apps OAuth proxy
+and your CORS layer (a) already restricts browser origins. For defense-in-depth, keep protection on
+and set `allowed_origins=[WORKSPACE_URL]` plus `allowed_hosts` to whatever the proxy forwards.
+
+**(c) The Accept 406 gate — `406 Not Acceptable: Client must accept both application/json and
+text/event-stream`.** ← **the most common "won't save" cause, and the hardest to spot.**
+The Streamable HTTP transport's POST handler **rejects unless `Accept` lists BOTH `application/json`
+and `text/event-stream`**. Genie Code's browser save-time validation sends a **JSON-only**
+(`application/json`) or **wildcard** (`*/*`) Accept, so the handshake `406`s and the entry vanishes
+on Save. **This gate is independent of `json_response` / `enableJsonResponse`** — that setting only
+changes the *response* format, not the Accept requirement. Two coordinated fixes:
+
+1. **Normalize the incoming `Accept`** at the transport layer (ASGI middleware over `/mcp`): if it
+   does not already list both types (JSON-only, `*/*`, or empty), rewrite it to
+   `application/json, text/event-stream`. Widening is safe because (2) makes a plain-JSON reply
+   always valid; leave an already-tolerant Accept untouched.
+2. **Enable JSON responses** (`json_response=True` in FastMCP / `enableJsonResponse: true` in the TS
+   SDK) so the reply body is plain JSON for maximum client tolerance.
+
+Verify (the check a green server-side smoke *misses* because it hand-sends the dual value):
+`curl -X POST "$APP_URL/mcp" -H "Authorization: Bearer $TOKEN" -H "Origin: https://<workspace-host>"
+-H "Accept: application/json" -H "Content-Type: application/json" -d '{"jsonrpc":"2.0","id":1,
+"method":"initialize","params":{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":
+{"name":"x","version":"1"}}}'` → expect `200`, **not** `406`.
+
+> **Reference implementation (proven working).** The Databricks field-eng
+> `external-to-managed-table-migration-toolkit` custom MCP server
+> (`app/server/mcp/register-mcp.ts`) documents and fixes all three: `normalizeAcceptHeader` (the 406
+> fix), `normalizeOrigin` (scheme-forcing), and `setCors` (reflect `Access-Control-Request-Headers`,
+> expose `mcp-session-id`), with `enableJsonResponse: true`. The Python guidance here mirrors that
+> Node reference one-for-one.
 
 ### 4.5 The auth proxy handles user auth — MCP session ≠ auth
 The Databricks Apps auth proxy authenticates the user before the request reaches your app.
@@ -319,10 +402,19 @@ tool result. **Tear the probe down when done.**
 
 ### 9.3 Regression + smoke tests to keep
 - **307 regression:** `POST /mcp` returns **200**, not 307.
+- **The "won't save" triad (§4.4) — test each with the header that exposes it, or a server-side
+  smoke will pass while the browser Save fails:**
+  - **CORS preflight:** `OPTIONS /mcp` **with** `Origin: https://<workspace-host>` → `200/204` with
+    `access-control-allow-origin` echoing the scheme-qualified origin (not `400`).
+  - **Origin check:** authenticated `POST /mcp` **with** an `Origin` header → not `403 Invalid
+    Origin header`.
+  - **Accept 406 gate:** `POST /mcp` with `Accept: application/json` (and with `*/*`) → `200`, not
+    `406`. This is the one a hand-crafted smoke hides by sending the dual `Accept`.
 - **Two-session concurrency:** two identities never observe each other's state.
 - **Contract tests:** every tool validates against its `inputSchema` / `outputSchema` and sets all
   four annotations.
-- **Live smoke:** add server in Genie Code → invoke a prompt → call a tool → verify persisted state.
+- **Live smoke:** add server in Genie Code → **confirm it persists on Save** → invoke a prompt →
+  call a tool → verify persisted state.
 - **Re-probe harness:** keep §9.2 runnable so you can detect the day Genie Code gains elicitation.
 
 ---
@@ -338,6 +430,10 @@ tool result. **Tear the probe down when done.**
 **Deployment**
 - [ ] App name starts with `mcp-`
 - [ ] `POST /mcp` returns 200 (no 307) — regression test present
+- [ ] **"Won't save" triad handled (§4.4):** CORS allows the scheme-qualified workspace origin with
+      credentials + `expose_headers` `mcp-session-id`; transport `Origin` check won't `403`; incoming
+      `Accept` is normalized to the dual value and `json_response=True` — each covered by a test that
+      sends the exposing header (`Origin`, JSON-only `Accept`)
 - [ ] MCP app lifespan wired into the parent FastAPI app
 - [ ] Stateless; durable state in an external store keyed by resolved identity
 - [ ] MCP/FastMCP versions pinned in the lockfile
@@ -358,7 +454,14 @@ tool result. **Tear the probe down when done.**
 ## 11. Anti-patterns (do not do)
 
 - ❌ Assuming "works in Cursor/Claude" ⇒ "works in Genie Code." Genie Code's floor is lower.
-- ❌ Blaming CORS for a failed connection before ruling out the 307 (§4.2).
+- ❌ Assuming CORS is a non-issue for the **Save** step — it is browser-origin and credentialed
+  (§4.4a). Conversely, blaming generic "CORS" without checking the specific triad: the 307 (§4.2),
+  the transport `Origin` 403 (§4.4b), and the Accept `406` (§4.4c).
+- ❌ Trusting a green **server-side** smoke: a bare `curl` sends no `Origin` (skips §4.4b) and a
+  hand-set dual `Accept` (skips §4.4c), so it passes while the browser Save fails. Reproduce the
+  browser's headers.
+- ❌ Requiring the dual `Accept` from browser clients — normalize JSON-only/`*/*` to the dual value
+  and enable JSON responses (§4.4c).
 - ❌ Mounting the MCP app without wiring its lifespan (§4.3).
 - ❌ Asking the user for input via the protocol (elicitation/MRTR) as a hard requirement.
 - ❌ Shipping 10+ tools and starving the shared 20-tool budget.
@@ -371,9 +474,18 @@ tool result. **Tear the probe down when done.**
 
 ## 12. Provenance
 
-Derived from a live Genie Code MCP capability probe (`fevm-serverless`, 2026-09-21) and MCP
-`2026-07-28` protocol research. Worked example and the full reconciliation live alongside this file:
-[`README.md`](./README.md), [`mcp-research-and-findings.md`](./mcp-research-and-findings.md),
+Derived from:
+- A live Genie Code MCP **capability probe** (`fevm-serverless`, 2026-09-21) and MCP `2026-07-28`
+  protocol research (§2).
+- A live **"lists but won't save" investigation** (`fevm-serverless`, 2026-09-22) that reproduced
+  and fixed the three save-time gates in §4.4 (`400` CORS origin → `403` Invalid Origin → `406`
+  Accept), cross-checked against the working Databricks field-eng reference
+  `external-to-managed-table-migration-toolkit` (`app/server/mcp/register-mcp.ts`:
+  `normalizeAcceptHeader`, `normalizeOrigin`, `setCors`) and the official docs
+  [Connect Genie Code to MCP servers](https://docs.databricks.com/aws/en/genie-code/mcp).
+
+Worked example and the full reconciliation live alongside this file: [`README.md`](./README.md),
+[`mcp-research-and-findings.md`](./mcp-research-and-findings.md),
 [`mcp-interactive-track-doc-plan.md`](./mcp-interactive-track-doc-plan.md).
 Empirical findings outrank protocol docs for Genie Code's actual behavior — **when in doubt, run
 §9.**
