@@ -27,8 +27,8 @@ reasons, all avoidable:
 1. They assume **server→client interaction** (elicitation, sampling, MRTR) that Genie Code does not
    offer.
 2. They trip a **deployment gotcha** specific to Databricks Apps (naming, routing, lifespan, and the
-   browser-origin **"won't save" cluster** — CORS, Origin, Accept, and the hanging `GET` SSE — in
-   §4.4).
+   browser-origin **"won't save" cluster** — CORS, Origin, Accept, the hanging `GET` SSE, and the
+   `tools/list` payload shape — in §4.4).
 3. They over-spend the **20-tool budget** or write tool descriptions the agent can't act on.
 
 This spec removes all three.
@@ -116,17 +116,20 @@ app.mount("/mcp", mcp_app)
 If the parent app already exists with its own lifespan, **compose** the two lifespans explicitly —
 this is a real integration step, not a one-liner.
 
-### 4.4 The "lists but won't save" cluster — browser CORS, Origin, and the Accept 406 gate
+### 4.4 The "lists but won't save" cluster — CORS, Origin, Accept, the hanging GET, and the tools/list payload
 > **This supersedes an earlier claim in this doc that "CORS is usually a non-issue."** A live
-> save-failure investigation (2026-09-22, `fevm-serverless`) proved the opposite.
+> save-failure investigation (2026-09-22, `fevm-serverless`) proved the opposite, and resolved it
+> end-to-end: after all five gates below were fixed, Genie Code persisted the server and drove a full
+> interactive tool session.
 
 Genie Code's **"Add MCP server → Save"** runs a **browser-side** `initialize` + `tools/list`
 validation **from the workspace origin** (`https://<workspace-host>` on `*.cloud.databricks.com` /
 `*.azuredatabricks.net`) to your app origin (`*.databricksapps.com`). That is a genuine
 **cross-origin, credentialed** request. (The *runtime* agent path is proxied; the *save-time*
-validation is not — this is why it can list yet refuse to save.) **Three independent gates** can each
-make the entry **list but silently fail to persist on Save**, each with a *different* status code you
-only see if you send the matching header:
+validation is not — this is why it can list yet refuse to save.) **Five independent gates** can each
+make the entry **list but silently fail to persist on Save**. The first three surface a *different*
+status code you only see if you send the matching header; the last two are the cruel ones — the
+server returns `200`/`405` throughout and a naive server-side smoke looks perfectly green:
 
 **(a) CORS preflight — `400 Disallowed CORS origin`.**
 The browser sends an `OPTIONS` preflight to `/mcp`. The Apps auth proxy lets `OPTIONS` through
@@ -218,13 +221,54 @@ if scope["method"] in {"GET", "DELETE"}:
 Verify: `curl -i "$APP_URL/mcp" -H "Accept: text/event-stream" -H "Authorization: Bearer $TOKEN"`
 → expect a **fast `405`**, not a `200 text/event-stream` that hangs.
 
+**(e) The `tools/list` payload — extra fields silently rejected (the all-`200` failure).**
+The final gate, and the most disorienting: with (a)–(d) fixed, the server-side log shows a *complete,
+successful* handshake — `initialize` → `notifications/initialized` → `GET 405` → `tools/list 200`,
+every request green — yet Genie Code **still won't persist** and instead **re-runs `initialize` +
+`tools/list` in a loop**. The cause is the **content** of the `tools/list` result: Genie Code
+(protocolVersion `2025-11-25`) rejects tool entries that carry **`outputSchema`** and/or
+**`annotations`**. FastMCP emits that richer shape by default; the proven reference returns **only**
+`name`, `description`, and `inputSchema` per tool. Slim the *listing* to match — structured output
+and annotations still flow to tolerant clients at `tools/call` time, so this changes only what is
+advertised, not how the tools behave:
+
+```python
+from mcp.types import ListToolsRequest
+
+# Wrap FastMCP's default ListTools handler (after the app/handlers are built):
+_orig = mcp._mcp_server.request_handlers.get(ListToolsRequest)
+
+async def _list_tools(request):
+    result = await _orig(request)
+    for tool in result.root.tools:
+        tool.outputSchema = None   # Genie Code 2025-11-25 rejects these *in tools/list*
+        tool.annotations = None
+    return result
+
+mcp._mcp_server.request_handlers[ListToolsRequest] = _list_tools
+```
+
+Verify: `curl -X POST "$APP_URL/mcp" ... -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}'` → each
+tool object has **only** `name` / `description` / `inputSchema` (no `outputSchema`, no `annotations`).
+Success signature in the app log: the `initialize` + `tools/list` loop **stops** (one handshake, then
+`CallToolRequest`s as the agent actually uses the tools) instead of repeating.
+
+> **⚠ This deliberately contradicts the tool-quality guidance in §5.3 / §5.4** (set all four
+> annotations; declare `outputSchema` + return `structuredContent`). Repo reality wins for Genie
+> Code: those fields are correct MCP and help *tolerant* agents, but Genie Code's current client
+> rejects them **in the listing**. Keep them on your tool *definitions* (so `tools/call` still
+> returns `structuredContent` and other clients benefit) and strip them **only from the `tools/list`
+> response**. This is a client limitation, not a spec rule — re-test with the §9 probe when Genie
+> Code's client advances, and drop the strip once it tolerates the richer shape.
+
 > **Reference implementation (proven working).** The Databricks field-eng
 > `external-to-managed-table-migration-toolkit` custom MCP server
-> (`app/server/mcp/register-mcp.ts`) documents and fixes all four: `normalizeAcceptHeader` (the 406
-> fix), `normalizeOrigin` (scheme-forcing), `setCors` (reflect `Access-Control-Request-Headers`,
-> expose `mcp-session-id`), `enableJsonResponse: true`, and `app.get/delete('/mcp', noSession)` →
-> `405` (the hanging-stream fix, (d)). The Python guidance here mirrors that Node reference
-> one-for-one.
+> (`app/server/mcp/register-mcp.ts`) documents and fixes all five: `normalizeOrigin` (scheme-forcing,
+> (a)), `setCors` (reflect `Access-Control-Request-Headers`, expose `mcp-session-id`, (a)),
+> `normalizeAcceptHeader` + `enableJsonResponse: true` (the 406 fix, (c)),
+> `app.get/delete('/mcp', noSession)` → `405` (the hanging-stream fix, (d)), and a
+> `ListToolsRequestSchema` handler that returns only `name`/`description`/`inputSchema` (the payload
+> fix, (e)). The Python guidance here mirrors that Node reference one-for-one.
 
 ### 4.5 The auth proxy handles user auth — MCP session ≠ auth
 The Databricks Apps auth proxy authenticates the user before the request reaches your app.
@@ -424,8 +468,9 @@ tool result. **Tear the probe down when done.**
 
 ### 9.3 Regression + smoke tests to keep
 - **307 regression:** `POST /mcp` returns **200**, not 307.
-- **The "won't save" triad (§4.4) — test each with the header that exposes it, or a server-side
-  smoke will pass while the browser Save fails:**
+- **The "won't save" cluster (§4.4) — test each of the five gates with the header/method that
+  exposes it (or assert the slimmed listing), or a server-side smoke will pass while the browser
+  Save fails:**
   - **CORS preflight:** `OPTIONS /mcp` **with** `Origin: https://<workspace-host>` → `200/204` with
     `access-control-allow-origin` echoing the scheme-qualified origin (not `400`).
   - **Origin check:** authenticated `POST /mcp` **with** an `Origin` header → not `403 Invalid
@@ -435,6 +480,10 @@ tool result. **Tear the probe down when done.**
   - **Hanging GET stream:** `GET /mcp` (and `DELETE /mcp`) → a fast `405`, **not** a
     `200 text/event-stream` that returns zero bytes and hangs. This survives all the above — a
     server-side log full of `200`s can still fail Save on this one.
+  - **`tools/list` payload shape:** `POST /mcp` `tools/list` → each tool has **only**
+    `name`/`description`/`inputSchema` (assert **no** `outputSchema`, **no** `annotations`). The
+    all-`200` failure — the app log shows a clean handshake, but Genie Code loops `initialize` +
+    `tools/list` and never persists until these fields are stripped.
 - **Two-session concurrency:** two identities never observe each other's state.
 - **Contract tests:** every tool validates against its `inputSchema` / `outputSchema` and sets all
   four annotations.
@@ -458,8 +507,10 @@ tool result. **Tear the probe down when done.**
 - [ ] **"Won't save" gates handled (§4.4):** (a) CORS allows the scheme-qualified workspace origin
       with credentials + `expose_headers` `mcp-session-id`; (b) transport `Origin` check won't `403`;
       (c) incoming `Accept` normalized to the dual value + `json_response=True`; (d) `GET`/`DELETE`
-      `/mcp` return a fast `405`, not a hanging SSE — each covered by a test that sends the exposing
-      header/method (`Origin`, JSON-only `Accept`, `GET`)
+      `/mcp` return a fast `405`, not a hanging SSE; (e) `tools/list` entries are stripped to
+      `name`/`description`/`inputSchema` (no `outputSchema`/`annotations`) — each covered by a test
+      that sends the exposing header/method (`Origin`, JSON-only `Accept`, `GET`) or asserts the
+      slimmed listing
 - [ ] MCP app lifespan wired into the parent FastAPI app
 - [ ] Stateless; durable state in an external store keyed by resolved identity
 - [ ] MCP/FastMCP versions pinned in the lockfile
@@ -481,8 +532,9 @@ tool result. **Tear the probe down when done.**
 
 - ❌ Assuming "works in Cursor/Claude" ⇒ "works in Genie Code." Genie Code's floor is lower.
 - ❌ Assuming CORS is a non-issue for the **Save** step — it is browser-origin and credentialed
-  (§4.4a). Conversely, blaming generic "CORS" without checking the specific triad: the 307 (§4.2),
-  the transport `Origin` 403 (§4.4b), and the Accept `406` (§4.4c).
+  (§4.4a). Conversely, blaming generic "CORS" without checking the specific gates: the 307 (§4.2),
+  the transport `Origin` 403 (§4.4b), the Accept `406` (§4.4c), the hanging `GET` (§4.4d), and the
+  `tools/list` payload shape (§4.4e).
 - ❌ Trusting a green **server-side** smoke: a bare `curl` sends no `Origin` (skips §4.4b) and a
   hand-set dual `Accept` (skips §4.4c), so it passes while the browser Save fails. Reproduce the
   browser's headers.
@@ -490,6 +542,9 @@ tool result. **Tear the probe down when done.**
   and enable JSON responses (§4.4c).
 - ❌ Leaving a stateless `GET /mcp` as FastMCP's default hanging `200` SSE — return `405` so Genie
   Code's save-time validation doesn't stall on a stream that never delivers (§4.4d).
+- ❌ Advertising `outputSchema`/`annotations` in `tools/list` to Genie Code — it silently rejects the
+  richer listing and loops the handshake; strip those two fields from the *listing* only, keep them
+  on the tool definitions for `tools/call` and tolerant clients (§4.4e).
 - ❌ Mounting the MCP app without wiring its lifespan (§4.3).
 - ❌ Asking the user for input via the protocol (elicitation/MRTR) as a hard requirement.
 - ❌ Shipping 10+ tools and starving the shared 20-tool budget.
@@ -506,9 +561,10 @@ Derived from:
 - A live Genie Code MCP **capability probe** (`fevm-serverless`, 2026-09-21) and MCP `2026-07-28`
   protocol research (§2).
 - A live **"lists but won't save" investigation** (`fevm-serverless`, 2026-09-22) that reproduced
-  and fixed the four save-time gates in §4.4 (`400` CORS origin → `403` Invalid Origin → `406`
-  Accept → the hanging `GET` SSE, fixed with `405`), cross-checked against the working Databricks
-  field-eng reference
+  and fixed the five save-time gates in §4.4 (`400` CORS origin → `403` Invalid Origin → `406`
+  Accept → the hanging `GET` SSE, fixed with `405` → the `tools/list` payload strip), then confirmed
+  a full interactive learner session over the persisted server, cross-checked against the working
+  Databricks field-eng reference
   `external-to-managed-table-migration-toolkit` (`app/server/mcp/register-mcp.ts`:
   `normalizeAcceptHeader`, `normalizeOrigin`, `setCors`) and the official docs
   [Connect Genie Code to MCP servers](https://docs.databricks.com/aws/en/genie-code/mcp).
