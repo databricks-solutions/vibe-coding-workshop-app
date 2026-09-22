@@ -8,6 +8,7 @@ import os
 import sys
 import time
 from collections import deque
+from contextlib import asynccontextmanager
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -18,12 +19,47 @@ if backend_path not in sys.path:
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
 
 # Import the API router
-from src.backend.api.routes import router as api_router
 from src.backend.api.hackathon import router as hackathon_router
+from src.backend.api.routes import router as api_router
+
+MCP_MOUNT_ENABLED = os.environ.get("MCP_MOUNT_ENABLED", "").strip().lower() in {
+    "1",
+    "true",
+    "yes",
+    "on",
+}
+
+
+if MCP_MOUNT_ENABLED:
+    from src.backend.mcp_server import mcp_app
+
+    @asynccontextmanager
+    async def mcp_lifespan(_app):
+        async with mcp_app.router.lifespan_context(mcp_app):
+            yield
+
+
+    app_lifespan = mcp_lifespan
+else:
+    app_lifespan = None
+
+
+class _MCPPathRewrite:
+    """Rewrite the exact MCP path before Starlette resolves mounted routes."""
+
+    def __init__(self, asgi_app):
+        self.asgi_app = asgi_app
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] == "http" and scope.get("path") == "/mcp":
+            scope = dict(scope)
+            scope["path"] = "/mcp/"
+            scope["raw_path"] = scope.get("raw_path", b"/mcp") + b"/"
+        await self.asgi_app(scope, receive, send)
 
 # Get the directory where this script is located
 BASE_DIR = Path(__file__).resolve().parent
@@ -35,7 +71,10 @@ app = FastAPI(
     title="Vibe Coding Workshop API",
     description="AI-Powered Development Workflow Application - All UI data served from backend",
     version="2.0.0",
+    lifespan=app_lifespan,
 )
+if MCP_MOUNT_ENABLED:
+    app.add_middleware(_MCPPathRewrite)
 
 # ============== Security Configuration ==============
 # All values below are env-tunable so prod can override without code changes.
@@ -158,12 +197,22 @@ UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
 app.mount("/uploads", StaticFiles(directory=str(UPLOADS_DIR)), name="uploads")
 
 
+if MCP_MOUNT_ENABLED:
+    app.mount("/mcp", mcp_app, name="mcp")
+
+
 # Catch-all route for React SPA - must be LAST
 @app.get("/{full_path:path}")
 async def serve_spa(full_path: str):
     """Serve the React SPA for all non-API routes."""
     # Don't serve index.html for API routes
-    if full_path.startswith("api/") or full_path == "health" or full_path == "docs" or full_path == "openapi.json":
+    if (
+        full_path.startswith("api/")
+        or full_path == "health"
+        or full_path == "docs"
+        or full_path == "openapi.json"
+        or (MCP_MOUNT_ENABLED and (full_path == "mcp" or full_path.startswith("mcp/")))
+    ):
         return JSONResponse({"error": "Not found"}, status_code=404)
     
     # Serve static files from dist/ if they exist (e.g. brand-config.json)

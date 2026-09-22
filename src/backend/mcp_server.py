@@ -685,3 +685,6 @@ def contract_error_results_for_tests() -> dict[str, _ContractError]:
 
 
 mcp._install_error_aware_handler()
+
+
+mcp_app = mcp.http_app(path="/", transport="streamable-http", stateless_http=True)
