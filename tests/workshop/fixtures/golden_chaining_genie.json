@@ -48,13 +48,10 @@
   ],
   "activation_deploy_validate": [],
   "ontology_domain": [
-    "optimize_gate"
   ],
   "ontology_pages": [
-    "domain_model"
   ],
   "ontology_routing": [
-    "pages"
   ],
   "iterate_enhance": [],
   "redeploy_test": [

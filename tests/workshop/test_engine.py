@@ -65,7 +65,7 @@ def test_complete_locked_step_is_error_no_mutation():  # D3 F2
     locked = next(
         step
         for step in loaded.track_steps(TRACK)
-        if step.requiresGate and step.requiresGate not in []
+        if step.requiresGate
     )
     session = _session()
     result = engine.complete_step(TRACK, session, locked.sectionTag)
