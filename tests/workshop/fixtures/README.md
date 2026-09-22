@@ -1,21 +1,22 @@
 # Manifest golden fixtures
 
-These ordered-tag fixtures are derived from the read-only source of truth in
-`src/constants/workflowSections.ts`. The generator statically reads
-`WORKSHOP_LEVELS`, `WORKFLOW_SECTIONS`, `ALL_STEPS`, `CHAPTER_VISIBILITY`, and
-`GENIE_ONTOLOGY_TAGS`, then mirrors the `getFilteredSections` filtering rules.
-It does not import the frontend, start a server, or require workspace access.
+These ordered-tag fixtures are an independent oracle derived from the
+read-only source of truth in `src/constants/workflowSections.ts`. The fixture
+dump helper executes the real `getFilteredSections` and
+`getDisabledTagsForGenieOntology` functions. It does not use
+`generate_manifest.py`, import the Python loader, start a server, or require
+workspace access.
 
-From the repository root, regenerate both the manifest and the fixtures with:
-
-```bash
-python scripts/generate_manifest.py --write-fixtures
-```
-
-The manifest-only regeneration command is:
+From the repository root, regenerate the manifest only with:
 
 ```bash
 python scripts/generate_manifest.py
+```
+
+Independently regenerate the golden fixtures from the TypeScript source with:
+
+```bash
+node --experimental-strip-types scripts/dump_getfilteredsections.mjs
 ```
 
 `golden_order_genie_default.json` is the flattened `sectionTag` order with

@@ -3,10 +3,10 @@
 
 from __future__ import annotations
 
-import argparse
 import ast
 import json
 import re
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -15,7 +15,6 @@ from typing import Any
 ROOT = Path(__file__).resolve().parents[1]
 WORKFLOW_SOURCE = ROOT / "src/constants/workflowSections.ts"
 MANIFEST_PATH = ROOT / "src/backend/workshop/manifest.json"
-FIXTURES_PATH = ROOT / "tests/workshop/fixtures"
 
 
 @dataclass(frozen=True)
@@ -401,25 +400,10 @@ def _write_json(path: Path, data: Any) -> None:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser()
-    parser.add_argument(
-        "--write-fixtures",
-        action="store_true",
-        help="Also write the two ordered-tag golden fixtures used by the parity test.",
-    )
-    args = parser.parse_args()
+    if len(sys.argv) != 1:
+        raise SystemExit("generate_manifest.py accepts no arguments")
     manifest = build_manifest(WORKFLOW_SOURCE.read_text(encoding="utf-8"))
     _write_json(MANIFEST_PATH, manifest)
-    if args.write_fixtures:
-        genie_steps = [
-            step
-            for section in manifest["tracks"]["genie-accelerator"]["sections"]
-            for step in section["steps"]
-        ]
-        default_tags = [step["sectionTag"] for step in genie_steps if step.get("flag") is None]
-        ontology_tags = [step["sectionTag"] for step in genie_steps]
-        _write_json(FIXTURES_PATH / "golden_order_genie_default.json", default_tags)
-        _write_json(FIXTURES_PATH / "golden_order_genie_ontology_on.json", ontology_tags)
 
 
 if __name__ == "__main__":
