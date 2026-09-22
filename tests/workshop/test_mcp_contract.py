@@ -79,12 +79,8 @@ def test_registered_tools_return_schema_valid_structured_content_and_text():
         else:
             arguments = {"session_id": "test-session", "params": {}}
 
-        result = asyncio.run(tool.run(arguments, convert_result=name not in {
-            "vibe_complete_step",
-            "vibe_submit_answer",
-            "vibe_set_parameters",
-        }))
-        if name in {"vibe_complete_step", "vibe_submit_answer", "vibe_set_parameters"}:
+        result = asyncio.run(tool.run(arguments, convert_result=name != "vibe_submit_answer"))
+        if name == "vibe_submit_answer":
             assert result["isError"] is True
             assert result["structuredContent"]["error"]["code"] == "PHASE_2_NOT_ENABLED"
             assert result["content"]
