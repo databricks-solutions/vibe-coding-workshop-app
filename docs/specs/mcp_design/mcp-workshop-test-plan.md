@@ -96,6 +96,12 @@ CI-equivalent: run locally; a red parity test blocks the change (D3 §9).
 - **Capability negotiation** — with a client declaring `capabilities:{}` (the probe case), the
   server serves the **in-band** path and never emits an `elicitation/create` (D1 §2). With a
   synthetic elicitation-capable client, the upgrade path is exercised but remains optional.
+- **Self-serve / first-run (D1 §1a)** — the `Start the Genie Accelerator` prompt and the first
+  `vibe_get_step` result carry the orientation preamble (D1 §4.5); `Continue where I left off` does
+  **not**; the `vibe://guide/getting-started` resource resolves and contains the setup/troubleshoot
+  copy; and the `How does this workshop work?` prompt resolves without any tool knowledge. Assert an
+  orientation-free client can reach "step 1 presented" using only prompts + resources (the
+  self-serve acceptance, D9 Phase 1).
 
 ---
 
@@ -197,6 +203,7 @@ before every deploy (D9 §7).
 | All four annotations (D2 §8) | §3 per-tool |
 | Errors in-result (D2 §6) | §3 error taxonomy |
 | No elicitation dependency (D1 §2) | §4 capability negotiation |
+| Self-serve by construction (D1 §1a) | §4 self-serve / first-run |
 | Recommend-and-proceed default (D5 §3) | §4 + §10 |
 | Step-9 hard-stop (D1 §11) | §4 |
 | 307-no-redirect (plan §1.3.2) | §5 |

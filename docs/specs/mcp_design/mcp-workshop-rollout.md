@@ -36,7 +36,7 @@ interactivity layer is its own phase that does NOT wait on any capability upgrad
 | Phase | Scope | Gate to enter | Outcome |
 |---|---|---|---|
 | **0** | Engine: manifest + progression + assembler extraction + parity test (D3). UI unchanged. | D8 §2 green | Backend owns the walk; no user-visible change. |
-| **1** | Mount FastMCP `/mcp/`; **read-only** tools (`start_track`, `get_step`, `next_step`) + engine REST routes. | D8 §3, §5 green; live smoke §8 read path | Genie Code walks the track verbatim — **no copy-paste**. **Ships now; no elicitation dependency.** |
+| **1** | Mount FastMCP `/mcp/`; **read-only** tools (`start_track`, `get_step`, `next_step`) + engine REST routes; the self-serve on-ramp: orientation prompt, `vibe://guide/getting-started`, and the SPA "Connect to Genie Code" panel (D1 §1a, D4 §1.1). | D8 §3, §5 green; live smoke §8 read path; **self-serve acceptance** (below) | Genie Code walks the track verbatim — **no copy-paste**. **Ships now; no elicitation dependency.** |
 | **2** | **Interactivity + state (in-band):** `complete_step`, `submit_answer`, `set_parameters`, resources, the `interaction` block (D1), Lakebase columns + interaction log (D6), auth + annotations. | D8 §4, §6, §7 green | Full guided loop: gates, decisions, comprehension checks, cross-surface sync — **all in-band, no elicitation**. |
 | **3** | Repoint UI to the engine; retire TS orchestration; live-sync mirror. | parity stable; number↔tag flip (D6 §5) | Single brain; divergence eliminated. |
 | **4** | Generalize to all tracks (incl. LLM-generated steps) + other surfaces. | — | Whole workshop is dual-surface. |
@@ -44,6 +44,12 @@ interactivity layer is its own phase that does NOT wait on any capability upgrad
 **Key change from the pre-probe roadmap:** interactivity (Phase 2) is **not** gated on Genie Code
 elicitation. It is built in-band and ships independently. If elicitation later appears (§8), it is a
 purely additive enhancement (D1 §9), not a new phase.
+
+**Self-serve acceptance gate (Phase 1 exit, D1 §1a).** Ship only when a **first-time learner, given
+just the app URL and no other instructions or human help**, can: land on the app page → follow the
+"Connect to Genie Code" panel → be oriented by the server → reach "step 1 presented." The one manual
+step (paste the `/mcp` URL) is expected; everything after it must be server-driven. Verified by
+D8 §4 (self-serve / first-run) plus the live smoke (D8 §8).
 
 ---
 

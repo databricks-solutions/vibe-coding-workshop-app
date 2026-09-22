@@ -298,6 +298,7 @@ declares `ttlMs` + `cacheScope ∈ {global, session}`.
 | `vibe://track/{track}/overview` | Chapter/section narrative from `pathDescriptions.ts` + manifest `why` (D3 §3) | `global` | `3600000` (1 h) |
 | `vibe://session/{session_id}/state` | `{ outline: OutlineItem[], completed_gates: string[], captured_output_keys: string[] }` — the live walk + gate ledger, mirroring `.vibecoding-state.md` | `session` | `0` (no-cache; always fresh, stateless) |
 | `vibe://style/vibecoding` | The `.vibecoding-state.md` gate-ledger convention + Tier-G READ/RECORD bookends (`../genie-accelerator-prompt-standardization.md`) | `global` | `86400000` (24 h) |
+| `vibe://guide/getting-started` | **Self-documenting help** — how the workshop works (answer in chat, silence = recommended default, the one hard stop, mirror in the web UI) + the troubleshooting table (20-tool budget, stateless, the 307). The in-product source the agent reads to help a learner **without** a human or D10 (self-serve invariant, D1 §1a). | `global` | `86400000` (24 h) |
 
 Notes:
 - **`outline` is a resource, not a tool** (moved from the roadmap's `vibe_track_outline`) — it is
@@ -315,8 +316,9 @@ and are how learners *find* the server.
 
 | Prompt name | Arguments | Resolves to (messages) |
 |---|---|---|
-| `Start the Genie Accelerator` | `use_case?`, `industry?` | Instructs the agent to call `vibe_start_track {track:"genie-accelerator", …}` then `vibe_get_step`, present `prompt` verbatim, and narrate. |
-| `Continue where I left off` | — | Instructs the agent to call `vibe_next_step` and resume, reading `vibe://session/{session_id}/state` for context. |
+| `Start the Genie Accelerator` | `use_case?`, `industry?` | Instructs the agent to deliver the **first-run orientation** (D1 §4.5), then call `vibe_start_track {track:"genie-accelerator", …}` then `vibe_get_step`, present `prompt` verbatim, and narrate. |
+| `Continue where I left off` | — | Instructs the agent to call `vibe_next_step` and resume, reading `vibe://session/{session_id}/state` for context. **Skips** orientation. |
+| `How does this workshop work?` | — | Self-serve orientation on demand: instructs the agent to read `vibe://guide/getting-started` and explain how to answer, how gates work, the one hard stop, and how to mirror in the web UI (D1 §1a). Costs nothing against the tool budget. |
 
 Each prompt's resolved message MUST restate the **verbatim-first** rendering contract (D1 §6) so the
 agent presents the prompt body before narrating.
@@ -380,8 +382,11 @@ concern handled elsewhere, never a tool-level destroy.
 | Surface | Count | Items |
 |---|--:|---|
 | **Tools** | **6** | start_track, get_step, next_step, complete_step, submit_answer, set_parameters |
-| Resources | 3 | track overview, session state (incl. outline), style/vibecoding |
-| Prompts | 2 | Start the Genie Accelerator, Continue where I left off |
+| Resources | 4 | track overview, session state (incl. outline), style/vibecoding, guide/getting-started |
+| Prompts | 3 | Start the Genie Accelerator, Continue where I left off, How does this workshop work? |
+
+Resources and prompts cost **nothing** against Genie Code's ~20-tool budget, so the self-serve
+surfaces (the help resource + the orientation prompt, D1 §1a) are free — the tool count stays at 6.
 
 **Reconciliation with the roadmap §8.2:** the roadmap listed 6 tools *including* `vibe_track_outline`
 but *excluding* `vibe_submit_answer`. D1 requires `submit_answer`; to stay ≤ 6 we **demote

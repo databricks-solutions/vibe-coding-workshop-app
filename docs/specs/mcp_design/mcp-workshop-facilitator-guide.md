@@ -8,6 +8,14 @@
 > **Audience.** The facilitator running the Genie Accelerator over MCP, and the learner driving it
 > in Genie Code. Operational, not architectural — how to connect, run, project, and troubleshoot.
 
+> **⚠ This is a fallback, not the primary path.** The MCP experience is **self-serve by
+> construction** (D1 §1a): the app's landing page carries the "Connect to Genie Code" on-ramp
+> (D4 §1.1), and once connected the **server orients the learner and answers "how does this work?"
+> in-band** (the `How does this workshop work?` prompt + `vibe://guide/getting-started` resource,
+> D2 §4–§5). A learner needs **only the app URL** — not this document. This guide is a safety net
+> for classroom facilitation and a human-readable copy of the troubleshooting the server already
+> surfaces itself.
+
 ---
 
 ## 1. Prerequisites

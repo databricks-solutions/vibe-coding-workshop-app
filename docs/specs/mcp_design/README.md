@@ -43,6 +43,16 @@ in chat, progression via tools + next-prompt-as-approval). Protocol elicitation 
 canonical statement is [plan §1](./mcp-interactive-track-doc-plan.md#1-probe-findings-authoritative-constraints--do-not-re-litigate-without-a-re-probe);
 the reasoning and reconciliation are in [research §2–§3](./mcp-research-and-findings.md).
 
+**Design invariant — self-serve by construction ([D1 §1a](./mcp-workshop-interactivity.md)).** A
+first-time learner goes from "I have the app URL" to completing the track with **no human
+facilitator and no external doc**: the app's landing page carries the connection on-ramp
+([D4 §1.1](./mcp-workshop-architecture.md)), and the server orients + helps in-band via the
+`How does this workshop work?` prompt and the `vibe://guide/getting-started` resource
+([D2 §4–§5](./mcp-interface-contract.md)). The one honest boundary is the manual paste of the
+`/mcp` URL into Genie Code (no protocol lets a server self-register); everything after it is
+server-driven. The [facilitator guide (D10)](./mcp-workshop-facilitator-guide.md) is a fallback, not
+a prerequisite.
+
 ---
 
 ## Document set (from the plan) — all drafted ✅

@@ -43,6 +43,30 @@ Everything reuses content the track already owns; only comprehension-check *ques
 
 ---
 
+## 1a. Self-serve by construction (invariant)
+
+The MCP experience must be **self-serve**: a first-time learner goes from "I have the app URL" to
+completing the track **with no human facilitator and no external document open**. The
+[facilitator guide (D10)](./mcp-workshop-facilitator-guide.md) is a *fallback and classroom-ops
+safety net* — never a prerequisite.
+
+**The rule:** every piece of knowledge a learner needs to *start, run, and recover* is delivered
+**by the server through the protocol** — MCP prompts, tool/description-as-prompt text, the first-run
+orientation payload (§4.5), and a self-documenting help resource (`vibe://guide/getting-started`,
+D2 §4). Nothing a learner needs to progress may live *only* in a doc a human must hand them.
+
+**The one honest boundary.** MCP has no mechanism for a server to register itself in a client, so
+the single unavoidable manual step is the learner pasting the app's `/mcp` URL into Genie Code's
+custom-MCP-server setting. The design's job is to (a) make that step frictionless and
+self-explanatory from the **app's own landing page** (D4 §1 SPA on-ramp), and (b) make **everything
+after connection fully self-guided by the server**. We do not overclaim zero-touch; we make the one
+touch trivial and self-serve the rest.
+
+**Acceptance (tested in D8 §4, gated in D9 Phase 1):** with only the app URL and no other
+instructions, a learner connects, is oriented by the server, and completes step 1.
+
+---
+
 ## 2. Capability negotiation (default to in-band)
 
 1. At connect, the server records the client's declared capabilities at the transport level
@@ -126,6 +150,24 @@ subset.
   `{resolved_params, missing_required[]}`. Missing-required fields are surfaced as **prose** in the
   next result (not a protocol prompt); the agent asks in chat and re-calls the tool. Flags feed the
   engine's outline filter (D3 §5.1).
+
+### 4.5 Orientation (first-run, in-band) — the self-serve on-ramp
+- **Intent:** make the experience self-serve (§1a) by having the *server* orient a first-time
+  learner instead of relying on a human or D10.
+- **Content source:** static, server-owned orientation copy + the `vibe://guide/getting-started`
+  resource (D2 §4).
+- **Mechanism:** the `Start the Genie Accelerator` prompt (D2 §5) and the first `vibe_get_step`
+  result carry a short **orientation preamble** the agent delivers before step 1, covering only what
+  the learner needs to drive it themselves:
+  - answer questions **in chat** (there are no pop-up forms — that's expected, §2);
+  - **silence accepts the recommended default** — the track never blocks (except §11);
+  - there is **one hard stop** (the benchmark step, §11);
+  - progress is **saved server-side**; you can open the web UI on the same session to follow along
+    (§8);
+  - if tools go missing, it's the **20-tool budget** — disconnect other MCP servers (self-heal hint,
+    mirrors D10 §5).
+  Orientation is shown **once per session** (first step only) and is skippable; it never repeats or
+  blocks. A returning learner (`Continue where I left off`) skips it.
 
 ---
 

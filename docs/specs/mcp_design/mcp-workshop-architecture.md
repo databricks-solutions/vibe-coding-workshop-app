@@ -62,6 +62,22 @@ question/coaching content it surfaces (from D5's seeded bank).
 > The `.png`/`.mmd` architecture image must be regenerated to add the interactivity layer and drop
 > the elicitation arrow (roadmap kept in lockstep, per the file map).
 
+### 1.1 The SPA as the self-serve connection on-ramp
+
+Because MCP has no way for a server to register itself in a client, the one unavoidable manual step
+is the learner pasting the `/mcp` URL into Genie Code (D1 §1a). The **workshop app's own landing
+page carries that on-ramp** so no human or external doc is needed:
+
+- a **"Connect to Genie Code"** panel with the exact `https://<app-url>/mcp` string and a copy
+  button;
+- the three steps (Agent mode → add custom MCP server → paste URL), rendered from the same source
+  as D10 §2 so they never drift;
+- a one-line "then say *Start the Genie Accelerator*" pointer to the MCP prompt (D2 §5).
+
+After that single paste, the **server** owns the rest of the experience (orientation, help,
+progression) — the SPA reverts to its companion/mirror role (§3.3). This keeps the on-ramp
+self-serve without pretending the connection is zero-touch.
+
 ---
 
 ## 2. Deployment topology (Databricks Apps) — gotchas encoded
