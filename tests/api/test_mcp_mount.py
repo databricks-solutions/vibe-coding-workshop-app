@@ -71,8 +71,12 @@ def test_mcp_mount_is_feature_flagged_default_off(monkeypatch):
     with TestClient(app_module.app, base_url="http://127.0.0.1:8000", follow_redirects=False) as client:
         response = client.get("/mcp")
 
+    # With the flag off, /mcp is not a mount; it falls through to the SPA
+    # catch-all and returns 200. We assert the structural fact — no /mcp route
+    # is registered — rather than the response body, which depends on whether
+    # frontend/dist has been built (SPA index.html when built, API-banner JSON
+    # when not). Asserting the body string made this test env-dependent.
     assert response.status_code == 200
-    assert "Vibe Coding Workshop API" in response.text
     assert not any(getattr(route, "path", None) == "/mcp" for route in app_module.app.routes)
 
 
@@ -80,3 +84,20 @@ def test_mcp_mount_is_enabled_when_flag_is_on(monkeypatch):
     app_module = load_app(monkeypatch, enabled=True)
 
     assert any(getattr(route, "path", None) == "/mcp" for route in app_module.app.routes)
+
+
+def test_mcp_mount_is_ordered_before_spa_catch_all(monkeypatch):
+    """The /mcp mount must precede the SPA catch-all so /mcp is never resolved
+    by index.html. Guards route ordering structurally (method-independent),
+    not just via a single POST round-trip."""
+    app_module = load_app(monkeypatch, enabled=True)
+
+    routes = app_module.app.routes
+    mcp_index = next(
+        i for i, r in enumerate(routes) if getattr(r, "path", None) == "/mcp"
+    )
+    catch_all_index = next(
+        i for i, r in enumerate(routes)
+        if getattr(r, "path", None) == "/{full_path:path}"
+    )
+    assert mcp_index < catch_all_index

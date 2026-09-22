@@ -58,7 +58,10 @@ class _MCPPathRewrite:
         if scope["type"] == "http" and scope.get("path") == "/mcp":
             scope = dict(scope)
             scope["path"] = "/mcp/"
-            scope["raw_path"] = scope.get("raw_path", b"/mcp") + b"/"
+            # Deterministic + idempotent: we only reach here when path == "/mcp",
+            # so the rewritten raw_path is unambiguously b"/mcp/". Appending
+            # instead would double-slash if this middleware ran twice.
+            scope["raw_path"] = b"/mcp/"
         await self.asgi_app(scope, receive, send)
 
 # Get the directory where this script is located
