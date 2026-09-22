@@ -1,0 +1,687 @@
+"""Read-only Phase 1 MCP adapter for the Vibe Coding Workshop."""
+
+from __future__ import annotations
+
+import json
+import logging
+import uuid
+from dataclasses import asdict
+from typing import Any, Literal
+
+import jsonschema
+from fastapi import Request
+from mcp.server.fastmcp import Context, FastMCP
+from mcp.server.fastmcp.resources.types import TextResource
+from mcp.types import (
+    CallToolRequest,
+    CallToolResult,
+    ServerResult,
+    TextContent,
+    ToolAnnotations,
+)
+from pydantic import BaseModel, ConfigDict, Field, RootModel
+
+from .services.lakebase import (
+    is_lakebase_configured,
+    load_session,
+    save_session,
+)
+from .workshop import assembler, engine, manifest
+
+logger = logging.getLogger(__name__)
+
+DEFAULT_TRACK = "genie-accelerator"
+DEFAULT_INDUSTRY = "Technology"
+DEFAULT_USE_CASE = "Genie Accelerator"
+
+ORIENTATION_PREAMBLE = (
+    "First-run orientation: answer questions in chat; silence accepts the recommended default. "
+    "The track saves progress server-side and does not block, except for one benchmark hard stop. "
+    "You can mirror progress in the web UI using the same session. If tools go missing, disconnect "
+    "other MCP servers to stay within the 20-tool budget."
+)
+
+GETTING_STARTED_GUIDE = """# Getting started
+
+This workshop is a guided conversation. Start a track, read each prompt verbatim, then narrate why
+it matters and how to apply it. Answer questions in chat; silence accepts the recommended default.
+Progress is saved server-side and can be mirrored in the web UI using the same session.
+
+There is one hard stop: the benchmark step requires an explicit confirmation before it can advance.
+Everything else is designed to keep moving without pop-up forms or client elicitation.
+
+Troubleshooting:
+- 20-tool budget: disconnect other MCP servers if these tools are missing.
+- Stateless server: every request reads current session state from Lakebase.
+- 307 redirect: the app must mount the MCP HTTP app before the SPA catch-all.
+"""
+
+VIBECODING_STYLE = """# Vibe Coding gate ledger
+
+Use `.vibecoding-state.md` as the server-side progress ledger. Keep Tier-G READ and RECORD
+bookends around important actions. The MCP surface is additive to the web UI: it reads the same
+session state and presents the same step prompts without rewriting their verbatim bodies.
+"""
+
+
+class OutlineItem(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    sectionTag: str
+    title: str
+    status: Literal["done", "current", "locked", "skipped"]
+    execution: str
+
+
+class StepReference(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    sectionTag: str
+    title: str
+
+
+class DoneResult(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    done: Literal[True] = True
+
+
+class InteractionOption(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: str
+    label: str
+
+
+class Interaction(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: str
+    type: Literal["comprehension", "decision", "confirm"]
+    question: str
+    options: list[InteractionOption] = Field(default_factory=list)
+    recommended: str | None = None
+    skippable: bool
+
+
+class ExplainabilityPayload(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+    sectionTag: str
+    title: str
+    why: str
+    prompt: str
+    how_to_apply: str
+    expected_output: str
+    gate: str | None
+    requiresGate: str | None
+    consumes: list[str]
+    produces: str | None
+    execution: Literal["agent-doable", "ui-driven", "hybrid"]
+    next: StepReference
+    interaction: dict[str, Interaction] | None = None
+    orientation: str | None = None
+
+
+class StartTrackResult(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    session_id: str
+    track: str
+    outline: list[OutlineItem]
+
+
+class CompleteStepResult(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    completed_gates: list[str]
+    next: ExplainabilityPayload | DoneResult
+
+
+class SubmitAnswerResult(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    recorded: bool
+    coaching: str
+    unblocks: str | None
+
+
+class SetParametersResult(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    resolved_params: dict[str, Any]
+    missing_required: list[str]
+
+
+class _ContractError(dict):
+    """Marker returned by handlers so the HTTP adapter can set `isError`."""
+
+
+class NextStepResult(RootModel[ExplainabilityPayload | DoneResult]):
+    pass
+
+
+class WorkshopFastMCP(FastMCP):
+    """FastMCP 1.x compatibility shim for the app's `http_app` contract."""
+
+    def http_app(
+        self,
+        path: str = "/",
+        transport: str = "streamable-http",
+        stateless_http: bool = True,
+    ) -> Any:
+        if transport != "streamable-http":
+            raise ValueError("Phase 1 exposes only streamable-http")
+        self.settings.streamable_http_path = path
+        self.settings.stateless_http = stateless_http
+        return self.streamable_http_app()
+
+    def _install_error_aware_handler(self) -> None:
+        """Preserve structured error bodies while using FastMCP's tool catalog."""
+
+        async def handle(request: CallToolRequest) -> ServerResult:
+            tool_name = request.params.name
+            arguments = request.params.arguments or {}
+            tool = self._tool_manager.get_tool(tool_name)
+            if tool is None:
+                return ServerResult(
+                    CallToolResult(
+                        content=[TextContent(type="text", text=f"Unknown tool: {tool_name}")],
+                        isError=True,
+                    )
+                )
+            try:
+                jsonschema.validate(instance=arguments, schema=tool.parameters)
+                result = await tool.run(arguments, context=self.get_context(), convert_result=False)
+                if isinstance(result, _ContractError):
+                    structured = result["structuredContent"]
+                    return ServerResult(
+                        CallToolResult(
+                            content=[TextContent(type="text", text=json.dumps(structured, sort_keys=True))],
+                            structuredContent=structured,
+                            isError=True,
+                        )
+                    )
+                converted = tool.fn_metadata.convert_result(result)
+                if isinstance(converted, tuple) and len(converted) == 2:
+                    _, structured = converted
+                else:
+                    structured = None
+                if tool.output_schema is not None:
+                    jsonschema.validate(instance=structured, schema=tool.output_schema)
+                return ServerResult(
+                    CallToolResult(
+                        content=[TextContent(type="text", text=json.dumps(structured, sort_keys=True))],
+                        structuredContent=structured,
+                        isError=False,
+                    )
+                )
+            except Exception as error:  # noqa: BLE001
+                return ServerResult(
+                    CallToolResult(
+                        content=[TextContent(type="text", text=str(error))],
+                        isError=True,
+                    )
+                )
+
+        self._mcp_server.request_handlers[CallToolRequest] = handle
+
+
+mcp = WorkshopFastMCP(
+    name="vibe-coding-workshop",
+    instructions=(
+        "Use the prompts and resources to orient the learner. Present every workshop prompt "
+        "verbatim before narrating it. All interactions stay in-band."
+    ),
+    stateless_http=True,
+)
+
+
+def _error_result(code: str, message: str, **details: str) -> _ContractError:
+    error = {"code": code, "message": message, **details}
+    structured = {"isError": True, "error": error}
+    return _ContractError(
+        isError=True,
+        error=error,
+        structuredContent=structured,
+        content=[TextContent(type="text", text=json.dumps(structured, sort_keys=True))],
+    )
+
+
+def _request_user(context: Context | None) -> str:
+    if context is not None:
+        try:
+            request = context.request_context.request
+            if isinstance(request, Request):
+                for header in (
+                    "x-forwarded-email",
+                    "x-forwarded-user",
+                    "x-databricks-user-email",
+                    "x-databricks-user",
+                    "x-user-email",
+                    "x-user-id",
+                ):
+                    value = request.headers.get(header, "")
+                    if "@" in value:
+                        return value
+        except (LookupError, ValueError, AttributeError):
+            pass
+    import os
+
+    value = os.getenv("PGUSER", "")
+    return value if "@" in value else "unknown"
+
+
+def _session_state(record: dict[str, Any], track: str = DEFAULT_TRACK) -> engine.SessionState:
+    completed_gates = list(record.get("completed_gates") or [])
+    completed_steps = record.get("completed_steps") or []
+    try:
+        steps = manifest.load_manifest().track_steps(track)
+        for step_number in completed_steps:
+            if isinstance(step_number, int) and 1 <= step_number <= len(steps):
+                tag = steps[step_number - 1].sectionTag
+                if tag not in completed_gates:
+                    completed_gates.append(tag)
+    except KeyError:
+        pass
+    params = dict(record.get("session_parameters") or {})
+    for key in ("industry", "use_case", "industry_label", "use_case_label"):
+        if record.get(key) is not None:
+            params.setdefault(key, record[key])
+    captured_outputs = dict(record.get("captured_outputs") or {})
+    return engine.SessionState(
+        completed_gates=completed_gates,
+        captured_outputs=captured_outputs,
+        session_parameters=params,
+    )
+
+
+def _coerce_state(value: engine.SessionState | dict[str, Any]) -> engine.SessionState:
+    if isinstance(value, engine.SessionState):
+        return value
+    return _session_state(value)
+
+
+def _load_session_for_request(
+    session_id: str | None,
+    context: Context | None = None,
+    track: str = DEFAULT_TRACK,
+) -> tuple[engine.SessionState, str] | None:
+    """Resolve and authorize a session, reading Lakebase on every request."""
+
+    if not session_id:
+        return None
+    record = load_session(session_id)
+    if record is None:
+        if not is_lakebase_configured():
+            return engine.SessionState(), session_id
+        return None
+    owner = record.get("created_by")
+    caller = _request_user(context)
+    if owner and caller != "unknown" and owner != caller:
+        return None
+    return _session_state(record, track), session_id
+
+
+def _outline_items(track: str, state: engine.SessionState) -> list[OutlineItem]:
+    return [OutlineItem(**asdict(item)) for item in engine.outline(track, state)]
+
+
+def _next_reference(track: str, state: engine.SessionState, step: manifest.Step) -> StepReference:
+    ordered = engine.MANIFEST.outline_order(track, flags=engine._flags_for(track, state))
+    index = next((idx for idx, candidate in enumerate(ordered) if candidate.sectionTag == step.sectionTag), None)
+    if index is not None and index + 1 < len(ordered):
+        following = ordered[index + 1]
+        return StepReference(sectionTag=following.sectionTag, title=following.title)
+    return StepReference(sectionTag="", title="Track complete")
+
+
+def _step_payload(
+    track: str,
+    state: engine.SessionState,
+    step: manifest.Step,
+    session_id: str | None = None,
+) -> ExplainabilityPayload:
+    previous_outputs = engine.resolve_previous_outputs(step, state)
+    industry = state.session_parameters.get("industry", DEFAULT_INDUSTRY)
+    use_case = state.session_parameters.get("use_case", DEFAULT_USE_CASE)
+    assembled = assembler.get_section_input_content(
+        industry=industry,
+        use_case=use_case,
+        section_tag=step.sectionTag,
+        previous_outputs=previous_outputs,
+        session_id=session_id,
+    )
+    orientation = ORIENTATION_PREAMBLE if not state.completed_gates and step.order == 1 else None
+    return ExplainabilityPayload(
+        sectionTag=step.sectionTag,
+        title=step.title,
+        why=step.why or "",
+        prompt=assembled.get("input", ""),
+        how_to_apply=assembled.get("how_to_apply", ""),
+        expected_output=assembled.get("expected_output", ""),
+        gate=step.gate,
+        requiresGate=step.requiresGate,
+        consumes=list(step.consumes),
+        produces=step.produces,
+        execution=step.execution,
+        next=_next_reference(track, state, step),
+        interaction=None,
+        orientation=orientation,
+    )
+
+
+@mcp.tool(
+    name="vibe_start_track",
+    description=(
+        "Start or resume a guided workshop track (e.g. the Genie Accelerator) for the current user. "
+        "Call this first, in Agent mode, before any other vibe tool. Args: `track` (required), optional "
+        "`use_case`/`industry`/`session_id`. Returns the session id and the ordered step outline. "
+        "Errors if `track` is unknown."
+    ),
+    annotations=ToolAnnotations(
+        readOnlyHint=False,
+        destructiveHint=False,
+        idempotentHint=True,
+        openWorldHint=True,
+    ),
+    structured_output=True,
+)
+def vibe_start_track(
+    track: str,
+    use_case: str | None = None,
+    industry: str | None = None,
+    session_id: str | None = None,
+    context: Context | None = None,
+) -> StartTrackResult:
+    if track not in engine.MANIFEST.tracks:
+        return _error_result("UNKNOWN_TRACK", f"Unknown workshop track: {track}")  # type: ignore[return-value]
+    resolved = session_id or str(uuid.uuid4())
+    loaded = _load_session_for_request(resolved, context, track)
+    if loaded is None:
+        if session_id:
+            return _error_result("INVALID_SESSION", "The requested session could not be resolved.")  # type: ignore[return-value]
+        state = engine.SessionState()
+    else:
+        state, _ = loaded
+    if not session_id and is_lakebase_configured():
+        save_session(
+            session_id=resolved,
+            industry=industry,
+            use_case=use_case,
+            created_by=_request_user(context),
+            current_step=1,
+            completed_steps=[],
+        )
+    if industry:
+        state.session_parameters["industry"] = industry
+    if use_case:
+        state.session_parameters["use_case"] = use_case
+    return StartTrackResult(session_id=resolved, track=track, outline=_outline_items(track, state))
+
+
+@mcp.tool(
+    name="vibe_get_step",
+    description=(
+        "Fetch one workshop step to present to the learner. Returns the prompt to run **verbatim**, "
+        "plus why it matters, how to apply it, the expected output, the gate, and the next step — and "
+        "an optional `interaction` question to ask in chat. Present `prompt` verbatim first, then "
+        "narrate. Args: `session_id` (required), `sectionTag` (optional; defaults to the current step)."
+    ),
+    annotations=ToolAnnotations(
+        readOnlyHint=True,
+        destructiveHint=False,
+        idempotentHint=True,
+        openWorldHint=True,
+    ),
+    structured_output=True,
+)
+def vibe_get_step(
+    session_id: str,
+    sectionTag: str | None = None,
+    context: Context | None = None,
+) -> ExplainabilityPayload:
+    loaded = _load_session_for_request(session_id, context)
+    if loaded is None:
+        return _error_result("INVALID_SESSION", "The requested session could not be resolved.")  # type: ignore[return-value]
+    state, _ = loaded
+    state = _coerce_state(state)
+    steps = engine.MANIFEST.track_steps(DEFAULT_TRACK)
+    if sectionTag is None:
+        current = engine.next_step(DEFAULT_TRACK, state)
+        if isinstance(current, engine.Done):
+            return _error_result("UNKNOWN_STEP", "The track has no remaining step.")  # type: ignore[return-value]
+        step = current
+    else:
+        step = next((candidate for candidate in steps if candidate.sectionTag == sectionTag), None)
+        if step is None:
+            return _error_result("UNKNOWN_STEP", f"Unknown workshop step: {sectionTag}", sectionTag=sectionTag)  # type: ignore[return-value]
+        if not engine.can_start(step, state):
+            return _error_result("STEP_LOCKED", f"Complete {step.requiresGate} before this step.", sectionTag=sectionTag)  # type: ignore[return-value]
+    return _step_payload(DEFAULT_TRACK, state, step, session_id=session_id)
+
+
+@mcp.tool(
+    name="vibe_next_step",
+    description=(
+        "Advance to the first not-yet-completed step whose prerequisite gate is satisfied, and return "
+        "it (same shape as `vibe_get_step`). Returns `{done:true}` when the track is complete. Call "
+        "after a step's gate is recorded. Args: `session_id` (required)."
+    ),
+    annotations=ToolAnnotations(
+        readOnlyHint=True,
+        destructiveHint=False,
+        idempotentHint=True,
+        openWorldHint=True,
+    ),
+    structured_output=True,
+)
+def vibe_next_step(session_id: str, context: Context | None = None) -> NextStepResult:
+    loaded = _load_session_for_request(session_id, context)
+    if loaded is None:
+        return _error_result("INVALID_SESSION", "The requested session could not be resolved.")  # type: ignore[return-value]
+    state, _ = loaded
+    state = _coerce_state(state)
+    next_item = engine.next_step(DEFAULT_TRACK, state)
+    if isinstance(next_item, engine.Done):
+        return NextStepResult.model_validate(DoneResult())
+    return NextStepResult.model_validate(_step_payload(DEFAULT_TRACK, state, next_item, session_id=session_id))
+
+
+_PHASE_2_MESSAGE = "This write operation is not enabled until Phase 2; no state was changed."
+
+
+@mcp.tool(
+    name="vibe_complete_step",
+    description=(
+        "Record that the current step's gate passed and store the step's captured output (the gate = "
+        "this call, i.e. next-action-as-approval). Advances the walk. Do not call this for "
+        "`execution:ui-driven` steps — those are coached and hand off to the UI. Args: `session_id`, "
+        "`sectionTag`, `captured_output` (all required)."
+    ),
+    annotations=ToolAnnotations(
+        readOnlyHint=False,
+        destructiveHint=False,
+        idempotentHint=True,
+        openWorldHint=True,
+    ),
+    structured_output=True,
+)
+def vibe_complete_step(
+    session_id: str,
+    sectionTag: str,
+    captured_output: str,
+    context: Context | None = None,
+) -> CompleteStepResult:
+    return _error_result("PHASE_2_NOT_ENABLED", _PHASE_2_MESSAGE)  # type: ignore[return-value]
+
+
+@mcp.tool(
+    name="vibe_submit_answer",
+    description=(
+        "Record the learner's answer to a step's `interaction` question — a comprehension check or a "
+        "recommend-and-proceed decision/override — and return coaching feedback. Optional for skippable "
+        "questions (silence applies the recommended default). Args: `session_id`, `interaction_id`, "
+        "`answer` (all required)."
+    ),
+    annotations=ToolAnnotations(
+        readOnlyHint=False,
+        destructiveHint=False,
+        idempotentHint=True,
+        openWorldHint=True,
+    ),
+    structured_output=True,
+)
+def vibe_submit_answer(
+    session_id: str,
+    interaction_id: str,
+    answer: str,
+    context: Context | None = None,
+) -> SubmitAnswerResult:
+    return _error_result("PHASE_2_NOT_ENABLED", _PHASE_2_MESSAGE)  # type: ignore[return-value]
+
+
+@mcp.tool(
+    name="vibe_set_parameters",
+    description=(
+        "Set or update session parameters and feature flags (catalog, schema prefix, "
+        "`includeGenieOntology`, `includeLakehouse`, Lakebase instance). Returns the resolved parameters "
+        "and any still-missing required ones — ask the learner in chat for those, then call again. Args: "
+        "`session_id`, `params` (object)."
+    ),
+    annotations=ToolAnnotations(
+        readOnlyHint=False,
+        destructiveHint=False,
+        idempotentHint=True,
+        openWorldHint=True,
+    ),
+    structured_output=True,
+)
+def vibe_set_parameters(
+    session_id: str,
+    params: dict[str, Any],
+    context: Context | None = None,
+) -> SetParametersResult:
+    return _error_result("PHASE_2_NOT_ENABLED", _PHASE_2_MESSAGE)  # type: ignore[return-value]
+
+
+def _track_overview(track: str) -> str:
+    if track not in engine.MANIFEST.tracks:
+        return json.dumps({"error": "UNKNOWN_TRACK", "track": track})
+    selected = engine.MANIFEST.tracks[track]
+    sections = [
+        {"id": section.id, "title": section.title, "chapter": section.chapter, "why": section.why}
+        for section in selected.sections
+    ]
+    return json.dumps({"track": track, "title": selected.title, "sections": sections}, indent=2)
+
+
+def read_getting_started() -> str:
+    return GETTING_STARTED_GUIDE
+
+
+def _session_state_resource(session_id: str, context: Context | None = None) -> str:
+    loaded = _load_session_for_request(session_id, context)
+    if loaded is None:
+        return json.dumps({"isError": True, "error": {"code": "INVALID_SESSION"}})
+    state, _ = loaded
+    outline = [item.model_dump() for item in _outline_items(DEFAULT_TRACK, state)]
+    return json.dumps(
+        {
+            "outline": outline,
+            "completed_gates": list(state.completed_gates),
+            "captured_output_keys": sorted(state.captured_outputs),
+        },
+        indent=2,
+    )
+
+
+mcp._resource_manager.add_template(
+    _track_overview,
+    uri_template="vibe://track/{track}/overview",
+    name="vibe-track-overview",
+    description="Track narrative and manifest sections.",
+    meta={"ttlMs": 3_600_000, "cacheScope": "global"},
+)
+mcp._resource_manager.add_template(
+    _session_state_resource,
+    uri_template="vibe://session/{session_id}/state",
+    name="vibe-session-state",
+    description="Fresh live session state and gate ledger.",
+    meta={"ttlMs": 0, "cacheScope": "session"},
+)
+mcp.add_resource(
+    TextResource(
+        uri="vibe://style/vibecoding",
+        name="vibe-style-vibecoding",
+        description="Vibe Coding gate-ledger convention.",
+        mime_type="text/markdown",
+        text=VIBECODING_STYLE,
+        meta={"ttlMs": 86_400_000, "cacheScope": "global"},
+    )
+)
+mcp.add_resource(
+    TextResource(
+        uri="vibe://guide/getting-started",
+        name="vibe-guide-getting-started",
+        description="Self-serve workshop orientation and troubleshooting.",
+        mime_type="text/markdown",
+        text=GETTING_STARTED_GUIDE,
+        meta={"ttlMs": 86_400_000, "cacheScope": "global"},
+    )
+)
+
+
+@mcp.prompt(
+    name="Start the Genie Accelerator",
+    description="Start the first-run Genie Accelerator orientation and present step one.",
+)
+def start_genie_accelerator(use_case: str | None = None, industry: str | None = None) -> str:
+    parameters = []
+    if use_case:
+        parameters.append(f'use_case="{use_case}"')
+    if industry:
+        parameters.append(f'industry="{industry}"')
+    suffix = ", " + ", ".join(parameters) if parameters else ""
+    return (
+        f"{ORIENTATION_PREAMBLE}\n\n"
+        "Start the Genie Accelerator by calling `vibe_start_track` with "
+        f'{{track:"genie-accelerator"{suffix}}}, then call `vibe_get_step`. '
+        "Present the returned `prompt` verbatim first, then narrate `why`, `how_to_apply`, "
+        "`expected_output`, the gate, and the next step. Keep questions in chat."
+    )
+
+
+@mcp.prompt(
+    name="Continue where I left off",
+    description="Resume the current workshop session without repeating first-run orientation.",
+)
+def continue_where_left_off() -> str:
+    return (
+        "Read `vibe://session/{session_id}/state`, call `vibe_next_step`, and resume the learner. "
+        "Present the returned `prompt` verbatim first, then narrate the supporting fields."
+    )
+
+
+@mcp.prompt(
+    name="How does this workshop work?",
+    description="Explain the workshop using the server-side getting-started guide.",
+)
+def how_workshop_works() -> str:
+    return (
+        "Read `vibe://guide/getting-started` and explain how to answer in chat, how progress and "
+        "gates work, the one benchmark hard stop, troubleshooting, and how to mirror progress in "
+        "the web UI. When presenting a step later, always present its prompt verbatim first."
+    )
+
+
+def contract_error_results_for_tests() -> dict[str, _ContractError]:
+    """Expose representative typed failures for the D8 contract test."""
+
+    return {
+        code: _error_result(code, f"Expected workshop error: {code}")
+        for code in ("UNKNOWN_TRACK", "INVALID_SESSION", "UNKNOWN_STEP", "STEP_LOCKED")
+    }
+
+
+mcp._install_error_aware_handler()

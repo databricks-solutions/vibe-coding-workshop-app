@@ -10,6 +10,10 @@ httpx>=0.26.0
 requests>=2.31.0  # HTTP client for serving endpoints
 pyyaml>=6.0.0     # For loading prompts_config.yaml
 
+# MCP server surface (FastMCP + streamable HTTP + stateless HTTP)
+# 1.30.0 is the latest stable mcp 1.x release; mcp 2.x removes FastMCP.
+mcp==1.30.0
+
 # Databricks SDK for OAuth and workspace integration
 # v0.81.0+ required for postgres.generate_database_credential() (Lakebase Autoscaling)
 databricks-sdk>=0.81.0
