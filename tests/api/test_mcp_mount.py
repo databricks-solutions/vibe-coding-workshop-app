@@ -86,6 +86,21 @@ def test_mcp_mount_is_enabled_when_flag_is_on(monkeypatch):
     assert any(getattr(route, "path", None) == "/mcp" for route in app_module.app.routes)
 
 
+def test_mcp_path_rewrite_accepts_app_kwarg(monkeypatch):
+    """Starlette builds the middleware stack as cls(app=app, ...) — passing the
+    ASGI app by KEYWORD. The middleware's first param must therefore be named
+    `app`, or every route 500s at stack-build time. This guards the convention
+    directly (some Starlette versions instantiate positionally, which hid the
+    bug in the TestClient-based tests)."""
+    app_module = load_app(monkeypatch, enabled=True)
+
+    async def _noop(scope, receive, send):
+        return None
+
+    mw = app_module._MCPPathRewrite(app=_noop)  # must not raise on `app=`
+    assert mw.app is _noop
+
+
 def test_mcp_mount_is_ordered_before_spa_catch_all(monkeypatch):
     """The /mcp mount must precede the SPA catch-all so /mcp is never resolved
     by index.html. Guards route ordering structurally (method-independent),

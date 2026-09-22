@@ -51,8 +51,11 @@ else:
 class _MCPPathRewrite:
     """Rewrite the exact MCP path before Starlette resolves mounted routes."""
 
-    def __init__(self, asgi_app):
-        self.asgi_app = asgi_app
+    def __init__(self, app):
+        # Param MUST be named `app`: Starlette instantiates middleware as
+        # cls(app=app, ...) (by keyword), so a different name (e.g. asgi_app)
+        # raises TypeError at middleware-stack build time and 500s every route.
+        self.app = app
 
     async def __call__(self, scope, receive, send):
         if scope["type"] == "http" and scope.get("path") == "/mcp":
@@ -62,7 +65,7 @@ class _MCPPathRewrite:
             # so the rewritten raw_path is unambiguously b"/mcp/". Appending
             # instead would double-slash if this middleware ran twice.
             scope["raw_path"] = b"/mcp/"
-        await self.asgi_app(scope, receive, send)
+        await self.app(scope, receive, send)
 
 # Get the directory where this script is located
 BASE_DIR = Path(__file__).resolve().parent
