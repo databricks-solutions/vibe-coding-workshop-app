@@ -34,6 +34,8 @@ literals as consumer-step-number to `{ keyName: producerStepNumber }` entries,
 then translates producer numbers to `sectionTag` records parsed from
 `workflowSections.ts`. `produces` is reverse-derived only when one of those
 literal keys references the step; it is otherwise `null`. The Genie wrapper
-literals are at `WorkflowDiagram.tsx:1066-1083`. The ontology handoffs remain
-the established manifest contract required by D3 and are kept explicitly
-separate from the wrapper literal table.
+literals are at `WorkflowDiagram.tsx:1066-1083`. The ontology steps are
+intentionally not special-cased: `renderGenieStep` passes the shared
+`geniePreviousOutputs`, which is undefined for steps 67–69, so their
+`consumes` and `produces` values remain empty/null to match the live UI rather
+than the conceptual D3 chain.

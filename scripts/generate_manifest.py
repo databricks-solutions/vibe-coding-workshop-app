@@ -161,15 +161,6 @@ GENIE_CHAINING_LITERAL_OVERRIDES: dict[int, dict[str, int]] = {
     72: {"aibi_dashboard": 71, "prd_document": 3},
 }
 
-# These three ontology handoffs are retained from the established manifest
-# contract; all other Genie step context comes from the literals above.
-GENIE_ONTOLOGY_CHAINING: dict[int, dict[str, int]] = {
-    67: {"optimize_gate": 66},
-    68: {"domain_model": 67},
-    69: {"pages": 68},
-}
-
-
 def _ts_string(value: str) -> str:
     return ast.literal_eval(f"'{value}'")
 
@@ -322,7 +313,6 @@ def _chaining_references(track_id: str) -> dict[int, dict[str, int]]:
     references = dict(CHAINING_LITERAL_REFERENCES)
     if track_id == "genie-accelerator":
         references.update(GENIE_CHAINING_LITERAL_OVERRIDES)
-        references.update(GENIE_ONTOLOGY_CHAINING)
     if track_id == "agents-accelerator":
         references[17] = {"prd_document": 3, "table_metadata": 10}
     return references

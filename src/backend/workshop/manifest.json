@@ -2065,7 +2065,7 @@
               "gate": null,
               "requiresGate": "gagent_benchmarks",
               "consumes": [],
-              "produces": "optimize_gate",
+              "produces": null,
               "execution": "agent-doable",
               "surfaces": [
                 "ui",
@@ -2258,10 +2258,8 @@
               "why": null,
               "gate": null,
               "requiresGate": "gagent_optimize",
-              "consumes": [
-                "optimize_gate"
-              ],
-              "produces": "domain_model",
+              "consumes": [],
+              "produces": null,
               "execution": "hybrid",
               "surfaces": [
                 "ui",
@@ -2276,10 +2274,8 @@
               "why": null,
               "gate": null,
               "requiresGate": "ontology_domain",
-              "consumes": [
-                "domain_model"
-              ],
-              "produces": "pages",
+              "consumes": [],
+              "produces": null,
               "execution": "ui-driven",
               "surfaces": [
                 "ui",
@@ -2294,9 +2290,7 @@
               "why": null,
               "gate": null,
               "requiresGate": "ontology_pages",
-              "consumes": [
-                "pages"
-              ],
+              "consumes": [],
               "produces": null,
               "execution": "ui-driven",
               "surfaces": [
