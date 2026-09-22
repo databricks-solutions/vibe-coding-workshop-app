@@ -2,12 +2,21 @@
 
 **Status:** Proposed · Phase 0 ready to execute · **Author:** pairing session (research → architecture) · **Date:** 2026-09-19
 **Target repo:** `vibe-coding-workshop-app` (the deployable Databricks App)
-**Depends on:** the Genie Accelerator track already shipped per [`PLAN.md`](./PLAN.md), plus the
-refinements in [`genie-accelerator-diagram-and-optional-lakehouse.md`](./genie-accelerator-diagram-and-optional-lakehouse.md),
-[`genie-track-activation-and-step-cleanup.md`](./genie-track-activation-and-step-cleanup.md), and
-[`genie-accelerator-prompt-standardization.md`](./genie-accelerator-prompt-standardization.md).
-**Companion artifact:** [`images/mcp-workshop-engine-architecture.png`](./images/mcp-workshop-engine-architecture.png)
-(source: [`images/mcp-workshop-engine-architecture.mmd`](./images/mcp-workshop-engine-architecture.mmd)).
+**Depends on:** the Genie Accelerator track already shipped per [`PLAN.md`](../PLAN.md), plus the
+refinements in [`genie-accelerator-diagram-and-optional-lakehouse.md`](../genie-accelerator-diagram-and-optional-lakehouse.md),
+[`genie-track-activation-and-step-cleanup.md`](../genie-track-activation-and-step-cleanup.md), and
+[`genie-accelerator-prompt-standardization.md`](../genie-accelerator-prompt-standardization.md).
+**Companion artifact:** [`images/mcp-workshop-engine-architecture.png`](../images/mcp-workshop-engine-architecture.png)
+(source: [`images/mcp-workshop-engine-architecture.mmd`](../images/mcp-workshop-engine-architecture.mmd)).
+
+> **⚠ READ FIRST (added 2026-09-21).** This roadmap predates the live Genie Code capability probe.
+> Its architecture stands, but its *interactivity* assumptions were superseded: **Genie Code
+> supports no elicitation / MRTR / sampling** — interactivity is delivered **in-band**, not via
+> protocol elicitation. Before acting on this spec, read the series index
+> ([`README.md`](./README.md)), the reconciled research
+> ([`mcp-research-and-findings.md`](./mcp-research-and-findings.md)), and the authoritative probe
+> findings + build plan ([`mcp-interactive-track-doc-plan.md`](./mcp-interactive-track-doc-plan.md)).
+> Where they conflict with this file, **they win.**
 
 ---
 
@@ -85,7 +94,7 @@ Beta steps become *coached*, not automated (see §10.4).
 
 ## 2. Architecture
 
-![Workshop Engine architecture — one core, two adapters](./images/mcp-workshop-engine-architecture.png)
+![Workshop Engine architecture — one core, two adapters](../images/mcp-workshop-engine-architecture.png)
 
 **Principle:** one domain core, two thin transport adapters, one persisted state keyed by
 `session_id`. The React app and Genie Code are **two clients of the same brain**.
