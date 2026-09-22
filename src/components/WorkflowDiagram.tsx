@@ -5,6 +5,7 @@ import { ReadOnlyProvider } from '../contexts/ReadOnlyContext';
 import { WorkflowStep } from './WorkflowStep';
 import { Prerequisites } from './Prerequisites';
 import { WorkshopIntro } from './WorkshopIntro';
+import { ConnectToGenieCodePanel } from './ConnectToGenieCodePanel';
 import { HackathonEntryCard } from './hackathon/HackathonEntryCard';
 import { CodingAssistantSelector } from './CodingAssistantSelector';
 import { SectionedWorkflowSidebar } from './SectionedWorkflowSidebar';
@@ -3454,6 +3455,9 @@ export function WorkflowDiagram({
   return (
     <ReadOnlyProvider value={readOnly}>
     <div className="space-y-5">
+      {/* Self-serve Genie Code MCP on-ramp (D4 §1.1) — visible with only the app URL */}
+      <ConnectToGenieCodePanel />
+
       {/* Stage 0: Workshop Introduction */}
       <WorkshopIntro
         key={`intro-${sessionId}`}
