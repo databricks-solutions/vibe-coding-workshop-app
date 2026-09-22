@@ -139,6 +139,24 @@ def test_post_mcp_with_json_only_accept_is_not_406(monkeypatch):
     assert response.status_code == 200, response.text
 
 
+def test_get_and_delete_mcp_return_405_not_a_hanging_sse(monkeypatch):
+    """Stateless server: GET/DELETE /mcp must return 405, not FastMCP's default
+    200 text/event-stream that hangs with no data. Genie Code opens that GET
+    stream during save-time validation and stalls on it, so the entry never
+    persists. Matches the proven Genie Code reference (register-mcp.ts)."""
+    app_module = load_app(monkeypatch, enabled=True)
+
+    with TestClient(app_module.app, base_url="http://127.0.0.1:8000", follow_redirects=False) as client:
+        get_resp = client.get("/mcp", headers={"Accept": "text/event-stream"})
+        del_resp = client.delete("/mcp")
+
+    assert get_resp.status_code == 405, get_resp.text
+    assert del_resp.status_code == 405, del_resp.text
+    # It is a JSON-RPC error body, not an SSE stream.
+    assert get_resp.headers["content-type"].split(";", 1)[0] == "application/json"
+    assert get_resp.json()["error"]["code"] == -32000
+
+
 def test_mcp_mount_is_ordered_before_spa_catch_all(monkeypatch):
     """The /mcp mount must precede the SPA catch-all so /mcp is never resolved
     by index.html. Guards route ordering structurally (method-independent),

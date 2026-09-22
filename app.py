@@ -50,6 +50,24 @@ else:
 
 _MCP_DUAL_ACCEPT = b"application/json, text/event-stream"
 
+_MCP_METHOD_NOT_ALLOWED_BODY = (
+    b'{"jsonrpc":"2.0","error":{"code":-32000,'
+    b'"message":"Method not allowed (stateless server)."},"id":null}'
+)
+
+
+async def _mcp_method_not_allowed(send):
+    """Send a 405 JSON-RPC error (CORS headers are added by CORSMiddleware)."""
+    await send({
+        "type": "http.response.start",
+        "status": 405,
+        "headers": [
+            (b"content-type", b"application/json"),
+            (b"content-length", str(len(_MCP_METHOD_NOT_ALLOWED_BODY)).encode()),
+        ],
+    })
+    await send({"type": "http.response.body", "body": _MCP_METHOD_NOT_ALLOWED_BODY})
+
 
 def _normalize_mcp_accept(headers):
     """Widen a JSON-only / wildcard / empty Accept to the dual MCP value.
@@ -91,6 +109,16 @@ class _MCPPathRewrite:
     async def __call__(self, scope, receive, send):
         path = scope.get("path", "") if scope["type"] == "http" else ""
         if path == "/mcp" or path.startswith("/mcp/"):
+            if scope.get("method") in {"GET", "DELETE"}:
+                # Stateless server: there is no standalone server->client SSE
+                # stream and no session to tear down. FastMCP answers GET with a
+                # 200 text/event-stream that hangs forever (no data). Genie Code
+                # opens that stream during "Add MCP server" validation and stalls
+                # waiting on it, so the entry never persists. Match the proven
+                # Genie Code reference (register-mcp.ts) and reject GET/DELETE
+                # with 405 so the client proceeds instead of waiting.
+                await _mcp_method_not_allowed(send)
+                return
             scope = dict(scope)
             if path == "/mcp":
                 scope["path"] = "/mcp/"
