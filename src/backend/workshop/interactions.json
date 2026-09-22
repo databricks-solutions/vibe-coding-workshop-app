@@ -1,0 +1,87 @@
+{
+  "project_setup": {
+    "pre": {
+      "id": "project_setup.why",
+      "type": "comprehension",
+      "question": "Why should the project boundary and intended Genie use case be explicit before the build starts?",
+      "options": [
+        {"id": "governed_first", "label": "So every later decision has a clear, governed target"},
+        {"id": "prototype_first", "label": "So we can postpone scope until after implementation"}
+      ],
+      "recommended": "governed_first",
+      "skippable": true,
+      "coaching": {
+        "governed_first": "Correct — a clear boundary keeps the later semantic and agent decisions grounded.",
+        "prototype_first": "Scope first is safer here; otherwise later outputs can drift away from the intended use case."
+      }
+    }
+  },
+  "semlayer_locate": {
+    "decision": {
+      "id": "semlayer_locate.source_strategy",
+      "type": "decision",
+      "question": "Which source strategy should we use for the semantic layer?",
+      "options": [
+        {"id": "reuse_existing", "label": "Reuse an existing governed source"},
+        {"id": "discover_new", "label": "Discover and qualify a new source"}
+      ],
+      "recommended": "reuse_existing",
+      "skippable": true,
+      "coaching": {
+        "reuse_existing": "Recommended — start with the governed source and expand only when coverage requires it.",
+        "discover_new": "That is a valid override; record the qualification work before building on the source."
+      }
+    }
+  },
+  "semlayer_measures": {
+    "post": {
+      "id": "semlayer_measures.reflection",
+      "type": "comprehension",
+      "question": "What makes a proposed measure useful to an agent and to the people reviewing its answers?",
+      "options": [
+        {"id": "business_metrics", "label": "A named business meaning with a stable calculation"},
+        {"id": "raw_columns", "label": "A raw column name without a defined meaning"}
+      ],
+      "recommended": "business_metrics",
+      "skippable": true,
+      "coaching": {
+        "business_metrics": "Exactly — stable business meaning is what makes a measure reusable and reviewable.",
+        "raw_columns": "Raw columns are inputs, not measures; define the business calculation and meaning first."
+      }
+    }
+  },
+  "gagent_benchmarks": {
+    "decision": {
+      "id": "gagent_benchmarks.benchmark_confirmation",
+      "type": "confirm",
+      "question": "Confirm that the benchmark answers are ready to load and verify the agent against.",
+      "options": [
+        {"id": "confirm", "label": "Confirm and load the benchmark set"},
+        {"id": "not_ready", "label": "Not yet — keep the step open"}
+      ],
+      "recommended": "confirm",
+      "skippable": false,
+      "coaching": {
+        "confirm": "Confirmed — the benchmark step can now be completed.",
+        "not_ready": "No problem — keep refining the benchmark answers before confirming."
+      }
+    }
+  },
+  "gaccel_activation": {
+    "decision": {
+      "id": "gaccel_activation.activation_scope",
+      "type": "decision",
+      "question": "Which activation scope should we plan first?",
+      "options": [
+        {"id": "activate_now", "label": "Activate the highest-value path now"},
+        {"id": "defer_activation", "label": "Defer activation until more evidence is collected"}
+      ],
+      "recommended": "activate_now",
+      "skippable": true,
+      "coaching": {
+        "activate_now": "Recommended — start with the highest-value path and keep the scope intentionally narrow.",
+        "defer_activation": "That override is reasonable when evidence or ownership is not ready yet."
+      }
+    }
+  }
+}
