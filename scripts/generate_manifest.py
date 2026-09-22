@@ -46,146 +46,127 @@ GENIE_ONTOLOGY_FLAG = "includeGenieOntology"
 GENIE_STEP_METADATA: dict[str, dict[str, Any]] = {
     "semlayer_locate": {
         "requiresGate": None,
-        "consumes": ["prd_document"],
-        "produces": "genie_brief",
         "execution": "agent-doable",
     },
     "semlayer_profile": {
         "requiresGate": "semlayer_locate",
-        "consumes": ["genie_brief"],
-        "produces": "schema_profile",
         "execution": "agent-doable",
     },
     "semlayer_measures": {
         "requiresGate": "semlayer_profile",
-        "consumes": ["schema_profile"],
-        "produces": "measures_signoff",
         "execution": "hybrid",
     },
     "semlayer_metric_view": {
         "requiresGate": "semlayer_measures",
-        "consumes": ["measures_signoff"],
-        "produces": "metric_view",
         "execution": "agent-doable",
     },
     "semlayer_synonyms": {
         "requiresGate": "semlayer_metric_view",
-        "consumes": ["metric_view"],
-        "produces": "synonyms",
         "execution": "agent-doable",
     },
     "gagent_describe": {
         "requiresGate": "semlayer_metric_view",
-        "consumes": ["metric_view"],
-        "produces": "genie_space",
         "execution": "agent-doable",
     },
     "gagent_instructions": {
         "requiresGate": "gagent_describe",
-        "consumes": ["genie_space"],
-        "produces": "agent_instructions",
         "execution": "agent-doable",
     },
     "gagent_verified": {
         "requiresGate": "gagent_instructions",
-        "consumes": ["agent_instructions"],
-        "produces": "verified_queries",
         "execution": "agent-doable",
     },
     "gagent_benchmarks": {
         "requiresGate": "gagent_verified",
-        "consumes": ["verified_queries"],
-        "produces": "benchmarks",
         "execution": "agent-doable",
     },
     "gagent_optimize": {
         "requiresGate": "gagent_benchmarks",
-        "consumes": ["benchmarks"],
-        "produces": "optimize_gate",
         "execution": "agent-doable",
     },
     "gaccel_dashboard": {
         "requiresGate": "semlayer_metric_view",
-        "consumes": ["metric_view"],
-        "produces": "dashboard_inventory",
         "execution": "agent-doable",
     },
     "ontology_domain": {
         "requiresGate": "gagent_optimize",
-        "consumes": ["optimize_gate"],
-        "produces": "domain_model",
         "execution": "hybrid",
     },
     "ontology_pages": {
         "requiresGate": "ontology_domain",
-        "consumes": ["domain_model"],
-        "produces": "pages",
         "execution": "ui-driven",
     },
     "ontology_routing": {
         "requiresGate": "ontology_pages",
-        "consumes": ["pages"],
-        "produces": "routing_page",
         "execution": "ui-driven",
     },
     "gaccel_activation": {
         "requiresGate": "gagent_optimize",
-        "consumes": ["aibi_dashboard", "prd_document"],
-        "produces": "sync_plan",
         "execution": "agent-doable",
     },
 }
 
-OUTPUT_BY_TAG = {
-    "prd_generation": "prd_document",
-    "bronze_table_metadata": "table_metadata",
-    "gold_layer_design": "gold_layer_design",
-    "bronze_layer_creation": "synthetic_data",
-    "silver_layer_sdp": "silver_layer",
-    "gold_layer_pipeline": "gold_layer_pipeline",
-    "usecase_plan": "usecase_plan",
-    "aibi_dashboard": "aibi_dashboard",
-    "genie_space": "genie_space",
-    "agent_framework": "agent_framework",
-    "wire_ui_agent": "wire_ui_agent",
-    "iterate_enhance": "iteration_plan",
-    "skill_install_explore": "exploration_findings",
-    "skill_define_strategy": "skill_strategy",
-    "skill_create_skillmd": "skill_definition",
-    "skill_apply_contracts": "applied_skill",
-    "skill_certify_tables": "certified_skill",
-    "activation_table_design": "activation_table_design",
-    "activation_reverse_sync": "activation_reverse_sync",
-    "activation_app_design": "activation_app_design",
-    "activation_build_wire": "activation_build_wire",
-    "activation_wire_lakebase": "activation_wire_lakebase",
-    "activation_deploy_validate": "activation_app",
+# Hand-transcribed from the `previousOutputs` literals in
+# `WorkflowDiagram.tsx`, mirrored by `stepPreviousOutputs.ts`. Keys are the
+# object keys passed to the assembler; values are the source step numbers.
+CHAINING_LITERAL_REFERENCES: dict[int, dict[str, int]] = {
+    10: {"prd_document": 3},
+    11: {"table_metadata": 10},
+    12: {"table_metadata": 10},
+    13: {"synthetic_data": 12},
+    14: {"gold_layer_design": 11},
+    15: {"prd_document": 3, "gold_layer_design": 11},
+    16: {"prd_document": 3, "gold_layer_design": 11},
+    17: {"usecase_plan": 15},
+    18: {"prd_document": 3, "gold_layer_design": 11},
+    19: {"agent_framework": 18},
+    21: {"iteration_plan": 20},
+    27: {"exploration_findings": 26},
+    28: {"skill_strategy": 27},
+    29: {"skill_definition": 28},
+    30: {"applied_skill": 29},
+    32: {
+        "gold_layer_design": 11,
+        "usecase_plan": 15,
+        "prd_document": 3,
+        "activation_plan": 72,
+    },
+    34: {"gold_layer_design": 11, "prd_document": 3},
+    35: {"activation_app_design": 34},
+    39: {"agent_spec_design": 38},
+    40: {"agent_tool_selection": 39},
+    41: {"uc_resources_foundation": 40},
+    42: {"mlflow_agent_tracing_uc": 41},
+    43: {"knowledge_assistant_create": 42},
+    44: {"track_a_agent_app_clone_framework": 43},
+    45: {"track_a_agent_ka_genie_tools": 44},
+    46: {"track_a_agent_auth_memory": 45},
+    47: {"track_a_agent_eval_deploy": 46},
+    48: {"appkit_agent_app_proxy_chat": 47},
+    49: {"appkit_chat_feedback_mlflow": 48},
+    50: {"mlflow_prompt_registry": 49},
+    51: {"mlflow_evaluation_datasets": 50},
+    52: {"mlflow_scorers_and_judges": 51},
+    53: {"mlflow_evaluation_runs_and_iteration": 52},
+    54: {"mlflow_human_review_and_signoff": 53},
+    55: {"mlflow_logged_model_uc_registration": 54},
+    56: {"mlflow_gateway_and_deployment": 55},
+    73: {"activation_wire_lakebase": 36},
 }
 
-CONSUMES_BY_TAG = {
-    "bronze_table_metadata": ["prd_document"],
-    "gold_layer_design": ["table_metadata"],
-    "bronze_layer_creation": ["table_metadata"],
-    "silver_layer_sdp": ["synthetic_data"],
-    "gold_layer_pipeline": ["gold_layer_design"],
-    "usecase_plan": ["prd_document", "gold_layer_design"],
-    "aibi_dashboard": ["prd_document", "gold_layer_design"],
-    "genie_space": ["usecase_plan"],
-    "agent_framework": ["prd_document", "gold_layer_design"],
-    "wire_ui_agent": ["agent_framework"],
-    "redeploy_test": ["iteration_plan"],
-    "skill_define_strategy": ["exploration_findings"],
-    "skill_create_skillmd": ["skill_strategy"],
-    "skill_apply_contracts": ["skill_definition"],
-    "skill_certify_tables": ["applied_skill"],
-    "activation_app_design": ["gold_layer_design", "prd_document"],
-    "activation_build_wire": ["activation_app_design"],
-    "activation_table_design": [
-        "gold_layer_design",
-        "usecase_plan",
-        "prd_document",
-        "activation_plan",
-    ],
+GENIE_CHAINING_LITERAL_OVERRIDES: dict[int, dict[str, int]] = {
+    11: {"table_metadata": 22, "prd_document": 3},
+    17: {"prd_document": 3, "table_metadata": 10},
+    71: {"metric_view": 60, "prd_document": 3},
+    72: {"aibi_dashboard": 71, "prd_document": 3},
+}
+
+# These three ontology handoffs are retained from the established manifest
+# contract; all other Genie step context comes from the literals above.
+GENIE_ONTOLOGY_CHAINING: dict[int, dict[str, int]] = {
+    67: {"optimize_gate": 66},
+    68: {"domain_model": 67},
+    69: {"pages": 68},
 }
 
 
@@ -314,6 +295,8 @@ def _metadata(
     step: SourceStep,
     previous_tag: str | None,
     ontology_tags: set[str],
+    consumes_by_step: dict[int, list[str]],
+    produces_by_step: dict[int, str],
 ) -> dict[str, Any]:
     data: dict[str, Any] = {
         "order": 0,
@@ -322,21 +305,51 @@ def _metadata(
         "why": None,
         "gate": None,
         "requiresGate": previous_tag,
-        "consumes": list(CONSUMES_BY_TAG.get(step.section_tag, [])),
-        "produces": OUTPUT_BY_TAG.get(step.section_tag),
+        "consumes": consumes_by_step.get(step.number, []),
+        "produces": produces_by_step.get(step.number),
         "execution": "agent-doable",
         "surfaces": ["ui", "mcp"],
         "flag": None,
     }
     if step.section_tag in GENIE_STEP_METADATA:
         data.update(GENIE_STEP_METADATA[step.section_tag])
-    if track_id == "genie-accelerator" and step.section_tag == "gold_layer_design":
-        data["consumes"] = ["table_metadata", "prd_document"]
-    if track_id == "agents-accelerator" and step.section_tag == "genie_space":
-        data["consumes"] = ["prd_document", "table_metadata"]
     if step.section_tag in ontology_tags:
         data["flag"] = GENIE_ONTOLOGY_FLAG
     return data
+
+
+def _chaining_references(track_id: str) -> dict[int, dict[str, int]]:
+    references = dict(CHAINING_LITERAL_REFERENCES)
+    if track_id == "genie-accelerator":
+        references.update(GENIE_CHAINING_LITERAL_OVERRIDES)
+        references.update(GENIE_ONTOLOGY_CHAINING)
+    if track_id == "agents-accelerator":
+        references[17] = {"prd_document": 3, "table_metadata": 10}
+    return references
+
+
+def _chaining_metadata(
+    track_id: str,
+    present_numbers: set[int],
+) -> tuple[dict[int, list[str]], dict[int, str]]:
+    references = _chaining_references(track_id)
+    consumes_by_step = {
+        consumer_number: list(literals)
+        for consumer_number, literals in references.items()
+    }
+    produces_by_step: dict[int, str] = {}
+    for literals in references.values():
+        for output_key, source_number in literals.items():
+            if source_number not in present_numbers:
+                continue
+            existing_key = produces_by_step.get(source_number)
+            if existing_key is not None and existing_key != output_key:
+                raise ValueError(
+                    f"Step {source_number} has conflicting output keys: "
+                    f"{existing_key!r} and {output_key!r}"
+                )
+            produces_by_step[source_number] = output_key
+    return consumes_by_step, produces_by_step
 
 
 def build_manifest(source: str) -> dict[str, Any]:
@@ -356,6 +369,12 @@ def build_manifest(source: str) -> dict[str, Any]:
     tracks: dict[str, Any] = {}
     for track_id, track in levels.items():
         ordered_sections = _filtered_sections(track, sections, steps)
+        present_numbers = {
+            number for section in ordered_sections for number in section.steps
+        }
+        consumes_by_step, produces_by_step = _chaining_metadata(
+            track_id, present_numbers
+        )
         track_steps: list[dict[str, Any]] = []
         previous_tag: str | None = None
         serialized_sections: list[dict[str, Any]] = []
@@ -363,7 +382,14 @@ def build_manifest(source: str) -> dict[str, Any]:
             serialized_steps: list[dict[str, Any]] = []
             for number in section.steps:
                 source_step = steps[number]
-                step_data = _metadata(track_id, source_step, previous_tag, ontology_tags)
+                step_data = _metadata(
+                    track_id,
+                    source_step,
+                    previous_tag,
+                    ontology_tags,
+                    consumes_by_step,
+                    produces_by_step,
+                )
                 step_data["order"] = len(track_steps) + 1
                 serialized_steps.append(step_data)
                 track_steps.append(step_data)

@@ -469,7 +469,7 @@
               "consumes": [
                 "synthetic_data"
               ],
-              "produces": "silver_layer",
+              "produces": null,
               "execution": "agent-doable",
               "surfaces": [
                 "ui",
@@ -505,7 +505,7 @@
               "consumes": [
                 "gold_layer_design"
               ],
-              "produces": "gold_layer_pipeline",
+              "produces": null,
               "execution": "agent-doable",
               "surfaces": [
                 "ui",
@@ -699,7 +699,7 @@
               "consumes": [
                 "synthetic_data"
               ],
-              "produces": "silver_layer",
+              "produces": null,
               "execution": "agent-doable",
               "surfaces": [
                 "ui",
@@ -735,7 +735,7 @@
               "consumes": [
                 "gold_layer_design"
               ],
-              "produces": "gold_layer_pipeline",
+              "produces": null,
               "execution": "agent-doable",
               "surfaces": [
                 "ui",
@@ -797,7 +797,7 @@
                 "prd_document",
                 "gold_layer_design"
               ],
-              "produces": "aibi_dashboard",
+              "produces": null,
               "execution": "agent-doable",
               "surfaces": [
                 "ui",
@@ -815,7 +815,7 @@
               "consumes": [
                 "usecase_plan"
               ],
-              "produces": "genie_space",
+              "produces": null,
               "execution": "agent-doable",
               "surfaces": [
                 "ui",
@@ -1156,7 +1156,7 @@
               "consumes": [
                 "synthetic_data"
               ],
-              "produces": "silver_layer",
+              "produces": null,
               "execution": "agent-doable",
               "surfaces": [
                 "ui",
@@ -1192,7 +1192,7 @@
               "consumes": [
                 "gold_layer_design"
               ],
-              "produces": "gold_layer_pipeline",
+              "produces": null,
               "execution": "agent-doable",
               "surfaces": [
                 "ui",
@@ -1254,7 +1254,7 @@
                 "prd_document",
                 "gold_layer_design"
               ],
-              "produces": "aibi_dashboard",
+              "produces": null,
               "execution": "agent-doable",
               "surfaces": [
                 "ui",
@@ -1272,7 +1272,7 @@
               "consumes": [
                 "usecase_plan"
               ],
-              "produces": "genie_space",
+              "produces": null,
               "execution": "agent-doable",
               "surfaces": [
                 "ui",
@@ -1341,7 +1341,7 @@
               "consumes": [
                 "agent_framework"
               ],
-              "produces": "wire_ui_agent",
+              "produces": null,
               "execution": "agent-doable",
               "surfaces": [
                 "ui",
@@ -1519,7 +1519,7 @@
               "consumes": [
                 "synthetic_data"
               ],
-              "produces": "silver_layer",
+              "produces": null,
               "execution": "agent-doable",
               "surfaces": [
                 "ui",
@@ -1555,7 +1555,7 @@
               "consumes": [
                 "gold_layer_design"
               ],
-              "produces": "gold_layer_pipeline",
+              "produces": null,
               "execution": "agent-doable",
               "surfaces": [
                 "ui",
@@ -1617,7 +1617,7 @@
                 "prd_document",
                 "gold_layer_design"
               ],
-              "produces": "aibi_dashboard",
+              "produces": null,
               "execution": "agent-doable",
               "surfaces": [
                 "ui",
@@ -1635,7 +1635,7 @@
               "consumes": [
                 "usecase_plan"
               ],
-              "produces": "genie_space",
+              "produces": null,
               "execution": "agent-doable",
               "surfaces": [
                 "ui",
@@ -1836,7 +1836,7 @@
               "gate": null,
               "requiresGate": "prd_generation",
               "consumes": [],
-              "produces": null,
+              "produces": "table_metadata",
               "execution": "agent-doable",
               "surfaces": [
                 "ui",
@@ -1873,7 +1873,7 @@
               "consumes": [
                 "gold_layer_design"
               ],
-              "produces": "gold_layer_pipeline",
+              "produces": null,
               "execution": "agent-doable",
               "surfaces": [
                 "ui",
@@ -1912,10 +1912,8 @@
               "why": null,
               "gate": null,
               "requiresGate": null,
-              "consumes": [
-                "prd_document"
-              ],
-              "produces": "genie_brief",
+              "consumes": [],
+              "produces": null,
               "execution": "agent-doable",
               "surfaces": [
                 "ui",
@@ -1930,10 +1928,8 @@
               "why": null,
               "gate": null,
               "requiresGate": "semlayer_locate",
-              "consumes": [
-                "genie_brief"
-              ],
-              "produces": "schema_profile",
+              "consumes": [],
+              "produces": null,
               "execution": "agent-doable",
               "surfaces": [
                 "ui",
@@ -1948,10 +1944,8 @@
               "why": null,
               "gate": null,
               "requiresGate": "semlayer_profile",
-              "consumes": [
-                "schema_profile"
-              ],
-              "produces": "measures_signoff",
+              "consumes": [],
+              "produces": null,
               "execution": "hybrid",
               "surfaces": [
                 "ui",
@@ -1966,9 +1960,7 @@
               "why": null,
               "gate": null,
               "requiresGate": "semlayer_measures",
-              "consumes": [
-                "measures_signoff"
-              ],
+              "consumes": [],
               "produces": "metric_view",
               "execution": "agent-doable",
               "surfaces": [
@@ -1984,10 +1976,8 @@
               "why": null,
               "gate": null,
               "requiresGate": "semlayer_metric_view",
-              "consumes": [
-                "metric_view"
-              ],
-              "produces": "synonyms",
+              "consumes": [],
+              "produces": null,
               "execution": "agent-doable",
               "surfaces": [
                 "ui",
@@ -2010,10 +2000,8 @@
               "why": null,
               "gate": null,
               "requiresGate": "semlayer_metric_view",
-              "consumes": [
-                "metric_view"
-              ],
-              "produces": "genie_space",
+              "consumes": [],
+              "produces": null,
               "execution": "agent-doable",
               "surfaces": [
                 "ui",
@@ -2028,10 +2016,8 @@
               "why": null,
               "gate": null,
               "requiresGate": "gagent_describe",
-              "consumes": [
-                "genie_space"
-              ],
-              "produces": "agent_instructions",
+              "consumes": [],
+              "produces": null,
               "execution": "agent-doable",
               "surfaces": [
                 "ui",
@@ -2046,10 +2032,8 @@
               "why": null,
               "gate": null,
               "requiresGate": "gagent_instructions",
-              "consumes": [
-                "agent_instructions"
-              ],
-              "produces": "verified_queries",
+              "consumes": [],
+              "produces": null,
               "execution": "agent-doable",
               "surfaces": [
                 "ui",
@@ -2064,10 +2048,8 @@
               "why": null,
               "gate": null,
               "requiresGate": "gagent_verified",
-              "consumes": [
-                "verified_queries"
-              ],
-              "produces": "benchmarks",
+              "consumes": [],
+              "produces": null,
               "execution": "agent-doable",
               "surfaces": [
                 "ui",
@@ -2082,9 +2064,7 @@
               "why": null,
               "gate": null,
               "requiresGate": "gagent_benchmarks",
-              "consumes": [
-                "benchmarks"
-              ],
+              "consumes": [],
               "produces": "optimize_gate",
               "execution": "agent-doable",
               "surfaces": [
@@ -2101,9 +2081,10 @@
               "gate": null,
               "requiresGate": "semlayer_metric_view",
               "consumes": [
-                "metric_view"
+                "metric_view",
+                "prd_document"
               ],
-              "produces": "dashboard_inventory",
+              "produces": "aibi_dashboard",
               "execution": "agent-doable",
               "surfaces": [
                 "ui",
@@ -2130,7 +2111,7 @@
                 "aibi_dashboard",
                 "prd_document"
               ],
-              "produces": "sync_plan",
+              "produces": "activation_plan",
               "execution": "agent-doable",
               "surfaces": [
                 "ui",
@@ -2151,7 +2132,7 @@
                 "prd_document",
                 "activation_plan"
               ],
-              "produces": "activation_table_design",
+              "produces": null,
               "execution": "agent-doable",
               "surfaces": [
                 "ui",
@@ -2167,7 +2148,7 @@
               "gate": null,
               "requiresGate": "activation_table_design",
               "consumes": [],
-              "produces": "activation_reverse_sync",
+              "produces": null,
               "execution": "agent-doable",
               "surfaces": [
                 "ui",
@@ -2204,7 +2185,7 @@
               "consumes": [
                 "activation_app_design"
               ],
-              "produces": "activation_build_wire",
+              "produces": null,
               "execution": "agent-doable",
               "surfaces": [
                 "ui",
@@ -2235,7 +2216,9 @@
               "why": null,
               "gate": null,
               "requiresGate": "activation_wire_lakebase",
-              "consumes": [],
+              "consumes": [
+                "activation_wire_lakebase"
+              ],
               "produces": null,
               "execution": "agent-doable",
               "surfaces": [
@@ -2252,7 +2235,7 @@
               "gate": null,
               "requiresGate": "activation_wire_genie",
               "consumes": [],
-              "produces": "activation_app",
+              "produces": null,
               "execution": "agent-doable",
               "surfaces": [
                 "ui",
@@ -2314,7 +2297,7 @@
               "consumes": [
                 "pages"
               ],
-              "produces": "routing_page",
+              "produces": null,
               "execution": "ui-driven",
               "surfaces": [
                 "ui",
@@ -2492,7 +2475,7 @@
               "consumes": [
                 "synthetic_data"
               ],
-              "produces": "silver_layer",
+              "produces": null,
               "execution": "agent-doable",
               "surfaces": [
                 "ui",
@@ -2528,7 +2511,7 @@
               "consumes": [
                 "gold_layer_design"
               ],
-              "produces": "gold_layer_pipeline",
+              "produces": null,
               "execution": "agent-doable",
               "surfaces": [
                 "ui",
@@ -2740,7 +2723,7 @@
               "consumes": [
                 "applied_skill"
               ],
-              "produces": "certified_skill",
+              "produces": null,
               "execution": "agent-doable",
               "surfaces": [
                 "ui",
@@ -2976,7 +2959,7 @@
               "gate": null,
               "requiresGate": "workspace_setup_deploy",
               "consumes": [],
-              "produces": null,
+              "produces": "agent_spec_design",
               "execution": "agent-doable",
               "surfaces": [
                 "ui",
@@ -2991,8 +2974,10 @@
               "why": null,
               "gate": null,
               "requiresGate": "agent_spec_design",
-              "consumes": [],
-              "produces": null,
+              "consumes": [
+                "agent_spec_design"
+              ],
+              "produces": "agent_tool_selection",
               "execution": "agent-doable",
               "surfaces": [
                 "ui",
@@ -3007,8 +2992,10 @@
               "why": null,
               "gate": null,
               "requiresGate": "agent_tool_selection",
-              "consumes": [],
-              "produces": null,
+              "consumes": [
+                "agent_tool_selection"
+              ],
+              "produces": "uc_resources_foundation",
               "execution": "agent-doable",
               "surfaces": [
                 "ui",
@@ -3023,8 +3010,10 @@
               "why": null,
               "gate": null,
               "requiresGate": "uc_resources_foundation",
-              "consumes": [],
-              "produces": null,
+              "consumes": [
+                "uc_resources_foundation"
+              ],
+              "produces": "mlflow_agent_tracing_uc",
               "execution": "agent-doable",
               "surfaces": [
                 "ui",
@@ -3039,8 +3028,10 @@
               "why": null,
               "gate": null,
               "requiresGate": "mlflow_agent_tracing_uc",
-              "consumes": [],
-              "produces": null,
+              "consumes": [
+                "mlflow_agent_tracing_uc"
+              ],
+              "produces": "knowledge_assistant_create",
               "execution": "agent-doable",
               "surfaces": [
                 "ui",
@@ -3055,8 +3046,10 @@
               "why": null,
               "gate": null,
               "requiresGate": "knowledge_assistant_create",
-              "consumes": [],
-              "produces": null,
+              "consumes": [
+                "knowledge_assistant_create"
+              ],
+              "produces": "track_a_agent_app_clone_framework",
               "execution": "agent-doable",
               "surfaces": [
                 "ui",
@@ -3071,8 +3064,10 @@
               "why": null,
               "gate": null,
               "requiresGate": "track_a_agent_app_clone_framework",
-              "consumes": [],
-              "produces": null,
+              "consumes": [
+                "track_a_agent_app_clone_framework"
+              ],
+              "produces": "track_a_agent_ka_genie_tools",
               "execution": "agent-doable",
               "surfaces": [
                 "ui",
@@ -3087,8 +3082,10 @@
               "why": null,
               "gate": null,
               "requiresGate": "track_a_agent_ka_genie_tools",
-              "consumes": [],
-              "produces": null,
+              "consumes": [
+                "track_a_agent_ka_genie_tools"
+              ],
+              "produces": "track_a_agent_auth_memory",
               "execution": "agent-doable",
               "surfaces": [
                 "ui",
@@ -3103,8 +3100,10 @@
               "why": null,
               "gate": null,
               "requiresGate": "track_a_agent_auth_memory",
-              "consumes": [],
-              "produces": null,
+              "consumes": [
+                "track_a_agent_auth_memory"
+              ],
+              "produces": "track_a_agent_eval_deploy",
               "execution": "agent-doable",
               "surfaces": [
                 "ui",
@@ -3119,8 +3118,10 @@
               "why": null,
               "gate": null,
               "requiresGate": "track_a_agent_eval_deploy",
-              "consumes": [],
-              "produces": null,
+              "consumes": [
+                "track_a_agent_eval_deploy"
+              ],
+              "produces": "appkit_agent_app_proxy_chat",
               "execution": "agent-doable",
               "surfaces": [
                 "ui",
@@ -3135,8 +3136,10 @@
               "why": null,
               "gate": null,
               "requiresGate": "appkit_agent_app_proxy_chat",
-              "consumes": [],
-              "produces": null,
+              "consumes": [
+                "appkit_agent_app_proxy_chat"
+              ],
+              "produces": "appkit_chat_feedback_mlflow",
               "execution": "agent-doable",
               "surfaces": [
                 "ui",
@@ -3159,8 +3162,10 @@
               "why": null,
               "gate": null,
               "requiresGate": "appkit_chat_feedback_mlflow",
-              "consumes": [],
-              "produces": null,
+              "consumes": [
+                "appkit_chat_feedback_mlflow"
+              ],
+              "produces": "mlflow_prompt_registry",
               "execution": "agent-doable",
               "surfaces": [
                 "ui",
@@ -3175,8 +3180,10 @@
               "why": null,
               "gate": null,
               "requiresGate": "mlflow_prompt_registry",
-              "consumes": [],
-              "produces": null,
+              "consumes": [
+                "mlflow_prompt_registry"
+              ],
+              "produces": "mlflow_evaluation_datasets",
               "execution": "agent-doable",
               "surfaces": [
                 "ui",
@@ -3191,8 +3198,10 @@
               "why": null,
               "gate": null,
               "requiresGate": "mlflow_evaluation_datasets",
-              "consumes": [],
-              "produces": null,
+              "consumes": [
+                "mlflow_evaluation_datasets"
+              ],
+              "produces": "mlflow_scorers_and_judges",
               "execution": "agent-doable",
               "surfaces": [
                 "ui",
@@ -3207,8 +3216,10 @@
               "why": null,
               "gate": null,
               "requiresGate": "mlflow_scorers_and_judges",
-              "consumes": [],
-              "produces": null,
+              "consumes": [
+                "mlflow_scorers_and_judges"
+              ],
+              "produces": "mlflow_evaluation_runs_and_iteration",
               "execution": "agent-doable",
               "surfaces": [
                 "ui",
@@ -3223,8 +3234,10 @@
               "why": null,
               "gate": null,
               "requiresGate": "mlflow_evaluation_runs_and_iteration",
-              "consumes": [],
-              "produces": null,
+              "consumes": [
+                "mlflow_evaluation_runs_and_iteration"
+              ],
+              "produces": "mlflow_human_review_and_signoff",
               "execution": "agent-doable",
               "surfaces": [
                 "ui",
@@ -3239,8 +3252,10 @@
               "why": null,
               "gate": null,
               "requiresGate": "mlflow_human_review_and_signoff",
-              "consumes": [],
-              "produces": null,
+              "consumes": [
+                "mlflow_human_review_and_signoff"
+              ],
+              "produces": "mlflow_logged_model_uc_registration",
               "execution": "agent-doable",
               "surfaces": [
                 "ui",
@@ -3255,8 +3270,10 @@
               "why": null,
               "gate": null,
               "requiresGate": "mlflow_logged_model_uc_registration",
-              "consumes": [],
-              "produces": null,
+              "consumes": [
+                "mlflow_logged_model_uc_registration"
+              ],
+              "produces": "mlflow_gateway_and_deployment",
               "execution": "agent-doable",
               "surfaces": [
                 "ui",
@@ -3271,7 +3288,9 @@
               "why": null,
               "gate": null,
               "requiresGate": "mlflow_gateway_and_deployment",
-              "consumes": [],
+              "consumes": [
+                "mlflow_gateway_and_deployment"
+              ],
               "produces": null,
               "execution": "agent-doable",
               "surfaces": [
@@ -3450,7 +3469,7 @@
               "consumes": [
                 "synthetic_data"
               ],
-              "produces": "silver_layer",
+              "produces": null,
               "execution": "agent-doable",
               "surfaces": [
                 "ui",
@@ -3486,7 +3505,7 @@
               "consumes": [
                 "gold_layer_design"
               ],
-              "produces": "gold_layer_pipeline",
+              "produces": null,
               "execution": "agent-doable",
               "surfaces": [
                 "ui",
@@ -3680,7 +3699,7 @@
               "consumes": [
                 "synthetic_data"
               ],
-              "produces": "silver_layer",
+              "produces": null,
               "execution": "agent-doable",
               "surfaces": [
                 "ui",
@@ -3716,7 +3735,7 @@
               "consumes": [
                 "gold_layer_design"
               ],
-              "produces": "gold_layer_pipeline",
+              "produces": null,
               "execution": "agent-doable",
               "surfaces": [
                 "ui",
@@ -3778,7 +3797,7 @@
                 "prd_document",
                 "gold_layer_design"
               ],
-              "produces": "aibi_dashboard",
+              "produces": null,
               "execution": "agent-doable",
               "surfaces": [
                 "ui",
@@ -3796,7 +3815,7 @@
               "consumes": [
                 "usecase_plan"
               ],
-              "produces": "genie_space",
+              "produces": null,
               "execution": "agent-doable",
               "surfaces": [
                 "ui",
@@ -4041,7 +4060,7 @@
               "consumes": [
                 "synthetic_data"
               ],
-              "produces": "silver_layer",
+              "produces": null,
               "execution": "agent-doable",
               "surfaces": [
                 "ui",
@@ -4077,7 +4096,7 @@
               "consumes": [
                 "gold_layer_design"
               ],
-              "produces": "gold_layer_pipeline",
+              "produces": null,
               "execution": "agent-doable",
               "surfaces": [
                 "ui",
@@ -4139,7 +4158,7 @@
                 "prd_document",
                 "gold_layer_design"
               ],
-              "produces": "aibi_dashboard",
+              "produces": null,
               "execution": "agent-doable",
               "surfaces": [
                 "ui",
@@ -4157,7 +4176,7 @@
               "consumes": [
                 "usecase_plan"
               ],
-              "produces": "genie_space",
+              "produces": null,
               "execution": "agent-doable",
               "surfaces": [
                 "ui",
@@ -4402,7 +4421,7 @@
               "consumes": [
                 "synthetic_data"
               ],
-              "produces": "silver_layer",
+              "produces": null,
               "execution": "agent-doable",
               "surfaces": [
                 "ui",
@@ -4438,7 +4457,7 @@
               "consumes": [
                 "gold_layer_design"
               ],
-              "produces": "gold_layer_pipeline",
+              "produces": null,
               "execution": "agent-doable",
               "surfaces": [
                 "ui",
@@ -4500,7 +4519,7 @@
                 "prd_document",
                 "gold_layer_design"
               ],
-              "produces": "aibi_dashboard",
+              "produces": null,
               "execution": "agent-doable",
               "surfaces": [
                 "ui",
@@ -4518,7 +4537,7 @@
               "consumes": [
                 "usecase_plan"
               ],
-              "produces": "genie_space",
+              "produces": null,
               "execution": "agent-doable",
               "surfaces": [
                 "ui",
@@ -4587,7 +4606,7 @@
               "consumes": [
                 "agent_framework"
               ],
-              "produces": "wire_ui_agent",
+              "produces": null,
               "execution": "agent-doable",
               "surfaces": [
                 "ui",
