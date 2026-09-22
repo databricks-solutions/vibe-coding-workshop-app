@@ -25,12 +25,12 @@ probe constraints in
 | Identity endpoint `/api/user/current` | `src/backend/api/routes.py:6557` | `:6400` |
 | `GET /api/section-metadata/{section_tag}` (how_to_apply / expected_output) | `routes.py:2252` | `:2150` |
 | Track overview narrative source | `src/constants/pathDescriptions.ts` | same |
-| Gate ledger convention | `.n.md` per-step file (Tier-G READ/RECORD bookends, `../genie-accelerator-prompt-standardization.md`) | roadmap called it `.vibecoding-state.md` |
+| Gate ledger convention | `.vibecoding-state.md` (Tier-G READ/RECORD bookends, `../genie-accelerator-prompt-standardization.md` §17 + `../genie-accelerator-locate-daisychain-and-prompt-cleanup.md`) | `.vibecoding-state.md` |
 | SPA catch-all (mount `/mcp` before it) | `app.py:162` | `:162` |
 
-> **Ledger naming.** The live Tier-G convention is a per-step `.n.md` gate file, not
-> `.vibecoding-state.md`. This contract uses `.n.md`; the `vibe://style/vibecoding` resource
-> documents it (§4).
+> **Ledger naming.** The live Tier-G convention is `.vibecoding-state.md` — verified in both the
+> prompt-standardization spec (§17, line 74 RECORD bookend) and the Locate daisy-chain spec. This
+> contract and the `vibe://style/vibecoding` resource use that name (§4).
 
 ---
 
@@ -296,8 +296,8 @@ declares `ttlMs` + `cacheScope ∈ {global, session}`.
 | URI template | Payload | cacheScope | ttlMs |
 |---|---|---|---|
 | `vibe://track/{track}/overview` | Chapter/section narrative from `pathDescriptions.ts` + manifest `why` (D3 §3) | `global` | `3600000` (1 h) |
-| `vibe://session/{session_id}/state` | `{ outline: OutlineItem[], completed_gates: string[], captured_output_keys: string[] }` — the live walk + gate ledger, mirroring `.n.md` | `session` | `0` (no-cache; always fresh, stateless) |
-| `vibe://style/vibecoding` | The `.n.md` gate-ledger convention + Tier-G READ/RECORD bookends (`../genie-accelerator-prompt-standardization.md`) | `global` | `86400000` (24 h) |
+| `vibe://session/{session_id}/state` | `{ outline: OutlineItem[], completed_gates: string[], captured_output_keys: string[] }` — the live walk + gate ledger, mirroring `.vibecoding-state.md` | `session` | `0` (no-cache; always fresh, stateless) |
+| `vibe://style/vibecoding` | The `.vibecoding-state.md` gate-ledger convention + Tier-G READ/RECORD bookends (`../genie-accelerator-prompt-standardization.md`) | `global` | `86400000` (24 h) |
 
 Notes:
 - **`outline` is a resource, not a tool** (moved from the roadmap's `vibe_track_outline`) — it is

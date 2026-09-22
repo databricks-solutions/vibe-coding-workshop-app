@@ -20,7 +20,8 @@ docs.** Read in the order below.
 | 5 | [`workshop-engine-domain.md`](./workshop-engine-domain.md) | Spec (D3) | **Draft (2026-09-22)** | The backend domain: manifest JSON Schema, progression functions, assembler-parity contract, state model. Transport-agnostic keystone. |
 | 6 | [`mcp-workshop-interactivity.md`](./mcp-workshop-interactivity.md) | Spec (D1) | **Draft (2026-09-22)** | The no-elicitation interaction model: the four in-band patterns, the `interaction` payload block, capability negotiation, the Step-9 hard-stop, and the elicitation upgrade path. |
 | 7 | [`mcp-interface-contract.md`](./mcp-interface-contract.md) | Spec (D2) | **Draft (2026-09-22)** | The IDL: 6 tools (name, description-as-prompt, input/output schemas, all four annotations, error taxonomy), 3 resources, 2 prompts, and the tool-budget accounting. |
-| 8 | D4–D10 design docs | Specs | **Not yet written** | The remaining workshop-specific specifications, per the plan. See below. |
+| 8 | [`mcp-workshop-pedagogy.md`](./mcp-workshop-pedagogy.md) | Spec (D5) | **Draft (2026-09-22)** | The learning model, where comprehension checks + decision points sit per section, the recommend-and-proceed doctrine, question-bank authoring via the `sections/*.md` pipeline, in-band phrasing, and the tone contract. |
+| 9 | D4, D6–D10 design docs | Specs | **Not yet written** | The remaining workshop-specific specifications, per the plan. See below. |
 
 ---
 
@@ -41,11 +42,12 @@ the reasoning and reconciliation are in [research §2–§3](./mcp-research-and-
 
 ## Documents to build next (from the plan)
 
-Write order: **D1 + D3** ✅ → **D2** ✅ **+ D5** → **D4 + D6 + D7** → **D8 + D9** → **D10**.
+Write order: **D1 + D3** ✅ → **D2** ✅ **+ D5** ✅ → **D4 + D6 + D7** → **D8 + D9** → **D10**.
 
 - **D1** ✅ [`mcp-workshop-interactivity.md`](./mcp-workshop-interactivity.md) — keystone: the no-elicitation interaction model + four patterns. *(Draft)*
 - **D3** ✅ [`workshop-engine-domain.md`](./workshop-engine-domain.md) — manifest schema, progression semantics, assembler-parity contract. *(Draft)*
 - **D2** ✅ [`mcp-interface-contract.md`](./mcp-interface-contract.md) — the tool/resource/prompt IDL. *(Draft)*
+- **D5** ✅ [`mcp-workshop-pedagogy.md`](./mcp-workshop-pedagogy.md) — learning model + question authoring. *(Draft)*
 - **D5** `mcp-workshop-pedagogy.md` — learning model + question authoring.
 - **D4** `mcp-workshop-architecture.md` — components + sequences + deployment topology.
 - **D6** `mcp-workshop-data-model.md` — Lakebase DDL incl. the interaction/decision log.
