@@ -48,3 +48,10 @@ tests/e2e/report/
 venv/
 .venv/
 .venv-test/
+
+# Agent/tooling transients (Polly worktrees + state, local editor state)
+.polly/
+.worktrees/
+
+# Local user-config backups (per-workshop snapshots)
+user-config.yaml.backup.*
