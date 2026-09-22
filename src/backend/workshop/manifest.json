@@ -1,0 +1,4669 @@
+{
+  "version": "1",
+  "tracks": {
+    "app-only": {
+      "id": "app-only",
+      "title": "Databricks Apps",
+      "assistants": [
+        "default"
+      ],
+      "flags": {},
+      "sections": [
+        {
+          "id": "define-usecase",
+          "chapter": "Foundation",
+          "title": "Project Setup",
+          "why": "Configure your environment and generate product requirements",
+          "steps": [
+            {
+              "order": 1,
+              "sectionTag": "project_setup",
+              "title": "Set Up Project",
+              "why": null,
+              "gate": null,
+              "requiresGate": null,
+              "consumes": [],
+              "produces": null,
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            },
+            {
+              "order": 2,
+              "sectionTag": "prd_generation",
+              "title": "PRD Generation",
+              "why": null,
+              "gate": null,
+              "requiresGate": "project_setup",
+              "consumes": [],
+              "produces": "prd_document",
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            }
+          ]
+        },
+        {
+          "id": "databricks-app",
+          "chapter": "Databricks App",
+          "title": "Databricks App",
+          "why": "Design user interface and deploy to Databricks Apps",
+          "steps": [
+            {
+              "order": 3,
+              "sectionTag": "cursor_copilot_ui_design",
+              "title": "UI Design",
+              "why": null,
+              "gate": null,
+              "requiresGate": "prd_generation",
+              "consumes": [],
+              "produces": null,
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            },
+            {
+              "order": 4,
+              "sectionTag": "deploy_databricks_app",
+              "title": "Deploy App",
+              "why": null,
+              "gate": null,
+              "requiresGate": "cursor_copilot_ui_design",
+              "consumes": [],
+              "produces": null,
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            }
+          ]
+        },
+        {
+          "id": "iterate-enhance",
+          "chapter": "Refinement",
+          "title": "Iterate & Enhance",
+          "why": "Continuous improvement, testing, and optimization",
+          "steps": [
+            {
+              "order": 5,
+              "sectionTag": "iterate_enhance",
+              "title": "Iterate & Enhance",
+              "why": null,
+              "gate": null,
+              "requiresGate": "deploy_databricks_app",
+              "consumes": [],
+              "produces": "iteration_plan",
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            },
+            {
+              "order": 6,
+              "sectionTag": "redeploy_test",
+              "title": "Redeploy & Test",
+              "why": null,
+              "gate": null,
+              "requiresGate": "iterate_enhance",
+              "consumes": [
+                "iteration_plan"
+              ],
+              "produces": null,
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            }
+          ]
+        },
+        {
+          "id": "cleanup",
+          "chapter": "Clean Up",
+          "title": "Clean Up",
+          "why": "Safely remove all workshop-created resources from your workspace",
+          "steps": [
+            {
+              "order": 7,
+              "sectionTag": "workspace_cleanup",
+              "title": "Workspace Clean Up",
+              "why": null,
+              "gate": null,
+              "requiresGate": "redeploy_test",
+              "consumes": [],
+              "produces": null,
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            }
+          ]
+        }
+      ]
+    },
+    "app-database": {
+      "id": "app-database",
+      "title": "+ Lakebase",
+      "assistants": [
+        "default"
+      ],
+      "flags": {},
+      "sections": [
+        {
+          "id": "define-usecase",
+          "chapter": "Foundation",
+          "title": "Project Setup",
+          "why": "Configure your environment and generate product requirements",
+          "steps": [
+            {
+              "order": 1,
+              "sectionTag": "project_setup",
+              "title": "Set Up Project",
+              "why": null,
+              "gate": null,
+              "requiresGate": null,
+              "consumes": [],
+              "produces": null,
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            },
+            {
+              "order": 2,
+              "sectionTag": "prd_generation",
+              "title": "PRD Generation",
+              "why": null,
+              "gate": null,
+              "requiresGate": "project_setup",
+              "consumes": [],
+              "produces": "prd_document",
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            }
+          ]
+        },
+        {
+          "id": "databricks-app",
+          "chapter": "Databricks App",
+          "title": "Databricks App",
+          "why": "Design user interface and deploy to Databricks Apps",
+          "steps": [
+            {
+              "order": 3,
+              "sectionTag": "cursor_copilot_ui_design",
+              "title": "UI Design",
+              "why": null,
+              "gate": null,
+              "requiresGate": "prd_generation",
+              "consumes": [],
+              "produces": null,
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            },
+            {
+              "order": 4,
+              "sectionTag": "deploy_databricks_app",
+              "title": "Deploy App",
+              "why": null,
+              "gate": null,
+              "requiresGate": "cursor_copilot_ui_design",
+              "consumes": [],
+              "produces": null,
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            }
+          ]
+        },
+        {
+          "id": "lakebase",
+          "chapter": "Lakebase",
+          "title": "Lakebase",
+          "why": "Set up PostgreSQL database, connect to your app, and deploy",
+          "steps": [
+            {
+              "order": 5,
+              "sectionTag": "setup_lakebase",
+              "title": "Setup Lakebase",
+              "why": null,
+              "gate": null,
+              "requiresGate": "deploy_databricks_app",
+              "consumes": [],
+              "produces": null,
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            },
+            {
+              "order": 6,
+              "sectionTag": "wire_ui_lakebase",
+              "title": "Wire UI to Lakebase",
+              "why": null,
+              "gate": null,
+              "requiresGate": "setup_lakebase",
+              "consumes": [],
+              "produces": null,
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            },
+            {
+              "order": 7,
+              "sectionTag": "workspace_setup_deploy",
+              "title": "Deploy and Test",
+              "why": null,
+              "gate": null,
+              "requiresGate": "wire_ui_lakebase",
+              "consumes": [],
+              "produces": null,
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            }
+          ]
+        },
+        {
+          "id": "iterate-enhance",
+          "chapter": "Refinement",
+          "title": "Iterate & Enhance",
+          "why": "Continuous improvement, testing, and optimization",
+          "steps": [
+            {
+              "order": 8,
+              "sectionTag": "iterate_enhance",
+              "title": "Iterate & Enhance",
+              "why": null,
+              "gate": null,
+              "requiresGate": "workspace_setup_deploy",
+              "consumes": [],
+              "produces": "iteration_plan",
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            },
+            {
+              "order": 9,
+              "sectionTag": "redeploy_test",
+              "title": "Redeploy & Test",
+              "why": null,
+              "gate": null,
+              "requiresGate": "iterate_enhance",
+              "consumes": [
+                "iteration_plan"
+              ],
+              "produces": null,
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            }
+          ]
+        },
+        {
+          "id": "cleanup",
+          "chapter": "Clean Up",
+          "title": "Clean Up",
+          "why": "Safely remove all workshop-created resources from your workspace",
+          "steps": [
+            {
+              "order": 10,
+              "sectionTag": "workspace_cleanup",
+              "title": "Workspace Clean Up",
+              "why": null,
+              "gate": null,
+              "requiresGate": "redeploy_test",
+              "consumes": [],
+              "produces": null,
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            }
+          ]
+        }
+      ]
+    },
+    "lakehouse": {
+      "id": "lakehouse",
+      "title": "Lakehouse",
+      "assistants": [
+        "default"
+      ],
+      "flags": {},
+      "sections": [
+        {
+          "id": "define-usecase",
+          "chapter": "Foundation",
+          "title": "Project Setup",
+          "why": "Configure your environment and generate product requirements",
+          "steps": [
+            {
+              "order": 1,
+              "sectionTag": "project_setup",
+              "title": "Set Up Project",
+              "why": null,
+              "gate": null,
+              "requiresGate": null,
+              "consumes": [],
+              "produces": null,
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            },
+            {
+              "order": 2,
+              "sectionTag": "prd_generation",
+              "title": "PRD Generation",
+              "why": null,
+              "gate": null,
+              "requiresGate": "project_setup",
+              "consumes": [],
+              "produces": "prd_document",
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            }
+          ]
+        },
+        {
+          "id": "lakehouse",
+          "chapter": "Lakehouse",
+          "title": "Lakehouse",
+          "why": "Data foundation, modeling, and pipelines",
+          "steps": [
+            {
+              "order": 3,
+              "sectionTag": "bronze_table_metadata",
+              "title": "Bring your Metadata",
+              "why": null,
+              "gate": null,
+              "requiresGate": "prd_generation",
+              "consumes": [
+                "prd_document"
+              ],
+              "produces": "table_metadata",
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            },
+            {
+              "order": 4,
+              "sectionTag": "bronze_layer_creation",
+              "title": "Bronze Layer Creation",
+              "why": null,
+              "gate": null,
+              "requiresGate": "bronze_table_metadata",
+              "consumes": [
+                "table_metadata"
+              ],
+              "produces": "synthetic_data",
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            },
+            {
+              "order": 5,
+              "sectionTag": "silver_layer_sdp",
+              "title": "Silver Layer",
+              "why": null,
+              "gate": null,
+              "requiresGate": "bronze_layer_creation",
+              "consumes": [
+                "synthetic_data"
+              ],
+              "produces": "silver_layer",
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            },
+            {
+              "order": 6,
+              "sectionTag": "gold_layer_design",
+              "title": "Gold Layer Design",
+              "why": null,
+              "gate": null,
+              "requiresGate": "silver_layer_sdp",
+              "consumes": [
+                "table_metadata"
+              ],
+              "produces": "gold_layer_design",
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            },
+            {
+              "order": 7,
+              "sectionTag": "gold_layer_pipeline",
+              "title": "Gold Pipeline",
+              "why": null,
+              "gate": null,
+              "requiresGate": "gold_layer_design",
+              "consumes": [
+                "gold_layer_design"
+              ],
+              "produces": "gold_layer_pipeline",
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            },
+            {
+              "order": 8,
+              "sectionTag": "deploy_lakehouse_assets",
+              "title": "Deploy Assets",
+              "why": null,
+              "gate": null,
+              "requiresGate": "gold_layer_pipeline",
+              "consumes": [],
+              "produces": null,
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            }
+          ]
+        },
+        {
+          "id": "iterate-enhance",
+          "chapter": "Refinement",
+          "title": "Iterate & Enhance",
+          "why": "Continuous improvement, testing, and optimization",
+          "steps": [
+            {
+              "order": 9,
+              "sectionTag": "iterate_enhance",
+              "title": "Iterate & Enhance",
+              "why": null,
+              "gate": null,
+              "requiresGate": "deploy_lakehouse_assets",
+              "consumes": [],
+              "produces": "iteration_plan",
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            },
+            {
+              "order": 10,
+              "sectionTag": "redeploy_test",
+              "title": "Redeploy & Test",
+              "why": null,
+              "gate": null,
+              "requiresGate": "iterate_enhance",
+              "consumes": [
+                "iteration_plan"
+              ],
+              "produces": null,
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            }
+          ]
+        },
+        {
+          "id": "cleanup",
+          "chapter": "Clean Up",
+          "title": "Clean Up",
+          "why": "Safely remove all workshop-created resources from your workspace",
+          "steps": [
+            {
+              "order": 11,
+              "sectionTag": "workspace_cleanup",
+              "title": "Workspace Clean Up",
+              "why": null,
+              "gate": null,
+              "requiresGate": "redeploy_test",
+              "consumes": [],
+              "produces": null,
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            }
+          ]
+        }
+      ]
+    },
+    "lakehouse-di": {
+      "id": "lakehouse-di",
+      "title": "+ AI and Agents",
+      "assistants": [
+        "default"
+      ],
+      "flags": {},
+      "sections": [
+        {
+          "id": "define-usecase",
+          "chapter": "Foundation",
+          "title": "Project Setup",
+          "why": "Configure your environment and generate product requirements",
+          "steps": [
+            {
+              "order": 1,
+              "sectionTag": "project_setup",
+              "title": "Set Up Project",
+              "why": null,
+              "gate": null,
+              "requiresGate": null,
+              "consumes": [],
+              "produces": null,
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            },
+            {
+              "order": 2,
+              "sectionTag": "prd_generation",
+              "title": "PRD Generation",
+              "why": null,
+              "gate": null,
+              "requiresGate": "project_setup",
+              "consumes": [],
+              "produces": "prd_document",
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            }
+          ]
+        },
+        {
+          "id": "lakehouse",
+          "chapter": "Lakehouse",
+          "title": "Lakehouse",
+          "why": "Data foundation, modeling, and pipelines",
+          "steps": [
+            {
+              "order": 3,
+              "sectionTag": "bronze_table_metadata",
+              "title": "Bring your Metadata",
+              "why": null,
+              "gate": null,
+              "requiresGate": "prd_generation",
+              "consumes": [
+                "prd_document"
+              ],
+              "produces": "table_metadata",
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            },
+            {
+              "order": 4,
+              "sectionTag": "bronze_layer_creation",
+              "title": "Bronze Layer Creation",
+              "why": null,
+              "gate": null,
+              "requiresGate": "bronze_table_metadata",
+              "consumes": [
+                "table_metadata"
+              ],
+              "produces": "synthetic_data",
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            },
+            {
+              "order": 5,
+              "sectionTag": "silver_layer_sdp",
+              "title": "Silver Layer",
+              "why": null,
+              "gate": null,
+              "requiresGate": "bronze_layer_creation",
+              "consumes": [
+                "synthetic_data"
+              ],
+              "produces": "silver_layer",
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            },
+            {
+              "order": 6,
+              "sectionTag": "gold_layer_design",
+              "title": "Gold Layer Design",
+              "why": null,
+              "gate": null,
+              "requiresGate": "silver_layer_sdp",
+              "consumes": [
+                "table_metadata"
+              ],
+              "produces": "gold_layer_design",
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            },
+            {
+              "order": 7,
+              "sectionTag": "gold_layer_pipeline",
+              "title": "Gold Pipeline",
+              "why": null,
+              "gate": null,
+              "requiresGate": "gold_layer_design",
+              "consumes": [
+                "gold_layer_design"
+              ],
+              "produces": "gold_layer_pipeline",
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            },
+            {
+              "order": 8,
+              "sectionTag": "deploy_lakehouse_assets",
+              "title": "Deploy Assets",
+              "why": null,
+              "gate": null,
+              "requiresGate": "gold_layer_pipeline",
+              "consumes": [],
+              "produces": null,
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            }
+          ]
+        },
+        {
+          "id": "data-intelligence",
+          "chapter": "AI and Agents",
+          "title": "AI and Agents",
+          "why": "Translating data into insights, logic, and decisions",
+          "steps": [
+            {
+              "order": 9,
+              "sectionTag": "usecase_plan",
+              "title": "Use-Case Plan",
+              "why": null,
+              "gate": null,
+              "requiresGate": "deploy_lakehouse_assets",
+              "consumes": [
+                "prd_document",
+                "gold_layer_design"
+              ],
+              "produces": "usecase_plan",
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            },
+            {
+              "order": 10,
+              "sectionTag": "aibi_dashboard",
+              "title": "AI/BI Dashboard",
+              "why": null,
+              "gate": null,
+              "requiresGate": "usecase_plan",
+              "consumes": [
+                "prd_document",
+                "gold_layer_design"
+              ],
+              "produces": "aibi_dashboard",
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            },
+            {
+              "order": 11,
+              "sectionTag": "genie_space",
+              "title": "Genie Space",
+              "why": null,
+              "gate": null,
+              "requiresGate": "aibi_dashboard",
+              "consumes": [
+                "usecase_plan"
+              ],
+              "produces": "genie_space",
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            },
+            {
+              "order": 12,
+              "sectionTag": "deploy_di_assets",
+              "title": "Deploy Assets",
+              "why": null,
+              "gate": null,
+              "requiresGate": "genie_space",
+              "consumes": [],
+              "produces": null,
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            },
+            {
+              "order": 13,
+              "sectionTag": "optimize_genie",
+              "title": "Optimize Genie",
+              "why": null,
+              "gate": null,
+              "requiresGate": "deploy_di_assets",
+              "consumes": [],
+              "produces": null,
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            },
+            {
+              "order": 14,
+              "sectionTag": "agent_framework",
+              "title": "Build Agent",
+              "why": null,
+              "gate": null,
+              "requiresGate": "optimize_genie",
+              "consumes": [
+                "prd_document",
+                "gold_layer_design"
+              ],
+              "produces": "agent_framework",
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            }
+          ]
+        },
+        {
+          "id": "iterate-enhance",
+          "chapter": "Refinement",
+          "title": "Iterate & Enhance",
+          "why": "Continuous improvement, testing, and optimization",
+          "steps": [
+            {
+              "order": 15,
+              "sectionTag": "iterate_enhance",
+              "title": "Iterate & Enhance",
+              "why": null,
+              "gate": null,
+              "requiresGate": "agent_framework",
+              "consumes": [],
+              "produces": "iteration_plan",
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            },
+            {
+              "order": 16,
+              "sectionTag": "redeploy_test",
+              "title": "Redeploy & Test",
+              "why": null,
+              "gate": null,
+              "requiresGate": "iterate_enhance",
+              "consumes": [
+                "iteration_plan"
+              ],
+              "produces": null,
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            }
+          ]
+        },
+        {
+          "id": "cleanup",
+          "chapter": "Clean Up",
+          "title": "Clean Up",
+          "why": "Safely remove all workshop-created resources from your workspace",
+          "steps": [
+            {
+              "order": 17,
+              "sectionTag": "workspace_cleanup",
+              "title": "Workspace Clean Up",
+              "why": null,
+              "gate": null,
+              "requiresGate": "redeploy_test",
+              "consumes": [],
+              "produces": null,
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            }
+          ]
+        }
+      ]
+    },
+    "end-to-end": {
+      "id": "end-to-end",
+      "title": "Complete Workshop",
+      "assistants": [
+        "default"
+      ],
+      "flags": {},
+      "sections": [
+        {
+          "id": "define-usecase",
+          "chapter": "Foundation",
+          "title": "Project Setup",
+          "why": "Configure your environment and generate product requirements",
+          "steps": [
+            {
+              "order": 1,
+              "sectionTag": "project_setup",
+              "title": "Set Up Project",
+              "why": null,
+              "gate": null,
+              "requiresGate": null,
+              "consumes": [],
+              "produces": null,
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            },
+            {
+              "order": 2,
+              "sectionTag": "prd_generation",
+              "title": "PRD Generation",
+              "why": null,
+              "gate": null,
+              "requiresGate": "project_setup",
+              "consumes": [],
+              "produces": "prd_document",
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            }
+          ]
+        },
+        {
+          "id": "databricks-app",
+          "chapter": "Databricks App",
+          "title": "Databricks App",
+          "why": "Design user interface and deploy to Databricks Apps",
+          "steps": [
+            {
+              "order": 3,
+              "sectionTag": "cursor_copilot_ui_design",
+              "title": "UI Design",
+              "why": null,
+              "gate": null,
+              "requiresGate": "prd_generation",
+              "consumes": [],
+              "produces": null,
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            },
+            {
+              "order": 4,
+              "sectionTag": "deploy_databricks_app",
+              "title": "Deploy App",
+              "why": null,
+              "gate": null,
+              "requiresGate": "cursor_copilot_ui_design",
+              "consumes": [],
+              "produces": null,
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            }
+          ]
+        },
+        {
+          "id": "lakebase",
+          "chapter": "Lakebase",
+          "title": "Lakebase",
+          "why": "Set up PostgreSQL database, connect to your app, and deploy",
+          "steps": [
+            {
+              "order": 5,
+              "sectionTag": "setup_lakebase",
+              "title": "Setup Lakebase",
+              "why": null,
+              "gate": null,
+              "requiresGate": "deploy_databricks_app",
+              "consumes": [],
+              "produces": null,
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            },
+            {
+              "order": 6,
+              "sectionTag": "wire_ui_lakebase",
+              "title": "Wire UI to Lakebase",
+              "why": null,
+              "gate": null,
+              "requiresGate": "setup_lakebase",
+              "consumes": [],
+              "produces": null,
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            },
+            {
+              "order": 7,
+              "sectionTag": "workspace_setup_deploy",
+              "title": "Deploy and Test",
+              "why": null,
+              "gate": null,
+              "requiresGate": "wire_ui_lakebase",
+              "consumes": [],
+              "produces": null,
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            }
+          ]
+        },
+        {
+          "id": "lakehouse",
+          "chapter": "Lakehouse",
+          "title": "Lakehouse",
+          "why": "Data foundation, modeling, and pipelines",
+          "steps": [
+            {
+              "order": 8,
+              "sectionTag": "sync_from_lakebase",
+              "title": "Register Lakebase in UC",
+              "why": null,
+              "gate": null,
+              "requiresGate": "workspace_setup_deploy",
+              "consumes": [],
+              "produces": null,
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            },
+            {
+              "order": 9,
+              "sectionTag": "bronze_table_metadata",
+              "title": "Bring your Metadata",
+              "why": null,
+              "gate": null,
+              "requiresGate": "sync_from_lakebase",
+              "consumes": [
+                "prd_document"
+              ],
+              "produces": "table_metadata",
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            },
+            {
+              "order": 10,
+              "sectionTag": "bronze_layer_creation",
+              "title": "Bronze Layer Creation",
+              "why": null,
+              "gate": null,
+              "requiresGate": "bronze_table_metadata",
+              "consumes": [
+                "table_metadata"
+              ],
+              "produces": "synthetic_data",
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            },
+            {
+              "order": 11,
+              "sectionTag": "silver_layer_sdp",
+              "title": "Silver Layer",
+              "why": null,
+              "gate": null,
+              "requiresGate": "bronze_layer_creation",
+              "consumes": [
+                "synthetic_data"
+              ],
+              "produces": "silver_layer",
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            },
+            {
+              "order": 12,
+              "sectionTag": "gold_layer_design",
+              "title": "Gold Layer Design",
+              "why": null,
+              "gate": null,
+              "requiresGate": "silver_layer_sdp",
+              "consumes": [
+                "table_metadata"
+              ],
+              "produces": "gold_layer_design",
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            },
+            {
+              "order": 13,
+              "sectionTag": "gold_layer_pipeline",
+              "title": "Gold Pipeline",
+              "why": null,
+              "gate": null,
+              "requiresGate": "gold_layer_design",
+              "consumes": [
+                "gold_layer_design"
+              ],
+              "produces": "gold_layer_pipeline",
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            },
+            {
+              "order": 14,
+              "sectionTag": "deploy_lakehouse_assets",
+              "title": "Deploy Assets",
+              "why": null,
+              "gate": null,
+              "requiresGate": "gold_layer_pipeline",
+              "consumes": [],
+              "produces": null,
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            }
+          ]
+        },
+        {
+          "id": "data-intelligence",
+          "chapter": "AI and Agents",
+          "title": "AI and Agents",
+          "why": "Translating data into insights, logic, and decisions",
+          "steps": [
+            {
+              "order": 15,
+              "sectionTag": "usecase_plan",
+              "title": "Use-Case Plan",
+              "why": null,
+              "gate": null,
+              "requiresGate": "deploy_lakehouse_assets",
+              "consumes": [
+                "prd_document",
+                "gold_layer_design"
+              ],
+              "produces": "usecase_plan",
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            },
+            {
+              "order": 16,
+              "sectionTag": "aibi_dashboard",
+              "title": "AI/BI Dashboard",
+              "why": null,
+              "gate": null,
+              "requiresGate": "usecase_plan",
+              "consumes": [
+                "prd_document",
+                "gold_layer_design"
+              ],
+              "produces": "aibi_dashboard",
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            },
+            {
+              "order": 17,
+              "sectionTag": "genie_space",
+              "title": "Genie Space",
+              "why": null,
+              "gate": null,
+              "requiresGate": "aibi_dashboard",
+              "consumes": [
+                "usecase_plan"
+              ],
+              "produces": "genie_space",
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            },
+            {
+              "order": 18,
+              "sectionTag": "deploy_di_assets",
+              "title": "Deploy Assets",
+              "why": null,
+              "gate": null,
+              "requiresGate": "genie_space",
+              "consumes": [],
+              "produces": null,
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            },
+            {
+              "order": 19,
+              "sectionTag": "optimize_genie",
+              "title": "Optimize Genie",
+              "why": null,
+              "gate": null,
+              "requiresGate": "deploy_di_assets",
+              "consumes": [],
+              "produces": null,
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            },
+            {
+              "order": 20,
+              "sectionTag": "agent_framework",
+              "title": "Build Agent",
+              "why": null,
+              "gate": null,
+              "requiresGate": "optimize_genie",
+              "consumes": [
+                "prd_document",
+                "gold_layer_design"
+              ],
+              "produces": "agent_framework",
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            },
+            {
+              "order": 21,
+              "sectionTag": "wire_ui_agent",
+              "title": "Wire UI to Agent",
+              "why": null,
+              "gate": null,
+              "requiresGate": "agent_framework",
+              "consumes": [
+                "agent_framework"
+              ],
+              "produces": "wire_ui_agent",
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            }
+          ]
+        },
+        {
+          "id": "iterate-enhance",
+          "chapter": "Refinement",
+          "title": "Iterate & Enhance",
+          "why": "Continuous improvement, testing, and optimization",
+          "steps": [
+            {
+              "order": 22,
+              "sectionTag": "iterate_enhance",
+              "title": "Iterate & Enhance",
+              "why": null,
+              "gate": null,
+              "requiresGate": "wire_ui_agent",
+              "consumes": [],
+              "produces": "iteration_plan",
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            },
+            {
+              "order": 23,
+              "sectionTag": "redeploy_test",
+              "title": "Redeploy & Test",
+              "why": null,
+              "gate": null,
+              "requiresGate": "iterate_enhance",
+              "consumes": [
+                "iteration_plan"
+              ],
+              "produces": null,
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            }
+          ]
+        },
+        {
+          "id": "cleanup",
+          "chapter": "Clean Up",
+          "title": "Clean Up",
+          "why": "Safely remove all workshop-created resources from your workspace",
+          "steps": [
+            {
+              "order": 24,
+              "sectionTag": "workspace_cleanup",
+              "title": "Workspace Clean Up",
+              "why": null,
+              "gate": null,
+              "requiresGate": "redeploy_test",
+              "consumes": [],
+              "produces": null,
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            }
+          ]
+        }
+      ]
+    },
+    "accelerator": {
+      "id": "accelerator",
+      "title": "Data Product Accelerator",
+      "assistants": [
+        "default"
+      ],
+      "flags": {},
+      "sections": [
+        {
+          "id": "define-usecase",
+          "chapter": "Foundation",
+          "title": "Project Setup",
+          "why": "Configure your environment and generate product requirements",
+          "steps": [
+            {
+              "order": 1,
+              "sectionTag": "project_setup",
+              "title": "Set Up Project",
+              "why": null,
+              "gate": null,
+              "requiresGate": null,
+              "consumes": [],
+              "produces": null,
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            },
+            {
+              "order": 2,
+              "sectionTag": "prd_generation",
+              "title": "PRD Generation",
+              "why": null,
+              "gate": null,
+              "requiresGate": "project_setup",
+              "consumes": [],
+              "produces": "prd_document",
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            }
+          ]
+        },
+        {
+          "id": "lakehouse",
+          "chapter": "Lakehouse",
+          "title": "Lakehouse",
+          "why": "Data foundation, modeling, and pipelines",
+          "steps": [
+            {
+              "order": 3,
+              "sectionTag": "bronze_table_metadata",
+              "title": "Bring your Metadata",
+              "why": null,
+              "gate": null,
+              "requiresGate": "prd_generation",
+              "consumes": [
+                "prd_document"
+              ],
+              "produces": "table_metadata",
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            },
+            {
+              "order": 4,
+              "sectionTag": "bronze_layer_creation",
+              "title": "Bronze Layer Creation",
+              "why": null,
+              "gate": null,
+              "requiresGate": "bronze_table_metadata",
+              "consumes": [
+                "table_metadata"
+              ],
+              "produces": "synthetic_data",
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            },
+            {
+              "order": 5,
+              "sectionTag": "silver_layer_sdp",
+              "title": "Silver Layer",
+              "why": null,
+              "gate": null,
+              "requiresGate": "bronze_layer_creation",
+              "consumes": [
+                "synthetic_data"
+              ],
+              "produces": "silver_layer",
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            },
+            {
+              "order": 6,
+              "sectionTag": "gold_layer_design",
+              "title": "Gold Layer Design",
+              "why": null,
+              "gate": null,
+              "requiresGate": "silver_layer_sdp",
+              "consumes": [
+                "table_metadata"
+              ],
+              "produces": "gold_layer_design",
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            },
+            {
+              "order": 7,
+              "sectionTag": "gold_layer_pipeline",
+              "title": "Gold Pipeline",
+              "why": null,
+              "gate": null,
+              "requiresGate": "gold_layer_design",
+              "consumes": [
+                "gold_layer_design"
+              ],
+              "produces": "gold_layer_pipeline",
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            },
+            {
+              "order": 8,
+              "sectionTag": "deploy_lakehouse_assets",
+              "title": "Deploy Assets",
+              "why": null,
+              "gate": null,
+              "requiresGate": "gold_layer_pipeline",
+              "consumes": [],
+              "produces": null,
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            }
+          ]
+        },
+        {
+          "id": "data-intelligence",
+          "chapter": "AI and Agents",
+          "title": "AI and Agents",
+          "why": "Translating data into insights, logic, and decisions",
+          "steps": [
+            {
+              "order": 9,
+              "sectionTag": "usecase_plan",
+              "title": "Use-Case Plan",
+              "why": null,
+              "gate": null,
+              "requiresGate": "deploy_lakehouse_assets",
+              "consumes": [
+                "prd_document",
+                "gold_layer_design"
+              ],
+              "produces": "usecase_plan",
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            },
+            {
+              "order": 10,
+              "sectionTag": "aibi_dashboard",
+              "title": "AI/BI Dashboard",
+              "why": null,
+              "gate": null,
+              "requiresGate": "usecase_plan",
+              "consumes": [
+                "prd_document",
+                "gold_layer_design"
+              ],
+              "produces": "aibi_dashboard",
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            },
+            {
+              "order": 11,
+              "sectionTag": "genie_space",
+              "title": "Genie Space",
+              "why": null,
+              "gate": null,
+              "requiresGate": "aibi_dashboard",
+              "consumes": [
+                "usecase_plan"
+              ],
+              "produces": "genie_space",
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            },
+            {
+              "order": 12,
+              "sectionTag": "deploy_di_assets",
+              "title": "Deploy Assets",
+              "why": null,
+              "gate": null,
+              "requiresGate": "genie_space",
+              "consumes": [],
+              "produces": null,
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            },
+            {
+              "order": 13,
+              "sectionTag": "optimize_genie",
+              "title": "Optimize Genie",
+              "why": null,
+              "gate": null,
+              "requiresGate": "deploy_di_assets",
+              "consumes": [],
+              "produces": null,
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            },
+            {
+              "order": 14,
+              "sectionTag": "agent_framework",
+              "title": "Build Agent",
+              "why": null,
+              "gate": null,
+              "requiresGate": "optimize_genie",
+              "consumes": [
+                "prd_document",
+                "gold_layer_design"
+              ],
+              "produces": "agent_framework",
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            }
+          ]
+        },
+        {
+          "id": "iterate-enhance",
+          "chapter": "Refinement",
+          "title": "Iterate & Enhance",
+          "why": "Continuous improvement, testing, and optimization",
+          "steps": [
+            {
+              "order": 15,
+              "sectionTag": "iterate_enhance",
+              "title": "Iterate & Enhance",
+              "why": null,
+              "gate": null,
+              "requiresGate": "agent_framework",
+              "consumes": [],
+              "produces": "iteration_plan",
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            },
+            {
+              "order": 16,
+              "sectionTag": "redeploy_test",
+              "title": "Redeploy & Test",
+              "why": null,
+              "gate": null,
+              "requiresGate": "iterate_enhance",
+              "consumes": [
+                "iteration_plan"
+              ],
+              "produces": null,
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            }
+          ]
+        },
+        {
+          "id": "cleanup",
+          "chapter": "Clean Up",
+          "title": "Clean Up",
+          "why": "Safely remove all workshop-created resources from your workspace",
+          "steps": [
+            {
+              "order": 17,
+              "sectionTag": "workspace_cleanup",
+              "title": "Workspace Clean Up",
+              "why": null,
+              "gate": null,
+              "requiresGate": "redeploy_test",
+              "consumes": [],
+              "produces": null,
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            }
+          ]
+        }
+      ]
+    },
+    "genie-accelerator": {
+      "id": "genie-accelerator",
+      "title": "Genie Accelerator",
+      "assistants": [
+        "default"
+      ],
+      "flags": {
+        "includeGenieOntology": {
+          "default": false,
+          "affectsSteps": [
+            "ontology_domain",
+            "ontology_pages",
+            "ontology_routing"
+          ],
+          "note": "Genie Ontology is opt-in; mirrors getDisabledTagsForGenieOntology."
+        }
+      },
+      "sections": [
+        {
+          "id": "define-usecase",
+          "chapter": "Foundation",
+          "title": "Project Setup",
+          "why": "Configure your environment and generate product requirements",
+          "steps": [
+            {
+              "order": 1,
+              "sectionTag": "project_setup",
+              "title": "Set Up Project",
+              "why": null,
+              "gate": null,
+              "requiresGate": null,
+              "consumes": [],
+              "produces": null,
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            },
+            {
+              "order": 2,
+              "sectionTag": "prd_generation",
+              "title": "PRD Generation",
+              "why": null,
+              "gate": null,
+              "requiresGate": "project_setup",
+              "consumes": [],
+              "produces": "prd_document",
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            }
+          ]
+        },
+        {
+          "id": "lakehouse",
+          "chapter": "Lakehouse",
+          "title": "Lakehouse",
+          "why": "Data foundation, modeling, and pipelines",
+          "steps": [
+            {
+              "order": 3,
+              "sectionTag": "genie_silver_metadata",
+              "title": "Analyze Silver Metadata",
+              "why": null,
+              "gate": null,
+              "requiresGate": "prd_generation",
+              "consumes": [],
+              "produces": null,
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            },
+            {
+              "order": 4,
+              "sectionTag": "gold_layer_design",
+              "title": "Gold Layer Design",
+              "why": null,
+              "gate": null,
+              "requiresGate": "genie_silver_metadata",
+              "consumes": [
+                "table_metadata",
+                "prd_document"
+              ],
+              "produces": "gold_layer_design",
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            },
+            {
+              "order": 5,
+              "sectionTag": "gold_layer_pipeline",
+              "title": "Gold Pipeline",
+              "why": null,
+              "gate": null,
+              "requiresGate": "gold_layer_design",
+              "consumes": [
+                "gold_layer_design"
+              ],
+              "produces": "gold_layer_pipeline",
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            },
+            {
+              "order": 6,
+              "sectionTag": "deploy_lakehouse_assets",
+              "title": "Deploy Assets",
+              "why": null,
+              "gate": null,
+              "requiresGate": "gold_layer_pipeline",
+              "consumes": [],
+              "produces": null,
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            }
+          ]
+        },
+        {
+          "id": "semantic-layer",
+          "chapter": "AI and Agents",
+          "title": "Semantic Layer",
+          "why": "Locate data, analyze measures, and build a governed Metric View",
+          "steps": [
+            {
+              "order": 7,
+              "sectionTag": "semlayer_locate",
+              "title": "Locate Data & Bring Context",
+              "why": null,
+              "gate": null,
+              "requiresGate": null,
+              "consumes": [
+                "prd_document"
+              ],
+              "produces": "genie_brief",
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            },
+            {
+              "order": 8,
+              "sectionTag": "semlayer_profile",
+              "title": "Profile Your Schema",
+              "why": null,
+              "gate": null,
+              "requiresGate": "semlayer_locate",
+              "consumes": [
+                "genie_brief"
+              ],
+              "produces": "schema_profile",
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            },
+            {
+              "order": 9,
+              "sectionTag": "semlayer_measures",
+              "title": "Measures Analysis",
+              "why": null,
+              "gate": null,
+              "requiresGate": "semlayer_profile",
+              "consumes": [
+                "schema_profile"
+              ],
+              "produces": "measures_signoff",
+              "execution": "hybrid",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            },
+            {
+              "order": 10,
+              "sectionTag": "semlayer_metric_view",
+              "title": "Draft the Metric View",
+              "why": null,
+              "gate": null,
+              "requiresGate": "semlayer_measures",
+              "consumes": [
+                "measures_signoff"
+              ],
+              "produces": "metric_view",
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            },
+            {
+              "order": 11,
+              "sectionTag": "semlayer_synonyms",
+              "title": "Review & Expand Synonyms",
+              "why": null,
+              "gate": null,
+              "requiresGate": "semlayer_metric_view",
+              "consumes": [
+                "metric_view"
+              ],
+              "produces": "synonyms",
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            }
+          ]
+        },
+        {
+          "id": "genie-agent",
+          "chapter": "AI and Agents",
+          "title": "Genie Agent",
+          "why": "Stand up a Genie Agent on the Metric View, tune it, and prove it with an AI/BI dashboard",
+          "steps": [
+            {
+              "order": 12,
+              "sectionTag": "gagent_describe",
+              "title": "Describe the Agent",
+              "why": null,
+              "gate": null,
+              "requiresGate": "semlayer_metric_view",
+              "consumes": [
+                "metric_view"
+              ],
+              "produces": "genie_space",
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            },
+            {
+              "order": 13,
+              "sectionTag": "gagent_instructions",
+              "title": "Author Instructions",
+              "why": null,
+              "gate": null,
+              "requiresGate": "gagent_describe",
+              "consumes": [
+                "genie_space"
+              ],
+              "produces": "agent_instructions",
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            },
+            {
+              "order": 14,
+              "sectionTag": "gagent_verified",
+              "title": "Add Verified Queries",
+              "why": null,
+              "gate": null,
+              "requiresGate": "gagent_instructions",
+              "consumes": [
+                "agent_instructions"
+              ],
+              "produces": "verified_queries",
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            },
+            {
+              "order": 15,
+              "sectionTag": "gagent_benchmarks",
+              "title": "Load Benchmarks",
+              "why": null,
+              "gate": null,
+              "requiresGate": "gagent_verified",
+              "consumes": [
+                "verified_queries"
+              ],
+              "produces": "benchmarks",
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            },
+            {
+              "order": 16,
+              "sectionTag": "gagent_optimize",
+              "title": "Optimize Loop",
+              "why": null,
+              "gate": null,
+              "requiresGate": "gagent_benchmarks",
+              "consumes": [
+                "benchmarks"
+              ],
+              "produces": "optimize_gate",
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            },
+            {
+              "order": 17,
+              "sectionTag": "gaccel_dashboard",
+              "title": "AI/BI Dashboard",
+              "why": null,
+              "gate": null,
+              "requiresGate": "semlayer_metric_view",
+              "consumes": [
+                "metric_view"
+              ],
+              "produces": "dashboard_inventory",
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            }
+          ]
+        },
+        {
+          "id": "genie-activate",
+          "chapter": "Activation",
+          "title": "Activate",
+          "why": "Plan activation, then sync to Lakebase and stand up an app",
+          "steps": [
+            {
+              "order": 18,
+              "sectionTag": "gaccel_activation",
+              "title": "Choose What to Activate",
+              "why": null,
+              "gate": null,
+              "requiresGate": "gagent_optimize",
+              "consumes": [
+                "aibi_dashboard",
+                "prd_document"
+              ],
+              "produces": "sync_plan",
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            },
+            {
+              "order": 19,
+              "sectionTag": "activation_table_design",
+              "title": "Design & Provision Synced Tables",
+              "why": null,
+              "gate": null,
+              "requiresGate": "gaccel_activation",
+              "consumes": [
+                "gold_layer_design",
+                "usecase_plan",
+                "prd_document",
+                "activation_plan"
+              ],
+              "produces": "activation_table_design",
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            },
+            {
+              "order": 20,
+              "sectionTag": "activation_reverse_sync",
+              "title": "Create Synced Tables",
+              "why": null,
+              "gate": null,
+              "requiresGate": "activation_table_design",
+              "consumes": [],
+              "produces": "activation_reverse_sync",
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            },
+            {
+              "order": 21,
+              "sectionTag": "activation_app_design",
+              "title": "Design Analytics App",
+              "why": null,
+              "gate": null,
+              "requiresGate": "activation_reverse_sync",
+              "consumes": [
+                "gold_layer_design",
+                "prd_document"
+              ],
+              "produces": "activation_app_design",
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            },
+            {
+              "order": 22,
+              "sectionTag": "activation_build_wire",
+              "title": "Build Analytics App",
+              "why": null,
+              "gate": null,
+              "requiresGate": "activation_app_design",
+              "consumes": [
+                "activation_app_design"
+              ],
+              "produces": "activation_build_wire",
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            },
+            {
+              "order": 23,
+              "sectionTag": "activation_wire_lakebase",
+              "title": "Wire to Lakebase",
+              "why": null,
+              "gate": null,
+              "requiresGate": "activation_build_wire",
+              "consumes": [],
+              "produces": "activation_wire_lakebase",
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            },
+            {
+              "order": 24,
+              "sectionTag": "activation_wire_genie",
+              "title": "Wire Genie",
+              "why": null,
+              "gate": null,
+              "requiresGate": "activation_wire_lakebase",
+              "consumes": [],
+              "produces": null,
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            },
+            {
+              "order": 25,
+              "sectionTag": "activation_deploy_validate",
+              "title": "Deploy & Validate",
+              "why": null,
+              "gate": null,
+              "requiresGate": "activation_wire_genie",
+              "consumes": [],
+              "produces": "activation_app",
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            }
+          ]
+        },
+        {
+          "id": "genie-ontology",
+          "chapter": "AI and Agents",
+          "title": "Genie Ontology",
+          "why": "Model the Discover domain, pages, and routing (Genie One)",
+          "steps": [
+            {
+              "order": 26,
+              "sectionTag": "ontology_domain",
+              "title": "Model the Domain + Subdomains",
+              "why": null,
+              "gate": null,
+              "requiresGate": "gagent_optimize",
+              "consumes": [
+                "optimize_gate"
+              ],
+              "produces": "domain_model",
+              "execution": "hybrid",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": "includeGenieOntology"
+            },
+            {
+              "order": 27,
+              "sectionTag": "ontology_pages",
+              "title": "Author Pages",
+              "why": null,
+              "gate": null,
+              "requiresGate": "ontology_domain",
+              "consumes": [
+                "domain_model"
+              ],
+              "produces": "pages",
+              "execution": "ui-driven",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": "includeGenieOntology"
+            },
+            {
+              "order": 28,
+              "sectionTag": "ontology_routing",
+              "title": "Write the Routing Page",
+              "why": null,
+              "gate": null,
+              "requiresGate": "ontology_pages",
+              "consumes": [
+                "pages"
+              ],
+              "produces": "routing_page",
+              "execution": "ui-driven",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": "includeGenieOntology"
+            }
+          ]
+        },
+        {
+          "id": "iterate-enhance",
+          "chapter": "Refinement",
+          "title": "Iterate & Enhance",
+          "why": "Continuous improvement, testing, and optimization",
+          "steps": [
+            {
+              "order": 29,
+              "sectionTag": "iterate_enhance",
+              "title": "Iterate & Enhance",
+              "why": null,
+              "gate": null,
+              "requiresGate": "ontology_routing",
+              "consumes": [],
+              "produces": "iteration_plan",
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            },
+            {
+              "order": 30,
+              "sectionTag": "redeploy_test",
+              "title": "Redeploy & Test",
+              "why": null,
+              "gate": null,
+              "requiresGate": "iterate_enhance",
+              "consumes": [
+                "iteration_plan"
+              ],
+              "produces": null,
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            }
+          ]
+        },
+        {
+          "id": "cleanup",
+          "chapter": "Clean Up",
+          "title": "Clean Up",
+          "why": "Safely remove all workshop-created resources from your workspace",
+          "steps": [
+            {
+              "order": 31,
+              "sectionTag": "workspace_cleanup",
+              "title": "Workspace Clean Up",
+              "why": null,
+              "gate": null,
+              "requiresGate": "redeploy_test",
+              "consumes": [],
+              "produces": null,
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            }
+          ]
+        }
+      ]
+    },
+    "data-engineering-accelerator": {
+      "id": "data-engineering-accelerator",
+      "title": "Data Engineering Accelerator",
+      "assistants": [
+        "default"
+      ],
+      "flags": {},
+      "sections": [
+        {
+          "id": "define-usecase",
+          "chapter": "Foundation",
+          "title": "Project Setup",
+          "why": "Configure your environment and generate product requirements",
+          "steps": [
+            {
+              "order": 1,
+              "sectionTag": "project_setup",
+              "title": "Set Up Project",
+              "why": null,
+              "gate": null,
+              "requiresGate": null,
+              "consumes": [],
+              "produces": null,
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            },
+            {
+              "order": 2,
+              "sectionTag": "prd_generation",
+              "title": "PRD Generation",
+              "why": null,
+              "gate": null,
+              "requiresGate": "project_setup",
+              "consumes": [],
+              "produces": "prd_document",
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            }
+          ]
+        },
+        {
+          "id": "lakehouse",
+          "chapter": "Lakehouse",
+          "title": "Lakehouse",
+          "why": "Data foundation, modeling, and pipelines",
+          "steps": [
+            {
+              "order": 3,
+              "sectionTag": "bronze_table_metadata",
+              "title": "Bring your Metadata",
+              "why": null,
+              "gate": null,
+              "requiresGate": "prd_generation",
+              "consumes": [
+                "prd_document"
+              ],
+              "produces": "table_metadata",
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            },
+            {
+              "order": 4,
+              "sectionTag": "bronze_layer_creation",
+              "title": "Bronze Layer Creation",
+              "why": null,
+              "gate": null,
+              "requiresGate": "bronze_table_metadata",
+              "consumes": [
+                "table_metadata"
+              ],
+              "produces": "synthetic_data",
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            },
+            {
+              "order": 5,
+              "sectionTag": "silver_layer_sdp",
+              "title": "Silver Layer",
+              "why": null,
+              "gate": null,
+              "requiresGate": "bronze_layer_creation",
+              "consumes": [
+                "synthetic_data"
+              ],
+              "produces": "silver_layer",
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            },
+            {
+              "order": 6,
+              "sectionTag": "gold_layer_design",
+              "title": "Gold Layer Design",
+              "why": null,
+              "gate": null,
+              "requiresGate": "silver_layer_sdp",
+              "consumes": [
+                "table_metadata"
+              ],
+              "produces": "gold_layer_design",
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            },
+            {
+              "order": 7,
+              "sectionTag": "gold_layer_pipeline",
+              "title": "Gold Pipeline",
+              "why": null,
+              "gate": null,
+              "requiresGate": "gold_layer_design",
+              "consumes": [
+                "gold_layer_design"
+              ],
+              "produces": "gold_layer_pipeline",
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            },
+            {
+              "order": 8,
+              "sectionTag": "deploy_lakehouse_assets",
+              "title": "Deploy Assets",
+              "why": null,
+              "gate": null,
+              "requiresGate": "gold_layer_pipeline",
+              "consumes": [],
+              "produces": null,
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            }
+          ]
+        },
+        {
+          "id": "iterate-enhance",
+          "chapter": "Refinement",
+          "title": "Iterate & Enhance",
+          "why": "Continuous improvement, testing, and optimization",
+          "steps": [
+            {
+              "order": 9,
+              "sectionTag": "iterate_enhance",
+              "title": "Iterate & Enhance",
+              "why": null,
+              "gate": null,
+              "requiresGate": "deploy_lakehouse_assets",
+              "consumes": [],
+              "produces": "iteration_plan",
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            },
+            {
+              "order": 10,
+              "sectionTag": "redeploy_test",
+              "title": "Redeploy & Test",
+              "why": null,
+              "gate": null,
+              "requiresGate": "iterate_enhance",
+              "consumes": [
+                "iteration_plan"
+              ],
+              "produces": null,
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            }
+          ]
+        },
+        {
+          "id": "cleanup",
+          "chapter": "Clean Up",
+          "title": "Clean Up",
+          "why": "Safely remove all workshop-created resources from your workspace",
+          "steps": [
+            {
+              "order": 11,
+              "sectionTag": "workspace_cleanup",
+              "title": "Workspace Clean Up",
+              "why": null,
+              "gate": null,
+              "requiresGate": "redeploy_test",
+              "consumes": [],
+              "produces": null,
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            }
+          ]
+        }
+      ]
+    },
+    "skills-accelerator": {
+      "id": "skills-accelerator",
+      "title": "Agent Skills Accelerator",
+      "assistants": [
+        "default"
+      ],
+      "flags": {},
+      "sections": [
+        {
+          "id": "define-usecase",
+          "chapter": "Foundation",
+          "title": "Project Setup",
+          "why": "Configure your environment and generate product requirements",
+          "steps": [
+            {
+              "order": 1,
+              "sectionTag": "project_setup",
+              "title": "Set Up Project",
+              "why": null,
+              "gate": null,
+              "requiresGate": null,
+              "consumes": [],
+              "produces": null,
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            }
+          ]
+        },
+        {
+          "id": "agent-skills",
+          "chapter": "Workshop",
+          "title": "Build Agent Skill",
+          "why": "Build a custom Agent Skill guided by your use case",
+          "steps": [
+            {
+              "order": 2,
+              "sectionTag": "skill_install_explore",
+              "title": "Explore Existing Skills",
+              "why": null,
+              "gate": null,
+              "requiresGate": "project_setup",
+              "consumes": [],
+              "produces": "exploration_findings",
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            },
+            {
+              "order": 3,
+              "sectionTag": "skill_define_strategy",
+              "title": "Define Skill Strategy",
+              "why": null,
+              "gate": null,
+              "requiresGate": "skill_install_explore",
+              "consumes": [
+                "exploration_findings"
+              ],
+              "produces": "skill_strategy",
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            },
+            {
+              "order": 4,
+              "sectionTag": "skill_create_skillmd",
+              "title": "Create SKILL.md",
+              "why": null,
+              "gate": null,
+              "requiresGate": "skill_define_strategy",
+              "consumes": [
+                "skill_strategy"
+              ],
+              "produces": "skill_definition",
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            },
+            {
+              "order": 5,
+              "sectionTag": "skill_apply_contracts",
+              "title": "Apply & Test Skill",
+              "why": null,
+              "gate": null,
+              "requiresGate": "skill_create_skillmd",
+              "consumes": [
+                "skill_definition"
+              ],
+              "produces": "applied_skill",
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            },
+            {
+              "order": 6,
+              "sectionTag": "skill_certify_tables",
+              "title": "Validate & Automate",
+              "why": null,
+              "gate": null,
+              "requiresGate": "skill_apply_contracts",
+              "consumes": [
+                "applied_skill"
+              ],
+              "produces": "certified_skill",
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            }
+          ]
+        },
+        {
+          "id": "iterate-enhance",
+          "chapter": "Refinement",
+          "title": "Iterate & Enhance",
+          "why": "Continuous improvement, testing, and optimization",
+          "steps": [
+            {
+              "order": 7,
+              "sectionTag": "iterate_enhance",
+              "title": "Iterate & Enhance",
+              "why": null,
+              "gate": null,
+              "requiresGate": "skill_certify_tables",
+              "consumes": [],
+              "produces": "iteration_plan",
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            },
+            {
+              "order": 8,
+              "sectionTag": "redeploy_test",
+              "title": "Redeploy & Test",
+              "why": null,
+              "gate": null,
+              "requiresGate": "iterate_enhance",
+              "consumes": [
+                "iteration_plan"
+              ],
+              "produces": null,
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            }
+          ]
+        },
+        {
+          "id": "cleanup",
+          "chapter": "Clean Up",
+          "title": "Clean Up",
+          "why": "Safely remove all workshop-created resources from your workspace",
+          "steps": [
+            {
+              "order": 9,
+              "sectionTag": "workspace_cleanup",
+              "title": "Workspace Clean Up",
+              "why": null,
+              "gate": null,
+              "requiresGate": "redeploy_test",
+              "consumes": [],
+              "produces": null,
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            }
+          ]
+        }
+      ]
+    },
+    "agents-accelerator": {
+      "id": "agents-accelerator",
+      "title": "Agents Accelerator",
+      "assistants": [
+        "default"
+      ],
+      "flags": {},
+      "sections": [
+        {
+          "id": "define-usecase",
+          "chapter": "Foundation",
+          "title": "Project Setup",
+          "why": "Configure your environment and generate product requirements",
+          "steps": [
+            {
+              "order": 1,
+              "sectionTag": "project_setup",
+              "title": "Set Up Project",
+              "why": null,
+              "gate": null,
+              "requiresGate": null,
+              "consumes": [],
+              "produces": null,
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            },
+            {
+              "order": 2,
+              "sectionTag": "prd_generation",
+              "title": "PRD Generation",
+              "why": null,
+              "gate": null,
+              "requiresGate": "project_setup",
+              "consumes": [],
+              "produces": "prd_document",
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            }
+          ]
+        },
+        {
+          "id": "databricks-app",
+          "chapter": "Databricks App",
+          "title": "Databricks App",
+          "why": "Design user interface and deploy to Databricks Apps",
+          "steps": [
+            {
+              "order": 3,
+              "sectionTag": "cursor_copilot_ui_design",
+              "title": "UI Design",
+              "why": null,
+              "gate": null,
+              "requiresGate": "prd_generation",
+              "consumes": [],
+              "produces": null,
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            },
+            {
+              "order": 4,
+              "sectionTag": "deploy_databricks_app",
+              "title": "Deploy App",
+              "why": null,
+              "gate": null,
+              "requiresGate": "cursor_copilot_ui_design",
+              "consumes": [],
+              "produces": null,
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            }
+          ]
+        },
+        {
+          "id": "lakebase",
+          "chapter": "Lakebase",
+          "title": "Lakebase",
+          "why": "Set up PostgreSQL database, connect to your app, and deploy",
+          "steps": [
+            {
+              "order": 5,
+              "sectionTag": "setup_lakebase",
+              "title": "Setup Lakebase",
+              "why": null,
+              "gate": null,
+              "requiresGate": "deploy_databricks_app",
+              "consumes": [],
+              "produces": null,
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            },
+            {
+              "order": 6,
+              "sectionTag": "wire_ui_lakebase",
+              "title": "Wire UI to Lakebase",
+              "why": null,
+              "gate": null,
+              "requiresGate": "setup_lakebase",
+              "consumes": [],
+              "produces": null,
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            },
+            {
+              "order": 7,
+              "sectionTag": "workspace_setup_deploy",
+              "title": "Deploy and Test",
+              "why": null,
+              "gate": null,
+              "requiresGate": "wire_ui_lakebase",
+              "consumes": [],
+              "produces": null,
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            }
+          ]
+        },
+        {
+          "id": "agents-on-apps",
+          "chapter": "Agents Accelerator",
+          "title": "Agents on Apps",
+          "why": "Design the agent, then build it on top of your Databricks App + Lakebase",
+          "steps": [
+            {
+              "order": 8,
+              "sectionTag": "agent_spec_design",
+              "title": "Agent Spec Design",
+              "why": null,
+              "gate": null,
+              "requiresGate": "workspace_setup_deploy",
+              "consumes": [],
+              "produces": null,
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            },
+            {
+              "order": 9,
+              "sectionTag": "agent_tool_selection",
+              "title": "Agent Tool Selection",
+              "why": null,
+              "gate": null,
+              "requiresGate": "agent_spec_design",
+              "consumes": [],
+              "produces": null,
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            },
+            {
+              "order": 10,
+              "sectionTag": "uc_resources_foundation",
+              "title": "UC Resources Foundation",
+              "why": null,
+              "gate": null,
+              "requiresGate": "agent_tool_selection",
+              "consumes": [],
+              "produces": null,
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            },
+            {
+              "order": 11,
+              "sectionTag": "mlflow_agent_tracing_uc",
+              "title": "MLflow Tracing + UC OTel",
+              "why": null,
+              "gate": null,
+              "requiresGate": "uc_resources_foundation",
+              "consumes": [],
+              "produces": null,
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            },
+            {
+              "order": 12,
+              "sectionTag": "knowledge_assistant_create",
+              "title": "Knowledge Assistant",
+              "why": null,
+              "gate": null,
+              "requiresGate": "mlflow_agent_tracing_uc",
+              "consumes": [],
+              "produces": null,
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            },
+            {
+              "order": 13,
+              "sectionTag": "track_a_agent_app_clone_framework",
+              "title": "Clone + Framework",
+              "why": null,
+              "gate": null,
+              "requiresGate": "knowledge_assistant_create",
+              "consumes": [],
+              "produces": null,
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            },
+            {
+              "order": 14,
+              "sectionTag": "track_a_agent_ka_genie_tools",
+              "title": "Tools and MCP",
+              "why": null,
+              "gate": null,
+              "requiresGate": "track_a_agent_app_clone_framework",
+              "consumes": [],
+              "produces": null,
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            },
+            {
+              "order": 15,
+              "sectionTag": "track_a_agent_auth_memory",
+              "title": "Auth + Memory",
+              "why": null,
+              "gate": null,
+              "requiresGate": "track_a_agent_ka_genie_tools",
+              "consumes": [],
+              "produces": null,
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            },
+            {
+              "order": 16,
+              "sectionTag": "track_a_agent_eval_deploy",
+              "title": "Smoke Eval + Deploy",
+              "why": null,
+              "gate": null,
+              "requiresGate": "track_a_agent_auth_memory",
+              "consumes": [],
+              "produces": null,
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            },
+            {
+              "order": 17,
+              "sectionTag": "appkit_agent_app_proxy_chat",
+              "title": "AppKit Agent Proxy",
+              "why": null,
+              "gate": null,
+              "requiresGate": "track_a_agent_eval_deploy",
+              "consumes": [],
+              "produces": null,
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            },
+            {
+              "order": 18,
+              "sectionTag": "appkit_chat_feedback_mlflow",
+              "title": "Chat Feedback to MLflow",
+              "why": null,
+              "gate": null,
+              "requiresGate": "appkit_agent_app_proxy_chat",
+              "consumes": [],
+              "produces": null,
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            }
+          ]
+        },
+        {
+          "id": "mlflow-genai",
+          "chapter": "Agents Accelerator",
+          "title": "MLflow for Gen-AI",
+          "why": "Manage the agent lifecycle: prompts, evaluation, registry, deployment, monitoring",
+          "steps": [
+            {
+              "order": 19,
+              "sectionTag": "mlflow_prompt_registry",
+              "title": "Prompt Registry",
+              "why": null,
+              "gate": null,
+              "requiresGate": "appkit_chat_feedback_mlflow",
+              "consumes": [],
+              "produces": null,
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            },
+            {
+              "order": 20,
+              "sectionTag": "mlflow_evaluation_datasets",
+              "title": "Evaluation Datasets",
+              "why": null,
+              "gate": null,
+              "requiresGate": "mlflow_prompt_registry",
+              "consumes": [],
+              "produces": null,
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            },
+            {
+              "order": 21,
+              "sectionTag": "mlflow_scorers_and_judges",
+              "title": "Scorers and Judges",
+              "why": null,
+              "gate": null,
+              "requiresGate": "mlflow_evaluation_datasets",
+              "consumes": [],
+              "produces": null,
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            },
+            {
+              "order": 22,
+              "sectionTag": "mlflow_evaluation_runs_and_iteration",
+              "title": "Evaluation Runs + Iteration",
+              "why": null,
+              "gate": null,
+              "requiresGate": "mlflow_scorers_and_judges",
+              "consumes": [],
+              "produces": null,
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            },
+            {
+              "order": 23,
+              "sectionTag": "mlflow_human_review_and_signoff",
+              "title": "Human Review + Sign-off",
+              "why": null,
+              "gate": null,
+              "requiresGate": "mlflow_evaluation_runs_and_iteration",
+              "consumes": [],
+              "produces": null,
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            },
+            {
+              "order": 24,
+              "sectionTag": "mlflow_logged_model_uc_registration",
+              "title": "Logged Model & UC Registration",
+              "why": null,
+              "gate": null,
+              "requiresGate": "mlflow_human_review_and_signoff",
+              "consumes": [],
+              "produces": null,
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            },
+            {
+              "order": 25,
+              "sectionTag": "mlflow_gateway_and_deployment",
+              "title": "AI Gateway + Deployment",
+              "why": null,
+              "gate": null,
+              "requiresGate": "mlflow_logged_model_uc_registration",
+              "consumes": [],
+              "produces": null,
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            },
+            {
+              "order": 26,
+              "sectionTag": "mlflow_production_monitoring_and_debugging",
+              "title": "Production Monitoring + Debugging",
+              "why": null,
+              "gate": null,
+              "requiresGate": "mlflow_gateway_and_deployment",
+              "consumes": [],
+              "produces": null,
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            }
+          ]
+        },
+        {
+          "id": "iterate-enhance",
+          "chapter": "Refinement",
+          "title": "Iterate & Enhance",
+          "why": "Continuous improvement, testing, and optimization",
+          "steps": [
+            {
+              "order": 27,
+              "sectionTag": "iterate_enhance",
+              "title": "Iterate & Enhance",
+              "why": null,
+              "gate": null,
+              "requiresGate": "mlflow_production_monitoring_and_debugging",
+              "consumes": [],
+              "produces": "iteration_plan",
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            },
+            {
+              "order": 28,
+              "sectionTag": "redeploy_test",
+              "title": "Redeploy & Test",
+              "why": null,
+              "gate": null,
+              "requiresGate": "iterate_enhance",
+              "consumes": [
+                "iteration_plan"
+              ],
+              "produces": null,
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            }
+          ]
+        },
+        {
+          "id": "cleanup",
+          "chapter": "Clean Up",
+          "title": "Clean Up",
+          "why": "Safely remove all workshop-created resources from your workspace",
+          "steps": [
+            {
+              "order": 29,
+              "sectionTag": "workspace_cleanup",
+              "title": "Workspace Clean Up",
+              "why": null,
+              "gate": null,
+              "requiresGate": "redeploy_test",
+              "consumes": [],
+              "produces": null,
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            }
+          ]
+        }
+      ]
+    },
+    "reverse-lakehouse": {
+      "id": "reverse-lakehouse",
+      "title": "Lakehouse",
+      "assistants": [
+        "default"
+      ],
+      "flags": {},
+      "sections": [
+        {
+          "id": "define-usecase",
+          "chapter": "Foundation",
+          "title": "Project Setup",
+          "why": "Configure your environment and generate product requirements",
+          "steps": [
+            {
+              "order": 1,
+              "sectionTag": "project_setup",
+              "title": "Set Up Project",
+              "why": null,
+              "gate": null,
+              "requiresGate": null,
+              "consumes": [],
+              "produces": null,
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            },
+            {
+              "order": 2,
+              "sectionTag": "prd_generation",
+              "title": "PRD Generation",
+              "why": null,
+              "gate": null,
+              "requiresGate": "project_setup",
+              "consumes": [],
+              "produces": "prd_document",
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            }
+          ]
+        },
+        {
+          "id": "lakehouse",
+          "chapter": "Lakehouse",
+          "title": "Lakehouse",
+          "why": "Data foundation, modeling, and pipelines",
+          "steps": [
+            {
+              "order": 3,
+              "sectionTag": "bronze_table_metadata",
+              "title": "Bring your Metadata",
+              "why": null,
+              "gate": null,
+              "requiresGate": "prd_generation",
+              "consumes": [
+                "prd_document"
+              ],
+              "produces": "table_metadata",
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            },
+            {
+              "order": 4,
+              "sectionTag": "bronze_layer_creation",
+              "title": "Bronze Layer Creation",
+              "why": null,
+              "gate": null,
+              "requiresGate": "bronze_table_metadata",
+              "consumes": [
+                "table_metadata"
+              ],
+              "produces": "synthetic_data",
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            },
+            {
+              "order": 5,
+              "sectionTag": "silver_layer_sdp",
+              "title": "Silver Layer",
+              "why": null,
+              "gate": null,
+              "requiresGate": "bronze_layer_creation",
+              "consumes": [
+                "synthetic_data"
+              ],
+              "produces": "silver_layer",
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            },
+            {
+              "order": 6,
+              "sectionTag": "gold_layer_design",
+              "title": "Gold Layer Design",
+              "why": null,
+              "gate": null,
+              "requiresGate": "silver_layer_sdp",
+              "consumes": [
+                "table_metadata"
+              ],
+              "produces": "gold_layer_design",
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            },
+            {
+              "order": 7,
+              "sectionTag": "gold_layer_pipeline",
+              "title": "Gold Pipeline",
+              "why": null,
+              "gate": null,
+              "requiresGate": "gold_layer_design",
+              "consumes": [
+                "gold_layer_design"
+              ],
+              "produces": "gold_layer_pipeline",
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            },
+            {
+              "order": 8,
+              "sectionTag": "deploy_lakehouse_assets",
+              "title": "Deploy Assets",
+              "why": null,
+              "gate": null,
+              "requiresGate": "gold_layer_pipeline",
+              "consumes": [],
+              "produces": null,
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            }
+          ]
+        },
+        {
+          "id": "iterate-enhance",
+          "chapter": "Refinement",
+          "title": "Iterate & Enhance",
+          "why": "Continuous improvement, testing, and optimization",
+          "steps": [
+            {
+              "order": 9,
+              "sectionTag": "iterate_enhance",
+              "title": "Iterate & Enhance",
+              "why": null,
+              "gate": null,
+              "requiresGate": "deploy_lakehouse_assets",
+              "consumes": [],
+              "produces": "iteration_plan",
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            },
+            {
+              "order": 10,
+              "sectionTag": "redeploy_test",
+              "title": "Redeploy & Test",
+              "why": null,
+              "gate": null,
+              "requiresGate": "iterate_enhance",
+              "consumes": [
+                "iteration_plan"
+              ],
+              "produces": null,
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            }
+          ]
+        },
+        {
+          "id": "cleanup",
+          "chapter": "Clean Up",
+          "title": "Clean Up",
+          "why": "Safely remove all workshop-created resources from your workspace",
+          "steps": [
+            {
+              "order": 11,
+              "sectionTag": "workspace_cleanup",
+              "title": "Workspace Clean Up",
+              "why": null,
+              "gate": null,
+              "requiresGate": "redeploy_test",
+              "consumes": [],
+              "produces": null,
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            }
+          ]
+        }
+      ]
+    },
+    "reverse-lakehouse-di": {
+      "id": "reverse-lakehouse-di",
+      "title": "+ AI and Agents",
+      "assistants": [
+        "default"
+      ],
+      "flags": {},
+      "sections": [
+        {
+          "id": "define-usecase",
+          "chapter": "Foundation",
+          "title": "Project Setup",
+          "why": "Configure your environment and generate product requirements",
+          "steps": [
+            {
+              "order": 1,
+              "sectionTag": "project_setup",
+              "title": "Set Up Project",
+              "why": null,
+              "gate": null,
+              "requiresGate": null,
+              "consumes": [],
+              "produces": null,
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            },
+            {
+              "order": 2,
+              "sectionTag": "prd_generation",
+              "title": "PRD Generation",
+              "why": null,
+              "gate": null,
+              "requiresGate": "project_setup",
+              "consumes": [],
+              "produces": "prd_document",
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            }
+          ]
+        },
+        {
+          "id": "lakehouse",
+          "chapter": "Lakehouse",
+          "title": "Lakehouse",
+          "why": "Data foundation, modeling, and pipelines",
+          "steps": [
+            {
+              "order": 3,
+              "sectionTag": "bronze_table_metadata",
+              "title": "Bring your Metadata",
+              "why": null,
+              "gate": null,
+              "requiresGate": "prd_generation",
+              "consumes": [
+                "prd_document"
+              ],
+              "produces": "table_metadata",
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            },
+            {
+              "order": 4,
+              "sectionTag": "bronze_layer_creation",
+              "title": "Bronze Layer Creation",
+              "why": null,
+              "gate": null,
+              "requiresGate": "bronze_table_metadata",
+              "consumes": [
+                "table_metadata"
+              ],
+              "produces": "synthetic_data",
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            },
+            {
+              "order": 5,
+              "sectionTag": "silver_layer_sdp",
+              "title": "Silver Layer",
+              "why": null,
+              "gate": null,
+              "requiresGate": "bronze_layer_creation",
+              "consumes": [
+                "synthetic_data"
+              ],
+              "produces": "silver_layer",
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            },
+            {
+              "order": 6,
+              "sectionTag": "gold_layer_design",
+              "title": "Gold Layer Design",
+              "why": null,
+              "gate": null,
+              "requiresGate": "silver_layer_sdp",
+              "consumes": [
+                "table_metadata"
+              ],
+              "produces": "gold_layer_design",
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            },
+            {
+              "order": 7,
+              "sectionTag": "gold_layer_pipeline",
+              "title": "Gold Pipeline",
+              "why": null,
+              "gate": null,
+              "requiresGate": "gold_layer_design",
+              "consumes": [
+                "gold_layer_design"
+              ],
+              "produces": "gold_layer_pipeline",
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            },
+            {
+              "order": 8,
+              "sectionTag": "deploy_lakehouse_assets",
+              "title": "Deploy Assets",
+              "why": null,
+              "gate": null,
+              "requiresGate": "gold_layer_pipeline",
+              "consumes": [],
+              "produces": null,
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            }
+          ]
+        },
+        {
+          "id": "data-intelligence",
+          "chapter": "AI and Agents",
+          "title": "AI and Agents",
+          "why": "Translating data into insights, logic, and decisions",
+          "steps": [
+            {
+              "order": 9,
+              "sectionTag": "usecase_plan",
+              "title": "Use-Case Plan",
+              "why": null,
+              "gate": null,
+              "requiresGate": "deploy_lakehouse_assets",
+              "consumes": [
+                "prd_document",
+                "gold_layer_design"
+              ],
+              "produces": "usecase_plan",
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            },
+            {
+              "order": 10,
+              "sectionTag": "aibi_dashboard",
+              "title": "AI/BI Dashboard",
+              "why": null,
+              "gate": null,
+              "requiresGate": "usecase_plan",
+              "consumes": [
+                "prd_document",
+                "gold_layer_design"
+              ],
+              "produces": "aibi_dashboard",
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            },
+            {
+              "order": 11,
+              "sectionTag": "genie_space",
+              "title": "Genie Space",
+              "why": null,
+              "gate": null,
+              "requiresGate": "aibi_dashboard",
+              "consumes": [
+                "usecase_plan"
+              ],
+              "produces": "genie_space",
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            },
+            {
+              "order": 12,
+              "sectionTag": "deploy_di_assets",
+              "title": "Deploy Assets",
+              "why": null,
+              "gate": null,
+              "requiresGate": "genie_space",
+              "consumes": [],
+              "produces": null,
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            },
+            {
+              "order": 13,
+              "sectionTag": "optimize_genie",
+              "title": "Optimize Genie",
+              "why": null,
+              "gate": null,
+              "requiresGate": "deploy_di_assets",
+              "consumes": [],
+              "produces": null,
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            },
+            {
+              "order": 14,
+              "sectionTag": "agent_framework",
+              "title": "Build Agent",
+              "why": null,
+              "gate": null,
+              "requiresGate": "optimize_genie",
+              "consumes": [
+                "prd_document",
+                "gold_layer_design"
+              ],
+              "produces": "agent_framework",
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            }
+          ]
+        },
+        {
+          "id": "iterate-enhance",
+          "chapter": "Refinement",
+          "title": "Iterate & Enhance",
+          "why": "Continuous improvement, testing, and optimization",
+          "steps": [
+            {
+              "order": 15,
+              "sectionTag": "iterate_enhance",
+              "title": "Iterate & Enhance",
+              "why": null,
+              "gate": null,
+              "requiresGate": "agent_framework",
+              "consumes": [],
+              "produces": "iteration_plan",
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            },
+            {
+              "order": 16,
+              "sectionTag": "redeploy_test",
+              "title": "Redeploy & Test",
+              "why": null,
+              "gate": null,
+              "requiresGate": "iterate_enhance",
+              "consumes": [
+                "iteration_plan"
+              ],
+              "produces": null,
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            }
+          ]
+        },
+        {
+          "id": "cleanup",
+          "chapter": "Clean Up",
+          "title": "Clean Up",
+          "why": "Safely remove all workshop-created resources from your workspace",
+          "steps": [
+            {
+              "order": 17,
+              "sectionTag": "workspace_cleanup",
+              "title": "Workspace Clean Up",
+              "why": null,
+              "gate": null,
+              "requiresGate": "redeploy_test",
+              "consumes": [],
+              "produces": null,
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            }
+          ]
+        }
+      ]
+    },
+    "reverse-lakebase": {
+      "id": "reverse-lakebase",
+      "title": "+ Lakebase (Synced)",
+      "assistants": [
+        "default"
+      ],
+      "flags": {},
+      "sections": [
+        {
+          "id": "define-usecase",
+          "chapter": "Foundation",
+          "title": "Project Setup",
+          "why": "Configure your environment and generate product requirements",
+          "steps": [
+            {
+              "order": 1,
+              "sectionTag": "project_setup",
+              "title": "Set Up Project",
+              "why": null,
+              "gate": null,
+              "requiresGate": null,
+              "consumes": [],
+              "produces": null,
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            },
+            {
+              "order": 2,
+              "sectionTag": "prd_generation",
+              "title": "PRD Generation",
+              "why": null,
+              "gate": null,
+              "requiresGate": "project_setup",
+              "consumes": [],
+              "produces": "prd_document",
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            }
+          ]
+        },
+        {
+          "id": "lakehouse",
+          "chapter": "Lakehouse",
+          "title": "Lakehouse",
+          "why": "Data foundation, modeling, and pipelines",
+          "steps": [
+            {
+              "order": 3,
+              "sectionTag": "sync_from_lakebase",
+              "title": "Register Lakebase in UC",
+              "why": null,
+              "gate": null,
+              "requiresGate": "prd_generation",
+              "consumes": [],
+              "produces": null,
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            },
+            {
+              "order": 4,
+              "sectionTag": "bronze_table_metadata",
+              "title": "Bring your Metadata",
+              "why": null,
+              "gate": null,
+              "requiresGate": "sync_from_lakebase",
+              "consumes": [
+                "prd_document"
+              ],
+              "produces": "table_metadata",
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            },
+            {
+              "order": 5,
+              "sectionTag": "bronze_layer_creation",
+              "title": "Bronze Layer Creation",
+              "why": null,
+              "gate": null,
+              "requiresGate": "bronze_table_metadata",
+              "consumes": [
+                "table_metadata"
+              ],
+              "produces": "synthetic_data",
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            },
+            {
+              "order": 6,
+              "sectionTag": "silver_layer_sdp",
+              "title": "Silver Layer",
+              "why": null,
+              "gate": null,
+              "requiresGate": "bronze_layer_creation",
+              "consumes": [
+                "synthetic_data"
+              ],
+              "produces": "silver_layer",
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            },
+            {
+              "order": 7,
+              "sectionTag": "gold_layer_design",
+              "title": "Gold Layer Design",
+              "why": null,
+              "gate": null,
+              "requiresGate": "silver_layer_sdp",
+              "consumes": [
+                "table_metadata"
+              ],
+              "produces": "gold_layer_design",
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            },
+            {
+              "order": 8,
+              "sectionTag": "gold_layer_pipeline",
+              "title": "Gold Pipeline",
+              "why": null,
+              "gate": null,
+              "requiresGate": "gold_layer_design",
+              "consumes": [
+                "gold_layer_design"
+              ],
+              "produces": "gold_layer_pipeline",
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            },
+            {
+              "order": 9,
+              "sectionTag": "deploy_lakehouse_assets",
+              "title": "Deploy Assets",
+              "why": null,
+              "gate": null,
+              "requiresGate": "gold_layer_pipeline",
+              "consumes": [],
+              "produces": null,
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            }
+          ]
+        },
+        {
+          "id": "data-intelligence",
+          "chapter": "AI and Agents",
+          "title": "AI and Agents",
+          "why": "Translating data into insights, logic, and decisions",
+          "steps": [
+            {
+              "order": 10,
+              "sectionTag": "usecase_plan",
+              "title": "Use-Case Plan",
+              "why": null,
+              "gate": null,
+              "requiresGate": "deploy_lakehouse_assets",
+              "consumes": [
+                "prd_document",
+                "gold_layer_design"
+              ],
+              "produces": "usecase_plan",
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            },
+            {
+              "order": 11,
+              "sectionTag": "aibi_dashboard",
+              "title": "AI/BI Dashboard",
+              "why": null,
+              "gate": null,
+              "requiresGate": "usecase_plan",
+              "consumes": [
+                "prd_document",
+                "gold_layer_design"
+              ],
+              "produces": "aibi_dashboard",
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            },
+            {
+              "order": 12,
+              "sectionTag": "genie_space",
+              "title": "Genie Space",
+              "why": null,
+              "gate": null,
+              "requiresGate": "aibi_dashboard",
+              "consumes": [
+                "usecase_plan"
+              ],
+              "produces": "genie_space",
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            },
+            {
+              "order": 13,
+              "sectionTag": "deploy_di_assets",
+              "title": "Deploy Assets",
+              "why": null,
+              "gate": null,
+              "requiresGate": "genie_space",
+              "consumes": [],
+              "produces": null,
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            },
+            {
+              "order": 14,
+              "sectionTag": "optimize_genie",
+              "title": "Optimize Genie",
+              "why": null,
+              "gate": null,
+              "requiresGate": "deploy_di_assets",
+              "consumes": [],
+              "produces": null,
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            },
+            {
+              "order": 15,
+              "sectionTag": "agent_framework",
+              "title": "Build Agent",
+              "why": null,
+              "gate": null,
+              "requiresGate": "optimize_genie",
+              "consumes": [
+                "prd_document",
+                "gold_layer_design"
+              ],
+              "produces": "agent_framework",
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            }
+          ]
+        },
+        {
+          "id": "iterate-enhance",
+          "chapter": "Refinement",
+          "title": "Iterate & Enhance",
+          "why": "Continuous improvement, testing, and optimization",
+          "steps": [
+            {
+              "order": 16,
+              "sectionTag": "iterate_enhance",
+              "title": "Iterate & Enhance",
+              "why": null,
+              "gate": null,
+              "requiresGate": "agent_framework",
+              "consumes": [],
+              "produces": "iteration_plan",
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            },
+            {
+              "order": 17,
+              "sectionTag": "redeploy_test",
+              "title": "Redeploy & Test",
+              "why": null,
+              "gate": null,
+              "requiresGate": "iterate_enhance",
+              "consumes": [
+                "iteration_plan"
+              ],
+              "produces": null,
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            }
+          ]
+        },
+        {
+          "id": "cleanup",
+          "chapter": "Clean Up",
+          "title": "Clean Up",
+          "why": "Safely remove all workshop-created resources from your workspace",
+          "steps": [
+            {
+              "order": 18,
+              "sectionTag": "workspace_cleanup",
+              "title": "Workspace Clean Up",
+              "why": null,
+              "gate": null,
+              "requiresGate": "redeploy_test",
+              "consumes": [],
+              "produces": null,
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            }
+          ]
+        }
+      ]
+    },
+    "reverse-app": {
+      "id": "reverse-app",
+      "title": "+ Analytics App",
+      "assistants": [
+        "default"
+      ],
+      "flags": {},
+      "sections": [
+        {
+          "id": "define-usecase",
+          "chapter": "Foundation",
+          "title": "Project Setup",
+          "why": "Configure your environment and generate product requirements",
+          "steps": [
+            {
+              "order": 1,
+              "sectionTag": "project_setup",
+              "title": "Set Up Project",
+              "why": null,
+              "gate": null,
+              "requiresGate": null,
+              "consumes": [],
+              "produces": null,
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            },
+            {
+              "order": 2,
+              "sectionTag": "prd_generation",
+              "title": "PRD Generation",
+              "why": null,
+              "gate": null,
+              "requiresGate": "project_setup",
+              "consumes": [],
+              "produces": "prd_document",
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            }
+          ]
+        },
+        {
+          "id": "lakehouse",
+          "chapter": "Lakehouse",
+          "title": "Lakehouse",
+          "why": "Data foundation, modeling, and pipelines",
+          "steps": [
+            {
+              "order": 3,
+              "sectionTag": "sync_from_lakebase",
+              "title": "Register Lakebase in UC",
+              "why": null,
+              "gate": null,
+              "requiresGate": "prd_generation",
+              "consumes": [],
+              "produces": null,
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            },
+            {
+              "order": 4,
+              "sectionTag": "bronze_table_metadata",
+              "title": "Bring your Metadata",
+              "why": null,
+              "gate": null,
+              "requiresGate": "sync_from_lakebase",
+              "consumes": [
+                "prd_document"
+              ],
+              "produces": "table_metadata",
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            },
+            {
+              "order": 5,
+              "sectionTag": "bronze_layer_creation",
+              "title": "Bronze Layer Creation",
+              "why": null,
+              "gate": null,
+              "requiresGate": "bronze_table_metadata",
+              "consumes": [
+                "table_metadata"
+              ],
+              "produces": "synthetic_data",
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            },
+            {
+              "order": 6,
+              "sectionTag": "silver_layer_sdp",
+              "title": "Silver Layer",
+              "why": null,
+              "gate": null,
+              "requiresGate": "bronze_layer_creation",
+              "consumes": [
+                "synthetic_data"
+              ],
+              "produces": "silver_layer",
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            },
+            {
+              "order": 7,
+              "sectionTag": "gold_layer_design",
+              "title": "Gold Layer Design",
+              "why": null,
+              "gate": null,
+              "requiresGate": "silver_layer_sdp",
+              "consumes": [
+                "table_metadata"
+              ],
+              "produces": "gold_layer_design",
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            },
+            {
+              "order": 8,
+              "sectionTag": "gold_layer_pipeline",
+              "title": "Gold Pipeline",
+              "why": null,
+              "gate": null,
+              "requiresGate": "gold_layer_design",
+              "consumes": [
+                "gold_layer_design"
+              ],
+              "produces": "gold_layer_pipeline",
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            },
+            {
+              "order": 9,
+              "sectionTag": "deploy_lakehouse_assets",
+              "title": "Deploy Assets",
+              "why": null,
+              "gate": null,
+              "requiresGate": "gold_layer_pipeline",
+              "consumes": [],
+              "produces": null,
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            }
+          ]
+        },
+        {
+          "id": "data-intelligence",
+          "chapter": "AI and Agents",
+          "title": "AI and Agents",
+          "why": "Translating data into insights, logic, and decisions",
+          "steps": [
+            {
+              "order": 10,
+              "sectionTag": "usecase_plan",
+              "title": "Use-Case Plan",
+              "why": null,
+              "gate": null,
+              "requiresGate": "deploy_lakehouse_assets",
+              "consumes": [
+                "prd_document",
+                "gold_layer_design"
+              ],
+              "produces": "usecase_plan",
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            },
+            {
+              "order": 11,
+              "sectionTag": "aibi_dashboard",
+              "title": "AI/BI Dashboard",
+              "why": null,
+              "gate": null,
+              "requiresGate": "usecase_plan",
+              "consumes": [
+                "prd_document",
+                "gold_layer_design"
+              ],
+              "produces": "aibi_dashboard",
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            },
+            {
+              "order": 12,
+              "sectionTag": "genie_space",
+              "title": "Genie Space",
+              "why": null,
+              "gate": null,
+              "requiresGate": "aibi_dashboard",
+              "consumes": [
+                "usecase_plan"
+              ],
+              "produces": "genie_space",
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            },
+            {
+              "order": 13,
+              "sectionTag": "deploy_di_assets",
+              "title": "Deploy Assets",
+              "why": null,
+              "gate": null,
+              "requiresGate": "genie_space",
+              "consumes": [],
+              "produces": null,
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            },
+            {
+              "order": 14,
+              "sectionTag": "optimize_genie",
+              "title": "Optimize Genie",
+              "why": null,
+              "gate": null,
+              "requiresGate": "deploy_di_assets",
+              "consumes": [],
+              "produces": null,
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            },
+            {
+              "order": 15,
+              "sectionTag": "agent_framework",
+              "title": "Build Agent",
+              "why": null,
+              "gate": null,
+              "requiresGate": "optimize_genie",
+              "consumes": [
+                "prd_document",
+                "gold_layer_design"
+              ],
+              "produces": "agent_framework",
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            },
+            {
+              "order": 16,
+              "sectionTag": "wire_ui_agent",
+              "title": "Wire UI to Agent",
+              "why": null,
+              "gate": null,
+              "requiresGate": "agent_framework",
+              "consumes": [
+                "agent_framework"
+              ],
+              "produces": "wire_ui_agent",
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            }
+          ]
+        },
+        {
+          "id": "iterate-enhance",
+          "chapter": "Refinement",
+          "title": "Iterate & Enhance",
+          "why": "Continuous improvement, testing, and optimization",
+          "steps": [
+            {
+              "order": 17,
+              "sectionTag": "iterate_enhance",
+              "title": "Iterate & Enhance",
+              "why": null,
+              "gate": null,
+              "requiresGate": "wire_ui_agent",
+              "consumes": [],
+              "produces": "iteration_plan",
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            },
+            {
+              "order": 18,
+              "sectionTag": "redeploy_test",
+              "title": "Redeploy & Test",
+              "why": null,
+              "gate": null,
+              "requiresGate": "iterate_enhance",
+              "consumes": [
+                "iteration_plan"
+              ],
+              "produces": null,
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            }
+          ]
+        },
+        {
+          "id": "cleanup",
+          "chapter": "Clean Up",
+          "title": "Clean Up",
+          "why": "Safely remove all workshop-created resources from your workspace",
+          "steps": [
+            {
+              "order": 19,
+              "sectionTag": "workspace_cleanup",
+              "title": "Workspace Clean Up",
+              "why": null,
+              "gate": null,
+              "requiresGate": "redeploy_test",
+              "consumes": [],
+              "produces": null,
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            }
+          ]
+        }
+      ]
+    }
+  }
+}
