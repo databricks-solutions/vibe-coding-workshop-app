@@ -151,9 +151,15 @@ async def security_middleware(request: Request, call_next):
 app.add_middleware(
     CORSMiddleware,
     allow_origins=ALLOWED_ORIGINS,
-    allow_credentials=False,
+    # Genie Code connects to /mcp cross-origin (workspace origin -> app origin)
+    # with credentials. Browsers require an explicit origin (never "*") together
+    # with credentials, and the MCP client must be able to read mcp-session-id.
+    # ALLOWED_ORIGINS carries the workspace URL. Ref:
+    # https://docs.databricks.com/aws/en/genie-code/mcp
+    allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
     allow_headers=["*"],
+    expose_headers=["mcp-session-id", "mcp-protocol-version"],
 )
 
 # Include the API router with /api prefix

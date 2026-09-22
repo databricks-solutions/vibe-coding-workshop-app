@@ -82,6 +82,14 @@ env:
   - name: MCP_MOUNT_ENABLED
     value: "true"
 
+  # Cross-origin allowlist for CORS. Genie Code's browser connects from the
+  # workspace origin (…cloud.databricks.com / …azuredatabricks.net) to this
+  # app's /mcp (…databricksapps.com) — a cross-origin, credentialed request.
+  # That origin must be allowlisted or the "Add MCP server" save fails with a
+  # CORS preflight error. Set from the deploy workspace host.
+  - name: ALLOWED_ORIGINS
+    value: "__WORKSPACE_HOST__"
+
 # Health check endpoint
 health_check:
   path: /health
