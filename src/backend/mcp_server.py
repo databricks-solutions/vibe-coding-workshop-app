@@ -12,6 +12,7 @@ import jsonschema
 from fastapi import Request
 from mcp.server.fastmcp import Context, FastMCP
 from mcp.server.fastmcp.resources.types import TextResource
+from mcp.server.transport_security import TransportSecuritySettings
 from mcp.types import (
     CallToolRequest,
     CallToolResult,
@@ -227,6 +228,21 @@ class WorkshopFastMCP(FastMCP):
         self._mcp_server.request_handlers[CallToolRequest] = handle
 
 
+# FastMCP defaults host to 127.0.0.1 and, for localhost, auto-enables DNS-
+# rebinding protection with a localhost-only Origin allowlist
+# (mcp/server/fastmcp/server.py). Behind the Databricks Apps proxy the app
+# binds to 127.0.0.1, so that auto-protection rejects Genie Code's real
+# workspace Origin (…cloud.databricks.com / …azuredatabricks.net) with
+# 403 "Invalid Origin header" — which blocks "Add MCP server" from saving.
+# DNS-rebinding protection is redundant in this topology: the app is a public
+# HTTPS endpoint gated by the Databricks OAuth proxy, and browser origins are
+# already restricted by CORSMiddleware (ALLOWED_ORIGINS) in app.py. Disable the
+# transport-level check so the intended cross-origin browser client works.
+# Ref: https://docs.databricks.com/aws/en/genie-code/mcp
+_MCP_TRANSPORT_SECURITY = TransportSecuritySettings(
+    enable_dns_rebinding_protection=False,
+)
+
 mcp = WorkshopFastMCP(
     name="vibe-coding-workshop",
     instructions=(
@@ -234,6 +250,7 @@ mcp = WorkshopFastMCP(
         "verbatim before narrating it. All interactions stay in-band."
     ),
     stateless_http=True,
+    transport_security=_MCP_TRANSPORT_SECURITY,
 )
 
 
