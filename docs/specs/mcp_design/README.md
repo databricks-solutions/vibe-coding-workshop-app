@@ -24,7 +24,9 @@ docs.** Read in the order below.
 | 9 | [`mcp-workshop-architecture.md`](./mcp-workshop-architecture.md) | Spec (D4) | **Draft (2026-09-22)** | Components, the Databricks Apps deployment topology (probe gotchas encoded), and the sequence diagrams (start/param intake, step walk + gate, cross-surface sync, Step-9 hard-stop). |
 | 10 | [`mcp-workshop-data-model.md`](./mcp-workshop-data-model.md) | Spec (D6) | **Draft (2026-09-22)** | Additive Lakebase changes: `captured_outputs` / `completed_gates` columns, the `session_interactions` log, session-parameter keys, number↔tag migration, and the migration DDL. |
 | 11 | [`mcp-workshop-security.md`](./mcp-workshop-security.md) | Spec (D7) | **Draft (2026-09-22)** | Identity → `session_id`, MCP-session≠auth, managed-proxy identity nuance, CORS reconciliation, the `/mcp` rate-limit decision, and stateless-concurrency isolation. |
-| 12 | D8–D10 design docs | Specs | **Not yet written** | Execution & verification tier, per the plan. See below. |
+| 12 | [`mcp-workshop-test-plan.md`](./mcp-workshop-test-plan.md) | Spec (D8) | **Draft (2026-09-22)** | Engine/parity, MCP contract, interactivity, the 307/mount/lifespan regressions, statelessness, data-model migration, the live Genie Code smoke, and the reusable re-probe harness — with a spec→test coverage matrix. |
+| 13 | [`mcp-workshop-rollout.md`](./mcp-workshop-rollout.md) | Spec (D9) | **Draft (2026-09-22)** | The revised phasing (Phase 1 ships now; interactivity decoupled from elicitation), reseed-vs-redeploy matrix, dependency pinning, the deploy preflight checklist, STOP-and-ask gates, rollback, and the re-probe trigger. |
+| 14 | [`mcp-workshop-facilitator-guide.md`](./mcp-workshop-facilitator-guide.md) | Guide (D10) | **Draft (2026-09-22)** | How a learner adds the app as a Custom MCP server, the dual-surface projector setup, the 20-tool caveat, what in-band interactivity looks like, and a troubleshooting table. |
 
 ---
 
@@ -43,9 +45,9 @@ the reasoning and reconciliation are in [research §2–§3](./mcp-research-and-
 
 ---
 
-## Documents to build next (from the plan)
+## Document set (from the plan) — all drafted ✅
 
-Write order: **D1 + D3** ✅ → **D2** ✅ **+ D5** ✅ → **D4** ✅ **+ D6** ✅ **+ D7** ✅ → **D8 + D9** → **D10**.
+Write order (complete): **D1 + D3** → **D2 + D5** → **D4 + D6 + D7** → **D8 + D9** → **D10**.
 
 - **D1** ✅ [`mcp-workshop-interactivity.md`](./mcp-workshop-interactivity.md) — keystone: the no-elicitation interaction model + four patterns. *(Draft)*
 - **D3** ✅ [`workshop-engine-domain.md`](./workshop-engine-domain.md) — manifest schema, progression semantics, assembler-parity contract. *(Draft)*
@@ -54,11 +56,12 @@ Write order: **D1 + D3** ✅ → **D2** ✅ **+ D5** ✅ → **D4** ✅ **+ D6**
 - **D4** ✅ [`mcp-workshop-architecture.md`](./mcp-workshop-architecture.md) — components + sequences + deployment topology. *(Draft)*
 - **D6** ✅ [`mcp-workshop-data-model.md`](./mcp-workshop-data-model.md) — Lakebase DDL incl. the interaction/decision log. *(Draft)*
 - **D7** ✅ [`mcp-workshop-security.md`](./mcp-workshop-security.md) — identity, CORS reconciliation, `/mcp` rate-limit decision. *(Draft)*
-- **D8** `mcp-workshop-test-plan.md` — parity, contract, 307-regression, re-probe harness.
-- **D9** `mcp-workshop-rollout.md` — phasing (Phase 1 ships now), version pinning, deploy gates.
-- **D10** `mcp-workshop-facilitator-guide.md` — setup + troubleshooting (optional).
+- **D8** ✅ [`mcp-workshop-test-plan.md`](./mcp-workshop-test-plan.md) — parity, contract, 307-regression, re-probe harness. *(Draft)*
+- **D9** ✅ [`mcp-workshop-rollout.md`](./mcp-workshop-rollout.md) — phasing (Phase 1 ships now), version pinning, deploy gates. *(Draft)*
+- **D10** ✅ [`mcp-workshop-facilitator-guide.md`](./mcp-workshop-facilitator-guide.md) — setup + troubleshooting. *(Draft)*
 
-Full content-per-doc and the dependency graph are in
+All D1–D10 are drafted. Next step is human review + implementation (Phase 0 per D9). Full
+content-per-doc and the dependency graph are in
 [`mcp-interactive-track-doc-plan.md`](./mcp-interactive-track-doc-plan.md).
 
 ---
