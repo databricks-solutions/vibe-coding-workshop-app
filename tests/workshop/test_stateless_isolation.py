@@ -20,6 +20,7 @@ contract. Any in-process caching in mcp_server would make the tool results
 diverge from this store and trip the assertions.
 """
 
+import asyncio
 import copy
 import json
 import pathlib
@@ -193,10 +194,23 @@ def test_get_step_reflects_externally_written_parameters(store):
     }
 
 
+def _read_session_state_resource(session_id):
+    """Read vibe://session/{id}/state through the registered MCP resource layer
+    (template resolution + Resource.read), not the private handler."""
+
+    async def _read():
+        manager = mcp_server.mcp._resource_manager
+        resource = await manager.get_resource(f"vibe://session/{session_id}/state")
+        assert resource is not None
+        return await resource.read()
+
+    return json.loads(asyncio.run(_read()))
+
+
 def test_session_state_resource_reflects_external_writes_on_next_read(store):
     data, _ = store
 
-    first = json.loads(mcp_server._session_state_resource(SESSION_A))
+    first = _read_session_state_resource(SESSION_A)
     assert first["completed_gates"] == []
     assert first["captured_output_keys"] == []
 
@@ -204,7 +218,7 @@ def test_session_state_resource_reflects_external_writes_on_next_read(store):
     data[SESSION_A]["completed_gates"] = ["project_setup", "prd_generation"]
     data[SESSION_A]["captured_outputs"] = {"prd_document": "written elsewhere"}
 
-    second = json.loads(mcp_server._session_state_resource(SESSION_A))
+    second = _read_session_state_resource(SESSION_A)
     assert second["completed_gates"] == ["project_setup", "prd_generation"]
     assert second["captured_output_keys"] == ["prd_document"]
     assert second != first
@@ -214,79 +228,142 @@ def test_session_state_resource_reflects_external_writes_on_next_read(store):
 # Property 3 — IDEMPOTENT RETRIES
 # ---------------------------------------------------------------------------
 
-def test_complete_step_replay_is_idempotent_success(store):
+def test_complete_step_replay_is_idempotent_and_re_reads_fresh(store):
+    """A complete_step retry is idempotent success AND reads persisted state fresh.
+
+    Cache-sensitive by construction: a concurrent writer advances SESSION_A's
+    persisted ledger between the two calls. A stateless server re-reads it on the
+    retry and preserves it; a cached in-process SessionState would replay against
+    the stale object and clobber the out-of-band write on save — so this test
+    fails on its own under a shared-cache bug.
+    """
     data, interactions = store
     data[SESSION_A]["completed_gates"] = ["project_setup"]
 
     first = mcp_server.vibe_complete_step(SESSION_A, "prd_generation", "ORIGINAL")
-    second = mcp_server.vibe_complete_step(SESSION_A, "prd_generation", "REPLAY-MUST-NOT-OVERWRITE")
+    assert isinstance(first, mcp_server.CompleteStepResult)
+    assert data[SESSION_A]["captured_outputs"] == {"prd_document": "ORIGINAL"}
+
+    # Concurrent out-of-band write for the SAME session between the two calls.
+    data[SESSION_A]["completed_gates"] = [
+        "project_setup", "prd_generation", "genie_silver_metadata",
+    ]
+    data[SESSION_A]["captured_outputs"]["table_metadata"] = "OUT-OF-BAND"
+
+    second = mcp_server.vibe_complete_step(
+        SESSION_A, "prd_generation", "REPLAY-MUST-NOT-OVERWRITE"
+    )
 
     # No spurious error — re-completing a done gate is idempotent success (§6/D3 F3).
-    assert isinstance(first, mcp_server.CompleteStepResult)
     assert isinstance(second, mcp_server.CompleteStepResult)
-    assert first.completed_gates == ["project_setup", "prd_generation"]
-    assert second.completed_gates == ["project_setup", "prd_generation"]
-
-    # Gate recorded exactly once — no duplicate append.
+    # The retry saw the out-of-band gate (fresh read) and did not duplicate it.
+    assert data[SESSION_A]["completed_gates"] == [
+        "project_setup", "prd_generation", "genie_silver_metadata",
+    ]
     assert data[SESSION_A]["completed_gates"].count("prd_generation") == 1
-    assert data[SESSION_A]["completed_gates"] == ["project_setup", "prd_generation"]
-    # Captured output is preserved, NOT overwritten by the replay's payload.
-    assert data[SESSION_A]["captured_outputs"] == {"prd_document": "ORIGINAL"}
+    # The out-of-band output survived (fresh read) AND the replay payload did NOT
+    # overwrite the original captured output.
+    assert data[SESSION_A]["captured_outputs"] == {
+        "prd_document": "ORIGINAL",
+        "table_metadata": "OUT-OF-BAND",
+    }
     # complete_step never touches the interaction provenance log.
     assert interactions == []
 
 
-def test_submit_answer_decision_marker_is_idempotent_on_replay(store):
+def test_submit_answer_confirmation_survives_a_different_retry_answer(store):
+    """A recorded confirmation is not overwritten/cleared by a different retry
+    answer, and never leaks across sessions.
+
+    - Overwrite probe (BLOCKING 1): the retry submits a DIFFERENT valid answer
+      ("not_ready"), so an overwrite/clear of the marker is observable — the
+      assertion goes RED if the retry mutated the decision marker.
+    - Cache-sensitive (BLOCKING 2): an interleaved SESSION_B confirmation with a
+      distinct captured output must stay distinct. Under a shared cache, B would
+      read/persist SESSION_A's outputs and the B assertion fails on its own.
+    """
     data, interactions = store
+    marker = mcp_server.decision_capture_key(
+        "gagent_benchmarks", "gagent_benchmarks.benchmark_confirmation"
+    )
     data[SESSION_A]["completed_gates"] = _benchmark_ready_gates()
+    data[SESSION_A]["captured_outputs"] = {"prd_document": "A-PRD"}
+    data[SESSION_B]["completed_gates"] = _benchmark_ready_gates()
+    data[SESSION_B]["captured_outputs"] = {"prd_document": "B-PRD"}
 
     first = mcp_server.vibe_submit_answer(
         SESSION_A, "gagent_benchmarks.benchmark_confirmation", "confirm"
     )
-    second = mcp_server.vibe_submit_answer(
-        SESSION_A, "gagent_benchmarks.benchmark_confirmation", "confirm"
-    )
-
-    # No spurious error on retry; the confirm keeps unblocking the hard stop.
-    assert first.recorded is True and second.recorded is True
+    assert first.recorded is True
     assert first.unblocks == "gagent_benchmarks"
-    assert second.unblocks == "gagent_benchmarks"
-
-    marker = mcp_server.decision_capture_key(
-        "gagent_benchmarks", "gagent_benchmarks.benchmark_confirmation"
-    )
-    # The STATE that gates progression — the captured_outputs decision marker —
-    # is written exactly once with a stable value. A retry neither adds a second
-    # key nor corrupts the value. This is the idempotency a stateless re-read
-    # regression would actually break.
-    decision_keys = [key for key in data[SESSION_A]["captured_outputs"] if key == marker]
-    assert decision_keys == [marker]
     assert data[SESSION_A]["captured_outputs"][marker] == "confirm"
 
-    # NOTE: session_interactions is an APPEND-ONLY provenance table by design
-    # (db/lakebase/ddl/12_mcp_engine_state.sql; pinned by test_interactivity's
-    # single-submit assertions). Recording each attempt — including a retry — is
-    # intended provenance, so a replay does append a second provenance row. The
-    # correctness-bearing idempotency lives on the session STATE asserted above,
-    # not on the audit trail; this assertion documents that intended behavior.
-    assert len(interactions) == 2
+    # Interleave SESSION_B confirming its OWN benchmark.
+    b_result = mcp_server.vibe_submit_answer(
+        SESSION_B, "gagent_benchmarks.benchmark_confirmation", "confirm"
+    )
+    assert b_result.unblocks == "gagent_benchmarks"
+
+    # Retry SESSION_A with a DIFFERENT valid answer. It must neither re-confirm nor
+    # clear/overwrite the confirmation already recorded on the first call.
+    second = mcp_server.vibe_submit_answer(
+        SESSION_A, "gagent_benchmarks.benchmark_confirmation", "not_ready"
+    )
+    assert second.recorded is True
+    assert second.unblocks is None
+
+    # SESSION_A: the marker reflects the FIRST accepted decision, unchanged. Exactly
+    # one marker key mapping to "confirm"; this assertion fails if the retry
+    # overwrote the value or dropped the key.
+    a_captured = data[SESSION_A]["captured_outputs"]
+    assert [key for key in a_captured if key == marker] == [marker]
+    assert a_captured[marker] == "confirm"
+    assert a_captured == {"prd_document": "A-PRD", marker: "confirm"}
+
+    # SESSION_B stays distinct — its captured output is B-PRD, never A-PRD.
+    b_captured = data[SESSION_B]["captured_outputs"]
+    assert b_captured["prd_document"] == "B-PRD"
+    assert b_captured[marker] == "confirm"
+    assert a_captured != b_captured
+
+    # Append-only provenance (§12 / DDL 12_mcp_engine_state.sql): every attempt is
+    # recorded, attributed to the right session and answer — asserted concretely,
+    # not by a bare count.
+    assert [(row["session_id"], row["answer"]) for row in interactions] == [
+        (SESSION_A, "confirm"),
+        (SESSION_B, "confirm"),
+        (SESSION_A, "not_ready"),
+    ]
 
 
-def test_complete_step_replay_after_reload_never_double_appends_gate(store):
-    """Drive a two-step walk, then replay every completion. Each gate must appear
-    exactly once and every captured output must keep its first value — proving the
-    walk is rebuilt from freshly-read state, not from an accumulating in-process
-    list."""
-    data, _ = store
+def test_complete_step_replay_reflects_out_of_band_reload(store):
+    """Replaying complete_step re-reads the persisted ledger fresh: a gate a
+    concurrent writer already recorded out-of-band is neither duplicated nor lost,
+    and its captured output is preserved.
 
-    mcp_server.vibe_complete_step(SESSION_A, "project_setup", "setup")
-    mcp_server.vibe_complete_step(SESSION_A, "prd_generation", "prd-v1")
-    # Replay both, out of order, with different payloads.
-    mcp_server.vibe_complete_step(SESSION_A, "prd_generation", "prd-v2")
-    mcp_server.vibe_complete_step(SESSION_A, "project_setup", "setup-again")
+    Cache-sensitive: a cached in-process SessionState would replay against a stale
+    object and clobber the out-of-band write on save, so this test fails on its own
+    under a shared-cache bug.
+    """
+    data, interactions = store
+
+    first = mcp_server.vibe_complete_step(SESSION_A, "project_setup", "setup")
+    assert first.completed_gates == ["project_setup"]
+
+    # Out-of-band: another request/UI for the SAME session completes the next gate
+    # and records its output while our caller was idle (the actual reload step).
+    data[SESSION_A]["completed_gates"] = ["project_setup", "prd_generation"]
+    data[SESSION_A]["captured_outputs"] = {"prd_document": "OUT-OF-BAND-PRD"}
+
+    # Replay the already-done project_setup completion — it must re-read fresh.
+    second = mcp_server.vibe_complete_step(SESSION_A, "project_setup", "setup-again")
+    assert isinstance(second, mcp_server.CompleteStepResult)
 
     gates = data[SESSION_A]["completed_gates"]
     assert gates == ["project_setup", "prd_generation"]
     assert gates.count("project_setup") == 1
     assert gates.count("prd_generation") == 1
-    assert data[SESSION_A]["captured_outputs"] == {"prd_document": "prd-v1"}
+    # The out-of-band captured output survived the replay (proves fresh re-read),
+    # and project_setup (produces nothing) did not overwrite it.
+    assert data[SESSION_A]["captured_outputs"] == {"prd_document": "OUT-OF-BAND-PRD"}
+    assert interactions == []
