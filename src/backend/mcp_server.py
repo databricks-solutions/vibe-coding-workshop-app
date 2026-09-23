@@ -1,4 +1,4 @@
-"""Read-only Phase 1 MCP adapter for the Vibe Coding Workshop."""
+"""MCP adapter for the Vibe Coding Workshop."""
 
 from __future__ import annotations
 
@@ -559,7 +559,41 @@ def vibe_complete_step(
     captured_output: str,
     context: Context | None = None,
 ) -> CompleteStepResult:
-    return _error_result("PHASE_2_NOT_ENABLED", _PHASE_2_MESSAGE)  # type: ignore[return-value]
+    loaded = _load_session_for_request(session_id, context)
+    if loaded is None:
+        return _error_result("INVALID_SESSION", "The requested session could not be resolved.")  # type: ignore[return-value]
+
+    state, _ = loaded
+    result = engine.complete_step(DEFAULT_TRACK, state, sectionTag, captured_output)
+    if not result.ok:
+        messages = {
+            "UNKNOWN_TRACK": "Unknown workshop track.",
+            "UNKNOWN_STEP": f"Unknown workshop step: {sectionTag}",
+            "STEP_LOCKED": "The requested step is locked until its prerequisite gate is complete.",
+            "UI_DRIVEN_STEP": "This step is coached and must be completed in the web UI.",
+        }
+        code = result.error_code or "UNKNOWN_STEP"
+        return _error_result(
+            code,
+            messages.get(code, "The workshop step could not be completed."),
+            sectionTag=sectionTag,
+        )  # type: ignore[return-value]
+
+    save_session(
+        session_id=session_id,
+        captured_outputs=dict(state.captured_outputs),
+        completed_gates=list(result.completed_gates),
+    )
+
+    next_step = result.next_step
+    if isinstance(next_step, engine.Done):
+        next_payload: ExplainabilityPayload | DoneResult = DoneResult()
+    else:
+        next_payload = _step_payload(DEFAULT_TRACK, state, next_step, session_id=session_id)
+    return CompleteStepResult(
+        completed_gates=list(result.completed_gates),
+        next=next_payload,
+    )
 
 
 @mcp.tool(
@@ -608,7 +642,15 @@ def vibe_set_parameters(
     params: dict[str, Any],
     context: Context | None = None,
 ) -> SetParametersResult:
-    return _error_result("PHASE_2_NOT_ENABLED", _PHASE_2_MESSAGE)  # type: ignore[return-value]
+    loaded = _load_session_for_request(session_id, context)
+    if loaded is None:
+        return _error_result("INVALID_SESSION", "The requested session could not be resolved.")  # type: ignore[return-value]
+
+    state, _ = loaded
+    state.session_parameters.update(params)
+    resolved_params = dict(state.session_parameters)
+    save_session(session_id=session_id, session_parameters=resolved_params)
+    return SetParametersResult(resolved_params=resolved_params, missing_required=[])
 
 
 def _track_overview(track: str) -> str:
