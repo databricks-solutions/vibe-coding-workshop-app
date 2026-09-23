@@ -284,6 +284,57 @@ record the client's declared capabilities or identity, capture them at the **tra
 Pin `mcp` and `fastmcp` (and `fastapi`, `uvicorn`) to exact versions in your lockfile; MCP's cadence
 means minor bumps change handshake behavior.
 
+### 4.8 Deploying a **stateful** MCP server: two silent-failure landmines
+> Discovered live (2026-09-23, `fevm-serverless`) while shipping an interactive, state-persisting
+> workshop engine over MCP. Both landmines leave the server **up, listing tools, and answering
+> `200`** while the *stateful* behavior is silently broken — so a green server-side smoke and a
+> healthy app both lie. If your MCP server persists anything (sessions, provenance, gates), read this.
+
+**(a) Apply schema changes ADDITIVELY — never route an additive migration through a destructive
+drop+reseed, especially on a scale-to-zero / low-capacity Postgres.**
+The state store here is Lakebase (Databricks' managed Postgres) in **autoscaling** mode (scale-to-zero,
+e.g. 0.5 CU). The new-feature migration was correctly written additive and idempotent
+(`ALTER TABLE ... ADD COLUMN IF NOT EXISTS`, `CREATE TABLE IF NOT EXISTS`, `CREATE INDEX IF NOT
+EXISTS`). But the deploy's "reseed" step ran a **`--recreate`** that `DROP`s content tables and
+reseeds them from a large (>1 MB, ~thousands of statements) DML file over a **single long-lived
+connection**. On the low-capacity endpoint that connection **dropped partway through the seed**, and
+because the seeder swallowed per-statement errors (`ignore_errors`), it **silently left the content
+table EMPTY** and never reached the grant step — while printing "seeded successfully". Rules:
+- The additive DDL is all you need for an additive migration — apply it via a **non-destructive**
+  path (`CREATE ... IF NOT EXISTS` + `ADD COLUMN IF NOT EXISTS`), not a drop+reseed.
+- If you must run a large seed, make the loader **reconnect-on-drop** (regenerate the credential and
+  reconnect, retry the statement) and **idempotent** (`ON CONFLICT DO NOTHING`). A single-connection
+  bulk seed against a scale-to-zero endpoint is a coin-flip.
+- **Never trust a seeder that swallows errors.** After any migration/seed, **assert row counts** on
+  the tables you touched **and** re-assert the grants (below). "N statements executed" printed by an
+  `ignore_errors` loop can mean "N of M failed silently".
+
+**(b) A grant step that fails mid-run leaves new tables unreadable by the app's identity.**
+The app connects to Postgres as its **service principal** (or via a `public`/inherited role). New
+tables created by the *deployer's* identity are **not** automatically usable by the app SP. The grant
+step (`GRANT ... ON ALL TABLES ... TO public` / `TO "<sp>"`, plus `ALTER DEFAULT PRIVILEGES`) ran
+**after** the seed and so **never executed** when the connection dropped — leaving the new table
+INSERT-denied for the app even once it was repopulated. Re-apply grants explicitly and verify with
+`has_table_privilege('<role>', '<schema>.<table>', 'INSERT')` — do not assume the create implied them.
+
+**(c) A "code-only" / fast deploy can ship the app with its state backend SILENTLY DISABLED.**
+The state store's connection config (host + endpoint/credential) is populated by a **discovery step**
+that runs only in the *full* deploy. The **fast/code-only** path **skips** it, syncing an `app.yaml`
+whose `LAKEBASE_HOST` / `ENDPOINT_NAME` are **blank**. Result: the app boots, `/mcp` lists tools,
+every tool returns `200` — but `is_state_configured()` is **False**, so **every load/save/append is a
+no-op** and nothing persists across requests (fatal for a stateless-HTTP server that relies on the DB
+for continuity). "App is RUNNING" + "tools list" **do not** prove state works. Rules:
+- Treat the state-backend connection env as **required config**, and **fail loud** (or log a stark
+  warning) at startup when it's blank — don't degrade to a silent in-memory/YAML fallback for a
+  server whose whole contract is persistence.
+- The **deploy smoke must include a WRITE + read-back**, not just `initialize`/`tools/list`. Call a
+  write tool, then confirm the row landed (query the store directly, or a read tool). See §9.3.
+- After a fast deploy, confirm the state backend logged **"configured"**, not "not configured".
+
+**Bottom line:** for a stateful MCP server, "healthy app + green handshake" is necessary but **not
+sufficient**. The acceptance signal is **a write that persists and reads back**, plus explicit
+row-count and grant checks after any migration.
+
 ---
 
 ## 5. Tool design (the surface Genie Code uses most)
@@ -489,6 +540,14 @@ tool result. **Tear the probe down when done.**
   four annotations.
 - **Live smoke:** add server in Genie Code → **confirm it persists on Save** → invoke a prompt →
   call a tool → verify persisted state.
+- **Write + read-back (stateful servers, §4.8):** the deploy smoke must call a **write** tool and
+  then confirm the row landed — query the store directly or call a read tool — **not** just
+  `initialize`/`tools/list`. A blank state-backend config (§4.8c) leaves every write a silent no-op
+  while all requests still return `200`; only a read-back catches it. Also assert the startup log
+  shows the state backend **"configured"**.
+- **Post-migration row-count + grant check (§4.8a/b):** after any migration/seed, assert row counts
+  on touched tables and `has_table_privilege('<app-role>', '<schema>.<table>', 'INSERT')` on new
+  tables — an `ignore_errors` seeder can report success while leaving a table empty and ungranted.
 - **Re-probe harness:** keep §9.2 runnable so you can detect the day Genie Code gains elicitation.
 
 ---
@@ -513,6 +572,10 @@ tool result. **Tear the probe down when done.**
       slimmed listing
 - [ ] MCP app lifespan wired into the parent FastAPI app
 - [ ] Stateless; durable state in an external store keyed by resolved identity
+- [ ] **Stateful-deploy landmines handled (§4.8):** schema changes applied additively (no
+      drop+reseed for an additive migration); large seeds reconnect-on-drop + idempotent;
+      post-migration row-count **and** grant checks; state-backend config treated as required
+      (fail-loud on blank, no silent in-memory fallback); deploy smoke does a **write + read-back**
 - [ ] MCP/FastMCP versions pinned in the lockfile
 
 **Tools / prompts / resources**
@@ -546,6 +609,13 @@ tool result. **Tear the probe down when done.**
   richer listing and loops the handshake; strip those two fields from the *listing* only, keep them
   on the tool definitions for `tools/call` and tolerant clients (§4.4e).
 - ❌ Mounting the MCP app without wiring its lifespan (§4.3).
+- ❌ Routing an **additive** migration through a destructive `drop+reseed`, or trusting a large
+  single-connection bulk seed against a scale-to-zero / low-capacity Postgres — it drops mid-run and
+  an `ignore_errors` loop leaves the table **empty** while reporting success. Apply additively,
+  reconnect-on-drop, and assert row counts + grants afterward (§4.8a/b).
+- ❌ Accepting **"app RUNNING + tools/list works"** as proof a **stateful** server works. A
+  code-only/fast deploy can ship a **blank** state-backend config (§4.8c) so every write is a silent
+  no-op behind `200`s. Fail loud on blank config; make the deploy smoke do a **write + read-back**.
 - ❌ Asking the user for input via the protocol (elicitation/MRTR) as a hard requirement.
 - ❌ Shipping 10+ tools and starving the shared 20-tool budget.
 - ❌ Tool descriptions that say *what* but not *when* / *params* / *errors*.
@@ -568,6 +638,12 @@ Derived from:
   `external-to-managed-table-migration-toolkit` (`app/server/mcp/register-mcp.ts`:
   `normalizeAcceptHeader`, `normalizeOrigin`, `setCors`) and the official docs
   [Connect Genie Code to MCP servers](https://docs.databricks.com/aws/en/genie-code/mcp).
+- A live **stateful-deploy investigation** (`fevm-serverless`, 2026-09-23) shipping an interactive,
+  state-persisting workshop engine over MCP — source of §4.8: a destructive `--recreate` reseed that
+  dropped a content table then died mid-seed on a scale-to-zero Lakebase (leaving it empty +
+  ungranted), and a `--code-only` deploy that shipped a blank state-backend config so every write was
+  a silent no-op behind `200`s. Both were invisible to a green server-side handshake and a healthy
+  app; only a **write + read-back** and post-migration row-count/grant checks caught them.
 
 Worked example and the full reconciliation live alongside this file: [`README.md`](./README.md),
 [`mcp-research-and-findings.md`](./mcp-research-and-findings.md),
