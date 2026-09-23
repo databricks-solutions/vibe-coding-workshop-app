@@ -24,6 +24,7 @@ from mcp.types import (
 from pydantic import BaseModel, ConfigDict, Field, RootModel
 
 from .services.lakebase import (
+    append_session_interaction,
     is_lakebase_configured,
     load_session,
     save_session,
@@ -104,6 +105,7 @@ class Interaction(BaseModel):
     options: list[InteractionOption] = Field(default_factory=list)
     recommended: str | None = None
     skippable: bool
+    coaching: dict[str, str] = Field(default_factory=dict)
 
 
 class ExplainabilityPayload(BaseModel):
@@ -121,7 +123,7 @@ class ExplainabilityPayload(BaseModel):
     produces: str | None
     execution: Literal["agent-doable", "ui-driven", "hybrid"]
     next: StepReference
-    interaction: dict[str, Interaction] | None = None
+    interaction: dict[str, Interaction | None] | None = None
     orientation: str | None = None
 
 
@@ -382,6 +384,54 @@ def _next_reference(track: str, state: engine.SessionState, step: manifest.Step)
     return StepReference(sectionTag="", title="Track complete")
 
 
+def decision_capture_key(section_tag: str, interaction_id: str) -> str:
+    return f"interaction_decision:{section_tag}:{interaction_id}"
+
+
+def _interaction_payload(section_tag: str) -> dict[str, Interaction | None] | None:
+    blocks = manifest.interactions_for(section_tag)
+    if not blocks:
+        return None
+    return {
+        slot: Interaction.model_validate(block) if block is not None else None
+        for slot in manifest.INTERACTION_SLOTS
+        for block in [blocks.get(slot)]
+    }
+
+
+def _find_interaction(
+    interaction_id: str,
+) -> tuple[str, str, Interaction] | None:
+    for section_tag, blocks in manifest.load_interactions().items():
+        for slot in manifest.INTERACTION_SLOTS:
+            block = blocks.get(slot)
+            if isinstance(block, dict) and block.get("id") == interaction_id:
+                return section_tag, slot, Interaction.model_validate(block)
+    return None
+
+
+def _resolve_interaction_answer(
+    interaction: Interaction, answer: str
+) -> tuple[str, bool, str]:
+    silent = not answer.strip()
+    if silent and interaction.skippable and interaction.recommended is not None:
+        resolved = interaction.recommended
+        was_default = True
+    else:
+        resolved = answer.strip()
+        was_default = False
+
+    for option in interaction.options:
+        if resolved == option.id or resolved.casefold() == option.label.casefold():
+            resolved = option.id
+            break
+    coaching = interaction.coaching.get(
+        resolved,
+        "Thanks — I’ll carry that answer forward without blocking the track.",
+    )
+    return resolved, was_default, coaching
+
+
 def _step_payload(
     track: str,
     state: engine.SessionState,
@@ -412,7 +462,7 @@ def _step_payload(
         produces=step.produces,
         execution=step.execution,
         next=_next_reference(track, state, step),
-        interaction=None,
+        interaction=_interaction_payload(step.sectionTag),
         orientation=orientation,
     )
 
@@ -534,9 +584,6 @@ def vibe_next_step(session_id: str, context: Context | None = None) -> NextStepR
     return NextStepResult.model_validate(_step_payload(DEFAULT_TRACK, state, next_item, session_id=session_id))
 
 
-_PHASE_2_MESSAGE = "This write operation is not enabled until Phase 2; no state was changed."
-
-
 @mcp.tool(
     name="vibe_complete_step",
     description=(
@@ -564,6 +611,18 @@ def vibe_complete_step(
         return _error_result("INVALID_SESSION", "The requested session could not be resolved.")  # type: ignore[return-value]
 
     state, _ = loaded
+    blocking = manifest.blocking_interactions(sectionTag)
+    if blocking:
+        confirmed = any(
+            decision_capture_key(sectionTag, block["id"]) in state.captured_outputs
+            for block in blocking
+        )
+        if not confirmed:
+            return _error_result(
+                "GATE_REQUIRED",
+                "Confirm the benchmark decision before completing this step.",
+                sectionTag=sectionTag,
+            )  # type: ignore[return-value]
     result = engine.complete_step(DEFAULT_TRACK, state, sectionTag, captured_output)
     if not result.ok:
         messages = {
@@ -571,6 +630,7 @@ def vibe_complete_step(
             "UNKNOWN_STEP": f"Unknown workshop step: {sectionTag}",
             "STEP_LOCKED": "The requested step is locked until its prerequisite gate is complete.",
             "UI_DRIVEN_STEP": "This step is coached and must be completed in the web UI.",
+            "GATE_REQUIRED": "Confirm the blocking interaction before completing this step.",
         }
         code = result.error_code or "UNKNOWN_STEP"
         return _error_result(
@@ -618,7 +678,55 @@ def vibe_submit_answer(
     answer: str,
     context: Context | None = None,
 ) -> SubmitAnswerResult:
-    return _error_result("PHASE_2_NOT_ENABLED", _PHASE_2_MESSAGE)  # type: ignore[return-value]
+    loaded = _load_session_for_request(session_id, context)
+    if loaded is None:
+        return _error_result("INVALID_SESSION", "The requested session could not be resolved.")  # type: ignore[return-value]
+
+    state, _ = loaded
+    resolved = _find_interaction(interaction_id)
+    if resolved is None:
+        return _error_result(
+            "UNKNOWN_INTERACTION",
+            f"Unknown workshop interaction: {interaction_id}",
+            interaction_id=interaction_id,
+        )  # type: ignore[return-value]
+    section_tag, _slot, interaction = resolved
+    current = engine.next_step(DEFAULT_TRACK, state)
+    if isinstance(current, engine.Done) or current.sectionTag != section_tag:
+        return _error_result(
+            "UNKNOWN_INTERACTION",
+            f"Interaction {interaction_id} is not on the current workshop step.",
+            interaction_id=interaction_id,
+        )  # type: ignore[return-value]
+
+    resolved_answer, was_default, coaching = _resolve_interaction_answer(interaction, answer)
+    recorded = append_session_interaction(
+        session_id=session_id,
+        section_tag=section_tag,
+        interaction_id=interaction.id,
+        kind=interaction.type,
+        answer=resolved_answer,
+        recommended=interaction.recommended,
+        was_default=was_default,
+        coaching_shown=coaching,
+        surface="mcp",
+    )
+
+    unblocks = None
+    if recorded and interaction.type in {"decision", "confirm"}:
+        confirmed = (
+            interaction.type == "decision"
+            or (not was_default and resolved_answer == interaction.recommended)
+        )
+        if confirmed:
+            state.captured_outputs[decision_capture_key(section_tag, interaction.id)] = resolved_answer
+            save_session(
+                session_id=session_id,
+                captured_outputs=dict(state.captured_outputs),
+            )
+            unblocks = section_tag
+
+    return SubmitAnswerResult(recorded=recorded, coaching=coaching, unblocks=unblocks)
 
 
 @mcp.tool(

@@ -7,9 +7,9 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Literal
 
-
 Execution = Literal["agent-doable", "ui-driven", "hybrid"]
 Surface = Literal["ui", "mcp"]
+INTERACTION_SLOTS = ("pre", "decision", "post")
 
 
 @dataclass(frozen=True)
@@ -27,7 +27,7 @@ class Step:
     flag: str | None = None
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> "Step":
+    def from_dict(cls, data: dict[str, Any]) -> Step:
         return cls(
             order=int(data["order"]),
             sectionTag=str(data["sectionTag"]),
@@ -52,7 +52,7 @@ class Section:
     why: str | None = None
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> "Section":
+    def from_dict(cls, data: dict[str, Any]) -> Section:
         return cls(
             id=str(data["id"]),
             title=str(data["title"]),
@@ -69,7 +69,7 @@ class Flag:
     note: str | None = None
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> "Flag":
+    def from_dict(cls, data: dict[str, Any]) -> Flag:
         return cls(
             default=bool(data.get("default", False)),
             affectsSteps=[str(value) for value in data.get("affectsSteps", [])],
@@ -86,7 +86,7 @@ class Track:
     flags: dict[str, Flag] = field(default_factory=dict)
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> "Track":
+    def from_dict(cls, data: dict[str, Any]) -> Track:
         return cls(
             id=str(data["id"]),
             title=str(data["title"]),
@@ -153,3 +153,43 @@ def load_manifest(path: str | None = None) -> Manifest:
 
 def track_steps(track_id: str, path: str | None = None) -> list[Step]:
     return load_manifest(path).track_steps(track_id)
+
+
+def _interactions_path(path: str | None) -> Path:
+    return Path(path) if path is not None else Path(__file__).with_name("interactions.json")
+
+
+def load_interactions(path: str | None = None) -> dict[str, dict[str, dict[str, Any] | None]]:
+    interactions_path = _interactions_path(path)
+    with interactions_path.open(encoding="utf-8") as stream:
+        data = json.load(stream)
+    if not isinstance(data, dict):
+        raise TypeError("Interactions must be keyed by sectionTag")
+    return {
+        str(section_tag): {
+            slot: block if isinstance(block, dict) else None
+            for slot, block in section_data.items()
+            if slot in INTERACTION_SLOTS
+        }
+        for section_tag, section_data in data.items()
+        if isinstance(section_data, dict)
+    }
+
+
+def interactions_for(
+    section_tag: str, path: str | None = None
+) -> dict[str, dict[str, Any] | None] | None:
+    return load_interactions(path).get(section_tag)
+
+
+def blocking_interactions(
+    section_tag: str, path: str | None = None
+) -> list[dict[str, Any]]:
+    blocks = interactions_for(section_tag, path) or {}
+    return [
+        block
+        for block in blocks.values()
+        if isinstance(block, dict)
+        and block.get("type") == "confirm"
+        and block.get("skippable") is False
+    ]
