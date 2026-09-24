@@ -1,0 +1,58 @@
+{
+  "app-only": [
+    "project_setup",
+    "prd_generation"
+  ],
+  "app-database": [
+    "project_setup",
+    "prd_generation"
+  ],
+  "lakehouse": [
+    "project_setup",
+    "prd_generation"
+  ],
+  "lakehouse-di": [
+    "project_setup",
+    "prd_generation"
+  ],
+  "end-to-end": [
+    "project_setup",
+    "prd_generation"
+  ],
+  "accelerator": [
+    "project_setup",
+    "prd_generation"
+  ],
+  "genie-accelerator": [
+    "project_setup",
+    "use_case_selection",
+    "prd_generation"
+  ],
+  "data-engineering-accelerator": [
+    "project_setup",
+    "prd_generation"
+  ],
+  "skills-accelerator": [
+    "project_setup"
+  ],
+  "agents-accelerator": [
+    "project_setup",
+    "prd_generation"
+  ],
+  "reverse-lakehouse": [
+    "project_setup",
+    "prd_generation"
+  ],
+  "reverse-lakehouse-di": [
+    "project_setup",
+    "prd_generation"
+  ],
+  "reverse-lakebase": [
+    "project_setup",
+    "prd_generation"
+  ],
+  "reverse-app": [
+    "project_setup",
+    "prd_generation"
+  ]
+}

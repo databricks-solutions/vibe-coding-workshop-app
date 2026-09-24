@@ -487,6 +487,9 @@ export const ALL_STEPS: Record<number, WorkflowStep> = {
   67: { number: 67, title: 'Model the Domain + Subdomains', icon: Globe, color: 'text-teal-400', sectionTag: 'ontology_domain' },
   68: { number: 68, title: 'Author Pages', icon: BookOpen, color: 'text-teal-400', sectionTag: 'ontology_pages' },
   69: { number: 69, title: 'Write the Routing Page', icon: GitBranch, color: 'text-teal-400', sectionTag: 'ontology_routing' },
+  // Genie Accelerator use-case discovery (D11, Phase 2B). Inserted into the shared
+  // define-usecase section for the genie-accelerator track ONLY (stripped elsewhere).
+  70: { number: 70, title: 'Define Your Use Case', icon: ClipboardList, color: 'text-blue-300', sectionTag: 'use_case_selection' },
   71: { number: 71, title: 'AI/BI Dashboard', icon: LayoutDashboard, color: 'text-emerald-400', sectionTag: 'gaccel_dashboard' },
   72: { number: 72, title: 'Choose What to Activate', icon: ClipboardList, color: 'text-emerald-400', sectionTag: 'gaccel_activation' },
   73: { number: 73, title: 'Wire Genie', icon: MessageSquareText, color: 'text-emerald-500', sectionTag: 'activation_wire_genie' },
@@ -504,7 +507,9 @@ export const WORKFLOW_SECTIONS: WorkflowSection[] = [
     color: 'text-blue-400',
     bgColor: 'bg-blue-500/15',
     borderColor: 'border-blue-500/30',
-    steps: [2, 3].map(n => ALL_STEPS[n]),
+    // Base order: project_setup -> use_case_selection (70, genie-only) -> prd_generation.
+    // getFilteredSections strips step 70 for every non-genie track (see below).
+    steps: [2, 70, 3].map(n => ALL_STEPS[n]),
   },
   {
     id: 'databricks-app',
@@ -754,12 +759,15 @@ export function getFilteredSections(
       if (GENIE_TRACK_SECTION_IDS.has(section.id) && !isGenie) {
         return { ...section, steps: [] };
       }
-      // Skills Accelerator: remove PRD step from foundation
-      if (section.id === 'define-usecase' && isSkillsAccelerator) {
-        return {
-          ...section,
-          steps: section.steps.filter(step => step.number !== 3),
-        };
+      // define-usecase: use_case_selection (step 70) is a genie-accelerator-only
+      // beat (D11, Phase 2B), so strip it from every non-genie track. Skills
+      // Accelerator additionally drops the PRD step (3) from foundation.
+      if (section.id === 'define-usecase' && !isGenie) {
+        let steps = section.steps.filter(step => step.number !== 70);
+        if (isSkillsAccelerator) {
+          steps = steps.filter(step => step.number !== 3);
+        }
+        return { ...section, steps };
       }
       // Genie Accelerator: lakehouse section shows only steps 22, 11, 14, 23
       if (section.id === 'lakehouse' && isGenie) {

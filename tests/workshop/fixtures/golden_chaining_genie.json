@@ -1,6 +1,9 @@
 {
   "project_setup": [],
-  "prd_generation": [],
+  "use_case_selection": [],
+  "prd_generation": [
+    "use_case_brief"
+  ],
   "genie_silver_metadata": [],
   "gold_layer_design": [
     "table_metadata",

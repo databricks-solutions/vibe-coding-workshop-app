@@ -51,7 +51,9 @@ def _error_code(result):
 
 def test_complete_step_advances_and_persists_gate_and_output(session_store):
     store, saves = session_store
-    store[SESSION_ID]["completed_gates"] = ["project_setup"]
+    # prd_generation now gates on use_case_selection (D11 §3.6), so the ledger
+    # must already hold both predecessor gates before PRD can be completed.
+    store[SESSION_ID]["completed_gates"] = ["project_setup", "use_case_selection"]
 
     result = mcp_server.vibe_complete_step(
         SESSION_ID,
@@ -59,9 +61,10 @@ def test_complete_step_advances_and_persists_gate_and_output(session_store):
         "Generated PRD",
     )
 
-    assert result.completed_gates == ["project_setup", "prd_generation"]
+    expected_gates = ["project_setup", "use_case_selection", "prd_generation"]
+    assert result.completed_gates == expected_gates
     assert result.next.sectionTag == "genie_silver_metadata"
-    assert store[SESSION_ID]["completed_gates"] == ["project_setup", "prd_generation"]
+    assert store[SESSION_ID]["completed_gates"] == expected_gates
     assert store[SESSION_ID]["captured_outputs"] == {"prd_document": "Generated PRD"}
     assert saves[-1][1]["completed_gates"] == result.completed_gates
     assert saves[-1][1]["captured_outputs"] == {"prd_document": "Generated PRD"}
