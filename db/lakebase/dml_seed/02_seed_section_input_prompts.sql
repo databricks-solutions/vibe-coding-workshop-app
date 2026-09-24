@@ -105,6 +105,123 @@
 -- (or just apply on a fresh schema).
 -- =============================================================================
 
+-- Define Your Use Case (Phase 2B — D11): certified-first use-case selection before the PRD
+INSERT INTO ${catalog}.${schema}.section_input_prompts 
+(input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
+VALUES
+(958, 'use_case_selection',
+'Before generating the PRD, lock in the **use case** that anchors everything you build in the Genie Accelerator. The PRD, data model, dashboard, and Genie space all follow from this single choice, so choose deliberately.
+
+## Start from your industry
+
+1. **List industries.** Read the `vibe://usecases/industries` resource for the curated industry options (each has a `value` and a `label`).
+2. **List use cases for that industry.** Read `vibe://usecases/{industry}` (for example `vibe://usecases/retail`). Entries come back certified-first and each carries `value`, `label`, `category`, and `is_certified`.
+3. **Prefer a certified use case (recommended).** Entries with `is_certified` set to true are curated and tested end to end, so they give the smoothest path through the accelerator. Pick one of these unless you have a specific reason not to.
+4. **Or build your own [Beta].** If none of the certified use cases fit, author a custom use case: an industry, a short label, and a one-paragraph description of what the application does and who uses it. Custom use cases stay local to this session and are never written to the shared library.
+
+## Lock your choice
+
+When you have decided, call `vibe_set_parameters` with `params`:
+
+- `industry` — the industry value (for example `retail`)
+- `use_case` — the use case value
+- `use_case_label` — a human-readable title
+- `use_case_source` — `curated` when you picked from the listing, or `custom` when you authored your own
+- `use_case_description` — required only when `use_case_source` is `custom`
+
+`vibe_set_parameters` returns the resolved parameters plus any still-missing required fields. If fields are missing, ask for them in chat and call again. Once the selection locks, it produces the **use case brief** that the PRD step — and every step after it — consumes. You cannot proceed to the PRD until a use case is locked.',
+'',
+'Define Your Use Case',
+'Pick the certified use case (or author your own) that anchors the PRD and every downstream step',
+2,
+'## 1️⃣ How To Apply
+
+You do not paste this step into a coding assistant — you make a choice, then lock it with a single tool call.
+
+### Prerequisite
+
+- ✅ `project_setup` complete (workspace and CLI ready)
+
+### Steps to Apply
+
+**Step 1: Browse industries** — read the `vibe://usecases/industries` resource and pick the industry that matches your scenario.
+
+**Step 2: Browse use cases** — read `vibe://usecases/{industry}` for that industry; certified options appear first.
+
+**Step 3: Decide** — choose a certified use case (recommended), or author a custom one if none fit.
+
+**Step 4: Lock it** — call `vibe_set_parameters` with `industry`, `use_case`, `use_case_label`, and `use_case_source` (add `use_case_description` for a custom use case).
+
+**Step 5: Confirm** — check the returned parameters, supply any still-missing fields, then continue to the PRD step.
+
+---
+
+## 2️⃣ What Are We Building?
+
+### What is a use case brief?
+
+The use case brief is the single anchoring artifact for the whole accelerator: an industry, a use case, a human-readable label, and (for custom use cases) a one-paragraph description. Every later step — PRD, data model, dashboard, Genie space — reads from it.
+
+### Selection flow
+
+```
+┌───────────────────────────────────────────────────────────────────────────┐
+│                   USE-CASE SELECTION (start from industry)                  │
+├───────────────────────────────────────────────────────────────────────────┤
+│  vibe://usecases/industries   ->  pick an industry                          │
+│           │                                                                 │
+│           ▼                                                                 │
+│  vibe://usecases/{industry}   ->  certified-first use cases                 │
+│           │                                                                 │
+│     ┌─────┴───────────────┐                                                 │
+│     ▼                     ▼                                                 │
+│  certified (recommended)  custom [Beta] (session-local)                     │
+│     │                     │                                                 │
+│     └──────────┬──────────┘                                                 │
+│                ▼                                                            │
+│     vibe_set_parameters   ->  use_case_brief locked                         │
+└───────────────────────────────────────────────────────────────────────────┘
+```
+
+### Key Concepts
+
+| Concept | What It Means | Why It Matters |
+|---------|---------------|----------------|
+| **Certified use case** | A curated, end-to-end tested option (`is_certified: true`) | Smoothest path; the recommended default |
+| **Custom use case** | An author-your-own option, session-local | Flexibility when nothing certified fits; never leaks to the shared library |
+| **Use case brief** | The locked (industry, use case, label, [description]) tuple | The anchor every downstream step consumes |
+
+---
+
+## 3️⃣ Why Are We Building It This Way? (Databricks Best Practices)
+
+| Practice | How It''s Used Here |
+|----------|-------------------|
+| **Start from the business problem** | You choose an industry and use case before any code, so the PRD and data model serve a real scenario |
+| **Curated, certified defaults** | Certified use cases are vetted end to end, reducing dead-ends during the workshop |
+| **One anchoring artifact** | The use case brief keeps every step consistent — no drift between PRD, data, and Genie |
+
+---
+
+## 4️⃣ What Happens Behind the Scenes?
+
+### Gate Contract
+
+| Reads gate | Produces gate | Captured state |
+|------------|---------------|----------------|
+| `project_setup` | `use_case_selection` | `use_case_brief` (industry, use_case, use_case_label, use_case_source, and use_case_description for custom) |
+
+`vibe_set_parameters` writes the selection into `session_parameters`; the engine records the `use_case_selection` gate and produces the `use_case_brief`. The PRD step declares `requiresGate: use_case_selection` and `consumes: use_case_brief`, so it stays blocked until the brief exists.',
+'### Resources Created
+- [ ] A single use case locked into the session (`industry`, `use_case`, `use_case_label`, `use_case_source`)
+- [ ] The `use_case_brief` artifact, available to every downstream step
+
+### Success Criteria Checklist
+- [ ] `vibe_set_parameters` returned no missing required fields
+- [ ] The `use_case_selection` gate is recorded
+- [ ] The PRD step is unblocked and will generate against the locked use case',
+true, 1, true, current_timestamp(), current_timestamp(), current_user());
+
 -- Product Requirements Document (PRD)
 INSERT INTO ${catalog}.${schema}.section_input_prompts 
 (input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, version, is_active, inserted_at, updated_at, created_by)
