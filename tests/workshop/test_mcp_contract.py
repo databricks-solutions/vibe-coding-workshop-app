@@ -101,7 +101,9 @@ def test_resources_declare_ttl_and_cache_scope():
     resources = list(mcp_server.mcp._resource_manager.list_resources())
     templates = list(mcp_server.mcp._resource_manager.list_templates())
     all_resources = resources + templates
-    assert len(all_resources) == 4
+    # 4 workshop resources + the 2 use-case discovery resources (D11 §3.1):
+    # vibe://usecases/industries (concrete) and vibe://usecases/{industry} (template).
+    assert len(all_resources) == 6
     for resource in all_resources:
         assert resource.meta["ttlMs"] >= 0
         assert resource.meta["cacheScope"] in {"global", "session"}
