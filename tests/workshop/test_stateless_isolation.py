@@ -116,6 +116,11 @@ def test_two_sessions_driven_interleaved_never_share_state(store):
     # three gates while B stops after the shared first step.
     mcp_server.vibe_complete_step(SESSION_A, "project_setup", "a-setup")
     mcp_server.vibe_complete_step(SESSION_B, "project_setup", "b-setup")
+    # use_case_selection is a blocking confirm (D11 §3.4/T3): confirm the
+    # recommended selection before the step can complete.
+    mcp_server.vibe_submit_answer(
+        SESSION_A, "use_case_selection.usecase_confirmation", "use_certified"
+    )
     mcp_server.vibe_complete_step(SESSION_A, "use_case_selection", "A-BRIEF")
     mcp_server.vibe_complete_step(SESSION_A, "prd_generation", "A-PRD")
 
@@ -138,6 +143,9 @@ def test_two_sessions_driven_interleaved_never_share_state(store):
     # (c) Now B walks its own use_case_selection + prd_generation with DIFFERENT
     # captured outputs. The two sessions' outputs must be distinct — not a
     # shared/overwritten value.
+    mcp_server.vibe_submit_answer(
+        SESSION_B, "use_case_selection.usecase_confirmation", "use_certified"
+    )
     mcp_server.vibe_complete_step(SESSION_B, "use_case_selection", "B-BRIEF")
     mcp_server.vibe_complete_step(SESSION_B, "prd_generation", "B-PRD")
     assert data[SESSION_A]["captured_outputs"]["prd_document"] == "A-PRD"
