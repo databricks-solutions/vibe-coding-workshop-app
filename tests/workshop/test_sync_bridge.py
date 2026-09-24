@@ -157,14 +157,25 @@ def test_idempotent_replay_does_not_duplicate_or_regress(session_store):
     store, saves = session_store
     positions = _positions()
 
-    mcp_server.vibe_complete_step(SESSION_ID, "project_setup", "env configured")
+    first_result = mcp_server.vibe_complete_step(SESSION_ID, "project_setup", "env configured")
+    assert not isinstance(first_result, dict), first_result
     first = saves[-1][1]
     assert first["completed_steps"] == [positions["project_setup"]]
     assert first["current_step"] == positions["use_case_selection"]
 
-    # Replaying the SAME completion must not duplicate the completed step nor
-    # move current_step backward.
-    mcp_server.vibe_complete_step(SESSION_ID, "project_setup", "env configured (again)")
+    # Replaying the SAME completion must (a) genuinely run to a successful save
+    # again — not short-circuit or error into a re-read of the FIRST save — and
+    # (b) not duplicate the completed step nor move current_step backward.
+    saves_before_replay = len(saves)
+    replay_result = mcp_server.vibe_complete_step(
+        SESSION_ID, "project_setup", "env configured (again)"
+    )
+    # The replay is a real success (not an isError dict), and it appended a NEW
+    # save entry — so the assertions below are checking the REPLAY's write.
+    assert not isinstance(replay_result, dict), replay_result
+    assert replay_result.completed_gates[-1] == "project_setup"
+    assert len(saves) == saves_before_replay + 1
+
     replay = saves[-1][1]
     assert replay["completed_steps"] == [positions["project_setup"]]
     assert len(replay["completed_steps"]) == len(set(replay["completed_steps"]))
@@ -199,3 +210,37 @@ def test_existing_engine_writes_preserved_alongside_legacy_fields(session_store)
         positions["use_case_selection"],
     ]
     assert save_fields["current_step"] == positions["prd_generation"]
+
+
+# --- Guard — a locked use case in session_parameters survives complete_step ---
+
+
+def test_locked_use_case_in_session_parameters_survives_complete_step(session_store):
+    """vibe_complete_step must NOT clobber the locked UC in session_parameters.
+
+    session_parameters is written by vibe_set_parameters, not vibe_complete_step;
+    the complete_step save omits it, and save_session preserves it via
+    ``session_parameters = COALESCE(EXCLUDED.session_parameters, <table>...)``
+    (none-preserve — mirrored by the fake store's merge). This guard would catch
+    a future regression that started writing/wiping session_parameters here.
+    """
+
+    store, _ = session_store
+    store[SESSION_ID]["completed_gates"] = ["project_setup"]
+    # A fully-locked CUSTOM use case (this is the recommend-and-proceed unblock
+    # for use_case_selection per T4 / D11 §3.5 — no 'use_certified' answer).
+    locked_uc = {
+        "industry": "retail",
+        "use_case": "curbside_eta",
+        "use_case_label": "Curbside Pickup ETA",
+        "use_case_source": "custom",
+        "use_case_description": "Predict curbside pickup wait times.",
+    }
+    store[SESSION_ID]["session_parameters"] = dict(locked_uc)
+
+    brief = '{"industry":"retail","use_case":"curbside_eta","source":"custom"}'
+    completed = mcp_server.vibe_complete_step(SESSION_ID, "use_case_selection", brief)
+    assert not isinstance(completed, dict), completed
+
+    # The locked UC is still intact, unchanged, after completing the step.
+    assert store[SESSION_ID]["session_parameters"] == locked_uc
