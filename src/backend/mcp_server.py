@@ -11,7 +11,7 @@ from typing import Any, Literal
 import jsonschema
 from fastapi import Request
 from mcp.server.fastmcp import Context, FastMCP
-from mcp.server.fastmcp.resources.types import TextResource
+from mcp.server.fastmcp.resources.types import FunctionResource, TextResource
 from mcp.server.transport_security import TransportSecuritySettings
 from mcp.types import (
     CallToolRequest,
@@ -776,6 +776,50 @@ def read_getting_started() -> str:
     return GETTING_STARTED_GUIDE
 
 
+def _usecase_industries_resource() -> str:
+    """Curated industry options for use-case selection (D11 §3.1).
+
+    Backed by the SAME seam the SPA uses — ``get_industries()`` — so there is one
+    source of truth and no fork. Lazy-imported so registration triggers no
+    import-time Databricks/Lakebase call. The leading ``value == ""`` placeholder
+    ("Select an industry...") is a dropdown affordance and is dropped here so an
+    agent sees only real options.
+    """
+    from .api.routes import get_industries
+
+    options = [
+        {"value": opt.get("value"), "label": opt.get("label")}
+        for opt in get_industries()
+        if opt.get("value")
+    ]
+    return json.dumps({"industries": options}, indent=2)
+
+
+def _usecases_for_industry_resource(industry: str) -> str:
+    """Use cases for one industry, CERTIFIED-FIRST (D11 §3.1).
+
+    Backed by ``get_use_cases_map()``. That seam returns RAW Lakebase order —
+    certified-first is frontend-only today — so the ordering is enforced here with
+    a stable sort (``is_certified`` True sorts ahead; original order preserved
+    within each group). The empty ``"Select a use case..."`` placeholder is
+    dropped. Each entry carries value/label/category/is_certified.
+    """
+    from .api.routes import get_use_cases_map
+
+    entries = [e for e in get_use_cases_map().get(industry, []) if e.get("value")]
+    ordered = sorted(entries, key=lambda e: not bool(e.get("is_certified")))
+    use_cases = [
+        {
+            "value": e.get("value"),
+            "label": e.get("label"),
+            "category": e.get("category"),
+            "is_certified": bool(e.get("is_certified")),
+        }
+        for e in ordered
+    ]
+    return json.dumps({"industry": industry, "use_cases": use_cases}, indent=2)
+
+
 def _session_state_resource(session_id: str, context: Context | None = None) -> str:
     loaded = _load_session_for_request(session_id, context)
     if loaded is None:
@@ -825,6 +869,24 @@ mcp.add_resource(
         text=GETTING_STARTED_GUIDE,
         meta={"ttlMs": 86_400_000, "cacheScope": "global"},
     )
+)
+mcp.add_resource(
+    FunctionResource(
+        uri="vibe://usecases/industries",
+        name="vibe-usecases-industries",
+        description="Curated industry options (value/label) for use-case selection.",
+        mime_type="application/json",
+        fn=_usecase_industries_resource,
+        meta={"ttlMs": 3_600_000, "cacheScope": "global"},
+    )
+)
+mcp._resource_manager.add_template(
+    _usecases_for_industry_resource,
+    uri_template="vibe://usecases/{industry}",
+    name="vibe-usecases-for-industry",
+    description="Use cases for an industry, certified-first, each with value/label/category/is_certified.",
+    mime_type="application/json",
+    meta={"ttlMs": 3_600_000, "cacheScope": "global"},
 )
 
 
