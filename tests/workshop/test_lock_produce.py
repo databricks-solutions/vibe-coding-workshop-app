@@ -78,7 +78,18 @@ def session_store(monkeypatch):
 
 @pytest.fixture
 def no_community_writes(monkeypatch):
-    """Spy the community-library writers so any call fails the custom-path test."""
+    """Spy EVERY real community-library (saved_usecase_descriptions) mutator.
+
+    These are the only functions in the codebase that INSERT/UPDATE/DELETE the
+    ``saved_usecase_descriptions`` community-library table (verified by grep:
+    ``save_usecase_builder_description`` @ lakebase.py:2164 INSERTs,
+    ``update_saved_usecase`` @ 2237 UPDATEs, ``delete_saved_usecase`` @ 2283
+    DELETEs; ``get_all_saved_usecases`` is a read-only SELECT). None are imported
+    or aliased into ``mcp_server.py`` (it imports only ``append_session_interaction``
+    / ``is_lakebase_configured`` / ``load_session`` / ``save_session``). We patch
+    each on the module with ``raising=True`` so a renamed/missing target fails the
+    test LOUD rather than silently passing (B4).
+    """
 
     calls = []
 
@@ -89,8 +100,8 @@ def no_community_writes(monkeypatch):
 
         return _spy
 
-    for name in ("save_usecase_builder_description", "update_saved_usecase"):
-        monkeypatch.setattr(lakebase_service, name, _forbidden(name), raising=False)
+    for name in ("save_usecase_builder_description", "update_saved_usecase", "delete_saved_usecase"):
+        monkeypatch.setattr(lakebase_service, name, _forbidden(name), raising=True)
     return calls
 
 
@@ -167,6 +178,40 @@ def test_set_parameters_custom_without_description_reports_missing(session_store
     )
 
     assert "use_case_description" in result.missing_required
+
+
+def test_set_parameters_curated_without_label_reports_missing(session_store):
+    """A curated selection REQUIRES industry + use_case + use_case_label (B1)."""
+    store, _, _ = session_store
+
+    result = mcp_server.vibe_set_parameters(
+        SESSION_ID,
+        {
+            "industry": "retail",
+            "use_case": "demand_forecasting",
+            "use_case_source": "curated",
+        },
+    )
+
+    assert "use_case_label" in result.missing_required
+    # Missing a required field means it is not fully locked.
+    assert mcp_server._custom_usecase_locked(store[SESSION_ID]["session_parameters"]) is False
+
+
+def test_set_parameters_generic_merge_after_partial_selection(session_store):
+    """After a partial selection, an unrelated merge keeps the plain contract (B2)."""
+    store, _, _ = session_store
+    # A partial custom selection leaves use_case_source in session_parameters.
+    mcp_server.vibe_set_parameters(
+        SESSION_ID,
+        {"use_case_source": "custom", "industry": "retail"},
+    )
+
+    # A later UNRELATED generic merge must NOT be treated as a selection call.
+    result = mcp_server.vibe_set_parameters(SESSION_ID, {"catalog": "analytics"})
+
+    assert result.missing_required == []
+    assert store[SESSION_ID]["session_parameters"]["catalog"] == "analytics"
 
 
 def test_set_parameters_generic_params_are_unaffected(session_store):
@@ -283,7 +328,11 @@ def test_custom_path_proceeds_after_lock_without_use_certified(session_store, no
 
 
 def test_custom_lock_incomplete_does_not_unblock(session_store):
-    """A partial custom lock (no description) must NOT satisfy the gate."""
+    """Custom lock missing ONLY use_case_description must NOT satisfy the gate (B5).
+
+    All other custom-required fields are present, so this isolates
+    use_case_description as the genuinely-required field for a custom lock.
+    """
     store, _, _ = session_store
     store[SESSION_ID]["completed_gates"] = ["project_setup"]
 
@@ -292,7 +341,9 @@ def test_custom_lock_incomplete_does_not_unblock(session_store):
         {
             "industry": "retail",
             "use_case": "curbside_eta",
+            "use_case_label": "Curbside Pickup ETA",
             "use_case_source": "custom",
+            # use_case_description deliberately omitted — the only missing field.
         },
     )
 
@@ -332,11 +383,18 @@ def test_gagent_benchmarks_gate_unchanged_by_custom_lock(session_store):
     ]
     prerequisites = benchmark_gates[: benchmark_gates.index("gagent_benchmarks")]
     store[SESSION_ID]["completed_gates"] = prerequisites
-    store[SESSION_ID]["session_parameters"] = {
+    # A FULLY locked custom UC so _custom_usecase_locked() is genuinely TRUE —
+    # this exercises the custom-unblock branch and proves it is scoped to
+    # use_case_selection and does NOT leak into gagent_benchmarks (B3).
+    fully_locked_custom = {
         "use_case_source": "custom",
+        "industry": "retail",
         "use_case": "curbside_eta",
+        "use_case_label": "Curbside Pickup ETA",
         "use_case_description": "Predict curbside pickup wait times.",
     }
+    store[SESSION_ID]["session_parameters"] = fully_locked_custom
+    assert mcp_server._custom_usecase_locked(fully_locked_custom) is True
 
     blocked = mcp_server.vibe_complete_step(SESSION_ID, "gagent_benchmarks", "answers")
 

@@ -591,7 +591,7 @@ def vibe_next_step(session_id: str, context: Context | None = None) -> NextStepR
 # (``use_case_description``) before it can lock. Custom selections stay
 # SESSION-LOCAL — never written to the community library
 # ``saved_usecase_descriptions`` (D11 §2.1 / guardrail #5).
-_SELECTION_REQUIRED = ("industry", "use_case")
+_SELECTION_REQUIRED = ("industry", "use_case", "use_case_label")
 _CUSTOM_REQUIRED = ("industry", "use_case", "use_case_label", "use_case_description")
 
 
@@ -802,9 +802,13 @@ def vibe_set_parameters(
     state, _ = loaded
     state.session_parameters.update(params)
     resolved_params = dict(state.session_parameters)
+    # Whether THIS call is a use-case selection is decided from the incoming
+    # params — never from the accumulated resolved state — so an unrelated later
+    # merge (e.g. {"catalog": ...}) keeps the plain-merge contract even after a
+    # prior selection left use_case_source in session_parameters (B2).
     missing_required = (
         _selection_missing_required(resolved_params)
-        if _is_selection_call(resolved_params)
+        if _is_selection_call(params)
         else []
     )
     save_session(session_id=session_id, session_parameters=resolved_params)
