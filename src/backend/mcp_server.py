@@ -612,6 +612,41 @@ def _custom_usecase_locked(params: dict[str, Any]) -> bool:
     return params.get("use_case_source") == "custom" and not _selection_missing_required(params)
 
 
+# --- Cross-surface step-sync bridge (D11 §4.3) -------------------------------
+# The MCP engine tracks progress as completed_gates/captured_outputs, while the
+# legacy SPA tracks it as current_step (int) + completed_steps (int list). To let
+# MCP-driven progress show up in the legacy SPA, vibe_complete_step dual-writes
+# the legacy fields — derived from the SAME manifest section order that
+# ``_session_state`` uses to translate completed_steps back into gates. This is
+# the inverse of that reader (one section-order source, no hardcoded positions).
+def _legacy_progress(
+    track: str,
+    completed_gates: list[str],
+    next_step: manifest.Step | engine.Done,
+) -> tuple[int, list[int]]:
+    """Map engine progress to legacy (current_step, completed_steps).
+
+    ``completed_steps`` are the 1-based positions of every completed gate in the
+    manifest's full ordered step list (sorted, de-duplicated — idempotent on
+    replay). ``current_step`` is the position of the engine's next step, or one
+    past the end when the track is done. Because completed_gates only grows
+    within a session, current_step is monotonic and never regresses.
+    """
+
+    positions = {
+        step.sectionTag: index + 1
+        for index, step in enumerate(manifest.load_manifest().track_steps(track))
+    }
+    completed_steps = sorted(
+        {positions[tag] for tag in completed_gates if tag in positions}
+    )
+    if isinstance(next_step, engine.Done):
+        current_step = len(positions) + 1
+    else:
+        current_step = positions.get(next_step.sectionTag, len(positions) + 1)
+    return current_step, completed_steps
+
+
 @mcp.tool(
     name="vibe_complete_step",
     description=(
@@ -683,10 +718,20 @@ def vibe_complete_step(
             sectionTag=sectionTag,
         )  # type: ignore[return-value]
 
+    # D11 §4.3 sync bridge: dual-write the legacy SPA progress fields
+    # (current_step/completed_steps) alongside the engine state, in the SAME
+    # save — so a learner driving the workshop through MCP is reflected in the
+    # legacy SPA step indicator. Additive; the existing captured_outputs/
+    # completed_gates writes are preserved (COALESCE-safe, none-preserve).
+    current_step, completed_steps = _legacy_progress(
+        DEFAULT_TRACK, result.completed_gates, result.next_step
+    )
     save_session(
         session_id=session_id,
         captured_outputs=dict(state.captured_outputs),
         completed_gates=list(result.completed_gates),
+        current_step=current_step,
+        completed_steps=completed_steps,
     )
 
     next_step = result.next_step
