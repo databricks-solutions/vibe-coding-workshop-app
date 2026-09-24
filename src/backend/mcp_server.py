@@ -584,6 +584,34 @@ def vibe_next_step(session_id: str, context: Context | None = None) -> NextStepR
     return NextStepResult.model_validate(_step_payload(DEFAULT_TRACK, state, next_item, session_id=session_id))
 
 
+# --- Use-case selection lock (D11 §3.3, §3.5) --------------------------------
+# The learner's use case is locked into ``session_parameters`` via
+# ``vibe_set_parameters``. A curated selection needs an industry + use_case; a
+# custom ("author your own") selection additionally needs its authored brief
+# (``use_case_description``) before it can lock. Custom selections stay
+# SESSION-LOCAL — never written to the community library
+# ``saved_usecase_descriptions`` (D11 §2.1 / guardrail #5).
+_SELECTION_REQUIRED = ("industry", "use_case", "use_case_label")
+_CUSTOM_REQUIRED = ("industry", "use_case", "use_case_label", "use_case_description")
+
+
+def _is_selection_call(params: dict[str, Any]) -> bool:
+    """A ``vibe_set_parameters`` call is a use-case selection when it carries a source."""
+
+    return "use_case_source" in params
+
+
+def _selection_missing_required(params: dict[str, Any]) -> list[str]:
+    required = _CUSTOM_REQUIRED if params.get("use_case_source") == "custom" else _SELECTION_REQUIRED
+    return [key for key in required if not str(params.get(key) or "").strip()]
+
+
+def _custom_usecase_locked(params: dict[str, Any]) -> bool:
+    """True once a custom ("author your own") use case is fully locked in-session."""
+
+    return params.get("use_case_source") == "custom" and not _selection_missing_required(params)
+
+
 @mcp.tool(
     name="vibe_complete_step",
     description=(
@@ -617,10 +645,26 @@ def vibe_complete_step(
             decision_capture_key(sectionTag, block["id"]) in state.captured_outputs
             for block in blocking
         )
+        # Custom-path unblock (D11 §3.5): a learner who authors their own use case
+        # locks it via vibe_set_parameters; that lock is the recommend-and-proceed
+        # unblock for use_case_selection — proceeding WITHOUT a semantically-wrong
+        # 'use_certified' answer. Scoped to use_case_selection so the generic
+        # gagent_benchmarks gate (answer==recommended only) is provably untouched.
+        if (
+            not confirmed
+            and sectionTag == "use_case_selection"
+            and _custom_usecase_locked(state.session_parameters)
+        ):
+            confirmed = True
         if not confirmed:
+            message = (
+                "Confirm the use case selection before completing this step."
+                if sectionTag == "use_case_selection"
+                else "Confirm the benchmark decision before completing this step."
+            )
             return _error_result(
                 "GATE_REQUIRED",
-                "Confirm the benchmark decision before completing this step.",
+                message,
                 sectionTag=sectionTag,
             )  # type: ignore[return-value]
     result = engine.complete_step(DEFAULT_TRACK, state, sectionTag, captured_output)
@@ -732,10 +776,11 @@ def vibe_submit_answer(
 @mcp.tool(
     name="vibe_set_parameters",
     description=(
-        "Set or update session parameters and feature flags (catalog, schema prefix, "
-        "`includeGenieOntology`, `includeLakehouse`, Lakebase instance). Returns the resolved parameters "
-        "and any still-missing required ones — ask the learner in chat for those, then call again. Args: "
-        "`session_id`, `params` (object)."
+        "Set/update session parameters, feature flags, and the learner's use-case lock. For selection "
+        "pass `use_case_source` (\"curated\"/\"custom\") with `industry`, `use_case`, `use_case_label`; a "
+        "custom use case also needs the authored `use_case_description` and stays session-local. Returns "
+        "resolved params + still-missing required ones (ask in chat, then call again). Args: `session_id`, "
+        "`params`."
     ),
     annotations=ToolAnnotations(
         readOnlyHint=False,
@@ -757,8 +802,17 @@ def vibe_set_parameters(
     state, _ = loaded
     state.session_parameters.update(params)
     resolved_params = dict(state.session_parameters)
+    # Whether THIS call is a use-case selection is decided from the incoming
+    # params — never from the accumulated resolved state — so an unrelated later
+    # merge (e.g. {"catalog": ...}) keeps the plain-merge contract even after a
+    # prior selection left use_case_source in session_parameters (B2).
+    missing_required = (
+        _selection_missing_required(resolved_params)
+        if _is_selection_call(params)
+        else []
+    )
     save_session(session_id=session_id, session_parameters=resolved_params)
-    return SetParametersResult(resolved_params=resolved_params, missing_required=[])
+    return SetParametersResult(resolved_params=resolved_params, missing_required=missing_required)
 
 
 def _track_overview(track: str) -> str:
