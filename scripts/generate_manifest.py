@@ -155,6 +155,12 @@ CHAINING_LITERAL_REFERENCES: dict[int, dict[str, int]] = {
 }
 
 GENIE_CHAINING_LITERAL_OVERRIDES: dict[int, dict[str, int]] = {
+    # prd_generation (3) consumes use_case_brief, produced by use_case_selection
+    # (70). Genie-only: step 70 is stripped from every other track, and keeping
+    # this override off the shared table stops non-genie prd_generation from
+    # gaining a phantom consumes entry (consumes is populated regardless of
+    # whether the producing step is present in the track). See D11 §3.2–3.3.
+    3: {"use_case_brief": 70},
     11: {"table_metadata": 22, "prd_document": 3},
     17: {"prd_document": 3, "table_metadata": 10},
     71: {"metric_view": 60, "prd_document": 3},
@@ -261,6 +267,10 @@ def _filtered_sections(track: SourceTrack, sections: dict[str, SourceSection], s
     for section_id in track.section_ids:
         section = sections[section_id]
         section_steps = list(section.steps)
+        # use_case_selection (step 70) is a genie-accelerator-only beat (D11, Phase
+        # 2B); mirror getFilteredSections and strip it from every non-genie track.
+        if not is_genie and section_id == "define-usecase":
+            section_steps = [number for number in section_steps if number != 70]
         if is_skills and section_id == "define-usecase":
             section_steps = [number for number in section_steps if number != 3]
         if is_genie and section_id == "lakehouse":

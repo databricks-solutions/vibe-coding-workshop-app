@@ -111,26 +111,34 @@ def test_two_sessions_driven_interleaved_never_share_state(store):
     assert by_session[SESSION_B]["was_default"] is True
     assert by_session[SESSION_A]["answer"] != by_session[SESSION_B]["answer"]
 
-    # (b) Interleave the walk. A advances two gates; B advances one.
+    # (b) Interleave the walk. The genie define-usecase order is now
+    # project_setup -> use_case_selection -> prd_generation (D11 §3.6), so A walks
+    # three gates while B stops after the shared first step.
     mcp_server.vibe_complete_step(SESSION_A, "project_setup", "a-setup")
     mcp_server.vibe_complete_step(SESSION_B, "project_setup", "b-setup")
+    mcp_server.vibe_complete_step(SESSION_A, "use_case_selection", "A-BRIEF")
     mcp_server.vibe_complete_step(SESSION_A, "prd_generation", "A-PRD")
 
-    # B's ledger is untouched by A's second gate, and A's captured output has not
+    # B's ledger is untouched by A's later gates, and A's captured output has not
     # leaked into B.
-    assert data[SESSION_A]["completed_gates"] == ["project_setup", "prd_generation"]
+    assert data[SESSION_A]["completed_gates"] == [
+        "project_setup", "use_case_selection", "prd_generation",
+    ]
     assert data[SESSION_B]["completed_gates"] == ["project_setup"]
     assert data[SESSION_B]["captured_outputs"] == {}
 
-    # The walk position itself diverges: A is past prd_generation, B is still on it.
+    # The walk position itself diverges: A is past prd_generation, B is still on
+    # the newly inserted use_case_selection step.
     a_next = mcp_server.vibe_next_step(SESSION_A)
     b_next = mcp_server.vibe_next_step(SESSION_B)
     assert a_next.root.sectionTag == "genie_silver_metadata"
-    assert b_next.root.sectionTag == "prd_generation"
+    assert b_next.root.sectionTag == "use_case_selection"
     assert a_next.root.sectionTag != b_next.root.sectionTag
 
-    # (c) Now B completes prd_generation with a DIFFERENT captured output. The two
-    # sessions' outputs must be distinct — not a shared/overwritten value.
+    # (c) Now B walks its own use_case_selection + prd_generation with DIFFERENT
+    # captured outputs. The two sessions' outputs must be distinct — not a
+    # shared/overwritten value.
+    mcp_server.vibe_complete_step(SESSION_B, "use_case_selection", "B-BRIEF")
     mcp_server.vibe_complete_step(SESSION_B, "prd_generation", "B-PRD")
     assert data[SESSION_A]["captured_outputs"]["prd_document"] == "A-PRD"
     assert data[SESSION_B]["captured_outputs"]["prd_document"] == "B-PRD"
@@ -140,8 +148,11 @@ def test_two_sessions_driven_interleaved_never_share_state(store):
 def test_completing_one_session_does_not_advance_the_other(store):
     data, _ = store
 
-    # Fully load only session A's ledger; B stays empty.
-    data[SESSION_A]["completed_gates"] = ["project_setup", "prd_generation"]
+    # Fully load only session A's ledger through prd_generation (including the
+    # new use_case_selection gate, D11 §3.6); B stays empty.
+    data[SESSION_A]["completed_gates"] = [
+        "project_setup", "use_case_selection", "prd_generation",
+    ]
 
     a_next = mcp_server.vibe_next_step(SESSION_A)
     b_next = mcp_server.vibe_next_step(SESSION_B)
@@ -167,7 +178,9 @@ def test_next_step_reads_gate_ledger_fresh_between_requests(store):
     data[SESSION_A]["completed_gates"] = ["project_setup"]
 
     second = mcp_server.vibe_next_step(SESSION_A)
-    assert second.root.sectionTag == "prd_generation"
+    # After project_setup the walk advances to the newly inserted use_case_selection
+    # step (D11 §3.6), not straight to prd_generation.
+    assert second.root.sectionTag == "use_case_selection"
     assert second.root.sectionTag != first.root.sectionTag
 
 
@@ -238,7 +251,9 @@ def test_complete_step_replay_is_idempotent_and_re_reads_fresh(store):
     fails on its own under a shared-cache bug.
     """
     data, interactions = store
-    data[SESSION_A]["completed_gates"] = ["project_setup"]
+    # prd_generation now gates on use_case_selection (D11 §3.6); seed both
+    # predecessor gates so the first completion is unlocked.
+    data[SESSION_A]["completed_gates"] = ["project_setup", "use_case_selection"]
 
     first = mcp_server.vibe_complete_step(SESSION_A, "prd_generation", "ORIGINAL")
     assert isinstance(first, mcp_server.CompleteStepResult)
@@ -246,7 +261,7 @@ def test_complete_step_replay_is_idempotent_and_re_reads_fresh(store):
 
     # Concurrent out-of-band write for the SAME session between the two calls.
     data[SESSION_A]["completed_gates"] = [
-        "project_setup", "prd_generation", "genie_silver_metadata",
+        "project_setup", "use_case_selection", "prd_generation", "genie_silver_metadata",
     ]
     data[SESSION_A]["captured_outputs"]["table_metadata"] = "OUT-OF-BAND"
 
@@ -258,7 +273,7 @@ def test_complete_step_replay_is_idempotent_and_re_reads_fresh(store):
     assert isinstance(second, mcp_server.CompleteStepResult)
     # The retry saw the out-of-band gate (fresh read) and did not duplicate it.
     assert data[SESSION_A]["completed_gates"] == [
-        "project_setup", "prd_generation", "genie_silver_metadata",
+        "project_setup", "use_case_selection", "prd_generation", "genie_silver_metadata",
     ]
     assert data[SESSION_A]["completed_gates"].count("prd_generation") == 1
     # The out-of-band output survived (fresh read) AND the replay payload did NOT

@@ -1806,12 +1806,30 @@
             },
             {
               "order": 2,
-              "sectionTag": "prd_generation",
-              "title": "PRD Generation",
+              "sectionTag": "use_case_selection",
+              "title": "Define Your Use Case",
               "why": null,
               "gate": null,
               "requiresGate": "project_setup",
               "consumes": [],
+              "produces": "use_case_brief",
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            },
+            {
+              "order": 3,
+              "sectionTag": "prd_generation",
+              "title": "PRD Generation",
+              "why": null,
+              "gate": null,
+              "requiresGate": "use_case_selection",
+              "consumes": [
+                "use_case_brief"
+              ],
               "produces": "prd_document",
               "execution": "agent-doable",
               "surfaces": [
@@ -1829,7 +1847,7 @@
           "why": "Data foundation, modeling, and pipelines",
           "steps": [
             {
-              "order": 3,
+              "order": 4,
               "sectionTag": "genie_silver_metadata",
               "title": "Analyze Silver Metadata",
               "why": null,
@@ -1845,7 +1863,7 @@
               "flag": null
             },
             {
-              "order": 4,
+              "order": 5,
               "sectionTag": "gold_layer_design",
               "title": "Gold Layer Design",
               "why": null,
@@ -1864,7 +1882,7 @@
               "flag": null
             },
             {
-              "order": 5,
+              "order": 6,
               "sectionTag": "gold_layer_pipeline",
               "title": "Gold Pipeline",
               "why": null,
@@ -1882,7 +1900,7 @@
               "flag": null
             },
             {
-              "order": 6,
+              "order": 7,
               "sectionTag": "deploy_lakehouse_assets",
               "title": "Deploy Assets",
               "why": null,
@@ -1906,7 +1924,7 @@
           "why": "Locate data, analyze measures, and build a governed Metric View",
           "steps": [
             {
-              "order": 7,
+              "order": 8,
               "sectionTag": "semlayer_locate",
               "title": "Locate Data & Bring Context",
               "why": null,
@@ -1922,7 +1940,7 @@
               "flag": null
             },
             {
-              "order": 8,
+              "order": 9,
               "sectionTag": "semlayer_profile",
               "title": "Profile Your Schema",
               "why": null,
@@ -1938,7 +1956,7 @@
               "flag": null
             },
             {
-              "order": 9,
+              "order": 10,
               "sectionTag": "semlayer_measures",
               "title": "Measures Analysis",
               "why": null,
@@ -1954,7 +1972,7 @@
               "flag": null
             },
             {
-              "order": 10,
+              "order": 11,
               "sectionTag": "semlayer_metric_view",
               "title": "Draft the Metric View",
               "why": null,
@@ -1970,7 +1988,7 @@
               "flag": null
             },
             {
-              "order": 11,
+              "order": 12,
               "sectionTag": "semlayer_synonyms",
               "title": "Review & Expand Synonyms",
               "why": null,
@@ -1994,7 +2012,7 @@
           "why": "Stand up a Genie Agent on the Metric View, tune it, and prove it with an AI/BI dashboard",
           "steps": [
             {
-              "order": 12,
+              "order": 13,
               "sectionTag": "gagent_describe",
               "title": "Describe the Agent",
               "why": null,
@@ -2010,7 +2028,7 @@
               "flag": null
             },
             {
-              "order": 13,
+              "order": 14,
               "sectionTag": "gagent_instructions",
               "title": "Author Instructions",
               "why": null,
@@ -2026,7 +2044,7 @@
               "flag": null
             },
             {
-              "order": 14,
+              "order": 15,
               "sectionTag": "gagent_verified",
               "title": "Add Verified Queries",
               "why": null,
@@ -2042,7 +2060,7 @@
               "flag": null
             },
             {
-              "order": 15,
+              "order": 16,
               "sectionTag": "gagent_benchmarks",
               "title": "Load Benchmarks",
               "why": null,
@@ -2058,7 +2076,7 @@
               "flag": null
             },
             {
-              "order": 16,
+              "order": 17,
               "sectionTag": "gagent_optimize",
               "title": "Optimize Loop",
               "why": null,
@@ -2074,7 +2092,7 @@
               "flag": null
             },
             {
-              "order": 17,
+              "order": 18,
               "sectionTag": "gaccel_dashboard",
               "title": "AI/BI Dashboard",
               "why": null,
@@ -2101,7 +2119,7 @@
           "why": "Plan activation, then sync to Lakebase and stand up an app",
           "steps": [
             {
-              "order": 18,
+              "order": 19,
               "sectionTag": "gaccel_activation",
               "title": "Choose What to Activate",
               "why": null,
@@ -2120,7 +2138,7 @@
               "flag": null
             },
             {
-              "order": 19,
+              "order": 20,
               "sectionTag": "activation_table_design",
               "title": "Design & Provision Synced Tables",
               "why": null,
@@ -2141,7 +2159,7 @@
               "flag": null
             },
             {
-              "order": 20,
+              "order": 21,
               "sectionTag": "activation_reverse_sync",
               "title": "Create Synced Tables",
               "why": null,
@@ -2157,7 +2175,7 @@
               "flag": null
             },
             {
-              "order": 21,
+              "order": 22,
               "sectionTag": "activation_app_design",
               "title": "Design Analytics App",
               "why": null,
@@ -2176,7 +2194,7 @@
               "flag": null
             },
             {
-              "order": 22,
+              "order": 23,
               "sectionTag": "activation_build_wire",
               "title": "Build Analytics App",
               "why": null,
@@ -2194,7 +2212,7 @@
               "flag": null
             },
             {
-              "order": 23,
+              "order": 24,
               "sectionTag": "activation_wire_lakebase",
               "title": "Wire to Lakebase",
               "why": null,
@@ -2210,7 +2228,7 @@
               "flag": null
             },
             {
-              "order": 24,
+              "order": 25,
               "sectionTag": "activation_wire_genie",
               "title": "Wire Genie",
               "why": null,
@@ -2228,7 +2246,7 @@
               "flag": null
             },
             {
-              "order": 25,
+              "order": 26,
               "sectionTag": "activation_deploy_validate",
               "title": "Deploy & Validate",
               "why": null,
@@ -2252,7 +2270,7 @@
           "why": "Model the Discover domain, pages, and routing (Genie One)",
           "steps": [
             {
-              "order": 26,
+              "order": 27,
               "sectionTag": "ontology_domain",
               "title": "Model the Domain + Subdomains",
               "why": null,
@@ -2268,7 +2286,7 @@
               "flag": "includeGenieOntology"
             },
             {
-              "order": 27,
+              "order": 28,
               "sectionTag": "ontology_pages",
               "title": "Author Pages",
               "why": null,
@@ -2284,7 +2302,7 @@
               "flag": "includeGenieOntology"
             },
             {
-              "order": 28,
+              "order": 29,
               "sectionTag": "ontology_routing",
               "title": "Write the Routing Page",
               "why": null,
@@ -2308,7 +2326,7 @@
           "why": "Continuous improvement, testing, and optimization",
           "steps": [
             {
-              "order": 29,
+              "order": 30,
               "sectionTag": "iterate_enhance",
               "title": "Iterate & Enhance",
               "why": null,
@@ -2324,7 +2342,7 @@
               "flag": null
             },
             {
-              "order": 30,
+              "order": 31,
               "sectionTag": "redeploy_test",
               "title": "Redeploy & Test",
               "why": null,
@@ -2350,7 +2368,7 @@
           "why": "Safely remove all workshop-created resources from your workspace",
           "steps": [
             {
-              "order": 31,
+              "order": 32,
               "sectionTag": "workspace_cleanup",
               "title": "Workspace Clean Up",
               "why": null,

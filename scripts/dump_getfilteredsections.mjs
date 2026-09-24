@@ -52,6 +52,24 @@ try {
     `${JSON.stringify(flatten(ontologyEnabledDisabled), null, 2)}\n`,
     "utf8",
   );
+
+  // Independent per-track oracle for the shared define-usecase section: run the
+  // real getFilteredSections for every level and record the section's sectionTag
+  // order. Proves use_case_selection lands in genie-accelerator only (D11, 2B).
+  const defineUsecaseByTrack = {};
+  for (const trackId of Object.keys(workflowSections.WORKSHOP_LEVELS)) {
+    const section = workflowSections
+      .getFilteredSections(trackId, new Set())
+      .find((entry) => entry.id === "define-usecase");
+    defineUsecaseByTrack[trackId] = section
+      ? section.steps.map((step) => step.sectionTag)
+      : [];
+  }
+  await writeFile(
+    join(fixturesPath, "golden_define_usecase_by_track.json"),
+    `${JSON.stringify(defineUsecaseByTrack, null, 2)}\n`,
+    "utf8",
+  );
 } finally {
   await rm(temporaryDirectory, { recursive: true, force: true });
 }

@@ -24,6 +24,11 @@ node --experimental-strip-types scripts/dump_getfilteredsections.mjs
 `golden_order_genie_ontology_on.json` is the same full ordered set with the
 three `GENIE_ONTOLOGY_TAGS` retained, proving flag filtering preserves their
 source positions.
+`golden_define_usecase_by_track.json` maps every `WORKSHOP_LEVELS` track to the
+`sectionTag` order of its `define-usecase` section, taken from the same
+`getFilteredSections` dump. It proves the D11 `use_case_selection` step (source
+step 70) is present for `genie-accelerator` only and absent from every other
+track (and that `skills-accelerator` still drops PRD too).
 
 ## Chaining source
 
@@ -32,6 +37,12 @@ Genie Accelerator. Every row is independently hand-derived from the per-step
 `previousOutputs` literals in `src/components/WorkflowDiagram.tsx`, which is
 the authoritative chaining source, and source step numbers are translated to
 `sectionTag` values using `src/constants/workflowSections.ts`.
+
+The one exception to the `WorkflowDiagram.tsx` derivation is `use_case_brief`:
+it is a D11 engine-only artifact (Phase 2B) with no SPA diagram arrow, produced
+by `use_case_selection` (source step 70) and consumed by `prd_generation`. Its
+row here mirrors `GENIE_CHAINING_LITERAL_OVERRIDES[3]` in
+`scripts/generate_manifest.py`, which is the authoritative source for this pair.
 
 The shared `geniePreviousOutputs` value is undefined for grouped ontology steps
 67–69, so `ontology_domain`, `ontology_pages`, and `ontology_routing` correctly
