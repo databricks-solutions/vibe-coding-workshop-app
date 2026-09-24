@@ -27,6 +27,7 @@ and [`designing-mcp-servers-for-genie-code.md` §4](./designing-mcp-servers-for-
 | Identity endpoint | `/api/user/current` `routes.py:6557` |
 | Assembler (one path, both adapters) | `get_section_input_content` `routes.py:1241` |
 | Sessions store | `db/lakebase/ddl/03_sessions.sql` |
+| FMAPI call (coaching, §1.2) | `call_databricks_serving_endpoint(...)` **async** `routes.py:1400`; default endpoint `SERVING_ENDPOINT_NAME` `routes.py:440` |
 
 ---
 
@@ -57,7 +58,9 @@ and [`designing-mcp-servers-for-genie-code.md` §4](./designing-mcp-servers-for-
 **Principle (roadmap):** one domain core, two thin transport adapters, one persisted state keyed by
 `session_id`. Adapters contain **no** workshop logic. The **in-band interactivity layer** (D1) lives
 in the MCP adapter as payload shaping + the `vibe_submit_answer` handler; the engine owns the
-question/coaching content it surfaces (from D5's seeded bank).
+question/coaching content it surfaces (from D5's seeded bank). The **adaptive-coaching path**
+(Phase 2A, D1 §4.6) adds one MCP handler (`vibe_coach`) that reads state + assembler context and
+calls FMAPI via a shared `services/llm.py` (§1.2).
 
 > The `.png`/`.mmd` architecture image must be regenerated to add the interactivity layer and drop
 > the elicitation arrow (roadmap kept in lockstep, per the file map).
@@ -77,6 +80,36 @@ page carries that on-ramp** so no human or external doc is needed:
 After that single paste, the **server** owns the rest of the experience (orientation, help,
 progression) — the SPA reverts to its companion/mirror role (§3.3). This keeps the on-ramp
 self-serve without pretending the connection is zero-touch.
+
+### 1.2 The FMAPI coaching path (Phase 2A)
+
+Adaptive coaching (`vibe_coach`, D2 §3.7 / D1 §4.6) needs an in-workspace LLM. The app already has
+one: `call_databricks_serving_endpoint(...)` (`routes.py:1400`) against `SERVING_ENDPOINT_NAME`
+(`routes.py:440`). Two architecture rules keep this clean:
+
+1. **Extract, don't cross layers.** `call_databricks_serving_endpoint` and the endpoint resolution
+   live today in the **API layer** (`routes.py`). Extract them into
+   **`src/backend/services/llm.py`** so the MCP adapter does not import the web-API module; both
+   `routes.py` and `mcp_server.py` then import the service. (Same "one seam, reused by both adapters"
+   discipline as the assembler, D3 §7.) No behavior change — it is a move + import rewire.
+2. **Bridge sync↔async once.** The existing MCP tools are **sync** `def`s, but
+   `call_databricks_serving_endpoint` is **`async`**. Define `vibe_coach` as an **`async def`** tool
+   (FastMCP supports async handlers) so it can `await` the service directly — do not spin an event
+   loop per call. The engine/assembler stay sync; only the coaching handler is async.
+
+```
+   ┌───── MCP adapter (mcp_server.py) ─────┐
+   │  vibe_coach (async): read state, build │
+   │  context, scrub, log telemetry         │
+   └───────────────┬────────────────────────┘
+                   ▼
+        services/llm.py  (extract of routes.py:1400 + :440)
+                   ▼
+     Databricks serving endpoint  (FMAPI, as the app SP — D7 §6)
+```
+
+Coaching is **off the critical path**: if `services/llm.py` errors or times out, `vibe_coach`
+returns the static option-keyed fallback (D5 §11.4 / §5 degradation).
 
 ---
 
@@ -206,6 +239,32 @@ sequenceDiagram
   GC->>MCP: vibe_complete_step {…}  → now accepted
 ```
 
+### 3.5 Adaptive coaching (`vibe_coach`, Phase 2A) — fail-open
+
+```mermaid
+sequenceDiagram
+  participant U as Learner
+  participant GC as Genie Code
+  participant MCP as MCP adapter (async vibe_coach)
+  participant E as Engine
+  participant DB as Lakebase
+  participant LLM as services/llm.py → serving endpoint (FMAPI)
+  U->>GC: "why does this matter?" / "I'm stuck"  (in chat)
+  GC->>MCP: vibe_coach {session_id, focus}
+  MCP->>E: read state + resolve_previous_outputs (context, D2 §12.3)
+  E->>DB: read session (fresh, stateless)
+  MCP->>LLM: await coach(context, system=_COACH_SYSTEM)
+  alt model OK
+    LLM-->>MCP: coaching text
+    MCP->>MCP: leakage-scrub (D7 §6.1)
+  else model error / timeout / no endpoint
+    MCP->>MCP: static option-keyed fallback (is_fallback=true, D5 §11.4)
+  end
+  MCP-)DB: best-effort append kind='coaching' row (D6 §3a)  %% failure ignored
+  MCP-->>GC: CoachResult {coaching, focus, is_fallback, grounded_on}
+  GC->>U: read coaching aloud  (no gate change, no advance)
+```
+
 ---
 
 ## 4. Request lifecycle & statelessness
@@ -225,6 +284,7 @@ on in-process state (roadmap "stateless MCP"). Two concurrent sessions never sha
 | `execution: ui-driven` step | Coached; `complete_step` records a handoff marker, not a false gate (D3 §5.4) |
 | Malformed tool output | `isError` result (D2 §6/§7); never malformed `structuredContent` |
 | `/mcp` reached without auth | 302 by the proxy before the app (D7) |
+| Coaching model error / timeout / no endpoint (`vibe_coach`) | Static option-keyed fallback, `is_fallback:true` (D5 §11.4); never errors, never blocks (§1.2 / §3.5) |
 
 ---
 
@@ -232,9 +292,11 @@ on in-process state (roadmap "stateless MCP"). Two concurrent sessions never sha
 
 | File | Role | Phase |
 |---|---|---|
-| `src/backend/mcp_server.py` | FastMCP instance, tools/resources/prompts, in-band layer | 1 |
+| `src/backend/mcp_server.py` | FastMCP instance, tools/resources/prompts, in-band layer; **async `vibe_coach` handler + `_COACH_SYSTEM`** | 1 / **2A** |
 | `app.py` | mount `/mcp` before catch-all (`:162`); path-rewrite middleware; compose lifespan (`:34`); `serve_spa` excludes `/mcp` | 1 |
 | `src/backend/workshop/*` | engine core (D3) | 0 |
+| `src/backend/services/llm.py` | **extract** of `call_databricks_serving_endpoint` (`routes.py:1400`) + `SERVING_ENDPOINT_NAME` (`:440`); imported by both `routes.py` and `mcp_server.py` (§1.2) | **2A** |
+| `db/lakebase/ddl/13_mcp_coaching.sql` | additive coaching columns on `session_interactions` (D6 §7a) | **2A** |
 | `../images/mcp-workshop-engine-architecture.{mmd,png}` | regenerate: add interactivity layer, drop elicitation arrow | 1 |
 
 ---

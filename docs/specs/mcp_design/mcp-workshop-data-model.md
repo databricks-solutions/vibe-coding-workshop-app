@@ -18,7 +18,7 @@
 |---|---|
 | Sessions DDL | `db/lakebase/ddl/03_sessions.sql` |
 | `save_session(...)` (persist path) | `src/backend/services/lakebase.py:592` |
-| DDL naming convention | `db/lakebase/ddl/NN_*.sql` (next free: `12_`) |
+| DDL naming convention | `db/lakebase/ddl/NN_*.sql` (`12_` = Phase 2 engine state; `13_` = Phase 2A coaching, §7a) |
 | Prompt-content store (unchanged) | `db/lakebase/ddl/02_section_input_prompts.sql` |
 
 ---
@@ -77,8 +77,8 @@ CREATE TABLE IF NOT EXISTS ${schema}.session_interactions (
     session_id      VARCHAR(36) NOT NULL REFERENCES ${schema}.sessions(session_id),
     section_tag     VARCHAR(128) NOT NULL,             -- the step (D3 §2)
     interaction_id  VARCHAR(160) NOT NULL,             -- D1 Interaction.id, e.g. 'semlayer_locate.why'
-    kind            VARCHAR(16) NOT NULL,              -- 'comprehension' | 'decision' | 'confirm'
-    answer          TEXT,                              -- option id or free text (NULL if skipped)
+    kind            VARCHAR(16) NOT NULL,              -- 'comprehension' | 'decision' | 'confirm' | 'coaching' (§3a)
+    answer          TEXT,                              -- option id or free text (NULL if skipped / for coaching)
     recommended     TEXT,                              -- the default that was offered (NULL for open)
     was_default     BOOLEAN DEFAULT FALSE,             -- TRUE if silence applied the recommended default
     coaching_shown  TEXT,                              -- the coaching returned to the agent (D2 vibe_submit_answer)
@@ -95,6 +95,27 @@ CREATE INDEX IF NOT EXISTS idx_session_interactions_tag ON ${schema}.session_int
 - **Alternative (rejected for v1):** a `session_interactions` JSONB column on `sessions`. Rejected —
   a table gives clean append, indexing, and provenance without read-modify-write races under
   stateless concurrency (D7 §5).
+
+### 3a. Coaching provenance (Phase 2A — reuse the same table, two additive columns)
+
+Adaptive coaching (`vibe_coach`, D2 §3.7 / D5 §11) reuses `session_interactions` rather than adding
+a new table — a coaching turn is just another interaction:
+
+- `kind = 'coaching'`, `interaction_id = "coach.<focus>"` (e.g. `coach.why`), `answer = NULL`,
+  `coaching_shown = <the returned coaching text>`, `surface = 'mcp'`.
+- **Two additive columns** capture what's coaching-specific (both nullable, safe on legacy rows):
+
+| Column | Type | Purpose |
+|---|---|---|
+| `is_fallback` | `BOOLEAN DEFAULT FALSE` | TRUE ⇒ the FMAPI call failed/timed out (or no endpoint configured) and the static option-keyed coaching was returned (D5 §11.4). Drives the **fallback-rate** metric. |
+| `focus` | `VARCHAR(16)` | The coaching lens: `what_now` \| `why` \| `unblock` \| `review` (D2 §3.7). NULL for non-coaching rows. |
+
+- The write is **best-effort telemetry** — a failed insert must **not** fail the `vibe_coach` call
+  (coaching is fail-open, D5 §11.4). This matches the existing `append_session_interaction(...)`
+  behavior in `src/backend/services/lakebase.py`, which already returns `False` (never raises) on a
+  persistence failure.
+- **No benchmark text or literals** land in `coaching_shown` — the output is leakage-scrubbed before
+  it is returned *and* before it is stored (D7 §6 / §8).
 
 ---
 
@@ -135,6 +156,8 @@ source of truth.
   correctness.
 - **Delta writes:** `complete_step` appends to `completed_gates` (set semantics — idempotent, D3 F3)
   and sets one `captured_outputs` key. `submit_answer` inserts one `session_interactions` row.
+  `coach` (§3a) reads the session row + upstream `captured_outputs`, then **best-effort** inserts one
+  `kind='coaching'` row (a failed insert never fails the tool).
 - **No cross-session reads** in the hot path (D7 §5).
 
 ---
@@ -154,6 +177,22 @@ CREATE INDEX IF NOT EXISTS idx_session_interactions_tag ON ${schema}.session_int
 Applied via the app's existing schema-ensure path (`lakebase.py` `_ensure_schema`) or the reseed
 tooling — **additive, idempotent** (`IF NOT EXISTS`). No data backfill required; legacy sessions
 simply have empty tag stores until they next complete a step.
+
+### 7a. Coaching migration (new file `db/lakebase/ddl/13_mcp_coaching.sql`) — *Phase 2A*
+
+Because `12_*.sql` ships in Phase 2 and is already applied in deployed environments, the coaching
+columns (§3a) land in their **own** additive, idempotent file so a Phase-2 database upgrades cleanly
+without re-running (or editing) the Phase-2 migration:
+
+```sql
+-- 13_mcp_coaching.sql — additive; safe to re-run; depends on 12_mcp_engine_state.sql.
+ALTER TABLE ${schema}.session_interactions ADD COLUMN IF NOT EXISTS is_fallback BOOLEAN DEFAULT FALSE;
+ALTER TABLE ${schema}.session_interactions ADD COLUMN IF NOT EXISTS focus       VARCHAR(16);
+```
+
+No new table, no index change (the existing `idx_session_interactions_session`/`_tag` cover coaching
+reads). Legacy interaction rows get `is_fallback=FALSE`, `focus=NULL` — correct, since they are not
+coaching rows. Apply order: `12_` then `13_`.
 
 ---
 

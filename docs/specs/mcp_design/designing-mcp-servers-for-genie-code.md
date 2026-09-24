@@ -79,8 +79,9 @@ transport. **Re-verify with §9.**
    (deprecated `2026-07-28`).
 3. **No server→client requests.** Interactivity is **in-band** (§7): text the agent reads out +
    tools the agent calls. Never block waiting on the user through the protocol.
-4. **Budget your tools.** Target **≤ 5–6 tools**. Move read-only context to **resources** and
-   entry points to **prompts**. Consolidate parameters into one tool, not many.
+4. **Budget your tools.** Target **≤ ~6 tools** (a read-only coaching tool, §7.5, can justify one
+   more). Move read-only context to **resources** and entry points to **prompts**. Consolidate
+   parameters into one tool, not many.
 5. **Agent-mode, same-workspace.** Document this for the user; it is not something you control.
 
 ---
@@ -395,7 +396,7 @@ in-band**: the tool result carries the question as **text the agent reads out**,
 **in chat**, and the agent calls a **follow-up tool** with the answer. Progression is driven by
 **tools + conversation**, not by protocol round-trips.
 
-### 7.2 The four reusable interaction patterns
+### 7.2 The five reusable interaction patterns
 
 | Intent | In-band mechanism (build this) |
 |---|---|
@@ -403,6 +404,7 @@ in-band**: the tool result carries the question as **text the agent reads out**,
 | **Capture a decision (recommend-and-proceed)** | State the **recommended default in prose**; a single tool records confirm-or-override. Default is one keystroke away → it stays a flow, not an interrogation. |
 | **Gate / approval** | **Next action = approval**: the agent's next tool call *is* the confirmation, and the server records it. Reserve an explicit required stop only for true hard-stops. |
 | **Parameter intake** | One `set_parameters` tool with **resolved defaults**; surface any missing-required field as prose in the result, not as a protocol prompt. |
+| **Adaptive coaching (on-demand, LLM-grounded)** | A **read-only** tool returns a short, model-generated explanation of *what's happening and why*, grounded in server-held context + the user's own state. Call an **in-server** model (server→model, **not** server→client sampling), scrub the output, and **fail open** to static text. Optional, additive, off the critical path (§7.5). |
 
 ### 7.3 Progressive enhancement (forward-compatible, off by default)
 Read the client's declared capabilities at `initialize`. If a future client advertises
@@ -413,6 +415,38 @@ and must always work.
 ### 7.4 Keep any verbatim content contract intact
 If your server serves canonical text (prompts, docs), the interaction layer **wraps** the step; it
 must not rewrite the payload. Interaction is additive.
+
+### 7.5 Adaptive coaching (turn a walkthrough into a tutor)
+A stateless server that already holds rich context — the step's purpose, the canonical text, the
+user's prior outputs and answers — and has **in-workspace access to a model** can *generate*
+explanation on demand instead of only serving canned text. This is the difference between "present
+step + canned help" and "explain *this* user's situation live." Because the client declares no
+sampling (§4.4, §7.1), you do **not** ask the client's model — you call **your own** model
+server-side and return the text as a normal tool result.
+
+Build it as a **single read-only tool** (e.g. `coach`) that the user pulls when they ask "why does
+this matter?" / "what now?" / "I'm stuck", optionally with a `focus` enum. Make it safe by
+construction:
+
+- **Ground it, don't free-associate.** Assemble the context **server-side** from what you already
+  hold (never from tool arguments); instruct the model to ground every claim in that context and to
+  point at the next action rather than invent facts when context is thin.
+- **Honor the verbatim contract (§7.4).** Coaching **explains**; it never rewrites or re-issues the
+  canonical text. The system prompt must say so explicitly.
+- **Fail open.** Any model error/timeout — or no endpoint configured — degrades to your static
+  help text with an `is_fallback` flag. Coaching failing must never fail a step or a tool; it is
+  **off the critical path**.
+- **Firewall the output.** If any content is contaminating in your domain (benchmark text, sample
+  data, secrets, PII), forbid it in the system prompt **and** scrub the output before returning and
+  before logging; a scrub failure fails closed to the static text.
+- **Keep it read-only and cheap.** It changes no task state; cache per `(state-key, focus)`, keep
+  `max_tokens` small, and set a short timeout. Any telemetry write is best-effort, never blocking.
+- **Mind the budget (§3.4).** It is worth one tool slot precisely because it is a distinct
+  *capability* (argument-taking, model-backed), not a duplicate of a push-based question tool — but
+  it is still **one** tool, not one per topic.
+
+This keeps the pattern fully in-band (§7.1): the model call is server-internal; the client only ever
+calls a tool and reads the result aloud.
 
 ---
 
@@ -579,7 +613,8 @@ tool result. **Tear the probe down when done.**
 - [ ] MCP/FastMCP versions pinned in the lockfile
 
 **Tools / prompts / resources**
-- [ ] ≤ ~5–6 tools; read-only context is resources; entry points are prompts
+- [ ] ≤ ~6 tools (a coaching tool, §7.5, may justify one more); read-only context is resources;
+      entry points are prompts
 - [ ] Every tool: description-as-prompt (200–400 chars), flat `inputSchema`, `outputSchema` +
       `structuredContent`, all four annotations, `isError` for expected failures
 - [ ] Large payloads returned as resource links, not inlined

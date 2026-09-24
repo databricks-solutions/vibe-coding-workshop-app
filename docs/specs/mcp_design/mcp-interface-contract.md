@@ -27,6 +27,8 @@ probe constraints in
 | Track overview narrative source | `src/constants/pathDescriptions.ts` | same |
 | Gate ledger convention | `.vibecoding-state.md` (Tier-G READ/RECORD bookends, `../genie-accelerator-prompt-standardization.md` §17 + `../genie-accelerator-locate-daisychain-and-prompt-cleanup.md`) | `.vibecoding-state.md` |
 | SPA catch-all (mount `/mcp` before it) | `app.py:162` | `:162` |
+| FMAPI call (adaptive coaching, §3.7) | `call_databricks_serving_endpoint(prompt, endpoint_name, max_tokens, temperature, system_prompt)` — **async** — `src/backend/api/routes.py:1400` | (new) |
+| Default serving endpoint | `SERVING_ENDPOINT_NAME = os.getenv("DATABRICKS_SERVING_ENDPOINT", "databricks-claude-sonnet-4-5")` `routes.py:440` | (new) |
 
 > **Ledger naming.** The live Tier-G convention is `.vibecoding-state.md` — verified in both the
 > prompt-standardization spec (§17, line 74 RECORD bookend) and the Locate daisy-chain spec. This
@@ -36,9 +38,11 @@ probe constraints in
 
 ## 1. Design principles (normative, from the generic spec)
 
-1. **Tool budget ≤ 6.** Genie Code enforces ~20 tools across *all* connected servers. This contract
-   ships **6 tools**; read-only listings (outline/overview/state) are **resources**, entry points
-   are **prompts** (§9 accounts for the budget).
+1. **Tool budget ≤ 7.** Genie Code enforces ~20 tools across *all* connected servers. This contract
+   ships **7 tools** (6 core, plus `vibe_coach` added in Phase 2A, §3.7); read-only listings
+   (outline/overview/state) are **resources**, entry points are **prompts** (§9 accounts for the
+   budget). 7 is still comfortably under the ~20 shared ceiling — do not grow it further without a
+   budget re-check (D1 §5, generic §3.4).
 2. **Descriptions are the agent's only documentation** — 200–400 chars, stating *what · when ·
    params · errors* (generic §5.1).
 3. **Flat `inputSchema`** — < 8 params, enums + defaults (generic §5.2).
@@ -96,14 +100,14 @@ identity source; `clientInfo.name` is the connection name, not the user (probe f
 ### 2.4 Annotation semantics
 `readOnlyHint` = no state change · `destructiveHint` = removes/overwrites data ·
 `idempotentHint` = same args ⇒ same effect (safe to retry) · `openWorldHint` = touches an external
-system. All six tools set `openWorldHint: true` (Lakebase).
+system. All seven tools set `openWorldHint: true` (Lakebase; plus FMAPI for `vibe_coach`, §3.7).
 
 ---
 
 ## 3. Tools (the catalog)
 
-Six tools. Each entry is the binding contract: description-as-prompt, `inputSchema`, `outputSchema`,
-annotations, errors, and the D3/D1 mapping.
+Seven tools (6 core + `vibe_coach`, §3.7). Each entry is the binding contract:
+description-as-prompt, `inputSchema`, `outputSchema`, annotations, errors, and the D3/D1/D5 mapping.
 
 ### 3.1 `vibe_start_track`
 > **Description (as-prompt):** "Start or resume a guided workshop track (e.g. the Genie
@@ -286,6 +290,44 @@ annotations, errors, and the D3/D1 mapping.
 - **Maps to:** D3 §4 session_parameters + the outline flag filter (D3 §5.1); reuses
   `/api/session/{id}/parameters` + `lakehouse-params`.
 
+### 3.7 `vibe_coach`  *(net-new, Phase 2A — from D5 §11 adaptive coaching)*
+> **Description (as-prompt):** "Coach the learner on **what is happening at their current step and
+> why**, grounded in their own progress — call it on demand when they ask 'why does this matter?',
+> 'what do I do now?', or 'I'm stuck'. Read-only; never blocks or advances the track. Args:
+> `session_id` (required), `focus` (optional: what_now | why | unblock | review), `sectionTag`
+> (optional; defaults to the current step)."
+
+```jsonc
+"inputSchema": {
+  "type": "object",
+  "required": ["session_id"],
+  "properties": {
+    "session_id": { "type": "string" },
+    "focus":      { "type": "string", "enum": ["what_now","why","unblock","review"], "default": "what_now",
+                    "description": "Coaching lens: orient (what_now), motivate (why), get unstuck (unblock), or recap (review)." },
+    "sectionTag": { "type": "string", "description": "Defaults to the current step." }
+  },
+  "additionalProperties": false
+}
+"outputSchema": { "$ref": "CoachResult" }   // see §12
+```
+- **Annotations:** `readOnly:true, destructive:false, idempotent:true, openWorld:true`
+  (`openWorld` because it calls FMAPI + reads Lakebase; `readOnly` because it changes **no** workshop
+  state — progress/gates/answers are untouched. The optional coaching-telemetry row (D6 §3a) is an
+  observability side-channel, like a log line, not workshop state).
+- **Errors:** `INVALID_SESSION`, `UNKNOWN_STEP` (explicit bad `sectionTag`). **Never** raises on an
+  FMAPI failure — coaching is **fail-open**: on any model/timeout error it returns the static,
+  option-keyed fallback (D5 §11.4 / interactions bank) with `is_fallback:true`. There is no
+  `COACH_FAILED` code by design.
+- **Grounding (server-assembled, never client-supplied):** the current step's `title`/`why`/
+  `how_to_apply`/`expected_output`/`gate` + the verbatim `prompt` (as *reference to explain*, never
+  to rewrite — §7 / D1 §7), the learner's `captured_outputs`, prior `session_interactions` answers,
+  and `industry`/`use_case` (D5 §11.2). The model call carries `_COACH_SYSTEM` (§12) as
+  `system_prompt`.
+- **Maps to:** D5 §11 (pedagogy/doctrine) via `services/llm.py` (extract of
+  `call_databricks_serving_endpoint`, `routes.py:1400`; D4 §1.2). **No REST twin required** for v1
+  (the SPA renders its own coaching); add `GET /api/track/{track}/coach` later if the UI needs it.
+
 ---
 
 ## 4. Resources (read-only context)
@@ -338,7 +380,7 @@ error (generic §5.5). Shape:
 |---|---|---|---|
 | `UNKNOWN_TRACK` | `track` not in manifest | `start_track` | — |
 | `INVALID_SESSION` | session id unresolvable | all | — |
-| `UNKNOWN_STEP` | `sectionTag` not in track | `get_step`, `complete_step` | D3 F1 |
+| `UNKNOWN_STEP` | `sectionTag` not in track | `get_step`, `complete_step`, `coach` | D3 F1 |
 | `STEP_LOCKED` | prerequisite gate not met | `get_step`, `complete_step` | D3 F2 |
 | `UI_DRIVEN_STEP` | step is coached, not agent-completable | `complete_step` | D3 §5.4 / D1 §4.3 |
 | `GATE_REQUIRED` | Step-9 confirm answer not yet recorded | `complete_step` | D1 §11 |
@@ -346,7 +388,9 @@ error (generic §5.5). Shape:
 | `INVALID_PARAM` | unknown/invalid parameter (strict mode) | `set_parameters` | D3 §4 |
 
 `complete_step` on an already-completed gate is **not** an error — it is idempotent success
-(D3 F3).
+(D3 F3). `vibe_coach` **never** returns an FMAPI error — model/timeout failures degrade to the
+static fallback with `is_fallback:true` (§3.7 / D5 §11.4); only `INVALID_SESSION`/`UNKNOWN_STEP`
+(bad inputs, before any model call) are `isError`.
 
 ---
 
@@ -371,9 +415,10 @@ never returns malformed structured output.
 | `vibe_complete_step` | ❌ | ❌ | ✅ | ✅ |
 | `vibe_submit_answer` | ❌ | ❌ | ✅ | ✅ |
 | `vibe_set_parameters` | ❌ | ❌ | ✅ | ✅ |
+| `vibe_coach` | ✅ | ❌ | ✅ | ✅ |
 
-None are `destructive`: completion/answers are additive and idempotent; rollback is a whole-snapshot
-concern handled elsewhere, never a tool-level destroy.
+None are `destructive`: completion/answers are additive and idempotent; coaching mutates no workshop
+state; rollback is a whole-snapshot concern handled elsewhere, never a tool-level destroy.
 
 ---
 
@@ -381,17 +426,20 @@ concern handled elsewhere, never a tool-level destroy.
 
 | Surface | Count | Items |
 |---|--:|---|
-| **Tools** | **6** | start_track, get_step, next_step, complete_step, submit_answer, set_parameters |
+| **Tools** | **7** | start_track, get_step, next_step, complete_step, submit_answer, set_parameters, **coach** |
 | Resources | 4 | track overview, session state (incl. outline), style/vibecoding, guide/getting-started |
 | Prompts | 3 | Start the Genie Accelerator, Continue where I left off, How does this workshop work? |
 
 Resources and prompts cost **nothing** against Genie Code's ~20-tool budget, so the self-serve
-surfaces (the help resource + the orientation prompt, D1 §1a) are free — the tool count stays at 6.
+surfaces (the help resource + the orientation prompt, D1 §1a) are free — the tool count is **7**
+(6 core + `vibe_coach`, added in Phase 2A). Coaching is deliberately a **tool** (not a resource)
+because it takes arguments (`focus`, `sectionTag`) and calls a model per invocation.
 
 **Reconciliation with the roadmap §8.2:** the roadmap listed 6 tools *including* `vibe_track_outline`
-but *excluding* `vibe_submit_answer`. D1 requires `submit_answer`; to stay ≤ 6 we **demote
-`track_outline` to the session-state resource** (§4). Net: still 6 tools, and the read-only listing
-lives where reads belong (generic §6).
+but *excluding* `vibe_submit_answer`. D1 requires `submit_answer`; to stay at 6 **core** tools we
+**demote `track_outline` to the session-state resource** (§4). Net: 6 core tools, and the read-only
+listing lives where reads belong (generic §6). **Phase 2A** then adds `vibe_coach` (§3.7) for a
+total of **7** — still far under the shared ~20-tool ceiling.
 
 ---
 
@@ -405,6 +453,7 @@ lives where reads belong (generic §6).
 | `vibe_complete_step` | `complete_step` | gate = next-action-as-approval (§4.3) | `POST /api/track/{track}/complete` |
 | `vibe_submit_answer` | (writes interaction log) | §4.1/§4.2 + §11 | — (UI-native) |
 | `vibe_set_parameters` | session_parameters + outline filter | §4.4 | `POST /api/session/{id}/parameters` |
+| `vibe_coach` | reads state + assembler context; calls FMAPI (`services/llm.py`) | D1 §4.6 (adaptive coaching) | — (UI-native; optional `GET …/coach` later) |
 
 ---
 
@@ -417,3 +466,103 @@ lives where reads belong (generic §6).
    Recommend lenient-with-warning to avoid brittle failures as the flag set grows.
 3. **Overview resource freshness.** 1 h TTL assumes track narrative is static between deploys;
    confirm reseed invalidates it (or drop TTL to session).
+4. **Coaching model + budget knobs (§3.7/§12).** Endpoint (`DATABRICKS_SERVING_ENDPOINT`, default
+   `databricks-claude-sonnet-4-5`), `max_tokens`, timeout, and whether to cache per
+   `(session_id, sectionTag, focus)`. Recommend: reuse the app default endpoint, `max_tokens≈400`,
+   a short (≈8 s) timeout with fail-open, and per-triple caching.
+5. **Coaching telemetry (D6 §3a).** Persist a `kind='coaching'` row per call (recommended, for the
+   fallback-rate metric) vs. fire-and-forget with no row. Recommend persist, best-effort.
+
+---
+
+## 12. Adaptive-coaching internals (`CoachResult` + `_COACH_SYSTEM`)
+
+The shape and the model contract behind `vibe_coach` (§3.7). Bound by the D8 coaching tests (§4).
+
+### 12.1 `CoachResult` (output type)
+
+```jsonc
+// CoachResult — the vibe_coach outputSchema (structuredContent + mirrored text, §7)
+"CoachResult": {
+  "type": "object",
+  "required": ["coaching", "focus", "section_tag", "is_fallback"],
+  "properties": {
+    "coaching":    { "type": "string",
+                     "description": "2–5 sentences the agent reads out; explains what's happening and why. Never restates the step prompt." },
+    "focus":       { "type": "string", "enum": ["what_now","why","unblock","review"] },
+    "section_tag": { "type": "string", "description": "The step the coaching is grounded on." },
+    "grounded_on": { "type": "array", "items": { "type": "string" },
+                     "description": "Which context keys fed the answer, e.g. ['why','expected_output','captured_outputs:genie_brief']. For transparency/tests." },
+    "is_fallback": { "type": "boolean",
+                     "description": "true ⇒ the FMAPI call failed/timed out and the static option-keyed fallback was returned (D5 §11.4)." }
+  },
+  "additionalProperties": false
+}
+```
+
+Pydantic sketch (mirrors the existing models in `src/backend/mcp_server.py`):
+
+```python
+class CoachResult(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    coaching: str
+    focus: Literal["what_now", "why", "unblock", "review"]
+    section_tag: str
+    grounded_on: list[str] = Field(default_factory=list)
+    is_fallback: bool = False
+```
+
+### 12.2 `_COACH_SYSTEM` (the model system prompt)
+
+Passed as `system_prompt` to `call_databricks_serving_endpoint` (`routes.py:1400` → `services/llm.py`,
+D4 §1.2). It is a **server-owned constant** (like `ORIENTATION_PREAMBLE` in `mcp_server.py`), never
+learner- or agent-supplied. The **user message** is the assembled grounding context (§3.7); this
+system prompt fixes the role, the guardrails, and the output shape.
+
+```text
+You are the coach for a hands-on Databricks "Genie Accelerator" workshop. A learner is working
+through it inside an AI coding agent. Your job: explain, in plain language, WHAT is happening at
+their current step and WHY it matters — grounded ONLY in the CONTEXT provided in the user message
+(the step's purpose, how-to-apply, expected output, the learner's own prior outputs and answers,
+and their industry/use case).
+
+HARD RULES
+- Ground every claim in the CONTEXT. If the CONTEXT does not support an answer, say what the learner
+  should do or check next — never invent facts, table names, column values, or results.
+- NEVER restate, paraphrase, or "improve" the step's verbatim PROMPT body. It is shown to the
+  learner separately and must remain authoritative. You explain and motivate; you do not re-issue
+  the instruction.
+- NEVER emit benchmark question text, sample data values, literals, secrets, or PII. Speak in terms
+  of concepts and the learner's own artifacts, not raw data. (Firewall — D7 §6.)
+- Respect the learner's recorded decisions: if they chose a non-recommended option, coach that
+  path's trade-offs; do not scold or re-litigate a settled choice.
+
+FOCUS (from the CONTEXT's `focus` field)
+- what_now : orient them — where they are, what this step produces, what to do next.
+- why      : motivate — why this step exists and what breaks downstream if it's skipped or wrong.
+- unblock  : diagnose — the most likely reason they're stuck here and the smallest next action.
+- review   : recap — what they've accomplished so far and how this step builds on it.
+
+STYLE
+- 2–5 sentences. Confident guide, not a form or a quiz. Recommend, don't interrogate (D5 §3, §7).
+- No emoji, no numbered/decorated headers, no marketing adjectives, no filler (economist/humanizer
+  bars, D5 §7). Precise and literal about tokens, gate names, and definitions — do not vague them.
+- Output prose only. No JSON, no markdown headings — the tool wraps your text into CoachResult.
+```
+
+### 12.3 Grounding context (the user message)
+
+Assembled server-side from the same sources `_step_payload` already uses (`mcp_server.py`), plus
+session history — **never** taken from tool arguments:
+
+| Context key | Source |
+|---|---|
+| `focus` | the `focus` arg (§3.7) |
+| `title`, `why`, `how_to_apply`, `expected_output`, `gate`, `execution` | step payload (D3 §8) |
+| `prompt` (verbatim, **as reference only**) | assembler `bypass_llm` input (D3 §7.5) |
+| `captured_outputs` (relevant `consumes`/`produces` keys) | `engine.resolve_previous_outputs` (D3 §6) |
+| prior answers/decisions | `session_interactions` (D6 §3) |
+| `industry`, `use_case` | `session_parameters` (D6 §4) |
+
+`grounded_on` in the result echoes which of these keys were non-empty, for transparency and the
+D8 grounding test (§4).

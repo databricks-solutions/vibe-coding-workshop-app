@@ -34,6 +34,7 @@ under `tests/e2e/` conventions.
 | Engine / domain | manifest ↔ UI parity; assembler byte-parity; progression correctness | §2 |
 | MCP contract | tool/resource/prompt shapes, annotations, output/error contracts | §3 |
 | Interactivity | in-band patterns, recommend-and-proceed, Step-9 hard-stop, capability negotiation | §4 |
+| Adaptive coaching (Phase 2A) | grounding, fail-open, leakage scrub, read-only, provenance | §4a |
 | Deployment regression | 307-no-redirect, mount order, lifespan | §5 |
 | Statelessness | two-session isolation; per-request reads | §6 |
 | Data model | additive DDL, dual-write, number↔tag, interaction log | §7 |
@@ -66,7 +67,8 @@ CI-equivalent: run locally; a red parity test blocks the change (D3 §9).
 
 `tests/workshop/test_mcp_contract.py`:
 
-- **Budget:** exactly **6 tools** exposed (D2 §9); fail if a 7th appears.
+- **Budget:** exactly **7 tools** exposed (D2 §9: the 6 core + `vibe_coach`); fail if an 8th appears
+  (guards the shared ~20-tool budget). Before Phase 2A, assert **6**.
 - **Per tool:** non-empty description in the 200–400 char band; `inputSchema` present and flat
   (< 8 params); `outputSchema` present; **all four annotations** set (D2 §8).
 - **Output contract:** every tool returns `structuredContent` validating against its `outputSchema`
@@ -102,6 +104,30 @@ CI-equivalent: run locally; a red parity test blocks the change (D3 §9).
   copy; and the `How does this workshop work?` prompt resolves without any tool knowledge. Assert an
   orientation-free client can reach "step 1 presented" using only prompts + resources (the
   self-serve acceptance, D9 Phase 1).
+
+### 4a. Adaptive-coaching tests (D1 §4.6 / D2 §3.7 / D5 §11) — *Phase 2A*
+
+`tests/workshop/test_coaching.py` (mock the FMAPI seam — `services/llm.py`, D4 §1.2 — so these run
+offline with no live endpoint):
+
+- **Grounding** — with a mocked model that echoes its inputs, assert `vibe_coach` sends only the
+  server-assembled context keys (D2 §12.3), `_COACH_SYSTEM` as the system prompt, and that
+  `grounded_on` reflects the non-empty context keys.
+- **Verbatim / no re-issue** — assert the step's verbatim `prompt` body is passed as *reference*
+  context but the returned `coaching` is not required to equal it; the contract is enforced by
+  `_COACH_SYSTEM` (assert the system prompt text carries the "never restate the prompt" rule).
+- **Fail-open (the important one)** — (a) mock the model to raise/timeout → `vibe_coach` returns the
+  static option-keyed fallback with `is_fallback:true`, **not** an `isError`; (b) unset the endpoint
+  (`DATABRICKS_SERVING_ENDPOINT` empty) → still returns useful static coaching, `is_fallback:true`.
+- **Leakage scrub (D7 §6.1)** — feed the mock a response containing a planted benchmark-style
+  string / literal; assert it is scrubbed from both the returned `coaching` **and** the stored
+  `coaching_shown`; assert a scrub failure falls back to static (never ships unscrubbed).
+- **Read-only** — `vibe_coach` changes no `completed_gates`/`captured_outputs`/answers; a coaching
+  call does not advance `next_step`.
+- **Provenance (D6 §3a)** — a successful call best-effort inserts exactly one `session_interactions`
+  row with `kind='coaching'`, the `focus`, and `is_fallback`; assert a telemetry-insert failure does
+  **not** fail the tool.
+- **Annotations** — `vibe_coach` is `readOnly:true, idempotent:true, openWorld:true` (D2 §8).
 
 ---
 
@@ -141,6 +167,9 @@ CI-equivalent: run locally; a red parity test blocks the change (D3 §9).
   (D6 §5).
 - **Interaction log append:** `submit_answer` inserts exactly one `session_interactions` row with
   provenance (D6 §3).
+- **Coaching migration idempotent (Phase 2A):** `13_mcp_coaching.sql` re-runs cleanly
+  (`ADD COLUMN IF NOT EXISTS is_fallback/focus`); legacy interaction rows read back
+  `is_fallback=FALSE`, `focus=NULL` (D6 §7a).
 
 ---
 
@@ -184,7 +213,8 @@ Extend the template-repo `lint_section_prompts.py` scoped check (D5 §5.2):
 ## 11. Invocation (no CI today)
 
 Run locally and record results in the PR (roadmap §15):
-- Python: `pytest tests/workshop tests/api` (add the new files).
+- Python: `pytest tests/workshop tests/api` (add the new files, incl. `test_coaching.py`; mock the
+  `services/llm.py` FMAPI seam so coaching tests run offline).
 - Frontend build/lint: `npm run build` + lint clean (roadmap §15).
 - Playwright smoke: `tests/e2e` conventions for the deployed check.
 
@@ -204,6 +234,9 @@ before every deploy (D9 §7).
 | Errors in-result (D2 §6) | §3 error taxonomy |
 | No elicitation dependency (D1 §2) | §4 capability negotiation |
 | Self-serve by construction (D1 §1a) | §4 self-serve / first-run |
+| Adaptive coaching fail-open (D1 §4.6 / D5 §11.4) | §4a fail-open |
+| Coaching firewall / scrub (D7 §6.1) | §4a leakage scrub |
+| Coaching is read-only + fail-open telemetry (D2 §3.7 / D6 §3a) | §4a read-only + provenance |
 | Recommend-and-proceed default (D5 §3) | §4 + §10 |
 | Step-9 hard-stop (D1 §11) | §4 |
 | 307-no-redirect (plan §1.3.2) | §5 |

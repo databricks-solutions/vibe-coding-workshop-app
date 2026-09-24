@@ -64,8 +64,9 @@ NON-NEGOTIABLE GUARDRAILS (propagate verbatim to EVERY sub-agent)
     from Lakebase per request; no engine correctness depends on in-process
     state; two concurrent sessions never share memory.
 6.  APP NAME (D4 §2; D9 §4): the deployed app name MUST start with "mcp-".
-7.  TOOL BUDGET ≤ 6 (D2 §1, §9): exactly 6 tools. Read-only listings are
-    RESOURCES; entry points are PROMPTS (both are free of the ~20-tool budget).
+7.  TOOL BUDGET ≤ 7 (D2 §1, §9): exactly 7 tools — 6 core + vibe_coach (added
+    in Phase 2A, D2 §3.7). Read-only listings are RESOURCES; entry points are
+    PROMPTS (both are free of the ~20-tool budget). Do NOT add an 8th.
 8.  ANNOTATIONS + ERRORS (D2 §7, §8): every tool sets all four annotations and
     returns structuredContent validating its outputSchema PLUS a text block;
     expected failures return isError with a code from D2 §6 — never a protocol
@@ -93,10 +94,16 @@ EXECUTION DOCTRINE
     Phase 0  engine (D3) ................. UI unchanged
     Phase 1  read-only MCP + self-serve on-ramp (D2, D4, D7)
     Phase 2  interactivity + state, in-band (D1, D5, D6)
+    Phase 2A adaptive coaching (LLM, in-band) (D2 §3.7/§12, D1 §4.6, D5 §11,
+             D6 §3a/§7a, D7 §6.1, D4 §1.2)
     Phase 3  repoint UI to the engine (D3 §4.3, D4 §3.3)
     Phase 4  generalize to all tracks
   Do NOT begin a phase until the prior phase's EXIT GATE is green AND the human
-  has approved the between-phase gate.
+  has approved the between-phase gate. EXCEPTION (D9 §1): Phase 2A depends ONLY
+  on Phase 2 and is decoupled from Phase 3 (different files, fail-open) — it may
+  run AFTER Phase 2 in parallel with Phase 3, or be deferred. It is still
+  IN-BAND: vibe_coach calls FMAPI server-side; it is NOT a server→client call
+  and NOT sampling (D1 §10).
 - PER PHASE, STEP 1: generate a writing-plans plan doc under
   docs/superpowers/plans/2026-09-22-mcp-phaseN-<name>.md from that phase's spec
   sources, copying these GUARDRAILS in verbatim and drawing each task's failing
@@ -120,6 +127,10 @@ EXIT GATES (first green gate each phase is OBJECTIVE)
   (D9 §7 / D8 §4 self-serve).
 - Phase 2: interactivity (D8 §4) + stateless isolation (D8 §6) + data-model
   migration (D8 §7).
+- Phase 2A: coaching tests (D8 §4a) — grounding, FAIL-OPEN (model error / no
+  endpoint → static fallback, is_fallback:true, NEVER isError), leakage scrub
+  (before return AND before store, D7 §6.1), read-only, best-effort provenance
+  (D6 §3a) — all mocking the services/llm.py FMAPI seam so they run offline.
 
 HARD STOPS — human-only; NEVER attempt autonomously (D9 §5; D8 §8). Produce the
 artifact/PR/runbook and WAIT:
@@ -127,6 +138,9 @@ artifact/PR/runbook and WAIT:
 - The LIVE GENIE CODE SMOKE (D8 §8): a human must be in Agent mode and paste
   the /mcp URL; you cannot self-verify the client side.
 - Reseed (deploy.sh --tables-only) and the number↔tag flip (D9 §5).
+- (Phase 2A) The coaching serving-endpoint + per-call FMAPI cost decision
+  (D9 §9 q4): recommend a model + budget knobs, and ship 2A flag-off if unsure
+  — the human approves enabling it. Do NOT pick/enable an endpoint autonomously.
 
 PHASE FILE MAPS (where work lands)
 - Phase 0 (D3 §11):
@@ -143,7 +157,8 @@ PHASE FILE MAPS (where work lands)
                                                         per D8 §13 — use
                                                         tests/workshop/)
 - Phase 1 (D4 §6):
-    src/backend/mcp_server.py                          (FastMCP: 6 tools D2 §3,
+    src/backend/mcp_server.py                          (FastMCP: 6 CORE tools D2 §3
+                                                        (+ vibe_coach in Phase 2A → 7),
                                                         4 resources D2 §4,
                                                         3 prompts D2 §5)
     app.py                                             (mount /mcp before :162;
@@ -157,6 +172,21 @@ PHASE FILE MAPS (where work lands)
                                                         completed_gates columns +
                                                         session_interactions table,
                                                         D6 §2, §3, §7)
+- Phase 2A (D2 §3.7/§12, D1 §4.6, D5 §11, D6 §3a/§7a, D7 §6.1, D4 §1.2):
+    src/backend/services/llm.py                        (EXTRACT of
+                                                        call_databricks_serving_endpoint
+                                                        routes.py:1400 + SERVING_ENDPOINT_NAME
+                                                        routes.py:440; import from BOTH
+                                                        routes.py and mcp_server.py — do
+                                                        NOT import routes.py into the MCP
+                                                        adapter)
+    src/backend/mcp_server.py                          (ASYNC vibe_coach handler +
+                                                        _COACH_SYSTEM constant + CoachResult
+                                                        model; grounding context D2 §12.3;
+                                                        leakage-scrub before return AND store)
+    db/lakebase/ddl/13_mcp_coaching.sql                (additive: is_fallback, focus columns
+                                                        on session_interactions, D6 §7a)
+    tests/workshop/test_coaching.py                    (D8 §4a; mock the llm.py seam)
 
 REUSE, DON'T REBUILD (D3 §7; roadmap "one engine, one assembler")
 - The assembler is get_section_input_content (routes.py:1241). EXTRACT it;
@@ -169,6 +199,10 @@ REUSE, DON'T REBUILD (D3 §7; roadmap "one engine, one assembler")
   session_id (D3 §4; NOTE: not :5787 — that citation is stale).
 - Step metadata (how_to_apply/expected_output): GET /api/section-metadata/
   {section_tag} (routes.py:2252), bundled into the step payload (D3 §8).
+- FMAPI for coaching (Phase 2A): call_databricks_serving_endpoint (routes.py:1400,
+  ASYNC, takes system_prompt) + SERVING_ENDPOINT_NAME (routes.py:440). EXTRACT to
+  services/llm.py; vibe_coach is an ASYNC tool so it can await it (D4 §1.2). NEVER
+  write a second serving-endpoint client.
 
 CADENCE
 After each phase: summarize the PRs opened, the local pytest results, and the
@@ -194,12 +228,15 @@ routes.py:1296   get_section_input_template(section_tag, assistant_key)  (fork c
 routes.py:1349-1356  token substitution + placeholders + {prd_document} default
 routes.py:1364-1371  conditional brand injection (fixed section_tag set)
 routes.py:1515   return { ... }                 (assembler return shape)
+routes.py:440    SERVING_ENDPOINT_NAME = os.getenv("DATABRICKS_SERVING_ENDPOINT", "databricks-claude-sonnet-4-5")  (Phase 2A coaching)
+routes.py:1400   async def call_databricks_serving_endpoint(prompt, endpoint_name, max_tokens, temperature, system_prompt)  (EXTRACT to services/llm.py — Phase 2A)
 routes.py:2252   @router.get("/section-metadata/{section_tag}")
 routes.py:5944   @router.post("/session/save")  (CORRECTED; not :5787)
 routes.py:6557   @router.get("/user/current")   (identity → session_id)
 db/lakebase/ddl/03_sessions.sql          existing sessions schema (D6 §1)
 db/lakebase/ddl/02_section_input_prompts.sql   prompt-content store (unchanged)
-db/lakebase/ddl/12_mcp_engine_state.sql  NEW additive migration (D6 §7)
+db/lakebase/ddl/12_mcp_engine_state.sql  Phase 2 additive migration (D6 §7)
+db/lakebase/ddl/13_mcp_coaching.sql      Phase 2A additive migration: is_fallback, focus (D6 §7a)
 ════════════════════════════════════════════════════════════════════════════
 ```
 
@@ -207,8 +244,9 @@ db/lakebase/ddl/12_mcp_engine_state.sql  NEW additive migration (D6 §7)
 
 ## Notes for the human (not part of the charter)
 
-- **Autonomy ceiling.** The charter drives Polly through **Phases 0–2 built, tested, and PR'd**,
-  stopping at the deploy and the live Genie Code smoke — the correct ceiling for this build
+- **Autonomy ceiling.** The charter drives Polly through **Phases 0–2 (plus the decoupled Phase 2A)
+  built, tested, and PR'd**, stopping at the deploy, the live Genie Code smoke, and the coaching
+  serving-endpoint/cost decision — the correct ceiling for this build
   ([D9 §5](./mcp-workshop-rollout.md), [D8 §8](./mcp-workshop-test-plan.md)).
 - **Why "plan first."** Making Polly emit a writing-plans doc per phase keeps her execution on the
   byte-parity/test rails ([D3 §9](./workshop-engine-domain.md)) instead of free-decomposing from
