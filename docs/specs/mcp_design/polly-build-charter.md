@@ -139,8 +139,11 @@ artifact/PR/runbook and WAIT:
   the /mcp URL; you cannot self-verify the client side.
 - Reseed (deploy.sh --tables-only) and the number↔tag flip (D9 §5).
 - (Phase 2A) The coaching serving-endpoint + per-call FMAPI cost decision
-  (D9 §9 q4): recommend a model + budget knobs, and ship 2A flag-off if unsure
-  — the human approves enabling it. Do NOT pick/enable an endpoint autonomously.
+  (D9 §9 q4) is RESOLVED 2026-09-24 — ship 2A ENABLED: app-default endpoint,
+  max_tokens~400, ~8s fail-open, per-triple cache, kill-switch env default on
+  (superseded here; see polly-charter-next.md). Do NOT pick a different endpoint
+  or change the knobs autonomously; enabling in a live workspace still rides the
+  deploy hard stop.
 
 PHASE FILE MAPS (where work lands)
 - Phase 0 (D3 §11):
@@ -245,9 +248,10 @@ db/lakebase/ddl/13_mcp_coaching.sql      Phase 2A additive migration: is_fallbac
 ## Notes for the human (not part of the charter)
 
 - **Autonomy ceiling.** The charter drives Polly through **Phases 0–2 (plus the decoupled Phase 2A)
-  built, tested, and PR'd**, stopping at the deploy, the live Genie Code smoke, and the coaching
-  serving-endpoint/cost decision — the correct ceiling for this build
-  ([D9 §5](./mcp-workshop-rollout.md), [D8 §8](./mcp-workshop-test-plan.md)).
+  built, tested, and PR'd**, stopping at the deploy and the live Genie Code smoke
+  ([D9 §5](./mcp-workshop-rollout.md), [D8 §8](./mcp-workshop-test-plan.md)). The coaching
+  serving-endpoint/cost decision that used to sit here is **resolved (2026-09-24): ship 2A enabled**
+  with the signed-off knobs (D9 §9 q4) — it no longer gates the build.
 - **Why "plan first."** Making Polly emit a writing-plans doc per phase keeps her execution on the
   byte-parity/test rails ([D3 §9](./workshop-engine-domain.md)) instead of free-decomposing from
   prose.

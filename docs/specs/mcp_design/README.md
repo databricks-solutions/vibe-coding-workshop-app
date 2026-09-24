@@ -82,8 +82,9 @@ Phasing authority is [D9 §1](./mcp-workshop-rollout.md#1-revised-phasing-elicit
 - **Phase 2B — recommended next** ([D11](./mcp-workshop-usecase-selection.md)): use-case selection
   before PRD + step-sync bridge. Zero new tools. Fixes the PRD-jump and the cross-surface step
   visibility gap the first live run exposed.
-- **Phase 2A — after/parallel to 2B**: adaptive coaching (`vibe_coach`, 7th tool), flag-off pending a
-  cost/endpoint sign-off.
+- **Phase 2A — after/parallel to 2B**: adaptive coaching (`vibe_coach`, 7th tool). **Cost/endpoint
+  signed off 2026-09-24 → ship enabled** (app-default endpoint, `max_tokens≈400`, ~8 s fail-open,
+  per-triple cache, kill-switch env default on).
 - **Phase 3** (UI-repoint, subsumes the 2B bridge) and **Phase 4** (generalize `use_case_selection`
   to all tracks) follow.
 

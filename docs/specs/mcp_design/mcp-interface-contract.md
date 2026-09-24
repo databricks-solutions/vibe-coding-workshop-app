@@ -466,10 +466,10 @@ total of **7** — still far under the shared ~20-tool ceiling.
    Recommend lenient-with-warning to avoid brittle failures as the flag set grows.
 3. **Overview resource freshness.** 1 h TTL assumes track narrative is static between deploys;
    confirm reseed invalidates it (or drop TTL to session).
-4. **Coaching model + budget knobs (§3.7/§12).** Endpoint (`DATABRICKS_SERVING_ENDPOINT`, default
-   `databricks-claude-sonnet-4-5`), `max_tokens`, timeout, and whether to cache per
-   `(session_id, sectionTag, focus)`. Recommend: reuse the app default endpoint, `max_tokens≈400`,
-   a short (≈8 s) timeout with fail-open, and per-triple caching.
+4. **Coaching model + budget knobs (§3.7/§12).** **RESOLVED 2026-09-24 (ship enabled):** endpoint =
+   app default (`DATABRICKS_SERVING_ENDPOINT` → `databricks-claude-sonnet-4-5`), `max_tokens≈400`,
+   `≈8 s` timeout with fail-open, and per-triple caching on `(session_id, sectionTag, focus)`. Gate
+   the live call behind a coaching kill-switch env (default **on**) for rollback (D9 §6).
 5. **Coaching telemetry (D6 §3a).** Persist a `kind='coaching'` row per call (recommended, for the
    fallback-rate metric) vs. fire-and-forget with no row. Recommend persist, best-effort.
 

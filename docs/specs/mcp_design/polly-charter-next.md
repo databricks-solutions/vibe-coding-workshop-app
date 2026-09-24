@@ -32,11 +32,16 @@ Both are decoupled fast-follows on shipped Phase 2 (D9 §1). Order by **priority
 
 - **2B fixes a live defect** (PRD-jump) **and** delivers the human's explicit step-sync ask. It is
   additive, adds **zero tools**, and needs **no cost sign-off**.
-- **2A is an enhancement** (nicer help) that adds the 7th tool **and** carries a per-call FMAPI
-  **cost/endpoint decision** — a human sign-off (D9 §5, §9 q4).
+- **2A is an enhancement** (nicer help) that adds the 7th tool. Its per-call FMAPI **cost/endpoint
+  decision is now signed off** (2026-09-24, §9 q4) — **ship enabled** with the agreed knobs.
 
 So: **2B next**, then 2A (which may even run in parallel — different files). Both precede Phase 3,
 whose UI-repoint **subsumes** the 2B sync bridge and makes sync canonical.
+
+> **2A cost/endpoint sign-off — DECIDED 2026-09-24.** Ship 2A **enabled** (not flag-off): endpoint =
+> app default (`databricks-claude-sonnet-4-5`), `max_tokens≈400`, `≈8 s` timeout (**fail-open** to
+> static coaching), cache per `(session_id, sectionTag, focus)`. Keep a coaching **kill-switch** env
+> (default **on**) so it can be disabled without a code revert (D9 §6 rollback).
 
 ---
 
@@ -51,7 +56,10 @@ MISSION
 Phases 0–2 are SHIPPED (merged, deployed to fevm-serverless, smoke green; 6
 tools). Build the two decoupled fast-follows on Phase 2, IN ORDER:
   Phase 2B — use-case selection step + step-sync bridge (Genie Accelerator).
-  Phase 2A — adaptive coaching (vibe_coach), the 7th tool, flag-off by default.
+  Phase 2A — adaptive coaching (vibe_coach), the 7th tool. ENABLED (cost/endpoint
+             signed off 2026-09-24): app-default endpoint, max_tokens~400, ~8s
+             fail-open timeout, cache per (session_id,sectionTag,focus); keep a
+             coaching kill-switch env (default on) for rollback.
 You are the supervisor: plan, delegate to coding sub-agents on their own
 harnesses + git worktrees, route every diff to a different-vendor reviewer.
 You WRITE NO CODE and NEVER MERGE. The human reviews and merges every PR.
@@ -130,21 +138,28 @@ PHASE 2A — TASKS (D1 §4.6, D2 §3.7/§12, D4 §1.2, D5 §11, D6 §7a, D7 §6.
      session_interactions (D6 §7a).
   3. mcp_server.py: async vibe_coach handler + _COACH_SYSTEM + CoachResult;
      grounding context (D2 §12.3); LEAKAGE SCRUB before return AND before store
-     (D7 §6.1); FAIL-OPEN to static coaching (is_fallback:true).
+     (D7 §6.1); FAIL-OPEN to static coaching (is_fallback:true). Wire the
+     SIGNED-OFF knobs: endpoint=app default (databricks-claude-sonnet-4-5),
+     max_tokens~400, ~8s timeout, cache per (session_id,sectionTag,focus); gate
+     the live call behind a coaching kill-switch env (default ON) so it can be
+     disabled without a code revert (D9 §6).
   4. tests/workshop/test_coaching.py (D8 §4a): grounding, fail-open (model error
-     / no endpoint → static, NEVER isError), leakage scrub, read-only,
-     provenance — mocking the services/llm.py FMAPI seam so they run offline.
-  EXIT GATE (D9 §7 row 2A): D8 §4a green + 13_ migration; ship FLAG-OFF unless
-  the human approves the endpoint/cost (below).
+     / no endpoint / kill-switch off → static, NEVER isError), leakage scrub,
+     read-only, provenance, cache-hit on repeat triple — mocking the
+     services/llm.py FMAPI seam so they run offline.
+  EXIT GATE (D9 §7 row 2A): D8 §4a green + 13_ migration; ship ENABLED with the
+  signed-off knobs (cost/endpoint approved 2026-09-24, §9 q4).
 
 HARD STOPS — human-only; produce the artifact/PR/runbook and WAIT (D9 §5):
 - Deploying to ANY workspace (scripts/deploy.sh) — incl. the 2B code redeploy.
 - Reseed (deploy.sh --tables-only) — needed only if a use_case_selection prompt
   body is added (D9 §2): reseed BEFORE the code redeploy.
 - The LIVE GENIE CODE SMOKE (client side) — a human pastes the /mcp URL.
-- (2A) The coaching serving-endpoint + per-call FMAPI COST decision (D9 §9 q4):
-  recommend a model + max_tokens/timeout + cache key; ship 2A flag-off if unsure.
-  Do NOT pick/enable an endpoint autonomously.
+- (2A) The coaching serving-endpoint + per-call FMAPI COST decision is ALREADY
+  MADE (signed off 2026-09-24, §9 q4): use the app default endpoint with the
+  knobs above — do NOT pick a different endpoint or change the knobs
+  autonomously. (Enabling it in a live workspace still rides the deploy hard
+  stop above.)
 
 CADENCE
 After each phase: summarize PRs opened, local pytest results, and the human gate
@@ -184,12 +199,15 @@ db/lakebase/ddl/13_mcp_coaching.sql    additive coaching columns (2A — to crea
 
 ## Notes for the human (not part of the charter)
 
-- **Autonomy ceiling** is unchanged: Polly builds + tests + PRs Phase 2B, then 2A **flag-off**,
-  stopping at the deploy, the live Genie Code smoke, and the 2A endpoint/cost sign-off (D9 §5).
+- **Autonomy ceiling** is unchanged: Polly builds + tests + PRs Phase 2B, then 2A **enabled with the
+  signed-off knobs**, stopping at the deploy and the live Genie Code smoke (the 2A endpoint/cost
+  decision is now made, so it no longer gates the build — only the deploy does, D9 §5).
 - **This charter deliberately does not copy the task text** — 2B tasks are canonical in
   [D11 §8](./mcp-workshop-usecase-selection.md), 2A tasks in the coaching thread — so there is one
   source per phase (avoids the two-copies-drift the predecessor charter warned about).
 - **Phase 3 (UI-repoint) is intentionally deferred.** It subsumes the 2B sync bridge and needs the
   number↔tag flip sign-off (D6 §5 / D9 §5). Charter it separately once 2B is in.
-- **Decision still needed for 2A:** the coaching endpoint + cost knobs (D9 §9 q4). Until you answer,
-  Polly ships 2A behind a flag.
+- **2A decision made (2026-09-24):** ship **enabled** — app-default endpoint
+  (`databricks-claude-sonnet-4-5`), `max_tokens≈400`, `≈8 s` fail-open timeout, cache per
+  `(session_id, sectionTag, focus)`, with a coaching kill-switch env (default on) for rollback.
+  Nothing further is needed from the human before Polly builds 2A.

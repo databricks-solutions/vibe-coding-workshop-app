@@ -38,7 +38,7 @@ interactivity layer is its own phase that does NOT wait on any capability upgrad
 | **0** ✅ | Engine: manifest + progression + assembler extraction + parity test (D3). UI unchanged. | D8 §2 green | Backend owns the walk; no user-visible change. |
 | **1** ✅ | Mount FastMCP `/mcp/`; **read-only** tools (`start_track`, `get_step`, `next_step`) + engine REST routes; the self-serve on-ramp: orientation prompt, `vibe://guide/getting-started`, and the SPA "Connect to Genie Code" panel (D1 §1a, D4 §1.1). | D8 §3, §5 green; live smoke §8 read path; **self-serve acceptance** (below) | Genie Code walks the track verbatim — **no copy-paste**. **Ships now; no elicitation dependency.** |
 | **2** ✅ | **Interactivity + state (in-band):** `complete_step`, `submit_answer`, `set_parameters`, resources, the `interaction` block (D1), Lakebase columns + interaction log (D6), auth + annotations. | D8 §4, §6, §7 green | Full guided loop: gates, decisions, comprehension checks — **all in-band, no elicitation**. **Shared session store + cross-surface handoff** (same `session_id`, OBO-scoped): each surface can resume the other's session. *Step-progress **visibility** in the SPA is NOT yet delivered here* — MCP writes `completed_gates`/`captured_outputs` while the legacy SPA reads `current_step`/`completed_steps`; that reconciliation is Phase 2B (bridge) / Phase 3 (canonical). **Shipped: PRs #40–#44, deployed to `fevm-serverless`, smoke green (6 tools).** |
-| **2A** | **Adaptive coaching (LLM, in-band):** `vibe_coach` tool (D2 §3.7), `services/llm.py` FMAPI extract (D4 §1.2), `_COACH_SYSTEM` + `CoachResult` (D2 §12), coaching provenance columns `13_mcp_coaching.sql` (D6 §7a), leakage firewall (D7 §6.1). | D8 §4a green; **Phase 2 shipped** | On-demand, grounded, personalized coaching ("what now / why / unblock / review") — **fail-open** to the authored static coaching; adds one tool (→7). |
+| **2A** | **Adaptive coaching (LLM, in-band):** `vibe_coach` tool (D2 §3.7), `services/llm.py` FMAPI extract (D4 §1.2), `_COACH_SYSTEM` + `CoachResult` (D2 §12), coaching provenance columns `13_mcp_coaching.sql` (D6 §7a), leakage firewall (D7 §6.1). **Cost/endpoint signed off 2026-09-24 → ship ENABLED** (app-default endpoint, `max_tokens≈400`, `≈8 s` fail-open, per-triple cache, kill-switch env default on; §9 q4). | D8 §4a green; **Phase 2 shipped** | On-demand, grounded, personalized coaching ("what now / why / unblock / review") — **fail-open** to the authored static coaching; adds one tool (→7). |
 | **2B** | **Continuity & correctness (in-band, additive, ZERO new tools):** the shared **use-case selection** step before PRD — industry → certified-first use cases → author-your-own — producing the track-agnostic `use_case_brief` gate ([D11 §3](./mcp-workshop-usecase-selection.md)); and the **step-sync bridge** so the existing SPA reflects MCP progress ([D11 §4.3](./mcp-workshop-usecase-selection.md)). **Genie Accelerator only** (generalization is Phase 4). | D8 use-case-gate + sync-bridge tests green ([D11 §6](./mcp-workshop-usecase-selection.md)); **Phase 2 shipped** | Fixes the PRD-jump (PRD no longer renders against `DEFAULT_USE_CASE`); a learner sees the same step across MCP and the web app. |
 | **3** | Repoint UI to the engine; retire TS orchestration; live-sync mirror (engine-backed `GET /api/track/{track}/outline?session_id`, D4 §3.3). **Subsumes the 2B bridge** — makes the section/gate model the single source of truth, sync bidirectional. | parity stable; number↔tag flip (D6 §5) | Single brain; divergence eliminated. |
 | **4** | Generalize to all tracks (incl. LLM-generated steps) + other surfaces. **Includes hoisting `use_case_selection` into the shared `define-usecase` section for all ten tracks** (D11 open q1). | — | Whole workshop is dual-surface. |
@@ -57,7 +57,8 @@ order. It is still an in-band pattern (server-side FMAPI, not a server→client 
 on Phase 2, is **additive** (a manifest step, two resources, one interaction block, a bridge write in
 `vibe_complete_step`), adds **zero tools**, and touches different files from 2A. Ordering is by
 *priority, not label*: **2B fixes a live defect (the PRD-jump) and delivers the human's step-sync ask,
-so it is recommended before 2A** (a coaching *enhancement* that also carries a cost sign-off, §9 q4).
+so it is recommended before 2A** (a coaching *enhancement*; its cost/endpoint sign-off is now
+**resolved — ship enabled**, §9 q4).
 2A and 2B can run in parallel; both precede Phase 3. Phase 3's UI-repoint **subsumes** the 2B sync
 bridge (the bridge is the fast, backward-compatible path; the repoint is the canonical one), and
 Phase 4 **generalizes** 2B's `use_case_selection` step to all ten tracks. No renumbering of Phase 3→4.
@@ -115,8 +116,10 @@ Before any `/mcp` deploy (plan §1.3 / generic §4 / D4 §2):
 - [ ] `/mcp` rate-limit decision recorded (D7 §4).
 - [ ] `mcp`/`fastmcp` pinned in `requirements.txt`.
 - [ ] Parity + contract tests green (D8 §2–§3).
-- [ ] **(Phase 2A)** `13_mcp_coaching.sql` applied (D6 §7a); `DATABRICKS_SERVING_ENDPOINT` set (or
-      confirm fail-open static coaching is acceptable, D5 §11.4); coaching tests green (D8 §4a).
+- [ ] **(Phase 2A — ship enabled, §9 q4)** `13_mcp_coaching.sql` applied (D6 §7a);
+      `DATABRICKS_SERVING_ENDPOINT` = app default (`databricks-claude-sonnet-4-5`); coaching
+      kill-switch env present and **on**; `max_tokens≈400` / `≈8 s` timeout / per-triple cache wired;
+      fail-open verified (D5 §11.4); coaching tests green (D8 §4a).
 - [ ] **(Phase 2B)** tool count still **≤7** (use-case work adds zero tools); `prd_generation` is
       gated on `use_case_selection` and renders against the locked use case; `vibe_complete_step`
       updates `current_step`/`completed_steps` (sync bridge); D11 §6 tests green; if a
@@ -179,8 +182,9 @@ If the probe shows `elicitation` is now advertised, open a follow-up to enable D
    workspace for the MCP app.
 2. **MCP mount feature-flag** — env var name + default (recommend default-off until Phase 1 sign-off).
 3. **Who owns the re-probe cadence** — tie it to a release checklist or a periodic reminder.
-4. **Coaching model + cost (Phase 2A)** — reuse the app default endpoint
-   (`databricks-claude-sonnet-4-5`) or a smaller/cheaper one for coaching; set `max_tokens`/timeout
-   and whether to cache per `(session_id, sectionTag, focus)` (D2 §11 q4). Coaching adds
-   per-invocation FMAPI cost — confirm it is acceptable, or ship Phase 2A **flagged off** and enable
-   after review. A serving-endpoint or cost decision is a human sign-off, like any deploy (§5).
+4. **Coaching model + cost (Phase 2A)** — **RESOLVED 2026-09-24 (ship enabled).** Reuse the **app
+   default** endpoint (`databricks-claude-sonnet-4-5`); `max_tokens≈400`; `≈8 s` timeout with
+   **fail-open** to static coaching; **cache per `(session_id, sectionTag, focus)`** (D2 §12 q4). Keep
+   a coaching **kill-switch** env (default **on**) so it can be disabled without a code revert (§6).
+   The per-invocation FMAPI cost was reviewed and accepted; the remaining human gate is the deploy
+   itself (§5), not the endpoint/knob choice.
