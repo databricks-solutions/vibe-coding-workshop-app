@@ -50,6 +50,23 @@
       }
     }
   },
+  "use_case_selection": {
+    "decision": {
+      "id": "use_case_selection.usecase_confirmation",
+      "type": "confirm",
+      "question": "Confirm the use case you'll build this Genie Agent for before continuing: proceed with the certified use case, or author your own custom use case first.",
+      "options": [
+        {"id": "use_certified", "label": "Proceed with the certified use case"},
+        {"id": "author_own", "label": "Author your own custom use case first"}
+      ],
+      "recommended": "use_certified",
+      "skippable": false,
+      "coaching": {
+        "use_certified": "Confirmed — the certified use case is locked and this step can be completed.",
+        "author_own": "Good override — draft your custom use case and lock it with vibe_set_parameters, then confirm to proceed."
+      }
+    }
+  },
   "gagent_benchmarks": {
     "decision": {
       "id": "gagent_benchmarks.benchmark_confirmation",
