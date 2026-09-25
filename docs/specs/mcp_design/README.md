@@ -56,6 +56,26 @@ a prerequisite.
 
 ---
 
+## Vocabulary: `track` vs `coding_assistant` (and what MCP pins)
+
+Two orthogonal axes that are easy to conflate — the crisp definitions live in
+[D3 §2.1](./workshop-engine-domain.md); the MCP-specific pinning lives here:
+
+- **`track`** (a `WorkshopLevel`: `genie-accelerator`, `lakehouse`, …) + its optional-chapter
+  **flags** (`includeGenieOntology`, `includeLakehouse`) decide **which steps appear** (composition).
+- **`coding_assistant`** (the `__default__` / `genie-code` / `coda` fork on each prompt row) decides
+  **which prompt body a step renders** (content).
+
+**What the MCP adapter pins:** `mcp_server.py` fixes `DEFAULT_TRACK = "genie-accelerator"` and
+`DEFAULT_CODING_ASSISTANT = "genie-code"`, and leaves the optional-chapter flags at their defaults
+(both OFF), so the default MCP walk is Foundation → Semantic Layer → Genie Agent → Activate →
+Refinement → Clean Up (Lakehouse and Ontology are opt-in via `vibe_set_parameters`). **There is no
+"Genie Code track" row** — the Genie Code experience is `genie-accelerator` + the `genie-code` fork +
+default flags. "Genie Code has its own track" is a statement about *this pinned combination*, never a
+separate `WorkshopLevel`.
+
+---
+
 ## Document set (from the plan) — all drafted ✅
 
 Write order (complete): **D1 + D3** → **D2 + D5** → **D4 + D6 + D7** → **D8 + D9** → **D10**.

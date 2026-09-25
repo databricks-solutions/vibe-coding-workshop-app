@@ -21,6 +21,26 @@ DEFINE_USECASE_BY_TRACK = json.loads(
     (FIX / "golden_define_usecase_by_track.json").read_text()
 )
 
+# The four opt-in Genie lakehouse steps (mirrors GENIE_LAKEHOUSE_TAGS in
+# workflowSections.ts and the includeLakehouse flag in the manifest).
+LAKEHOUSE_TAGS = (
+    "genie_silver_metadata",
+    "gold_layer_design",
+    "gold_layer_pipeline",
+    "deploy_lakehouse_assets",
+)
+
+# The subset of lakehouse steps that ALSO appear in non-genie tracks
+# (genie_silver_metadata is genie-only). The includeLakehouse flag is
+# genie-accelerator-scoped (D3 §3.3), so these must never be flag-stamped in
+# another track — stamping there would make outline_order drop them (unknown
+# flag -> default False), a cross-track regression the genie-only fixtures miss.
+SHARED_LAKEHOUSE_TAGS = (
+    "gold_layer_design",
+    "gold_layer_pipeline",
+    "deploy_lakehouse_assets",
+)
+
 
 def _ordered_tags(steps):
     return [step.sectionTag for step in steps]
@@ -43,6 +63,8 @@ def test_order_parity_default_flags():
     got = _ordered_tags(loaded.outline_order("genie-accelerator", flags={}))
     want = json.loads((FIX / "golden_order_genie_default.json").read_text())
     assert got == want
+    # The lakehouse chapter is opt-in (default OFF): none of its steps appear.
+    assert not any(tag in LAKEHOUSE_TAGS for tag in got)
 
 
 def test_flag_parity_ontology_on_reintroduces_tags_in_position():
@@ -55,8 +77,60 @@ def test_flag_parity_ontology_on_reintroduces_tags_in_position():
     want = json.loads((FIX / "golden_order_genie_ontology_on.json").read_text())
     assert got == want
     assert any(tag.startswith("ontology_") for tag in got)
+    # Enabling ontology must not pull in the independent lakehouse chapter.
+    assert not any(tag in LAKEHOUSE_TAGS for tag in got)
     default = json.loads((FIX / "golden_order_genie_default.json").read_text())
     assert not any(tag.startswith("ontology_") for tag in default)
+
+
+def test_flag_parity_lakehouse_on_reintroduces_tags_in_position():
+    loaded = manifest.load_manifest()
+    got = _ordered_tags(
+        loaded.outline_order(
+            "genie-accelerator", flags={"includeLakehouse": True}
+        )
+    )
+    want = json.loads((FIX / "golden_order_genie_lakehouse_on.json").read_text())
+    assert got == want
+    assert all(tag in got for tag in LAKEHOUSE_TAGS)
+    # Enabling lakehouse must not pull in the independent ontology chapter.
+    assert not any(tag.startswith("ontology_") for tag in got)
+    default = json.loads((FIX / "golden_order_genie_default.json").read_text())
+    assert not any(tag in LAKEHOUSE_TAGS for tag in default)
+
+
+def test_lakehouse_flag_is_genie_scoped_only():
+    """Regression guard (D3 §3.3 track-scoped stamping): the includeLakehouse flag
+    and its per-step stamping are confined to genie-accelerator. Shared lakehouse
+    steps that also live in other tracks must stay unflagged (flag is None) and
+    present in those tracks' default outline — otherwise the genie-only toggle
+    would silently drop them cross-track. The genie-accelerator parity fixtures
+    do not cover other tracks, so this is the only guard for that regression."""
+    loaded = manifest.load_manifest()
+
+    # Only genie-accelerator defines the flag.
+    for track_id, track in loaded.tracks.items():
+        if track_id == "genie-accelerator":
+            assert "includeLakehouse" in track.flags
+        else:
+            assert "includeLakehouse" not in track.flags, track_id
+
+    # In every non-genie track, any shared lakehouse step is unstamped and stays
+    # in the default outline (default flags = nothing dropped for these).
+    saw_shared_elsewhere = False
+    for track_id in loaded.tracks:
+        if track_id == "genie-accelerator":
+            continue
+        default_tags = set(_ordered_tags(loaded.outline_order(track_id, flags={})))
+        for step in loaded.track_steps(track_id):
+            if step.sectionTag in SHARED_LAKEHOUSE_TAGS:
+                saw_shared_elsewhere = True
+                assert step.flag is None, (track_id, step.sectionTag, step.flag)
+                assert step.sectionTag in default_tags, (track_id, step.sectionTag)
+
+    # Positive control: the shared tags really do appear in >=1 non-genie track,
+    # so the assertions above are not vacuously satisfied.
+    assert saw_shared_elsewhere
 
 
 # --- Phase 2B / D11: use_case_selection in the Genie Accelerator define-usecase ---

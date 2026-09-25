@@ -135,6 +135,13 @@ a new table — a coaching turn is just another interaction:
 `vibe_set_parameters` (D2 §3.6) writes here; `missing_required` is computed against the track's
 required params.
 
+> **Orthogonal axes (see [D3 §2.1](./workshop-engine-domain.md)).** The optional-chapter **flags**
+> (`includeGenieOntology`, `includeLakehouse`) decide *which steps appear* (composition); the
+> **`coding_assistant`** fork decides *which prompt body a step renders* (content). They are
+> independent — changing one never affects the other — and `coding_assistant` is **not** a track.
+> Each `includeX` flag here must have a matching `flags` entry in the manifest track (D3 §3.3 SPA↔
+> manifest parity); a key present here but absent from the track is a bug.
+
 ---
 
 ## 5. Number↔tag migration

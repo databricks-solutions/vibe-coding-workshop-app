@@ -114,8 +114,8 @@ VALUES
 
 ## Start from your industry
 
-1. **List industries.** Read the `vibe://usecases/industries` resource for the curated industry options (each has a `value` and a `label`).
-2. **List use cases for that industry.** Read `vibe://usecases/{industry}` (for example `vibe://usecases/retail`). Entries come back certified-first and each carries `value`, `label`, `category`, and `is_certified`.
+1. **Pick an industry.** This step''s payload includes `available_industries` — the curated options, each with a `value` and a `label`. Choose the one that matches your scenario.
+2. **List use cases for that industry.** Call `vibe_set_parameters` with just the `industry` value; the result echoes `available_use_cases` for that industry, certified-first, each carrying `value`, `label`, `category`, and `is_certified`.
 3. **Prefer a certified use case (recommended).** Entries with `is_certified` set to true are curated and tested end to end, so they give the smoothest path through the accelerator. Pick one of these unless you have a specific reason not to.
 4. **Or build your own [Beta].** If none of the certified use cases fit, author a custom use case: an industry, a short label, and a one-paragraph description of what the application does and who uses it. Custom use cases stay local to this session and are never written to the shared library.
 
@@ -144,9 +144,9 @@ You do not paste this step into a coding assistant — you make a choice, then l
 
 ### Steps to Apply
 
-**Step 1: Browse industries** — read the `vibe://usecases/industries` resource and pick the industry that matches your scenario.
+**Step 1: Browse industries** — this step''s payload includes `available_industries`; pick the industry that matches your scenario.
 
-**Step 2: Browse use cases** — read `vibe://usecases/{industry}` for that industry; certified options appear first.
+**Step 2: Browse use cases** — call `vibe_set_parameters` with just that `industry`; the result echoes `available_use_cases` for it, certified-first.
 
 **Step 3: Decide** — choose a certified use case (recommended), or author a custom one if none fit.
 
@@ -168,10 +168,10 @@ The use case brief is the single anchoring artifact for the whole accelerator: a
 ┌───────────────────────────────────────────────────────────────────────────┐
 │                   USE-CASE SELECTION (start from industry)                  │
 ├───────────────────────────────────────────────────────────────────────────┤
-│  vibe://usecases/industries   ->  pick an industry                          │
+│  payload.available_industries   ->  pick an industry                        │
 │           │                                                                 │
 │           ▼                                                                 │
-│  vibe://usecases/{industry}   ->  certified-first use cases                 │
+│  set_parameters(industry) echo  ->  certified-first use cases               │
 │           │                                                                 │
 │     ┌─────┴───────────────┐                                                 │
 │     ▼                     ▼                                                 │

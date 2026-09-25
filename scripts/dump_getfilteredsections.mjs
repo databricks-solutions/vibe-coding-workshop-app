@@ -30,12 +30,23 @@ await writeFile(temporarySourcePath, executableSource, "utf8");
 
 try {
   const workflowSections = await import(pathToFileURL(temporarySourcePath).href);
-  const defaultDisabled = new Set(
-    workflowSections.getDisabledTagsForGenieOntology("genie-accelerator", false),
-  );
-  const ontologyEnabledDisabled = new Set(
-    workflowSections.getDisabledTagsForGenieOntology("genie-accelerator", true),
-  );
+  // Both the Genie Ontology and the Genie lakehouse chapters are opt-in
+  // (default OFF). The golden orders must therefore drop both blocks by default
+  // and reintroduce one at a time so the parity tests can pin each toggle in
+  // isolation, mirroring the manifest generator's includeGenieOntology /
+  // includeLakehouse flags.
+  const defaultDisabled = new Set([
+    ...workflowSections.getDisabledTagsForGenieOntology("genie-accelerator", false),
+    ...workflowSections.getDisabledTagsForLakehouse("genie-accelerator", false),
+  ]);
+  const ontologyEnabledDisabled = new Set([
+    ...workflowSections.getDisabledTagsForGenieOntology("genie-accelerator", true),
+    ...workflowSections.getDisabledTagsForLakehouse("genie-accelerator", false),
+  ]);
+  const lakehouseEnabledDisabled = new Set([
+    ...workflowSections.getDisabledTagsForGenieOntology("genie-accelerator", false),
+    ...workflowSections.getDisabledTagsForLakehouse("genie-accelerator", true),
+  ]);
   const flatten = (disabledTags) =>
     workflowSections
       .getFilteredSections("genie-accelerator", disabledTags)
@@ -50,6 +61,11 @@ try {
   await writeFile(
     join(fixturesPath, "golden_order_genie_ontology_on.json"),
     `${JSON.stringify(flatten(ontologyEnabledDisabled), null, 2)}\n`,
+    "utf8",
+  );
+  await writeFile(
+    join(fixturesPath, "golden_order_genie_lakehouse_on.json"),
+    `${JSON.stringify(flatten(lakehouseEnabledDisabled), null, 2)}\n`,
     "utf8",
   );
 

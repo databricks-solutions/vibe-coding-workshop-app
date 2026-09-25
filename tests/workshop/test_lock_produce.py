@@ -224,7 +224,12 @@ def test_set_parameters_generic_params_are_unaffected(session_store):
         {"catalog": "analytics", "schema_prefix": "workshop_"},
     )
 
-    assert result.resolved_params == {"catalog": "analytics", "schema_prefix": "workshop_"}
+    assert result.resolved_params == {
+        "catalog": "analytics",
+        "schema_prefix": "workshop_",
+        # MCP always marks the session as the genie-code fork (setdefault).
+        "coding_assistant": "genie-code",
+    }
     assert result.missing_required == []
 
 

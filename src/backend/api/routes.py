@@ -6842,6 +6842,33 @@ async def _stream_usecase_generation(
         yield event
 
 
+async def generate_usecase_description(request_body: UseCaseGenerateRequest) -> str:
+    """Non-streaming wrapper: aggregate the builder's SSE content into one string.
+
+    Reuses the exact PRD-grade message-building of ``_stream_usecase_generation``
+    (system prompt, industry/use_case/hints) and only collapses the SSE transport
+    so a non-streaming caller (e.g. the MCP ``draft_custom`` path) gets the full
+    Markdown draft. Concatenates every ``content`` delta in order; an ``error``
+    event is fatal.
+    """
+    import json as _json
+
+    parts: list[str] = []
+    async for event in _stream_usecase_generation(request_body):
+        if not event.startswith("data: "):
+            continue
+        payload = _json.loads(event[6:].strip())
+        etype = payload.get("type")
+        if etype == "content":
+            parts.append(payload.get("content", ""))
+        elif etype == "error":
+            raise RuntimeError(payload.get("error", "use case generation failed"))
+    text = "".join(parts).strip()
+    if not text:
+        raise RuntimeError("use case generation returned no content")
+    return text
+
+
 @router.post("/usecase-builder/generate", summary="Generate use case description (streaming SSE)")
 async def usecase_builder_generate(request_body: UseCaseGenerateRequest):
     """

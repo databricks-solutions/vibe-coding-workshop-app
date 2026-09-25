@@ -132,11 +132,12 @@ def test_two_sessions_driven_interleaved_never_share_state(store):
     assert data[SESSION_B]["completed_gates"] == ["project_setup"]
     assert data[SESSION_B]["captured_outputs"] == {}
 
-    # The walk position itself diverges: A is past prd_generation, B is still on
-    # the newly inserted use_case_selection step.
+    # The walk position itself diverges: A is past prd_generation (and, with the
+    # lakehouse chapter off by default, lands on the first semantic-layer step),
+    # B is still on the newly inserted use_case_selection step.
     a_next = mcp_server.vibe_next_step(SESSION_A)
     b_next = mcp_server.vibe_next_step(SESSION_B)
-    assert a_next.root.sectionTag == "genie_silver_metadata"
+    assert a_next.root.sectionTag == "semlayer_locate"
     assert b_next.root.sectionTag == "use_case_selection"
     assert a_next.root.sectionTag != b_next.root.sectionTag
 
@@ -165,7 +166,8 @@ def test_completing_one_session_does_not_advance_the_other(store):
     a_next = mcp_server.vibe_next_step(SESSION_A)
     b_next = mcp_server.vibe_next_step(SESSION_B)
 
-    assert a_next.root.sectionTag == "genie_silver_metadata"
+    # Lakehouse is opt-in (default OFF), so A's walk skips genie_silver_metadata.
+    assert a_next.root.sectionTag == "semlayer_locate"
     # B must still be at the very first step — A's gates never bled across.
     assert b_next.root.sectionTag == "project_setup"
 
@@ -212,6 +214,8 @@ def test_get_step_reflects_externally_written_parameters(store):
         "industry": "Healthcare",
         "use_case": "Claims",
         "catalog": "prod",
+        # MCP always marks the session as the genie-code fork (setdefault).
+        "coding_assistant": "genie-code",
     }
 
 

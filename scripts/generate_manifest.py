@@ -42,6 +42,7 @@ class SourceTrack:
 
 
 GENIE_ONTOLOGY_FLAG = "includeGenieOntology"
+GENIE_LAKEHOUSE_FLAG = "includeLakehouse"
 
 GENIE_STEP_METADATA: dict[str, dict[str, Any]] = {
     "semlayer_locate": {
@@ -296,6 +297,7 @@ def _metadata(
     step: SourceStep,
     previous_tag: str | None,
     ontology_tags: set[str],
+    lakehouse_tags: set[str],
     consumes_by_step: dict[int, list[str]],
     produces_by_step: dict[int, str],
 ) -> dict[str, Any]:
@@ -314,8 +316,17 @@ def _metadata(
     }
     if step.section_tag in GENIE_STEP_METADATA:
         data.update(GENIE_STEP_METADATA[step.section_tag])
-    if step.section_tag in ontology_tags:
-        data["flag"] = GENIE_ONTOLOGY_FLAG
+    # Both optional-chapter flags are genie-accelerator-only (mirrors
+    # LEVELS_WITH_LAKEHOUSE_TOGGLE / the ontology toggle in workflowSections.ts):
+    # their flag DEFINITIONS live only on that track, so a shared lakehouse step
+    # (gold_layer_design/pipeline/deploy_lakehouse_assets also appear in other
+    # tracks) must NOT be stamped elsewhere or outline_order would drop it by
+    # default with no matching flag definition.
+    if track_id == "genie-accelerator":
+        if step.section_tag in ontology_tags:
+            data["flag"] = GENIE_ONTOLOGY_FLAG
+        elif step.section_tag in lakehouse_tags:
+            data["flag"] = GENIE_LAKEHOUSE_FLAG
     return data
 
 
@@ -366,6 +377,18 @@ def build_manifest(source: str) -> dict[str, Any]:
         for value in re.findall(r"'([^']+)'", ontology_match.group(1))
     ]
     ontology_tags = set(ontology_tags_in_order)
+    lakehouse_match = re.search(
+        r"GENIE_LAKEHOUSE_TAGS\s*=\s*\[([^\]]*)\]",
+        source,
+        re.S,
+    )
+    if lakehouse_match is None:
+        raise ValueError("Could not find GENIE_LAKEHOUSE_TAGS in workflowSections.ts")
+    lakehouse_tags_in_order = [
+        _ts_string(value)
+        for value in re.findall(r"'([^']+)'", lakehouse_match.group(1))
+    ]
+    lakehouse_tags = set(lakehouse_tags_in_order)
     tracks: dict[str, Any] = {}
     for track_id, track in levels.items():
         ordered_sections = _filtered_sections(track, sections, steps)
@@ -387,6 +410,7 @@ def build_manifest(source: str) -> dict[str, Any]:
                     source_step,
                     previous_tag,
                     ontology_tags,
+                    lakehouse_tags,
                     consumes_by_step,
                     produces_by_step,
                 )
@@ -409,6 +433,11 @@ def build_manifest(source: str) -> dict[str, Any]:
                 "default": False,
                 "affectsSteps": ontology_tags_in_order,
                 "note": "Genie Ontology is opt-in; mirrors getDisabledTagsForGenieOntology.",
+            }
+            flags[GENIE_LAKEHOUSE_FLAG] = {
+                "default": False,
+                "affectsSteps": lakehouse_tags_in_order,
+                "note": "Genie lakehouse chapter is opt-in; mirrors getDisabledTagsForLakehouse.",
             }
         tracks[track_id] = {
             "id": track_id,

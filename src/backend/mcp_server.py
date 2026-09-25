@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import asyncio
+import contextvars
 import json
 import logging
+import threading
 import uuid
 from dataclasses import asdict
-from typing import Any, Literal
+from typing import Any, Callable, Literal
 
 import jsonschema
 from fastapi import Request
@@ -36,6 +39,10 @@ logger = logging.getLogger(__name__)
 DEFAULT_TRACK = "genie-accelerator"
 DEFAULT_INDUSTRY = "Technology"
 DEFAULT_USE_CASE = "Genie Accelerator"
+# MCP is exclusively the Genie Code client, so every step renders the
+# 'genie-code' prompt fork. Steps without a fork fall back to '__default__'
+# automatically inside the assembler.
+DEFAULT_CODING_ASSISTANT = "genie-code"
 
 ORIENTATION_PREAMBLE = (
     "First-run orientation: answer questions in chat; silence accepts the recommended default. "
@@ -125,6 +132,12 @@ class ExplainabilityPayload(BaseModel):
     next: StepReference
     interaction: dict[str, Interaction | None] | None = None
     orientation: str | None = None
+    # Use-case discovery inlined into the tool payload (Workstream D): the Genie
+    # Code agent cannot read vibe:// resources, so the use_case_selection step
+    # carries the curated industry options here, plus the certified-first use
+    # cases for the chosen industry once one is set. None on every other step.
+    available_industries: list[dict[str, Any]] | None = None
+    available_use_cases: list[dict[str, Any]] | None = None
 
 
 class StartTrackResult(BaseModel):
@@ -155,6 +168,16 @@ class SetParametersResult(BaseModel):
 
     resolved_params: dict[str, Any]
     missing_required: list[str]
+    # PRD-grade custom use-case draft returned by the ``draft_custom`` mode. It is
+    # returned for review and is NOT persisted until the learner confirms it back
+    # through a normal ``vibe_set_parameters`` call carrying ``use_case_description``.
+    drafted_description: str | None = None
+    # Use-case discovery echoed back to the agent (Workstream D). Populated on any
+    # selection-touching call so the agent never has to read a vibe:// resource:
+    # the curated industries, and the certified-first use cases once a valid
+    # industry is resolved. None on plain non-selection merges.
+    available_industries: list[dict[str, Any]] | None = None
+    available_use_cases: list[dict[str, Any]] | None = None
 
 
 class _ContractError(dict):
@@ -447,9 +470,10 @@ def _step_payload(
         section_tag=step.sectionTag,
         previous_outputs=previous_outputs,
         session_id=session_id,
+        coding_assistant_override=DEFAULT_CODING_ASSISTANT,
     )
     orientation = ORIENTATION_PREAMBLE if not state.completed_gates and step.order == 1 else None
-    return ExplainabilityPayload(
+    payload = ExplainabilityPayload(
         sectionTag=step.sectionTag,
         title=step.title,
         why=step.why or "",
@@ -465,6 +489,18 @@ def _step_payload(
         interaction=_interaction_payload(step.sectionTag),
         orientation=orientation,
     )
+    # Workstream D: the use-case picker inlines its options so the Genie Code agent
+    # never has to read a vibe:// resource. Best-effort — a data-layer hiccup must
+    # never keep the step from rendering, so the lists degrade to None.
+    if step.sectionTag == "use_case_selection":
+        try:
+            payload.available_industries = _available_industries()
+            chosen = state.session_parameters.get("industry")
+            if chosen:
+                payload.available_use_cases = _available_use_cases(str(chosen))
+        except Exception:  # noqa: BLE001 — options are advisory, never fatal
+            pass
+    return payload
 
 
 @mcp.tool(
@@ -500,6 +536,10 @@ def vibe_start_track(
         state = engine.SessionState()
     else:
         state, _ = loaded
+    # MCP is exclusively the Genie Code client — mark the session so any other
+    # read path (SPA bridge, the vibe://session/{id}/state resource) resolves
+    # the genie-code fork too. setdefault never clobbers an explicit choice.
+    state.session_parameters.setdefault("coding_assistant", DEFAULT_CODING_ASSISTANT)
     if not session_id and is_lakebase_configured():
         save_session(
             session_id=resolved,
@@ -508,6 +548,7 @@ def vibe_start_track(
             created_by=_request_user(context),
             current_step=1,
             completed_steps=[],
+            session_parameters=state.session_parameters,
         )
     if industry:
         state.session_parameters["industry"] = industry
@@ -601,6 +642,25 @@ def _is_selection_call(params: dict[str, Any]) -> bool:
     return "use_case_source" in params
 
 
+# Keys whose presence means THIS call is about picking a use case, so the result
+# should echo the inlined discovery lists (Workstream D). Broader than
+# ``_is_selection_call`` on purpose: a bare ``{"industry": ...}`` call — the
+# reworded step body's way to fetch use cases without a vibe:// resource — must
+# still echo ``available_use_cases``.
+_SELECTION_TOUCH_KEYS = (
+    "industry",
+    "use_case",
+    "use_case_label",
+    "use_case_source",
+    "use_case_description",
+    "use_case_hints",
+)
+
+
+def _touches_usecase_selection(params: dict[str, Any]) -> bool:
+    return any(key in params for key in _SELECTION_TOUCH_KEYS)
+
+
 def _selection_missing_required(params: dict[str, Any]) -> list[str]:
     required = _CUSTOM_REQUIRED if params.get("use_case_source") == "custom" else _SELECTION_REQUIRED
     return [key for key in required if not str(params.get(key) or "").strip()]
@@ -610,6 +670,56 @@ def _custom_usecase_locked(params: dict[str, Any]) -> bool:
     """True once a custom ("author your own") use case is fully locked in-session."""
 
     return params.get("use_case_source") == "custom" and not _selection_missing_required(params)
+
+
+def _mirror_custom_usecase(params: dict[str, Any]) -> None:
+    """Land a locked custom use case in the fields the assembler actually reads.
+
+    The selection lock is keyed on ``use_case_description``/``use_case_label`` but
+    the prompt assembler resolves ``{use_case_description}`` (and the title) from
+    ``custom_use_case_description``/``custom_use_case_label`` (assembler.py). Without
+    this mirror an MCP-authored custom use case is silently dropped from the PRD
+    and every downstream prompt. Mutates ``params`` in place; never overwrites an
+    explicit custom_* value already present.
+    """
+
+    if params.get("use_case_source") != "custom":
+        return
+    desc = str(params.get("use_case_description") or "").strip()
+    if desc and not str(params.get("custom_use_case_description") or "").strip():
+        params["custom_use_case_description"] = desc
+    label = str(params.get("use_case_label") or "").strip()
+    if label and not str(params.get("custom_use_case_label") or "").strip():
+        params["custom_use_case_label"] = label
+
+
+def _run_async_blocking(make_coro: Callable[[], Any]) -> Any:
+    """Run an async coroutine to completion from a sync MCP tool.
+
+    FastMCP invokes sync tools directly on the running event loop, so
+    ``asyncio.run`` here would raise "cannot be called from a running event loop".
+    Instead run the coroutine in a dedicated thread with its own loop, wrapped in a
+    copied context so the OBO auth ContextVar propagates (SP fallback otherwise).
+    """
+
+    ctx = contextvars.copy_context()
+    box: dict[str, Any] = {}
+
+    def runner() -> None:
+        loop = asyncio.new_event_loop()
+        try:
+            box["value"] = loop.run_until_complete(make_coro())
+        except BaseException as exc:  # noqa: BLE001 — re-raised on the calling thread
+            box["error"] = exc
+        finally:
+            loop.close()
+
+    thread = threading.Thread(target=lambda: ctx.run(runner))
+    thread.start()
+    thread.join()
+    if "error" in box:
+        raise box["error"]
+    return box["value"]
 
 
 # --- Cross-surface step-sync bridge (D11 §4.3) -------------------------------
@@ -821,11 +931,11 @@ def vibe_submit_answer(
 @mcp.tool(
     name="vibe_set_parameters",
     description=(
-        "Set/update session parameters, feature flags, and the learner's use-case lock. For selection "
-        "pass `use_case_source` (\"curated\"/\"custom\") with `industry`, `use_case`, `use_case_label`; a "
-        "custom use case also needs the authored `use_case_description` and stays session-local. Returns "
-        "resolved params + still-missing required ones (ask in chat, then call again). Args: `session_id`, "
-        "`params`."
+        "Set/update session parameters, feature flags, and the use-case lock. "
+        "Selection: pass `use_case_source` (curated/custom) with `industry`, `use_case`, "
+        "`use_case_label`; custom also needs `use_case_description` (session-local). "
+        "For a PRD-grade custom brief pass `mode=\"draft_custom\"` (+`use_case_hints`), "
+        "then confirm by resending `use_case_description`. Args: `session_id`, `params`, `mode`."
     ),
     annotations=ToolAnnotations(
         readOnlyHint=False,
@@ -838,6 +948,7 @@ def vibe_submit_answer(
 def vibe_set_parameters(
     session_id: str,
     params: dict[str, Any],
+    mode: str | None = None,
     context: Context | None = None,
 ) -> SetParametersResult:
     loaded = _load_session_for_request(session_id, context)
@@ -845,8 +956,83 @@ def vibe_set_parameters(
         return _error_result("INVALID_SESSION", "The requested session could not be resolved.")  # type: ignore[return-value]
 
     state, _ = loaded
+
+    # Reject an unknown industry BEFORE persisting anything (Workstream D). The
+    # authoritative set is the industries that actually have use cases
+    # (``get_use_cases_map()`` keys) — NOT ``get_industries()``, whose YAML fallback
+    # can omit an industry that still has curated use cases. Fail-open on an empty
+    # map so a data-layer outage never blocks a selection.
+    if "industry" in params:
+        from .api.routes import get_use_cases_map
+
+        known_industries = set(get_use_cases_map().keys())
+        industry_val = str(params.get("industry") or "")
+        if known_industries and industry_val not in known_industries:
+            return _error_result(  # type: ignore[return-value]
+                "UNKNOWN_INDUSTRY",
+                f"Unknown industry '{industry_val}'. Choose one from available_industries.",
+            )
+
     state.session_parameters.update(params)
+    # MCP is exclusively Genie Code: keep the fork marker present so a merge that
+    # omits it never silently drops the session back to the __default__ prompt.
+    state.session_parameters.setdefault("coding_assistant", DEFAULT_CODING_ASSISTANT)
+    # A confirmed custom use case must land in the fields the assembler reads.
+    _mirror_custom_usecase(state.session_parameters)
     resolved_params = dict(state.session_parameters)
+
+    # Echo the inlined discovery lists on any selection-touching call so the agent
+    # never has to read a vibe:// resource (Workstream D). Best-effort; None on a
+    # plain non-selection merge (e.g. {"catalog": ...}).
+    echo_industries: list[dict[str, Any]] | None = None
+    echo_use_cases: list[dict[str, Any]] | None = None
+    if _touches_usecase_selection(params):
+        try:
+            echo_industries = _available_industries()
+            chosen = str(resolved_params.get("industry") or "").strip()
+            if chosen:
+                echo_use_cases = _available_use_cases(chosen)
+        except Exception:  # noqa: BLE001 — echo is advisory, never fatal
+            pass
+
+    # draft_custom: generate a PRD-grade brief from the app's use-case builder and
+    # return it for review WITHOUT persisting a description (the learner confirms
+    # it back through a normal call carrying use_case_description).
+    if mode == "draft_custom":
+        if resolved_params.get("use_case_source") != "custom":
+            return _error_result(  # type: ignore[return-value]
+                "DRAFT_PRECONDITION",
+                "draft_custom requires use_case_source=custom.",
+            )
+        name = str(
+            resolved_params.get("use_case_label") or resolved_params.get("use_case") or ""
+        ).strip()
+        hints = str(resolved_params.get("use_case_hints") or "").strip()
+        if not (name or hints):
+            return _error_result(  # type: ignore[return-value]
+                "DRAFT_PRECONDITION",
+                "Provide a use case name (use_case_label) or use_case_hints to draft.",
+            )
+        # Persist the merged inputs (industry/source/label/hints) but NOT a draft.
+        save_session(session_id=session_id, session_parameters=resolved_params)
+        from .api.routes import UseCaseGenerateRequest, generate_usecase_description
+
+        industry = str(resolved_params.get("industry") or "").strip() or None
+        request_body = UseCaseGenerateRequest(
+            industry=industry,
+            use_case_name=name or None,
+            hints=hints or None,
+            mode="generate",
+        )
+        drafted = _run_async_blocking(lambda: generate_usecase_description(request_body))
+        return SetParametersResult(
+            resolved_params=resolved_params,
+            missing_required=_selection_missing_required(resolved_params),
+            drafted_description=drafted,
+            available_industries=echo_industries,
+            available_use_cases=echo_use_cases,
+        )
+
     # Whether THIS call is a use-case selection is decided from the incoming
     # params — never from the accumulated resolved state — so an unrelated later
     # merge (e.g. {"catalog": ...}) keeps the plain-merge contract even after a
@@ -857,7 +1043,12 @@ def vibe_set_parameters(
         else []
     )
     save_session(session_id=session_id, session_parameters=resolved_params)
-    return SetParametersResult(resolved_params=resolved_params, missing_required=missing_required)
+    return SetParametersResult(
+        resolved_params=resolved_params,
+        missing_required=missing_required,
+        available_industries=echo_industries,
+        available_use_cases=echo_use_cases,
+    )
 
 
 def _track_overview(track: str) -> str:
@@ -875,6 +1066,51 @@ def read_getting_started() -> str:
     return GETTING_STARTED_GUIDE
 
 
+def _available_industries() -> list[dict[str, Any]]:
+    """Curated industry options as a list of {value, label} dicts.
+
+    The single source of truth for both the ``vibe://usecases/industries`` resource
+    (SPA/user-attach path) and the inlined tool payload / ``vibe_set_parameters``
+    echo (Workstream D — the Genie Code agent cannot read resources). Backed by the
+    SAME ``get_industries()`` seam the SPA uses; lazy-imported so nothing triggers a
+    Databricks/Lakebase call at registration time. The leading ``value == ""``
+    placeholder ("Select an industry...") is a dropdown affordance and is dropped so
+    an agent sees only real options.
+    """
+    from .api.routes import get_industries
+
+    return [
+        {"value": opt.get("value"), "label": opt.get("label")}
+        for opt in get_industries()
+        if opt.get("value")
+    ]
+
+
+def _available_use_cases(industry: str) -> list[dict[str, Any]]:
+    """Use cases for one industry, CERTIFIED-FIRST, as a list of dicts.
+
+    Shared by the ``vibe://usecases/{industry}`` resource and the inlined payload /
+    echo. Backed by ``get_use_cases_map()``, which returns RAW Lakebase order —
+    certified-first is frontend-only today — so the ordering is enforced here with a
+    stable sort (``is_certified`` True sorts ahead; original order preserved within
+    each group). The empty ``"Select a use case..."`` placeholder is dropped. Each
+    entry carries value/label/category/is_certified.
+    """
+    from .api.routes import get_use_cases_map
+
+    entries = [e for e in get_use_cases_map().get(industry, []) if e.get("value")]
+    ordered = sorted(entries, key=lambda e: not bool(e.get("is_certified")))
+    return [
+        {
+            "value": e.get("value"),
+            "label": e.get("label"),
+            "category": e.get("category"),
+            "is_certified": bool(e.get("is_certified")),
+        }
+        for e in ordered
+    ]
+
+
 def _usecase_industries_resource() -> str:
     """Curated industry options for use-case selection (D11 §3.1).
 
@@ -884,14 +1120,7 @@ def _usecase_industries_resource() -> str:
     ("Select an industry...") is a dropdown affordance and is dropped here so an
     agent sees only real options.
     """
-    from .api.routes import get_industries
-
-    options = [
-        {"value": opt.get("value"), "label": opt.get("label")}
-        for opt in get_industries()
-        if opt.get("value")
-    ]
-    return json.dumps({"industries": options}, indent=2)
+    return json.dumps({"industries": _available_industries()}, indent=2)
 
 
 def _usecases_for_industry_resource(industry: str) -> str:
@@ -903,20 +1132,9 @@ def _usecases_for_industry_resource(industry: str) -> str:
     within each group). The empty ``"Select a use case..."`` placeholder is
     dropped. Each entry carries value/label/category/is_certified.
     """
-    from .api.routes import get_use_cases_map
-
-    entries = [e for e in get_use_cases_map().get(industry, []) if e.get("value")]
-    ordered = sorted(entries, key=lambda e: not bool(e.get("is_certified")))
-    use_cases = [
-        {
-            "value": e.get("value"),
-            "label": e.get("label"),
-            "category": e.get("category"),
-            "is_certified": bool(e.get("is_certified")),
-        }
-        for e in ordered
-    ]
-    return json.dumps({"industry": industry, "use_cases": use_cases}, indent=2)
+    return json.dumps(
+        {"industry": industry, "use_cases": _available_use_cases(industry)}, indent=2
+    )
 
 
 def _session_state_resource(session_id: str, context: Context | None = None) -> str:

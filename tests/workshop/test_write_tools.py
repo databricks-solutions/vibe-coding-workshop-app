@@ -63,7 +63,9 @@ def test_complete_step_advances_and_persists_gate_and_output(session_store):
 
     expected_gates = ["project_setup", "use_case_selection", "prd_generation"]
     assert result.completed_gates == expected_gates
-    assert result.next.sectionTag == "genie_silver_metadata"
+    # The lakehouse chapter is opt-in (default OFF), so the walk skips
+    # genie_silver_metadata and lands on the first semantic-layer step.
+    assert result.next.sectionTag == "semlayer_locate"
     assert store[SESSION_ID]["completed_gates"] == expected_gates
     assert store[SESSION_ID]["captured_outputs"] == {"prd_document": "Generated PRD"}
     assert saves[-1][1]["completed_gates"] == result.completed_gates
@@ -118,6 +120,8 @@ def test_set_parameters_merges_and_persists_effective_parameters(session_store):
     assert result.resolved_params == {
         "catalog": "analytics",
         "schema_prefix": "workshop_",
+        # MCP always marks the session as the genie-code fork (setdefault).
+        "coding_assistant": "genie-code",
     }
     assert result.missing_required == []
     assert store[SESSION_ID]["session_parameters"] == result.resolved_params

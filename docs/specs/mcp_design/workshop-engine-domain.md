@@ -54,6 +54,28 @@ Three **independent** identifier spaces. Conflating them is the #1 divergence bu
 **Rule:** the engine keys **everything** — gates, captured outputs, chaining, outline — by
 `sectionTag`. A **number↔tag map** exists only to bridge the legacy UI state during migration (§4.3).
 
+### 2.1 Two orthogonal axes: composition vs content
+
+A second conflation (distinct from the namespace one above) is treating "which steps" and "which
+prompt body" as one dimension. They are **orthogonal**:
+
+| Axis | What it decides | Encoded by | Resolved by |
+|---|---|---|---|
+| **Composition** — *which steps appear* | the `track` (a `WorkshopLevel`: `genie-accelerator`, `lakehouse`, …) plus its optional-chapter **flags** (`includeGenieOntology`, `includeLakehouse`) | `manifest.json` `tracks[…].sections[…].steps` + `flags` (§3) | `outline` / `next_step` flag filter (§5.1) |
+| **Content** — *which prompt body a step renders* | the **`coding_assistant` fork** on the `section_input_prompts` row (`__default__` / `genie-code` / `coda`), keyed `(section_tag, coding_assistant, version)` | seed rows | the assembler's fork resolution (§7.2), reading `session_parameters.coding_assistant` or an explicit override |
+
+Consequences worth stating so they are never re-derived under pressure:
+
+- **There is no per-assistant track.** "Genie Code" is a *content fork* (and a client), **not** a
+  `WorkshopLevel`. A phrase like "Genie Code has its own track" means *the composition a given
+  adapter serves*, not a separate track row. When a request conflates the two, resolve it against
+  this table before planning.
+- The two axes are **independent**: switching the fork (`coding_assistant`) never changes which
+  steps appear; toggling a flag never changes a step's prompt body.
+- This spec is **transport-agnostic**: it does not pin a track or a fork. An adapter may pin both
+  (e.g. the MCP adapter fixes `track = genie-accelerator` and `coding_assistant = genie-code` and
+  leaves flags at their defaults) — that pinning is documented in the MCP series README, not here.
+
 ---
 
 ## 3. The Track Manifest
@@ -156,7 +178,22 @@ chaining. Loaded by `src/backend/workshop/manifest.py`; data in `manifest.json`.
   hand-edited.**
 - The generator must reproduce, per track, the exact output of
   `getFilteredSections(level, disabledTags, …)` flattened to an ordered `sectionTag` list, with the
-  default flag state (ontology **off**).
+  **default flag state — all optional-chapter flags OFF** (`includeGenieOntology` **and**
+  `includeLakehouse`; add every future flag here too). A non-normative field bullet naming a flag is
+  not enough — this normative rule is what CI reproduces, so it must list every default-off flag.
+- **SPA↔manifest flag parity (normative).** Every level-scoped `getDisabledTagsFor*` toggle in
+  `workflowSections.ts` (e.g. `getDisabledTagsForGenieOntology`, `getDisabledTagsForLakehouse`) MUST
+  have a matching entry in that track's `flags` block, with the same default. The frontend toggle and
+  the manifest flag are two encodings of one contract; adding a toggle on one side without the other
+  is the divergence this section exists to prevent.
+- **Track-scoped stamping (normative).** A flag is stamped on a step **only in the track(s) whose
+  `flags` block defines it** (mirror the frontend's `LEVELS_WITH_*_TOGGLE` scoping). Several
+  optional-chapter `sectionTag`s are **shared across tracks** (e.g. `gold_layer_design`,
+  `gold_layer_pipeline`, `deploy_lakehouse_assets` also appear in `lakehouse`, `end-to-end`,
+  `accelerator`, …). Stamping a flag on a track that does not define it makes `outline_order` treat
+  the flag as an unknown default-false and silently drop the step there — a cross-track regression the
+  genie-only parity fixtures do not catch. The generator applies optional-chapter flags only when
+  `track_id == "genie-accelerator"`.
 - See §9 for the parity contract that fails CI on drift.
 
 ---
@@ -326,9 +363,14 @@ is present.
 
 1. **Order parity:** the engine's ordered `sectionTag` list (from `outline` with default flags) ==
    `getFilteredSections(level, defaultDisabledTags, …)` flattened to `sectionTag`s. (For the genie
-   track, default = ontology **off**.)
-2. **Flag parity:** toggling `includeGenieOntology=true` re-introduces `ontology_*` in the same
-   positions the TS toggle produces.
+   track, default = **both optional chapters off**: ontology **off** and lakehouse **off**, so the
+   default walk is `… → prd_generation → semlayer_locate → …` with no `genie_silver_metadata` /
+   `gold_*` / `deploy_lakehouse_assets`.)
+2. **Flag parity:** toggling `includeGenieOntology=true` re-introduces `ontology_*`, and toggling
+   `includeLakehouse=true` re-introduces the four lakehouse steps, each in the same positions the
+   corresponding TS toggle produces. One golden fixture per toggle
+   (`golden_order_genie_default.json`, `…_ontology_on.json`, `…_lakehouse_on.json`); enabling one
+   optional chapter must not pull in the other.
 3. **Chaining parity:** for each step, `consumes` resolves to the same upstream keys the
    `WorkflowDiagram.tsx` / `stepPreviousOutputs.ts` literals produce (translated number→tag).
 4. **Assembler byte-parity:** for a sample of genie `sectionTag`s (fork + default),

@@ -1779,6 +1779,16 @@
             "ontology_routing"
           ],
           "note": "Genie Ontology is opt-in; mirrors getDisabledTagsForGenieOntology."
+        },
+        "includeLakehouse": {
+          "default": false,
+          "affectsSteps": [
+            "genie_silver_metadata",
+            "gold_layer_design",
+            "gold_layer_pipeline",
+            "deploy_lakehouse_assets"
+          ],
+          "note": "Genie lakehouse chapter is opt-in; mirrors getDisabledTagsForLakehouse."
         }
       },
       "sections": [
@@ -1860,7 +1870,7 @@
                 "ui",
                 "mcp"
               ],
-              "flag": null
+              "flag": "includeLakehouse"
             },
             {
               "order": 5,
@@ -1879,7 +1889,7 @@
                 "ui",
                 "mcp"
               ],
-              "flag": null
+              "flag": "includeLakehouse"
             },
             {
               "order": 6,
@@ -1897,7 +1907,7 @@
                 "ui",
                 "mcp"
               ],
-              "flag": null
+              "flag": "includeLakehouse"
             },
             {
               "order": 7,
@@ -1913,7 +1923,7 @@
                 "ui",
                 "mcp"
               ],
-              "flag": null
+              "flag": "includeLakehouse"
             }
           ]
         },
