@@ -43,8 +43,9 @@ ASSISTANTS = [None, "genie-code"]  # default + fork
 
 EXPECTED_KEYS = {
     "input", "input_template", "system_prompt", "how_to_apply",
-    "expected_output", "how_to_apply_images", "expected_output_images",
-    "bypass_llm", "_brand_url", "coding_assistant_variant",
+    "expected_output", "user_trigger_prompt", "how_to_apply_images",
+    "expected_output_images", "bypass_llm", "_brand_url",
+    "coding_assistant_variant",
 }
 
 # A token-rich template exercises the whole substitution set (base tokens,

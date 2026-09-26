@@ -215,7 +215,7 @@ def _refresh_lakebase_cache():
                 SELECT DISTINCT ON (section_tag, coding_assistant)
                     section_tag, coding_assistant, input_template, system_prompt,
                     section_title, section_description,
-                    order_number, version, how_to_apply, expected_output, bypass_llm,
+                    order_number, version, how_to_apply, expected_output, user_trigger_prompt, bypass_llm,
                     how_to_apply_images, expected_output_images
                 FROM {schema}.section_input_prompts
                 WHERE is_active = TRUE
@@ -348,6 +348,7 @@ def _section_row_to_template(row: Dict[str, Any]) -> Dict[str, Any]:
         "system_prompt": row.get("system_prompt", ""),
         "how_to_apply": row.get("how_to_apply", ""),
         "expected_output": row.get("expected_output", ""),
+        "user_trigger_prompt": row.get("user_trigger_prompt", ""),
         "how_to_apply_images": _parse_image_field(row.get("how_to_apply_images")),
         "expected_output_images": _parse_image_field(row.get("expected_output_images")),
         "section_title": row.get("section_title", ""),
@@ -400,6 +401,7 @@ def get_section_input_template(
             "section_description",
             "how_to_apply",
             "expected_output",
+            "user_trigger_prompt",
             "how_to_apply_images",
             "expected_output_images",
             "order_number",

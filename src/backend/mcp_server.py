@@ -46,6 +46,9 @@ DEFAULT_CODING_ASSISTANT = "genie-code"
 
 ORIENTATION_PREAMBLE = (
     "First-run orientation: answer questions in chat; silence accepts the recommended default. "
+    "Each step is learner-triggered — present the step, hand over its `user_trigger_prompt` (the "
+    "plain-English ask), and WAIT for the learner to submit it before doing the work. Never auto-run "
+    "the next step on your own. "
     "The track saves progress server-side and does not block, except for one benchmark hard stop. "
     "You can mirror progress in the web UI using the same session. If tools go missing, disconnect "
     "other MCP servers to stay within the 20-tool budget."
@@ -56,6 +59,10 @@ GETTING_STARTED_GUIDE = """# Getting started
 This workshop is a guided conversation. Start a track, read each prompt verbatim, then narrate why
 it matters and how to apply it. Answer questions in chat; silence accepts the recommended default.
 Progress is saved server-side and can be mirrored in the web UI using the same session.
+
+Steps are learner-triggered. After you present a step, hand the learner its `user_trigger_prompt` —
+a simple English prompt they submit back to you — and wait for them to send it before you do the
+work. Do not auto-execute the next step; the trigger to move forward always comes from the learner.
 
 There is one hard stop: the benchmark step requires an explicit confirmation before it can advance.
 Everything else is designed to keep moving without pop-up forms or client elicitation.
@@ -124,6 +131,10 @@ class ExplainabilityPayload(BaseModel):
     prompt: str
     how_to_apply: str
     expected_output: str
+    # The plain-English ask the learner submits to START this step. The agent
+    # presents it and waits for the learner to say it, rather than auto-running
+    # the step (suggestion c). Empty when a step authors no trigger.
+    user_trigger_prompt: str = ""
     gate: str | None
     requiresGate: str | None
     consumes: list[str]
@@ -480,6 +491,7 @@ def _step_payload(
         prompt=assembled.get("input", ""),
         how_to_apply=assembled.get("how_to_apply", ""),
         expected_output=assembled.get("expected_output", ""),
+        user_trigger_prompt=assembled.get("user_trigger_prompt", ""),
         gate=step.gate,
         requiresGate=step.requiresGate,
         consumes=list(step.consumes),
@@ -560,10 +572,11 @@ def vibe_start_track(
 @mcp.tool(
     name="vibe_get_step",
     description=(
-        "Fetch one workshop step to present to the learner. Returns the prompt to run **verbatim**, "
-        "plus why it matters, how to apply it, the expected output, the gate, and the next step — and "
-        "an optional `interaction` question to ask in chat. Present `prompt` verbatim first, then "
-        "narrate. Args: `session_id` (required), `sectionTag` (optional; defaults to the current step)."
+        "Fetch one workshop step to present. Returns the prompt to run **verbatim**, plus why it "
+        "matters, how to apply it, expected output, the gate, the next step, and `user_trigger_prompt` "
+        "— the plain-English ask to hand the learner so THEY start the work (present it and wait; never "
+        "auto-run). Optional `interaction` to ask in chat. Args: `session_id`; `sectionTag` (optional, "
+        "defaults to current)."
     ),
     annotations=ToolAnnotations(
         readOnlyHint=True,
@@ -602,8 +615,9 @@ def vibe_get_step(
     name="vibe_next_step",
     description=(
         "Advance to the first not-yet-completed step whose prerequisite gate is satisfied, and return "
-        "it (same shape as `vibe_get_step`). Returns `{done:true}` when the track is complete. Call "
-        "after a step's gate is recorded. Args: `session_id` (required)."
+        "it (same shape as `vibe_get_step`, incl. `user_trigger_prompt`). Present the step, hand the "
+        "learner its trigger prompt, then WAIT for them to submit it — never auto-run. Returns "
+        "`{done:true}` when complete. Call after a step's gate is recorded. Args: `session_id`."
     ),
     annotations=ToolAnnotations(
         readOnlyHint=True,
@@ -761,9 +775,9 @@ def _legacy_progress(
     name="vibe_complete_step",
     description=(
         "Record that the current step's gate passed and store its captured output (the gate = this "
-        "call, next-action-as-approval); advances the walk. If the step's `interaction` has a `post` "
-        "check, ask it and record via `vibe_submit_answer` first (only valid while the step is "
-        "current). Not for `execution:ui-driven` steps. Args: `session_id`, `sectionTag`, "
+        "call, next-action-as-approval); advances the walk. Call only after the learner triggered and "
+        "ran the step. If its `interaction` has a `post` check, ask it via `vibe_submit_answer` first "
+        "(only while current). Not for `execution:ui-driven` steps. Args: `session_id`, `sectionTag`, "
         "`captured_output`."
     ),
     annotations=ToolAnnotations(

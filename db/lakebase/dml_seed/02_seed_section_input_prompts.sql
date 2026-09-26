@@ -107,7 +107,7 @@
 
 -- Define Your Use Case (Phase 2B — D11): certified-first use-case selection before the PRD
 INSERT INTO ${catalog}.${schema}.section_input_prompts 
-(input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
+(input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, user_trigger_prompt, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
 VALUES
 (958, 'use_case_selection',
 'Before generating the PRD, lock in the **use case** that anchors everything you build in the Genie Accelerator. The PRD, data model, dashboard, and Genie space all follow from this single choice, so choose deliberately.
@@ -224,11 +224,12 @@ The use case brief is the single anchoring artifact for the whole accelerator: a
 - [ ] `vibe_set_parameters` returned no missing required fields
 - [ ] The `use_case_selection` gate is recorded
 - [ ] The PRD step is unblocked and will generate against the locked use case',
+'Help me pick the use case for my project. Show me the certified options and let me choose the one I want to build, or help me define my own.',
 true, 1, true, current_timestamp(), current_timestamp(), current_user());
 
 -- Product Requirements Document (PRD)
 INSERT INTO ${catalog}.${schema}.section_input_prompts 
-(input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, version, is_active, inserted_at, updated_at, created_by)
+(input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, user_trigger_prompt, version, is_active, inserted_at, updated_at, created_by)
 VALUES
 (1, 'prd_generation',
 'Generate a prompt that I can copy into my AI coding assistant (Cursor/Copilot) to create a simple Product Requirements Document (PRD).
@@ -357,6 +358,7 @@ The prompt should be focused and specific to {use_case_title}, incorporating the
 - All user journeys have success AND failure paths
 - Edge cases and error states are documented
 - Analytics events are specified for key actions',
+'Let''s create the PRD for my app. Walk me through generating a Product Requirements Document and save it to my project''s docs folder.',
 1, true, current_timestamp(), current_timestamp(), current_user());
 
 -- Figma UI Design
@@ -1905,7 +1907,7 @@ true, 1, true, current_timestamp(), current_timestamp(), current_user());
 
 -- Step 9: Gold Layer Design (PRD-aligned) - bypass_LLM = TRUE
 INSERT INTO ${catalog}.${schema}.section_input_prompts 
-(input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
+(input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, user_trigger_prompt, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
 VALUES
 (6, 'gold_layer_design',
 'I have a customer schema at @data_product_accelerator/context/{use_case_file_prefix}_Schema.csv.
@@ -2203,6 +2205,7 @@ unknown_member:
 - [ ] All transformation types from standard 15-type enum (no invented values)
 - [ ] `unknown_member` documented for each dimension referenced by a `nullable: true` FK
 - [ ] Stakeholder sign-off obtained',
+'Let''s design the Gold layer for my project. Help me define the tables in YAML and produce an ERD that lines up with my PRD.',
 true, 1, true, current_timestamp(), current_timestamp(), current_user());
 
 -- gold_layer_design (genie-code fork) — prescriptive paths + skill refs; design-only (writes artifacts, no deploy); artifacts land under <DP_BUNDLE_ROOT>/gold_layer_design; bypass_LLM = TRUE
@@ -3317,7 +3320,7 @@ true, 1, true, current_timestamp(), current_timestamp(), current_user());
 
 -- Step 12: Gold Layer Pipeline (YAML-Driven Implementation) - bypass_LLM = TRUE
 INSERT INTO ${catalog}.${schema}.section_input_prompts 
-(input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
+(input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, user_trigger_prompt, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
 VALUES
 (9, 'gold_layer_pipeline',
 'Implement the Gold layer using @data_product_accelerator/skills/gold/01-gold-layer-setup/SKILL.md
@@ -3847,6 +3850,7 @@ LIMIT 10;
 - [ ] Serverless: `environments` block with `environment_version: "4"`
 - [ ] Tags applied: `environment`, `layer=gold`, `job_type`
 - [ ] Job names include `${var.user_prefix}` and render as `[dev <short_name>] ...` with the project name retained (no collisions in shared workspace)',
+'Build the Gold layer pipeline from my YAML designs — create the tables and merge the data in from Silver.',
 true, 1, true, current_timestamp(), current_timestamp(), current_user());
 
 -- gold_layer_pipeline (genie-code fork) — prescriptive paths + directives; bundle-job-only; reads YAML from <DP_BUNDLE_ROOT>/gold_layer_design; bypass_LLM = TRUE
@@ -6318,7 +6322,7 @@ true, 2, true, current_timestamp(), current_timestamp(), current_user());
 
 -- Iterate & Enhance App
 INSERT INTO ${catalog}.${schema}.section_input_prompts 
-(input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, version, is_active, inserted_at, updated_at, created_by)
+(input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, user_trigger_prompt, version, is_active, inserted_at, updated_at, created_by)
 VALUES
 (14, 'iterate_enhance',
 'Iterate and enhance the application based on user feedback and business needs.
@@ -6490,11 +6494,12 @@ What areas could be improved?
 - [ ] Updated user guide
 - [ ] API documentation
 - [ ] Release notes',
+'Let''s iterate on my app — help me add a new feature and improve the experience.',
 1, true, current_timestamp(), current_timestamp(), current_user());
 
 -- Step 21: Redeploy & Test - consumes Step 20's iteration_plan, verifies the delta only - bypass_LLM = TRUE
 INSERT INTO ${catalog}.${schema}.section_input_prompts 
-(input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
+(input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, user_trigger_prompt, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
 VALUES
 (15, 'redeploy_test',
 '## Your Task
@@ -6811,6 +6816,7 @@ This append is non-negotiable — the next Step 20 reads it before planning the 
 **Output handoff:**
 - [ ] Docs updated for the changed surface only
 - [ ] State file appended with deploy timestamp, smoke test results, gates live, fixes applied',
+'Redeploy just my latest changes and verify they work, then update the docs and state file.',
 true, 1, true, current_timestamp(), current_timestamp(), current_user());
 
 -- Setup Lakebase (Config Only — Package + Bundle Resources)
@@ -7802,7 +7808,7 @@ true, false, 1, true, current_timestamp(), current_timestamp(), current_user());
 
 -- Step 22: Analyze Silver Metadata (Genie Accelerator) - bypass_LLM = TRUE
 INSERT INTO ${catalog}.${schema}.section_input_prompts 
-(input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
+(input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, user_trigger_prompt, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
 VALUES
 (114, 'genie_silver_metadata',
 'Extract and analyze comprehensive table and column metadata from your Silver layer schema.
@@ -7954,6 +7960,7 @@ This step extracts **comprehensive metadata** from your Silver layer — not jus
 - `<ARTIFACT_ROOT>/data_product_accelerator/context/{use_case_file_prefix}_Metadata.csv` — enriched metadata CSV
 - `docs/genie_plan.md` — analysis with table relevance, relationships, Genie Space recommendations, metric/TVF candidates
 - CSV contains: table_name, table_type, table_comment, column_name, data_type, is_nullable, column_comment, constraint_type, constraint_name, column_tags, table_tags',
+'Help me analyze my Silver layer metadata — pull the table and column comments, constraints, and tags so we know what we''re working with.',
 true, 1, true, current_timestamp(), current_timestamp(), current_user());
 
 -- Step 22 (Generate Mode): Design Silver Schema from PRD - bypass_LLM = TRUE
@@ -8169,7 +8176,7 @@ true, 1, true, current_timestamp(), current_timestamp(), current_user());
 
 -- Step 23: Deploy Lakehouse Assets - bypass_LLM = TRUE
 INSERT INTO ${catalog}.${schema}.section_input_prompts 
-(input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
+(input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, user_trigger_prompt, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
 VALUES
 (116, 'deploy_lakehouse_assets',
 'Deploy and run all Bronze, Silver, and Gold layer jobs end-to-end using @data_product_accelerator/skills/common/databricks-asset-bundles/SKILL.md and @data_product_accelerator/skills/common/databricks-autonomous-operations/SKILL.md
@@ -8424,6 +8431,7 @@ The autonomous operations skill follows this protocol:
 - [ ] Data flows from Bronze → Silver → Gold without errors
 - [ ] Row counts are reasonable across all layers
 - [ ] Ready for Data Intelligence layer (Genie, Dashboards)',
+'Deploy my lakehouse assets. Validate and run the Bronze, Silver, and Gold jobs in the right order.',
 true, 1, true, current_timestamp(), current_timestamp(), current_user());
 
 -- deploy_lakehouse_assets (genie-code fork) — prescriptive: deploy+run the whole pipeline FROM the bundle editor; bundle-only, no hand-run SQL/API; bypass_LLM = TRUE
@@ -9513,7 +9521,7 @@ true, 1, true, current_timestamp(), current_timestamp(), current_user());
 -- assistant to safely delete all Databricks resources created during the workshop.
 -- =============================================================================
 INSERT INTO ${catalog}.${schema}.section_input_prompts 
-(input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
+(input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, user_trigger_prompt, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
 VALUES
 (140, 'workspace_cleanup',
 'Clean up all Databricks resources created during the Vibe Coding Workshop. Delete every resource safely — if it exists, delete it; if it does not exist, skip it and move on. Never fail on a missing resource.
@@ -9910,11 +9918,12 @@ Both bundles are destroyed automatically in Phase 9 — the data-product bundle 
 - [ ] Pipelines page shows no workshop DLT pipelines
 - [ ] Dashboards page shows no workshop dashboards (check Trash too)
 - [ ] Genie page shows no workshop Genie spaces',
+'Help me safely clean up and delete all the Databricks resources I created during the workshop.',
 true, 1, true, current_timestamp(), current_timestamp(), current_user());
 
 -- Activation: Reverse ETL (Steps 32-36)
 INSERT INTO ${catalog}.${schema}.section_input_prompts 
-(input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
+(input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, user_trigger_prompt, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
 VALUES
 (141, 'activation_table_design',
 '## Your Task
@@ -10129,11 +10138,12 @@ flowchart LR
   - [ ] Each TRIGGERED entry cites a `>=24h` cron
   - [ ] Data type mapping notes and mitigations
   - [ ] Ordered creation checklist',
+'Help me design which Gold tables to sync into Lakebase, including the keys, sync modes, and types.',
 true, 1, true, current_timestamp(), current_timestamp(), current_user());
 
 -- Create Synced Tables
 INSERT INTO ${catalog}.${schema}.section_input_prompts 
-(input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
+(input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, user_trigger_prompt, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
 VALUES
 (142, 'activation_reverse_sync',
 '## Your Task
@@ -10342,11 +10352,12 @@ After initial sync, Snapshot and Triggered modes need explicit triggers via REST
 - [ ] All synced tables created in dependency order
 - [ ] Sync status confirmed healthy for each table
 - [ ] Row counts verified in Lakebase',
+'Create the Synced Tables from my Gold layer into Lakebase.',
 true, 1, true, current_timestamp(), current_timestamp(), current_user());
 
 -- Design Analytics App
 INSERT INTO ${catalog}.${schema}.section_input_prompts 
-(input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
+(input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, user_trigger_prompt, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
 VALUES
 (143, 'activation_app_design',
 '## Your Task
@@ -10499,11 +10510,12 @@ Every UI element must cite its synced source:
   - [ ] Clear note of extensions to existing app vs greenfield
   - [ ] Genie chat/assistant panel: placement, theming to the brand tokens, and empty/loading/error states (wired later at the Wire Genie step via the `genie()` plugin)
   - [ ] Visual and Brand section: aesthetic direction, brand palette (oklch CSS variables), typography pairing, logo placement, light/dark theme, empty/loading/error states',
+'Help me design an analytics app and dashboards on top of my synced Lakebase data.',
 true, 1, true, current_timestamp(), current_timestamp(), current_user());
 
 -- Build Analytics App
 INSERT INTO ${catalog}.${schema}.section_input_prompts 
-(input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
+(input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, user_trigger_prompt, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
 VALUES
 (144, 'activation_build_wire',
 '## Your Task
@@ -10690,11 +10702,12 @@ A **ConnectionStatus** badge shows "Mock Data" now and will flip to "Live Data" 
 - [ ] Navigation wired (extending existing app or greenfield)
 - [ ] Brand theming applied — brand colors as CSS variables, brand fonts, logo in header/navbar + favicon
 - [ ] Local testing passes at `http://localhost:8000`',
+'Build the analytics app with FastAPI and React using placeholder data, and let''s test it locally.',
 true, 1, true, current_timestamp(), current_timestamp(), current_user());
 
 -- Wire to Lakebase
 INSERT INTO ${catalog}.${schema}.section_input_prompts 
-(input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
+(input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, user_trigger_prompt, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
 VALUES
 (146, 'activation_wire_lakebase',
 '## Your Task
@@ -10874,11 +10887,12 @@ The app reads Lakebase **read-only** — it never changes the data. A small Conn
 - [ ] `/api/health/lakebase` returns `{connected, mode: "autoscaling", schema: "{user_schema_prefix}"}`
 - [ ] ConnectionStatus indicator shows "Live Data" at top of page
 - [ ] App still functions with placeholder data if Lakebase is unreachable',
+'Wire my analytics app to Lakebase — replace the placeholder data with real queries against the synced tables.',
 true, 1, true, current_timestamp(), current_timestamp(), current_user());
 
 -- Wire Genie
 INSERT INTO ${catalog}.${schema}.section_input_prompts 
-(input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
+(input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, user_trigger_prompt, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
 VALUES
 (147, 'activation_wire_genie',
 '## Your Task
@@ -11028,11 +11042,12 @@ By default the FastAPI app calls Genie as its **own service principal** — a cl
 - [ ] Frontend chat panel posts to `/api/chat`, renders the answer, shows the SQL Genie ran, and threads follow-ups by `conversation_id`
 - [ ] Locally, a question from `@docs/genie_brief.md` returns `source: "live"` with `data.sql` populated (empty rows OK)
 - [ ] Chat panel still renders cleanly if `/api/chat` returns `source: "mock"`',
+'Add a Genie-backed chat endpoint to my analytics app so users can ask questions in natural language.',
 true, 1, true, current_timestamp(), current_timestamp(), current_user());
 
 -- Deploy & Validate
 INSERT INTO ${catalog}.${schema}.section_input_prompts 
-(input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
+(input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, user_trigger_prompt, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
 VALUES
 (145, 'activation_deploy_validate',
 '## Your Task
@@ -11265,6 +11280,7 @@ When you deploy, Databricks Apps gives the app its **own identity** (a service p
 - [ ] Data freshness confirmed (Gold → Lakebase → App)
 - [ ] No debug/diagnostic routes remain mounted in the deployed app
 - [ ] No keep-alive/warmup cron in place; endpoint is allowed to scale-to-zero when idle',
+'Deploy my analytics app to Databricks Apps and validate the whole pipeline end to end.',
 true, 1, true, current_timestamp(), current_timestamp(), current_user());
 
 -- =============================================================================
@@ -17175,7 +17191,7 @@ true, 1, true, current_timestamp(), current_timestamp(), current_user());
 
 -- Step 1 (Genie Accelerator · Semantic Layer): Locate Data & Bring Context - bypass_llm=TRUE (Type C, verbatim template; Genie Code reasons on the real schema + dropped files)
 INSERT INTO ${catalog}.${schema}.section_input_prompts 
-(input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
+(input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, user_trigger_prompt, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
 VALUES
 (60, 'semlayer_locate',
 '**Point at my existing tables read-only, read any definitions I bring, and seed the Genie brief from the PRD — no building, just a first-pass brief for me to correct.**
@@ -17259,11 +17275,12 @@ Open questions (batched):
   1. Is "revenue" gross or net of discount?  (assumed: net — correct me)
   2. Which date drives time filters — order date or ship date?  (assumed: order date)
 ```',
+'Help me point Genie at my data and seed the Genie brief from my PRD. Don''t build anything yet — just locate the data and gather context.',
 true, 1, true, current_timestamp(), current_timestamp(), current_user());
 
 -- Step 2 (Genie Accelerator · Semantic Layer): Profile Your Schema - bypass_llm=TRUE (Type B, verbatim template; read-only discovery)
 INSERT INTO ${catalog}.${schema}.section_input_prompts 
-(input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
+(input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, user_trigger_prompt, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
 VALUES
 (61, 'semlayer_profile',
 '**Profile the source schema read-only — grain, joins, PK/FK candidates, hidden business columns, and an ERD — then mark each candidate measure can/can''t-support and create nothing.**
@@ -17343,11 +17360,12 @@ erDiagram
   LINEITEM { decimal l_extendedprice "money" decimal l_discount "0-1" string l_returnflag "R = returned" }
   ORDERS { date o_orderdate "primary time dim" decimal o_totalprice "tax-incl" }
 ```',
+'Profile my source schema — figure out the grain, joins, keys, and which measures the data can support, and draw me an ERD.',
 true, 1, true, current_timestamp(), current_timestamp(), current_user());
 
 -- Step 3 (Genie Accelerator · Semantic Layer): Measures Analysis (the sign-off gate) - bypass_llm=TRUE (Type B/C; discover-don't-inject — template names no conflict)
 INSERT INTO ${catalog}.${schema}.section_input_prompts 
-(input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
+(input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, user_trigger_prompt, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
 VALUES
 (62, 'semlayer_measures',
 '**Draft a governed ≤5-measure inventory and self-discover any definitional conflicts. Keep the review gate — show me the inventory before any Metric View YAML — but resolve every conflict with a concrete recommendation, not an open question.**
@@ -17431,11 +17449,12 @@ The conflict may surface here **or** already during Step 1 elicitation — eithe
 | Net Revenue | `SUM(l_extendedprice * (1 - l_discount))` | `lineitem` | line | A. Chen | **Gross** `SUM(l_extendedprice)` also circulates — Finance vs Sales-Ops; **recommend net** |
 | Average Order Value | Net Revenue ÷ distinct orders | `lineitem`+`orders` | order | A. Chen | **non-additive** — never average across periods |
 | Return Rate | returned lines ÷ all lines (24.69%) | `lineitem.l_returnflag` | line | Sales-Ops (assumed) | order-level denominator gives 43.07%; **recommend line-level** |',
+'Draft the measure inventory for my data and flag any conflicting definitions. Stop and let me sign off before building any Metric View.',
 true, 1, true, current_timestamp(), current_timestamp(), current_user());
 
 -- Step 4 (Genie Accelerator · Semantic Layer): Draft the Metric View - bypass_llm=TRUE (Type B/C; Path B author-from-inventory default, Path A /importBI in the genie-code fork)
 INSERT INTO ${catalog}.${schema}.section_input_prompts 
-(input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
+(input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, user_trigger_prompt, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
 VALUES
 (63, 'semlayer_metric_view',
 '**Build a governed Metric View from the signed-off inventory — plan and show me the YAML first, create it idempotently in the writable target only on my OK, then prove every measure with a `MEASURE()` query.**
@@ -17519,11 +17538,12 @@ SELECT MEASURE(net_revenue), MEASURE(gross_revenue), MEASURE(order_count)
 FROM {lakehouse_default_catalog}.{user_schema_prefix}_gold.order_revenue_metrics;
 -- net_revenue = 1,089,835,179,247 | gross = 1,147,191,013,439 | orders = 7,500,000
 ```',
+'Let''s author the Metric View from my signed-off measures. Show me the YAML to review before you create anything.',
 true, 1, true, current_timestamp(), current_timestamp(), current_user());
 
 -- Step 5 (Genie Accelerator · Semantic Layer): Review & Expand Synonyms - bypass_llm=TRUE (Type B; review-and-expand, not first-time add)
 INSERT INTO ${catalog}.${schema}.section_input_prompts 
-(input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
+(input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, user_trigger_prompt, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
 VALUES
 (64, 'semlayer_synonyms',
 '**Review the synonyms already on the Metric View and expand them — acronyms, informal phrasing, legacy names (and any imported BI field aliases). Keep the diff-review gate; recommend the full set rather than asking me which to add.**
@@ -17599,6 +17619,7 @@ Cover the three ways people drift from the canonical name: the **acronym** ("AOV
 -     synonyms: ["aov"]
 +     synonyms: ["aov", "avg order value", "spend per order", "revenue per order", "avg basket"]
 ```',
+'Review the synonyms on my Metric View and help me expand them to cover acronyms, informal phrasing, and legacy names.',
 true, 1, true, current_timestamp(), current_timestamp(), current_user());
 
 -- semlayer_locate (genie-code fork) — data-mode navigation + synthetic branch + file-drop; bypass_LLM = TRUE
@@ -17637,7 +17658,7 @@ true, 1, true, current_timestamp(), current_timestamp(), current_user());
 
 -- semlayer_locate_upload (default), save uploaded dictionary + seed brief; bypass_llm = TRUE
 INSERT INTO ${catalog}.${schema}.section_input_prompts 
-(input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
+(input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, user_trigger_prompt, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
 VALUES
 (943, 'semlayer_locate_upload',
 '**Save my uploaded data dictionary, then seed the Genie brief from it and the PRD — no building yet, just a first-pass brief for me to correct.**
@@ -17677,6 +17698,7 @@ Record the gate result in `.vibecoding-state.md`.',
 - `docs/genie_brief.md` seeded from the dictionary and the PRD: function, candidate measures, user questions
 - One batched, pre-assumed clarifying-question list presented for your correction
 - Gate recorded to `.vibecoding-state.md`',
+'',
 true, 1, true, current_timestamp(), current_timestamp(), current_user());
 
 -- semlayer_locate_upload (genie-code fork), save uploaded dictionary + seed brief; bypass_llm = TRUE
@@ -17709,7 +17731,7 @@ true, 1, true, current_timestamp(), current_timestamp(), current_user());
 
 -- semlayer_locate_synthetic (default), Faker into the gold target + seed brief; bypass_llm = TRUE
 INSERT INTO ${catalog}.${schema}.section_input_prompts 
-(input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
+(input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, user_trigger_prompt, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
 VALUES
 (945, 'semlayer_locate_synthetic',
 '**Propose a PRD-grounded star schema, Faker-generate sample data into `{lakehouse_default_catalog}.{user_schema_prefix}_gold` on my yes, then seed the Genie brief — the only Locate mode that writes data.**
@@ -17747,6 +17769,7 @@ A small Faker-generated dataset in `{lakehouse_default_catalog}.{user_schema_pre
 - `docs/genie_brief.md` seeded from the PRD and the generated schema
 - One batched, pre-assumed clarifying-question list presented for your correction
 - Gate recorded to `.vibecoding-state.md`',
+'',
 true, 1, true, current_timestamp(), current_timestamp(), current_user());
 
 -- semlayer_locate_synthetic (genie-code fork), Faker into the gold target + seed brief; bypass_llm = TRUE
@@ -17775,7 +17798,7 @@ true, 1, true, current_timestamp(), current_timestamp(), current_user());
 
 -- semlayer_locate_prebuilt (default), daisy-chain from the Lakehouse track's Gold; bypass_llm = TRUE
 INSERT INTO ${catalog}.${schema}.section_input_prompts 
-(input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
+(input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, user_trigger_prompt, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
 VALUES
 (947, 'semlayer_locate_prebuilt',
 '**Point at the Gold I already built in `{lakehouse_default_catalog}.{user_schema_prefix}_gold` and seed the Genie brief from it and the PRD, reusing the measures the Gold model implies — no building, just a first-pass brief for me to correct.**
@@ -17811,6 +17834,7 @@ You reached this step with the Lakehouse track on, so Genie Code targets the Gol
 - `docs/genie_brief.md` seeded from the PRD and your Gold tables, reusing measures the Gold model implies
 - One batched, pre-assumed clarifying-question list presented for your correction
 - Gate recorded to `.vibecoding-state.md`',
+'',
 true, 1, true, current_timestamp(), current_timestamp(), current_user());
 
 -- semlayer_locate_prebuilt (genie-code fork), daisy-chain from the Lakehouse track's Gold; bypass_llm = TRUE
@@ -18127,7 +18151,7 @@ true, 1, true, current_timestamp(), current_timestamp(), current_user());
 
 -- Step 6 (Genie Accelerator · Genie Agent): Describe the Agent - bypass_llm=TRUE (Type B; native createAsset shell + PATCH serialized_space)
 INSERT INTO ${catalog}.${schema}.section_input_prompts 
-(input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
+(input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, user_trigger_prompt, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
 VALUES
 (65, 'gagent_describe',
 '**Create a Genie Agent scoped from the PRD personas. Attach the governed Metric View for measures AND its base detail table(s) one grain below for row-level questions, then review the serialized config before you create the space.**
@@ -18225,11 +18249,12 @@ Populate the space with `PATCH /api/2.0/genie/spaces/{id}` — **never** `PATCH 
 ```
 
 Some workspaces return the Metric View under `tables` instead of `metric_views` — validate and confirm it resolves rather than asserting the slot.',
+'Help me create a Genie space from my PRD personas, attach the Metric View and its detail tables, and let me review the config before it''s created.',
 true, 1, true, current_timestamp(), current_timestamp(), current_user());
 
 -- Step 7 (Genie Accelerator · Genie Agent): Author Instructions - bypass_llm=TRUE (Type B; PATCH serialized_space, one lean text_instructions entry)
 INSERT INTO ${catalog}.${schema}.section_input_prompts 
-(input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
+(input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, user_trigger_prompt, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
 VALUES
 (66, 'gagent_instructions',
 '**Author one lean, rule-shaped instruction block — every brief guardrail as one plain-English rule — always including a `MEASURE()`-vs-detail routing rule and an explicit scope boundary, and cut anything that isn''t load-bearing.**
@@ -18307,11 +18332,12 @@ Instructions load on **every** turn, so every line has to earn its place as a ru
 - Scope: <use-case> reporting only. Decline out-of-scope questions cleanly.
 - Never average a measure flagged non-additive across periods.
 ```',
+'Help me write the instructions for my Genie Agent — a single lean instruction block with a MEASURE()-vs-detail routing rule and a clear scope boundary.',
 true, 1, true, current_timestamp(), current_timestamp(), current_user());
 
 -- Step 8 (Genie Accelerator · Genie Agent): Add Verified Queries - bypass_llm=TRUE (Type B; instructions.example_question_sqls on the space, not the MV)
 INSERT INTO ${catalog}.${schema}.section_input_prompts 
-(input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
+(input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, user_trigger_prompt, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
 VALUES
 (67, 'gagent_verified',
 '**Add 2-3 verified example queries to the Genie space for the questions my users ask most — each exact SQL querying the governed Metric View via `MEASURE()`, run once to prove it returns before you save it to the space.**
@@ -18386,11 +18412,12 @@ SQL: SELECT region, MEASURE(net_revenue)
      FROM {lakehouse_default_catalog}.{user_schema_prefix}_gold.order_revenue_metrics
      WHERE order_year = 1997 GROUP BY region;   -- ✓ ran, returned 5 rows
 ```',
+'Let''s add a few verified example queries to my Genie space for the questions people ask most, and run each one to prove it works.',
 true, 1, true, current_timestamp(), current_timestamp(), current_user());
 
 -- Step 9 (Genie Accelerator · Genie Agent): Load Benchmarks (expected answers required) - bypass_llm=TRUE (Type B; Rule 12 - expected SQL per benchmark enables the optimize loop)
 INSERT INTO ${catalog}.${schema}.section_input_prompts 
-(input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
+(input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, user_trigger_prompt, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
 VALUES
 (68, 'gagent_benchmarks',
 '**Load 15 benchmark questions onto the space, attach an expected SQL answer to every one (an unanswered benchmark can''t be scored), self-check each answer''s confidence, then STOP so I can verify the low-confidence ones before any is treated as validated.**
@@ -18467,11 +18494,12 @@ Expected SQL: SELECT region, MEASURE(net_revenue)
               WHERE order_year = 1997 GROUP BY region ORDER BY 2 DESC LIMIT 1;
 Confidence: low → e.g. "ASIA, 231.4B"   ← flagged; confirm before validating
 ```',
+'Generate benchmark questions with expected answers for my Genie Agent, then stop so I can verify the low-confidence ones before we trust them.',
 true, 1, true, current_timestamp(), current_timestamp(), current_user());
 
 -- Step 10 (Genie Accelerator · Genie Agent): Optimize the Agent - bypass_llm=TRUE (Type B; native benchmark scorer + append-only 6-mode fix loop, 2-3 iterations)
 INSERT INTO ${catalog}.${schema}.section_input_prompts 
-(input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
+(input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, user_trigger_prompt, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
 VALUES
 (69, 'gagent_optimize',
 '**Run the space''s built-in benchmark scorer, read the per-question results, triage each miss to ONE append-only curation fix, then re-run — 2-3 iterations — and report the before/after pass rate. Aim for ~85%, don''t chase 100%.**
@@ -18561,11 +18589,12 @@ Overwriting instructions can regress questions that already passed. Appending ke
 Iteration 1: 9/15 (60%) → fixes: +2 synonyms, +1 entity-match, +1 routing rule
 Iteration 2: 13/15 (87%) → 2 remaining misses are ambiguous phrasings; stop (don''t overfit)
 ```',
+'Run the benchmark scorer on my Genie Agent, fix the misses with curation, and show me the before/after pass rate.',
 true, 1, true, current_timestamp(), current_timestamp(), current_user());
 
 -- Step 14 (Genie Accelerator · Genie Agent): Show Your Agent (proof beat, no new asset) - bypass_llm=TRUE (Type B)
 INSERT INTO ${catalog}.${schema}.section_input_prompts 
-(input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
+(input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, user_trigger_prompt, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
 VALUES
 (73, 'gagent_share',
 'The **proof beat** — no new asset. Ask your agent **one real question you actually needed answered this quarter** (not one you know it can handle) and confirm it behaves. Note what it got right and the one thing you''d curate next (that feeds the next benchmark round).
@@ -18640,6 +18669,7 @@ Q asked: "How did net revenue trend by quarter this year?"
 Got right: used MEASURE(net_revenue); disclosed anchor (latest date = 1998-08-02); grouped by quarter.
 Curate next: add synonym "top line" → net_revenue (I had to rephrase once).
 ```',
+'',
 true, 1, false, current_timestamp(), current_timestamp(), current_user());
 
 -- gagent_describe (genie-code fork) — native createAsset(genie) shell + PATCH /api/2.0/genie/spaces/{id}; bypass_LLM = TRUE
@@ -18726,7 +18756,7 @@ true, 1, true, current_timestamp(), current_timestamp(), current_user());
 
 -- Step 11 (Genie Accelerator · Genie Ontology): Model the Domain + Subdomains - bypass_llm=TRUE (Type B; UI-preferred, pre-created fallback; Beta)
 INSERT INTO ${catalog}.${schema}.section_input_prompts 
-(input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
+(input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, user_trigger_prompt, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
 VALUES
 (70, 'ontology_domain',
 '**Model a Genie Ontology domain with 3-5 subdomains in Databricks Discover (UI-preferred, or reuse a pre-created domain) and capture the domain and subdomain IDs.**
@@ -18798,11 +18828,12 @@ Domain: "Revenue Analytics"  (id: dom_a1b2c3…)
   ├─ Returns    (id: sub_22…)
   └─ Customers  (id: sub_33…)
 ```',
+'Help me set up the Discover domain and subdomains for my project and capture their IDs.',
 true, 1, true, current_timestamp(), current_timestamp(), current_user());
 
 -- Step 12 (Genie Accelerator · Genie Ontology): Author Pages - bypass_llm=TRUE (Type B/C; Discover UI Page editor, no public API; Beta)
 INSERT INTO ${catalog}.${schema}.section_input_prompts 
-(input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
+(input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, user_trigger_prompt, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
 VALUES
 (71, 'ontology_pages',
 '**Draft Discover Pages for my top measures — plain-language definition, exact formula naming the Metric View, synonyms, at least one negative rule, chunk-safe sentences — for me to review and publish, then capture the Page IDs.**
@@ -18886,11 +18917,12 @@ Synonyms: net sales, top line, revenue (net)
 Negative rule: Net Revenue never includes tax; do not use o_totalprice for Net Revenue.
 Related asset: order_revenue_metrics (Metric View)
 ```',
+'Walk me through authoring Discover Pages for my top measures — definition, formula, synonyms, and a negative rule for each.',
 true, 1, true, current_timestamp(), current_timestamp(), current_user());
 
 -- Step 13 (Genie Accelerator · Genie Ontology): Write the Routing Page - bypass_llm=TRUE (Type B; Discover UI Page editor, no public API; deck's highest-return exercise)
 INSERT INTO ${catalog}.${schema}.section_input_prompts 
-(input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
+(input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, user_trigger_prompt, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
 VALUES
 (72, 'ontology_routing',
 '**Author one Question-to-Metric-View Routing Page covering every inventory measure — four or five phrasings each (formal, acronym, informal, legacy) routed to the governed Metric View and exact measure — then name an owner, publish, and capture the Page ID.**
@@ -18960,6 +18992,7 @@ Most Genie misses are *right answer, wrong source* — it inferred a raw table i
 | revenue, net sales, top line, "sales $" | `order_revenue_metrics` | `net_revenue` |
 | AOV, avg order value, spend per order | `order_revenue_metrics` | `average_order_value` |
 | return rate, returns %, "% returned" | `order_revenue_metrics` | `return_rate` |',
+'Help me write the Question-to-Metric-View routing Page that maps how people phrase each measure to the governed Metric View.',
 true, 1, true, current_timestamp(), current_timestamp(), current_user());
 
 -- ontology_domain (genie-code fork) — Discover UI preferred + pre-created fallback + optional GC assist; bypass_LLM = TRUE
@@ -19040,7 +19073,7 @@ true, 1, true, current_timestamp(), current_timestamp(), current_user());
 
 -- Step 15 (Genie Accelerator · Tail): AI/BI Dashboard - bypass_llm=TRUE (Type C; LIGHT router to Genie Code's native AI/BI dashboard skill; inventories tables for Choose What to Activate)
 INSERT INTO ${catalog}.${schema}.section_input_prompts 
-(input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
+(input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, user_trigger_prompt, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
 VALUES
 (74, 'gaccel_dashboard',
 '**Build an AI/BI dashboard across the PRD-relevant Gold data using your native dashboard capability — governed `MEASURE()` tiles plus supporting detail — review the tile plan first, then inventory the tables it uses so Choose What to Activate knows what to sync.**
@@ -19113,11 +19146,12 @@ Dashboard: {use_case_title} — Revenue
   Bar    Net Revenue by region  MEASURE(net_revenue) x region
   Filter order_year (default: latest)
 ```',
+'Have Genie build an AI/BI dashboard over my Gold data, and list the tables it uses so I know what to activate.',
 true, 1, true, current_timestamp(), current_timestamp(), current_user());
 
 -- Step 16 (Genie Accelerator · Activate): Choose What to Activate - bypass_llm=TRUE (Type C; SELECTION-ONLY wrapper, decide which Gold dims+facts feed the app/dashboard (business reason only; keys/grain/mode deferred to step 32), then hand off to the reused Synced Tables → … → Deploy sequence)
 INSERT INTO ${catalog}.${schema}.section_input_prompts 
-(input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
+(input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, user_trigger_prompt, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
 VALUES
 (75, 'gaccel_activation',
 '**Choose what to activate — decide which Gold dimension + fact tables (and why) should feed the app and dashboard, never the Metric View itself — and record the approved selection for the Synced Tables sequence. Business selection only; keys, grain, order, and modes are the next step''s job.**
@@ -19191,11 +19225,12 @@ Activate from Metric View order_revenue_metrics + dashboard inventory → base t
   fact_lineitem  — revenue + margin measures, the app''s line-item detail screen
 → next: Design & Provision Synced Tables (works out PK · grain · order · mode)
 ```',
+'Help me decide which Gold tables to activate for the app and dashboard, and explain why each one is needed.',
 true, 1, true, current_timestamp(), current_timestamp(), current_user());
 
 -- Step 17 (Genie Accelerator · Tail): Productionize as a DAB - bypass_llm=TRUE (Type C; LIGHT hand-off to databricks-asset-bundles / deploy_di_assets)
 INSERT INTO ${catalog}.${schema}.section_input_prompts 
-(input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
+(input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, user_trigger_prompt, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
 VALUES
 (76, 'gaccel_productionize',
 'Optional, soft-recommended: package the track''s assets as a **Databricks Asset Bundle** so the whole thing redeploys reproducibly. This is a **light hand-off** — it reuses the workshop''s DAB skills and the existing "Deploy Semantic Layer Assets" flow. Keep the dev-files vs. prod-bundle boundary explicit.
@@ -19278,6 +19313,7 @@ This is the bridge from a hand-built track to a **repeatable** one — the same 
 # databricks bundle validate --target dev  → OK
 # databricks bundle deploy   --target dev  → deployed
 ```',
+'',
 true, 1, false, current_timestamp(), current_timestamp(), current_user());
 
 -- gaccel_dashboard (genie-code fork), LIGHT router to Genie Code's native AI/BI dashboard skill; canvas navigation + table inventory for Choose What to Activate; bypass_LLM = TRUE

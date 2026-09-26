@@ -121,6 +121,7 @@ def get_section_input_content(industry: str, use_case: str, section_tag: str, pr
     system_prompt = template.get('system_prompt', '')
     how_to_apply = template.get('how_to_apply', '')
     expected_output = template.get('expected_output', '')
+    user_trigger_prompt = template.get('user_trigger_prompt', '')
     how_to_apply_images = template.get('how_to_apply_images', [])
     expected_output_images = template.get('expected_output_images', [])
     bypass_llm = template.get('bypass_llm', False)  # Check if this section bypasses LLM
@@ -158,6 +159,7 @@ def get_section_input_content(industry: str, use_case: str, section_tag: str, pr
         system_prompt = system_prompt.replace(key, str(value))
         how_to_apply = how_to_apply.replace(key, str(value))
         expected_output = expected_output.replace(key, str(value))
+        user_trigger_prompt = user_trigger_prompt.replace(key, str(value))
     
     # Conditional branding injection -- only when company_brand_url is specified
     # Session overrides may store empty string for brand URL (e.g. from initial
@@ -316,6 +318,7 @@ Generate a detailed, actionable prompt for {section_tag} in a {industry_name} {u
         "system_prompt": system_prompt,
         "how_to_apply": how_to_apply,
         "expected_output": expected_output,
+        "user_trigger_prompt": user_trigger_prompt,
         "how_to_apply_images": how_to_apply_images,
         "expected_output_images": expected_output_images,
         "bypass_llm": bypass_llm,
