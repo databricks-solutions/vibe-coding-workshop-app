@@ -760,10 +760,11 @@ def _legacy_progress(
 @mcp.tool(
     name="vibe_complete_step",
     description=(
-        "Record that the current step's gate passed and store the step's captured output (the gate = "
-        "this call, i.e. next-action-as-approval). Advances the walk. Do not call this for "
-        "`execution:ui-driven` steps — those are coached and hand off to the UI. Args: `session_id`, "
-        "`sectionTag`, `captured_output` (all required)."
+        "Record that the current step's gate passed and store its captured output (the gate = this "
+        "call, next-action-as-approval); advances the walk. If the step's `interaction` has a `post` "
+        "check, ask it and record via `vibe_submit_answer` first (only valid while the step is "
+        "current). Not for `execution:ui-driven` steps. Args: `session_id`, `sectionTag`, "
+        "`captured_output`."
     ),
     annotations=ToolAnnotations(
         readOnlyHint=False,

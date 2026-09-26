@@ -117,7 +117,9 @@ VALUES
 1. **Pick an industry.** This step''s payload includes `available_industries` — the curated options, each with a `value` and a `label`. Choose the one that matches your scenario.
 2. **List use cases for that industry.** Call `vibe_set_parameters` with just the `industry` value; the result echoes `available_use_cases` for that industry, certified-first, each carrying `value`, `label`, `category`, and `is_certified`.
 3. **Prefer a certified use case (recommended).** Entries with `is_certified` set to true are curated and tested end to end, so they give the smoothest path through the accelerator. Pick one of these unless you have a specific reason not to.
-4. **Or build your own [Beta].** If none of the certified use cases fit, author a custom use case: an industry, a short label, and a one-paragraph description of what the application does and who uses it. Custom use cases stay local to this session and are never written to the shared library.
+4. **Or build your own [Beta].** If none of the certified use cases fit, author a custom use case. Do not write the description yourself — let the app draft a PRD-grade one from its own model so it stays consistent with the accelerator:
+   1. Call `vibe_set_parameters` with `mode="draft_custom"` and `params` `{"use_case_source": "custom", "industry": <industry value>, "use_case_label": <short title>, "use_case_hints": <optional one-line steer>}`. The app generates the description and returns it as `drafted_description` — nothing is locked yet.
+   2. Show `drafted_description` to the learner. Refine the label or hints and redraft if they want, then lock by calling `vibe_set_parameters` again with `use_case_description` set to the approved draft. Custom use cases stay local to this session and are never written to the shared library.
 
 ## Lock your choice
 
@@ -127,7 +129,7 @@ When you have decided, call `vibe_set_parameters` with `params`:
 - `use_case` — the use case value
 - `use_case_label` — a human-readable title
 - `use_case_source` — `curated` when you picked from the listing, or `custom` when you authored your own
-- `use_case_description` — required only when `use_case_source` is `custom`
+- `use_case_description` — required only when `use_case_source` is `custom`; generate it with the `mode="draft_custom"` flow above rather than writing it by hand
 
 `vibe_set_parameters` returns the resolved parameters plus any still-missing required fields. If fields are missing, ask for them in chat and call again. Once the selection locks, it produces the **use case brief** that the PRD step — and every step after it — consumes. You cannot proceed to the PRD until a use case is locked.',
 '',
@@ -150,7 +152,9 @@ You do not paste this step into a coding assistant — you make a choice, then l
 
 **Step 3: Decide** — choose a certified use case (recommended), or author a custom one if none fit.
 
-**Step 4: Lock it** — call `vibe_set_parameters` with `industry`, `use_case`, `use_case_label`, and `use_case_source` (add `use_case_description` for a custom use case).
+**Step 3a: Draft (custom only)** — for a custom use case, call `vibe_set_parameters` with `mode="draft_custom"` (passing `use_case_source=custom`, `industry`, `use_case_label`, and an optional `use_case_hints`). The app returns a PRD-grade `drafted_description`; review it with the learner before locking. Don''t hand-write the description.
+
+**Step 4: Lock it** — call `vibe_set_parameters` with `industry`, `use_case`, `use_case_label`, and `use_case_source` (for a custom use case add `use_case_description`, set to the approved `draft_custom` output).
 
 **Step 5: Confirm** — check the returned parameters, supply any still-missing fields, then continue to the PRD step.
 
@@ -188,7 +192,7 @@ The use case brief is the single anchoring artifact for the whole accelerator: a
 | Concept | What It Means | Why It Matters |
 |---------|---------------|----------------|
 | **Certified use case** | A curated, end-to-end tested option (`is_certified: true`) | Smoothest path; the recommended default |
-| **Custom use case** | An author-your-own option, session-local | Flexibility when nothing certified fits; never leaks to the shared library |
+| **Custom use case** | An author-your-own option, session-local, with its description drafted by the app (`mode="draft_custom"`) | Flexibility when nothing certified fits; PRD-grade and consistent; never leaks to the shared library |
 | **Use case brief** | The locked (industry, use case, label, [description]) tuple | The anchor every downstream step consumes |
 
 ---

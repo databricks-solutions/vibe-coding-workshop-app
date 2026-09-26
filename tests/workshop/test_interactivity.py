@@ -181,3 +181,44 @@ def test_interaction_is_sibling_and_prompt_remains_verbatim(monkeypatch, session
 
     assert payload.prompt == prompt
     assert payload.interaction is not None
+
+
+def test_every_interaction_block_conforms_to_schema():
+    """Every block in every slot is well-formed (guards the per-step quizzes)."""
+    allowed_types = {"comprehension", "decision", "confirm"}
+    all_interactions = manifest.load_interactions()
+    assert all_interactions
+
+    for section_tag, blocks in all_interactions.items():
+        for slot, block in blocks.items():
+            where = f"{section_tag}.{slot}"
+            assert slot in manifest.INTERACTION_SLOTS, where
+            assert block.get("id"), where
+            assert block.get("type") in allowed_types, (where, block.get("type"))
+            assert block.get("question"), where
+            assert block.get("recommended"), where
+            assert isinstance(block.get("skippable"), bool), where
+            options = block.get("options") or []
+            assert options, where
+            option_ids = {option["id"] for option in options}
+            assert block["recommended"] in option_ids, where
+            # Coaching must cover exactly the offered options, no more, no less.
+            assert set(block.get("coaching", {})) == option_ids, where
+
+
+def test_every_genie_accelerator_step_has_a_comprehension_check():
+    """Every step in the genie-accelerator track carries a comprehension quiz.
+
+    Encodes the "quiz on every step" contract: the check may live in the ``pre``
+    or ``post`` slot alongside any ``decision``/``confirm`` gate.
+    """
+    all_interactions = manifest.load_interactions()
+    steps = manifest.load_manifest().track_steps("genie-accelerator")
+    assert steps
+
+    for step in steps:
+        blocks = all_interactions.get(step.sectionTag, {})
+        kinds = {block.get("type") for block in blocks.values()}
+        assert "comprehension" in kinds, (
+            f"{step.sectionTag} has no comprehension check (slots: {sorted(blocks)})"
+        )

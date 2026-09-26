@@ -15,6 +15,7 @@ import asyncio
 import copy
 import json
 import pathlib
+import re
 import sys
 
 import pytest
@@ -198,3 +199,32 @@ def test_confirm_custom_mirrors_description_and_label(session_store):
     assert persisted["custom_use_case_label"] == "Curbside Pickup ETA"
     # The lock is genuinely satisfied for a custom use case.
     assert mcp_server._custom_usecase_locked(persisted) is True
+
+
+def test_seed_body_steers_custom_path_to_draft_custom():
+    """The seeded use_case_selection body (958) must route custom authoring through
+    the app's FMAPI draft (mode="draft_custom"), not free-author the description."""
+    seed = (
+        REPO_ROOT
+        / "db"
+        / "lakebase"
+        / "dml_seed"
+        / "02_seed_section_input_prompts.sql"
+    ).read_text()
+    # Isolate the use_case_selection block (input_id 958) so we assert against it,
+    # not some unrelated row.
+    marker = "(958, 'use_case_selection',"
+    start = seed.index(marker)
+    # End at the next VALUES row start (line beginning "(<digits>, '"), so a body
+    # line that happens to start with "(" doesn't truncate the block.
+    tail = re.search(r"\n\(\d+, '", seed[start + len(marker):])
+    end = start + len(marker) + tail.start() if tail else len(seed)
+    block = seed[start:end]
+
+    assert 'mode="draft_custom"' in block, "958 must instruct the draft_custom flow"
+    assert "drafted_description" in block
+    # The old free-author instruction must be gone.
+    assert (
+        "a one-paragraph description of what the application does and who uses it"
+        not in block
+    )

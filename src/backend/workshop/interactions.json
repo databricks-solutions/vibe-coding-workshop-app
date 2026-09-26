@@ -16,6 +16,123 @@
       }
     }
   },
+  "use_case_selection": {
+    "decision": {
+      "id": "use_case_selection.usecase_confirmation",
+      "type": "confirm",
+      "question": "Confirm the use case you'll build this Genie Agent for before continuing: proceed with the certified use case, or author your own custom use case first.",
+      "options": [
+        {"id": "use_certified", "label": "Proceed with the certified use case"},
+        {"id": "author_own", "label": "Author your own custom use case first"}
+      ],
+      "recommended": "use_certified",
+      "skippable": false,
+      "coaching": {
+        "use_certified": "Confirmed — the certified use case is locked and this step can be completed.",
+        "author_own": "Good override — draft your custom use case and lock it with vibe_set_parameters, then confirm to proceed."
+      }
+    },
+    "post": {
+      "id": "use_case_selection.check",
+      "type": "comprehension",
+      "question": "Why lock a single use case before building anything else?",
+      "options": [
+        {"id": "anchor_everything", "label": "It anchors the PRD, semantic layer, agent, and dashboard to one governed target"},
+        {"id": "keep_open", "label": "So we can keep scope open and decide what to build later"}
+      ],
+      "recommended": "anchor_everything",
+      "skippable": true,
+      "coaching": {
+        "anchor_everything": "Correct — every downstream artifact reads back from the locked use case.",
+        "keep_open": "The better answer is that it anchors everything — an open scope lets later steps drift."
+      }
+    }
+  },
+  "prd_generation": {
+    "post": {
+      "id": "prd_generation.check",
+      "type": "comprehension",
+      "question": "What is the PRD's role for the rest of the workshop?",
+      "options": [
+        {"id": "context_spine", "label": "The context spine every later step reads from instead of re-interviewing you"},
+        {"id": "throwaway_doc", "label": "A one-off document you can ignore once the build starts"}
+      ],
+      "recommended": "context_spine",
+      "skippable": true,
+      "coaching": {
+        "context_spine": "Correct — its personas, journeys, and entities ground every downstream decision.",
+        "throwaway_doc": "The better answer is the context spine — measures, metric view, agent, and dashboard all read back from it."
+      }
+    }
+  },
+  "genie_silver_metadata": {
+    "post": {
+      "id": "genie_silver_metadata.check",
+      "type": "comprehension",
+      "question": "Why analyze the silver-layer metadata before designing the gold layer?",
+      "options": [
+        {"id": "know_inputs", "label": "To know the real tables, columns, and grain the gold model will be built from"},
+        {"id": "skip_ahead", "label": "It is optional; you can design gold from assumptions and fix it later"}
+      ],
+      "recommended": "know_inputs",
+      "skippable": true,
+      "coaching": {
+        "know_inputs": "Correct — the gold design is only as sound as your understanding of the silver inputs.",
+        "skip_ahead": "The better answer is to know your inputs first — designing gold from assumptions invites rework."
+      }
+    }
+  },
+  "gold_layer_design": {
+    "post": {
+      "id": "gold_layer_design.check",
+      "type": "comprehension",
+      "question": "What is the gold layer optimized for?",
+      "options": [
+        {"id": "business_consumption", "label": "Clean, business-ready tables shaped for analytics and the semantic layer"},
+        {"id": "raw_ingest", "label": "Storing raw, unprocessed source data exactly as ingested"}
+      ],
+      "recommended": "business_consumption",
+      "skippable": true,
+      "coaching": {
+        "business_consumption": "Correct — gold is the business-ready layer the metric view and agent build on.",
+        "raw_ingest": "The better answer is business consumption — raw, unprocessed data belongs in the bronze layer."
+      }
+    }
+  },
+  "gold_layer_pipeline": {
+    "post": {
+      "id": "gold_layer_pipeline.check",
+      "type": "comprehension",
+      "question": "Why build the gold layer as a pipeline rather than a one-time query?",
+      "options": [
+        {"id": "repeatable_refresh", "label": "So the tables refresh repeatably and stay current as source data changes"},
+        {"id": "one_time", "label": "A single manual run is enough; the data never needs refreshing"}
+      ],
+      "recommended": "repeatable_refresh",
+      "skippable": true,
+      "coaching": {
+        "repeatable_refresh": "Correct — a pipeline keeps gold current and reproducible as upstream data lands.",
+        "one_time": "The better answer is repeatable refresh — a one-off query goes stale the moment source data changes."
+      }
+    }
+  },
+  "deploy_lakehouse_assets": {
+    "post": {
+      "id": "deploy_lakehouse_assets.check",
+      "type": "comprehension",
+      "question": "Why deploy the lakehouse assets before building the semantic layer on top?",
+      "options": [
+        {"id": "real_tables", "label": "The metric view and agent need the governed tables to actually exist in Unity Catalog"},
+        {"id": "cosmetic", "label": "Deployment is cosmetic; the semantic layer works against local drafts"}
+      ],
+      "recommended": "real_tables",
+      "skippable": true,
+      "coaching": {
+        "real_tables": "Correct — the semantic layer and agent bind to real UC objects, so they must exist first.",
+        "cosmetic": "The better answer is that real tables must exist — the metric view can't reference a local draft."
+      }
+    }
+  },
   "semlayer_locate": {
     "decision": {
       "id": "semlayer_locate.source_strategy",
@@ -30,6 +147,38 @@
       "coaching": {
         "reuse_existing": "Recommended — start with the governed source and expand only when coverage requires it.",
         "discover_new": "That is a valid override; record the qualification work before building on the source."
+      }
+    },
+    "post": {
+      "id": "semlayer_locate.check",
+      "type": "comprehension",
+      "question": "Why confirm your data source and bring in its context before designing measures?",
+      "options": [
+        {"id": "ground_brief", "label": "The brief must be grounded in real tables, columns, and joins, not guesses"},
+        {"id": "design_first", "label": "Design the measures first and find matching data afterward"}
+      ],
+      "recommended": "ground_brief",
+      "skippable": true,
+      "coaching": {
+        "ground_brief": "Correct — locating real data keeps the brief and every later step honest.",
+        "design_first": "The better answer is to ground the brief in real data first — measures without backing data can't ship."
+      }
+    }
+  },
+  "semlayer_profile": {
+    "post": {
+      "id": "semlayer_profile.check",
+      "type": "comprehension",
+      "question": "What does profiling the schema verify before you commit to measures?",
+      "options": [
+        {"id": "data_supports", "label": "Which candidate measures the actual data — values, joins, coverage — can truly support"},
+        {"id": "pretty_names", "label": "Only that the column names look presentable"}
+      ],
+      "recommended": "data_supports",
+      "skippable": true,
+      "coaching": {
+        "data_supports": "Correct — profiling separates measures the data can back from aspirational ones.",
+        "pretty_names": "The better answer is what the data can support — profiling checks values, joins, and coverage, not cosmetics."
       }
     }
   },
@@ -50,20 +199,88 @@
       }
     }
   },
-  "use_case_selection": {
-    "decision": {
-      "id": "use_case_selection.usecase_confirmation",
-      "type": "confirm",
-      "question": "Confirm the use case you'll build this Genie Agent for before continuing: proceed with the certified use case, or author your own custom use case first.",
+  "semlayer_metric_view": {
+    "post": {
+      "id": "semlayer_metric_view.check",
+      "type": "comprehension",
+      "question": "What does a metric view give a Genie agent that ad-hoc SQL does not?",
       "options": [
-        {"id": "use_certified", "label": "Proceed with the certified use case"},
-        {"id": "author_own", "label": "Author your own custom use case first"}
+        {"id": "governed_semantics", "label": "Governed, reusable measures and dimensions with consistent definitions"},
+        {"id": "faster_only", "label": "Nothing but faster queries; the definitions are identical to ad-hoc SQL"}
       ],
-      "recommended": "use_certified",
-      "skippable": false,
+      "recommended": "governed_semantics",
+      "skippable": true,
       "coaching": {
-        "use_certified": "Confirmed — the certified use case is locked and this step can be completed.",
-        "author_own": "Good override — draft your custom use case and lock it with vibe_set_parameters, then confirm to proceed."
+        "governed_semantics": "Correct — the metric view centralizes definitions so every answer stays consistent.",
+        "faster_only": "The better answer is governed semantics — the point is one trusted definition, not just speed."
+      }
+    }
+  },
+  "semlayer_synonyms": {
+    "post": {
+      "id": "semlayer_synonyms.check",
+      "type": "comprehension",
+      "question": "Why add synonyms to the semantic layer?",
+      "options": [
+        {"id": "map_language", "label": "So the agent maps the words real users say to the right fields and measures"},
+        {"id": "decoration", "label": "They are decorative and do not affect how the agent understands questions"}
+      ],
+      "recommended": "map_language",
+      "skippable": true,
+      "coaching": {
+        "map_language": "Correct — synonyms bridge everyday phrasing to your governed field and measure names.",
+        "decoration": "The better answer is mapping user language — synonyms directly improve how questions resolve."
+      }
+    }
+  },
+  "gagent_describe": {
+    "post": {
+      "id": "gagent_describe.check",
+      "type": "comprehension",
+      "question": "What is the purpose of the agent description?",
+      "options": [
+        {"id": "scope_and_audience", "label": "It tells the agent and users what it covers and who it serves, setting scope"},
+        {"id": "title_only", "label": "It is just a display title with no effect on behavior"}
+      ],
+      "recommended": "scope_and_audience",
+      "skippable": true,
+      "coaching": {
+        "scope_and_audience": "Correct — a clear description sets the agent's scope and audience expectations.",
+        "title_only": "The better answer is scope and audience — the description shapes what the agent takes on."
+      }
+    }
+  },
+  "gagent_instructions": {
+    "post": {
+      "id": "gagent_instructions.check",
+      "type": "comprehension",
+      "question": "What do good agent instructions primarily do?",
+      "options": [
+        {"id": "guardrails_behavior", "label": "Encode domain rules and guardrails that steer how the agent answers"},
+        {"id": "repeat_schema", "label": "Restate the table schema, which the agent already has"}
+      ],
+      "recommended": "guardrails_behavior",
+      "skippable": true,
+      "coaching": {
+        "guardrails_behavior": "Correct — instructions carry the domain rules and guardrails the schema alone can't express.",
+        "repeat_schema": "The better answer is guardrails and behavior — repeating the schema adds little the agent doesn't know."
+      }
+    }
+  },
+  "gagent_verified": {
+    "post": {
+      "id": "gagent_verified.check",
+      "type": "comprehension",
+      "question": "Why add verified queries to the agent?",
+      "options": [
+        {"id": "worked_examples", "label": "They are trusted worked examples that steer the agent toward correct SQL patterns"},
+        {"id": "block_others", "label": "They block users from asking anything else"}
+      ],
+      "recommended": "worked_examples",
+      "skippable": true,
+      "coaching": {
+        "worked_examples": "Correct — verified queries anchor the agent to known-good SQL for common questions.",
+        "block_others": "The better answer is worked examples — verified queries guide, they don't restrict what users can ask."
       }
     }
   },
@@ -82,6 +299,55 @@
         "confirm": "Confirmed — the benchmark step can now be completed.",
         "not_ready": "No problem — keep refining the benchmark answers before confirming."
       }
+    },
+    "post": {
+      "id": "gagent_benchmarks.check",
+      "type": "comprehension",
+      "question": "What are the benchmark questions used for?",
+      "options": [
+        {"id": "measure_quality", "label": "To measure the agent's answer quality objectively and drive the optimize loop"},
+        {"id": "training_data", "label": "As training data the agent memorizes verbatim"}
+      ],
+      "recommended": "measure_quality",
+      "skippable": true,
+      "coaching": {
+        "measure_quality": "Correct — benchmarks give an objective score that the optimize loop works to raise.",
+        "training_data": "The better answer is measuring quality — benchmarks evaluate the agent, they aren't memorized."
+      }
+    }
+  },
+  "gagent_optimize": {
+    "post": {
+      "id": "gagent_optimize.check",
+      "type": "comprehension",
+      "question": "What does the optimize loop do with benchmark results?",
+      "options": [
+        {"id": "iterate_fixes", "label": "Diagnoses failures and iterates instructions, metric view, and verified queries to raise the score"},
+        {"id": "one_shot", "label": "Nothing iterative — the first score is final"}
+      ],
+      "recommended": "iterate_fixes",
+      "skippable": true,
+      "coaching": {
+        "iterate_fixes": "Correct — the loop turns failing benchmarks into targeted fixes, then re-scores.",
+        "one_shot": "The better answer is to iterate — quality comes from measured loops, not a single pass."
+      }
+    }
+  },
+  "gaccel_dashboard": {
+    "post": {
+      "id": "gaccel_dashboard.check",
+      "type": "comprehension",
+      "question": "Why build an AI/BI dashboard alongside the Genie agent?",
+      "options": [
+        {"id": "complementary_surface", "label": "It gives a governed visual surface over the same semantic layer for at-a-glance answers"},
+        {"id": "replaces_agent", "label": "It replaces the Genie agent entirely"}
+      ],
+      "recommended": "complementary_surface",
+      "skippable": true,
+      "coaching": {
+        "complementary_surface": "Correct — the dashboard and agent share one semantic layer and serve different question styles.",
+        "replaces_agent": "The better answer is that it complements the agent — both read the same governed measures."
+      }
     }
   },
   "gaccel_activation": {
@@ -98,6 +364,242 @@
       "coaching": {
         "activate_now": "Recommended — start with the highest-value path and keep the scope intentionally narrow.",
         "defer_activation": "That override is reasonable when evidence or ownership is not ready yet."
+      }
+    },
+    "post": {
+      "id": "gaccel_activation.check",
+      "type": "comprehension",
+      "question": "What does 'activation' mean at this stage of the accelerator?",
+      "options": [
+        {"id": "put_to_work", "label": "Putting the highest-value path into real use for its intended audience"},
+        {"id": "archive", "label": "Archiving the project so nobody can use it"}
+      ],
+      "recommended": "put_to_work",
+      "skippable": true,
+      "coaching": {
+        "put_to_work": "Correct — activation is where the work reaches real users and delivers value.",
+        "archive": "The better answer is putting it to work — activation is the opposite of shelving the project."
+      }
+    }
+  },
+  "activation_table_design": {
+    "post": {
+      "id": "activation_table_design.check",
+      "type": "comprehension",
+      "question": "Why design synced tables for activation?",
+      "options": [
+        {"id": "serve_app", "label": "To serve the semantic-layer results to an operational app with low-latency reads"},
+        {"id": "backup_only", "label": "Only to make a backup copy of the data"}
+      ],
+      "recommended": "serve_app",
+      "skippable": true,
+      "coaching": {
+        "serve_app": "Correct — synced tables put governed data where an operational app can read it fast.",
+        "backup_only": "The better answer is serving the app — synced tables are for live reads, not archival backups."
+      }
+    }
+  },
+  "activation_reverse_sync": {
+    "post": {
+      "id": "activation_reverse_sync.check",
+      "type": "comprehension",
+      "question": "What does creating the synced tables accomplish?",
+      "options": [
+        {"id": "uc_to_lakebase", "label": "It syncs governed UC data into Lakebase so an app can read it operationally"},
+        {"id": "delete_source", "label": "It deletes the source tables in Unity Catalog"}
+      ],
+      "recommended": "uc_to_lakebase",
+      "skippable": true,
+      "coaching": {
+        "uc_to_lakebase": "Correct — the sync lands governed data in Lakebase for low-latency app access.",
+        "delete_source": "The better answer is syncing UC into Lakebase — the source tables stay right where they are."
+      }
+    }
+  },
+  "activation_app_design": {
+    "post": {
+      "id": "activation_app_design.check",
+      "type": "comprehension",
+      "question": "Why design the analytics app before building it?",
+      "options": [
+        {"id": "plan_ux", "label": "To plan the audience, surfaces, and flows so the build serves the use case"},
+        {"id": "skip_design", "label": "Design is unnecessary; start coding and see what happens"}
+      ],
+      "recommended": "plan_ux",
+      "skippable": true,
+      "coaching": {
+        "plan_ux": "Correct — a quick design keeps the build aligned to the audience and the use case.",
+        "skip_design": "The better answer is to plan first — coding without a design tends to drift from the use case."
+      }
+    }
+  },
+  "activation_build_wire": {
+    "post": {
+      "id": "activation_build_wire.check",
+      "type": "comprehension",
+      "question": "What are you doing when you build and wire the analytics app?",
+      "options": [
+        {"id": "connect_data", "label": "Connecting the UI to the governed data and the agent so users get real answers"},
+        {"id": "static_mock", "label": "Shipping a static mockup with no data connection"}
+      ],
+      "recommended": "connect_data",
+      "skippable": true,
+      "coaching": {
+        "connect_data": "Correct — wiring binds the UI to real governed data and the agent.",
+        "static_mock": "The better answer is connecting the data — a static mockup can't answer real questions."
+      }
+    }
+  },
+  "activation_wire_lakebase": {
+    "post": {
+      "id": "activation_wire_lakebase.check",
+      "type": "comprehension",
+      "question": "Why wire the app to Lakebase?",
+      "options": [
+        {"id": "operational_reads", "label": "For fast operational reads of the synced, governed data from the app"},
+        {"id": "cold_storage", "label": "To move the data into cold archival storage"}
+      ],
+      "recommended": "operational_reads",
+      "skippable": true,
+      "coaching": {
+        "operational_reads": "Correct — Lakebase gives the app low-latency reads of the synced data.",
+        "cold_storage": "The better answer is operational reads — Lakebase serves live app traffic, not cold archives."
+      }
+    }
+  },
+  "activation_wire_genie": {
+    "post": {
+      "id": "activation_wire_genie.check",
+      "type": "comprehension",
+      "question": "What does wiring Genie into the app give users?",
+      "options": [
+        {"id": "nl_in_app", "label": "Natural-language questions answered in-app against the governed semantic layer"},
+        {"id": "hardcoded_only", "label": "Only hard-coded charts with no natural-language ability"}
+      ],
+      "recommended": "nl_in_app",
+      "skippable": true,
+      "coaching": {
+        "nl_in_app": "Correct — wiring Genie lets users ask in natural language over the governed layer.",
+        "hardcoded_only": "The better answer is natural language in-app — that is exactly what wiring Genie adds."
+      }
+    }
+  },
+  "activation_deploy_validate": {
+    "post": {
+      "id": "activation_deploy_validate.check",
+      "type": "comprehension",
+      "question": "Why validate after deploying?",
+      "options": [
+        {"id": "confirm_works", "label": "To confirm the deployed app and agent actually work end to end for real users"},
+        {"id": "assume_ok", "label": "Deploying guarantees correctness; validation is unnecessary"}
+      ],
+      "recommended": "confirm_works",
+      "skippable": true,
+      "coaching": {
+        "confirm_works": "Correct — validation proves the deployed experience works before users rely on it.",
+        "assume_ok": "The better answer is to validate — a successful deploy doesn't guarantee correct behavior."
+      }
+    }
+  },
+  "ontology_domain": {
+    "post": {
+      "id": "ontology_domain.check",
+      "type": "comprehension",
+      "question": "Why model the domain and its subdomains?",
+      "options": [
+        {"id": "shared_meaning", "label": "To give the agent a shared map of concepts and how they relate, improving routing and answers"},
+        {"id": "paperwork", "label": "It is documentation paperwork with no effect on the agent"}
+      ],
+      "recommended": "shared_meaning",
+      "skippable": true,
+      "coaching": {
+        "shared_meaning": "Correct — a domain model helps the agent interpret questions and route them well.",
+        "paperwork": "The better answer is shared meaning — the ontology actively shapes how questions are understood."
+      }
+    }
+  },
+  "ontology_pages": {
+    "post": {
+      "id": "ontology_pages.check",
+      "type": "comprehension",
+      "question": "What is the purpose of authoring ontology pages?",
+      "options": [
+        {"id": "concept_context", "label": "To capture concept context the agent uses to interpret questions correctly"},
+        {"id": "marketing", "label": "To create marketing pages for external users"}
+      ],
+      "recommended": "concept_context",
+      "skippable": true,
+      "coaching": {
+        "concept_context": "Correct — pages carry the concept context that grounds the agent's understanding.",
+        "marketing": "The better answer is concept context — ontology pages inform the agent, not external marketing."
+      }
+    }
+  },
+  "ontology_routing": {
+    "post": {
+      "id": "ontology_routing.check",
+      "type": "comprehension",
+      "question": "What does the routing page do?",
+      "options": [
+        {"id": "direct_questions", "label": "Directs incoming questions to the right domain or agent based on the ontology"},
+        {"id": "random", "label": "Routes questions at random"}
+      ],
+      "recommended": "direct_questions",
+      "skippable": true,
+      "coaching": {
+        "direct_questions": "Correct — the routing page sends each question to the domain best suited to answer it.",
+        "random": "The better answer is directing questions — routing is deliberate, guided by the ontology."
+      }
+    }
+  },
+  "iterate_enhance": {
+    "post": {
+      "id": "iterate_enhance.check",
+      "type": "comprehension",
+      "question": "Why is iterate-and-enhance an explicit step?",
+      "options": [
+        {"id": "continuous_improve", "label": "Real quality comes from measured iteration, not a single first pass"},
+        {"id": "done_once", "label": "Once built, nothing should ever change"}
+      ],
+      "recommended": "continuous_improve",
+      "skippable": true,
+      "coaching": {
+        "continuous_improve": "Correct — iterating on real feedback is how the agent and app get genuinely good.",
+        "done_once": "The better answer is continuous improvement — the first build is a starting point, not the finish."
+      }
+    }
+  },
+  "redeploy_test": {
+    "post": {
+      "id": "redeploy_test.check",
+      "type": "comprehension",
+      "question": "Why redeploy and test after making changes?",
+      "options": [
+        {"id": "verify_live", "label": "To verify the changes actually work in the deployed environment users hit"},
+        {"id": "local_enough", "label": "Local edits are enough; deployed testing is redundant"}
+      ],
+      "recommended": "verify_live",
+      "skippable": true,
+      "coaching": {
+        "verify_live": "Correct — only a redeploy-and-test proves the change works where users actually run it.",
+        "local_enough": "The better answer is to verify live — local edits can behave differently once deployed."
+      }
+    }
+  },
+  "workspace_cleanup": {
+    "post": {
+      "id": "workspace_cleanup.check",
+      "type": "comprehension",
+      "question": "Why clean up the workspace at the end?",
+      "options": [
+        {"id": "avoid_cost_clutter", "label": "To remove orphaned resources that cost money or clutter the workspace"},
+        {"id": "never", "label": "Never clean up; leftover resources are always harmless"}
+      ],
+      "recommended": "avoid_cost_clutter",
+      "skippable": true,
+      "coaching": {
+        "avoid_cost_clutter": "Correct — cleanup reclaims cost and keeps the workspace tidy for the next project.",
+        "never": "The better answer is to clean up — orphaned resources can quietly accrue cost and clutter."
       }
     }
   }
