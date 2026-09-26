@@ -116,12 +116,15 @@ def get_section_input_content(industry: str, use_case: str, section_tag: str, pr
         )
     
     # Replace parameters in templates
-    input_text = template.get('input', '')
+    # `or ''` (not a default arg): a NULL column deserializes to a key that is
+    # PRESENT with value None, so `.get(k, '')` would return None and crash the
+    # `.replace` loop below. Coerce None -> '' for every text field.
+    input_text = template.get('input') or ''
     input_template_raw = input_text  # Keep the raw template with variables for reference
-    system_prompt = template.get('system_prompt', '')
-    how_to_apply = template.get('how_to_apply', '')
-    expected_output = template.get('expected_output', '')
-    user_trigger_prompt = template.get('user_trigger_prompt', '')
+    system_prompt = template.get('system_prompt') or ''
+    how_to_apply = template.get('how_to_apply') or ''
+    expected_output = template.get('expected_output') or ''
+    user_trigger_prompt = template.get('user_trigger_prompt') or ''
     how_to_apply_images = template.get('how_to_apply_images', [])
     expected_output_images = template.get('expected_output_images', [])
     bypass_llm = template.get('bypass_llm', False)  # Check if this section bypasses LLM

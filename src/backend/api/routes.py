@@ -342,17 +342,22 @@ def _parse_image_field(value: Any) -> List[Any]:
 
 
 def _section_row_to_template(row: Dict[str, Any]) -> Dict[str, Any]:
-    """Convert a section_input_prompts row into the legacy template dict shape."""
+    """Convert a section_input_prompts row into the legacy template dict shape.
+
+    Text fields use `or ""` (not a default arg): a nullable column deserializes
+    to a key that is PRESENT with value None, so `.get(k, "")` would leak None
+    downstream and crash the assembler's `.replace` substitution.
+    """
     return {
-        "input": row.get("input_template", ""),
-        "system_prompt": row.get("system_prompt", ""),
-        "how_to_apply": row.get("how_to_apply", ""),
-        "expected_output": row.get("expected_output", ""),
-        "user_trigger_prompt": row.get("user_trigger_prompt", ""),
+        "input": row.get("input_template") or "",
+        "system_prompt": row.get("system_prompt") or "",
+        "how_to_apply": row.get("how_to_apply") or "",
+        "expected_output": row.get("expected_output") or "",
+        "user_trigger_prompt": row.get("user_trigger_prompt") or "",
         "how_to_apply_images": _parse_image_field(row.get("how_to_apply_images")),
         "expected_output_images": _parse_image_field(row.get("expected_output_images")),
-        "section_title": row.get("section_title", ""),
-        "section_description": row.get("section_description", ""),
+        "section_title": row.get("section_title") or "",
+        "section_description": row.get("section_description") or "",
         "order_number": row.get("order_number", 99),
         "bypass_llm": row.get("bypass_llm", False),
     }

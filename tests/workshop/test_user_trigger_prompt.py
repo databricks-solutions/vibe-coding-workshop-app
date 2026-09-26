@@ -213,3 +213,96 @@ def test_get_and_next_step_descriptions_present_the_trigger_and_wait():
         assert "user_trigger_prompt" in desc, name
         low = desc.lower()
         assert "wait" in low or "auto-run" in low, name
+
+
+# --- 5. NULL-path regression (the production 'NoneType'.replace crash) --------
+# A nullable column deserializes to a key that is PRESENT with value None, so
+# `.get(k, "")` returns None (not the default) and the assembler's `.replace`
+# loop crashed with "'NoneType' object has no attribute 'replace'". These pin the
+# coercion so a NULL user_trigger_prompt (every non-authored step) never crashes.
+
+
+def test_section_row_to_template_coerces_null_text_columns_to_empty():
+    template = routes._section_row_to_template({
+        "input_template": None,
+        "system_prompt": None,
+        "how_to_apply": None,
+        "expected_output": None,
+        "user_trigger_prompt": None,
+        "section_title": None,
+        "section_description": None,
+    })
+    for field in (
+        "input", "system_prompt", "how_to_apply", "expected_output",
+        "user_trigger_prompt", "section_title", "section_description",
+    ):
+        assert template[field] == "", field
+        assert isinstance(template[field], str), field
+
+
+def _null_trigger_default_rows():
+    """__default__ row for TAG whose user_trigger_prompt is NULL (None)."""
+    return [{
+        "section_tag": TAG,
+        "coding_assistant": routes.DEFAULT_CODING_ASSISTANT_KEY,
+        "input_template": "Body for {use_case_title}.",
+        "system_prompt": "System.",
+        "section_title": f"Title {TAG}",
+        "section_description": f"Desc {TAG}",
+        "order_number": 3,
+        "version": 1,
+        "how_to_apply": "How.",
+        "expected_output": "Expected.",
+        "user_trigger_prompt": None,
+        "bypass_llm": False,
+        "how_to_apply_images": [],
+        "expected_output_images": [],
+    }]
+
+
+def _null_default_fallback_rows():
+    """Only a 'default'-tag row (the project_setup fallback), trigger NULL, and
+    NO project_setup row — reproduces the exact production crash path."""
+    return [{
+        "section_tag": "default",
+        "coding_assistant": routes.DEFAULT_CODING_ASSISTANT_KEY,
+        "input_template": "Default body for {use_case_title}.",
+        "system_prompt": "Default system.",
+        "section_title": "Default",
+        "section_description": "Default desc",
+        "order_number": 99,
+        "version": 1,
+        "how_to_apply": "How.",
+        "expected_output": "Expected.",
+        "user_trigger_prompt": None,
+        "bypass_llm": False,
+        "how_to_apply_images": [],
+        "expected_output_images": [],
+    }]
+
+
+def _seed(monkeypatch, rows_fn):
+    routes.clear_lakebase_cache()
+    monkeypatch.setattr(routes, "get_usecase_descriptions_from_lakebase", _usecase_rows)
+    monkeypatch.setattr(routes, "get_section_input_prompts_from_lakebase", rows_fn)
+    monkeypatch.setattr(routes, "get_workshop_parameters_sync", lambda: dict(_WORKSHOP_PARAMS))
+
+
+def test_assembler_survives_null_user_trigger_prompt(monkeypatch):
+    _seed(monkeypatch, _null_trigger_default_rows)
+    try:
+        out = assembler.get_section_input_content("retail", "curbside_eta", TAG)
+    finally:
+        routes.clear_lakebase_cache()
+    assert out["user_trigger_prompt"] == ""
+
+
+def test_assembler_project_setup_default_fallback_null_trigger(monkeypatch):
+    _seed(monkeypatch, _null_default_fallback_rows)
+    try:
+        out = assembler.get_section_input_content(
+            "retail", "curbside_eta", "project_setup", coding_assistant_override="genie-code"
+        )
+    finally:
+        routes.clear_lakebase_cache()
+    assert out["user_trigger_prompt"] == ""
