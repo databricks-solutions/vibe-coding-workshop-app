@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import contextvars
+import hashlib
 import json
 import logging
 import threading
@@ -52,6 +53,16 @@ ORIENTATION_PREAMBLE = (
     "The track saves progress server-side and does not block, except for one benchmark hard stop. "
     "You can mirror progress in the web UI using the same session. If tools go missing, disconnect "
     "other MCP servers to stay within the 20-tool budget."
+)
+
+# Re-injected on EVERY step that authors a trigger (not just step 1): MCP is
+# advisory, so the wait doctrine has to ride each payload or the agent drifts
+# back into auto-running the next step (Workstream #4).
+STEP_WAIT_DIRECTIVE = (
+    "STOP — this step is learner-triggered. Surface `user_trigger_prompt` to the "
+    "learner verbatim and WAIT for them to send it back. Do not call "
+    "vibe_complete_step or vibe_next_step until the learner responds in a fresh "
+    "turn; never chain steps on your own."
 )
 
 GETTING_STARTED_GUIDE = """# Getting started
@@ -143,6 +154,9 @@ class ExplainabilityPayload(BaseModel):
     next: StepReference
     interaction: dict[str, Interaction | None] | None = None
     orientation: str | None = None
+    # Per-step wait doctrine, present on every step that authors a trigger so the
+    # agent re-reads "present the trigger and WAIT" on each turn (Workstream #4).
+    instruction: str | None = None
     # Use-case discovery inlined into the tool payload (Workstream D): the Genie
     # Code agent cannot read vibe:// resources, so the use_case_selection step
     # carries the curated industry options here, plus the certified-first use
@@ -422,12 +436,30 @@ def decision_capture_key(section_tag: str, interaction_id: str) -> str:
     return f"interaction_decision:{section_tag}:{interaction_id}"
 
 
+def _quiz_view(interaction: Interaction) -> Interaction:
+    """Redact the answer key from a comprehension check before it ships.
+
+    Comprehension quizzes must be *asked*, not announced: leaking `recommended`
+    (the correct option) or `coaching` (the per-option verdicts) into the step
+    payload lets the agent front-run the answer. Strip both for
+    ``type == "comprehension"`` only — decisions/confirms legitimately surface
+    their recommended default. The verdict still reaches the learner AFTER they
+    answer, via `vibe_submit_answer`/`_resolve_interaction_answer`, which reads
+    the un-redacted block straight from the manifest (`_find_interaction`), so
+    silence-accepts-recommended is unaffected.
+    """
+
+    if interaction.type != "comprehension":
+        return interaction
+    return interaction.model_copy(update={"recommended": None, "coaching": {}})
+
+
 def _interaction_payload(section_tag: str) -> dict[str, Interaction | None] | None:
     blocks = manifest.interactions_for(section_tag)
     if not blocks:
         return None
     return {
-        slot: Interaction.model_validate(block) if block is not None else None
+        slot: _quiz_view(Interaction.model_validate(block)) if block is not None else None
         for slot in manifest.INTERACTION_SLOTS
         for block in [blocks.get(slot)]
     }
@@ -466,6 +498,152 @@ def _resolve_interaction_answer(
     return resolved, was_default, coaching
 
 
+# Cache of FMAPI-generated step prompts, keyed by (session, section, input-hash).
+# The web path renders each copy-paste prompt through the app's serving endpoint
+# (`generate_prompt_content_with_llm`); the MCP path must match it for
+# consistency, but re-generating on every `vibe_get_step`/`vibe_next_step` read
+# would be slow and costly. Cache only successful ("llm_generated") outputs so a
+# mock/error result is retried when the endpoint comes back.
+_STEP_PROMPT_CACHE: dict[tuple[str, str, str], str] = {}
+
+
+def _generate_step_prompt(
+    industry: str,
+    use_case: str,
+    section_tag: str,
+    assembled: dict[str, Any],
+    previous_outputs: dict[str, str] | None,
+    session_id: str | None,
+) -> str | None:
+    """Generate the copy-paste prompt via the app FMAPI, matching the web path.
+
+    Returns the LLM-generated prompt, or ``None`` to signal "use the assembled
+    template verbatim". None is returned for ``bypass_llm`` sections and whenever
+    the endpoint is unavailable (mock/error/exception) so the step never fails to
+    render — identical degradation to the web path's own fallback.
+    """
+
+    if assembled.get("bypass_llm"):
+        return None
+    input_text = assembled.get("input") or ""
+    if not input_text:
+        return None
+    cache_key = (
+        session_id or "",
+        section_tag,
+        hashlib.sha256(input_text.encode("utf-8")).hexdigest(),
+    )
+    cached = _STEP_PROMPT_CACHE.get(cache_key)
+    if cached is not None:
+        return cached
+    try:
+        from .api.routes import generate_prompt_content_with_llm
+
+        result = _run_async_blocking(
+            lambda: generate_prompt_content_with_llm(
+                industry=industry,
+                use_case=use_case,
+                section_tag=section_tag,
+                previous_outputs=previous_outputs,
+                session_id=session_id,
+            )
+        )
+    except Exception:  # noqa: BLE001 — generation is best-effort; degrade to template
+        logger.warning(
+            "FMAPI step-prompt generation failed for %s; using assembled template",
+            section_tag,
+            exc_info=True,
+        )
+        return None
+    # Only a genuine LLM generation replaces the template. Every other source
+    # (mock_llm, fallback_due_to_error, bypass_llm, input_only_no_llm) already
+    # returns the raw input, so we keep the MCP-assembled (genie-code) template.
+    if not isinstance(result, dict) or result.get("source") != "llm_generated":
+        return None
+    generated = (result.get("prompt") or "").strip()
+    if not generated:
+        return None
+    _STEP_PROMPT_CACHE[cache_key] = generated
+    return generated
+
+
+# Repo the workshop clones from. Kept in lockstep with the genie-code variant in
+# frontend `src/components/SetUpProjectStep.tsx` (REPO_URL / the three genie-*
+# commands / genieVerifyPrompt) — the web UI and the MCP path must run the SAME
+# one-time setup. There is no shared TS<->Py module, so this mirror is the single
+# backend copy; update both together.
+_WORKSHOP_TEMPLATE_REPO = "https://github.com/databricks-solutions/vibe-coding-workshop-template.git"
+
+
+def _project_setup_content(email: str) -> dict[str, str]:
+    """Render the Genie Code one-time setup (clone -> publish skills -> validate).
+
+    ``project_setup`` authors no seed row, so the MCP path used to surface an
+    empty template. The real setup lives in the web UI's ``SetUpProjectStep``
+    (genie-code variant); this mirrors it so the agent runs the exact same three
+    gated commands transparently and reports the result, instead of skipping the
+    step. ``email`` falls back to a visible placeholder when the session has not
+    resolved the learner's identity yet (same as the frontend).
+    """
+
+    email = email.strip() or "<your_email>"
+    user_root = f"/Workspace/Users/{email}"
+    project_path = f"{user_root}/vibe-coding-workshop"
+    skill_check = (
+        f"{user_root}/.assistant/skills/vibe-coding-workshop/"
+        "skills/genie-code-environment/SKILL.md"
+    )
+    clone_cmd = f"git clone {_WORKSHOP_TEMPLATE_REPO} {project_path}"
+    copy_cmd = (
+        f'D={user_root}; rm -rf "$D/.assistant/skills/vibe-coding-workshop"; '
+        'mkdir -p "$D/.assistant/skills"; '
+        'cp -R "$D/vibe-coding-workshop" "$D/.assistant/skills/"'
+    )
+    validate_cmd = (
+        f'D={user_root}; '
+        'test -d "$D/vibe-coding-workshop/.git" && echo "✅ 1/2 project cloned" '
+        '|| echo "❌ 1/2 re-run command 1"; '
+        'test -f "$D/.assistant/skills/vibe-coding-workshop/skills/'
+        'genie-code-environment/SKILL.md" && echo "✅ 2/2 skills published" '
+        '|| echo "❌ 2/2 re-run command 2"'
+    )
+    prompt = (
+        "One-time project setup for Genie Code. Run these three terminal commands "
+        "in order in the Genie Code terminal, show the learner each command and its "
+        "output, and STOP if validation is not two green checks.\n\n"
+        f"1) Clone the workshop into your project folder:\n{clone_cmd}\n\n"
+        f"2) Publish the whole clone into your skills folder:\n{copy_cmd}\n\n"
+        f"3) Validate (gate) — do not continue until you see two ✅:\n{validate_cmd}\n\n"
+        "Then, in ONE executeCode block, re-verify with os.path.exists (NOT "
+        f"listFiles): {project_path}/.git and {skill_check}. If either is missing, "
+        "STOP and tell the learner which command to re-run. Finally load the "
+        "behavior manifest with readSkillFile(\"skills/vibe-coding-workshop/skills/"
+        "genie-code-environment/SKILL.md\") and confirm 'Setup verified ✅'."
+    )
+    how_to_apply = (
+        "You are inside Genie Code — pre-authenticated and serverless (no "
+        "`databricks auth login`, no model setup). Present each command verbatim, "
+        "run it, and report the output. Command 2 is safe to re-run. The paths are "
+        f"filled with the learner's Databricks email ({email})."
+    )
+    expected_output = (
+        "The validate step prints two green checks:\n"
+        "✅ 1/2 project cloned\n"
+        "✅ 2/2 skills published\n"
+        "and the re-verify confirms both paths exist before the manifest loads."
+    )
+    user_trigger_prompt = (
+        "Set up my project: clone the workshop repo into my workspace, publish the "
+        "skills folder, and validate that setup is complete."
+    )
+    return {
+        "prompt": prompt,
+        "how_to_apply": how_to_apply,
+        "expected_output": expected_output,
+        "user_trigger_prompt": user_trigger_prompt,
+    }
+
+
 def _step_payload(
     track: str,
     state: engine.SessionState,
@@ -483,15 +661,39 @@ def _step_payload(
         session_id=session_id,
         coding_assistant_override=DEFAULT_CODING_ASSISTANT,
     )
+    if step.sectionTag == "project_setup":
+        # Surface the real one-time setup (clone -> publish skills -> validate ->
+        # verify) that otherwise lives only in the web UI. Fixed procedure, so no
+        # FMAPI call; the email drives the learner's /Workspace paths.
+        setup = _project_setup_content(str(state.session_parameters.get("user_email") or ""))
+        prompt = setup["prompt"]
+        how_to_apply = setup["how_to_apply"]
+        expected_output = setup["expected_output"]
+        user_trigger_prompt = setup["user_trigger_prompt"]
+    else:
+        # Match the web path: render the prompt through the app FMAPI, falling back
+        # to the assembled template when the endpoint is bypassed or unavailable.
+        generated_prompt = _generate_step_prompt(
+            industry=industry,
+            use_case=use_case,
+            section_tag=step.sectionTag,
+            assembled=assembled,
+            previous_outputs=previous_outputs,
+            session_id=session_id,
+        )
+        prompt = generated_prompt if generated_prompt is not None else assembled.get("input", "")
+        how_to_apply = assembled.get("how_to_apply", "")
+        expected_output = assembled.get("expected_output", "")
+        user_trigger_prompt = assembled.get("user_trigger_prompt", "")
     orientation = ORIENTATION_PREAMBLE if not state.completed_gates and step.order == 1 else None
     payload = ExplainabilityPayload(
         sectionTag=step.sectionTag,
         title=step.title,
         why=step.why or "",
-        prompt=assembled.get("input", ""),
-        how_to_apply=assembled.get("how_to_apply", ""),
-        expected_output=assembled.get("expected_output", ""),
-        user_trigger_prompt=assembled.get("user_trigger_prompt", ""),
+        prompt=prompt,
+        how_to_apply=how_to_apply,
+        expected_output=expected_output,
+        user_trigger_prompt=user_trigger_prompt,
         gate=step.gate,
         requiresGate=step.requiresGate,
         consumes=list(step.consumes),
@@ -500,6 +702,8 @@ def _step_payload(
         next=_next_reference(track, state, step),
         interaction=_interaction_payload(step.sectionTag),
         orientation=orientation,
+        # The wait doctrine rides every triggered step, not just step 1.
+        instruction=STEP_WAIT_DIRECTIVE if user_trigger_prompt else None,
     )
     # Workstream D: the use-case picker inlines its options so the Genie Code agent
     # never has to read a vibe:// resource. Best-effort — a data-layer hiccup must
@@ -552,6 +756,12 @@ def vibe_start_track(
     # read path (SPA bridge, the vibe://session/{id}/state resource) resolves
     # the genie-code fork too. setdefault never clobbers an explicit choice.
     state.session_parameters.setdefault("coding_assistant", DEFAULT_CODING_ASSISTANT)
+    # Persist the learner's email so the project_setup step can render their
+    # /Workspace/Users/<email> clone + skills paths (Workstream #5). setdefault so
+    # an explicit value is never clobbered; only a real address is stored.
+    _email = _request_user(context)
+    if "@" in _email:
+        state.session_parameters.setdefault("user_email", _email)
     if not session_id and is_lakebase_configured():
         save_session(
             session_id=resolved,
@@ -572,11 +782,10 @@ def vibe_start_track(
 @mcp.tool(
     name="vibe_get_step",
     description=(
-        "Fetch one workshop step to present. Returns the prompt to run **verbatim**, plus why it "
-        "matters, how to apply it, expected output, the gate, the next step, and `user_trigger_prompt` "
-        "— the plain-English ask to hand the learner so THEY start the work (present it and wait; never "
-        "auto-run). Optional `interaction` to ask in chat. Args: `session_id`; `sectionTag` (optional, "
-        "defaults to current)."
+        "Fetch one workshop step to present. Returns the prompt to run **verbatim**, why it matters, "
+        "how to apply it, expected output, the gate, the next step, and `user_trigger_prompt` — the "
+        "plain-English ask you MUST show the learner verbatim BEFORE doing any work, then WAIT for them "
+        "to send it (never auto-run or chain steps). Args: `session_id`; `sectionTag` (optional)."
     ),
     annotations=ToolAnnotations(
         readOnlyHint=True,
@@ -614,10 +823,10 @@ def vibe_get_step(
 @mcp.tool(
     name="vibe_next_step",
     description=(
-        "Advance to the first not-yet-completed step whose prerequisite gate is satisfied, and return "
-        "it (same shape as `vibe_get_step`, incl. `user_trigger_prompt`). Present the step, hand the "
-        "learner its trigger prompt, then WAIT for them to submit it — never auto-run. Returns "
-        "`{done:true}` when complete. Call after a step's gate is recorded. Args: `session_id`."
+        "Advance to the first not-yet-completed step whose prerequisite gate is satisfied and return "
+        "it (same shape as `vibe_get_step`, incl. `user_trigger_prompt`). Present it, show the trigger "
+        "verbatim, then WAIT for the learner to submit it — never auto-run or chain steps without a "
+        "fresh learner turn. Returns `{done:true}` when complete. Args: `session_id`."
     ),
     annotations=ToolAnnotations(
         readOnlyHint=True,
@@ -775,10 +984,10 @@ def _legacy_progress(
     name="vibe_complete_step",
     description=(
         "Record that the current step's gate passed and store its captured output (the gate = this "
-        "call, next-action-as-approval); advances the walk. Call only after the learner triggered and "
-        "ran the step. If its `interaction` has a `post` check, ask it via `vibe_submit_answer` first "
-        "(only while current). Not for `execution:ui-driven` steps. Args: `session_id`, `sectionTag`, "
-        "`captured_output`."
+        "call); advances the walk. Call ONLY after the learner triggered and ran the step in a fresh "
+        "turn — never chain it yourself. If its `interaction` has a `post` check, ask it via "
+        "`vibe_submit_answer` first. Not for `execution:ui-driven` steps. Args: `session_id`, "
+        "`sectionTag`, `captured_output`."
     ),
     annotations=ToolAnnotations(
         readOnlyHint=False,
@@ -815,6 +1024,16 @@ def vibe_complete_step(
             and sectionTag == "use_case_selection"
             and _custom_usecase_locked(state.session_parameters)
         ):
+            # Workstream #3: a locked custom use case must have been drafted via the
+            # app FMAPI (draft_custom). Without that marker, refuse the unblock and
+            # steer the agent to the draft rather than a self-authored description.
+            if not state.session_parameters.get("custom_draft_ready"):
+                return _error_result(  # type: ignore[return-value]
+                    "CUSTOM_DRAFT_REQUIRED",
+                    "Draft the custom use case through the app FMAPI first: call "
+                    'vibe_set_parameters(mode="draft_custom"), then confirm the draft.',
+                    sectionTag=sectionTag,
+                )
             confirmed = True
         if not confirmed:
             message = (
@@ -1040,12 +1259,35 @@ def vibe_set_parameters(
             mode="generate",
         )
         drafted = _run_async_blocking(lambda: generate_usecase_description(request_body))
+        # Record that the app FMAPI produced a draft for THIS session. The confirm
+        # gate (both here and in vibe_complete_step) requires this marker, so a
+        # custom use case can never be locked from a self-authored description —
+        # the learner must route through the FMAPI draft first (Workstream #3).
+        resolved_params["custom_draft_ready"] = True
+        resolved_params["custom_drafted_description"] = drafted
+        save_session(session_id=session_id, session_parameters=resolved_params)
         return SetParametersResult(
             resolved_params=resolved_params,
             missing_required=_selection_missing_required(resolved_params),
             drafted_description=drafted,
             available_industries=echo_industries,
             available_use_cases=echo_use_cases,
+        )
+
+    # Workstream #3: a custom use case cannot be locked from a self-authored
+    # description — it must come from the app FMAPI draft. Reject a completed
+    # custom selection (source=custom, nothing missing) that never ran
+    # draft_custom (no ``custom_draft_ready`` marker), pointing the agent at it.
+    if (
+        _is_selection_call(params)
+        and _custom_usecase_locked(resolved_params)
+        and not resolved_params.get("custom_draft_ready")
+    ):
+        return _error_result(  # type: ignore[return-value]
+            "CUSTOM_DRAFT_REQUIRED",
+            'Custom use cases must be drafted through the app FMAPI first. Call '
+            'vibe_set_parameters(mode="draft_custom") with use_case_source=custom '
+            "and a use_case_label or use_case_hints, then confirm the returned draft.",
         )
 
     # Whether THIS call is a use-case selection is decided from the incoming

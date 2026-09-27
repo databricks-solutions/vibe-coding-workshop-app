@@ -145,6 +145,9 @@ def test_set_parameters_persists_curated_selection(session_store):
 
 def test_set_parameters_persists_custom_selection_with_description(session_store):
     store, _, _ = session_store
+    # Custom locks now require the FMAPI draft first (Workstream #3); the marker
+    # stands in for a prior vibe_set_parameters(mode="draft_custom") call.
+    store[SESSION_ID]["session_parameters"]["custom_draft_ready"] = True
 
     result = mcp_server.vibe_set_parameters(
         SESSION_ID,
@@ -305,6 +308,9 @@ def test_prd_generation_before_selection_is_step_locked(session_store):
 def test_custom_path_proceeds_after_lock_without_use_certified(session_store, no_community_writes):
     store, _, _ = session_store
     store[SESSION_ID]["completed_gates"] = ["project_setup"]
+    # The FMAPI draft ran first (Workstream #3) — its marker lets the custom lock
+    # unblock without a 'use_certified' answer.
+    store[SESSION_ID]["session_parameters"]["custom_draft_ready"] = True
 
     # Learner authors + locks a custom UC — no 'use_certified' answer submitted.
     mcp_server.vibe_set_parameters(

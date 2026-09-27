@@ -72,12 +72,37 @@ def test_get_step_exposes_interaction_block_schema(session_store):
     interaction = payload.interaction["pre"]
     assert interaction is not None
     assert interaction.id
-    assert interaction.type in {"comprehension", "decision", "confirm"}
+    assert interaction.type == "comprehension"
     assert interaction.question
-    assert interaction.recommended
     assert interaction.skippable is True
     assert interaction.options
-    assert set(interaction.coaching) == {option.id for option in interaction.options}
+    # A comprehension quiz must be ASKED, not announced: the answer key is
+    # redacted from the payload so the agent cannot front-run it. The verdict
+    # still reaches the learner AFTER they answer, via vibe_submit_answer.
+    assert interaction.recommended is None
+    assert interaction.coaching == {}
+
+
+def test_comprehension_payload_redacts_answer_key_but_decisions_keep_it():
+    # Comprehension quizzes ship without recommended/coaching...
+    quiz = mcp_server._interaction_payload("project_setup")
+    assert quiz is not None
+    pre = quiz["pre"]
+    assert pre is not None and pre.type == "comprehension"
+    assert pre.recommended is None
+    assert pre.coaching == {}
+
+    # ...but gating decisions/confirms still surface their recommended default
+    # (that guidance is legitimate, not a test answer).
+    gate = mcp_server._interaction_payload("gagent_benchmarks")
+    assert gate is not None
+    confirm = next(
+        block
+        for block in gate.values()
+        if block is not None and block.type in {"decision", "confirm"}
+    )
+    assert confirm.recommended
+    assert set(confirm.coaching) == {option.id for option in confirm.options}
 
 
 def test_submit_answer_records_one_row_and_uses_recommended_default(session_store):
@@ -166,6 +191,10 @@ def test_empty_benchmark_confirmation_does_not_unblock(session_store):
 
 
 def test_interaction_is_sibling_and_prompt_remains_verbatim(monkeypatch, session_store):
+    store, _, _ = session_store
+    # use_case_selection (not project_setup, which is now a fixed setup procedure)
+    # is a normal content step whose prompt must survive its sibling interaction.
+    store[SESSION_ID]["completed_gates"] = ["project_setup"]
     prompt = "EXACT PROMPT BODY\nDo not rewrite this text."
     monkeypatch.setattr(
         mcp_server.assembler,
@@ -177,7 +206,7 @@ def test_interaction_is_sibling_and_prompt_remains_verbatim(monkeypatch, session
         },
     )
 
-    payload = mcp_server.vibe_get_step(SESSION_ID, "project_setup")
+    payload = mcp_server.vibe_get_step(SESSION_ID, "use_case_selection")
 
     assert payload.prompt == prompt
     assert payload.interaction is not None

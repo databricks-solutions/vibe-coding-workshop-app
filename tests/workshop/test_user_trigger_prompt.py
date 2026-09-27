@@ -163,6 +163,36 @@ def test_step_payload_trigger_degrades_to_empty_string(monkeypatch):
     assert payload.user_trigger_prompt == ""
 
 
+def test_step_payload_carries_wait_directive_when_triggered(monkeypatch):
+    # Workstream #4: the wait doctrine rides EVERY triggered step, not just step 1.
+    monkeypatch.setattr(
+        mcp_server.assembler,
+        "get_section_input_content",
+        lambda **kwargs: {
+            "input": "body",
+            "how_to_apply": "",
+            "expected_output": "",
+            "user_trigger_prompt": "Do the thing.",
+        },
+    )
+    payload = mcp_server._step_payload(
+        mcp_server.DEFAULT_TRACK, mcp_server.engine.SessionState(), _step(TAG)
+    )
+    assert payload.instruction == mcp_server.STEP_WAIT_DIRECTIVE
+
+
+def test_step_payload_no_wait_directive_without_trigger(monkeypatch):
+    monkeypatch.setattr(
+        mcp_server.assembler,
+        "get_section_input_content",
+        lambda **kwargs: {"input": "body", "how_to_apply": "", "expected_output": ""},
+    )
+    payload = mcp_server._step_payload(
+        mcp_server.DEFAULT_TRACK, mcp_server.engine.SessionState(), _step(TAG)
+    )
+    assert payload.instruction is None
+
+
 # --- 3. Seed contract — the authored prompts landed --------------------------
 
 _SEED = (
@@ -213,6 +243,20 @@ def test_get_and_next_step_descriptions_present_the_trigger_and_wait():
         assert "user_trigger_prompt" in desc, name
         low = desc.lower()
         assert "wait" in low or "auto-run" in low, name
+
+
+def test_step_wait_directive_demands_verbatim_and_forbids_chaining():
+    directive = mcp_server.STEP_WAIT_DIRECTIVE
+    assert "user_trigger_prompt" in directive
+    low = directive.lower()
+    assert "verbatim" in low and "wait" in low
+    # The imperative names both advance tools so the agent cannot chain silently.
+    assert "vibe_complete_step" in directive and "vibe_next_step" in directive
+
+
+def test_advance_tool_descriptions_forbid_chaining():
+    for name in ("vibe_next_step", "vibe_complete_step"):
+        assert "chain" in _tool_desc(name).lower(), name
 
 
 # --- 5. NULL-path regression (the production 'NoneType'.replace crash) --------

@@ -139,12 +139,16 @@ def test_draft_custom_returns_draft_without_persisting_description(session_store
 
     assert result.drafted_description == CANNED_MD
     persisted = store[SESSION_ID]["session_parameters"]
-    # The draft is for review only — no description is persisted yet.
+    # The draft is for review only — no confirmed description is persisted yet.
     assert "custom_use_case_description" not in persisted
     assert "use_case_description" not in persisted
     # Merged inputs ARE persisted (source/label/hints).
     assert persisted["use_case_source"] == "custom"
     assert persisted["use_case_label"] == "Curbside Pickup ETA"
+    # Workstream #3: the FMAPI draft records a marker so the confirm gate can
+    # prove the description came from the app, not a self-authored string.
+    assert persisted["custom_draft_ready"] is True
+    assert persisted["custom_drafted_description"] == CANNED_MD
 
 
 def test_draft_custom_requires_custom_source(session_store, monkeypatch):
@@ -178,8 +182,28 @@ def test_draft_custom_requires_name_or_hints(session_store, monkeypatch):
 # --- 3. Confirm / assembler wiring -------------------------------------------
 
 
-def test_confirm_custom_mirrors_description_and_label(session_store):
+def _draft_then(session_store, monkeypatch):
+    """Run the FMAPI draft so the confirm gate's marker is present."""
+
+    async def fake_generate(request_body):
+        return CANNED_MD
+
+    monkeypatch.setattr(routes, "generate_usecase_description", fake_generate)
+    return mcp_server.vibe_set_parameters(
+        SESSION_ID,
+        {
+            "industry": "retail",
+            "use_case_label": "Curbside Pickup ETA",
+            "use_case_hints": "predict wait from order + traffic",
+            "use_case_source": "custom",
+        },
+        mode="draft_custom",
+    )
+
+
+def test_confirm_custom_mirrors_description_and_label(session_store, monkeypatch):
     store, _ = session_store
+    _draft_then(session_store, monkeypatch)  # marker now present
 
     result = mcp_server.vibe_set_parameters(
         SESSION_ID,
@@ -199,6 +223,23 @@ def test_confirm_custom_mirrors_description_and_label(session_store):
     assert persisted["custom_use_case_label"] == "Curbside Pickup ETA"
     # The lock is genuinely satisfied for a custom use case.
     assert mcp_server._custom_usecase_locked(persisted) is True
+
+
+def test_confirm_custom_without_draft_is_blocked(session_store):
+    """A completed custom selection that never ran draft_custom is refused,
+    forcing the FMAPI draft rather than a self-authored description."""
+    result = mcp_server.vibe_set_parameters(
+        SESSION_ID,
+        {
+            "industry": "retail",
+            "use_case": "curbside_eta",
+            "use_case_label": "Curbside Pickup ETA",
+            "use_case_source": "custom",
+            "use_case_description": CANNED_MD,
+        },
+    )
+
+    assert _error_code(result) == "CUSTOM_DRAFT_REQUIRED"
 
 
 def test_seed_body_steers_custom_path_to_draft_custom():

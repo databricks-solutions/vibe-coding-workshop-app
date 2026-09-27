@@ -148,6 +148,44 @@ def test_step_payload_carries_interaction_and_verbatim_prompt(monkeypatch, sessi
     assert interaction.question == _usecase_block()["question"]
 
 
+# --- Workstream #3: a custom use case must route through the FMAPI draft -----
+
+
+def _locked_custom_params(**extra):
+    params = {
+        "industry": "retail",
+        "use_case": "curbside_eta",
+        "use_case_label": "Curbside Pickup ETA",
+        "use_case_description": "self-authored brief that never ran the FMAPI draft",
+        "use_case_source": "custom",
+        "coding_assistant": "genie-code",
+    }
+    params.update(extra)
+    return params
+
+
+def test_complete_step_custom_without_draft_is_blocked(session_store):
+    store, _, _ = session_store
+    store[SESSION_ID]["completed_gates"] = ["project_setup"]
+    # A fully-locked custom selection with NO draft marker (injected directly to
+    # exercise the vibe_complete_step defense, independent of vibe_set_parameters).
+    store[SESSION_ID]["session_parameters"] = _locked_custom_params()
+
+    blocked = mcp_server.vibe_complete_step(SESSION_ID, "use_case_selection", "brief")
+
+    assert _error_code(blocked) == "CUSTOM_DRAFT_REQUIRED"
+
+
+def test_complete_step_custom_with_draft_marker_unblocks(session_store):
+    store, _, _ = session_store
+    store[SESSION_ID]["completed_gates"] = ["project_setup"]
+    store[SESSION_ID]["session_parameters"] = _locked_custom_params(custom_draft_ready=True)
+
+    completed = mcp_server.vibe_complete_step(SESSION_ID, "use_case_selection", "brief")
+
+    assert completed.completed_gates[-1] == "use_case_selection"
+
+
 # --- D11 §6 test 4: recommend-and-proceed — certified is the stated default --
 
 

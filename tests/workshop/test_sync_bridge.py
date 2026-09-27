@@ -235,6 +235,8 @@ def test_locked_use_case_in_session_parameters_survives_complete_step(session_st
         "use_case_label": "Curbside Pickup ETA",
         "use_case_source": "custom",
         "use_case_description": "Predict curbside pickup wait times.",
+        # Custom locks now require the FMAPI draft marker (Workstream #3).
+        "custom_draft_ready": True,
     }
     store[SESSION_ID]["session_parameters"] = dict(locked_uc)
 
