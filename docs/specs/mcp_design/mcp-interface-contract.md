@@ -39,7 +39,7 @@ probe constraints in
 ## 1. Design principles (normative, from the generic spec)
 
 1. **Tool budget ≤ 7.** Genie Code enforces ~20 tools across *all* connected servers. This contract
-   ships **7 tools** (6 core, plus `vibe_coach` added in Phase 2A, §3.7); read-only listings
+   ships **7 tools** (6 core + `vibe_explain_step`; the Phase-2A coaching consolidation extends `vibe_explain_step` rather than adding an 8th, §9); read-only listings
    (outline/overview/state) are **resources**, entry points are **prompts** (§9 accounts for the
    budget). 7 is still comfortably under the ~20 shared ceiling — do not grow it further without a
    budget re-check (D1 §5, generic §3.4).
@@ -106,7 +106,7 @@ system. All seven tools set `openWorldHint: true` (Lakebase; plus FMAPI for `vib
 
 ## 3. Tools (the catalog)
 
-Seven tools (6 core + `vibe_coach`, §3.7). Each entry is the binding contract:
+Seven tools (6 core + `vibe_explain_step`; the Phase-2A coaching contract of §3.7/§12 folds into `vibe_explain_step` per §9). Each entry is the binding contract:
 description-as-prompt, `inputSchema`, `outputSchema`, annotations, errors, and the D3/D1/D5 mapping.
 
 ### 3.1 `vibe_start_track`
@@ -426,14 +426,20 @@ state; rollback is a whole-snapshot concern handled elsewhere, never a tool-leve
 
 | Surface | Count | Items |
 |---|--:|---|
-| **Tools** | **7** | start_track, get_step, next_step, complete_step, submit_answer, set_parameters, **coach** |
+| **Tools** | **7** | start_track, get_step, next_step, **explain_step**, complete_step, submit_answer, set_parameters |
 | Resources | 4 | track overview, session state (incl. outline), style/vibecoding, guide/getting-started |
 | Prompts | 3 | Start the Genie Accelerator, Continue where I left off, How does this workshop work? |
 
 Resources and prompts cost **nothing** against Genie Code's ~20-tool budget, so the self-serve
 surfaces (the help resource + the orientation prompt, D1 §1a) are free — the tool count is **7**
-(6 core + `vibe_coach`, added in Phase 2A). Coaching is deliberately a **tool** (not a resource)
-because it takes arguments (`focus`, `sectionTag`) and calls a model per invocation.
+(6 core + `vibe_explain_step`, the on-demand help tool shipped 2026-09-27).
+
+> **Phase 2A amendment (2026-09-27):** adaptive coaching is delivered by **extending
+> `vibe_explain_step`** (an optional `focus` arg + an FMAPI path that fails open to the static help it
+> already returns) rather than adding a separate `vibe_coach` tool — so the tool count stays **7**, not
+> 8. Coaching remains tool-shaped (it takes `focus`/`sectionTag` and calls a model per invocation);
+> §3.7/§12 describe the model contract, now hosted on `vibe_explain_step`, and §10's `vibe_coach` row
+> folds into `vibe_explain_step`. Rationale + sequencing: [D9 §1 row 2A](./mcp-workshop-rollout.md).
 
 **Reconciliation with the roadmap §8.2:** the roadmap listed 6 tools *including* `vibe_track_outline`
 but *excluding* `vibe_submit_answer`. D1 requires `submit_answer`; to stay at 6 **core** tools we

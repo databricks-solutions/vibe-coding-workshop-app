@@ -19,7 +19,7 @@ docs.** Read in the order below.
 | 4 | [`designing-mcp-servers-for-genie-code.md`](./designing-mcp-servers-for-genie-code.md) | Generic spec | Written (2026-09-22) | **Product-agnostic.** How *any* agent should design, deploy, and verify an MCP server that works with Genie Code — client ground truth, deployment requirements, tool/prompt/resource design, in-band interaction patterns, a reusable capability probe, and a checklist. |
 | 5 | [`workshop-engine-domain.md`](./workshop-engine-domain.md) | Spec (D3) | **Draft (2026-09-22)** | The backend domain: manifest JSON Schema, progression functions, assembler-parity contract, state model. Transport-agnostic keystone. |
 | 6 | [`mcp-workshop-interactivity.md`](./mcp-workshop-interactivity.md) | Spec (D1) | **Draft (2026-09-22; +§4.6 coaching 2026-09-23)** | The no-elicitation interaction model: the in-band patterns (four core + orientation + Phase 2A adaptive coaching), the `interaction` payload block, capability negotiation, the Step-9 hard-stop, and the elicitation upgrade path. |
-| 7 | [`mcp-interface-contract.md`](./mcp-interface-contract.md) | Spec (D2) | **Draft (2026-09-22; +Phase 2A coaching 2026-09-23)** | The IDL: 7 tools (6 core + `vibe_coach`; name, description-as-prompt, input/output schemas, all four annotations, error taxonomy), resources, prompts, the tool-budget accounting, and the adaptive-coaching internals (`CoachResult` + `_COACH_SYSTEM`, §12). |
+| 7 | [`mcp-interface-contract.md`](./mcp-interface-contract.md) | Spec (D2) | **Draft (2026-09-22; +Phase 2A coaching 2026-09-23; +2A consolidation 2026-09-27)** | The IDL: 7 tools (6 core + `vibe_explain_step`; Phase-2A coaching folds into `vibe_explain_step` per §9 amendment; name, description-as-prompt, input/output schemas, all four annotations, error taxonomy), resources, prompts, the tool-budget accounting, and the adaptive-coaching internals (`CoachResult` + `_COACH_SYSTEM`, §12). |
 | 8 | [`mcp-workshop-pedagogy.md`](./mcp-workshop-pedagogy.md) | Spec (D5) | **Draft (2026-09-22)** | The learning model, where comprehension checks + decision points sit per section, the recommend-and-proceed doctrine, question-bank authoring via the `sections/*.md` pipeline, in-band phrasing, and the tone contract. |
 | 9 | [`mcp-workshop-architecture.md`](./mcp-workshop-architecture.md) | Spec (D4) | **Draft (2026-09-22)** | Components, the Databricks Apps deployment topology (probe gotchas encoded), and the sequence diagrams (start/param intake, step walk + gate, cross-surface sync, Step-9 hard-stop). |
 | 10 | [`mcp-workshop-data-model.md`](./mcp-workshop-data-model.md) | Spec (D6) | **Draft (2026-09-22)** | Additive Lakebase changes: `captured_outputs` / `completed_gates` columns, the `session_interactions` log, session-parameter keys, number↔tag migration, and the migration DDL. |
@@ -98,22 +98,27 @@ the dependency graph are in [`mcp-interactive-track-doc-plan.md`](./mcp-interact
 
 Phasing authority is [D9 §1](./mcp-workshop-rollout.md#1-revised-phasing-elicitation-decoupled).
 
-- **Phases 0, 1, 2 — SHIPPED** (PRs #40–#44, deployed to `fevm-serverless`, smoke green; **6 tools**).
-- **Phase 2B — recommended next** ([D11](./mcp-workshop-usecase-selection.md)): use-case selection
-  before PRD + step-sync bridge. Zero new tools. Fixes the PRD-jump and the cross-surface step
-  visibility gap the first live run exposed.
-- **Phase 2A — after/parallel to 2B**: adaptive coaching (`vibe_coach`, 7th tool). **Cost/endpoint
-  signed off 2026-09-24 → ship enabled** (app-default endpoint, `max_tokens≈400`, ~8 s fail-open,
-  per-triple cache, kill-switch env default on).
-- **Phase 3** (UI-repoint, subsumes the 2B bridge) and **Phase 4** (generalize `use_case_selection`
-  to all tracks) follow.
+- **Phases 0, 1, 2, 2B — SHIPPED** (PRs #40–#44 + #45–#49, deployed to `fevm-serverless`, smoke green;
+  **7 tools** — the 7th is `vibe_explain_step`, not `vibe_coach`; see the reconciliation in
+  [D9 §1](./mcp-workshop-rollout.md#1-revised-phasing-elicitation-decoupled)).
+- **Phase 3 — recommended next** ([D9 §1](./mcp-workshop-rollout.md), scoped 2026-09-27): repoint the
+  SPA to the engine outline (`GET /api/track/{track}/outline`, D4 §3.3); retire the TS orchestration;
+  Task 0 persists the track and fixes the live "0/28" resume defect. Charter:
+  [`polly-charter-phase3.md`](./polly-charter-phase3.md).
+- **Phase 2A — its own charter *after* Phase 3**: adaptive coaching delivered as a **consolidation** —
+  extend `vibe_explain_step` (optional `focus`, FMAPI path, fail-open to the static help), **no 8th
+  tool**. Cost/endpoint signed off 2026-09-24. **Phase 4** (generalize `use_case_selection` to all
+  tracks) follows.
 
 Charters (the paste-ready supervisor commands for Polly):
 - [`polly-build-charter.md`](./polly-build-charter.md) — the original Phase 0→2/2A charter.
-- [`polly-charter-next.md`](./polly-charter-next.md) — **the next increment: Phase 2B → 2A.**
+- [`polly-charter-next.md`](./polly-charter-next.md) — Phase 2B → 2A (**2B shipped; superseded** — 2A is
+  reframed as a consolidation into `vibe_explain_step` and moved after Phase 3).
+- [`polly-charter-phase3.md`](./polly-charter-phase3.md) — **the next increment: Phase 3 (UI-repoint).**
 
-**Later addition — Phase 2A: adaptive coaching (2026-09-23).** A new `vibe_coach` tool turns the
-track from "canned step + canned help" into a live tutor: it calls an in-workspace **FMAPI** model
+**Later addition — Phase 2A: adaptive coaching (2026-09-23; reframed as a consolidation 2026-09-27).**
+Adaptive coaching — delivered by **extending `vibe_explain_step`** (no separate `vibe_coach` tool) —
+turns the track from "canned step + canned help" into a live tutor: it calls an in-workspace **FMAPI** model
 with the prompts/state the server already holds and coaches the learner on *what's happening and
 why* (`what_now`/`why`/`unblock`/`review`). It is **in-band** (server-side model call, not
 server→client sampling), **fail-open** to the authored static coaching, **read-only**, and

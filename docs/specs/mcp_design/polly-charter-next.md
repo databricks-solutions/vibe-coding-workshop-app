@@ -1,15 +1,31 @@
-# Polly Build Charter — Next Increment (Phase 2B → 2A)
+# Polly Build Charter — Phase 2B → 2A  ·  HISTORICAL / SUPERSEDED
 
-**Status:** Draft · **Date:** 2026-09-23 · **Target repo:** `vibe-coding-workshop-app`
-**Series:** [`README.md`](./README.md) · **Predecessor:** [`polly-build-charter.md`](./polly-build-charter.md) (Phase 0→2/2A)
-**Purpose:** the **single command** you hand Polly for the increment **after** Phase 2 shipped —
-build **Phase 2B (use-case selection + step-sync bridge)** first, then **Phase 2A (adaptive
-coaching)**, stopping before Phase 3.
+> ⚠️ **HISTORICAL RECORD — DO NOT RUN (annotated 2026-09-27).** Phase **2B was EXECUTED and SHIPPED**
+> (PRs #45–#49). Phase **2A was SUPERSEDED** — adaptive coaching is now delivered by **extending
+> `vibe_explain_step`** (no separate `vibe_coach` tool) and is sequenced **after Phase 3**. The fenced
+> CHARTER block below (and its `mcp_server.py:NN` line anchors) is preserved **verbatim as the executed
+> record**; its "NEXT INCREMENT: PHASE 2B then 2A" banner and line numbers reflect **2026-09-23, not
+> today**. **The current next increment is Phase 3** → [`polly-charter-phase3.md`](./polly-charter-phase3.md).
+> Live roadmap: [D9 §1](./mcp-workshop-rollout.md#1-revised-phasing-elicitation-decoupled).
+
+**Status:** **HISTORICAL** — 2B shipped; 2A reframed as a consolidation into `vibe_explain_step` and deferred after Phase 3 · **Original date:** 2026-09-23 · **Target repo:** `vibe-coding-workshop-app`
+**Series:** [`README.md`](./README.md) · **Predecessor:** [`polly-build-charter.md`](./polly-build-charter.md) (Phase 0→2/2A) · **Superseded by:** [`polly-charter-phase3.md`](./polly-charter-phase3.md)
+**Purpose (as authored 2026-09-23; retained as a record):** the **single command** handed to Polly to
+build **Phase 2B (use-case selection + step-sync bridge)** first, then **Phase 2A (adaptive coaching)**,
+stopping before Phase 3. **Outcome:** 2B shipped as specified; **2A did not ship as written** — it is
+reframed as a consolidation into `vibe_explain_step` (no 8th tool), sequenced after Phase 3.
 
 > **Where we are (live, 2026-09-23).** Phases **0, 1, 2 are SHIPPED** — PRs #40–#44 merged into
 > `feature/genie-code-mcp-integration`, deployed to `fevm-serverless`, server-side smoke green. The
 > deployed MCP surface has **6 tools** (`vibe_start_track`, `vibe_get_step`, `vibe_next_step`,
 > `vibe_complete_step`, `vibe_submit_answer`, `vibe_set_parameters`). `vibe_coach` is **not** built.
+>
+> **Update 2026-09-27 (superseding this charter):** Phase **2B has since shipped** (PRs #45–#49). The
+> surface is now **7 tools** — the 7th is **`vibe_explain_step`** (an on-demand help tool), *not*
+> `vibe_coach`, which was never built. Phase **2A is reframed as a consolidation** — coaching extends
+> `vibe_explain_step` (no 8th tool) — and is moved to its **own charter after Phase 3**. The next
+> increment is now **Phase 3 (UI-repoint)**: [`polly-charter-phase3.md`](./polly-charter-phase3.md).
+> Authority: [D9 §1](./mcp-workshop-rollout.md#1-revised-phasing-elicitation-decoupled).
 > Full guided loop + in-band interactivity + Lakebase state all work. Two gaps remain, both surfaced
 > by the human's first live Genie Code run:
 > 1. **The PRD-jump** — no in-band way to pick/author a use case, so PRD renders against
@@ -17,7 +33,8 @@ coaching)**, stopping before Phase 3.
 > 2. **No step-sync visibility** — MCP and the SPA write different progress fields on the same
 >    session row, so switching surfaces doesn't show the same step ([D11 §4.2](./mcp-workshop-usecase-selection.md)).
 
-> **How to use.** Paste the fenced **CHARTER** block into Polly as one message. The task
+> **How to use (HISTORICAL).** This block was pasted into Polly as one message on 2026-09-23 to build
+> 2B → 2A; **do not re-run it** (see the banner at the top — 2B shipped, 2A superseded). The task
 > decompositions live in the specs (not copied here, to avoid drift): Phase 2B = **[D11 §6/§8](./mcp-workshop-usecase-selection.md)**;
 > Phase 2A = the coaching thread ([D1 §4.6](./mcp-workshop-interactivity.md), [D2 §3.7/§12](./mcp-interface-contract.md),
 > [D4 §1.2](./mcp-workshop-architecture.md), [D5 §11](./mcp-workshop-pedagogy.md), [D6 §7a](./mcp-workshop-data-model.md),
@@ -45,7 +62,12 @@ whose UI-repoint **subsumes** the 2B sync bridge and makes sync canonical.
 
 ---
 
-## The charter (copy everything in this block into Polly)
+## The charter — EXECUTED 2026-09-23 (historical record; do not re-run)
+
+> ⚠️ Preserved verbatim below as the executed record of Phase 2B → 2A. **2B shipped** (PRs #45–#49);
+> **2A is superseded** (see the top banner). Line anchors are as of 2026-09-23 and have since drifted.
+> The current charter is [`polly-charter-phase3.md`](./polly-charter-phase3.md) — do **not** paste this
+> block as a live command.
 
 ```text
 ════════════════════════════════════════════════════════════════════════════
@@ -199,15 +221,18 @@ db/lakebase/ddl/13_mcp_coaching.sql    additive coaching columns (2A — to crea
 
 ## Notes for the human (not part of the charter)
 
-- **Autonomy ceiling** is unchanged: Polly builds + tests + PRs Phase 2B, then 2A **enabled with the
-  signed-off knobs**, stopping at the deploy and the live Genie Code smoke (the 2A endpoint/cost
-  decision is now made, so it no longer gates the build — only the deploy does, D9 §5).
+> **These notes are retained from 2026-09-23 and annotated for accuracy (2026-09-27).**
+
+- **Outcome vs. plan:** Phase **2B shipped** (PRs #45–#49). Phase **2A did NOT ship as written** — it is
+  reframed as a **consolidation** (extend `vibe_explain_step`; no separate `vibe_coach` tool) and moved
+  to its **own charter after Phase 3** ([`polly-charter-phase3.md`](./polly-charter-phase3.md)).
 - **This charter deliberately does not copy the task text** — 2B tasks are canonical in
   [D11 §8](./mcp-workshop-usecase-selection.md), 2A tasks in the coaching thread — so there is one
-  source per phase (avoids the two-copies-drift the predecessor charter warned about).
-- **Phase 3 (UI-repoint) is intentionally deferred.** It subsumes the 2B sync bridge and needs the
-  number↔tag flip sign-off (D6 §5 / D9 §5). Charter it separately once 2B is in.
-- **2A decision made (2026-09-24):** ship **enabled** — app-default endpoint
+  source per phase (avoids the two-copies-drift the predecessor charter warned about). *(Still true.)*
+- **Phase 3 (UI-repoint) is now the ACTIVE next charter** — it was "intentionally deferred" when this
+  was written. It subsumes the 2B sync bridge and needs the number↔tag flip sign-off (D6 §5 / D9 §5),
+  now scoped in [`polly-charter-phase3.md`](./polly-charter-phase3.md).
+- **2A cost/endpoint decision (2026-09-24) still stands** — app-default endpoint
   (`databricks-claude-sonnet-4-5`), `max_tokens≈400`, `≈8 s` fail-open timeout, cache per
-  `(session_id, sectionTag, focus)`, with a coaching kill-switch env (default on) for rollback.
-  Nothing further is needed from the human before Polly builds 2A.
+  `(session_id, sectionTag, focus)`, coaching kill-switch env (default on) — and carries into the 2A
+  **consolidation** charter. It applies to the `vibe_explain_step` extension, not a separate tool.

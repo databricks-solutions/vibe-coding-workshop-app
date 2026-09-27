@@ -67,8 +67,10 @@ CI-equivalent: run locally; a red parity test blocks the change (D3 §9).
 
 `tests/workshop/test_mcp_contract.py`:
 
-- **Budget:** exactly **7 tools** exposed (D2 §9: the 6 core + `vibe_coach`); fail if an 8th appears
-  (guards the shared ~20-tool budget). Before Phase 2A, assert **6**.
+- **Budget:** exactly **7 tools** exposed (D2 §9: the 6 core + `vibe_explain_step`); fail if an 8th
+  appears (guards the shared ~20-tool budget). *(Shipped state 2026-09-27: the 7th tool is
+  `vibe_explain_step`, not `vibe_coach`; the Phase-2A coaching consolidation extends it — still 7.
+  `tests/workshop/test_mcp_contract.py` asserts 7.)*
 - **Per tool:** non-empty description in the 200–400 char band; `inputSchema` present and flat
   (< 8 params); `outputSchema` present; **all four annotations** set (D2 §8).
 - **Output contract:** every tool returns `structuredContent` validating against its `outputSchema`

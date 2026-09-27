@@ -1,8 +1,17 @@
-# Polly Build Charter — MCP Interactive Track
+# Polly Build Charter — MCP Interactive Track  ·  HISTORICAL / EXECUTED
 
-**Status:** Draft · **Date:** 2026-09-22 · **Target repo:** `vibe-coding-workshop-app`
-**Series:** [`README.md`](./README.md)
-**Purpose:** the **single command** you hand Polly (Omnigent) so she autonomously builds the
+> ⚠️ **HISTORICAL RECORD — DO NOT RUN (annotated 2026-09-27).** This is the original Phase 0→2/2A
+> charter; **Phases 0, 1, and 2 have SHIPPED** (PRs #40–#44, deployed to `fevm-serverless`). Phase 2A
+> (adaptive coaching) was **not** built as written — it is **reframed as a consolidation** into
+> `vibe_explain_step` (no separate `vibe_coach` tool) and sequenced **after Phase 3**. The fenced
+> CHARTER block below (and its `routes.py:NN`/`app.py:NN` anchors) is preserved **verbatim as the
+> executed record** and reflects **2026-09-22, not today**. Current next increment: Phase 3 →
+> [`polly-charter-phase3.md`](./polly-charter-phase3.md). Live roadmap:
+> [D9 §1](./mcp-workshop-rollout.md#1-revised-phasing-elicitation-decoupled).
+
+**Status:** **HISTORICAL** — Phases 0–2 shipped; 2A reframed as a consolidation (see banner) · **Original date:** 2026-09-22 · **Target repo:** `vibe-coding-workshop-app`
+**Series:** [`README.md`](./README.md) · **Superseded by:** [`polly-charter-next.md`](./polly-charter-next.md) (2B, historical) → [`polly-charter-phase3.md`](./polly-charter-phase3.md) (current)
+**Purpose (as authored 2026-09-22; retained as a record):** the **single command** handed to Polly (Omnigent) to autonomously build the
 MCP-driven interactive Genie Accelerator track from the D1–D10 series, delegating to harnesses with
 cross-vendor review and one PR per task.
 
