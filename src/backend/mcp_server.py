@@ -885,6 +885,15 @@ def vibe_start_track(
             created_by=_request_user(context),
             current_step=1,
             completed_steps=[],
+            # Stamp the walked track as the top-level workshop_level column so the
+            # SPA (which reads response.workshop_level) rebuilds the SAME filtered
+            # outline the MCP walk uses. Without this, a resumed genie-code session
+            # falls back to the assistant cold-start level and the genie gates map
+            # to steps absent from the outline (the live 0/28 defect). This is the
+            # column, NOT a session_parameters JSONB key; save_session COALESCE-
+            # preserves it on later writes (see lakebase.save_session). New sessions
+            # only — resume never reaches this block, so an existing level is safe.
+            workshop_level=DEFAULT_TRACK,
             session_parameters=state.session_parameters,
         )
     if industry:
