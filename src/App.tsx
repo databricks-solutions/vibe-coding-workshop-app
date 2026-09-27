@@ -21,8 +21,44 @@ import {
 } from './components/session';
 import { apiClient } from './api/client';
 import { Zap, MessageSquare, Trophy, Plus, PanelLeftClose, PanelLeft, Menu, X, BarChart3, Eye, Compass, Award, ChevronDown, List, BookOpen } from 'lucide-react';
-import { normalizeLevel, getFilteredSections, getCumulativeOverrides, USE_CASE_LEVEL_LOCK, isForwardProgression, getDisabledTagsForAIModules, ALL_AI_MODULES, getDisabledTagsForMedallionLayers, normalizeMedallionLayers, ALL_MEDALLION_LAYERS, getDisabledTagsForLakehouse, getDisabledTagsForGenieOntology, computeChainContext, deriveInitialChainContext, type WorkshopLevel, type WorkflowDirection, type AIAgentModule, type MedallionLayer, type ChainContext } from './constants/workflowSections';
+import { normalizeLevel, getFilteredSections, getCumulativeOverrides, USE_CASE_LEVEL_LOCK, isForwardProgression, getDisabledTagsForAIModules, ALL_AI_MODULES, getDisabledTagsForMedallionLayers, normalizeMedallionLayers, ALL_MEDALLION_LAYERS, getDisabledTagsForLakehouse, getDisabledTagsForGenieOntology, computeChainContext, deriveInitialChainContext, completedGatesToStepNumbers, type WorkshopLevel, type WorkflowDirection, type AIAgentModule, type MedallionLayer, type ChainContext } from './constants/workflowSections';
 import { DEFAULT_LEVEL_BY_ASSISTANT, parseCodingAssistantsConfig } from './constants/codingAssistants';
+
+// Derive completed step NUMBERS (global ALL_STEPS numbering) from a loaded
+// session. Engine/MCP sessions carry sectionTag-keyed `completed_gates` — the
+// cross-surface source of truth — which map to the App's global step numbers.
+// Legacy web sessions have no gates, so fall back to the stored integer
+// `completed_steps` (already in global numbering). This is what lets a session
+// started in MCP resume on the correct step in the App: the backend's own
+// `completed_steps` are dense track positions that do NOT line up with these
+// global numbers.
+function deriveCompletedStepNumbers(
+  completedGates: string[] | undefined,
+  completedSteps: number[] | undefined,
+): number[] {
+  if (completedGates && completedGates.length > 0) {
+    return completedGatesToStepNumbers(completedGates);
+  }
+  return completedSteps || [];
+}
+
+// Resolve the workshop level a coding assistant implies when the session never
+// persisted an explicit one. MCP sessions never write a level, so when the
+// session's coding assistant has a cold-start default (genie-code ->
+// lakehouse-di) and the user never explicitly picked a level (and there's no
+// use-case lock), use that default so the App rebuilds the same filtered
+// outline the MCP walk uses. Returns undefined when no override should apply.
+function assistantDefaultLevel(
+  sessionParams: Record<string, unknown>,
+  lock: WorkshopLevel | null | undefined,
+): WorkshopLevel | undefined {
+  if (lock || sessionParams.level_explicitly_selected) return undefined;
+  const assistant = sessionParams.coding_assistant as string | undefined;
+  if (!assistant) return undefined;
+  return DEFAULT_LEVEL_BY_ASSISTANT[assistant as keyof typeof DEFAULT_LEVEL_BY_ASSISTANT] as
+    | WorkshopLevel
+    | undefined;
+}
 
 export default function App() {
   const location = useLocation();
@@ -337,12 +373,20 @@ export default function App() {
         const restoredLock = USE_CASE_LEVEL_LOCK[response.use_case || ''];
         setUseCaseLockedLevel(restoredLock ?? null);
 
-        // Restore workshop level — use-case lock takes precedence over saved value
-        const restoredLevel = restoredLock ?? normalizeLevel(response.workshop_level || 'end-to-end');
+        // Restore workshop level — use-case lock takes precedence over saved value.
+        // MCP sessions never persist a level; fall back to the coding assistant's
+        // cold-start default (genie-code -> lakehouse-di) when no explicit level
+        // was chosen so the filtered outline matches the MCP walk.
+        const restoredLevel = restoredLock
+          ?? assistantDefaultLevel(response.session_parameters || {}, restoredLock)
+          ?? normalizeLevel(response.workshop_level || 'end-to-end');
         setWorkshopLevel(!restoredLock && restoredLevel === 'skills-accelerator' ? 'end-to-end' : restoredLevel);
         
         // Restore completed steps and skipped steps
-        const completedStepsArray: number[] = response.completed_steps || [];
+        const completedStepsArray: number[] = deriveCompletedStepNumbers(
+          response.completed_gates,
+          response.completed_steps,
+        );
         const restoredCompleted = new Set(completedStepsArray);
         // Intent is defined when industry + use case are selected — ensure step 1 is in completedSteps
         if (response.industry && response.use_case) {
@@ -482,7 +526,13 @@ export default function App() {
         setSelectedUseCase(response.use_case || '');
         setSelectedUseCaseLabel(response.use_case_label || '');
         setStepPrompts(response.step_prompts || {});
-        const loadedCompletedSteps: number[] = response.completed_steps || [];
+        // Engine/MCP sessions carry sectionTag-keyed completed_gates (the
+        // cross-surface source of truth); map them to global step numbers. Legacy
+        // web sessions fall back to the stored integer completed_steps.
+        const loadedCompletedSteps: number[] = deriveCompletedStepNumbers(
+          response.completed_gates,
+          response.completed_steps,
+        );
         const loadedCompleted = new Set(loadedCompletedSteps);
         // Intent is defined when industry + use case are selected — ensure step 1 is in completedSteps
         if (response.industry && response.use_case) {
@@ -497,8 +547,14 @@ export default function App() {
         const loadedLock = USE_CASE_LEVEL_LOCK[response.use_case || ''];
         setUseCaseLockedLevel(loadedLock ?? null);
 
-        // Restore workshop level — use-case lock takes precedence over saved value
-        const loadedLevel = loadedLock ?? normalizeLevel(response.workshop_level || 'end-to-end');
+        // Restore workshop level — use-case lock takes precedence over saved value.
+        // MCP sessions never persist a level, so fall back to the coding
+        // assistant's cold-start default (genie-code -> lakehouse-di) when no
+        // explicit level was chosen, so the App rebuilds the same filtered outline
+        // the MCP walk uses. Explicit picks and use-case locks still win.
+        const loadedLevel = loadedLock
+          ?? assistantDefaultLevel(response.session_parameters || {}, loadedLock)
+          ?? normalizeLevel(response.workshop_level || 'end-to-end');
         const effectiveRestoredLevel: WorkshopLevel =
           !loadedLock && loadedLevel === 'skills-accelerator' ? 'end-to-end' : loadedLevel;
         setWorkshopLevel(effectiveRestoredLevel);
@@ -527,7 +583,7 @@ export default function App() {
         const nextStep = getNextIncompleteStep(
           Array.from(loadedCompleted),
           loadedSkippedSteps,
-          loadedLevel,
+          effectiveRestoredLevel,
           restoredChain,
         );
         setInitialExpandedStep(nextStep);

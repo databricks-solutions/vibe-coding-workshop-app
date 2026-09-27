@@ -324,6 +324,7 @@ export interface SessionLoadResponse {
   current_step: number;
   workshop_level?: string;
   completed_steps: number[];
+  completed_gates?: string[];
   skipped_steps?: number[];
   step_prompts: Record<number, string>;
   session_parameters?: Record<string, string>;

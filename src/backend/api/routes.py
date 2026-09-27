@@ -5455,6 +5455,7 @@ class SessionLoadResponse(BaseModel):
     current_step: int = Field(1)
     workshop_level: Optional[str] = Field(None, description="Workshop level: app-only, app-database, lakehouse, lakehouse-di, end-to-end, accelerator, or genie-accelerator")
     completed_steps: List[int] = Field(default_factory=list)
+    completed_gates: List[str] = Field(default_factory=list, description="Completed step sectionTags (engine/MCP source of truth for cross-surface numbering)")
     skipped_steps: List[int] = Field(default_factory=list)
     step_prompts: Dict[int, str] = Field(default_factory=dict)
     session_parameters: Optional[Dict[str, Any]] = Field(default_factory=dict, description="Session parameter overrides (JSONB)")
@@ -5620,6 +5621,7 @@ async def get_or_create_default_session(request: Request) -> SessionLoadResponse
                 current_step=current_step,
                 workshop_level=session_data.get("workshop_level", "300"),
                 completed_steps=completed_steps,
+                completed_gates=session_data.get("completed_gates") or [],
                 skipped_steps=session_data.get("skipped_steps") or [],
                 step_prompts=session_data.get("step_prompts") or {},
                 session_parameters=session_data.get("session_parameters") or {},
@@ -5775,6 +5777,7 @@ async def load_session_endpoint(session_id: str) -> SessionLoadResponse:
                 current_step=session_data.get("current_step", 1),
                 workshop_level=session_data.get("workshop_level", "300"),
                 completed_steps=session_data.get("completed_steps", []),
+                completed_gates=session_data.get("completed_gates") or [],
                 skipped_steps=session_data.get("skipped_steps", []),
                 step_prompts=session_data.get("step_prompts", {}),
                 session_parameters=session_data.get("session_parameters", {}),

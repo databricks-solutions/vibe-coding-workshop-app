@@ -495,6 +495,22 @@ export const ALL_STEPS: Record<number, WorkflowStep> = {
   73: { number: 73, title: 'Wire Genie', icon: MessageSquareText, color: 'text-emerald-500', sectionTag: 'activation_wire_genie' },
 };
 
+// Reverse lookup: sectionTag -> global step number. Single source of truth for
+// cross-surface numbering. The MCP/engine records progress as sectionTags
+// (completed_gates); this maps them back to the fixed ALL_STEPS numbers the App
+// positions against, so a session started in MCP resumes on the right step in
+// the App (the backend's own completed_steps are dense track positions that do
+// NOT line up with these global numbers).
+const SECTION_TAG_TO_STEP_NUMBER: Record<string, number> = Object.fromEntries(
+  Object.values(ALL_STEPS).map(s => [s.sectionTag, s.number]),
+);
+
+export function completedGatesToStepNumbers(gates: string[]): number[] {
+  return gates
+    .map(tag => SECTION_TAG_TO_STEP_NUMBER[tag])
+    .filter((n): n is number => n != null);
+}
+
 // The logical sections with their step groupings (4-chapter structure + activation + skills)
 export const WORKFLOW_SECTIONS: WorkflowSection[] = [
   {
