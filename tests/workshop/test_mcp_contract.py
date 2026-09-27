@@ -15,6 +15,7 @@ EXPECTED_TOOLS = {
     "vibe_start_track",
     "vibe_get_step",
     "vibe_next_step",
+    "vibe_explain_step",
     "vibe_complete_step",
     "vibe_submit_answer",
     "vibe_set_parameters",
@@ -24,6 +25,7 @@ EXPECTED_ANNOTATIONS = {
     "vibe_start_track": (False, False, True, True),
     "vibe_get_step": (True, False, True, True),
     "vibe_next_step": (True, False, True, True),
+    "vibe_explain_step": (True, False, True, True),
     "vibe_complete_step": (False, False, True, True),
     "vibe_submit_answer": (False, False, True, True),
     "vibe_set_parameters": (False, False, True, True),
@@ -34,10 +36,10 @@ def _tools_by_name():
     return {tool.name: tool for tool in mcp_server.mcp._tool_manager.list_tools()}
 
 
-def test_exactly_six_tools_with_contract_metadata():
+def test_exactly_seven_tools_with_contract_metadata():
     tools = _tools_by_name()
     assert set(tools) == EXPECTED_TOOLS
-    assert len(tools) == 6
+    assert len(tools) == 7
 
     for name, tool in tools.items():
         assert 200 <= len(tool.description or "") <= 400, name
@@ -60,7 +62,7 @@ def test_registered_tools_return_schema_valid_structured_content_and_text():
     for name, tool in tools.items():
         if name == "vibe_start_track":
             arguments = {"track": "genie-accelerator"}
-        elif name in {"vibe_get_step", "vibe_next_step"}:
+        elif name in {"vibe_get_step", "vibe_next_step", "vibe_explain_step"}:
             arguments = {"session_id": "test-session"}
         elif name == "vibe_complete_step":
             arguments = {

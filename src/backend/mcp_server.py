@@ -49,7 +49,8 @@ ORIENTATION_PREAMBLE = (
     "First-run orientation: answer questions in chat; silence accepts the recommended default. "
     "Each step is learner-triggered — present the step, hand over its `user_trigger_prompt` (the "
     "plain-English ask), and WAIT for the learner to submit it before doing the work. Never auto-run "
-    "the next step on your own. "
+    "the next step on your own. Step payloads are lean; call `vibe_explain_step` when the learner asks "
+    "how to apply a step or what to expect. "
     "The track saves progress server-side and does not block, except for one benchmark hard stop. "
     "You can mirror progress in the web UI using the same session. If tools go missing, disconnect "
     "other MCP servers to stay within the 20-tool budget."
@@ -68,8 +69,9 @@ STEP_WAIT_DIRECTIVE = (
 GETTING_STARTED_GUIDE = """# Getting started
 
 This workshop is a guided conversation. Start a track, read each prompt verbatim, then narrate why
-it matters and how to apply it. Answer questions in chat; silence accepts the recommended default.
-Progress is saved server-side and can be mirrored in the web UI using the same session.
+it matters. Step payloads are lean — call `vibe_explain_step` for how-to detail and expected
+deliverables when the learner asks. Answer questions in chat; silence accepts the recommended
+default. Progress is saved server-side and can be mirrored in the web UI using the same session.
 
 Steps are learner-triggered. After you present a step, hand the learner its `user_trigger_prompt` —
 a simple English prompt they submit back to you — and wait for them to send it before you do the
@@ -140,12 +142,18 @@ class ExplainabilityPayload(BaseModel):
     title: str
     why: str
     prompt: str
-    how_to_apply: str
-    expected_output: str
     # The plain-English ask the learner submits to START this step. The agent
     # presents it and waits for the learner to say it, rather than auto-running
     # the step (suggestion c). Empty when a step authors no trigger.
     user_trigger_prompt: str = ""
+    # Per-step wait doctrine, present on every step that authors a trigger so the
+    # agent re-reads "present the trigger and WAIT" on each turn (Workstream #4).
+    # Kept adjacent to user_trigger_prompt so the trigger + wait doctrine ride
+    # together near the top of a deliberately slim payload. how_to_apply and
+    # expected_output moved OFF the step payload to the on-demand vibe_explain_step
+    # tool: the big markdown blocks inflated context and let the client drift out
+    # of the "present trigger -> WAIT" ritual on later steps.
+    instruction: str | None = None
     gate: str | None
     requiresGate: str | None
     consumes: list[str]
@@ -154,9 +162,6 @@ class ExplainabilityPayload(BaseModel):
     next: StepReference
     interaction: dict[str, Interaction | None] | None = None
     orientation: str | None = None
-    # Per-step wait doctrine, present on every step that authors a trigger so the
-    # agent re-reads "present the trigger and WAIT" on each turn (Workstream #4).
-    instruction: str | None = None
     # Use-case discovery inlined into the tool payload (Workstream D): the Genie
     # Code agent cannot read vibe:// resources, so the use_case_selection step
     # carries the curated industry options here, plus the certified-first use
@@ -185,6 +190,25 @@ class CompleteStepResult(BaseModel):
 
     completed_gates: list[str]
     next: ExplainabilityPayload | DoneResult
+    # Advisory re-surfacing of the just-completed step's post-comprehension check
+    # (answer key redacted). Non-gating: it nudges the agent to ask the quiz at
+    # the moment it is due, since the slim step payload + long-run drift let the
+    # client silently skip the optional post check. None when the step has no
+    # post check or the learner already answered it.
+    post_check: Interaction | None = None
+
+
+class StepHelpResult(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    # On-demand help for a step (how_to_apply + expected_output), moved OFF the
+    # step payload to keep it slim. Fetched only when the learner asks how to
+    # apply a step or what to expect.
+    sectionTag: str
+    title: str
+    why: str
+    how_to_apply: str
+    expected_output: str
 
 
 class SubmitAnswerResult(BaseModel):
@@ -476,6 +500,13 @@ def decision_capture_key(section_tag: str, interaction_id: str) -> str:
     return f"interaction_decision:{section_tag}:{interaction_id}"
 
 
+def interaction_answered_key(section_tag: str, interaction_id: str) -> str:
+    """Marker that a comprehension check was answered (suppresses the post-check
+    reminder in vibe_complete_step). Distinct namespace from decision_capture_key
+    so it never collides with gating or produce keys."""
+    return f"interaction_answered:{section_tag}:{interaction_id}"
+
+
 def _quiz_view(interaction: Interaction) -> Interaction:
     """Redact the answer key from a comprehension check before it ships.
 
@@ -503,6 +534,25 @@ def _interaction_payload(section_tag: str) -> dict[str, Interaction | None] | No
         for slot in manifest.INTERACTION_SLOTS
         for block in [blocks.get(slot)]
     }
+
+
+def _pending_post_check(
+    section_tag: str, state: engine.SessionState
+) -> Interaction | None:
+    """The just-completed step's post comprehension check, redacted, if still due.
+
+    vibe_complete_step re-surfaces this so the agent asks the quiz at the moment
+    it is due — the slim step payload plus long-run drift let the client skip the
+    optional post check silently. Only comprehension checks are re-surfaced, and
+    only until the learner has answered (marker recorded by vibe_submit_answer).
+    """
+    blocks = manifest.interactions_for(section_tag) or {}
+    post = blocks.get("post")
+    if not isinstance(post, dict) or post.get("type") != "comprehension":
+        return None
+    if interaction_answered_key(section_tag, str(post.get("id") or "")) in state.captured_outputs:
+        return None
+    return _quiz_view(Interaction.model_validate(post))
 
 
 def _find_interaction(
@@ -707,8 +757,6 @@ def _step_payload(
         # FMAPI call; the email drives the learner's /Workspace paths.
         setup = _project_setup_content(str(state.session_parameters.get("user_email") or ""))
         prompt = setup["prompt"]
-        how_to_apply = setup["how_to_apply"]
-        expected_output = setup["expected_output"]
         user_trigger_prompt = setup["user_trigger_prompt"]
     else:
         # Match the web path: render the prompt through the app FMAPI, falling back
@@ -722,8 +770,6 @@ def _step_payload(
             session_id=session_id,
         )
         prompt = generated_prompt if generated_prompt is not None else assembled.get("input", "")
-        how_to_apply = assembled.get("how_to_apply", "")
-        expected_output = assembled.get("expected_output", "")
         user_trigger_prompt = assembled.get("user_trigger_prompt", "")
     orientation = None
     if not state.completed_gates and step.order == 1:
@@ -739,8 +785,6 @@ def _step_payload(
         title=step.title,
         why=step.why or "",
         prompt=prompt,
-        how_to_apply=how_to_apply,
-        expected_output=expected_output,
         user_trigger_prompt=user_trigger_prompt,
         gate=step.gate,
         requiresGate=step.requiresGate,
@@ -864,9 +908,10 @@ def vibe_start_track(
     name="vibe_get_step",
     description=(
         "Fetch one workshop step to present. Returns the prompt to run **verbatim**, why it matters, "
-        "how to apply it, expected output, the gate, the next step, and `user_trigger_prompt` — the "
-        "plain-English ask you MUST show the learner verbatim BEFORE doing any work, then WAIT for them "
-        "to send it (never auto-run or chain steps). Args: `session_id`; `sectionTag` (optional)."
+        "the gate, the next step, and `user_trigger_prompt` — the plain-English ask you MUST show the "
+        "learner verbatim BEFORE doing any work, then WAIT for them to send it (never auto-run or chain "
+        "steps). Call `vibe_explain_step` for how-to or expected output. Args: `session_id`; "
+        "`sectionTag` (optional)."
     ),
     annotations=ToolAnnotations(
         readOnlyHint=True,
@@ -929,6 +974,70 @@ def vibe_next_step(session_id: str, context: Context | None = None) -> NextStepR
     if isinstance(next_item, engine.Done):
         return NextStepResult.model_validate(DoneResult())
     return NextStepResult.model_validate(_step_payload(DEFAULT_TRACK, state, next_item, session_id=session_id))
+
+
+@mcp.tool(
+    name="vibe_explain_step",
+    description=(
+        "On-demand help for a step: returns `how_to_apply` and `expected_output`, plus `title` and "
+        "`why`. The step payload is deliberately slim and omits these — call this ONLY when the learner "
+        "asks you to explain a step, how to apply it, or what to expect. Args: `session_id`; "
+        "`sectionTag` (optional, defaults to the current step)."
+    ),
+    annotations=ToolAnnotations(
+        readOnlyHint=True,
+        destructiveHint=False,
+        idempotentHint=True,
+        openWorldHint=True,
+    ),
+    structured_output=True,
+)
+def vibe_explain_step(
+    session_id: str,
+    sectionTag: str | None = None,
+    context: Context | None = None,
+) -> StepHelpResult:
+    loaded = _load_session_for_request(session_id, context)
+    if loaded is None:
+        return _error_result("INVALID_SESSION", "The requested session could not be resolved.")  # type: ignore[return-value]
+    state, _ = loaded
+    state = _coerce_state(state)
+    steps = engine.MANIFEST.track_steps(DEFAULT_TRACK)
+    if sectionTag is None:
+        current = engine.next_step(DEFAULT_TRACK, state)
+        if isinstance(current, engine.Done):
+            return _error_result("UNKNOWN_STEP", "The track has no remaining step.")  # type: ignore[return-value]
+        step = current
+    else:
+        step = next((candidate for candidate in steps if candidate.sectionTag == sectionTag), None)
+        if step is None:
+            return _error_result("UNKNOWN_STEP", f"Unknown workshop step: {sectionTag}", sectionTag=sectionTag)  # type: ignore[return-value]
+    if step.sectionTag == "project_setup":
+        # project_setup authors no seed row; mirror _step_payload's synthesized content.
+        setup = _project_setup_content(str(state.session_parameters.get("user_email") or ""))
+        how_to_apply = setup["how_to_apply"]
+        expected_output = setup["expected_output"]
+    else:
+        industry = state.session_parameters.get("industry", DEFAULT_INDUSTRY)
+        use_case = state.session_parameters.get("use_case", DEFAULT_USE_CASE)
+        previous_outputs = engine.resolve_previous_outputs(step, state)
+        assembled = assembler.get_section_input_content(
+            industry=industry,
+            use_case=use_case,
+            section_tag=step.sectionTag,
+            previous_outputs=previous_outputs,
+            session_id=session_id,
+            coding_assistant_override=DEFAULT_CODING_ASSISTANT,
+        )
+        how_to_apply = assembled.get("how_to_apply", "")
+        expected_output = assembled.get("expected_output", "")
+    return StepHelpResult(
+        sectionTag=step.sectionTag,
+        title=step.title,
+        why=step.why or "",
+        how_to_apply=how_to_apply,
+        expected_output=expected_output,
+    )
 
 
 # --- Use-case selection lock (D11 §3.3, §3.5) --------------------------------
@@ -1181,6 +1290,7 @@ def vibe_complete_step(
     return CompleteStepResult(
         completed_gates=list(result.completed_gates),
         next=next_payload,
+        post_check=_pending_post_check(sectionTag, state),
     )
 
 
@@ -1218,7 +1328,7 @@ def vibe_submit_answer(
             f"Unknown workshop interaction: {interaction_id}",
             interaction_id=interaction_id,
         )  # type: ignore[return-value]
-    section_tag, _slot, interaction = resolved
+    section_tag, slot, interaction = resolved
     current = engine.next_step(DEFAULT_TRACK, state)
     if isinstance(current, engine.Done) or current.sectionTag != section_tag:
         return _error_result(
@@ -1253,6 +1363,17 @@ def vibe_submit_answer(
                 captured_outputs=dict(state.captured_outputs),
             )
             unblocks = section_tag
+    elif recorded and interaction.type == "comprehension" and slot == "post":
+        # Mark the POST comprehension as answered so vibe_complete_step stops
+        # re-surfacing it as a reminder. Scoped to the post slot (the only one the
+        # reminder targets) so pre/decision checks never touch captured_outputs.
+        # Non-gating — this only suppresses the advisory nudge; a silent accept
+        # still counts as answered.
+        state.captured_outputs[interaction_answered_key(section_tag, interaction.id)] = resolved_answer
+        save_session(
+            session_id=session_id,
+            captured_outputs=dict(state.captured_outputs),
+        )
 
     return SubmitAnswerResult(recorded=recorded, coaching=coaching, unblocks=unblocks)
 
@@ -1593,8 +1714,9 @@ def start_genie_accelerator(use_case: str | None = None, industry: str | None = 
         f"{ORIENTATION_PREAMBLE}\n\n"
         "Start the Genie Accelerator by calling `vibe_start_track` with "
         f'{{track:"genie-accelerator"{suffix}}}, then call `vibe_get_step`. '
-        "Present the returned `prompt` verbatim first, then narrate `why`, `how_to_apply`, "
-        "`expected_output`, the gate, and the next step. Keep questions in chat."
+        "Present the returned `prompt` verbatim first, then narrate `why`, the gate, and the next "
+        "step, and show `user_trigger_prompt` verbatim before waiting. Call `vibe_explain_step` if the "
+        "learner asks how to apply the step or what to expect. Keep questions in chat."
     )
 
 

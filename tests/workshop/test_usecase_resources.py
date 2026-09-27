@@ -5,7 +5,8 @@ Two read-only, budget-free resources backed by the existing repository seams:
   vibe://usecases/industries   -> get_industries()     (value/label options)
   vibe://usecases/{industry}   -> get_use_cases_map()  (certified-first)
 
-These are RESOURCES, not tools: the 6-tool budget must stay 6. Certified-first
+These are RESOURCES, not tools: they stay off the tool budget (7 tools, well under
+the ~20 limit). Certified-first
 ordering is enforced by the resource itself (the API returns raw Lakebase order).
 All seams are mocked so the suite runs fully offline.
 """
@@ -103,11 +104,11 @@ def test_usecases_resource_unknown_industry_is_empty(monkeypatch):
     assert data["use_cases"] == []
 
 
-def test_tool_budget_stays_six_and_resources_are_not_tools():
-    """(3) Resources are budget-free: the registered tool set stays exactly 6, and
-    neither use-case URI is a tool."""
+def test_tool_budget_stays_within_limit_and_resources_are_not_tools():
+    """(3) Resources are budget-free: the registered tool set stays at 7 (well under
+    the 20-tool budget), and neither use-case URI is a tool."""
     tool_names = {tool.name for tool in mcp_server.mcp._tool_manager.list_tools()}
-    assert len(tool_names) == 6, f"tool budget drifted: {sorted(tool_names)}"
+    assert len(tool_names) == 7, f"tool budget drifted: {sorted(tool_names)}"
 
     # The use-case resources are registered as a concrete resource + a template,
     # never as tools.
