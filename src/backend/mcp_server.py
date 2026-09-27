@@ -163,6 +163,10 @@ class ExplainabilityPayload(BaseModel):
     # cases for the chosen industry once one is set. None on every other step.
     available_industries: list[dict[str, Any]] | None = None
     available_use_cases: list[dict[str, Any]] | None = None
+    # Data-location CUJ (Workstream 1): the effective source {catalog, schema,
+    # is_overridden} on the Locate Data step, mirroring the web LakehouseParams
+    # editor. None on every other step.
+    data_location: dict[str, Any] | None = None
 
 
 class StartTrackResult(BaseModel):
@@ -171,6 +175,9 @@ class StartTrackResult(BaseModel):
     session_id: str
     track: str
     outline: list[OutlineItem]
+    # Deep-link handoff (Workstream 2): a ready-to-open web-UI URL for this session
+    # (``<base>?sessionId=<id>``), or None when the request host is unavailable.
+    session_url: str | None = None
 
 
 class CompleteStepResult(BaseModel):
@@ -366,6 +373,39 @@ def _request_user(context: Context | None) -> str:
 
     value = os.getenv("PGUSER", "")
     return value if "@" in value else "unknown"
+
+
+def _request_base_url(context: Context | None) -> str | None:
+    """Derive the app's own base URL from the forwarded request headers, mirroring
+    the web save endpoint (routes.save_session_endpoint). Returns None when it
+    cannot be resolved (no request context, or a localhost host), so the deep-link
+    handoff degrades gracefully rather than emitting a broken URL."""
+    if context is None:
+        return None
+    try:
+        request = context.request_context.request
+    except (LookupError, AttributeError):
+        return None
+    if not isinstance(request, Request):
+        return None
+    forwarded_host = request.headers.get("x-forwarded-host")
+    if forwarded_host:
+        protocol = request.headers.get("x-forwarded-proto", "https")
+        return f"{protocol}://{forwarded_host}"
+    host_header = request.headers.get("host")
+    if host_header and "localhost" not in host_header:
+        return f"https://{host_header}"
+    return None
+
+
+def _stash_base_url(state: engine.SessionState, context: Context | None) -> None:
+    """Stash the derived base URL onto the in-memory session state so _step_payload
+    can render a web-UI deep link in the step-1 orientation. Only read-only callers
+    use this and it is never saved, so it does not pollute persisted
+    session_parameters."""
+    base = _request_base_url(context)
+    if base:
+        state.session_parameters.setdefault("app_base_url", base)
 
 
 def _session_state(record: dict[str, Any], track: str = DEFAULT_TRACK) -> engine.SessionState:
@@ -685,7 +725,15 @@ def _step_payload(
         how_to_apply = assembled.get("how_to_apply", "")
         expected_output = assembled.get("expected_output", "")
         user_trigger_prompt = assembled.get("user_trigger_prompt", "")
-    orientation = ORIENTATION_PREAMBLE if not state.completed_gates and step.order == 1 else None
+    orientation = None
+    if not state.completed_gates and step.order == 1:
+        orientation = ORIENTATION_PREAMBLE
+        # Deep-link handoff (Workstream 2): if a base URL was stashed on the state,
+        # append a ready-to-open web-UI link so the learner can jump between MCP and
+        # the app mid-run using the same session.
+        _base = state.session_parameters.get("app_base_url")
+        if _base and session_id:
+            orientation = f"{orientation}\n\nOpen in the workshop UI: {_base}?sessionId={session_id}"
     payload = ExplainabilityPayload(
         sectionTag=step.sectionTag,
         title=step.title,
@@ -716,6 +764,24 @@ def _step_payload(
                 payload.available_use_cases = _available_use_cases(str(chosen))
         except Exception:  # noqa: BLE001 — options are advisory, never fatal
             pass
+    # Data-location CUJ (Workstream 1): surface the effective source catalog/schema
+    # on the Locate Data step — the MCP analog of the web LakehouseParams editor — so
+    # the agent can confirm the default or persist a change via vibe_set_parameters.
+    if step.sectionTag == "semlayer_locate":
+        try:
+            from .api.routes import get_effective_workshop_parameters
+
+            _eff = get_effective_workshop_parameters(session_id)
+            payload.data_location = {
+                "catalog": _eff.get("chapter_3_lakehouse_catalog", "samples"),
+                "schema": _eff.get("chapter_3_lakehouse_schema", "wanderbricks"),
+                "is_overridden": (
+                    "chapter_3_lakehouse_catalog" in state.session_parameters
+                    or "chapter_3_lakehouse_schema" in state.session_parameters
+                ),
+            }
+        except Exception:  # noqa: BLE001 — enrichment is advisory, never fatal
+            pass
     return payload
 
 
@@ -724,8 +790,8 @@ def _step_payload(
     description=(
         "Start or resume a guided workshop track (e.g. the Genie Accelerator) for the current user. "
         "Call this first, in Agent mode, before any other vibe tool. Args: `track` (required), optional "
-        "`use_case`/`industry`/`session_id`. Returns the session id and the ordered step outline. "
-        "Errors if `track` is unknown."
+        "`use_case`/`industry`/`session_id`. Returns the session id, a `session_url` deep link to open "
+        "the same session in the web UI, and the ordered step outline. Errors if `track` is unknown."
     ),
     annotations=ToolAnnotations(
         readOnlyHint=False,
@@ -763,10 +829,15 @@ def vibe_start_track(
     if "@" in _email:
         state.session_parameters.setdefault("user_email", _email)
     if not session_id and is_lakebase_configured():
+        # Auto-name the new session so it surfaces in the web UI session menu
+        # (is_saved requires a name that is set and != "New Session"). Refined to
+        # the confirmed use case once it locks in vibe_complete_step (Workstream 3).
+        _initial_name = f"Genie Code — {use_case}" if use_case else "Genie Code Workshop"
         save_session(
             session_id=resolved,
             industry=industry,
             use_case=use_case,
+            session_name=_initial_name,
             created_by=_request_user(context),
             current_step=1,
             completed_steps=[],
@@ -776,7 +847,17 @@ def vibe_start_track(
         state.session_parameters["industry"] = industry
     if use_case:
         state.session_parameters["use_case"] = use_case
-    return StartTrackResult(session_id=resolved, track=track, outline=_outline_items(track, state))
+    # Deep-link handoff (Workstream 2): hand back a ready-to-open web-UI URL for this
+    # same session so the learner can move freely between MCP and the app. None when
+    # the request headers do not expose a usable host (degrades gracefully).
+    _base = _request_base_url(context)
+    session_url = f"{_base}?sessionId={resolved}" if _base else None
+    return StartTrackResult(
+        session_id=resolved,
+        track=track,
+        outline=_outline_items(track, state),
+        session_url=session_url,
+    )
 
 
 @mcp.tool(
@@ -805,6 +886,7 @@ def vibe_get_step(
         return _error_result("INVALID_SESSION", "The requested session could not be resolved.")  # type: ignore[return-value]
     state, _ = loaded
     state = _coerce_state(state)
+    _stash_base_url(state, context)
     steps = engine.MANIFEST.track_steps(DEFAULT_TRACK)
     if sectionTag is None:
         current = engine.next_step(DEFAULT_TRACK, state)
@@ -842,6 +924,7 @@ def vibe_next_step(session_id: str, context: Context | None = None) -> NextStepR
         return _error_result("INVALID_SESSION", "The requested session could not be resolved.")  # type: ignore[return-value]
     state, _ = loaded
     state = _coerce_state(state)
+    _stash_base_url(state, context)
     next_item = engine.next_step(DEFAULT_TRACK, state)
     if isinstance(next_item, engine.Done):
         return NextStepResult.model_validate(DoneResult())
@@ -1070,8 +1153,20 @@ def vibe_complete_step(
     current_step, completed_steps = _legacy_progress(
         DEFAULT_TRACK, result.completed_gates, result.next_step
     )
+    # Workstream 3: once the use case locks, refine the auto-name so the web UI
+    # session menu shows what this session is building. None on every other step so
+    # COALESCE preserves any name the learner set in the UI.
+    _refined_name = None
+    if sectionTag == "use_case_selection":
+        _label = (
+            state.session_parameters.get("use_case_label")
+            or state.session_parameters.get("use_case")
+        )
+        if _label:
+            _refined_name = f"Genie Code — {_label}"
     save_session(
         session_id=session_id,
+        session_name=_refined_name,
         captured_outputs=dict(state.captured_outputs),
         completed_gates=list(result.completed_gates),
         current_step=current_step,
@@ -1190,6 +1285,25 @@ def vibe_set_parameters(
         return _error_result("INVALID_SESSION", "The requested session could not be resolved.")  # type: ignore[return-value]
 
     state, _ = loaded
+
+    # Friendly data-location aliases (Workstream 1): map the web LakehouseParams
+    # editor's catalog/schema fields onto the workshop parameter keys the assembler
+    # substitutes ({chapter_3_lakehouse_catalog}.{chapter_3_lakehouse_schema}), so an
+    # MCP learner retargets the Locate Data source the same way the UI does. Raw keys
+    # still work; a blank value is rejected rather than silently clearing the default.
+    _DATA_LOCATION_ALIASES = {
+        "data_catalog": "chapter_3_lakehouse_catalog",
+        "data_schema": "chapter_3_lakehouse_schema",
+    }
+    for _alias, _target in _DATA_LOCATION_ALIASES.items():
+        if _alias in params:
+            _value = str(params.pop(_alias) or "").strip()
+            if not _value:
+                return _error_result(  # type: ignore[return-value]
+                    "INVALID_PARAMETER",
+                    f"{_alias} must be a non-empty catalog/schema name.",
+                )
+            params[_target] = _value
 
     # Reject an unknown industry BEFORE persisting anything (Workstream D). The
     # authoritative set is the industries that actually have use cases

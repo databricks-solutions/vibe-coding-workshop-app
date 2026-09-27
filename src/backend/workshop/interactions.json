@@ -135,18 +135,18 @@
   },
   "semlayer_locate": {
     "decision": {
-      "id": "semlayer_locate.source_strategy",
+      "id": "semlayer_locate.data_location",
       "type": "decision",
-      "question": "Which source strategy should we use for the semantic layer?",
+      "question": "Point Genie at the workshop's default data source, or set a different catalog.schema first? (The step prompt shows the current default.)",
       "options": [
-        {"id": "reuse_existing", "label": "Reuse an existing governed source"},
-        {"id": "discover_new", "label": "Discover and qualify a new source"}
+        {"id": "keep_default", "label": "Use the default source"},
+        {"id": "change_source", "label": "Point Genie at a different catalog.schema"}
       ],
-      "recommended": "reuse_existing",
+      "recommended": "keep_default",
       "skippable": true,
       "coaching": {
-        "reuse_existing": "Recommended — start with the governed source and expand only when coverage requires it.",
-        "discover_new": "That is a valid override; record the qualification work before building on the source."
+        "keep_default": "Using the workshop default source — the brief will be grounded there.",
+        "change_source": "Set the new source with vibe_set_parameters(data_catalog, data_schema), then point Genie there."
       }
     },
     "post": {

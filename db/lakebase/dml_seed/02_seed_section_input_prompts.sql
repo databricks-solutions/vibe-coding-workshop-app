@@ -17632,7 +17632,7 @@ VALUES
 
 Read `docs/design_prd.md` and `.vibecoding-state.md` first — reuse the PRD''s User Journeys and High-Level Data Entities; don''t re-ask what they already answer.
 
-My {use_case_title} data is in `{chapter_3_lakehouse_catalog}.{chapter_3_lakehouse_schema}` — read it read-only.
+`{chapter_3_lakehouse_catalog}.{chapter_3_lakehouse_schema}` is the workshop DEFAULT source. Before you point Genie at it, ask me ONE question — pre-filled with that default — to confirm it is where my {use_case_title} data actually lives, or to give you a different `catalog.schema`. If I name a different source, call `vibe_set_parameters(params={"data_catalog": "<catalog>", "data_schema": "<schema>"})` to set it for this session before continuing, then read the confirmed source read-only.
 
 If I''ve dropped my current definitions into the repo, read them and pull out every measure name, definition, and field alias you can, citing which file each came from. If I haven''t, elicit them instead.
 
