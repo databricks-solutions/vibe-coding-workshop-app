@@ -298,6 +298,12 @@ export interface SessionSaveRequest {
   direction?: string;
   include_lakehouse?: boolean;
   include_genie_ontology?: boolean;
+  // Engine composition inputs (Phase 3 T3b-2a). Persisted into session_parameters
+  // (chain_context -> chainContext; flags -> nested flags object) so the outline
+  // endpoint composes the same variant/sub-toggle outline the UI shows. The SPA
+  // wiring that populates these from UI state lands in T3b-2b.
+  chain_context?: string;
+  flags?: Record<string, boolean>;
   completed_steps: number[];
   step_prompts: Record<number, string>;
 }
@@ -377,6 +383,9 @@ export interface UpdateSessionMetadataRequest {
   coding_assistant?: string;
   include_lakehouse?: boolean;
   include_genie_ontology?: boolean;
+  // Engine composition inputs (Phase 3 T3b-2a) — see SessionSaveRequest above.
+  chain_context?: string;
+  flags?: Record<string, boolean>;
 }
 
 export interface SessionListItem {
