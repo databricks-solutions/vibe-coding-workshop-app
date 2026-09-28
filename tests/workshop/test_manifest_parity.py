@@ -101,11 +101,17 @@ def test_flag_parity_lakehouse_on_reintroduces_tags_in_position():
 
 def test_lakehouse_flag_is_genie_scoped_only():
     """Regression guard (D3 §3.3 track-scoped stamping): the includeLakehouse flag
-    and its per-step stamping are confined to genie-accelerator. Shared lakehouse
-    steps that also live in other tracks must stay unflagged (flag is None) and
-    present in those tracks' default outline — otherwise the genie-only toggle
-    would silently drop them cross-track. The genie-accelerator parity fixtures
-    do not cover other tracks, so this is the only guard for that regression."""
+    (default OFF) is confined to genie-accelerator. Shared lakehouse steps that
+    also live in other tracks must NOT carry includeLakehouse and must stay in
+    those tracks' default outline — otherwise the genie-only OFF-by-default toggle
+    would silently drop them cross-track. The genie-accelerator parity fixtures do
+    not cover other tracks, so this is the only guard for that regression.
+
+    Phase 3 T3a: gold_layer_design / gold_layer_pipeline now carry the default-TRUE
+    ``medallion.gold`` flag on medallion-toggle tracks. That is safe (default true =
+    present unless the learner opts out) and is NOT the leak this test guards, so
+    the assertion is on the specific includeLakehouse flag, not "flag is None".
+    ``deploy_lakehouse_assets`` maps to no sub-toggle and stays unflagged."""
     loaded = manifest.load_manifest()
 
     # Only genie-accelerator defines the flag.
@@ -115,8 +121,9 @@ def test_lakehouse_flag_is_genie_scoped_only():
         else:
             assert "includeLakehouse" not in track.flags, track_id
 
-    # In every non-genie track, any shared lakehouse step is unstamped and stays
-    # in the default outline (default flags = nothing dropped for these).
+    # In every non-genie track, any shared lakehouse step never carries the
+    # genie-scoped includeLakehouse flag and stays in the default outline (its own
+    # sub-toggle, if any, is default ON so nothing is dropped by default).
     saw_shared_elsewhere = False
     for track_id in loaded.tracks:
         if track_id == "genie-accelerator":
@@ -125,7 +132,7 @@ def test_lakehouse_flag_is_genie_scoped_only():
         for step in loaded.track_steps(track_id):
             if step.sectionTag in SHARED_LAKEHOUSE_TAGS:
                 saw_shared_elsewhere = True
-                assert step.flag is None, (track_id, step.sectionTag, step.flag)
+                assert step.flag != "includeLakehouse", (track_id, step.sectionTag, step.flag)
                 assert step.sectionTag in default_tags, (track_id, step.sectionTag)
 
     # Positive control: the shared tags really do appear in >=1 non-genie track,

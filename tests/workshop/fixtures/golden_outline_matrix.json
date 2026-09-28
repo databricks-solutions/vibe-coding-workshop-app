@@ -1,6 +1,6 @@
 {
   "generated_by": "node --experimental-strip-types scripts/dump_outline_matrix.mjs",
-  "doc": "engine.outline() vs getFilteredSections() parity matrix. ts=REAL getFilteredSections; engine=manifest.outline_order (re-verified in Python). status=parity when equal else gap. Expressible axes MUST be parity; gap axes scope Phase 3 T3.",
+  "doc": "engine.outline() vs getFilteredSections() parity matrix. ts=REAL getFilteredSections; engine=manifest.outline_order (re-verified in Python). status=parity when equal else gap. Phase 3 T3a: the engine composes all four axes (direction=reverse, additive-chain climb, AI-module + medallion sub-toggles), so every cell is expressible and MUST be parity; each cell records the engine inputs (flags + direction/chainContext) that reproduce its TS order.",
   "manifest_version": "1",
   "tracks": [
     "app-only",
@@ -25,6 +25,8 @@
       "axis": "default",
       "expressible": true,
       "flags": {},
+      "direction": null,
+      "chainContext": null,
       "ts": [
         "project_setup",
         "prd_generation",
@@ -51,6 +53,8 @@
       "axis": "default",
       "expressible": true,
       "flags": {},
+      "direction": null,
+      "chainContext": null,
       "ts": [
         "project_setup",
         "prd_generation",
@@ -83,6 +87,8 @@
       "axis": "default",
       "expressible": true,
       "flags": {},
+      "direction": null,
+      "chainContext": null,
       "ts": [
         "project_setup",
         "prd_generation",
@@ -115,8 +121,10 @@
       "track": "lakehouse",
       "combo": "climb:app",
       "axis": "climb",
-      "expressible": false,
+      "expressible": true,
       "flags": {},
+      "direction": null,
+      "chainContext": "app",
       "ts": [
         "project_setup",
         "prd_generation",
@@ -139,6 +147,12 @@
       "engine": [
         "project_setup",
         "prd_generation",
+        "cursor_copilot_ui_design",
+        "deploy_databricks_app",
+        "setup_lakebase",
+        "wire_ui_lakebase",
+        "workspace_setup_deploy",
+        "sync_from_lakebase",
         "bronze_table_metadata",
         "bronze_layer_creation",
         "silver_layer_sdp",
@@ -149,14 +163,18 @@
         "redeploy_test",
         "workspace_cleanup"
       ],
-      "status": "gap"
+      "status": "parity"
     },
     {
       "track": "lakehouse",
       "combo": "medallion:gold-off",
       "axis": "medallion",
-      "expressible": false,
-      "flags": {},
+      "expressible": true,
+      "flags": {
+        "medallion.gold": false
+      },
+      "direction": null,
+      "chainContext": null,
       "ts": [
         "project_setup",
         "prd_generation",
@@ -174,21 +192,24 @@
         "bronze_table_metadata",
         "bronze_layer_creation",
         "silver_layer_sdp",
-        "gold_layer_design",
-        "gold_layer_pipeline",
         "deploy_lakehouse_assets",
         "iterate_enhance",
         "redeploy_test",
         "workspace_cleanup"
       ],
-      "status": "gap"
+      "status": "parity"
     },
     {
       "track": "lakehouse",
       "combo": "medallion:silver+gold-off",
       "axis": "medallion",
-      "expressible": false,
-      "flags": {},
+      "expressible": true,
+      "flags": {
+        "medallion.silver": false,
+        "medallion.gold": false
+      },
+      "direction": null,
+      "chainContext": null,
       "ts": [
         "project_setup",
         "prd_generation",
@@ -204,15 +225,12 @@
         "prd_generation",
         "bronze_table_metadata",
         "bronze_layer_creation",
-        "silver_layer_sdp",
-        "gold_layer_design",
-        "gold_layer_pipeline",
         "deploy_lakehouse_assets",
         "iterate_enhance",
         "redeploy_test",
         "workspace_cleanup"
       ],
-      "status": "gap"
+      "status": "parity"
     },
     {
       "track": "lakehouse-di",
@@ -220,6 +238,8 @@
       "axis": "default",
       "expressible": true,
       "flags": {},
+      "direction": null,
+      "chainContext": null,
       "ts": [
         "project_setup",
         "prd_generation",
@@ -264,8 +284,10 @@
       "track": "lakehouse-di",
       "combo": "climb:app",
       "axis": "climb",
-      "expressible": false,
+      "expressible": true,
       "flags": {},
+      "direction": null,
+      "chainContext": "app",
       "ts": [
         "project_setup",
         "prd_generation",
@@ -295,6 +317,12 @@
       "engine": [
         "project_setup",
         "prd_generation",
+        "cursor_copilot_ui_design",
+        "deploy_databricks_app",
+        "setup_lakebase",
+        "wire_ui_lakebase",
+        "workspace_setup_deploy",
+        "sync_from_lakebase",
         "bronze_table_metadata",
         "bronze_layer_creation",
         "silver_layer_sdp",
@@ -307,18 +335,23 @@
         "deploy_di_assets",
         "optimize_genie",
         "agent_framework",
+        "wire_ui_agent",
         "iterate_enhance",
         "redeploy_test",
         "workspace_cleanup"
       ],
-      "status": "gap"
+      "status": "parity"
     },
     {
       "track": "lakehouse-di",
       "combo": "ai-off:genie",
       "axis": "ai-modules",
-      "expressible": false,
-      "flags": {},
+      "expressible": true,
+      "flags": {
+        "ai.genie": false
+      },
+      "direction": null,
+      "chainContext": null,
       "ts": [
         "project_setup",
         "prd_generation",
@@ -347,22 +380,24 @@
         "deploy_lakehouse_assets",
         "usecase_plan",
         "aibi_dashboard",
-        "genie_space",
         "deploy_di_assets",
-        "optimize_genie",
         "agent_framework",
         "iterate_enhance",
         "redeploy_test",
         "workspace_cleanup"
       ],
-      "status": "gap"
+      "status": "parity"
     },
     {
       "track": "lakehouse-di",
       "combo": "ai-off:agent",
       "axis": "ai-modules",
-      "expressible": false,
-      "flags": {},
+      "expressible": true,
+      "flags": {
+        "ai.agent": false
+      },
+      "direction": null,
+      "chainContext": null,
       "ts": [
         "project_setup",
         "prd_generation",
@@ -395,19 +430,22 @@
         "genie_space",
         "deploy_di_assets",
         "optimize_genie",
-        "agent_framework",
         "iterate_enhance",
         "redeploy_test",
         "workspace_cleanup"
       ],
-      "status": "gap"
+      "status": "parity"
     },
     {
       "track": "lakehouse-di",
       "combo": "ai-off:dashboard",
       "axis": "ai-modules",
-      "expressible": false,
-      "flags": {},
+      "expressible": true,
+      "flags": {
+        "ai.dashboard": false
+      },
+      "direction": null,
+      "chainContext": null,
       "ts": [
         "project_setup",
         "prd_generation",
@@ -436,7 +474,6 @@
         "gold_layer_pipeline",
         "deploy_lakehouse_assets",
         "usecase_plan",
-        "aibi_dashboard",
         "genie_space",
         "deploy_di_assets",
         "optimize_genie",
@@ -445,14 +482,20 @@
         "redeploy_test",
         "workspace_cleanup"
       ],
-      "status": "gap"
+      "status": "parity"
     },
     {
       "track": "lakehouse-di",
       "combo": "ai-off:all",
       "axis": "ai-modules",
-      "expressible": false,
-      "flags": {},
+      "expressible": true,
+      "flags": {
+        "ai.genie": false,
+        "ai.agent": false,
+        "ai.dashboard": false
+      },
+      "direction": null,
+      "chainContext": null,
       "ts": [
         "project_setup",
         "prd_generation",
@@ -478,23 +521,23 @@
         "gold_layer_pipeline",
         "deploy_lakehouse_assets",
         "usecase_plan",
-        "aibi_dashboard",
-        "genie_space",
         "deploy_di_assets",
-        "optimize_genie",
-        "agent_framework",
         "iterate_enhance",
         "redeploy_test",
         "workspace_cleanup"
       ],
-      "status": "gap"
+      "status": "parity"
     },
     {
       "track": "lakehouse-di",
       "combo": "medallion:gold-off",
       "axis": "medallion",
-      "expressible": false,
-      "flags": {},
+      "expressible": true,
+      "flags": {
+        "medallion.gold": false
+      },
+      "direction": null,
+      "chainContext": null,
       "ts": [
         "project_setup",
         "prd_generation",
@@ -518,8 +561,6 @@
         "bronze_table_metadata",
         "bronze_layer_creation",
         "silver_layer_sdp",
-        "gold_layer_design",
-        "gold_layer_pipeline",
         "deploy_lakehouse_assets",
         "usecase_plan",
         "aibi_dashboard",
@@ -531,14 +572,19 @@
         "redeploy_test",
         "workspace_cleanup"
       ],
-      "status": "gap"
+      "status": "parity"
     },
     {
       "track": "lakehouse-di",
       "combo": "medallion:silver+gold-off",
       "axis": "medallion",
-      "expressible": false,
-      "flags": {},
+      "expressible": true,
+      "flags": {
+        "medallion.silver": false,
+        "medallion.gold": false
+      },
+      "direction": null,
+      "chainContext": null,
       "ts": [
         "project_setup",
         "prd_generation",
@@ -560,9 +606,6 @@
         "prd_generation",
         "bronze_table_metadata",
         "bronze_layer_creation",
-        "silver_layer_sdp",
-        "gold_layer_design",
-        "gold_layer_pipeline",
         "deploy_lakehouse_assets",
         "usecase_plan",
         "aibi_dashboard",
@@ -574,7 +617,7 @@
         "redeploy_test",
         "workspace_cleanup"
       ],
-      "status": "gap"
+      "status": "parity"
     },
     {
       "track": "end-to-end",
@@ -582,6 +625,8 @@
       "axis": "default",
       "expressible": true,
       "flags": {},
+      "direction": null,
+      "chainContext": null,
       "ts": [
         "project_setup",
         "prd_generation",
@@ -640,8 +685,10 @@
       "track": "end-to-end",
       "combo": "direction:reverse",
       "axis": "direction",
-      "expressible": false,
+      "expressible": true,
       "flags": {},
+      "direction": "reverse",
+      "chainContext": null,
       "ts": [
         "project_setup",
         "prd_generation",
@@ -670,12 +717,6 @@
       "engine": [
         "project_setup",
         "prd_generation",
-        "cursor_copilot_ui_design",
-        "deploy_databricks_app",
-        "setup_lakebase",
-        "wire_ui_lakebase",
-        "workspace_setup_deploy",
-        "sync_from_lakebase",
         "bronze_table_metadata",
         "bronze_layer_creation",
         "silver_layer_sdp",
@@ -683,24 +724,33 @@
         "gold_layer_pipeline",
         "deploy_lakehouse_assets",
         "usecase_plan",
-        "aibi_dashboard",
         "genie_space",
+        "aibi_dashboard",
         "deploy_di_assets",
         "optimize_genie",
         "agent_framework",
-        "wire_ui_agent",
+        "activation_table_design",
+        "activation_reverse_sync",
+        "activation_app_design",
+        "activation_build_wire",
+        "activation_wire_lakebase",
+        "activation_deploy_validate",
         "iterate_enhance",
         "redeploy_test",
         "workspace_cleanup"
       ],
-      "status": "gap"
+      "status": "parity"
     },
     {
       "track": "end-to-end",
       "combo": "ai-off:genie",
       "axis": "ai-modules",
-      "expressible": false,
-      "flags": {},
+      "expressible": true,
+      "flags": {
+        "ai.genie": false
+      },
+      "direction": null,
+      "chainContext": null,
       "ts": [
         "project_setup",
         "prd_generation",
@@ -742,23 +792,25 @@
         "deploy_lakehouse_assets",
         "usecase_plan",
         "aibi_dashboard",
-        "genie_space",
         "deploy_di_assets",
-        "optimize_genie",
         "agent_framework",
         "wire_ui_agent",
         "iterate_enhance",
         "redeploy_test",
         "workspace_cleanup"
       ],
-      "status": "gap"
+      "status": "parity"
     },
     {
       "track": "end-to-end",
       "combo": "ai-off:agent",
       "axis": "ai-modules",
-      "expressible": false,
-      "flags": {},
+      "expressible": true,
+      "flags": {
+        "ai.agent": false
+      },
+      "direction": null,
+      "chainContext": null,
       "ts": [
         "project_setup",
         "prd_generation",
@@ -803,20 +855,22 @@
         "genie_space",
         "deploy_di_assets",
         "optimize_genie",
-        "agent_framework",
-        "wire_ui_agent",
         "iterate_enhance",
         "redeploy_test",
         "workspace_cleanup"
       ],
-      "status": "gap"
+      "status": "parity"
     },
     {
       "track": "end-to-end",
       "combo": "ai-off:dashboard",
       "axis": "ai-modules",
-      "expressible": false,
-      "flags": {},
+      "expressible": true,
+      "flags": {
+        "ai.dashboard": false
+      },
+      "direction": null,
+      "chainContext": null,
       "ts": [
         "project_setup",
         "prd_generation",
@@ -858,7 +912,6 @@
         "gold_layer_pipeline",
         "deploy_lakehouse_assets",
         "usecase_plan",
-        "aibi_dashboard",
         "genie_space",
         "deploy_di_assets",
         "optimize_genie",
@@ -868,14 +921,20 @@
         "redeploy_test",
         "workspace_cleanup"
       ],
-      "status": "gap"
+      "status": "parity"
     },
     {
       "track": "end-to-end",
       "combo": "ai-off:all",
       "axis": "ai-modules",
-      "expressible": false,
-      "flags": {},
+      "expressible": true,
+      "flags": {
+        "ai.genie": false,
+        "ai.agent": false,
+        "ai.dashboard": false
+      },
+      "direction": null,
+      "chainContext": null,
       "ts": [
         "project_setup",
         "prd_generation",
@@ -913,24 +972,23 @@
         "gold_layer_pipeline",
         "deploy_lakehouse_assets",
         "usecase_plan",
-        "aibi_dashboard",
-        "genie_space",
         "deploy_di_assets",
-        "optimize_genie",
-        "agent_framework",
-        "wire_ui_agent",
         "iterate_enhance",
         "redeploy_test",
         "workspace_cleanup"
       ],
-      "status": "gap"
+      "status": "parity"
     },
     {
       "track": "end-to-end",
       "combo": "medallion:gold-off",
       "axis": "medallion",
-      "expressible": false,
-      "flags": {},
+      "expressible": true,
+      "flags": {
+        "medallion.gold": false
+      },
+      "direction": null,
+      "chainContext": null,
       "ts": [
         "project_setup",
         "prd_generation",
@@ -967,8 +1025,6 @@
         "bronze_table_metadata",
         "bronze_layer_creation",
         "silver_layer_sdp",
-        "gold_layer_design",
-        "gold_layer_pipeline",
         "deploy_lakehouse_assets",
         "usecase_plan",
         "aibi_dashboard",
@@ -981,14 +1037,19 @@
         "redeploy_test",
         "workspace_cleanup"
       ],
-      "status": "gap"
+      "status": "parity"
     },
     {
       "track": "end-to-end",
       "combo": "medallion:silver+gold-off",
       "axis": "medallion",
-      "expressible": false,
-      "flags": {},
+      "expressible": true,
+      "flags": {
+        "medallion.silver": false,
+        "medallion.gold": false
+      },
+      "direction": null,
+      "chainContext": null,
       "ts": [
         "project_setup",
         "prd_generation",
@@ -1023,9 +1084,6 @@
         "sync_from_lakebase",
         "bronze_table_metadata",
         "bronze_layer_creation",
-        "silver_layer_sdp",
-        "gold_layer_design",
-        "gold_layer_pipeline",
         "deploy_lakehouse_assets",
         "usecase_plan",
         "aibi_dashboard",
@@ -1038,7 +1096,7 @@
         "redeploy_test",
         "workspace_cleanup"
       ],
-      "status": "gap"
+      "status": "parity"
     },
     {
       "track": "accelerator",
@@ -1046,6 +1104,8 @@
       "axis": "default",
       "expressible": true,
       "flags": {},
+      "direction": null,
+      "chainContext": null,
       "ts": [
         "project_setup",
         "prd_generation",
@@ -1090,8 +1150,12 @@
       "track": "accelerator",
       "combo": "ai-off:genie",
       "axis": "ai-modules",
-      "expressible": false,
-      "flags": {},
+      "expressible": true,
+      "flags": {
+        "ai.genie": false
+      },
+      "direction": null,
+      "chainContext": null,
       "ts": [
         "project_setup",
         "prd_generation",
@@ -1120,22 +1184,24 @@
         "deploy_lakehouse_assets",
         "usecase_plan",
         "aibi_dashboard",
-        "genie_space",
         "deploy_di_assets",
-        "optimize_genie",
         "agent_framework",
         "iterate_enhance",
         "redeploy_test",
         "workspace_cleanup"
       ],
-      "status": "gap"
+      "status": "parity"
     },
     {
       "track": "accelerator",
       "combo": "ai-off:agent",
       "axis": "ai-modules",
-      "expressible": false,
-      "flags": {},
+      "expressible": true,
+      "flags": {
+        "ai.agent": false
+      },
+      "direction": null,
+      "chainContext": null,
       "ts": [
         "project_setup",
         "prd_generation",
@@ -1168,19 +1234,22 @@
         "genie_space",
         "deploy_di_assets",
         "optimize_genie",
-        "agent_framework",
         "iterate_enhance",
         "redeploy_test",
         "workspace_cleanup"
       ],
-      "status": "gap"
+      "status": "parity"
     },
     {
       "track": "accelerator",
       "combo": "ai-off:dashboard",
       "axis": "ai-modules",
-      "expressible": false,
-      "flags": {},
+      "expressible": true,
+      "flags": {
+        "ai.dashboard": false
+      },
+      "direction": null,
+      "chainContext": null,
       "ts": [
         "project_setup",
         "prd_generation",
@@ -1209,7 +1278,6 @@
         "gold_layer_pipeline",
         "deploy_lakehouse_assets",
         "usecase_plan",
-        "aibi_dashboard",
         "genie_space",
         "deploy_di_assets",
         "optimize_genie",
@@ -1218,14 +1286,20 @@
         "redeploy_test",
         "workspace_cleanup"
       ],
-      "status": "gap"
+      "status": "parity"
     },
     {
       "track": "accelerator",
       "combo": "ai-off:all",
       "axis": "ai-modules",
-      "expressible": false,
-      "flags": {},
+      "expressible": true,
+      "flags": {
+        "ai.genie": false,
+        "ai.agent": false,
+        "ai.dashboard": false
+      },
+      "direction": null,
+      "chainContext": null,
       "ts": [
         "project_setup",
         "prd_generation",
@@ -1251,23 +1325,23 @@
         "gold_layer_pipeline",
         "deploy_lakehouse_assets",
         "usecase_plan",
-        "aibi_dashboard",
-        "genie_space",
         "deploy_di_assets",
-        "optimize_genie",
-        "agent_framework",
         "iterate_enhance",
         "redeploy_test",
         "workspace_cleanup"
       ],
-      "status": "gap"
+      "status": "parity"
     },
     {
       "track": "accelerator",
       "combo": "medallion:gold-off",
       "axis": "medallion",
-      "expressible": false,
-      "flags": {},
+      "expressible": true,
+      "flags": {
+        "medallion.gold": false
+      },
+      "direction": null,
+      "chainContext": null,
       "ts": [
         "project_setup",
         "prd_generation",
@@ -1291,8 +1365,6 @@
         "bronze_table_metadata",
         "bronze_layer_creation",
         "silver_layer_sdp",
-        "gold_layer_design",
-        "gold_layer_pipeline",
         "deploy_lakehouse_assets",
         "usecase_plan",
         "aibi_dashboard",
@@ -1304,14 +1376,19 @@
         "redeploy_test",
         "workspace_cleanup"
       ],
-      "status": "gap"
+      "status": "parity"
     },
     {
       "track": "accelerator",
       "combo": "medallion:silver+gold-off",
       "axis": "medallion",
-      "expressible": false,
-      "flags": {},
+      "expressible": true,
+      "flags": {
+        "medallion.silver": false,
+        "medallion.gold": false
+      },
+      "direction": null,
+      "chainContext": null,
       "ts": [
         "project_setup",
         "prd_generation",
@@ -1333,9 +1410,6 @@
         "prd_generation",
         "bronze_table_metadata",
         "bronze_layer_creation",
-        "silver_layer_sdp",
-        "gold_layer_design",
-        "gold_layer_pipeline",
         "deploy_lakehouse_assets",
         "usecase_plan",
         "aibi_dashboard",
@@ -1347,7 +1421,7 @@
         "redeploy_test",
         "workspace_cleanup"
       ],
-      "status": "gap"
+      "status": "parity"
     },
     {
       "track": "genie-accelerator",
@@ -1355,6 +1429,8 @@
       "axis": "default",
       "expressible": true,
       "flags": {},
+      "direction": null,
+      "chainContext": null,
       "ts": [
         "project_setup",
         "use_case_selection",
@@ -1419,6 +1495,8 @@
       "flags": {
         "includeLakehouse": true
       },
+      "direction": null,
+      "chainContext": null,
       "ts": [
         "project_setup",
         "use_case_selection",
@@ -1491,6 +1569,8 @@
       "flags": {
         "includeGenieOntology": true
       },
+      "direction": null,
+      "chainContext": null,
       "ts": [
         "project_setup",
         "use_case_selection",
@@ -1562,6 +1642,8 @@
         "includeLakehouse": true,
         "includeGenieOntology": true
       },
+      "direction": null,
+      "chainContext": null,
       "ts": [
         "project_setup",
         "use_case_selection",
@@ -1638,6 +1720,8 @@
       "axis": "default",
       "expressible": true,
       "flags": {},
+      "direction": null,
+      "chainContext": null,
       "ts": [
         "project_setup",
         "prd_generation",
@@ -1670,8 +1754,12 @@
       "track": "data-engineering-accelerator",
       "combo": "medallion:gold-off",
       "axis": "medallion",
-      "expressible": false,
-      "flags": {},
+      "expressible": true,
+      "flags": {
+        "medallion.gold": false
+      },
+      "direction": null,
+      "chainContext": null,
       "ts": [
         "project_setup",
         "prd_generation",
@@ -1689,21 +1777,24 @@
         "bronze_table_metadata",
         "bronze_layer_creation",
         "silver_layer_sdp",
-        "gold_layer_design",
-        "gold_layer_pipeline",
         "deploy_lakehouse_assets",
         "iterate_enhance",
         "redeploy_test",
         "workspace_cleanup"
       ],
-      "status": "gap"
+      "status": "parity"
     },
     {
       "track": "data-engineering-accelerator",
       "combo": "medallion:silver+gold-off",
       "axis": "medallion",
-      "expressible": false,
-      "flags": {},
+      "expressible": true,
+      "flags": {
+        "medallion.silver": false,
+        "medallion.gold": false
+      },
+      "direction": null,
+      "chainContext": null,
       "ts": [
         "project_setup",
         "prd_generation",
@@ -1719,15 +1810,12 @@
         "prd_generation",
         "bronze_table_metadata",
         "bronze_layer_creation",
-        "silver_layer_sdp",
-        "gold_layer_design",
-        "gold_layer_pipeline",
         "deploy_lakehouse_assets",
         "iterate_enhance",
         "redeploy_test",
         "workspace_cleanup"
       ],
-      "status": "gap"
+      "status": "parity"
     },
     {
       "track": "skills-accelerator",
@@ -1735,6 +1823,8 @@
       "axis": "default",
       "expressible": true,
       "flags": {},
+      "direction": null,
+      "chainContext": null,
       "ts": [
         "project_setup",
         "skill_install_explore",
@@ -1765,6 +1855,8 @@
       "axis": "default",
       "expressible": true,
       "flags": {},
+      "direction": null,
+      "chainContext": null,
       "ts": [
         "project_setup",
         "prd_generation",
@@ -1835,6 +1927,8 @@
       "axis": "default",
       "expressible": true,
       "flags": {},
+      "direction": null,
+      "chainContext": null,
       "ts": [
         "project_setup",
         "prd_generation",
@@ -1867,8 +1961,10 @@
       "track": "reverse-lakehouse",
       "combo": "direction:reverse",
       "axis": "direction",
-      "expressible": false,
+      "expressible": true,
       "flags": {},
+      "direction": "reverse",
+      "chainContext": null,
       "ts": [
         "project_setup",
         "prd_generation",
@@ -1901,8 +1997,12 @@
       "track": "reverse-lakehouse",
       "combo": "medallion:gold-off",
       "axis": "medallion",
-      "expressible": false,
-      "flags": {},
+      "expressible": true,
+      "flags": {
+        "medallion.gold": false
+      },
+      "direction": null,
+      "chainContext": null,
       "ts": [
         "project_setup",
         "prd_generation",
@@ -1920,21 +2020,24 @@
         "bronze_table_metadata",
         "bronze_layer_creation",
         "silver_layer_sdp",
-        "gold_layer_design",
-        "gold_layer_pipeline",
         "deploy_lakehouse_assets",
         "iterate_enhance",
         "redeploy_test",
         "workspace_cleanup"
       ],
-      "status": "gap"
+      "status": "parity"
     },
     {
       "track": "reverse-lakehouse",
       "combo": "medallion:silver+gold-off",
       "axis": "medallion",
-      "expressible": false,
-      "flags": {},
+      "expressible": true,
+      "flags": {
+        "medallion.silver": false,
+        "medallion.gold": false
+      },
+      "direction": null,
+      "chainContext": null,
       "ts": [
         "project_setup",
         "prd_generation",
@@ -1950,15 +2053,12 @@
         "prd_generation",
         "bronze_table_metadata",
         "bronze_layer_creation",
-        "silver_layer_sdp",
-        "gold_layer_design",
-        "gold_layer_pipeline",
         "deploy_lakehouse_assets",
         "iterate_enhance",
         "redeploy_test",
         "workspace_cleanup"
       ],
-      "status": "gap"
+      "status": "parity"
     },
     {
       "track": "reverse-lakehouse-di",
@@ -1966,6 +2066,8 @@
       "axis": "default",
       "expressible": true,
       "flags": {},
+      "direction": null,
+      "chainContext": null,
       "ts": [
         "project_setup",
         "prd_generation",
@@ -1976,8 +2078,8 @@
         "gold_layer_pipeline",
         "deploy_lakehouse_assets",
         "usecase_plan",
-        "aibi_dashboard",
         "genie_space",
+        "aibi_dashboard",
         "deploy_di_assets",
         "optimize_genie",
         "agent_framework",
@@ -1995,8 +2097,8 @@
         "gold_layer_pipeline",
         "deploy_lakehouse_assets",
         "usecase_plan",
-        "aibi_dashboard",
         "genie_space",
+        "aibi_dashboard",
         "deploy_di_assets",
         "optimize_genie",
         "agent_framework",
@@ -2010,8 +2112,10 @@
       "track": "reverse-lakehouse-di",
       "combo": "direction:reverse",
       "axis": "direction",
-      "expressible": false,
+      "expressible": true,
       "flags": {},
+      "direction": "reverse",
+      "chainContext": null,
       "ts": [
         "project_setup",
         "prd_generation",
@@ -2041,8 +2145,8 @@
         "gold_layer_pipeline",
         "deploy_lakehouse_assets",
         "usecase_plan",
-        "aibi_dashboard",
         "genie_space",
+        "aibi_dashboard",
         "deploy_di_assets",
         "optimize_genie",
         "agent_framework",
@@ -2050,14 +2154,18 @@
         "redeploy_test",
         "workspace_cleanup"
       ],
-      "status": "gap"
+      "status": "parity"
     },
     {
       "track": "reverse-lakehouse-di",
       "combo": "ai-off:genie",
       "axis": "ai-modules",
-      "expressible": false,
-      "flags": {},
+      "expressible": true,
+      "flags": {
+        "ai.genie": false
+      },
+      "direction": null,
+      "chainContext": null,
       "ts": [
         "project_setup",
         "prd_generation",
@@ -2086,22 +2194,24 @@
         "deploy_lakehouse_assets",
         "usecase_plan",
         "aibi_dashboard",
-        "genie_space",
         "deploy_di_assets",
-        "optimize_genie",
         "agent_framework",
         "iterate_enhance",
         "redeploy_test",
         "workspace_cleanup"
       ],
-      "status": "gap"
+      "status": "parity"
     },
     {
       "track": "reverse-lakehouse-di",
       "combo": "ai-off:agent",
       "axis": "ai-modules",
-      "expressible": false,
-      "flags": {},
+      "expressible": true,
+      "flags": {
+        "ai.agent": false
+      },
+      "direction": null,
+      "chainContext": null,
       "ts": [
         "project_setup",
         "prd_generation",
@@ -2112,8 +2222,8 @@
         "gold_layer_pipeline",
         "deploy_lakehouse_assets",
         "usecase_plan",
-        "aibi_dashboard",
         "genie_space",
+        "aibi_dashboard",
         "deploy_di_assets",
         "optimize_genie",
         "iterate_enhance",
@@ -2130,201 +2240,29 @@
         "gold_layer_pipeline",
         "deploy_lakehouse_assets",
         "usecase_plan",
-        "aibi_dashboard",
         "genie_space",
+        "aibi_dashboard",
         "deploy_di_assets",
         "optimize_genie",
-        "agent_framework",
         "iterate_enhance",
         "redeploy_test",
         "workspace_cleanup"
       ],
-      "status": "gap"
+      "status": "parity"
     },
     {
       "track": "reverse-lakehouse-di",
       "combo": "ai-off:dashboard",
       "axis": "ai-modules",
-      "expressible": false,
-      "flags": {},
-      "ts": [
-        "project_setup",
-        "prd_generation",
-        "bronze_table_metadata",
-        "bronze_layer_creation",
-        "silver_layer_sdp",
-        "gold_layer_design",
-        "gold_layer_pipeline",
-        "deploy_lakehouse_assets",
-        "usecase_plan",
-        "genie_space",
-        "deploy_di_assets",
-        "optimize_genie",
-        "agent_framework",
-        "iterate_enhance",
-        "redeploy_test",
-        "workspace_cleanup"
-      ],
-      "engine": [
-        "project_setup",
-        "prd_generation",
-        "bronze_table_metadata",
-        "bronze_layer_creation",
-        "silver_layer_sdp",
-        "gold_layer_design",
-        "gold_layer_pipeline",
-        "deploy_lakehouse_assets",
-        "usecase_plan",
-        "aibi_dashboard",
-        "genie_space",
-        "deploy_di_assets",
-        "optimize_genie",
-        "agent_framework",
-        "iterate_enhance",
-        "redeploy_test",
-        "workspace_cleanup"
-      ],
-      "status": "gap"
-    },
-    {
-      "track": "reverse-lakehouse-di",
-      "combo": "ai-off:all",
-      "axis": "ai-modules",
-      "expressible": false,
-      "flags": {},
-      "ts": [
-        "project_setup",
-        "prd_generation",
-        "bronze_table_metadata",
-        "bronze_layer_creation",
-        "silver_layer_sdp",
-        "gold_layer_design",
-        "gold_layer_pipeline",
-        "deploy_lakehouse_assets",
-        "usecase_plan",
-        "deploy_di_assets",
-        "iterate_enhance",
-        "redeploy_test",
-        "workspace_cleanup"
-      ],
-      "engine": [
-        "project_setup",
-        "prd_generation",
-        "bronze_table_metadata",
-        "bronze_layer_creation",
-        "silver_layer_sdp",
-        "gold_layer_design",
-        "gold_layer_pipeline",
-        "deploy_lakehouse_assets",
-        "usecase_plan",
-        "aibi_dashboard",
-        "genie_space",
-        "deploy_di_assets",
-        "optimize_genie",
-        "agent_framework",
-        "iterate_enhance",
-        "redeploy_test",
-        "workspace_cleanup"
-      ],
-      "status": "gap"
-    },
-    {
-      "track": "reverse-lakehouse-di",
-      "combo": "medallion:gold-off",
-      "axis": "medallion",
-      "expressible": false,
-      "flags": {},
-      "ts": [
-        "project_setup",
-        "prd_generation",
-        "bronze_table_metadata",
-        "bronze_layer_creation",
-        "silver_layer_sdp",
-        "deploy_lakehouse_assets",
-        "usecase_plan",
-        "aibi_dashboard",
-        "genie_space",
-        "deploy_di_assets",
-        "optimize_genie",
-        "agent_framework",
-        "iterate_enhance",
-        "redeploy_test",
-        "workspace_cleanup"
-      ],
-      "engine": [
-        "project_setup",
-        "prd_generation",
-        "bronze_table_metadata",
-        "bronze_layer_creation",
-        "silver_layer_sdp",
-        "gold_layer_design",
-        "gold_layer_pipeline",
-        "deploy_lakehouse_assets",
-        "usecase_plan",
-        "aibi_dashboard",
-        "genie_space",
-        "deploy_di_assets",
-        "optimize_genie",
-        "agent_framework",
-        "iterate_enhance",
-        "redeploy_test",
-        "workspace_cleanup"
-      ],
-      "status": "gap"
-    },
-    {
-      "track": "reverse-lakehouse-di",
-      "combo": "medallion:silver+gold-off",
-      "axis": "medallion",
-      "expressible": false,
-      "flags": {},
-      "ts": [
-        "project_setup",
-        "prd_generation",
-        "bronze_table_metadata",
-        "bronze_layer_creation",
-        "deploy_lakehouse_assets",
-        "usecase_plan",
-        "aibi_dashboard",
-        "genie_space",
-        "deploy_di_assets",
-        "optimize_genie",
-        "agent_framework",
-        "iterate_enhance",
-        "redeploy_test",
-        "workspace_cleanup"
-      ],
-      "engine": [
-        "project_setup",
-        "prd_generation",
-        "bronze_table_metadata",
-        "bronze_layer_creation",
-        "silver_layer_sdp",
-        "gold_layer_design",
-        "gold_layer_pipeline",
-        "deploy_lakehouse_assets",
-        "usecase_plan",
-        "aibi_dashboard",
-        "genie_space",
-        "deploy_di_assets",
-        "optimize_genie",
-        "agent_framework",
-        "iterate_enhance",
-        "redeploy_test",
-        "workspace_cleanup"
-      ],
-      "status": "gap"
-    },
-    {
-      "track": "reverse-lakebase",
-      "combo": "default",
-      "axis": "default",
       "expressible": true,
-      "flags": {},
+      "flags": {
+        "ai.dashboard": false
+      },
+      "direction": null,
+      "chainContext": null,
       "ts": [
         "project_setup",
         "prd_generation",
-        "sync_from_lakebase",
         "bronze_table_metadata",
         "bronze_layer_creation",
         "silver_layer_sdp",
@@ -2332,7 +2270,6 @@
         "gold_layer_pipeline",
         "deploy_lakehouse_assets",
         "usecase_plan",
-        "aibi_dashboard",
         "genie_space",
         "deploy_di_assets",
         "optimize_genie",
@@ -2344,7 +2281,6 @@
       "engine": [
         "project_setup",
         "prd_generation",
-        "sync_from_lakebase",
         "bronze_table_metadata",
         "bronze_layer_creation",
         "silver_layer_sdp",
@@ -2352,7 +2288,6 @@
         "gold_layer_pipeline",
         "deploy_lakehouse_assets",
         "usecase_plan",
-        "aibi_dashboard",
         "genie_space",
         "deploy_di_assets",
         "optimize_genie",
@@ -2364,11 +2299,148 @@
       "status": "parity"
     },
     {
+      "track": "reverse-lakehouse-di",
+      "combo": "ai-off:all",
+      "axis": "ai-modules",
+      "expressible": true,
+      "flags": {
+        "ai.genie": false,
+        "ai.agent": false,
+        "ai.dashboard": false
+      },
+      "direction": null,
+      "chainContext": null,
+      "ts": [
+        "project_setup",
+        "prd_generation",
+        "bronze_table_metadata",
+        "bronze_layer_creation",
+        "silver_layer_sdp",
+        "gold_layer_design",
+        "gold_layer_pipeline",
+        "deploy_lakehouse_assets",
+        "usecase_plan",
+        "deploy_di_assets",
+        "iterate_enhance",
+        "redeploy_test",
+        "workspace_cleanup"
+      ],
+      "engine": [
+        "project_setup",
+        "prd_generation",
+        "bronze_table_metadata",
+        "bronze_layer_creation",
+        "silver_layer_sdp",
+        "gold_layer_design",
+        "gold_layer_pipeline",
+        "deploy_lakehouse_assets",
+        "usecase_plan",
+        "deploy_di_assets",
+        "iterate_enhance",
+        "redeploy_test",
+        "workspace_cleanup"
+      ],
+      "status": "parity"
+    },
+    {
+      "track": "reverse-lakehouse-di",
+      "combo": "medallion:gold-off",
+      "axis": "medallion",
+      "expressible": true,
+      "flags": {
+        "medallion.gold": false
+      },
+      "direction": null,
+      "chainContext": null,
+      "ts": [
+        "project_setup",
+        "prd_generation",
+        "bronze_table_metadata",
+        "bronze_layer_creation",
+        "silver_layer_sdp",
+        "deploy_lakehouse_assets",
+        "usecase_plan",
+        "genie_space",
+        "aibi_dashboard",
+        "deploy_di_assets",
+        "optimize_genie",
+        "agent_framework",
+        "iterate_enhance",
+        "redeploy_test",
+        "workspace_cleanup"
+      ],
+      "engine": [
+        "project_setup",
+        "prd_generation",
+        "bronze_table_metadata",
+        "bronze_layer_creation",
+        "silver_layer_sdp",
+        "deploy_lakehouse_assets",
+        "usecase_plan",
+        "genie_space",
+        "aibi_dashboard",
+        "deploy_di_assets",
+        "optimize_genie",
+        "agent_framework",
+        "iterate_enhance",
+        "redeploy_test",
+        "workspace_cleanup"
+      ],
+      "status": "parity"
+    },
+    {
+      "track": "reverse-lakehouse-di",
+      "combo": "medallion:silver+gold-off",
+      "axis": "medallion",
+      "expressible": true,
+      "flags": {
+        "medallion.silver": false,
+        "medallion.gold": false
+      },
+      "direction": null,
+      "chainContext": null,
+      "ts": [
+        "project_setup",
+        "prd_generation",
+        "bronze_table_metadata",
+        "bronze_layer_creation",
+        "deploy_lakehouse_assets",
+        "usecase_plan",
+        "genie_space",
+        "aibi_dashboard",
+        "deploy_di_assets",
+        "optimize_genie",
+        "agent_framework",
+        "iterate_enhance",
+        "redeploy_test",
+        "workspace_cleanup"
+      ],
+      "engine": [
+        "project_setup",
+        "prd_generation",
+        "bronze_table_metadata",
+        "bronze_layer_creation",
+        "deploy_lakehouse_assets",
+        "usecase_plan",
+        "genie_space",
+        "aibi_dashboard",
+        "deploy_di_assets",
+        "optimize_genie",
+        "agent_framework",
+        "iterate_enhance",
+        "redeploy_test",
+        "workspace_cleanup"
+      ],
+      "status": "parity"
+    },
+    {
       "track": "reverse-lakebase",
-      "combo": "direction:reverse",
-      "axis": "direction",
-      "expressible": false,
+      "combo": "default",
+      "axis": "default",
+      "expressible": true,
       "flags": {},
+      "direction": null,
+      "chainContext": null,
       "ts": [
         "project_setup",
         "prd_generation",
@@ -2392,7 +2464,6 @@
       "engine": [
         "project_setup",
         "prd_generation",
-        "sync_from_lakebase",
         "bronze_table_metadata",
         "bronze_layer_creation",
         "silver_layer_sdp",
@@ -2400,27 +2471,81 @@
         "gold_layer_pipeline",
         "deploy_lakehouse_assets",
         "usecase_plan",
-        "aibi_dashboard",
         "genie_space",
+        "aibi_dashboard",
         "deploy_di_assets",
         "optimize_genie",
-        "agent_framework",
+        "activation_table_design",
+        "activation_reverse_sync",
         "iterate_enhance",
         "redeploy_test",
         "workspace_cleanup"
       ],
-      "status": "gap"
+      "status": "parity"
+    },
+    {
+      "track": "reverse-lakebase",
+      "combo": "direction:reverse",
+      "axis": "direction",
+      "expressible": true,
+      "flags": {},
+      "direction": "reverse",
+      "chainContext": null,
+      "ts": [
+        "project_setup",
+        "prd_generation",
+        "bronze_table_metadata",
+        "bronze_layer_creation",
+        "silver_layer_sdp",
+        "gold_layer_design",
+        "gold_layer_pipeline",
+        "deploy_lakehouse_assets",
+        "usecase_plan",
+        "genie_space",
+        "aibi_dashboard",
+        "deploy_di_assets",
+        "optimize_genie",
+        "activation_table_design",
+        "activation_reverse_sync",
+        "iterate_enhance",
+        "redeploy_test",
+        "workspace_cleanup"
+      ],
+      "engine": [
+        "project_setup",
+        "prd_generation",
+        "bronze_table_metadata",
+        "bronze_layer_creation",
+        "silver_layer_sdp",
+        "gold_layer_design",
+        "gold_layer_pipeline",
+        "deploy_lakehouse_assets",
+        "usecase_plan",
+        "genie_space",
+        "aibi_dashboard",
+        "deploy_di_assets",
+        "optimize_genie",
+        "activation_table_design",
+        "activation_reverse_sync",
+        "iterate_enhance",
+        "redeploy_test",
+        "workspace_cleanup"
+      ],
+      "status": "parity"
     },
     {
       "track": "reverse-lakebase",
       "combo": "ai-off:genie",
       "axis": "ai-modules",
-      "expressible": false,
-      "flags": {},
+      "expressible": true,
+      "flags": {
+        "ai.genie": false
+      },
+      "direction": null,
+      "chainContext": null,
       "ts": [
         "project_setup",
         "prd_generation",
-        "sync_from_lakebase",
         "bronze_table_metadata",
         "bronze_layer_creation",
         "silver_layer_sdp",
@@ -2430,7 +2555,8 @@
         "usecase_plan",
         "aibi_dashboard",
         "deploy_di_assets",
-        "agent_framework",
+        "activation_table_design",
+        "activation_reverse_sync",
         "iterate_enhance",
         "redeploy_test",
         "workspace_cleanup"
@@ -2438,7 +2564,6 @@
       "engine": [
         "project_setup",
         "prd_generation",
-        "sync_from_lakebase",
         "bronze_table_metadata",
         "bronze_layer_creation",
         "silver_layer_sdp",
@@ -2447,26 +2572,28 @@
         "deploy_lakehouse_assets",
         "usecase_plan",
         "aibi_dashboard",
-        "genie_space",
         "deploy_di_assets",
-        "optimize_genie",
-        "agent_framework",
+        "activation_table_design",
+        "activation_reverse_sync",
         "iterate_enhance",
         "redeploy_test",
         "workspace_cleanup"
       ],
-      "status": "gap"
+      "status": "parity"
     },
     {
       "track": "reverse-lakebase",
       "combo": "ai-off:dashboard",
       "axis": "ai-modules",
-      "expressible": false,
-      "flags": {},
+      "expressible": true,
+      "flags": {
+        "ai.dashboard": false
+      },
+      "direction": null,
+      "chainContext": null,
       "ts": [
         "project_setup",
         "prd_generation",
-        "sync_from_lakebase",
         "bronze_table_metadata",
         "bronze_layer_creation",
         "silver_layer_sdp",
@@ -2477,7 +2604,8 @@
         "genie_space",
         "deploy_di_assets",
         "optimize_genie",
-        "agent_framework",
+        "activation_table_design",
+        "activation_reverse_sync",
         "iterate_enhance",
         "redeploy_test",
         "workspace_cleanup"
@@ -2485,7 +2613,6 @@
       "engine": [
         "project_setup",
         "prd_generation",
-        "sync_from_lakebase",
         "bronze_table_metadata",
         "bronze_layer_creation",
         "silver_layer_sdp",
@@ -2493,27 +2620,31 @@
         "gold_layer_pipeline",
         "deploy_lakehouse_assets",
         "usecase_plan",
-        "aibi_dashboard",
         "genie_space",
         "deploy_di_assets",
         "optimize_genie",
-        "agent_framework",
+        "activation_table_design",
+        "activation_reverse_sync",
         "iterate_enhance",
         "redeploy_test",
         "workspace_cleanup"
       ],
-      "status": "gap"
+      "status": "parity"
     },
     {
       "track": "reverse-lakebase",
       "combo": "ai-off:all",
       "axis": "ai-modules",
-      "expressible": false,
-      "flags": {},
+      "expressible": true,
+      "flags": {
+        "ai.genie": false,
+        "ai.dashboard": false
+      },
+      "direction": null,
+      "chainContext": null,
       "ts": [
         "project_setup",
         "prd_generation",
-        "sync_from_lakebase",
         "bronze_table_metadata",
         "bronze_layer_creation",
         "silver_layer_sdp",
@@ -2522,7 +2653,8 @@
         "deploy_lakehouse_assets",
         "usecase_plan",
         "deploy_di_assets",
-        "agent_framework",
+        "activation_table_design",
+        "activation_reverse_sync",
         "iterate_enhance",
         "redeploy_test",
         "workspace_cleanup"
@@ -2530,7 +2662,6 @@
       "engine": [
         "project_setup",
         "prd_generation",
-        "sync_from_lakebase",
         "bronze_table_metadata",
         "bronze_layer_creation",
         "silver_layer_sdp",
@@ -2538,37 +2669,39 @@
         "gold_layer_pipeline",
         "deploy_lakehouse_assets",
         "usecase_plan",
-        "aibi_dashboard",
-        "genie_space",
         "deploy_di_assets",
-        "optimize_genie",
-        "agent_framework",
+        "activation_table_design",
+        "activation_reverse_sync",
         "iterate_enhance",
         "redeploy_test",
         "workspace_cleanup"
       ],
-      "status": "gap"
+      "status": "parity"
     },
     {
       "track": "reverse-lakebase",
       "combo": "medallion:gold-off",
       "axis": "medallion",
-      "expressible": false,
-      "flags": {},
+      "expressible": true,
+      "flags": {
+        "medallion.gold": false
+      },
+      "direction": null,
+      "chainContext": null,
       "ts": [
         "project_setup",
         "prd_generation",
-        "sync_from_lakebase",
         "bronze_table_metadata",
         "bronze_layer_creation",
         "silver_layer_sdp",
         "deploy_lakehouse_assets",
         "usecase_plan",
-        "aibi_dashboard",
         "genie_space",
+        "aibi_dashboard",
         "deploy_di_assets",
         "optimize_genie",
-        "agent_framework",
+        "activation_table_design",
+        "activation_reverse_sync",
         "iterate_enhance",
         "redeploy_test",
         "workspace_cleanup"
@@ -2576,93 +2709,47 @@
       "engine": [
         "project_setup",
         "prd_generation",
-        "sync_from_lakebase",
         "bronze_table_metadata",
         "bronze_layer_creation",
         "silver_layer_sdp",
-        "gold_layer_design",
-        "gold_layer_pipeline",
         "deploy_lakehouse_assets",
         "usecase_plan",
-        "aibi_dashboard",
         "genie_space",
+        "aibi_dashboard",
         "deploy_di_assets",
         "optimize_genie",
-        "agent_framework",
+        "activation_table_design",
+        "activation_reverse_sync",
         "iterate_enhance",
         "redeploy_test",
         "workspace_cleanup"
       ],
-      "status": "gap"
+      "status": "parity"
     },
     {
       "track": "reverse-lakebase",
       "combo": "medallion:silver+gold-off",
       "axis": "medallion",
-      "expressible": false,
-      "flags": {},
-      "ts": [
-        "project_setup",
-        "prd_generation",
-        "sync_from_lakebase",
-        "bronze_table_metadata",
-        "bronze_layer_creation",
-        "deploy_lakehouse_assets",
-        "usecase_plan",
-        "aibi_dashboard",
-        "genie_space",
-        "deploy_di_assets",
-        "optimize_genie",
-        "agent_framework",
-        "iterate_enhance",
-        "redeploy_test",
-        "workspace_cleanup"
-      ],
-      "engine": [
-        "project_setup",
-        "prd_generation",
-        "sync_from_lakebase",
-        "bronze_table_metadata",
-        "bronze_layer_creation",
-        "silver_layer_sdp",
-        "gold_layer_design",
-        "gold_layer_pipeline",
-        "deploy_lakehouse_assets",
-        "usecase_plan",
-        "aibi_dashboard",
-        "genie_space",
-        "deploy_di_assets",
-        "optimize_genie",
-        "agent_framework",
-        "iterate_enhance",
-        "redeploy_test",
-        "workspace_cleanup"
-      ],
-      "status": "gap"
-    },
-    {
-      "track": "reverse-app",
-      "combo": "default",
-      "axis": "default",
       "expressible": true,
-      "flags": {},
+      "flags": {
+        "medallion.silver": false,
+        "medallion.gold": false
+      },
+      "direction": null,
+      "chainContext": null,
       "ts": [
         "project_setup",
         "prd_generation",
-        "sync_from_lakebase",
         "bronze_table_metadata",
         "bronze_layer_creation",
-        "silver_layer_sdp",
-        "gold_layer_design",
-        "gold_layer_pipeline",
         "deploy_lakehouse_assets",
         "usecase_plan",
-        "aibi_dashboard",
         "genie_space",
+        "aibi_dashboard",
         "deploy_di_assets",
         "optimize_genie",
-        "agent_framework",
-        "wire_ui_agent",
+        "activation_table_design",
+        "activation_reverse_sync",
         "iterate_enhance",
         "redeploy_test",
         "workspace_cleanup"
@@ -2670,20 +2757,16 @@
       "engine": [
         "project_setup",
         "prd_generation",
-        "sync_from_lakebase",
         "bronze_table_metadata",
         "bronze_layer_creation",
-        "silver_layer_sdp",
-        "gold_layer_design",
-        "gold_layer_pipeline",
         "deploy_lakehouse_assets",
         "usecase_plan",
-        "aibi_dashboard",
         "genie_space",
+        "aibi_dashboard",
         "deploy_di_assets",
         "optimize_genie",
-        "agent_framework",
-        "wire_ui_agent",
+        "activation_table_design",
+        "activation_reverse_sync",
         "iterate_enhance",
         "redeploy_test",
         "workspace_cleanup"
@@ -2692,10 +2775,12 @@
     },
     {
       "track": "reverse-app",
-      "combo": "direction:reverse",
-      "axis": "direction",
-      "expressible": false,
+      "combo": "default",
+      "axis": "default",
+      "expressible": true,
       "flags": {},
+      "direction": null,
+      "chainContext": null,
       "ts": [
         "project_setup",
         "prd_generation",
@@ -2724,7 +2809,6 @@
       "engine": [
         "project_setup",
         "prd_generation",
-        "sync_from_lakebase",
         "bronze_table_metadata",
         "bronze_layer_creation",
         "silver_layer_sdp",
@@ -2732,28 +2816,96 @@
         "gold_layer_pipeline",
         "deploy_lakehouse_assets",
         "usecase_plan",
-        "aibi_dashboard",
         "genie_space",
+        "aibi_dashboard",
         "deploy_di_assets",
         "optimize_genie",
         "agent_framework",
-        "wire_ui_agent",
+        "activation_table_design",
+        "activation_reverse_sync",
+        "activation_app_design",
+        "activation_build_wire",
+        "activation_wire_lakebase",
+        "activation_deploy_validate",
         "iterate_enhance",
         "redeploy_test",
         "workspace_cleanup"
       ],
-      "status": "gap"
+      "status": "parity"
+    },
+    {
+      "track": "reverse-app",
+      "combo": "direction:reverse",
+      "axis": "direction",
+      "expressible": true,
+      "flags": {},
+      "direction": "reverse",
+      "chainContext": null,
+      "ts": [
+        "project_setup",
+        "prd_generation",
+        "bronze_table_metadata",
+        "bronze_layer_creation",
+        "silver_layer_sdp",
+        "gold_layer_design",
+        "gold_layer_pipeline",
+        "deploy_lakehouse_assets",
+        "usecase_plan",
+        "genie_space",
+        "aibi_dashboard",
+        "deploy_di_assets",
+        "optimize_genie",
+        "agent_framework",
+        "activation_table_design",
+        "activation_reverse_sync",
+        "activation_app_design",
+        "activation_build_wire",
+        "activation_wire_lakebase",
+        "activation_deploy_validate",
+        "iterate_enhance",
+        "redeploy_test",
+        "workspace_cleanup"
+      ],
+      "engine": [
+        "project_setup",
+        "prd_generation",
+        "bronze_table_metadata",
+        "bronze_layer_creation",
+        "silver_layer_sdp",
+        "gold_layer_design",
+        "gold_layer_pipeline",
+        "deploy_lakehouse_assets",
+        "usecase_plan",
+        "genie_space",
+        "aibi_dashboard",
+        "deploy_di_assets",
+        "optimize_genie",
+        "agent_framework",
+        "activation_table_design",
+        "activation_reverse_sync",
+        "activation_app_design",
+        "activation_build_wire",
+        "activation_wire_lakebase",
+        "activation_deploy_validate",
+        "iterate_enhance",
+        "redeploy_test",
+        "workspace_cleanup"
+      ],
+      "status": "parity"
     },
     {
       "track": "reverse-app",
       "combo": "ai-off:genie",
       "axis": "ai-modules",
-      "expressible": false,
-      "flags": {},
+      "expressible": true,
+      "flags": {
+        "ai.genie": false
+      },
+      "direction": null,
+      "chainContext": null,
       "ts": [
         "project_setup",
         "prd_generation",
-        "sync_from_lakebase",
         "bronze_table_metadata",
         "bronze_layer_creation",
         "silver_layer_sdp",
@@ -2764,7 +2916,12 @@
         "aibi_dashboard",
         "deploy_di_assets",
         "agent_framework",
-        "wire_ui_agent",
+        "activation_table_design",
+        "activation_reverse_sync",
+        "activation_app_design",
+        "activation_build_wire",
+        "activation_wire_lakebase",
+        "activation_deploy_validate",
         "iterate_enhance",
         "redeploy_test",
         "workspace_cleanup"
@@ -2772,7 +2929,6 @@
       "engine": [
         "project_setup",
         "prd_generation",
-        "sync_from_lakebase",
         "bronze_table_metadata",
         "bronze_layer_creation",
         "silver_layer_sdp",
@@ -2781,27 +2937,33 @@
         "deploy_lakehouse_assets",
         "usecase_plan",
         "aibi_dashboard",
-        "genie_space",
         "deploy_di_assets",
-        "optimize_genie",
         "agent_framework",
-        "wire_ui_agent",
+        "activation_table_design",
+        "activation_reverse_sync",
+        "activation_app_design",
+        "activation_build_wire",
+        "activation_wire_lakebase",
+        "activation_deploy_validate",
         "iterate_enhance",
         "redeploy_test",
         "workspace_cleanup"
       ],
-      "status": "gap"
+      "status": "parity"
     },
     {
       "track": "reverse-app",
       "combo": "ai-off:agent",
       "axis": "ai-modules",
-      "expressible": false,
-      "flags": {},
+      "expressible": true,
+      "flags": {
+        "ai.agent": false
+      },
+      "direction": null,
+      "chainContext": null,
       "ts": [
         "project_setup",
         "prd_generation",
-        "sync_from_lakebase",
         "bronze_table_metadata",
         "bronze_layer_creation",
         "silver_layer_sdp",
@@ -2809,10 +2971,16 @@
         "gold_layer_pipeline",
         "deploy_lakehouse_assets",
         "usecase_plan",
-        "aibi_dashboard",
         "genie_space",
+        "aibi_dashboard",
         "deploy_di_assets",
         "optimize_genie",
+        "activation_table_design",
+        "activation_reverse_sync",
+        "activation_app_design",
+        "activation_build_wire",
+        "activation_wire_lakebase",
+        "activation_deploy_validate",
         "iterate_enhance",
         "redeploy_test",
         "workspace_cleanup"
@@ -2820,7 +2988,6 @@
       "engine": [
         "project_setup",
         "prd_generation",
-        "sync_from_lakebase",
         "bronze_table_metadata",
         "bronze_layer_creation",
         "silver_layer_sdp",
@@ -2828,28 +2995,35 @@
         "gold_layer_pipeline",
         "deploy_lakehouse_assets",
         "usecase_plan",
-        "aibi_dashboard",
         "genie_space",
+        "aibi_dashboard",
         "deploy_di_assets",
         "optimize_genie",
-        "agent_framework",
-        "wire_ui_agent",
+        "activation_table_design",
+        "activation_reverse_sync",
+        "activation_app_design",
+        "activation_build_wire",
+        "activation_wire_lakebase",
+        "activation_deploy_validate",
         "iterate_enhance",
         "redeploy_test",
         "workspace_cleanup"
       ],
-      "status": "gap"
+      "status": "parity"
     },
     {
       "track": "reverse-app",
       "combo": "ai-off:dashboard",
       "axis": "ai-modules",
-      "expressible": false,
-      "flags": {},
+      "expressible": true,
+      "flags": {
+        "ai.dashboard": false
+      },
+      "direction": null,
+      "chainContext": null,
       "ts": [
         "project_setup",
         "prd_generation",
-        "sync_from_lakebase",
         "bronze_table_metadata",
         "bronze_layer_creation",
         "silver_layer_sdp",
@@ -2861,7 +3035,12 @@
         "deploy_di_assets",
         "optimize_genie",
         "agent_framework",
-        "wire_ui_agent",
+        "activation_table_design",
+        "activation_reverse_sync",
+        "activation_app_design",
+        "activation_build_wire",
+        "activation_wire_lakebase",
+        "activation_deploy_validate",
         "iterate_enhance",
         "redeploy_test",
         "workspace_cleanup"
@@ -2869,7 +3048,6 @@
       "engine": [
         "project_setup",
         "prd_generation",
-        "sync_from_lakebase",
         "bronze_table_metadata",
         "bronze_layer_creation",
         "silver_layer_sdp",
@@ -2877,28 +3055,37 @@
         "gold_layer_pipeline",
         "deploy_lakehouse_assets",
         "usecase_plan",
-        "aibi_dashboard",
         "genie_space",
         "deploy_di_assets",
         "optimize_genie",
         "agent_framework",
-        "wire_ui_agent",
+        "activation_table_design",
+        "activation_reverse_sync",
+        "activation_app_design",
+        "activation_build_wire",
+        "activation_wire_lakebase",
+        "activation_deploy_validate",
         "iterate_enhance",
         "redeploy_test",
         "workspace_cleanup"
       ],
-      "status": "gap"
+      "status": "parity"
     },
     {
       "track": "reverse-app",
       "combo": "ai-off:all",
       "axis": "ai-modules",
-      "expressible": false,
-      "flags": {},
+      "expressible": true,
+      "flags": {
+        "ai.genie": false,
+        "ai.agent": false,
+        "ai.dashboard": false
+      },
+      "direction": null,
+      "chainContext": null,
       "ts": [
         "project_setup",
         "prd_generation",
-        "sync_from_lakebase",
         "bronze_table_metadata",
         "bronze_layer_creation",
         "silver_layer_sdp",
@@ -2907,6 +3094,12 @@
         "deploy_lakehouse_assets",
         "usecase_plan",
         "deploy_di_assets",
+        "activation_table_design",
+        "activation_reverse_sync",
+        "activation_app_design",
+        "activation_build_wire",
+        "activation_wire_lakebase",
+        "activation_deploy_validate",
         "iterate_enhance",
         "redeploy_test",
         "workspace_cleanup"
@@ -2914,7 +3107,6 @@
       "engine": [
         "project_setup",
         "prd_generation",
-        "sync_from_lakebase",
         "bronze_table_metadata",
         "bronze_layer_creation",
         "silver_layer_sdp",
@@ -2922,39 +3114,48 @@
         "gold_layer_pipeline",
         "deploy_lakehouse_assets",
         "usecase_plan",
-        "aibi_dashboard",
-        "genie_space",
         "deploy_di_assets",
-        "optimize_genie",
-        "agent_framework",
-        "wire_ui_agent",
+        "activation_table_design",
+        "activation_reverse_sync",
+        "activation_app_design",
+        "activation_build_wire",
+        "activation_wire_lakebase",
+        "activation_deploy_validate",
         "iterate_enhance",
         "redeploy_test",
         "workspace_cleanup"
       ],
-      "status": "gap"
+      "status": "parity"
     },
     {
       "track": "reverse-app",
       "combo": "medallion:gold-off",
       "axis": "medallion",
-      "expressible": false,
-      "flags": {},
+      "expressible": true,
+      "flags": {
+        "medallion.gold": false
+      },
+      "direction": null,
+      "chainContext": null,
       "ts": [
         "project_setup",
         "prd_generation",
-        "sync_from_lakebase",
         "bronze_table_metadata",
         "bronze_layer_creation",
         "silver_layer_sdp",
         "deploy_lakehouse_assets",
         "usecase_plan",
-        "aibi_dashboard",
         "genie_space",
+        "aibi_dashboard",
         "deploy_di_assets",
         "optimize_genie",
         "agent_framework",
-        "wire_ui_agent",
+        "activation_table_design",
+        "activation_reverse_sync",
+        "activation_app_design",
+        "activation_build_wire",
+        "activation_wire_lakebase",
+        "activation_deploy_validate",
         "iterate_enhance",
         "redeploy_test",
         "workspace_cleanup"
@@ -2962,46 +3163,57 @@
       "engine": [
         "project_setup",
         "prd_generation",
-        "sync_from_lakebase",
         "bronze_table_metadata",
         "bronze_layer_creation",
         "silver_layer_sdp",
-        "gold_layer_design",
-        "gold_layer_pipeline",
         "deploy_lakehouse_assets",
         "usecase_plan",
-        "aibi_dashboard",
         "genie_space",
+        "aibi_dashboard",
         "deploy_di_assets",
         "optimize_genie",
         "agent_framework",
-        "wire_ui_agent",
+        "activation_table_design",
+        "activation_reverse_sync",
+        "activation_app_design",
+        "activation_build_wire",
+        "activation_wire_lakebase",
+        "activation_deploy_validate",
         "iterate_enhance",
         "redeploy_test",
         "workspace_cleanup"
       ],
-      "status": "gap"
+      "status": "parity"
     },
     {
       "track": "reverse-app",
       "combo": "medallion:silver+gold-off",
       "axis": "medallion",
-      "expressible": false,
-      "flags": {},
+      "expressible": true,
+      "flags": {
+        "medallion.silver": false,
+        "medallion.gold": false
+      },
+      "direction": null,
+      "chainContext": null,
       "ts": [
         "project_setup",
         "prd_generation",
-        "sync_from_lakebase",
         "bronze_table_metadata",
         "bronze_layer_creation",
         "deploy_lakehouse_assets",
         "usecase_plan",
-        "aibi_dashboard",
         "genie_space",
+        "aibi_dashboard",
         "deploy_di_assets",
         "optimize_genie",
         "agent_framework",
-        "wire_ui_agent",
+        "activation_table_design",
+        "activation_reverse_sync",
+        "activation_app_design",
+        "activation_build_wire",
+        "activation_wire_lakebase",
+        "activation_deploy_validate",
         "iterate_enhance",
         "redeploy_test",
         "workspace_cleanup"
@@ -3009,25 +3221,26 @@
       "engine": [
         "project_setup",
         "prd_generation",
-        "sync_from_lakebase",
         "bronze_table_metadata",
         "bronze_layer_creation",
-        "silver_layer_sdp",
-        "gold_layer_design",
-        "gold_layer_pipeline",
         "deploy_lakehouse_assets",
         "usecase_plan",
-        "aibi_dashboard",
         "genie_space",
+        "aibi_dashboard",
         "deploy_di_assets",
         "optimize_genie",
         "agent_framework",
-        "wire_ui_agent",
+        "activation_table_design",
+        "activation_reverse_sync",
+        "activation_app_design",
+        "activation_build_wire",
+        "activation_wire_lakebase",
+        "activation_deploy_validate",
         "iterate_enhance",
         "redeploy_test",
         "workspace_cleanup"
       ],
-      "status": "gap"
+      "status": "parity"
     }
   ]
 }

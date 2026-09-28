@@ -20,10 +20,14 @@
 // Python against the real engine.outline(), so it is not hollow.
 //
 // status = 'parity' when ts and engine are byte-equal ordered sequences,
-// otherwise 'gap'. Expressible axes (default forward, genie flags) MUST be
-// parity; gap axes (direction=reverse, additive-chain climb, AI-module
-// sub-toggles, medallion sub-toggles) are the T3 reconciliation scope — recorded
-// with their concrete diff, never forced to parity by bending the engine or TS.
+// otherwise 'gap'. As of Phase 3 T3a the engine composes ALL four former gap
+// axes — direction=reverse (baked into the four reverse-* tracks; a runtime
+// variant on end-to-end), additive-chain climb (a chainContext variant on
+// lakehouse / lakehouse-di), and the AI-module + medallion sub-toggles (six
+// default-true session flags) — so every enumerated cell is expressible and MUST
+// be parity. Each cell records the ENGINE inputs (flags + direction/chainContext)
+// that reproduce its REAL getFilteredSections order; nothing is forced to parity
+// by bending the engine or the TS oracle.
 //
 // Run: node --experimental-strip-types scripts/dump_outline_matrix.mjs
 // Node >= 22 (native TS strip). No tsx/vitest. package.json is type:module.
@@ -64,12 +68,28 @@ await writeFile(temporarySourcePath, executableSource, "utf8");
 const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
 
 /**
- * Reproduce engine.outline()'s ordered sectionTag sequence: strict manifest
- * declaration order minus steps whose flag is off. `flags` overrides each
- * flag's manifest default. This mirrors manifest.py Manifest.outline_order and
- * is re-verified against the real Python engine in test_outline_parity.py.
+ * Select the active section list for a track given the composition `inputs`
+ * (direction / chainContext), mirroring manifest.py Track.sections_for: the first
+ * variant whose `when` conditions all match wins, else the default sections.
  */
-function engineOutline(trackId, flags) {
+function selectSections(track, inputs) {
+  for (const variant of track.variants ?? []) {
+    const when = variant.when ?? {};
+    if (Object.entries(when).every(([k, v]) => String((inputs ?? {})[k]) === String(v))) {
+      return variant.sections;
+    }
+  }
+  return track.sections;
+}
+
+/**
+ * Reproduce engine.outline()'s ordered sectionTag sequence: pick the active
+ * sections for `inputs`, then take manifest declaration order minus steps whose
+ * flag is off. `flags` overrides each flag's manifest default. This mirrors
+ * manifest.py Manifest.outline_order and is re-verified against the real Python
+ * engine in test_outline_parity.py.
+ */
+function engineOutline(trackId, flags, inputs) {
   const track = manifest.tracks[trackId];
   const active = {};
   for (const [name, def] of Object.entries(track.flags ?? {})) {
@@ -79,7 +99,7 @@ function engineOutline(trackId, flags) {
     active[name] = Boolean(value);
   }
   const tags = [];
-  for (const section of track.sections) {
+  for (const section of selectSections(track, inputs)) {
     for (const step of section.steps) {
       if (step.flag == null || active[step.flag]) {
         tags.push(step.sectionTag);
@@ -120,23 +140,50 @@ try {
     "reverse-app",
     "end-to-end",
   ]);
+  // The four reverse-* levels render ONLY in reverse direction, so reverse is
+  // their intrinsic baseline (the engine bakes it into the manifest track). Their
+  // default / sub-toggle / direction cells are therefore computed at direction
+  // "reverse"; end-to-end stays forward-baseline with a reverse VARIANT.
+  const REVERSE_INTRINSIC = new Set([
+    "reverse-lakehouse",
+    "reverse-lakehouse-di",
+    "reverse-lakebase",
+    "reverse-app",
+  ]);
+  const baselineDirection = (trackId) =>
+    REVERSE_INTRINSIC.has(trackId) ? "reverse" : "forward";
   // Additive-chain climb: getCumulativeOverrides returns overrides only for
   // APP_CHAIN positions past index 1 (lakehouse, lakehouse-di).
   const CLIMB_TRACKS = new Set(["lakehouse", "lakehouse-di"]);
 
-  /** Build the ordered list of {label, axis, expressible, flags, ts} cells for a track. */
+  // Sub-toggle flag names (Phase 3 T3a) — the session flags the engine reads to
+  // express an AI-module / medallion-layer deselection. Mirrors the flag stamping
+  // in generate_manifest.py and the tag maps in getDisabledTagsFor*.
+  const aiFlag = (module) => `ai.${module}`;
+  const medallionFlag = (layer) => `medallion.${layer}`;
+
+  /**
+   * Build the ordered cells for a track. Every cell carries the ENGINE inputs
+   * that reproduce its TS order: `flags` (sub-toggle / genie booleans), plus the
+   * composition inputs `direction` / `chainContext` the engine reads from
+   * session_parameters to pick a variant. All four former gap axes are now
+   * engine-expressible (Phase 3 T3a), so `expressible` is true throughout.
+   */
   function cellsForTrack(trackId) {
     const cells = [];
     const isGenie = trackId === GENIE;
+    const baseDir = baselineDirection(trackId);
 
-    // 1) Default forward combo — the hard-assert safety net (expressible).
+    // 1) Default combo — the hard-assert safety net. For reverse-* tracks the
+    //    baseline (and thus this cell) is reverse; the engine bakes it into the
+    //    default track, so no explicit input is needed.
     const defaultDisabled = isGenie ? genieDisabled(false, false) : new Set();
     cells.push({
       combo: "default",
       axis: "default",
       expressible: true,
       flags: {},
-      ts: flatten(trackId, defaultDisabled, undefined, "forward"),
+      ts: flatten(trackId, defaultDisabled, undefined, baseDir),
     });
 
     // 2) Genie flag matrix (expressible via session_parameters.flags).
@@ -164,30 +211,36 @@ try {
       });
     }
 
-    // 3) Additive-chain climb (GAP) — real getCumulativeOverrides input.
+    // 3) Additive-chain climb — engine reads chainContext='app' -> climb variant.
     if (CLIMB_TRACKS.has(trackId)) {
       const overrides = ws.getCumulativeOverrides(trackId, new Set(), "app");
       cells.push({
         combo: "climb:app",
         axis: "climb",
-        expressible: false,
+        expressible: true,
         flags: {},
+        chainContext: "app",
         ts: flatten(trackId, new Set(), overrides ?? undefined, "forward"),
       });
     }
 
-    // 4) direction = reverse (GAP).
+    // 4) direction = reverse. For the four reverse-* tracks this equals the baked
+    //    default (the input is a no-op the engine ignores); for end-to-end the
+    //    engine selects the reverse variant.
     if (REVERSE_OFFERED.has(trackId)) {
       cells.push({
         combo: "direction:reverse",
         axis: "direction",
-        expressible: false,
+        expressible: true,
         flags: {},
+        direction: "reverse",
         ts: flatten(trackId, new Set(), undefined, "reverse"),
       });
     }
 
-    // 5) AI-module sub-toggles (GAP) — isolated against the forward baseline.
+    // 5) AI-module sub-toggles — engine expresses each via a default-true ai.*
+    //    flag turned off. Computed at the track's baseline direction, so reverse-*
+    //    cells are genuine reverse x sub-toggle COMPOUND cells.
     if (ws.LEVELS_WITH_AI_MODULES.has(trackId)) {
       const applicable = ws.getApplicableAIModules(trackId);
       for (const module of ws.ALL_AI_MODULES) {
@@ -198,49 +251,58 @@ try {
         cells.push({
           combo: `ai-off:${module}`,
           axis: "ai-modules",
-          expressible: false,
-          flags: {},
+          expressible: true,
+          flags: { [aiFlag(module)]: false },
           ts: flatten(
             trackId,
             new Set(ws.getDisabledTagsForAIModules(trackId, selected)),
             undefined,
-            "forward",
+            baseDir,
           ),
         });
       }
       // All applicable AI modules off.
+      const allOffFlags = {};
+      for (const module of ws.ALL_AI_MODULES) {
+        if (applicable.has(module)) allOffFlags[aiFlag(module)] = false;
+      }
       cells.push({
         combo: "ai-off:all",
         axis: "ai-modules",
-        expressible: false,
-        flags: {},
+        expressible: true,
+        flags: allOffFlags,
         ts: flatten(
           trackId,
           new Set(ws.getDisabledTagsForAIModules(trackId, new Set())),
           undefined,
-          "forward",
+          baseDir,
         ),
       });
     }
 
-    // 6) Medallion sub-toggles (GAP) — cascade-legal selections that differ
-    // from all-on (empty / silver-only / gold-only normalize back to all-on).
+    // 6) Medallion sub-toggles — cascade-legal selections that differ from all-on
+    //    ({bronze,silver} => gold off; {bronze} => silver+gold off). Engine
+    //    expresses via default-true medallion.* flags turned off, at baseline dir.
     if (ws.LEVELS_WITH_MEDALLION_TOGGLES.has(trackId)) {
       const medallionCombos = [
-        ["medallion:gold-off", new Set(["bronze", "silver"])],
-        ["medallion:silver+gold-off", new Set(["bronze"])],
+        ["medallion:gold-off", new Set(["bronze", "silver"]), { [medallionFlag("gold")]: false }],
+        [
+          "medallion:silver+gold-off",
+          new Set(["bronze"]),
+          { [medallionFlag("silver")]: false, [medallionFlag("gold")]: false },
+        ],
       ];
-      for (const [combo, selected] of medallionCombos) {
+      for (const [combo, selected, flags] of medallionCombos) {
         cells.push({
           combo,
           axis: "medallion",
-          expressible: false,
-          flags: {},
+          expressible: true,
+          flags,
           ts: flatten(
             trackId,
             new Set(ws.getDisabledTagsForMedallionLayers(trackId, selected)),
             undefined,
-            "forward",
+            baseDir,
           ),
         });
       }
@@ -252,7 +314,10 @@ try {
   const cells = [];
   for (const trackId of tracks) {
     for (const cell of cellsForTrack(trackId)) {
-      const engine = engineOutline(trackId, cell.flags);
+      const inputs = {};
+      if (cell.direction != null) inputs.direction = cell.direction;
+      if (cell.chainContext != null) inputs.chainContext = cell.chainContext;
+      const engine = engineOutline(trackId, cell.flags, inputs);
       const status = arraysEqual(cell.ts, engine) ? "parity" : "gap";
       cells.push({
         track: trackId,
@@ -260,6 +325,8 @@ try {
         axis: cell.axis,
         expressible: cell.expressible,
         flags: cell.flags,
+        direction: cell.direction ?? null,
+        chainContext: cell.chainContext ?? null,
         ts: cell.ts,
         engine,
         status,
@@ -269,7 +336,7 @@ try {
 
   const matrix = {
     generated_by: "node --experimental-strip-types scripts/dump_outline_matrix.mjs",
-    doc: "engine.outline() vs getFilteredSections() parity matrix. ts=REAL getFilteredSections; engine=manifest.outline_order (re-verified in Python). status=parity when equal else gap. Expressible axes MUST be parity; gap axes scope Phase 3 T3.",
+    doc: "engine.outline() vs getFilteredSections() parity matrix. ts=REAL getFilteredSections; engine=manifest.outline_order (re-verified in Python). status=parity when equal else gap. Phase 3 T3a: the engine composes all four axes (direction=reverse, additive-chain climb, AI-module + medallion sub-toggles), so every cell is expressible and MUST be parity; each cell records the engine inputs (flags + direction/chainContext) that reproduce its TS order.",
     manifest_version: manifest.version,
     tracks,
     cells,
@@ -281,9 +348,9 @@ try {
     "utf8",
   );
 
-  // --- Human-readable PARITY_MATRIX.md (the T3 reconciliation list). ---------
+  // --- Human-readable PARITY_MATRIX.md ---------------------------------------
   const axisLabels = {
-    default: "default (forward)",
+    default: "default",
     "genie-flags": "genie flags",
     climb: "additive-chain climb",
     direction: "direction=reverse",
@@ -292,9 +359,16 @@ try {
   };
   const parityCells = cells.filter((c) => c.status === "parity");
   const gapCells = cells.filter((c) => c.status === "gap");
+  const engineInput = (c) => {
+    const parts = [];
+    if (c.direction) parts.push(`direction=${c.direction}`);
+    if (c.chainContext) parts.push(`chainContext=${c.chainContext}`);
+    for (const [k, v] of Object.entries(c.flags ?? {})) parts.push(`${k}=${v}`);
+    return parts.join(", ") || "—";
+  };
 
   const lines = [];
-  lines.push("# Outline parity matrix (Phase 3 T2)");
+  lines.push("# Outline parity matrix (Phase 3 T3a)");
   lines.push("");
   lines.push(
     "Generated by `node --experimental-strip-types scripts/dump_outline_matrix.mjs`. Do not hand-edit — regenerate.",
@@ -302,8 +376,10 @@ try {
   lines.push("");
   lines.push(
     "`ts` = the REAL `getFilteredSections()` ordered `sectionTag` sequence. " +
-      "`engine` = `engine.outline()` (manifest declaration order minus flag-filtered steps). " +
-      "**parity** = the engine reproduces the TS order; **gap** = an axis the engine cannot yet express (Phase 3 T3 scope).",
+      "`engine` = `engine.outline()` (manifest declaration order minus flag-filtered steps, over the variant the engine selects). " +
+      "**parity** = the engine reproduces the TS order. As of T3a the engine composes all four axes " +
+      "(direction=reverse, additive-chain climb, AI-module + medallion sub-toggles), so every cell is expressible and parity; " +
+      "the `Engine input` column shows the flags + direction/chainContext the engine reads to reproduce each TS order.",
   );
   lines.push("");
   lines.push(
@@ -312,11 +388,11 @@ try {
   lines.push("");
   lines.push("## Matrix (14 tracks x combos)");
   lines.push("");
-  lines.push("| Track | Combo | Axis | Expressible | Status | TS len | Engine len |");
-  lines.push("| --- | --- | --- | --- | --- | --- | --- |");
+  lines.push("| Track | Combo | Axis | Engine input | Expressible | Status | TS len | Engine len |");
+  lines.push("| --- | --- | --- | --- | --- | --- | --- | --- |");
   for (const c of cells) {
     lines.push(
-      `| ${c.track} | ${c.combo} | ${axisLabels[c.axis] ?? c.axis} | ${
+      `| ${c.track} | ${c.combo} | ${axisLabels[c.axis] ?? c.axis} | ${engineInput(c)} | ${
         c.expressible ? "yes" : "no"
       } | ${c.status === "parity" ? "✅ parity" : "⚠️ gap"} | ${c.ts.length} | ${
         c.engine.length
@@ -327,17 +403,18 @@ try {
   lines.push("## Expressible cells (hard-asserted parity — the safety net)");
   lines.push("");
   lines.push(
-    "These are the cells the engine is expected to reproduce exactly. Any drift here is a real finding, not a gap.",
+    "Every cell the engine reproduces exactly. Any drift here is a real finding, not a gap.",
   );
   lines.push("");
   for (const c of cells.filter((x) => x.expressible)) {
     lines.push(`- \`${c.track}\` / \`${c.combo}\` — ${c.status.toUpperCase()}`);
   }
   lines.push("");
-  lines.push("## T3 reconciliation gap list");
+  lines.push("## Composition axes (Phase 3 T3a — all reconciled)");
   lines.push("");
   lines.push(
-    "Axes the engine cannot yet express. Each cell below shows how the REAL TS order diverges from the engine's (forward) model. Grouped by axis.",
+    "The four axes that were Phase 3 T3 gaps are now engine-composed. Any cell that regresses to a gap " +
+      "is listed below with its concrete TS-vs-engine diff (empty in a healthy tree).",
   );
   lines.push("");
   const byAxis = {};
@@ -349,7 +426,7 @@ try {
     lines.push(`### ${axisLabels[axis] ?? axis} (${group.length} gap cells)`);
     lines.push("");
     if (group.length === 0) {
-      lines.push("_No gap cells for this axis (axis is either not offered or a no-op on every legal track)._");
+      lines.push("_Reconciled: every cell on this axis is engine-composed and at parity._");
       lines.push("");
       continue;
     }
@@ -376,18 +453,15 @@ try {
     }
     lines.push("");
   }
-  // Accidental-parity note: expressibility=false but status=parity (axis is a
-  // no-op on that track). Locked so a later real divergence is caught.
-  const accidental = cells.filter((c) => !c.expressible && c.status === "parity");
-  lines.push("## Accidental-parity gap cells (axis is a no-op on this track)");
+  // Non-expressible cells: none should remain after T3a (every axis composes).
+  const notExpressible = cells.filter((c) => !c.expressible);
+  lines.push("## Non-expressible cells (should be empty after T3a)");
   lines.push("");
-  if (accidental.length === 0) {
-    lines.push("_None._");
+  if (notExpressible.length === 0) {
+    lines.push("_None — every enumerated cell is engine-expressible._");
   } else {
-    for (const c of accidental) {
-      lines.push(
-        `- \`${c.track}\` / \`${c.combo}\` (\`${axisLabels[c.axis] ?? c.axis}\`) — TS order equals the engine's forward order, so this axis changes nothing for this track. Locked; a later divergence will fail the harness.`,
-      );
+    for (const c of notExpressible) {
+      lines.push(`- \`${c.track}\` / \`${c.combo}\` (\`${axisLabels[c.axis] ?? c.axis}\`) — status ${c.status}`);
     }
   }
   lines.push("");

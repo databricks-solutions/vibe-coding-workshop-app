@@ -375,7 +375,31 @@
       "assistants": [
         "default"
       ],
-      "flags": {},
+      "flags": {
+        "medallion.bronze": {
+          "default": true,
+          "affectsSteps": [
+            "bronze_table_metadata",
+            "bronze_layer_creation"
+          ],
+          "note": "Medallion layer sub-toggle (default ON); mirrors getDisabledTagsForMedallionLayers."
+        },
+        "medallion.silver": {
+          "default": true,
+          "affectsSteps": [
+            "silver_layer_sdp"
+          ],
+          "note": "Medallion layer sub-toggle (default ON); mirrors getDisabledTagsForMedallionLayers."
+        },
+        "medallion.gold": {
+          "default": true,
+          "affectsSteps": [
+            "gold_layer_design",
+            "gold_layer_pipeline"
+          ],
+          "note": "Medallion layer sub-toggle (default ON); mirrors getDisabledTagsForMedallionLayers."
+        }
+      },
       "sections": [
         {
           "id": "define-usecase",
@@ -439,7 +463,7 @@
                 "ui",
                 "mcp"
               ],
-              "flag": null
+              "flag": "medallion.bronze"
             },
             {
               "order": 4,
@@ -457,7 +481,7 @@
                 "ui",
                 "mcp"
               ],
-              "flag": null
+              "flag": "medallion.bronze"
             },
             {
               "order": 5,
@@ -475,7 +499,7 @@
                 "ui",
                 "mcp"
               ],
-              "flag": null
+              "flag": "medallion.silver"
             },
             {
               "order": 6,
@@ -493,7 +517,7 @@
                 "ui",
                 "mcp"
               ],
-              "flag": null
+              "flag": "medallion.gold"
             },
             {
               "order": 7,
@@ -511,7 +535,7 @@
                 "ui",
                 "mcp"
               ],
-              "flag": null
+              "flag": "medallion.gold"
             },
             {
               "order": 8,
@@ -597,6 +621,347 @@
             }
           ]
         }
+      ],
+      "variants": [
+        {
+          "when": {
+            "chainContext": "app"
+          },
+          "sections": [
+            {
+              "id": "define-usecase",
+              "chapter": "Foundation",
+              "title": "Project Setup",
+              "why": "Configure your environment and generate product requirements",
+              "steps": [
+                {
+                  "order": 1,
+                  "sectionTag": "project_setup",
+                  "title": "Set Up Project",
+                  "why": null,
+                  "gate": null,
+                  "requiresGate": null,
+                  "consumes": [],
+                  "produces": null,
+                  "execution": "agent-doable",
+                  "surfaces": [
+                    "ui",
+                    "mcp"
+                  ],
+                  "flag": null
+                },
+                {
+                  "order": 2,
+                  "sectionTag": "prd_generation",
+                  "title": "PRD Generation",
+                  "why": null,
+                  "gate": null,
+                  "requiresGate": "project_setup",
+                  "consumes": [],
+                  "produces": "prd_document",
+                  "execution": "agent-doable",
+                  "surfaces": [
+                    "ui",
+                    "mcp"
+                  ],
+                  "flag": null
+                }
+              ]
+            },
+            {
+              "id": "databricks-app",
+              "chapter": "Databricks App",
+              "title": "Databricks App",
+              "why": "Design user interface and deploy to Databricks Apps",
+              "steps": [
+                {
+                  "order": 3,
+                  "sectionTag": "cursor_copilot_ui_design",
+                  "title": "UI Design",
+                  "why": null,
+                  "gate": null,
+                  "requiresGate": "prd_generation",
+                  "consumes": [],
+                  "produces": null,
+                  "execution": "agent-doable",
+                  "surfaces": [
+                    "ui",
+                    "mcp"
+                  ],
+                  "flag": null
+                },
+                {
+                  "order": 4,
+                  "sectionTag": "deploy_databricks_app",
+                  "title": "Deploy App",
+                  "why": null,
+                  "gate": null,
+                  "requiresGate": "cursor_copilot_ui_design",
+                  "consumes": [],
+                  "produces": null,
+                  "execution": "agent-doable",
+                  "surfaces": [
+                    "ui",
+                    "mcp"
+                  ],
+                  "flag": null
+                }
+              ]
+            },
+            {
+              "id": "lakebase",
+              "chapter": "Lakebase",
+              "title": "Lakebase",
+              "why": "Set up PostgreSQL database, connect to your app, and deploy",
+              "steps": [
+                {
+                  "order": 5,
+                  "sectionTag": "setup_lakebase",
+                  "title": "Setup Lakebase",
+                  "why": null,
+                  "gate": null,
+                  "requiresGate": "deploy_databricks_app",
+                  "consumes": [],
+                  "produces": null,
+                  "execution": "agent-doable",
+                  "surfaces": [
+                    "ui",
+                    "mcp"
+                  ],
+                  "flag": null
+                },
+                {
+                  "order": 6,
+                  "sectionTag": "wire_ui_lakebase",
+                  "title": "Wire UI to Lakebase",
+                  "why": null,
+                  "gate": null,
+                  "requiresGate": "setup_lakebase",
+                  "consumes": [],
+                  "produces": null,
+                  "execution": "agent-doable",
+                  "surfaces": [
+                    "ui",
+                    "mcp"
+                  ],
+                  "flag": null
+                },
+                {
+                  "order": 7,
+                  "sectionTag": "workspace_setup_deploy",
+                  "title": "Deploy and Test",
+                  "why": null,
+                  "gate": null,
+                  "requiresGate": "wire_ui_lakebase",
+                  "consumes": [],
+                  "produces": null,
+                  "execution": "agent-doable",
+                  "surfaces": [
+                    "ui",
+                    "mcp"
+                  ],
+                  "flag": null
+                }
+              ]
+            },
+            {
+              "id": "lakehouse",
+              "chapter": "Lakehouse",
+              "title": "Lakehouse",
+              "why": "Data foundation, modeling, and pipelines",
+              "steps": [
+                {
+                  "order": 8,
+                  "sectionTag": "sync_from_lakebase",
+                  "title": "Register Lakebase in UC",
+                  "why": null,
+                  "gate": null,
+                  "requiresGate": "workspace_setup_deploy",
+                  "consumes": [],
+                  "produces": null,
+                  "execution": "agent-doable",
+                  "surfaces": [
+                    "ui",
+                    "mcp"
+                  ],
+                  "flag": null
+                },
+                {
+                  "order": 9,
+                  "sectionTag": "bronze_table_metadata",
+                  "title": "Bring your Metadata",
+                  "why": null,
+                  "gate": null,
+                  "requiresGate": "sync_from_lakebase",
+                  "consumes": [
+                    "prd_document"
+                  ],
+                  "produces": "table_metadata",
+                  "execution": "agent-doable",
+                  "surfaces": [
+                    "ui",
+                    "mcp"
+                  ],
+                  "flag": "medallion.bronze"
+                },
+                {
+                  "order": 10,
+                  "sectionTag": "bronze_layer_creation",
+                  "title": "Bronze Layer Creation",
+                  "why": null,
+                  "gate": null,
+                  "requiresGate": "bronze_table_metadata",
+                  "consumes": [
+                    "table_metadata"
+                  ],
+                  "produces": "synthetic_data",
+                  "execution": "agent-doable",
+                  "surfaces": [
+                    "ui",
+                    "mcp"
+                  ],
+                  "flag": "medallion.bronze"
+                },
+                {
+                  "order": 11,
+                  "sectionTag": "silver_layer_sdp",
+                  "title": "Silver Layer",
+                  "why": null,
+                  "gate": null,
+                  "requiresGate": "bronze_layer_creation",
+                  "consumes": [
+                    "synthetic_data"
+                  ],
+                  "produces": null,
+                  "execution": "agent-doable",
+                  "surfaces": [
+                    "ui",
+                    "mcp"
+                  ],
+                  "flag": "medallion.silver"
+                },
+                {
+                  "order": 12,
+                  "sectionTag": "gold_layer_design",
+                  "title": "Gold Layer Design",
+                  "why": null,
+                  "gate": null,
+                  "requiresGate": "silver_layer_sdp",
+                  "consumes": [
+                    "table_metadata"
+                  ],
+                  "produces": "gold_layer_design",
+                  "execution": "agent-doable",
+                  "surfaces": [
+                    "ui",
+                    "mcp"
+                  ],
+                  "flag": "medallion.gold"
+                },
+                {
+                  "order": 13,
+                  "sectionTag": "gold_layer_pipeline",
+                  "title": "Gold Pipeline",
+                  "why": null,
+                  "gate": null,
+                  "requiresGate": "gold_layer_design",
+                  "consumes": [
+                    "gold_layer_design"
+                  ],
+                  "produces": null,
+                  "execution": "agent-doable",
+                  "surfaces": [
+                    "ui",
+                    "mcp"
+                  ],
+                  "flag": "medallion.gold"
+                },
+                {
+                  "order": 14,
+                  "sectionTag": "deploy_lakehouse_assets",
+                  "title": "Deploy Assets",
+                  "why": null,
+                  "gate": null,
+                  "requiresGate": "gold_layer_pipeline",
+                  "consumes": [],
+                  "produces": null,
+                  "execution": "agent-doable",
+                  "surfaces": [
+                    "ui",
+                    "mcp"
+                  ],
+                  "flag": null
+                }
+              ]
+            },
+            {
+              "id": "iterate-enhance",
+              "chapter": "Refinement",
+              "title": "Iterate & Enhance",
+              "why": "Continuous improvement, testing, and optimization",
+              "steps": [
+                {
+                  "order": 15,
+                  "sectionTag": "iterate_enhance",
+                  "title": "Iterate & Enhance",
+                  "why": null,
+                  "gate": null,
+                  "requiresGate": "deploy_lakehouse_assets",
+                  "consumes": [],
+                  "produces": "iteration_plan",
+                  "execution": "agent-doable",
+                  "surfaces": [
+                    "ui",
+                    "mcp"
+                  ],
+                  "flag": null
+                },
+                {
+                  "order": 16,
+                  "sectionTag": "redeploy_test",
+                  "title": "Redeploy & Test",
+                  "why": null,
+                  "gate": null,
+                  "requiresGate": "iterate_enhance",
+                  "consumes": [
+                    "iteration_plan"
+                  ],
+                  "produces": null,
+                  "execution": "agent-doable",
+                  "surfaces": [
+                    "ui",
+                    "mcp"
+                  ],
+                  "flag": null
+                }
+              ]
+            },
+            {
+              "id": "cleanup",
+              "chapter": "Clean Up",
+              "title": "Clean Up",
+              "why": "Safely remove all workshop-created resources from your workspace",
+              "steps": [
+                {
+                  "order": 17,
+                  "sectionTag": "workspace_cleanup",
+                  "title": "Workspace Clean Up",
+                  "why": null,
+                  "gate": null,
+                  "requiresGate": "redeploy_test",
+                  "consumes": [],
+                  "produces": null,
+                  "execution": "agent-doable",
+                  "surfaces": [
+                    "ui",
+                    "mcp"
+                  ],
+                  "flag": null
+                }
+              ]
+            }
+          ]
+        }
       ]
     },
     "lakehouse-di": {
@@ -605,7 +970,54 @@
       "assistants": [
         "default"
       ],
-      "flags": {},
+      "flags": {
+        "ai.genie": {
+          "default": true,
+          "affectsSteps": [
+            "genie_space",
+            "optimize_genie"
+          ],
+          "note": "AI module sub-toggle (default ON); mirrors getDisabledTagsForAIModules."
+        },
+        "ai.agent": {
+          "default": true,
+          "affectsSteps": [
+            "agent_framework",
+            "wire_ui_agent"
+          ],
+          "note": "AI module sub-toggle (default ON); mirrors getDisabledTagsForAIModules."
+        },
+        "ai.dashboard": {
+          "default": true,
+          "affectsSteps": [
+            "aibi_dashboard"
+          ],
+          "note": "AI module sub-toggle (default ON); mirrors getDisabledTagsForAIModules."
+        },
+        "medallion.bronze": {
+          "default": true,
+          "affectsSteps": [
+            "bronze_table_metadata",
+            "bronze_layer_creation"
+          ],
+          "note": "Medallion layer sub-toggle (default ON); mirrors getDisabledTagsForMedallionLayers."
+        },
+        "medallion.silver": {
+          "default": true,
+          "affectsSteps": [
+            "silver_layer_sdp"
+          ],
+          "note": "Medallion layer sub-toggle (default ON); mirrors getDisabledTagsForMedallionLayers."
+        },
+        "medallion.gold": {
+          "default": true,
+          "affectsSteps": [
+            "gold_layer_design",
+            "gold_layer_pipeline"
+          ],
+          "note": "Medallion layer sub-toggle (default ON); mirrors getDisabledTagsForMedallionLayers."
+        }
+      },
       "sections": [
         {
           "id": "define-usecase",
@@ -669,7 +1081,7 @@
                 "ui",
                 "mcp"
               ],
-              "flag": null
+              "flag": "medallion.bronze"
             },
             {
               "order": 4,
@@ -687,7 +1099,7 @@
                 "ui",
                 "mcp"
               ],
-              "flag": null
+              "flag": "medallion.bronze"
             },
             {
               "order": 5,
@@ -705,7 +1117,7 @@
                 "ui",
                 "mcp"
               ],
-              "flag": null
+              "flag": "medallion.silver"
             },
             {
               "order": 6,
@@ -723,7 +1135,7 @@
                 "ui",
                 "mcp"
               ],
-              "flag": null
+              "flag": "medallion.gold"
             },
             {
               "order": 7,
@@ -741,7 +1153,7 @@
                 "ui",
                 "mcp"
               ],
-              "flag": null
+              "flag": "medallion.gold"
             },
             {
               "order": 8,
@@ -803,7 +1215,7 @@
                 "ui",
                 "mcp"
               ],
-              "flag": null
+              "flag": "ai.dashboard"
             },
             {
               "order": 11,
@@ -821,7 +1233,7 @@
                 "ui",
                 "mcp"
               ],
-              "flag": null
+              "flag": "ai.genie"
             },
             {
               "order": 12,
@@ -853,7 +1265,7 @@
                 "ui",
                 "mcp"
               ],
-              "flag": null
+              "flag": "ai.genie"
             },
             {
               "order": 14,
@@ -872,7 +1284,7 @@
                 "ui",
                 "mcp"
               ],
-              "flag": null
+              "flag": "ai.agent"
             }
           ]
         },
@@ -942,6 +1354,480 @@
             }
           ]
         }
+      ],
+      "variants": [
+        {
+          "when": {
+            "chainContext": "app"
+          },
+          "sections": [
+            {
+              "id": "define-usecase",
+              "chapter": "Foundation",
+              "title": "Project Setup",
+              "why": "Configure your environment and generate product requirements",
+              "steps": [
+                {
+                  "order": 1,
+                  "sectionTag": "project_setup",
+                  "title": "Set Up Project",
+                  "why": null,
+                  "gate": null,
+                  "requiresGate": null,
+                  "consumes": [],
+                  "produces": null,
+                  "execution": "agent-doable",
+                  "surfaces": [
+                    "ui",
+                    "mcp"
+                  ],
+                  "flag": null
+                },
+                {
+                  "order": 2,
+                  "sectionTag": "prd_generation",
+                  "title": "PRD Generation",
+                  "why": null,
+                  "gate": null,
+                  "requiresGate": "project_setup",
+                  "consumes": [],
+                  "produces": "prd_document",
+                  "execution": "agent-doable",
+                  "surfaces": [
+                    "ui",
+                    "mcp"
+                  ],
+                  "flag": null
+                }
+              ]
+            },
+            {
+              "id": "databricks-app",
+              "chapter": "Databricks App",
+              "title": "Databricks App",
+              "why": "Design user interface and deploy to Databricks Apps",
+              "steps": [
+                {
+                  "order": 3,
+                  "sectionTag": "cursor_copilot_ui_design",
+                  "title": "UI Design",
+                  "why": null,
+                  "gate": null,
+                  "requiresGate": "prd_generation",
+                  "consumes": [],
+                  "produces": null,
+                  "execution": "agent-doable",
+                  "surfaces": [
+                    "ui",
+                    "mcp"
+                  ],
+                  "flag": null
+                },
+                {
+                  "order": 4,
+                  "sectionTag": "deploy_databricks_app",
+                  "title": "Deploy App",
+                  "why": null,
+                  "gate": null,
+                  "requiresGate": "cursor_copilot_ui_design",
+                  "consumes": [],
+                  "produces": null,
+                  "execution": "agent-doable",
+                  "surfaces": [
+                    "ui",
+                    "mcp"
+                  ],
+                  "flag": null
+                }
+              ]
+            },
+            {
+              "id": "lakebase",
+              "chapter": "Lakebase",
+              "title": "Lakebase",
+              "why": "Set up PostgreSQL database, connect to your app, and deploy",
+              "steps": [
+                {
+                  "order": 5,
+                  "sectionTag": "setup_lakebase",
+                  "title": "Setup Lakebase",
+                  "why": null,
+                  "gate": null,
+                  "requiresGate": "deploy_databricks_app",
+                  "consumes": [],
+                  "produces": null,
+                  "execution": "agent-doable",
+                  "surfaces": [
+                    "ui",
+                    "mcp"
+                  ],
+                  "flag": null
+                },
+                {
+                  "order": 6,
+                  "sectionTag": "wire_ui_lakebase",
+                  "title": "Wire UI to Lakebase",
+                  "why": null,
+                  "gate": null,
+                  "requiresGate": "setup_lakebase",
+                  "consumes": [],
+                  "produces": null,
+                  "execution": "agent-doable",
+                  "surfaces": [
+                    "ui",
+                    "mcp"
+                  ],
+                  "flag": null
+                },
+                {
+                  "order": 7,
+                  "sectionTag": "workspace_setup_deploy",
+                  "title": "Deploy and Test",
+                  "why": null,
+                  "gate": null,
+                  "requiresGate": "wire_ui_lakebase",
+                  "consumes": [],
+                  "produces": null,
+                  "execution": "agent-doable",
+                  "surfaces": [
+                    "ui",
+                    "mcp"
+                  ],
+                  "flag": null
+                }
+              ]
+            },
+            {
+              "id": "lakehouse",
+              "chapter": "Lakehouse",
+              "title": "Lakehouse",
+              "why": "Data foundation, modeling, and pipelines",
+              "steps": [
+                {
+                  "order": 8,
+                  "sectionTag": "sync_from_lakebase",
+                  "title": "Register Lakebase in UC",
+                  "why": null,
+                  "gate": null,
+                  "requiresGate": "workspace_setup_deploy",
+                  "consumes": [],
+                  "produces": null,
+                  "execution": "agent-doable",
+                  "surfaces": [
+                    "ui",
+                    "mcp"
+                  ],
+                  "flag": null
+                },
+                {
+                  "order": 9,
+                  "sectionTag": "bronze_table_metadata",
+                  "title": "Bring your Metadata",
+                  "why": null,
+                  "gate": null,
+                  "requiresGate": "sync_from_lakebase",
+                  "consumes": [
+                    "prd_document"
+                  ],
+                  "produces": "table_metadata",
+                  "execution": "agent-doable",
+                  "surfaces": [
+                    "ui",
+                    "mcp"
+                  ],
+                  "flag": "medallion.bronze"
+                },
+                {
+                  "order": 10,
+                  "sectionTag": "bronze_layer_creation",
+                  "title": "Bronze Layer Creation",
+                  "why": null,
+                  "gate": null,
+                  "requiresGate": "bronze_table_metadata",
+                  "consumes": [
+                    "table_metadata"
+                  ],
+                  "produces": "synthetic_data",
+                  "execution": "agent-doable",
+                  "surfaces": [
+                    "ui",
+                    "mcp"
+                  ],
+                  "flag": "medallion.bronze"
+                },
+                {
+                  "order": 11,
+                  "sectionTag": "silver_layer_sdp",
+                  "title": "Silver Layer",
+                  "why": null,
+                  "gate": null,
+                  "requiresGate": "bronze_layer_creation",
+                  "consumes": [
+                    "synthetic_data"
+                  ],
+                  "produces": null,
+                  "execution": "agent-doable",
+                  "surfaces": [
+                    "ui",
+                    "mcp"
+                  ],
+                  "flag": "medallion.silver"
+                },
+                {
+                  "order": 12,
+                  "sectionTag": "gold_layer_design",
+                  "title": "Gold Layer Design",
+                  "why": null,
+                  "gate": null,
+                  "requiresGate": "silver_layer_sdp",
+                  "consumes": [
+                    "table_metadata"
+                  ],
+                  "produces": "gold_layer_design",
+                  "execution": "agent-doable",
+                  "surfaces": [
+                    "ui",
+                    "mcp"
+                  ],
+                  "flag": "medallion.gold"
+                },
+                {
+                  "order": 13,
+                  "sectionTag": "gold_layer_pipeline",
+                  "title": "Gold Pipeline",
+                  "why": null,
+                  "gate": null,
+                  "requiresGate": "gold_layer_design",
+                  "consumes": [
+                    "gold_layer_design"
+                  ],
+                  "produces": null,
+                  "execution": "agent-doable",
+                  "surfaces": [
+                    "ui",
+                    "mcp"
+                  ],
+                  "flag": "medallion.gold"
+                },
+                {
+                  "order": 14,
+                  "sectionTag": "deploy_lakehouse_assets",
+                  "title": "Deploy Assets",
+                  "why": null,
+                  "gate": null,
+                  "requiresGate": "gold_layer_pipeline",
+                  "consumes": [],
+                  "produces": null,
+                  "execution": "agent-doable",
+                  "surfaces": [
+                    "ui",
+                    "mcp"
+                  ],
+                  "flag": null
+                }
+              ]
+            },
+            {
+              "id": "data-intelligence",
+              "chapter": "AI and Agents",
+              "title": "AI and Agents",
+              "why": "Translating data into insights, logic, and decisions",
+              "steps": [
+                {
+                  "order": 15,
+                  "sectionTag": "usecase_plan",
+                  "title": "Use-Case Plan",
+                  "why": null,
+                  "gate": null,
+                  "requiresGate": "deploy_lakehouse_assets",
+                  "consumes": [
+                    "prd_document",
+                    "gold_layer_design"
+                  ],
+                  "produces": "usecase_plan",
+                  "execution": "agent-doable",
+                  "surfaces": [
+                    "ui",
+                    "mcp"
+                  ],
+                  "flag": null
+                },
+                {
+                  "order": 16,
+                  "sectionTag": "aibi_dashboard",
+                  "title": "AI/BI Dashboard",
+                  "why": null,
+                  "gate": null,
+                  "requiresGate": "usecase_plan",
+                  "consumes": [
+                    "prd_document",
+                    "gold_layer_design"
+                  ],
+                  "produces": null,
+                  "execution": "agent-doable",
+                  "surfaces": [
+                    "ui",
+                    "mcp"
+                  ],
+                  "flag": "ai.dashboard"
+                },
+                {
+                  "order": 17,
+                  "sectionTag": "genie_space",
+                  "title": "Genie Space",
+                  "why": null,
+                  "gate": null,
+                  "requiresGate": "aibi_dashboard",
+                  "consumes": [
+                    "usecase_plan"
+                  ],
+                  "produces": null,
+                  "execution": "agent-doable",
+                  "surfaces": [
+                    "ui",
+                    "mcp"
+                  ],
+                  "flag": "ai.genie"
+                },
+                {
+                  "order": 18,
+                  "sectionTag": "deploy_di_assets",
+                  "title": "Deploy Assets",
+                  "why": null,
+                  "gate": null,
+                  "requiresGate": "genie_space",
+                  "consumes": [],
+                  "produces": null,
+                  "execution": "agent-doable",
+                  "surfaces": [
+                    "ui",
+                    "mcp"
+                  ],
+                  "flag": null
+                },
+                {
+                  "order": 19,
+                  "sectionTag": "optimize_genie",
+                  "title": "Optimize Genie",
+                  "why": null,
+                  "gate": null,
+                  "requiresGate": "deploy_di_assets",
+                  "consumes": [],
+                  "produces": null,
+                  "execution": "agent-doable",
+                  "surfaces": [
+                    "ui",
+                    "mcp"
+                  ],
+                  "flag": "ai.genie"
+                },
+                {
+                  "order": 20,
+                  "sectionTag": "agent_framework",
+                  "title": "Build Agent",
+                  "why": null,
+                  "gate": null,
+                  "requiresGate": "optimize_genie",
+                  "consumes": [
+                    "prd_document",
+                    "gold_layer_design"
+                  ],
+                  "produces": "agent_framework",
+                  "execution": "agent-doable",
+                  "surfaces": [
+                    "ui",
+                    "mcp"
+                  ],
+                  "flag": "ai.agent"
+                },
+                {
+                  "order": 21,
+                  "sectionTag": "wire_ui_agent",
+                  "title": "Wire UI to Agent",
+                  "why": null,
+                  "gate": null,
+                  "requiresGate": "agent_framework",
+                  "consumes": [
+                    "agent_framework"
+                  ],
+                  "produces": null,
+                  "execution": "agent-doable",
+                  "surfaces": [
+                    "ui",
+                    "mcp"
+                  ],
+                  "flag": "ai.agent"
+                }
+              ]
+            },
+            {
+              "id": "iterate-enhance",
+              "chapter": "Refinement",
+              "title": "Iterate & Enhance",
+              "why": "Continuous improvement, testing, and optimization",
+              "steps": [
+                {
+                  "order": 22,
+                  "sectionTag": "iterate_enhance",
+                  "title": "Iterate & Enhance",
+                  "why": null,
+                  "gate": null,
+                  "requiresGate": "wire_ui_agent",
+                  "consumes": [],
+                  "produces": "iteration_plan",
+                  "execution": "agent-doable",
+                  "surfaces": [
+                    "ui",
+                    "mcp"
+                  ],
+                  "flag": null
+                },
+                {
+                  "order": 23,
+                  "sectionTag": "redeploy_test",
+                  "title": "Redeploy & Test",
+                  "why": null,
+                  "gate": null,
+                  "requiresGate": "iterate_enhance",
+                  "consumes": [
+                    "iteration_plan"
+                  ],
+                  "produces": null,
+                  "execution": "agent-doable",
+                  "surfaces": [
+                    "ui",
+                    "mcp"
+                  ],
+                  "flag": null
+                }
+              ]
+            },
+            {
+              "id": "cleanup",
+              "chapter": "Clean Up",
+              "title": "Clean Up",
+              "why": "Safely remove all workshop-created resources from your workspace",
+              "steps": [
+                {
+                  "order": 24,
+                  "sectionTag": "workspace_cleanup",
+                  "title": "Workspace Clean Up",
+                  "why": null,
+                  "gate": null,
+                  "requiresGate": "redeploy_test",
+                  "consumes": [],
+                  "produces": null,
+                  "execution": "agent-doable",
+                  "surfaces": [
+                    "ui",
+                    "mcp"
+                  ],
+                  "flag": null
+                }
+              ]
+            }
+          ]
+        }
       ]
     },
     "end-to-end": {
@@ -950,7 +1836,54 @@
       "assistants": [
         "default"
       ],
-      "flags": {},
+      "flags": {
+        "ai.genie": {
+          "default": true,
+          "affectsSteps": [
+            "genie_space",
+            "optimize_genie"
+          ],
+          "note": "AI module sub-toggle (default ON); mirrors getDisabledTagsForAIModules."
+        },
+        "ai.agent": {
+          "default": true,
+          "affectsSteps": [
+            "agent_framework",
+            "wire_ui_agent"
+          ],
+          "note": "AI module sub-toggle (default ON); mirrors getDisabledTagsForAIModules."
+        },
+        "ai.dashboard": {
+          "default": true,
+          "affectsSteps": [
+            "aibi_dashboard"
+          ],
+          "note": "AI module sub-toggle (default ON); mirrors getDisabledTagsForAIModules."
+        },
+        "medallion.bronze": {
+          "default": true,
+          "affectsSteps": [
+            "bronze_table_metadata",
+            "bronze_layer_creation"
+          ],
+          "note": "Medallion layer sub-toggle (default ON); mirrors getDisabledTagsForMedallionLayers."
+        },
+        "medallion.silver": {
+          "default": true,
+          "affectsSteps": [
+            "silver_layer_sdp"
+          ],
+          "note": "Medallion layer sub-toggle (default ON); mirrors getDisabledTagsForMedallionLayers."
+        },
+        "medallion.gold": {
+          "default": true,
+          "affectsSteps": [
+            "gold_layer_design",
+            "gold_layer_pipeline"
+          ],
+          "note": "Medallion layer sub-toggle (default ON); mirrors getDisabledTagsForMedallionLayers."
+        }
+      },
       "sections": [
         {
           "id": "define-usecase",
@@ -1126,7 +2059,7 @@
                 "ui",
                 "mcp"
               ],
-              "flag": null
+              "flag": "medallion.bronze"
             },
             {
               "order": 10,
@@ -1144,7 +2077,7 @@
                 "ui",
                 "mcp"
               ],
-              "flag": null
+              "flag": "medallion.bronze"
             },
             {
               "order": 11,
@@ -1162,7 +2095,7 @@
                 "ui",
                 "mcp"
               ],
-              "flag": null
+              "flag": "medallion.silver"
             },
             {
               "order": 12,
@@ -1180,7 +2113,7 @@
                 "ui",
                 "mcp"
               ],
-              "flag": null
+              "flag": "medallion.gold"
             },
             {
               "order": 13,
@@ -1198,7 +2131,7 @@
                 "ui",
                 "mcp"
               ],
-              "flag": null
+              "flag": "medallion.gold"
             },
             {
               "order": 14,
@@ -1260,7 +2193,7 @@
                 "ui",
                 "mcp"
               ],
-              "flag": null
+              "flag": "ai.dashboard"
             },
             {
               "order": 17,
@@ -1278,7 +2211,7 @@
                 "ui",
                 "mcp"
               ],
-              "flag": null
+              "flag": "ai.genie"
             },
             {
               "order": 18,
@@ -1310,7 +2243,7 @@
                 "ui",
                 "mcp"
               ],
-              "flag": null
+              "flag": "ai.genie"
             },
             {
               "order": 20,
@@ -1329,7 +2262,7 @@
                 "ui",
                 "mcp"
               ],
-              "flag": null
+              "flag": "ai.agent"
             },
             {
               "order": 21,
@@ -1347,7 +2280,7 @@
                 "ui",
                 "mcp"
               ],
-              "flag": null
+              "flag": "ai.agent"
             }
           ]
         },
@@ -1417,6 +2350,464 @@
             }
           ]
         }
+      ],
+      "variants": [
+        {
+          "when": {
+            "direction": "reverse"
+          },
+          "sections": [
+            {
+              "id": "define-usecase",
+              "chapter": "Foundation",
+              "title": "Project Setup",
+              "why": "Configure your environment and generate product requirements",
+              "steps": [
+                {
+                  "order": 1,
+                  "sectionTag": "project_setup",
+                  "title": "Set Up Project",
+                  "why": null,
+                  "gate": null,
+                  "requiresGate": null,
+                  "consumes": [],
+                  "produces": null,
+                  "execution": "agent-doable",
+                  "surfaces": [
+                    "ui",
+                    "mcp"
+                  ],
+                  "flag": null
+                },
+                {
+                  "order": 2,
+                  "sectionTag": "prd_generation",
+                  "title": "PRD Generation",
+                  "why": null,
+                  "gate": null,
+                  "requiresGate": "project_setup",
+                  "consumes": [],
+                  "produces": "prd_document",
+                  "execution": "agent-doable",
+                  "surfaces": [
+                    "ui",
+                    "mcp"
+                  ],
+                  "flag": null
+                }
+              ]
+            },
+            {
+              "id": "lakehouse",
+              "chapter": "Lakehouse",
+              "title": "Lakehouse",
+              "why": "Data foundation, modeling, and pipelines",
+              "steps": [
+                {
+                  "order": 3,
+                  "sectionTag": "bronze_table_metadata",
+                  "title": "Bring your Metadata",
+                  "why": null,
+                  "gate": null,
+                  "requiresGate": "prd_generation",
+                  "consumes": [
+                    "prd_document"
+                  ],
+                  "produces": "table_metadata",
+                  "execution": "agent-doable",
+                  "surfaces": [
+                    "ui",
+                    "mcp"
+                  ],
+                  "flag": "medallion.bronze"
+                },
+                {
+                  "order": 4,
+                  "sectionTag": "bronze_layer_creation",
+                  "title": "Bronze Layer Creation",
+                  "why": null,
+                  "gate": null,
+                  "requiresGate": "bronze_table_metadata",
+                  "consumes": [
+                    "table_metadata"
+                  ],
+                  "produces": "synthetic_data",
+                  "execution": "agent-doable",
+                  "surfaces": [
+                    "ui",
+                    "mcp"
+                  ],
+                  "flag": "medallion.bronze"
+                },
+                {
+                  "order": 5,
+                  "sectionTag": "silver_layer_sdp",
+                  "title": "Silver Layer",
+                  "why": null,
+                  "gate": null,
+                  "requiresGate": "bronze_layer_creation",
+                  "consumes": [
+                    "synthetic_data"
+                  ],
+                  "produces": null,
+                  "execution": "agent-doable",
+                  "surfaces": [
+                    "ui",
+                    "mcp"
+                  ],
+                  "flag": "medallion.silver"
+                },
+                {
+                  "order": 6,
+                  "sectionTag": "gold_layer_design",
+                  "title": "Gold Layer Design",
+                  "why": null,
+                  "gate": null,
+                  "requiresGate": "silver_layer_sdp",
+                  "consumes": [
+                    "table_metadata"
+                  ],
+                  "produces": "gold_layer_design",
+                  "execution": "agent-doable",
+                  "surfaces": [
+                    "ui",
+                    "mcp"
+                  ],
+                  "flag": "medallion.gold"
+                },
+                {
+                  "order": 7,
+                  "sectionTag": "gold_layer_pipeline",
+                  "title": "Gold Pipeline",
+                  "why": null,
+                  "gate": null,
+                  "requiresGate": "gold_layer_design",
+                  "consumes": [
+                    "gold_layer_design"
+                  ],
+                  "produces": null,
+                  "execution": "agent-doable",
+                  "surfaces": [
+                    "ui",
+                    "mcp"
+                  ],
+                  "flag": "medallion.gold"
+                },
+                {
+                  "order": 8,
+                  "sectionTag": "deploy_lakehouse_assets",
+                  "title": "Deploy Assets",
+                  "why": null,
+                  "gate": null,
+                  "requiresGate": "gold_layer_pipeline",
+                  "consumes": [],
+                  "produces": null,
+                  "execution": "agent-doable",
+                  "surfaces": [
+                    "ui",
+                    "mcp"
+                  ],
+                  "flag": null
+                }
+              ]
+            },
+            {
+              "id": "data-intelligence",
+              "chapter": "AI and Agents",
+              "title": "AI and Agents",
+              "why": "Translating data into insights, logic, and decisions",
+              "steps": [
+                {
+                  "order": 9,
+                  "sectionTag": "usecase_plan",
+                  "title": "Use-Case Plan",
+                  "why": null,
+                  "gate": null,
+                  "requiresGate": "deploy_lakehouse_assets",
+                  "consumes": [
+                    "prd_document",
+                    "gold_layer_design"
+                  ],
+                  "produces": "usecase_plan",
+                  "execution": "agent-doable",
+                  "surfaces": [
+                    "ui",
+                    "mcp"
+                  ],
+                  "flag": null
+                },
+                {
+                  "order": 10,
+                  "sectionTag": "genie_space",
+                  "title": "Genie Space",
+                  "why": null,
+                  "gate": null,
+                  "requiresGate": "usecase_plan",
+                  "consumes": [
+                    "usecase_plan"
+                  ],
+                  "produces": null,
+                  "execution": "agent-doable",
+                  "surfaces": [
+                    "ui",
+                    "mcp"
+                  ],
+                  "flag": "ai.genie"
+                },
+                {
+                  "order": 11,
+                  "sectionTag": "aibi_dashboard",
+                  "title": "AI/BI Dashboard",
+                  "why": null,
+                  "gate": null,
+                  "requiresGate": "genie_space",
+                  "consumes": [
+                    "prd_document",
+                    "gold_layer_design"
+                  ],
+                  "produces": null,
+                  "execution": "agent-doable",
+                  "surfaces": [
+                    "ui",
+                    "mcp"
+                  ],
+                  "flag": "ai.dashboard"
+                },
+                {
+                  "order": 12,
+                  "sectionTag": "deploy_di_assets",
+                  "title": "Deploy Assets",
+                  "why": null,
+                  "gate": null,
+                  "requiresGate": "aibi_dashboard",
+                  "consumes": [],
+                  "produces": null,
+                  "execution": "agent-doable",
+                  "surfaces": [
+                    "ui",
+                    "mcp"
+                  ],
+                  "flag": null
+                },
+                {
+                  "order": 13,
+                  "sectionTag": "optimize_genie",
+                  "title": "Optimize Genie",
+                  "why": null,
+                  "gate": null,
+                  "requiresGate": "deploy_di_assets",
+                  "consumes": [],
+                  "produces": null,
+                  "execution": "agent-doable",
+                  "surfaces": [
+                    "ui",
+                    "mcp"
+                  ],
+                  "flag": "ai.genie"
+                },
+                {
+                  "order": 14,
+                  "sectionTag": "agent_framework",
+                  "title": "Build Agent",
+                  "why": null,
+                  "gate": null,
+                  "requiresGate": "optimize_genie",
+                  "consumes": [
+                    "prd_document",
+                    "gold_layer_design"
+                  ],
+                  "produces": "agent_framework",
+                  "execution": "agent-doable",
+                  "surfaces": [
+                    "ui",
+                    "mcp"
+                  ],
+                  "flag": "ai.agent"
+                }
+              ]
+            },
+            {
+              "id": "activation",
+              "chapter": "Activation",
+              "title": "Reverse ETL",
+              "why": "Sync analytics into Lakebase and build an analytics-serving app",
+              "steps": [
+                {
+                  "order": 15,
+                  "sectionTag": "activation_table_design",
+                  "title": "Design & Provision Synced Tables",
+                  "why": null,
+                  "gate": null,
+                  "requiresGate": "agent_framework",
+                  "consumes": [
+                    "gold_layer_design",
+                    "usecase_plan",
+                    "prd_document",
+                    "activation_plan"
+                  ],
+                  "produces": null,
+                  "execution": "agent-doable",
+                  "surfaces": [
+                    "ui",
+                    "mcp"
+                  ],
+                  "flag": null
+                },
+                {
+                  "order": 16,
+                  "sectionTag": "activation_reverse_sync",
+                  "title": "Create Synced Tables",
+                  "why": null,
+                  "gate": null,
+                  "requiresGate": "activation_table_design",
+                  "consumes": [],
+                  "produces": null,
+                  "execution": "agent-doable",
+                  "surfaces": [
+                    "ui",
+                    "mcp"
+                  ],
+                  "flag": null
+                },
+                {
+                  "order": 17,
+                  "sectionTag": "activation_app_design",
+                  "title": "Design Analytics App",
+                  "why": null,
+                  "gate": null,
+                  "requiresGate": "activation_reverse_sync",
+                  "consumes": [
+                    "gold_layer_design",
+                    "prd_document"
+                  ],
+                  "produces": "activation_app_design",
+                  "execution": "agent-doable",
+                  "surfaces": [
+                    "ui",
+                    "mcp"
+                  ],
+                  "flag": null
+                },
+                {
+                  "order": 18,
+                  "sectionTag": "activation_build_wire",
+                  "title": "Build Analytics App",
+                  "why": null,
+                  "gate": null,
+                  "requiresGate": "activation_app_design",
+                  "consumes": [
+                    "activation_app_design"
+                  ],
+                  "produces": null,
+                  "execution": "agent-doable",
+                  "surfaces": [
+                    "ui",
+                    "mcp"
+                  ],
+                  "flag": null
+                },
+                {
+                  "order": 19,
+                  "sectionTag": "activation_wire_lakebase",
+                  "title": "Wire to Lakebase",
+                  "why": null,
+                  "gate": null,
+                  "requiresGate": "activation_build_wire",
+                  "consumes": [],
+                  "produces": "activation_wire_lakebase",
+                  "execution": "agent-doable",
+                  "surfaces": [
+                    "ui",
+                    "mcp"
+                  ],
+                  "flag": null
+                },
+                {
+                  "order": 20,
+                  "sectionTag": "activation_deploy_validate",
+                  "title": "Deploy & Validate",
+                  "why": null,
+                  "gate": null,
+                  "requiresGate": "activation_wire_lakebase",
+                  "consumes": [],
+                  "produces": null,
+                  "execution": "agent-doable",
+                  "surfaces": [
+                    "ui",
+                    "mcp"
+                  ],
+                  "flag": null
+                }
+              ]
+            },
+            {
+              "id": "iterate-enhance",
+              "chapter": "Refinement",
+              "title": "Iterate & Enhance",
+              "why": "Continuous improvement, testing, and optimization",
+              "steps": [
+                {
+                  "order": 21,
+                  "sectionTag": "iterate_enhance",
+                  "title": "Iterate & Enhance",
+                  "why": null,
+                  "gate": null,
+                  "requiresGate": "activation_deploy_validate",
+                  "consumes": [],
+                  "produces": "iteration_plan",
+                  "execution": "agent-doable",
+                  "surfaces": [
+                    "ui",
+                    "mcp"
+                  ],
+                  "flag": null
+                },
+                {
+                  "order": 22,
+                  "sectionTag": "redeploy_test",
+                  "title": "Redeploy & Test",
+                  "why": null,
+                  "gate": null,
+                  "requiresGate": "iterate_enhance",
+                  "consumes": [
+                    "iteration_plan"
+                  ],
+                  "produces": null,
+                  "execution": "agent-doable",
+                  "surfaces": [
+                    "ui",
+                    "mcp"
+                  ],
+                  "flag": null
+                }
+              ]
+            },
+            {
+              "id": "cleanup",
+              "chapter": "Clean Up",
+              "title": "Clean Up",
+              "why": "Safely remove all workshop-created resources from your workspace",
+              "steps": [
+                {
+                  "order": 23,
+                  "sectionTag": "workspace_cleanup",
+                  "title": "Workspace Clean Up",
+                  "why": null,
+                  "gate": null,
+                  "requiresGate": "redeploy_test",
+                  "consumes": [],
+                  "produces": null,
+                  "execution": "agent-doable",
+                  "surfaces": [
+                    "ui",
+                    "mcp"
+                  ],
+                  "flag": null
+                }
+              ]
+            }
+          ]
+        }
       ]
     },
     "accelerator": {
@@ -1425,7 +2816,54 @@
       "assistants": [
         "default"
       ],
-      "flags": {},
+      "flags": {
+        "ai.genie": {
+          "default": true,
+          "affectsSteps": [
+            "genie_space",
+            "optimize_genie"
+          ],
+          "note": "AI module sub-toggle (default ON); mirrors getDisabledTagsForAIModules."
+        },
+        "ai.agent": {
+          "default": true,
+          "affectsSteps": [
+            "agent_framework",
+            "wire_ui_agent"
+          ],
+          "note": "AI module sub-toggle (default ON); mirrors getDisabledTagsForAIModules."
+        },
+        "ai.dashboard": {
+          "default": true,
+          "affectsSteps": [
+            "aibi_dashboard"
+          ],
+          "note": "AI module sub-toggle (default ON); mirrors getDisabledTagsForAIModules."
+        },
+        "medallion.bronze": {
+          "default": true,
+          "affectsSteps": [
+            "bronze_table_metadata",
+            "bronze_layer_creation"
+          ],
+          "note": "Medallion layer sub-toggle (default ON); mirrors getDisabledTagsForMedallionLayers."
+        },
+        "medallion.silver": {
+          "default": true,
+          "affectsSteps": [
+            "silver_layer_sdp"
+          ],
+          "note": "Medallion layer sub-toggle (default ON); mirrors getDisabledTagsForMedallionLayers."
+        },
+        "medallion.gold": {
+          "default": true,
+          "affectsSteps": [
+            "gold_layer_design",
+            "gold_layer_pipeline"
+          ],
+          "note": "Medallion layer sub-toggle (default ON); mirrors getDisabledTagsForMedallionLayers."
+        }
+      },
       "sections": [
         {
           "id": "define-usecase",
@@ -1489,7 +2927,7 @@
                 "ui",
                 "mcp"
               ],
-              "flag": null
+              "flag": "medallion.bronze"
             },
             {
               "order": 4,
@@ -1507,7 +2945,7 @@
                 "ui",
                 "mcp"
               ],
-              "flag": null
+              "flag": "medallion.bronze"
             },
             {
               "order": 5,
@@ -1525,7 +2963,7 @@
                 "ui",
                 "mcp"
               ],
-              "flag": null
+              "flag": "medallion.silver"
             },
             {
               "order": 6,
@@ -1543,7 +2981,7 @@
                 "ui",
                 "mcp"
               ],
-              "flag": null
+              "flag": "medallion.gold"
             },
             {
               "order": 7,
@@ -1561,7 +2999,7 @@
                 "ui",
                 "mcp"
               ],
-              "flag": null
+              "flag": "medallion.gold"
             },
             {
               "order": 8,
@@ -1623,7 +3061,7 @@
                 "ui",
                 "mcp"
               ],
-              "flag": null
+              "flag": "ai.dashboard"
             },
             {
               "order": 11,
@@ -1641,7 +3079,7 @@
                 "ui",
                 "mcp"
               ],
-              "flag": null
+              "flag": "ai.genie"
             },
             {
               "order": 12,
@@ -1673,7 +3111,7 @@
                 "ui",
                 "mcp"
               ],
-              "flag": null
+              "flag": "ai.genie"
             },
             {
               "order": 14,
@@ -1692,7 +3130,7 @@
                 "ui",
                 "mcp"
               ],
-              "flag": null
+              "flag": "ai.agent"
             }
           ]
         },
@@ -2403,7 +3841,31 @@
       "assistants": [
         "default"
       ],
-      "flags": {},
+      "flags": {
+        "medallion.bronze": {
+          "default": true,
+          "affectsSteps": [
+            "bronze_table_metadata",
+            "bronze_layer_creation"
+          ],
+          "note": "Medallion layer sub-toggle (default ON); mirrors getDisabledTagsForMedallionLayers."
+        },
+        "medallion.silver": {
+          "default": true,
+          "affectsSteps": [
+            "silver_layer_sdp"
+          ],
+          "note": "Medallion layer sub-toggle (default ON); mirrors getDisabledTagsForMedallionLayers."
+        },
+        "medallion.gold": {
+          "default": true,
+          "affectsSteps": [
+            "gold_layer_design",
+            "gold_layer_pipeline"
+          ],
+          "note": "Medallion layer sub-toggle (default ON); mirrors getDisabledTagsForMedallionLayers."
+        }
+      },
       "sections": [
         {
           "id": "define-usecase",
@@ -2467,7 +3929,7 @@
                 "ui",
                 "mcp"
               ],
-              "flag": null
+              "flag": "medallion.bronze"
             },
             {
               "order": 4,
@@ -2485,7 +3947,7 @@
                 "ui",
                 "mcp"
               ],
-              "flag": null
+              "flag": "medallion.bronze"
             },
             {
               "order": 5,
@@ -2503,7 +3965,7 @@
                 "ui",
                 "mcp"
               ],
-              "flag": null
+              "flag": "medallion.silver"
             },
             {
               "order": 6,
@@ -2521,7 +3983,7 @@
                 "ui",
                 "mcp"
               ],
-              "flag": null
+              "flag": "medallion.gold"
             },
             {
               "order": 7,
@@ -2539,7 +4001,7 @@
                 "ui",
                 "mcp"
               ],
-              "flag": null
+              "flag": "medallion.gold"
             },
             {
               "order": 8,
@@ -3397,7 +4859,31 @@
       "assistants": [
         "default"
       ],
-      "flags": {},
+      "flags": {
+        "medallion.bronze": {
+          "default": true,
+          "affectsSteps": [
+            "bronze_table_metadata",
+            "bronze_layer_creation"
+          ],
+          "note": "Medallion layer sub-toggle (default ON); mirrors getDisabledTagsForMedallionLayers."
+        },
+        "medallion.silver": {
+          "default": true,
+          "affectsSteps": [
+            "silver_layer_sdp"
+          ],
+          "note": "Medallion layer sub-toggle (default ON); mirrors getDisabledTagsForMedallionLayers."
+        },
+        "medallion.gold": {
+          "default": true,
+          "affectsSteps": [
+            "gold_layer_design",
+            "gold_layer_pipeline"
+          ],
+          "note": "Medallion layer sub-toggle (default ON); mirrors getDisabledTagsForMedallionLayers."
+        }
+      },
       "sections": [
         {
           "id": "define-usecase",
@@ -3461,7 +4947,7 @@
                 "ui",
                 "mcp"
               ],
-              "flag": null
+              "flag": "medallion.bronze"
             },
             {
               "order": 4,
@@ -3479,7 +4965,7 @@
                 "ui",
                 "mcp"
               ],
-              "flag": null
+              "flag": "medallion.bronze"
             },
             {
               "order": 5,
@@ -3497,7 +4983,7 @@
                 "ui",
                 "mcp"
               ],
-              "flag": null
+              "flag": "medallion.silver"
             },
             {
               "order": 6,
@@ -3515,7 +5001,7 @@
                 "ui",
                 "mcp"
               ],
-              "flag": null
+              "flag": "medallion.gold"
             },
             {
               "order": 7,
@@ -3533,7 +5019,7 @@
                 "ui",
                 "mcp"
               ],
-              "flag": null
+              "flag": "medallion.gold"
             },
             {
               "order": 8,
@@ -3627,7 +5113,54 @@
       "assistants": [
         "default"
       ],
-      "flags": {},
+      "flags": {
+        "ai.genie": {
+          "default": true,
+          "affectsSteps": [
+            "genie_space",
+            "optimize_genie"
+          ],
+          "note": "AI module sub-toggle (default ON); mirrors getDisabledTagsForAIModules."
+        },
+        "ai.agent": {
+          "default": true,
+          "affectsSteps": [
+            "agent_framework",
+            "wire_ui_agent"
+          ],
+          "note": "AI module sub-toggle (default ON); mirrors getDisabledTagsForAIModules."
+        },
+        "ai.dashboard": {
+          "default": true,
+          "affectsSteps": [
+            "aibi_dashboard"
+          ],
+          "note": "AI module sub-toggle (default ON); mirrors getDisabledTagsForAIModules."
+        },
+        "medallion.bronze": {
+          "default": true,
+          "affectsSteps": [
+            "bronze_table_metadata",
+            "bronze_layer_creation"
+          ],
+          "note": "Medallion layer sub-toggle (default ON); mirrors getDisabledTagsForMedallionLayers."
+        },
+        "medallion.silver": {
+          "default": true,
+          "affectsSteps": [
+            "silver_layer_sdp"
+          ],
+          "note": "Medallion layer sub-toggle (default ON); mirrors getDisabledTagsForMedallionLayers."
+        },
+        "medallion.gold": {
+          "default": true,
+          "affectsSteps": [
+            "gold_layer_design",
+            "gold_layer_pipeline"
+          ],
+          "note": "Medallion layer sub-toggle (default ON); mirrors getDisabledTagsForMedallionLayers."
+        }
+      },
       "sections": [
         {
           "id": "define-usecase",
@@ -3691,7 +5224,7 @@
                 "ui",
                 "mcp"
               ],
-              "flag": null
+              "flag": "medallion.bronze"
             },
             {
               "order": 4,
@@ -3709,7 +5242,7 @@
                 "ui",
                 "mcp"
               ],
-              "flag": null
+              "flag": "medallion.bronze"
             },
             {
               "order": 5,
@@ -3727,7 +5260,7 @@
                 "ui",
                 "mcp"
               ],
-              "flag": null
+              "flag": "medallion.silver"
             },
             {
               "order": 6,
@@ -3745,7 +5278,7 @@
                 "ui",
                 "mcp"
               ],
-              "flag": null
+              "flag": "medallion.gold"
             },
             {
               "order": 7,
@@ -3763,7 +5296,7 @@
                 "ui",
                 "mcp"
               ],
-              "flag": null
+              "flag": "medallion.gold"
             },
             {
               "order": 8,
@@ -3810,11 +5343,29 @@
             },
             {
               "order": 10,
+              "sectionTag": "genie_space",
+              "title": "Genie Space",
+              "why": null,
+              "gate": null,
+              "requiresGate": "usecase_plan",
+              "consumes": [
+                "usecase_plan"
+              ],
+              "produces": null,
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": "ai.genie"
+            },
+            {
+              "order": 11,
               "sectionTag": "aibi_dashboard",
               "title": "AI/BI Dashboard",
               "why": null,
               "gate": null,
-              "requiresGate": "usecase_plan",
+              "requiresGate": "genie_space",
               "consumes": [
                 "prd_document",
                 "gold_layer_design"
@@ -3825,25 +5376,7 @@
                 "ui",
                 "mcp"
               ],
-              "flag": null
-            },
-            {
-              "order": 11,
-              "sectionTag": "genie_space",
-              "title": "Genie Space",
-              "why": null,
-              "gate": null,
-              "requiresGate": "aibi_dashboard",
-              "consumes": [
-                "usecase_plan"
-              ],
-              "produces": null,
-              "execution": "agent-doable",
-              "surfaces": [
-                "ui",
-                "mcp"
-              ],
-              "flag": null
+              "flag": "ai.dashboard"
             },
             {
               "order": 12,
@@ -3851,7 +5384,7 @@
               "title": "Deploy Assets",
               "why": null,
               "gate": null,
-              "requiresGate": "genie_space",
+              "requiresGate": "aibi_dashboard",
               "consumes": [],
               "produces": null,
               "execution": "agent-doable",
@@ -3875,7 +5408,7 @@
                 "ui",
                 "mcp"
               ],
-              "flag": null
+              "flag": "ai.genie"
             },
             {
               "order": 14,
@@ -3894,7 +5427,7 @@
                 "ui",
                 "mcp"
               ],
-              "flag": null
+              "flag": "ai.agent"
             }
           ]
         },
@@ -3972,7 +5505,46 @@
       "assistants": [
         "default"
       ],
-      "flags": {},
+      "flags": {
+        "ai.genie": {
+          "default": true,
+          "affectsSteps": [
+            "genie_space",
+            "optimize_genie"
+          ],
+          "note": "AI module sub-toggle (default ON); mirrors getDisabledTagsForAIModules."
+        },
+        "ai.dashboard": {
+          "default": true,
+          "affectsSteps": [
+            "aibi_dashboard"
+          ],
+          "note": "AI module sub-toggle (default ON); mirrors getDisabledTagsForAIModules."
+        },
+        "medallion.bronze": {
+          "default": true,
+          "affectsSteps": [
+            "bronze_table_metadata",
+            "bronze_layer_creation"
+          ],
+          "note": "Medallion layer sub-toggle (default ON); mirrors getDisabledTagsForMedallionLayers."
+        },
+        "medallion.silver": {
+          "default": true,
+          "affectsSteps": [
+            "silver_layer_sdp"
+          ],
+          "note": "Medallion layer sub-toggle (default ON); mirrors getDisabledTagsForMedallionLayers."
+        },
+        "medallion.gold": {
+          "default": true,
+          "affectsSteps": [
+            "gold_layer_design",
+            "gold_layer_pipeline"
+          ],
+          "note": "Medallion layer sub-toggle (default ON); mirrors getDisabledTagsForMedallionLayers."
+        }
+      },
       "sections": [
         {
           "id": "define-usecase",
@@ -4022,27 +5594,11 @@
           "steps": [
             {
               "order": 3,
-              "sectionTag": "sync_from_lakebase",
-              "title": "Register Lakebase in UC",
-              "why": null,
-              "gate": null,
-              "requiresGate": "prd_generation",
-              "consumes": [],
-              "produces": null,
-              "execution": "agent-doable",
-              "surfaces": [
-                "ui",
-                "mcp"
-              ],
-              "flag": null
-            },
-            {
-              "order": 4,
               "sectionTag": "bronze_table_metadata",
               "title": "Bring your Metadata",
               "why": null,
               "gate": null,
-              "requiresGate": "sync_from_lakebase",
+              "requiresGate": "prd_generation",
               "consumes": [
                 "prd_document"
               ],
@@ -4052,10 +5608,10 @@
                 "ui",
                 "mcp"
               ],
-              "flag": null
+              "flag": "medallion.bronze"
             },
             {
-              "order": 5,
+              "order": 4,
               "sectionTag": "bronze_layer_creation",
               "title": "Bronze Layer Creation",
               "why": null,
@@ -4070,10 +5626,10 @@
                 "ui",
                 "mcp"
               ],
-              "flag": null
+              "flag": "medallion.bronze"
             },
             {
-              "order": 6,
+              "order": 5,
               "sectionTag": "silver_layer_sdp",
               "title": "Silver Layer",
               "why": null,
@@ -4088,10 +5644,10 @@
                 "ui",
                 "mcp"
               ],
-              "flag": null
+              "flag": "medallion.silver"
             },
             {
-              "order": 7,
+              "order": 6,
               "sectionTag": "gold_layer_design",
               "title": "Gold Layer Design",
               "why": null,
@@ -4106,10 +5662,10 @@
                 "ui",
                 "mcp"
               ],
-              "flag": null
+              "flag": "medallion.gold"
             },
             {
-              "order": 8,
+              "order": 7,
               "sectionTag": "gold_layer_pipeline",
               "title": "Gold Pipeline",
               "why": null,
@@ -4124,10 +5680,10 @@
                 "ui",
                 "mcp"
               ],
-              "flag": null
+              "flag": "medallion.gold"
             },
             {
-              "order": 9,
+              "order": 8,
               "sectionTag": "deploy_lakehouse_assets",
               "title": "Deploy Assets",
               "why": null,
@@ -4151,7 +5707,7 @@
           "why": "Translating data into insights, logic, and decisions",
           "steps": [
             {
-              "order": 10,
+              "order": 9,
               "sectionTag": "usecase_plan",
               "title": "Use-Case Plan",
               "why": null,
@@ -4170,12 +5726,30 @@
               "flag": null
             },
             {
+              "order": 10,
+              "sectionTag": "genie_space",
+              "title": "Genie Space",
+              "why": null,
+              "gate": null,
+              "requiresGate": "usecase_plan",
+              "consumes": [
+                "usecase_plan"
+              ],
+              "produces": null,
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": "ai.genie"
+            },
+            {
               "order": 11,
               "sectionTag": "aibi_dashboard",
               "title": "AI/BI Dashboard",
               "why": null,
               "gate": null,
-              "requiresGate": "usecase_plan",
+              "requiresGate": "genie_space",
               "consumes": [
                 "prd_document",
                 "gold_layer_design"
@@ -4186,33 +5760,15 @@
                 "ui",
                 "mcp"
               ],
-              "flag": null
+              "flag": "ai.dashboard"
             },
             {
               "order": 12,
-              "sectionTag": "genie_space",
-              "title": "Genie Space",
-              "why": null,
-              "gate": null,
-              "requiresGate": "aibi_dashboard",
-              "consumes": [
-                "usecase_plan"
-              ],
-              "produces": null,
-              "execution": "agent-doable",
-              "surfaces": [
-                "ui",
-                "mcp"
-              ],
-              "flag": null
-            },
-            {
-              "order": 13,
               "sectionTag": "deploy_di_assets",
               "title": "Deploy Assets",
               "why": null,
               "gate": null,
-              "requiresGate": "genie_space",
+              "requiresGate": "aibi_dashboard",
               "consumes": [],
               "produces": null,
               "execution": "agent-doable",
@@ -4223,7 +5779,7 @@
               "flag": null
             },
             {
-              "order": 14,
+              "order": 13,
               "sectionTag": "optimize_genie",
               "title": "Optimize Genie",
               "why": null,
@@ -4236,20 +5792,46 @@
                 "ui",
                 "mcp"
               ],
-              "flag": null
-            },
+              "flag": "ai.genie"
+            }
+          ]
+        },
+        {
+          "id": "activation",
+          "chapter": "Activation",
+          "title": "Reverse ETL",
+          "why": "Sync analytics into Lakebase and build an analytics-serving app",
+          "steps": [
             {
-              "order": 15,
-              "sectionTag": "agent_framework",
-              "title": "Build Agent",
+              "order": 14,
+              "sectionTag": "activation_table_design",
+              "title": "Design & Provision Synced Tables",
               "why": null,
               "gate": null,
               "requiresGate": "optimize_genie",
               "consumes": [
+                "gold_layer_design",
+                "usecase_plan",
                 "prd_document",
-                "gold_layer_design"
+                "activation_plan"
               ],
-              "produces": "agent_framework",
+              "produces": null,
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            },
+            {
+              "order": 15,
+              "sectionTag": "activation_reverse_sync",
+              "title": "Create Synced Tables",
+              "why": null,
+              "gate": null,
+              "requiresGate": "activation_table_design",
+              "consumes": [],
+              "produces": null,
               "execution": "agent-doable",
               "surfaces": [
                 "ui",
@@ -4271,7 +5853,7 @@
               "title": "Iterate & Enhance",
               "why": null,
               "gate": null,
-              "requiresGate": "agent_framework",
+              "requiresGate": "activation_reverse_sync",
               "consumes": [],
               "produces": "iteration_plan",
               "execution": "agent-doable",
@@ -4333,7 +5915,54 @@
       "assistants": [
         "default"
       ],
-      "flags": {},
+      "flags": {
+        "ai.genie": {
+          "default": true,
+          "affectsSteps": [
+            "genie_space",
+            "optimize_genie"
+          ],
+          "note": "AI module sub-toggle (default ON); mirrors getDisabledTagsForAIModules."
+        },
+        "ai.agent": {
+          "default": true,
+          "affectsSteps": [
+            "agent_framework",
+            "wire_ui_agent"
+          ],
+          "note": "AI module sub-toggle (default ON); mirrors getDisabledTagsForAIModules."
+        },
+        "ai.dashboard": {
+          "default": true,
+          "affectsSteps": [
+            "aibi_dashboard"
+          ],
+          "note": "AI module sub-toggle (default ON); mirrors getDisabledTagsForAIModules."
+        },
+        "medallion.bronze": {
+          "default": true,
+          "affectsSteps": [
+            "bronze_table_metadata",
+            "bronze_layer_creation"
+          ],
+          "note": "Medallion layer sub-toggle (default ON); mirrors getDisabledTagsForMedallionLayers."
+        },
+        "medallion.silver": {
+          "default": true,
+          "affectsSteps": [
+            "silver_layer_sdp"
+          ],
+          "note": "Medallion layer sub-toggle (default ON); mirrors getDisabledTagsForMedallionLayers."
+        },
+        "medallion.gold": {
+          "default": true,
+          "affectsSteps": [
+            "gold_layer_design",
+            "gold_layer_pipeline"
+          ],
+          "note": "Medallion layer sub-toggle (default ON); mirrors getDisabledTagsForMedallionLayers."
+        }
+      },
       "sections": [
         {
           "id": "define-usecase",
@@ -4383,27 +6012,11 @@
           "steps": [
             {
               "order": 3,
-              "sectionTag": "sync_from_lakebase",
-              "title": "Register Lakebase in UC",
-              "why": null,
-              "gate": null,
-              "requiresGate": "prd_generation",
-              "consumes": [],
-              "produces": null,
-              "execution": "agent-doable",
-              "surfaces": [
-                "ui",
-                "mcp"
-              ],
-              "flag": null
-            },
-            {
-              "order": 4,
               "sectionTag": "bronze_table_metadata",
               "title": "Bring your Metadata",
               "why": null,
               "gate": null,
-              "requiresGate": "sync_from_lakebase",
+              "requiresGate": "prd_generation",
               "consumes": [
                 "prd_document"
               ],
@@ -4413,10 +6026,10 @@
                 "ui",
                 "mcp"
               ],
-              "flag": null
+              "flag": "medallion.bronze"
             },
             {
-              "order": 5,
+              "order": 4,
               "sectionTag": "bronze_layer_creation",
               "title": "Bronze Layer Creation",
               "why": null,
@@ -4431,10 +6044,10 @@
                 "ui",
                 "mcp"
               ],
-              "flag": null
+              "flag": "medallion.bronze"
             },
             {
-              "order": 6,
+              "order": 5,
               "sectionTag": "silver_layer_sdp",
               "title": "Silver Layer",
               "why": null,
@@ -4449,10 +6062,10 @@
                 "ui",
                 "mcp"
               ],
-              "flag": null
+              "flag": "medallion.silver"
             },
             {
-              "order": 7,
+              "order": 6,
               "sectionTag": "gold_layer_design",
               "title": "Gold Layer Design",
               "why": null,
@@ -4467,10 +6080,10 @@
                 "ui",
                 "mcp"
               ],
-              "flag": null
+              "flag": "medallion.gold"
             },
             {
-              "order": 8,
+              "order": 7,
               "sectionTag": "gold_layer_pipeline",
               "title": "Gold Pipeline",
               "why": null,
@@ -4485,10 +6098,10 @@
                 "ui",
                 "mcp"
               ],
-              "flag": null
+              "flag": "medallion.gold"
             },
             {
-              "order": 9,
+              "order": 8,
               "sectionTag": "deploy_lakehouse_assets",
               "title": "Deploy Assets",
               "why": null,
@@ -4512,7 +6125,7 @@
           "why": "Translating data into insights, logic, and decisions",
           "steps": [
             {
-              "order": 10,
+              "order": 9,
               "sectionTag": "usecase_plan",
               "title": "Use-Case Plan",
               "why": null,
@@ -4531,12 +6144,30 @@
               "flag": null
             },
             {
+              "order": 10,
+              "sectionTag": "genie_space",
+              "title": "Genie Space",
+              "why": null,
+              "gate": null,
+              "requiresGate": "usecase_plan",
+              "consumes": [
+                "usecase_plan"
+              ],
+              "produces": null,
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": "ai.genie"
+            },
+            {
               "order": 11,
               "sectionTag": "aibi_dashboard",
               "title": "AI/BI Dashboard",
               "why": null,
               "gate": null,
-              "requiresGate": "usecase_plan",
+              "requiresGate": "genie_space",
               "consumes": [
                 "prd_document",
                 "gold_layer_design"
@@ -4547,33 +6178,15 @@
                 "ui",
                 "mcp"
               ],
-              "flag": null
+              "flag": "ai.dashboard"
             },
             {
               "order": 12,
-              "sectionTag": "genie_space",
-              "title": "Genie Space",
-              "why": null,
-              "gate": null,
-              "requiresGate": "aibi_dashboard",
-              "consumes": [
-                "usecase_plan"
-              ],
-              "produces": null,
-              "execution": "agent-doable",
-              "surfaces": [
-                "ui",
-                "mcp"
-              ],
-              "flag": null
-            },
-            {
-              "order": 13,
               "sectionTag": "deploy_di_assets",
               "title": "Deploy Assets",
               "why": null,
               "gate": null,
-              "requiresGate": "genie_space",
+              "requiresGate": "aibi_dashboard",
               "consumes": [],
               "produces": null,
               "execution": "agent-doable",
@@ -4584,7 +6197,7 @@
               "flag": null
             },
             {
-              "order": 14,
+              "order": 13,
               "sectionTag": "optimize_genie",
               "title": "Optimize Genie",
               "why": null,
@@ -4597,10 +6210,10 @@
                 "ui",
                 "mcp"
               ],
-              "flag": null
+              "flag": "ai.genie"
             },
             {
-              "order": 15,
+              "order": 14,
               "sectionTag": "agent_framework",
               "title": "Build Agent",
               "why": null,
@@ -4616,18 +6229,114 @@
                 "ui",
                 "mcp"
               ],
-              "flag": null
-            },
+              "flag": "ai.agent"
+            }
+          ]
+        },
+        {
+          "id": "activation",
+          "chapter": "Activation",
+          "title": "Reverse ETL",
+          "why": "Sync analytics into Lakebase and build an analytics-serving app",
+          "steps": [
             {
-              "order": 16,
-              "sectionTag": "wire_ui_agent",
-              "title": "Wire UI to Agent",
+              "order": 15,
+              "sectionTag": "activation_table_design",
+              "title": "Design & Provision Synced Tables",
               "why": null,
               "gate": null,
               "requiresGate": "agent_framework",
               "consumes": [
-                "agent_framework"
+                "gold_layer_design",
+                "usecase_plan",
+                "prd_document",
+                "activation_plan"
               ],
+              "produces": null,
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            },
+            {
+              "order": 16,
+              "sectionTag": "activation_reverse_sync",
+              "title": "Create Synced Tables",
+              "why": null,
+              "gate": null,
+              "requiresGate": "activation_table_design",
+              "consumes": [],
+              "produces": null,
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            },
+            {
+              "order": 17,
+              "sectionTag": "activation_app_design",
+              "title": "Design Analytics App",
+              "why": null,
+              "gate": null,
+              "requiresGate": "activation_reverse_sync",
+              "consumes": [
+                "gold_layer_design",
+                "prd_document"
+              ],
+              "produces": "activation_app_design",
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            },
+            {
+              "order": 18,
+              "sectionTag": "activation_build_wire",
+              "title": "Build Analytics App",
+              "why": null,
+              "gate": null,
+              "requiresGate": "activation_app_design",
+              "consumes": [
+                "activation_app_design"
+              ],
+              "produces": null,
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            },
+            {
+              "order": 19,
+              "sectionTag": "activation_wire_lakebase",
+              "title": "Wire to Lakebase",
+              "why": null,
+              "gate": null,
+              "requiresGate": "activation_build_wire",
+              "consumes": [],
+              "produces": "activation_wire_lakebase",
+              "execution": "agent-doable",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": null
+            },
+            {
+              "order": 20,
+              "sectionTag": "activation_deploy_validate",
+              "title": "Deploy & Validate",
+              "why": null,
+              "gate": null,
+              "requiresGate": "activation_wire_lakebase",
+              "consumes": [],
               "produces": null,
               "execution": "agent-doable",
               "surfaces": [
@@ -4645,12 +6354,12 @@
           "why": "Continuous improvement, testing, and optimization",
           "steps": [
             {
-              "order": 17,
+              "order": 21,
               "sectionTag": "iterate_enhance",
               "title": "Iterate & Enhance",
               "why": null,
               "gate": null,
-              "requiresGate": "wire_ui_agent",
+              "requiresGate": "activation_deploy_validate",
               "consumes": [],
               "produces": "iteration_plan",
               "execution": "agent-doable",
@@ -4661,7 +6370,7 @@
               "flag": null
             },
             {
-              "order": 18,
+              "order": 22,
               "sectionTag": "redeploy_test",
               "title": "Redeploy & Test",
               "why": null,
@@ -4687,7 +6396,7 @@
           "why": "Safely remove all workshop-created resources from your workspace",
           "steps": [
             {
-              "order": 19,
+              "order": 23,
               "sectionTag": "workspace_cleanup",
               "title": "Workspace Clean Up",
               "why": null,

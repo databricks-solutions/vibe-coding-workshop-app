@@ -44,6 +44,91 @@ class SourceTrack:
 GENIE_ONTOLOGY_FLAG = "includeGenieOntology"
 GENIE_LAKEHOUSE_FLAG = "includeLakehouse"
 
+# ---------------------------------------------------------------------------
+# Phase 3 T3a — composition axes (mirrors src/constants/workflowSections.ts).
+# These tables are hand-mirrored from the TS source; the parity harness
+# (scripts/dump_outline_matrix.mjs + tests/workshop/test_outline_parity.py)
+# imports the REAL TS transforms and byte-verifies every composed cell, so any
+# drift here fails the gate rather than shipping silently.
+# ---------------------------------------------------------------------------
+
+# AXIS 3+4 — AI-module + medallion sub-toggles: six DEFAULT-TRUE session flags,
+# each a pure step-disable over a disjoint set of gated sectionTags (one tag maps
+# to exactly one flag). Mirrors getDisabledTagsForAIModules /
+# getDisabledTagsForMedallionLayers (workflowSections.ts:127,192).
+AI_MODULE_FLAG_TAGS: dict[str, list[str]] = {
+    "ai.genie": ["genie_space", "optimize_genie"],
+    "ai.agent": ["agent_framework", "wire_ui_agent"],
+    "ai.dashboard": ["aibi_dashboard"],
+}
+MEDALLION_FLAG_TAGS: dict[str, list[str]] = {
+    "medallion.bronze": ["bronze_table_metadata", "bronze_layer_creation"],
+    "medallion.silver": ["silver_layer_sdp"],
+    "medallion.gold": ["gold_layer_design", "gold_layer_pipeline"],
+}
+
+# LEVELS_WITH_AI_MODULES (workflowSections.ts:86) + APPLICABLE_AI_MODULES (:107):
+# reverse-lakebase narrows to {genie,dashboard} because getFilteredSections
+# already strips its Agent steps.
+LEVELS_WITH_AI_MODULES: set[str] = {
+    "lakehouse-di",
+    "end-to-end",
+    "accelerator",
+    "reverse-lakehouse-di",
+    "reverse-lakebase",
+    "reverse-app",
+}
+APPLICABLE_AI_MODULES: dict[str, set[str]] = {
+    "lakehouse-di": {"genie", "agent", "dashboard"},
+    "end-to-end": {"genie", "agent", "dashboard"},
+    "accelerator": {"genie", "agent", "dashboard"},
+    "reverse-lakehouse-di": {"genie", "agent", "dashboard"},
+    "reverse-lakebase": {"genie", "dashboard"},
+    "reverse-app": {"genie", "agent", "dashboard"},
+}
+# LEVELS_WITH_MEDALLION_TOGGLES (workflowSections.ts:150) — all three layers
+# applicable on every listed level (APPLICABLE_MEDALLION_LAYERS is empty ==
+# default to all three).
+LEVELS_WITH_MEDALLION_TOGGLES: set[str] = {
+    "lakehouse",
+    "lakehouse-di",
+    "end-to-end",
+    "accelerator",
+    "data-engineering-accelerator",
+    "reverse-lakehouse",
+    "reverse-lakehouse-di",
+    "reverse-lakebase",
+    "reverse-app",
+}
+
+# AXIS 1 — direction=reverse. The four reverse-* levels render ONLY in reverse
+# direction (direction is 1:1 with these level names in the UI), so reverse is
+# baked into their manifest tracks intrinsically. end-to-end is direction-
+# agnostic, so its reverse form is a runtime variant (see build_manifest).
+REVERSE_TRACKS: set[str] = {
+    "reverse-lakehouse",
+    "reverse-lakehouse-di",
+    "reverse-lakebase",
+    "reverse-app",
+}
+# REVERSE_SECTION_ORDER (workflowSections.ts:951) — stable section re-sort applied
+# in reverse direction, before the iterate-enhance/cleanup tail sort.
+REVERSE_SECTION_ORDER: list[str] = [
+    "define-usecase",
+    "lakehouse",
+    "data-intelligence",
+    "activation",
+    "iterate-enhance",
+    "cleanup",
+]
+
+# AXIS 2 — additive-chain climb. APP_CHAIN (workflowSections.ts:947); climbing to
+# lakehouse / lakehouse-di with chainContext='app' re-admits the app+lakebase
+# sections via the cumulative sectionIds/chapterVisibility union
+# (getCumulativeOverrides :1123). Modelled as a runtime variant.
+APP_CHAIN: list[str] = ["app-only", "app-database", "lakehouse", "lakehouse-di"]
+CLIMB_TRACKS: set[str] = {"lakehouse", "lakehouse-di"}
+
 GENIE_STEP_METADATA: dict[str, dict[str, Any]] = {
     "semlayer_locate": {
         "requiresGate": None,
@@ -261,33 +346,80 @@ def parse_source(source: str) -> tuple[dict[int, SourceStep], dict[str, SourceSe
     return steps, sections, levels
 
 
-def _filtered_sections(track: SourceTrack, sections: dict[str, SourceSection], steps: dict[int, SourceStep]) -> list[SourceSection]:
-    is_genie = track.track_id == "genie-accelerator"
-    is_skills = track.track_id == "skills-accelerator"
+def _filtered_sections(
+    track_id: str,
+    section_id_set: set[str],
+    chapters: set[str],
+    direction: str,
+    sections: dict[str, SourceSection],
+    steps: dict[int, SourceStep],
+) -> list[SourceSection]:
+    """Reproduce getFilteredSections (workflowSections.ts:750) for one track.
+
+    Iterates WORKFLOW_SECTIONS in DECLARATION order filtered by ``section_id_set``
+    membership (exactly like the TS ``WORKFLOW_SECTIONS.filter(...)``), applies the
+    per-section step transforms for the given ``chapters`` and ``direction``, then
+    the reverse section re-sort (reverse only) and the iterate-enhance/cleanup tail
+    sort. ``sections`` preserves declaration order (parse_source builds it from the
+    source array), so iterating it yields the TS section order regardless of the
+    order in which section ids appear in a track's sectionIds / override union.
+    """
+
+    is_genie = track_id == "genie-accelerator"
+    is_skills = track_id == "skills-accelerator"
+    is_reverse = direction == "reverse"
+    genie_track_section_ids = {"semantic-layer", "genie-agent", "genie-ontology", "genie-activate"}
+
     filtered: list[SourceSection] = []
-    for section_id in track.section_ids:
-        section = sections[section_id]
+    for section_id, section in sections.items():
+        if section_id not in section_id_set:
+            continue
         section_steps = list(section.steps)
-        # use_case_selection (step 70) is a genie-accelerator-only beat (D11, Phase
-        # 2B); mirror getFilteredSections and strip it from every non-genie track.
-        if not is_genie and section_id == "define-usecase":
+        # The branches below mirror the sequential `if (...) return {...}` blocks
+        # in getFilteredSections; the first matching branch wins (hence elif).
+        if section_id in genie_track_section_ids and not is_genie:
+            section_steps = []
+        elif section_id == "define-usecase" and not is_genie:
+            # use_case_selection (step 70) is genie-only (D11, Phase 2B); Skills
+            # additionally drops the PRD step (3).
             section_steps = [number for number in section_steps if number != 70]
-        if is_skills and section_id == "define-usecase":
-            section_steps = [number for number in section_steps if number != 3]
-        if is_genie and section_id == "lakehouse":
+            if is_skills:
+                section_steps = [number for number in section_steps if number != 3]
+        elif section_id == "lakehouse" and is_genie:
             section_steps = [number for number in section_steps if number in {22, 11, 14, 23}]
-        if is_genie and section_id == "data-intelligence":
+        elif section_id == "data-intelligence" and is_genie:
             section_steps = []
-        if not is_genie and section_id == "lakehouse":
+        elif section_id == "lakehouse" and not is_genie:
             section_steps = [number for number in section_steps if number != 22]
-            if "ch2" not in track.chapters:
+            if "ch2" not in chapters or is_reverse:
                 section_steps = [number for number in section_steps if number != 9]
-        if section_id == "activation":
+        elif section_id == "activation" and not is_reverse:
             section_steps = []
-        if section_id == "data-intelligence" and "ch1" not in track.chapters:
+        elif section_id == "activation" and track_id == "reverse-lakebase":
+            section_steps = [number for number in section_steps if number in {32, 33}]
+        elif section_id in {"databricks-app", "lakebase"} and is_reverse:
+            section_steps = []
+        elif section_id == "data-intelligence" and ("ch1" not in chapters or is_reverse):
             section_steps = [number for number in section_steps if number != 19]
+            if is_reverse:
+                # reverse-lakebase has no app to wire an agent to: drop Build Agent.
+                if track_id == "reverse-lakebase":
+                    section_steps = [number for number in section_steps if number != 18]
+                # In reverse ETL, Genie Space (17) must precede AI/BI Dashboard (16).
+                if 16 in section_steps and 17 in section_steps:
+                    i16 = section_steps.index(16)
+                    i17 = section_steps.index(17)
+                    if i16 < i17:
+                        section_steps[i16], section_steps[i17] = section_steps[i17], section_steps[i16]
         if section_steps:
             filtered.append(SourceSection(section.section_id, section.chapter, section.title, section.focus, section_steps))
+
+    if is_reverse:
+        filtered.sort(
+            key=lambda item: REVERSE_SECTION_ORDER.index(item.section_id)
+            if item.section_id in REVERSE_SECTION_ORDER
+            else 999
+        )
     filtered.sort(key=lambda item: (998 if item.section_id == "iterate-enhance" else 999 if item.section_id == "cleanup" else 0))
     return filtered
 
@@ -363,6 +495,109 @@ def _chaining_metadata(
     return consumes_by_step, produces_by_step
 
 
+def _subtoggle_flags_for_track(track_id: str) -> dict[str, list[str]]:
+    """Return the DEFAULT-TRUE sub-toggle flags applicable to this track, as
+    ``{flag_name: [affected sectionTags]}``. Only AI modules that are applicable
+    on the level (APPLICABLE_AI_MODULES) contribute an ``ai.*`` flag; every
+    medallion-toggle level gets all three ``medallion.*`` flags. Order is fixed
+    (genie, agent, dashboard, then bronze, silver, gold) for deterministic
+    manifest output."""
+
+    flags: dict[str, list[str]] = {}
+    if track_id in LEVELS_WITH_AI_MODULES:
+        applicable = APPLICABLE_AI_MODULES.get(track_id, set())
+        for module in ("genie", "agent", "dashboard"):
+            if module in applicable:
+                name = f"ai.{module}"
+                flags[name] = list(AI_MODULE_FLAG_TAGS[name])
+    if track_id in LEVELS_WITH_MEDALLION_TOGGLES:
+        for layer in ("bronze", "silver", "gold"):
+            name = f"medallion.{layer}"
+            flags[name] = list(MEDALLION_FLAG_TAGS[name])
+    return flags
+
+
+def _subtoggle_note(flag_name: str) -> str:
+    if flag_name.startswith("ai."):
+        return "AI module sub-toggle (default ON); mirrors getDisabledTagsForAIModules."
+    return "Medallion layer sub-toggle (default ON); mirrors getDisabledTagsForMedallionLayers."
+
+
+def _cumulative_override(track_id: str, levels: dict[str, SourceTrack]) -> tuple[set[str], set[str]]:
+    """Mirror getCumulativeOverrides for an APP_CHAIN climb (chainContext='app').
+
+    Returns the union of sectionIds and the union of chapterVisibility across
+    APP_CHAIN[0..idx] for ``track_id``. Section ORDER is irrelevant (the assembler
+    iterates WORKFLOW_SECTIONS declaration order), so a set of ids suffices."""
+
+    idx = APP_CHAIN.index(track_id)
+    section_ids: set[str] = set()
+    chapters: set[str] = set()
+    for level_id in APP_CHAIN[: idx + 1]:
+        level = levels[level_id]
+        section_ids.update(level.section_ids)
+        chapters.update(level.chapters)
+    return section_ids, chapters
+
+
+def _serialize_sections(
+    track_id: str,
+    section_id_set: set[str],
+    chapters: set[str],
+    direction: str,
+    sections: dict[str, SourceSection],
+    steps: dict[int, SourceStep],
+    ontology_tags: set[str],
+    lakehouse_tags: set[str],
+    subtoggle_tag_to_flag: dict[str, str],
+) -> list[dict[str, Any]]:
+    """Assemble one ordered section list (default track or a variant) into the
+    serialized manifest shape, chaining ``requiresGate``/consumes/produces over the
+    composed order and stamping the default-true sub-toggle flags."""
+
+    ordered_sections = _filtered_sections(
+        track_id, section_id_set, chapters, direction, sections, steps
+    )
+    present_numbers = {number for section in ordered_sections for number in section.steps}
+    consumes_by_step, produces_by_step = _chaining_metadata(track_id, present_numbers)
+    track_steps: list[dict[str, Any]] = []
+    previous_tag: str | None = None
+    serialized_sections: list[dict[str, Any]] = []
+    for section in ordered_sections:
+        serialized_steps: list[dict[str, Any]] = []
+        for number in section.steps:
+            source_step = steps[number]
+            step_data = _metadata(
+                track_id,
+                source_step,
+                previous_tag,
+                ontology_tags,
+                lakehouse_tags,
+                consumes_by_step,
+                produces_by_step,
+            )
+            # Sub-toggle stamping (AI/medallion, default TRUE). Never overrides a
+            # genie-scoped flag set by _metadata; a step maps to at most one flag.
+            if step_data["flag"] is None:
+                flag_name = subtoggle_tag_to_flag.get(source_step.section_tag)
+                if flag_name is not None:
+                    step_data["flag"] = flag_name
+            step_data["order"] = len(track_steps) + 1
+            serialized_steps.append(step_data)
+            track_steps.append(step_data)
+            previous_tag = source_step.section_tag
+        serialized_sections.append(
+            {
+                "id": section.section_id,
+                "chapter": section.chapter,
+                "title": section.title,
+                "why": section.focus,
+                "steps": serialized_steps,
+            }
+        )
+    return serialized_sections
+
+
 def build_manifest(source: str) -> dict[str, Any]:
     steps, sections, levels = parse_source(source)
     ontology_match = re.search(
@@ -391,42 +626,67 @@ def build_manifest(source: str) -> dict[str, Any]:
     lakehouse_tags = set(lakehouse_tags_in_order)
     tracks: dict[str, Any] = {}
     for track_id, track in levels.items():
-        ordered_sections = _filtered_sections(track, sections, steps)
-        present_numbers = {
-            number for section in ordered_sections for number in section.steps
+        subtoggle_flags = _subtoggle_flags_for_track(track_id)
+        subtoggle_tag_to_flag = {
+            tag: flag_name
+            for flag_name, tags in subtoggle_flags.items()
+            for tag in tags
         }
-        consumes_by_step, produces_by_step = _chaining_metadata(
-            track_id, present_numbers
+        section_id_set = set(track.section_ids)
+        # AXIS 1: reverse is intrinsic to the four reverse-* tracks — bake it in.
+        default_direction = "reverse" if track_id in REVERSE_TRACKS else "forward"
+        serialized_sections = _serialize_sections(
+            track_id,
+            section_id_set,
+            track.chapters,
+            default_direction,
+            sections,
+            steps,
+            ontology_tags,
+            lakehouse_tags,
+            subtoggle_tag_to_flag,
         )
-        track_steps: list[dict[str, Any]] = []
-        previous_tag: str | None = None
-        serialized_sections: list[dict[str, Any]] = []
-        for section in ordered_sections:
-            serialized_steps: list[dict[str, Any]] = []
-            for number in section.steps:
-                source_step = steps[number]
-                step_data = _metadata(
-                    track_id,
-                    source_step,
-                    previous_tag,
-                    ontology_tags,
-                    lakehouse_tags,
-                    consumes_by_step,
-                    produces_by_step,
-                )
-                step_data["order"] = len(track_steps) + 1
-                serialized_steps.append(step_data)
-                track_steps.append(step_data)
-                previous_tag = source_step.section_tag
-            serialized_sections.append(
+
+        # AXIS 2 (climb) + end-to-end reverse: runtime variants selected by the
+        # engine from session_parameters (chainContext / direction). Not distinct
+        # tracks — one track carrying alternate composed orderings.
+        variants: list[dict[str, Any]] = []
+        if track_id in CLIMB_TRACKS:
+            override_ids, override_chapters = _cumulative_override(track_id, levels)
+            variants.append(
                 {
-                    "id": section.section_id,
-                    "chapter": section.chapter,
-                    "title": section.title,
-                    "why": section.focus,
-                    "steps": serialized_steps,
+                    "when": {"chainContext": "app"},
+                    "sections": _serialize_sections(
+                        track_id,
+                        override_ids,
+                        override_chapters,
+                        "forward",
+                        sections,
+                        steps,
+                        ontology_tags,
+                        lakehouse_tags,
+                        subtoggle_tag_to_flag,
+                    ),
                 }
             )
+        if track_id == "end-to-end":
+            variants.append(
+                {
+                    "when": {"direction": "reverse"},
+                    "sections": _serialize_sections(
+                        track_id,
+                        section_id_set,
+                        track.chapters,
+                        "reverse",
+                        sections,
+                        steps,
+                        ontology_tags,
+                        lakehouse_tags,
+                        subtoggle_tag_to_flag,
+                    ),
+                }
+            )
+
         flags: dict[str, Any] = {}
         if track_id == "genie-accelerator":
             flags[GENIE_ONTOLOGY_FLAG] = {
@@ -439,13 +699,23 @@ def build_manifest(source: str) -> dict[str, Any]:
                 "affectsSteps": lakehouse_tags_in_order,
                 "note": "Genie lakehouse chapter is opt-in; mirrors getDisabledTagsForLakehouse.",
             }
-        tracks[track_id] = {
+        for flag_name, tags in subtoggle_flags.items():
+            flags[flag_name] = {
+                "default": True,
+                "affectsSteps": tags,
+                "note": _subtoggle_note(flag_name),
+            }
+
+        track_entry: dict[str, Any] = {
             "id": track_id,
             "title": track.title,
             "assistants": ["default"],
             "flags": flags,
             "sections": serialized_sections,
         }
+        if variants:
+            track_entry["variants"] = variants
+        tracks[track_id] = track_entry
     return {"version": "1", "tracks": tracks}
 
 
