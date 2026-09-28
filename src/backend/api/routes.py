@@ -5428,6 +5428,14 @@ class SessionSaveRequest(BaseModel):
     direction: Optional[str] = Field(None, description="Workflow direction: forward or reverse")
     include_lakehouse: Optional[bool] = Field(None, description="Genie Accelerator: include the optional Lakehouse (Bronze -> Gold) block")
     include_genie_ontology: Optional[bool] = Field(None, description="Genie Accelerator: include the optional Genie Ontology block")
+    # Engine composition inputs (Phase 3 T3b-2a). Persisted into session_parameters
+    # under the exact keys engine._inputs_for / _flags_for read, so GET
+    # /api/track/{track}/outline composes the same variant/sub-toggle outline the
+    # UI shows. `chain_context` -> top-level `chainContext` (read by _inputs_for);
+    # `flags` -> a nested `flags` object (read by _flags_for). Additive: the
+    # existing snake_case direction/include_* keys stay for other consumers.
+    chain_context: Optional[str] = Field(None, description="Additive-chain context: app | lakehouse | reverse (persisted as session_parameters.chainContext)")
+    flags: Optional[Dict[str, bool]] = Field(None, description="Engine composition flags (e.g. includeLakehouse, ai.genie, medallion.bronze) persisted under session_parameters.flags")
     completed_steps: List[int] = Field(default_factory=list, description="List of completed step numbers")
     step_prompts: Dict[int, str] = Field(default_factory=dict, description="Map of step number to generated prompt")
 
@@ -5728,6 +5736,12 @@ async def save_session_endpoint(request_body: SessionSaveRequest, request: Reque
             _save_param_patch["include_lakehouse"] = request_body.include_lakehouse
         if request_body.include_genie_ontology is not None:
             _save_param_patch["include_genie_ontology"] = request_body.include_genie_ontology
+        # Engine composition inputs (Phase 3 T3b-2a) — mirror the update-metadata
+        # path so a full save also persists chainContext + flags for GET /outline.
+        if request_body.chain_context is not None:
+            _save_param_patch["chainContext"] = request_body.chain_context
+        if request_body.flags is not None:
+            _save_param_patch["flags"] = request_body.flags
         if success and _save_param_patch:
             try:
                 schema = get_schema()
@@ -5954,6 +5968,11 @@ class SessionUpdateMetadataRequest(BaseModel):
     coding_assistant: Optional[str] = Field(None, description="Selected coding assistant: cursor, copilot, or vscode")
     include_lakehouse: Optional[bool] = Field(None, description="Genie Accelerator: include the optional Lakehouse (Bronze -> Gold) block")
     include_genie_ontology: Optional[bool] = Field(None, description="Genie Accelerator: include the optional Genie Ontology block")
+    # Engine composition inputs (Phase 3 T3b-2a) — see SessionSaveRequest for the
+    # rationale. Persisted alongside the snake_case keys so GET /outline reflects
+    # the UI's climb / reverse / AI+medallion / genie-opt-in state.
+    chain_context: Optional[str] = Field(None, description="Additive-chain context: app | lakehouse | reverse (persisted as session_parameters.chainContext)")
+    flags: Optional[Dict[str, bool]] = Field(None, description="Engine composition flags (e.g. includeLakehouse, ai.genie, medallion.bronze) persisted under session_parameters.flags")
 
 
 @router.post("/session/update-metadata")
@@ -6022,7 +6041,15 @@ async def update_session_metadata_endpoint(request_body: SessionUpdateMetadataRe
             _session_param_patch['include_lakehouse'] = request_body.include_lakehouse
         if request_body.include_genie_ontology is not None:
             _session_param_patch['include_genie_ontology'] = request_body.include_genie_ontology
-        
+        # Engine composition inputs (Phase 3 T3b-2a): persist under the exact keys
+        # engine._inputs_for (top-level chainContext) and _flags_for (nested flags)
+        # read, so GET /outline mirrors the UI. The JSONB `||` merge replaces the
+        # `flags` object wholesale — the SPA sends the complete flag set each save.
+        if request_body.chain_context is not None:
+            _session_param_patch['chainContext'] = request_body.chain_context
+        if request_body.flags is not None:
+            _session_param_patch['flags'] = request_body.flags
+
         # Derive user_schema_prefix from email + use case name (or source schema for accelerator)
         # Triggered when use case is selected, custom label is edited, or workshop_level changes
         _uc_name = (
