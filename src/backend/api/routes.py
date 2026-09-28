@@ -21,7 +21,7 @@ from pathlib import Path
 import uuid
 from fastapi import APIRouter, HTTPException, Response, UploadFile, File, Form, Request
 from fastapi.responses import StreamingResponse, FileResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from typing import List, Dict, Optional, Any, AsyncGenerator
 from datetime import datetime, timezone
 
@@ -5464,6 +5464,15 @@ class SessionLoadResponse(BaseModel):
     updated_at: Optional[str] = Field(None)
     is_saved: bool = Field(False)
     message: str = Field(..., description="Status message")
+
+    @field_validator("prerequisites_completed", "is_saved", mode="before")
+    @classmethod
+    def _coerce_none_bool_to_false(cls, v: object) -> object:
+        # MCP-created sessions can persist NULL for these BOOLEAN columns.
+        # Pydantic v2's strict bool rejects None, which 500s the load endpoint
+        # and silently drops the SPA back to the default (end-to-end) session —
+        # the true cause of the "0/28" resume defect. Coerce None -> False.
+        return False if v is None else v
 
 
 class NewSessionResponse(BaseModel):

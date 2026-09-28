@@ -59,3 +59,35 @@ def test_load_session_endpoint_defaults_gates_empty_for_legacy_sessions(monkeypa
 
     assert result.success is True
     assert result.completed_gates == []
+
+
+def test_load_session_endpoint_coerces_null_boolean_columns(monkeypatch):
+    # MCP-created sessions can persist NULL for the BOOLEAN columns
+    # ``prerequisites_completed`` / ``is_saved``. Pydantic v2's strict bool
+    # rejects None, which 500s the load endpoint; the SPA then silently falls
+    # back to the default (end-to-end) session — the true cause of the "0/28"
+    # resume defect. The model must coerce None -> False so the resume succeeds
+    # and reaches the level resolver.
+    record = {
+        "session_id": "mcp-null-prereq",
+        "completed_steps": [1, 2, 3],
+        "completed_gates": ["project_setup", "use_case_selection", "prd_generation"],
+        "session_parameters": {"coding_assistant": "genie-code"},
+        "workshop_level": None,
+        "prerequisites_completed": None,  # NULL in Lakebase for MCP sessions
+        "is_saved": None,
+    }
+    monkeypatch.setattr(routes, "load_session", lambda sid: dict(record))
+
+    # Before the fix this raised a validation error (surfaced as HTTP 500).
+    result = asyncio.run(routes.load_session_endpoint("mcp-null-prereq"))
+
+    assert result.success is True
+    assert result.prerequisites_completed is False
+    assert result.is_saved is False
+    # The genie gates still forward so the App can map them to global numbers.
+    assert result.completed_gates == [
+        "project_setup",
+        "use_case_selection",
+        "prd_generation",
+    ]
