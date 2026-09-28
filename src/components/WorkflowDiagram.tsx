@@ -14,10 +14,11 @@ import { DefineIntentSection } from './DefineIntentSection';
 import { SetUpProjectStep } from './SetUpProjectStep';
 import { CelebrationOverlay, type CelebrationData } from './CelebrationOverlay';
 import { PathAndArchitecture } from './PathAndArchitecture';
-import { 
-  WORKFLOW_SECTIONS, 
+import {
+  WORKFLOW_SECTIONS,
   getSectionForStep,
   getFilteredSections,
+  orderedSectionsForRead,
   getCumulativeOverrides,
   ALL_STEPS,
   type WorkshopLevel,
@@ -133,6 +134,10 @@ interface WorkflowDiagramProps {
   onIncludeLakehouseChange?: (next: boolean) => void;
   includeGenieOntology?: boolean;
   onIncludeGenieOntologyChange?: (next: boolean) => void;
+  /** Engine-composed ordered sectionTag list from GET /api/track/{track}/outline
+   * (Phase 3 T3b-2b). When resolved + safe, it drives the read-path section
+   * ORDER; null/undefined => the getFilteredSections fallback order. */
+  outlineTags?: string[] | null;
   readOnly?: boolean;
 }
 
@@ -219,6 +224,7 @@ export function WorkflowDiagram({
   onIncludeLakehouseChange,
   includeGenieOntology = false,
   onIncludeGenieOntologyChange,
+  outlineTags = null,
   readOnly = false,
 }: WorkflowDiagramProps) {
   // UI option is now always cursor (Figma option removed from UI)
@@ -359,11 +365,28 @@ export function WorkflowDiagram({
     () => getCumulativeOverrides(workshopLevel, completedSteps, chainContext),
     [workshopLevel, completedSteps, chainContext],
   );
-  const rawSections = getFilteredSections(
-    workshopLevel,
-    disabledSectionTags,
-    cumulativeOverrides ?? undefined,
-    direction,
+  // getFilteredSections is the FALLBACK order + the track-correct membership/chrome
+  // source. ORDER is engine-authoritative (T3b-2b): orderedSectionsForRead reorders
+  // into the endpoint's outline order when resolved + safe, filtering disabled tags
+  // on top, and returns the fallback order otherwise (never blanks the sidebar).
+  const fallbackSections = useMemo(
+    () => getFilteredSections(
+      workshopLevel,
+      disabledSectionTags,
+      cumulativeOverrides ?? undefined,
+      direction,
+    ),
+    [workshopLevel, disabledSectionTags, cumulativeOverrides, direction],
+  );
+  const rawSections = useMemo(
+    () => orderedSectionsForRead(
+      fallbackSections,
+      outlineTags,
+      disabledSectionTags,
+      direction,
+      workshopLevel,
+    ),
+    [fallbackSections, outlineTags, disabledSectionTags, direction, workshopLevel],
   );
   const visibleSections = useMemo(() => {
     if (workshopLevel === 'genie-accelerator' && step22Mode === 'upload') {
