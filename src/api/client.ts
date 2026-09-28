@@ -345,6 +345,23 @@ export interface NewSessionResponse {
   session_id: string;
 }
 
+// Track outline (Phase 3). The flat, engine-composed step order for a track —
+// the SAME sequence the MCP server's outline tool returns. `status` is the
+// engine's per-step state; the SPA read path (T3b-2b) consumes `sectionTag` for
+// ORDER and defers `status` projection to a later task.
+export interface TrackOutlineItem {
+  sectionTag: string;
+  title: string;
+  status: 'done' | 'current' | 'locked' | 'skipped';
+  execution: string;
+}
+
+export interface TrackOutlineResponse {
+  track: string;
+  session_id: string | null;
+  outline: TrackOutlineItem[];
+}
+
 export interface FeedbackRequest {
   session_id: string;
   feedback_rating: 'thumbs_up' | 'thumbs_down';
@@ -1243,6 +1260,22 @@ class ApiClient {
       ? `?coding_assistant=${encodeURIComponent(codingAssistant)}`
       : '';
     return this.fetch(`/config/visibility${qs}`);
+  }
+
+  /** Fetch the engine-composed step outline for a track (Phase 3 T3b-2b). The
+   * response is FLAT and ordered — the same sequence the MCP outline tool
+   * returns — reflecting the session's PERSISTED composition inputs
+   * (chainContext / flags). Pass `sessionId` to compose the saved variant;
+   * omit it for the fresh (all-locked-after-first) outline. Mirrors
+   * `getVisibility`: a thin GET the caller wraps in a cancelled-flag effect. */
+  async getTrackOutline(
+    track: string,
+    sessionId?: string,
+  ): Promise<TrackOutlineResponse> {
+    const qs = sessionId ? `?session_id=${encodeURIComponent(sessionId)}` : '';
+    return this.fetch<TrackOutlineResponse>(
+      `/track/${encodeURIComponent(track)}/outline${qs}`,
+    );
   }
 
   /** Admin: full three-column visibility matrix (Default / CoDA / Genie Code).
