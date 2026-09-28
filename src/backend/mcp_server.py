@@ -34,6 +34,7 @@ from .services.lakebase import (
     save_session,
 )
 from .workshop import assembler, engine, manifest
+from .workshop.state import build_session_state
 
 logger = logging.getLogger(__name__)
 
@@ -432,34 +433,10 @@ def _stash_base_url(state: engine.SessionState, context: Context | None) -> None
         state.session_parameters.setdefault("app_base_url", base)
 
 
-def _session_state(record: dict[str, Any], track: str = DEFAULT_TRACK) -> engine.SessionState:
-    completed_gates = list(record.get("completed_gates") or [])
-    completed_steps = record.get("completed_steps") or []
-    try:
-        steps = manifest.load_manifest().track_steps(track)
-        for step_number in completed_steps:
-            if isinstance(step_number, int) and 1 <= step_number <= len(steps):
-                tag = steps[step_number - 1].sectionTag
-                if tag not in completed_gates:
-                    completed_gates.append(tag)
-    except KeyError:
-        pass
-    params = dict(record.get("session_parameters") or {})
-    for key in ("industry", "use_case", "industry_label", "use_case_label"):
-        if record.get(key) is not None:
-            params.setdefault(key, record[key])
-    captured_outputs = dict(record.get("captured_outputs") or {})
-    return engine.SessionState(
-        completed_gates=completed_gates,
-        captured_outputs=captured_outputs,
-        session_parameters=params,
-    )
-
-
 def _coerce_state(value: engine.SessionState | dict[str, Any]) -> engine.SessionState:
     if isinstance(value, engine.SessionState):
         return value
-    return _session_state(value)
+    return build_session_state(value)
 
 
 def _load_session_for_request(
@@ -480,7 +457,7 @@ def _load_session_for_request(
     caller = _request_user(context)
     if owner and caller != "unknown" and owner != caller:
         return None
-    return _session_state(record, track), session_id
+    return build_session_state(record, track), session_id
 
 
 def _outline_items(track: str, state: engine.SessionState) -> list[OutlineItem]:
@@ -1151,7 +1128,7 @@ def _run_async_blocking(make_coro: Callable[[], Any]) -> Any:
 # legacy SPA tracks it as current_step (int) + completed_steps (int list). To let
 # MCP-driven progress show up in the legacy SPA, vibe_complete_step dual-writes
 # the legacy fields — derived from the SAME manifest section order that
-# ``_session_state`` uses to translate completed_steps back into gates. This is
+# ``build_session_state`` uses to translate completed_steps back into gates. This is
 # the inverse of that reader (one section-order source, no hardcoded positions).
 def _legacy_progress(
     track: str,
