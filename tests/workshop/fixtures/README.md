@@ -30,6 +30,35 @@ source positions.
 step 70) is present for `genie-accelerator` only and absent from every other
 track (and that `skills-accelerator` still drops PRD too).
 
+## Outline parity matrix (Phase 3 T2)
+
+`golden_outline_matrix.json` is the full `engine.outline()` vs
+`getFilteredSections()` parity matrix — all 14 tracks x every legal flag/axis
+combo. `PARITY_MATRIX.md` is its human-readable companion (pass/gap table plus
+the T3 reconciliation gap list). Both are emitted by the same oracle, which
+uses the identical offline scaffold as `dump_getfilteredsections.mjs`:
+
+```bash
+node --experimental-strip-types scripts/dump_outline_matrix.mjs
+```
+
+The `ts` column of each cell is the REAL `getFilteredSections()` ordered
+`sectionTag` sequence (never derived from `generate_manifest.py` or
+`manifest.json` — that is the hollow side under test). The `engine` column
+mirrors `manifest.outline_order` and is independently re-verified against the
+real Python `engine.outline()` in `tests/workshop/test_outline_parity.py`.
+`status` is `parity` when the two orders match, else `gap`.
+
+Expressible axes (default forward order for all 14 tracks; the four
+`genie-accelerator` flag combos) are hard-asserted parity — a mismatch there is
+a real engine/TS drift finding, not a gap. Gap axes (`direction=reverse`,
+additive-chain climb, AI-module sub-toggles, medallion sub-toggles) are the
+axes the engine cannot yet express; they are enumerated with their concrete
+diff and locked as the Phase 3 T3 reconciliation scope. Regenerate after any
+change to `workflowSections.ts` or `manifest.json` and commit both files;
+`test_oracle_regeneration_is_byte_identical` asserts the JSON is byte-identical
+to a fresh dump.
+
 ## Chaining source
 
 `golden_chaining_genie.json` is a full-track 31-step `consumes` map for the
