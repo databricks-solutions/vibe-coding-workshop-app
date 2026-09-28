@@ -5848,6 +5848,11 @@ async def get_track_outline(
     sentinel ``auto`` — and any other non-track value — resolves the track from the
     loaded session via ``resolve_track`` (which tolerates legacy workshop_level
     None/'300'). With no session to resolve against, a non-track path is a 404.
+
+    A ``session_id`` that is PROVIDED but cannot be loaded is a 404 for BOTH the
+    explicit and auto paths (symmetric) — the route never serves a fresh outline
+    while echoing a session id that failed to load. The fresh-outline 200 applies
+    only when ``session_id`` was omitted entirely.
     """
     from src.backend.workshop import engine
     from src.backend.workshop.state import build_session_state
@@ -5860,6 +5865,12 @@ async def get_track_outline(
         except Exception as e:  # never surface a load error as a 500 for a read
             logger.warning(f"[Track Outline] load_session failed for {session_id}: {e}")
             record = None
+        if record is None:
+            # A session_id was PROVIDED but could not be loaded. Symmetric with the
+            # auto path: never serve a misleading fresh/all-locked outline while
+            # echoing a session id that failed to load. (The T1-B8 no-session 200
+            # path only applies when session_id was not provided at all.)
+            raise HTTPException(status_code=404, detail=f"Session '{session_id}' not found")
 
     if is_track(track):
         resolved = track  # explicit client request wins

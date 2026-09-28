@@ -138,6 +138,45 @@ def test_unknown_track_without_session_is_clean_404(client, stub_session):
     assert "detail" in resp.json()  # structured error, not an unhandled KeyError/500
 
 
+# --- NB2 hardening: provided-but-unloadable session is 404 on BOTH paths ------
+
+
+def test_valid_track_with_unloadable_session_is_404(client, stub_session):
+    """Explicit VALID track + session_id whose load returns None -> 404, not a
+    misleading fresh/all-locked 200 that echoes a session that failed to load.
+
+    Unlike test_unknown_track_without_session_is_clean_404 (which does NOT pass
+    session_id, so load_session is never called), this test passes session_id in
+    params so load_session is actually invoked and returns None.
+    """
+    stub_session(None)  # load_session(session_id) -> None
+
+    resp = client.get(
+        f"/api/track/{GENIE_TRACK}/outline", params={"session_id": "gone"}
+    )
+
+    assert resp.status_code == 404, resp.text
+    assert "detail" in resp.json()
+
+
+def test_valid_track_with_raising_load_session_is_404(client, monkeypatch):
+    """Explicit VALID track + session_id whose load raises -> 404 (not 500, not a
+    misleading fresh outline). The load error is swallowed, then treated as
+    provided-but-unloadable."""
+
+    def _boom(session_id):
+        raise RuntimeError("lakebase unavailable")
+
+    monkeypatch.setattr(routes, "load_session", _boom)
+
+    resp = client.get(
+        f"/api/track/{GENIE_TRACK}/outline", params={"session_id": "explodes"}
+    )
+
+    assert resp.status_code == 404, resp.text
+    assert "detail" in resp.json()
+
+
 # --- T1-B5 NUMBER -> GATE BACKFILL parity -------------------------------------
 
 
