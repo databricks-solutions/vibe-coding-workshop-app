@@ -74,6 +74,23 @@ def _flags_for(track_id: str, session: SessionState) -> dict[str, bool]:
     return flags
 
 
+# Composition inputs the engine threads into manifest.outline_order to select a
+# runtime variant (Phase 3 T3a). ``direction`` drives end-to-end reverse;
+# ``chainContext`` drives the lakehouse / lakehouse-di additive-chain climb. The
+# four reverse-* tracks bake reverse in as their default, so they need no input.
+_COMPOSITION_INPUTS = ("direction", "chainContext")
+
+
+def _inputs_for(session: SessionState) -> dict[str, str]:
+    parameters = session.session_parameters
+    inputs: dict[str, str] = {}
+    for name in _COMPOSITION_INPUTS:
+        value = parameters.get(name)
+        if value is not None:
+            inputs[name] = str(value)
+    return inputs
+
+
 def _skipped_tags(session: SessionState) -> set[str]:
     parameters = session.session_parameters
     values = parameters.get("skipped_gates", parameters.get("skippedSteps", []))
@@ -85,7 +102,11 @@ def _skipped_tags(session: SessionState) -> set[str]:
 
 
 def _ordered_steps(track_id: str, session: SessionState) -> list[Step]:
-    return MANIFEST.outline_order(track_id, flags=_flags_for(track_id, session))
+    return MANIFEST.outline_order(
+        track_id,
+        flags=_flags_for(track_id, session),
+        inputs=_inputs_for(session),
+    )
 
 
 def outline(track_id: str, session: SessionState) -> list[StepStatus]:

@@ -78,12 +78,37 @@ class Flag:
 
 
 @dataclass(frozen=True)
+class Variant:
+    """A composed ordering selected at runtime by matching session inputs.
+
+    ``when`` is a set of ``session_parameters`` key/value conditions (e.g.
+    ``{"chainContext": "app"}`` or ``{"direction": "reverse"}``); a variant is
+    active when every condition matches. ``sections`` is a full alternate section
+    list in the same shape as ``Track.sections`` — the engine applies flag
+    filtering to it exactly as it does the default sections (Phase 3 T3a)."""
+
+    when: dict[str, str]
+    sections: list[Section]
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> Variant:
+        return cls(
+            when={str(key): str(value) for key, value in data.get("when", {}).items()},
+            sections=[Section.from_dict(section) for section in data.get("sections", [])],
+        )
+
+    def matches(self, inputs: dict[str, str]) -> bool:
+        return all(inputs.get(key) == value for key, value in self.when.items())
+
+
+@dataclass(frozen=True)
 class Track:
     id: str
     title: str
     sections: list[Section]
     assistants: list[str] = field(default_factory=list)
     flags: dict[str, Flag] = field(default_factory=dict)
+    variants: list[Variant] = field(default_factory=list)
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> Track:
@@ -96,10 +121,23 @@ class Track:
                 str(name): Flag.from_dict(value)
                 for name, value in data.get("flags", {}).items()
             },
+            variants=[Variant.from_dict(variant) for variant in data.get("variants", [])],
         )
 
     def steps(self) -> list[Step]:
         return [step for section in self.sections for step in section.steps]
+
+    def sections_for(self, inputs: dict[str, str] | None = None) -> list[Section]:
+        """Select the active section list for the given session inputs.
+
+        The first variant whose ``when`` conditions all match wins; otherwise the
+        default sections. Variants carry non-empty ``when``, so absent inputs (the
+        default session) always resolve to the default sections."""
+
+        for variant in self.variants:
+            if variant.matches(inputs or {}):
+                return variant.sections
+        return self.sections
 
 
 @dataclass(frozen=True)
@@ -111,19 +149,24 @@ class Manifest:
         return self._track(track_id).steps()
 
     def outline_order(
-        self, track_id: str, flags: dict[str, bool] | None = None
+        self,
+        track_id: str,
+        flags: dict[str, bool] | None = None,
+        inputs: dict[str, str] | None = None,
     ) -> list[Step]:
         track = self._track(track_id)
         requested_flags = flags or {}
+        sections = track.sections_for(inputs)
         steps: list[Step] = []
-        for step in track.steps():
-            if step.flag is None:
-                steps.append(step)
-                continue
-            flag_definition = track.flags.get(step.flag)
-            default = flag_definition.default if flag_definition else False
-            if bool(requested_flags.get(step.flag, default)):
-                steps.append(step)
+        for section in sections:
+            for step in section.steps:
+                if step.flag is None:
+                    steps.append(step)
+                    continue
+                flag_definition = track.flags.get(step.flag)
+                default = flag_definition.default if flag_definition else False
+                if bool(requested_flags.get(step.flag, default)):
+                    steps.append(step)
         return steps
 
     def _track(self, track_id: str) -> Track:
