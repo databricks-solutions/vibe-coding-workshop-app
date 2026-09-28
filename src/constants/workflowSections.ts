@@ -511,6 +511,28 @@ export function completedGatesToStepNumbers(gates: string[]): number[] {
     .filter((n): n is number => n != null);
 }
 
+// Presentation-only projection of ALL_STEPS, keyed by sectionTag (Phase 3
+// T3b-2b, piece 5). Carries ONLY the visual attributes the sidebar/divider
+// surfaces need (title / icon / color) — ZERO ordering or identity logic. This
+// mirrors the already-tag-keyed GENIE_STEP_META shape in WorkflowDiagram and is
+// the forward-looking presentation source as the surfaces move off numeric step
+// identity. The `number` key on ALL_STEPS and the tag<->number maps above STAY
+// (they back the Set<number> compat shim); dropping them is a later task.
+export interface StepPresentation {
+  title: string;
+  icon: LucideIcon;
+  color: string;
+}
+
+export const STEP_PRESENTATION: Record<string, StepPresentation> = Object.fromEntries(
+  Object.values(ALL_STEPS)
+    .filter(step => !!step.sectionTag)
+    .map(step => [
+      step.sectionTag as string,
+      { title: step.title, icon: step.icon, color: step.color },
+    ]),
+);
+
 // The logical sections with their step groupings (4-chapter structure + activation + skills)
 export const WORKFLOW_SECTIONS: WorkflowSection[] = [
   {
@@ -872,6 +894,90 @@ export function getFilteredSections(
   });
 
   return filtered;
+}
+
+// Phase 3 T3b-2b (piece 2): make ORDER engine-authoritative for the read path.
+//
+// The GET /api/track/{track}/outline endpoint returns the engine's flat, ordered
+// sectionTag list (composed from the session's PERSISTED inputs). This helper
+// reorders the sidebar/step surfaces into that engine order, while taking each
+// step's chrome + object from the track-correct `fallbackSections`
+// (getFilteredSections) — never getSectionForStep, whose global lookup is
+// ambiguous for step numbers shared across sections. Client-side disabled-tag
+// FILTERING is applied on top so live chip toggles hide steps instantly
+// (filtering removes; it never reorders).
+//
+// It returns `fallbackSections` unchanged (never blanks the sidebar) whenever
+// adopting the endpoint order would be unsafe:
+//   - the outline hasn't resolved / errored (`outlineTags` null or empty);
+//   - a forward-baseline track is being viewed in `reverse` (its reverse order is
+//     composed only from PERSISTED direction/chainContext, so until that lands the
+//     endpoint would return forward order — the four reverse-* tracks bake reverse
+//     intrinsically and are safe);
+//   - the endpoint doesn't COVER every step the client would show (a persisted-
+//     variant lag, e.g. an un-persisted additive-chain climb) — falling back
+//     avoids DROPPING a step the user should see;
+//   - the endpoint order would interleave a section (defensive; parity keeps
+//     sections contiguous, so this never fires in the steady state).
+//
+// In the steady (persisted) state the engine and getFilteredSections agree by the
+// T2/T3a parity harness, so the adopted order is visually identical — the point is
+// that it is now SOURCED from the engine. getFilteredSections stays only as the
+// fallback (its deletion is a later task).
+export function orderedSectionsForRead(
+  fallbackSections: WorkflowSection[],
+  outlineTags: string[] | null | undefined,
+  disabledSectionTags: Set<string>,
+  direction: WorkflowDirection,
+  level: WorkshopLevel,
+): WorkflowSection[] {
+  if (!outlineTags || outlineTags.length === 0) return fallbackSections;
+
+  // Reverse-order guard: only the intrinsically-reverse reverse-* tracks are safe
+  // to take from the endpoint in reverse direction.
+  const isReverseTrack = normalizeLevel(level).startsWith('reverse-');
+  if (direction === 'reverse' && !isReverseTrack) return fallbackSections;
+
+  const stepByTag = new Map<string, { sectionId: string; step: WorkflowStep }>();
+  const metaById = new Map<string, WorkflowSection>();
+  for (const section of fallbackSections) {
+    metaById.set(section.id, section);
+    for (const step of section.steps) {
+      if (step.sectionTag) stepByTag.set(step.sectionTag, { sectionId: section.id, step });
+    }
+  }
+
+  const result: WorkflowSection[] = [];
+  const seenSectionIds = new Set<string>();
+  let current: WorkflowSection | null = null;
+  let adopted = 0;
+  for (const tag of outlineTags) {
+    if (disabledSectionTags.has(tag)) continue; // instant client-side filter
+    const hit = stepByTag.get(tag);
+    if (!hit) continue; // endpoint tag not in this track's client sections
+    adopted++;
+    const meta = metaById.get(hit.sectionId)!;
+    if (!current || current.id !== meta.id) {
+      if (seenSectionIds.has(meta.id)) return fallbackSections; // interleaving -> unsafe
+      seenSectionIds.add(meta.id);
+      current = { ...meta, steps: [hit.step] };
+      result.push(current);
+    } else {
+      current.steps = [...current.steps, hit.step];
+    }
+  }
+
+  // Coverage guard: the endpoint must cover every step the client would show
+  // (after the same disabled-tag filter). A shortfall = a persisted-variant lag;
+  // fall back so we never drop a step the user should see.
+  const clientVisible = fallbackSections.reduce(
+    (n, s) =>
+      n + s.steps.filter(st => st.sectionTag && !disabledSectionTags.has(st.sectionTag)).length,
+    0,
+  );
+  if (adopted !== clientVisible) return fallbackSections;
+
+  return result;
 }
 
 // Chapter visibility for Learning Objectives

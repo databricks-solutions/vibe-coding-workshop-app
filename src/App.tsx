@@ -21,7 +21,7 @@ import {
 } from './components/session';
 import { apiClient } from './api/client';
 import { Zap, MessageSquare, Trophy, Plus, PanelLeftClose, PanelLeft, Menu, X, BarChart3, Eye, Compass, Award, ChevronDown, List, BookOpen } from 'lucide-react';
-import { getFilteredSections, getCumulativeOverrides, USE_CASE_LEVEL_LOCK, isForwardProgression, getDisabledTagsForAIModules, ALL_AI_MODULES, getDisabledTagsForMedallionLayers, normalizeMedallionLayers, ALL_MEDALLION_LAYERS, getDisabledTagsForLakehouse, getDisabledTagsForGenieOntology, computeChainContext, deriveInitialChainContext, completedGatesToStepNumbers, type WorkshopLevel, type WorkflowDirection, type AIAgentModule, type MedallionLayer, type ChainContext } from './constants/workflowSections';
+import { getFilteredSections, orderedSectionsForRead, getCumulativeOverrides, USE_CASE_LEVEL_LOCK, isForwardProgression, getDisabledTagsForAIModules, ALL_AI_MODULES, getDisabledTagsForMedallionLayers, normalizeMedallionLayers, ALL_MEDALLION_LAYERS, getDisabledTagsForLakehouse, getDisabledTagsForGenieOntology, computeChainContext, deriveInitialChainContext, completedGatesToStepNumbers, type WorkshopLevel, type WorkflowDirection, type AIAgentModule, type MedallionLayer, type ChainContext } from './constants/workflowSections';
 import { DEFAULT_LEVEL_BY_ASSISTANT, parseCodingAssistantsConfig } from './constants/codingAssistants';
 import { resolveRestoredLevel } from './constants/restoreLevel';
 
@@ -142,6 +142,12 @@ export default function App() {
   const [prerequisitesVisible, setPrerequisitesVisible] = useState<boolean>(true);
   const [disabledWorkshopLevels, setDisabledWorkshopLevels] = useState<Set<WorkshopLevel>>(new Set());
 
+  // Engine-composed outline for the active track (Phase 3 T3b-2b). The ordered
+  // flat sectionTag list from GET /api/track/{track}/outline, or null until it
+  // resolves / on error. This is the ORDER source for the read path; the sidebar
+  // falls back to getFilteredSections order whenever it's null (never blanks).
+  const [outlineTags, setOutlineTags] = useState<string[] | null>(null);
+
   // Client-side AI sub-module selection (Genie / Agent / Dashboard chips).
   // Kept SEPARATE from `disabledSectionTags` so the per-coding-assistant visibility
   // refresh cannot clobber user toggles. Both sets are unioned via `effectiveDisabledTags`.
@@ -179,6 +185,39 @@ export default function App() {
     if (aiTags.length === 0 && medTags.length === 0 && lakeTags.length === 0 && ontologyTags.length === 0) return disabledSectionTags;
     return new Set<string>([...disabledSectionTags, ...aiTags, ...medTags, ...lakeTags, ...ontologyTags]);
   }, [workshopLevel, aiAgentsModules, medallionLayers, includeLakehouse, includeGenieOntology, disabledSectionTags]);
+
+  // Build the COMPLETE engine `flags` object (Phase 3 T3b-2b write path) from the
+  // explicit axis values. The backend replaces the nested flags object wholesale
+  // (routes.py), so every persist sends all keys. A module/layer present in the
+  // set => its flag is ON (step included); the engine ignores flags a track's
+  // steps don't reference, so the full set is safe on every track. Genie-only
+  // includeLakehouse / includeGenieOntology are carried camelCase alongside.
+  const engineFlagsFrom = useCallback((
+    ai: Set<AIAgentModule>,
+    med: Set<MedallionLayer>,
+    lakehouse: boolean,
+    ontology: boolean,
+  ): Record<string, boolean> => ({
+    includeLakehouse: lakehouse,
+    includeGenieOntology: ontology,
+    'ai.genie': ai.has('genie'),
+    'ai.agent': ai.has('agent'),
+    'ai.dashboard': ai.has('dashboard'),
+    'medallion.bronze': med.has('bronze'),
+    'medallion.silver': med.has('silver'),
+    'medallion.gold': med.has('gold'),
+  }), []);
+
+  // The composition payload from CURRENT live state — spread into save/progress
+  // writes so GET /outline composes the same variant/sub-toggle outline the UI
+  // shows. `chain_context` is sent only when non-null (accelerators have no chain;
+  // the only variant-selecting tracks, lakehouse/lakehouse-di, always carry a
+  // non-null chain). Handlers that change an axis build the payload explicitly
+  // from the NEW value instead (state isn't updated yet within the handler).
+  const compositionParams = useMemo(() => ({
+    ...(chainContext ? { chain_context: chainContext } : {}),
+    flags: engineFlagsFrom(aiAgentsModules, medallionLayers, includeLakehouse, includeGenieOntology),
+  }), [chainContext, aiAgentsModules, medallionLayers, includeLakehouse, includeGenieOntology, engineFlagsFrom]);
 
   // Selected options
   const [selectedIndustry, setSelectedIndustry] = useState<string>('');
@@ -475,11 +514,20 @@ export default function App() {
     // Use cumulative overrides so app-chain users who progressed to lakehouse
     // see the full step list (including step 9 which requires ch2 visibility)
     const cumOverrides = getCumulativeOverrides(effectiveLevel, completedSet, effectiveChain);
-    const sections = getFilteredSections(
+    const fallbackSections = getFilteredSections(
       effectiveLevel,
       effectiveDisabledTags,
       cumOverrides ?? undefined,
       direction,
+    );
+    // ORDER is engine-authoritative (T3b-2b): derive step order from the endpoint
+    // outline when it's resolved + safe, else the getFilteredSections fallback.
+    const sections = orderedSectionsForRead(
+      fallbackSections,
+      outlineTags,
+      effectiveDisabledTags,
+      direction,
+      effectiveLevel,
     );
     const stepOrder = sections.flatMap(s => s.steps.map(st => st.number));
     
@@ -613,12 +661,23 @@ export default function App() {
       }
     }
     if (sessionId) {
+      // Persist the NEW level's composition (T3b-2b): chain_context = nextChain,
+      // and the complete flags for the post-change chip state (a path switch
+      // resets chips to the inclusive default; otherwise they carry over) so GET
+      // /outline composes the level the UI now shows.
+      const levelChanged = level !== workshopLevel;
+      const nextAi = levelChanged ? new Set<AIAgentModule>(ALL_AI_MODULES) : aiAgentsModules;
+      const nextMed = levelChanged ? new Set<MedallionLayer>(ALL_MEDALLION_LAYERS) : medallionLayers;
+      const nextLake = levelChanged ? false : includeLakehouse;
+      const nextOnto = levelChanged ? false : includeGenieOntology;
       apiClient.updateSessionMetadata({
         session_id: sessionId,
         workshop_level: level,
+        ...(nextChain ? { chain_context: nextChain } : {}),
+        flags: engineFlagsFrom(nextAi, nextMed, nextLake, nextOnto),
       }).catch(err => console.error('Error saving workshop level:', err));
     }
-  }, [sessionId, levelExplicitlySelected, completedSteps, workshopLevel, readOnly, setMedallionLayers, chainContext]);
+  }, [sessionId, levelExplicitlySelected, completedSteps, workshopLevel, readOnly, setMedallionLayers, chainContext, aiAgentsModules, medallionLayers, includeLakehouse, includeGenieOntology, engineFlagsFrom]);
 
   const handleStepPromptGenerated = useCallback((stepNumber: number, promptText: string) => {
     if (readOnly) return;
@@ -642,15 +701,18 @@ export default function App() {
     if (readOnly) return;
     setCompletedSteps(newSteps);
     
-    // Auto-save completed steps to backend (piggyback workshop level)
+    // Auto-save completed steps to backend (piggyback workshop level + the
+    // complete composition from live state, T3b-2b, so GET /outline stays in sync
+    // even for users who never touch a composition chip explicitly).
     if (sessionId) {
       apiClient.updateSessionMetadata({
         session_id: sessionId,
         completed_steps: Array.from(newSteps),
         workshop_level: workshopLevel,  // Piggyback workshop level save on progress
+        ...compositionParams,
       }).catch(err => console.error('Error saving completed steps:', err));
     }
-  }, [sessionId, workshopLevel, readOnly]);
+  }, [sessionId, workshopLevel, readOnly, compositionParams]);
 
   // Handle skipped steps change and auto-save to backend
   const handleSkippedStepsChange = useCallback((newSkipped: Set<number>) => {
@@ -740,9 +802,13 @@ export default function App() {
       apiClient.updateSessionMetadata({
         session_id: sessionId,
         direction: newDirection,
+        // Complete composition (T3b-2b) so GET /outline recomposes for the new
+        // direction. The engine reads persisted `direction` to select the reverse
+        // variant; flags/chain_context reflect current live state.
+        ...compositionParams,
       }).catch(err => console.error('Error persisting direction:', err));
     }
-  }, [directionLocked, sessionId, workshopLevel]);
+  }, [directionLocked, sessionId, workshopLevel, compositionParams]);
 
   // Genie Accelerator: toggle the optional Lakehouse (Bronze -> Gold) block.
   const handleIncludeLakehouseChange = useCallback((next: boolean) => {
@@ -752,9 +818,13 @@ export default function App() {
       apiClient.updateSessionMetadata({
         session_id: sessionId,
         include_lakehouse: next,
+        // Complete flags (T3b-2b) built with the NEW lakehouse value so GET
+        // /outline re-admits/drops the opt-in Lakehouse arc to match the UI.
+        ...(chainContext ? { chain_context: chainContext } : {}),
+        flags: engineFlagsFrom(aiAgentsModules, medallionLayers, next, includeGenieOntology),
       }).catch(err => console.error('Error persisting include_lakehouse:', err));
     }
-  }, [readOnly, sessionId]);
+  }, [readOnly, sessionId, chainContext, aiAgentsModules, medallionLayers, includeGenieOntology, engineFlagsFrom]);
 
   // Genie Accelerator: toggle the optional Genie Ontology block.
   const handleIncludeGenieOntologyChange = useCallback((next: boolean) => {
@@ -764,9 +834,42 @@ export default function App() {
       apiClient.updateSessionMetadata({
         session_id: sessionId,
         include_genie_ontology: next,
+        // Complete flags (T3b-2b) built with the NEW ontology value.
+        ...(chainContext ? { chain_context: chainContext } : {}),
+        flags: engineFlagsFrom(aiAgentsModules, medallionLayers, includeLakehouse, next),
       }).catch(err => console.error('Error persisting include_genie_ontology:', err));
     }
-  }, [readOnly, sessionId]);
+  }, [readOnly, sessionId, chainContext, aiAgentsModules, medallionLayers, includeLakehouse, engineFlagsFrom]);
+
+  // AI-module chips (Genie / Agent / Dashboard). Previously client-only; now also
+  // persist the complete flags (T3b-2b) so GET /outline drops/keeps the gated AI
+  // steps to match the UI. Built with the NEW module set (state not yet updated).
+  const handleAIModulesChange = useCallback((next: Set<AIAgentModule>) => {
+    if (readOnly) return;
+    setAiAgentsModules(next);
+    if (sessionId) {
+      apiClient.updateSessionMetadata({
+        session_id: sessionId,
+        ...(chainContext ? { chain_context: chainContext } : {}),
+        flags: engineFlagsFrom(next, medallionLayers, includeLakehouse, includeGenieOntology),
+      }).catch(err => console.error('Error persisting AI modules:', err));
+    }
+  }, [readOnly, sessionId, chainContext, medallionLayers, includeLakehouse, includeGenieOntology, engineFlagsFrom]);
+
+  // Bronze/Silver/Gold medallion chips. Same rationale; the set is normalized
+  // (Gold->Silver->Bronze cascade) before both the setter and the persisted flags.
+  const handleMedallionLayersChange = useCallback((next: Set<MedallionLayer>) => {
+    if (readOnly) return;
+    const normalized = normalizeMedallionLayers(next);
+    setMedallionLayers(next); // setter normalizes internally; keep behavior
+    if (sessionId) {
+      apiClient.updateSessionMetadata({
+        session_id: sessionId,
+        ...(chainContext ? { chain_context: chainContext } : {}),
+        flags: engineFlagsFrom(aiAgentsModules, normalized, includeLakehouse, includeGenieOntology),
+      }).catch(err => console.error('Error persisting medallion layers:', err));
+    }
+  }, [readOnly, sessionId, chainContext, aiAgentsModules, includeLakehouse, includeGenieOntology, engineFlagsFrom, setMedallionLayers]);
 
   const handleSaveSession = async (name: string, description: string, rating?: 'thumbs_up' | 'thumbs_down', comment?: string) => {
     if (!sessionId || readOnly) return;
@@ -788,6 +891,10 @@ export default function App() {
         direction,
         include_lakehouse: includeLakehouse,
         include_genie_ontology: includeGenieOntology,
+        // Engine composition inputs (T3b-2b) so GET /outline composes the same
+        // climb/reverse/AI/medallion outline the UI shows. Snake_case direction/
+        // include_* stay above for other consumers.
+        ...compositionParams,
         completed_steps: Array.from(completedSteps),
         step_prompts: stepPrompts
       });
@@ -883,6 +990,37 @@ export default function App() {
       cancelled = true;
     };
   }, [codingAssistant, dataRefreshKey]);
+
+  // Engine outline fetch (Phase 3 T3b-2b): the ORDER source for the read path.
+  // Keyed on the axes that select the track/variant the endpoint composes from
+  // PERSISTED session state (workshopLevel is a 1:1 manifest track id; direction
+  // is persisted too). Live sub-toggle chips are NOT a dep — the endpoint reflects
+  // persisted flags, and orderedSectionsForRead applies the live disabled-tag
+  // filter on top, so membership stays instant without a refetch. Mirrors the
+  // visibility effect: a cancelled flag drops stale responses, errors keep the
+  // prior outline (log, never blank), and polling/refresh is deferred to T3c.
+  useEffect(() => {
+    if (!sessionId) {
+      setOutlineTags(null); // no session yet -> read path uses getFilteredSections
+      return;
+    }
+    let cancelled = false;
+    apiClient
+      .getTrackOutline(workshopLevel, sessionId)
+      .then(resp => {
+        if (cancelled) return;
+        setOutlineTags(resp.outline.map(item => item.sectionTag));
+      })
+      .catch(err => {
+        if (cancelled) return;
+        console.error('Error fetching track outline:', err);
+        // Keep the prior outline; the read path falls back to getFilteredSections
+        // order if none has resolved. Never blank the sidebar.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [sessionId, workshopLevel, direction]);
 
   // Show config hint after scrolling past step 3
   useEffect(() => {
@@ -1396,9 +1534,10 @@ export default function App() {
                     directionLocked={directionLocked}
                     onDirectionChange={handleDirectionChange}
                     aiAgentsModules={aiAgentsModules}
-                    onAIModulesChange={setAiAgentsModules}
+                    onAIModulesChange={handleAIModulesChange}
                     medallionLayers={medallionLayers}
-                    onMedallionLayersChange={setMedallionLayers}
+                    onMedallionLayersChange={handleMedallionLayersChange}
+                    outlineTags={outlineTags}
                     includeLakehouse={includeLakehouse}
                     onIncludeLakehouseChange={handleIncludeLakehouseChange}
                     includeGenieOntology={includeGenieOntology}
