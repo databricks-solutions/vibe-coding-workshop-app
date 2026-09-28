@@ -17,12 +17,13 @@ import math
 import time
 import asyncio
 import yaml
+from dataclasses import asdict
 from pathlib import Path
 import uuid
 from fastapi import APIRouter, HTTPException, Response, UploadFile, File, Form, Request
 from fastapi.responses import StreamingResponse, FileResponse
-from pydantic import BaseModel, Field, field_validator
-from typing import List, Dict, Optional, Any, AsyncGenerator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
+from typing import List, Dict, Literal, Optional, Any, AsyncGenerator
 from datetime import datetime, timezone
 
 SECTION_TAG_RE = re.compile(r"^[a-zA-Z0-9_-]{1,64}$")
@@ -5808,6 +5809,85 @@ async def load_session_endpoint(session_id: str) -> SessionLoadResponse:
     except Exception as e:
         logger.error(f"[Session API] Error loading session {session_id}: {e}")
         raise HTTPException(status_code=500, detail=f"Error loading session: {str(e)}")
+
+
+# =============================================================================
+# TRACK OUTLINE (Phase 3 T1) — thin transport over engine.outline
+# =============================================================================
+# A pure adapter: it resolves a track, rebuilds the engine SessionState through
+# the SAME shared builder the MCP server uses (number->gate backfill included),
+# and returns engine.outline verbatim. Zero workshop logic lives here, and it
+# imports the workshop package (never mcp_server) so the FastMCP app stays out
+# of the REST layer. Flat MCP parity: no section grouping/metadata (DECISION-T1-2).
+
+class TrackOutlineItem(BaseModel):
+    """Mirror of mcp_server.OutlineItem — the exact flat wire shape (extra=forbid)."""
+    model_config = ConfigDict(extra="forbid")
+
+    sectionTag: str
+    title: str
+    status: Literal["done", "current", "locked", "skipped"]
+    execution: str
+
+
+class TrackOutlineResponse(BaseModel):
+    """Flat MCP-parity payload: resolved track, echoed session id, ordered outline."""
+    track: str = Field(..., description="Resolved track id (a manifest track key)")
+    session_id: Optional[str] = Field(None, description="Echo of the requested session id")
+    outline: List[TrackOutlineItem] = Field(default_factory=list)
+
+
+@router.get("/track/{track}/outline")
+async def get_track_outline(
+    track: str, session_id: Optional[str] = None
+) -> TrackOutlineResponse:
+    """Return the ordered step outline for a track, as engine.outline computes it.
+
+    Track resolution (DECISION-T1-1): an explicit ``{track}`` that is a valid
+    manifest track key is used directly (the client asked for it). The documented
+    sentinel ``auto`` — and any other non-track value — resolves the track from the
+    loaded session via ``resolve_track`` (which tolerates legacy workshop_level
+    None/'300'). With no session to resolve against, a non-track path is a 404.
+
+    A ``session_id`` that is PROVIDED but cannot be loaded is a 404 for BOTH the
+    explicit and auto paths (symmetric) — the route never serves a fresh outline
+    while echoing a session id that failed to load. The fresh-outline 200 applies
+    only when ``session_id`` was omitted entirely.
+    """
+    from src.backend.workshop import engine
+    from src.backend.workshop.state import build_session_state
+    from src.backend.workshop.track_resolution import is_track, resolve_track
+
+    record = None
+    if session_id:
+        try:
+            record = load_session(session_id)
+        except Exception as e:  # never surface a load error as a 500 for a read
+            logger.warning(f"[Track Outline] load_session failed for {session_id}: {e}")
+            record = None
+        if record is None:
+            # A session_id was PROVIDED but could not be loaded. Symmetric with the
+            # auto path: never serve a misleading fresh/all-locked outline while
+            # echoing a session id that failed to load. (The T1-B8 no-session 200
+            # path only applies when session_id was not provided at all.)
+            raise HTTPException(status_code=404, detail=f"Session '{session_id}' not found")
+
+    if is_track(track):
+        resolved = track  # explicit client request wins
+    elif record is not None:
+        resolved = resolve_track(record)  # 'auto' / any non-track value
+    else:
+        # Nothing to resolve against — an unknown track with no session.
+        raise HTTPException(status_code=404, detail=f"Unknown track '{track}'")
+
+    # resolved is guaranteed a valid manifest key here (explicit or resolve_track),
+    # but guard defensively so a future resolver change can never 500 the route.
+    if not is_track(resolved):
+        raise HTTPException(status_code=404, detail=f"Unknown track '{track}'")
+
+    state = build_session_state(record, resolved) if record is not None else engine.SessionState()
+    outline = [asdict(item) for item in engine.outline(resolved, state)]
+    return TrackOutlineResponse(track=resolved, session_id=session_id, outline=outline)
 
 
 @router.delete("/session/{session_id}")
