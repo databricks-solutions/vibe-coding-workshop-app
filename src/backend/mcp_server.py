@@ -465,7 +465,12 @@ def _outline_items(track: str, state: engine.SessionState) -> list[OutlineItem]:
 
 
 def _next_reference(track: str, state: engine.SessionState, step: manifest.Step) -> StepReference:
-    ordered = engine.MANIFEST.outline_order(track, flags=engine._flags_for(track, state))
+    # Order against the SAME composition engine.outline uses — _ordered_steps
+    # threads BOTH flags and composition inputs (direction / chainContext), so the
+    # "next" pointer stays consistent with the outline on the variant tracks
+    # (lakehouse climb, end-to-end reverse). Passing flags but omitting inputs
+    # here ordered against the input-blind default and disagreed mid-track.
+    ordered = engine._ordered_steps(track, state)
     index = next((idx for idx, candidate in enumerate(ordered) if candidate.sectionTag == step.sectionTag), None)
     if index is not None and index + 1 < len(ordered):
         following = ordered[index + 1]
