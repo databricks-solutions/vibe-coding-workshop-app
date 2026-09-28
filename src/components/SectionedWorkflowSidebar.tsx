@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { ChevronRight, ChevronDown, Check, SkipForward } from 'lucide-react';
 import { StepStatusLegend } from './StepStatusLegend';
 import type { WorkflowSection } from '../constants/workflowSections';
+import { STEP_PRESENTATION } from '../constants/workflowSections';
 import { SessionParametersPopover } from './session';
 
 interface SectionedWorkflowSidebarProps {
@@ -251,7 +252,7 @@ export function SectionedWorkflowSidebar({
                               ? 'text-emerald-400/80 line-through'
                               : 'text-muted-foreground'
                           }`}>
-                            {step.title}
+                            {(step.sectionTag && STEP_PRESENTATION[step.sectionTag]?.title) || step.title}
                           </span>
 
                           {/* Active indicator */}
