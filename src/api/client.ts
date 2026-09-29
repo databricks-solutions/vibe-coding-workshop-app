@@ -1278,6 +1278,30 @@ class ApiClient {
     );
   }
 
+  /** Fetch the engine-composed step outline for an EPHEMERAL, UNPERSISTED
+   * composition (Phase 3 T4a). Sibling to `getTrackOutline` — it does NOT overload
+   * the session-only GET. It POSTs the composition inputs the /config/test-scenario
+   * sandbox is previewing (direction + AI/medallion/genie `flags`) with NO session
+   * id, so the backend builds a bare SessionState and returns engine.outline without
+   * loading or persisting anything. The arbitrary client-side disabled-tag filter
+   * (per-assistant hides, cleanup/iterate tail sections) is applied by the caller on
+   * top of the returned order, exactly as `orderedSectionsForRead` does. */
+  async previewTrackOutline(
+    track: string,
+    params: { direction?: 'forward' | 'reverse'; flags?: Record<string, boolean> } = {},
+  ): Promise<TrackOutlineResponse> {
+    return this.fetch<TrackOutlineResponse>(
+      `/track/${encodeURIComponent(track)}/outline/preview`,
+      {
+        method: 'POST',
+        body: JSON.stringify({
+          ...(params.direction != null ? { direction: params.direction } : {}),
+          ...(params.flags != null ? { flags: params.flags } : {}),
+        }),
+      },
+    );
+  }
+
   /** Admin: full three-column visibility matrix (Default / CoDA / Genie Code).
    * `kind: 'path'` rows are workshop-level visibility entries keyed by
    * `__path_<level>__`. */
