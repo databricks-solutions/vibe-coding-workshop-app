@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo, lazy, Suspense } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef, lazy, Suspense } from 'react';
 import { Routes, Route, Link, useLocation, Navigate } from 'react-router-dom';
 import { WorkflowDiagram } from './components/WorkflowDiagram';
 import { ThemeToggle } from './components/ThemeToggle';
@@ -21,7 +21,7 @@ import {
 } from './components/session';
 import { apiClient } from './api/client';
 import { Zap, MessageSquare, Trophy, Plus, PanelLeftClose, PanelLeft, Menu, X, BarChart3, Eye, Compass, Award, ChevronDown, List, BookOpen } from 'lucide-react';
-import { getFilteredSections, orderedSectionsForRead, getCumulativeOverrides, USE_CASE_LEVEL_LOCK, isForwardProgression, getDisabledTagsForAIModules, ALL_AI_MODULES, getDisabledTagsForMedallionLayers, normalizeMedallionLayers, ALL_MEDALLION_LAYERS, getDisabledTagsForLakehouse, getDisabledTagsForGenieOntology, computeChainContext, deriveInitialChainContext, completedGatesToStepNumbers, type WorkshopLevel, type WorkflowDirection, type AIAgentModule, type MedallionLayer, type ChainContext } from './constants/workflowSections';
+import { orderedSectionsForRead, getCumulativeOverrides, USE_CASE_LEVEL_LOCK, isForwardProgression, getDisabledTagsForAIModules, ALL_AI_MODULES, getDisabledTagsForMedallionLayers, normalizeMedallionLayers, ALL_MEDALLION_LAYERS, getDisabledTagsForLakehouse, getDisabledTagsForGenieOntology, computeChainContext, deriveInitialChainContext, completedGatesToStepNumbers, type WorkshopLevel, type WorkflowDirection, type AIAgentModule, type MedallionLayer, type ChainContext } from './constants/workflowSections';
 import { DEFAULT_LEVEL_BY_ASSISTANT, parseCodingAssistantsConfig } from './constants/codingAssistants';
 import { resolveRestoredLevel } from './constants/restoreLevel';
 
@@ -131,7 +131,6 @@ export default function App() {
   const [currentUserResolved, setCurrentUserResolved] = useState(false);
   const [sessionOwner, setSessionOwner] = useState<string | null>(null);
   const [defaultCatalog, setDefaultCatalog] = useState('');
-  const [initialExpandedStep, setInitialExpandedStep] = useState<number>(1);
 
   // Visibility state (fetched per coding_assistant from backend). The Set is
   // the list of disabled section_tags. `prerequisitesVisible` controls whether
@@ -142,11 +141,42 @@ export default function App() {
   const [prerequisitesVisible, setPrerequisitesVisible] = useState<boolean>(true);
   const [disabledWorkshopLevels, setDisabledWorkshopLevels] = useState<Set<WorkshopLevel>>(new Set());
 
-  // Engine-composed outline for the active track (Phase 3 T3b-2b). The ordered
-  // flat sectionTag list from GET /api/track/{track}/outline, or null until it
-  // resolves / on error. This is the ORDER source for the read path; the sidebar
-  // falls back to getFilteredSections order whenever it's null (never blanks).
+  // Engine-composed outline for the active track (Phase 3 T3c). The ordered flat
+  // sectionTag list from GET /api/track/{track}/outline, or null until it first
+  // resolves (kept on transient error). This is the ORDER source for the read
+  // path; while null the read path renders a loading skeleton (never blanks, never
+  // re-composes client-side).
   const [outlineTags, setOutlineTags] = useState<string[] | null>(null);
+
+  // Engine outline fetch (Phase 3 T3c). `fetchOutline` is the single shared fetch
+  // used by (a) the dep-driven effect, (b) refetch-after-persist in the write
+  // handlers, and (c) the poller — all defined below. A monotonic sequence guard
+  // makes the LATEST-issued request win, so a refetch-after-persist (issued after
+  // the PUT resolves) always supersedes the effect's earlier, possibly-stale
+  // request — this is what lets the endpoint order reflect just-persisted
+  // direction/variant BEFORE render and closes the old reverse/coverage fallbacks.
+  // Errors keep the prior outline (log, never blank); an unresolved outline
+  // degrades to the read-path skeleton.
+  const outlineReqSeq = useRef(0);
+  const fetchOutline = useCallback((track: string, sid: string) => {
+    const seq = ++outlineReqSeq.current;
+    return apiClient
+      .getTrackOutline(track, sid)
+      .then(resp => {
+        if (seq !== outlineReqSeq.current) return; // superseded by a newer request
+        setOutlineTags(resp.outline.map(item => item.sectionTag));
+      })
+      .catch(err => {
+        if (seq !== outlineReqSeq.current) return;
+        console.error('Error fetching track outline:', err);
+        // Keep the prior outline; the read path shows a skeleton if none has
+        // resolved and the poller retries. Never blank the sidebar.
+      });
+  }, []);
+
+  // outlineReady gates the returning-user restore (WorkflowDiagram) so it navigates
+  // using the engine order, not a provisional pre-fetch value.
+  const outlineReady = outlineTags != null;
 
   // Client-side AI sub-module selection (Genie / Agent / Dashboard chips).
   // Kept SEPARATE from `disabledSectionTags` so the per-coding-assistant visibility
@@ -431,11 +461,9 @@ export default function App() {
         setIncludeGenieOntology(!!sessionParams.include_genie_ontology);
         setCodingAssistant(sessionParams.coding_assistant || null);
         setCodingAssistantExplicit(!!sessionParams.coding_assistant);
-        
-        // Find the next incomplete step using the actual section order for this workshop level
-        const nextStep = getNextIncompleteStep(Array.from(restoredCompleted), skippedStepsArray, restoredLevel);
-        setInitialExpandedStep(nextStep);
-        
+        // initialExpandedStep is a memo (T3c) derived from the engine outline; it
+        // resolves once the outline lands, so no imperative set here.
+
         window.history.replaceState({}, '', `?sessionId=${response.session_id}${window.location.hash}`);
       }
       // Trigger fade-out animation
@@ -447,7 +475,6 @@ export default function App() {
       const localSessionId = crypto.randomUUID();
       setSessionId(localSessionId);
       setSessionSaved(false);
-      setInitialExpandedStep(1);
       window.history.replaceState({}, '', `?sessionId=${localSessionId}${window.location.hash}`);
       // Still finish loading even on error
       finishSessionLoading();
@@ -476,7 +503,6 @@ export default function App() {
       setChainContext(null);
       setAiAgentsModules(new Set(ALL_AI_MODULES));
       setMedallionLayers(new Set(ALL_MEDALLION_LAYERS));
-      setInitialExpandedStep(1);
       setSelectedIndustry('');
       setSelectedIndustryLabel('');
       setSelectedUseCase('');
@@ -500,8 +526,13 @@ export default function App() {
     }
   };
 
-  // Helper to find the next incomplete step
-  const getNextIncompleteStep = (
+  // Helper to find the next incomplete step. ORDER is engine-authoritative (T3c):
+  // the step order comes from the endpoint outline (via orderedSectionsForRead),
+  // never the legacy client-side composer. While the outline is unresolved it
+  // returns [] and this yields 1 — the `initialExpandedStep` memo recomputes once
+  // the outline lands, and the returning-user restore is gated on `outlineReady` so
+  // it never navigates off that provisional value.
+  const getNextIncompleteStep = useCallback((
     completed: number[],
     skipped: number[] = [],
     level?: WorkshopLevel,
@@ -511,26 +542,17 @@ export default function App() {
     const skippedSet = new Set(skipped);
     const effectiveLevel = level || workshopLevel;
     const effectiveChain = chainOverride ?? chainContext;
-    // Use cumulative overrides so app-chain users who progressed to lakehouse
-    // see the full step list (including step 9 which requires ch2 visibility)
+    // Cumulative overrides supply the section chrome for climbed columns so an
+    // app-chain user who progressed into lakehouse resolves those tags' sections.
     const cumOverrides = getCumulativeOverrides(effectiveLevel, completedSet, effectiveChain);
-    const fallbackSections = getFilteredSections(
-      effectiveLevel,
-      effectiveDisabledTags,
-      cumOverrides ?? undefined,
-      direction,
-    );
-    // ORDER is engine-authoritative (T3b-2b): derive step order from the endpoint
-    // outline when it's resolved + safe, else the getFilteredSections fallback.
     const sections = orderedSectionsForRead(
-      fallbackSections,
       outlineTags,
       effectiveDisabledTags,
-      direction,
       effectiveLevel,
+      cumOverrides ?? undefined,
     );
     const stepOrder = sections.flatMap(s => s.steps.map(st => st.number));
-    
+
     for (const step of stepOrder) {
       if (!completedSet.has(step) && !skippedSet.has(step)) {
         return step;
@@ -538,7 +560,17 @@ export default function App() {
     }
     // All steps complete - return last visible step
     return stepOrder[stepOrder.length - 1] || 1;
-  };
+  }, [workshopLevel, chainContext, outlineTags, effectiveDisabledTags]);
+
+  // The step to auto-expand/restore. Derived (T3c) rather than snapshot-at-load so
+  // it recomputes SYNCHRONOUSLY once the engine outline resolves — the returning-
+  // user restore effect (gated on outlineReady) then reads the correct value in the
+  // same render, never a stale provisional. Recomputing as the user progresses is
+  // harmless: the restore effect is one-shot per session.
+  const initialExpandedStep = useMemo(
+    () => getNextIncompleteStep(Array.from(completedSteps), Array.from(skippedSteps), workshopLevel, chainContext),
+    [getNextIncompleteStep, completedSteps, skippedSteps, workshopLevel, chainContext],
+  );
 
   const loadSession = async (id: string) => {
     try {
@@ -600,16 +632,9 @@ export default function App() {
         setIncludeGenieOntology(!!sessionParams.include_genie_ontology);
         setCodingAssistant(sessionParams.coding_assistant || null);
         setCodingAssistantExplicit(!!sessionParams.coding_assistant);
-        
-        // Navigate to the next incomplete step using the actual section order
-        const nextStep = getNextIncompleteStep(
-          Array.from(loadedCompleted),
-          loadedSkippedSteps,
-          effectiveRestoredLevel,
-          restoredChain,
-        );
-        setInitialExpandedStep(nextStep);
-        
+        // initialExpandedStep is a memo (T3c) derived from the engine outline; the
+        // returning-user restore (gated on outlineReady) navigates once it lands.
+
         // Trigger fade-out animation
         finishSessionLoading();
       } else {
@@ -670,14 +695,19 @@ export default function App() {
       const nextMed = levelChanged ? new Set<MedallionLayer>(ALL_MEDALLION_LAYERS) : medallionLayers;
       const nextLake = levelChanged ? false : includeLakehouse;
       const nextOnto = levelChanged ? false : includeGenieOntology;
+      const sid = sessionId;
       apiClient.updateSessionMetadata({
-        session_id: sessionId,
+        session_id: sid,
         workshop_level: level,
         ...(nextChain ? { chain_context: nextChain } : {}),
         flags: engineFlagsFrom(nextAi, nextMed, nextLake, nextOnto),
-      }).catch(err => console.error('Error saving workshop level:', err));
+      })
+        // Refetch AFTER the persist resolves so GET /outline composes the NEW
+        // level/variant (T3c). Sequenced via the seq guard in fetchOutline.
+        .then(() => fetchOutline(level, sid))
+        .catch(err => console.error('Error saving workshop level:', err));
     }
-  }, [sessionId, levelExplicitlySelected, completedSteps, workshopLevel, readOnly, setMedallionLayers, chainContext, aiAgentsModules, medallionLayers, includeLakehouse, includeGenieOntology, engineFlagsFrom]);
+  }, [sessionId, levelExplicitlySelected, completedSteps, workshopLevel, readOnly, setMedallionLayers, chainContext, aiAgentsModules, medallionLayers, includeLakehouse, includeGenieOntology, engineFlagsFrom, fetchOutline]);
 
   const handleStepPromptGenerated = useCallback((stepNumber: number, promptText: string) => {
     if (readOnly) return;
@@ -705,14 +735,20 @@ export default function App() {
     // complete composition from live state, T3b-2b, so GET /outline stays in sync
     // even for users who never touch a composition chip explicitly).
     if (sessionId) {
+      const sid = sessionId;
       apiClient.updateSessionMetadata({
-        session_id: sessionId,
+        session_id: sid,
         completed_steps: Array.from(newSteps),
         workshop_level: workshopLevel,  // Piggyback workshop level save on progress
         ...compositionParams,
-      }).catch(err => console.error('Error saving completed steps:', err));
+      })
+        // Refetch after the STATUS-changing persist so a climb that admits new
+        // steps is reflected in the outline order (T3c; closes the old coverage
+        // fallback). Optimistic checkmarks already updated above.
+        .then(() => fetchOutline(workshopLevel, sid))
+        .catch(err => console.error('Error saving completed steps:', err));
     }
-  }, [sessionId, workshopLevel, readOnly, compositionParams]);
+  }, [sessionId, workshopLevel, readOnly, compositionParams, fetchOutline]);
 
   // Handle skipped steps change and auto-save to backend
   const handleSkippedStepsChange = useCallback((newSkipped: Set<number>) => {
@@ -799,47 +835,58 @@ export default function App() {
       setWorkshopLevel('app-database');
     }
     if (sessionId) {
+      const sid = sessionId;
       apiClient.updateSessionMetadata({
-        session_id: sessionId,
+        session_id: sid,
         direction: newDirection,
         // Complete composition (T3b-2b) so GET /outline recomposes for the new
         // direction. The engine reads persisted `direction` to select the reverse
         // variant; flags/chain_context reflect current live state.
         ...compositionParams,
-      }).catch(err => console.error('Error persisting direction:', err));
+      })
+        // Refetch after direction persists so the reverse order lands BEFORE the
+        // next render (T3c; closes the old reverse-order fallback).
+        .then(() => fetchOutline(workshopLevel, sid))
+        .catch(err => console.error('Error persisting direction:', err));
     }
-  }, [directionLocked, sessionId, workshopLevel, compositionParams]);
+  }, [directionLocked, sessionId, workshopLevel, compositionParams, fetchOutline]);
 
   // Genie Accelerator: toggle the optional Lakehouse (Bronze -> Gold) block.
   const handleIncludeLakehouseChange = useCallback((next: boolean) => {
     if (readOnly) return;
     setIncludeLakehouse(next);
     if (sessionId) {
+      const sid = sessionId;
       apiClient.updateSessionMetadata({
-        session_id: sessionId,
+        session_id: sid,
         include_lakehouse: next,
         // Complete flags (T3b-2b) built with the NEW lakehouse value so GET
         // /outline re-admits/drops the opt-in Lakehouse arc to match the UI.
         ...(chainContext ? { chain_context: chainContext } : {}),
         flags: engineFlagsFrom(aiAgentsModules, medallionLayers, next, includeGenieOntology),
-      }).catch(err => console.error('Error persisting include_lakehouse:', err));
+      })
+        .then(() => fetchOutline(workshopLevel, sid)) // T3c: refetch after persist
+        .catch(err => console.error('Error persisting include_lakehouse:', err));
     }
-  }, [readOnly, sessionId, chainContext, aiAgentsModules, medallionLayers, includeGenieOntology, engineFlagsFrom]);
+  }, [readOnly, sessionId, workshopLevel, chainContext, aiAgentsModules, medallionLayers, includeGenieOntology, engineFlagsFrom, fetchOutline]);
 
   // Genie Accelerator: toggle the optional Genie Ontology block.
   const handleIncludeGenieOntologyChange = useCallback((next: boolean) => {
     if (readOnly) return;
     setIncludeGenieOntology(next);
     if (sessionId) {
+      const sid = sessionId;
       apiClient.updateSessionMetadata({
-        session_id: sessionId,
+        session_id: sid,
         include_genie_ontology: next,
         // Complete flags (T3b-2b) built with the NEW ontology value.
         ...(chainContext ? { chain_context: chainContext } : {}),
         flags: engineFlagsFrom(aiAgentsModules, medallionLayers, includeLakehouse, next),
-      }).catch(err => console.error('Error persisting include_genie_ontology:', err));
+      })
+        .then(() => fetchOutline(workshopLevel, sid)) // T3c: refetch after persist
+        .catch(err => console.error('Error persisting include_genie_ontology:', err));
     }
-  }, [readOnly, sessionId, chainContext, aiAgentsModules, medallionLayers, includeLakehouse, engineFlagsFrom]);
+  }, [readOnly, sessionId, workshopLevel, chainContext, aiAgentsModules, medallionLayers, includeLakehouse, engineFlagsFrom, fetchOutline]);
 
   // AI-module chips (Genie / Agent / Dashboard). Previously client-only; now also
   // persist the complete flags (T3b-2b) so GET /outline drops/keeps the gated AI
@@ -848,13 +895,16 @@ export default function App() {
     if (readOnly) return;
     setAiAgentsModules(next);
     if (sessionId) {
+      const sid = sessionId;
       apiClient.updateSessionMetadata({
-        session_id: sessionId,
+        session_id: sid,
         ...(chainContext ? { chain_context: chainContext } : {}),
         flags: engineFlagsFrom(next, medallionLayers, includeLakehouse, includeGenieOntology),
-      }).catch(err => console.error('Error persisting AI modules:', err));
+      })
+        .then(() => fetchOutline(workshopLevel, sid)) // T3c: refetch after persist
+        .catch(err => console.error('Error persisting AI modules:', err));
     }
-  }, [readOnly, sessionId, chainContext, medallionLayers, includeLakehouse, includeGenieOntology, engineFlagsFrom]);
+  }, [readOnly, sessionId, workshopLevel, chainContext, medallionLayers, includeLakehouse, includeGenieOntology, engineFlagsFrom, fetchOutline]);
 
   // Bronze/Silver/Gold medallion chips. Same rationale; the set is normalized
   // (Gold->Silver->Bronze cascade) before both the setter and the persisted flags.
@@ -863,13 +913,16 @@ export default function App() {
     const normalized = normalizeMedallionLayers(next);
     setMedallionLayers(next); // setter normalizes internally; keep behavior
     if (sessionId) {
+      const sid = sessionId;
       apiClient.updateSessionMetadata({
-        session_id: sessionId,
+        session_id: sid,
         ...(chainContext ? { chain_context: chainContext } : {}),
         flags: engineFlagsFrom(aiAgentsModules, normalized, includeLakehouse, includeGenieOntology),
-      }).catch(err => console.error('Error persisting medallion layers:', err));
+      })
+        .then(() => fetchOutline(workshopLevel, sid)) // T3c: refetch after persist
+        .catch(err => console.error('Error persisting medallion layers:', err));
     }
-  }, [readOnly, sessionId, chainContext, aiAgentsModules, includeLakehouse, includeGenieOntology, engineFlagsFrom, setMedallionLayers]);
+  }, [readOnly, sessionId, workshopLevel, chainContext, aiAgentsModules, includeLakehouse, includeGenieOntology, engineFlagsFrom, setMedallionLayers, fetchOutline]);
 
   const handleSaveSession = async (name: string, description: string, rating?: 'thumbs_up' | 'thumbs_down', comment?: string) => {
     if (!sessionId || readOnly) return;
@@ -905,6 +958,8 @@ export default function App() {
         setSessionDescription(description);
         setShareUrl(response.share_url || null);
         setShowSaveDialog(false);
+        // T3c: refetch the outline after the save persists the full composition.
+        fetchOutline(workshopLevel, sessionId);
         if (pendingNewSession) {
           setPendingNewSession(false);
           window.history.replaceState({}, '', window.location.pathname);
@@ -991,36 +1046,57 @@ export default function App() {
     };
   }, [codingAssistant, dataRefreshKey]);
 
-  // Engine outline fetch (Phase 3 T3b-2b): the ORDER source for the read path.
-  // Keyed on the axes that select the track/variant the endpoint composes from
-  // PERSISTED session state (workshopLevel is a 1:1 manifest track id; direction
-  // is persisted too). Live sub-toggle chips are NOT a dep — the endpoint reflects
-  // persisted flags, and orderedSectionsForRead applies the live disabled-tag
-  // filter on top, so membership stays instant without a refetch. Mirrors the
-  // visibility effect: a cancelled flag drops stale responses, errors keep the
-  // prior outline (log, never blank), and polling/refresh is deferred to T3c.
+  // Dep-driven fetch: refires when the track (workshopLevel) or persisted direction
+  // changes. Live sub-toggle chips are NOT a dep — the endpoint reflects persisted
+  // flags and orderedSectionsForRead applies the live disabled-tag filter on top.
   useEffect(() => {
     if (!sessionId) {
-      setOutlineTags(null); // no session yet -> read path uses getFilteredSections
+      outlineReqSeq.current++; // invalidate any in-flight request
+      setOutlineTags(null);
       return;
     }
-    let cancelled = false;
-    apiClient
-      .getTrackOutline(workshopLevel, sessionId)
-      .then(resp => {
-        if (cancelled) return;
-        setOutlineTags(resp.outline.map(item => item.sectionTag));
-      })
-      .catch(err => {
-        if (cancelled) return;
-        console.error('Error fetching track outline:', err);
-        // Keep the prior outline; the read path falls back to getFilteredSections
-        // order if none has resolved. Never blank the sidebar.
-      });
-    return () => {
-      cancelled = true;
+    fetchOutline(workshopLevel, sessionId);
+  }, [sessionId, workshopLevel, direction, fetchOutline]);
+
+  // Polling v1 (NOT SSE): keep the outline live so cross-surface (MCP) progress and
+  // any server-side recomposition surface without a manual refresh. Pauses while
+  // the tab is hidden; refetches (debounced) on focus / visibility regain.
+  useEffect(() => {
+    if (!sessionId) return;
+    const POLL_MS = 30000;
+    let intervalId: ReturnType<typeof setInterval> | undefined;
+    let debounceId: ReturnType<typeof setTimeout> | undefined;
+    const poll = () => {
+      if (document.hidden) return;
+      fetchOutline(workshopLevel, sessionId);
     };
-  }, [sessionId, workshopLevel, direction]);
+    const kick = () => {
+      if (document.hidden) return;
+      clearTimeout(debounceId);
+      debounceId = setTimeout(() => fetchOutline(workshopLevel, sessionId), 300);
+    };
+    const startInterval = () => {
+      clearInterval(intervalId);
+      intervalId = setInterval(poll, POLL_MS);
+    };
+    const onVisibility = () => {
+      if (document.hidden) {
+        clearInterval(intervalId); // pause when hidden
+      } else {
+        kick();          // catch up immediately
+        startInterval(); // resume steady polling
+      }
+    };
+    startInterval();
+    window.addEventListener('focus', kick);
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => {
+      clearInterval(intervalId);
+      clearTimeout(debounceId);
+      window.removeEventListener('focus', kick);
+      document.removeEventListener('visibilitychange', onVisibility);
+    };
+  }, [sessionId, workshopLevel, fetchOutline]);
 
   // Show config hint after scrolling past step 3
   useEffect(() => {
@@ -1538,6 +1614,7 @@ export default function App() {
                     medallionLayers={medallionLayers}
                     onMedallionLayersChange={handleMedallionLayersChange}
                     outlineTags={outlineTags}
+                    outlineReady={outlineReady}
                     includeLakehouse={includeLakehouse}
                     onIncludeLakehouseChange={handleIncludeLakehouseChange}
                     includeGenieOntology={includeGenieOntology}

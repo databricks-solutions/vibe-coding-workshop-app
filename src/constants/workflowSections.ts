@@ -896,87 +896,72 @@ export function getFilteredSections(
   return filtered;
 }
 
-// Phase 3 T3b-2b (piece 2): make ORDER engine-authoritative for the read path.
+// Phase 3 T3c: the GET /api/track/{track}/outline endpoint is the ORDER authority
+// for the read path (its per-step status becomes authoritative in a later task).
 //
-// The GET /api/track/{track}/outline endpoint returns the engine's flat, ordered
-// sectionTag list (composed from the session's PERSISTED inputs). This helper
-// reorders the sidebar/step surfaces into that engine order, while taking each
-// step's chrome + object from the track-correct `fallbackSections`
-// (getFilteredSections) — never getSectionForStep, whose global lookup is
-// ambiguous for step numbers shared across sections. Client-side disabled-tag
-// FILTERING is applied on top so live chip toggles hide steps instantly
-// (filtering removes; it never reorders).
+// This helper projects the engine's flat, ordered sectionTag list onto the
+// sidebar/step surfaces WITHOUT calling getFilteredSections: each step's chrome +
+// object comes from the global ALL_STEPS registry, and each tag's PARENT SECTION
+// is resolved from the track's OWN `sectionIds` (WORKSHOP_LEVELS[level] + any climb
+// `overrides`). Resolving the section via the track's sectionIds — not a global
+// scan — disambiguates the tags shared across sections: the activation steps 32-37
+// live in BOTH the reverse-ETL `activation` section AND the Genie Accelerator
+// `genie-activate` section, and only the track's sectionIds say which one is on
+// screen. Client-side disabled-tag FILTERING is applied on top so live chip
+// toggles hide steps instantly (filtering removes; it never reorders).
 //
-// It returns `fallbackSections` unchanged (never blanks the sidebar) whenever
-// adopting the endpoint order would be unsafe:
-//   - the outline hasn't resolved / errored (`outlineTags` null or empty);
-//   - a forward-baseline track is being viewed in `reverse` (its reverse order is
-//     composed only from PERSISTED direction/chainContext, so until that lands the
-//     endpoint would return forward order — the four reverse-* tracks bake reverse
-//     intrinsically and are safe);
-//   - the endpoint doesn't COVER every step the client would show (a persisted-
-//     variant lag, e.g. an un-persisted additive-chain climb) — falling back
-//     avoids DROPPING a step the user should see;
-//   - the endpoint order would interleave a section (defensive; parity keeps
-//     sections contiguous, so this never fires in the steady state).
-//
-// In the steady (persisted) state the engine and getFilteredSections agree by the
-// T2/T3a parity harness, so the adopted order is visually identical — the point is
-// that it is now SOURCED from the engine. getFilteredSections stays only as the
-// fallback (its deletion is a later task).
-export function orderedSectionsForRead(
-  fallbackSections: WorkflowSection[],
-  outlineTags: string[] | null | undefined,
-  disabledSectionTags: Set<string>,
-  direction: WorkflowDirection,
+// When the outline hasn't resolved (null/empty — unresolved or errored fetch) it
+// returns an EMPTY list; the CALLER renders a loading skeleton and never blanks the
+// sidebar or silently re-composes via getFilteredSections (guardrail #3). The
+// former reverse/interleaving/coverage fallbacks are gone: the endpoint is already
+// ordered for the PERSISTED direction/variant (refetch-after-persist keeps it
+// fresh), so its order is adopted as-is; section contiguity is asserted by the
+// parity / write->read round-trip tests rather than guarded at runtime.
+function trackStepIndex(
   level: WorkshopLevel,
-): WorkflowSection[] {
-  if (!outlineTags || outlineTags.length === 0) return fallbackSections;
-
-  // Reverse-order guard: only the intrinsically-reverse reverse-* tracks are safe
-  // to take from the endpoint in reverse direction.
-  const isReverseTrack = normalizeLevel(level).startsWith('reverse-');
-  if (direction === 'reverse' && !isReverseTrack) return fallbackSections;
-
-  const stepByTag = new Map<string, { sectionId: string; step: WorkflowStep }>();
-  const metaById = new Map<string, WorkflowSection>();
-  for (const section of fallbackSections) {
-    metaById.set(section.id, section);
+  overrides?: { sectionIds: string[] },
+): Map<string, { section: WorkflowSection; step: WorkflowStep }> {
+  const normalizedLevel = normalizeLevel(level);
+  const levelConfig = WORKSHOP_LEVELS[normalizedLevel] ?? WORKSHOP_LEVELS['end-to-end'];
+  const sectionIds = overrides?.sectionIds ?? levelConfig.sectionIds;
+  const byId = new Map(WORKFLOW_SECTIONS.map(s => [s.id, s]));
+  const index = new Map<string, { section: WorkflowSection; step: WorkflowStep }>();
+  for (const id of sectionIds) {
+    const section = byId.get(id);
+    if (!section) continue;
     for (const step of section.steps) {
-      if (step.sectionTag) stepByTag.set(step.sectionTag, { sectionId: section.id, step });
+      // First section wins for a shared tag; the track's sectionIds never list
+      // both `activation` and `genie-activate`, so 32-37 resolve unambiguously.
+      if (step.sectionTag && !index.has(step.sectionTag)) {
+        index.set(step.sectionTag, { section, step });
+      }
     }
   }
+  return index;
+}
 
+export function orderedSectionsForRead(
+  outlineTags: string[] | null | undefined,
+  disabledSectionTags: Set<string>,
+  level: WorkshopLevel,
+  overrides?: { sectionIds: string[]; chapterVisibility: Set<'ch1' | 'ch2' | 'ch3' | 'ch4'> },
+): WorkflowSection[] {
+  if (!outlineTags || outlineTags.length === 0) return [];
+
+  const index = trackStepIndex(level, overrides);
   const result: WorkflowSection[] = [];
-  const seenSectionIds = new Set<string>();
   let current: WorkflowSection | null = null;
-  let adopted = 0;
   for (const tag of outlineTags) {
     if (disabledSectionTags.has(tag)) continue; // instant client-side filter
-    const hit = stepByTag.get(tag);
+    const hit = index.get(tag);
     if (!hit) continue; // endpoint tag not in this track's client sections
-    adopted++;
-    const meta = metaById.get(hit.sectionId)!;
-    if (!current || current.id !== meta.id) {
-      if (seenSectionIds.has(meta.id)) return fallbackSections; // interleaving -> unsafe
-      seenSectionIds.add(meta.id);
-      current = { ...meta, steps: [hit.step] };
+    if (!current || current.id !== hit.section.id) {
+      current = { ...hit.section, steps: [hit.step] };
       result.push(current);
     } else {
       current.steps = [...current.steps, hit.step];
     }
   }
-
-  // Coverage guard: the endpoint must cover every step the client would show
-  // (after the same disabled-tag filter). A shortfall = a persisted-variant lag;
-  // fall back so we never drop a step the user should see.
-  const clientVisible = fallbackSections.reduce(
-    (n, s) =>
-      n + s.steps.filter(st => st.sectionTag && !disabledSectionTags.has(st.sectionTag)).length,
-    0,
-  );
-  if (adopted !== clientVisible) return fallbackSections;
-
   return result;
 }
 
