@@ -39,10 +39,10 @@ Totals: 65 cells across 14 tracks — 65 parity, 0 gap.
 | accelerator | ai-off:all | AI-module sub-toggle | ai.genie=false, ai.agent=false, ai.dashboard=false | yes | ✅ parity | 13 | 13 |
 | accelerator | medallion:gold-off | medallion sub-toggle | medallion.gold=false | yes | ✅ parity | 15 | 15 |
 | accelerator | medallion:silver+gold-off | medallion sub-toggle | medallion.silver=false, medallion.gold=false | yes | ✅ parity | 14 | 14 |
-| genie-accelerator | default | default | — | yes | ✅ parity | 25 | 25 |
-| genie-accelerator | flags:includeLakehouse | genie flags | includeLakehouse=true | yes | ✅ parity | 29 | 29 |
-| genie-accelerator | flags:includeGenieOntology | genie flags | includeGenieOntology=true | yes | ✅ parity | 28 | 28 |
-| genie-accelerator | flags:includeLakehouse+includeGenieOntology | genie flags | includeLakehouse=true, includeGenieOntology=true | yes | ✅ parity | 32 | 32 |
+| genie-accelerator | default | default | — | yes | ✅ parity | 24 | 24 |
+| genie-accelerator | flags:includeLakehouse | genie flags | includeLakehouse=true | yes | ✅ parity | 28 | 28 |
+| genie-accelerator | flags:includeGenieOntology | genie flags | includeGenieOntology=true | yes | ✅ parity | 27 | 27 |
+| genie-accelerator | flags:includeLakehouse+includeGenieOntology | genie flags | includeLakehouse=true, includeGenieOntology=true | yes | ✅ parity | 31 | 31 |
 | data-engineering-accelerator | default | default | — | yes | ✅ parity | 11 | 11 |
 | data-engineering-accelerator | medallion:gold-off | medallion sub-toggle | medallion.gold=false | yes | ✅ parity | 9 | 9 |
 | data-engineering-accelerator | medallion:silver+gold-off | medallion sub-toggle | medallion.silver=false, medallion.gold=false | yes | ✅ parity | 8 | 8 |

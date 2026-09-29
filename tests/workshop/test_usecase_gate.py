@@ -95,23 +95,34 @@ def test_complete_step_gate_required_before_confirmation(session_store):
     assert _error_code(blocked) == "GATE_REQUIRED"
 
 
-# --- D11 §6 test 2: confirming (answer == recommended) unblocks + advances ---
+# --- Option A: confirming on the beat, then the lock resolves the gate --------
 
 
-def test_confirmation_unblocks_and_completes_the_step(session_store):
+def test_confirmation_answerable_then_lock_resolves_gate(session_store):
     store, _, _ = session_store
-    store[SESSION_ID]["completed_gates"] = ["project_setup"]
     block = _usecase_block()
 
+    # The confirm interaction is answerable on the pre-journey beat (unresolved).
     submitted = mcp_server.vibe_submit_answer(SESSION_ID, block["id"], block["recommended"])
     assert submitted.unblocks == "use_case_selection"
 
-    # The decision marker the generic gate looks for is now present.
+    # The decision marker the generic gate looks for is recorded.
     marker = mcp_server.decision_capture_key("use_case_selection", block["id"])
     assert store[SESSION_ID]["captured_outputs"][marker] == block["recommended"]
 
-    completed = mcp_server.vibe_complete_step(SESSION_ID, "use_case_selection", "brief")
-    assert completed.completed_gates[-1] == "use_case_selection"
+    # Locking the curated selection resolves the pre-journey gate (Option A) —
+    # replacing the retired vibe_complete_step("use_case_selection") path.
+    result = mcp_server.vibe_set_parameters(
+        SESSION_ID,
+        {
+            "industry": "retail",
+            "use_case": "demand_forecasting",
+            "use_case_label": "Demand Forecasting",
+            "use_case_source": "curated",
+        },
+    )
+    assert result.use_case_resolved is True
+    assert "use_case_selection" in store[SESSION_ID]["completed_gates"]
 
 
 # --- D11 §6 test 3: step payload carries the block; prompt stays verbatim ----
@@ -176,14 +187,16 @@ def test_complete_step_custom_without_draft_is_blocked(session_store):
     assert _error_code(blocked) == "CUSTOM_DRAFT_REQUIRED"
 
 
-def test_complete_step_custom_with_draft_marker_unblocks(session_store):
+def test_custom_with_draft_marker_lock_resolves_gate(session_store):
     store, _, _ = session_store
-    store[SESSION_ID]["completed_gates"] = ["project_setup"]
-    store[SESSION_ID]["session_parameters"] = _locked_custom_params(custom_draft_ready=True)
+    # The FMAPI draft ran first (marker set); the custom selection is then locked
+    # via vibe_set_parameters, which resolves the pre-journey gate (Option A).
+    store[SESSION_ID]["session_parameters"] = {"custom_draft_ready": True}
 
-    completed = mcp_server.vibe_complete_step(SESSION_ID, "use_case_selection", "brief")
+    result = mcp_server.vibe_set_parameters(SESSION_ID, _locked_custom_params())
 
-    assert completed.completed_gates[-1] == "use_case_selection"
+    assert result.use_case_resolved is True
+    assert "use_case_selection" in store[SESSION_ID]["completed_gates"]
 
 
 # --- D11 §6 test 4: recommend-and-proceed — certified is the stated default --

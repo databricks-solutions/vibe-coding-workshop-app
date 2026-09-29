@@ -118,8 +118,12 @@ def test_step_payload_inlines_industries_and_certified_first_use_cases(monkeypat
     _mock_seams(monkeypatch)
     _stub_assembler(monkeypatch)
 
+    # use_case_selection is the PRE-JOURNEY intent beat (Option A), not a numbered
+    # step, so it is surfaced via mcp_server._INTENT_BEAT_STEP rather than track_steps.
     state = mcp_server.engine.SessionState(session_parameters={"industry": "retail"})
-    payload = mcp_server._step_payload(mcp_server.DEFAULT_TRACK, state, _step("use_case_selection"))
+    payload = mcp_server._step_payload(
+        mcp_server.DEFAULT_TRACK, state, mcp_server._INTENT_BEAT_STEP
+    )
 
     assert [o["value"] for o in payload.available_industries] == ["retail", "travel"]
     # Placeholder stripped; each option carries value/label.
@@ -137,7 +141,9 @@ def test_step_payload_omits_use_cases_before_an_industry_is_chosen(monkeypatch):
     _stub_assembler(monkeypatch)
 
     state = mcp_server.engine.SessionState()  # no industry yet
-    payload = mcp_server._step_payload(mcp_server.DEFAULT_TRACK, state, _step("use_case_selection"))
+    payload = mcp_server._step_payload(
+        mcp_server.DEFAULT_TRACK, state, mcp_server._INTENT_BEAT_STEP
+    )
 
     assert [o["value"] for o in payload.available_industries] == ["retail", "travel"]
     assert payload.available_use_cases is None

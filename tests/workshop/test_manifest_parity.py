@@ -143,33 +143,45 @@ def test_lakehouse_flag_is_genie_scoped_only():
 # --- Phase 2B / D11: use_case_selection in the Genie Accelerator define-usecase ---
 
 
-def test_genie_define_usecase_has_use_case_selection_before_prd():
-    """Contract 1: genie-accelerator define-usecase contains use_case_selection
-    ordered before prd_generation, and it produces use_case_brief."""
+def test_genie_define_usecase_is_project_setup_then_prd_no_numbered_selection():
+    """Contract 1 (ghost retirement): genie-accelerator define-usecase is
+    [project_setup, prd_generation] — use_case_selection is NO LONGER a numbered
+    outline step. Use-case capture is a pre-journey intent beat resolved up front
+    (mirroring App step 1 / the MCP engine's resolve_use_case)."""
     loaded = manifest.load_manifest()
     tags = _define_usecase_tags(loaded, "genie-accelerator")
     # Oracle parity: matches what getFilteredSections yields for this track.
     assert tags == DEFINE_USECASE_BY_TRACK["genie-accelerator"]
-    assert tags == ["project_setup", "use_case_selection", "prd_generation"]
-    assert tags.index("use_case_selection") < tags.index("prd_generation")
-
-    selection = _step_by_tag(loaded, "genie-accelerator", "use_case_selection")
-    assert selection.produces == "use_case_brief"
+    assert tags == ["project_setup", "prd_generation"]
+    assert "use_case_selection" not in tags
 
 
 def test_prd_generation_consumes_brief_and_gates_on_selection():
-    """Contract 2: prd_generation consumes use_case_brief and gates on use_case_selection."""
+    """Contract 2 (LOCKED unchanged): prd_generation still consumes use_case_brief
+    and still gates on use_case_selection — the gate is resolved pre-journey, so
+    this contract is preserved exactly even though use_case_selection is no longer
+    a numbered step. (requiresGate is pinned by GENIE_REQUIRES_GATE_OVERRIDES.)"""
     loaded = manifest.load_manifest()
     prd = _step_by_tag(loaded, "genie-accelerator", "prd_generation")
     assert "use_case_brief" in prd.consumes
     assert prd.requiresGate == "use_case_selection"
 
 
-def test_use_case_selection_chains_gate_to_project_setup():
-    """Contract 3: use_case_selection chains its gate to the preceding project_setup."""
+def test_use_case_selection_is_not_a_numbered_step_on_any_track():
+    """Contract 3 (ghost retirement): use_case_selection appears as a numbered step
+    in NO track's outline — it was retired everywhere, not just visually hidden.
+    Its gate string stays valid (resolved pre-journey) but never surfaces a node."""
     loaded = manifest.load_manifest()
-    selection = _step_by_tag(loaded, "genie-accelerator", "use_case_selection")
-    assert selection.requiresGate == "project_setup"
+    for track_id in loaded.tracks:
+        tags = [step.sectionTag for step in loaded.track_steps(track_id)]
+        assert "use_case_selection" not in tags, track_id
+    # And no numbered step produces the use_case_brief artifact (pre-journey only).
+    genie_producers = [
+        step.sectionTag
+        for step in loaded.track_steps("genie-accelerator")
+        if step.produces == "use_case_brief"
+    ]
+    assert genie_producers == []
 
 
 def test_non_genie_tracks_define_usecase_unchanged():

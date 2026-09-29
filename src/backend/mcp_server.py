@@ -10,6 +10,7 @@ import logging
 import threading
 import uuid
 from dataclasses import asdict
+from datetime import datetime, timezone
 from typing import Any, Callable, Literal
 
 import jsonschema
@@ -235,6 +236,11 @@ class SetParametersResult(BaseModel):
     # industry is resolved. None on plain non-selection merges.
     available_industries: list[dict[str, Any]] | None = None
     available_use_cases: list[dict[str, Any]] | None = None
+    # True when THIS call resolved the pre-journey use-case gate (Option A): a
+    # fully-locked selection wrote use_case_selection -> completed_gates and the
+    # use_case_brief artifact, so the walk can proceed to the first numbered step
+    # and prd_generation is unlocked. False on plain merges and partial selections.
+    use_case_resolved: bool = False
 
 
 class _ContractError(dict):
@@ -471,6 +477,14 @@ def _next_reference(track: str, state: engine.SessionState, step: manifest.Step)
     # (lakehouse climb, end-to-end reverse). Passing flags but omitting inputs
     # here ordered against the input-blind default and disagreed mid-track.
     ordered = engine._ordered_steps(track, state)
+    ordered_tags = {candidate.sectionTag for candidate in ordered}
+    # Pre-journey intent beat (Option A): use_case_selection is not a numbered step,
+    # so it has no position in the ordered outline — its "next" is the first
+    # numbered step (project_setup) the learner reaches once the use case locks.
+    if step.sectionTag == _INTENT_BEAT_STEP.sectionTag and step.sectionTag not in ordered_tags:
+        if ordered:
+            return StepReference(sectionTag=ordered[0].sectionTag, title=ordered[0].title)
+        return StepReference(sectionTag="", title="Track complete")
     index = next((idx for idx, candidate in enumerate(ordered) if candidate.sectionTag == step.sectionTag), None)
     if index is not None and index + 1 < len(ordered):
         following = ordered[index + 1]
@@ -716,6 +730,64 @@ def _project_setup_content(email: str) -> dict[str, str]:
     }
 
 
+# --- Pre-journey use-case intent beat (Option A) -----------------------------
+# use_case_selection was retired as a numbered outline step. A fresh Genie Code
+# learner who has NOT pre-picked a use case is still asked ONCE, up front, before
+# the first numbered step (guardrail #3) — mirroring the App's step 1 "Define Your
+# Intent". This synthetic step is surfaced by vibe_next_step / vibe_get_step while
+# the use case is unresolved; it is NOT a manifest step and is never advanced
+# THROUGH via vibe_complete_step. Locking the use case (vibe_set_parameters, or
+# vibe_start_track with industry+use_case) resolves the gate via
+# engine.resolve_use_case, after which the walk proceeds to project_setup.
+_INTENT_BEAT_STEP = manifest.Step(
+    order=1,
+    sectionTag=engine.USE_CASE_GATE,
+    title="Define Your Use Case",
+    why=(
+        "Lock the use case up front so the PRD, semantic layer, agent, and "
+        "dashboard are all built for one governed target."
+    ),
+    requiresGate=None,
+    consumes=[],
+    produces=engine.USE_CASE_BRIEF,
+    execution="agent-doable",
+)
+
+
+def _needs_use_case(state: engine.SessionState) -> bool:
+    """Whether the pre-journey use-case pick is still due for this session."""
+
+    return not engine.use_case_resolved(state)
+
+
+def _build_use_case_brief(params: dict[str, Any]) -> str:
+    """Assemble the ``use_case_brief`` artifact (D11 §3.3) from locked parameters.
+
+    Track-agnostic; its job is to lock and record the choice (provenance +
+    downstream narrative), not to re-plumb rendering — the assembler already keys
+    on ``industry``/``use_case`` in session_parameters. ``description`` is present
+    for a custom (author-your-own) use case, carrying the FMAPI-drafted brief.
+    """
+
+    source = "custom" if params.get("use_case_source") == "custom" else "curated"
+    brief: dict[str, Any] = {
+        "industry": str(params.get("industry") or ""),
+        "use_case": str(params.get("use_case") or ""),
+        "use_case_label": str(params.get("use_case_label") or params.get("use_case") or ""),
+        "source": source,
+        "selected_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+    }
+    if source == "custom":
+        description = str(
+            params.get("use_case_description")
+            or params.get("custom_drafted_description")
+            or ""
+        ).strip()
+        if description:
+            brief["description"] = description
+    return json.dumps(brief)
+
+
 def _step_payload(
     track: str,
     state: engine.SessionState,
@@ -882,6 +954,20 @@ def vibe_start_track(
         state.session_parameters["industry"] = industry
     if use_case:
         state.session_parameters["use_case"] = use_case
+    # Pre-journey use-case resolution (Option A): starting a track with BOTH an
+    # industry and a use case resolves the use_case_selection gate up front (writes
+    # the gate string + use_case_brief), so the learner never has to walk a numbered
+    # use-case step and prd_generation is unlocked. Without both, the pre-journey
+    # intent beat elicits the pick on the first vibe_next_step (guardrail #3).
+    if industry and use_case and not engine.use_case_resolved(state):
+        engine.resolve_use_case(state, _build_use_case_brief(state.session_parameters))
+        if is_lakebase_configured():
+            save_session(
+                session_id=resolved,
+                session_parameters=state.session_parameters,
+                captured_outputs=dict(state.captured_outputs),
+                completed_gates=list(state.completed_gates),
+            )
     # Deep-link handoff (Workstream 2): hand back a ready-to-open web-UI URL for this
     # same session so the learner can move freely between MCP and the app. None when
     # the request headers do not expose a usable host (degrades gracefully).
@@ -924,6 +1010,12 @@ def vibe_get_step(
     state = _coerce_state(state)
     _stash_base_url(state, context)
     steps = engine.MANIFEST.track_steps(DEFAULT_TRACK)
+    # The pre-journey intent beat (Option A) is not a manifest step, so it is
+    # resolved here rather than looked up in track_steps: an explicit request for
+    # use_case_selection, or the default (sectionTag=None) while the use case is
+    # unresolved, returns the beat with its picker payload.
+    if sectionTag == _INTENT_BEAT_STEP.sectionTag or (sectionTag is None and _needs_use_case(state)):
+        return _step_payload(DEFAULT_TRACK, state, _INTENT_BEAT_STEP, session_id=session_id)
     if sectionTag is None:
         current = engine.next_step(DEFAULT_TRACK, state)
         if isinstance(current, engine.Done):
@@ -961,6 +1053,13 @@ def vibe_next_step(session_id: str, context: Context | None = None) -> NextStepR
     state, _ = loaded
     state = _coerce_state(state)
     _stash_base_url(state, context)
+    # Pre-journey intent beat (Option A, guardrail #3): before the first numbered
+    # step, a learner who has not yet locked a use case is asked to pick one. The
+    # beat is surfaced until the use_case_selection gate resolves.
+    if _needs_use_case(state):
+        return NextStepResult.model_validate(
+            _step_payload(DEFAULT_TRACK, state, _INTENT_BEAT_STEP, session_id=session_id)
+        )
     next_item = engine.next_step(DEFAULT_TRACK, state)
     if isinstance(next_item, engine.Done):
         return NextStepResult.model_validate(DoneResult())
@@ -1320,8 +1419,16 @@ def vibe_submit_answer(
             interaction_id=interaction_id,
         )  # type: ignore[return-value]
     section_tag, slot, interaction = resolved
+    # Which step's interactions are answerable right now. The engine's current step
+    # is always eligible; while the use case is unresolved the pre-journey intent
+    # beat (Option A) is ALSO eligible, so its use_case_selection confirm/comprehension
+    # interactions stay answerable even though the beat is not a manifest step
+    # (the lock via vibe_set_parameters is what resolves the gate).
     current = engine.next_step(DEFAULT_TRACK, state)
-    if isinstance(current, engine.Done) or current.sectionTag != section_tag:
+    answerable = {None if isinstance(current, engine.Done) else current.sectionTag}
+    if _needs_use_case(state):
+        answerable.add(_INTENT_BEAT_STEP.sectionTag)
+    if section_tag not in answerable:
         return _error_result(
             "UNKNOWN_INTERACTION",
             f"Interaction {interaction_id} is not on the current workshop step.",
@@ -1525,12 +1632,48 @@ def vibe_set_parameters(
         if _is_selection_call(params)
         else []
     )
-    save_session(session_id=session_id, session_parameters=resolved_params)
+
+    # Pre-journey use-case resolution (Option A). A fully-locked selection (this
+    # call carries a source and nothing required is missing) resolves the
+    # use_case_selection gate up front — writing the gate string to completed_gates
+    # AND the use_case_brief artifact to captured_outputs, mirroring App step 1.
+    # A custom selection has already cleared the FMAPI-draft gate above, so a lock
+    # here is legitimate. This replaces the retired vibe_complete_step path for
+    # use_case_selection; the gate then unlocks prd_generation
+    # (requiresGate="use_case_selection", consumes=["use_case_brief"]).
+    resolved_use_case = False
+    if _is_selection_call(params) and not missing_required:
+        newly = engine.resolve_use_case(state, _build_use_case_brief(resolved_params))
+        resolved_use_case = engine.use_case_resolved(state)
+        # Dual-write the legacy SPA progress fields from the SAME manifest section
+        # order the sync bridge uses (D11 §4.3), so the pick shows up in the SPA.
+        current_step, completed_steps = _legacy_progress(
+            DEFAULT_TRACK, list(state.completed_gates), engine.next_step(DEFAULT_TRACK, state)
+        )
+        # Refine the auto-name to what this session is building — only when the
+        # gate is newly resolved, so COALESCE preserves a name the learner set.
+        refined_name = None
+        if newly:
+            label = resolved_params.get("use_case_label") or resolved_params.get("use_case")
+            if label:
+                refined_name = f"Genie Code — {label}"
+        save_session(
+            session_id=session_id,
+            session_name=refined_name,
+            session_parameters=resolved_params,
+            captured_outputs=dict(state.captured_outputs),
+            completed_gates=list(state.completed_gates),
+            current_step=current_step,
+            completed_steps=completed_steps,
+        )
+    else:
+        save_session(session_id=session_id, session_parameters=resolved_params)
     return SetParametersResult(
         resolved_params=resolved_params,
         missing_required=missing_required,
         available_industries=echo_industries,
         available_use_cases=echo_use_cases,
+        use_case_resolved=resolved_use_case,
     )
 
 

@@ -68,10 +68,15 @@ the authoritative chaining source, and source step numbers are translated to
 `sectionTag` values using `src/constants/workflowSections.ts`.
 
 The one exception to the `WorkflowDiagram.tsx` derivation is `use_case_brief`:
-it is a D11 engine-only artifact (Phase 2B) with no SPA diagram arrow, produced
-by `use_case_selection` (source step 70) and consumed by `prd_generation`. Its
-row here mirrors `GENIE_CHAINING_LITERAL_OVERRIDES[3]` in
-`scripts/generate_manifest.py`, which is the authoritative source for this pair.
+it is a D11 engine-only artifact with no SPA diagram arrow, consumed by
+`prd_generation`. Its producer, `use_case_selection`, was retired as a numbered
+outline step and is now resolved PRE-JOURNEY (mirroring the App's step 1 "Define
+Your Intent"): the MCP engine writes `use_case_brief` up front via
+`resolve_use_case`, so no numbered step produces it and `use_case_selection` is
+NOT a key here. `prd_generation`'s `["use_case_brief"]` row mirrors
+`GENIE_CHAINING_LITERAL_OVERRIDES[3]` in `scripts/generate_manifest.py`, which is
+the authoritative source for this consume (re-pointed 70 -> 1, the pre-journey
+producer's identity).
 
 The shared `geniePreviousOutputs` value is undefined for grouped ontology steps
 67–69, so `ontology_domain`, `ontology_pages`, and `ontology_routing` correctly

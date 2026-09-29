@@ -75,7 +75,10 @@ def _step(section_tag):
 def _gates_before(section_tag):
     steps = manifest.load_manifest().track_steps(mcp_server.DEFAULT_TRACK)
     target = next(s for s in steps if s.sectionTag == section_tag)
-    return [s.sectionTag for s in steps if s.order < target.order]
+    # Option A: the use case is resolved PRE-JOURNEY (before any numbered step), so
+    # a session positioned on a numbered step carries the use_case_selection gate —
+    # which prd_generation.requiresGate depends on. It is not itself a numbered step.
+    return ["use_case_selection"] + [s.sectionTag for s in steps if s.order < target.order]
 
 
 # --- 1. Slim payload ---------------------------------------------------------

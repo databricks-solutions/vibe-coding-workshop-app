@@ -21,6 +21,7 @@ and *produces* the `use_case_brief` consumed by `prd_generation`:
 """
 
 import copy
+import json
 import pathlib
 import sys
 
@@ -236,22 +237,32 @@ def test_set_parameters_generic_params_are_unaffected(session_store):
     assert result.missing_required == []
 
 
-# --- D11 §3.3 — use_case_brief captured on complete --------------------------
+# --- D11 §3.3 — use_case_brief captured on the pre-journey lock --------------
 
 
-def test_complete_use_case_selection_captures_use_case_brief(session_store):
+def test_locking_curated_selection_resolves_gate_and_captures_brief(session_store):
+    """Option A: locking a curated selection via vibe_set_parameters resolves the
+    pre-journey use_case_selection gate AND captures the use_case_brief — replacing
+    the retired vibe_complete_step("use_case_selection") path."""
     store, _, _ = session_store
-    store[SESSION_ID]["completed_gates"] = ["project_setup"]
-    block = _usecase_block()
 
-    # Confirm the certified default (recommend-and-proceed) to pass the gate.
-    mcp_server.vibe_submit_answer(SESSION_ID, block["id"], block["recommended"])
+    result = mcp_server.vibe_set_parameters(
+        SESSION_ID,
+        {
+            "industry": "retail",
+            "use_case": "demand_forecasting",
+            "use_case_label": "Demand Forecasting",
+            "use_case_source": "curated",
+        },
+    )
 
-    brief = '{"industry":"retail","use_case":"demand_forecasting","source":"curated"}'
-    completed = mcp_server.vibe_complete_step(SESSION_ID, "use_case_selection", brief)
-
-    assert completed.completed_gates[-1] == "use_case_selection"
-    assert store[SESSION_ID]["captured_outputs"]["use_case_brief"] == brief
+    assert result.use_case_resolved is True
+    assert result.missing_required == []
+    assert "use_case_selection" in store[SESSION_ID]["completed_gates"]
+    brief = json.loads(store[SESSION_ID]["captured_outputs"]["use_case_brief"])
+    assert brief["industry"] == "retail"
+    assert brief["use_case"] == "demand_forecasting"
+    assert brief["source"] == "curated"
 
 
 # --- D11 §3.6 / §5 — PRD renders against the LOCKED use case -----------------
@@ -305,15 +316,14 @@ def test_prd_generation_before_selection_is_step_locked(session_store):
 # --- D11 §3.5 — custom path proceeds after lock (recommend-and-proceed) ------
 
 
-def test_custom_path_proceeds_after_lock_without_use_certified(session_store, no_community_writes):
+def test_custom_path_resolves_gate_after_lock_without_use_certified(session_store, no_community_writes):
     store, _, _ = session_store
-    store[SESSION_ID]["completed_gates"] = ["project_setup"]
     # The FMAPI draft ran first (Workstream #3) — its marker lets the custom lock
-    # unblock without a 'use_certified' answer.
+    # resolve the gate without a 'use_certified' answer (recommend-and-proceed).
     store[SESSION_ID]["session_parameters"]["custom_draft_ready"] = True
 
     # Learner authors + locks a custom UC — no 'use_certified' answer submitted.
-    mcp_server.vibe_set_parameters(
+    result = mcp_server.vibe_set_parameters(
         SESSION_ID,
         {
             "industry": "retail",
@@ -324,13 +334,12 @@ def test_custom_path_proceeds_after_lock_without_use_certified(session_store, no
         },
     )
 
-    brief = '{"industry":"retail","use_case":"curbside_eta","source":"custom"}'
-    completed = mcp_server.vibe_complete_step(SESSION_ID, "use_case_selection", brief)
-
-    # The lock alone unblocked the gate (no 'use_certified' capture marker).
-    assert not isinstance(completed, dict), completed
-    assert completed.completed_gates[-1] == "use_case_selection"
-    assert store[SESSION_ID]["captured_outputs"]["use_case_brief"] == brief
+    # The lock alone resolved the pre-journey gate (no 'use_certified' marker).
+    assert result.use_case_resolved is True
+    assert "use_case_selection" in store[SESSION_ID]["completed_gates"]
+    brief = json.loads(store[SESSION_ID]["captured_outputs"]["use_case_brief"])
+    assert brief["source"] == "custom"
+    assert brief["description"].startswith("Predict curbside")
 
     # Guardrail #5: custom UC stayed session-local — no community-library write.
     assert no_community_writes == []
@@ -338,16 +347,14 @@ def test_custom_path_proceeds_after_lock_without_use_certified(session_store, no
     assert marker not in store[SESSION_ID]["captured_outputs"]
 
 
-def test_custom_lock_incomplete_does_not_unblock(session_store):
-    """Custom lock missing ONLY use_case_description must NOT satisfy the gate (B5).
-
-    All other custom-required fields are present, so this isolates
+def test_custom_lock_incomplete_does_not_resolve_gate(session_store):
+    """Custom lock missing ONLY use_case_description must NOT resolve the pre-journey
+    gate (B5). All other custom-required fields are present, so this isolates
     use_case_description as the genuinely-required field for a custom lock.
     """
     store, _, _ = session_store
-    store[SESSION_ID]["completed_gates"] = ["project_setup"]
 
-    mcp_server.vibe_set_parameters(
+    result = mcp_server.vibe_set_parameters(
         SESSION_ID,
         {
             "industry": "retail",
@@ -358,26 +365,37 @@ def test_custom_lock_incomplete_does_not_unblock(session_store):
         },
     )
 
-    blocked = mcp_server.vibe_complete_step(SESSION_ID, "use_case_selection", "brief")
-
-    assert isinstance(blocked, dict)
-    assert _error_code(blocked) == "GATE_REQUIRED"
+    assert "use_case_description" in result.missing_required
+    assert result.use_case_resolved is False
+    assert "use_case_selection" not in store[SESSION_ID].get("completed_gates", [])
 
 
 # --- D11 §6 — certified path still unblocks on 'use_certified' ---------------
 
 
-def test_certified_path_still_unblocks_on_use_certified(session_store):
+def test_certified_confirm_is_answerable_on_the_beat_and_lock_resolves_gate(session_store):
+    """Option A: the confirm interaction is still answerable on the pre-journey beat
+    (recommend-and-proceed), and locking the curated selection resolves the gate."""
     store, _, _ = session_store
-    store[SESSION_ID]["completed_gates"] = ["project_setup"]
     block = _usecase_block()
 
+    # The confirm interaction is answerable while the beat is current (unresolved).
     submitted = mcp_server.vibe_submit_answer(SESSION_ID, block["id"], "use_certified")
+    assert not isinstance(submitted, dict), submitted
     assert submitted.unblocks == "use_case_selection"
 
-    completed = mcp_server.vibe_complete_step(SESSION_ID, "use_case_selection", "brief")
-    assert not isinstance(completed, dict), completed
-    assert completed.completed_gates[-1] == "use_case_selection"
+    # Locking the curated selection resolves the pre-journey gate.
+    result = mcp_server.vibe_set_parameters(
+        SESSION_ID,
+        {
+            "industry": "retail",
+            "use_case": "demand_forecasting",
+            "use_case_label": "Demand Forecasting",
+            "use_case_source": "curated",
+        },
+    )
+    assert result.use_case_resolved is True
+    assert "use_case_selection" in store[SESSION_ID]["completed_gates"]
 
 
 # --- Scope guard — gagent_benchmarks gate behaviour is UNCHANGED -------------
