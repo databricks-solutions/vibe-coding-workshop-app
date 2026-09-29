@@ -46,10 +46,13 @@ GENIE_LAKEHOUSE_FLAG = "includeLakehouse"
 
 # ---------------------------------------------------------------------------
 # Phase 3 T3a — composition axes (mirrors src/constants/workflowSections.ts).
-# These tables are hand-mirrored from the TS source; the parity harness
-# (scripts/dump_outline_matrix.mjs + tests/workshop/test_outline_parity.py)
-# imports the REAL TS transforms and byte-verifies every composed cell, so any
-# drift here fails the gate rather than shipping silently.
+# These tables are hand-mirrored from the TS source. Parity is now guarded by a
+# FROZEN golden matrix (tests/workshop/test_outline_parity.py vs
+# fixtures/golden_outline_matrix.json): the golden's `ts` column was captured from
+# the real TS transforms while they were live and was FROZEN in Phase 3 T4b (the
+# TS getFilteredSections and its node oracle scripts/dump_outline_matrix.mjs were
+# retired), so the engine must reproduce that permanent reference cell-for-cell —
+# any drift in these tables fails the gate rather than shipping silently.
 # ---------------------------------------------------------------------------
 
 # AXIS 3+4 — AI-module + medallion sub-toggles: six DEFAULT-TRUE session flags,
@@ -68,8 +71,8 @@ MEDALLION_FLAG_TAGS: dict[str, list[str]] = {
 }
 
 # LEVELS_WITH_AI_MODULES (workflowSections.ts:86) + APPLICABLE_AI_MODULES (:107):
-# reverse-lakebase narrows to {genie,dashboard} because getFilteredSections
-# already strips its Agent steps.
+# reverse-lakebase narrows to {genie,dashboard} because the reverse section
+# transforms in _filtered_sections (this file) already strip its Agent steps.
 LEVELS_WITH_AI_MODULES: set[str] = {
     "lakehouse-di",
     "end-to-end",
@@ -111,8 +114,11 @@ REVERSE_TRACKS: set[str] = {
     "reverse-lakebase",
     "reverse-app",
 }
-# REVERSE_SECTION_ORDER (workflowSections.ts:951) — stable section re-sort applied
-# in reverse direction, before the iterate-enhance/cleanup tail sort.
+# REVERSE_SECTION_ORDER — stable section re-sort applied in reverse direction,
+# before the iterate-enhance/cleanup tail sort. This is the generator's OWN copy of
+# the ordering (the TS REVERSE_SECTION_ORDER it mirrored was deleted in Phase 3
+# T4b); the frozen-golden parity harness pins that the composed reverse order it
+# produces stays correct.
 REVERSE_SECTION_ORDER: list[str] = [
     "define-usecase",
     "lakehouse",
@@ -739,7 +745,21 @@ def build_manifest(source: str) -> dict[str, Any]:
         if variants:
             track_entry["variants"] = variants
         tracks[track_id] = track_entry
-    return {"version": "1", "tracks": tracks}
+
+    # Global step-number -> sectionTag map (T5 PR1, decision D-2). Authority is the
+    # frontend ALL_STEPS object (parse_source keys `steps` by its GLOBAL number, not
+    # the track-local Step.order), so the backend can resolve App-origin
+    # completed_steps/skipped_steps — which are GLOBAL numbers — back to tags in
+    # state.build_session_state. Emitted string-keyed and sorted for deterministic
+    # (byte-identical) regeneration.
+    step_number_to_tag = {
+        str(number): steps[number].section_tag for number in sorted(steps)
+    }
+    return {
+        "version": "1",
+        "step_number_to_tag": step_number_to_tag,
+        "tracks": tracks,
+    }
 
 
 def _write_json(path: Path, data: Any) -> None:
