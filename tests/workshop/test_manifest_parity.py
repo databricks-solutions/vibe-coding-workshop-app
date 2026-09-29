@@ -12,11 +12,13 @@ from src.backend.workshop import manifest
 
 FIX = pathlib.Path(__file__).parent / "fixtures"
 
-# Independent oracle: `scripts/dump_getfilteredsections.mjs` executes the real
-# `getFilteredSections` from `src/constants/workflowSections.ts` and writes the
-# resulting `define-usecase` sectionTag order for every track. Asserting the
-# generated manifest against this fixture keeps the check honest (TS source is
-# the oracle) instead of comparing manifest.json against itself.
+# Frozen reference: `golden_define_usecase_by_track.json` was captured from the
+# real `getFilteredSections` (`src/constants/workflowSections.ts`) while that
+# function was still live — it recorded the `define-usecase` sectionTag order for
+# every track. `getFilteredSections` and its node oracle were RETIRED in Phase 3
+# T4b, so this golden is now a FROZEN, hand-independent reference. Asserting the
+# generated manifest against it keeps the check honest (an external reference)
+# instead of comparing manifest.json against itself.
 DEFINE_USECASE_BY_TRACK = json.loads(
     (FIX / "golden_define_usecase_by_track.json").read_text()
 )
@@ -150,7 +152,7 @@ def test_genie_define_usecase_is_project_setup_then_prd_no_numbered_selection():
     (mirroring App step 1 / the MCP engine's resolve_use_case)."""
     loaded = manifest.load_manifest()
     tags = _define_usecase_tags(loaded, "genie-accelerator")
-    # Oracle parity: matches what getFilteredSections yields for this track.
+    # Frozen-reference parity: matches the captured getFilteredSections order for this track.
     assert tags == DEFINE_USECASE_BY_TRACK["genie-accelerator"]
     assert tags == ["project_setup", "prd_generation"]
     assert "use_case_selection" not in tags
@@ -190,7 +192,7 @@ def test_non_genie_tracks_define_usecase_unchanged():
     loaded = manifest.load_manifest()
     for track_id in ("app-only", "lakehouse"):
         tags = _define_usecase_tags(loaded, track_id)
-        # Oracle parity from getFilteredSections for this track.
+        # Frozen-reference parity from the captured getFilteredSections order for this track.
         assert tags == DEFINE_USECASE_BY_TRACK[track_id], track_id
         assert tags == ["project_setup", "prd_generation"], track_id
         assert "use_case_selection" not in tags, track_id

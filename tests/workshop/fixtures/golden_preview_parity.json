@@ -1,6 +1,6 @@
 {
-  "generated_by": "node --experimental-strip-types scripts/dump_preview_parity.mjs",
-  "doc": "Preview-path parity (Phase 3 T4a). rebuilt = clientFilter(engine.outline(track,{direction,flags}), effectiveDisabledTags); gfs = REAL getFilteredSections(track, effectiveDisabledTags, undefined, direction) flattened. status=parity when byte-equal. The divergence group documents getFilteredSections' client-reverse on variant-less tracks — the intentionally-retired branch (engine returns FORWARD; the rebuilt sandbox never sends reverse there, per B1). previewTags is re-verified against the LIVE Python engine.outline() in tests/workshop/test_preview_parity.py.",
+  "generated_by": "FROZEN reference — captured from getFilteredSections() via the now-retired scripts/dump_preview_parity.mjs. That oracle and getFilteredSections were removed in Phase 3 T4b; the gfs/gfsReverse columns are the permanent, non-regenerable reference.",
+  "doc": "Preview-path parity (Phase 3 T4a/T4b). rebuilt = clientFilter(engine.outline(track,{direction,flags}), effectiveDisabledTags); gfs = FROZEN getFilteredSections(track, effectiveDisabledTags, undefined, direction) reference flattened. status=parity when byte-equal. The divergence group documents getFilteredSections' client-reverse on variant-less tracks — the intentionally-retired branch (engine returns FORWARD; the rebuilt sandbox never sends reverse there, per B1). previewTags is re-verified against the LIVE Python engine.outline() in tests/workshop/test_preview_parity.py.",
   "manifest_version": "1",
   "variant_reverse_tracks": [
     "end-to-end",
