@@ -109,7 +109,7 @@ export const APPLICABLE_AI_MODULES: Partial<Record<WorkshopLevel, ReadonlySet<AI
   'end-to-end':           new Set<AIAgentModule>(['genie', 'agent', 'dashboard']),
   'accelerator':          new Set<AIAgentModule>(['genie', 'agent', 'dashboard']),
   'reverse-lakehouse-di': new Set<AIAgentModule>(['genie', 'agent', 'dashboard']),
-  'reverse-lakebase':     new Set<AIAgentModule>(['genie', 'dashboard']), // Agent pre-removed by getFilteredSections
+  'reverse-lakebase':     new Set<AIAgentModule>(['genie', 'dashboard']), // Agent pre-removed by the engine outline for this track
   'reverse-app':          new Set<AIAgentModule>(['genie', 'agent', 'dashboard']),
 };
 
@@ -213,8 +213,8 @@ export function getDisabledTagsForMedallionLayers(
 export const LEVELS_WITH_LAKEHOUSE_TOGGLE: ReadonlySet<WorkshopLevel> =
   new Set<WorkshopLevel>(['genie-accelerator']);
 
-// The four Genie Accelerator lakehouse steps (see getFilteredSections: the
-// lakehouse section is filtered to [22, 11, 14, 23] for genie-accelerator).
+// The four Genie Accelerator lakehouse steps (the engine outline filters the
+// lakehouse section to [22, 11, 14, 23] for genie-accelerator).
 // Disabling these tags removes the whole LAKEHOUSE section from the default path.
 export const GENIE_LAKEHOUSE_TAGS = [
   'genie_silver_metadata', // step 22 — Analyze Silver Metadata
@@ -244,8 +244,8 @@ export function getDisabledTagsForLakehouse(
 // mostly-UI-driven block that follows the Activate section (it is an optional
 // domain-scoping refinement layered on after the app is built).
 // Because these three tags cover the entire `genie-ontology` section,
-// disabling them drops the whole section via the empty-section filter in
-// getFilteredSections.
+// disabling them drops the whole section via the engine outline's
+// empty-section filter.
 // ---------------------------------------------------------------------------
 export const LEVELS_WITH_ONTOLOGY_TOGGLE: ReadonlySet<WorkshopLevel> =
   new Set<WorkshopLevel>(['genie-accelerator']);
@@ -337,8 +337,8 @@ export const WORKSHOP_LEVELS: Record<WorkshopLevel, LevelConfig> = {
     tooltip: 'Build a governed Metric View, a Genie Agent, an ontology, and activate it',
     description: 'Locate data and build a governed Metric View, stand up and tune a Genie Agent, model the Discover ontology, then activate with a dashboard, Lakebase sync, and a deployable bundle.',
     // The new track sections (semantic-layer, genie-agent, genie-ontology, genie-activate)
-    // REPLACE the legacy AI/BI beats; data-intelligence is emptied in getFilteredSections
-    // and dropped by the empty-steps filter. Section display order follows WORKFLOW_SECTIONS.
+    // REPLACE the legacy AI/BI beats; data-intelligence is emptied by the engine outline
+    // and dropped by its empty-steps filter. Section display order follows WORKFLOW_SECTIONS.
     sectionIds: ['define-usecase', 'lakehouse', 'data-intelligence', 'semantic-layer', 'genie-agent', 'genie-activate', 'genie-ontology', 'iterate-enhance', 'cleanup'],
   },
   'data-engineering-accelerator': {
@@ -770,138 +770,12 @@ export function normalizeLevel(level: string): WorkshopLevel {
   }
 }
 
-// Helper to get filtered sections based on workshop level.
-// Optional `overrides` supplies cumulative sectionIds / chapterVisibility
-// when a user has progressed across columns (e.g. app-database → lakehouse).
-export function getFilteredSections(
-  level: WorkshopLevel,
-  disabledSectionTags: Set<string> = new Set(),
-  overrides?: { sectionIds: string[]; chapterVisibility: Set<'ch1' | 'ch2' | 'ch3' | 'ch4'> },
-  direction: WorkflowDirection = 'forward',
-): WorkflowSection[] {
-  const normalizedLevel = normalizeLevel(level);
-  const levelConfig = WORKSHOP_LEVELS[normalizedLevel] ?? WORKSHOP_LEVELS['end-to-end'];
-  const sectionIds = overrides?.sectionIds ?? levelConfig.sectionIds;
-  const chapterVisibility = overrides?.chapterVisibility ?? (CHAPTER_VISIBILITY[normalizedLevel] ?? CHAPTER_VISIBILITY['end-to-end']);
-  
-  const isGenie = normalizedLevel === 'genie-accelerator';
-  const isSkillsAccelerator = normalizedLevel === 'skills-accelerator';
-
-  // Genie Accelerator track sections. Bound to seed rows by sectionTag only.
-  // (These ids are added to the genie-accelerator sectionIds; the guard below is a
-  // defensive belt-and-braces so they never leak into any other level.)
-  const GENIE_TRACK_SECTION_IDS = new Set([
-    'semantic-layer', 'genie-agent', 'genie-ontology', 'genie-activate',
-  ]);
-
-  let filtered = WORKFLOW_SECTIONS
-    .filter(section => sectionIds.includes(section.id))
-    .map(section => {
-      // The Genie Accelerator track only exists for the genie-accelerator level.
-      if (GENIE_TRACK_SECTION_IDS.has(section.id) && !isGenie) {
-        return { ...section, steps: [] };
-      }
-      // define-usecase: Skills Accelerator drops the PRD step (3) from foundation.
-      // (use_case_selection is no longer a numbered step; it was retired as a
-      // pre-journey intent beat, so there is nothing genie-specific to strip here.)
-      if (section.id === 'define-usecase' && isSkillsAccelerator) {
-        return { ...section, steps: section.steps.filter(step => step.number !== 3) };
-      }
-      // Genie Accelerator: lakehouse section shows only steps 22, 11, 14, 23
-      if (section.id === 'lakehouse' && isGenie) {
-        return {
-          ...section,
-          steps: section.steps.filter(step => [22, 11, 14, 23].includes(step.number))
-        };
-      }
-      // Genie Accelerator: the new track (semantic-layer → genie-agent → genie-ontology
-      // → genie-activate) REPLACES the legacy AI/BI beats. Empty steps drop this section.
-      if (section.id === 'data-intelligence' && isGenie) {
-        return { ...section, steps: [] };   // was: filter to [15, 17, 24, 25]
-      }
-      // Non-genie paths: always hide step 22 and conditionally hide step 9
-      if (section.id === 'lakehouse' && !isGenie) {
-        let steps = section.steps.filter(step => step.number !== 22);
-        if (!chapterVisibility.has('ch2') || direction === 'reverse') {
-          steps = steps.filter(step => step.number !== 9);
-        }
-        return { ...section, steps };
-      }
-      // Activation section: only visible in reverse direction
-      if (section.id === 'activation' && direction !== 'reverse') {
-        return { ...section, steps: [] };
-      }
-      // reverse-lakebase: only Plan + Create synced tables (steps 32-33)
-      // reverse-app: show all activation steps (32-37)
-      if (section.id === 'activation' && normalizedLevel === 'reverse-lakebase') {
-        return {
-          ...section,
-          steps: section.steps.filter(step => [32, 33].includes(step.number)),
-        };
-      }
-      // Databricks App and Lakebase sections: hidden in reverse direction
-      // (Activation steps replace their functionality with Synced Tables + analytics app)
-      if ((section.id === 'databricks-app' || section.id === 'lakebase') && direction === 'reverse') {
-        return { ...section, steps: [] };
-      }
-      // Exclude step 19 (Wire UI to Agent) when there is no UI being built (ch1 not in path)
-      // or when in reverse direction (Reverse ETL flows build analytics apps, not agent-wired UIs)
-      if (section.id === 'data-intelligence' && (!chapterVisibility.has('ch1') || direction === 'reverse')) {
-        let steps = section.steps.filter(step => step.number !== 19);
-        if (direction === 'reverse') {
-          // For reverse-lakebase, also remove Build Agent (no app to wire it to)
-          if (normalizedLevel === 'reverse-lakebase') {
-            steps = steps.filter(step => step.number !== 18);
-          }
-          // In reverse ETL, Genie Space (17) must precede AI/BI Dashboard (16)
-          // because the dashboard queries Metric Views created by the semantic layer
-          const i16 = steps.findIndex(s => s.number === 16);
-          const i17 = steps.findIndex(s => s.number === 17);
-          if (i16 !== -1 && i17 !== -1 && i16 < i17) {
-            [steps[i16], steps[i17]] = [steps[i17], steps[i16]];
-          }
-        }
-        return { ...section, steps };
-      }
-      return section;
-    });
-
-  filtered = filtered.filter(section => section.steps.length > 0);
-
-  if (disabledSectionTags.size > 0) {
-    filtered = filtered
-      .map(section => ({
-        ...section,
-        steps: section.steps.filter(s => !s.sectionTag || !disabledSectionTags.has(s.sectionTag))
-      }))
-      .filter(section => section.steps.length > 0);
-  }
-
-  if (direction === 'reverse') {
-    filtered.sort((a, b) => {
-      const ai = REVERSE_SECTION_ORDER.indexOf(a.id);
-      const bi = REVERSE_SECTION_ORDER.indexOf(b.id);
-      return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi);
-    });
-  }
-
-  // Guarantee: iterate-enhance and cleanup are always the last two sections
-  filtered.sort((a, b) => {
-    const tailOrder: Record<string, number> = { 'iterate-enhance': 998, 'cleanup': 999 };
-    const aT = tailOrder[a.id] ?? 0;
-    const bT = tailOrder[b.id] ?? 0;
-    return aT - bT;
-  });
-
-  return filtered;
-}
-
 // Phase 3 T3c: the GET /api/track/{track}/outline endpoint is the ORDER authority
 // for the read path (its per-step status becomes authoritative in a later task).
 //
 // This helper projects the engine's flat, ordered sectionTag list onto the
-// sidebar/step surfaces WITHOUT calling getFilteredSections: each step's chrome +
-// object comes from the global ALL_STEPS registry, and each tag's PARENT SECTION
+// sidebar/step surfaces WITHOUT re-deriving the order client-side: each step's
+// chrome + object comes from the global ALL_STEPS registry, and each tag's PARENT SECTION
 // is resolved from the track's OWN `sectionIds` (WORKSHOP_LEVELS[level] + any climb
 // `overrides`). Resolving the section via the track's sectionIds — not a global
 // scan — disambiguates the tags shared across sections: the activation steps 32-37
@@ -912,7 +786,7 @@ export function getFilteredSections(
 //
 // When the outline hasn't resolved (null/empty — unresolved or errored fetch) it
 // returns an EMPTY list; the CALLER renders a loading skeleton and never blanks the
-// sidebar or silently re-composes via getFilteredSections (guardrail #3). The
+// sidebar or silently re-derives the order client-side (guardrail #3). The
 // former reverse/interleaving/coverage fallbacks are gone: the endpoint is already
 // ordered for the PERSISTED direction/variant (refetch-after-persist keeps it
 // fresh), so its order is adopted as-is; section contiguity is asserted by the
@@ -1037,16 +911,6 @@ export function getLevelUIOverrides(level: WorkshopLevel): LevelUIOverrides {
 
 export const APP_CHAIN: WorkshopLevel[] = ['app-only', 'app-database', 'lakehouse', 'lakehouse-di'];
 const LAKEHOUSE_CHAIN: WorkshopLevel[] = ['lakehouse', 'lakehouse-di'];
-
-// Reverse ETL section ordering
-export const REVERSE_SECTION_ORDER = [
-  'define-usecase',
-  'lakehouse',
-  'data-intelligence',
-  'activation',
-  'iterate-enhance',
-  'cleanup',
-];
 
 const REVERSE_ANALYTICS_CHAIN: WorkshopLevel[] = ['reverse-lakehouse', 'reverse-lakehouse-di', 'reverse-lakebase', 'reverse-app'];
 export { REVERSE_ANALYTICS_CHAIN };
