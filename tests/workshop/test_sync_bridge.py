@@ -119,17 +119,22 @@ def _usecase_block() -> dict:
 
 
 def test_complete_step_writes_legacy_progress_from_manifest_order(session_store):
-    _, saves = session_store
+    store, saves = session_store
     positions = _positions()
+    # The use case is resolved pre-journey (Option A), so the walk can proceed
+    # past project_setup to prd_generation (which gates on use_case_selection).
+    store[SESSION_ID]["completed_gates"] = ["use_case_selection"]
 
-    # project_setup is the first step (no prerequisite gate) — completing it via
-    # MCP must record legacy step 1 done and advance current_step to the next.
+    # project_setup is the first numbered step (no prerequisite gate) — completing
+    # it via MCP must record legacy step 1 done and advance current_step to prd.
     completed = mcp_server.vibe_complete_step(SESSION_ID, "project_setup", "env configured")
 
     assert not isinstance(completed, dict), completed
     save_fields = saves[-1][1]
+    # use_case_selection is not a numbered step, so it never maps to a legacy
+    # position (completed_steps counts only numbered steps).
     assert save_fields["completed_steps"] == [positions["project_setup"]]
-    assert save_fields["current_step"] == positions["use_case_selection"]
+    assert save_fields["current_step"] == positions["prd_generation"]
 
 
 # --- D11 §6 — EXIT-GATE PROOF: legacy reader surfaces MCP-driven progress -----
@@ -138,6 +143,7 @@ def test_complete_step_writes_legacy_progress_from_manifest_order(session_store)
 def test_legacy_reader_reflects_mcp_driven_progress(session_store):
     store, _ = session_store
     positions = _positions()
+    store[SESSION_ID]["completed_gates"] = ["use_case_selection"]
 
     mcp_server.vibe_complete_step(SESSION_ID, "project_setup", "env configured")
 
@@ -147,7 +153,7 @@ def test_legacy_reader_reflects_mcp_driven_progress(session_store):
     assert default_session is not None
     assert default_session["session_id"] == SESSION_ID
     assert default_session["completed_steps"] == [positions["project_setup"]]
-    assert default_session["current_step"] == positions["use_case_selection"]
+    assert default_session["current_step"] == positions["prd_generation"]
 
 
 # --- D11 §4.3 — idempotent replay: no duplicates, no backward regression ------
@@ -156,12 +162,13 @@ def test_legacy_reader_reflects_mcp_driven_progress(session_store):
 def test_idempotent_replay_does_not_duplicate_or_regress(session_store):
     store, saves = session_store
     positions = _positions()
+    store[SESSION_ID]["completed_gates"] = ["use_case_selection"]
 
     first_result = mcp_server.vibe_complete_step(SESSION_ID, "project_setup", "env configured")
     assert not isinstance(first_result, dict), first_result
     first = saves[-1][1]
     assert first["completed_steps"] == [positions["project_setup"]]
-    assert first["current_step"] == positions["use_case_selection"]
+    assert first["current_step"] == positions["prd_generation"]
 
     # Replaying the SAME completion must (a) genuinely run to a successful save
     # again — not short-circuit or error into a re-read of the FIRST save — and
@@ -186,30 +193,35 @@ def test_idempotent_replay_does_not_duplicate_or_regress(session_store):
 # --- No regression — captured_outputs / completed_gates preserved by same save-
 
 
-def test_existing_engine_writes_preserved_alongside_legacy_fields(session_store):
+def test_pre_journey_lock_save_carries_engine_writes_and_legacy_fields(session_store):
+    """Option A: the pre-journey lock (vibe_set_parameters) writes the engine state
+    (use_case_brief + the use_case_selection gate) AND the legacy progress fields in
+    the SAME save. No numbered step is done yet, so completed_steps is empty and
+    current_step points at the first numbered step (project_setup)."""
     store, saves = session_store
     positions = _positions()
-    # project_setup is the prerequisite gate for use_case_selection.
-    store[SESSION_ID]["completed_gates"] = ["project_setup"]
 
-    # Confirm the certified default so the blocking gate passes.
-    block = _usecase_block()
-    mcp_server.vibe_submit_answer(SESSION_ID, block["id"], block["recommended"])
-
-    brief = '{"industry":"retail","use_case":"demand_forecasting","source":"curated"}'
-    completed = mcp_server.vibe_complete_step(SESSION_ID, "use_case_selection", brief)
-    assert not isinstance(completed, dict), completed
+    result = mcp_server.vibe_set_parameters(
+        SESSION_ID,
+        {
+            "industry": "retail",
+            "use_case": "demand_forecasting",
+            "use_case_label": "Demand Forecasting",
+            "use_case_source": "curated",
+        },
+    )
+    assert result.use_case_resolved is True
 
     save_fields = saves[-1][1]
-    # Existing engine-state writes are preserved by the SAME save call...
-    assert save_fields["captured_outputs"]["use_case_brief"] == brief
+    # Engine-state writes land in the SAME save...
+    import json
+
+    assert json.loads(save_fields["captured_outputs"]["use_case_brief"])["use_case"] == "demand_forecasting"
     assert "use_case_selection" in save_fields["completed_gates"]
-    # ...and the legacy progress fields are added alongside them.
-    assert save_fields["completed_steps"] == [
-        positions["project_setup"],
-        positions["use_case_selection"],
-    ]
-    assert save_fields["current_step"] == positions["prd_generation"]
+    # ...alongside the legacy progress fields. use_case_selection is not a numbered
+    # step, so it never appears in completed_steps; project_setup is next.
+    assert save_fields["completed_steps"] == []
+    assert save_fields["current_step"] == positions["project_setup"]
 
 
 # --- Guard — a locked use case in session_parameters survives complete_step ---
@@ -226,9 +238,10 @@ def test_locked_use_case_in_session_parameters_survives_complete_step(session_st
     """
 
     store, _ = session_store
-    store[SESSION_ID]["completed_gates"] = ["project_setup"]
-    # A fully-locked CUSTOM use case (this is the recommend-and-proceed unblock
-    # for use_case_selection per T4 / D11 §3.5 — no 'use_certified' answer).
+    # Use case already resolved pre-journey; a locked CUSTOM use case sits in
+    # session_parameters. Completing a NUMBERED step (project_setup) must not
+    # clobber it — vibe_complete_step's save omits session_parameters.
+    store[SESSION_ID]["completed_gates"] = ["use_case_selection"]
     locked_uc = {
         "industry": "retail",
         "use_case": "curbside_eta",
@@ -240,8 +253,7 @@ def test_locked_use_case_in_session_parameters_survives_complete_step(session_st
     }
     store[SESSION_ID]["session_parameters"] = dict(locked_uc)
 
-    brief = '{"industry":"retail","use_case":"curbside_eta","source":"custom"}'
-    completed = mcp_server.vibe_complete_step(SESSION_ID, "use_case_selection", brief)
+    completed = mcp_server.vibe_complete_step(SESSION_ID, "project_setup", "env configured")
     assert not isinstance(completed, dict), completed
 
     # The locked UC is still intact, unchanged, after completing the step.

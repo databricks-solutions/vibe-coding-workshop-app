@@ -1419,8 +1419,16 @@ def vibe_submit_answer(
             interaction_id=interaction_id,
         )  # type: ignore[return-value]
     section_tag, slot, interaction = resolved
+    # Which step's interactions are answerable right now. The engine's current step
+    # is always eligible; while the use case is unresolved the pre-journey intent
+    # beat (Option A) is ALSO eligible, so its use_case_selection confirm/comprehension
+    # interactions stay answerable even though the beat is not a manifest step
+    # (the lock via vibe_set_parameters is what resolves the gate).
     current = engine.next_step(DEFAULT_TRACK, state)
-    if isinstance(current, engine.Done) or current.sectionTag != section_tag:
+    answerable = {None if isinstance(current, engine.Done) else current.sectionTag}
+    if _needs_use_case(state):
+        answerable.add(_INTENT_BEAT_STEP.sectionTag)
+    if section_tag not in answerable:
         return _error_result(
             "UNKNOWN_INTERACTION",
             f"Interaction {interaction_id} is not on the current workshop step.",

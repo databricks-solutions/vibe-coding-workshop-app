@@ -63,12 +63,12 @@ def test_start_track_name_includes_use_case_when_known(monkeypatch):
 # --- the name is refined once the use case locks -----------------------------
 
 
-def test_complete_use_case_selection_refines_session_name(monkeypatch):
+def test_locking_use_case_refines_session_name(monkeypatch):
     store = {
         SESSION_ID: {
             "session_id": SESSION_ID,
             "created_by": None,
-            "completed_gates": ["project_setup"],
+            "completed_gates": [],
             "captured_outputs": {},
             "session_parameters": {},
         }
@@ -87,11 +87,9 @@ def test_complete_use_case_selection_refines_session_name(monkeypatch):
     monkeypatch.setattr(mcp_server, "load_session", load_session)
     monkeypatch.setattr(mcp_server, "save_session", save_session)
     monkeypatch.setattr(mcp_server, "is_lakebase_configured", lambda: True)
-    # The decision marker is only persisted when the interaction record lands
-    # (vibe_submit_answer gates on ``recorded``); offline that write no-ops, so
-    # stub it truthy the same way the lock/produce suite does.
-    monkeypatch.setattr(mcp_server, "append_session_interaction", lambda **k: True, raising=False)
 
+    # Option A: the pre-journey lock (vibe_set_parameters) resolves the use case
+    # AND refines the auto-name \u2014 replacing the retired complete_step name-refine.
     mcp_server.vibe_set_parameters(
         SESSION_ID,
         {
@@ -101,13 +99,8 @@ def test_complete_use_case_selection_refines_session_name(monkeypatch):
             "use_case_source": "curated",
         },
     )
-    block = _usecase_block()
-    mcp_server.vibe_submit_answer(SESSION_ID, block["id"], block["recommended"])
 
-    completed = mcp_server.vibe_complete_step(SESSION_ID, "use_case_selection", "brief")
-
-    assert not isinstance(completed, dict), completed
-    # The complete-step save carried the refined, use-case-aware name.
+    # The lock save carried the refined, use-case-aware name.
     named = [s.get("session_name") for s in saves if s.get("session_name")]
     assert "Genie Code \u2014 Demand Forecasting" in named
 

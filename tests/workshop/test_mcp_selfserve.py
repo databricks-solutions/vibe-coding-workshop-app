@@ -46,5 +46,7 @@ def test_orientation_free_client_reaches_step_one_with_prompts_and_resources(mon
     assert "vibe_start_track" in _render_prompt("Start the Genie Accelerator")
     monkeypatch.setattr(mcp_server, "_load_session_for_request", lambda *_args, **_kwargs: ({}, "test"))
     payload = mcp_server.vibe_get_step("test-session")
-    assert payload.sectionTag == "project_setup"
+    # Option A: a fresh client lands on the pre-journey use-case beat (before the
+    # first numbered step), so it is asked to pick a use case up front.
+    assert payload.sectionTag == "use_case_selection"
     assert payload.prompt

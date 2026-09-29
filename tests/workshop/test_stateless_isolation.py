@@ -111,43 +111,41 @@ def test_two_sessions_driven_interleaved_never_share_state(store):
     assert by_session[SESSION_B]["was_default"] is True
     assert by_session[SESSION_A]["answer"] != by_session[SESSION_B]["answer"]
 
-    # (b) Interleave the walk. The genie define-usecase order is now
-    # project_setup -> use_case_selection -> prd_generation (D11 §3.6), so A walks
-    # three gates while B stops after the shared first step.
-    mcp_server.vibe_complete_step(SESSION_A, "project_setup", "a-setup")
-    mcp_server.vibe_complete_step(SESSION_B, "project_setup", "b-setup")
-    # use_case_selection is a blocking confirm (D11 §3.4/T3): confirm the
-    # recommended selection before the step can complete.
-    mcp_server.vibe_submit_answer(
-        SESSION_A, "use_case_selection.usecase_confirmation", "use_certified"
+    # (b) Interleave the walk. Under Option A the use case is resolved PRE-JOURNEY
+    # (before the first numbered step): A locks its use case, then walks
+    # project_setup -> prd_generation; B does nothing and stays on the beat.
+    mcp_server.vibe_set_parameters(
+        SESSION_A,
+        {"industry": "retail", "use_case": "demand_forecasting",
+         "use_case_label": "Demand Forecasting", "use_case_source": "curated"},
     )
-    mcp_server.vibe_complete_step(SESSION_A, "use_case_selection", "A-BRIEF")
+    mcp_server.vibe_complete_step(SESSION_A, "project_setup", "a-setup")
     mcp_server.vibe_complete_step(SESSION_A, "prd_generation", "A-PRD")
 
-    # B's ledger is untouched by A's later gates, and A's captured output has not
-    # leaked into B.
+    # B's ledger is untouched by A's gates, and A's captured output has not leaked.
+    # The pre-journey lock records use_case_selection FIRST, then the numbered walk.
     assert data[SESSION_A]["completed_gates"] == [
-        "project_setup", "use_case_selection", "prd_generation",
+        "use_case_selection", "project_setup", "prd_generation",
     ]
-    assert data[SESSION_B]["completed_gates"] == ["project_setup"]
+    assert data[SESSION_B]["completed_gates"] == []
     assert data[SESSION_B]["captured_outputs"] == {}
 
-    # The walk position itself diverges: A is past prd_generation (and, with the
-    # lakehouse chapter off by default, lands on the first semantic-layer step),
-    # B is still on the newly inserted use_case_selection step.
+    # The walk position diverges: A is past prd_generation (lakehouse off by
+    # default -> first semantic-layer step); B is still on the pre-journey beat.
     a_next = mcp_server.vibe_next_step(SESSION_A)
     b_next = mcp_server.vibe_next_step(SESSION_B)
     assert a_next.root.sectionTag == "semlayer_locate"
     assert b_next.root.sectionTag == "use_case_selection"
     assert a_next.root.sectionTag != b_next.root.sectionTag
 
-    # (c) Now B walks its own use_case_selection + prd_generation with DIFFERENT
-    # captured outputs. The two sessions' outputs must be distinct — not a
-    # shared/overwritten value.
-    mcp_server.vibe_submit_answer(
-        SESSION_B, "use_case_selection.usecase_confirmation", "use_certified"
+    # (c) Now B walks its own use case + prd_generation with DIFFERENT captured
+    # outputs. The two sessions' outputs must be distinct — not shared/overwritten.
+    mcp_server.vibe_set_parameters(
+        SESSION_B,
+        {"industry": "retail", "use_case": "assortment",
+         "use_case_label": "Assortment", "use_case_source": "curated"},
     )
-    mcp_server.vibe_complete_step(SESSION_B, "use_case_selection", "B-BRIEF")
+    mcp_server.vibe_complete_step(SESSION_B, "project_setup", "b-setup")
     mcp_server.vibe_complete_step(SESSION_B, "prd_generation", "B-PRD")
     assert data[SESSION_A]["captured_outputs"]["prd_document"] == "A-PRD"
     assert data[SESSION_B]["captured_outputs"]["prd_document"] == "B-PRD"
@@ -157,10 +155,10 @@ def test_two_sessions_driven_interleaved_never_share_state(store):
 def test_completing_one_session_does_not_advance_the_other(store):
     data, _ = store
 
-    # Fully load only session A's ledger through prd_generation (including the
-    # new use_case_selection gate, D11 §3.6); B stays empty.
+    # Fully load only session A's ledger: the use case is resolved pre-journey and
+    # A has walked project_setup -> prd_generation; B stays empty.
     data[SESSION_A]["completed_gates"] = [
-        "project_setup", "use_case_selection", "prd_generation",
+        "use_case_selection", "project_setup", "prd_generation",
     ]
 
     a_next = mcp_server.vibe_next_step(SESSION_A)
@@ -168,8 +166,8 @@ def test_completing_one_session_does_not_advance_the_other(store):
 
     # Lakehouse is opt-in (default OFF), so A's walk skips genie_silver_metadata.
     assert a_next.root.sectionTag == "semlayer_locate"
-    # B must still be at the very first step — A's gates never bled across.
-    assert b_next.root.sectionTag == "project_setup"
+    # B must still be at the pre-journey use-case beat — A's gates never bled across.
+    assert b_next.root.sectionTag == "use_case_selection"
 
 
 # ---------------------------------------------------------------------------
@@ -180,34 +178,36 @@ def test_next_step_reads_gate_ledger_fresh_between_requests(store):
     data, _ = store
 
     first = mcp_server.vibe_next_step(SESSION_A)
-    assert first.root.sectionTag == "project_setup"
+    # Fresh session -> the pre-journey use-case beat (Option A), before project_setup.
+    assert first.root.sectionTag == "use_case_selection"
 
     # A concurrent writer (the web UI, or another request for the same session)
-    # persists a completed gate BETWEEN the two tool calls. A stateless server
-    # must observe it on the very next request; an in-process cache would not.
-    data[SESSION_A]["completed_gates"] = ["project_setup"]
+    # resolves the use case AND completes project_setup BETWEEN the two tool calls.
+    # A stateless server must observe it on the very next request; a cache would not.
+    data[SESSION_A]["completed_gates"] = ["use_case_selection", "project_setup"]
 
     second = mcp_server.vibe_next_step(SESSION_A)
-    # After project_setup the walk advances to the newly inserted use_case_selection
-    # step (D11 §3.6), not straight to prd_generation.
-    assert second.root.sectionTag == "use_case_selection"
+    # The beat is gone (use case resolved) and project_setup is done, so the walk
+    # advances to prd_generation (gated on use_case_selection).
+    assert second.root.sectionTag == "prd_generation"
     assert second.root.sectionTag != first.root.sectionTag
 
 
 def test_get_step_reflects_externally_written_parameters(store):
     data, _ = store
 
-    # Baseline: current step is project_setup with default parameters.
+    # Baseline: a fresh session lands on the pre-journey use-case beat (Option A).
     baseline = mcp_server.vibe_get_step(SESSION_A)
-    assert baseline.sectionTag == "project_setup"
+    assert baseline.sectionTag == "use_case_selection"
 
-    # A concurrent writer changes session parameters out-of-band.
+    # A concurrent writer changes session parameters out-of-band. The use case is
+    # still not RESOLVED (no use_case_selection gate), so the beat is still current.
     data[SESSION_A]["session_parameters"] = {"industry": "Healthcare", "use_case": "Claims"}
 
     # The next read must resolve against the freshly-persisted parameters — the
     # engine never reuses an in-process SessionState.
     refreshed = mcp_server.vibe_get_step(SESSION_A)
-    assert refreshed.sectionTag == "project_setup"
+    assert refreshed.sectionTag == "use_case_selection"
     # set_parameters likewise merges onto freshly-read state (not a stale copy).
     result = mcp_server.vibe_set_parameters(SESSION_A, {"catalog": "prod"})
     assert result.resolved_params == {
