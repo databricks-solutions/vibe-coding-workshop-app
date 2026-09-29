@@ -177,16 +177,19 @@ def test_valid_track_with_raising_load_session_is_404(client, monkeypatch):
     assert "detail" in resp.json()
 
 
-# --- T1-B5 NUMBER -> GATE BACKFILL parity -------------------------------------
+# --- T1-B5 NUMBER -> GATE BACKFILL parity (T5 PR1: GLOBAL numbers) ------------
 
 
 def test_completed_steps_backfill_marks_done(client, stub_session):
-    tags = _genie_tags(2)
+    # App-origin row: empty gates + GLOBAL ALL_STEPS numbers (NOT dense track
+    # indices). Globals 2/3 are project_setup / prd_generation, which happen to be
+    # the first two genie steps as well.
+    tags = _genie_tags(2)  # [project_setup, prd_generation]
     record = {
         "session_id": "sess-backfill",
         "workshop_level": GENIE_TRACK,
-        "completed_gates": [],  # empty on the wire...
-        "completed_steps": [1, 2],  # ...but legacy indices say steps 1-2 are done
+        "completed_gates": [],  # empty on the wire (the App never writes gates)...
+        "completed_steps": [2, 3],  # ...GLOBAL numbers say those steps are done
         "captured_outputs": {},
         "session_parameters": {},
     }
@@ -268,10 +271,21 @@ def test_mcp_coerce_state_uses_shared_builder():
     assert coerced.session_parameters == expected.session_parameters
 
 
-def test_build_session_state_backfills_gates_from_indices():
-    tags = _genie_tags(3)
-    record = {"completed_steps": [1, 2, 3], "completed_gates": [], "session_parameters": {}}
+def test_build_session_state_backfills_gates_from_global_numbers():
+    # App-origin globals resolve through step_number_to_tag (NOT dense index):
+    # 2/3 -> project_setup/prd_generation; 57/58 -> semlayer_locate/profile — the
+    # genie globals the old ``1 <= n <= len(steps)`` guard silently dropped.
+    record = {
+        "completed_steps": [2, 3, 57, 58],
+        "completed_gates": [],
+        "session_parameters": {},
+    }
 
     state = build_session_state(record, GENIE_TRACK)
 
-    assert state.completed_gates == tags
+    assert state.completed_gates == [
+        "project_setup",
+        "prd_generation",
+        "semlayer_locate",
+        "semlayer_profile",
+    ]
