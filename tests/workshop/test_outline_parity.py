@@ -1,8 +1,8 @@
-"""Phase 3 T2/T3a — engine.outline() vs getFilteredSections() parity harness.
+"""Phase 3 T2/T3a/T4b — engine.outline() vs the FROZEN golden matrix.
 
 Proves the Python engine (``engine.outline`` over ``manifest.outline_order``)
-reproduces the REAL ``getFilteredSections()`` ordered ``sectionTag`` sequence for
-all 14 tracks at every legal flag/axis combo.
+reproduces the frozen ``sectionTag`` reference sequence for all 14 tracks at every
+legal flag/axis combo.
 
 As of Phase 3 T3a the engine composes ALL four axes that were T2 gaps —
 direction=reverse (baked into the four reverse-* tracks; a runtime variant on
@@ -10,12 +10,14 @@ end-to-end), additive-chain climb (a chainContext variant on lakehouse /
 lakehouse-di), and the AI-module + medallion sub-toggles (six default-true
 session flags) — so every enumerated cell is expressible and at parity.
 
-The golden matrix (``fixtures/golden_outline_matrix.json``) is emitted by the
-non-hollow oracle ``scripts/dump_outline_matrix.mjs`` (which runs the real TS
-``getFilteredSections`` offline — never ``generate_manifest.py``/``manifest.json``
-for the TS truth). Each cell carries ``ts`` (the real TS order), ``engine`` (the
-manifest model), ``status`` (parity | gap), and the engine inputs (``flags`` plus
-``direction`` / ``chainContext``) that reproduce its TS order.
+The golden matrix (``fixtures/golden_outline_matrix.json``) is FROZEN. Its ``ts``
+column was captured from the real TS ``getFilteredSections()`` while that function
+was still live (pre-T4b); ``getFilteredSections`` and its node oracle
+(``scripts/dump_outline_matrix.mjs``) were RETIRED in Phase 3 T4b, so the golden is
+no longer regenerable — it is the PERMANENT contract the engine must reproduce.
+Each cell carries ``ts`` (the frozen reference order), ``engine`` (the manifest
+model at capture time), ``status`` (parity | gap), and the engine inputs
+(``flags`` plus ``direction`` / ``chainContext``) that reproduce its order.
 
 Guarantees (D-T2-2 "lock the whole relationship"):
   * Every cell is HARD-asserted parity — a divergence is a real drift finding,
@@ -25,22 +27,19 @@ Guarantees (D-T2-2 "lock the whole relationship"):
     the engine side is not hollow.
   * The committed ``status`` is re-derived and locked, so a regression to a gap
     fails and forces a conscious update.
-  * Re-running the node oracle must reproduce the JSON byte-for-byte.
+  * The LIVE engine must still reproduce the frozen golden, cell-for-cell — a
+    tamper on either the engine side or the frozen golden fails this harness.
 """
 
 import json
 import pathlib
-import subprocess
-import sys
 
 import pytest
 
 from src.backend.workshop import engine, manifest
 
-REPO_ROOT = pathlib.Path(__file__).resolve().parents[2]
 FIX = pathlib.Path(__file__).parent / "fixtures"
 MATRIX_PATH = FIX / "golden_outline_matrix.json"
-ORACLE = "scripts/dump_outline_matrix.mjs"
 
 MATRIX = json.loads(MATRIX_PATH.read_text(encoding="utf-8"))
 CELLS = MATRIX["cells"]
@@ -88,14 +87,14 @@ def _cells_where(**match):
 @pytest.mark.parametrize("track", TRACKS)
 def test_default_forward_parity(track):
     """Each of the 14 tracks: engine.outline() at a fresh session equals the
-    REAL getFilteredSections() default-forward order. HARD assert — any
+    frozen getFilteredSections() default-forward reference order. HARD assert — any
     mismatch is a real engine/TS drift finding."""
     cell = _cells_where(track=track, combo="default")
     assert len(cell) == 1, f"missing single default cell for {track}"
     cell = cell[0]
     live = _engine_tags(track)
     assert live == cell["ts"], (
-        f"DRIFT: engine.outline({track!r}) != getFilteredSections default order\n"
+        f"DRIFT: engine.outline({track!r}) != frozen getFilteredSections default order\n"
         f"  engine: {live}\n  ts    : {cell['ts']}"
     )
     assert cell["engine"] == cell["ts"], f"committed default cell not parity for {track}"
@@ -171,7 +170,7 @@ def test_committed_matrix_matches_live_engine():
 
 # --------------------------------------------------------------------------- #
 # T3a — the four former gap axes are now engine-composed: zero gaps, zero
-# non-expressible cells, and each axis reproduces the REAL getFilteredSections
+# non-expressible cells, and each axis reproduces the frozen getFilteredSections
 # order via engine inputs (flags + direction/chainContext).
 # --------------------------------------------------------------------------- #
 def test_no_gap_cells_remain():
@@ -204,7 +203,7 @@ def test_four_axes_fully_expressible_and_parity():
 def test_direction_reverse_is_composed_for_every_reverse_track():
     """AXIS 1: the four reverse-* tracks bake reverse into their default outline
     (direction input is a no-op), and end-to-end selects a reverse VARIANT. Every
-    direction:reverse cell reproduces the REAL reverse getFilteredSections order."""
+    direction:reverse cell reproduces the frozen reverse getFilteredSections order."""
     direction_cells = _cells_where(axis="direction")
     covered = {c["track"] for c in direction_cells}
     assert covered == {
@@ -230,7 +229,7 @@ def test_direction_reverse_is_composed_for_every_reverse_track():
 def test_climb_reads_chaincontext_variant():
     """AXIS 2: lakehouse / lakehouse-di re-admit the app+lakebase chain when the
     engine reads chainContext='app' (a manifest variant), matching the REAL
-    getCumulativeOverrides-driven getFilteredSections order."""
+    frozen getCumulativeOverrides-driven getFilteredSections order."""
     climb_cells = _cells_where(axis="climb")
     assert {c["track"] for c in climb_cells} == {"lakehouse", "lakehouse-di"}
     for cell in climb_cells:
@@ -321,30 +320,19 @@ def test_matrix_covers_every_legal_combo():
 
 
 # --------------------------------------------------------------------------- #
-# T2-B4 — the oracle is real: re-running the node dump reproduces the golden
-# matrix byte-for-byte (mirrors test_manifest_regeneration_is_byte_identical).
+# T4b — the frozen golden is a real contract, not a vacuous echo: the LIVE
+# engine must reproduce EVERY cell's frozen ``ts`` order exactly. A tamper on the
+# engine side (a changed manifest/outline order) OR on the frozen golden fails
+# here. This replaces the retired node-oracle byte-identity check: the oracle and
+# getFilteredSections are gone (T4b), so the golden is frozen and the engine is
+# validated against it rather than against a regenerated live source.
 # --------------------------------------------------------------------------- #
-def test_oracle_regeneration_is_byte_identical():
-    """Re-run scripts/dump_outline_matrix.mjs and assert the committed JSON is
-    byte-for-byte what the REAL getFilteredSections oracle emits — proving the
-    ts column was not hand-authored. Skips only if node is unavailable offline;
-    the parse/coverage guarantees above still run unconditionally."""
-    before = MATRIX_PATH.read_bytes()
-    try:
-        subprocess.run(
-            ["node", "--experimental-strip-types", ORACLE],
-            cwd=REPO_ROOT,
-            check=True,
-            capture_output=True,
+def test_live_engine_reproduces_frozen_golden_cell_for_cell():
+    for cell in CELLS:
+        if not cell["expressible"]:
+            continue
+        live = _engine_tags_for_cell(cell)
+        assert live == cell["ts"], (
+            f"engine no longer reproduces the FROZEN golden for "
+            f"{cell['track']}/{cell['combo']}:\n  engine: {live}\n  frozen ts: {cell['ts']}"
         )
-    except FileNotFoundError:
-        pytest.skip(
-            "node not available offline; regenerate with: "
-            f"node --experimental-strip-types {ORACLE}"
-        )
-    after = MATRIX_PATH.read_bytes()
-    assert after == before, (
-        "dump_outline_matrix.mjs output differs from the committed "
-        "golden_outline_matrix.json — regenerate and commit it "
-        f"(node --experimental-strip-types {ORACLE})."
-    )

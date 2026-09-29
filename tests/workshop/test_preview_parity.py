@@ -1,40 +1,34 @@
-"""Phase 3 T4a — preview-path vs getFilteredSections parity harness.
+"""Phase 3 T4a/T4b — preview-path (engine order + client filter) vs FROZEN golden.
 
-The /config/test-scenario sandbox no longer calls getFilteredSections for its step
-ORDER. It now fetches engine.outline() from the session-less preview endpoint and
-applies its effectiveDisabledTags as a CLIENT-SIDE filter, exactly as
-orderedSectionsForRead does for the production read path. This suite proves that
-REBUILT path is byte-identical to the OLD getFilteredSections path across every
-engine-expressible sandbox cell, and asserts the ONE thing the rebuild deliberately
-drops — getFilteredSections' client-side reverse on variant-less tracks.
+The /config/test-scenario sandbox derives its step ORDER from engine.outline()
+(fetched from the session-less preview endpoint) and applies its
+effectiveDisabledTags as a CLIENT-SIDE filter, exactly as orderedSectionsForRead
+does for the production read path. This suite proves that path is byte-identical
+to the frozen ``gfs`` reference across every engine-expressible sandbox cell, and
+asserts the ONE thing the design deliberately drops — the retired client-side
+reverse on variant-less tracks.
 
-Non-hollow, both sides LIVE (getFilteredSections still exists in this PR; it is
-retired in T4b):
-  * ``gfs`` is the REAL getFilteredSections output, emitted by the node oracle
-    ``scripts/dump_preview_parity.mjs`` (which runs the real TS offline). Never a
-    hand-authored list.
-  * ``previewTags`` (the manifest engine model in the oracle) is RE-VERIFIED here
-    against the LIVE Python ``engine.outline()`` for every cell, so the engine side
-    is not hollow either.
-  * ``rebuilt`` == ``clientFilter(previewTags, effectiveDisabledTags)`` is asserted
-    == ``gfs`` for every parity cell.
-  * Re-running the node oracle must reproduce the committed JSON byte-for-byte
-    (proving the ts/gfs column was not hand-authored).
+The golden (``fixtures/golden_preview_parity.json``) is FROZEN. Its ``gfs`` /
+``gfsReverse`` columns were captured from the real TS ``getFilteredSections()``
+while that function was still live (pre-T4b); ``getFilteredSections`` and its node
+oracle (``scripts/dump_preview_parity.mjs``) were RETIRED in Phase 3 T4b, so the
+golden is no longer regenerable — it is the PERMANENT reference. The engine side
+stays non-hollow:
+  * ``previewTags`` is RE-VERIFIED against the LIVE Python ``engine.outline()`` for
+    every cell, so the engine side is not trusted from the frozen file.
+  * ``rebuilt`` == ``clientFilter(live engine order, effectiveDisabledTags)`` is
+    asserted == the frozen ``gfs`` for every parity cell (a tamper on either side
+    fails).
 """
 
 import json
 import pathlib
-import subprocess
-
-import pytest
 
 from src.backend.workshop import engine
 
 
-REPO_ROOT = pathlib.Path(__file__).resolve().parents[2]
 FIX = pathlib.Path(__file__).parent / "fixtures"
 GOLDEN_PATH = FIX / "golden_preview_parity.json"
-ORACLE = "scripts/dump_preview_parity.mjs"
 
 GOLDEN = json.loads(GOLDEN_PATH.read_text(encoding="utf-8"))
 PARITY = GOLDEN["parity"]
@@ -73,7 +67,7 @@ def _client_filter(tags, disabled):
 # --------------------------------------------------------------------------- #
 # The core safety net: for EVERY parity cell, the rebuilt preview path
 # (engine order + client-side effectiveDisabledTags filter) is byte-identical to
-# the REAL getFilteredSections output. Non-hollow: previewTags is re-derived from
+# the frozen getFilteredSections output. Non-hollow: previewTags is re-derived from
 # the LIVE engine, then the filter is re-applied here — nothing trusts the oracle's
 # own `rebuilt` blindly.
 # --------------------------------------------------------------------------- #
@@ -91,7 +85,7 @@ def test_every_parity_cell_is_byte_identical_to_getfilteredsections():
         # (2) client-filter the LIVE engine order by the cell's effectiveDisabledTags.
         rebuilt = _client_filter(live, cell["disabledTags"])
         assert rebuilt == cell["rebuilt"], "oracle rebuilt column stale vs live re-filter"
-        # (3) BYTE-IDENTITY: rebuilt == REAL getFilteredSections.
+        # (3) BYTE-IDENTITY: rebuilt == the frozen getFilteredSections reference.
         assert rebuilt == cell["gfs"], (
             f"PARITY BREAK {cell['track']}/{cell['direction']}/{cell['combo']}/{cell['tail']}:\n"
             f"  rebuilt: {rebuilt}\n  gfs    : {cell['gfs']}"
@@ -137,14 +131,14 @@ def test_reverse_cells_only_on_variant_reverse_tracks():
 
 def test_arbitrary_assistant_hide_tags_flow_through_client_filter():
     """GAP A: per-assistant disabled tags map to NO engine flag — the engine KEEPS
-    them and the client filter must drop them exactly as getFilteredSections does."""
+    them and the client filter must drop them exactly as the frozen getFilteredSections reference recorded."""
     cell = next(c for c in PARITY if c["combo"] == "assistant-hides")
     # The arbitrary tags are present in the engine order (not dropped structurally)...
     for tag in cell["extraDisabled"]:
         assert tag in cell["previewTags"], tag
         # ...but gone from the rebuilt output (dropped by the client filter)...
         assert tag not in cell["rebuilt"], tag
-    # ...and rebuilt still equals the REAL getFilteredSections with those tags.
+    # ...and rebuilt still equals the frozen getFilteredSections reference with those tags.
     assert cell["rebuilt"] == cell["gfs"]
 
 
@@ -168,32 +162,7 @@ def test_variant_less_reverse_diverges_documenting_the_retired_branch():
         # getFilteredSections DOES client-reverse — the retired branch — so it
         # genuinely differs from the engine's forward order.
         assert live_reverse != cell["gfsReverse"], (
-            f"expected divergence for {track}: engine forward vs GFS client-reverse"
+            f"expected divergence for {track}: engine forward vs the frozen "
+            "client-reverse reference"
         )
         assert cell["previewReverse"] == cell["previewForward"] != cell["gfsReverse"]
-
-
-# --------------------------------------------------------------------------- #
-# The oracle is real: re-running the node dump reproduces the committed golden
-# byte-for-byte (mirrors test_outline_parity.test_oracle_regeneration_is_byte_identical).
-# --------------------------------------------------------------------------- #
-def test_oracle_regeneration_is_byte_identical():
-    before = GOLDEN_PATH.read_bytes()
-    try:
-        subprocess.run(
-            ["node", "--experimental-strip-types", ORACLE],
-            cwd=REPO_ROOT,
-            check=True,
-            capture_output=True,
-        )
-    except FileNotFoundError:
-        pytest.skip(
-            "node not available offline; regenerate with: "
-            f"node --experimental-strip-types {ORACLE}"
-        )
-    after = GOLDEN_PATH.read_bytes()
-    assert after == before, (
-        "dump_preview_parity.mjs output differs from the committed "
-        "golden_preview_parity.json — regenerate and commit it "
-        f"(node --experimental-strip-types {ORACLE})."
-    )

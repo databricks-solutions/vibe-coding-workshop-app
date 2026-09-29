@@ -1,6 +1,6 @@
 {
-  "generated_by": "node --experimental-strip-types scripts/dump_outline_matrix.mjs",
-  "doc": "engine.outline() vs getFilteredSections() parity matrix. ts=REAL getFilteredSections; engine=manifest.outline_order (re-verified in Python). status=parity when equal else gap. Phase 3 T3a: the engine composes all four axes (direction=reverse, additive-chain climb, AI-module + medallion sub-toggles), so every cell is expressible and MUST be parity; each cell records the engine inputs (flags + direction/chainContext) that reproduce its TS order.",
+  "generated_by": "FROZEN reference — captured from getFilteredSections() via the now-retired scripts/dump_outline_matrix.mjs. That oracle and getFilteredSections were removed in Phase 3 T4b; this matrix is the permanent, non-regenerable reference the live engine must reproduce.",
+  "doc": "engine.outline() vs the FROZEN getFilteredSections() reference matrix. ts=FROZEN getFilteredSections reference; engine=manifest.outline_order at capture (re-verified in Python against the LIVE engine). status=parity when equal else gap. Phase 3 T3a: the engine composes all four axes (direction=reverse, additive-chain climb, AI-module + medallion sub-toggles), so every cell is expressible and MUST be parity; each cell records the engine inputs (flags + direction/chainContext) that reproduce its TS order.",
   "manifest_version": "1",
   "tracks": [
     "app-only",
