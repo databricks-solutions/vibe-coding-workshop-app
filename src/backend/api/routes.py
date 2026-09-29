@@ -5904,6 +5904,73 @@ async def get_track_outline(
     return TrackOutlineResponse(track=resolved, session_id=session_id, outline=outline)
 
 
+# --- Additive preview sibling (Phase 3 T4a) ----------------------------------
+# The /config/test-scenario dev sandbox needs the engine's ordered outline for a
+# track composed from the params the user is *previewing* (direction + AI/medallion
+# + genie sub-toggle flags) WITHOUT creating or touching a session. This POST is a
+# strict SIBLING to GET /track/{track}/outline above: it does NOT overload or change
+# that session-only route. It never loads or persists a session, never touches the
+# database, and never resolves 'auto' — the caller always passes an explicit track.
+# It builds a fresh, EPHEMERAL engine.SessionState from the inline composition
+# inputs (mirroring the exact session_parameters shape the persisted save path
+# writes — top-level `direction` read by engine._inputs_for; nested `flags` read by
+# engine._flags_for) and returns engine.outline verbatim. The arbitrary client-side
+# disabled-tag filtering (per-assistant hides, cleanup/iterate tail sections) stays
+# CLIENT-SIDE in the sandbox exactly as it does in the production read path
+# (orderedSectionsForRead) — it is not an engine concern and is not sent here.
+
+class TrackOutlinePreviewRequest(BaseModel):
+    """Inline composition inputs for the ephemeral (session-less) outline preview.
+
+    ``direction`` selects the reverse variant on variant-having tracks (end-to-end
+    + the four reverse-* tracks bake reverse as their default); it is read by
+    engine._inputs_for. ``flags`` are the AI-module / medallion / genie sub-toggles
+    (ai.*/medallion.* + includeLakehouse/includeGenieOntology) read by
+    engine._flags_for. Both are optional — an absent input yields the track's baked
+    default composition, identical to a fresh session."""
+    model_config = ConfigDict(extra="forbid")
+
+    direction: Optional[Literal["forward", "reverse"]] = Field(
+        None, description="Workflow direction; selects the reverse variant where a track has one"
+    )
+    flags: Optional[Dict[str, bool]] = Field(
+        None, description="Engine composition flags (ai.*/medallion.* + includeLakehouse/includeGenieOntology)"
+    )
+
+
+@router.post("/track/{track}/outline/preview")
+async def preview_track_outline(
+    track: str, request_body: TrackOutlinePreviewRequest
+) -> TrackOutlineResponse:
+    """Return engine.outline for an EPHEMERAL, UNPERSISTED composition (Phase 3 T4a).
+
+    Sibling to GET /track/{track}/outline. Unlike that route this one takes NO
+    session id, loads NO session, and writes NOTHING: it builds a bare
+    engine.SessionState carrying only the inline direction + flags, then returns the
+    same flat engine.outline payload. ``track`` must be an explicit, valid manifest
+    track key (no 'auto' resolution — there is no session to resolve against); any
+    other value is a 404.
+    """
+    from src.backend.workshop import engine
+    from src.backend.workshop.track_resolution import is_track
+
+    if not is_track(track):
+        raise HTTPException(status_code=404, detail=f"Unknown track '{track}'")
+
+    # Mirror the persisted session_parameters shape (routes.py save path): top-level
+    # `direction` (engine._inputs_for) + nested `flags` (engine._flags_for). No DB,
+    # no session-id, no persist — this SessionState lives only for this call.
+    session_parameters: Dict[str, Any] = {}
+    if request_body.direction is not None:
+        session_parameters["direction"] = request_body.direction
+    if request_body.flags is not None:
+        session_parameters["flags"] = request_body.flags
+
+    state = engine.SessionState(session_parameters=session_parameters)
+    outline = [asdict(item) for item in engine.outline(track, state)]
+    return TrackOutlineResponse(track=track, session_id=None, outline=outline)
+
+
 @router.delete("/session/{session_id}")
 async def delete_session_endpoint(session_id: str):
     """Delete a session from Lakebase"""

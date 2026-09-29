@@ -31,8 +31,8 @@ import {
   ALL_STEPS,
   getDisabledTagsForAIModules,
   getDisabledTagsForMedallionLayers,
-  getFilteredSections,
   normalizeMedallionLayers,
+  orderedSectionsForRead,
   type AIAgentModule,
   type MedallionLayer,
   type WorkflowDirection,
@@ -49,6 +49,28 @@ import { SetUpProjectStep } from '../SetUpProjectStep';
 // here automatically; there is no LLM prompt to generate.
 const NON_LLM_STEPS = new Set<number>([1, 2]);
 const SET_UP_PROJECT_STEP_NUMBER = 2;
+
+// B1 (Phase 3 T4a) — SANDBOX-ONLY reverse-toggle constraint. `reverse` is a
+// DISTINCT engine ordering only for tracks that HAVE a reverse variant/baseline:
+// end-to-end (a {direction:reverse} manifest variant) and the four reverse-*
+// tracks (reverse baked in as their default). On any other (variant-less) track
+// the engine returns the FORWARD order, so a reverse toggle there is a no-op —
+// and Reverse ETL is conceptually end-to-end anyway. We therefore only offer /
+// honor the reverse toggle for these tracks in the sandbox.
+//
+// This is DELIBERATELY sandbox-only. It does NOT touch the real app's toggle:
+// App.tsx / PathAndArchitecture `directionLocked` is a PROGRESS lock, not a level
+// gate, and the real app's no-op reverse on variant-less levels is a separate
+// concern (out of scope for T4a). The justification here is on its own merits —
+// reverse is meaningless (identical to forward) on a variant-less track — NOT that
+// the app gates it (it does not).
+const VARIANT_REVERSE_TRACKS = new Set<WorkshopLevel>([
+  'end-to-end',
+  'reverse-lakehouse',
+  'reverse-lakehouse-di',
+  'reverse-lakebase',
+  'reverse-app',
+]);
 
 interface RunState {
   status: 'idle' | 'running' | 'error' | 'cancelled' | 'done';
@@ -167,11 +189,95 @@ export function TestScenarioConfig({ onToast }: TestScenarioConfigProps) {
     assistantDisabledTags,
   ]);
 
-  // Visible step list, derived from architecture choices.
-  const visibleSections = useMemo(
-    () => getFilteredSections(workshopLevel, effectiveDisabledTags, undefined, direction),
-    [workshopLevel, effectiveDisabledTags, direction],
+  // B1 guard (sandbox-only): reverse is only expressible on variant-having tracks.
+  const levelSupportsReverse = VARIANT_REVERSE_TRACKS.has(workshopLevel);
+
+  // Reject a reverse selection on a variant-less track (it would be a no-op the
+  // engine ignores). PathAndArchitecture always renders both toggles; here we
+  // simply don't honor reverse where it has no distinct ordering.
+  const handleDirectionChange = useCallback(
+    (next: WorkflowDirection) => {
+      if (next === 'reverse' && !VARIANT_REVERSE_TRACKS.has(workshopLevel)) return;
+      setDirection(next);
+    },
+    [workshopLevel],
   );
+
+  // If the user switches to a variant-less track while reverse is active, coerce
+  // back to forward so the previewed direction is always one the engine expresses.
+  useEffect(() => {
+    if (direction === 'reverse' && !VARIANT_REVERSE_TRACKS.has(workshopLevel)) {
+      setDirection('forward');
+    }
+  }, [workshopLevel, direction]);
+
+  // The direction actually SENT to the engine — never `reverse` on a variant-less
+  // track (the coercion effect above keeps `direction` in sync, but this is the
+  // belt-and-braces value used to compose the fetch).
+  const effectiveDirection: WorkflowDirection = levelSupportsReverse ? direction : 'forward';
+
+  // Complete engine `flags` for the preview endpoint, mirroring App.engineFlagsFrom
+  // (Phase 3 T3b-2b): a module/layer present in the chip set => its flag is ON. The
+  // sandbox has no Genie Accelerator opt-in toggles, and it never adds the Genie
+  // Lakehouse/Ontology tags to effectiveDisabledTags, so it always previewed the
+  // FULL Genie composition — we keep includeLakehouse / includeGenieOntology ON to
+  // preserve that exact behavior (the client-side filter below is the single drop
+  // mechanism for everything the sandbox actually hides).
+  const previewFlags = useMemo<Record<string, boolean>>(
+    () => ({
+      includeLakehouse: true,
+      includeGenieOntology: true,
+      'ai.genie': aiAgentsModules.has('genie'),
+      'ai.agent': aiAgentsModules.has('agent'),
+      'ai.dashboard': aiAgentsModules.has('dashboard'),
+      'medallion.bronze': medallionLayers.has('bronze'),
+      'medallion.silver': medallionLayers.has('silver'),
+      'medallion.gold': medallionLayers.has('gold'),
+    }),
+    [aiAgentsModules, medallionLayers],
+  );
+
+  // Engine-authoritative ordered outline tags for the CURRENT preview composition
+  // (Phase 3 T4a). Fetched from the additive, session-less /outline/preview endpoint
+  // — no session, no writes — mirroring the production read path (App.fetchOutline).
+  // `null` means "not resolved yet"; the render shows a skeleton and never blanks.
+  const [previewTags, setPreviewTags] = useState<string[] | null>(null);
+
+  // Monotonic sequence guard: the LATEST-issued preview request wins, so a rapid
+  // level/direction/chip change can't let a slow earlier response clobber a newer
+  // one (mirrors App.fetchOutline's outlineReqSeq guard at App.tsx:160-174). Errors
+  // keep the prior tags (log, never blank).
+  const previewReqSeq = useRef(0);
+  useEffect(() => {
+    const seq = ++previewReqSeq.current;
+    apiClient
+      .previewTrackOutline(workshopLevel, { direction: effectiveDirection, flags: previewFlags })
+      .then((resp) => {
+        if (seq !== previewReqSeq.current) return; // superseded by a newer request
+        setPreviewTags(resp.outline.map((item) => item.sectionTag));
+      })
+      .catch((err) => {
+        if (seq !== previewReqSeq.current) return;
+        console.error('Error fetching preview outline:', err);
+        // Keep the prior tags; never blank the step list on a transient error.
+      });
+  }, [workshopLevel, effectiveDirection, previewFlags]);
+
+  // Visible step list = the engine's ordered outline (ORDER + structural variant),
+  // with the sandbox's effectiveDisabledTags applied as the CLIENT-SIDE filter —
+  // exactly as orderedSectionsForRead does for the production read path
+  // (workflowSections.ts:954-955). The engine owns order + reverse/flag drops; the
+  // client filter owns the arbitrary tags (per-assistant hides + cleanup/iterate
+  // tail sections) that never map to an engine flag.
+  const visibleSections = useMemo(
+    () => orderedSectionsForRead(previewTags, effectiveDisabledTags, workshopLevel),
+    [previewTags, effectiveDisabledTags, workshopLevel],
+  );
+
+  // Distinguish "still loading the first outline" from "resolved but empty" so the
+  // render shows a skeleton instead of the empty-state copy while the fetch is in
+  // flight (never blank/crash).
+  const outlineResolved = previewTags != null;
 
   // Flatten visible steps, in section order, for Run All. Non-LLM steps
   // (intent + Set Up Project) are excluded — they're rendered inline above /
@@ -562,7 +668,7 @@ export function TestScenarioConfig({ onToast }: TestScenarioConfigProps) {
           hasUseCaseSelected={intentDefined}
           direction={direction}
           directionLocked={false}
-          onDirectionChange={setDirection}
+          onDirectionChange={handleDirectionChange}
           aiAgentsModules={aiAgentsModules}
           onAIModulesChange={setAiAgentsModules}
           medallionLayers={medallionLayers}
@@ -696,7 +802,12 @@ export function TestScenarioConfig({ onToast }: TestScenarioConfigProps) {
 
       {/* Generated prompt cards */}
       <div className="space-y-3 pb-12">
-        {displaySteps.length === 0 ? (
+        {!outlineResolved ? (
+          <div className="rounded-lg border border-dashed border-border bg-card/40 px-6 py-12 text-center text-muted-foreground">
+            <Loader2 className="w-5 h-5 animate-spin mx-auto mb-2 text-primary" />
+            Loading step list…
+          </div>
+        ) : displaySteps.length === 0 ? (
           <div className="rounded-lg border border-dashed border-border bg-card/40 px-6 py-12 text-center text-muted-foreground">
             Pick an architecture above to see the step list.
           </div>
