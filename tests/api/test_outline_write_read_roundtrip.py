@@ -195,3 +195,67 @@ def test_subtoggle_medallion_gold_off_roundtrip(client):
     assert {"gold_layer_design", "gold_layer_pipeline"} <= set(default)
     assert {"gold_layer_design", "gold_layer_pipeline"}.isdisjoint(toggled)
     assert set(toggled) < set(default)
+
+
+# --- (c) DIRECTION:REVERSE round-trip ----------------------------------------
+# T3c makes the endpoint the ORDER authority and removes the client-side reverse
+# fallback, so a persisted direction:reverse MUST recompose the outline server-side
+# (the SPA now refetches after persisting direction). These prove the reverse order
+# survives the write->read loop through the REAL endpoint.
+
+
+def _reverse_tags(track: str) -> list[str]:
+    """Non-hollow reverse baseline: the LIVE engine's direction=reverse outline."""
+    state = engine.SessionState(session_parameters={"direction": "reverse"})
+    return [asdict(i)["sectionTag"] for i in engine.outline(track, state)]
+
+
+def test_direction_reverse_roundtrip_recomposes_forward_baseline_track(client):
+    """Forward-viewed-reverse: persist ``direction='reverse'`` for ``end-to-end``
+    (a forward-baseline track whose reverse order is composed ONLY from the
+    persisted direction) via the write path, reload, and GET /outline. The endpoint
+    must return the reverse VARIANT — the exact case the removed client fallback #2
+    used to guard, now closed by refetch-after-persist."""
+    # 1) WRITE: the SPA sends direction from live state (handleDirectionChange).
+    resp = client.post(
+        "/api/session/update-metadata",
+        json={"session_id": "s1", "direction": "reverse"},
+    )
+    assert resp.status_code == 200, resp.text
+
+    patch = client.harness.last_patch
+    assert patch.get("direction") == "reverse"  # write side (fail-before: dropped)
+
+    # 2) READ: reload with that persisted patch, then compose through the endpoint.
+    client.harness.seed_reload("end-to-end", patch)
+    got = _outline_tags(client, "end-to-end")
+
+    # Non-hollow: the endpoint reproduces the LIVE engine's reverse variant exactly,
+    # and it genuinely differs from the forward default.
+    assert got == _reverse_tags("end-to-end")
+    assert got != _default_tags("end-to-end")
+
+    # Concrete, human-checkable delta: the reverse-ETL activation arc (32-37) is
+    # admitted only in reverse; the forward-only app/lakebase-wiring steps drop.
+    forward = _default_tags("end-to-end")
+    assert "activation_table_design" in got and "activation_table_design" not in forward
+    assert "deploy_databricks_app" in forward and "deploy_databricks_app" not in got
+    # Activation tags form a single contiguous block at the tail (pre-refinement),
+    # which is what lets orderedSectionsForRead group them without the dropped
+    # interleaving guard.
+    activation = [t for t in got if t.startswith("activation_")]
+    first = got.index(activation[0])
+    assert got[first : first + len(activation)] == activation
+
+
+@pytest.mark.parametrize(
+    "track",
+    ["reverse-lakehouse", "reverse-lakehouse-di", "reverse-lakebase", "reverse-app"],
+)
+def test_reverse_tracks_are_intrinsically_reverse_over_the_endpoint(client, track):
+    """The four reverse-* tracks bake reverse into their default outline, so the
+    endpoint serves the reverse order even with NO composition persisted — the SPA
+    read path adopts it directly (these tracks were always safe)."""
+    client.harness.seed_reload(track, {})
+    got = _outline_tags(client, track)
+    assert got == _default_tags(track) == _reverse_tags(track)
