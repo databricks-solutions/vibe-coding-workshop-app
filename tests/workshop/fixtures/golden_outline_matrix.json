@@ -1433,7 +1433,6 @@
       "chainContext": null,
       "ts": [
         "project_setup",
-        "use_case_selection",
         "prd_generation",
         "semlayer_locate",
         "semlayer_profile",
@@ -1460,7 +1459,6 @@
       ],
       "engine": [
         "project_setup",
-        "use_case_selection",
         "prd_generation",
         "semlayer_locate",
         "semlayer_profile",
@@ -1499,7 +1497,6 @@
       "chainContext": null,
       "ts": [
         "project_setup",
-        "use_case_selection",
         "prd_generation",
         "genie_silver_metadata",
         "gold_layer_design",
@@ -1530,7 +1527,6 @@
       ],
       "engine": [
         "project_setup",
-        "use_case_selection",
         "prd_generation",
         "genie_silver_metadata",
         "gold_layer_design",
@@ -1573,7 +1569,6 @@
       "chainContext": null,
       "ts": [
         "project_setup",
-        "use_case_selection",
         "prd_generation",
         "semlayer_locate",
         "semlayer_profile",
@@ -1603,7 +1598,6 @@
       ],
       "engine": [
         "project_setup",
-        "use_case_selection",
         "prd_generation",
         "semlayer_locate",
         "semlayer_profile",
@@ -1646,7 +1640,6 @@
       "chainContext": null,
       "ts": [
         "project_setup",
-        "use_case_selection",
         "prd_generation",
         "genie_silver_metadata",
         "gold_layer_design",
@@ -1680,7 +1673,6 @@
       ],
       "engine": [
         "project_setup",
-        "use_case_selection",
         "prd_generation",
         "genie_silver_metadata",
         "gold_layer_design",
