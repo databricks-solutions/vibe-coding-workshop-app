@@ -220,3 +220,37 @@ def resolve_previous_outputs(step: Step, session: SessionState) -> dict[str, str
         for key in step.consumes
         if key in session.captured_outputs
     }
+
+
+# --- Pre-journey use-case resolution (Option A) ------------------------------
+# use_case_selection was retired as a numbered outline step. The use case is now
+# captured UP FRONT — before the first numbered step — mirroring the App's step 1
+# "Define Your Intent". Locking the use case is a pre-journey resolution: it marks
+# the use_case_selection gate complete and records the use_case_brief artifact, so
+# prd_generation (requiresGate="use_case_selection", consumes=["use_case_brief"])
+# unlocks and resolves without a numbered use_case_selection node. This is the
+# engine primitive the manifest lacked; the MCP lock/start_track paths call it.
+USE_CASE_GATE = "use_case_selection"
+USE_CASE_BRIEF = "use_case_brief"
+
+
+def use_case_resolved(session: SessionState) -> bool:
+    """Whether the pre-journey use-case gate has been resolved for this session."""
+
+    return USE_CASE_GATE in session.completed_gates
+
+
+def resolve_use_case(session: SessionState, brief: str) -> bool:
+    """Resolve the pre-journey use-case gate, mutating only the supplied session.
+
+    Records the ``use_case_selection`` gate (once — idempotent on a re-lock, so a
+    learner refining their selection never double-appends) and stores the
+    ``use_case_brief`` artifact. Returns True when this call newly resolved the
+    gate (so callers can drive one-time side effects such as the session rename).
+    """
+
+    newly_resolved = USE_CASE_GATE not in session.completed_gates
+    if newly_resolved:
+        session.completed_gates.append(USE_CASE_GATE)
+    session.captured_outputs[USE_CASE_BRIEF] = brief
+    return newly_resolved
