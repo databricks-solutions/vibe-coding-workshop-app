@@ -5437,6 +5437,16 @@ class SessionSaveRequest(BaseModel):
     chain_context: Optional[str] = Field(None, description="Additive-chain context: app | lakehouse | reverse (persisted as session_parameters.chainContext)")
     flags: Optional[Dict[str, bool]] = Field(None, description="Engine composition flags (e.g. includeLakehouse, ai.genie, medallion.bronze) persisted under session_parameters.flags")
     completed_steps: List[int] = Field(default_factory=list, description="List of completed step numbers")
+    # Gate dual-write (Phase 3 T5 PR3a). The SPA writes the COMPLETE gate set (the
+    # sectionTags for ALL completed/skipped steps, derived from the same numbers it
+    # sends above) ALONGSIDE the legacy numbers. completed_gates threads into the
+    # completed_gates column; skipped_gates is merged into session_parameters (where
+    # the read side — state.build_session_state / engine._skipped_tags — consumes
+    # it). MUST be the complete set, never a delta: once completed_gates is
+    # non-empty the read path trusts gates verbatim and ignores the numbers, so a
+    # partial write would silently drop number-only progress.
+    completed_gates: List[str] = Field(default_factory=list, description="Complete set of completed step sectionTags (dual-write mirror of completed_steps)")
+    skipped_gates: List[str] = Field(default_factory=list, description="Complete set of skipped step sectionTags (dual-write mirror; persisted under session_parameters.skipped_gates)")
     step_prompts: Dict[int, str] = Field(default_factory=dict, description="Map of step number to generated prompt")
 
 
@@ -5724,12 +5734,18 @@ async def save_session_endpoint(request_body: SessionSaveRequest, request: Reque
             current_step=request_body.current_step,
             workshop_level=request_body.workshop_level,
             completed_steps=request_body.completed_steps,
+            completed_gates=request_body.completed_gates,
             step_prompts=request_body.step_prompts,
             created_by=current_user,
         )
-        
+
         # Persist direction / include_lakehouse / include_genie_ontology in session_parameters if provided
         _save_param_patch = {}
+        # Gate dual-write (T5 PR3a): skipped_gates lives in session_parameters (the
+        # read side reads session_parameters['skipped_gates']). The full-save path
+        # carries the complete skipped set, so persist it in lockstep with the
+        # completed_gates column written above.
+        _save_param_patch["skipped_gates"] = request_body.skipped_gates
         if request_body.direction:
             _save_param_patch["direction"] = request_body.direction
         if request_body.include_lakehouse is not None:
@@ -6027,6 +6043,13 @@ class SessionUpdateMetadataRequest(BaseModel):
     workshop_level: Optional[str] = Field(None, description="Workshop level: app-only, app-database, lakehouse, lakehouse-di, end-to-end, accelerator, or genie-accelerator")
     completed_steps: Optional[List[int]] = Field(None, description="List of completed step numbers")
     skipped_steps: Optional[List[int]] = Field(None, description="List of skipped step numbers")
+    # Gate dual-write (Phase 3 T5 PR3a) — see SessionSaveRequest for the contract.
+    # Optional/None on this partial-update path so an update that carries no gates
+    # (e.g. an industry-only save) leaves the persisted gates untouched (COALESCE
+    # for the column, no patch key for skipped_gates). When present they MUST be
+    # the complete set, mirroring the numbers in the same request.
+    completed_gates: Optional[List[str]] = Field(None, description="Complete set of completed step sectionTags (dual-write mirror of completed_steps)")
+    skipped_gates: Optional[List[str]] = Field(None, description="Complete set of skipped step sectionTags (dual-write mirror; persisted under session_parameters.skipped_gates)")
     custom_use_case_label: Optional[str] = Field(None, max_length=30, description="User-edited use case name override")
     custom_use_case_description: Optional[str] = Field(None, description="User-edited use case description override")
     level_explicitly_selected: Optional[bool] = Field(None, description="Whether the user explicitly clicked a level button")
@@ -6085,12 +6108,18 @@ async def update_session_metadata_endpoint(request_body: SessionUpdateMetadataRe
             prerequisites_completed=request_body.prerequisites_completed,
             workshop_level=request_body.workshop_level,
             completed_steps=request_body.completed_steps,
+            completed_gates=request_body.completed_gates,
             skipped_steps=request_body.skipped_steps,
             current_step=current_step,
         )
-        
+
         # Store custom use case overrides and derive user_schema_prefix
         _session_param_patch = {}
+        # Gate dual-write (T5 PR3a): persist the complete skipped_gates set into
+        # session_parameters (where the read side consumes it) whenever the request
+        # carries it. Omitted => partial update => leave the persisted set untouched.
+        if request_body.skipped_gates is not None:
+            _session_param_patch['skipped_gates'] = request_body.skipped_gates
         
         if request_body.custom_use_case_label is not None:
             _session_param_patch['custom_use_case_label'] = request_body.custom_use_case_label
