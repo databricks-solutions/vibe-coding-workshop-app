@@ -66,12 +66,32 @@ class _ParamCapture:
         assert self.patches, "no session_parameters patch was written"
         return self.patches[-1]
 
+    def patch_key(self, key):
+        """The last merged value for `key`, or None if never patched."""
+        for patch in reversed(self.patches):
+            if key in patch:
+                return patch[key]
+        return None
+
+
+class _ExistingStore:
+    """Stand-in for the persisted row the endpoints load to compute the gate
+    merge. Tests seed ``.record`` to simulate an MCP-origin session."""
+
+    def __init__(self):
+        self.record: dict | None = None
+
+    def load_session(self, session_id):
+        return self.record
+
 
 @pytest.fixture
 def client(monkeypatch):
     saves = _SaveCapture()
     params = _ParamCapture()
+    existing = _ExistingStore()
     monkeypatch.setattr(routes, "save_session", saves.save_session)
+    monkeypatch.setattr(routes, "load_session", existing.load_session)
     monkeypatch.setattr(routes, "execute_insert", params.execute_insert)
     monkeypatch.setattr(routes, "execute_query", lambda *a, **k: [])
     monkeypatch.setattr(routes, "get_schema", lambda: "test_schema")
@@ -81,6 +101,7 @@ def client(monkeypatch):
     test_client = TestClient(app)
     test_client.save_capture = saves  # type: ignore[attr-defined]
     test_client.param_capture = params  # type: ignore[attr-defined]
+    test_client.existing = existing  # type: ignore[attr-defined]
     return test_client
 
 
@@ -162,9 +183,11 @@ def test_save_session_dual_writes_gates(client):
     assert patch.get("skipped_gates") == ["setup_lakebase"]  # FAILS before PR3a
 
 
-def test_save_session_empty_gates_is_a_complete_empty_set(client):
-    """A save with no completions carries an empty (complete) gate set — the SPA
-    is authoritative on a full save, so empty means genuinely no completions."""
+def test_save_session_omitting_gates_preserves_existing(client):
+    """PRESERVE-on-absent (review fix, blocking #2): a save that omits the gate
+    fields (composition-only save / older client) must NOT clobber persisted gates
+    — it passes ``completed_gates=None`` (COALESCE-preserved) and writes no
+    ``skipped_gates`` patch. The []-default that used to overwrite is gone."""
     resp = client.post(
         "/api/session/save",
         json={
@@ -175,5 +198,115 @@ def test_save_session_empty_gates_is_a_complete_empty_set(client):
         },
     )
     assert resp.status_code == 200, resp.text
-    # Defaulted to the empty complete set (not None) on the full-save path.
-    assert client.save_capture.last.get("completed_gates") == []
+    assert client.save_capture.last.get("completed_gates") is None
+    assert all("skipped_gates" not in p for p in client.param_capture.patches)
+
+
+# --- cross-surface MERGE (review fix, blocking #1) ---------------------------
+#
+# The App can only represent gates that map to a global ALL_STEPS number. An
+# MCP-origin session carries gates the App CANNOT represent — notably the engine
+# gate `use_case_selection` (WITH underscore; retired from numbered ALL_STEPS,
+# distinct from step-1 `usecase_selection` NO underscore). The dual-write must
+# add-only PRESERVE those, or an App write destroys them and re-locks the steps
+# whose requiresGate they satisfy (on genie-accelerator, prd_generation).
+
+
+def test_mcp_origin_nonrepresentable_gate_preserved_keeps_prd_unlocked(client):
+    from src.backend.workshop import engine
+    from src.backend.workshop.state import build_session_state
+
+    # Seeded MCP-origin row: use case resolved pre-journey + project_setup done;
+    # prd_generation NOT yet done. `use_case_selection` is non-representable.
+    client.existing.record = {
+        "completed_gates": ["use_case_selection", "project_setup"],
+        "session_parameters": {},
+    }
+
+    # App path: hydrate drops use_case_selection (unmappable), so a subsequent
+    # completion write carries only the number-derived representable gate.
+    resp = client.post(
+        "/api/session/update-metadata",
+        json={
+            "session_id": "s1",
+            "completed_steps": [2],
+            "completed_gates": ["project_setup"],  # NO use_case_selection
+        },
+    )
+    assert resp.status_code == 200, resp.text
+
+    merged = client.save_capture.last.get("completed_gates")
+    # The non-representable MCP gate survived the App write (add-only preserve).
+    assert "use_case_selection" in merged
+    assert "project_setup" in merged
+
+    # And the engine agrees: prd_generation (requiresGate == use_case_selection on
+    # genie-accelerator) stays UNLOCKED — 'current', not re-locked.
+    state = build_session_state(
+        {"completed_gates": merged, "completed_steps": [2], "session_parameters": {}},
+        "genie-accelerator",
+    )
+    status = {item.sectionTag: item.status for item in engine.outline("genie-accelerator", state)}
+    assert status["prd_generation"] == "current", status.get("prd_generation")
+    prd = next(s for s in engine.MANIFEST.track_steps("genie-accelerator") if s.sectionTag == "prd_generation")
+    assert engine.can_start(prd, state) is True
+
+    # Contrast — the BUG a naive replace would cause: with use_case_selection
+    # destroyed, prd_generation's requiresGate is unsatisfied and it RE-LOCKS.
+    naive = build_session_state(
+        {"completed_gates": ["project_setup"], "completed_steps": [2], "session_parameters": {}},
+        "genie-accelerator",
+    )
+    assert engine.can_start(prd, naive) is False
+
+
+def test_app_uncomplete_drops_representable_gate_but_preserves_nonrepresentable(client):
+    """Representable gates stay App-AUTHORITATIVE: un-completing a numbered step on
+    the App path correctly DROPS its representable tag, while a co-present
+    non-representable gate (use_case_selection) is add-only preserved."""
+    # MCP-origin row: use_case_selection + project_setup + prd_generation all done.
+    client.existing.record = {
+        "completed_gates": ["use_case_selection", "project_setup", "prd_generation"],
+        "session_parameters": {},
+    }
+
+    # App un-completes prd_generation -> its remaining number-derived gate set.
+    resp = client.post(
+        "/api/session/update-metadata",
+        json={
+            "session_id": "s1",
+            "completed_steps": [2],
+            "completed_gates": ["project_setup"],  # prd_generation un-completed
+        },
+    )
+    assert resp.status_code == 200, resp.text
+
+    merged = client.save_capture.last.get("completed_gates")
+    assert "prd_generation" not in merged  # representable => App drops it
+    assert "project_setup" in merged
+    assert "use_case_selection" in merged  # non-representable => preserved
+
+
+def test_save_path_merges_nonrepresentable_gate(client):
+    """The full-save path is symmetric: it too add-only preserves a stored
+    non-representable gate, and merges skipped_gates the same way."""
+    client.existing.record = {
+        "completed_gates": ["use_case_selection", "project_setup"],
+        "session_parameters": {"skipped_gates": ["use_case_selection"]},
+    }
+    resp = client.post(
+        "/api/session/save",
+        json={
+            "session_id": "s1",
+            "current_step": 3,
+            "completed_steps": [2, 3],
+            "step_prompts": {},
+            "completed_gates": ["project_setup", "prd_generation"],
+            "skipped_gates": [],
+        },
+    )
+    assert resp.status_code == 200, resp.text
+    merged = client.save_capture.last.get("completed_gates")
+    assert set(merged) == {"project_setup", "prd_generation", "use_case_selection"}
+    # skipped_gates merge preserves the non-representable stored skip too.
+    assert client.param_capture.patch_key("skipped_gates") == ["use_case_selection"]
