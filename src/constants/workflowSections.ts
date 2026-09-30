@@ -514,6 +514,20 @@ export function completedGatesToStepNumbers(gates: string[]): number[] {
     .filter((n): n is number => n != null);
 }
 
+// Forward bridge (Phase 3 T5 PR3a): global ALL_STEPS numbers -> sectionTags. The
+// SPA dual-writes `completed_gates`/`skipped_gates` by mapping the SAME number set
+// it persists as `completed_steps`/`skipped_steps`, so the two stores are
+// consistent BY CONSTRUCTION — the complete gate set, never a delta. Unmapped
+// numbers are dropped (harmless: the engine ignores tags not in the track's
+// outline). This MUST be the complete set: once `completed_gates` is non-empty the
+// backend read path trusts the gates verbatim and ignores the numbers, so a
+// partial write would silently drop number-only progress.
+export function stepNumbersToGates(steps: number[]): string[] {
+  return steps
+    .map(n => ALL_STEPS[n]?.sectionTag)
+    .filter((tag): tag is string => tag != null);
+}
+
 // Presentation-only projection of ALL_STEPS, keyed by sectionTag (Phase 3
 // T3b-2b, piece 5). Carries ONLY the visual attributes the sidebar/divider
 // surfaces need (title / icon / color) — ZERO ordering or identity logic. This

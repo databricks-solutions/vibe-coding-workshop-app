@@ -21,7 +21,7 @@ import {
 } from './components/session';
 import { apiClient } from './api/client';
 import { Zap, MessageSquare, Trophy, Plus, PanelLeftClose, PanelLeft, Menu, X, BarChart3, Eye, Compass, Award, ChevronDown, List, BookOpen } from 'lucide-react';
-import { orderedSectionsForRead, getCumulativeOverrides, USE_CASE_LEVEL_LOCK, isForwardProgression, getDisabledTagsForAIModules, ALL_AI_MODULES, getDisabledTagsForMedallionLayers, normalizeMedallionLayers, ALL_MEDALLION_LAYERS, getDisabledTagsForLakehouse, getDisabledTagsForGenieOntology, computeChainContext, deriveInitialChainContext, completedGatesToStepNumbers, SECTION_TAG_TO_STEP_NUMBER, type WorkshopLevel, type WorkflowDirection, type AIAgentModule, type MedallionLayer, type ChainContext } from './constants/workflowSections';
+import { orderedSectionsForRead, getCumulativeOverrides, USE_CASE_LEVEL_LOCK, isForwardProgression, getDisabledTagsForAIModules, ALL_AI_MODULES, getDisabledTagsForMedallionLayers, normalizeMedallionLayers, ALL_MEDALLION_LAYERS, getDisabledTagsForLakehouse, getDisabledTagsForGenieOntology, computeChainContext, deriveInitialChainContext, completedGatesToStepNumbers, stepNumbersToGates, SECTION_TAG_TO_STEP_NUMBER, type WorkshopLevel, type WorkflowDirection, type AIAgentModule, type MedallionLayer, type ChainContext } from './constants/workflowSections';
 import { mergeStatus } from './constants/mergeStatus';
 import type { TrackOutlineItem } from './api/client';
 import { DEFAULT_LEVEL_BY_ASSISTANT, parseCodingAssistantsConfig } from './constants/codingAssistants';
@@ -770,6 +770,13 @@ export default function App() {
       apiClient.updateSessionMetadata({
         session_id: sid,
         completed_steps: Array.from(newSteps),
+        // Gate dual-write (T5 PR3a): the COMPLETE gate set from the SAME numbers
+        // written above. This write is what flips the session to gates-present, so
+        // it must ALSO carry the complete skipped_gates (from live skippedSteps) —
+        // once gates are present the read path ignores the skipped NUMBERS, so a
+        // completion write that omitted skipped_gates would drop skipped progress.
+        completed_gates: stepNumbersToGates(Array.from(newSteps)),
+        skipped_gates: stepNumbersToGates(Array.from(skippedSteps)),
         workshop_level: workshopLevel,  // Piggyback workshop level save on progress
         ...compositionParams,
       })
@@ -779,7 +786,7 @@ export default function App() {
         .then(() => fetchOutline(workshopLevel, sid))
         .catch(err => console.error('Error saving completed steps:', err));
     }
-  }, [sessionId, workshopLevel, readOnly, compositionParams, fetchOutline]);
+  }, [sessionId, workshopLevel, readOnly, skippedSteps, compositionParams, fetchOutline]);
 
   // Handle skipped steps change and auto-save to backend
   const handleSkippedStepsChange = useCallback((newSkipped: Set<number>) => {
@@ -790,6 +797,11 @@ export default function App() {
       apiClient.updateSessionMetadata({
         session_id: sessionId,
         skipped_steps: Array.from(newSkipped),
+        // Gate dual-write (T5 PR3a): the COMPLETE skipped gate set from the SAME
+        // numbers written above (persisted under session_parameters.skipped_gates,
+        // where the read path reads it). completed_gates is intentionally omitted
+        // here so the existing completed gates are COALESCE-preserved.
+        skipped_gates: stepNumbersToGates(Array.from(newSkipped)),
       }).catch(err => console.error('Error saving skipped steps:', err));
     }
   }, [sessionId, readOnly]);
@@ -980,6 +992,11 @@ export default function App() {
         // include_* stay above for other consumers.
         ...compositionParams,
         completed_steps: Array.from(completedSteps),
+        // Gate dual-write (T5 PR3a): the COMPLETE completed/skipped gate sets from
+        // the SAME numbers persisted on this full save, so a saved web session
+        // reads back through the gates-present verbatim path with no progress loss.
+        completed_gates: stepNumbersToGates(Array.from(completedSteps)),
+        skipped_gates: stepNumbersToGates(Array.from(skippedSteps)),
         step_prompts: stepPrompts
       });
       
