@@ -1419,8 +1419,18 @@ STEP_SCORES = {
     31: 10,
     # Agents Accelerator — Agents on Apps (steps 38-46): 50 points each
     38: 50, 39: 50, 40: 50, 41: 50, 42: 50, 43: 50, 44: 50, 45: 50, 46: 50,
-    # Agents Accelerator — MLflow for Gen-AI (steps 47-54): 50 points each
+    # Agents Accelerator — MLflow for Gen-AI (steps 47-56): 50 points each
     47: 50, 48: 50, 49: 50, 50: 50, 51: 50, 52: 50, 53: 50, 54: 50,
+    # Agents Accelerator — MLflow tail (steps 55-56): 50 points each (T5 PR3c)
+    55: 50, 56: 50,
+    # Genie Accelerator — Semantic Layer (steps 57-61): 50 points each (T5 PR3c)
+    57: 50, 58: 50, 59: 50, 60: 50, 61: 50,
+    # Genie Accelerator — Genie Agent (steps 62-66, 71): 50 points each (T5 PR3c)
+    62: 50, 63: 50, 64: 50, 65: 50, 66: 50, 71: 50,
+    # Genie Accelerator — Genie Ontology (steps 67-69): 50 points each (T5 PR3c)
+    67: 50, 68: 50, 69: 50,
+    # Genie Accelerator — Genie Activation (steps 72-73): 40 points each (T5 PR3c)
+    72: 40, 73: 40,
 }
 
 # Chapter definitions for progress tracking (must match src/constants/scoring.ts)
@@ -1433,7 +1443,14 @@ CHAPTERS = {
     'Activation': {'steps': {32, 33, 34, 35, 36, 37}, 'display': 'Reverse ETL'},
     'Refinement': {'steps': {20, 21}, 'display': 'Refinement'},
     'Agent Skills': {'steps': {26, 27, 28, 29, 30}, 'display': 'Agent Skills'},
-    'Agents Accelerator': {'steps': {38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54}, 'display': 'Agents Accelerator'},
+    'Agents Accelerator': {'steps': {38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56}, 'display': 'Agents Accelerator'},
+    # Genie Accelerator chapters (T5 PR3c) — mirror the manifest's genie-accelerator
+    # section groupings; kept as their own chapters (not merged into the shared
+    # 'Chapter 4'/'Activation' sets) so cross-track chapter-completion is unaffected.
+    'Semantic Layer': {'steps': {57, 58, 59, 60, 61}, 'display': 'Semantic Layer'},
+    'Genie Agent': {'steps': {62, 63, 64, 65, 66, 71}, 'display': 'Genie Agent'},
+    'Genie Ontology': {'steps': {67, 68, 69}, 'display': 'Genie Ontology'},
+    'Genie Activation': {'steps': {72, 73}, 'display': 'Genie Activation'},
     'Clean Up': {'steps': {31}, 'display': 'Clean Up'},
 }
 
@@ -1446,6 +1463,94 @@ def _calculate_score(completed_steps: List[int], skipped_steps: List[int] = None
     skipped = set(skipped_steps) if skipped_steps else set()
     unique_steps = set(completed_steps)
     return sum(STEP_SCORES.get(step, 0) for step in unique_steps if step not in skipped)
+
+
+# --- T5 PR3c: re-key completion aggregations from raw numbers to gate-derived ---
+# GLOBAL step numbers. STEP_SCORES / CHAPTERS are keyed by GLOBAL ``ALL_STEPS``
+# numbers, but the sessions table's ``completed_steps`` column collides two
+# numberings (App-origin globals vs MCP-origin dense positions). These helpers
+# resolve each row to canonical GLOBAL numbers via PR1's ``step_number_to_tag``
+# disambiguation (reused, not re-derived) so gate-only + mixed App/MCP cohorts
+# score and count correctly. See workshop/completion_keying.py.
+
+
+def _parse_json_list(value: Any) -> list:
+    """Parse a JSON-array column (TEXT or already-decoded) into a list."""
+    if isinstance(value, str):
+        try:
+            return json.loads(value) if value else []
+        except Exception:
+            return []
+    return value or []
+
+
+def _parse_json_obj(value: Any) -> dict:
+    """Parse a JSONB column (TEXT or already-decoded) into a dict."""
+    if isinstance(value, str):
+        try:
+            return json.loads(value) if value else {}
+        except Exception:
+            return {}
+    return value if isinstance(value, dict) else {}
+
+
+# Global step 1 ("Define Your Intent" / usecase_selection) is credited when the
+# use case is defined. The MCP engine gate is "use_case_selection" (engine.py),
+# which has NO global number (manifest global 1 is "usecase_selection"), so it
+# never resolves through the tag->number map and step 1 is dropped for MCP
+# sessions. Mirror the App's rule (App.tsx:492 / :654 — industry AND use_case set
+# => completedSteps.add(1)) at the aggregation layer, for App- AND MCP-origin
+# rows alike, using the top-level industry/use_case TEXT columns (no JSONB-vs-''
+# comparison; no string special-case for the gate literal).
+_INTENT_STEP = 1
+
+
+def _has_defined_intent(row: Dict[str, Any]) -> bool:
+    return bool((row.get("industry") or "").strip() and (row.get("use_case") or "").strip())
+
+
+def _row_completion_globals(row: Dict[str, Any], inverse_map: Dict[str, int]) -> tuple:
+    """Canonical (completed, skipped) GLOBAL step-number sets for one sessions row.
+
+    Reads ``completed_steps``/``skipped_steps`` (JSON int arrays), the
+    ``completed_gates`` column (JSON tag array) and ``skipped_gates`` (nested in
+    the ``session_parameters`` JSONB), then disambiguates via PR1's map — origin
+    decided once by ``completed_gates`` presence, skipped in lockstep. Global step
+    1 is unioned into completed when the row has defined intent (industry AND
+    use_case), mirroring the App (GAP 2); idempotent when it is already present."""
+    from src.backend.workshop.completion_keying import resolve_completion_globals
+
+    session_params = _parse_json_obj(row.get("session_parameters"))
+    completed, skipped = resolve_completion_globals(
+        completed_gates=_parse_json_list(row.get("completed_gates")),
+        completed_steps=_parse_json_list(row.get("completed_steps")),
+        skipped_gates=session_params.get("skipped_gates") or [],
+        skipped_steps=_parse_json_list(row.get("skipped_steps")),
+        inverse_map=inverse_map,
+    )
+    if _has_defined_intent(row):
+        completed = completed | {_INTENT_STEP}
+    return completed, skipped
+
+
+def _aggregate_step_completion(rows: List[Dict[str, Any]], inverse_map: Dict[str, int]) -> List[Dict[str, Any]]:
+    """Per-GLOBAL-step completed/skipped counts across sessions rows, gate-derived.
+
+    Replaces the old ``json_array_elements_text(completed_steps)`` SQL unnest,
+    which counted raw (dense for MCP) numbers and dropped gate-only rows."""
+    completed_map: Dict[int, int] = {}
+    skipped_map: Dict[int, int] = {}
+    for row in rows:
+        completed_global, skipped_global = _row_completion_globals(row, inverse_map)
+        for step in completed_global:
+            completed_map[step] = completed_map.get(step, 0) + 1
+        for step in skipped_global:
+            skipped_map[step] = skipped_map.get(step, 0) + 1
+    all_step_nums = sorted(set(completed_map) | set(skipped_map))
+    return [
+        {"step_number": s, "completed": completed_map.get(s, 0), "skipped": skipped_map.get(s, 0)}
+        for s in all_step_nums
+    ]
 
 
 def _get_chapter_status(completed_steps: List[int], skipped_steps: List[int] = None) -> tuple:
@@ -1541,21 +1646,31 @@ def get_leaderboard(limit: int = 10) -> List[Dict]:
         with get_connection() as conn:
             cursor = _dict_cursor(conn)
             
-            # Get all sessions with completed_steps
-            # We'll process scoring in Python for flexibility
+            # Get all sessions with any completion signal. Scoring runs in Python
+            # (T5 PR3c) off gate-derived GLOBAL numbers, so the row set must ALSO
+            # admit gate-only rows — MCP-origin sessions carry authoritative
+            # completed_gates even when completed_steps is empty/'[]'. completed_gates
+            # (column) + skipped_gates (in session_parameters) are pulled for the
+            # per-row disambiguation.
             query = f"""
-            SELECT 
+            SELECT
                 session_id,
                 created_by,
                 completed_steps,
                 skipped_steps,
+                completed_gates,
+                session_parameters,
+                industry,
+                use_case,
                 updated_at,
                 workshop_level
             FROM {table_name}
-            WHERE created_by IS NOT NULL 
+            WHERE created_by IS NOT NULL
               AND created_by != ''
-              AND completed_steps IS NOT NULL
-              AND completed_steps != '[]'
+              AND (
+                    (completed_steps IS NOT NULL AND completed_steps != '[]')
+                 OR (completed_gates IS NOT NULL AND completed_gates != '[]')
+              )
             ORDER BY created_by, updated_at DESC
             """
             
@@ -1565,35 +1680,26 @@ def get_leaderboard(limit: int = 10) -> List[Dict]:
             
             # Aggregate by user - keep session with highest score
             user_scores = {}  # email -> {score, completed_steps, updated_at}
-            
+
+            # Build PR1's tag->GLOBAL-number inverse map ONCE (reused per row).
+            from src.backend.workshop.completion_keying import tag_to_global_number
+            inverse_map = tag_to_global_number()
+
             for row in rows:
                 email = row.get('created_by', '')
                 if not email:
                     continue
-                
-                # Parse completed_steps
-                completed_steps_raw = row.get('completed_steps', '[]')
-                try:
-                    if isinstance(completed_steps_raw, str):
-                        completed_steps = json.loads(completed_steps_raw)
-                    else:
-                        completed_steps = completed_steps_raw or []
-                except:
-                    completed_steps = []
-                
+
+                # Re-key to canonical GLOBAL step numbers (T5 PR3c): gates present
+                # => trust gates (map tag->global); gates empty => App-origin
+                # numbers verbatim. NEVER re-index dense MCP positions.
+                completed_global, skipped_global = _row_completion_globals(row, inverse_map)
+                completed_steps = sorted(completed_global)
+                skipped_steps = sorted(skipped_global)
+
                 if not completed_steps:
                     continue
-                
-                # Parse skipped_steps
-                skipped_steps_raw = row.get('skipped_steps', '[]')
-                try:
-                    if isinstance(skipped_steps_raw, str):
-                        skipped_steps = json.loads(skipped_steps_raw)
-                    else:
-                        skipped_steps = skipped_steps_raw or []
-                except:
-                    skipped_steps = []
-                
+
                 score = _calculate_score(completed_steps, skipped_steps)
                 updated_at = row.get('updated_at')
                 
@@ -1649,7 +1755,12 @@ def get_leaderboard(limit: int = 10) -> List[Dict]:
                     'avatar': _get_avatar_for_user(email),
                     'score': data['score'],
                     'completed_steps': sorted(set(data['completed_steps'])),
-                    'skipped_steps': sorted(data.get('skipped_steps', [])),
+                    'skipped_steps': sorted(set(data.get('skipped_steps', []))),
+                    # Gate-derived count the leaderboard UI displays (T5 PR3c) — the
+                    # number of canonical GLOBAL steps done, correct for gate-only
+                    # and MCP-dense rows the raw completed_steps length mis-counted.
+                    'completed_step_count': len(set(data['completed_steps'])),
+                    'skipped_step_count': len(set(data.get('skipped_steps', []))),
                     'completed_chapters': completed_chapters,
                     'in_progress_chapters': in_progress_chapters,
                     'updated_at': updated_at,
@@ -1821,21 +1932,25 @@ def get_analytics() -> Dict[str, Any]:
         """)
         total_prompts = int(prompts_rows[0].get("total_prompts", 0)) if prompts_rows else 0
 
-        # Average score — fetch all sessions and compute in Python (like leaderboard)
+        # Average score — fetch all sessions and compute in Python (like leaderboard).
+        # T5 PR3c: score off gate-derived GLOBAL numbers, and admit gate-only rows
+        # (completed_gates non-empty even when completed_steps is empty/'[]') so
+        # MCP-origin sessions are neither dropped nor mis-scored on dense positions.
+        from src.backend.workshop.completion_keying import tag_to_global_number
+        _inverse_map = tag_to_global_number()
         score_rows = execute_query(f"""
-            SELECT completed_steps, skipped_steps
+            SELECT completed_steps, skipped_steps, completed_gates, session_parameters, industry, use_case
             FROM {table_name}
-            WHERE completed_steps IS NOT NULL
-              AND completed_steps != ''
-              AND completed_steps != '[]'
+            WHERE (completed_steps IS NOT NULL AND completed_steps != '' AND completed_steps != '[]')
+               OR (completed_gates IS NOT NULL AND completed_gates != '[]')
         """)
         scores = []
         for sr in score_rows:
             try:
-                cs = json.loads(sr["completed_steps"]) if isinstance(sr["completed_steps"], str) else (sr["completed_steps"] or [])
-                sk_raw = sr.get("skipped_steps", "[]")
-                sk = json.loads(sk_raw) if isinstance(sk_raw, str) else (sk_raw or [])
-                scores.append(_calculate_score(cs, sk))
+                cs_global, sk_global = _row_completion_globals(sr, _inverse_map)
+                if not cs_global:
+                    continue
+                scores.append(_calculate_score(sorted(cs_global), sorted(sk_global)))
             except Exception:
                 pass
         avg_score = round(sum(scores) / len(scores), 1) if scores else 0
@@ -1885,33 +2000,18 @@ def get_analytics() -> Dict[str, Any]:
             })
 
         # -- Step completion counts -------------------------------------------
-        completed_step_rows = execute_query(f"""
-            SELECT step::int AS step_number, COUNT(*) AS cnt
-            FROM {table_name},
-                 json_array_elements_text(completed_steps::json) AS step
-            WHERE completed_steps IS NOT NULL
-              AND completed_steps != ''
-              AND completed_steps != '[]'
-            GROUP BY step::int
-            ORDER BY step::int
+        # T5 PR3c: the old SQL unnest counted RAW completed_steps numbers, so it
+        # counted MCP dense positions as global steps and dropped gate-only rows.
+        # Aggregate in Python over gate-derived GLOBAL numbers instead, admitting
+        # gate-only rows (completed_gates non-empty even when completed_steps empty).
+        step_rows = execute_query(f"""
+            SELECT completed_steps, skipped_steps, completed_gates, session_parameters, industry, use_case
+            FROM {table_name}
+            WHERE (completed_steps IS NOT NULL AND completed_steps != '' AND completed_steps != '[]')
+               OR (skipped_steps IS NOT NULL AND skipped_steps != '' AND skipped_steps != '[]')
+               OR (completed_gates IS NOT NULL AND completed_gates != '[]')
         """)
-        skipped_step_rows = execute_query(f"""
-            SELECT step::int AS step_number, COUNT(*) AS cnt
-            FROM {table_name},
-                 json_array_elements_text(skipped_steps::json) AS step
-            WHERE skipped_steps IS NOT NULL
-              AND skipped_steps != ''
-              AND skipped_steps != '[]'
-            GROUP BY step::int
-            ORDER BY step::int
-        """)
-        completed_map = {int(r["step_number"]): int(r["cnt"]) for r in completed_step_rows}
-        skipped_map = {int(r["step_number"]): int(r["cnt"]) for r in skipped_step_rows}
-        all_step_nums = sorted(set(list(completed_map.keys()) + list(skipped_map.keys())))
-        step_completion_counts = [
-            {"step_number": s, "completed": completed_map.get(s, 0), "skipped": skipped_map.get(s, 0)}
-            for s in all_step_nums
-        ]
+        step_completion_counts = _aggregate_step_completion(step_rows, _inverse_map)
 
         # -- Chapter feedback -------------------------------------------------
         cf_rows = execute_query(f"""
@@ -1973,8 +2073,11 @@ def get_analytics() -> Dict[str, Any]:
             })
 
         # -- User activity ----------------------------------------------------
+        # T5 PR3c: total_steps + best_score off gate-derived GLOBAL numbers
+        # (completed_gates + skipped_gates pulled for the per-row disambiguation).
         user_rows = execute_query(f"""
-            SELECT created_by, session_id, completed_steps, skipped_steps, feedback_rating
+            SELECT created_by, session_id, completed_steps, skipped_steps,
+                   completed_gates, session_parameters, industry, use_case, feedback_rating
             FROM {table_name}
             WHERE created_by IS NOT NULL AND created_by != ''
         """)
@@ -1986,15 +2089,9 @@ def get_analytics() -> Dict[str, Any]:
             if email not in user_agg:
                 user_agg[email] = {"sessions": set(), "total_steps": 0, "best_score": 0, "feedback_given": 0}
             user_agg[email]["sessions"].add(ur.get("session_id"))
-            cs_raw = ur.get("completed_steps", "[]")
-            sk_raw = ur.get("skipped_steps", "[]")
-            try:
-                cs = json.loads(cs_raw) if isinstance(cs_raw, str) else (cs_raw or [])
-                sk = json.loads(sk_raw) if isinstance(sk_raw, str) else (sk_raw or [])
-            except Exception:
-                cs, sk = [], []
-            user_agg[email]["total_steps"] += len(set(cs))
-            score = _calculate_score(cs, sk)
+            cs_global, sk_global = _row_completion_globals(ur, _inverse_map)
+            user_agg[email]["total_steps"] += len(cs_global)
+            score = _calculate_score(sorted(cs_global), sorted(sk_global))
             if score > user_agg[email]["best_score"]:
                 user_agg[email]["best_score"] = score
             if ur.get("feedback_rating"):

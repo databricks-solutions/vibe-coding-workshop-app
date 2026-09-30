@@ -446,6 +446,11 @@ export interface LeaderboardEntry {
   score: number;
   completed_steps: number[];
   skipped_steps: number[];
+  // Gate-derived counts of canonical GLOBAL steps (T5 PR3c). The backend now
+  // re-keys completion off completed_gates; the UI reads these instead of
+  // completed_steps.length so gate-only / MCP-dense rows count correctly.
+  completed_step_count?: number;
+  skipped_step_count?: number;
   completed_chapters: string[];
   in_progress_chapters: string[];
   updated_at?: string;
