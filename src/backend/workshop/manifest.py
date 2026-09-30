@@ -144,6 +144,11 @@ class Track:
 class Manifest:
     version: str
     tracks: dict[str, Track]
+    # Global ALL_STEPS step-number -> sectionTag (T5 PR1). Keyed by the FRONTEND
+    # global number, not the track-local Step.order — the only backend mirror of
+    # the frontend numbering, used to resolve App-origin completed/skipped step
+    # numbers back to tags. Empty for manifests generated before the field existed.
+    step_number_to_tag: dict[int, str] = field(default_factory=dict)
 
     def track_steps(self, track_id: str) -> list[Step]:
         return self._track(track_id).steps()
@@ -191,11 +196,21 @@ def load_manifest(path: str | None = None) -> Manifest:
             str(track_id): Track.from_dict(track_data)
             for track_id, track_data in data["tracks"].items()
         },
+        step_number_to_tag={
+            int(number): str(tag)
+            for number, tag in data.get("step_number_to_tag", {}).items()
+        },
     )
 
 
 def track_steps(track_id: str, path: str | None = None) -> list[Step]:
     return load_manifest(path).track_steps(track_id)
+
+
+def step_number_to_tag(path: str | None = None) -> dict[int, str]:
+    """Global ALL_STEPS step-number -> sectionTag map (see ``Manifest``)."""
+
+    return load_manifest(path).step_number_to_tag
 
 
 def _interactions_path(path: str | None) -> Path:
