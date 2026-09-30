@@ -5556,6 +5556,13 @@ class SessionListItem(BaseModel):
     use_case: Optional[str]
     use_case_label: Optional[str]
     current_step: int
+    # Gate-derived count of canonical GLOBAL completed steps (T5 R3). Surfaced
+    # server-side (the leaderboard's completed_step_count way) so the session
+    # list can show progress WITHOUT the raw current_step scalar, ahead of the
+    # human-run current_step column DROP. Optional so a cached/older-shape dict
+    # that omits it still constructs (Pydantic v2 extra='ignore' otherwise strips
+    # an undeclared field before the client ever sees it).
+    completed_step_count: Optional[int] = None
     feedback_rating: Optional[str]
     created_at: Optional[str]
     updated_at: Optional[str]

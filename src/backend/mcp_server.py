@@ -1198,6 +1198,34 @@ def _mirror_custom_usecase(params: dict[str, Any]) -> None:
         params["custom_use_case_label"] = label
 
 
+def _industry_label_for(industry: str, echo: list[dict[str, Any]] | None) -> str | None:
+    """Best-effort value->display-label for an industry (Workstream — R3 item 3).
+
+    The analytics ``by_industry`` breakdown GROUPs BY the top-level
+    ``industry_label`` column, so an MCP session that persists only ``industry``
+    (the value) is dropped from it. The MCP selection contract never carries
+    ``industry_label`` (``_SELECTION_REQUIRED`` is industry/use_case/use_case_label),
+    so it is resolved here from the SAME curated list the echo uses. Reuses the
+    already-computed ``echo`` list when present; otherwise does one best-effort
+    lookup. Returns None when unresolved so ``save_session`` COALESCE-preserves any
+    existing value rather than clobbering it with an empty string.
+    """
+
+    if not industry:
+        return None
+    options = echo
+    if options is None:
+        try:
+            options = _available_industries()
+        except Exception:  # noqa: BLE001 — label resolution is best-effort
+            options = []
+    for opt in options or []:
+        if str(opt.get("value") or "") == industry:
+            label = str(opt.get("label") or "").strip()
+            return label or None
+    return None
+
+
 def _run_async_blocking(make_coro: Callable[[], Any]) -> Any:
     """Run an async coroutine to completion from a sync MCP tool.
 
@@ -1657,9 +1685,31 @@ def vibe_set_parameters(
             label = resolved_params.get("use_case_label") or resolved_params.get("use_case")
             if label:
                 refined_name = f"Genie Code — {label}"
+        # R3 item 3: persist the top-level industry/use_case columns (NOT just the
+        # session_parameters JSONB) so this MCP-locked session earns step-1 credit
+        # (the aggregation reads industry AND use_case) AND appears in the
+        # industry/use-case analytics breakdowns (which GROUP BY the *_label
+        # columns). Labels: use_case_label is carried in resolved_params (a
+        # selection required key); industry_label is resolved here from the same
+        # curated list the echo uses. save_session COALESCE-preserves None, so a
+        # missing value never clobbers an existing one (pass None, not "").
+        _lock_industry = str(resolved_params.get("industry") or "").strip() or None
+        _lock_use_case = str(resolved_params.get("use_case") or "").strip() or None
+        _lock_use_case_label = (
+            str(resolved_params.get("use_case_label") or resolved_params.get("use_case") or "").strip()
+            or None
+        )
+        _lock_industry_label = (
+            str(resolved_params.get("industry_label") or "").strip()
+            or _industry_label_for(_lock_industry or "", echo_industries)
+        )
         save_session(
             session_id=session_id,
             session_name=refined_name,
+            industry=_lock_industry,
+            industry_label=_lock_industry_label,
+            use_case=_lock_use_case,
+            use_case_label=_lock_use_case_label,
             session_parameters=resolved_params,
             captured_outputs=dict(state.captured_outputs),
             completed_gates=list(state.completed_gates),
