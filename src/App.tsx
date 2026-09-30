@@ -193,10 +193,17 @@ export default function App() {
   // with the LOCAL optimistic `completedSteps` so a just-completed step never
   // flickers back to not-done in the persist -> refetch window. Endpoint status is
   // the truth; the local optimistic overlay only ADDS on top and converges to the
-  // endpoint set once the refetch lands (see mergeStatus). This is display/read
-  // only — `completedSteps` remains the authoritative source for mutation, the
-  // save/progress persists (completed_steps only; no gate write), and the
-  // App-level direction-lock / started-guard thresholds.
+  // endpoint set once the refetch lands (see mergeStatus).
+  //
+  // NOTE: `projectedCompletedSteps` is passed as WorkflowDiagram's `completedSteps`
+  // prop, which is BOTH the render source AND the mutation seed its toggle handlers
+  // read (`new Set(completedSteps)` at WorkflowDiagram.tsx ~715/753/828). So the
+  // union — not the raw local set — is what a toggle grows/shrinks and then
+  // persists back into `completed_steps` (NUMBERS-ONLY; NO gate write; NO schema
+  // touch). This is BENIGN CONVERGENCE: the endpoint `done` set is derived from the
+  // authoritative `completed_gates`, so only genuinely-completed steps can enter
+  // the union and nothing false/foreign is ever written. The clean display-vs-
+  // mutation split (a separate mutation-seed prop) is deferred to PR 3a.
   const projectedCompletedSteps = useMemo(
     () => mergeStatus(completedSteps, outline ?? [], SECTION_TAG_TO_STEP_NUMBER),
     [completedSteps, outline],
