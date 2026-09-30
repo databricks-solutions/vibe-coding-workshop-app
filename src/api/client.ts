@@ -338,6 +338,10 @@ export interface SessionLoadResponse {
   completed_steps: number[];
   completed_gates?: string[];
   skipped_steps?: number[];
+  // Skipped-side gate mirror (Phase 3 T5 PR3b′). Surfaced from
+  // session_parameters['skipped_gates'] by the load response, symmetric to
+  // completed_gates, so the App can hydrate skipped steps gate-first.
+  skipped_gates?: string[];
   step_prompts: Record<number, string>;
   session_parameters?: Record<string, string>;
   created_by?: string;

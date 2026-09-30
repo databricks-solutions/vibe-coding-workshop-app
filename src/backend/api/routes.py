@@ -5506,6 +5506,7 @@ class SessionLoadResponse(BaseModel):
     completed_steps: List[int] = Field(default_factory=list)
     completed_gates: List[str] = Field(default_factory=list, description="Completed step sectionTags (engine/MCP source of truth for cross-surface numbering)")
     skipped_steps: List[int] = Field(default_factory=list)
+    skipped_gates: List[str] = Field(default_factory=list, description="Skipped step sectionTags (surfaced from session_parameters['skipped_gates']; skipped-side mirror of completed_gates for gate-first hydration)")
     step_prompts: Dict[int, str] = Field(default_factory=dict)
     session_parameters: Optional[Dict[str, Any]] = Field(default_factory=dict, description="Session parameter overrides (JSONB)")
     created_by: Optional[str] = Field(None)
@@ -5681,6 +5682,10 @@ async def get_or_create_default_session(request: Request) -> SessionLoadResponse
                 completed_steps=completed_steps,
                 completed_gates=session_data.get("completed_gates") or [],
                 skipped_steps=session_data.get("skipped_steps") or [],
+                # skipped_gates lives in session_parameters (the write path patches
+                # it there); surface it top-level, symmetric to completed_gates, so
+                # the App can hydrate skipped steps gate-first (PR3b′).
+                skipped_gates=(session_data.get("session_parameters") or {}).get("skipped_gates") or [],
                 step_prompts=session_data.get("step_prompts") or {},
                 session_parameters=session_data.get("session_parameters") or {},
                 created_by=session_data.get("created_by"),
@@ -5862,6 +5867,10 @@ async def load_session_endpoint(session_id: str) -> SessionLoadResponse:
                 completed_steps=session_data.get("completed_steps", []),
                 completed_gates=session_data.get("completed_gates") or [],
                 skipped_steps=session_data.get("skipped_steps", []),
+                # skipped_gates lives in session_parameters (the write path patches
+                # it there); surface it top-level, symmetric to completed_gates, so
+                # the App can hydrate skipped steps gate-first (PR3b′).
+                skipped_gates=(session_data.get("session_parameters") or {}).get("skipped_gates") or [],
                 step_prompts=session_data.get("step_prompts", {}),
                 session_parameters=session_data.get("session_parameters", {}),
                 created_by=session_data.get("created_by"),

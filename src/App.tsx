@@ -45,6 +45,26 @@ function deriveCompletedStepNumbers(
   return completedSteps || [];
 }
 
+// Derive skipped step NUMBERS gate-first — the exact skipped-side mirror of
+// deriveCompletedStepNumbers (Phase 3 T5 PR3b′, closes R2). PR3a dual-writes
+// `skipped_gates` (sectionTags) alongside the legacy integer `skipped_steps`,
+// but the read path never read the gates back, leaving skipped hydration
+// asymmetric with completed. Engine/MCP sessions carry sectionTag-keyed
+// `skipped_gates` (the cross-surface source of truth); reuse the SAME bridge
+// completedGatesToStepNumbers — it maps ANY sectionTag list to the App's fixed
+// global numbers, so no skipped-specific bridge is needed. Legacy web sessions
+// have no gates, so fall back to the stored integer `skipped_steps` (already in
+// global numbering).
+function deriveSkippedStepNumbers(
+  skippedGates: string[] | undefined,
+  skippedSteps: number[] | undefined,
+): number[] {
+  if (skippedGates && skippedGates.length > 0) {
+    return completedGatesToStepNumbers(skippedGates);
+  }
+  return skippedSteps || [];
+}
+
 export default function App() {
   const location = useLocation();
   const [showConfigHint, setShowConfigHint] = useState(false);
@@ -473,7 +493,12 @@ export default function App() {
           restoredCompleted.add(1);
         }
         setCompletedSteps(restoredCompleted);
-        const skippedStepsArray = response.skipped_steps || [];
+        // Gate-first skipped hydration (PR3b′), mirroring completedSteps above:
+        // prefer sectionTag-keyed skipped_gates, fall back to legacy skipped_steps.
+        const skippedStepsArray = deriveSkippedStepNumbers(
+          response.skipped_gates,
+          response.skipped_steps,
+        );
         setSkippedSteps(new Set(skippedStepsArray));
         
         // Restore step prompts
@@ -630,7 +655,12 @@ export default function App() {
           loadedCompleted.add(1);
         }
         setCompletedSteps(loadedCompleted);
-        const loadedSkippedSteps = response.skipped_steps || [];
+        // Gate-first skipped hydration (PR3b′), mirroring loadedCompletedSteps:
+        // prefer sectionTag-keyed skipped_gates, fall back to legacy skipped_steps.
+        const loadedSkippedSteps = deriveSkippedStepNumbers(
+          response.skipped_gates,
+          response.skipped_steps,
+        );
         setSkippedSteps(new Set(loadedSkippedSteps));
         setPrerequisitesCompleted(response.prerequisites_completed || false);
         
