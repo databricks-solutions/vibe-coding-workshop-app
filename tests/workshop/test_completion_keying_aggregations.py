@@ -356,3 +356,71 @@ def test_skipped_lockstep_app_uses_skipped_numbers():
         {"step_number": 6, "completed": 0, "skipped": 1},
         {"step_number": 17, "completed": 1, "skipped": 0},
     ]
+
+
+# =============================================================================
+# Serialization boundary — the gate-derived count fields must SURVIVE onto the
+# LeaderboardEntry response model. get_leaderboard() puts completed_step_count /
+# skipped_step_count in each dict, but the endpoint coerces every row through
+# LeaderboardEntry(**entry) with response_model=List[LeaderboardEntry]. Pydantic
+# v2's default extra='ignore' silently strips any field the model does not
+# declare, so without the declaration the client never receives the counts and
+# the FE `entry.completed_step_count ?? entry.completed_steps.length` always
+# falls back to the raw array length — defeating the fix for exactly the
+# gate-only / MCP-dense rows this PR admits. This crosses the boundary the pure
+# aggregation tests never touch. FAILS before the LeaderboardEntry fields are
+# declared (stripped), PASSES after.
+# =============================================================================
+
+
+def _leaderboard_entry_dict():
+    """A representative get_leaderboard()-shaped dict for a gate-only/MCP row —
+    canonical GLOBAL steps + the gate-derived counts, built in-test (no DB)."""
+    return {
+        "rank": 1,
+        "user_id": "mcp@x.com",
+        "session_id": "s-1",
+        "display_name": "Mcp M.",
+        "avatar": "🦊",
+        "score": 0,
+        "completed_steps": [57, 58, 59],
+        "skipped_steps": [60],
+        # Explicit gate-derived counts. Deliberately DIFFERENT from the array
+        # lengths so a test that only checked len(completed_steps) could not pass
+        # by coincidence — the fields must be transmitted independently.
+        "completed_step_count": 3,
+        "skipped_step_count": 1,
+        "completed_chapters": [],
+        "in_progress_chapters": [],
+        "updated_at": None,
+        "workshop_level": "genie-accelerator",
+    }
+
+
+def test_leaderboard_entry_preserves_gate_derived_counts():
+    from src.backend.api.routes import LeaderboardEntry
+
+    entry = _leaderboard_entry_dict()
+    model = LeaderboardEntry(**entry)
+
+    # Survive onto the constructed model (not stripped by extra='ignore').
+    assert model.completed_step_count == 3
+    assert model.skipped_step_count == 1
+
+    # Survive onto the serialized wire shape the client receives.
+    dumped = model.model_dump()
+    assert "completed_step_count" in dumped and dumped["completed_step_count"] == 3
+    assert "skipped_step_count" in dumped and dumped["skipped_step_count"] == 1
+
+
+def test_leaderboard_entry_counts_optional_for_legacy_shape():
+    """Cached / older-shape entries omit the counts — the model must still
+    construct (Optional/None), so the FE fallback path stays intact."""
+    from src.backend.api.routes import LeaderboardEntry
+
+    entry = _leaderboard_entry_dict()
+    del entry["completed_step_count"]
+    del entry["skipped_step_count"]
+    model = LeaderboardEntry(**entry)
+    assert model.completed_step_count is None
+    assert model.skipped_step_count is None

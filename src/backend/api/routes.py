@@ -6413,6 +6413,11 @@ class LeaderboardEntry(BaseModel):
     score: int = Field(..., description="Total score based on completed steps")
     completed_steps: List[int] = Field(default_factory=list, description="List of completed step numbers")
     skipped_steps: List[int] = Field(default_factory=list, description="List of skipped step numbers")
+    # Gate-derived canonical GLOBAL-step counts (T5 PR3c). Optional/None so cached
+    # or older-shape entries still construct; the FE reads these instead of
+    # completed_steps.length so gate-only / MCP-dense rows count correctly.
+    completed_step_count: Optional[int] = Field(None, description="Gate-derived count of completed GLOBAL steps")
+    skipped_step_count: Optional[int] = Field(None, description="Gate-derived count of skipped GLOBAL steps")
     completed_chapters: List[str] = Field(default_factory=list, description="Fully completed chapters")
     in_progress_chapters: List[str] = Field(default_factory=list, description="Chapters with some progress")
     updated_at: Optional[str] = Field(None, description="Last update timestamp")
