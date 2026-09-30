@@ -305,6 +305,12 @@ export interface SessionSaveRequest {
   chain_context?: string;
   flags?: Record<string, boolean>;
   completed_steps: number[];
+  // Gate dual-write (Phase 3 T5 PR3a). The COMPLETE gate set (sectionTags for ALL
+  // completed/skipped steps, derived from the same numbers above via
+  // stepNumbersToGates) written alongside the legacy numbers. Must be complete,
+  // never a delta — the backend read path trusts non-empty gates verbatim.
+  completed_gates?: string[];
+  skipped_gates?: string[];
   step_prompts: Record<number, string>;
 }
 
@@ -392,6 +398,11 @@ export interface UpdateSessionMetadataRequest {
   workshop_level?: string;
   completed_steps?: number[];
   skipped_steps?: number[];
+  // Gate dual-write (Phase 3 T5 PR3a) — see SessionSaveRequest. Optional on this
+  // partial-update path: omit to leave persisted gates untouched; when present
+  // they are the complete set mirroring the numbers in the same request.
+  completed_gates?: string[];
+  skipped_gates?: string[];
   custom_use_case_label?: string;
   custom_use_case_description?: string;
   level_explicitly_selected?: boolean;

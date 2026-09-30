@@ -5411,6 +5411,36 @@ except ImportError:
         return False
 
 
+def _merge_app_gates(incoming: Optional[List[str]], existing: Optional[List[str]]) -> Optional[List[str]]:
+    """Server-side gate MERGE for the SPA dual-write (T5 PR3a review fix).
+
+    The App can only represent gates that map to a global ``ALL_STEPS`` number
+    (the values of ``manifest.step_number_to_tag``). MCP-origin sessions carry
+    gates the App CANNOT represent — notably the engine gate ``use_case_selection``
+    (retired from numbered ALL_STEPS; distinct from step-1 ``usecase_selection``) —
+    which several steps depend on via ``requiresGate``. A naive replace on the App
+    write path would destroy those and re-lock the dependent steps.
+
+    Resolution (generic, not string-specific): persist the UNION of the incoming
+    App-derived gates and the EXISTING stored gates that are NOT App-representable.
+    So App-representable gates are AUTHORITATIVE from the App — an un-completed
+    numbered step correctly drops its representable tag — while non-representable
+    stored gates are ADD-ONLY (the App never drops what it cannot represent).
+
+    Returns None when ``incoming`` is None (preserve-on-absent: the caller leaves
+    the persisted gates untouched). ``manifest.step_number_to_tag`` is read-only
+    (the PR1 accessor); no engine/state/manifest behavior changes."""
+    if incoming is None:
+        return None
+    from src.backend.workshop import manifest
+    representable = set(manifest.step_number_to_tag().values())
+    merged = list(incoming)
+    for gate in existing or []:
+        if gate not in representable and gate not in merged:
+            merged.append(gate)
+    return merged
+
+
 # Session Pydantic Models
 class SessionSaveRequest(BaseModel):
     """Request to save a session"""
@@ -5437,6 +5467,16 @@ class SessionSaveRequest(BaseModel):
     chain_context: Optional[str] = Field(None, description="Additive-chain context: app | lakehouse | reverse (persisted as session_parameters.chainContext)")
     flags: Optional[Dict[str, bool]] = Field(None, description="Engine composition flags (e.g. includeLakehouse, ai.genie, medallion.bronze) persisted under session_parameters.flags")
     completed_steps: List[int] = Field(default_factory=list, description="List of completed step numbers")
+    # Gate dual-write (Phase 3 T5 PR3a). The SPA writes the COMPLETE App-derived gate
+    # set (sectionTags for ALL completed/skipped steps, from the same numbers above)
+    # ALONGSIDE the legacy numbers. Optional/None (NOT []-default) so an omitting
+    # save — composition-only or an older client — leaves the persisted gates
+    # untouched (present => server-side MERGE, absent/None => preserve). See
+    # `_merge_app_gates`: App-representable gates are authoritative from the App;
+    # non-representable stored gates (e.g. MCP-only `use_case_selection`) are
+    # add-only preserved so an App write can't re-lock a step whose gate they satisfy.
+    completed_gates: Optional[List[str]] = Field(None, description="Complete set of App-completed step sectionTags (dual-write; server-side merged with non-representable stored gates)")
+    skipped_gates: Optional[List[str]] = Field(None, description="Complete set of App-skipped step sectionTags (dual-write; persisted under session_parameters.skipped_gates, same merge)")
     step_prompts: Dict[int, str] = Field(default_factory=dict, description="Map of step number to generated prompt")
 
 
@@ -5710,6 +5750,19 @@ async def save_session_endpoint(request_body: SessionSaveRequest, request: Reque
         else:
             base_url = str(request.base_url).rstrip("/")
         
+        # Gate dual-write (T5 PR3a): MERGE-on-present / PRESERVE-on-absent for both
+        # completed_gates (column) and skipped_gates (session_parameters). Load the
+        # existing gates once (only when the request carries either) so the merge can
+        # add-only preserve non-representable stored gates (e.g. MCP `use_case_selection`).
+        _existing_completed_gates: List[str] = []
+        _existing_skipped_gates: List[str] = []
+        if request_body.completed_gates is not None or request_body.skipped_gates is not None:
+            _existing = load_session(request_body.session_id) or {}
+            _existing_completed_gates = _existing.get("completed_gates") or []
+            _existing_skipped_gates = (_existing.get("session_parameters") or {}).get("skipped_gates") or []
+        _merged_completed_gates = _merge_app_gates(request_body.completed_gates, _existing_completed_gates)
+        _merged_skipped_gates = _merge_app_gates(request_body.skipped_gates, _existing_skipped_gates)
+
         # Save to Lakebase
         success = save_session(
             session_id=request_body.session_id,
@@ -5724,12 +5777,18 @@ async def save_session_endpoint(request_body: SessionSaveRequest, request: Reque
             current_step=request_body.current_step,
             workshop_level=request_body.workshop_level,
             completed_steps=request_body.completed_steps,
+            completed_gates=_merged_completed_gates,  # None => COALESCE preserves
             step_prompts=request_body.step_prompts,
             created_by=current_user,
         )
-        
+
         # Persist direction / include_lakehouse / include_genie_ontology in session_parameters if provided
         _save_param_patch = {}
+        # skipped_gates lives in session_parameters (the read side reads
+        # session_parameters['skipped_gates']). Patch ONLY when present (absent =>
+        # leave the persisted set untouched — no []-clobber on an omitting save).
+        if _merged_skipped_gates is not None:
+            _save_param_patch["skipped_gates"] = _merged_skipped_gates
         if request_body.direction:
             _save_param_patch["direction"] = request_body.direction
         if request_body.include_lakehouse is not None:
@@ -6027,6 +6086,13 @@ class SessionUpdateMetadataRequest(BaseModel):
     workshop_level: Optional[str] = Field(None, description="Workshop level: app-only, app-database, lakehouse, lakehouse-di, end-to-end, accelerator, or genie-accelerator")
     completed_steps: Optional[List[int]] = Field(None, description="List of completed step numbers")
     skipped_steps: Optional[List[int]] = Field(None, description="List of skipped step numbers")
+    # Gate dual-write (Phase 3 T5 PR3a) — see SessionSaveRequest for the contract.
+    # Optional/None on this partial-update path so an update that carries no gates
+    # (e.g. an industry-only save) leaves the persisted gates untouched (COALESCE
+    # for the column, no patch key for skipped_gates). When present they MUST be
+    # the complete set, mirroring the numbers in the same request.
+    completed_gates: Optional[List[str]] = Field(None, description="Complete set of completed step sectionTags (dual-write mirror of completed_steps)")
+    skipped_gates: Optional[List[str]] = Field(None, description="Complete set of skipped step sectionTags (dual-write mirror; persisted under session_parameters.skipped_gates)")
     custom_use_case_label: Optional[str] = Field(None, max_length=30, description="User-edited use case name override")
     custom_use_case_description: Optional[str] = Field(None, description="User-edited use case description override")
     level_explicitly_selected: Optional[bool] = Field(None, description="Whether the user explicitly clicked a level button")
@@ -6075,6 +6141,21 @@ async def update_session_metadata_endpoint(request_body: SessionUpdateMetadataRe
         if request_body.completed_steps:
             current_step = max(request_body.completed_steps) if request_body.completed_steps else None
         
+        # Gate dual-write (T5 PR3a): MERGE-on-present / PRESERVE-on-absent, symmetric
+        # for completed_gates (column) and skipped_gates (session_parameters). Load
+        # existing gates once (only when the request carries either) so the merge can
+        # add-only preserve non-representable stored gates (e.g. MCP `use_case_selection`),
+        # which the App can't represent as numbers and would otherwise destroy —
+        # re-locking any step whose requiresGate they satisfy.
+        _existing_completed_gates: List[str] = []
+        _existing_skipped_gates: List[str] = []
+        if request_body.completed_gates is not None or request_body.skipped_gates is not None:
+            _existing = load_session(request_body.session_id) or {}
+            _existing_completed_gates = _existing.get("completed_gates") or []
+            _existing_skipped_gates = (_existing.get("session_parameters") or {}).get("skipped_gates") or []
+        _merged_completed_gates = _merge_app_gates(request_body.completed_gates, _existing_completed_gates)
+        _merged_skipped_gates = _merge_app_gates(request_body.skipped_gates, _existing_skipped_gates)
+
         success = save_session(
             session_id=request_body.session_id,
             industry=request_body.industry,
@@ -6085,12 +6166,17 @@ async def update_session_metadata_endpoint(request_body: SessionUpdateMetadataRe
             prerequisites_completed=request_body.prerequisites_completed,
             workshop_level=request_body.workshop_level,
             completed_steps=request_body.completed_steps,
+            completed_gates=_merged_completed_gates,  # None => COALESCE preserves
             skipped_steps=request_body.skipped_steps,
             current_step=current_step,
         )
-        
+
         # Store custom use case overrides and derive user_schema_prefix
         _session_param_patch = {}
+        # skipped_gates persists into session_parameters (where the read side reads
+        # it). Patch ONLY when present (absent => partial update => leave untouched).
+        if _merged_skipped_gates is not None:
+            _session_param_patch['skipped_gates'] = _merged_skipped_gates
         
         if request_body.custom_use_case_label is not None:
             _session_param_patch['custom_use_case_label'] = request_body.custom_use_case_label
