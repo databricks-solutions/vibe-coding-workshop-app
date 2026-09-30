@@ -1903,7 +1903,7 @@ def get_analytics() -> Dict[str, Any]:
             SELECT completed_steps, skipped_steps, completed_gates, session_parameters
             FROM {table_name}
             WHERE (completed_steps IS NOT NULL AND completed_steps != '' AND completed_steps != '[]')
-               OR (completed_gates IS NOT NULL AND completed_gates != '' AND completed_gates != '[]')
+               OR (completed_gates IS NOT NULL AND completed_gates != '[]')
         """)
         scores = []
         for sr in score_rows:
@@ -1970,7 +1970,7 @@ def get_analytics() -> Dict[str, Any]:
             FROM {table_name}
             WHERE (completed_steps IS NOT NULL AND completed_steps != '' AND completed_steps != '[]')
                OR (skipped_steps IS NOT NULL AND skipped_steps != '' AND skipped_steps != '[]')
-               OR (completed_gates IS NOT NULL AND completed_gates != '' AND completed_gates != '[]')
+               OR (completed_gates IS NOT NULL AND completed_gates != '[]')
         """)
         step_completion_counts = _aggregate_step_completion(step_rows, _inverse_map)
 

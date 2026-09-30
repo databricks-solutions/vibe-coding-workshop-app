@@ -35,7 +35,9 @@ Run offline (no Lakebase): these exercise the pure re-key helpers, not the DB.
 
 import json
 import pathlib
+import re
 import sys
+from contextlib import contextmanager
 
 REPO_ROOT = pathlib.Path(__file__).resolve().parents[2]
 if str(REPO_ROOT) not in sys.path:
@@ -424,3 +426,133 @@ def test_leaderboard_entry_counts_optional_for_legacy_shape():
     model = LeaderboardEntry(**entry)
     assert model.completed_step_count is None
     assert model.skipped_step_count is None
+
+
+# =============================================================================
+# SQL-orchestration boundary (B2) — the analytics gate-admitting WHERE branches
+# must NOT compare the completed_gates JSONB column to '' . Postgres casts '' to
+# jsonb at parse time -> ERROR: invalid input syntax for type json; execute_query
+# swallows it and returns [] -> avg_score silently 0 and step_completion_counts
+# silently EMPTY in prod. The pure-helper tests never see this because they call
+# the helpers with dict rows, so the SQL string never reaches a Postgres parser.
+#
+# These tests RECORD every SQL string the aggregation issues (stubbing the DB so
+# it stays offline) and assert (a) no JSONB column is compared to '' in ANY
+# issued query, (b) get_analytics() returns non-empty step_completion_counts AND
+# non-zero avg_score end-to-end (through the orchestration wrapper), and (c)
+# get_leaderboard() admits the gate-only row end-to-end.
+#
+# TAMPER: re-adding `completed_gates != ''` to either analytics query makes the
+# recorded SQL contain it, so assertion (a) FAILS. NOTE: an offline stub cannot
+# prove Postgres JSONB type semantics — it proves the bad predicate is gone and
+# the orchestration returns non-empty; the human re-runs the live read-only
+# predicate check at the gate.
+# =============================================================================
+
+# JSONB columns that must never be compared to '' (skipped_gates lives inside
+# session_parameters JSONB). completed_steps/skipped_steps are TEXT — excluded.
+_JSONB_EMPTY_STRING_RE = re.compile(
+    r"(completed_gates|session_parameters|captured_outputs|skipped_gates)\s*(!=|<>)\s*''"
+)
+
+
+def _analytics_cohort_rows():
+    """Mixed cohort as get_analytics' completion queries would return it:
+    an App-origin scored row (globals 17,18 -> score 100) and an MCP gate-only
+    genie row (globals 57-59, completed_steps empty). Rows carry the extra keys
+    the various analytics queries read (session_id / feedback_rating)."""
+    app = _app_row("app@x.com", [17, 18])
+    mcp = _mcp_row("mcp@x.com", GENIE_GATES, [])
+    for r, sid in ((app, "s-app"), (mcp, "s-mcp")):
+        r["session_id"] = sid
+        r["feedback_rating"] = None
+    return [app, mcp]
+
+
+def _install_recording_execute_query(monkeypatch, recorded):
+    """Stub lakebase.execute_query: record the SQL, return plausible rows so
+    get_analytics runs end-to-end. Any query selecting the completion columns
+    (score_rows / step_rows / user_rows) gets the mixed cohort."""
+    rows = _analytics_cohort_rows()
+
+    def _fake_execute_query(sql, params=None):
+        recorded.append(sql)
+        if "total_sessions" in sql:
+            return [{"total_sessions": 2, "total_users": 2, "total_feedback": 0,
+                     "positive_count": 0, "negative_count": 0}]
+        if "avg_steps_per_session" in sql and "prereqs_completed" in sql:
+            return [{"avg_steps_per_session": 0, "prereqs_completed": 0, "saved_sessions": 0}]
+        if "total_prompts" in sql:
+            return [{"total_prompts": 0}]
+        # score_rows, step_rows AND user_rows all select these two columns.
+        if "completed_gates" in sql and "completed_steps" in sql:
+            return [dict(r) for r in rows]
+        return []
+
+    monkeypatch.setattr(lakebase, "is_lakebase_configured", lambda: True)
+    monkeypatch.setattr(lakebase, "_get_sessions_table_name", lambda: "genie.sessions")
+    monkeypatch.setattr(lakebase, "execute_query", _fake_execute_query)
+
+
+def test_get_analytics_issues_no_jsonb_empty_string_comparison(monkeypatch):
+    recorded: list = []
+    _install_recording_execute_query(monkeypatch, recorded)
+
+    result = lakebase.get_analytics()
+
+    # (a) No issued query compares a JSONB column to '' .
+    offenders = [s for s in recorded if _JSONB_EMPTY_STRING_RE.search(s)]
+    assert offenders == [], f"JSONB column compared to '': {offenders}"
+
+    # (b) End-to-end the orchestration returns real data (not the swallowed []).
+    assert result["step_completion_counts"], "step_completion_counts empty"
+    assert result["usage"]["avg_score"] > 0, "avg_score silently zero"
+    # Gate-derived globals present (17,18 from App; 57-59 from the gate-only MCP row).
+    steps = {c["step_number"] for c in result["step_completion_counts"]}
+    assert {17, 18, 57, 58, 59} <= steps
+
+
+def _install_recording_leaderboard(monkeypatch, recorded):
+    """Stub get_leaderboard's DB layer: a fake connection + recording cursor
+    that captures the executed SQL and returns the mixed cohort."""
+    rows = _analytics_cohort_rows()
+
+    class _RecCursor:
+        def execute(self, sql, params=None):
+            recorded.append(sql)
+
+        def fetchall(self):
+            return [dict(r) for r in rows]
+
+        def fetchone(self):
+            return None
+
+        def close(self):
+            pass
+
+    @contextmanager
+    def _fake_get_connection():
+        yield object()
+
+    monkeypatch.setattr(lakebase, "is_lakebase_configured", lambda: True)
+    monkeypatch.setattr(lakebase, "_get_sessions_table_name", lambda: "genie.sessions")
+    monkeypatch.setattr(lakebase, "get_connection", _fake_get_connection)
+    monkeypatch.setattr(lakebase, "_dict_cursor", lambda conn: _RecCursor())
+
+
+def test_get_leaderboard_issues_no_jsonb_empty_string_and_admits_gate_only(monkeypatch):
+    recorded: list = []
+    _install_recording_leaderboard(monkeypatch, recorded)
+
+    result = lakebase.get_leaderboard(limit=10)
+
+    # (a) No issued query compares a JSONB column to '' .
+    offenders = [s for s in recorded if _JSONB_EMPTY_STRING_RE.search(s)]
+    assert offenders == [], f"JSONB column compared to '': {offenders}"
+
+    # (c) The gate-only MCP row (completed_steps empty, gates populated) is
+    # admitted end-to-end — the class the pre-PR3c WHERE dropped.
+    user_ids = {e["user_id"] for e in result}
+    assert "mcp@x.com" in user_ids
+    mcp_entry = next(e for e in result if e["user_id"] == "mcp@x.com")
+    assert mcp_entry["completed_step_count"] == 3
