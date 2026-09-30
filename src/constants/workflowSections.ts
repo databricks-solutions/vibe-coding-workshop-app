@@ -504,7 +504,7 @@ export const ALL_STEPS: Record<number, WorkflowStep> = {
 // positions against, so a session started in MCP resumes on the right step in
 // the App (the backend's own completed_steps are dense track positions that do
 // NOT line up with these global numbers).
-const SECTION_TAG_TO_STEP_NUMBER: Record<string, number> = Object.fromEntries(
+export const SECTION_TAG_TO_STEP_NUMBER: Record<string, number> = Object.fromEntries(
   Object.values(ALL_STEPS).map(s => [s.sectionTag, s.number]),
 );
 

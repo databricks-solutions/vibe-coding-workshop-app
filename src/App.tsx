@@ -21,7 +21,9 @@ import {
 } from './components/session';
 import { apiClient } from './api/client';
 import { Zap, MessageSquare, Trophy, Plus, PanelLeftClose, PanelLeft, Menu, X, BarChart3, Eye, Compass, Award, ChevronDown, List, BookOpen } from 'lucide-react';
-import { orderedSectionsForRead, getCumulativeOverrides, USE_CASE_LEVEL_LOCK, isForwardProgression, getDisabledTagsForAIModules, ALL_AI_MODULES, getDisabledTagsForMedallionLayers, normalizeMedallionLayers, ALL_MEDALLION_LAYERS, getDisabledTagsForLakehouse, getDisabledTagsForGenieOntology, computeChainContext, deriveInitialChainContext, completedGatesToStepNumbers, type WorkshopLevel, type WorkflowDirection, type AIAgentModule, type MedallionLayer, type ChainContext } from './constants/workflowSections';
+import { orderedSectionsForRead, getCumulativeOverrides, USE_CASE_LEVEL_LOCK, isForwardProgression, getDisabledTagsForAIModules, ALL_AI_MODULES, getDisabledTagsForMedallionLayers, normalizeMedallionLayers, ALL_MEDALLION_LAYERS, getDisabledTagsForLakehouse, getDisabledTagsForGenieOntology, computeChainContext, deriveInitialChainContext, completedGatesToStepNumbers, SECTION_TAG_TO_STEP_NUMBER, type WorkshopLevel, type WorkflowDirection, type AIAgentModule, type MedallionLayer, type ChainContext } from './constants/workflowSections';
+import { mergeStatus } from './constants/mergeStatus';
+import type { TrackOutlineItem } from './api/client';
 import { DEFAULT_LEVEL_BY_ASSISTANT, parseCodingAssistantsConfig } from './constants/codingAssistants';
 import { resolveRestoredLevel } from './constants/restoreLevel';
 
@@ -141,12 +143,20 @@ export default function App() {
   const [prerequisitesVisible, setPrerequisitesVisible] = useState<boolean>(true);
   const [disabledWorkshopLevels, setDisabledWorkshopLevels] = useState<Set<WorkshopLevel>>(new Set());
 
-  // Engine-composed outline for the active track (Phase 3 T3c). The ordered flat
-  // sectionTag list from GET /api/track/{track}/outline, or null until it first
-  // resolves (kept on transient error). This is the ORDER source for the read
-  // path; while null the read path renders a loading skeleton (never blanks, never
-  // re-composes client-side).
-  const [outlineTags, setOutlineTags] = useState<string[] | null>(null);
+  // Engine-composed outline for the active track (Phase 3 T3c; extended in T5 PR2
+  // Work B). The full ordered TrackOutlineItem[] from GET /api/track/{track}/outline
+  // — carrying per-step `status` — or null until it first resolves (kept on
+  // transient error). While null the read path renders a loading skeleton (never
+  // blanks, never re-composes client-side).
+  const [outline, setOutline] = useState<TrackOutlineItem[] | null>(null);
+
+  // ORDER source for the read path (T3c), derived from the full outline: the flat
+  // `sectionTag` sequence, unchanged. ORDER still comes from the endpoint outline;
+  // Work B adds STATUS consumption (projectedCompletedSteps below), not ordering.
+  const outlineTags = useMemo(
+    () => (outline ? outline.map(item => item.sectionTag) : null),
+    [outline],
+  );
 
   // Engine outline fetch (Phase 3 T3c). `fetchOutline` is the single shared fetch
   // used by (a) the dep-driven effect, (b) refetch-after-persist in the write
@@ -164,7 +174,7 @@ export default function App() {
       .getTrackOutline(track, sid)
       .then(resp => {
         if (seq !== outlineReqSeq.current) return; // superseded by a newer request
-        setOutlineTags(resp.outline.map(item => item.sectionTag));
+        setOutline(resp.outline);
       })
       .catch(err => {
         if (seq !== outlineReqSeq.current) return;
@@ -177,6 +187,27 @@ export default function App() {
   // outlineReady gates the returning-user restore (WorkflowDiagram) so it navigates
   // using the engine order, not a provisional pre-fetch value.
   const outlineReady = outlineTags != null;
+
+  // Work B (Phase 3 T5 PR2): project the endpoint's per-step `status: 'done'`
+  // onto the Set<number> done-set the sidebar/step surfaces render from, UNIONed
+  // with the LOCAL optimistic `completedSteps` so a just-completed step never
+  // flickers back to not-done in the persist -> refetch window. Endpoint status is
+  // the truth; the local optimistic overlay only ADDS on top and converges to the
+  // endpoint set once the refetch lands (see mergeStatus).
+  //
+  // NOTE: `projectedCompletedSteps` is passed as WorkflowDiagram's `completedSteps`
+  // prop, which is BOTH the render source AND the mutation seed its toggle handlers
+  // read (`new Set(completedSteps)` at WorkflowDiagram.tsx ~715/753/828). So the
+  // union — not the raw local set — is what a toggle grows/shrinks and then
+  // persists back into `completed_steps` (NUMBERS-ONLY; NO gate write; NO schema
+  // touch). This is BENIGN CONVERGENCE: the endpoint `done` set is derived from the
+  // authoritative `completed_gates`, so only genuinely-completed steps can enter
+  // the union and nothing false/foreign is ever written. The clean display-vs-
+  // mutation split (a separate mutation-seed prop) is deferred to PR 3a.
+  const projectedCompletedSteps = useMemo(
+    () => mergeStatus(completedSteps, outline ?? [], SECTION_TAG_TO_STEP_NUMBER),
+    [completedSteps, outline],
+  );
 
   // Client-side AI sub-module selection (Genie / Agent / Dashboard chips).
   // Kept SEPARATE from `disabledSectionTags` so the per-coding-assistant visibility
@@ -1052,7 +1083,7 @@ export default function App() {
   useEffect(() => {
     if (!sessionId) {
       outlineReqSeq.current++; // invalidate any in-flight request
-      setOutlineTags(null);
+      setOutline(null);
       return;
     }
     fetchOutline(workshopLevel, sessionId);
@@ -1589,7 +1620,7 @@ export default function App() {
                   <WorkflowDiagram
                     sessionId={sessionId}
                     stepPrompts={stepPrompts}
-                    completedSteps={completedSteps}
+                    completedSteps={projectedCompletedSteps}
                     selectedIndustry={selectedIndustry}
                     selectedIndustryLabel={selectedIndustryLabel}
                     selectedUseCase={selectedUseCase}
