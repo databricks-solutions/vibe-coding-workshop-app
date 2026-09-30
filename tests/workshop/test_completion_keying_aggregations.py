@@ -36,8 +36,12 @@ Run offline (no Lakebase): these exercise the pure re-key helpers, not the DB.
 import json
 import pathlib
 import re
+import shutil
+import subprocess
 import sys
 from contextlib import contextmanager
+
+import pytest
 
 REPO_ROOT = pathlib.Path(__file__).resolve().parents[2]
 if str(REPO_ROOT) not in sys.path:
@@ -556,3 +560,132 @@ def test_get_leaderboard_issues_no_jsonb_empty_string_and_admits_gate_only(monke
     assert "mcp@x.com" in user_ids
     mcp_entry = next(e for e in result if e["user_id"] == "mcp@x.com")
     assert mcp_entry["completed_step_count"] == 3
+
+
+# =============================================================================
+# GAP 1 — scoring COVERAGE + BE/FE parity. 18 global steps (55-73 minus the
+# retired 70) had no STEP_SCORES entry and no chapter; genie-accelerator is the
+# default track, so its real completions scored ~0. This block pins: (1) the
+# backend STEP_SCORES/CHAPTERS equal the frontend scoring.ts copy key-for-key,
+# (2) every manifest global is scored AND in exactly one chapter (a future new
+# step cannot silently go unscored), (3) a concrete session scores the old-wrong
+# vs new-correct total. TAMPER: remove one new entry from one copy -> parity AND
+# coverage fail.
+# =============================================================================
+
+
+def _node_scoring_dump():
+    """Parse the REAL scoring.ts via node --experimental-strip-types (mirrors the
+    mergeStatus/stepNumbersToGates .node pattern; no vitest) and return its
+    STEP_SCORES / CHAPTERS."""
+    node = shutil.which("node")
+    if node is None:
+        pytest.skip("node not available for BE/FE scoring parity")
+    out = subprocess.run(
+        [node, "--experimental-strip-types", "tests/frontend/scoringDump.node.mts"],
+        cwd=REPO_ROOT,
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout
+    return json.loads(out)
+
+
+def test_step_scores_and_chapters_parity_backend_vs_frontend():
+    dump = _node_scoring_dump()
+
+    # STEP_SCORES: identical key-for-key, value-for-value.
+    fe_scores = {int(k): v for k, v in dump["step_scores"].items()}
+    assert fe_scores == dict(lakebase.STEP_SCORES)
+
+    # CHAPTERS: identical step sets and display per chapter name.
+    be_chapters = {
+        name: {"steps": sorted(info["steps"]), "display": info["display"]}
+        for name, info in lakebase.CHAPTERS.items()
+    }
+    fe_chapters = {
+        name: {"steps": sorted(info["steps"]), "display": info["display"]}
+        for name, info in dump["chapters"].items()
+    }
+    assert fe_chapters == be_chapters
+
+
+def test_every_manifest_global_is_scored_and_in_one_chapter():
+    globals_ = set(manifest.step_number_to_tag().keys())
+
+    # Every global has a STEP_SCORES entry (no silent zero).
+    missing = sorted(globals_ - set(lakebase.STEP_SCORES))
+    assert missing == [], f"globals with no STEP_SCORES entry: {missing}"
+
+    # Every global belongs to exactly one chapter.
+    from collections import Counter
+
+    membership = Counter()
+    for info in lakebase.CHAPTERS.values():
+        for step in info["steps"]:
+            membership[step] += 1
+    no_chapter = sorted(g for g in globals_ if membership[g] == 0)
+    multi_chapter = sorted(g for g in globals_ if membership[g] > 1)
+    assert no_chapter == [], f"globals in no chapter: {no_chapter}"
+    assert multi_chapter == [], f"globals in >1 chapter: {multi_chapter}"
+
+
+# Pre-PR3c STEP_SCORES (globals 1-54 only) — the state the fail-before asserts.
+_OLD_STEP_SCORES = {k: v for k, v in lakebase.STEP_SCORES.items() if k <= 54}
+
+
+def test_genie_completions_scored_correctly_fail_before_pass_after():
+    completed = [2, 3, 57, 58, 59, 60]  # 6 real genie-accelerator completions
+
+    # FAIL-BEFORE: globals 57-60 unscored -> only 2,3 count (10+10).
+    old = sum(_OLD_STEP_SCORES.get(s, 0) for s in completed)
+    assert old == 20
+
+    # PASS-AFTER: 2,3 (Foundation 10) + 57-60 (Semantic Layer 50) = 20 + 200.
+    new = lakebase._calculate_score(completed, [])
+    assert new == 220
+    assert new != old
+
+
+# =============================================================================
+# GAP 2 — step 1 ("Define Your Intent") credit. The MCP gate use_case_selection
+# has no global number, so it is dropped; mirror the App's rule (industry AND
+# use_case set => step 1 done) at the aggregation layer, for App- AND MCP-origin
+# rows. TAMPER: drop the union-{1} rule -> the MCP row loses step 1 and this
+# test fails.
+# =============================================================================
+
+
+def _mcp_intent_row(industry, use_case):
+    """MCP-origin row that resolved the use_case_selection gate; industry/use_case
+    are the top-level TEXT columns the App reads."""
+    row = _mcp_row("intent@x.com", ["use_case_selection"], [1])
+    row["industry"] = industry
+    row["use_case"] = use_case
+    return row
+
+
+def test_mcp_session_with_defined_intent_gets_step_1():
+    row = _mcp_intent_row("Retail", "Demand forecasting")
+    completed, _skipped = lakebase._row_completion_globals(row, INVERSE)
+    # use_case_selection does not map to a global; step 1 comes from the intent rule.
+    assert 1 in completed
+
+
+def test_row_missing_either_intent_column_does_not_get_step_1():
+    only_industry = _mcp_intent_row("Retail", "")
+    only_use_case = _mcp_intent_row("", "Demand forecasting")
+    neither = _mcp_intent_row("", "")
+    for row in (only_industry, only_use_case, neither):
+        completed, _ = lakebase._row_completion_globals(row, INVERSE)
+        assert 1 not in completed
+
+
+def test_step_1_intent_credit_is_idempotent_for_app_origin():
+    # App-origin already has global 1 in completed_steps AND defined intent — the
+    # union must not double-count or drop anything else.
+    row = _app_row("app@x.com", [1, 2, 3])
+    row["industry"] = "Retail"
+    row["use_case"] = "Demand forecasting"
+    completed, _ = lakebase._row_completion_globals(row, INVERSE)
+    assert completed == {1, 2, 3}

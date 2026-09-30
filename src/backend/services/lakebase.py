@@ -1419,8 +1419,18 @@ STEP_SCORES = {
     31: 10,
     # Agents Accelerator — Agents on Apps (steps 38-46): 50 points each
     38: 50, 39: 50, 40: 50, 41: 50, 42: 50, 43: 50, 44: 50, 45: 50, 46: 50,
-    # Agents Accelerator — MLflow for Gen-AI (steps 47-54): 50 points each
+    # Agents Accelerator — MLflow for Gen-AI (steps 47-56): 50 points each
     47: 50, 48: 50, 49: 50, 50: 50, 51: 50, 52: 50, 53: 50, 54: 50,
+    # Agents Accelerator — MLflow tail (steps 55-56): 50 points each (T5 PR3c)
+    55: 50, 56: 50,
+    # Genie Accelerator — Semantic Layer (steps 57-61): 50 points each (T5 PR3c)
+    57: 50, 58: 50, 59: 50, 60: 50, 61: 50,
+    # Genie Accelerator — Genie Agent (steps 62-66, 71): 50 points each (T5 PR3c)
+    62: 50, 63: 50, 64: 50, 65: 50, 66: 50, 71: 50,
+    # Genie Accelerator — Genie Ontology (steps 67-69): 50 points each (T5 PR3c)
+    67: 50, 68: 50, 69: 50,
+    # Genie Accelerator — Genie Activation (steps 72-73): 40 points each (T5 PR3c)
+    72: 40, 73: 40,
 }
 
 # Chapter definitions for progress tracking (must match src/constants/scoring.ts)
@@ -1433,7 +1443,14 @@ CHAPTERS = {
     'Activation': {'steps': {32, 33, 34, 35, 36, 37}, 'display': 'Reverse ETL'},
     'Refinement': {'steps': {20, 21}, 'display': 'Refinement'},
     'Agent Skills': {'steps': {26, 27, 28, 29, 30}, 'display': 'Agent Skills'},
-    'Agents Accelerator': {'steps': {38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54}, 'display': 'Agents Accelerator'},
+    'Agents Accelerator': {'steps': {38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56}, 'display': 'Agents Accelerator'},
+    # Genie Accelerator chapters (T5 PR3c) — mirror the manifest's genie-accelerator
+    # section groupings; kept as their own chapters (not merged into the shared
+    # 'Chapter 4'/'Activation' sets) so cross-track chapter-completion is unaffected.
+    'Semantic Layer': {'steps': {57, 58, 59, 60, 61}, 'display': 'Semantic Layer'},
+    'Genie Agent': {'steps': {62, 63, 64, 65, 66, 71}, 'display': 'Genie Agent'},
+    'Genie Ontology': {'steps': {67, 68, 69}, 'display': 'Genie Ontology'},
+    'Genie Activation': {'steps': {72, 73}, 'display': 'Genie Activation'},
     'Clean Up': {'steps': {31}, 'display': 'Clean Up'},
 }
 
@@ -1477,23 +1494,43 @@ def _parse_json_obj(value: Any) -> dict:
     return value if isinstance(value, dict) else {}
 
 
+# Global step 1 ("Define Your Intent" / usecase_selection) is credited when the
+# use case is defined. The MCP engine gate is "use_case_selection" (engine.py),
+# which has NO global number (manifest global 1 is "usecase_selection"), so it
+# never resolves through the tag->number map and step 1 is dropped for MCP
+# sessions. Mirror the App's rule (App.tsx:492 / :654 — industry AND use_case set
+# => completedSteps.add(1)) at the aggregation layer, for App- AND MCP-origin
+# rows alike, using the top-level industry/use_case TEXT columns (no JSONB-vs-''
+# comparison; no string special-case for the gate literal).
+_INTENT_STEP = 1
+
+
+def _has_defined_intent(row: Dict[str, Any]) -> bool:
+    return bool((row.get("industry") or "").strip() and (row.get("use_case") or "").strip())
+
+
 def _row_completion_globals(row: Dict[str, Any], inverse_map: Dict[str, int]) -> tuple:
     """Canonical (completed, skipped) GLOBAL step-number sets for one sessions row.
 
     Reads ``completed_steps``/``skipped_steps`` (JSON int arrays), the
     ``completed_gates`` column (JSON tag array) and ``skipped_gates`` (nested in
     the ``session_parameters`` JSONB), then disambiguates via PR1's map — origin
-    decided once by ``completed_gates`` presence, skipped in lockstep."""
+    decided once by ``completed_gates`` presence, skipped in lockstep. Global step
+    1 is unioned into completed when the row has defined intent (industry AND
+    use_case), mirroring the App (GAP 2); idempotent when it is already present."""
     from src.backend.workshop.completion_keying import resolve_completion_globals
 
     session_params = _parse_json_obj(row.get("session_parameters"))
-    return resolve_completion_globals(
+    completed, skipped = resolve_completion_globals(
         completed_gates=_parse_json_list(row.get("completed_gates")),
         completed_steps=_parse_json_list(row.get("completed_steps")),
         skipped_gates=session_params.get("skipped_gates") or [],
         skipped_steps=_parse_json_list(row.get("skipped_steps")),
         inverse_map=inverse_map,
     )
+    if _has_defined_intent(row):
+        completed = completed | {_INTENT_STEP}
+    return completed, skipped
 
 
 def _aggregate_step_completion(rows: List[Dict[str, Any]], inverse_map: Dict[str, int]) -> List[Dict[str, Any]]:
@@ -1623,6 +1660,8 @@ def get_leaderboard(limit: int = 10) -> List[Dict]:
                 skipped_steps,
                 completed_gates,
                 session_parameters,
+                industry,
+                use_case,
                 updated_at,
                 workshop_level
             FROM {table_name}
@@ -1900,7 +1939,7 @@ def get_analytics() -> Dict[str, Any]:
         from src.backend.workshop.completion_keying import tag_to_global_number
         _inverse_map = tag_to_global_number()
         score_rows = execute_query(f"""
-            SELECT completed_steps, skipped_steps, completed_gates, session_parameters
+            SELECT completed_steps, skipped_steps, completed_gates, session_parameters, industry, use_case
             FROM {table_name}
             WHERE (completed_steps IS NOT NULL AND completed_steps != '' AND completed_steps != '[]')
                OR (completed_gates IS NOT NULL AND completed_gates != '[]')
@@ -1966,7 +2005,7 @@ def get_analytics() -> Dict[str, Any]:
         # Aggregate in Python over gate-derived GLOBAL numbers instead, admitting
         # gate-only rows (completed_gates non-empty even when completed_steps empty).
         step_rows = execute_query(f"""
-            SELECT completed_steps, skipped_steps, completed_gates, session_parameters
+            SELECT completed_steps, skipped_steps, completed_gates, session_parameters, industry, use_case
             FROM {table_name}
             WHERE (completed_steps IS NOT NULL AND completed_steps != '' AND completed_steps != '[]')
                OR (skipped_steps IS NOT NULL AND skipped_steps != '' AND skipped_steps != '[]')
@@ -2038,7 +2077,7 @@ def get_analytics() -> Dict[str, Any]:
         # (completed_gates + skipped_gates pulled for the per-row disambiguation).
         user_rows = execute_query(f"""
             SELECT created_by, session_id, completed_steps, skipped_steps,
-                   completed_gates, session_parameters, feedback_rating
+                   completed_gates, session_parameters, industry, use_case, feedback_rating
             FROM {table_name}
             WHERE created_by IS NOT NULL AND created_by != ''
         """)
