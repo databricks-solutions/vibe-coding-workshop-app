@@ -297,11 +297,13 @@ function LeaderboardRow({
               {entry.completed_chapters.length} chapter{entry.completed_chapters.length !== 1 ? 's' : ''}
             </span>
             <span className="text-muted-foreground/50">•</span>
-            <span>{entry.completed_steps.length} steps</span>
-            {entry.skipped_steps && entry.skipped_steps.length > 0 && (
+            {/* T5 PR3c: gate-derived count from the backend (falls back to the
+                array length for older responses that omit the field). */}
+            <span>{entry.completed_step_count ?? entry.completed_steps.length} steps</span>
+            {(entry.skipped_step_count ?? entry.skipped_steps?.length ?? 0) > 0 && (
               <>
                 <span className="text-muted-foreground/50">•</span>
-                <span className="text-amber-400/70">{entry.skipped_steps.length} skipped</span>
+                <span className="text-amber-400/70">{entry.skipped_step_count ?? entry.skipped_steps.length} skipped</span>
               </>
             )}
           </p>
