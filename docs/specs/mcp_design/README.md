@@ -101,9 +101,14 @@ Phasing authority is [D9 §1](./mcp-workshop-rollout.md#1-revised-phasing-elicit
 - **Phases 0, 1, 2, 2B — SHIPPED** (PRs #40–#44 + #45–#49, deployed to `fevm-serverless`, smoke green;
   **7 tools** — the 7th is `vibe_explain_step`, not `vibe_coach`; see the reconciliation in
   [D9 §1](./mcp-workshop-rollout.md#1-revised-phasing-elicitation-decoupled)).
-- **Phase 3 — recommended next** ([D9 §1](./mcp-workshop-rollout.md), scoped 2026-09-27): repoint the
-  SPA to the engine outline (`GET /api/track/{track}/outline`, D4 §3.3); retire the TS orchestration;
-  Task 0 persists the track and fixes the live "0/28" resume defect. Charter:
+- **Phase 3 — T0–T4 SHIPPED; T5 soaking** ([D9 §1](./mcp-workshop-rollout.md), scoped 2026-09-27):
+  repoint the SPA to the engine outline (`GET /api/track/{track}/outline`, D4 §3.3) and retire the TS
+  orchestration. T0 persists the track and fixed the live "0/28" resume defect (PR #50); T1–T4
+  (PRs #51/#52/#53/#57/#59/#61) land the outline endpoint, the engine-vs-TS parity harness, the SPA
+  read-path repoint, and the `getFilteredSections` retirement. **T5 (gates-only contract)** is at R4b
+  (#71): the legacy `current_step`/`completed_steps`/`skipped_steps` dual-write stopped in R4a (#70)
+  and all reads went gates-only in R4b — **deployed and soaking; the legacy-column DROP (D6 §5/§9) is
+  pending** (human holds the soak clock). Charter:
   [`polly-charter-phase3.md`](./polly-charter-phase3.md).
 - **Phase 2A — its own charter *after* Phase 3**: adaptive coaching delivered as a **consolidation** —
   extend `vibe_explain_step` (optional `focus`, FMAPI path, fail-open to the static help), **no 8th
@@ -114,7 +119,7 @@ Charters (the paste-ready supervisor commands for Polly):
 - [`polly-build-charter.md`](./polly-build-charter.md) — the original Phase 0→2/2A charter.
 - [`polly-charter-next.md`](./polly-charter-next.md) — Phase 2B → 2A (**2B shipped; superseded** — 2A is
   reframed as a consolidation into `vibe_explain_step` and moved after Phase 3).
-- [`polly-charter-phase3.md`](./polly-charter-phase3.md) — **the next increment: Phase 3 (UI-repoint).**
+- [`polly-charter-phase3.md`](./polly-charter-phase3.md) — **Phase 3 (UI-repoint): T0–T4 shipped; T5 (gates-only contract) soaking, DROP pending.**
 
 **Later addition — Phase 2A: adaptive coaching (2026-09-23; reframed as a consolidation 2026-09-27).**
 Adaptive coaching — delivered by **extending `vibe_explain_step`** (no separate `vibe_coach` tool) —

@@ -96,6 +96,15 @@ EXECUTION DOCTRINE
 - SERIALIZE shared-file edits: mcp_server.py, workflowSections.ts, App.tsx,
   routes.py are trunk files. /fanout only independent leaves.
 
+STATUS (soak-hygiene update): T0-T4 SHIPPED, T5 SOAKING. T0 track persistence
+(#50); T1 the /api/track/{track}/outline endpoint (#51); T2 the engine-vs-TS
+parity harness (#52); T3 the SPA read-path repoint (#53/#57/#59); T4 the
+getFilteredSections TS-orchestration retirement (#61). T5 (step 5 below — DROP
+LEGACY NUMBER STORES) is at R4b (#71): the current_step/completed_steps/
+skipped_steps dual-write stopped in R4a (#70) and every read went gates-only in
+R4b — DEPLOYED AND SOAKING; the legacy-column DROP (D6 §5/§9) is PENDING, on the
+human hard stop below.
+
 TASKS
   0. TRACK PERSISTENCE (fixes the live 0/28 defect; foundation for the endpoint).
      MCP stamps the engine track into the shared row (workshop_level = DEFAULT_TRACK)
