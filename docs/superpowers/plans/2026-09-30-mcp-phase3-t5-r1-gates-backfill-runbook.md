@@ -44,7 +44,11 @@ guard and the verifier enforce.
 > string makes Postgres cast `''` → jsonb at parse time → `ERROR: invalid input
 > syntax for type json`, which `execute_query` swallows (returns `[]`). This was
 > the PR3c B2 parse-time bug. Use `IS NULL OR = '[]'::jsonb` for JSONB, and the
-> regex + `~ '[0-9]'` test for the TEXT number columns.
+> **`col IS NOT NULL AND`** + regex + `~ '[0-9]'` test for the TEXT number columns.
+> The leading `IS NOT NULL` is **not optional**: a bare `col ~ '…'` yields SQL `NULL`
+> (not `FALSE`) for a `NULL` column, so a negated or OR-combined test can silently
+> drop or miscount a `NULL`-column row. Every non-empty test in this runbook mirrors
+> (a.1) exactly: `col IS NOT NULL AND col ~ '^…$' AND col ~ '[0-9]'`.
 
 Live facts from the operator (recorded at authoring time; **re-confirm in step 0**):
 18 rows total; cohort **A = 0, A' = 0, B = 13** (so R1 is a **no-op on this
@@ -343,8 +347,8 @@ SELECT md5(s.created_by) AS user_md5, s.session_id,
              JOIN step_map sm ON sm.step_number = d.n), '[]'::jsonb) AS skipped_tags
 FROM vibe_coding_workshop.sessions s
 WHERE (s.completed_gates IS NULL OR s.completed_gates = '[]'::jsonb)
-  AND NOT (s.completed_steps ~ '^\s*\[\s*(\d+\s*(,\s*\d+\s*)*)?\]\s*$' AND s.completed_steps ~ '[0-9]')  -- completed_steps EMPTY
-  AND (s.skipped_steps ~ '^\s*\[\s*(\d+\s*(,\s*\d+\s*)*)?\]\s*$' AND s.skipped_steps ~ '[0-9]')          -- skipped_steps non-empty
+  AND NOT (s.completed_steps IS NOT NULL AND s.completed_steps ~ '^\s*\[\s*(\d+\s*(,\s*\d+\s*)*)?\]\s*$' AND s.completed_steps ~ '[0-9]')  -- completed_steps EMPTY/NULL (exact negation of (a.1) completed_nonempty)
+  AND (s.skipped_steps IS NOT NULL AND s.skipped_steps ~ '^\s*\[\s*(\d+\s*(,\s*\d+\s*)*)?\]\s*$' AND s.skipped_steps ~ '[0-9]')          -- skipped_steps non-empty (mirrors (a.1))
 ORDER BY s.session_id;
 ```
 
@@ -478,8 +482,8 @@ WHERE (completed_gates IS NULL OR completed_gates = '[]'::jsonb)
   AND session_parameters->'skipped_gates' IS NOT NULL
   AND session_parameters->'skipped_gates' <> '[]'::jsonb
   AND (
-        (completed_steps ~ '^\s*\[\s*(\d+\s*(,\s*\d+\s*)*)?\]\s*$' AND completed_steps ~ '[0-9]')
-     OR (skipped_steps   ~ '^\s*\[\s*(\d+\s*(,\s*\d+\s*)*)?\]\s*$' AND skipped_steps   ~ '[0-9]')
+        (completed_steps IS NOT NULL AND completed_steps ~ '^\s*\[\s*(\d+\s*(,\s*\d+\s*)*)?\]\s*$' AND completed_steps ~ '[0-9]')
+     OR (skipped_steps   IS NOT NULL AND skipped_steps   ~ '^\s*\[\s*(\d+\s*(,\s*\d+\s*)*)?\]\s*$' AND skipped_steps   ~ '[0-9]')
       );
 ```
 
@@ -494,8 +498,8 @@ SELECT session_id, md5(created_by) AS user_md5, workshop_level,
 FROM vibe_coding_workshop.sessions s
 WHERE (completed_gates IS NULL OR completed_gates = '[]'::jsonb)
   AND (
-        (completed_steps ~ '^\s*\[\s*(\d+\s*(,\s*\d+\s*)*)?\]\s*$' AND completed_steps ~ '[0-9]')
-     OR (skipped_steps   ~ '^\s*\[\s*(\d+\s*(,\s*\d+\s*)*)?\]\s*$' AND skipped_steps   ~ '[0-9]')
+        (completed_steps IS NOT NULL AND completed_steps ~ '^\s*\[\s*(\d+\s*(,\s*\d+\s*)*)?\]\s*$' AND completed_steps ~ '[0-9]')
+     OR (skipped_steps   IS NOT NULL AND skipped_steps   ~ '^\s*\[\s*(\d+\s*(,\s*\d+\s*)*)?\]\s*$' AND skipped_steps   ~ '[0-9]')
       )
   AND (
         (session_parameters->>'coding_assistant') IS NOT NULL
@@ -609,7 +613,7 @@ WHERE
       (s.completed_gates IS NULL OR s.completed_gates = '[]'::jsonb)
   AND (s.session_parameters->'skipped_gates' IS NULL
        OR s.session_parameters->'skipped_gates' = '[]'::jsonb)
-  AND (s.completed_steps ~ '^\s*\[\s*(\d+\s*(,\s*\d+\s*)*)?\]\s*$' AND s.completed_steps ~ '[0-9]')  -- cohort A only; A' is listed in (a.1b)
+  AND (s.completed_steps IS NOT NULL AND s.completed_steps ~ '^\s*\[\s*(\d+\s*(,\s*\d+\s*)*)?\]\s*$' AND s.completed_steps ~ '[0-9]')  -- cohort A only; A' is listed in (a.1b)
 ORDER BY s.session_id;
 ```
 
@@ -662,7 +666,7 @@ WHERE
       (s.completed_gates IS NULL OR s.completed_gates = '[]'::jsonb)
   AND (s.session_parameters->'skipped_gates' IS NULL
        OR s.session_parameters->'skipped_gates' = '[]'::jsonb)
-  AND (s.completed_steps ~ '^\s*\[\s*(\d+\s*(,\s*\d+\s*)*)?\]\s*$' AND s.completed_steps ~ '[0-9]');  -- cohort A only; A' excluded (see (a.1b))
+  AND (s.completed_steps IS NOT NULL AND s.completed_steps ~ '^\s*\[\s*(\d+\s*(,\s*\d+\s*)*)?\]\s*$' AND s.completed_steps ~ '[0-9]');  -- cohort A only; A' excluded (see (a.1b))
 
 SELECT count(*) AS backup_count FROM :backup_tbl;
 ```
@@ -765,7 +769,7 @@ admitted AS (
       (s.completed_gates IS NULL OR s.completed_gates = '[]'::jsonb)
   AND (s.session_parameters->'skipped_gates' IS NULL
        OR s.session_parameters->'skipped_gates' = '[]'::jsonb)
-  AND (s.completed_steps ~ '^\s*\[\s*(\d+\s*(,\s*\d+\s*)*)?\]\s*$' AND s.completed_steps ~ '[0-9]')  -- cohort A only: completed_steps MUST be non-empty (A' excluded — see (a.1b) / R4)
+  AND (s.completed_steps IS NOT NULL AND s.completed_steps ~ '^\s*\[\s*(\d+\s*(,\s*\d+\s*)*)?\]\s*$' AND s.completed_steps ~ '[0-9]')  -- cohort A only: completed_steps MUST be non-empty (A' excluded — see (a.1b) / R4)
 ),
 mapped AS (
   SELECT a.session_id,
@@ -850,7 +854,7 @@ they were never backfilled (see (a.1b)) — so this count must exclude them:
 SELECT count(*) AS remaining_a
 FROM vibe_coding_workshop.sessions s
 WHERE (completed_gates IS NULL OR completed_gates = '[]'::jsonb)
-  AND (completed_steps ~ '^\s*\[\s*(\d+\s*(,\s*\d+\s*)*)?\]\s*$' AND completed_steps ~ '[0-9]');
+  AND (completed_steps IS NOT NULL AND completed_steps ~ '^\s*\[\s*(\d+\s*(,\s*\d+\s*)*)?\]\s*$' AND completed_steps ~ '[0-9]');
 ```
 
 Expected: **0** (every admitted A row now carries gates). Any A' row still shows
@@ -1095,7 +1099,7 @@ written AS (
   FROM :backup_tbl b
 )
 UPDATE vibe_coding_workshop.sessions t
-SET completed_gates = w.backup_completed_gates,                                   -- restore the backed-up value ('[]'/NULL for A ∪ A')
+SET completed_gates = w.backup_completed_gates,                                   -- restore the backed-up value ('[]'/NULL — the backup is cohort A only)
     session_parameters = CASE
       WHEN w.backup_session_parameters ? 'skipped_gates'
         THEN jsonb_set(COALESCE(t.session_parameters, '{}'::jsonb),
@@ -1184,6 +1188,18 @@ the **unresolved** count that (e.4) reports separately (an unresolved row is **n
 a failure and never a ROLLBACK signal).
 
 ### (e.3) Backup (own date+time-named table)
+
+Step (e) is independent of the gate backfill and may be run **after the no-op exit
+(a.8)**, which skipped the (a.9) reset — so if you are reusing the dry-run session it
+may still be **READ ONLY**. Reset before this first write (fresh session is the safer
+pattern, as in (a.9)):
+
+```sql
+SET SESSION CHARACTERISTICS AS TRANSACTION READ WRITE;
+SHOW transaction_read_only;   -- must print "off"
+```
+
+**STOP unless `transaction_read_only` is `off`.** Then take the backup:
 
 ```sql
 \set label_backup_tbl vibe_coding_workshop.r1_labels_backfill_backup_YYYYMMDD_HHMM
@@ -1298,9 +1314,12 @@ label). `COMMIT` after reviewing counts. Drop `:label_backup_tbl` after the soak
   is suspicious because MCP rows normally carry gates. Its `completed_steps` could
   be **dense track positions**, which the global `step_map` would mistranslate. The
   flag forces a human decision before any such row is migrated.
-- **Lossy-drop avoidance.** Guard `U` ensures every number in A/A' is in the map
-  before any write, so the number→tag→number round trip is exact; the verifier
-  re-proves it per row against the backup.
+- **Lossy-drop avoidance.** Guard `U` scans every gates-empty row (A **and** A') and
+  flags any step number not in `step_map`, so the number→tag→number round trip is
+  exact for every number before any write. R1 writes only cohort **A** (the backup is
+  A-only); checking A' too means R4 inherits a map that already covers the
+  skipped-only numbers. The verifier re-proves the round trip per row against the
+  A-only backup.
 - **Offline tests ≠ Postgres semantics.** The offline tests pin the map and the SQL
   guard *text*; they cannot execute Postgres. The operator's live read-only dry run
   (step a) and the verifier (step c.2) are the real gates.

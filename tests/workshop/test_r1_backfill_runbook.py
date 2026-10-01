@@ -453,6 +453,17 @@ def test_every_read_only_reset_before_next_write(runbook_text):
         assert _SHOW in window, "no SHOW transaction_read_only check before the next write"
         assert window.index(_RW) < window.index(_SHOW), "SHOW must follow the READ WRITE reset"
 
+    # (e) is reachable right after the no-op exit (a.8) in the SAME psql session,
+    # which skipped (a.9) and may still be READ ONLY — so (e)'s write part must carry
+    # its OWN reset before its first write, independent of (a.9) / (d-pre).
+    e_write = _section(runbook_text, "### (e.3)", "### (e.5)")
+    e_first_write = min(
+        i for i in (e_write.find("CREATE TABLE"), e_write.find("UPDATE vibe_coding_workshop")) if i != -1
+    )
+    assert _RW in e_write and _SHOW in e_write, "(e) write part missing READ WRITE reset"
+    assert e_write.index(_RW) < e_first_write, "(e) reset must precede its first write"
+    assert e_write.index(_RW) < e_write.index(_SHOW), "SHOW must follow the (e) reset"
+
 
 def test_rollback_resets_read_write_before_update(runbook_text):
     rollback = _section(runbook_text, "Then the surgical restore", "After rollback")
@@ -481,3 +492,58 @@ def test_bprime_states_accurate_rerun_reason(runbook_text):
     assert "0 rows" in bprime
     assert "skipped_gates" in bprime  # the accurate WHERE re-check reason
     assert "write-time" in bprime
+
+
+# =============================================================================
+# 6. FIX LOOP 2 — NULL-safe emptiness predicates (the (a.1b) NULL trap).
+# =============================================================================
+
+# The distinctive digit check that tails every TEXT number-column non-empty test.
+_DIGIT_TEST_RE = re.compile(r"~\s*'\[0-9\]'")
+
+
+def test_number_emptiness_predicates_are_null_safe(runbook_text):
+    """Every `completed_steps`/`skipped_steps` non-empty test must carry a leading
+    `IS NOT NULL` guard, so a NULL column can't be miscounted (the (a.1b) NULL trap:
+    `NOT (col ~ '…')` is NULL for a NULL column and silently drops the row). Keyed on
+    the `~ '[0-9]'` digit check that tails each real predicate; prose mentions (no
+    `\\]\\s*$'` regex body nearby) are skipped."""
+    checked = 0
+    for m in _DIGIT_TEST_RE.finditer(runbook_text):
+        pos = m.start()
+        window = runbook_text[max(0, pos - 185):pos]
+        if r"\]\s*$'" not in window:
+            continue  # prose mention of the test, not an actual SQL predicate
+        checked += 1
+        assert "IS NOT NULL" in window, (
+            f"NULL-unsafe emptiness predicate near: {runbook_text[pos - 95:pos + 12]!r}"
+        )
+    assert checked >= 10, f"expected >= 10 SQL emptiness predicates, found {checked}"
+
+
+def test_a1b_listing_matches_a1_aprime_filter(runbook_text):
+    """(a.1b) must mirror the (a.1) cohort_a_prime filter: NOT(completed_nonempty)
+    AND skipped_nonempty, each with the SAME IS-NOT-NULL-guarded non-empty test."""
+    a1b = _section(runbook_text, "### (a.1b)", "### (a.2)")
+    assert "NOT (s.completed_steps IS NOT NULL AND" in a1b  # exact negation of (a.1)
+    assert "AND (s.skipped_steps IS NOT NULL AND" in a1b    # same skipped_nonempty guard
+
+
+def test_classify_cohort_null_completed_is_a_prime():
+    """A row whose completed_steps is SQL NULL (not '[]') with non-empty skipped is
+    A' — the Python mirror must agree with the NULL-safe (a.1) classification."""
+    row = {
+        "completed_gates": json.dumps([]),
+        "completed_steps": None,  # SQL NULL
+        "skipped_steps": json.dumps([57]),
+        "session_parameters": json.dumps({}),
+    }
+    assert r1_verify.classify_cohort(row) == "A_prime"
+    assert r1_verify.is_backfill_admitted(row) is False
+
+
+def test_verifier_raises_on_null_completed_a_prime_backup():
+    row = _a_prime_backup_row()
+    row["backup_completed_steps"] = None  # SQL NULL in the backup
+    with pytest.raises(ValueError):
+        r1_verify.compare_row(row, INVERSE)
