@@ -26,6 +26,15 @@ are invariant) and applied to BOTH views, which makes the step-1 comparison a
 check that global 1 survives the number->gate->number round trip rather than a
 re-derivation of intent.
 
+COHORT SCOPE
+------------
+Cohort **A only**. The backup predicate admits only cohort-A rows
+(``completed_steps`` non-empty); :func:`compare_row` reconstructs each row's
+ORIGINAL cohort and raises ``ValueError`` if it ever sees an **A'** (skipped-only)
+row or any non-admitted row, so a mis-built backup FAILS the verify instead of
+silently passing. A' rows cannot be migrated by R1 and are an R4 item (runbook
+§(a.1b)).
+
 SAFETY
 ------
 * Connects with the app's existing Lakebase helper (``lakebase.get_connection``);
@@ -48,6 +57,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import json
 import os
 import re
 import sys
@@ -73,6 +83,72 @@ READ_ONLY_STATEMENT = "SET SESSION CHARACTERISTICS AS TRANSACTION READ ONLY"
 # (they come from the runbook operator), but we still constrain them to a safe
 # shape so a typo can never smuggle anything into the query text.
 _SAFE_IDENT = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]*)*$")
+
+# --- Offline cohort / backfill-admission mirror -----------------------------
+# Pure Python mirror of the runbook's (a.1) cohort classification and the (b)
+# backfill admission predicate, so the harness can REJECT a row R1 must not have
+# touched (an A' / skipped-only row) and the offline tests can exercise that logic
+# without a database. The int-array regex matches the runbook's TEXT guard exactly.
+_INT_ARRAY_RE = re.compile(r"^\s*\[\s*(\d+\s*(,\s*\d+\s*)*)?\]\s*$")
+
+
+def _text_is_nonempty_int_array(value: Any) -> bool:
+    """True iff ``value`` is TEXT matching the int-array regex AND holds a digit.
+
+    Mirrors the runbook predicate ``col ~ '^...$' AND col ~ '[0-9]'`` for the TEXT
+    number columns, so :func:`classify_cohort` agrees with the dry-run SQL."""
+    if value is None:
+        return False
+    if not isinstance(value, str):
+        value = json.dumps(value)
+    return bool(_INT_ARRAY_RE.match(value)) and any(ch.isdigit() for ch in value)
+
+
+def _as_list(value: Any) -> list:
+    if isinstance(value, str):
+        try:
+            parsed = json.loads(value) if value else []
+        except Exception:
+            parsed = []
+    else:
+        parsed = value or []
+    return parsed if isinstance(parsed, list) else []
+
+
+def _skipped_gates_of(row: dict[str, Any]) -> list:
+    sp = row.get("session_parameters")
+    if isinstance(sp, str):
+        try:
+            sp = json.loads(sp) if sp else {}
+        except Exception:
+            sp = {}
+    if not isinstance(sp, dict):
+        return []
+    return _as_list(sp.get("skipped_gates"))
+
+
+def classify_cohort(row: dict[str, Any]) -> str:
+    """Offline mirror of the runbook (a.1) cohort logic for a sessions-shaped row.
+
+    Reads ``completed_gates`` (JSON tag array) + ``completed_steps`` /
+    ``skipped_steps`` (TEXT int arrays). Returns ``"A"`` / ``"A_prime"`` / ``"B"`` /
+    ``"C"`` — the SAME four cohorts the dry-run SQL counts. Pure; no DB."""
+    if _as_list(row.get("completed_gates")):
+        return "B"
+    if _text_is_nonempty_int_array(row.get("completed_steps")):
+        return "A"
+    if _text_is_nonempty_int_array(row.get("skipped_steps")):
+        return "A_prime"
+    return "C"
+
+
+def is_backfill_admitted(row: dict[str, Any]) -> bool:
+    """Offline mirror of the (b) backfill admission: cohort **A only**, and only
+    when ``session_parameters.skipped_gates`` is still empty (K-overlap guard).
+
+    A' (``completed_steps`` empty) is excluded — writing its ``skipped_gates`` is
+    inert while ``completed_gates`` stays empty (runbook (a.1b) / R4)."""
+    return classify_cohort(row) == "A" and not _skipped_gates_of(row)
 
 
 @dataclass(frozen=True)
@@ -131,6 +207,31 @@ def compare_row(
     comparing the completed set, the skipped set, the score, and the step-1
     credit. ``resolve`` / ``score`` default to the app's production helpers and
     are injectable only to keep the function trivially unit-testable."""
+
+    # The verifier handles cohort-A backups ONLY. Reconstruct the row's ORIGINAL
+    # (pre-backfill) cohort from the backed-up numbers with gates treated empty.
+    # An A' (skipped-only) row must never have been backed up — the backup predicate
+    # is cohort A — and R1 cannot migrate it anyway (completion_keying ignores
+    # skipped_gates while completed_gates is empty), so reject it loudly. A backed-up
+    # row that is not backfill-admitted at all signals backup-predicate drift.
+    origin_view = {
+        "completed_gates": "[]",
+        "completed_steps": row.get("backup_completed_steps"),
+        "skipped_steps": row.get("backup_skipped_steps"),
+        "session_parameters": "{}",
+    }
+    cohort = classify_cohort(origin_view)
+    if cohort == "A_prime":
+        raise ValueError(
+            f"A' row in backup (session_id={row.get('session_id')!r}): completed_steps "
+            "empty, skipped_steps non-empty. R1 does not migrate skipped-only rows "
+            "(see runbook §(a.1b) / R4)."
+        )
+    if not is_backfill_admitted(origin_view):
+        raise ValueError(
+            f"backed-up row (session_id={row.get('session_id')!r}) is cohort {cohort}, "
+            "not backfill-admitted (expected cohort A). Backup-predicate drift?"
+        )
 
     _resolve = resolve or lakebase._row_completion_globals
     _score = score or lakebase._calculate_score
@@ -229,7 +330,11 @@ def main(argv: list[str] | None = None) -> int:
         print(f"ERROR: verification query failed: {type(exc).__name__}: {exc}", file=sys.stderr)
         return 2
 
-    offenders = verify_rows(rows, inverse_map)
+    try:
+        offenders = verify_rows(rows, inverse_map)
+    except ValueError as exc:
+        print(f"ERROR: {exc}", file=sys.stderr)
+        return 2
 
     print(f"R1 verify: checked {len(rows)} backed-up row(s); {len(offenders)} mismatch(es).")
     for row, mismatches in offenders:

@@ -47,9 +47,12 @@ guard and the verifier enforce.
 > regex + `~ '[0-9]'` test for the TEXT number columns.
 
 Live facts from the operator (recorded at authoring time; **re-confirm in step 0**):
-18 rows total; 0 non-int-array `completed_steps`; 0 non-object `session_parameters`;
-the operator's identity has `UPDATE` on `sessions` + `CREATE` on the schema via
-`databricks_superuser`.
+18 rows total; cohort **A = 0, A' = 0, B = 13** (so R1 is a **no-op on this
+workspace** — the dry run ends at the no-op exit (a.8)); 0 non-int-array
+`completed_steps`; 0 non-object `session_parameters`; the operator's identity has
+`UPDATE` on `sessions` + `CREATE` on the schema via `databricks_superuser`. These
+counts are **install-specific** — the runbook stays the procedure for other
+installs and for the pre-`DROP` re-check, so re-confirm every count in step 0 / (a).
 
 ---
 
@@ -62,8 +65,13 @@ the operator's identity has `UPDATE` on `sessions` + `CREATE` on the schema via
 | **B**  | `completed_gates` present (already gate-keyed; **never touched**) |
 | **C**  | gates empty **AND** both number columns empty (nothing to migrate) |
 
-Backfill targets **A ∪ A'**. Expected post-run: **A = A' = 0**, **B += (A + A')**,
-C and B/row-count otherwise unchanged.
+Backfill targets **A only**. **A' rows cannot be migrated by R1** (see (a.1b)): the
+read path (`completion_keying.resolve_completion_globals`) decides origin once by
+`completed_gates` presence and consults `skipped_gates` **only when
+`completed_gates` is non-empty**. An A' row has no completed numbers, so its
+`completed_gates` would stay `[]` and a written `skipped_gates` would be **inert** —
+A' is deferred to **R4**. Expected post-run: **A = 0**, **B grows by exactly the
+original A**; **A' is unchanged**; C and the total row-count otherwise unchanged.
 
 | Guard | Meaning | STOP when |
 |---|---|---|
@@ -229,9 +237,119 @@ SELECT
 FROM classified;
 ```
 
-Expected shape: one row, four integer columns. **Record `cohort_a` and
-`cohort_a_prime`** — their sum is the expected `rows_updated` in (b) and the
-expected backup count in (d-pre).
+Expected shape: one row, four integer columns. **Record `cohort_a`** — it alone is
+the expected `rows_updated` in (b) and the expected backup count in (d-pre).
+**Record `cohort_a_prime`** too: it is **not** backfilled (see (a.1b)); it is the
+count of rows deferred to R4, and it is a **STOP** condition if `> 0`.
+
+### (a.1b) Cohort A' — STOP (skipped-only rows R1 cannot migrate)
+
+An **A'** row (gates empty, `completed_steps` empty, `skipped_steps` non-empty)
+**cannot be migrated by R1**. The read path
+(`completion_keying.resolve_completion_globals`) decides origin **once** by
+`completed_gates` presence and reads `skipped_gates` **only on the gates-present
+branch**; on the gates-empty branch it uses the numeric `skipped_steps` verbatim
+and **ignores `skipped_gates` entirely**. An A' row has no completed numbers, so
+mapping produces an empty `completed_tags` → `completed_gates` would stay `[]` →
+the row stays on the gates-empty branch and any `skipped_gates` we wrote is
+**inert**. So R1 deliberately leaves A' rows untouched; they are handled in **R4**
+(which revisits the skipped-only representation). **STOP if `cohort_a_prime > 0`**
+and record the rows below for the R4 plan — do **not** attempt to backfill them here:
+
+```sql
+WITH step_map(step_number, tag) AS (
+  VALUES
+    (1, 'usecase_selection'),
+    (2, 'project_setup'),
+    (3, 'prd_generation'),
+    (4, 'cursor_copilot_ui_design'),
+    (5, 'deploy_databricks_app'),
+    (6, 'setup_lakebase'),
+    (7, 'wire_ui_lakebase'),
+    (8, 'workspace_setup_deploy'),
+    (9, 'sync_from_lakebase'),
+    (10, 'bronze_table_metadata'),
+    (11, 'gold_layer_design'),
+    (12, 'bronze_layer_creation'),
+    (13, 'silver_layer_sdp'),
+    (14, 'gold_layer_pipeline'),
+    (15, 'usecase_plan'),
+    (16, 'aibi_dashboard'),
+    (17, 'genie_space'),
+    (18, 'agent_framework'),
+    (19, 'wire_ui_agent'),
+    (20, 'iterate_enhance'),
+    (21, 'redeploy_test'),
+    (22, 'genie_silver_metadata'),
+    (23, 'deploy_lakehouse_assets'),
+    (24, 'deploy_di_assets'),
+    (25, 'optimize_genie'),
+    (26, 'skill_install_explore'),
+    (27, 'skill_define_strategy'),
+    (28, 'skill_create_skillmd'),
+    (29, 'skill_apply_contracts'),
+    (30, 'skill_certify_tables'),
+    (31, 'workspace_cleanup'),
+    (32, 'activation_table_design'),
+    (33, 'activation_reverse_sync'),
+    (34, 'activation_app_design'),
+    (35, 'activation_build_wire'),
+    (36, 'activation_wire_lakebase'),
+    (37, 'activation_deploy_validate'),
+    (38, 'agent_spec_design'),
+    (39, 'agent_tool_selection'),
+    (40, 'uc_resources_foundation'),
+    (41, 'mlflow_agent_tracing_uc'),
+    (42, 'knowledge_assistant_create'),
+    (43, 'track_a_agent_app_clone_framework'),
+    (44, 'track_a_agent_ka_genie_tools'),
+    (45, 'track_a_agent_auth_memory'),
+    (46, 'track_a_agent_eval_deploy'),
+    (47, 'appkit_agent_app_proxy_chat'),
+    (48, 'appkit_chat_feedback_mlflow'),
+    (49, 'mlflow_prompt_registry'),
+    (50, 'mlflow_evaluation_datasets'),
+    (51, 'mlflow_scorers_and_judges'),
+    (52, 'mlflow_evaluation_runs_and_iteration'),
+    (53, 'mlflow_human_review_and_signoff'),
+    (54, 'mlflow_logged_model_uc_registration'),
+    (55, 'mlflow_gateway_and_deployment'),
+    (56, 'mlflow_production_monitoring_and_debugging'),
+    (57, 'semlayer_locate'),
+    (58, 'semlayer_profile'),
+    (59, 'semlayer_measures'),
+    (60, 'semlayer_metric_view'),
+    (61, 'semlayer_synonyms'),
+    (62, 'gagent_describe'),
+    (63, 'gagent_instructions'),
+    (64, 'gagent_verified'),
+    (65, 'gagent_benchmarks'),
+    (66, 'gagent_optimize'),
+    (67, 'ontology_domain'),
+    (68, 'ontology_pages'),
+    (69, 'ontology_routing'),
+    (71, 'gaccel_dashboard'),
+    (72, 'gaccel_activation'),
+    (73, 'activation_wire_genie')
+)
+SELECT md5(s.created_by) AS user_md5, s.session_id,
+       s.skipped_steps AS skipped_numbers,
+       COALESCE((
+             SELECT jsonb_agg(sm.tag ORDER BY sm.step_number)
+             FROM (SELECT DISTINCT e.num::int AS n
+                   FROM jsonb_array_elements_text(
+                     (CASE WHEN s.skipped_steps ~ '^\s*\[\s*(\d+\s*(,\s*\d+\s*)*)?\]\s*$'
+                           THEN s.skipped_steps ELSE '[]' END)::jsonb) AS e(num)) d
+             JOIN step_map sm ON sm.step_number = d.n), '[]'::jsonb) AS skipped_tags
+FROM vibe_coding_workshop.sessions s
+WHERE (s.completed_gates IS NULL OR s.completed_gates = '[]'::jsonb)
+  AND NOT (s.completed_steps ~ '^\s*\[\s*(\d+\s*(,\s*\d+\s*)*)?\]\s*$' AND s.completed_steps ~ '[0-9]')  -- completed_steps EMPTY
+  AND (s.skipped_steps ~ '^\s*\[\s*(\d+\s*(,\s*\d+\s*)*)?\]\s*$' AND s.skipped_steps ~ '[0-9]')          -- skipped_steps non-empty
+ORDER BY s.session_id;
+```
+
+Expected: **0 rows** (on this workspace). **STOP if any row returns** — hand the
+`session_id` / `skipped_tags` list to the R4 plan.
 
 ### (a.2) Guard M — malformed number TEXT
 
@@ -491,15 +609,38 @@ WHERE
       (s.completed_gates IS NULL OR s.completed_gates = '[]'::jsonb)
   AND (s.session_parameters->'skipped_gates' IS NULL
        OR s.session_parameters->'skipped_gates' = '[]'::jsonb)
-  AND (
-        (s.completed_steps ~ '^\s*\[\s*(\d+\s*(,\s*\d+\s*)*)?\]\s*$' AND s.completed_steps ~ '[0-9]')
-     OR (s.skipped_steps   ~ '^\s*\[\s*(\d+\s*(,\s*\d+\s*)*)?\]\s*$' AND s.skipped_steps   ~ '[0-9]')
-      )
+  AND (s.completed_steps ~ '^\s*\[\s*(\d+\s*(,\s*\d+\s*)*)?\]\s*$' AND s.completed_steps ~ '[0-9]')  -- cohort A only; A' is listed in (a.1b)
 ORDER BY s.session_id;
 ```
 
 Eyeball the `*_numbers → *_tags` mapping for a few rows. Expected row count ==
-`cohort_a + cohort_a_prime`.
+`cohort_a` (A rows only — A' is previewed separately in (a.1b) and is **not**
+backfilled). A rows that also carry `skipped_steps` still show mapped
+`skipped_tags`, which the backfill writes in lockstep.
+
+### (a.8) Decision — proceed, STOP, or no-op exit
+
+With all STOP conditions clear, decide from the (a.1) counts:
+
+- **`cohort_a_prime > 0`** → **STOP** (see (a.1b)); the A' rows are an R4 item, not an R1 backfill.
+- **`cohort_a + cohort_a_prime = 0`** → **R1 complete — nothing to backfill.** Stop here: do **not** create a backup table, do **not** open a transaction, do **not** run (c). (This is the expected outcome on an install whose rows are already gate-keyed — e.g. the reference workspace: A = 0, A' = 0, B = 13.)
+- **`cohort_a > 0`** (and `cohort_a_prime = 0`) → continue to (a.9), then (d-pre).
+
+### (a.9) Reset the session to READ WRITE  *(only when proceeding to a write)*
+
+The dry run above opened the session **READ ONLY**. The safer pattern is to run
+the entire dry run (a) in its **own** psql session and start a **fresh** session
+for the writes — then no reset is needed. If instead you ran the dry run in the
+same session you are about to write from, this reset is the required **fallback**
+so the backup `CREATE TABLE` and the backfill `UPDATE` are not silently blocked by
+the carried-over read-only characteristic:
+
+```sql
+SET SESSION CHARACTERISTICS AS TRANSACTION READ WRITE;
+SHOW transaction_read_only;   -- must print "off"
+```
+
+**STOP unless `transaction_read_only` is `off`.**
 
 ---
 
@@ -521,15 +662,14 @@ WHERE
       (s.completed_gates IS NULL OR s.completed_gates = '[]'::jsonb)
   AND (s.session_parameters->'skipped_gates' IS NULL
        OR s.session_parameters->'skipped_gates' = '[]'::jsonb)
-  AND (
-        (s.completed_steps ~ '^\s*\[\s*(\d+\s*(,\s*\d+\s*)*)?\]\s*$' AND s.completed_steps ~ '[0-9]')
-     OR (s.skipped_steps   ~ '^\s*\[\s*(\d+\s*(,\s*\d+\s*)*)?\]\s*$' AND s.skipped_steps   ~ '[0-9]')
-      );
+  AND (s.completed_steps ~ '^\s*\[\s*(\d+\s*(,\s*\d+\s*)*)?\]\s*$' AND s.completed_steps ~ '[0-9]');  -- cohort A only; A' excluded (see (a.1b))
 
 SELECT count(*) AS backup_count FROM :backup_tbl;
 ```
 
-**STOP if `backup_count <> cohort_a + cohort_a_prime`** from (a.1).
+**STOP if `backup_count <> cohort_a`** from (a.1). (The backup predicate matches the
+backfill admission in (b): cohort A only — `completed_steps` non-empty — so A' rows
+are never captured here.)
 
 ---
 
@@ -625,10 +765,7 @@ admitted AS (
       (s.completed_gates IS NULL OR s.completed_gates = '[]'::jsonb)
   AND (s.session_parameters->'skipped_gates' IS NULL
        OR s.session_parameters->'skipped_gates' = '[]'::jsonb)
-  AND (
-        (s.completed_steps ~ '^\s*\[\s*(\d+\s*(,\s*\d+\s*)*)?\]\s*$' AND s.completed_steps ~ '[0-9]')
-     OR (s.skipped_steps   ~ '^\s*\[\s*(\d+\s*(,\s*\d+\s*)*)?\]\s*$' AND s.skipped_steps   ~ '[0-9]')
-      )
+  AND (s.completed_steps ~ '^\s*\[\s*(\d+\s*(,\s*\d+\s*)*)?\]\s*$' AND s.completed_steps ~ '[0-9]')  -- cohort A only: completed_steps MUST be non-empty (A' excluded — see (a.1b) / R4)
 ),
 mapped AS (
   SELECT a.session_id,
@@ -675,8 +812,8 @@ original globals. The `CASE … ~ regex … ELSE '[]'` wrapper means a `::jsonb`
 Then check the count and decide. psql reports the affected count as the
 `UPDATE <n>` command tag, and the `RETURNING` clause prints one row per updated
 session — count those rows (do **not** `SELECT … FROM mapped`; the CTE is out of
-scope once the statement finishes). The expected `<n>` is `cohort_a +
-cohort_a_prime` from (a.1):
+scope once the statement finishes). The expected `<n>` is `cohort_a` from (a.1)
+(A rows only — A' is never admitted):
 
 - count matches → `COMMIT;`
 - count differs (or anything looks wrong) → `ROLLBACK;` and investigate.
@@ -684,7 +821,12 @@ cohort_a_prime` from (a.1):
 ### (b') Idempotence re-run
 
 In its own guarded transaction, run the **same** `UPDATE` again — it must report
-**0 rows** (every A/A' row now has gates, so the gates-empty `WHERE` excludes them):
+**0 rows**. The reason is the `UPDATE`'s own write-time `WHERE`, not the `admitted`
+CTE: every backfilled A row now has a **non-empty `completed_gates`**, so the
+`(t.completed_gates IS NULL OR = '[]'::jsonb)` re-check excludes it; and any A row
+that carried `skipped_steps` now has a **non-empty `session_parameters.skipped_gates`**,
+so the `(t.session_parameters->'skipped_gates' IS NULL OR = '[]'::jsonb)` re-check
+excludes it too. (A' rows were never admitted, so they do not enter this at all.)
 
 ```sql
 BEGIN;
@@ -699,19 +841,20 @@ ROLLBACK;
 
 ## (c) VERIFY
 
-### (c.1) No A/A' rows remain
+### (c.1) No cohort-A rows remain
+
+Cohort A only (`completed_steps` non-empty). A' rows are **expected to remain** —
+they were never backfilled (see (a.1b)) — so this count must exclude them:
 
 ```sql
-SELECT count(*) AS remaining_a_aprime
+SELECT count(*) AS remaining_a
 FROM vibe_coding_workshop.sessions s
 WHERE (completed_gates IS NULL OR completed_gates = '[]'::jsonb)
-  AND (
-        (completed_steps ~ '^\s*\[\s*(\d+\s*(,\s*\d+\s*)*)?\]\s*$' AND completed_steps ~ '[0-9]')
-     OR (skipped_steps   ~ '^\s*\[\s*(\d+\s*(,\s*\d+\s*)*)?\]\s*$' AND skipped_steps   ~ '[0-9]')
-      );
+  AND (completed_steps ~ '^\s*\[\s*(\d+\s*(,\s*\d+\s*)*)?\]\s*$' AND completed_steps ~ '[0-9]');
 ```
 
-Expected: **0**.
+Expected: **0** (every admitted A row now carries gates). Any A' row still shows
+gates-empty with a non-empty `skipped_steps` — correct, and deferred to R4.
 
 ### (c.2) Round-trip verifier
 
@@ -840,7 +983,17 @@ WHERE t.completed_gates <> w.written_completed_gates
    OR (t.session_parameters->'skipped_gates') IS DISTINCT FROM w.written_skipped_gates;
 ```
 
-Then the surgical restore (same BEGIN / check / COMMIT-or-ROLLBACK discipline):
+Then the surgical restore. **If you are reusing a session that ran a READ ONLY dry
+run, reset it to READ WRITE first** (same fallback as (a.9); running the rollback in
+its own fresh session is the safer pattern):
+
+```sql
+SET SESSION CHARACTERISTICS AS TRANSACTION READ WRITE;
+SHOW transaction_read_only;   -- must print "off"
+```
+
+**STOP unless `transaction_read_only` is `off`.** Then the restore itself (same
+BEGIN / check / COMMIT-or-ROLLBACK discipline):
 
 ```sql
 \set ON_ERROR_STOP on
@@ -993,6 +1146,26 @@ FROM vibe_coding_workshop.sessions;
 
 ### (e.2) Unresolved rows (listed, not guessed)
 
+List **both** label kinds that have a value but no curated label, so neither is
+silently guessed.
+
+**Unresolved INDUSTRY labels** (`industry` set, no curated `industry_label`):
+
+```sql
+WITH industry_src AS (
+  SELECT DISTINCT ON (industry) industry, industry_label
+  FROM vibe_coding_workshop.usecase_descriptions
+  WHERE is_active = TRUE AND industry_label IS NOT NULL AND industry_label <> ''
+  ORDER BY industry, version DESC
+)
+SELECT t.session_id, md5(t.created_by) AS user_md5, t.industry
+FROM vibe_coding_workshop.sessions t
+WHERE t.industry IS NOT NULL AND t.industry <> '' AND t.industry_label IS NULL
+  AND NOT EXISTS (SELECT 1 FROM industry_src i WHERE i.industry = t.industry);
+```
+
+**Unresolved USE-CASE labels** (`use_case` set, no curated `use_case_label`):
+
 ```sql
 WITH usecase_src AS (
   SELECT DISTINCT ON (industry, use_case) industry, use_case, use_case_label
@@ -1006,7 +1179,9 @@ WHERE t.use_case IS NOT NULL AND t.use_case <> '' AND t.use_case_label IS NULL
   AND NOT EXISTS (SELECT 1 FROM usecase_src u WHERE u.industry = t.industry AND u.use_case = t.use_case);
 ```
 
-These stay NULL — do not invent labels for them.
+Rows in **either** list stay NULL — do not invent labels for them. Their count is
+the **unresolved** count that (e.4) reports separately (an unresolved row is **not**
+a failure and never a ROLLBACK signal).
 
 ### (e.3) Backup (own date+time-named table)
 
@@ -1057,8 +1232,17 @@ RETURNING t.session_id;
 ```
 
 Both UPDATEs set a label **only** where the curated source has a matching row
-(INNER join); unresolved rows get no join row and stay NULL. Review both
-`RETURNING` counts against (e.1), then `COMMIT` or `ROLLBACK`.
+(INNER join); unresolved rows (e.2) get no join row and stay NULL. So each
+`RETURNING` count equals the **resolvable** count, **not** the (e.1) candidate count:
+
+```
+resolvable = (e.1) candidates − (e.2) unresolved
+```
+
+Compare each `RETURNING` count to its **resolvable** count, and report the
+**unresolved** count separately. A non-zero unresolved count is **expected** and is
+**never** a ROLLBACK signal — only a `RETURNING` count that falls short of
+*resolvable* (or anything else unexpected) means `ROLLBACK`; otherwise `COMMIT`.
 
 ### (e.5) Surgical label rollback
 

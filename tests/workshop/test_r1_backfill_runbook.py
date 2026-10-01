@@ -324,3 +324,160 @@ def test_verifier_sets_read_only_before_any_query_in_source():
     ro = src.index("cursor.execute(READ_ONLY_STATEMENT)")
     sel = src.index("cursor.execute(select_sql)")
     assert ro < sel, "read-only guard must execute before the data SELECT"
+
+
+# =============================================================================
+# 5. FIX LOOP 1 — A' (skipped-only) handling, no-op exit, read-only reset,
+#    label backfill. Cross-review FAIL / OPTION A.
+# =============================================================================
+
+
+def _session_row(gates, completed, skipped, skipped_gates=None):
+    """A sessions-shaped row (DB column shapes) for the cohort/admission mirror."""
+    sp = {} if skipped_gates is None else {"skipped_gates": skipped_gates}
+    return {
+        "completed_gates": json.dumps(gates),
+        "completed_steps": json.dumps(completed),
+        "skipped_steps": json.dumps(skipped),
+        "session_parameters": json.dumps(sp),
+    }
+
+
+def _a_prime_backup_row():
+    """A backup row shaped like A' (skipped-only): no completed numbers."""
+    return {
+        "session_id": "s-aprime",
+        "created_by": "aprime@x.com",
+        "backup_completed_steps": json.dumps([]),
+        "backup_skipped_steps": json.dumps([57]),
+        "live_completed_gates": json.dumps([]),
+        "live_session_parameters": json.dumps({"skipped_gates": ["semlayer_locate"]}),
+        "industry": "",
+        "use_case": "",
+    }
+
+
+# --- 5a. Cohort logic classifies A' and the verifier STOPs on it --------------
+
+
+def test_classify_cohort_identifies_all_cohorts():
+    assert r1_verify.classify_cohort(_session_row([], [6, 17], [])) == "A"
+    assert r1_verify.classify_cohort(_session_row([], [], [57])) == "A_prime"
+    assert r1_verify.classify_cohort(_session_row(["setup_lakebase"], [6], [])) == "B"
+    assert r1_verify.classify_cohort(_session_row([], [], [])) == "C"
+
+
+def test_verifier_raises_on_a_prime_backup_row():
+    with pytest.raises(ValueError):
+        r1_verify.compare_row(_a_prime_backup_row(), INVERSE)
+
+
+def test_main_exits_nonzero_on_a_prime_row(monkeypatch):
+    _install_fake_db(monkeypatch, [_a_prime_backup_row()])
+    assert r1_verify.main(_main_args()) != 0
+
+
+def test_runbook_a_prime_stop_and_r4(runbook_text):
+    sec = _section(runbook_text, "### (a.1b)", "### (a.2)")
+    assert "STOP" in sec
+    assert "R4" in sec
+    assert "completion_keying" in sec  # the stated root cause
+    assert "skipped_tags" in sec  # lists skipped numbers -> mapped tags
+
+
+# --- 5b. Backfill selection excludes A' --------------------------------------
+
+
+def test_backfill_admits_only_cohort_a():
+    assert r1_verify.is_backfill_admitted(_session_row([], [6, 17], [])) is True
+    assert r1_verify.is_backfill_admitted(_session_row([], [], [57])) is False  # A'
+    assert r1_verify.is_backfill_admitted(_session_row(["genie_space"], [6], [])) is False  # B
+    assert r1_verify.is_backfill_admitted(_session_row([], [], [])) is False  # C
+    # A-shaped but already carries skipped_gates (K-overlap) -> not admitted.
+    assert r1_verify.is_backfill_admitted(_session_row([], [6], [], skipped_gates=["semlayer_locate"])) is False
+
+
+def test_backfill_predicate_requires_completed_nonempty(runbook_text):
+    backfill = _section(runbook_text, "## (b) BACKFILL", "### (b') Idempotence")
+    assert "cohort A only" in backfill
+    assert "completed_steps MUST be non-empty" in backfill
+
+
+def test_backup_predicate_is_cohort_a_only(runbook_text):
+    dpre = _section(runbook_text, "## (d-pre) BACKUP", "## (b) BACKFILL")
+    assert "cohort A only" in dpre
+    assert "backup_count <> cohort_a`" in dpre  # not cohort_a + cohort_a_prime
+
+
+# --- 5c. A + A' = 0 no-op exit; post-run expectations cover only A -----------
+
+
+def test_noop_exit_when_no_cohort_a():
+    rows = [_session_row(["genie_space"], [6], []), _session_row([], [], [])]  # B + C
+    cohorts = {r1_verify.classify_cohort(r) for r in rows}
+    assert "A" not in cohorts and "A_prime" not in cohorts  # -> no-op exit
+    with_a = rows + [_session_row([], [17], [])]
+    assert "A" in {r1_verify.classify_cohort(r) for r in with_a}  # -> not a no-op
+
+
+def test_runbook_has_noop_exit_text(runbook_text):
+    assert "R1 complete — nothing to backfill" in runbook_text
+    assert "cohort_a + cohort_a_prime = 0" in runbook_text
+
+
+def test_postrun_expectations_cover_only_A(runbook_text):
+    # The old (wrong) claims must be gone.
+    assert "A = A' = 0" not in runbook_text
+    assert "B += (A + A')" not in runbook_text
+    # The corrected claim is present.
+    assert "A' is unchanged" in runbook_text
+
+
+# --- 5d. Read-only -> read-write reset before every write --------------------
+
+_RO = "SET SESSION CHARACTERISTICS AS TRANSACTION READ ONLY;"
+_RW = "SET SESSION CHARACTERISTICS AS TRANSACTION READ WRITE;"
+_SHOW = "SHOW transaction_read_only;"
+_WRITE_RE = re.compile(r"(?m)^\s*(?:UPDATE vibe_coding_workshop|CREATE TABLE )")
+
+
+def test_every_read_only_reset_before_next_write(runbook_text):
+    ro_positions = [m.start() for m in re.finditer(re.escape(_RO), runbook_text)]
+    assert ro_positions, "expected at least one READ ONLY statement"
+    writes = [m.start() for m in _WRITE_RE.finditer(runbook_text)]
+    for ro in ro_positions:
+        nxt = min((w for w in writes if w > ro), default=None)
+        assert nxt is not None, "a READ ONLY with no following write statement"
+        window = runbook_text[ro:nxt]
+        assert _RW in window, "no READ WRITE reset between READ ONLY and the next write"
+        assert _SHOW in window, "no SHOW transaction_read_only check before the next write"
+        assert window.index(_RW) < window.index(_SHOW), "SHOW must follow the READ WRITE reset"
+
+
+def test_rollback_resets_read_write_before_update(runbook_text):
+    rollback = _section(runbook_text, "Then the surgical restore", "After rollback")
+    assert _RW in rollback and _SHOW in rollback
+    assert rollback.index(_RW) < rollback.index("UPDATE vibe_coding_workshop.sessions")
+
+
+# --- 5e. Non-blocking: label backfill (e.2 industry+use_case; e.4 resolvable) -
+
+
+def test_e2_lists_unresolved_industry_and_use_case(runbook_text):
+    e2 = _section(runbook_text, "### (e.2)", "### (e.3)")
+    assert "industry_src" in e2 and "usecase_src" in e2
+    assert e2.count("NOT EXISTS") >= 2  # one unresolved listing per label kind
+
+
+def test_e4_compares_to_resolvable_not_total(runbook_text):
+    e4 = _section(runbook_text, "### (e.4)", "### (e.5)")
+    assert "resolvable" in e4
+    assert "unresolved" in e4
+    assert "never" in e4  # unresolved is never a ROLLBACK signal
+
+
+def test_bprime_states_accurate_rerun_reason(runbook_text):
+    bprime = _section(runbook_text, "### (b') Idempotence", "## (c) VERIFY")
+    assert "0 rows" in bprime
+    assert "skipped_gates" in bprime  # the accurate WHERE re-check reason
+    assert "write-time" in bprime
