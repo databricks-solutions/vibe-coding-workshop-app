@@ -159,7 +159,7 @@ def test_non_step_gate_skip_rejects_completing_prd_generation():
 
 # --- 3. vibe_set_parameters rejects server-owned keys (all-or-nothing) --------
 
-RESERVED = ["skipped_gates", "custom_draft_ready", "custom_drafted_description"]
+RESERVED = ["skipped_gates", "skippedSteps", "custom_draft_ready", "custom_drafted_description"]
 
 
 @pytest.mark.parametrize("key", RESERVED)
@@ -187,3 +187,59 @@ def test_reserved_param_key_rejects_whole_call_all_or_nothing(session_store, key
     # The co-submitted ordinary param did NOT persist either.
     assert "chapter_3_lakehouse_catalog" not in store[SESSION_ID]["session_parameters"]
     assert saves == []
+
+
+# --- 4. the camelCase skippedSteps alias cannot forge a skip (amendment) ------
+# engine._skipped_tags still falls back to session_parameters["skippedSteps"] when
+# "skipped_gates" is absent (a dead legacy read, no writer — deliberately kept).
+# Pre-widening that write was display-only; the widened can_start would otherwise
+# turn it into a real self-skip bypass over MCP, so it is a reserved key too.
+# (test_reserved_param_key_* above already parametrize "skippedSteps".)
+# TAMPER: remove "skippedSteps" from _RESERVED_PARAM_KEYS → this test and the
+# parametrized skippedSteps rejection both fail.
+
+
+def test_skipped_steps_alias_cannot_change_the_engine_current_step(session_store):
+    store, _ = session_store
+    # MCP-only soak row with NO skipped_gates key: current sits at semlayer_measures.
+    store[SESSION_ID]["completed_gates"] = list(SOAK_GATES)
+    store[SESSION_ID]["session_parameters"] = {}
+
+    def _current_tag():
+        record = store[SESSION_ID]
+        state = engine.SessionState(
+            completed_gates=list(record["completed_gates"]),
+            captured_outputs={},
+            session_parameters=dict(record["session_parameters"]),
+        )
+        return engine.next_step(TRACK, state).sectionTag
+
+    before = _current_tag()
+    result = mcp_server.vibe_set_parameters(SESSION_ID, {"skippedSteps": ["semlayer_measures"]})
+    after = _current_tag()
+
+    assert _error_code(result) == "INVALID_PARAMETER"
+    # The rejected alias write did not move the walk off semlayer_measures.
+    assert before == after == "semlayer_measures"
+
+
+# --- 5. vibe_get_step agrees with vibe_next_step after a web skip (fold-in) ---
+# TAMPER: drop the outline tags at the vibe_get_step can_start call → this fails
+# (the explicit lookup falsely reports STEP_LOCKED while vibe_next_step opens it).
+
+
+def test_vibe_get_step_not_locked_for_successor_after_web_skip(session_store, monkeypatch):
+    store, _ = session_store
+    store[SESSION_ID]["completed_gates"] = list(SOAK_GATES)
+    store[SESSION_ID]["session_parameters"] = {"skipped_gates": ["semlayer_measures"]}
+    # Stub the assembler seam so _step_payload renders without an FMAPI/data call.
+    monkeypatch.setattr(
+        mcp_server.assembler,
+        "get_section_input_content",
+        lambda **kwargs: {"input": "PROMPT", "user_trigger_prompt": "GO"},
+    )
+
+    payload = mcp_server.vibe_get_step(SESSION_ID, "semlayer_metric_view")
+
+    assert not isinstance(payload, dict), f"unexpected STEP_LOCKED / error: {payload}"
+    assert payload.sectionTag == "semlayer_metric_view"
