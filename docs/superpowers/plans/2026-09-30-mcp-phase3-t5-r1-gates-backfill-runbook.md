@@ -1,12 +1,43 @@
-# T5 R1 — legacy gates-backfill RUNBOOK (gates-empty App-origin rows → `completed_gates` / `skipped_gates`)
+# T5 R1 — legacy gates-backfill RUNBOOK + UPGRADE MIGRATION (gates-empty App-origin rows → `completed_gates` / `skipped_gates`)
 
-> **Status:** runbook (author: polly sub-agent / this PR). **Execution: HUMAN-ONLY.**
-> Nothing in this PR connects to Lakebase or executes SQL. Every statement below is
-> run **by a human operator** against the live `vibe_coding_workshop` schema, in the
-> order given, with the STOP conditions enforced. The offline tests
-> (`tests/workshop/test_r1_backfill_runbook.py`) pin the map and the SQL guards;
-> **they cannot prove PostgreSQL semantics** — the operator's live, read-only dry
-> run (step a) is the real gate.
+> **Status:** **Executed on fevm-serverless 2026-09-30 (no-op: A=0)** — retained as the
+> **UPGRADE MIGRATION for installs coming from `main`.** Author: polly sub-agent.
+> **Execution: HUMAN-ONLY.** Nothing in the repo connects to Lakebase or executes SQL.
+> Every statement below is run **by a human operator** against the live
+> `vibe_coding_workshop` schema, in the order given, with the STOP conditions
+> enforced. The offline tests (`tests/workshop/test_r1_backfill_runbook.py`) pin the
+> map and the SQL guards; **they cannot prove PostgreSQL semantics** — the operator's
+> live, read-only dry run (step a) is the real gate.
+>
+> **Why this is kept.** On fevm-serverless R1 was a no-op (A=0/A'=0) and the three
+> legacy columns have since been dropped (the human-run DROP, 2026-10-01 — see
+> §"Human-run DROP"). But any install **upgrading from `main`** still has
+> number-only progress and must run this migration **before** deploying gates-only
+> code (which no longer reads the number columns). This runbook is that migration.
+
+---
+
+## Upgrade order (installs coming from `main`)
+
+An install on pre-gates code (number-keyed `completed_steps` / `current_step` /
+`skipped_steps`, no `completed_gates`) upgrades to the gates-only contract in this
+**exact order** — each step gated by the next being safe:
+
+1. **Tables-only reseed** — apply the additive DDL so `sessions.completed_gates`
+   exists (`db/lakebase/ddl/12_mcp_engine_state.sql`). This is `IF NOT EXISTS` /
+   additive; it never drops or rewrites existing rows. (On a fresh install the
+   number columns are already absent from `03_sessions.sql`; on an upgrading install
+   they are still present and still carry the live progress — that is expected and
+   is exactly what R1 migrates.)
+2. **R1 dry run + backfill** — run **(a)**→**(c)** below to forward-migrate
+   App-origin gates-empty rows onto `completed_gates` / `skipped_gates`. On an
+   install whose rows are already gate-keyed this is a no-op (the (a.8) no-op exit).
+3. **Deploy gates-only code** — only after R1 is green may you deploy a build at or
+   after `f7731c0` (T5 R4b), which **stops reading** the number columns. Deploying it
+   onto un-migrated rows would drop their progress from the engine/leaderboard.
+4. **Optional DROP** — once gates-only code is soaked, the operator may drop the
+   three number columns (see §"Human-run DROP"). The DROP is optional: gates-only
+   code is correct whether or not the columns still physically exist.
 
 ## 0. Context & what this fixes
 
@@ -1384,7 +1415,115 @@ FROM vibe_coding_workshop.sessions
 WHERE completed_steps IS NOT NULL;
 ```
 
-The DROP statement itself is drafted by the human, not here.
+The DROP statement itself is drafted in §"Human-run DROP" below.
+
+---
+
+## Human-run DROP  *(drafted here; executed by a human — never from the app)*
+
+This section **drafts** the column DROP; it never runs from the app and no test
+executes it. It mirrors the procedure the human ran on **fevm-serverless at
+2026-10-01 18:55 UTC** (pre-DROP gate A=0 / A'=0 / MIXED=0 / all guards 0; a
+full-row backup of the three columns; one transaction dropping the three columns
+`RESTRICT`; post-DROP smoke PASS). An upgrading install repeats these steps with
+its own counts and its own date+time-named backup table.
+
+### (D.1) Re-gate  *(read-only — the DROP's go/no-go)*
+
+Re-run the **Pre-DROP checklist** above in full: **(a)** (cohort counts + all
+guards), plus **(a.1c)** (MIXED). **STOP unless** every one is clear:
+
+- [ ] **A = 0**, **A' = 0** ((a.1)/(a.1b)) — no gates-empty row still carrying numbers.
+- [ ] **MIXED = 0** ((a.1c)) — no gates-present row whose skips live only in `skipped_steps`.
+- [ ] **M = P = U = K-overlap = ORIGIN = 0** ((a.2)–(a.6)).
+- [ ] **R4b absence pin green** on the deployed commit
+      (`tests/workshop/test_legacy_columns_absent.py`).
+
+Only when all are clear does the DROP proceed. (On fevm-serverless all were 0 and
+the DROP was a clean no-progress-loss operation.)
+
+### (D.2) Full-row backup  *(the only thing to keep)*
+
+Back up **every** row's three columns (not just a cohort) so the DROP is fully
+reversible, into a date+time-named table (so re-runs cannot collide). Plain
+`CREATE TABLE` (no `IF NOT EXISTS`) so a name collision fails loudly:
+
+```sql
+\set drop_backup_tbl vibe_coding_workshop.t5_legacy_step_columns_backup_YYYYMMDD_HHMM
+
+CREATE TABLE :drop_backup_tbl AS
+SELECT session_id, completed_steps, current_step, skipped_steps, now() AS backed_up_at
+FROM vibe_coding_workshop.sessions;
+
+-- Count check: must equal total_sessions from (0) PREFLIGHT.
+SELECT count(*) AS backup_count FROM :drop_backup_tbl;
+```
+
+**STOP if `backup_count <> total_sessions`.** The backup table **stays** after the
+DROP — dropping *it* is a separate, later human decision, not part of this runbook.
+
+### (D.3) DROP  *(single transaction, manual COMMIT, `RESTRICT`)*
+
+```sql
+\set ON_ERROR_STOP on
+BEGIN;
+
+ALTER TABLE vibe_coding_workshop.sessions
+  DROP COLUMN completed_steps RESTRICT,
+  DROP COLUMN current_step    RESTRICT,
+  DROP COLUMN skipped_steps   RESTRICT;
+```
+
+`RESTRICT` (the default) makes the DROP **fail** if any view / rule / generated
+column still depends on one of the three — a dependency means something still
+reads them, so stop and investigate rather than cascade. Review, then `COMMIT`
+(clean) or `ROLLBACK`.
+
+### (D.4) Verify  *(read-only)*
+
+```sql
+-- The three columns are gone; the gates columns remain.
+SELECT column_name
+FROM information_schema.columns
+WHERE table_schema = 'vibe_coding_workshop' AND table_name = 'sessions'
+  AND column_name IN ('completed_steps', 'current_step', 'skipped_steps', 'completed_gates')
+ORDER BY column_name;
+-- Expect exactly one row: completed_gates.
+```
+
+Then a smoke check on the deployed app: a new session saves and loads; an
+MCP-completed step is visible in the SPA via `completed_gates`; the leaderboard
+and analytics render. (On fevm-serverless post-DROP smoke was PASS.)
+
+### (D.5) Rollback  *(re-add the columns, then restore from the backup)*
+
+If the DROP must be reverted, re-create the columns with their **original** types
+and defaults, then restore values from the full-row backup:
+
+```sql
+\set ON_ERROR_STOP on
+BEGIN;
+
+-- Re-add with the exact pre-DROP definitions (see 03_sessions.sql history):
+ALTER TABLE vibe_coding_workshop.sessions
+  ADD COLUMN completed_steps TEXT,
+  ADD COLUMN current_step    INTEGER DEFAULT 1,
+  ADD COLUMN skipped_steps   TEXT DEFAULT '[]';
+
+-- Restore the backed-up values (every row; the backup is full-row).
+UPDATE vibe_coding_workshop.sessions t
+SET completed_steps = b.completed_steps,
+    current_step    = b.current_step,
+    skipped_steps   = b.skipped_steps
+FROM :drop_backup_tbl b
+WHERE t.session_id = b.session_id
+RETURNING t.session_id;
+```
+
+Compare the `RETURNING` count to `backup_count`, then `COMMIT` (reconciles) or
+`ROLLBACK`. Note the re-added columns start at their DDL defaults
+(`current_step = 1`, `skipped_steps = '[]'`, `completed_steps = NULL`) for any row
+absent from the backup; the full-row backup means there are none.
 
 ---
 

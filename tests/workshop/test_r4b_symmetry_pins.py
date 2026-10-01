@@ -59,6 +59,11 @@ def test_build_session_state_resolves_skipped_from_gates_when_completed_empty():
     record = {
         "completed_gates": [],  # no completions
         "session_parameters": {"skipped_gates": [_SKIPPED_TAG]},
+        # Retired numeric column — present only to prove it is never read (symmetry
+        # with pin (b)'s stale_skipped decoy). 57 == semlayer_locate, a real
+        # genie-accelerator outline step: if build_session_state resurrected the
+        # numeric column it would surface as "done" and the final assertion fails.
+        "completed_steps": json.dumps([57]),
     }
     state = build_session_state(record, track=DEFAULT_TRACK)
 
@@ -68,7 +73,8 @@ def test_build_session_state_resolves_skipped_from_gates_when_completed_empty():
 
     statuses = {s.sectionTag: s.status for s in engine.outline(DEFAULT_TRACK, state)}
     assert statuses[_SKIPPED_TAG] == "skipped"
-    # Nothing is "done": completed_gates is empty and no numeric column resurrects it.
+    # Nothing is "done": completed_gates is empty and the stale completed_steps decoy
+    # is never read.
     assert "done" not in set(statuses.values())
 
 

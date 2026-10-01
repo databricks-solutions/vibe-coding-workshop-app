@@ -10,6 +10,17 @@
 > New columns/tables are additive; existing rows keep working; the legacy number-keyed state stays
 > until the UI migrates (D3 §4.3).
 
+> **⚠ POST-DROP UPDATE (2026-10-01).** Phase 3 is complete and the migration this doc
+> anticipated has **shipped**: the engine moved to a **gates-only** contract (reads/writes
+> `completed_gates` + nested `skipped_gates`, mapped tag↔global number), and the three legacy
+> number columns — **`completed_steps`, `current_step`, `skipped_steps`** — were **dropped from the
+> live `sessions` table on fevm-serverless (human-run DROP, 2026-10-01)** and removed from
+> `03_sessions.sql`, so fresh installs never get them. The sections below describe the **as-designed
+> dual-write / coexistence** phases and are kept as shipped history; where they say the number
+> columns "stay" or are "dual-written," read that as **retired**. Installs upgrading from `main`
+> forward-migrate via the R1 runbook
+> ([`../../superpowers/plans/2026-09-30-mcp-phase3-t5-r1-gates-backfill-runbook.md`](../../superpowers/plans/2026-09-30-mcp-phase3-t5-r1-gates-backfill-runbook.md)).
+
 ---
 
 ## 0. Anchors verified live (2026-09-22)
