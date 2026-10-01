@@ -293,7 +293,6 @@ export interface SessionSaveRequest {
   session_description?: string;
   feedback_rating?: 'thumbs_up' | 'thumbs_down' | null;
   feedback_comment?: string;
-  current_step: number;
   workshop_level?: string;
   direction?: string;
   include_lakehouse?: boolean;
@@ -304,11 +303,11 @@ export interface SessionSaveRequest {
   // wiring that populates these from UI state lands in T3b-2b.
   chain_context?: string;
   flags?: Record<string, boolean>;
-  completed_steps: number[];
-  // Gate dual-write (Phase 3 T5 PR3a). The COMPLETE gate set (sectionTags for ALL
-  // completed/skipped steps, derived from the same numbers above via
-  // stepNumbersToGates) written alongside the legacy numbers. Must be complete,
-  // never a delta — the backend read path trusts non-empty gates verbatim.
+  // Gate write (Phase 3 T5). The COMPLETE gate set (sectionTags for ALL
+  // completed/skipped steps, derived from the live step numbers via
+  // stepNumbersToGates). Must be complete, never a delta — the backend read path
+  // trusts non-empty gates verbatim. The legacy completed_steps / current_step
+  // number fields were retired in R4a (writes stopped).
   completed_gates?: string[];
   skipped_gates?: string[];
   step_prompts: Record<number, string>;
@@ -400,11 +399,10 @@ export interface UpdateSessionMetadataRequest {
   use_case_label?: string;
   prerequisites_completed?: boolean;
   workshop_level?: string;
-  completed_steps?: number[];
-  skipped_steps?: number[];
-  // Gate dual-write (Phase 3 T5 PR3a) — see SessionSaveRequest. Optional on this
+  // Gate write (Phase 3 T5) — see SessionSaveRequest. Optional on this
   // partial-update path: omit to leave persisted gates untouched; when present
-  // they are the complete set mirroring the numbers in the same request.
+  // they are the complete set. The legacy completed_steps / skipped_steps number
+  // fields were retired in R4a (writes stopped).
   completed_gates?: string[];
   skipped_gates?: string[];
   custom_use_case_label?: string;

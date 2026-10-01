@@ -799,11 +799,10 @@ export default function App() {
       const sid = sessionId;
       apiClient.updateSessionMetadata({
         session_id: sid,
-        completed_steps: Array.from(newSteps),
-        // Gate dual-write (T5 PR3a): the COMPLETE gate set from the SAME numbers
-        // written above. This write is what flips the session to gates-present, so
-        // it must ALSO carry the complete skipped_gates (from live skippedSteps) —
-        // once gates are present the read path ignores the skipped NUMBERS, so a
+        // Gate write (T5): the COMPLETE completed gate set, derived from the live
+        // completed-step numbers. The legacy completed_steps number write was
+        // retired in R4a. This write must ALSO carry the complete skipped_gates
+        // (from live skippedSteps): the backend read path keys off gates, so a
         // completion write that omitted skipped_gates would drop skipped progress.
         completed_gates: stepNumbersToGates(Array.from(newSteps)),
         skipped_gates: stepNumbersToGates(Array.from(skippedSteps)),
@@ -826,11 +825,11 @@ export default function App() {
     if (sessionId) {
       apiClient.updateSessionMetadata({
         session_id: sessionId,
-        skipped_steps: Array.from(newSkipped),
-        // Gate dual-write (T5 PR3a): the COMPLETE skipped gate set from the SAME
-        // numbers written above (persisted under session_parameters.skipped_gates,
-        // where the read path reads it). completed_gates is intentionally omitted
-        // here so the existing completed gates are COALESCE-preserved.
+        // Gate write (T5): the COMPLETE skipped gate set, derived from the live
+        // skipped-step numbers (persisted under session_parameters.skipped_gates,
+        // where the read path reads it). The legacy skipped_steps number write was
+        // retired in R4a. completed_gates is intentionally omitted here so the
+        // existing completed gates are COALESCE-preserved.
         skipped_gates: stepNumbersToGates(Array.from(newSkipped)),
       }).catch(err => console.error('Error saving skipped steps:', err));
     }
@@ -1012,7 +1011,6 @@ export default function App() {
         session_description: description,
         feedback_rating: rating || null,
         feedback_comment: comment,
-        current_step: Math.max(...Array.from(completedSteps), 1),
         workshop_level: workshopLevel,
         direction,
         include_lakehouse: includeLakehouse,
@@ -1021,10 +1019,10 @@ export default function App() {
         // climb/reverse/AI/medallion outline the UI shows. Snake_case direction/
         // include_* stay above for other consumers.
         ...compositionParams,
-        completed_steps: Array.from(completedSteps),
-        // Gate dual-write (T5 PR3a): the COMPLETE completed/skipped gate sets from
-        // the SAME numbers persisted on this full save, so a saved web session
-        // reads back through the gates-present verbatim path with no progress loss.
+        // Gate write (T5): the COMPLETE completed/skipped gate sets, derived from
+        // the live step numbers, so a saved web session reads back through the
+        // gates-present verbatim path with no progress loss. The legacy
+        // completed_steps / current_step number writes were retired in R4a.
         completed_gates: stepNumbersToGates(Array.from(completedSteps)),
         skipped_gates: stepNumbersToGates(Array.from(skippedSteps)),
         step_prompts: stepPrompts

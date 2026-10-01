@@ -129,9 +129,12 @@ def test_update_metadata_dual_writes_completed_gates_and_skipped_gates(client):
         "cursor_copilot_ui_design",
     ]  # FAILS before PR3a (field dropped -> None/absent)
 
-    # The legacy numbers are STILL written (dual-write, not a cutover).
-    assert sorted(save.get("completed_steps") or []) == [2, 3, 4]
-    assert (save.get("skipped_steps") or []) == [6]
+    # R4a stopped writing the legacy number columns: even though this payload still
+    # carries completed_steps / skipped_steps (an older-tab shape), save_session is
+    # NOT called with them — Pydantic's extra='ignore' drops the removed fields.
+    assert "completed_steps" not in save
+    assert "skipped_steps" not in save
+    assert "current_step" not in save
 
     # skipped_gates lands in the session_parameters JSONB (where the read side
     # consumes it: state.build_session_state / engine._skipped_tags).
@@ -177,7 +180,10 @@ def test_save_session_dual_writes_gates(client):
         "prd_generation",
         "cursor_copilot_ui_design",
     ]  # FAILS before PR3a
-    assert sorted(save.get("completed_steps") or []) == [2, 3, 4]  # legacy still written
+    # R4a: the legacy number columns are no longer forwarded to save_session even
+    # though the full-save payload still carries current_step / completed_steps.
+    assert "completed_steps" not in save
+    assert "current_step" not in save
 
     patch = client.param_capture.last_patch
     assert patch.get("skipped_gates") == ["setup_lakebase"]  # FAILS before PR3a

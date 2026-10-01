@@ -355,6 +355,42 @@ ORDER BY s.session_id;
 Expected: **0 rows** (on this workspace). **STOP if any row returns** — hand the
 `session_id` / `skipped_tags` list to the R4 plan.
 
+### (a.1c) Cohort MIXED + informational skipped-gates  *(added for T5 R4 — pre-R4b gate)*
+
+R4a stops writing the number columns; R4b then deletes the gates-empty number
+fallback in `completion_keying.resolve_completion_globals` /
+`state.build_session_state`. Before R4b deploys, re-run (a) in full AND this
+query. **MIXED** catches a row whose completion moved to `completed_gates` but
+whose skips live **only** in the numeric `skipped_steps` (no
+`session_parameters.skipped_gates`): R4b's engine read path deletes the
+`skipped_steps → skipped_gates` backfill in `build_session_state`, so those
+skips would vanish from the engine outline. PR #64 always writes both gate sides,
+so this must be **0**.
+
+```sql
+WITH classified AS (
+  SELECT
+    (completed_gates IS NOT NULL AND completed_gates <> '[]'::jsonb)                         AS gates_present,
+    (completed_gates IS NULL OR completed_gates = '[]'::jsonb)                               AS gates_empty,
+    (skipped_steps IS NOT NULL AND skipped_steps ~ '^\s*\[\s*(\d+\s*(,\s*\d+\s*)*)?\]\s*$' AND skipped_steps ~ '[0-9]') AS skipped_numbers_nonempty,
+    (COALESCE(session_parameters -> 'skipped_gates', '[]'::jsonb) = '[]'::jsonb)             AS skipped_gates_empty
+  FROM vibe_coding_workshop.sessions
+)
+SELECT
+  -- STOP if > 0: gates present, skips only in numbers, no skipped_gates.
+  count(*) FILTER (WHERE gates_present AND skipped_numbers_nonempty AND skipped_gates_empty)
+    AS cohort_mixed,
+  -- Informational (NOT a STOP): the R4a→R4b window cohort — skips live in
+  -- skipped_gates but no completions yet, so (a.1)'s gates-empty branch still
+  -- reads the (now-unwritten) skipped_steps until R4b flips the resolver.
+  count(*) FILTER (WHERE gates_empty AND NOT skipped_gates_empty)
+    AS informational_gates_empty_skipped_gates_present
+FROM classified;
+```
+
+Expected: `cohort_mixed = 0` (**STOP if `> 0`** — hand the rows to the R4b plan).
+`informational_gates_empty_skipped_gates_present` is reported, not gated.
+
 ### (a.2) Guard M — malformed number TEXT
 
 ```sql
@@ -1299,6 +1335,56 @@ RETURNING t.session_id;
 
 Per-column, diverged-safe (restores only where live still equals the written
 label). `COMMIT` after reviewing counts. Drop `:label_backup_tbl` after the soak.
+
+---
+
+## Pre-DROP checklist  *(added for T5 R4 — informational, human-run)*
+
+The DROP of `completed_steps`, `current_step`, `skipped_steps` is the human's,
+**after R4b is deployed and soaked**. This is the sign-off gate; it drafts no DDL.
+
+**The R4a→R4b window.** R4a stops *writing* the three columns but keeps the
+read-side number fallback, so R4a is independently deployable. One display-only
+consequence exists until R4b deploys: a session with **skips but no completions**
+(`completed_gates` empty, `skipped_gates` non-empty — the
+`informational_gates_empty_skipped_gates_present` count in (a.1c)) loses its skips
+from the **leaderboard/analytics**, because `resolve_completion_globals` reads the
+numeric `skipped_steps` on the gates-empty branch and R4a no longer writes them.
+It is cosmetic (no stored data is lost; `skipped_gates` is intact) and **self-heals
+at R4b**, whose gates-only resolver reads `skipped_gates` directly.
+
+**Sequence:** gate + merge + deploy R4a → smoke (old-client POST 200 with the
+legacy fields ignored; a new row has NULL `completed_steps` and still loads; an
+MCP-completed step is visible in the SPA via `completed_gates`) → **pre-R4b gate**
+→ dispatch R4b → gate + merge + deploy R4b → soak → DROP.
+
+**Pre-R4b / pre-DROP gate (read-only).** Re-run **(a) in full** plus (a.1c), and
+require:
+
+- [ ] **A = 0** — `cohort_a` ((a.1)): no gates-empty row with `completed_steps`.
+- [ ] **A' = 0** — `cohort_a_prime` ((a.1)/(a.1b)): no skipped-only gates-empty row.
+- [ ] **MIXED = 0** — `cohort_mixed` ((a.1c)): no gates-present row whose skips live
+      only in `skipped_steps`.
+- [ ] **All R1 guards 0** — M, P, U, K-overlap, ORIGIN ((a.2)–(a.6)).
+- [ ] **R4b absence pin green** on the deployed commit
+      (`tests/workshop/test_legacy_columns_absent.py`, added in R4b).
+- [ ] Report (not gate) `informational_gates_empty_skipped_gates_present` ((a.1c)).
+
+Optional stray-writer check (informational, **read-only** — catches a late
+writer, cannot prove absence): with the three columns still present, confirm no
+app write has touched them since the R4b deploy. (No `SET ... READ ONLY` reset is
+issued here — this is a bare `SELECT`, run outside any write transaction.)
+
+```sql
+-- Newest row whose completed_steps diverges from the post-R4a DDL default (NULL).
+-- After R4b deploy this max(updated_at) should predate the deploy; a newer
+-- timestamp means something is still writing the column — investigate before DROP.
+SELECT max(updated_at) AS newest_nondefault_completed_steps
+FROM vibe_coding_workshop.sessions
+WHERE completed_steps IS NOT NULL;
+```
+
+The DROP statement itself is drafted by the human, not here.
 
 ---
 
