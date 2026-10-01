@@ -1147,6 +1147,14 @@ def vibe_explain_step(
 _SELECTION_REQUIRED = ("industry", "use_case", "use_case_label")
 _CUSTOM_REQUIRED = ("industry", "use_case", "use_case_label", "use_case_description")
 
+# Server-owned keys the engine/draft paths set internally — never a learner input.
+# ``skipped_gates`` is the skip ledger ``engine.can_start`` reads; ``custom_draft_ready``
+# / ``custom_drafted_description`` are the FMAPI draft-first markers the use-case
+# confirm gate requires. ``vibe_set_parameters`` merges ``params`` straight into
+# ``session_parameters``, so a Genie Code agent could otherwise forge a skip or
+# defeat the draft gate; these are rejected on the incoming params before any save.
+_RESERVED_PARAM_KEYS = ("skipped_gates", "custom_draft_ready", "custom_drafted_description")
+
 
 def _is_selection_call(params: dict[str, Any]) -> bool:
     """A ``vibe_set_parameters`` call is a use-case selection when it carries a source."""
@@ -1527,6 +1535,16 @@ def vibe_set_parameters(
         return _error_result("INVALID_SESSION", "The requested session could not be resolved.")  # type: ignore[return-value]
 
     state, _ = loaded
+
+    # Reject server-owned keys in the INCOMING params before any update/save, so a
+    # rejected call persists nothing (all-or-nothing). These are set only by the
+    # engine/draft paths — a learner must never forge a skip or the draft markers.
+    reserved = [key for key in _RESERVED_PARAM_KEYS if key in params]
+    if reserved:
+        return _error_result(  # type: ignore[return-value]
+            "INVALID_PARAMETER",
+            f"{', '.join(reserved)} are server-owned and cannot be set via vibe_set_parameters.",
+        )
 
     # Friendly data-location aliases (Workstream 1): map the web LakehouseParams
     # editor's catalog/schema fields onto the workshop parameter keys the assembler

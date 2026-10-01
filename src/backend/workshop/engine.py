@@ -115,6 +115,7 @@ def outline(track_id: str, session: SessionState) -> list[StepStatus]:
     steps = _ordered_steps(track_id, session)
     completed = set(session.completed_gates)
     skipped = _skipped_tags(session)
+    outline_tags = {step.sectionTag for step in steps}
     current_tag: str | None = None
 
     statuses: list[StepStatus] = []
@@ -123,7 +124,7 @@ def outline(track_id: str, session: SessionState) -> list[StepStatus]:
             status: Status = "done"
         elif step.sectionTag in skipped:
             status = "skipped"
-        elif current_tag is None and can_start(step, session):
+        elif current_tag is None and can_start(step, session, outline_tags):
             current_tag = step.sectionTag
             status = "current"
         else:
@@ -151,10 +152,30 @@ def next_step(track_id: str, session: SessionState) -> Step | Done:
     return Done()
 
 
-def can_start(step: Step, session: SessionState) -> bool:
-    """Return whether the step's predecessor gate has been satisfied."""
+def can_start(
+    step: Step,
+    session: SessionState,
+    outline_tags: set[str] | None = None,
+) -> bool:
+    """Return whether the step's predecessor gate has been satisfied.
 
-    return step.requiresGate is None or step.requiresGate in session.completed_gates
+    A gate is satisfied when the step has no gate, the gate is already in
+    ``completed_gates``, or the gate was skipped AND names a step in THIS
+    session's ordered outline (``outline_tags``). The outline-membership
+    condition is what keeps a non-outline gate — ``use_case_selection`` is
+    resolved pre-journey, never as an outline node — unsatisfiable by a skip, so
+    a stray ``skipped_gates`` entry can only unlock a genuinely skipped numbered
+    step. Callers without the outline context (``outline_tags`` left as ``None``)
+    fall back to the strict completed-only gate.
+    """
+
+    if step.requiresGate is None or step.requiresGate in session.completed_gates:
+        return True
+    return (
+        outline_tags is not None
+        and step.requiresGate in outline_tags
+        and step.requiresGate in _skipped_tags(session)
+    )
 
 
 def _result_error(
@@ -195,7 +216,8 @@ def complete_step(
             next_step=next_step(track_id, session),
         )
 
-    if not can_start(step, session):
+    outline_tags = {candidate.sectionTag for candidate in _ordered_steps(track_id, session)}
+    if not can_start(step, session, outline_tags):
         return _result_error(session, "STEP_LOCKED")
 
     if step.execution == "ui-driven":
