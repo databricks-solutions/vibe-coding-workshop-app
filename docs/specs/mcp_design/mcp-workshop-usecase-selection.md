@@ -14,6 +14,18 @@ UI-repoint that makes cross-surface sync *canonical* is **Phase 3** (this doc sh
 > doc designs both. It follows the series doctrine: **reuse the one repository and the existing
 > tool set; add zero new tools** (the ≤7-tool budget, [charter guardrail 7](./polly-build-charter.md)).
 
+> **⚠ POST-DROP UPDATE (2026-10-01).** The cross-surface **sync bridge** this doc designs (§4.3.1 —
+> `vibe_complete_step` writing `current_step` / `completed_steps` so the legacy SPA step indicator
+> stays in step) was the **Phase 2B bridge**; Phase 3 then made gates canonical and **retired** that
+> bridge. The three legacy number columns — **`current_step`, `completed_steps`, `skipped_steps`** —
+> were **dropped from the live `sessions` table (human-run DROP, 2026-10-01)**: the SPA and MCP now
+> read a single **gates-only** ledger (`completed_gates` + nested `skipped_gates`), so there is no
+> number column to keep in sync. The bridge sections below are kept as shipped history — read every
+> present-tense "writes/updates `current_step`/`completed_steps`" as **retired**. Also note the
+> step-1 duality: **`usecase_selection`** (App Intent act, step 1 — credit rides `_has_defined_intent`)
+> is distinct from **`use_case_selection`** (the engine PRD-chain gate, inert under ghost-retirement
+> Option A).
+
 ---
 
 ## 1. The problem, grounded in code

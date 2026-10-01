@@ -18,6 +18,17 @@ refinements in [`genie-accelerator-diagram-and-optional-lakehouse.md`](../genie-
 > findings + build plan ([`mcp-interactive-track-doc-plan.md`](./mcp-interactive-track-doc-plan.md)).
 > Where they conflict with this file, **they win.**
 
+> **⚠ POST-DROP UPDATE (2026-10-01).** This roadmap describes the capture/state store in terms of
+> **`completed_steps`** (step numbers, dual-written alongside the new tag ledger). That migration has
+> **shipped**: Phase 3 moved the engine to a **gates-only** contract — progress is resolved purely
+> from `completed_gates` + nested `skipped_gates` (tag↔global map), and the three legacy number
+> columns (**`completed_steps`, `current_step`, `skipped_steps`**) were **dropped from the live
+> `sessions` table (human-run DROP, 2026-10-01)**. Read the present-tense "`completed_steps`
+> store / dual-write" references below as the as-designed intermediate; the shipped store is
+> `completed_gates`. History is kept intact; only this annotation marks the retirement. Upgrading
+> installs migrate via the R1 runbook
+> ([`../../superpowers/plans/2026-09-30-mcp-phase3-t5-r1-gates-backfill-runbook.md`](../../superpowers/plans/2026-09-30-mcp-phase3-t5-r1-gates-backfill-runbook.md)).
+
 ---
 
 ## 0. Read this first (context for the executing agent)
