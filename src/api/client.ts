@@ -429,6 +429,11 @@ export interface SessionListItem {
   use_case?: string;
   use_case_label?: string;
   current_step: number;
+  // Gate-derived count of canonical GLOBAL completed steps (T5 R3). The backend
+  // now surfaces this so the session list renders progress without the raw
+  // current_step scalar (ahead of the current_step column DROP). Optional: a
+  // cached/older response may omit it, in which case the UI shows "Not started".
+  completed_step_count?: number;
   feedback_rating?: string;
   created_at?: string;
   updated_at?: string;

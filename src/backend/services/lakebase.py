@@ -433,11 +433,29 @@ def _is_retriable_connection_error(exc: Exception) -> bool:
     ))
 
 
+def _sql_fingerprint(sql: str, limit: int = 120) -> str:
+    """A whitespace-normalized, truncated fingerprint of a SQL string for logs.
+
+    NEVER includes params — those carry emails and session content. Collapses
+    runs of whitespace to single spaces and truncates to ``limit`` chars so an
+    ERROR log points at the offending query (which query silently returned [],
+    e.g. the PR3c B2 JSONB-vs-'' parse failure) without leaking data or spamming
+    the log with a multi-line statement.
+    """
+    normalized = " ".join((sql or "").split())
+    return normalized[:limit] + ("…" if len(normalized) > limit else "")
+
+
 def execute_query(sql: str, params: tuple = None) -> List[Dict]:
     """Execute a SELECT query and return results as list of dicts.
 
     Retries once on transient connection errors (e.g. Lakebase scale-to-zero
     killing a pooled connection between the pool health-check and query execution).
+
+    On failure the [] return contract is unchanged (callers depend on it), but the
+    ERROR log now carries the exception class + a normalized SQL fingerprint so a
+    query that silently swallows to [] (the class of bug behind PR3c B2) is
+    diagnosable from logs alone. Params are deliberately never logged.
     """
     if not is_lakebase_configured():
         logger.info("Lakebase not configured - returning empty results")
@@ -457,9 +475,15 @@ def execute_query(sql: str, params: tuple = None) -> List[Dict]:
             if attempt == 0 and _is_retriable_connection_error(e):
                 logger.warning(f"Retriable connection error in execute_query, retrying once: {e}")
                 continue
-            logger.error(f"Error executing query: {e}")
+            logger.error(
+                f"Error executing query [{type(e).__name__}]: {e} "
+                f"| sql: {_sql_fingerprint(sql)}"
+            )
             return []
-    logger.error(f"Error executing query after retry: {last_err}")
+    logger.error(
+        f"Error executing query after retry [{type(last_err).__name__}]: {last_err} "
+        f"| sql: {_sql_fingerprint(sql)}"
+    )
     return []
 
 
@@ -1061,17 +1085,24 @@ def get_user_sessions(created_by: str, limit: int = 50, saved_only: bool = True)
         with get_connection() as conn:
             cursor = _dict_cursor(conn)
             
-            # Build query - if saved_only, filter to sessions with a name
+            # Build query - if saved_only, filter to sessions with a name.
+            # completed_steps/skipped_steps/completed_gates/session_parameters are
+            # pulled so the completed_step_count is gate-derived (T5 R3): the same
+            # per-row disambiguation the leaderboard/analytics use. Widening ALL of
+            # them is load-bearing — a gate-only row (completed_steps empty, gates
+            # populated) counts 0 without completed_gates, and step-1 credit needs
+            # industry/use_case (already selected).
             if saved_only:
                 query = f"""
-                SELECT 
+                SELECT
                     session_id, session_name, session_description,
                     industry, industry_label, use_case, use_case_label,
                     current_step, feedback_rating,
+                    completed_steps, skipped_steps, completed_gates, session_parameters,
                     created_by, created_at, updated_at
                 FROM {table_name}
                 WHERE created_by = %s
-                  AND session_name IS NOT NULL 
+                  AND session_name IS NOT NULL
                   AND session_name != ''
                   AND session_name != 'New Session'
                 ORDER BY updated_at DESC
@@ -1079,10 +1110,11 @@ def get_user_sessions(created_by: str, limit: int = 50, saved_only: bool = True)
                 """
             else:
                 query = f"""
-                SELECT 
+                SELECT
                     session_id, session_name, session_description,
                     industry, industry_label, use_case, use_case_label,
                     current_step, feedback_rating,
+                    completed_steps, skipped_steps, completed_gates, session_parameters,
                     created_by, created_at, updated_at
                 FROM {table_name}
                 WHERE created_by = %s
@@ -1093,7 +1125,13 @@ def get_user_sessions(created_by: str, limit: int = 50, saved_only: bool = True)
             cursor.execute(query, (created_by, limit))
             rows = cursor.fetchall()
             cursor.close()
-            
+
+            # Build PR1's tag->GLOBAL-number inverse map ONCE (reused per row, the
+            # get_leaderboard way) so the gate-derived completed_step_count never
+            # rebuilds the map per row.
+            from src.backend.workshop.completion_keying import tag_to_global_number
+            inverse_map = tag_to_global_number()
+
             sessions = []
             for row in rows:
                 created_at = row.get("created_at")
@@ -1102,7 +1140,14 @@ def get_user_sessions(created_by: str, limit: int = 50, saved_only: bool = True)
                     created_at = created_at.strftime('%Y-%m-%d %H:%M:%S')
                 if hasattr(updated_at, 'strftime'):
                     updated_at = updated_at.strftime('%Y-%m-%d %H:%M:%S')
-                
+
+                # Gate-derived completed count (T5 R3) — replaces the raw
+                # current_step scalar in the list display. _row_completion_globals
+                # disambiguates origin (gates present => trust gates; empty =>
+                # App-origin globals verbatim) and unions step-1 credit when the
+                # row has defined intent, reusing the SAME rule the aggregations do.
+                completed_global, _skipped_global = _row_completion_globals(row, inverse_map)
+
                 sessions.append({
                     "session_id": row["session_id"],
                     "session_name": row.get("session_name"),
@@ -1112,13 +1157,14 @@ def get_user_sessions(created_by: str, limit: int = 50, saved_only: bool = True)
                     "use_case": row.get("use_case"),
                     "use_case_label": row.get("use_case_label"),
                     "current_step": row.get("current_step", 1),
+                    "completed_step_count": len(completed_global),
                     "feedback_rating": row.get("feedback_rating"),
                     "created_by": row.get("created_by"),
                     "created_at": created_at,
                     "updated_at": updated_at,
                     "is_saved": bool(row.get("session_name") and row["session_name"] != "New Session"),
                 })
-            
+
             return sessions
             
     except Exception as e:
@@ -1419,7 +1465,7 @@ STEP_SCORES = {
     31: 10,
     # Agents Accelerator — Agents on Apps (steps 38-46): 50 points each
     38: 50, 39: 50, 40: 50, 41: 50, 42: 50, 43: 50, 44: 50, 45: 50, 46: 50,
-    # Agents Accelerator — MLflow for Gen-AI (steps 47-56): 50 points each
+    # Agents Accelerator — MLflow for Gen-AI (steps 47-54): 50 points each
     47: 50, 48: 50, 49: 50, 50: 50, 51: 50, 52: 50, 53: 50, 54: 50,
     # Agents Accelerator — MLflow tail (steps 55-56): 50 points each (T5 PR3c)
     55: 50, 56: 50,
@@ -1896,17 +1942,12 @@ def get_analytics() -> Dict[str, Any]:
         summary = summary_rows[0] if summary_rows else _empty["summary"]
 
         # -- Usage metrics ----------------------------------------------------
+        # avg_steps_per_session moved to Python (below, off _row_completion_globals)
+        # so the per-row numerator is the gate-derived completed count — the raw
+        # json_array_length(completed_steps) counted MCP dense positions and
+        # ignored gate-only rows. prereqs_completed / saved_sessions stay in SQL.
         usage_rows = execute_query(f"""
             SELECT
-                COALESCE(
-                    (SELECT ROUND(AVG(
-                        CASE WHEN completed_steps IS NOT NULL
-                             AND completed_steps != ''
-                             AND completed_steps != '[]'
-                        THEN json_array_length(completed_steps::json)
-                        ELSE 0 END
-                    )::numeric, 1) FROM {table_name}),
-                0) AS avg_steps_per_session,
                 (SELECT COUNT(*) FROM {table_name}
                  WHERE prerequisites_completed = TRUE) AS prereqs_completed,
                 (SELECT COUNT(*) FROM {table_name}
@@ -1955,8 +1996,30 @@ def get_analytics() -> Dict[str, Any]:
                 pass
         avg_score = round(sum(scores) / len(scores), 1) if scores else 0
 
+        # avg_steps_per_session — same semantics as the retired SQL AVG: average
+        # the per-row completed count over ALL rows (a row with no completion
+        # counts as 0), rounded to 1 decimal, 0 on an empty table. ONLY the per-row
+        # numerator changes: len(completed) via _row_completion_globals (gate-
+        # derived, step-1 credit included) instead of json_array_length of the raw
+        # column. Pull ALL rows (no WHERE) so the denominator stays every row.
+        avg_rows = execute_query(f"""
+            SELECT completed_steps, skipped_steps, completed_gates, session_parameters, industry, use_case
+            FROM {table_name}
+        """)
+        if avg_rows:
+            _step_total = 0
+            for ar in avg_rows:
+                try:
+                    _completed, _ = _row_completion_globals(ar, _inverse_map)
+                    _step_total += len(_completed)
+                except Exception:
+                    pass
+            avg_steps_per_session = round(_step_total / len(avg_rows), 1)
+        else:
+            avg_steps_per_session = 0
+
         usage = {
-            "avg_steps_per_session": float(usage_base.get("avg_steps_per_session", 0)),
+            "avg_steps_per_session": float(avg_steps_per_session),
             "prereqs_completed": int(usage_base.get("prereqs_completed", 0)),
             "total_prompts_generated": total_prompts,
             "saved_sessions": int(usage_base.get("saved_sessions", 0)),
@@ -2039,9 +2102,15 @@ def get_analytics() -> Dict[str, Any]:
         ]
 
         # -- Recent sessions --------------------------------------------------
+        # T5 R3: completed_count off gate-derived GLOBAL numbers (the same
+        # _row_completion_globals disambiguation) instead of len(raw completed_steps),
+        # which counted MCP dense positions and dropped gate-only rows. SELECT
+        # widened to carry all six columns the per-row resolver reads.
         recent_rows = execute_query(f"""
             SELECT session_id, created_by, industry_label, use_case_label,
-                   workshop_level, completed_steps, created_at
+                   workshop_level, created_at,
+                   completed_steps, skipped_steps, completed_gates, session_parameters,
+                   industry, use_case
             FROM {table_name}
             ORDER BY created_at DESC
             LIMIT 10
@@ -2049,12 +2118,8 @@ def get_analytics() -> Dict[str, Any]:
         recent_sessions = []
         for rr in recent_rows:
             email = rr.get("created_by", "")
-            cs_raw = rr.get("completed_steps", "[]")
-            try:
-                cs = json.loads(cs_raw) if isinstance(cs_raw, str) else (cs_raw or [])
-                completed_count = len(cs)
-            except Exception:
-                completed_count = 0
+            completed, _skipped = _row_completion_globals(rr, _inverse_map)
+            completed_count = len(completed)
             lvl = rr.get("workshop_level") or ""
             ca = rr.get("created_at")
             if hasattr(ca, "isoformat"):
