@@ -180,9 +180,16 @@ def test_get_user_default_session_orders_by_updated_at_desc(monkeypatch):
 
     # Most recently updated wins; the retired current_step progress ordering is gone.
     assert "ORDER BY" in sql
-    order_clause = sql[sql.index("ORDER BY"):]
+    assert "LIMIT 1" in sql
+    # Isolate the ORDER BY clause (up to LIMIT) and pin PURE recency: a single key,
+    # updated_at DESC, with no secondary tiebreak column.
+    order_clause = sql[sql.index("ORDER BY"):sql.index("LIMIT")]
     assert "updated_at DESC" in order_clause
-    assert "current_step" not in sql
+    assert "," not in order_clause, f"ordering is not a single key: {order_clause!r}"
+    # None of the three retired step columns appear anywhere in the query (R4b): not
+    # as an ordering key and not in the SELECT list.
+    for legacy in ("current_step", "completed_steps", "skipped_steps"):
+        assert legacy not in sql, f"retired column {legacy!r} still referenced in SQL"
 
 
 # =============================================================================

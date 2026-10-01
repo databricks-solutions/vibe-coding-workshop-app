@@ -748,10 +748,12 @@ def build_manifest(source: str) -> dict[str, Any]:
 
     # Global step-number -> sectionTag map (T5 PR1, decision D-2). Authority is the
     # frontend ALL_STEPS object (parse_source keys `steps` by its GLOBAL number, not
-    # the track-local Step.order), so the backend can resolve App-origin
-    # completed_steps/skipped_steps — which are GLOBAL numbers — back to tags in
-    # state.build_session_state. Emitted string-keyed and sorted for deterministic
-    # (byte-identical) regeneration.
+    # the track-local Step.order). The App-origin completed_steps/skipped_steps
+    # back-resolution this once fed in state.build_session_state was retired in R4b
+    # (reads went gates-only, no numeric fallback). The map now serves the App's own
+    # tag<->number bridges and the analytics inverse
+    # (completion_keying.tag_to_global_number: tag -> GLOBAL number). Emitted
+    # string-keyed and sorted for deterministic (byte-identical) regeneration.
     step_number_to_tag = {
         str(number): steps[number].section_tag for number in sorted(steps)
     }

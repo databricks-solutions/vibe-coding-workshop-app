@@ -1,15 +1,15 @@
 """Cross-surface resume: /session/{id} must forward the sectionTag-keyed
 ``completed_gates`` to the client.
 
-The MCP/engine records progress as ``completed_gates`` (sectionTags) and, via the
-sync bridge, ALSO as legacy ``completed_steps`` — but those legacy ints are dense
-positions in the backend track outline, which do NOT line up with the frontend's
-fixed global step numbers (e.g. ``semlayer_locate`` = 57). The App therefore
-resumes off the sectionTags, mapping them to global numbers through its own
-registry. That only works if the load endpoint actually surfaces
-``completed_gates``; ``lakebase.load_session`` returns them, but the
-``SessionLoadResponse`` model must carry them through. These tests pin that
-passthrough (present + absent), the fix for the MCP->App deep-link resume.
+The MCP/engine records progress as ``completed_gates`` (sectionTags) — the single
+source of truth. The load response forwards that list verbatim; the App maps each
+tag to its own fixed GLOBAL step number through its tag<->number bridge (e.g.
+``semlayer_locate`` = 57). There are NO legacy step numbers in the contract: the
+``completed_steps`` dual-write was retired in R4a (#70) and every read went
+gates-only in R4b (#71), so ``SessionLoadResponse`` carries gates and nothing
+numeric. These tests pin that passthrough (present + absent): it works only if
+``lakebase.load_session`` returns ``completed_gates`` AND the
+``SessionLoadResponse`` model forwards the field — the MCP->App deep-link resume.
 """
 
 import asyncio
@@ -26,7 +26,7 @@ from src.backend.api import routes
 def test_load_session_endpoint_forwards_completed_gates(monkeypatch):
     record = {
         "session_id": "gates-sid",
-        "completed_steps": [1, 2],  # legacy dense positions (backend track order)
+        "completed_steps": [1, 2],  # retired legacy column; a decoy that must never surface
         "completed_gates": ["project_setup", "prd_generation", "semlayer_locate"],
         "session_parameters": {"coding_assistant": "genie-code"},
         "is_saved": True,
@@ -46,11 +46,12 @@ def test_load_session_endpoint_forwards_completed_gates(monkeypatch):
 
 
 def test_load_session_endpoint_defaults_gates_empty_for_legacy_sessions(monkeypatch):
-    # A legacy web session has no engine gates — the field must default to [] so
-    # the App falls back to the stored integer completed_steps.
+    # A legacy web session has no engine gates — the field must default to []. The
+    # retired numeric completed_steps column is NOT read (R4b): there is no numeric
+    # fallback, so an empty gate set hydrates no gate-derived progress.
     record = {
         "session_id": "legacy-sid",
-        "completed_steps": [1, 2, 3],
+        "completed_steps": [1, 2, 3],  # retired column; must be ignored
         "is_saved": True,
     }
     monkeypatch.setattr(routes, "load_session", lambda sid: dict(record))
