@@ -56,37 +56,24 @@ def _gates_for(step_numbers: list[int]) -> list[str]:
 # --- 1. ROUND-TRIP: complete-set dual-write loses nothing --------------------
 
 
-def test_dual_write_roundtrip_no_progress_loss_end_to_end():
-    # App-completed GLOBAL numbers, including the pre-journey global 1
+def test_complete_gate_set_yields_full_progress_end_to_end():
+    # Globals the App completed, including the pre-journey global 1
     # (usecase_selection) which is not a numbered outline step.
     completed_steps = [1, 2, 3, 4, 5]
     skipped_steps = [6]  # global 6 => setup_lakebase
     complete_gates = _gates_for(completed_steps)
     complete_skipped_gates = _gates_for(skipped_steps)
 
-    # What the numbers ALONE would have produced (gates-empty reconciliation path).
-    numbers_only = {
-        "completed_gates": [],
-        "completed_steps": completed_steps,
-        "skipped_steps": skipped_steps,
-        "session_parameters": {},
-    }
-    # The dual-write shape the SPA now persists: the COMPLETE gate set alongside
-    # the legacy numbers; skipped_gates lives in session_parameters.
-    dual_write = {
+    # The gate write shape the SPA persists: the COMPLETE gate set; skipped_gates
+    # lives in session_parameters. (R4b: no numeric columns are read.)
+    gate_write = {
         "completed_gates": complete_gates,
-        "completed_steps": completed_steps,
-        "skipped_steps": skipped_steps,
         "session_parameters": {"skipped_gates": complete_skipped_gates},
     }
 
-    numbers_done = _done_tags(END_TO_END, numbers_only)
-    dual_done = _done_tags(END_TO_END, dual_write)
+    dual_done = _done_tags(END_TO_END, gate_write)
 
-    # Loses NOTHING: the gates-present (verbatim) done-set equals the done-set the
-    # numbers alone would have produced.
-    assert dual_done == numbers_done
-    # And it is the real progress (not a trivially-passing empty match).
+    # The complete gate set yields the real progress (not a trivially-passing match).
     assert {
         "project_setup",
         "prd_generation",
@@ -95,27 +82,18 @@ def test_dual_write_roundtrip_no_progress_loss_end_to_end():
     } <= dual_done
     assert "setup_lakebase" not in dual_done  # never completed; not over-completed
 
-    # Skipped lockstep: setup_lakebase is skipped on both shapes.
-    assert _skipped_tags(END_TO_END, dual_write) == _skipped_tags(END_TO_END, numbers_only)
-    assert "setup_lakebase" in _skipped_tags(END_TO_END, dual_write)
+    # Skipped lockstep from skipped_gates: setup_lakebase is skipped.
+    assert "setup_lakebase" in _skipped_tags(END_TO_END, gate_write)
 
 
-def test_dual_write_roundtrip_no_progress_loss_genie_high_globals():
-    # genie-accelerator real progress lives at globals 57+ (the dense-index guard
-    # dropped these pre-PR1); prove the dual-write preserves them too.
+def test_complete_gate_set_yields_full_progress_genie_high_globals():
+    # genie-accelerator real progress lives at globals 57+ (semlayer_*).
     completed_steps = [2, 3, 57, 58, 59]
-    dual_write = {
+    gate_write = {
         "completed_gates": _gates_for(completed_steps),
-        "completed_steps": completed_steps,
         "session_parameters": {},
     }
-    numbers_only = {
-        "completed_gates": [],
-        "completed_steps": completed_steps,
-        "session_parameters": {},
-    }
-    dual_done = _done_tags(GENIE_TRACK, dual_write)
-    assert dual_done == _done_tags(GENIE_TRACK, numbers_only)
+    dual_done = _done_tags(GENIE_TRACK, gate_write)
     assert {"semlayer_locate", "semlayer_profile", "semlayer_measures"} <= dual_done
 
 

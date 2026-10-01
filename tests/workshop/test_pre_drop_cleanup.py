@@ -130,7 +130,7 @@ def test_step1_credit_requires_both_intent_columns(monkeypatch):
     assert result[1]["completed_step_count"] == 0
 
 
-def test_get_user_sessions_select_carries_all_six_disambiguation_columns(monkeypatch):
+def test_get_user_sessions_select_carries_gate_disambiguation_columns(monkeypatch):
     # The count is only correct in prod if the SELECT actually fetches every
     # column _row_completion_globals reads. This SQL-string assert is the ONLY
     # guard for that: the behavioral tests above drive a stub whose fetchall()
@@ -138,15 +138,51 @@ def test_get_user_sessions_select_carries_all_six_disambiguation_columns(monkeyp
     # dropped column would not make them fail — only this assertion catches it.
     _result, recorded = _run_get_user_sessions(monkeypatch, [_saved_row()])
     sql = recorded[0]
-    for col in (
-        "completed_steps",
-        "skipped_steps",
-        "completed_gates",
-        "session_parameters",
-        "industry",
-        "use_case",
-    ):
-        assert col in sql, f"widened SELECT is missing {col}"
+    for col in ("completed_gates", "session_parameters", "industry", "use_case"):
+        assert col in sql, f"gates SELECT is missing {col}"
+    # R4b: the retired numeric columns are NOT selected.
+    for col in ("completed_steps", "skipped_steps", "current_step"):
+        assert col not in sql, f"gates SELECT still names retired column {col}"
+
+
+# =============================================================================
+# R4-D2 — get_user_default_session orders by updated_at DESC (not current_step).
+# =============================================================================
+
+
+def test_get_user_default_session_orders_by_updated_at_desc(monkeypatch):
+    # The DB does the ORDER BY + LIMIT 1; an offline stub can't exercise row
+    # ordering, so this is a SQL-string guard. R4-D2 drops the current_step
+    # progress tiebreak in favour of pure recency.
+    recorded: list = []
+
+    class _OneCursor:
+        def execute(self, sql, params=None):
+            recorded.append(sql)
+
+        def fetchone(self):
+            return None  # no row — we only care about the issued SQL
+
+        def close(self):
+            pass
+
+    @contextmanager
+    def _fake_get_connection():
+        yield object()
+
+    monkeypatch.setattr(lakebase, "is_lakebase_configured", lambda: True)
+    monkeypatch.setattr(lakebase, "_get_sessions_table_name", lambda: "genie.sessions")
+    monkeypatch.setattr(lakebase, "get_connection", _fake_get_connection)
+    monkeypatch.setattr(lakebase, "_dict_cursor", lambda conn: _OneCursor())
+
+    lakebase.get_user_default_session("u@x.com")
+    sql = recorded[0]
+
+    # Most recently updated wins; the retired current_step progress ordering is gone.
+    assert "ORDER BY" in sql
+    order_clause = sql[sql.index("ORDER BY"):]
+    assert "updated_at DESC" in order_clause
+    assert "current_step" not in sql
 
 
 # =============================================================================
@@ -154,21 +190,12 @@ def test_get_user_sessions_select_carries_all_six_disambiguation_columns(monkeyp
 # =============================================================================
 
 
-def _app_row(completed_steps):
-    return {
-        "completed_steps": json.dumps(completed_steps),
-        "skipped_steps": "[]",
-        "completed_gates": "[]",
-        "session_parameters": "{}",
-        "industry": None,
-        "use_case": None,
-    }
+# globals 17,18 as gates (genie_space / agent_framework).
+_GATES_17_18 = ["genie_space", "agent_framework"]
 
 
-def _mcp_gate_only_row(gates):
+def _gate_row(gates):
     return {
-        "completed_steps": "[]",  # gate-only: raw column empty
-        "skipped_steps": "[]",
         "completed_gates": json.dumps(gates),
         "session_parameters": "{}",
         "industry": None,
@@ -179,13 +206,12 @@ def _mcp_gate_only_row(gates):
 def _zero_row():
     """No completion, no intent — contributes 0 to the average (guards the
     denominator: the average is over ALL rows, not just completed ones)."""
-    return _app_row([])
+    return _gate_row([])
 
 
 def _install_analytics_stub(monkeypatch, cohort):
-    """Stub the analytics DB layer. Every completion query (avg_rows / score_rows
-    / step_rows / recent_rows / user_rows selects completed_gates + completed_steps)
-    gets the full cohort; scalar summary queries get benign zeros."""
+    """Stub the analytics DB layer. Every completion query selects completed_gates;
+    those get the full cohort, scalar summary queries get benign zeros."""
 
     def _fake_execute_query(sql, params=None):
         if "total_sessions" in sql:
@@ -195,7 +221,7 @@ def _install_analytics_stub(monkeypatch, cohort):
             return [{"prereqs_completed": 0, "saved_sessions": 0}]
         if "total_prompts" in sql:
             return [{"total_prompts": 0}]
-        if "completed_gates" in sql and "completed_steps" in sql:
+        if "completed_gates" in sql:
             return [dict(r) for r in cohort]
         return []
 
@@ -205,23 +231,14 @@ def _install_analytics_stub(monkeypatch, cohort):
 
 
 def test_avg_steps_per_session_gate_derived_over_all_rows(monkeypatch):
-    # Mixed cohort with a ZERO-completion row so the denominator (all rows) matters.
-    # New per-row counts: App {17,18}=2, MCP gate-only {57,58}=2, zero=0.
-    cohort = [_app_row([17, 18]), _mcp_gate_only_row(GENIE_GATES), _zero_row()]
+    # Cohort with a ZERO-completion row so the denominator (all rows) matters.
+    # Gate-derived per-row counts: {17,18}=2, {57,58}=2, zero=0.
+    cohort = [_gate_row(_GATES_17_18), _gate_row(GENIE_GATES), _zero_row()]
     _install_analytics_stub(monkeypatch, cohort)
 
     result = lakebase.get_analytics()
-    # NEW: (2 + 2 + 0) / 3 = 1.333 -> 1.3, averaged over ALL rows.
+    # (2 + 2 + 0) / 3 = 1.333 -> 1.3, averaged over ALL rows (gate-derived numerator).
     assert result["usage"]["avg_steps_per_session"] == 1.3
-
-    # FAIL-BEFORE: the retired SQL used json_array_length(completed_steps) — the
-    # gate-only row counts 0, so old = (2 + 0 + 0) / 3 = 0.666 -> 0.7. Divergence
-    # proves the gate-only row was being dropped from the numerator; the zero row
-    # proves the denominator stays every row (not just completed ones).
-    old_numerators = [len(json.loads(r["completed_steps"])) for r in cohort]
-    old_avg = round(sum(old_numerators) / len(cohort), 1)
-    assert old_avg == 0.7
-    assert result["usage"]["avg_steps_per_session"] != old_avg
 
 
 def test_avg_steps_per_session_zero_on_empty_table(monkeypatch):
@@ -231,18 +248,14 @@ def test_avg_steps_per_session_zero_on_empty_table(monkeypatch):
 
 
 def test_recent_sessions_completed_count_gate_derived(monkeypatch):
-    # A gate-only genie session: raw completed_steps empty, gates -> globals 57,58.
-    cohort = [_mcp_gate_only_row(GENIE_GATES)]
+    # A gate-only genie session: gates -> globals 57,58.
+    cohort = [_gate_row(GENIE_GATES)]
     _install_analytics_stub(monkeypatch, cohort)
 
     result = lakebase.get_analytics()
     counts = [s["completed_count"] for s in result["recent_sessions"]]
-    # NEW: gate-derived count = 2.
+    # Gate-derived count = 2 (the class the raw numeric column dropped for gate-only rows).
     assert counts == [2]
-
-    # FAIL-BEFORE: len(raw completed_steps) == 0 for a gate-only row.
-    assert len(json.loads(cohort[0]["completed_steps"])) == 0
-    assert counts[0] != len(json.loads(cohort[0]["completed_steps"]))
 
 
 def test_analytics_no_jsonb_vs_empty_string_in_new_queries(monkeypatch):
@@ -251,7 +264,7 @@ def test_analytics_no_jsonb_vs_empty_string_in_new_queries(monkeypatch):
     import re
 
     recorded: list = []
-    cohort = [_app_row([17, 18]), _mcp_gate_only_row(GENIE_GATES), _zero_row()]
+    cohort = [_gate_row(_GATES_17_18), _gate_row(GENIE_GATES), _zero_row()]
 
     def _fake_execute_query(sql, params=None):
         recorded.append(sql)
@@ -262,7 +275,7 @@ def test_analytics_no_jsonb_vs_empty_string_in_new_queries(monkeypatch):
             return [{"prereqs_completed": 0, "saved_sessions": 0}]
         if "total_prompts" in sql:
             return [{"total_prompts": 0}]
-        if "completed_gates" in sql and "completed_steps" in sql:
+        if "completed_gates" in sql:
             return [dict(r) for r in cohort]
         return []
 

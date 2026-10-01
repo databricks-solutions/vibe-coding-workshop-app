@@ -297,13 +297,13 @@ function LeaderboardRow({
               {entry.completed_chapters.length} chapter{entry.completed_chapters.length !== 1 ? 's' : ''}
             </span>
             <span className="text-muted-foreground/50">•</span>
-            {/* T5 PR3c: gate-derived count from the backend (falls back to the
-                array length for older responses that omit the field). */}
-            <span>{entry.completed_step_count ?? entry.completed_steps.length} steps</span>
-            {(entry.skipped_step_count ?? entry.skipped_steps?.length ?? 0) > 0 && (
+            {/* T5 R4b: gate-derived count from the backend (completed_step_count
+                is authoritative; 0 when a cached/older response omits it). */}
+            <span>{entry.completed_step_count ?? 0} steps</span>
+            {(entry.skipped_step_count ?? 0) > 0 && (
               <>
                 <span className="text-muted-foreground/50">•</span>
-                <span className="text-amber-400/70">{entry.skipped_step_count ?? entry.skipped_steps.length} skipped</span>
+                <span className="text-amber-400/70">{entry.skipped_step_count ?? 0} skipped</span>
               </>
             )}
           </p>
@@ -346,7 +346,7 @@ function LeaderboardRow({
       <ChapterTooltip 
         completed={entry.completed_chapters} 
         inProgress={entry.in_progress_chapters}
-        skippedSteps={entry.skipped_steps || []}
+        skippedSteps={entry.skipped_globals || []}
         workshopLevel={entry.workshop_level}
       />
     </Wrapper>

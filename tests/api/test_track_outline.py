@@ -180,30 +180,50 @@ def test_valid_track_with_raising_load_session_is_404(client, monkeypatch):
 # --- T1-B5 NUMBER -> GATE BACKFILL parity (T5 PR1: GLOBAL numbers) ------------
 
 
-def test_completed_steps_backfill_marks_done(client, stub_session):
-    # App-origin row: empty gates + GLOBAL ALL_STEPS numbers (NOT dense track
-    # indices). Globals 2/3 are project_setup / prd_generation, which happen to be
-    # the first two genie steps as well.
+def test_completed_gates_mark_done(client, stub_session):
+    # T5 R4b: progress is read from completed_gates verbatim (gates-only). A row
+    # whose gates name project_setup / prd_generation marks exactly those done.
     tags = _genie_tags(2)  # [project_setup, prd_generation]
     record = {
-        "session_id": "sess-backfill",
+        "session_id": "sess-gates",
         "workshop_level": GENIE_TRACK,
-        "completed_gates": [],  # empty on the wire (the App never writes gates)...
-        "completed_steps": [2, 3],  # ...GLOBAL numbers say those steps are done
+        "completed_gates": tags,
         "captured_outputs": {},
         "session_parameters": {},
     }
     stub_session(record)
 
-    resp = client.get(f"/api/track/{GENIE_TRACK}/outline", params={"session_id": "sess-backfill"})
+    resp = client.get(f"/api/track/{GENIE_TRACK}/outline", params={"session_id": "sess-gates"})
 
     assert resp.status_code == 200, resp.text
     body = resp.json()
-    # Parity with the shared builder's backfill (compare against the engine).
     assert body["outline"] == _expected_outline(GENIE_TRACK, record)
     status_by_tag = {item["sectionTag"]: item["status"] for item in body["outline"]}
     for tag in tags:
         assert status_by_tag[tag] == "done"
+
+
+def test_completed_steps_numbers_are_not_read(client, stub_session):
+    # T5 R4b TAMPER: a row with EMPTY gates but a stale numeric completed_steps
+    # column marks NOTHING done — the number backfill is gone. Re-add a numeric
+    # read to build_session_state and this fails (steps become done).
+    tags = _genie_tags(2)
+    record = {
+        "session_id": "sess-nums",
+        "workshop_level": GENIE_TRACK,
+        "completed_gates": [],
+        "completed_steps": [2, 3],  # retired column — must be ignored
+        "captured_outputs": {},
+        "session_parameters": {},
+    }
+    stub_session(record)
+
+    resp = client.get(f"/api/track/{GENIE_TRACK}/outline", params={"session_id": "sess-nums"})
+
+    assert resp.status_code == 200, resp.text
+    status_by_tag = {item["sectionTag"]: item["status"] for item in resp.json()["outline"]}
+    for tag in tags:
+        assert status_by_tag[tag] != "done", "stale numeric column must not mark steps done"
 
 
 # --- T1-B6 NULL tolerance -----------------------------------------------------
@@ -271,10 +291,21 @@ def test_mcp_coerce_state_uses_shared_builder():
     assert coerced.session_parameters == expected.session_parameters
 
 
-def test_build_session_state_backfills_gates_from_global_numbers():
-    # App-origin globals resolve through step_number_to_tag (NOT dense index):
-    # 2/3 -> project_setup/prd_generation; 57/58 -> semlayer_locate/profile — the
-    # genie globals the old ``1 <= n <= len(steps)`` guard silently dropped.
+def test_build_session_state_uses_gates_verbatim():
+    # T5 R4b: completed_gates are used verbatim; there is no number backfill.
+    record = {
+        "completed_gates": ["project_setup", "prd_generation", "semlayer_locate"],
+        "session_parameters": {},
+    }
+
+    state = build_session_state(record, GENIE_TRACK)
+
+    assert state.completed_gates == ["project_setup", "prd_generation", "semlayer_locate"]
+
+
+def test_build_session_state_ignores_stale_number_column():
+    # T5 R4b TAMPER: empty gates + a stale completed_steps column => empty gates
+    # (the number backfill is gone). Re-add the backfill and this fails.
     record = {
         "completed_steps": [2, 3, 57, 58],
         "completed_gates": [],
@@ -283,9 +314,4 @@ def test_build_session_state_backfills_gates_from_global_numbers():
 
     state = build_session_state(record, GENIE_TRACK)
 
-    assert state.completed_gates == [
-        "project_setup",
-        "prd_generation",
-        "semlayer_locate",
-        "semlayer_profile",
-    ]
+    assert state.completed_gates == []

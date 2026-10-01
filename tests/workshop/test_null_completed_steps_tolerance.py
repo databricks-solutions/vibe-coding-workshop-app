@@ -1,24 +1,17 @@
-"""Phase 3 T5 R4a — readers tolerate a NULL ``completed_steps`` column.
+"""Phase 3 T5 R4b — readers work on an R4a-written gate-only row.
 
-R4a's INSERT omits ``completed_steps`` / ``current_step`` / ``skipped_steps``.
-``current_step`` and ``skipped_steps`` carry DDL defaults (``1`` and ``'[]'``),
-but ``completed_steps`` has NO DDL default (``03_sessions.sql``), so every row
-written after R4a stores SQL NULL there. Every reader must tolerate that NULL —
-no exception — and still produce the correct GATE-derived counts (R4a does not
-change the readers; they were already gate-first after T5 PR3b′/PR3c, and this
-pins it against the NULL that R4a now makes routine).
+R4a's INSERT omits the numeric progress columns, so rows written after it store
+SQL NULL ``completed_steps`` (no DDL default) alongside a populated
+``completed_gates``. R4b makes the readers gates-only: they never read the
+numeric columns, so such a row is handled with no error and the GATE-derived
+counts are correct.
 
-The row under test mimics an R4a-written gate-only session: ``completed_steps``
-NULL, ``current_step`` = 1 (default), ``skipped_steps`` = '[]' (default), and a
-populated ``completed_gates`` (semantic-layer tags → globals 57/58/59). Its
-gate-derived completed count is therefore 3 even though the number column is NULL.
+The row under test mimics that shape: ``completed_steps`` NULL, a populated
+``completed_gates`` (semantic-layer tags → globals 57/58/59). Its gate-derived
+completed count is 3.
 
 Covered readers: ``load_session``, ``get_user_default_session``,
 ``get_user_sessions``, ``get_leaderboard``, ``get_analytics``.
-
-TAMPER: make any reader ``json.loads`` the raw ``completed_steps`` value without
-the ``None`` guard → ``json.loads(None)`` raises ``TypeError`` and that reader's
-test fails. Restore the guard → passes.
 
 Offline: a fake connection / recording cursor / stubbed ``execute_query`` — no
 live Lakebase (mirrors ``test_completion_keying_aggregations``).
@@ -114,9 +107,10 @@ def test_load_session_tolerates_null_completed_steps(monkeypatch):
     _patch_conn(monkeypatch, _RecCursor(one=_null_row()))
     session = lakebase.load_session("s-null")
     assert session is not None
-    # NULL parsed to an empty list (not an error); gates survive intact.
-    assert session["completed_steps"] == []
+    # No error, and gates survive intact. The retired numeric column is not
+    # read, so it is absent from the returned dict (R4b).
     assert session["completed_gates"] == GENIE_GATES
+    assert "completed_steps" not in session
 
 
 # --- get_user_default_session -------------------------------------------------
@@ -126,8 +120,9 @@ def test_get_user_default_session_tolerates_null_completed_steps(monkeypatch):
     _patch_conn(monkeypatch, _RecCursor(one=_null_row()))
     session = lakebase.get_user_default_session("learner@example.com")
     assert session is not None
-    assert session["completed_steps"] == []
-    assert session["current_step"] == 1
+    # Surfaces completed_gates for gate-first resume; the numeric column is absent.
+    assert session["completed_gates"] == GENIE_GATES
+    assert "completed_steps" not in session
 
 
 # --- get_user_sessions --------------------------------------------------------
@@ -166,8 +161,8 @@ def test_get_analytics_tolerates_null_completed_steps(monkeypatch):
             return [{"avg_steps_per_session": 0, "prereqs_completed": 0, "saved_sessions": 0}]
         if "total_prompts" in sql:
             return [{"total_prompts": 0}]
-        # score_rows / step_rows / user_rows all select both completion columns.
-        if "completed_gates" in sql and "completed_steps" in sql:
+        # score_rows / step_rows / user_rows / recent_rows all select completed_gates.
+        if "completed_gates" in sql:
             return [dict(r) for r in rows]
         return []
 

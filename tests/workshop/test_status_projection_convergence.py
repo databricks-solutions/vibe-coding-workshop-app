@@ -48,24 +48,26 @@ def _merge_status(local_optimistic, status_by_tag, tag_to_number):
     return endpoint_done | set(local_optimistic), endpoint_done
 
 
-def test_endpoint_status_catches_up_for_app_origin_completions():
-    # App-origin row: empty gates + GLOBAL ALL_STEPS numbers, including the
-    # just-completed step (global 58 = semlayer_profile). Globals 57/58 are the
-    # genie progress the old dense-index misread silently dropped (PR1 fixed it).
+# The persisted gate set the App writes; globals 2,3,57,58 (incl. the genie
+# high-globals 57/58 the old dense-index misread silently dropped).
+_CONVERGE_GATES = ["project_setup", "prd_generation", "semlayer_locate", "semlayer_profile"]
+
+
+def test_endpoint_status_catches_up_for_completions():
+    # Gate-only row (R4b): completions ride on completed_gates.
     record = {
         "session_id": "sess-converge",
         "workshop_level": GENIE_TRACK,
-        "completed_gates": [],
-        "completed_steps": [2, 3, 57, 58],
+        "completed_gates": _CONVERGE_GATES,
         "captured_outputs": {},
         "session_parameters": {},
     }
 
     status = _status_by_tag(GENIE_TRACK, record)
 
-    # The refetch has landed: every persisted global is reported done by the
+    # The refetch has landed: every persisted gate is reported done by the
     # endpoint (its tag status == 'done').
-    for tag in ("project_setup", "prd_generation", "semlayer_locate", "semlayer_profile"):
+    for tag in _CONVERGE_GATES:
         assert status[tag] == "done", f"{tag} should be done: {status.get(tag)}"
 
     # And the endpoint is NOT marking everything done — a step the user never
@@ -79,8 +81,7 @@ def test_overlay_converges_to_endpoint_after_refetch_not_masking():
     record = {
         "session_id": "sess-converge",
         "workshop_level": GENIE_TRACK,
-        "completed_gates": [],
-        "completed_steps": [2, 3, 57, 58],
+        "completed_gates": _CONVERGE_GATES,
         "captured_outputs": {},
         "session_parameters": {},
     }

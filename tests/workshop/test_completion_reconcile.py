@@ -1,21 +1,14 @@
-"""T5 PR1 — reconcile ``completed_steps``/``skipped_steps`` with ``completed_gates``.
+"""T5 PR1/R4b — ``build_session_state`` reads progress from the gate sets.
 
-Root cause (verified): ``completed_steps`` carries TWO numberings on one column.
-The **App** persists **global ``ALL_STEPS`` numbers** and never writes
-``completed_gates``; the **MCP** walk persists **dense track positions** AND writes
-authoritative ``completed_gates``. The former ``build_session_state`` read every
-``completed_steps`` int as a 1-based *dense track index*, so App-origin rows were
-systematically misread (off-by-one over-completion on ``end-to-end``; silent
-drop of the learner's real ``genie-accelerator`` progress at globals 57+).
+The generated global ``step_number -> sectionTag`` map (authority = frontend
+``ALL_STEPS``) remains the single cross-surface numbering authority. The read
+path itself is gates-only (R4b): ``completed_gates`` are used verbatim and
+``skipped_gates`` (in ``session_parameters``) verbatim — there is no number
+backfill. A row whose gates are empty carries NO progress even if the retired
+numeric columns still hold values.
 
-The fix is pure read-side (no Lakebase touch, no migration): a generated global
-``step_number -> sectionTag`` map (authority = frontend ``ALL_STEPS``) plus a
-disambiguation rule — **gates present => trust gates verbatim** (MCP-origin);
-**gates empty => App-origin globals**, mapped through the global map and filtered
-to the track's own step set. ``skipped`` moves in lockstep.
-
-These tests FAIL against the old ``steps[n-1]`` dense-index logic and PASS after
-the fix. See docs/superpowers/plans/2026-09-29-mcp-phase3-t5-completion-keying-tags.md.
+This file pins the map (a drift oracle against the frontend ``ALL_STEPS``), the
+gates-verbatim behaviour, and the gates-only "numbers are never read" guarantee.
 """
 
 import pathlib
@@ -70,126 +63,75 @@ def test_backend_map_module_accessor_matches():
     assert manifest.step_number_to_tag() == manifest.load_manifest().step_number_to_tag
 
 
-# --- App-origin (gates empty): globals mapped, then track-filtered ------------
+# --- Gates present: gates trusted verbatim, numbers never read ----------------
 
 
-def test_app_origin_end_to_end_no_off_by_one():
-    """end-to-end App globals {1,2,3,4,5}: the old dense-index read stamped
-    ``setup_lakebase`` (dense position 5) done. As GLOBAL numbers, 6=setup_lakebase
-    was never completed, so it must NOT be done. Global 1 (``usecase_selection``)
-    is not a numbered step on any track and is dropped."""
-    record = {
-        "completed_gates": [],
-        "completed_steps": [1, 2, 3, 4, 5],
-        "session_parameters": {},
-    }
-    state = build_session_state(record, "end-to-end")
-    gates = set(state.completed_gates)
-    assert "setup_lakebase" not in gates  # the off-by-one over-completion, fixed
-    assert {
-        "project_setup",
-        "prd_generation",
-        "cursor_copilot_ui_design",
-        "deploy_databricks_app",
-    } <= gates
-    assert "usecase_selection" not in gates  # global 1 is not a track step
-
-
-def test_app_origin_genie_high_globals_not_dropped():
-    """genie-accelerator's real learner progress lives at globals 57+. The old
-    ``1 <= n <= len(steps)`` guard (31 dense steps) silently dropped them; as
-    global numbers they map to real genie steps and must survive."""
-    record = {
-        "completed_gates": [],
-        "completed_steps": [57, 58, 59],
-        "session_parameters": {},
-    }
-    state = build_session_state(record, "genie-accelerator")
-    gates = set(state.completed_gates)
-    assert {"semlayer_locate", "semlayer_profile", "semlayer_measures"} <= gates
-
-
-def test_app_origin_genie_low_globals_no_false_lakehouse():
-    """genie-accelerator App globals {1,2,3}: the old dense read stamped dense[2] =
-    ``genie_silver_metadata`` done. As globals, {2,3} => project_setup/prd_generation
-    and 1 is dropped, so genie_silver_metadata is NOT falsely completed."""
-    record = {
-        "completed_gates": [],
-        "completed_steps": [1, 2, 3],
-        "session_parameters": {},
-    }
-    state = build_session_state(record, "genie-accelerator")
-    gates = set(state.completed_gates)
-    assert "genie_silver_metadata" not in gates
-    assert {"project_setup", "prd_generation"} <= gates
-
-
-def test_app_origin_cross_track_global_ignored():
-    """A global that maps to a tag NOT in this track (e.g. a genie step number on
-    end-to-end) is dropped, never mis-indexed onto some other step."""
-    record = {
-        "completed_gates": [],
-        "completed_steps": [57],  # semlayer_locate — genie-only
-        "session_parameters": {},
-    }
-    state = build_session_state(record, "end-to-end")
-    assert state.completed_gates == []
-
-
-def test_engine_outline_end_to_end_setup_lakebase_not_done():
-    """Observable projection: with App globals {1,2,3,4,5}, engine.outline must not
-    report ``setup_lakebase`` as done while ``deploy_databricks_app`` is done."""
-    record = {
-        "completed_gates": [],
-        "completed_steps": [1, 2, 3, 4, 5],
-        "session_parameters": {},
-    }
-    state = build_session_state(record, "end-to-end")
-    status = {item.sectionTag: item.status for item in engine.outline("end-to-end", state)}
-    assert status["deploy_databricks_app"] == "done"
-    assert status["setup_lakebase"] != "done"
-
-
-# --- MCP-origin (gates present): gates trusted verbatim, numbers ignored ------
-
-
-def test_mcp_origin_gates_trusted_verbatim():
-    """Gates present => MCP-origin/authoritative. ``completed_steps`` (dense track
-    positions) must NOT re-synthesize any tag — the gates are used as-is."""
+def test_gates_trusted_verbatim():
+    """``completed_gates`` are used as-is; a stale numeric completed_steps column
+    does NOT re-synthesize any tag."""
     record = {
         "completed_gates": ["project_setup", "prd_generation"],
-        "completed_steps": [1, 2, 3, 4, 5],  # dense positions; must be ignored
+        "completed_steps": [1, 2, 3, 4, 5],  # retired column; must be ignored
         "session_parameters": {},
     }
     state = build_session_state(record, "end-to-end")
     assert state.completed_gates == ["project_setup", "prd_generation"]
 
 
-# --- D-3: skipped moves in lockstep with completed ----------------------------
-
-
-def test_app_origin_skipped_globals_mapped():
-    """App-origin ``skipped_steps`` are global numbers too — map them to tags into
-    ``session_parameters.skipped_gates`` so the engine renders them skipped."""
+def test_genie_high_global_gates_survive():
+    """genie-accelerator progress at globals 57+ (semlayer_*) rides on the gates
+    and is rendered done by the engine."""
     record = {
-        "completed_gates": [],
-        "completed_steps": [2],
-        "skipped_steps": [6],  # global 6 => setup_lakebase
+        "completed_gates": ["semlayer_locate", "semlayer_profile", "semlayer_measures"],
         "session_parameters": {},
     }
-    state = build_session_state(record, "end-to-end")
-    assert state.session_parameters.get("skipped_gates") == ["setup_lakebase"]
-    status = {item.sectionTag: item.status for item in engine.outline("end-to-end", state)}
-    assert status["setup_lakebase"] == "skipped"
+    state = build_session_state(record, "genie-accelerator")
+    status = {item.sectionTag: item.status for item in engine.outline("genie-accelerator", state)}
+    for tag in ("semlayer_locate", "semlayer_profile", "semlayer_measures"):
+        assert status[tag] == "done"
 
 
-def test_mcp_origin_skipped_gates_trusted():
-    """Gates present => trust ``skipped_gates`` verbatim; ``skipped_steps`` (dense)
-    is ignored and must not clobber the authoritative tag set."""
+def test_skipped_gates_trusted_verbatim():
+    """``skipped_gates`` (in session_parameters) are used as-is; a stale
+    skipped_steps column does not clobber them."""
     record = {
         "completed_gates": ["project_setup"],
-        "skipped_steps": [6],
+        "skipped_steps": [6],  # retired column; must be ignored
         "session_parameters": {"skipped_gates": ["wire_ui_lakebase"]},
     }
     state = build_session_state(record, "end-to-end")
     assert state.session_parameters["skipped_gates"] == ["wire_ui_lakebase"]
+    status = {item.sectionTag: item.status for item in engine.outline("end-to-end", state)}
+    assert status["wire_ui_lakebase"] == "skipped"
+
+
+# --- Gates-only (R4b): the retired numeric columns are NEVER read -------------
+
+
+def test_numbers_only_row_yields_no_progress():
+    """TAMPER: empty gates + stale completed_steps/skipped_steps columns => NO
+    completed_gates and NO skipped_gates. Re-add a number backfill to
+    build_session_state and this fails."""
+    record = {
+        "completed_gates": [],
+        "completed_steps": [1, 2, 3, 4, 5],  # retired column; must be ignored
+        "skipped_steps": [6],               # retired column; must be ignored
+        "session_parameters": {},
+    }
+    state = build_session_state(record, "end-to-end")
+    assert state.completed_gates == []
+    assert "skipped_gates" not in state.session_parameters
+
+
+def test_numbers_only_row_engine_marks_nothing_done():
+    """Observable projection of the gates-only guarantee: with empty gates and a
+    stale numeric column, no step is done or skipped."""
+    record = {
+        "completed_gates": [],
+        "completed_steps": [1, 2, 3, 4, 5],
+        "session_parameters": {},
+    }
+    state = build_session_state(record, "end-to-end")
+    statuses = {item.status for item in engine.outline("end-to-end", state)}
+    assert "done" not in statuses
+    assert "skipped" not in statuses

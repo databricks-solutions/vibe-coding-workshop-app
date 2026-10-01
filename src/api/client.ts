@@ -306,8 +306,8 @@ export interface SessionSaveRequest {
   // Gate write (Phase 3 T5). The COMPLETE gate set (sectionTags for ALL
   // completed/skipped steps, derived from the live step numbers via
   // stepNumbersToGates). Must be complete, never a delta — the backend read path
-  // trusts non-empty gates verbatim. The legacy completed_steps / current_step
-  // number fields were retired in R4a (writes stopped).
+  // trusts non-empty gates verbatim. The legacy numeric progress fields were
+  // retired in R4a (writes stopped).
   completed_gates?: string[];
   skipped_gates?: string[];
   step_prompts: Record<number, string>;
@@ -332,11 +332,8 @@ export interface SessionLoadResponse {
   feedback_rating?: string;
   feedback_comment?: string;
   prerequisites_completed?: boolean;
-  current_step: number;
   workshop_level?: string;
-  completed_steps: number[];
   completed_gates?: string[];
-  skipped_steps?: number[];
   // Skipped-side gate mirror (Phase 3 T5 PR3b′). Surfaced from
   // session_parameters['skipped_gates'] by the load response, symmetric to
   // completed_gates, so the App can hydrate skipped steps gate-first.
@@ -401,8 +398,8 @@ export interface UpdateSessionMetadataRequest {
   workshop_level?: string;
   // Gate write (Phase 3 T5) — see SessionSaveRequest. Optional on this
   // partial-update path: omit to leave persisted gates untouched; when present
-  // they are the complete set. The legacy completed_steps / skipped_steps number
-  // fields were retired in R4a (writes stopped).
+  // they are the complete set. The legacy numeric progress fields were retired
+  // in R4a (writes stopped).
   completed_gates?: string[];
   skipped_gates?: string[];
   custom_use_case_label?: string;
@@ -426,11 +423,10 @@ export interface SessionListItem {
   industry_label?: string;
   use_case?: string;
   use_case_label?: string;
-  current_step: number;
-  // Gate-derived count of canonical GLOBAL completed steps (T5 R3). The backend
-  // now surfaces this so the session list renders progress without the raw
-  // current_step scalar (ahead of the current_step column DROP). Optional: a
-  // cached/older response may omit it, in which case the UI shows "Not started".
+  // Gate-derived count of canonical GLOBAL completed steps (T5 R3/R4b). The
+  // backend surfaces this so the session list renders progress from the gate set
+  // alone. Optional: a cached/older response may omit it, in which case the UI
+  // shows "Not started".
   completed_step_count?: number;
   feedback_rating?: string;
   created_at?: string;
@@ -447,11 +443,11 @@ export interface LeaderboardEntry {
   display_name: string;
   avatar: string;
   score: number;
-  completed_steps: number[];
-  skipped_steps: number[];
-  // Gate-derived counts of canonical GLOBAL steps (T5 PR3c). The backend now
-  // re-keys completion off completed_gates; the UI reads these instead of
-  // completed_steps.length so gate-only / MCP-dense rows count correctly.
+  completed_globals: number[];
+  skipped_globals: number[];
+  // Gate-derived counts of canonical GLOBAL steps (T5 PR3c/R4b). The backend
+  // re-keys completion off completed_gates; the UI reads these counts directly
+  // rather than measuring an array length.
   completed_step_count?: number;
   skipped_step_count?: number;
   completed_chapters: string[];

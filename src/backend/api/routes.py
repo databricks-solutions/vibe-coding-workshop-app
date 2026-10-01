@@ -5463,9 +5463,9 @@ class SessionSaveRequest(BaseModel):
     chain_context: Optional[str] = Field(None, description="Additive-chain context: app | lakehouse | reverse (persisted as session_parameters.chainContext)")
     flags: Optional[Dict[str, bool]] = Field(None, description="Engine composition flags (e.g. includeLakehouse, ai.genie, medallion.bronze) persisted under session_parameters.flags")
     # Gate write (Phase 3 T5). The SPA writes the COMPLETE App-derived gate set
-    # (sectionTags for ALL completed/skipped steps). The legacy completed_steps /
-    # current_step number fields were retired in R4a (writes stopped); a legacy tab
-    # may still POST them, but Pydantic's default extra='ignore' drops them.
+    # (sectionTags for ALL completed/skipped steps). The legacy numeric progress
+    # fields were retired in R4a (writes stopped); a legacy tab may still POST
+    # them, but Pydantic's default extra='ignore' drops them.
     # Optional/None (NOT []-default) so an omitting save — composition-only or an
     # older client — leaves the persisted gates untouched (present => server-side
     # MERGE, absent/None => preserve). See `_merge_app_gates`: App-representable
@@ -5498,11 +5498,8 @@ class SessionLoadResponse(BaseModel):
     feedback_rating: Optional[str] = Field(None)
     feedback_comment: Optional[str] = Field(None)
     prerequisites_completed: bool = Field(False)
-    current_step: int = Field(1)
     workshop_level: Optional[str] = Field(None, description="Workshop level: app-only, app-database, lakehouse, lakehouse-di, end-to-end, accelerator, or genie-accelerator")
-    completed_steps: List[int] = Field(default_factory=list)
     completed_gates: List[str] = Field(default_factory=list, description="Completed step sectionTags (engine/MCP source of truth for cross-surface numbering)")
-    skipped_steps: List[int] = Field(default_factory=list)
     skipped_gates: List[str] = Field(default_factory=list, description="Skipped step sectionTags (surfaced from session_parameters['skipped_gates']; skipped-side mirror of completed_gates for gate-first hydration)")
     step_prompts: Dict[int, str] = Field(default_factory=dict)
     session_parameters: Optional[Dict[str, Any]] = Field(default_factory=dict, description="Session parameter overrides (JSONB)")
@@ -5552,13 +5549,11 @@ class SessionListItem(BaseModel):
     industry_label: Optional[str]
     use_case: Optional[str]
     use_case_label: Optional[str]
-    current_step: int
-    # Gate-derived count of canonical GLOBAL completed steps (T5 R3). Surfaced
-    # server-side (the leaderboard's completed_step_count way) so the session
-    # list can show progress WITHOUT the raw current_step scalar, ahead of the
-    # human-run current_step column DROP. Optional so a cached/older-shape dict
-    # that omits it still constructs (Pydantic v2 extra='ignore' otherwise strips
-    # an undeclared field before the client ever sees it).
+    # Gate-derived count of canonical GLOBAL completed steps (T5 R3/R4b). Surfaced
+    # server-side (the leaderboard's completed_step_count way) so the session list
+    # can show progress from the gate set alone. Optional so a cached/older-shape
+    # dict that omits it still constructs (Pydantic v2 extra='ignore' otherwise
+    # strips an undeclared field before the client ever sees it).
     completed_step_count: Optional[int] = None
     feedback_rating: Optional[str]
     created_at: Optional[str]
@@ -5652,12 +5647,11 @@ async def get_or_create_default_session(request: Request) -> SessionLoadResponse
         
         if session_data:
             session_id = session_data['session_id']
-            current_step = session_data.get("current_step") or 1
-            completed_steps = session_data.get("completed_steps") or []
+            completed_gates = session_data.get("completed_gates") or []
             prereqs = session_data.get("prerequisites_completed")
             prerequisites_completed = prereqs if prereqs is not None else False
-            
-            logger.info(f"[Session API] Found existing default session: {session_id}, step={current_step}, completed={len(completed_steps)} steps")
+
+            logger.info(f"[Session API] Found existing default session: {session_id}, completed_gates={len(completed_gates)}")
             
             # Clean up orphan unsaved sessions, keeping only this one
             try:
@@ -5679,11 +5673,8 @@ async def get_or_create_default_session(request: Request) -> SessionLoadResponse
                 feedback_rating=session_data.get("feedback_rating"),
                 feedback_comment=session_data.get("feedback_comment"),
                 prerequisites_completed=prerequisites_completed,
-                current_step=current_step,
                 workshop_level=session_data.get("workshop_level", "300"),
-                completed_steps=completed_steps,
-                completed_gates=session_data.get("completed_gates") or [],
-                skipped_steps=session_data.get("skipped_steps") or [],
+                completed_gates=completed_gates,
                 # skipped_gates lives in session_parameters (the write path patches
                 # it there); surface it top-level, symmetric to completed_gates, so
                 # the App can hydrate skipped steps gate-first (PR3b′).
@@ -5722,9 +5713,7 @@ async def get_or_create_default_session(request: Request) -> SessionLoadResponse
         session_id=session_id,
         session_name="New Session",
         prerequisites_completed=False,
-        current_step=1,
         workshop_level="300",
-        completed_steps=[],
         step_prompts={},
         created_by=created_by,
         is_saved=False,
@@ -5860,11 +5849,8 @@ async def load_session_endpoint(session_id: str) -> SessionLoadResponse:
                 feedback_rating=session_data.get("feedback_rating"),
                 feedback_comment=session_data.get("feedback_comment"),
                 prerequisites_completed=session_data.get("prerequisites_completed", False),
-                current_step=session_data.get("current_step", 1),
                 workshop_level=session_data.get("workshop_level", "300"),
-                completed_steps=session_data.get("completed_steps", []),
                 completed_gates=session_data.get("completed_gates") or [],
-                skipped_steps=session_data.get("skipped_steps", []),
                 # skipped_gates lives in session_parameters (the write path patches
                 # it there); surface it top-level, symmetric to completed_gates, so
                 # the App can hydrate skipped steps gate-first (PR3b′).
@@ -6092,9 +6078,9 @@ class SessionUpdateMetadataRequest(BaseModel):
     prerequisites_completed: Optional[bool] = Field(None, description="Whether prerequisites are completed")
     workshop_level: Optional[str] = Field(None, description="Workshop level: app-only, app-database, lakehouse, lakehouse-di, end-to-end, accelerator, or genie-accelerator")
     # Gate write (Phase 3 T5) — see SessionSaveRequest for the contract. The legacy
-    # completed_steps / skipped_steps number fields were retired in R4a (writes
-    # stopped); a legacy tab may still POST them, but Pydantic's default
-    # extra='ignore' drops them. Optional/None on this partial-update path so an
+    # numeric progress fields were retired in R4a (writes stopped); a legacy tab
+    # may still POST them, but Pydantic's default extra='ignore' drops them.
+    # Optional/None on this partial-update path so an
     # update that carries no gates (e.g. an industry-only save) leaves the persisted
     # gates untouched (COALESCE for the column, no patch key for skipped_gates).
     # When present they MUST be the complete set.
@@ -6393,11 +6379,11 @@ class LeaderboardEntry(BaseModel):
     display_name: str = Field(..., description="Formatted display name (e.g., 'John D.')")
     avatar: str = Field(..., description="Emoji avatar for the user")
     score: int = Field(..., description="Total score based on completed steps")
-    completed_steps: List[int] = Field(default_factory=list, description="List of completed step numbers")
-    skipped_steps: List[int] = Field(default_factory=list, description="List of skipped step numbers")
-    # Gate-derived canonical GLOBAL-step counts (T5 PR3c). Optional/None so cached
-    # or older-shape entries still construct; the FE reads these instead of
-    # completed_steps.length so gate-only / MCP-dense rows count correctly.
+    completed_globals: List[int] = Field(default_factory=list, description="Completed GLOBAL step numbers (gate-derived)")
+    skipped_globals: List[int] = Field(default_factory=list, description="Skipped GLOBAL step numbers (gate-derived)")
+    # Gate-derived canonical GLOBAL-step counts (T5 PR3c/R4b). Optional/None so
+    # cached or older-shape entries still construct; the FE reads these counts
+    # directly rather than measuring an array length.
     completed_step_count: Optional[int] = Field(None, description="Gate-derived count of completed GLOBAL steps")
     skipped_step_count: Optional[int] = Field(None, description="Gate-derived count of skipped GLOBAL steps")
     completed_chapters: List[str] = Field(default_factory=list, description="Fully completed chapters")
