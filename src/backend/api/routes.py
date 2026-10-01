@@ -5383,7 +5383,6 @@ try:
         delete_user_unsaved_sessions,
         update_step_prompt,
         get_leaderboard,
-        cleanup_session_steps,
         get_analytics,
     )
     SESSION_FUNCTIONS_AVAILABLE = True
@@ -5403,8 +5402,6 @@ except ImportError:
         return None
     def get_leaderboard(*args, **kwargs):
         return []
-    def cleanup_session_steps(*args, **kwargs):
-        return {'sessions_fixed': 0, 'step_41_replaced': 0}
     def delete_user_unsaved_sessions(*args, **kwargs):
         return 0
     def update_step_prompt(*args, **kwargs):
@@ -5453,7 +5450,6 @@ class SessionSaveRequest(BaseModel):
     session_description: Optional[str] = Field(None, max_length=500, description="Session description")
     feedback_rating: Optional[str] = Field(None, description="Feedback rating: thumbs_up or thumbs_down")
     feedback_comment: Optional[str] = Field(None, description="Feedback comment")
-    current_step: int = Field(1, description="Current step number (1-22)")
     workshop_level: Optional[str] = Field(None, description="Workshop level: app-only, app-database, lakehouse, lakehouse-di, end-to-end, accelerator, or genie-accelerator")
     direction: Optional[str] = Field(None, description="Workflow direction: forward or reverse")
     include_lakehouse: Optional[bool] = Field(None, description="Genie Accelerator: include the optional Lakehouse (Bronze -> Gold) block")
@@ -5466,16 +5462,17 @@ class SessionSaveRequest(BaseModel):
     # existing snake_case direction/include_* keys stay for other consumers.
     chain_context: Optional[str] = Field(None, description="Additive-chain context: app | lakehouse | reverse (persisted as session_parameters.chainContext)")
     flags: Optional[Dict[str, bool]] = Field(None, description="Engine composition flags (e.g. includeLakehouse, ai.genie, medallion.bronze) persisted under session_parameters.flags")
-    completed_steps: List[int] = Field(default_factory=list, description="List of completed step numbers")
-    # Gate dual-write (Phase 3 T5 PR3a). The SPA writes the COMPLETE App-derived gate
-    # set (sectionTags for ALL completed/skipped steps, from the same numbers above)
-    # ALONGSIDE the legacy numbers. Optional/None (NOT []-default) so an omitting
-    # save — composition-only or an older client — leaves the persisted gates
-    # untouched (present => server-side MERGE, absent/None => preserve). See
-    # `_merge_app_gates`: App-representable gates are authoritative from the App;
-    # non-representable stored gates (e.g. MCP-only `use_case_selection`) are
-    # add-only preserved so an App write can't re-lock a step whose gate they satisfy.
-    completed_gates: Optional[List[str]] = Field(None, description="Complete set of App-completed step sectionTags (dual-write; server-side merged with non-representable stored gates)")
+    # Gate write (Phase 3 T5). The SPA writes the COMPLETE App-derived gate set
+    # (sectionTags for ALL completed/skipped steps). The legacy completed_steps /
+    # current_step number fields were retired in R4a (writes stopped); a legacy tab
+    # may still POST them, but Pydantic's default extra='ignore' drops them.
+    # Optional/None (NOT []-default) so an omitting save — composition-only or an
+    # older client — leaves the persisted gates untouched (present => server-side
+    # MERGE, absent/None => preserve). See `_merge_app_gates`: App-representable
+    # gates are authoritative from the App; non-representable stored gates (e.g.
+    # MCP-only `use_case_selection`) are add-only preserved so an App write can't
+    # re-lock a step whose gate they satisfy.
+    completed_gates: Optional[List[str]] = Field(None, description="Complete set of App-completed step sectionTags (server-side merged with non-representable stored gates)")
     skipped_gates: Optional[List[str]] = Field(None, description="Complete set of App-skipped step sectionTags (dual-write; persisted under session_parameters.skipped_gates, same merge)")
     step_prompts: Dict[int, str] = Field(default_factory=dict, description="Map of step number to generated prompt")
 
@@ -5627,8 +5624,6 @@ async def create_new_session(request: Request) -> NewSessionResponse:
         success = save_session(
             session_id=session_id,
             session_name="New Session",
-            current_step=1,
-            completed_steps=[],
             created_by=created_by,
         )
         if success:
@@ -5712,8 +5707,6 @@ async def get_or_create_default_session(request: Request) -> SessionLoadResponse
         success = save_session(
             session_id=session_id,
             session_name="New Session",
-            current_step=1,
-            completed_steps=[],
             created_by=created_by,
         )
         if success:
@@ -5786,9 +5779,7 @@ async def save_session_endpoint(request_body: SessionSaveRequest, request: Reque
             session_description=request_body.session_description,
             feedback_rating=request_body.feedback_rating,
             feedback_comment=request_body.feedback_comment,
-            current_step=request_body.current_step,
             workshop_level=request_body.workshop_level,
-            completed_steps=request_body.completed_steps,
             completed_gates=_merged_completed_gates,  # None => COALESCE preserves
             step_prompts=request_body.step_prompts,
             created_by=current_user,
@@ -6100,15 +6091,15 @@ class SessionUpdateMetadataRequest(BaseModel):
     use_case_label: Optional[str] = Field(None, description="Use case display label")
     prerequisites_completed: Optional[bool] = Field(None, description="Whether prerequisites are completed")
     workshop_level: Optional[str] = Field(None, description="Workshop level: app-only, app-database, lakehouse, lakehouse-di, end-to-end, accelerator, or genie-accelerator")
-    completed_steps: Optional[List[int]] = Field(None, description="List of completed step numbers")
-    skipped_steps: Optional[List[int]] = Field(None, description="List of skipped step numbers")
-    # Gate dual-write (Phase 3 T5 PR3a) — see SessionSaveRequest for the contract.
-    # Optional/None on this partial-update path so an update that carries no gates
-    # (e.g. an industry-only save) leaves the persisted gates untouched (COALESCE
-    # for the column, no patch key for skipped_gates). When present they MUST be
-    # the complete set, mirroring the numbers in the same request.
-    completed_gates: Optional[List[str]] = Field(None, description="Complete set of completed step sectionTags (dual-write mirror of completed_steps)")
-    skipped_gates: Optional[List[str]] = Field(None, description="Complete set of skipped step sectionTags (dual-write mirror; persisted under session_parameters.skipped_gates)")
+    # Gate write (Phase 3 T5) — see SessionSaveRequest for the contract. The legacy
+    # completed_steps / skipped_steps number fields were retired in R4a (writes
+    # stopped); a legacy tab may still POST them, but Pydantic's default
+    # extra='ignore' drops them. Optional/None on this partial-update path so an
+    # update that carries no gates (e.g. an industry-only save) leaves the persisted
+    # gates untouched (COALESCE for the column, no patch key for skipped_gates).
+    # When present they MUST be the complete set.
+    completed_gates: Optional[List[str]] = Field(None, description="Complete set of completed step sectionTags")
+    skipped_gates: Optional[List[str]] = Field(None, description="Complete set of skipped step sectionTags (persisted under session_parameters.skipped_gates)")
     custom_use_case_label: Optional[str] = Field(None, max_length=30, description="User-edited use case name override")
     custom_use_case_description: Optional[str] = Field(None, description="User-edited use case description override")
     level_explicitly_selected: Optional[bool] = Field(None, description="Whether the user explicitly clicked a level button")
@@ -6139,25 +6130,12 @@ async def update_session_metadata_endpoint(request_body: SessionUpdateMetadataRe
             'industry': request_body.industry, 'use_case': request_body.use_case,
             'workshop_level': request_body.workshop_level,
             'prerequisites_completed': request_body.prerequisites_completed,
-            'completed_steps': request_body.completed_steps,
-            'skipped_steps': request_body.skipped_steps,
+            'completed_gates': request_body.completed_gates,
+            'skipped_gates': request_body.skipped_gates,
         }.items() if v is not None]
         logger.info(f"[Session API] Updating metadata for session {request_body.session_id}: fields={_updating}")
-        
-        # Deduplicate step IDs to prevent score inflation from duplicate entries
-        if request_body.completed_steps is not None:
-            request_body.completed_steps = list(set(request_body.completed_steps))
-        
-        # Safety: warn if completed_steps is being explicitly set to empty
-        if request_body.completed_steps is not None and len(request_body.completed_steps) == 0:
-            logger.warning(f"[Session API] CAUTION: completed_steps being set to EMPTY for session {request_body.session_id}")
-        
-        # Calculate current_step from completed_steps if provided
-        current_step = None
-        if request_body.completed_steps:
-            current_step = max(request_body.completed_steps) if request_body.completed_steps else None
-        
-        # Gate dual-write (T5 PR3a): MERGE-on-present / PRESERVE-on-absent, symmetric
+
+        # Gate write (T5): MERGE-on-present / PRESERVE-on-absent, symmetric
         # for completed_gates (column) and skipped_gates (session_parameters). Load
         # existing gates once (only when the request carries either) so the merge can
         # add-only preserve non-representable stored gates (e.g. MCP `use_case_selection`),
@@ -6181,10 +6159,7 @@ async def update_session_metadata_endpoint(request_body: SessionUpdateMetadataRe
             created_by=current_user,
             prerequisites_completed=request_body.prerequisites_completed,
             workshop_level=request_body.workshop_level,
-            completed_steps=request_body.completed_steps,
             completed_gates=_merged_completed_gates,  # None => COALESCE preserves
-            skipped_steps=request_body.skipped_steps,
-            current_step=current_step,
         )
 
         # Store custom use case overrides and derive user_schema_prefix
@@ -6507,40 +6482,6 @@ async def get_user_sessions_by_email(email: str) -> List[SessionListItem]:
     except Exception as e:
         logger.error(f"[Workshop Users API] Error fetching sessions for {email}: {e}", exc_info=True)
         return []
-
-
-@router.post("/admin/cleanup-sessions")
-async def cleanup_sessions_endpoint(request: Request) -> Dict[str, Any]:
-    """
-    Admin endpoint to clean up session data.
-    
-    Fixes:
-    1. Replaces step 41 with step 4 in completed_steps arrays
-    2. Updates current_step to match max(completed_steps) for each session
-    
-    Returns count of sessions fixed.
-    """
-    try:
-        # Get current user for logging
-        current_user = _get_session_user(request)
-        logger.info(f"[Admin API] Session cleanup triggered by {current_user}")
-        
-        stats = cleanup_session_steps()
-        
-        logger.info(f"[Admin API] Cleanup complete: {stats}")
-        return {
-            "success": True,
-            "message": f"Cleanup complete. Fixed {stats['sessions_fixed']} sessions, replaced step 41 in {stats['step_41_replaced']} sessions.",
-            "stats": stats
-        }
-        
-    except Exception as e:
-        logger.error(f"[Admin API] Cleanup error: {e}", exc_info=True)
-        return {
-            "success": False,
-            "message": str(e),
-            "stats": {'sessions_fixed': 0, 'step_41_replaced': 0}
-        }
 
 
 # ============================================================

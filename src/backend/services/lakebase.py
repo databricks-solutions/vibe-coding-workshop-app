@@ -625,10 +625,7 @@ def save_session(
     feedback_comment: str = None,
     feedback_request_followup: bool = None,
     prerequisites_completed: bool = None,
-    current_step: int = None,
     workshop_level: str = None,
-    completed_steps: List[int] = None,
-    skipped_steps: List[int] = None,
     step_prompts: Dict[int, str] = None,
     created_by: str = None,
     captured_outputs: Dict[str, str] = None,
@@ -654,9 +651,6 @@ def save_session(
         feedback_rating: 'thumbs_up', 'thumbs_down', or None
         feedback_comment: User feedback text
         feedback_request_followup: Whether user requests follow-up support
-        current_step: Current step number (None preserves existing)
-        completed_steps: List of completed step numbers (None preserves existing)
-        skipped_steps: List of skipped step numbers (None preserves existing)
         step_prompts: Dict mapping step number to generated prompt text
         created_by: User email
         captured_outputs: Dict mapping produces keys to captured output text
@@ -674,9 +668,6 @@ def save_session(
     
     # Defensive logging: track exactly which fields are being written
     _fields_being_set = []
-    if completed_steps is not None: _fields_being_set.append(f"completed_steps({len(completed_steps)} items)")
-    if skipped_steps is not None: _fields_being_set.append(f"skipped_steps({len(skipped_steps)} items)")
-    if current_step is not None: _fields_being_set.append(f"current_step={current_step}")
     if workshop_level is not None: _fields_being_set.append(f"workshop_level={workshop_level}")
     if industry is not None: _fields_being_set.append("industry")
     if use_case is not None: _fields_being_set.append("use_case")
@@ -700,14 +691,9 @@ def save_session(
                 if step_num != 1 and prompt_text:  # Skip step 1, include steps 2-20
                     step_prompts_jsonb[str(step_num)] = prompt_text
         step_prompts_json = json.dumps(step_prompts_jsonb)
-        
-        # Serialize completed_steps and skipped_steps to JSON
-        # Use SQL NULL (None) when not provided so COALESCE preserves existing DB values
-        # Deduplicate step IDs to prevent inflated scores from duplicate entries
-        if completed_steps is not None:
-            completed_steps = list(set(completed_steps))
-        completed_steps_json = json.dumps(completed_steps) if completed_steps is not None else None
-        skipped_steps_json = json.dumps(skipped_steps) if skipped_steps is not None else None
+
+        # Serialize JSONB payloads. None => SQL NULL so COALESCE preserves the
+        # existing DB value (never clobbers on a partial save).
         captured_outputs_json = json.dumps(captured_outputs) if captured_outputs is not None else None
         completed_gates_json = json.dumps(completed_gates) if completed_gates is not None else None
         session_parameters_json = json.dumps(session_parameters) if session_parameters is not None else None
@@ -726,7 +712,7 @@ def save_session(
                 industry, industry_label, use_case, use_case_label,
                 feedback_rating, feedback_comment, feedback_request_followup,
                 step_1_prompt, step_prompts,
-                prerequisites_completed, current_step, workshop_level, completed_steps, skipped_steps,
+                prerequisites_completed, workshop_level,
                 captured_outputs, completed_gates, session_parameters,
                 created_at, updated_at
             ) VALUES (
@@ -735,7 +721,7 @@ def save_session(
                 %s, %s, %s, %s,
                 %s, %s, %s,
                 %s, %s,
-                %s, %s, %s, %s, %s,
+                %s, %s,
                 %s, %s, %s,
                 %s, %s
             )
@@ -750,10 +736,7 @@ def save_session(
                 feedback_comment = COALESCE(EXCLUDED.feedback_comment, {table_name}.feedback_comment),
                 feedback_request_followup = COALESCE(EXCLUDED.feedback_request_followup, {table_name}.feedback_request_followup),
                 prerequisites_completed = COALESCE(EXCLUDED.prerequisites_completed, {table_name}.prerequisites_completed),
-                current_step = COALESCE(EXCLUDED.current_step, {table_name}.current_step),
                 workshop_level = COALESCE(EXCLUDED.workshop_level, {table_name}.workshop_level),
-                completed_steps = COALESCE(EXCLUDED.completed_steps, {table_name}.completed_steps),
-                skipped_steps = COALESCE(EXCLUDED.skipped_steps, {table_name}.skipped_steps),
                 captured_outputs = COALESCE(EXCLUDED.captured_outputs, {table_name}.captured_outputs),
                 completed_gates = COALESCE(EXCLUDED.completed_gates, {table_name}.completed_gates),
                 session_parameters = COALESCE(EXCLUDED.session_parameters, {table_name}.session_parameters),
@@ -768,7 +751,7 @@ def save_session(
                 industry, industry_label, use_case, use_case_label,
                 feedback_rating, feedback_comment, feedback_request_followup,
                 step_1_prompt_value, step_prompts_json,
-                prerequisites_completed, current_step, workshop_level, completed_steps_json, skipped_steps_json,
+                prerequisites_completed, workshop_level,
                 captured_outputs_json, completed_gates_json, session_parameters_json,
                 now,
                 now,
@@ -1232,7 +1215,7 @@ def get_user_default_session(created_by: str) -> Optional[Dict]:
                         completed_steps = json.loads(completed_steps)
                     except:
                         completed_steps = []
-                
+
                 # Parse skipped_steps
                 skipped_steps = row.get("skipped_steps")
                 if skipped_steps is None:
@@ -2219,104 +2202,6 @@ def get_analytics() -> Dict[str, Any]:
     except Exception as e:
         logger.warning("Analytics query failed: %s", e)
         return _empty
-
-
-def cleanup_session_steps() -> Dict[str, int]:
-    """
-    Clean up session data:
-    1. Replace step 41 with step 4 in all completed_steps arrays
-    2. Update current_step to be max(completed_steps) for each session
-    
-    Returns:
-        Dict with counts: {'sessions_fixed': n, 'step_41_replaced': n}
-    """
-    if not is_lakebase_configured():
-        logger.warning("Lakebase not configured - cannot cleanup sessions")
-        return {'sessions_fixed': 0, 'step_41_replaced': 0}
-    
-    table_name = _get_sessions_table_name()
-    logger.info(f"Starting session cleanup on {table_name}")
-    
-    stats = {'sessions_fixed': 0, 'step_41_replaced': 0}
-    
-    try:
-        with get_connection() as conn:
-            cursor = _dict_cursor(conn)
-            
-            # Get all sessions with completed_steps
-            query = f"""
-            SELECT session_id, completed_steps, current_step
-            FROM {table_name}
-            WHERE completed_steps IS NOT NULL
-            """
-            
-            cursor.execute(query)
-            rows = cursor.fetchall()
-            
-            for row in rows:
-                session_id = row['session_id']
-                completed_steps_raw = row.get('completed_steps', '[]')
-                current_step = row.get('current_step', 1)
-                
-                # Parse completed_steps
-                try:
-                    if isinstance(completed_steps_raw, str):
-                        completed_steps = json.loads(completed_steps_raw)
-                    else:
-                        completed_steps = completed_steps_raw or []
-                except:
-                    completed_steps = []
-                
-                if not completed_steps:
-                    continue
-                
-                needs_update = False
-                
-                # Fix step 41 -> 4
-                if 41 in completed_steps:
-                    completed_steps = [4 if s == 41 else s for s in completed_steps]
-                    # Remove duplicates while preserving order
-                    seen = set()
-                    completed_steps = [s for s in completed_steps if not (s in seen or seen.add(s))]
-                    stats['step_41_replaced'] += 1
-                    needs_update = True
-                
-                # Fix current_step to be max of completed_steps
-                if completed_steps:
-                    correct_current_step = max(completed_steps)
-                    if current_step != correct_current_step:
-                        current_step = correct_current_step
-                        needs_update = True
-                
-                # Update if needed
-                if needs_update:
-                    update_cursor = conn.cursor()
-                    update_sql = f"""
-                    UPDATE {table_name}
-                    SET completed_steps = %s,
-                        current_step = %s,
-                        updated_at = %s
-                    WHERE session_id = %s
-                    """
-                    now = datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')
-                    update_cursor.execute(update_sql, (
-                        json.dumps(completed_steps),
-                        current_step,
-                        now,
-                        session_id
-                    ))
-                    update_cursor.close()
-                    stats['sessions_fixed'] += 1
-            
-            conn.commit()
-            cursor.close()
-            
-            logger.info(f"Session cleanup complete: {stats}")
-            return stats
-            
-    except Exception as e:
-        logger.error(f"Error during session cleanup: {e}", exc_info=True)
-        return stats
 
 
 # =============================================================================

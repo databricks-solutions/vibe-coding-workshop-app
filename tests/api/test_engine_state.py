@@ -84,14 +84,17 @@ class TestEngineStatePersistence(unittest.TestCase):
                 lakebase.save_session(
                     session_id="session-1",
                     created_by="learner@example.com",
-                    completed_steps=[1, 4],
                     captured_outputs=captured_outputs,
                     completed_gates=completed_gates,
                 )
             )
 
         save_sql, save_params = saved_connection.cursor_for_write.executions[0]
-        self.assertIn("completed_steps", save_sql)
+        # R4a: the legacy number columns are no longer written. The INSERT emits
+        # neither completed_steps nor current_step; engine state still persists.
+        self.assertNotIn("completed_steps", save_sql)
+        self.assertNotIn("current_step", save_sql)
+        self.assertNotIn("skipped_steps", save_sql)
         self.assertIn("captured_outputs", save_sql)
         self.assertIn("completed_gates", save_sql)
         self.assertIn(json.dumps(captured_outputs), save_params)

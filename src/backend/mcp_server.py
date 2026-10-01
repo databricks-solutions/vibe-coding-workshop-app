@@ -946,8 +946,6 @@ def vibe_start_track(
             use_case_label=_use_case_label_for(industry or "", use_case or ""),
             session_name=_initial_name,
             created_by=_request_user(context),
-            current_step=1,
-            completed_steps=[],
             # Stamp the walked track as the top-level workshop_level column so the
             # SPA (which reads response.workshop_level) rebuilds the SAME filtered
             # outline the MCP walk uses. Without this, a resumed genie-code session
@@ -1294,41 +1292,6 @@ def _run_async_blocking(make_coro: Callable[[], Any]) -> Any:
     return box["value"]
 
 
-# --- Cross-surface step-sync bridge (D11 §4.3) -------------------------------
-# The MCP engine tracks progress as completed_gates/captured_outputs, while the
-# legacy SPA tracks it as current_step (int) + completed_steps (int list). To let
-# MCP-driven progress show up in the legacy SPA, vibe_complete_step dual-writes
-# the legacy fields — derived from the SAME manifest section order that
-# ``build_session_state`` uses to translate completed_steps back into gates. This is
-# the inverse of that reader (one section-order source, no hardcoded positions).
-def _legacy_progress(
-    track: str,
-    completed_gates: list[str],
-    next_step: manifest.Step | engine.Done,
-) -> tuple[int, list[int]]:
-    """Map engine progress to legacy (current_step, completed_steps).
-
-    ``completed_steps`` are the 1-based positions of every completed gate in the
-    manifest's full ordered step list (sorted, de-duplicated — idempotent on
-    replay). ``current_step`` is the position of the engine's next step, or one
-    past the end when the track is done. Because completed_gates only grows
-    within a session, current_step is monotonic and never regresses.
-    """
-
-    positions = {
-        step.sectionTag: index + 1
-        for index, step in enumerate(manifest.load_manifest().track_steps(track))
-    }
-    completed_steps = sorted(
-        {positions[tag] for tag in completed_gates if tag in positions}
-    )
-    if isinstance(next_step, engine.Done):
-        current_step = len(positions) + 1
-    else:
-        current_step = positions.get(next_step.sectionTag, len(positions) + 1)
-    return current_step, completed_steps
-
-
 @mcp.tool(
     name="vibe_complete_step",
     description=(
@@ -1411,14 +1374,6 @@ def vibe_complete_step(
             sectionTag=sectionTag,
         )  # type: ignore[return-value]
 
-    # D11 §4.3 sync bridge: dual-write the legacy SPA progress fields
-    # (current_step/completed_steps) alongside the engine state, in the SAME
-    # save — so a learner driving the workshop through MCP is reflected in the
-    # legacy SPA step indicator. Additive; the existing captured_outputs/
-    # completed_gates writes are preserved (COALESCE-safe, none-preserve).
-    current_step, completed_steps = _legacy_progress(
-        DEFAULT_TRACK, result.completed_gates, result.next_step
-    )
     # Workstream 3: once the use case locks, refine the auto-name so the web UI
     # session menu shows what this session is building. None on every other step so
     # COALESCE preserves any name the learner set in the UI.
@@ -1430,13 +1385,15 @@ def vibe_complete_step(
         )
         if _label:
             _refined_name = f"Genie Code — {_label}"
+    # Cross-surface progress rides on completed_gates alone (T5 R4a): the SPA
+    # hydrates its step indicator from the gate set via deriveCompletedStepNumbers,
+    # so MCP-driven progress shows up without the retired current_step/
+    # completed_steps number columns.
     save_session(
         session_id=session_id,
         session_name=_refined_name,
         captured_outputs=dict(state.captured_outputs),
         completed_gates=list(result.completed_gates),
-        current_step=current_step,
-        completed_steps=completed_steps,
     )
 
     next_step = result.next_step
@@ -1712,11 +1669,6 @@ def vibe_set_parameters(
     if _is_selection_call(params) and not missing_required:
         newly = engine.resolve_use_case(state, _build_use_case_brief(resolved_params))
         resolved_use_case = engine.use_case_resolved(state)
-        # Dual-write the legacy SPA progress fields from the SAME manifest section
-        # order the sync bridge uses (D11 §4.3), so the pick shows up in the SPA.
-        current_step, completed_steps = _legacy_progress(
-            DEFAULT_TRACK, list(state.completed_gates), engine.next_step(DEFAULT_TRACK, state)
-        )
         # Refine the auto-name to what this session is building — only when the
         # gate is newly resolved, so COALESCE preserves a name the learner set.
         refined_name = None
@@ -1752,8 +1704,6 @@ def vibe_set_parameters(
             session_parameters=resolved_params,
             captured_outputs=dict(state.captured_outputs),
             completed_gates=list(state.completed_gates),
-            current_step=current_step,
-            completed_steps=completed_steps,
         )
     else:
         save_session(session_id=session_id, session_parameters=resolved_params)
