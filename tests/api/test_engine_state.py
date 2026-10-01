@@ -122,7 +122,9 @@ class TestEngineStatePersistence(unittest.TestCase):
                 patch.object(lakebase, "get_schema", return_value="workshop"):
             session = lakebase.load_session("session-1")
 
-        self.assertEqual(session["completed_steps"], [1, 4])
+        # R4b: load_session is gates-only — the stale numeric column (here [1, 4])
+        # is NOT read, so it is absent from the loaded dict. Engine state survives.
+        self.assertNotIn("completed_steps", session)
         self.assertEqual(session["completed_gates"], completed_gates)
         self.assertEqual(session["captured_outputs"], captured_outputs)
 

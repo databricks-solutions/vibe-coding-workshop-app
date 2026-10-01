@@ -115,6 +115,38 @@ def _as_list(value: Any) -> list:
     return parsed if isinstance(parsed, list) else []
 
 
+def _resolve_row_completion(row: dict[str, Any], inverse_map: dict[str, int]) -> tuple[set, set]:
+    """R1-local completion resolver — the backfill verifier's own copy of the
+    pre-R4b origin-based rule (gates present => map tags; gates empty => the
+    numeric columns ARE global numbers) plus the step-1 intent credit.
+
+    The app read path went gates-only in T5 R4b (``lakebase._row_completion_globals``
+    no longer resolves the numeric columns), but the backfill verifier MUST still
+    reason about BOTH the number-derived backup view and the gate-derived live
+    view to prove the backfill was loss-free. Keeping this resolution here — in the
+    R1 tooling that reads the retired columns and is deleted at the column DROP —
+    preserves R1's behaviour verbatim without reintroducing a numeric read into the
+    production app. See the R4b plan / PR body."""
+    completed_gates = [g for g in _as_list(row.get("completed_gates")) if isinstance(g, str)]
+    if completed_gates:
+        completed = {inverse_map[t] for t in completed_gates if t in inverse_map}
+        skipped = {
+            inverse_map[t] for t in _skipped_gates_of(row) if isinstance(t, str) and t in inverse_map
+        }
+    else:
+        completed = {
+            n for n in _as_list(row.get("completed_steps"))
+            if isinstance(n, int) and not isinstance(n, bool)
+        }
+        skipped = {
+            n for n in _as_list(row.get("skipped_steps"))
+            if isinstance(n, int) and not isinstance(n, bool)
+        }
+    if (row.get("industry") or "").strip() and (row.get("use_case") or "").strip():
+        completed = completed | {1}
+    return completed, skipped
+
+
 def _skipped_gates_of(row: dict[str, Any]) -> list:
     sp = row.get("session_parameters")
     if isinstance(sp, str):
@@ -233,7 +265,7 @@ def compare_row(
             "not backfill-admitted (expected cohort A). Backup-predicate drift?"
         )
 
-    _resolve = resolve or lakebase._row_completion_globals
+    _resolve = resolve or _resolve_row_completion
     _score = score or lakebase._calculate_score
 
     backup_completed, backup_skipped = _resolve(_number_derived_view(row), inverse_map)

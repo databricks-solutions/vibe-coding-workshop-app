@@ -502,8 +502,8 @@ export const ALL_STEPS: Record<number, WorkflowStep> = {
 // cross-surface numbering. The MCP/engine records progress as sectionTags
 // (completed_gates); this maps them back to the fixed ALL_STEPS numbers the App
 // positions against, so a session started in MCP resumes on the right step in
-// the App (the backend's own completed_steps are dense track positions that do
-// NOT line up with these global numbers).
+// the App (the backend's own dense track positions do NOT line up with these
+// global numbers).
 export const SECTION_TAG_TO_STEP_NUMBER: Record<string, number> = Object.fromEntries(
   Object.values(ALL_STEPS).map(s => [s.sectionTag, s.number]),
 );
@@ -514,14 +514,12 @@ export function completedGatesToStepNumbers(gates: string[]): number[] {
     .filter((n): n is number => n != null);
 }
 
-// Forward bridge (Phase 3 T5 PR3a): global ALL_STEPS numbers -> sectionTags. The
-// SPA dual-writes `completed_gates`/`skipped_gates` by mapping the SAME number set
-// it persists as `completed_steps`/`skipped_steps`, so the two stores are
-// consistent BY CONSTRUCTION — the complete gate set, never a delta. Unmapped
-// numbers are dropped (harmless: the engine ignores tags not in the track's
-// outline). This MUST be the complete set: once `completed_gates` is non-empty the
-// backend read path trusts the gates verbatim and ignores the numbers, so a
-// partial write would silently drop number-only progress.
+// Forward bridge (Phase 3 T5): global ALL_STEPS numbers -> sectionTags. The SPA
+// writes `completed_gates`/`skipped_gates` by mapping its live step-number set,
+// so the gate set is the complete, authoritative progress — never a delta.
+// Unmapped numbers are dropped (harmless: the engine ignores tags not in the
+// track's outline). This MUST be the complete set: the backend read path trusts
+// the gates verbatim.
 export function stepNumbersToGates(steps: number[]): string[] {
   return steps
     .map(n => ALL_STEPS[n]?.sectionTag)

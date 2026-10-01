@@ -196,8 +196,8 @@ def _install_analytics_db(monkeypatch, db_rows):
         if "chapter_feedback" in sql:
             return []
         # score_rows / avg_rows / step_rows / recent_rows / user_rows all SELECT
-        # completed_steps; the feedback query does not.
-        if "completed_steps" in sql:
+        # completed_gates; the feedback query does not.
+        if "completed_gates" in sql:
             return [dict(r) for r in db_rows]
         return []
 

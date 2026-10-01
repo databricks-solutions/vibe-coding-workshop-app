@@ -21,49 +21,12 @@ import {
 } from './components/session';
 import { apiClient } from './api/client';
 import { Zap, MessageSquare, Trophy, Plus, PanelLeftClose, PanelLeft, Menu, X, BarChart3, Eye, Compass, Award, ChevronDown, List, BookOpen } from 'lucide-react';
-import { orderedSectionsForRead, getCumulativeOverrides, USE_CASE_LEVEL_LOCK, isForwardProgression, getDisabledTagsForAIModules, ALL_AI_MODULES, getDisabledTagsForMedallionLayers, normalizeMedallionLayers, ALL_MEDALLION_LAYERS, getDisabledTagsForLakehouse, getDisabledTagsForGenieOntology, computeChainContext, deriveInitialChainContext, completedGatesToStepNumbers, stepNumbersToGates, SECTION_TAG_TO_STEP_NUMBER, type WorkshopLevel, type WorkflowDirection, type AIAgentModule, type MedallionLayer, type ChainContext } from './constants/workflowSections';
+import { orderedSectionsForRead, getCumulativeOverrides, USE_CASE_LEVEL_LOCK, isForwardProgression, getDisabledTagsForAIModules, ALL_AI_MODULES, getDisabledTagsForMedallionLayers, normalizeMedallionLayers, ALL_MEDALLION_LAYERS, getDisabledTagsForLakehouse, getDisabledTagsForGenieOntology, computeChainContext, deriveInitialChainContext, stepNumbersToGates, SECTION_TAG_TO_STEP_NUMBER, type WorkshopLevel, type WorkflowDirection, type AIAgentModule, type MedallionLayer, type ChainContext } from './constants/workflowSections';
 import { mergeStatus } from './constants/mergeStatus';
 import type { TrackOutlineItem } from './api/client';
 import { DEFAULT_LEVEL_BY_ASSISTANT, parseCodingAssistantsConfig } from './constants/codingAssistants';
 import { resolveRestoredLevel } from './constants/restoreLevel';
-
-// Derive completed step NUMBERS (global ALL_STEPS numbering) from a loaded
-// session. Engine/MCP sessions carry sectionTag-keyed `completed_gates` — the
-// cross-surface source of truth — which map to the App's global step numbers.
-// Legacy web sessions have no gates, so fall back to the stored integer
-// `completed_steps` (already in global numbering). This is what lets a session
-// started in MCP resume on the correct step in the App: the backend's own
-// `completed_steps` are dense track positions that do NOT line up with these
-// global numbers.
-function deriveCompletedStepNumbers(
-  completedGates: string[] | undefined,
-  completedSteps: number[] | undefined,
-): number[] {
-  if (completedGates && completedGates.length > 0) {
-    return completedGatesToStepNumbers(completedGates);
-  }
-  return completedSteps || [];
-}
-
-// Derive skipped step NUMBERS gate-first — the exact skipped-side mirror of
-// deriveCompletedStepNumbers (Phase 3 T5 PR3b′, closes R2). PR3a dual-writes
-// `skipped_gates` (sectionTags) alongside the legacy integer `skipped_steps`,
-// but the read path never read the gates back, leaving skipped hydration
-// asymmetric with completed. Engine/MCP sessions carry sectionTag-keyed
-// `skipped_gates` (the cross-surface source of truth); reuse the SAME bridge
-// completedGatesToStepNumbers — it maps ANY sectionTag list to the App's fixed
-// global numbers, so no skipped-specific bridge is needed. Legacy web sessions
-// have no gates, so fall back to the stored integer `skipped_steps` (already in
-// global numbering).
-function deriveSkippedStepNumbers(
-  skippedGates: string[] | undefined,
-  skippedSteps: number[] | undefined,
-): number[] {
-  if (skippedGates && skippedGates.length > 0) {
-    return completedGatesToStepNumbers(skippedGates);
-  }
-  return skippedSteps || [];
-}
+import { deriveCompletedStepNumbers, deriveSkippedStepNumbers } from './constants/deriveProgress';
 
 export default function App() {
   const location = useLocation();
@@ -219,11 +182,10 @@ export default function App() {
   // prop, which is BOTH the render source AND the mutation seed its toggle handlers
   // read (`new Set(completedSteps)` at WorkflowDiagram.tsx ~715/753/828). So the
   // union — not the raw local set — is what a toggle grows/shrinks and then
-  // persists back into `completed_steps` (NUMBERS-ONLY; NO gate write; NO schema
-  // touch). This is BENIGN CONVERGENCE: the endpoint `done` set is derived from the
-  // authoritative `completed_gates`, so only genuinely-completed steps can enter
-  // the union and nothing false/foreign is ever written. The clean display-vs-
-  // mutation split (a separate mutation-seed prop) is deferred to PR 3a.
+  // persists back as the gate set (mapped from the step numbers via
+  // stepNumbersToGates). This is BENIGN CONVERGENCE: the endpoint `done` set is
+  // derived from the authoritative `completed_gates`, so only genuinely-completed
+  // steps can enter the union and nothing false/foreign is ever written.
   const projectedCompletedSteps = useMemo(
     () => mergeStatus(completedSteps, outline ?? [], SECTION_TAG_TO_STEP_NUMBER),
     [completedSteps, outline],
@@ -482,10 +444,9 @@ export default function App() {
         const restoredLevel = resolveRestoredLevel(response, restoredLock);
         setWorkshopLevel(restoredLevel);
         
-        // Restore completed steps and skipped steps
+        // Restore completed steps and skipped steps (gate-first, R4b).
         const completedStepsArray: number[] = deriveCompletedStepNumbers(
           response.completed_gates,
-          response.completed_steps,
         );
         const restoredCompleted = new Set(completedStepsArray);
         // Intent is defined when industry + use case are selected — ensure step 1 is in completedSteps
@@ -494,10 +455,9 @@ export default function App() {
         }
         setCompletedSteps(restoredCompleted);
         // Gate-first skipped hydration (PR3b′), mirroring completedSteps above:
-        // prefer sectionTag-keyed skipped_gates, fall back to legacy skipped_steps.
+        // map the sectionTag-keyed skipped_gates to global numbers.
         const skippedStepsArray = deriveSkippedStepNumbers(
           response.skipped_gates,
-          response.skipped_steps,
         );
         setSkippedSteps(new Set(skippedStepsArray));
         
@@ -642,12 +602,10 @@ export default function App() {
         setSelectedUseCase(response.use_case || '');
         setSelectedUseCaseLabel(response.use_case_label || '');
         setStepPrompts(response.step_prompts || {});
-        // Engine/MCP sessions carry sectionTag-keyed completed_gates (the
-        // cross-surface source of truth); map them to global step numbers. Legacy
-        // web sessions fall back to the stored integer completed_steps.
+        // Sessions carry sectionTag-keyed completed_gates (the cross-surface
+        // source of truth); map them to global step numbers (gate-first, R4b).
         const loadedCompletedSteps: number[] = deriveCompletedStepNumbers(
           response.completed_gates,
-          response.completed_steps,
         );
         const loadedCompleted = new Set(loadedCompletedSteps);
         // Intent is defined when industry + use case are selected — ensure step 1 is in completedSteps
@@ -656,10 +614,9 @@ export default function App() {
         }
         setCompletedSteps(loadedCompleted);
         // Gate-first skipped hydration (PR3b′), mirroring loadedCompletedSteps:
-        // prefer sectionTag-keyed skipped_gates, fall back to legacy skipped_steps.
+        // map the sectionTag-keyed skipped_gates to global numbers.
         const loadedSkippedSteps = deriveSkippedStepNumbers(
           response.skipped_gates,
-          response.skipped_steps,
         );
         setSkippedSteps(new Set(loadedSkippedSteps));
         setPrerequisitesCompleted(response.prerequisites_completed || false);
@@ -800,10 +757,10 @@ export default function App() {
       apiClient.updateSessionMetadata({
         session_id: sid,
         // Gate write (T5): the COMPLETE completed gate set, derived from the live
-        // completed-step numbers. The legacy completed_steps number write was
-        // retired in R4a. This write must ALSO carry the complete skipped_gates
-        // (from live skippedSteps): the backend read path keys off gates, so a
-        // completion write that omitted skipped_gates would drop skipped progress.
+        // completed-step numbers. The legacy numeric progress write was retired in
+        // R4a. This write must ALSO carry the complete skipped_gates (from live
+        // skippedSteps): the backend read path keys off gates, so a completion
+        // write that omitted skipped_gates would drop skipped progress.
         completed_gates: stepNumbersToGates(Array.from(newSteps)),
         skipped_gates: stepNumbersToGates(Array.from(skippedSteps)),
         workshop_level: workshopLevel,  // Piggyback workshop level save on progress
@@ -827,7 +784,7 @@ export default function App() {
         session_id: sessionId,
         // Gate write (T5): the COMPLETE skipped gate set, derived from the live
         // skipped-step numbers (persisted under session_parameters.skipped_gates,
-        // where the read path reads it). The legacy skipped_steps number write was
+        // where the read path reads it). The legacy numeric progress write was
         // retired in R4a. completed_gates is intentionally omitted here so the
         // existing completed gates are COALESCE-preserved.
         skipped_gates: stepNumbersToGates(Array.from(newSkipped)),
@@ -1021,8 +978,8 @@ export default function App() {
         ...compositionParams,
         // Gate write (T5): the COMPLETE completed/skipped gate sets, derived from
         // the live step numbers, so a saved web session reads back through the
-        // gates-present verbatim path with no progress loss. The legacy
-        // completed_steps / current_step number writes were retired in R4a.
+        // gates-present path with no progress loss. The legacy numeric progress
+        // writes were retired in R4a.
         completed_gates: stepNumbersToGates(Array.from(completedSteps)),
         skipped_gates: stepNumbersToGates(Array.from(skippedSteps)),
         step_prompts: stepPrompts

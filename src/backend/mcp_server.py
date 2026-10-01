@@ -1385,10 +1385,9 @@ def vibe_complete_step(
         )
         if _label:
             _refined_name = f"Genie Code — {_label}"
-    # Cross-surface progress rides on completed_gates alone (T5 R4a): the SPA
+    # Cross-surface progress rides on completed_gates alone (T5 R4a/R4b): the SPA
     # hydrates its step indicator from the gate set via deriveCompletedStepNumbers,
-    # so MCP-driven progress shows up without the retired current_step/
-    # completed_steps number columns.
+    # so MCP-driven progress shows up without any retired numeric progress columns.
     save_session(
         session_id=session_id,
         session_name=_refined_name,

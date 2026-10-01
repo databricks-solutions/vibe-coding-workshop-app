@@ -1,78 +1,61 @@
-// Node unit test for gate-first COMPLETED hydration — the frontend half of
-// Phase 3 T5 R4a required test 3 (MCP → SPA visibility WITHOUT the numbers).
+// Node unit test for gate-first COMPLETED hydration — Phase 3 T5 R4b.
 //
 // Run: node --experimental-strip-types --test tests/frontend/deriveCompletedStepNumbers.node.test.ts
 //
-// No React/DOM/vitest — mirrors deriveSkippedStepNumbers.node.test.ts. It imports
-// the REAL workflowSections.ts bridge (completedGatesToStepNumbers over the actual
-// ALL_STEPS global map), then models the App's completed-read strategy EXACTLY as
-// deriveCompletedStepNumbers appears in App.tsx:
-//
-//   deriveCompletedStepNumbers — gates → global numbers via the REAL bridge, else
-//                                fall back to the legacy numbers.
-//
-// R4a context: an MCP vibe_complete_step now persists ONLY completed_gates (the
-// current_step/completed_steps number columns were retired). A gate-only session
-// (completed_gates populated, completed_steps empty/absent — the R4a shape) must
-// still hydrate the SPA step indicator to the correct GLOBAL step numbers purely
-// from the gates. The backend half is tests/workshop/test_sync_bridge.py.
+// No React/DOM/vitest. It imports the REAL function under test
+// (src/constants/deriveProgress.ts), which was extracted out of App.tsx in R4b
+// (no behaviour change) precisely so these tests exercise the production code
+// instead of a hand-copied model. deriveCompletedStepNumbers is gates-only: it
+// maps completed_gates -> global numbers via the REAL workflowSections bridge
+// and has NO numeric fallback.
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
+import { deriveCompletedStepNumbers } from '../../src/constants/deriveProgress.ts';
 import { completedGatesToStepNumbers } from '../../src/constants/workflowSections.ts';
 
-interface CompletedReadResponse {
-  completed_gates?: string[];
-  completed_steps?: number[];
-}
-
-// Byte-identical to the body of deriveCompletedStepNumbers (App.tsx).
-function deriveCompletedStepNumbers(response: CompletedReadResponse): number[] {
-  const completedGates = response.completed_gates;
-  if (completedGates && completedGates.length > 0) {
-    return completedGatesToStepNumbers(completedGates);
-  }
-  return response.completed_steps || [];
-}
-
-test('MCP gate-only session (genie globals 57+): hydrates the correct global steps with NO completed_steps', () => {
-  // Semantic-layer tags → globals 57/58/59. The MCP shape after R4a: gates set,
-  // completed_steps absent (never written).
+test('MCP gate-only session (genie globals 57+): hydrates the correct global steps', () => {
   const completedTags = ['semlayer_locate', 'semlayer_profile', 'semlayer_measures'];
   const expected = completedGatesToStepNumbers(completedTags); // [57, 58, 59]
   assert.deepEqual([...expected].sort((a, b) => a - b), [57, 58, 59]);
 
-  const gateOnly: CompletedReadResponse = { completed_gates: completedTags };
-  const derived = deriveCompletedStepNumbers(gateOnly);
+  const derived = deriveCompletedStepNumbers(completedTags);
   assert.deepEqual(
     [...derived].sort((a, b) => a - b),
     [57, 58, 59],
-    'gate-only MCP session maps to the correct global steps',
+    'gate-only session maps to the correct global steps',
   );
 });
 
-test('MCP gate-only session (end-to-end low globals): project_setup/prd map correctly', () => {
+test('end-to-end low globals: project_setup/prd map correctly from gates', () => {
   const completedTags = ['project_setup', 'prd_generation'];
   const expected = completedGatesToStepNumbers(completedTags);
   assert.ok(expected.length === 2, 'both tags resolve to globals');
-
-  const gateOnly: CompletedReadResponse = { completed_gates: completedTags, completed_steps: [] };
-  const derived = deriveCompletedStepNumbers(gateOnly);
   assert.deepEqual(
-    [...derived].sort((a, b) => a - b),
+    [...deriveCompletedStepNumbers(completedTags)].sort((a, b) => a - b),
     [...expected].sort((a, b) => a - b),
-    'gate-first read recovers the globals from gates alone (ignores empty completed_steps)',
   );
 });
 
-test('legacy web session (no gates): falls back to the stored completed_steps', () => {
-  const legacy: CompletedReadResponse = { completed_gates: [], completed_steps: [2, 3] };
-  assert.deepEqual(deriveCompletedStepNumbers(legacy).sort((a, b) => a - b), [2, 3]);
+test('empty / absent gates hydrate to no completions', () => {
+  assert.deepEqual(deriveCompletedStepNumbers([]), []);
+  assert.deepEqual(deriveCompletedStepNumbers(undefined), []);
+});
 
-  const noGatesField: CompletedReadResponse = { completed_steps: [4] };
-  assert.deepEqual(deriveCompletedStepNumbers(noGatesField), [4]);
-
-  const empty: CompletedReadResponse = {};
-  assert.deepEqual(deriveCompletedStepNumbers(empty), []);
+test('TAMPER: no numeric fallback — a legacy numbers argument is ignored', () => {
+  // The retired behaviour fell back to a `completed_steps` number array when gates
+  // were empty. deriveCompletedStepNumbers is now gates-only (single arg). View it
+  // through a 2-arg type and pass stale legacy numbers alongside EMPTY gates: a
+  // gates-only function MUST ignore them and return []. If a numeric fallback is
+  // re-added to the real function, it returns [2, 3] and this assertion fails.
+  const asTwoArg = deriveCompletedStepNumbers as unknown as (
+    gates: string[] | undefined,
+    legacyNumbers?: number[],
+  ) => number[];
+  assert.deepEqual(
+    asTwoArg([], [2, 3]),
+    [],
+    'empty gates must yield [] even when legacy numbers are present (no fallback)',
+  );
 });

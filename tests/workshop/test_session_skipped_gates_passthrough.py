@@ -43,20 +43,18 @@ def test_load_session_endpoint_surfaces_skipped_gates_from_session_parameters(mo
 
     assert result.success is True
     # The skipped sectionTags are forwarded verbatim so the App can map them to
-    # global step numbers (symmetric to completed_gates).
+    # global step numbers (symmetric to completed_gates). Gates are the only
+    # source (R4b): the response no longer carries a skipped_steps field.
     assert result.skipped_gates == ["semlayer_locate", "semlayer_profile"]
-    # The raw numbers store is empty for this gate-only session — proving the App
-    # would render NO skips if it kept reading skipped_steps alone.
-    assert result.skipped_steps == []
+    assert not hasattr(result, "skipped_steps")
 
 
-def test_load_session_endpoint_defaults_skipped_gates_empty_for_legacy_sessions(monkeypatch):
-    # A legacy web session has no skipped_gates in session_parameters — the field
-    # must default to [] so the App falls back to the stored integer skipped_steps.
+def test_load_session_endpoint_defaults_skipped_gates_empty_without_gates(monkeypatch):
+    # A session with no skipped_gates in session_parameters surfaces []. The stale
+    # numeric skipped_steps column is NOT read (R4b), so skips do not reappear.
     record = {
         "session_id": "legacy-skip-sid",
-        "completed_steps": [1, 2, 3],
-        "skipped_steps": [2],
+        "skipped_steps": [2],  # retired column; must be ignored
         "session_parameters": {"coding_assistant": "cursor"},
         "is_saved": True,
     }
@@ -66,7 +64,6 @@ def test_load_session_endpoint_defaults_skipped_gates_empty_for_legacy_sessions(
 
     assert result.success is True
     assert result.skipped_gates == []
-    assert result.skipped_steps == [2]
 
 
 def test_load_session_endpoint_defaults_skipped_gates_empty_when_no_session_parameters(monkeypatch):
@@ -90,10 +87,7 @@ def test_default_session_endpoint_surfaces_skipped_gates_from_session_parameters
     # unsaved "continue where you left off" path) must surface skipped_gates too.
     record = {
         "session_id": "default-skip-sid",
-        "current_step": 5,
-        "completed_steps": [1, 2],
         "completed_gates": ["project_setup", "prd_generation"],
-        "skipped_steps": [],
         "session_parameters": {"skipped_gates": ["semlayer_measures"]},
         "prerequisites_completed": True,
     }
@@ -105,4 +99,4 @@ def test_default_session_endpoint_surfaces_skipped_gates_from_session_parameters
 
     assert result.success is True
     assert result.skipped_gates == ["semlayer_measures"]
-    assert result.skipped_steps == []
+    assert not hasattr(result, "skipped_steps")
