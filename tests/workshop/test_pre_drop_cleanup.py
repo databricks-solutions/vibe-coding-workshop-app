@@ -131,9 +131,11 @@ def test_step1_credit_requires_both_intent_columns(monkeypatch):
 
 
 def test_get_user_sessions_select_carries_all_six_disambiguation_columns(monkeypatch):
-    # The count is only correct if the SELECT actually fetches every column
-    # _row_completion_globals reads. A gate-only row WITH intent (above) is the
-    # assertion that FAILS if any of these is dropped from the widened SELECT.
+    # The count is only correct in prod if the SELECT actually fetches every
+    # column _row_completion_globals reads. This SQL-string assert is the ONLY
+    # guard for that: the behavioral tests above drive a stub whose fetchall()
+    # returns full dict rows regardless of which columns the SELECT names, so a
+    # dropped column would not make them fail — only this assertion catches it.
     _result, recorded = _run_get_user_sessions(monkeypatch, [_saved_row()])
     sql = recorded[0]
     for col in (

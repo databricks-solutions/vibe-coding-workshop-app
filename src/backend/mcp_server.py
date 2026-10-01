@@ -934,7 +934,16 @@ def vibe_start_track(
         save_session(
             session_id=resolved,
             industry=industry,
+            # R3.1: also persist the *_label columns the by_industry / by_use_case
+            # analytics GROUP BY, so a start-track-only session (which never walks
+            # the selection lock) is not dropped from those breakdowns. Resolved
+            # from the curated list; None when unresolved so save_session COALESCE-
+            # preserves rather than writing a raw id as a label. vibe_start_track
+            # has no use_case_label input, so it is resolved via _use_case_label_for
+            # (NOT a use_case fallback — see that helper's docstring).
+            industry_label=_industry_label_for(industry or "", None),
             use_case=use_case,
+            use_case_label=_use_case_label_for(industry or "", use_case or ""),
             session_name=_initial_name,
             created_by=_request_user(context),
             current_step=1,
@@ -1221,6 +1230,36 @@ def _industry_label_for(industry: str, echo: list[dict[str, Any]] | None) -> str
             options = []
     for opt in options or []:
         if str(opt.get("value") or "") == industry:
+            label = str(opt.get("label") or "").strip()
+            return label or None
+    return None
+
+
+def _use_case_label_for(industry: str, use_case: str) -> str | None:
+    """Best-effort value->display-label for a use case (R3.1 — start-track gap).
+
+    The analytics ``by_use_case`` breakdown GROUPs BY the top-level
+    ``use_case_label`` column, so a start-track-only MCP session that persists only
+    ``use_case`` (the value) is dropped from it. Unlike the selection lock path,
+    ``vibe_start_track`` has NO ``use_case_label`` input, so it is resolved here
+    from the SAME curated list the echo uses — ``_available_use_cases(industry)`` —
+    matching value -> label exactly as ``_industry_label_for`` resolves industries.
+    Returns None when unresolved (unknown pair, or either arg missing) so
+    ``save_session`` COALESCE-preserves any existing value. Crucially NOT the lock
+    path's ``use_case_label or use_case`` fallback: with no label input that would
+    always write the raw id (e.g. ``"booking"``) as a label and forge a second wrong
+    ``by_use_case`` group. Never raises — a lookup failure degrades to None so
+    session creation is never broken.
+    """
+
+    if not industry or not use_case:
+        return None
+    try:
+        options = _available_use_cases(industry)
+    except Exception:  # noqa: BLE001 — label resolution is best-effort
+        options = []
+    for opt in options or []:
+        if str(opt.get("value") or "") == use_case:
             label = str(opt.get("label") or "").strip()
             return label or None
     return None
