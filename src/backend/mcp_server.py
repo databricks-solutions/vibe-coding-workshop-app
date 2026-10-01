@@ -1032,7 +1032,11 @@ def vibe_get_step(
         step = next((candidate for candidate in steps if candidate.sectionTag == sectionTag), None)
         if step is None:
             return _error_result("UNKNOWN_STEP", f"Unknown workshop step: {sectionTag}", sectionTag=sectionTag)  # type: ignore[return-value]
-        if not engine.can_start(step, state):
+        # Pass the ordered-outline tags so this explicit lookup is skip-aware too —
+        # i.e. vibe_get_step and vibe_next_step agree on whether a step after a
+        # (web) skip is open, instead of this call falsely reporting STEP_LOCKED.
+        outline_tags = {item.sectionTag for item in engine.outline(DEFAULT_TRACK, state)}
+        if not engine.can_start(step, state, outline_tags):
             return _error_result("STEP_LOCKED", f"Complete {step.requiresGate} before this step.", sectionTag=sectionTag)  # type: ignore[return-value]
     return _step_payload(DEFAULT_TRACK, state, step, session_id=session_id)
 
@@ -1146,6 +1150,22 @@ def vibe_explain_step(
 # ``saved_usecase_descriptions`` (D11 §2.1 / guardrail #5).
 _SELECTION_REQUIRED = ("industry", "use_case", "use_case_label")
 _CUSTOM_REQUIRED = ("industry", "use_case", "use_case_label", "use_case_description")
+
+# Server-owned keys the engine/draft paths set internally — never a learner input.
+# ``skipped_gates`` is the skip ledger ``engine.can_start`` reads; ``skippedSteps`` is
+# the legacy camelCase alias ``engine._skipped_tags`` still falls back to (dead read,
+# no writer — left in place and ledgered, not removed here); ``custom_draft_ready`` /
+# ``custom_drafted_description`` are the FMAPI draft-first markers the use-case confirm
+# gate requires. ``vibe_set_parameters`` merges ``params`` straight into
+# ``session_parameters``, so a Genie Code agent could otherwise forge a skip (via either
+# skip key) or defeat the draft gate; these are rejected on the incoming params before
+# any save.
+_RESERVED_PARAM_KEYS = (
+    "skipped_gates",
+    "skippedSteps",
+    "custom_draft_ready",
+    "custom_drafted_description",
+)
 
 
 def _is_selection_call(params: dict[str, Any]) -> bool:
@@ -1527,6 +1547,16 @@ def vibe_set_parameters(
         return _error_result("INVALID_SESSION", "The requested session could not be resolved.")  # type: ignore[return-value]
 
     state, _ = loaded
+
+    # Reject server-owned keys in the INCOMING params before any update/save, so a
+    # rejected call persists nothing (all-or-nothing). These are set only by the
+    # engine/draft paths — a learner must never forge a skip or the draft markers.
+    reserved = [key for key in _RESERVED_PARAM_KEYS if key in params]
+    if reserved:
+        return _error_result(  # type: ignore[return-value]
+            "INVALID_PARAMETER",
+            f"{', '.join(reserved)} are server-owned and cannot be set via vibe_set_parameters.",
+        )
 
     # Friendly data-location aliases (Workstream 1): map the web LakehouseParams
     # editor's catalog/schema fields onto the workshop parameter keys the assembler
