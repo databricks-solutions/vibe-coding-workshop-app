@@ -1601,11 +1601,18 @@ async def call_databricks_serving_endpoint(
         
         
         try:
-            # Use SDK's api_client.do() which handles auth but doesn't have the as_dict bug
-            raw_result = client.api_client.do(
-                method="POST",
-                path=f"/serving-endpoints/{endpoint}/invocations",
-                body=openai_request_body
+            # Use SDK's api_client.do() which handles auth but doesn't have the as_dict bug.
+            # Offloaded to a worker thread: this is a synchronous, blocking SDK HTTP
+            # call, and call_databricks_serving_endpoint runs on the shared event loop
+            # (web /generate-prompt and the MCP step-prompt path both reach here) — a
+            # slow endpoint must not freeze the loop. to_thread copies contextvars, so
+            # auth is unchanged; no signature/timeout/retry change.
+            raw_result = await asyncio.to_thread(
+                lambda: client.api_client.do(
+                    method="POST",
+                    path=f"/serving-endpoints/{endpoint}/invocations",
+                    body=openai_request_body
+                )
             )
             
             # The api_client.do() returns a dict directly
@@ -1623,7 +1630,9 @@ async def call_databricks_serving_endpoint(
                 for i, agent_payload in enumerate(agent_payloads):
                     try:
                         logger.info(f"  Trying Agent format variation {i+1}...")
-                        query_response = make_request(agent_payload)
+                        # make_request wraps the blocking SDK serving_endpoints.query()
+                        # fallbacks; offload it off the shared event loop too.
+                        query_response = await asyncio.to_thread(make_request, agent_payload)
                         last_error = None
                         break
                     except Exception as agent_err:
