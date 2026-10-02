@@ -337,8 +337,11 @@ class WorkshopFastMCP(FastMCP):
                 # instead. `get_context()` is called here (on the loop) so the
                 # request context is captured eagerly; `asyncio.to_thread` copies
                 # contextvars, so the OBO auth context propagates into the thread.
-                # Arg validation, Context injection, the _ContractError contract and
-                # output-schema validation all run unchanged inside `tool.run`.
+                # Arg validation, Context injection and the tool body run inside
+                # `tool.run` (in the thread). The _ContractError contract, result
+                # conversion and output-schema validation stay ON-LOOP below, after
+                # the thread returns (convert_result=False keeps them out of the
+                # worker thread).
                 context = self.get_context()
                 if tool.is_async:
                     result = await tool.run(arguments, context=context, convert_result=False)
@@ -722,6 +725,14 @@ def _generate_step_prompt(
     # the generation; overlapping readers join the same Future. Guard the
     # registry with the lock so exactly one owner is elected per key.
     with _STEP_PROMPT_LOCK:
+        # Re-check the cache under the lock (TOCTOU): a generation that completed
+        # between the unlocked check above and here has already written the cache
+        # and popped the registry, so electing a fresh owner would redundantly
+        # regenerate. The success-only semantics are unchanged — a failed
+        # generation writes nothing, so a later read still re-generates.
+        cached = _STEP_PROMPT_CACHE.get(cache_key)
+        if cached is not None:
+            return cached
         future = _STEP_PROMPT_INFLIGHT.get(cache_key)
         is_owner = future is None
         if is_owner:

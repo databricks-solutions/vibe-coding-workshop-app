@@ -347,3 +347,98 @@ def test_run_async_blocking_times_out_without_blocking_callers():
         return "quick"
 
     assert mcp_server._run_async_blocking(quick) == "quick"
+
+
+# --- 8. retry after a failed generation (cache contract) -------------------
+# A generation that resolves None (endpoint error / non-llm source) must leave
+# the key out of BOTH the cache and the in-flight registry, so the next read
+# starts a fresh generation and a later success is cached. This pins the
+# "a mock/error result is retried when the endpoint comes back" contract.
+# TAMPER M1: replace the `_STEP_PROMPT_INFLIGHT.pop(...)` in the generation's
+# finally with `pass` -> the resolved-None Future lingers in the registry, every
+# later read joins it and gets the template forever -> both tests below fail
+# (the in-flight-absence assertion, and the retry never happens: fake called once).
+
+def test_non_llm_source_failure_is_retried_and_then_cached(monkeypatch):
+    monkeypatch.setattr(mcp_server, "STEP_PROMPT_BUDGET_S", 5.0)
+    calls = {"n": 0}
+
+    async def fake(*args, **kwargs):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            return {"source": "fallback_due_to_error", "prompt": "IGNORED"}
+        return {"source": "llm_generated", "prompt": "RETRIED"}
+
+    monkeypatch.setattr(routes, "generate_prompt_content_with_llm", fake)
+    key = _cache_key("sess-retry-src")
+
+    first = _gen("sess-retry-src")
+    assert first is None  # degraded to template
+    assert key not in mcp_server._STEP_PROMPT_CACHE  # failure is never cached
+    assert key not in mcp_server._STEP_PROMPT_INFLIGHT  # and the registry is cleared
+
+    second = _gen("sess-retry-src")  # a NEW generation runs
+    assert second == "RETRIED"
+    assert calls["n"] == 2
+    assert mcp_server._STEP_PROMPT_CACHE[key] == "RETRIED"
+
+
+def test_raised_generation_is_retried_and_then_cached(monkeypatch):
+    monkeypatch.setattr(mcp_server, "STEP_PROMPT_BUDGET_S", 5.0)
+    calls = {"n": 0}
+
+    async def fake(*args, **kwargs):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            raise RuntimeError("serving endpoint down")
+        return {"source": "llm_generated", "prompt": "RECOVERED"}
+
+    monkeypatch.setattr(routes, "generate_prompt_content_with_llm", fake)
+    key = _cache_key("sess-retry-raise")
+
+    first = _gen("sess-retry-raise")
+    assert first is None  # exception degraded to template
+    assert key not in mcp_server._STEP_PROMPT_CACHE
+    assert key not in mcp_server._STEP_PROMPT_INFLIGHT
+
+    second = _gen("sess-retry-raise")
+    assert second == "RECOVERED"
+    assert calls["n"] == 2
+    assert mcp_server._STEP_PROMPT_CACHE[key] == "RECOVERED"
+
+
+# --- 9. make_request (agent-format fallback) runs off-loop -----------------
+
+class _FakeApiClientSchemaError:
+    def do(self, method, path, body):  # noqa: ARG002 — mimics the SDK signature
+        # Force the OpenAI path to fail with a schema error so the agent-format
+        # fallback (make_request) is exercised.
+        raise RuntimeError("BAD_REQUEST: schema validation failed, missing inputs")
+
+
+class _FakeServingEndpointsSlow:
+    def query(self, **kwargs):  # noqa: ARG002 — mimics the SDK signature
+        time.sleep(0.4)
+        return {"choices": [{"message": {"content": "hi"}}]}
+
+
+class _FakeClientAgentFallback:
+    config = _FakeConfig()
+    api_client = _FakeApiClientSchemaError()
+    serving_endpoints = _FakeServingEndpointsSlow()
+
+
+def test_make_request_agent_fallback_runs_off_loop(monkeypatch):
+    # The agent-format fallback wraps the blocking serving_endpoints.query() in
+    # make_request; it must run off the shared loop too.
+    # TAMPER M5: revert `await asyncio.to_thread(make_request, agent_payload)` to a
+    # direct `make_request(agent_payload)` -> the ticker starves during the 0.4s
+    # query() -> ticks ~= 0.
+    monkeypatch.setattr(routes, "DATABRICKS_SDK_AVAILABLE", True)
+    monkeypatch.setattr(routes, "get_workspace_client", lambda: _FakeClientAgentFallback())
+    monkeypatch.setattr(routes, "get_best_available_endpoint", lambda: "ep")
+
+    result, ticks = asyncio.run(_call_endpoint_with_ticker())
+
+    assert isinstance(result, dict)
+    assert ticks >= 5  # loop kept progressing during the blocking fallback query
