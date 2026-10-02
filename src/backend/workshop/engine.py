@@ -32,6 +32,22 @@ class Done:
     done: bool = True
 
 
+@dataclass(frozen=True)
+class Blocked:
+    """No step is ``current`` yet a step remains ``locked``.
+
+    Returned by ``next_step`` in place of ``Done()`` when the scan finds no
+    ``current`` step but at least one ``locked`` step survives — a gate the
+    composition can never satisfy (a dangling ``requiresGate``). After the T5 PR A
+    gate rewire this is unreachable on authored data; it is the safety net that
+    turns a FUTURE gate-data defect into an explicit signal instead of a false
+    ``Done``. Carries the FIRST locked step in outline order."""
+
+    sectionTag: str
+    title: str
+    requiresGate: str | None
+
+
 @dataclass
 class CompleteResult:
     ok: bool
@@ -141,14 +157,30 @@ def outline(track_id: str, session: SessionState) -> list[StepStatus]:
     return statuses
 
 
-def next_step(track_id: str, session: SessionState) -> Step | Done:
-    """Return the first current step or a done sentinel."""
+def next_step(track_id: str, session: SessionState) -> Step | Done | Blocked:
+    """Return the first current step, a done sentinel, or a blocked signal.
+
+    When a ``current`` step exists it is returned. Otherwise the scan is either
+    complete (every step ``done`` or ``skipped`` -> ``Done``) or wedged behind an
+    unsatisfiable gate (a ``locked`` step with none ``current`` ahead of it ->
+    ``Blocked`` naming the FIRST such step). ``Blocked`` never fires while a step
+    is ``current`` and ``Done`` never fires while a step is ``locked`` — the two
+    are mutually exclusive, so a caller can trust ``Done`` to mean truly finished.
+    This is a pure function of the existing scan; it introduces no skip source.
+    """
 
     statuses = outline(track_id, session)
     steps = _ordered_steps(track_id, session)
     for status, step in zip(statuses, steps):
         if status.status == "current":
             return step
+    for status, step in zip(statuses, steps):
+        if status.status == "locked":
+            return Blocked(
+                sectionTag=step.sectionTag,
+                title=step.title,
+                requiresGate=step.requiresGate,
+            )
     return Done()
 
 

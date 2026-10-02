@@ -247,7 +247,28 @@ class _ContractError(dict):
     """Marker returned by handlers so the HTTP adapter can set `isError`."""
 
 
-class NextStepResult(RootModel[ExplainabilityPayload | DoneResult]):
+class BlockedBy(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    sectionTag: str
+    title: str
+    requiresGate: str | None
+
+
+class BlockedResult(BaseModel):
+    # Third `vibe_next_step` outcome (PR B): the walk is wedged behind an
+    # unsatisfiable gate. Deliberately carries NO top-level sectionTag/title so a
+    # blocked payload can never be mistaken for a step; `blocked_by` names the
+    # offending step. DoneResult is untouched, so a client keying on `done` never
+    # sees a false `done:true` — a blocked walk reports `blocked`, not `done`.
+    model_config = ConfigDict(extra="forbid")
+
+    blocked: Literal[True] = True
+    blocked_by: BlockedBy
+    message: str
+
+
+class NextStepResult(RootModel[ExplainabilityPayload | DoneResult | BlockedResult]):
     pass
 
 
@@ -1040,13 +1061,47 @@ def vibe_get_step(
     return _step_payload(DEFAULT_TRACK, state, step, session_id=session_id)
 
 
+def _blocked_result(
+    track: str, state: engine.SessionState, blocked: engine.Blocked
+) -> BlockedResult:
+    """Build the blocked payload and emit the defect-signal WARNING.
+
+    After the T5 PR A gate rewire a blocked `next_step` is unreachable on authored
+    data, so any occurrence is a workshop-configuration defect worth a server-side
+    warning. The log carries the track, the composition flags, and the dangling
+    gate only — never session parameters or learner content (no PII)."""
+
+    logger.warning(
+        "vibe_next_step blocked (workshop-config defect): track=%s flags=%s "
+        "locked_step=%s requiresGate=%s",
+        track,
+        engine._flags_for(track, state),
+        blocked.sectionTag,
+        blocked.requiresGate,
+    )
+    message = (
+        f"The workshop cannot advance because '{blocked.title}' requires "
+        f"'{blocked.requiresGate}'. This indicates a workshop configuration "
+        "problem, not a learner action. Tell the learner and stop."
+    )
+    return BlockedResult(
+        blocked_by=BlockedBy(
+            sectionTag=blocked.sectionTag,
+            title=blocked.title,
+            requiresGate=blocked.requiresGate,
+        ),
+        message=message,
+    )
+
+
 @mcp.tool(
     name="vibe_next_step",
     description=(
         "Advance to the first not-yet-completed step whose prerequisite gate is satisfied and return "
-        "it (same shape as `vibe_get_step`, incl. `user_trigger_prompt`). Present it, show the trigger "
-        "verbatim, then WAIT for the learner to submit it — never auto-run or chain steps without a "
-        "fresh learner turn. Returns `{done:true}` when complete. Args: `session_id`."
+        "it (same shape as `vibe_get_step`, incl. `user_trigger_prompt`). Show its trigger verbatim, "
+        "then WAIT for the learner to submit it — never auto-run or chain steps. Returns `{done:true}` "
+        "when complete, or `{blocked:true, blocked_by}` when a step is behind an unsatisfiable gate. "
+        "Args: `session_id`."
     ),
     annotations=ToolAnnotations(
         readOnlyHint=True,
@@ -1073,6 +1128,8 @@ def vibe_next_step(session_id: str, context: Context | None = None) -> NextStepR
     next_item = engine.next_step(DEFAULT_TRACK, state)
     if isinstance(next_item, engine.Done):
         return NextStepResult.model_validate(DoneResult())
+    if isinstance(next_item, engine.Blocked):
+        return NextStepResult.model_validate(_blocked_result(DEFAULT_TRACK, state, next_item))
     return NextStepResult.model_validate(_step_payload(DEFAULT_TRACK, state, next_item, session_id=session_id))
 
 

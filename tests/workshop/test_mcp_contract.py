@@ -4,6 +4,7 @@ import pathlib
 import sys
 
 import jsonschema
+import pytest
 
 REPO_ROOT = pathlib.Path(__file__).resolve().parents[2]
 if str(REPO_ROOT) not in sys.path:
@@ -87,6 +88,34 @@ def test_registered_tools_return_schema_valid_structured_content_and_text():
         jsonschema.validate(structured_content, tool.output_schema)
         mirrored = json.loads(text_content[0].text)
         assert mirrored == structured_content or mirrored == structured_content.get("result") or mirrored.get("result") == structured_content
+
+
+def test_next_step_union_admits_blocked_variant():
+    """PR B: the ``NextStepResult`` union gains a third member ``BlockedResult``.
+
+    DoneResult is untouched (``{done:true}`` with no extras) and a blocked payload
+    must NOT carry a top-level step shape. Stripping the union member or its
+    ``blocked_by`` field (T2) flips the blocked validation below to a failure."""
+
+    schema = mcp_server.NextStepResult.model_json_schema()
+    blocked = {
+        "blocked": True,
+        "blocked_by": {"sectionTag": "beta", "title": "Beta", "requiresGate": "ghost_gate"},
+        "message": "configuration problem",
+    }
+    jsonschema.validate(blocked, schema)
+
+    # DoneResult shape unchanged: `{done: true}`, no extra keys.
+    jsonschema.validate({"done": True}, schema)
+    with pytest.raises(jsonschema.ValidationError):
+        jsonschema.validate({"done": True, "extra": 1}, schema)
+
+    # A blocked payload must not look like a step (no top-level sectionTag), and
+    # `blocked_by` is required.
+    with pytest.raises(jsonschema.ValidationError):
+        jsonschema.validate({**blocked, "sectionTag": "beta"}, schema)
+    with pytest.raises(jsonschema.ValidationError):
+        jsonschema.validate({"blocked": True, "message": "m"}, schema)
 
 
 def test_read_tool_errors_are_typed_results():
