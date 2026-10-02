@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import concurrent.futures
 import contextvars
 import hashlib
 import json
@@ -272,6 +273,31 @@ class NextStepResult(RootModel[ExplainabilityPayload | DoneResult | BlockedResul
     pass
 
 
+def _run_sync_tool_in_thread(tool: Any, arguments: dict[str, Any], context: Any) -> Any:
+    """Drive a SYNC FastMCP tool's ``run`` coroutine to completion off the loop.
+
+    ``tool.run`` is a coroutine, but for a sync tool it never awaits anything that
+    suspends — ``call_fn_with_arg_validation`` validates the arguments, injects the
+    Context and calls ``fn(**kwargs)`` with no I/O await. Stepping the coroutine
+    once therefore runs the whole body synchronously in this worker thread, and
+    ``StopIteration`` carries the return value (including a ``_ContractError``).
+    This is invoked via ``asyncio.to_thread`` so the event loop stays free; if a
+    tool declared sync ever actually awaits (it must not), we close the coroutine
+    and raise rather than silently falling back to blocking the loop.
+    """
+
+    coro = tool.run(arguments, context=context, convert_result=False)
+    try:
+        coro.send(None)
+    except StopIteration as stop:
+        return stop.value
+    coro.close()
+    raise RuntimeError(
+        f"sync MCP tool {getattr(tool, 'name', '?')!r} unexpectedly awaited; "
+        "cannot run off-loop"
+    )
+
+
 class WorkshopFastMCP(FastMCP):
     """FastMCP 1.x compatibility shim for the app's `http_app` contract."""
 
@@ -303,7 +329,23 @@ class WorkshopFastMCP(FastMCP):
                 )
             try:
                 jsonschema.validate(instance=arguments, schema=tool.parameters)
-                result = await tool.run(arguments, context=self.get_context(), convert_result=False)
+                # Off-loop execution: the app runs ONE uvicorn event loop shared by
+                # the web UI and /mcp (app.py). FastMCP calls a SYNC tool body
+                # directly on that loop (func_metadata: `return fn(**args)`), so a
+                # slow tool (e.g. an uncached FMAPI step-prompt render) would freeze
+                # every concurrent request. Run sync tool bodies in a worker thread
+                # instead. `get_context()` is called here (on the loop) so the
+                # request context is captured eagerly; `asyncio.to_thread` copies
+                # contextvars, so the OBO auth context propagates into the thread.
+                # Arg validation, Context injection, the _ContractError contract and
+                # output-schema validation all run unchanged inside `tool.run`.
+                context = self.get_context()
+                if tool.is_async:
+                    result = await tool.run(arguments, context=context, convert_result=False)
+                else:
+                    result = await asyncio.to_thread(
+                        _run_sync_tool_in_thread, tool, arguments, context
+                    )
                 if isinstance(result, _ContractError):
                     structured = result["structuredContent"]
                     return ServerResult(
@@ -613,6 +655,38 @@ def _resolve_interaction_answer(
 # mock/error result is retried when the endpoint comes back.
 _STEP_PROMPT_CACHE: dict[tuple[str, str, str], str] = {}
 
+# Wall-clock budget for a single FMAPI step-prompt generation on the MCP read
+# path. 90s = 1.5x the SDK's 60s per-attempt HTTP timeout (a healthy-but-slow
+# attempt still lands), <= the web streaming path's 120s ceiling, and well under
+# the observed Genie Code client default. On expiry the read degrades to the
+# assembled template (identical to any FMAPI failure); the generation keeps
+# running on a daemon thread and still populates the cache on success, so the
+# next read is instant (late-success caching).
+STEP_PROMPT_BUDGET_S = 90.0
+
+# Single-flight registry: at most one in-flight generation per cache key. Reads
+# arriving while a generation for the same key is running JOIN its Future (with
+# their own budget) instead of starting a second generation. The daemon
+# generation thread resolves the Future and writes _STEP_PROMPT_CACHE on success,
+# then pops the key — so a generation that finishes after every waiting read
+# timed out still lands in the cache (late-success caching).
+_STEP_PROMPT_LOCK = threading.Lock()
+_STEP_PROMPT_INFLIGHT: dict[tuple[str, str, str], "concurrent.futures.Future[str | None]"] = {}
+
+
+def _extract_llm_generated(result: Any) -> str | None:
+    """Return the generated prompt only for a genuine LLM result, else None.
+
+    Every non-``llm_generated`` source (mock_llm, fallback_due_to_error,
+    bypass_llm, input_only_no_llm) already returns the raw input, so the MCP path
+    keeps its assembled (genie-code) template by degrading to None.
+    """
+
+    if not isinstance(result, dict) or result.get("source") != "llm_generated":
+        return None
+    generated = (result.get("prompt") or "").strip()
+    return generated or None
+
 
 def _generate_step_prompt(
     industry: str,
@@ -643,35 +717,74 @@ def _generate_step_prompt(
     cached = _STEP_PROMPT_CACHE.get(cache_key)
     if cached is not None:
         return cached
-    try:
-        from .api.routes import generate_prompt_content_with_llm
 
-        result = _run_async_blocking(
-            lambda: generate_prompt_content_with_llm(
-                industry=industry,
-                use_case=use_case,
-                section_tag=section_tag,
-                previous_outputs=previous_outputs,
-                session_id=session_id,
+    # Single-flight: the first reader for this key becomes the owner and starts
+    # the generation; overlapping readers join the same Future. Guard the
+    # registry with the lock so exactly one owner is elected per key.
+    with _STEP_PROMPT_LOCK:
+        future = _STEP_PROMPT_INFLIGHT.get(cache_key)
+        is_owner = future is None
+        if is_owner:
+            future = concurrent.futures.Future()
+            _STEP_PROMPT_INFLIGHT[cache_key] = future
+
+    if is_owner:
+        async def _generate_and_resolve() -> None:
+            # Runs on the daemon generation thread (see _run_async_blocking). It
+            # resolves the Future and writes the cache even if the owner already
+            # abandoned the join on budget expiry, so a late success still lands
+            # (late-success caching). Always degrade to the template (None) on any
+            # failure — generation is best-effort.
+            try:
+                from .api.routes import generate_prompt_content_with_llm
+
+                result = await generate_prompt_content_with_llm(
+                    industry=industry,
+                    use_case=use_case,
+                    section_tag=section_tag,
+                    previous_outputs=previous_outputs,
+                    session_id=session_id,
+                )
+                generated = _extract_llm_generated(result)
+                if generated is not None:
+                    _STEP_PROMPT_CACHE[cache_key] = generated
+                future.set_result(generated)
+            except BaseException:  # noqa: BLE001 — best-effort; degrade to template
+                logger.warning(
+                    "FMAPI step-prompt generation failed for %s; using assembled template",
+                    section_tag,
+                    exc_info=True,
+                )
+                future.set_result(None)
+            finally:
+                with _STEP_PROMPT_LOCK:
+                    _STEP_PROMPT_INFLIGHT.pop(cache_key, None)
+
+        try:
+            # The daemon thread drives generation to completion (and resolves the
+            # Future) regardless of this join; we wait only up to the budget.
+            _run_async_blocking(_generate_and_resolve, timeout_s=STEP_PROMPT_BUDGET_S)
+        except TimeoutError:
+            logger.warning(
+                "FMAPI step-prompt generation exceeded %.0fs budget for %s; using assembled template",
+                STEP_PROMPT_BUDGET_S,
+                section_tag,
             )
-        )
-    except Exception:  # noqa: BLE001 — generation is best-effort; degrade to template
+            return None
+        # Completed within budget: the coroutine already resolved the Future.
+        return future.result()
+
+    # Joiner: never starts a second generation — wait on the owner's Future with
+    # this read's own budget, degrading to the template on expiry.
+    try:
+        return future.result(timeout=STEP_PROMPT_BUDGET_S)
+    except concurrent.futures.TimeoutError:
         logger.warning(
-            "FMAPI step-prompt generation failed for %s; using assembled template",
+            "FMAPI step-prompt generation exceeded %.0fs budget for %s; using assembled template",
+            STEP_PROMPT_BUDGET_S,
             section_tag,
-            exc_info=True,
         )
         return None
-    # Only a genuine LLM generation replaces the template. Every other source
-    # (mock_llm, fallback_due_to_error, bypass_llm, input_only_no_llm) already
-    # returns the raw input, so we keep the MCP-assembled (genie-code) template.
-    if not isinstance(result, dict) or result.get("source") != "llm_generated":
-        return None
-    generated = (result.get("prompt") or "").strip()
-    if not generated:
-        return None
-    _STEP_PROMPT_CACHE[cache_key] = generated
-    return generated
 
 
 # Repo the workshop clones from. Kept in lockstep with the genie-code variant in
@@ -1338,13 +1451,20 @@ def _use_case_label_for(industry: str, use_case: str) -> str | None:
     return None
 
 
-def _run_async_blocking(make_coro: Callable[[], Any]) -> Any:
+def _run_async_blocking(make_coro: Callable[[], Any], timeout_s: float | None = None) -> Any:
     """Run an async coroutine to completion from a sync MCP tool.
 
     FastMCP invokes sync tools directly on the running event loop, so
     ``asyncio.run`` here would raise "cannot be called from a running event loop".
     Instead run the coroutine in a dedicated thread with its own loop, wrapped in a
     copied context so the OBO auth ContextVar propagates (SP fallback otherwise).
+
+    ``timeout_s`` bounds how long the caller waits for the thread. With the default
+    ``None`` the caller waits indefinitely (behaviour-identical to before). With a
+    budget set, the caller raises ``TimeoutError`` on expiry and the thread — a
+    daemon, so it never blocks interpreter shutdown — keeps running to completion;
+    callers that want its late result arrange for it via a side channel (e.g. the
+    step-prompt single-flight Future).
     """
 
     ctx = contextvars.copy_context()
@@ -1359,9 +1479,11 @@ def _run_async_blocking(make_coro: Callable[[], Any]) -> Any:
         finally:
             loop.close()
 
-    thread = threading.Thread(target=lambda: ctx.run(runner))
+    thread = threading.Thread(target=lambda: ctx.run(runner), daemon=True)
     thread.start()
-    thread.join()
+    thread.join(timeout_s)
+    if thread.is_alive():
+        raise TimeoutError(f"async operation exceeded {timeout_s}s budget")
     if "error" in box:
         raise box["error"]
     return box["value"]
