@@ -170,18 +170,37 @@ description-as-prompt, `inputSchema`, `outputSchema`, annotations, errors, and t
 ### 3.3 `vibe_next_step`
 > **Description (as-prompt):** "Advance to the first not-yet-completed step whose prerequisite gate
 > is satisfied, and return it (same shape as vibe_get_step). Returns `{done:true}` when the track is
-> complete. Call after a step's gate is recorded. Args: `session_id` (required)."
+> complete, or `{blocked:true, blocked_by}` when a step is wedged behind an unsatisfiable gate. Call
+> after a step's gate is recorded. Args: `session_id` (required)."
 
 ```jsonc
 "inputSchema": { "type":"object", "required":["session_id"],
   "properties": { "session_id": { "type":"string" } }, "additionalProperties": false }
 "outputSchema": {
   "oneOf": [ { "$ref": "ExplainabilityPayload" },
-             { "type":"object", "required":["done"], "properties": { "done": { "const": true } } } ]
+             { "type":"object", "required":["done"], "properties": { "done": { "const": true } } },
+             // Blocked (T5 PR B): the walk is wedged behind a gate it can never satisfy. No
+             // top-level sectionTag/title — a blocked payload must not be mistaken for a step.
+             { "type":"object", "required":["blocked","blocked_by","message"], "additionalProperties": false,
+               "properties": {
+                 "blocked": { "const": true },
+                 "blocked_by": { "type":"object", "required":["sectionTag","title","requiresGate"], "additionalProperties": false,
+                   "properties": { "sectionTag": {"type":"string"}, "title": {"type":"string"}, "requiresGate": {"type":["string","null"]} } },
+                 "message": { "type":"string" } } } ]
 }
 ```
 - **Annotations:** `readOnly:true, destructive:false, idempotent:true, openWorld:true`.
 - **Errors:** `INVALID_SESSION`.
+- **Blocked variant (T5 PR B):** the invariant is that `vibe_next_step` NEVER reports `{done:true}`
+  while the track is unfinished. When the engine scan finds no `current` step yet a `locked` step
+  survives (a dangling `requiresGate`), it returns `blocked` — naming the first locked step and its
+  gate — plus a deterministic (no-LLM) `message` telling the agent this is a workshop-configuration
+  defect, not a learner action, and to stop. The server also logs a WARNING (track, flags, dangling
+  gate; no PII). `DoneResult` is unchanged, so an old client keying on `done` never sees a false
+  `done:true`. After the T5 PR A gate rewire this path is unreachable on authored data; it is a
+  safety net for a future gate-data defect. **Scope note:** only `vibe_next_step` surfaces `blocked`
+  — `vibe_get_step`/`vibe_complete_step` are unchanged because the locked-only state is unreachable
+  by construction post-PR-A.
 - **Maps to:** D3 `next_step(session)`; REST twin `GET /api/track/{track}/next`.
 
 ### 3.4 `vibe_complete_step`
@@ -391,6 +410,12 @@ error (generic §5.5). Shape:
 (D3 F3). `vibe_coach` **never** returns an FMAPI error — model/timeout failures degrade to the
 static fallback with `is_fallback:true` (§3.7 / D5 §11.4); only `INVALID_SESSION`/`UNKNOWN_STEP`
 (bad inputs, before any model call) are `isError`.
+
+`vibe_next_step`'s `blocked` variant (§3.3, T5 PR B) is likewise **not** an error — it is a
+schema-valid success-channel result (not `isError`), the third `NextStepResult` union member. It
+signals a workshop-configuration defect (an unsatisfiable gate) rather than a bad caller input, so
+it rides the normal output contract and carries an actionable `message`; the defect is additionally
+logged server-side as a WARNING.
 
 ---
 
