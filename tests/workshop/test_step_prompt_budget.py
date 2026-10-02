@@ -49,19 +49,27 @@ def _assembled(**overrides):
 
 @pytest.fixture(autouse=True)
 def _reset_step_prompt_state():
-    """Isolate the module-global cache + in-flight registry across tests."""
+    """Isolate the module-global cache + in-flight + negative registries across tests."""
     mcp_server._STEP_PROMPT_CACHE.clear()
     with mcp_server._STEP_PROMPT_LOCK:
         mcp_server._STEP_PROMPT_INFLIGHT.clear()
+        mcp_server._STEP_PROMPT_NEGATIVE.clear()
     yield
     mcp_server._STEP_PROMPT_CACHE.clear()
     with mcp_server._STEP_PROMPT_LOCK:
         mcp_server._STEP_PROMPT_INFLIGHT.clear()
+        mcp_server._STEP_PROMPT_NEGATIVE.clear()
 
 
 def _patch_generate(monkeypatch, *, source="llm_generated", prompt="GEN", delay=0.0,
                     gate=None, counter=None):
-    """Install a fake async ``generate_prompt_content_with_llm``.
+    """Install a fake async ``collect_step_prompt_via_stream``.
+
+    The daemon generation now drains the web stream through
+    ``collect_step_prompt_via_stream`` (returns the ``llm_generated`` dict shape on
+    success, ``None`` on failure) instead of ``generate_prompt_content_with_llm``;
+    the budget/single-flight/late-success machinery under test is unchanged, so this
+    stub keeps returning the same dict shape ``_extract_llm_generated`` consumes.
 
     ``delay`` sleeps before returning; ``gate`` (a threading.Event) blocks the fake
     until the test releases it, so overlap is deterministic.
@@ -77,7 +85,7 @@ def _patch_generate(monkeypatch, *, source="llm_generated", prompt="GEN", delay=
             await asyncio.sleep(delay)
         return {"source": source, "prompt": prompt}
 
-    monkeypatch.setattr(routes, "generate_prompt_content_with_llm", fake)
+    monkeypatch.setattr(routes, "collect_step_prompt_via_stream", fake)
 
 
 def _gen(session_id, section_tag="prd_generation"):
@@ -275,7 +283,7 @@ def test_contextvar_propagates_into_generation_thread(monkeypatch):
         seen["cv"] = _TEST_CV.get()
         return {"source": "llm_generated", "prompt": "GEN"}
 
-    monkeypatch.setattr(routes, "generate_prompt_content_with_llm", fake)
+    monkeypatch.setattr(routes, "collect_step_prompt_via_stream", fake)
 
     _TEST_CV.set("obo-token-xyz")
     out = _gen("sess-cv")
@@ -349,11 +357,14 @@ def test_run_async_blocking_times_out_without_blocking_callers():
     assert mcp_server._run_async_blocking(quick) == "quick"
 
 
-# --- 8. retry after a failed generation (cache contract) -------------------
+# --- 8. retry after a failed generation (cache contract, ACROSS the TTL) ----
 # A generation that resolves None (endpoint error / non-llm source) must leave
-# the key out of BOTH the cache and the in-flight registry, so the next read
-# starts a fresh generation and a later success is cached. This pins the
-# "a mock/error result is retried when the endpoint comes back" contract.
+# the key out of the POSITIVE cache and the in-flight registry, so once its
+# negative-cache verdict expires the next read starts a FRESH generation and a
+# later success is cached. This pins the PR #77 "a mock/error result is retried
+# when the endpoint comes back" contract, now carried ACROSS the negative-cache
+# TTL (the retry no longer happens on the immediately-following read — it waits
+# out the TTL). The TTL is patched to 0.0 so the retry is observable in-test.
 # TAMPER M1: replace the `_STEP_PROMPT_INFLIGHT.pop(...)` in the generation's
 # finally with `pass` -> the resolved-None Future lingers in the registry, every
 # later read joins it and gets the template forever -> both tests below fail
@@ -361,6 +372,7 @@ def test_run_async_blocking_times_out_without_blocking_callers():
 
 def test_non_llm_source_failure_is_retried_and_then_cached(monkeypatch):
     monkeypatch.setattr(mcp_server, "STEP_PROMPT_BUDGET_S", 5.0)
+    monkeypatch.setattr(mcp_server, "_STEP_PROMPT_NEGATIVE_TTL_S", 0.0)  # expire immediately
     calls = {"n": 0}
 
     async def fake(*args, **kwargs):
@@ -369,15 +381,15 @@ def test_non_llm_source_failure_is_retried_and_then_cached(monkeypatch):
             return {"source": "fallback_due_to_error", "prompt": "IGNORED"}
         return {"source": "llm_generated", "prompt": "RETRIED"}
 
-    monkeypatch.setattr(routes, "generate_prompt_content_with_llm", fake)
+    monkeypatch.setattr(routes, "collect_step_prompt_via_stream", fake)
     key = _cache_key("sess-retry-src")
 
     first = _gen("sess-retry-src")
     assert first is None  # degraded to template
-    assert key not in mcp_server._STEP_PROMPT_CACHE  # failure is never cached
+    assert key not in mcp_server._STEP_PROMPT_CACHE  # failure is never positive-cached
     assert key not in mcp_server._STEP_PROMPT_INFLIGHT  # and the registry is cleared
 
-    second = _gen("sess-retry-src")  # a NEW generation runs
+    second = _gen("sess-retry-src")  # negative verdict already expired -> a NEW generation runs
     assert second == "RETRIED"
     assert calls["n"] == 2
     assert mcp_server._STEP_PROMPT_CACHE[key] == "RETRIED"
@@ -385,6 +397,7 @@ def test_non_llm_source_failure_is_retried_and_then_cached(monkeypatch):
 
 def test_raised_generation_is_retried_and_then_cached(monkeypatch):
     monkeypatch.setattr(mcp_server, "STEP_PROMPT_BUDGET_S", 5.0)
+    monkeypatch.setattr(mcp_server, "_STEP_PROMPT_NEGATIVE_TTL_S", 0.0)  # expire immediately
     calls = {"n": 0}
 
     async def fake(*args, **kwargs):
@@ -393,7 +406,7 @@ def test_raised_generation_is_retried_and_then_cached(monkeypatch):
             raise RuntimeError("serving endpoint down")
         return {"source": "llm_generated", "prompt": "RECOVERED"}
 
-    monkeypatch.setattr(routes, "generate_prompt_content_with_llm", fake)
+    monkeypatch.setattr(routes, "collect_step_prompt_via_stream", fake)
     key = _cache_key("sess-retry-raise")
 
     first = _gen("sess-retry-raise")

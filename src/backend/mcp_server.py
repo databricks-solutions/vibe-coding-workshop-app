@@ -9,6 +9,7 @@ import hashlib
 import json
 import logging
 import threading
+import time
 import uuid
 from dataclasses import asdict
 from datetime import datetime, timezone
@@ -332,7 +333,7 @@ class WorkshopFastMCP(FastMCP):
                 # Off-loop execution: the app runs ONE uvicorn event loop shared by
                 # the web UI and /mcp (app.py). FastMCP calls a SYNC tool body
                 # directly on that loop (func_metadata: `return fn(**args)`), so a
-                # slow tool (e.g. an uncached FMAPI step-prompt render) would freeze
+                # slow tool (e.g. an uncached MCP step-prompt render) would freeze
                 # every concurrent request. Run sync tool bodies in a worker thread
                 # instead. `get_context()` is called here (on the loop) so the
                 # request context is captured eagerly; `asyncio.to_thread` copies
@@ -658,7 +659,7 @@ def _resolve_interaction_answer(
 # mock/error result is retried when the endpoint comes back.
 _STEP_PROMPT_CACHE: dict[tuple[str, str, str], str] = {}
 
-# Wall-clock budget for a single FMAPI step-prompt generation on the MCP read
+# Wall-clock budget for a single MCP step-prompt generation on the MCP read
 # path. 90s = 1.5x the SDK's 60s per-attempt HTTP timeout (a healthy-but-slow
 # attempt still lands), <= the web streaming path's 120s ceiling, and well under
 # the observed Genie Code client default. On expiry the read degrades to the
@@ -675,6 +676,18 @@ STEP_PROMPT_BUDGET_S = 90.0
 # timed out still lands in the cache (late-success caching).
 _STEP_PROMPT_LOCK = threading.Lock()
 _STEP_PROMPT_INFLIGHT: dict[tuple[str, str, str], "concurrent.futures.Future[str | None]"] = {}
+
+# Negative cache: a key maps to the monotonic time at which its "this generation
+# truly failed" verdict expires. Checked under _STEP_PROMPT_LOCK BEFORE electing or
+# joining, so a read for a known-failing key returns the template instantly instead
+# of re-running a (slow, truncating, or erroring) generation on every poll. Written
+# ONLY on a TRUE failure that the generation RESOLVED (exception, error event,
+# truncation, empty content) — NEVER on a budget abandonment, which leaves the
+# generation in flight so a late success can still land and cache (late-success
+# caching). On TTL expiry the key is dropped and the next read elects a fresh
+# generation, so the PR #77 retry-after-failure contract holds across the TTL.
+_STEP_PROMPT_NEGATIVE_TTL_S = 300.0
+_STEP_PROMPT_NEGATIVE: dict[tuple[str, str, str], float] = {}
 
 
 def _extract_llm_generated(result: Any) -> str | None:
@@ -733,6 +746,14 @@ def _generate_step_prompt(
         cached = _STEP_PROMPT_CACHE.get(cache_key)
         if cached is not None:
             return cached
+        # Negative cache: a key whose last generation truly failed degrades straight
+        # to the template for the TTL, without electing or joining a generation. On
+        # expiry we drop the entry and fall through to a fresh election (retry).
+        neg_expiry = _STEP_PROMPT_NEGATIVE.get(cache_key)
+        if neg_expiry is not None:
+            if neg_expiry > time.monotonic():
+                return None
+            del _STEP_PROMPT_NEGATIVE[cache_key]
         future = _STEP_PROMPT_INFLIGHT.get(cache_key)
         is_owner = future is None
         if is_owner:
@@ -745,25 +766,45 @@ def _generate_step_prompt(
             # resolves the Future and writes the cache even if the owner already
             # abandoned the join on budget expiry, so a late success still lands
             # (late-success caching). Always degrade to the template (None) on any
-            # failure — generation is best-effort.
+            # failure — generation is best-effort. A TRULY-RESOLVED failure (the
+            # collector returned None, or raised) writes the negative-cache entry so
+            # the next read within the TTL short-circuits to the template; a budget
+            # abandonment resolves nothing here (the stream is still draining) and so
+            # writes NO negative entry, keeping late-success caching possible.
             try:
-                from .api.routes import generate_prompt_content_with_llm
+                from .api.routes import collect_step_prompt_via_stream
 
-                result = await generate_prompt_content_with_llm(
+                result = await collect_step_prompt_via_stream(
                     industry=industry,
                     use_case=use_case,
                     section_tag=section_tag,
                     previous_outputs=previous_outputs,
                     session_id=session_id,
+                    coding_assistant=DEFAULT_CODING_ASSISTANT,
                 )
                 generated = _extract_llm_generated(result)
                 if generated is not None:
                     _STEP_PROMPT_CACHE[cache_key] = generated
+                else:
+                    # True failure (collector named the cause in its own WARNING):
+                    # record the negative entry and degrade to the template.
+                    with _STEP_PROMPT_LOCK:
+                        _STEP_PROMPT_NEGATIVE[cache_key] = time.monotonic() + _STEP_PROMPT_NEGATIVE_TTL_S
+                    logger.info(
+                        "MCP step-prompt generation failed for %s; template served, "
+                        "negative-cached for %.0fs",
+                        section_tag,
+                        _STEP_PROMPT_NEGATIVE_TTL_S,
+                    )
                 future.set_result(generated)
             except BaseException:  # noqa: BLE001 — best-effort; degrade to template
+                with _STEP_PROMPT_LOCK:
+                    _STEP_PROMPT_NEGATIVE[cache_key] = time.monotonic() + _STEP_PROMPT_NEGATIVE_TTL_S
                 logger.warning(
-                    "FMAPI step-prompt generation failed for %s; using assembled template",
+                    "MCP step-prompt generation raised for %s; using assembled template, "
+                    "negative-cached for %.0fs",
                     section_tag,
+                    _STEP_PROMPT_NEGATIVE_TTL_S,
                     exc_info=True,
                 )
                 future.set_result(None)
@@ -777,7 +818,7 @@ def _generate_step_prompt(
             _run_async_blocking(_generate_and_resolve, timeout_s=STEP_PROMPT_BUDGET_S)
         except TimeoutError:
             logger.warning(
-                "FMAPI step-prompt generation exceeded %.0fs budget for %s; using assembled template",
+                "MCP step-prompt generation exceeded %.0fs budget for %s; using assembled template",
                 STEP_PROMPT_BUDGET_S,
                 section_tag,
             )
@@ -791,7 +832,7 @@ def _generate_step_prompt(
         return future.result(timeout=STEP_PROMPT_BUDGET_S)
     except concurrent.futures.TimeoutError:
         logger.warning(
-            "FMAPI step-prompt generation exceeded %.0fs budget for %s; using assembled template",
+            "MCP step-prompt generation exceeded %.0fs budget for %s; using assembled template",
             STEP_PROMPT_BUDGET_S,
             section_tag,
         )

@@ -1,10 +1,11 @@
 """Workstream #2 - the MCP step prompt is rendered through the app FMAPI.
 
-The web path generates each copy-paste prompt via
-``routes.generate_prompt_content_with_llm`` (system_prompt + assembled input ->
-serving endpoint). The MCP path must match it for consistency, degrading to the
-assembled template verbatim whenever the section bypasses the LLM or the
-endpoint is unavailable. Only a genuine ``source == "llm_generated"`` result
+The web path generates each copy-paste prompt by streaming through the app serving
+endpoint; the MCP path drains that same web generator via
+``routes.collect_step_prompt_via_stream`` (returns the ``llm_generated`` dict shape
+on success, ``None`` on failure). The MCP path must match it for consistency,
+degrading to the assembled template verbatim whenever the section bypasses the LLM
+or the endpoint is unavailable. Only a genuine ``source == "llm_generated"`` result
 replaces the template; results are cached per (session, section, input-hash).
 """
 
@@ -51,7 +52,7 @@ def _stub_generate(monkeypatch, source, prompt="GEN", counter=None):
             counter["n"] += 1
         return {"source": source, "prompt": prompt}
 
-    monkeypatch.setattr(routes, "generate_prompt_content_with_llm", fake)
+    monkeypatch.setattr(routes, "collect_step_prompt_via_stream", fake)
 
 
 def test_generate_step_prompt_uses_llm_generated(monkeypatch):

@@ -2332,6 +2332,104 @@ async def stream_llm_response(
             yield event
 
 
+async def collect_step_prompt_via_stream(
+    industry: str,
+    use_case: str,
+    section_tag: str,
+    previous_outputs: Optional[Dict[str, str]] = None,
+    session_id: Optional[str] = None,
+    coding_assistant: str = "genie-code",
+) -> Optional[Dict[str, Any]]:
+    """Drain the WEB streaming generator and collect a complete, UNTRUNCATED prompt.
+
+    The MCP step-prompt read path must serve the SAME copy-paste prompt the web UI
+    renders. Rather than rebuild messages (which would duplicate the system prompt,
+    request text, brand appendix and bypass handling and silently drift), this drains
+    ``stream_llm_response`` itself — the one web generator — with the MCP coding-assistant
+    fork (``genie-code``). It never touches ``clear_lakebase_cache`` (a web-path concern)
+    and leaves the generator byte-identical.
+
+    SUCCESS (and the ONLY case that returns a prompt) is a clean terminal stream:
+    a ``done`` event AND non-empty content AND NO ``max_tokens`` (truncation) warning
+    AND NO ``error`` event AND a model that is not ``bypass_llm``. On success it returns
+    the ``llm_generated`` dict shape (``{"source": "llm_generated", "prompt": ...}``) so
+    the caller's existing ``_extract_llm_generated`` gate is unchanged.
+
+    ANYTHING ELSE is a FAILURE and returns ``None`` (caller degrades to the assembled
+    template). A truncated prompt is a failure — it must never be served or cached. The
+    distinct failure cause is named in a WARNING here (the only site that observes the
+    stream events); the MCP caller records the negative-cache entry and the template
+    degrade.
+    """
+    chunks: List[str] = []
+    saw_done = False
+    saw_error = False
+    saw_truncation = False
+    model: Optional[str] = None
+
+    try:
+        async for raw in stream_llm_response(
+            industry,
+            use_case,
+            section_tag,
+            previous_outputs=previous_outputs,
+            session_id=session_id,
+            coding_assistant_override=coding_assistant,
+        ):
+            # Each item is an SSE "data: {json}\n\n" line emitted by the generator.
+            payload = raw[len("data: "):] if raw.startswith("data: ") else raw
+            payload = payload.strip()
+            if not payload:
+                continue
+            try:
+                event = json.loads(payload)
+            except json.JSONDecodeError:
+                continue
+            etype = event.get("type")
+            if etype == "start":
+                model = event.get("model")
+            elif etype == "content":
+                chunks.append(event.get("content", ""))
+            elif etype == "warning" and event.get("code") == "max_tokens":
+                saw_truncation = True
+            elif etype == "error":
+                saw_error = True
+            elif etype == "done":
+                saw_done = True
+    except Exception:
+        logger.warning(
+            "[MCP collector] stream drain raised for section %s (cause=exception); degrading to template",
+            section_tag,
+            exc_info=True,
+        )
+        return None
+
+    content = "".join(chunks)
+    if saw_done and content and not saw_truncation and not saw_error and model != "bypass_llm":
+        return {"source": "llm_generated", "prompt": content}
+
+    # Name the distinct failure cause (no PII) so operators can tell a truncation
+    # (content/prompt-body issue) from an endpoint error or a bypass section.
+    if saw_error:
+        cause = "error"
+    elif saw_truncation:
+        cause = "truncation"
+    elif model == "bypass_llm":
+        cause = "bypass"
+    elif not content:
+        cause = "empty"
+    elif not saw_done:
+        cause = "no-done"
+    else:
+        cause = "unknown"
+    logger.warning(
+        "[MCP collector] step-prompt generation failed for section %s (cause=%s); degrading to template",
+        section_tag,
+        cause,
+    )
+    return None
+
+
 @router.post("/generate-prompt-stream", summary="Stream prompt generation (SSE)")
 async def generate_prompt_stream(request: PromptRequest):
     """
