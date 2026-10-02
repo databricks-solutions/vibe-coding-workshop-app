@@ -3,13 +3,17 @@
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any, Literal
 
 Execution = Literal["agent-doable", "ui-driven", "hybrid"]
 Surface = Literal["ui", "mcp"]
 INTERACTION_SLOTS = ("pre", "decision", "post")
+
+# Pre-journey gate (retired as a numbered step). A requiresGate chain that walks
+# back to it terminates AT it — the use-case gate stays as-authored.
+USE_CASE_GATE = "use_case_selection"
 
 
 @dataclass(frozen=True)
@@ -172,7 +176,43 @@ class Manifest:
                 default = flag_definition.default if flag_definition else False
                 if bool(requested_flags.get(step.flag, default)):
                     steps.append(step)
-        return steps
+        return self._rewire_gates(steps, sections)
+
+    def _rewire_gates(self, steps: list[Step], sections: list[Section]) -> list[Step]:
+        """Rewire gates left dangling by flag filtering (Phase 3 T5 PR A).
+
+        Filtering a flagged step out of the composition does not touch the
+        surviving steps' ``requiresGate``, so a step whose prerequisite was
+        filtered out keeps a gate that can never be satisfied — it stays locked
+        forever and ``next_step`` returns ``Done()`` with steps remaining. Each
+        such gate is rewired to the nearest ancestor that IS in this composed
+        outline, found by walking the required step's own ``requiresGate``
+        chain over the full (unfiltered) active section list. Shared ``Step``
+        objects are never mutated — ``dataclasses.replace`` copies, and only
+        for steps whose gate actually changes. ORDER is untouched."""
+
+        if not steps:
+            return steps
+        outline_tags = {step.sectionTag for step in steps}
+        # Full step universe of the ACTIVE sections (pre-flag-filter): the walk
+        # may pass through steps that exist here but were filtered from the
+        # outline. Variant sections (Phase 3 T3a) are honored via sections_for.
+        active_map = {
+            step.sectionTag: step
+            for section in sections
+            for step in section.steps
+        }
+        rewired: list[Step] = []
+        for step in steps:
+            gate = step.requiresGate
+            if gate is None or gate in outline_tags:
+                rewired.append(step)
+                continue
+            ancestor = _nearest_outline_ancestor(gate, outline_tags, active_map)
+            if ancestor != gate:
+                step = replace(step, requiresGate=ancestor)
+            rewired.append(step)
+        return rewired
 
     def _track(self, track_id: str) -> Track:
         try:
@@ -180,6 +220,33 @@ class Manifest:
         except KeyError as error:
             available = ", ".join(sorted(self.tracks))
             raise KeyError(f"Unknown track {track_id!r}; available tracks: {available}") from error
+
+
+def _nearest_outline_ancestor(
+    gate: str,
+    outline_tags: set[str],
+    active_map: dict[str, Step],
+) -> str | None:
+    """Walk ``gate``'s own ``requiresGate`` chain to the nearest outline member.
+
+    Terminals: an ancestor in the outline → that gate; the pre-journey
+    ``use_case_selection`` gate → stays as-authored; a ``None`` link → ``None``;
+    a missing step or a cycle → ``None`` (defensive — 0 occurrences in the
+    manifest today, asserted by the gate-rewiring invariant test)."""
+
+    seen: set[str] = set()
+    current: str | None = gate
+    while current is not None:
+        if current == USE_CASE_GATE:
+            return current
+        if current in outline_tags:
+            return current
+        required = active_map.get(current)
+        if required is None or current in seen:
+            return None
+        seen.add(current)
+        current = required.requiresGate
+    return None
 
 
 def _manifest_path(path: str | None) -> Path:
