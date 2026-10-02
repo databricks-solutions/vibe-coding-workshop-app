@@ -56,13 +56,19 @@ No env var / config key. At most a plain module constant. Never invent config ke
   bounds wall-clock. The "1.5x so a 60-75s attempt lands" claim is true only for
   streaming/longer-timeout paths, not silent non-streaming attempts.
 
-## 7. (B) acceptance candidate — NAMED WITH EVIDENCE (human re-measures before smoke)
-Primary: project_setup (genie-accelerator step 2, Foundation family — the smallest
-assembled-prompt family; historically rendered fast in MCP smokes).
-HONEST CAVEAT: offline seed-size evidence is INCONCLUSIVE as an output-length predictor —
-iterate_enhance seeds at only 4,037 chars yet generated 29,301 chars (the LLM elaborates).
-The definitive measure is the human's stream probe before the smoke; if project_setup
-truncates, fall back to prd_generation / semlayer_locate and re-probe.
+## 7. (B) acceptance step — CONFIRMED WITH LIVE EVIDENCE (human ruling 2026-10-02)
+(B) = **prd_generation** — the first REAL LLM step in the default outline, i.e. the
+first step whose prompt actually drains through the collector.
+project_setup is NOT a valid (B): it is a VIRTUAL step. _step_payload special-cases
+section_tag == "project_setup" and returns _project_setup_content(email) (mcp_server.py
+~:994-998) — a fixed clone→publish→validate procedure that NEVER reaches
+_generate_step_prompt / the collector, so it exercises none of this fix. (It is also
+manifest step 1, not step 2; the earlier "step 2 / Foundation family" framing was wrong
+on both counts.)
+Live measurement (human stream probe, session 191c48c8) confirms prd_generation renders
+fast and UNTRUNCATED: web stream for prd_generation (genie-code) — first chunk 3.0s,
+total 22.3s, 6,398 chars, ended on "done" with NO max_tokens truncation warning. This is
+the confirmed (B) step for the acceptance smoke (no re-probe needed).
 
 ## 8. Tests (offline; fake generator; no real FMAPI; patch the budget small)
 - Collector concatenates chunks exactly (T-d: drop chunks -> fail).
@@ -87,8 +93,8 @@ Charter exceptions stated in the PR body. STOP-and-report over partial/red PRs.
 (A) iterate_enhance, uncached: first read <= 90s + eps with the template; once the
     generation ends (truncated -> failure), a repeat read returns the template in < 2s
     (negative cache). Web GET / stays < 2s throughout.
-(B) project_setup (or the re-measured candidate): web stream finishes UNTRUNCATED inside
-    90s -> the MCP read returns the LLM prompt.
+(B) prd_generation (the first real LLM step; §7): web stream finishes UNTRUNCATED inside
+    90s (measured 22.3s / 6,398 chars) -> the MCP read returns the LLM prompt.
 (C) Logs: budget WARNING only on timeouts; the failure log names truncation distinctly;
     no new error classes.
 

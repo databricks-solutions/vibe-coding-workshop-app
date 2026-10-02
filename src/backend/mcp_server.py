@@ -333,7 +333,7 @@ class WorkshopFastMCP(FastMCP):
                 # Off-loop execution: the app runs ONE uvicorn event loop shared by
                 # the web UI and /mcp (app.py). FastMCP calls a SYNC tool body
                 # directly on that loop (func_metadata: `return fn(**args)`), so a
-                # slow tool (e.g. an uncached FMAPI step-prompt render) would freeze
+                # slow tool (e.g. an uncached MCP step-prompt render) would freeze
                 # every concurrent request. Run sync tool bodies in a worker thread
                 # instead. `get_context()` is called here (on the loop) so the
                 # request context is captured eagerly; `asyncio.to_thread` copies
@@ -659,7 +659,7 @@ def _resolve_interaction_answer(
 # mock/error result is retried when the endpoint comes back.
 _STEP_PROMPT_CACHE: dict[tuple[str, str, str], str] = {}
 
-# Wall-clock budget for a single FMAPI step-prompt generation on the MCP read
+# Wall-clock budget for a single MCP step-prompt generation on the MCP read
 # path. 90s = 1.5x the SDK's 60s per-attempt HTTP timeout (a healthy-but-slow
 # attempt still lands), <= the web streaming path's 120s ceiling, and well under
 # the observed Genie Code client default. On expiry the read degrades to the
@@ -818,7 +818,7 @@ def _generate_step_prompt(
             _run_async_blocking(_generate_and_resolve, timeout_s=STEP_PROMPT_BUDGET_S)
         except TimeoutError:
             logger.warning(
-                "FMAPI step-prompt generation exceeded %.0fs budget for %s; using assembled template",
+                "MCP step-prompt generation exceeded %.0fs budget for %s; using assembled template",
                 STEP_PROMPT_BUDGET_S,
                 section_tag,
             )
@@ -832,7 +832,7 @@ def _generate_step_prompt(
         return future.result(timeout=STEP_PROMPT_BUDGET_S)
     except concurrent.futures.TimeoutError:
         logger.warning(
-            "FMAPI step-prompt generation exceeded %.0fs budget for %s; using assembled template",
+            "MCP step-prompt generation exceeded %.0fs budget for %s; using assembled template",
             STEP_PROMPT_BUDGET_S,
             section_tag,
         )

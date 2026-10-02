@@ -309,3 +309,29 @@ def test_budget_abandonment_does_not_write_negative(monkeypatch):
         time.sleep(0.02)
     assert mcp_server._STEP_PROMPT_CACHE.get(key) == "LATE_OK"
     assert key not in mcp_server._STEP_PROMPT_NEGATIVE  # success never negative-caches
+
+
+# --- call-site pin: _generate_step_prompt -> collector fork ----------------
+
+def test_generate_step_prompt_passes_default_coding_assistant(monkeypatch):
+    # The collector-forwarding leg (collector -> stream_llm_response override) is pinned
+    # by test_collector_forwards_genie_code_override; this pins the OTHER leg — the MCP
+    # call site passes coding_assistant=DEFAULT_CODING_ASSISTANT ("genie-code") into the
+    # collector. Without it, the collector would default to the shared __default__ fork
+    # and the MCP path would stop matching the genie-code web prompt.
+    # TAMPER: drop `coding_assistant=DEFAULT_CODING_ASSISTANT` at the mcp_server call site
+    # -> the recorded kwarg is absent -> this assertion fails.
+    monkeypatch.setattr(mcp_server, "STEP_PROMPT_BUDGET_S", 5.0)
+    record = {}
+
+    async def fake(*args, **kwargs):
+        record["args"] = args
+        record["kwargs"] = kwargs
+        return {"source": "llm_generated", "prompt": "GEN"}
+
+    monkeypatch.setattr(routes, "collect_step_prompt_via_stream", fake)
+
+    out = _gen("sess-callsite")
+    assert out == "GEN"
+    assert record["kwargs"].get("coding_assistant") == mcp_server.DEFAULT_CODING_ASSISTANT
+    assert mcp_server.DEFAULT_CODING_ASSISTANT == "genie-code"
