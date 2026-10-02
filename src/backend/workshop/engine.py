@@ -192,6 +192,30 @@ def _result_error(
     )
 
 
+def resolve_step(
+    track_id: str,
+    session: SessionState,
+    section_tag: str,
+) -> Step | None:
+    """Resolve a step against THIS session's composed outline first.
+
+    The composed outline (``_ordered_steps``) carries the gate-rewired steps
+    (Phase 3 T5 PR A) — a step whose authored ``requiresGate`` was flag-filtered
+    dangles there but is rewired in the outline. Any lookup that gates on
+    ``requiresGate`` must read the outline copy, or it re-checks the original
+    dangling gate and disagrees with ``vibe_next_step``/``engine.outline``.
+    Tags outside the outline (explicitly requested flag-filtered steps) keep
+    the authored lookup — this fallback is the sole remaining direct
+    ``track_steps`` read; no gate check may bypass the outline."""
+
+    ordered = _ordered_steps(track_id, session)
+    for step in ordered:
+        if step.sectionTag == section_tag:
+            return step
+    authored = MANIFEST.track_steps(track_id)
+    return next((candidate for candidate in authored if candidate.sectionTag == section_tag), None)
+
+
 def complete_step(
     track_id: str,
     session: SessionState,
@@ -201,11 +225,9 @@ def complete_step(
     """Complete a visible step, mutating only the supplied session state."""
 
     try:
-        steps = MANIFEST.track_steps(track_id)
+        step = resolve_step(track_id, session, section_tag)
     except KeyError:
         return _result_error(session, "UNKNOWN_TRACK")
-
-    step = next((candidate for candidate in steps if candidate.sectionTag == section_tag), None)
     if step is None:
         return _result_error(session, "UNKNOWN_STEP")
 

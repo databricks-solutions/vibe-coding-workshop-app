@@ -1016,9 +1016,8 @@ def vibe_get_step(
     state, _ = loaded
     state = _coerce_state(state)
     _stash_base_url(state, context)
-    steps = engine.MANIFEST.track_steps(DEFAULT_TRACK)
     # The pre-journey intent beat (Option A) is not a manifest step, so it is
-    # resolved here rather than looked up in track_steps: an explicit request for
+    # resolved here rather than via engine.resolve_step: an explicit request for
     # use_case_selection, or the default (sectionTag=None) while the use case is
     # unresolved, returns the beat with its picker payload.
     if sectionTag == _INTENT_BEAT_STEP.sectionTag or (sectionTag is None and _needs_use_case(state)):
@@ -1029,7 +1028,7 @@ def vibe_get_step(
             return _error_result("UNKNOWN_STEP", "The track has no remaining step.")  # type: ignore[return-value]
         step = current
     else:
-        step = next((candidate for candidate in steps if candidate.sectionTag == sectionTag), None)
+        step = engine.resolve_step(DEFAULT_TRACK, state, sectionTag)
         if step is None:
             return _error_result("UNKNOWN_STEP", f"Unknown workshop step: {sectionTag}", sectionTag=sectionTag)  # type: ignore[return-value]
         # Pass the ordered-outline tags so this explicit lookup is skip-aware too —
@@ -1103,14 +1102,13 @@ def vibe_explain_step(
         return _error_result("INVALID_SESSION", "The requested session could not be resolved.")  # type: ignore[return-value]
     state, _ = loaded
     state = _coerce_state(state)
-    steps = engine.MANIFEST.track_steps(DEFAULT_TRACK)
     if sectionTag is None:
         current = engine.next_step(DEFAULT_TRACK, state)
         if isinstance(current, engine.Done):
             return _error_result("UNKNOWN_STEP", "The track has no remaining step.")  # type: ignore[return-value]
         step = current
     else:
-        step = next((candidate for candidate in steps if candidate.sectionTag == sectionTag), None)
+        step = engine.resolve_step(DEFAULT_TRACK, state, sectionTag)
         if step is None:
             return _error_result("UNKNOWN_STEP", f"Unknown workshop step: {sectionTag}", sectionTag=sectionTag)  # type: ignore[return-value]
     if step.sectionTag == "project_setup":
