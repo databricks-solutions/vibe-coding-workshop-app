@@ -613,6 +613,105 @@ def _get_sessions_table_name() -> str:
     return f"{get_schema()}.{SESSIONS_TABLE}"
 
 
+def _session_upsert(
+    table_name: str,
+    session_id: str,
+    industry: str = None,
+    industry_label: str = None,
+    use_case: str = None,
+    use_case_label: str = None,
+    session_name: str = None,
+    session_description: str = None,
+    feedback_rating: str = None,
+    feedback_comment: str = None,
+    feedback_request_followup: bool = None,
+    prerequisites_completed: bool = None,
+    workshop_level: str = None,
+    step_prompts: Dict[int, str] = None,
+    created_by: str = None,
+    captured_outputs: Dict[str, str] = None,
+    completed_gates: List[str] = None,
+    session_parameters: Dict[str, Any] = None,
+) -> tuple:
+    """Build the sessions UPSERT ``(sql, params)``.
+
+    Shared by ``save_session`` and ``save_session_merging_gates`` so both run the
+    exact same COALESCE-preserving statement."""
+    # Step 1 stored in dedicated column, steps 2-20 stored in JSONB
+    step_1_prompt_value = step_prompts.get(1) if step_prompts else None
+    
+    # Build step_prompts JSONB for steps 2-20 (exclude step 1)
+    step_prompts_jsonb = {}
+    if step_prompts:
+        for step_num, prompt_text in step_prompts.items():
+            if step_num != 1 and prompt_text:  # Skip step 1, include steps 2-20
+                step_prompts_jsonb[str(step_num)] = prompt_text
+    step_prompts_json = json.dumps(step_prompts_jsonb)
+
+    # Serialize JSONB payloads. None => SQL NULL so COALESCE preserves the
+    # existing DB value (never clobbers on a partial save).
+    captured_outputs_json = json.dumps(captured_outputs) if captured_outputs is not None else None
+    completed_gates_json = json.dumps(completed_gates) if completed_gates is not None else None
+    session_parameters_json = json.dumps(session_parameters) if session_parameters is not None else None
+    
+    # Current timestamp
+    now = datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')
+    
+    # Build the UPSERT SQL
+    upsert_sql = f"""
+    INSERT INTO {table_name} (
+        session_id, created_by,
+        session_name, session_description,
+        industry, industry_label, use_case, use_case_label,
+        feedback_rating, feedback_comment, feedback_request_followup,
+        step_1_prompt, step_prompts,
+        prerequisites_completed, workshop_level,
+        captured_outputs, completed_gates, session_parameters,
+        created_at, updated_at
+    ) VALUES (
+        %s, %s,
+        %s, %s,
+        %s, %s, %s, %s,
+        %s, %s, %s,
+        %s, %s,
+        %s, %s,
+        %s, %s, %s,
+        %s, %s
+    )
+    ON CONFLICT (session_id) DO UPDATE SET
+        industry = COALESCE(EXCLUDED.industry, {table_name}.industry),
+        industry_label = COALESCE(EXCLUDED.industry_label, {table_name}.industry_label),
+        use_case = COALESCE(EXCLUDED.use_case, {table_name}.use_case),
+        use_case_label = COALESCE(EXCLUDED.use_case_label, {table_name}.use_case_label),
+        session_name = COALESCE(EXCLUDED.session_name, {table_name}.session_name),
+        session_description = COALESCE(EXCLUDED.session_description, {table_name}.session_description),
+        feedback_rating = COALESCE(EXCLUDED.feedback_rating, {table_name}.feedback_rating),
+        feedback_comment = COALESCE(EXCLUDED.feedback_comment, {table_name}.feedback_comment),
+        feedback_request_followup = COALESCE(EXCLUDED.feedback_request_followup, {table_name}.feedback_request_followup),
+        prerequisites_completed = COALESCE(EXCLUDED.prerequisites_completed, {table_name}.prerequisites_completed),
+        workshop_level = COALESCE(EXCLUDED.workshop_level, {table_name}.workshop_level),
+        captured_outputs = COALESCE(EXCLUDED.captured_outputs, {table_name}.captured_outputs),
+        completed_gates = COALESCE(EXCLUDED.completed_gates, {table_name}.completed_gates),
+        session_parameters = COALESCE(EXCLUDED.session_parameters, {table_name}.session_parameters),
+        step_1_prompt = COALESCE(EXCLUDED.step_1_prompt, {table_name}.step_1_prompt),
+        step_prompts = COALESCE({table_name}.step_prompts, '{{}}'::jsonb) || COALESCE(EXCLUDED.step_prompts, '{{}}'::jsonb),
+        updated_at = EXCLUDED.updated_at
+    """
+    
+    params = (
+        session_id, created_by or "",
+        session_name, session_description,
+        industry, industry_label, use_case, use_case_label,
+        feedback_rating, feedback_comment, feedback_request_followup,
+        step_1_prompt_value, step_prompts_json,
+        prerequisites_completed, workshop_level,
+        captured_outputs_json, completed_gates_json, session_parameters_json,
+        now,
+        now,
+    )
+    return upsert_sql, params
+
+
 def save_session(
     session_id: str,
     industry: str = None,
@@ -681,90 +780,128 @@ def save_session(
     logger.info(f"Saving session {session_id}: fields=[{', '.join(_fields_being_set) or 'none'}]")
     
     try:
-        # Step 1 stored in dedicated column, steps 2-20 stored in JSONB
-        step_1_prompt_value = step_prompts.get(1) if step_prompts else None
-        
-        # Build step_prompts JSONB for steps 2-20 (exclude step 1)
-        step_prompts_jsonb = {}
-        if step_prompts:
-            for step_num, prompt_text in step_prompts.items():
-                if step_num != 1 and prompt_text:  # Skip step 1, include steps 2-20
-                    step_prompts_jsonb[str(step_num)] = prompt_text
-        step_prompts_json = json.dumps(step_prompts_jsonb)
+        upsert_sql, params = _session_upsert(
+            table_name,
+            session_id,
+            industry=industry,
+            industry_label=industry_label,
+            use_case=use_case,
+            use_case_label=use_case_label,
+            session_name=session_name,
+            session_description=session_description,
+            feedback_rating=feedback_rating,
+            feedback_comment=feedback_comment,
+            feedback_request_followup=feedback_request_followup,
+            prerequisites_completed=prerequisites_completed,
+            workshop_level=workshop_level,
+            step_prompts=step_prompts,
+            created_by=created_by,
+            captured_outputs=captured_outputs,
+            completed_gates=completed_gates,
+            session_parameters=session_parameters,
+        )
 
-        # Serialize JSONB payloads. None => SQL NULL so COALESCE preserves the
-        # existing DB value (never clobbers on a partial save).
-        captured_outputs_json = json.dumps(captured_outputs) if captured_outputs is not None else None
-        completed_gates_json = json.dumps(completed_gates) if completed_gates is not None else None
-        session_parameters_json = json.dumps(session_parameters) if session_parameters is not None else None
-        
-        # Current timestamp
-        now = datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')
-        
         with get_connection() as conn:
             cursor = conn.cursor()
-            
-            # Build the UPSERT SQL
-            upsert_sql = f"""
-            INSERT INTO {table_name} (
-                session_id, created_by,
-                session_name, session_description,
-                industry, industry_label, use_case, use_case_label,
-                feedback_rating, feedback_comment, feedback_request_followup,
-                step_1_prompt, step_prompts,
-                prerequisites_completed, workshop_level,
-                captured_outputs, completed_gates, session_parameters,
-                created_at, updated_at
-            ) VALUES (
-                %s, %s,
-                %s, %s,
-                %s, %s, %s, %s,
-                %s, %s, %s,
-                %s, %s,
-                %s, %s,
-                %s, %s, %s,
-                %s, %s
-            )
-            ON CONFLICT (session_id) DO UPDATE SET
-                industry = COALESCE(EXCLUDED.industry, {table_name}.industry),
-                industry_label = COALESCE(EXCLUDED.industry_label, {table_name}.industry_label),
-                use_case = COALESCE(EXCLUDED.use_case, {table_name}.use_case),
-                use_case_label = COALESCE(EXCLUDED.use_case_label, {table_name}.use_case_label),
-                session_name = COALESCE(EXCLUDED.session_name, {table_name}.session_name),
-                session_description = COALESCE(EXCLUDED.session_description, {table_name}.session_description),
-                feedback_rating = COALESCE(EXCLUDED.feedback_rating, {table_name}.feedback_rating),
-                feedback_comment = COALESCE(EXCLUDED.feedback_comment, {table_name}.feedback_comment),
-                feedback_request_followup = COALESCE(EXCLUDED.feedback_request_followup, {table_name}.feedback_request_followup),
-                prerequisites_completed = COALESCE(EXCLUDED.prerequisites_completed, {table_name}.prerequisites_completed),
-                workshop_level = COALESCE(EXCLUDED.workshop_level, {table_name}.workshop_level),
-                captured_outputs = COALESCE(EXCLUDED.captured_outputs, {table_name}.captured_outputs),
-                completed_gates = COALESCE(EXCLUDED.completed_gates, {table_name}.completed_gates),
-                session_parameters = COALESCE(EXCLUDED.session_parameters, {table_name}.session_parameters),
-                step_1_prompt = COALESCE(EXCLUDED.step_1_prompt, {table_name}.step_1_prompt),
-                step_prompts = COALESCE({table_name}.step_prompts, '{{}}'::jsonb) || COALESCE(EXCLUDED.step_prompts, '{{}}'::jsonb),
-                updated_at = EXCLUDED.updated_at
-            """
-            
-            params = (
-                session_id, created_by or "",
-                session_name, session_description,
-                industry, industry_label, use_case, use_case_label,
-                feedback_rating, feedback_comment, feedback_request_followup,
-                step_1_prompt_value, step_prompts_json,
-                prerequisites_completed, workshop_level,
-                captured_outputs_json, completed_gates_json, session_parameters_json,
-                now,
-                now,
-            )
-            
+
             cursor.execute(upsert_sql, params)
             conn.commit()
             cursor.close()
             logger.info(f"Session {session_id} saved successfully to Lakebase")
             return True
-            
+
     except Exception as e:
         logger.error(f"Error saving session to Lakebase: {e}", exc_info=True)
+        return False
+
+
+def save_session_merging_gates(
+    session_id: str,
+    *,
+    app_completed_gates: Optional[List[str]],
+    app_skipped_gates: Optional[List[str]],
+    **save_kwargs: Any,
+) -> bool:
+    """App gate write: locked read -> ``_merge_app_gates`` -> upsert, atomically.
+
+    Closes the read-modify-write race on the App path: a separate
+    ``load_session`` followed by ``save_session`` let an MCP write that landed in
+    between (e.g. resolving the non-representable ``use_case_selection`` gate) be
+    overwritten by the App's merged list. Here the stored gates are read with
+    ``SELECT ... FOR UPDATE`` and the merged result is written by the same
+    ``_session_upsert`` statement ``save_session`` uses, on ONE connection in ONE
+    transaction, so no concurrent writer can commit in between.
+
+    ``app_completed_gates`` / ``app_skipped_gates`` follow ``_merge_app_gates``:
+    None = preserve-on-absent. ``completed_gates`` lands in its column (the
+    upsert COALESCE-preserves None); ``skipped_gates`` is patched into
+    ``session_parameters`` with the same JSONB ``||`` merge the routes use, inside
+    the same transaction. No stored row => nothing to preserve; the upsert
+    inserts. ``save_kwargs`` are the remaining ``save_session`` fields.
+
+    Returns False when Lakebase is not configured (same as ``save_session``) or
+    on any DB error (the transaction is rolled back)."""
+    if not is_lakebase_configured():
+        logger.warning(f"Lakebase not configured, cannot save session {session_id}")
+        return False
+
+    from src.backend.workshop.gate_merge import _merge_app_gates
+
+    table_name = _get_sessions_table_name()
+    logger.info(
+        f"Saving session {session_id} with locked gate merge: "
+        f"completed_gates={'set' if app_completed_gates is not None else 'absent'}, "
+        f"skipped_gates={'set' if app_skipped_gates is not None else 'absent'}"
+    )
+
+    try:
+        with get_connection() as conn:
+            # The autoscaling pool hands out autocommit connections; the lock
+            # must be held from the read through the upsert, so run an explicit
+            # transaction and restore the connection's mode afterwards.
+            prior_autocommit = conn.autocommit
+            conn.autocommit = False
+            try:
+                cursor = conn.cursor()
+                cursor.execute(
+                    f"SELECT completed_gates, session_parameters FROM {table_name} "
+                    f"WHERE session_id = %s FOR UPDATE",
+                    (session_id,),
+                )
+                row = cursor.fetchone()
+                stored_completed = _parse_json_list(row[0]) if row else []
+                stored_skipped = (
+                    _parse_json_list(_parse_json_obj(row[1]).get("skipped_gates")) if row else []
+                )
+                merged_completed = _merge_app_gates(app_completed_gates, stored_completed)
+                merged_skipped = _merge_app_gates(app_skipped_gates, stored_skipped)
+
+                upsert_sql, params = _session_upsert(
+                    table_name, session_id, completed_gates=merged_completed, **save_kwargs
+                )
+                cursor.execute(upsert_sql, params)
+                if merged_skipped is not None:
+                    cursor.execute(
+                        f"""
+                        UPDATE {table_name}
+                        SET session_parameters = COALESCE(session_parameters, '{{}}'::jsonb) || %s::jsonb,
+                            updated_at = CURRENT_TIMESTAMP
+                        WHERE session_id = %s
+                        """,
+                        (json.dumps({"skipped_gates": merged_skipped}), session_id),
+                    )
+                conn.commit()
+                cursor.close()
+            except Exception:
+                conn.rollback()
+                raise
+            finally:
+                conn.autocommit = prior_autocommit
+            logger.info(f"Session {session_id} saved successfully to Lakebase (locked gate merge)")
+            return True
+
+    except Exception as e:
+        logger.error(f"Error saving session with gate merge to Lakebase: {e}", exc_info=True)
         return False
 
 
