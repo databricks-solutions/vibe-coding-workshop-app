@@ -357,6 +357,46 @@ def test_run_async_blocking_times_out_without_blocking_callers():
     assert mcp_server._run_async_blocking(quick) == "quick"
 
 
+def test_run_async_blocking_finalizes_partial_stream_without_destroyed_task(caplog, monkeypatch):
+    # A generation that abandons an async generator mid-stream (truncated FMAPI
+    # stream) leaves its athrow finalizer task scheduled on the private loop; the
+    # runner must run loop.shutdown_asyncgens()/shutdown_default_executor() before
+    # loop.close(), or Task.__del__ logs "Task was destroyed but it is pending!"
+    # on every MCP generation. TAMPER: reverting the finally block to a bare
+    # loop.close() re-surfaces that ERROR line and fails this test.
+    import gc
+    import logging
+
+    async def stream():
+        for i in range(3):
+            yield i
+
+    async def partial_consumer():
+        async for _item in stream():
+            break  # abandon mid-stream, like a truncated generation
+        return "done"
+
+    executor_shutdowns: list[int] = []
+    original = asyncio.base_events.BaseEventLoop.shutdown_default_executor
+
+    async def counting_shutdown_default_executor(self):
+        executor_shutdowns.append(1)
+        await original(self)
+
+    monkeypatch.setattr(
+        asyncio.base_events.BaseEventLoop,
+        "shutdown_default_executor",
+        counting_shutdown_default_executor,
+    )
+
+    with caplog.at_level(logging.ERROR, logger="asyncio"):
+        assert mcp_server._run_async_blocking(partial_consumer) == "done"
+        gc.collect()  # force the finalizer / Task.__del__ that would log the error
+
+    assert "Task was destroyed but it is pending" not in caplog.text
+    assert executor_shutdowns, "loop.shutdown_default_executor must run before close"
+
+
 # --- 8. retry after a failed generation (cache contract, ACROSS the TTL) ----
 # A generation that resolves None (endpoint error / non-llm source) must leave
 # the key out of the POSITIVE cache and the in-flight registry, so once its
