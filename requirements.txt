@@ -16,7 +16,7 @@ mcp==1.30.0
 
 # Databricks SDK for OAuth and workspace integration
 # v0.81.0+ required for postgres.generate_database_credential() (Lakebase Autoscaling)
-databricks-sdk>=0.81.0
+databricks-sdk==0.139.0
 
 # Lakebase (PostgreSQL) connectivity
 # psycopg3 with binary driver and connection pool support (Autoscaling token rotation)
