@@ -1529,6 +1529,16 @@ def _run_async_blocking(make_coro: Callable[[], Any], timeout_s: float | None = 
         except BaseException as exc:  # noqa: BLE001 — re-raised on the calling thread
             box["error"] = exc
         finally:
+            # A partially-consumed async generator (truncated FMAPI stream) leaves
+            # its athrow finalizer task scheduled but never run; closing the loop
+            # under it logs "Task was destroyed but it is pending!" on every
+            # generation. Run both shutdowns on the still-open loop; a shutdown
+            # failure must never mask the original result/error above.
+            try:
+                loop.run_until_complete(loop.shutdown_asyncgens())
+                loop.run_until_complete(loop.shutdown_default_executor())
+            except BaseException:  # noqa: BLE001 — best-effort cleanup only
+                pass
             loop.close()
 
     thread = threading.Thread(target=lambda: ctx.run(runner), daemon=True)
