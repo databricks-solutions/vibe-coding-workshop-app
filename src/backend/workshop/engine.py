@@ -109,7 +109,7 @@ def _inputs_for(session: SessionState) -> dict[str, str]:
 
 def _skipped_tags(session: SessionState) -> set[str]:
     parameters = session.session_parameters
-    values = parameters.get("skipped_gates", parameters.get("skippedSteps", []))
+    values = parameters.get("skipped_gates", [])
     if isinstance(values, str):
         values = [values]
     if not isinstance(values, (list, tuple, set)):

@@ -652,17 +652,20 @@ def _resolve_interaction_answer(
 
 
 # Cache of FMAPI-generated step prompts, keyed by (session, section, input-hash).
-# The web path renders each copy-paste prompt through the app's serving endpoint
-# (`generate_prompt_content_with_llm`); the MCP path must match it for
-# consistency, but re-generating on every `vibe_get_step`/`vibe_next_step` read
-# would be slow and costly. Cache only successful ("llm_generated") outputs so a
-# mock/error result is retried when the endpoint comes back.
+# The web path renders each copy-paste prompt through the app's streaming
+# generator (`stream_llm_response`); the MCP path drains that same generator
+# (`collect_step_prompt_via_stream`) for consistency, but re-generating on every
+# `vibe_get_step`/`vibe_next_step` read would be slow and costly. Cache only
+# successful ("llm_generated") outputs so a failed result is retried once its
+# negative-cache entry (below) expires.
 _STEP_PROMPT_CACHE: dict[tuple[str, str, str], str] = {}
 
 # Wall-clock budget for a single MCP step-prompt generation on the MCP read
-# path. 90s = 1.5x the SDK's 60s per-attempt HTTP timeout (a healthy-but-slow
-# attempt still lands), <= the web streaming path's 120s ceiling, and well under
-# the observed Genie Code client default. On expiry the read degrades to the
+# path. It bounds how long the READER waits, not the generation: the SDK/httpx
+# timeouts only bound a stalled or failed request (120s is per-read, between
+# chunks), so a flowing stream has no total bound and can outlast 90s (plan
+# 2026-10-02-latency-generation-success §6). 90s is kept well under the observed
+# Genie Code client default. On expiry the read degrades to the
 # assembled template (identical to any FMAPI failure); the generation keeps
 # running on a daemon thread and still populates the cache on success, so the
 # next read is instant (late-success caching).
@@ -715,9 +718,10 @@ def _generate_step_prompt(
     """Generate the copy-paste prompt via the app FMAPI, matching the web path.
 
     Returns the LLM-generated prompt, or ``None`` to signal "use the assembled
-    template verbatim". None is returned for ``bypass_llm`` sections and whenever
-    the endpoint is unavailable (mock/error/exception) so the step never fails to
-    render — identical degradation to the web path's own fallback.
+    template verbatim". None is returned for ``bypass_llm`` sections, whenever the
+    generation fails (error event, truncated or empty stream, exception) or is
+    negative-cached from a recent failure, and when the read budget expires, so
+    the step never fails to render.
     """
 
     if assembled.get("bypass_llm"):
@@ -1393,8 +1397,8 @@ _CUSTOM_REQUIRED = ("industry", "use_case", "use_case_label", "use_case_descript
 
 # Server-owned keys the engine/draft paths set internally — never a learner input.
 # ``skipped_gates`` is the skip ledger ``engine.can_start`` reads; ``skippedSteps`` is
-# the legacy camelCase alias ``engine._skipped_tags`` still falls back to (dead read,
-# no writer — left in place and ledgered, not removed here); ``custom_draft_ready`` /
+# the retired camelCase alias (the engine no longer reads it) — still rejected so an
+# agent cannot plant the old key in ``session_parameters``; ``custom_draft_ready`` /
 # ``custom_drafted_description`` are the FMAPI draft-first markers the use-case confirm
 # gate requires. ``vibe_set_parameters`` merges ``params`` straight into
 # ``session_parameters``, so a Genie Code agent could otherwise forge a skip (via either
@@ -1552,13 +1556,17 @@ def _run_async_blocking(make_coro: Callable[[], Any], timeout_s: float | None = 
             # A partially-consumed async generator (truncated FMAPI stream) leaves
             # its athrow finalizer task scheduled but never run; closing the loop
             # under it logs "Task was destroyed but it is pending!" on every
-            # generation. Run both shutdowns on the still-open loop; a shutdown
-            # failure must never mask the original result/error above.
+            # generation. Run both shutdowns on the still-open loop, each in its own
+            # try so one failing does not skip the other; a shutdown failure must
+            # never mask the original result/error above.
             try:
                 loop.run_until_complete(loop.shutdown_asyncgens())
+            except BaseException:  # noqa: BLE001 — best-effort cleanup only
+                logger.debug("shutdown_asyncgens failed on private loop", exc_info=True)
+            try:
                 loop.run_until_complete(loop.shutdown_default_executor())
             except BaseException:  # noqa: BLE001 — best-effort cleanup only
-                pass
+                logger.debug("shutdown_default_executor failed on private loop", exc_info=True)
             loop.close()
 
     thread = threading.Thread(target=lambda: ctx.run(runner), daemon=True)

@@ -190,10 +190,9 @@ def test_reserved_param_key_rejects_whole_call_all_or_nothing(session_store, key
 
 
 # --- 4. the camelCase skippedSteps alias cannot forge a skip (amendment) ------
-# engine._skipped_tags still falls back to session_parameters["skippedSteps"] when
-# "skipped_gates" is absent (a dead legacy read, no writer — deliberately kept).
-# Pre-widening that write was display-only; the widened can_start would otherwise
-# turn it into a real self-skip bypass over MCP, so it is a reserved key too.
+# engine._skipped_tags reads ONLY "skipped_gates"; the legacy "skippedSteps"
+# fallback (a dead read with no writer) was removed. The key stays reserved so
+# vibe_set_parameters still rejects it rather than persisting a stray alias.
 # (test_reserved_param_key_* above already parametrize "skippedSteps".)
 # TAMPER: remove "skippedSteps" from _RESERVED_PARAM_KEYS → this test and the
 # parametrized skippedSteps rejection both fail.
@@ -221,6 +220,36 @@ def test_skipped_steps_alias_cannot_change_the_engine_current_step(session_store
     assert _error_code(result) == "INVALID_PARAMETER"
     # The rejected alias write did not move the walk off semlayer_measures.
     assert before == after == "semlayer_measures"
+
+
+# The engine itself ignores the retired alias: a row carrying ONLY skippedSteps
+# skips nothing, while the same tag under skipped_gates still unlocks the successor.
+# TAMPER: restore the `parameters.get("skippedSteps", [])` fallback in
+# engine._skipped_tags -> the alias-only session advances -> the first test fails.
+
+
+def test_skipped_steps_alias_alone_skips_nothing_in_engine():
+    session = _session(SOAK_GATES, {"skippedSteps": ["semlayer_measures"]})
+    assert engine._skipped_tags(session) == set()
+
+    successor = next(
+        s for s in engine.MANIFEST.track_steps(TRACK) if s.sectionTag == "semlayer_metric_view"
+    )
+    outline_tags = {s.sectionTag for s in engine._ordered_steps(TRACK, session)}
+    assert engine.can_start(successor, session, outline_tags) is False
+    assert engine.next_step(TRACK, session).sectionTag == "semlayer_measures"
+
+
+def test_skipped_gates_still_skips_in_engine():
+    session = _session(SOAK_GATES, {"skipped_gates": ["semlayer_measures"]})
+    assert engine._skipped_tags(session) == {"semlayer_measures"}
+
+    successor = next(
+        s for s in engine.MANIFEST.track_steps(TRACK) if s.sectionTag == "semlayer_metric_view"
+    )
+    outline_tags = {s.sectionTag for s in engine._ordered_steps(TRACK, session)}
+    assert engine.can_start(successor, session, outline_tags) is True
+    assert engine.next_step(TRACK, session).sectionTag == "semlayer_metric_view"
 
 
 # --- 5. vibe_get_step agrees with vibe_next_step after a web skip (fold-in) ---

@@ -397,6 +397,74 @@ def test_run_async_blocking_finalizes_partial_stream_without_destroyed_task(capl
     assert executor_shutdowns, "loop.shutdown_default_executor must run before close"
 
 
+def test_run_async_blocking_acloses_alive_async_generator():
+    # S1 pin: a generation that returns while an async generator is still ALIVE
+    # (suspended mid-iteration, not exhausted) must have that generator aclose()d
+    # by the runner's loop.shutdown_asyncgens() — its finally block runs before
+    # _run_async_blocking returns, not merely "no destroyed-task warning".
+    # TAMPER: remove the shutdown_asyncgens() call from the runner's finally ->
+    # the generator is never finalized -> `finalized` stays empty -> this fails.
+    finalized: list[str] = []
+    keep_alive: list = []
+
+    async def stream():
+        try:
+            for i in range(3):
+                yield i
+        finally:
+            finalized.append("closed")
+
+    async def partial_consumer():
+        agen = stream()
+        keep_alive.append(agen)  # strong ref: GC cannot finalize it behind our back
+        assert await agen.__anext__() == 0
+        return "done"
+
+    assert mcp_server._run_async_blocking(partial_consumer) == "done"
+    assert finalized == ["closed"]
+
+
+def test_run_async_blocking_executor_shutdown_runs_when_asyncgens_shutdown_raises(monkeypatch, caplog):
+    # #79 nit: each loop shutdown runs in its own try, so a raising
+    # shutdown_asyncgens() neither skips shutdown_default_executor() nor masks the
+    # coroutine's result, and the cleanup failure is logged at DEBUG (not swallowed).
+    # TAMPER: merge both shutdowns back into ONE try -> the asyncgens failure skips
+    # the executor shutdown -> `executor_shutdowns` stays empty -> this fails.
+    import logging
+
+    async def raising_shutdown_asyncgens(self):
+        raise RuntimeError("shutdown_asyncgens failed")
+
+    executor_shutdowns: list[int] = []
+    original = asyncio.base_events.BaseEventLoop.shutdown_default_executor
+
+    async def counting_shutdown_default_executor(self):
+        executor_shutdowns.append(1)
+        await original(self)
+
+    monkeypatch.setattr(
+        asyncio.base_events.BaseEventLoop, "shutdown_asyncgens", raising_shutdown_asyncgens
+    )
+    monkeypatch.setattr(
+        asyncio.base_events.BaseEventLoop,
+        "shutdown_default_executor",
+        counting_shutdown_default_executor,
+    )
+
+    async def ok():
+        return "RESULT"
+
+    with caplog.at_level(logging.DEBUG, logger=mcp_server.logger.name):
+        assert mcp_server._run_async_blocking(ok, timeout_s=2.0) == "RESULT"
+
+    assert executor_shutdowns == [1]
+    debug_lines = [
+        r for r in caplog.records
+        if r.levelno == logging.DEBUG and "shutdown_asyncgens failed" in r.getMessage()
+    ]
+    assert debug_lines, "a cleanup failure must be logged at DEBUG"
+
+
 # --- 8. retry after a failed generation (cache contract, ACROSS the TTL) ----
 # A generation that resolves None (endpoint error / non-llm source) must leave
 # the key out of the POSITIVE cache and the in-flight registry, so once its
