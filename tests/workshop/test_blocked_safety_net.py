@@ -257,3 +257,77 @@ def test_authored_gate_graph_has_no_cycles_or_missing_links():
                         missing.append(f"{track_id} {flags} {inputs}: {tag}->{gate}")
     assert cycles == [], "gate-graph cycles:\n" + "\n".join(cycles[:20])
     assert missing == [], "gate-graph missing links:\n" + "\n".join(missing[:20])
+
+
+# --- 5. secondary surfaces: every other next_step consumer handles Blocked ----
+#
+# PR B taught only ``vibe_next_step`` the Blocked variant. These pin the other
+# consumers on the same forced-blocked row (``session_store`` -> _patch_dangling).
+# Tampers (each flips its own test red; run manually, restore clean):
+# - **T4** drop the ``engine.Blocked`` branch in ``vibe_get_step(None)`` ->
+#   ``test_vibe_get_step_default_on_blocked_is_unknown_step`` fails.
+# - **T5** drop the ``engine.Blocked`` branch in ``vibe_explain_step(None)`` ->
+#   ``test_vibe_explain_step_default_on_blocked_is_unknown_step`` fails.
+# - **T6** drop the ``engine.Blocked`` branch in the ``vibe_complete_step`` next
+#   render -> ``test_vibe_complete_step_next_is_blocked_result`` fails.
+# - **T7** revert ``vibe_submit_answer``'s answerable set to Done-only (the locked
+#   step becomes answerable) -> ``test_vibe_submit_answer_on_blocked_is_unknown_interaction``
+#   fails.
+
+
+def _assert_blocked_unknown_step(result):
+    assert isinstance(result, mcp_server._ContractError), f"expected an error, got {result!r}"
+    assert result["isError"] is True
+    assert result["error"]["code"] == "UNKNOWN_STEP"
+    assert result["error"]["sectionTag"] == "beta"
+    assert "Beta" in result["error"]["message"]
+    assert "ghost_gate" in result["error"]["message"]
+    assert "configuration problem" in result["error"]["message"]
+
+
+def test_vibe_get_step_default_on_blocked_is_unknown_step(session_store):
+    _assert_blocked_unknown_step(mcp_server.vibe_get_step(SESSION_ID))
+
+
+def test_vibe_explain_step_default_on_blocked_is_unknown_step(session_store):
+    _assert_blocked_unknown_step(mcp_server.vibe_explain_step(SESSION_ID))
+
+
+def test_vibe_complete_step_next_is_blocked_result(session_store):
+    # Re-completing ``alpha`` (already done) returns the engine's next_step, which
+    # on this row is Blocked on ``beta``.
+    result = mcp_server.vibe_complete_step(SESSION_ID, "alpha", "alpha output")
+    assert isinstance(result, mcp_server.CompleteStepResult), f"unexpected: {result!r}"
+    assert isinstance(result.next, mcp_server.BlockedResult)
+    assert result.next.blocked_by.sectionTag == "beta"
+    assert result.next.blocked_by.requiresGate == "ghost_gate"
+    # extra="forbid" round-trip: the emitted payload is a valid CompleteStepResult.
+    dumped = result.model_dump()
+    assert mcp_server.CompleteStepResult.model_validate(dumped).next == result.next
+    assert "sectionTag" not in dumped["next"]
+
+
+def test_vibe_submit_answer_on_blocked_is_unknown_interaction(session_store, monkeypatch):
+    # Bind a real authored interaction to the locked ``beta`` step so the only
+    # thing standing between the agent and recording an answer is the guard.
+    _, slot, interaction = mcp_server._find_interaction("project_setup.why")
+    monkeypatch.setattr(
+        mcp_server,
+        "_find_interaction",
+        lambda interaction_id: ("beta", slot, interaction) if interaction_id == interaction.id else None,
+    )
+    recorded: list[dict] = []
+    monkeypatch.setattr(
+        mcp_server,
+        "append_session_interaction",
+        lambda **kwargs: recorded.append(kwargs) or True,
+        raising=False,
+    )
+    before = copy.deepcopy(session_store)
+
+    result = mcp_server.vibe_submit_answer(SESSION_ID, interaction.id, "an answer")
+
+    assert isinstance(result, mcp_server._ContractError), f"expected an error, got {result!r}"
+    assert result["error"]["code"] == "UNKNOWN_INTERACTION"
+    assert recorded == []
+    assert session_store == before

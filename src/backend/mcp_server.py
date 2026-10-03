@@ -193,7 +193,7 @@ class CompleteStepResult(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     completed_gates: list[str]
-    next: ExplainabilityPayload | DoneResult
+    next: ExplainabilityPayload | DoneResult | BlockedResult
     # Advisory re-surfacing of the just-completed step's post-comprehension check
     # (answer key redacted). Non-gating: it nudges the agent to ask the quiz at
     # the moment it is due, since the slim step payload + long-run drift let the
@@ -1212,6 +1212,8 @@ def vibe_get_step(
         current = engine.next_step(DEFAULT_TRACK, state)
         if isinstance(current, engine.Done):
             return _error_result("UNKNOWN_STEP", "The track has no remaining step.")  # type: ignore[return-value]
+        if isinstance(current, engine.Blocked):
+            return _blocked_step_error(current)  # type: ignore[return-value]
         step = current
     else:
         step = engine.resolve_step(DEFAULT_TRACK, state, sectionTag)
@@ -1224,6 +1226,22 @@ def vibe_get_step(
         if not engine.can_start(step, state, outline_tags):
             return _error_result("STEP_LOCKED", f"Complete {step.requiresGate} before this step.", sectionTag=sectionTag)  # type: ignore[return-value]
     return _step_payload(DEFAULT_TRACK, state, step, session_id=session_id)
+
+
+def _blocked_step_error(blocked: engine.Blocked) -> _ContractError:
+    """UNKNOWN_STEP for a default (sectionTag=None) lookup on a Blocked walk.
+
+    vibe_get_step / vibe_explain_step keep their single-payload contracts: a
+    blocked walk is a workshop-configuration defect that `vibe_next_step`
+    reports, so these surfaces return an error naming the dangling gate rather
+    than rendering the locked step."""
+
+    return _error_result(
+        "UNKNOWN_STEP",
+        f"The workshop cannot advance because '{blocked.title}' requires "
+        f"'{blocked.requiresGate}' — workshop configuration problem.",
+        sectionTag=blocked.sectionTag,
+    )
 
 
 def _blocked_result(
@@ -1328,6 +1346,8 @@ def vibe_explain_step(
         current = engine.next_step(DEFAULT_TRACK, state)
         if isinstance(current, engine.Done):
             return _error_result("UNKNOWN_STEP", "The track has no remaining step.")  # type: ignore[return-value]
+        if isinstance(current, engine.Blocked):
+            return _blocked_step_error(current)  # type: ignore[return-value]
         step = current
     else:
         step = engine.resolve_step(DEFAULT_TRACK, state, sectionTag)
@@ -1656,7 +1676,9 @@ def vibe_complete_step(
 
     next_step = result.next_step
     if isinstance(next_step, engine.Done):
-        next_payload: ExplainabilityPayload | DoneResult = DoneResult()
+        next_payload: ExplainabilityPayload | DoneResult | BlockedResult = DoneResult()
+    elif isinstance(next_step, engine.Blocked):
+        next_payload = _blocked_result(DEFAULT_TRACK, state, next_step)
     else:
         next_payload = _step_payload(DEFAULT_TRACK, state, next_step, session_id=session_id)
     return CompleteStepResult(
@@ -1705,9 +1727,10 @@ def vibe_submit_answer(
     # is always eligible; while the use case is unresolved the pre-journey intent
     # beat (Option A) is ALSO eligible, so its use_case_selection confirm/comprehension
     # interactions stay answerable even though the beat is not a manifest step
-    # (the lock via vibe_set_parameters is what resolves the gate).
+    # (the lock via vibe_set_parameters is what resolves the gate). A Blocked walk
+    # has no current step: its locked step cannot be worked, so it is not answerable.
     current = engine.next_step(DEFAULT_TRACK, state)
-    answerable = {None if isinstance(current, engine.Done) else current.sectionTag}
+    answerable = {None if isinstance(current, (engine.Done, engine.Blocked)) else current.sectionTag}
     if _needs_use_case(state):
         answerable.add(_INTENT_BEAT_STEP.sectionTag)
     if section_tag not in answerable:
