@@ -53,11 +53,11 @@ class CompleteResult:
     ok: bool
     error_code: str | None = None
     completed_gates: list[str] = field(default_factory=list)
-    next_step: Step | Done | None = None
+    next_step: Step | Done | Blocked | None = None
     coached: bool = False
 
     @property
-    def next(self) -> Step | Done | None:
+    def next(self) -> Step | Done | Blocked | None:
         """Expose the transport-facing name without duplicating state."""
 
         return self.next_step
