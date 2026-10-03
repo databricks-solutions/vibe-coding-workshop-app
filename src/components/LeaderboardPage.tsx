@@ -52,33 +52,41 @@ interface LeaderboardEntryWithMovement extends LeaderboardEntry {
 }
 
 // Confetti particle component
-function ConfettiParticle({ delay, color }: { delay: number; color: string }) {
+function ConfettiParticle({ delay, color, left, rotation }: { delay: number; color: string; left: number; rotation: number }) {
   return (
     <div
       className="absolute w-2 h-2 rounded-sm animate-confetti-fall"
       style={{
         backgroundColor: color,
-        left: `${Math.random() * 100}%`,
+        left: `${left}%`,
         animationDelay: `${delay}ms`,
-        transform: `rotate(${Math.random() * 360}deg)`,
+        transform: `rotate(${rotation}deg)`,
       }}
     />
   );
 }
 
-// Confetti burst for #1
-function ConfettiBurst() {
-  const colors = ['#FFD700', '#FFA500', '#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FFEAA7', '#DDA0DD'];
-  const particles = Array.from({ length: 30 }, (_, i) => ({
+const CONFETTI_COLORS = ['#FFD700', '#FFA500', '#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FFEAA7', '#DDA0DD'];
+
+function makeConfettiParticles() {
+  return Array.from({ length: 30 }, (_, i) => ({
     id: i,
     delay: Math.random() * 1000,
-    color: colors[Math.floor(Math.random() * colors.length)],
+    color: CONFETTI_COLORS[Math.floor(Math.random() * CONFETTI_COLORS.length)],
+    left: Math.random() * 100,
+    rotation: Math.random() * 360,
   }));
+}
+
+// Confetti burst for #1 — particles are randomized once per mount (lazy state
+// initializer) so render stays pure.
+function ConfettiBurst() {
+  const [particles] = useState(makeConfettiParticles);
 
   return (
     <div className="absolute inset-0 overflow-hidden pointer-events-none">
       {particles.map((p) => (
-        <ConfettiParticle key={p.id} delay={p.delay} color={p.color} />
+        <ConfettiParticle key={p.id} delay={p.delay} color={p.color} left={p.left} rotation={p.rotation} />
       ))}
     </div>
   );
