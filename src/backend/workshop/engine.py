@@ -238,7 +238,15 @@ def resolve_step(
     dangling gate and disagrees with ``vibe_next_step``/``engine.outline``.
     Tags outside the outline (explicitly requested flag-filtered steps) keep
     the authored lookup — this fallback is the sole remaining direct
-    ``track_steps`` read; no gate check may bypass the outline."""
+    ``track_steps`` read; no gate check may bypass the outline.
+
+    Limitation (D-16, pinned by tests/workshop/test_resolve_step_fallback.py):
+    a fallback step has no outline copy, so it carries its AUTHORED
+    ``requiresGate``, which may itself be flag-filtered (dangling). ``can_start``
+    then reads that authored gate: a skip cannot satisfy it (it is not an
+    outline tag), only completing it can. Completing a fallback step records its
+    gate and ``produces`` output but leaves ``outline`` and ``next_step``
+    unchanged."""
 
     ordered = _ordered_steps(track_id, session)
     for step in ordered:
