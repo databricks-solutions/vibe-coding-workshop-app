@@ -142,7 +142,7 @@ You do not paste this step into a coding assistant — you make a choice, then l
 
 ### Prerequisite
 
-- ✅ `project_setup` complete (workspace and CLI ready)
+- None. This is the first step of the Genie Code journey; you lock the use case **before** Set Up Project.
 
 ### Steps to Apply
 
