@@ -17,9 +17,12 @@ extra body keys, so ``save_session`` never receives ``completed_gates`` and the
 JSONB patch never contains ``skipped_gates`` — both assertions fail.
 
 All offline: the FastAPI router is mounted on a bare app; ``save_session``,
-``execute_insert`` and ``get_schema`` are monkeypatched — no live Lakebase. The
-JSONB ``||`` merge is a shallow top-level merge, so a captured patch dict mirrors
-what Postgres would store.
+``execute_insert`` and ``get_schema`` are monkeypatched — no live Lakebase. A
+gate-carrying request runs the REAL ``lakebase.save_session_merging_gates``
+(locked read -> merge -> upsert in one transaction) against the in-memory
+``_fake_sessions_db`` row, so the merged gates asserted here are what the upsert
+wrote. The JSONB ``||`` merge is a shallow top-level merge, so a captured patch
+dict mirrors what Postgres would store.
 """
 
 import json
@@ -29,6 +32,8 @@ from fastapi import FastAPI
 from starlette.testclient import TestClient
 
 from src.backend.api import routes
+
+from _fake_sessions_db import FakeSessionsDB, install
 
 
 class _SaveCapture:
@@ -74,24 +79,13 @@ class _ParamCapture:
         return None
 
 
-class _ExistingStore:
-    """Stand-in for the persisted row the endpoints load to compute the gate
-    merge. Tests seed ``.record`` to simulate an MCP-origin session."""
-
-    def __init__(self):
-        self.record: dict | None = None
-
-    def load_session(self, session_id):
-        return self.record
-
-
 @pytest.fixture
 def client(monkeypatch):
     saves = _SaveCapture()
     params = _ParamCapture()
-    existing = _ExistingStore()
+    db = FakeSessionsDB()  # the persisted row; tests seed ``.row`` (MCP-origin)
+    install(monkeypatch, db)
     monkeypatch.setattr(routes, "save_session", saves.save_session)
-    monkeypatch.setattr(routes, "load_session", existing.load_session)
     monkeypatch.setattr(routes, "execute_insert", params.execute_insert)
     monkeypatch.setattr(routes, "execute_query", lambda *a, **k: [])
     monkeypatch.setattr(routes, "get_schema", lambda: "test_schema")
@@ -101,7 +95,7 @@ def client(monkeypatch):
     test_client = TestClient(app)
     test_client.save_capture = saves  # type: ignore[attr-defined]
     test_client.param_capture = params  # type: ignore[attr-defined]
-    test_client.existing = existing  # type: ignore[attr-defined]
+    test_client.db = db  # type: ignore[attr-defined]
     return test_client
 
 
@@ -121,8 +115,8 @@ def test_update_metadata_dual_writes_completed_gates_and_skipped_gates(client):
     )
     assert resp.status_code == 200, resp.text
 
-    # completed_gates threads into save_session (-> completed_gates column).
-    save = client.save_capture.last
+    # completed_gates threads into the locked upsert (-> completed_gates column).
+    save = client.db.upserts[-1]
     assert save.get("completed_gates") == [
         "project_setup",
         "prd_generation",
@@ -138,7 +132,7 @@ def test_update_metadata_dual_writes_completed_gates_and_skipped_gates(client):
 
     # skipped_gates lands in the session_parameters JSONB (where the read side
     # consumes it: state.build_session_state / engine._skipped_tags).
-    patch = client.param_capture.last_patch
+    patch = client.db.param_patches[-1]
     assert patch.get("skipped_gates") == ["setup_lakebase"]  # FAILS before PR3a
 
 
@@ -155,6 +149,7 @@ def test_update_metadata_omitting_gates_preserves_existing(client):
     assert client.save_capture.last.get("completed_gates") is None
     # No skipped_gates key written when the request carried none.
     assert all("skipped_gates" not in p for p in client.param_capture.patches)
+    assert client.db.connections == []  # gate-less => plain save_session only
 
 
 # --- full save path ----------------------------------------------------------
@@ -174,7 +169,7 @@ def test_save_session_dual_writes_gates(client):
     )
     assert resp.status_code == 200, resp.text
 
-    save = client.save_capture.last
+    save = client.db.upserts[-1]
     assert save.get("completed_gates") == [
         "project_setup",
         "prd_generation",
@@ -185,7 +180,7 @@ def test_save_session_dual_writes_gates(client):
     assert "completed_steps" not in save
     assert "current_step" not in save
 
-    patch = client.param_capture.last_patch
+    patch = client.db.param_patches[-1]
     assert patch.get("skipped_gates") == ["setup_lakebase"]  # FAILS before PR3a
 
 
@@ -206,6 +201,7 @@ def test_save_session_omitting_gates_preserves_existing(client):
     assert resp.status_code == 200, resp.text
     assert client.save_capture.last.get("completed_gates") is None
     assert all("skipped_gates" not in p for p in client.param_capture.patches)
+    assert client.db.connections == []  # gate-less => plain save_session only
 
 
 # --- cross-surface MERGE (review fix, blocking #1) ---------------------------
@@ -224,7 +220,7 @@ def test_mcp_origin_nonrepresentable_gate_preserved_keeps_prd_unlocked(client):
 
     # Seeded MCP-origin row: use case resolved pre-journey + project_setup done;
     # prd_generation NOT yet done. `use_case_selection` is non-representable.
-    client.existing.record = {
+    client.db.row = {
         "completed_gates": ["use_case_selection", "project_setup"],
         "session_parameters": {},
     }
@@ -241,7 +237,7 @@ def test_mcp_origin_nonrepresentable_gate_preserved_keeps_prd_unlocked(client):
     )
     assert resp.status_code == 200, resp.text
 
-    merged = client.save_capture.last.get("completed_gates")
+    merged = client.db.upserts[-1].get("completed_gates")
     # The non-representable MCP gate survived the App write (add-only preserve).
     assert "use_case_selection" in merged
     assert "project_setup" in merged
@@ -271,7 +267,7 @@ def test_app_uncomplete_drops_representable_gate_but_preserves_nonrepresentable(
     the App path correctly DROPS its representable tag, while a co-present
     non-representable gate (use_case_selection) is add-only preserved."""
     # MCP-origin row: use_case_selection + project_setup + prd_generation all done.
-    client.existing.record = {
+    client.db.row = {
         "completed_gates": ["use_case_selection", "project_setup", "prd_generation"],
         "session_parameters": {},
     }
@@ -287,7 +283,7 @@ def test_app_uncomplete_drops_representable_gate_but_preserves_nonrepresentable(
     )
     assert resp.status_code == 200, resp.text
 
-    merged = client.save_capture.last.get("completed_gates")
+    merged = client.db.upserts[-1].get("completed_gates")
     assert "prd_generation" not in merged  # representable => App drops it
     assert "project_setup" in merged
     assert "use_case_selection" in merged  # non-representable => preserved
@@ -296,7 +292,7 @@ def test_app_uncomplete_drops_representable_gate_but_preserves_nonrepresentable(
 def test_save_path_merges_nonrepresentable_gate(client):
     """The full-save path is symmetric: it too add-only preserves a stored
     non-representable gate, and merges skipped_gates the same way."""
-    client.existing.record = {
+    client.db.row = {
         "completed_gates": ["use_case_selection", "project_setup"],
         "session_parameters": {"skipped_gates": ["use_case_selection"]},
     }
@@ -312,7 +308,7 @@ def test_save_path_merges_nonrepresentable_gate(client):
         },
     )
     assert resp.status_code == 200, resp.text
-    merged = client.save_capture.last.get("completed_gates")
+    merged = client.db.upserts[-1].get("completed_gates")
     assert set(merged) == {"project_setup", "prd_generation", "use_case_selection"}
     # skipped_gates merge preserves the non-representable stored skip too.
-    assert client.param_capture.patch_key("skipped_gates") == ["use_case_selection"]
+    assert client.db.row["session_parameters"]["skipped_gates"] == ["use_case_selection"]

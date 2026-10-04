@@ -20,7 +20,9 @@ returns 422 and ``test_*_200_with_legacy_fields_ignored`` fails; restore the
 default → 200 and it passes.
 
 All offline: the router mounts on a bare app; ``save_session`` / ``load_session``
-/ ``execute_insert`` / ``get_schema`` are monkeypatched — no live Lakebase.
+/ ``execute_insert`` / ``get_schema`` are monkeypatched — no live Lakebase. Gate-
+carrying requests run the real ``save_session_merging_gates`` against the
+in-memory ``_fake_sessions_db`` row.
 """
 
 import pytest
@@ -28,6 +30,8 @@ from fastapi import FastAPI
 from starlette.testclient import TestClient
 
 from src.backend.api import routes
+
+from _fake_sessions_db import FakeSessionsDB, install
 
 _LEGACY_FIELDS = ("current_step", "completed_steps", "skipped_steps")
 
@@ -49,6 +53,8 @@ class _SaveCapture:
 @pytest.fixture
 def client(monkeypatch):
     saves = _SaveCapture()
+    db = FakeSessionsDB()  # gate-carrying saves run the real locked merge against it
+    install(monkeypatch, db)
     monkeypatch.setattr(routes, "save_session", saves.save_session)
     monkeypatch.setattr(routes, "load_session", lambda *a, **k: None)
     monkeypatch.setattr(routes, "execute_insert", lambda *a, **k: True)
@@ -59,6 +65,7 @@ def client(monkeypatch):
     app.include_router(routes.router, prefix="/api")
     test_client = TestClient(app)
     test_client.save_capture = saves  # type: ignore[attr-defined]
+    test_client.db = db  # type: ignore[attr-defined]
     return test_client
 
 
@@ -82,7 +89,7 @@ def test_save_200_with_legacy_fields_ignored(client):
     )
     assert resp.status_code == 200, resp.text
 
-    save = client.save_capture.last
+    save = client.db.upserts[-1]
     # Gates still persist...
     assert save.get("completed_gates") == ["project_setup", "prd_generation"]
     # ...and none of the legacy numbers reached save_session.
@@ -104,7 +111,7 @@ def test_update_metadata_200_with_legacy_fields_ignored(client):
     )
     assert resp.status_code == 200, resp.text
 
-    save = client.save_capture.last
+    save = client.db.upserts[-1]
     assert save.get("completed_gates") == ["project_setup", "prd_generation"]
     for field in _LEGACY_FIELDS:
         assert field not in save, f"{field} must not be forwarded to save_session"
