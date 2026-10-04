@@ -225,7 +225,9 @@ export function SetUpProjectStep({
   const [workspaceUrl, setWorkspaceUrl] = useState<string>(DEFAULT_WORKSPACE_URL);
   const [isReloading, setIsReloading] = useState(false);
 
-  const fetchWorkspaceUrl = async () => {
+  // Resolves the workspace URL (session parameter first, then the workshop
+  // parameter); null keeps the current/default URL.
+  const fetchWorkspaceUrl = async (): Promise<string | null> => {
     try {
       if (sessionId) {
         const response = await fetch(`/api/session/${sessionId}/parameters`);
@@ -233,8 +235,7 @@ export function SetUpProjectStep({
           const params = await response.json();
           const wsParam = params.find((p: { param_key: string }) => p.param_key === 'workspace_url');
           if (wsParam?.param_value) {
-            setWorkspaceUrl(wsParam.param_value);
-            return;
+            return wsParam.param_value;
           }
         }
       }
@@ -242,12 +243,13 @@ export function SetUpProjectStep({
       if (response.ok) {
         const data = await response.json();
         if (data.param_value) {
-          setWorkspaceUrl(data.param_value);
+          return data.param_value;
         }
       }
     } catch {
       // Falls back to default workspace URL
     }
+    return null;
   };
 
   // Re-fetch workspace URL when refreshKey or sessionId changes so the
@@ -255,13 +257,16 @@ export function SetUpProjectStep({
   // session / workshop parameters. The Genie Code variant's email comes
   // in as a prop from App.tsx (no extra API call needed here).
   useEffect(() => {
-    fetchWorkspaceUrl();
+    fetchWorkspaceUrl().then((url) => {
+      if (url) setWorkspaceUrl(url);
+    });
   }, [refreshKey, sessionId]);
 
   const handleReload = async () => {
     setIsReloading(true);
     onStepReset?.();
-    await fetchWorkspaceUrl();
+    const url = await fetchWorkspaceUrl();
+    if (url) setWorkspaceUrl(url);
     setIsReloading(false);
   };
 

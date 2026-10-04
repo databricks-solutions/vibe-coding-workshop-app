@@ -47,12 +47,12 @@ interface SpeechRecognition extends EventTarget {
   abort(): void;
 }
 
-declare var SpeechRecognition: {
+interface SpeechRecognitionConstructor {
   prototype: SpeechRecognition;
   new (): SpeechRecognition;
-};
+}
 
 interface Window {
-  SpeechRecognition: typeof SpeechRecognition;
-  webkitSpeechRecognition: typeof SpeechRecognition;
+  SpeechRecognition: SpeechRecognitionConstructor;
+  webkitSpeechRecognition: SpeechRecognitionConstructor;
 }

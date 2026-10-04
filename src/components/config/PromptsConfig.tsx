@@ -7,7 +7,7 @@
 
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { createPortal } from 'react-dom';
-import ReactMarkdown from 'react-markdown';
+import ReactMarkdown, { type Components } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { Lightbulb, X, Pencil, Layers, FileCode, BadgeCheck } from 'lucide-react';
 import { apiClient } from '../../api/client';
@@ -20,36 +20,36 @@ type PathFilter = 'use_case' | 'skill';
 const SKILL_USE_CASES = new Set(['build_skill']);
 
 // Styled markdown components for nice rendering (dark theme)
-const markdownComponents = {
-  h1: ({ children }: any) => (
+const markdownComponents: Components = {
+  h1: ({ children }) => (
     <h1 className="text-xl font-bold text-foreground border-b border-border pb-2 mb-4 mt-2">
       {children}
     </h1>
   ),
-  h2: ({ children }: any) => (
+  h2: ({ children }) => (
     <h2 className="text-lg font-semibold text-foreground mt-4 mb-2">{children}</h2>
   ),
-  h3: ({ children }: any) => (
+  h3: ({ children }) => (
     <h3 className="text-base font-semibold text-foreground mt-3 mb-2">{children}</h3>
   ),
-  p: ({ children }: any) => (
+  p: ({ children }) => (
     <p className="text-muted-foreground mb-3 leading-relaxed">{children}</p>
   ),
-  ul: ({ children }: any) => (
+  ul: ({ children }) => (
     <ul className="list-disc list-outside space-y-1 mb-3 text-muted-foreground ml-6">{children}</ul>
   ),
-  ol: ({ children }: any) => (
+  ol: ({ children }) => (
     <ol className="list-decimal list-outside space-y-1 mb-3 text-muted-foreground ml-6">{children}</ol>
   ),
-  li: ({ children }: any) => (
+  li: ({ children }) => (
     <li className="text-muted-foreground pl-1">{children}</li>
   ),
-  code: ({ children }: any) => (
+  code: ({ children }) => (
     <code className="bg-secondary text-primary px-1.5 py-0.5 rounded text-sm font-mono break-all">
       {children}
     </code>
   ),
-  pre: ({ children }: any) => (
+  pre: ({ children }) => (
     <pre
       className={
         'block bg-slate-900 text-emerald-400 p-4 rounded-lg overflow-x-auto my-3 text-sm ' +
@@ -59,34 +59,34 @@ const markdownComponents = {
       {children}
     </pre>
   ),
-  blockquote: ({ children }: any) => (
+  blockquote: ({ children }) => (
     <blockquote className="border-l-4 border-emerald-500 pl-4 my-3 text-muted-foreground italic">
       {children}
     </blockquote>
   ),
-  strong: ({ children }: any) => (
+  strong: ({ children }) => (
     <strong className="font-semibold text-foreground">{children}</strong>
   ),
-  em: ({ children }: any) => (
+  em: ({ children }) => (
     <em className="italic text-muted-foreground">{children}</em>
   ),
   hr: () => <hr className="my-4 border-border" />,
-  a: ({ href, children }: any) => (
+  a: ({ href, children }) => (
     <a href={href} className="text-primary hover:underline" target="_blank" rel="noopener noreferrer">
       {children}
     </a>
   ),
-  table: ({ children }: any) => (
+  table: ({ children }) => (
     <div className="overflow-x-auto my-3">
       <table className="min-w-full border border-border rounded">{children}</table>
     </div>
   ),
-  th: ({ children }: any) => (
+  th: ({ children }) => (
     <th className="bg-secondary border border-border px-3 py-2 text-left text-sm font-semibold text-foreground">
       {children}
     </th>
   ),
-  td: ({ children }: any) => (
+  td: ({ children }) => (
     <td className="border border-border px-3 py-2 text-sm text-muted-foreground">{children}</td>
   ),
 };
@@ -198,7 +198,7 @@ export function PromptsConfig({ onToast }: PromptsConfigProps) {
       setLoading(true);
       const data = await apiClient.getLatestPromptConfigs();
       setConfigs(data);
-    } catch (error) {
+    } catch {
       onToast('Failed to load configurations', 'error');
     } finally {
       setLoading(false);
@@ -323,7 +323,7 @@ export function PromptsConfig({ onToast }: PromptsConfigProps) {
       setIsEditMode(false); // Return to view mode after save
       await loadConfigs();
       await loadVersions();
-    } catch (error) {
+    } catch {
       onToast('Failed to save configuration', 'error');
     } finally {
       setSaving(false);
@@ -351,8 +351,8 @@ export function PromptsConfig({ onToast }: PromptsConfigProps) {
       setSelectedUseCase('');
       setIsEditMode(false);
       updateUrlParams(normalizedId, '');
-    } catch (error: any) {
-      onToast(error?.message || 'Failed to add industry', 'error');
+    } catch (error) {
+      onToast((error instanceof Error && error.message) || 'Failed to add industry', 'error');
     } finally {
       setSaving(false);
     }
@@ -437,8 +437,8 @@ export function PromptsConfig({ onToast }: PromptsConfigProps) {
       await loadConfigs();
       setSelectedUseCase(derivedSlug);
       updateUrlParams(selectedIndustry, derivedSlug);
-    } catch (error: any) {
-      setBuilderSaveError(error?.message || 'Failed to create use case');
+    } catch (error) {
+      setBuilderSaveError((error instanceof Error && error.message) || 'Failed to create use case');
     } finally {
       setSaving(false);
     }
@@ -472,8 +472,8 @@ export function PromptsConfig({ onToast }: PromptsConfigProps) {
       onToast(result.message, 'success');
       setIsEditingActive(false);
       await loadConfigs();
-    } catch (error: any) {
-      onToast(error?.message || 'Failed to update active status', 'error');
+    } catch (error) {
+      onToast((error instanceof Error && error.message) || 'Failed to update active status', 'error');
     } finally {
       setSaving(false);
     }
@@ -499,8 +499,8 @@ export function PromptsConfig({ onToast }: PromptsConfigProps) {
       onToast(result.message, 'success');
       setIsEditingCertified(false);
       await loadConfigs();
-    } catch (error: any) {
-      onToast(error?.message || 'Failed to update certified status', 'error');
+    } catch (error) {
+      onToast((error instanceof Error && error.message) || 'Failed to update certified status', 'error');
     } finally {
       setSaving(false);
     }
@@ -531,8 +531,8 @@ export function PromptsConfig({ onToast }: PromptsConfigProps) {
       setShowDeleteConfirmModal(null);
       setDeleteConfirmText('');
       await loadConfigs();
-    } catch (error: any) {
-      onToast(error?.message || 'Failed to delete', 'error');
+    } catch (error) {
+      onToast((error instanceof Error && error.message) || 'Failed to delete', 'error');
     } finally {
       setSaving(false);
     }
