@@ -1160,6 +1160,24 @@ def vibe_start_track(
     _email = _request_user(context)
     if "@" in _email:
         state.session_parameters.setdefault("user_email", _email)
+    # D-13 / D-15: an uncatalogued use case is ignored — no gate, no use_case
+    # column or param, default session name — so the intent beat elicits a real
+    # pick and the row earns no step-1 credit. A catalogued industry is still
+    # recorded (by_industry analytics); an uncatalogued one is dropped too. A
+    # catalogue outage ("unavailable") fails open to today's behavior.
+    if industry and use_case and _curated_pair_status(industry, use_case) == "unknown":
+        keep_industry = _industry_label_for(industry, None) is not None
+        logger.info(
+            "vibe_start_track ignoring uncatalogued use case session=%s industry=%r "
+            "use_case=%r keep_industry=%s",
+            resolved,
+            industry,
+            use_case,
+            keep_industry,
+        )
+        use_case = None
+        if not keep_industry:
+            industry = None
     if not session_id and is_lakebase_configured():
         # Auto-name the new session so it surfaces in the web UI session menu
         # (is_saved requires a name that is set and != "New Session"). Refined to
@@ -1542,6 +1560,32 @@ def _industry_label_for(industry: str, echo: list[dict[str, Any]] | None) -> str
             label = str(opt.get("label") or "").strip()
             return label or None
     return None
+
+
+def _curated_pair_status(industry: str, use_case: str) -> Literal["known", "unknown", "unavailable"]:
+    """Classify an (industry, use_case) pair against the curated catalogue (D-13).
+
+    Built on the SAME ``_available_use_cases(industry)`` list as
+    ``_use_case_label_for``. ``known``: the value is listed. ``unknown``: the list is
+    non-empty and the value is absent — or the list is empty because the industry
+    itself is absent from a non-empty industry list (D-15). ``unavailable``: a lookup
+    raised or the catalogue is empty (down / offline) — callers fail open on it.
+    """
+
+    try:
+        options = _available_use_cases(industry)
+        if not options:
+            industries = _available_industries()
+            if industries and not any(
+                str(opt.get("value") or "") == industry for opt in industries
+            ):
+                return "unknown"
+            return "unavailable"
+    except Exception:  # noqa: BLE001 — a catalogue outage must never break the caller
+        return "unavailable"
+    if any(str(opt.get("value") or "") == use_case for opt in options):
+        return "known"
+    return "unknown"
 
 
 def _use_case_label_for(industry: str, use_case: str) -> str | None:
