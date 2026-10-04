@@ -5557,6 +5557,11 @@ class SessionSaveRequest(BaseModel):
     # re-lock a step whose gate they satisfy.
     completed_gates: Optional[List[str]] = Field(None, description="Complete set of App-completed step sectionTags (server-side merged with non-representable stored gates)")
     skipped_gates: Optional[List[str]] = Field(None, description="Complete set of App-skipped step sectionTags (dual-write; persisted under session_parameters.skipped_gates, same merge)")
+    # The gate sets the SPA last received from or wrote to the server (D-12). When
+    # present, the merge removes only gates the App saw and dropped; gates added
+    # elsewhere (MCP) since then survive. Absent => App-authoritative (old clients).
+    base_completed_gates: Optional[List[str]] = Field(None, description="completed_gates as the SPA last saw them (merge base; absent => App-authoritative)")
+    base_skipped_gates: Optional[List[str]] = Field(None, description="skipped_gates as the SPA last saw them (merge base; absent => App-authoritative)")
     step_prompts: Dict[int, str] = Field(default_factory=dict, description="Map of step number to generated prompt")
 
 
@@ -5840,6 +5845,8 @@ async def save_session_endpoint(request_body: SessionSaveRequest, request: Reque
                 request_body.session_id,
                 app_completed_gates=request_body.completed_gates,
                 app_skipped_gates=request_body.skipped_gates,
+                base_completed_gates=request_body.base_completed_gates,
+                base_skipped_gates=request_body.base_skipped_gates,
                 industry=request_body.industry,
                 industry_label=request_body.industry_label,
                 use_case=request_body.use_case,
@@ -6178,6 +6185,9 @@ class SessionUpdateMetadataRequest(BaseModel):
     # When present they MUST be the complete set.
     completed_gates: Optional[List[str]] = Field(None, description="Complete set of completed step sectionTags")
     skipped_gates: Optional[List[str]] = Field(None, description="Complete set of skipped step sectionTags (persisted under session_parameters.skipped_gates)")
+    # Merge bases (D-12) — see SessionSaveRequest.
+    base_completed_gates: Optional[List[str]] = Field(None, description="completed_gates as the SPA last saw them (merge base; absent => App-authoritative)")
+    base_skipped_gates: Optional[List[str]] = Field(None, description="skipped_gates as the SPA last saw them (merge base; absent => App-authoritative)")
     custom_use_case_label: Optional[str] = Field(None, max_length=30, description="User-edited use case name override")
     custom_use_case_description: Optional[str] = Field(None, description="User-edited use case description override")
     level_explicitly_selected: Optional[bool] = Field(None, description="Whether the user explicitly clicked a level button")
@@ -6228,6 +6238,8 @@ async def update_session_metadata_endpoint(request_body: SessionUpdateMetadataRe
                 request_body.session_id,
                 app_completed_gates=request_body.completed_gates,
                 app_skipped_gates=request_body.skipped_gates,
+                base_completed_gates=request_body.base_completed_gates,
+                base_skipped_gates=request_body.base_skipped_gates,
                 industry=request_body.industry,
                 industry_label=request_body.industry_label,
                 use_case=request_body.use_case,

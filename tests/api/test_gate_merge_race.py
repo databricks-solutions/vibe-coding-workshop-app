@@ -248,3 +248,178 @@ def test_moved_merge_semantics():
     ]
     assert merge(["use_case_selection"], ["use_case_selection"]) == ["use_case_selection"]
     assert merge([], None) == []
+
+
+# --- base-aware App merge (app-save-drops-unseen-mcp-gates, D-12) ----------------
+#
+# The SPA sends the gate sets it last saw as base_completed_gates /
+# base_skipped_gates. With a base the server removes only gates the App SAW
+# (representable, in base) and dropped; gates added elsewhere since survive.
+
+
+def _legacy_merge(incoming, existing):
+    """``_merge_app_gates`` as it was before ``base`` existed (the G3 oracle)."""
+    if incoming is None:
+        return None
+    from src.backend.workshop import manifest
+    representable = set(manifest.step_number_to_tag().values())
+    merged = list(incoming)
+    for gate in existing or []:
+        if gate not in representable and gate not in merged:
+            merged.append(gate)
+    return merged
+
+
+def test_g1_mcp_completed_gate_unseen_by_app_survives():
+    # TAMPER (T1): ignore base -> App-authoritative -> project_setup is dropped.
+    merged = gate_merge._merge_app_gates(
+        ["activation_app_design"],
+        ["use_case_selection", "project_setup"],  # project_setup: MCP-added
+        base=["use_case_selection"],
+    )
+    assert merged == ["use_case_selection", "project_setup", "activation_app_design"]
+
+
+def test_g2_learner_uncompleting_in_app_removes_the_gate():
+    # TAMPER (T2): removals = representable - incoming -> prd_generation (not in
+    # base, so MCP-added) is dropped too and this fails.
+    merged = gate_merge._merge_app_gates(
+        ["project_setup"],
+        ["project_setup", "setup_lakebase", "prd_generation"],
+        base=["project_setup", "setup_lakebase"],
+    )
+    assert merged == ["project_setup", "prd_generation"]
+
+
+@pytest.mark.parametrize(
+    "incoming, existing",
+    [
+        (None, ["use_case_selection"]),
+        (["project_setup"], ["use_case_selection", "project_setup", "prd_generation"]),
+        (["use_case_selection"], ["use_case_selection"]),
+        ([], None),
+        ([], ["use_case_selection", "project_setup"]),
+        (["prd_generation", "project_setup"], ["project_setup", "setup_lakebase"]),
+        (["project_setup"], []),
+        (["project_setup", "project_setup"], ["use_case_selection"]),
+    ],
+)
+def test_g3_no_base_is_todays_app_authoritative_merge(incoming, existing):
+    expected = _legacy_merge(incoming, existing)
+    assert gate_merge._merge_app_gates(incoming, existing) == expected
+    assert gate_merge._merge_app_gates(incoming, existing, None) == expected
+    assert gate_merge._merge_app_gates(incoming, existing, base=None) == expected
+
+
+@pytest.mark.parametrize("base", [None, [], ["use_case_selection", "project_setup"]])
+def test_g4_non_representable_stored_gate_survives_with_and_without_base(base):
+    # TAMPER (T3): removals = base - incoming (no representable filter) -> the
+    # hydrated base carries use_case_selection, the App can't send it -> dropped.
+    merged = gate_merge._merge_app_gates(
+        ["project_setup"], ["use_case_selection", "project_setup"], base=base
+    )
+    assert "use_case_selection" in merged
+    assert merged.count("use_case_selection") == 1
+    assert "project_setup" in merged
+
+
+def test_g5_skipped_gates_base_keeps_unseen_and_removes_seen(db):
+    db.row = {
+        "completed_gates": [],
+        "session_parameters": {"skipped_gates": ["setup_lakebase", "prd_generation"]},
+    }
+
+    assert lakebase.save_session_merging_gates(
+        "s1",
+        app_completed_gates=None,
+        app_skipped_gates=["activation_app_design"],
+        base_skipped_gates=["setup_lakebase"],
+    )
+
+    # G2-shape: setup_lakebase was seen and dropped -> removed. G1-shape:
+    # prd_generation was skipped elsewhere, unseen by the App -> survives.
+    assert db.row["session_parameters"]["skipped_gates"] == ["prd_generation", "activation_app_design"]
+
+
+def test_g5_completed_base_reaches_the_locked_merge(db):
+    db.row = {"completed_gates": ["project_setup", "setup_lakebase"], "session_parameters": {}}
+
+    assert lakebase.save_session_merging_gates(
+        "s1",
+        app_completed_gates=["prd_generation"],
+        app_skipped_gates=None,
+        base_completed_gates=["setup_lakebase"],
+    )
+
+    assert db.row["completed_gates"] == ["project_setup", "prd_generation"]
+
+
+def _mcp_completes_project_setup(row: dict) -> None:
+    """An MCP ``vibe_complete_step`` delta (the #88 add-only merge) adding project_setup."""
+    row["completed_gates"], _, _ = lakebase._apply_mcp_delta(
+        row.get("completed_gates") or [], {}, {}, add_gates=["project_setup"], set_outputs={}, set_params={}
+    )
+
+
+@pytest.mark.parametrize("path", _ENDPOINTS)
+def test_g6_app_write_after_mcp_delta_keeps_the_mcp_gate(client, db, path):
+    # The #88 probe's variant A, offline: the MCP vibe_complete_step delta commits,
+    # THEN the App write lands carrying a base that predates it.
+    # TAMPER (T1): ignore base -> App-authoritative -> project_setup is lost.
+    db.row = {"completed_gates": ["use_case_selection"], "session_parameters": {}}
+    assert lakebase.save_session_applying_mcp_delta(
+        "s1", add_gates=["project_setup"], set_outputs={}, set_params={}
+    )
+    assert db.row["completed_gates"] == ["use_case_selection", "project_setup"]
+
+    resp = client.post(
+        path,
+        json={
+            "session_id": "s1",
+            "step_prompts": {},
+            "completed_gates": ["activation_app_design"],
+            "base_completed_gates": ["use_case_selection"],
+            "skipped_gates": [],
+            "base_skipped_gates": [],
+        },
+    )
+    assert resp.status_code == 200, resp.text
+
+    assert db.row["completed_gates"] == ["use_case_selection", "project_setup", "activation_app_design"]
+
+
+@pytest.mark.parametrize("path", _ENDPOINTS)
+def test_g6_mcp_delta_during_app_write_keeps_the_mcp_gate(client, db, path):
+    # Same, with the MCP delta landing while the App write waits on the row lock.
+    db.row = {"completed_gates": ["use_case_selection"], "session_parameters": {}}
+    db.interleave = _mcp_completes_project_setup
+    db.interleave_on = "lock_read"
+
+    resp = client.post(
+        path,
+        json={
+            "session_id": "s1",
+            "step_prompts": {},
+            "completed_gates": ["activation_app_design"],
+            "base_completed_gates": ["use_case_selection"],
+        },
+    )
+    assert resp.status_code == 200, resp.text
+
+    assert db.interleave is None
+    assert db.row["completed_gates"] == ["use_case_selection", "project_setup", "activation_app_design"]
+
+
+@pytest.mark.parametrize("path", _ENDPOINTS)
+def test_g6_without_base_the_endpoint_stays_app_authoritative(client, db, path):
+    # Old clients (no base_*): unchanged behavior, the unseen representable gate
+    # is dropped exactly as before this change.
+    db.row = {"completed_gates": ["use_case_selection", "project_setup"], "session_parameters": {}}
+
+    resp = client.post(
+        path,
+        json={"session_id": "s1", "step_prompts": {}, "completed_gates": ["activation_app_design"]},
+    )
+    assert resp.status_code == 200, resp.text
+
+    assert db.row["completed_gates"] == ["activation_app_design", "use_case_selection"]

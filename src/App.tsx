@@ -27,6 +27,7 @@ import type { TrackOutlineItem } from './api/client';
 import { DEFAULT_LEVEL_BY_ASSISTANT, parseCodingAssistantsConfig } from './constants/codingAssistants';
 import { resolveRestoredLevel } from './constants/restoreLevel';
 import { deriveCompletedStepNumbers, deriveSkippedStepNumbers } from './constants/deriveProgress';
+import { emptyGateBase, hydrateGateBase, gateBaseFields, applyGateWriteResult, type GateBase, type GateWrite } from './utils/gateBase';
 
 export default function App() {
   const location = useLocation();
@@ -151,6 +152,10 @@ export default function App() {
   // Errors keep the prior outline (log, never blank); an unresolved outline
   // degrades to the read-path skeleton.
   const outlineReqSeq = useRef(0);
+  // The gate sets the SPA last received from or successfully wrote to the
+  // server (D-12). Every gate write sends them as base_* so the server removes
+  // only gates the App saw and dropped, never one an MCP tool added meanwhile.
+  const lastServerGatesRef = useRef<GateBase>(emptyGateBase());
   const fetchOutline = useCallback((track: string, sid: string) => {
     const seq = ++outlineReqSeq.current;
     return apiClient
@@ -460,6 +465,9 @@ export default function App() {
           response.skipped_gates,
         );
         setSkippedSteps(new Set(skippedStepsArray));
+        lastServerGatesRef.current = hydrateGateBase(
+          response.session_id, response.completed_gates, response.skipped_gates,
+        );
         
         // Restore step prompts
         setStepPrompts(response.step_prompts || {});
@@ -511,6 +519,7 @@ export default function App() {
       setStepPrompts({});
       setCompletedSteps(new Set());
       setSkippedSteps(new Set());
+      lastServerGatesRef.current = emptyGateBase(response.session_id);
       setPrerequisitesCompleted(false);
       setCodingAssistant(null);
       setLevelExplicitlySelected(false);
@@ -619,6 +628,9 @@ export default function App() {
           response.skipped_gates,
         );
         setSkippedSteps(new Set(loadedSkippedSteps));
+        lastServerGatesRef.current = hydrateGateBase(
+          id, response.completed_gates, response.skipped_gates,
+        );
         setPrerequisitesCompleted(response.prerequisites_completed || false);
         
         // Re-derive use-case-driven path lock from restored use case
@@ -754,22 +766,29 @@ export default function App() {
     // even for users who never touch a composition chip explicitly).
     if (sessionId) {
       const sid = sessionId;
-      apiClient.updateSessionMetadata({
-        session_id: sid,
-        // Gate write (T5): the COMPLETE completed gate set, derived from the live
-        // completed-step numbers. The legacy numeric progress write was retired in
-        // R4a. This write must ALSO carry the complete skipped_gates (from live
-        // skippedSteps): the backend read path keys off gates, so a completion
-        // write that omitted skipped_gates would drop skipped progress.
+      // Gate write (T5): the COMPLETE completed gate set, derived from the live
+      // completed-step numbers. The legacy numeric progress write was retired in
+      // R4a. This write must ALSO carry the complete skipped_gates (from live
+      // skippedSteps): the backend read path keys off gates, so a completion
+      // write that omitted skipped_gates would drop skipped progress.
+      const gateWrite: GateWrite = {
         completed_gates: stepNumbersToGates(Array.from(newSteps)),
         skipped_gates: stepNumbersToGates(Array.from(skippedSteps)),
+      };
+      apiClient.updateSessionMetadata({
+        session_id: sid,
+        ...gateWrite,
+        ...gateBaseFields(lastServerGatesRef.current, sid, gateWrite),
         workshop_level: workshopLevel,  // Piggyback workshop level save on progress
         ...compositionParams,
       })
         // Refetch after the STATUS-changing persist so a climb that admits new
         // steps is reflected in the outline order (T3c; closes the old coverage
         // fallback). Optimistic checkmarks already updated above.
-        .then(() => fetchOutline(workshopLevel, sid))
+        .then((res) => {
+          lastServerGatesRef.current = applyGateWriteResult(lastServerGatesRef.current, sid, gateWrite, res.success);
+          return fetchOutline(workshopLevel, sid);
+        })
         .catch(err => console.error('Error saving completed steps:', err));
     }
   }, [sessionId, workshopLevel, readOnly, skippedSteps, compositionParams, fetchOutline]);
@@ -780,15 +799,24 @@ export default function App() {
     setSkippedSteps(newSkipped);
     
     if (sessionId) {
-      apiClient.updateSessionMetadata({
-        session_id: sessionId,
-        // Gate write (T5): the COMPLETE skipped gate set, derived from the live
-        // skipped-step numbers (persisted under session_parameters.skipped_gates,
-        // where the read path reads it). The legacy numeric progress write was
-        // retired in R4a. completed_gates is intentionally omitted here so the
-        // existing completed gates are COALESCE-preserved.
+      const sid = sessionId;
+      // Gate write (T5): the COMPLETE skipped gate set, derived from the live
+      // skipped-step numbers (persisted under session_parameters.skipped_gates,
+      // where the read path reads it). The legacy numeric progress write was
+      // retired in R4a. completed_gates is intentionally omitted here so the
+      // existing completed gates are COALESCE-preserved.
+      const gateWrite: GateWrite = {
         skipped_gates: stepNumbersToGates(Array.from(newSkipped)),
-      }).catch(err => console.error('Error saving skipped steps:', err));
+      };
+      apiClient.updateSessionMetadata({
+        session_id: sid,
+        ...gateWrite,
+        ...gateBaseFields(lastServerGatesRef.current, sid, gateWrite),
+      })
+        .then((res) => {
+          lastServerGatesRef.current = applyGateWriteResult(lastServerGatesRef.current, sid, gateWrite, res.success);
+        })
+        .catch(err => console.error('Error saving skipped steps:', err));
     }
   }, [sessionId, readOnly]);
 
@@ -957,6 +985,15 @@ export default function App() {
     if (!sessionId || readOnly) return;
     
     setIsSaving(true);
+    const sid = sessionId;
+    // Gate write (T5): the COMPLETE completed/skipped gate sets, derived from
+    // the live step numbers, so a saved web session reads back through the
+    // gates-present path with no progress loss. The legacy numeric progress
+    // writes were retired in R4a.
+    const gateWrite: GateWrite = {
+      completed_gates: stepNumbersToGates(Array.from(completedSteps)),
+      skipped_gates: stepNumbersToGates(Array.from(skippedSteps)),
+    };
     try {
       const response = await apiClient.saveSession({
         session_id: sessionId,
@@ -976,14 +1013,11 @@ export default function App() {
         // climb/reverse/AI/medallion outline the UI shows. Snake_case direction/
         // include_* stay above for other consumers.
         ...compositionParams,
-        // Gate write (T5): the COMPLETE completed/skipped gate sets, derived from
-        // the live step numbers, so a saved web session reads back through the
-        // gates-present path with no progress loss. The legacy numeric progress
-        // writes were retired in R4a.
-        completed_gates: stepNumbersToGates(Array.from(completedSteps)),
-        skipped_gates: stepNumbersToGates(Array.from(skippedSteps)),
+        ...gateWrite,
+        ...gateBaseFields(lastServerGatesRef.current, sid, gateWrite),
         step_prompts: stepPrompts
       });
+      lastServerGatesRef.current = applyGateWriteResult(lastServerGatesRef.current, sid, gateWrite, response.success);
       
       if (response.success) {
         setSessionSaved(true);

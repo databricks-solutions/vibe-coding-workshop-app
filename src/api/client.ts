@@ -310,6 +310,11 @@ export interface SessionSaveRequest {
   // retired in R4a (writes stopped).
   completed_gates?: string[];
   skipped_gates?: string[];
+  // The gate sets the SPA last received from or wrote to the server (D-12,
+  // src/utils/gateBase.ts). The server removes only gates in the base that the
+  // write drops; absent => App-authoritative.
+  base_completed_gates?: string[];
+  base_skipped_gates?: string[];
   step_prompts: Record<number, string>;
 }
 
@@ -402,6 +407,9 @@ export interface UpdateSessionMetadataRequest {
   // in R4a (writes stopped).
   completed_gates?: string[];
   skipped_gates?: string[];
+  // Merge bases (D-12) — see SessionSaveRequest.
+  base_completed_gates?: string[];
+  base_skipped_gates?: string[];
   custom_use_case_label?: string;
   custom_use_case_description?: string;
   level_explicitly_selected?: boolean;
