@@ -252,11 +252,12 @@ export function WorkflowStep({
     }, 100);
   }, [handleGeneratePrompt, onStepReset]);
 
-  // Reset state when industry/useCase changes (during render; the refs are
-  // reset by the effect below)
-  const [contentFor, setContentFor] = useState({ industry, useCase });
-  if (contentFor.industry !== industry || contentFor.useCase !== useCase) {
-    setContentFor({ industry, useCase });
+  // Reset state when industry/useCase/session changes (during render; the refs
+  // are reset by the effect below)
+  const [contentFor, setContentFor] = useState({ industry, useCase, sessionId });
+  const resetting = contentFor.industry !== industry || contentFor.useCase !== useCase || contentFor.sessionId !== sessionId;
+  if (resetting) {
+    setContentFor({ industry, useCase, sessionId });
     setGeneratedContent(null);
     setShowGeneratedPrompt(false);
     setPromptError(null);
@@ -270,14 +271,16 @@ export function WorkflowStep({
     if (rafIdRef.current) { cancelAnimationFrame(rafIdRef.current); rafIdRef.current = 0; }
     streamBufferRef.current = '';
     metadataFetchedRef.current = false;
-  }, [industry, useCase]);
+  }, [industry, useCase, sessionId]);
 
   // Restore prompt text from session (instant, no API call) on mount and
-  // whenever initialPrompt changes
+  // whenever initialPrompt changes or a reset cleared it. While resetting, this
+  // render's content is stale (the resets above are queued), so restore
+  // regardless; these setters are queued after the resets, so they win.
   const [restoredFrom, setRestoredFrom] = useState<string | undefined>(undefined);
-  if (initialPrompt !== restoredFrom) {
+  if (resetting || initialPrompt !== restoredFrom) {
     setRestoredFrom(initialPrompt);
-    if (initialPrompt && !streamedPrompt && !generatedContent?.prompt) {
+    if (initialPrompt && (resetting || (!streamedPrompt && !generatedContent?.prompt))) {
       setStreamedPrompt(initialPrompt);
       setShowGeneratedPrompt(true);
       setGeneratedContent({
