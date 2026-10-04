@@ -1346,7 +1346,11 @@ def vibe_explain_step(
         return _error_result("INVALID_SESSION", "The requested session could not be resolved.")  # type: ignore[return-value]
     state, _ = loaded
     state = _coerce_state(state)
-    if sectionTag is None:
+    # Mirror vibe_get_step's intent-beat rule so get, next and explain agree on the
+    # pre-journey beat; its help comes from the same assembler row as the beat.
+    if sectionTag == _INTENT_BEAT_STEP.sectionTag or (sectionTag is None and _needs_use_case(state)):
+        step = _INTENT_BEAT_STEP
+    elif sectionTag is None:
         current = engine.next_step(DEFAULT_TRACK, state)
         if isinstance(current, engine.Done):
             return _error_result("UNKNOWN_STEP", "The track has no remaining step.")  # type: ignore[return-value]
@@ -1607,6 +1611,21 @@ def vibe_complete_step(
         return _error_result("INVALID_SESSION", "The requested session could not be resolved.")  # type: ignore[return-value]
 
     state, _ = loaded
+    # The intent beat on a track that does not author use_case_selection as a step:
+    # vibe_set_parameters' lock is what completes it (D-8). Once locked, re-completing
+    # is an idempotent success; while unlocked, the guards below steer to the lock.
+    intent_beat = (
+        sectionTag == engine.USE_CASE_GATE
+        and engine.resolve_step(DEFAULT_TRACK, state, sectionTag) is None
+    )
+    if intent_beat and engine.use_case_resolved(state):
+        return CompleteStepResult(
+            completed_gates=list(state.completed_gates),
+            next=_complete_next_payload(
+                state, engine.next_step(DEFAULT_TRACK, state), session_id
+            ),
+            post_check=None,
+        )
     blocking = manifest.blocking_interactions(sectionTag)
     if blocking:
         confirmed = any(
@@ -1645,6 +1664,15 @@ def vibe_complete_step(
                 message,
                 sectionTag=sectionTag,
             )  # type: ignore[return-value]
+    if intent_beat:
+        # engine.complete_step would answer UNKNOWN_STEP: the beat is not a manifest step.
+        return _error_result(
+            "GATE_REQUIRED",
+            "Lock the use case with vibe_set_parameters (curated: industry, use_case, "
+            'use_case_label, use_case_source; custom: draft first with mode="draft_custom"). '
+            "The lock completes this step.",
+            sectionTag=sectionTag,
+        )  # type: ignore[return-value]
     result = engine.complete_step(DEFAULT_TRACK, state, sectionTag, captured_output)
     if not result.ok:
         messages = {
@@ -1682,18 +1710,25 @@ def vibe_complete_step(
         completed_gates=list(result.completed_gates),
     )
 
-    next_step = result.next_step
-    if isinstance(next_step, engine.Done):
-        next_payload: ExplainabilityPayload | DoneResult | BlockedResult = DoneResult()
-    elif isinstance(next_step, engine.Blocked):
-        next_payload = _blocked_result(DEFAULT_TRACK, state, next_step)
-    else:
-        next_payload = _step_payload(DEFAULT_TRACK, state, next_step, session_id=session_id)
     return CompleteStepResult(
         completed_gates=list(result.completed_gates),
-        next=next_payload,
+        next=_complete_next_payload(state, result.next_step, session_id),
         post_check=_pending_post_check(sectionTag, state),
     )
+
+
+def _complete_next_payload(
+    state: engine.SessionState,
+    next_step: manifest.Step | engine.Done | engine.Blocked,
+    session_id: str,
+) -> ExplainabilityPayload | DoneResult | BlockedResult:
+    """The ``next`` of a vibe_complete_step result: Done, Blocked, or the step payload."""
+
+    if isinstance(next_step, engine.Done):
+        return DoneResult()
+    if isinstance(next_step, engine.Blocked):
+        return _blocked_result(DEFAULT_TRACK, state, next_step)
+    return _step_payload(DEFAULT_TRACK, state, next_step, session_id=session_id)
 
 
 @mcp.tool(

@@ -252,6 +252,24 @@ def test_post_check_answerable_after_completing_the_step(session_store):
     assert store[SESSION_ID]["completed_gates"] == gates_after_complete
 
 
+def test_post_check_answerable_after_a_later_step_completes(session_store):
+    # D-6: ANY completed step's post check is answerable, not only the most recent
+    # one, so a learner can answer late. Restricting the condition to
+    # completed_gates[-1] flips this red.
+    store, _saves, _interactions = session_store
+    _complete_prd(store)
+    state, _ = mcp_server._load_session_for_request(SESSION_ID)
+    later = mcp_server.engine.next_step(mcp_server.DEFAULT_TRACK, state)
+    assert isinstance(later, manifest.Step), later
+    completed = mcp_server.vibe_complete_step(SESSION_ID, later.sectionTag, "later output")
+    assert isinstance(completed, mcp_server.CompleteStepResult), completed
+    assert store[SESSION_ID]["completed_gates"][-1] == later.sectionTag != TAG
+
+    result = mcp_server.vibe_submit_answer(SESSION_ID, "prd_generation.check", "")
+
+    assert result.recorded is True
+
+
 def test_post_check_not_resurfaced_once_answered_after_complete(session_store):
     store, _saves, _interactions = session_store
     _complete_prd(store)
