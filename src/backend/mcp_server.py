@@ -1401,9 +1401,9 @@ _CUSTOM_REQUIRED = ("industry", "use_case", "use_case_label", "use_case_descript
 # agent cannot plant the old key in ``session_parameters``; ``custom_draft_ready`` /
 # ``custom_drafted_description`` are the FMAPI draft-first markers the use-case confirm
 # gate requires. ``vibe_set_parameters`` merges ``params`` straight into
-# ``session_parameters``, so a Genie Code agent could otherwise forge a skip (via either
-# skip key) or defeat the draft gate; these are rejected on the incoming params before
-# any save.
+# ``session_parameters``, so a Genie Code agent could otherwise forge a skip (or plant
+# the retired skippedSteps alias) or defeat the draft gate; these are rejected on the
+# incoming params before any save.
 _RESERVED_PARAM_KEYS = (
     "skipped_gates",
     "skippedSteps",
@@ -1741,7 +1741,16 @@ def vibe_submit_answer(
     answerable = {None if isinstance(current, (engine.Done, engine.Blocked)) else current.sectionTag}
     if _needs_use_case(state):
         answerable.add(_INTENT_BEAT_STEP.sectionTag)
-    if section_tag not in answerable:
+    # This is the post check that vibe_complete_step re-surfaces for an
+    # already-completed step: by then the engine has moved on, so it is never the
+    # current step. Only a completed step's POST comprehension widens; its pre and
+    # decision/confirm interactions, and any step not yet completed, stay rejected.
+    is_completed_post_check = (
+        slot == "post"
+        and interaction.type == "comprehension"
+        and section_tag in state.completed_gates
+    )
+    if section_tag not in answerable and not is_completed_post_check:
         return _error_result(
             "UNKNOWN_INTERACTION",
             f"Interaction {interaction_id} is not on the current workshop step.",
