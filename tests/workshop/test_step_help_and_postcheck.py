@@ -211,3 +211,97 @@ def test_vibe_submit_answer_pre_check_does_not_write_captured_outputs(session_st
     assert result.recorded is True
     assert store[SESSION_ID]["captured_outputs"] == {}
     assert saves == []
+
+
+# --- 5. A completed step's post check stays answerable -----------------------
+# vibe_complete_step surfaces the JUST-completed step's post check, but the engine
+# has already moved on, so that step is no longer the current one.
+
+
+def _complete_prd(store):
+    store[SESSION_ID]["completed_gates"] = _gates_before(TAG)
+    store[SESSION_ID]["session_parameters"] = {"industry": "retail", "use_case": "curbside_eta"}
+    result = mcp_server.vibe_complete_step(SESSION_ID, TAG, "PRD captured")
+    assert result.post_check is not None and result.post_check.id == "prd_generation.check"
+    state, _ = mcp_server._load_session_for_request(SESSION_ID)
+    current = mcp_server.engine.next_step(mcp_server.DEFAULT_TRACK, state)
+    assert getattr(current, "sectionTag", None) != TAG  # the engine moved past prd_generation
+
+
+def _assert_rejected(result, store_before, store, interactions):
+    assert result["isError"] is True
+    assert result["structuredContent"]["error"]["code"] == "UNKNOWN_INTERACTION"
+    assert interactions == []
+    assert store[SESSION_ID] == store_before
+
+
+def test_post_check_answerable_after_completing_the_step(session_store):
+    store, saves, interactions = session_store
+    _complete_prd(store)
+    gates_after_complete = list(store[SESSION_ID]["completed_gates"])
+    saves.clear()
+
+    result = mcp_server.vibe_submit_answer(SESSION_ID, "prd_generation.check", "")
+
+    assert result.recorded is True
+    assert len(interactions) == 1
+    marker = mcp_server.interaction_answered_key(TAG, "prd_generation.check")
+    assert marker in store[SESSION_ID]["captured_outputs"]
+    # Only the answered marker is written; completed_gates are never touched.
+    assert [set(fields) for _sid, fields in saves] == [{"captured_outputs"}]
+    assert store[SESSION_ID]["completed_gates"] == gates_after_complete
+
+
+def test_post_check_not_resurfaced_once_answered_after_complete(session_store):
+    store, _saves, _interactions = session_store
+    _complete_prd(store)
+    mcp_server.vibe_submit_answer(SESSION_ID, "prd_generation.check", "")
+
+    state = mcp_server.engine.SessionState(
+        captured_outputs=dict(store[SESSION_ID]["captured_outputs"])
+    )
+    assert mcp_server._pending_post_check(TAG, state) is None
+
+
+def test_completed_step_pre_interaction_still_unknown(session_store):
+    store, _saves, interactions = session_store
+    _complete_prd(store)  # project_setup is completed and no longer current
+    assert "project_setup" in store[SESSION_ID]["completed_gates"]
+    store_before = copy.deepcopy(store[SESSION_ID])
+
+    result = mcp_server.vibe_submit_answer(SESSION_ID, "project_setup.why", "")
+
+    _assert_rejected(result, store_before, store, interactions)
+
+
+def test_completed_step_confirm_interaction_still_unknown(session_store, monkeypatch):
+    store, _saves, interactions = session_store
+    _complete_prd(store)
+    store_before = copy.deepcopy(store[SESSION_ID])
+    # Every shipped post slot is a comprehension, so place a confirm interaction in a
+    # completed step's post slot to pin the type guard on its own.
+    confirm = mcp_server.Interaction.model_validate(
+        manifest.load_interactions()["use_case_selection"]["decision"]
+    )
+    assert confirm.type == "confirm"
+    monkeypatch.setattr(
+        mcp_server, "_find_interaction", lambda _id: (TAG, "post", confirm)
+    )
+
+    result = mcp_server.vibe_submit_answer(SESSION_ID, confirm.id, confirm.recommended or "")
+
+    _assert_rejected(result, store_before, store, interactions)
+
+
+def test_uncompleted_non_current_post_check_still_unknown(session_store):
+    store, _saves, interactions = session_store
+    # Positioned ON prd_generation: genie_silver_metadata is neither current nor
+    # completed, so its post check is not answerable yet.
+    store[SESSION_ID]["completed_gates"] = _gates_before(TAG)
+    store[SESSION_ID]["session_parameters"] = {"industry": "retail", "use_case": "curbside_eta"}
+    assert "genie_silver_metadata" not in store[SESSION_ID]["completed_gates"]
+    store_before = copy.deepcopy(store[SESSION_ID])
+
+    result = mcp_server.vibe_submit_answer(SESSION_ID, "genie_silver_metadata.check", "")
+
+    _assert_rejected(result, store_before, store, interactions)
