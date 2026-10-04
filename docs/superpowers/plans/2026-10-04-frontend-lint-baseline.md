@@ -14,7 +14,13 @@ Repo-wide `npm run lint` on the integration branch is red: 96 errors and 29 warn
 - The 29 warnings are out of scope: report the count, and don't add new ones.
 
 ## Fence
-Only the frontend files named above, new sibling `*.utils.ts` modules, new frontend test files, and the plan file. Not touched: src/App.tsx and src/constants/workflowSections.ts (trunk; none of their errors are in the inventory). No eslint.config change, no rule disabled globally, no package.json or package-lock change. Backend has zero diff.
+Only the frontend files named above, new sibling `*.utils.ts` or `*.utils.tsx` modules, new frontend test files, and the plan file. Not touched: src/App.tsx and src/constants/workflowSections.ts (trunk; none of their errors are in the inventory). No eslint.config change, no rule disabled globally, no package.json or package-lock change. Backend has zero diff.
+
+## Fence amendment (post-implementation)
+These paths fall outside the literal fence above. The reviewer accepted each one as justified:
+- src/components/MarkdownContent.utils.tsx and src/components/TypingText.utils.tsx: the sibling modules hold JSX, so they need .tsx, not .ts.
+- src/components/MermaidDiagram.tsx: a component extracted from MarkdownContent, so that MarkdownContent exports only components (react-refresh/only-export-components).
+- src/components/PromptCopyPanel.tsx and src/components/SkillBlueprintTab.tsx: import-path updates only, following the moved exports.
 
 ## Behavior contract
 Behavior-preserving refactor. The frontend vitest suite (16 tests per the #83 gate) must stay green, and the PR adds focused tests where a fix changes control flow: VerificationLinks (renders the same links for representative props, including the empty-linkDefs branch that previously returned before the hooks) and CelebrationOverlay (particle positions and rotations are stable across re-renders).
