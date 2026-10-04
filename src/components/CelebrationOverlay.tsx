@@ -15,8 +15,9 @@ import {
 } from 'lucide-react';
 import { useEscapeKey } from '../hooks/useEscapeKey';
 import { CHAPTER_LEARNING } from '../constants/chapterLearning';
-import { buildServiceNameMap, renderTextWithServices } from './TypingText';
-import { ServicePopover, serviceData } from './ServicePopover';
+import { buildServiceNameMap, renderTextWithServices } from './TypingText.utils';
+import { ServicePopover } from './ServicePopover';
+import { serviceData } from './ServicePopover.utils';
 import type { ServiceKey } from './ServicePopover';
 import { apiClient } from '../api/client';
 
@@ -70,13 +71,15 @@ function ConfettiParticle({
   color, 
   size = 'normal',
   startX,
-  startY 
+  startY,
+  rotation
 }: { 
   delay: number; 
   color: string; 
   size?: 'small' | 'normal' | 'large';
   startX: number;
   startY: number;
+  rotation: number;
 }) {
   const sizeClasses = {
     small: 'w-1.5 h-1.5',
@@ -92,7 +95,7 @@ function ConfettiParticle({
         left: `${startX}%`,
         top: `${startY}%`,
         animationDelay: `${delay}ms`,
-        transform: `rotate(${Math.random() * 360}deg)`,
+        transform: `rotate(${rotation}deg)`,
       }}
     />
   );
@@ -100,7 +103,25 @@ function ConfettiParticle({
 
 // ============== Confetti Burst ==============
 
-function ConfettiBurst({ 
+const CONFETTI_COLORS = [
+  '#FFD700', '#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4',
+  '#FFEAA7', '#DDA0DD', '#98D8C8', '#F7DC6F', '#BB8FCE',
+];
+
+function makeConfettiParticles(count: number, centerX: number, centerY: number, spread: number) {
+  return Array.from({ length: count }, (_, i) => ({
+    id: i,
+    delay: Math.random() * 300,
+    color: CONFETTI_COLORS[Math.floor(Math.random() * CONFETTI_COLORS.length)],
+    size: Math.random() > 0.7 ? 'large' : Math.random() > 0.4 ? 'normal' : 'small' as 'small' | 'normal' | 'large',
+    startX: centerX + (Math.random() - 0.5) * spread,
+    startY: centerY + (Math.random() - 0.5) * spread * 0.5,
+    rotation: Math.random() * 360,
+  }));
+}
+
+// Exported for tests/frontend/CelebrationOverlay.node.test.ts.
+export function ConfettiBurst({ 
   count = 40, 
   centerX = 50, 
   centerY = 40,
@@ -111,19 +132,8 @@ function ConfettiBurst({
   centerY?: number;
   spread?: number;
 }) {
-  const colors = [
-    '#FFD700', '#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4',
-    '#FFEAA7', '#DDA0DD', '#98D8C8', '#F7DC6F', '#BB8FCE',
-  ];
-  
-  const particles = Array.from({ length: count }, (_, i) => ({
-    id: i,
-    delay: Math.random() * 300,
-    color: colors[Math.floor(Math.random() * colors.length)],
-    size: Math.random() > 0.7 ? 'large' : Math.random() > 0.4 ? 'normal' : 'small' as 'small' | 'normal' | 'large',
-    startX: centerX + (Math.random() - 0.5) * spread,
-    startY: centerY + (Math.random() - 0.5) * spread * 0.5,
-  }));
+  // Randomized once per mount (lazy state initializer) so render stays pure.
+  const [particles] = useState(() => makeConfettiParticles(count, centerX, centerY, spread));
 
   return (
     <div className="absolute inset-0 overflow-hidden pointer-events-none">
@@ -135,6 +145,7 @@ function ConfettiBurst({
           size={p.size}
           startX={p.startX}
           startY={p.startY}
+          rotation={p.rotation}
         />
       ))}
     </div>

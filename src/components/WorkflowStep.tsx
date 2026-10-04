@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import type { ComponentProps, ReactNode } from 'react';
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { Sparkles, Loader2, RefreshCw, SkipForward, Undo2, CheckCircle, Workflow } from 'lucide-react';
 import { MarkdownContent, type MarkdownContentRef } from './MarkdownContent';
@@ -61,6 +61,14 @@ interface WorkflowStepProps {
   generateDisabledReason?: string;
 }
 
+// Snapshots shouldAnimate when the tab mounts, so the parent marking the
+// animation as played (from onMounted) doesn't cut the running animation; only
+// later mounts see it as played.
+function SkillBlueprintTabOnMount({ shouldAnimate, ...props }: ComponentProps<typeof SkillBlueprintTab>) {
+  const [animateThisMount] = useState(shouldAnimate);
+  return <SkillBlueprintTab {...props} shouldAnimate={animateThisMount} />;
+}
+
 export function WorkflowStep({ 
   icon, 
   title, 
@@ -120,7 +128,7 @@ export function WorkflowStep({
   const { copied, handleCopy } = useCopyToClipboard();
   
   const skillBlueprint = useSkillBlueprint(sectionTag);
-  const skillAnimPlayedRef = useRef(false);
+  const [skillAnimPlayed, setSkillAnimPlayed] = useState(false);
 
   // Handle Mark Complete - collapse content
   const handleMarkComplete = () => {
@@ -242,12 +250,13 @@ export function WorkflowStep({
     setTimeout(() => {
       handleGeneratePrompt();
     }, 100);
-  }, [handleGeneratePrompt]);
+  }, [handleGeneratePrompt, onStepReset]);
 
-  // Reset state when industry/useCase changes
-  useEffect(() => {
-    if (rafIdRef.current) { cancelAnimationFrame(rafIdRef.current); rafIdRef.current = 0; }
-    streamBufferRef.current = '';
+  // Reset state when industry/useCase changes (during render; the refs are
+  // reset by the effect below)
+  const [contentFor, setContentFor] = useState({ industry, useCase });
+  if (contentFor.industry !== industry || contentFor.useCase !== useCase) {
+    setContentFor({ industry, useCase });
     setGeneratedContent(null);
     setShowGeneratedPrompt(false);
     setPromptError(null);
@@ -255,11 +264,19 @@ export function WorkflowStep({
     setStreamedPrompt('');
     setIsStreaming(false);
     setTruncationWarning(null);
+  }
+
+  useEffect(() => {
+    if (rafIdRef.current) { cancelAnimationFrame(rafIdRef.current); rafIdRef.current = 0; }
+    streamBufferRef.current = '';
     metadataFetchedRef.current = false;
   }, [industry, useCase]);
 
-  // Restore prompt text from session (instant, no API call)
-  useEffect(() => {
+  // Restore prompt text from session (instant, no API call) on mount and
+  // whenever initialPrompt changes
+  const [restoredFrom, setRestoredFrom] = useState<string | undefined>(undefined);
+  if (initialPrompt !== restoredFrom) {
+    setRestoredFrom(initialPrompt);
     if (initialPrompt && !streamedPrompt && !generatedContent?.prompt) {
       setStreamedPrompt(initialPrompt);
       setShowGeneratedPrompt(true);
@@ -269,7 +286,7 @@ export function WorkflowStep({
         source: 'llm_generated',
       });
     }
-  }, [initialPrompt]);
+  }
 
   // Periodically save streaming content to session so partial output survives page refresh
   useEffect(() => {
@@ -289,6 +306,7 @@ export function WorkflowStep({
     if (generatedContent?.how_to_apply) return;
 
     metadataFetchedRef.current = true;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- loading flag for the section-metadata fetch this effect starts
     setIsLoadingMetadata(true);
     apiClient.getSectionMetadata(sectionTag, industry, useCase, sessionId)
       .then(meta => {
@@ -678,10 +696,10 @@ export function WorkflowStep({
               )
             )}
             {activeTab === 'skill_blueprint' && skillBlueprint && (
-              <SkillBlueprintTab
+              <SkillBlueprintTabOnMount
                 config={skillBlueprint}
-                shouldAnimate={!skillAnimPlayedRef.current}
-                onMounted={() => { skillAnimPlayedRef.current = true; }}
+                shouldAnimate={!skillAnimPlayed}
+                onMounted={() => setSkillAnimPlayed(true)}
               />
             )}
           </div>

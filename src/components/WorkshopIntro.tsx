@@ -113,14 +113,12 @@ interface WorkshopIntroProps {
  */
 export function WorkshopIntro({ forceCollapsed = false, onGetStarted, hasStarted = false }: WorkshopIntroProps) {
   const [userOverride, setUserOverride] = useState<boolean | null>(null);
-  const prevForceCollapsed = useRef(forceCollapsed);
+  const [prevForceCollapsed, setPrevForceCollapsed] = useState(forceCollapsed);
 
-  useEffect(() => {
-    if (forceCollapsed && !prevForceCollapsed.current) {
-      setUserOverride(null);
-    }
-    prevForceCollapsed.current = forceCollapsed;
-  }, [forceCollapsed]);
+  if (forceCollapsed !== prevForceCollapsed) {
+    setPrevForceCollapsed(forceCollapsed);
+    if (forceCollapsed) setUserOverride(null);
+  }
 
   // forceCollapsed sets the default; user can still manually expand
   const isExpanded = userOverride ?? (forceCollapsed ? false : true);

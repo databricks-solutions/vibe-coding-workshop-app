@@ -4,7 +4,7 @@ import { CopyButton } from './CopyButton';
 import { ExpandableOutputModal } from './ExpandableOutputModal';
 import { OutputStatsFooter } from './OutputStatsFooter';
 import { TruncationWarningBanner } from './TruncationWarningBanner';
-import { REMARK_PLUGINS, MARKDOWN_COMPONENTS } from './MarkdownContent';
+import { REMARK_PLUGINS, MARKDOWN_COMPONENTS } from './MarkdownContent.utils';
 
 export interface PromptCopyPanelProps {
   content: string;
