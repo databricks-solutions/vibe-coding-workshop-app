@@ -189,25 +189,16 @@ def test_rf5_completing_a_filtered_tag_leaves_outline_and_next_step_unchanged():
     assert result.next_step == next_before
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "DEFECT (queued for the lead): vibe_get_step's `next` pointer for a "
-        "filtered tag is {sectionTag: '', title: 'Track complete'} mid-track, "
-        "because _next_reference finds no outline index for the tag. Fix lives "
-        "in mcp_server.py, outside this PR's fence."
-    ),
-)
 def test_rf6_vibe_get_step_next_pointer_for_a_filtered_tag_is_not_track_complete(store):
-    """R-F6 · vibe_get_step's ``next`` for a filtered tag claims the track is complete.
+    """R-F6 · vibe_get_step's ``next`` for a filtered tag is the next outline step.
 
-    The step payload's ``next`` is computed against the composed outline; a
-    filtered tag has no index there, so it falls through to the end-of-track
-    reference even though the walk is mid-track (``vibe_next_step`` still
-    answers ``semlayer_locate``). This test asserts the correct behavior and is
-    a strict xfail, so a fix flips it to XPASS and forces the marker's removal."""
+    The filtered tag has no index in the composed outline, so ``next`` is the
+    first outline step authored after it (D-17): ``semlayer_locate``, which is
+    also what ``vibe_next_step`` answers mid-track. Previously a strict xfail
+    that read "Track complete"; next-ref-filtered-step fixed it."""
 
     store(PRE_GATES + [DANGLING_GATE])
     payload = mcp_server.vibe_get_step(SESSION_ID, FILTERED)
     assert _error_code(payload) is None, payload
     assert payload.next.title != "Track complete"
+    assert payload.next.sectionTag == "semlayer_locate"

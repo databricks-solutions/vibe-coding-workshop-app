@@ -597,6 +597,21 @@ def _next_reference(track: str, state: engine.SessionState, step: manifest.Step)
     if index is not None and index + 1 < len(ordered):
         following = ordered[index + 1]
         return StepReference(sectionTag=following.sectionTag, title=following.title)
+    # Off-outline step (an explicitly requested flag-filtered tag, resolved via
+    # the authored-manifest fallback, D-16/D-17): "next after this step" in the
+    # learner's track order. Walk the outline IN OUTLINE ORDER — consistent with
+    # the variant tracks, where climb/reverse compose an order that differs from
+    # authored order — and take the first step authored after this one. Only
+    # outline steps qualify, so it never points at another filtered step.
+    if index is None:
+        authored_index = {
+            candidate.sectionTag: idx for idx, candidate in enumerate(engine.MANIFEST.track_steps(track))
+        }
+        position = authored_index.get(step.sectionTag)
+        if position is not None:
+            for candidate in ordered:
+                if authored_index.get(candidate.sectionTag, -1) > position:
+                    return StepReference(sectionTag=candidate.sectionTag, title=candidate.title)
     return StepReference(sectionTag="", title="Track complete")
 
 
