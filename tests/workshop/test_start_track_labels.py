@@ -126,7 +126,7 @@ def test_b_unknown_use_case_persists_null_label(start_track_env):
     assert seed.get("use_case_label") is None
     # The industry still resolves (it is curated).
     assert seed.get("industry_label") == "Travel & Hospitality"
-    assert seed.get("use_case") == "nonexistent_uc"
+    assert seed.get("use_case") is None
 
 
 # --- (c) end-to-end: four columns persisted + session surfaces in the --------
