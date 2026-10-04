@@ -4,6 +4,7 @@ Databricks Apps Entry Point - FastAPI Application
 Serves both the React frontend and API endpoints.
 """
 
+import asyncio
 import os
 import sys
 import time
@@ -25,6 +26,7 @@ from fastapi.staticfiles import StaticFiles
 # Import the API router
 from src.backend.api.hackathon import router as hackathon_router
 from src.backend.api.routes import router as api_router
+from src.backend.executor import configure_default_executor, shutdown_executor
 
 MCP_MOUNT_ENABLED = os.environ.get("MCP_MOUNT_ENABLED", "").strip().lower() in {
     "1",
@@ -37,15 +39,21 @@ MCP_MOUNT_ENABLED = os.environ.get("MCP_MOUNT_ENABLED", "").strip().lower() in {
 if MCP_MOUNT_ENABLED:
     from src.backend.mcp_server import mcp_app
 
-    @asynccontextmanager
-    async def mcp_lifespan(_app):
-        async with mcp_app.router.lifespan_context(mcp_app):
+
+@asynccontextmanager
+async def app_lifespan(_app):
+    # The dedicated default executor (VIBE_THREAD_POOL_SIZE) is installed on the
+    # running loop whether or not /mcp is mounted; the MCP session manager's
+    # lifespan is wrapped inside it when the mount is enabled.
+    configure_default_executor(asyncio.get_running_loop())
+    try:
+        if MCP_MOUNT_ENABLED:
+            async with mcp_app.router.lifespan_context(mcp_app):
+                yield
+        else:
             yield
-
-
-    app_lifespan = mcp_lifespan
-else:
-    app_lifespan = None
+    finally:
+        shutdown_executor()
 
 
 _MCP_DUAL_ACCEPT = b"application/json, text/event-stream"
