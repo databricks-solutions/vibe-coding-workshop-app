@@ -1,6 +1,6 @@
 # Phase 3 exit report (2026-10-04)
 
-Base: `feature/genie-code-mcp-integration` at 17e8767 (#94). #95 (dedicated-thread-pool) was still open when this report was written, so it is not counted.
+Base: `feature/genie-code-mcp-integration` at 0f05bed (#95). The exit-gate tests were re-run on top of #95: the backend suite is 662 passed, 0 failed, 0 xfailed (the #95 floor of 640 plus the 22 exit-gate tests).
 
 ## Exit criteria
 
@@ -16,7 +16,7 @@ Tampers (all red, product code restored byte-identically, `git status` clean aft
 - T3 (`completedSteps.has(999)` in App.tsx) turns X3 red.
 - T4 (update-metadata skips the completed-gates write) turns X2 red.
 
-## Phase 3 merges (#80–#94)
+## Phase 3 merges (#80–#95)
 
 | PR | Merge | Title |
 |---|---|---|
@@ -35,7 +35,7 @@ Tampers (all red, product code restored byte-identically, `git status` clean aft
 | #92 | 49aa634 | start-track-unknown-usecase: ignore an uncatalogued use case at vibe_start_track |
 | #93 | 44f4fd7 | resolve-step-fallback: define and pin the authored-manifest fallback for filtered steps |
 | #94 | 17e8767 | next-ref-filtered-step: get_step's next for a filtered step points at the next outline step |
-| #95 | — | dedicated-thread-pool (open at report time; not merged) |
+| #95 | 0f05bed | dedicated-thread-pool: a dedicated default executor sized for a live workshop (D-18); deployed, probe PASS 5/5. Backend only (app.py, src/backend/executor.py): no outline or parity impact, and no frontend change, so the F4 allowlist counts are unchanged |
 
 ## Open ledger (B items carried past the exit gate)
 

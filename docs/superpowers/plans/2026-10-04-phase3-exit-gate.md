@@ -14,7 +14,7 @@ The exit gate requires: (a) parity stable; (b) no number-key consumers; (c) the 
 Fence: tests/workshop/test_phase3_exit_gate.py, docs/superpowers/plans/2026-10-04-phase3-exit-report.md, docs/superpowers/decision-log.md, and the plan file. If X1 or X2 find a REAL mismatch, do NOT fix it: pin it as xfail(strict=True) with a reason, record it in Findings, mark that criterion FAIL in the report, and report it clearly.
 
 ## Acceptance contract
-- Backend suite (DATABRICKS_CONFIG_FILE=/dev/null LAKEBASE_HOST= <APP>/.venv/bin/python -m pytest -c /dev/null --rootdir=. tests/workshop tests/api -q): floor 627 (at 17e8767; 640 if #95 merged) plus the new tests, 0 failed (strict xfails allowed only for reported mismatches). Lint ABSOLUTE (0 errors), build green, tools/list = 7.
+- Backend suite (DATABRICKS_CONFIG_FILE=/dev/null LAKEBASE_HOST= <APP>/.venv/bin/python -m pytest -c /dev/null --rootdir=. tests/workshop tests/api -q): floor 640 (at 0f05bed, #95 merged; 627 at 17e8767) plus the new tests, 0 failed (strict xfails allowed only for reported mismatches). Lint ABSOLUTE (0 errors), build green, tools/list = 7.
 - Tampers (FORGE/state/specs/phase3-exit-gate/tampers.md; they mutate PRODUCT code temporarily and are then restored byte-identically): T1 reverse the HTTP outline list in routes.py's outline handler → X1 red; T2 reverse the MCP _outline_items list → X1 red; T3 add `completedSteps.has(999)` to a scanned tsx file → X3 red; T4 skip the completed-gates write in update-metadata → X2 red. Confirm `git status` is clean after each restore (product code byte-identical).
 - Open a PR into feature/genie-code-mcp-integration titled "phase3-exit-gate: pin MCP == SPA outline per session; numeric-consumer allowlist; Phase 3 exit report".
 
@@ -26,7 +26,7 @@ Fence: tests/workshop/test_phase3_exit_gate.py, docs/superpowers/plans/2026-10-0
 
 **F3. `vibe_start_track` on resume does not persist.** With a `session_id` and no industry/use_case, it only `setdefault`s `coding_assistant` in memory. That doesn't change the outline, which X1 confirms.
 
-**F4. X3 allowlist (direct reads of the numeric `completedSteps` / `skippedSteps` sets; regex `\b(completedSteps|skippedSteps)\??\.(has|size|forEach|values|keys|entries)\b`; exact count per file, measured at 17e8767):**
+**F4. X3 allowlist (direct reads of the numeric `completedSteps` / `skippedSteps` sets; regex `\b(completedSteps|skippedSteps)\??\.(has|size|forEach|values|keys|entries)\b`; exact count per file, measured at 17e8767 and unchanged at 0f05bed, since #95 touched no frontend):**
 
 | File | Count | Justification |
 |---|---|---|
