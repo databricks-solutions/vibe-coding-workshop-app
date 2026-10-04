@@ -905,6 +905,119 @@ def save_session_merging_gates(
         return False
 
 
+def _apply_mcp_delta(
+    stored_gates: List[str],
+    stored_outputs: Dict[str, str],
+    stored_params: Dict[str, Any],
+    *,
+    add_gates: List[str],
+    set_outputs: Dict[str, str],
+    set_params: Dict[str, Any],
+) -> tuple:
+    """Apply an MCP delta to the stored JSONB values -> ``(gates, outputs, params)``.
+
+    Gates: stored, then each added gate not already stored (order kept).
+    Outputs / params: stored, with the delta keys overlaid."""
+    merged_gates = list(stored_gates) + [
+        gate for gate in dict.fromkeys(add_gates) if gate not in stored_gates
+    ]
+    merged_outputs = {**stored_outputs, **set_outputs}
+    merged_params = {**stored_params, **set_params}
+    return merged_gates, merged_outputs, merged_params
+
+
+def save_session_applying_mcp_delta(
+    session_id: str,
+    *,
+    add_gates: List[str],
+    set_outputs: Dict[str, str],
+    set_params: Dict[str, Any],
+    **save_kwargs: Any,
+) -> bool:
+    """MCP write: locked read -> apply the MCP delta -> upsert, atomically.
+
+    The mirror of ``save_session_merging_gates`` for the MCP path. An MCP tool
+    used to persist the FULL ``completed_gates`` / ``captured_outputs`` /
+    ``session_parameters`` it had loaded and mutated, so an App write that
+    committed between the MCP read and the MCP write was overwritten. Here only
+    the MCP's own delta is applied, onto the stored row read with
+    ``SELECT ... FOR UPDATE``, on ONE connection in ONE transaction:
+
+    - gates: stored + each ``add_gates`` entry not already stored (order kept);
+    - outputs / params: stored, with the ``set_outputs`` / ``set_params`` keys
+      overlaid.
+
+    A key or gate the App removed is not in the delta, so it is not resurrected;
+    a key or gate the App added is in the stored row, so it survives. The MCP
+    path only adds (D-9). ``save_kwargs`` are the remaining ``save_session``
+    fields, with their COALESCE semantics. No stored row => the upsert inserts
+    the delta.
+
+    An empty delta with no non-None ``save_kwargs`` is a no-op returning True,
+    without touching the DB. Returns False when Lakebase is not configured (same
+    as ``save_session``) or on any DB error (the transaction is rolled back)."""
+    if not is_lakebase_configured():
+        logger.warning(f"Lakebase not configured, cannot save session {session_id}")
+        return False
+
+    save_kwargs = {key: value for key, value in save_kwargs.items() if value is not None}
+    if not (add_gates or set_outputs or set_params or save_kwargs):
+        return True
+
+    table_name = _get_sessions_table_name()
+    logger.info(
+        f"Saving session {session_id} with locked MCP delta: "
+        f"add_gates={list(add_gates)}, set_outputs={sorted(set_outputs)}, "
+        f"set_params={sorted(set_params)}, fields={sorted(save_kwargs)}"
+    )
+
+    try:
+        with get_connection() as conn:
+            # Same transaction discipline as save_session_merging_gates: the lock
+            # is held from the read through the upsert.
+            prior_autocommit = conn.autocommit
+            conn.autocommit = False
+            try:
+                cursor = conn.cursor()
+                cursor.execute(
+                    f"SELECT completed_gates, captured_outputs, session_parameters FROM {table_name} "
+                    f"WHERE session_id = %s FOR UPDATE",
+                    (session_id,),
+                )
+                row = cursor.fetchone()
+                merged_gates, merged_outputs, merged_params = _apply_mcp_delta(
+                    _parse_json_list(row[0]) if row else [],
+                    _parse_json_obj(row[1]) if row else {},
+                    _parse_json_obj(row[2]) if row else {},
+                    add_gates=add_gates,
+                    set_outputs=set_outputs,
+                    set_params=set_params,
+                )
+
+                upsert_sql, params = _session_upsert(
+                    table_name,
+                    session_id,
+                    completed_gates=merged_gates,
+                    captured_outputs=merged_outputs,
+                    session_parameters=merged_params,
+                    **save_kwargs,
+                )
+                cursor.execute(upsert_sql, params)
+                conn.commit()
+                cursor.close()
+            except Exception:
+                conn.rollback()
+                raise
+            finally:
+                conn.autocommit = prior_autocommit
+            logger.info(f"Session {session_id} saved successfully to Lakebase (locked MCP delta)")
+            return True
+
+    except Exception as e:
+        logger.error(f"Error saving session MCP delta to Lakebase: {e}", exc_info=True)
+        return False
+
+
 def save_chapter_feedback(session_id: str, chapter_name: str, rating: str) -> bool:
     """
     Save thumbs up/down feedback for a specific chapter.

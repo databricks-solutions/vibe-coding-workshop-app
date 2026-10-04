@@ -3,8 +3,9 @@
 
 It understands exactly the statements the session write path issues:
 
-- ``SELECT completed_gates, session_parameters ... FOR UPDATE`` (the locked
-  read in ``save_session_merging_gates``) -> a positional tuple;
+- ``SELECT <columns> ... FOR UPDATE`` (the locked read in
+  ``save_session_merging_gates`` and ``save_session_applying_mcp_delta``) -> a
+  positional tuple of the selected columns;
 - the unlocked ``load_session`` SELECT (dict rows, via a patched
   ``_dict_cursor``) -> a dict;
 - the ``_session_upsert`` INSERT ... ON CONFLICT -> COALESCE-applied to the row;
@@ -14,10 +15,15 @@ It understands exactly the statements the session write path issues:
 App's read-modify-write. A real ``FOR UPDATE`` makes that writer wait for the
 lock, so it is applied BEFORE the locked read returns (the read sees it). An
 unlocked read cannot hold the writer off, so it is applied AFTER the snapshot is
-taken (the stale-read window the race lives in).
+taken (the stale-read window the race lives in). ``FOR UPDATE`` only holds the
+lock inside an explicit transaction: on an autocommit connection it is treated
+as an unlocked read. ``interleave_on`` picks the window the writer lands in:
+None = the first read of any kind, "read" = the first unlocked read (e.g. an MCP
+tool's ``load_session``), "lock_read" = the first locked read.
 """
 
 import json
+import re
 import time
 from contextlib import contextmanager
 
@@ -46,6 +52,7 @@ class FakeSessionsDB:
     def __init__(self):
         self.row: dict | None = None
         self.interleave = None  # callable(row) fired once, on the first read
+        self.interleave_on = None  # None | "read" | "lock_read" (see module doc)
         self.read_delay = 0.0  # seconds the read blocks (off-loop tests)
         self.connections: list["FakeConn"] = []
         self.events: list[tuple] = []  # (conn_index, kind)
@@ -59,8 +66,12 @@ class FakeSessionsDB:
         self.connections.append(conn)
         yield conn
 
-    def _fire_interleave(self):
-        if self.interleave is not None and self.row is not None:
+    def _fire_interleave(self, kind: str):
+        if (
+            self.interleave is not None
+            and self.row is not None
+            and self.interleave_on in (None, kind)
+        ):
             hook, self.interleave = self.interleave, None
             hook(self.row)
 
@@ -98,24 +109,23 @@ class FakeCursor:
         db = self.db
         text = " ".join(sql.split())
         self.conn.autocommit_during.append(self.conn.autocommit)
-        if text.startswith("SELECT") and "FOR UPDATE" in text:
+        if text.startswith("SELECT") and "FOR UPDATE" in text and not self.conn.autocommit:
             db.events.append((self.conn.index, "lock_read"))
             if db.read_delay:
                 time.sleep(db.read_delay)
-            db._fire_interleave()  # the lock serialises the writer: read sees it
-            row = db.row
-            self._result = (
-                None if row is None
-                else (json.dumps(row.get("completed_gates")), row.get("session_parameters"))
-            )
+            db._fire_interleave("lock_read")  # the lock serialises the writer: read sees it
+            self._result = _positional(text, db.row)
         elif text.startswith("SELECT"):
             db.events.append((self.conn.index, "read"))
             row = db.row
-            self._result = None if row is None else {
-                **{c: None for c in UPSERT_COLUMNS},
-                **json.loads(json.dumps(row)),
-            }
-            db._fire_interleave()  # unlocked: the writer lands after the snapshot
+            if self.dict_rows:
+                self._result = None if row is None else {
+                    **{c: None for c in UPSERT_COLUMNS},
+                    **json.loads(json.dumps(row)),
+                }
+            else:
+                self._result = _positional(text, json.loads(json.dumps(row)))
+            db._fire_interleave("read")  # unlocked: the writer lands after the snapshot
         elif text.startswith("INSERT INTO"):
             db.events.append((self.conn.index, "upsert"))
             if db.fail_on == "upsert":
@@ -146,6 +156,16 @@ class FakeCursor:
 
     def close(self):
         pass
+
+
+def _positional(text: str, row: dict | None):
+    """The selected columns of ``row`` as a tuple (``completed_gates`` as TEXT)."""
+    if row is None:
+        return None
+    columns = [c.strip() for c in re.match(r"SELECT (.*?) FROM ", text).group(1).split(",")]
+    return tuple(
+        json.dumps(row.get(c)) if c == "completed_gates" else row.get(c) for c in columns
+    )
 
 
 def install(monkeypatch, db: FakeSessionsDB) -> None:
