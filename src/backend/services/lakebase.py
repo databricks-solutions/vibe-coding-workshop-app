@@ -820,6 +820,8 @@ def save_session_merging_gates(
     *,
     app_completed_gates: Optional[List[str]],
     app_skipped_gates: Optional[List[str]],
+    base_completed_gates: Optional[List[str]] = None,
+    base_skipped_gates: Optional[List[str]] = None,
     **save_kwargs: Any,
 ) -> bool:
     """App gate write: locked read -> ``_merge_app_gates`` -> upsert, atomically.
@@ -833,7 +835,9 @@ def save_session_merging_gates(
     transaction, so no concurrent writer can commit in between.
 
     ``app_completed_gates`` / ``app_skipped_gates`` follow ``_merge_app_gates``:
-    None = preserve-on-absent. ``completed_gates`` lands in its column (the
+    None = preserve-on-absent. ``base_completed_gates`` / ``base_skipped_gates``
+    are the gate sets the SPA last saw, passed to the merge as ``base`` (None =
+    App-authoritative, today's behavior). ``completed_gates`` lands in its column (the
     upsert COALESCE-preserves None); ``skipped_gates`` is patched into
     ``session_parameters`` with the same JSONB ``||`` merge the routes use, inside
     the same transaction. No stored row => nothing to preserve; the upsert
@@ -873,8 +877,10 @@ def save_session_merging_gates(
                 stored_skipped = (
                     _parse_json_list(_parse_json_obj(row[1]).get("skipped_gates")) if row else []
                 )
-                merged_completed = _merge_app_gates(app_completed_gates, stored_completed)
-                merged_skipped = _merge_app_gates(app_skipped_gates, stored_skipped)
+                merged_completed = _merge_app_gates(
+                    app_completed_gates, stored_completed, base_completed_gates
+                )
+                merged_skipped = _merge_app_gates(app_skipped_gates, stored_skipped, base_skipped_gates)
 
                 upsert_sql, params = _session_upsert(
                     table_name, session_id, completed_gates=merged_completed, **save_kwargs
