@@ -36,3 +36,11 @@ Fence: src/backend/services/lakebase.py, src/backend/mcp_server.py, tests (a new
 - Backend suite (DATABRICKS_CONFIG_FILE=/dev/null LAKEBASE_HOST= <APP>/.venv/bin/python -m pytest -c /dev/null --rootdir=. tests/workshop tests/api -q): floor 566 plus the new tests, 0 failed. The race tests are green on 3 consecutive runs. Frontend build green; lint passes the D-7 differential gate (no new errors vs ad64c10). MCP tools/list = 7.
 - Tampers (FORGE/state/specs/mcp-gates-race/tampers.md), each verified and then restored byte-identically: T1 merged_gates = stored only → R1 red; T2 add_gates = all of after.completed_gates → R2 red; T3 drop FOR UPDATE / the explicit transaction → R1 red under the race harness; T4 make the empty delta hit the DB → R4 red. T3 is only observable if the harness models the row lock. Make the fake DB serialize or block on FOR UPDATE (as #84's race tests did, if they did), or assert the locking SELECT text and transaction boundaries directly. Say in the PR body which approach you took.
 - Open a PR into feature/genie-code-mcp-integration titled "mcp-gates-race: MCP writes persist their delta under a row lock".
+
+## Fence amendment (post-implementation)
+Files touched outside the fence above, each test-only:
+- tests/workshop/conftest.py: one autouse fixture. When a test stubs mcp_server.save_session, it applies the MCP delta to that test's stored record using the production `_apply_mcp_delta` and hands the stub the merged end state; otherwise the real locked function runs. This replaces edits to 52 tests across ~22 files, which stay byte-unchanged.
+- tests/workshop/test_write_tools.py and tests/workshop/test_sync_bridge.py: one idempotent-replay assertion each. The replay now writes nothing, so they assert that no save happened; their end-state checks are unchanged.
+- tests/api/_fake_sessions_db.py: models the FOR UPDATE row lock inside explicit transactions, with a new interleave_on window (None keeps #84's behavior).
+
+Behavior note: industry, use_case and *_label are no longer re-written into the session_parameters JSONB on every MCP write, only when changed; readers re-derive them from the columns.
