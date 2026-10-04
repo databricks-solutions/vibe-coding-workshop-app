@@ -104,8 +104,8 @@ def test_complete_step_is_idempotent_and_does_not_overwrite_output(session_store
     assert result.completed_gates == ["project_setup"]
     assert store[SESSION_ID]["completed_gates"] == ["project_setup"]
     assert store[SESSION_ID]["captured_outputs"] == {"existing": "stable"}
-    assert saves[-1][1]["completed_gates"] == ["project_setup"]
-    assert saves[-1][1]["captured_outputs"] == {"existing": "stable"}
+    # Nothing changed, so the MCP delta is empty and nothing is written (D-9).
+    assert saves == []
 
 
 def test_set_parameters_merges_and_persists_effective_parameters(session_store):

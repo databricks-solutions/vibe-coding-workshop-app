@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import concurrent.futures
 import contextvars
+import copy
 import hashlib
 import json
 import logging
@@ -34,7 +35,7 @@ from .services.lakebase import (
     append_session_interaction,
     is_lakebase_configured,
     load_session,
-    save_session,
+    save_session_applying_mcp_delta,
 )
 from .workshop import assembler, engine, manifest
 from .workshop.state import build_session_state
@@ -533,6 +534,46 @@ def _load_session_for_request(
     return build_session_state(record, track), session_id
 
 
+def _persist_mcp_delta(
+    session_id: str,
+    before: engine.SessionState,
+    after: engine.SessionState,
+    *,
+    session_parameters: dict[str, Any] | None = None,
+    **save_kwargs: Any,
+) -> bool:
+    """Persist only what this MCP call changed, under the row lock (D-9).
+
+    ``before`` is a deep copy of the state taken right after
+    ``_load_session_for_request``; ``after`` is the mutated state. The delta is
+    the gates ``after`` adds, the output keys that are new or changed, and the
+    keys of ``session_parameters`` (the resolved params; omitted => no parameter
+    write) that are new or changed versus ``before``. Writing full values would
+    overwrite an App write that committed between the MCP read and this write;
+    the MCP path never removes a gate or key, so the delta is all it needs.
+    ``save_kwargs`` are the non-JSONB ``save_session`` columns (COALESCE).
+    """
+
+    add_gates = [gate for gate in after.completed_gates if gate not in before.completed_gates]
+    set_outputs = {
+        key: value
+        for key, value in after.captured_outputs.items()
+        if key not in before.captured_outputs or before.captured_outputs[key] != value
+    }
+    set_params = {
+        key: value
+        for key, value in (session_parameters or {}).items()
+        if key not in before.session_parameters or before.session_parameters[key] != value
+    }
+    return save_session_applying_mcp_delta(
+        session_id,
+        add_gates=add_gates,
+        set_outputs=set_outputs,
+        set_params=set_params,
+        **save_kwargs,
+    )
+
+
 def _outline_items(track: str, state: engine.SessionState) -> list[OutlineItem]:
     return [OutlineItem(**asdict(item)) for item in engine.outline(track, state)]
 
@@ -924,9 +965,11 @@ def _project_setup_content(email: str) -> dict[str, str]:
 # use_case_selection was retired as a numbered outline step. A fresh Genie Code
 # learner who has NOT pre-picked a use case is still asked ONCE, up front, before
 # the first numbered step (guardrail #3) — mirroring the App's step 1 "Define Your
-# Intent". This synthetic step is surfaced by vibe_next_step / vibe_get_step while
-# the use case is unresolved; it is NOT a manifest step and is never advanced
-# THROUGH via vibe_complete_step. Locking the use case (vibe_set_parameters, or
+# Intent". This synthetic step is surfaced by vibe_next_step / vibe_get_step /
+# vibe_explain_step while the use case is unresolved; it is NOT a manifest step and
+# is never advanced THROUGH via vibe_complete_step, which on the beat follows D-8
+# (idempotent success once locked; GATE_REQUIRED steering to vibe_set_parameters
+# while unlocked). Locking the use case (vibe_set_parameters, or
 # vibe_start_track with industry+use_case) resolves the gate via
 # engine.resolve_use_case, after which the walk proceeds to project_setup.
 _INTENT_BEAT_STEP = manifest.Step(
@@ -1106,6 +1149,7 @@ def vibe_start_track(
         state = engine.SessionState()
     else:
         state, _ = loaded
+    before = copy.deepcopy(state)
     # MCP is exclusively the Genie Code client — mark the session so any other
     # read path (SPA bridge, the vibe://session/{id}/state resource) resolves
     # the genie-code fork too. setdefault never clobbers an explicit choice.
@@ -1121,8 +1165,10 @@ def vibe_start_track(
         # (is_saved requires a name that is set and != "New Session"). Refined to
         # the confirmed use case once it locks in vibe_complete_step (Workstream 3).
         _initial_name = f"Genie Code — {use_case}" if use_case else "Genie Code Workshop"
-        save_session(
-            session_id=resolved,
+        _persist_mcp_delta(
+            resolved,
+            before,
+            state,
             industry=industry,
             # R3.1: also persist the *_label columns the by_industry / by_use_case
             # analytics GROUP BY, so a start-track-only session (which never walks
@@ -1159,11 +1205,8 @@ def vibe_start_track(
     if industry and use_case and not engine.use_case_resolved(state):
         engine.resolve_use_case(state, _build_use_case_brief(state.session_parameters))
         if is_lakebase_configured():
-            save_session(
-                session_id=resolved,
-                session_parameters=state.session_parameters,
-                captured_outputs=dict(state.captured_outputs),
-                completed_gates=list(state.completed_gates),
+            _persist_mcp_delta(
+                resolved, before, state, session_parameters=state.session_parameters
             )
     # Deep-link handoff (Workstream 2): hand back a ready-to-open web-UI URL for this
     # same session so the learner can move freely between MCP and the app. None when
@@ -1611,6 +1654,7 @@ def vibe_complete_step(
         return _error_result("INVALID_SESSION", "The requested session could not be resolved.")  # type: ignore[return-value]
 
     state, _ = loaded
+    before = copy.deepcopy(state)
     # The intent beat on a track that does not author use_case_selection as a step:
     # vibe_set_parameters' lock is what completes it (D-8). Once locked, re-completing
     # is an idempotent success; while unlocked, the guards below steer to the lock.
@@ -1703,12 +1747,7 @@ def vibe_complete_step(
     # Cross-surface progress rides on completed_gates alone (T5 R4a/R4b): the SPA
     # hydrates its step indicator from the gate set via deriveCompletedStepNumbers,
     # so MCP-driven progress shows up without any retired numeric progress columns.
-    save_session(
-        session_id=session_id,
-        session_name=_refined_name,
-        captured_outputs=dict(state.captured_outputs),
-        completed_gates=list(result.completed_gates),
-    )
+    _persist_mcp_delta(session_id, before, state, session_name=_refined_name)
 
     return CompleteStepResult(
         completed_gates=list(result.completed_gates),
@@ -1758,6 +1797,7 @@ def vibe_submit_answer(
         return _error_result("INVALID_SESSION", "The requested session could not be resolved.")  # type: ignore[return-value]
 
     state, _ = loaded
+    before = copy.deepcopy(state)
     resolved = _find_interaction(interaction_id)
     if resolved is None:
         return _error_result(
@@ -1813,10 +1853,7 @@ def vibe_submit_answer(
         )
         if confirmed:
             state.captured_outputs[decision_capture_key(section_tag, interaction.id)] = resolved_answer
-            save_session(
-                session_id=session_id,
-                captured_outputs=dict(state.captured_outputs),
-            )
+            _persist_mcp_delta(session_id, before, state)
             unblocks = section_tag
     elif recorded and interaction.type == "comprehension" and slot == "post":
         # Mark the POST comprehension as answered so vibe_complete_step stops
@@ -1825,10 +1862,7 @@ def vibe_submit_answer(
         # Non-gating — this only suppresses the advisory nudge; a silent accept
         # still counts as answered.
         state.captured_outputs[interaction_answered_key(section_tag, interaction.id)] = resolved_answer
-        save_session(
-            session_id=session_id,
-            captured_outputs=dict(state.captured_outputs),
-        )
+        _persist_mcp_delta(session_id, before, state)
 
     return SubmitAnswerResult(recorded=recorded, coaching=coaching, unblocks=unblocks)
 
@@ -1861,6 +1895,7 @@ def vibe_set_parameters(
         return _error_result("INVALID_SESSION", "The requested session could not be resolved.")  # type: ignore[return-value]
 
     state, _ = loaded
+    before = copy.deepcopy(state)
 
     # Reject server-owned keys in the INCOMING params before any update/save, so a
     # rejected call persists nothing (all-or-nothing). These are set only by the
@@ -1948,7 +1983,7 @@ def vibe_set_parameters(
                 "Provide a use case name (use_case_label) or use_case_hints to draft.",
             )
         # Persist the merged inputs (industry/source/label/hints) but NOT a draft.
-        save_session(session_id=session_id, session_parameters=resolved_params)
+        _persist_mcp_delta(session_id, before, state, session_parameters=resolved_params)
         from .api.routes import UseCaseGenerateRequest, generate_usecase_description
 
         industry = str(resolved_params.get("industry") or "").strip() or None
@@ -1965,7 +2000,7 @@ def vibe_set_parameters(
         # the learner must route through the FMAPI draft first (Workstream #3).
         resolved_params["custom_draft_ready"] = True
         resolved_params["custom_drafted_description"] = drafted
-        save_session(session_id=session_id, session_parameters=resolved_params)
+        _persist_mcp_delta(session_id, before, state, session_parameters=resolved_params)
         return SetParametersResult(
             resolved_params=resolved_params,
             missing_required=_selection_missing_required(resolved_params),
@@ -2037,19 +2072,19 @@ def vibe_set_parameters(
             str(resolved_params.get("industry_label") or "").strip()
             or _industry_label_for(_lock_industry or "", echo_industries)
         )
-        save_session(
-            session_id=session_id,
+        _persist_mcp_delta(
+            session_id,
+            before,
+            state,
             session_name=refined_name,
             industry=_lock_industry,
             industry_label=_lock_industry_label,
             use_case=_lock_use_case,
             use_case_label=_lock_use_case_label,
             session_parameters=resolved_params,
-            captured_outputs=dict(state.captured_outputs),
-            completed_gates=list(state.completed_gates),
         )
     else:
-        save_session(session_id=session_id, session_parameters=resolved_params)
+        _persist_mcp_delta(session_id, before, state, session_parameters=resolved_params)
     return SetParametersResult(
         resolved_params=resolved_params,
         missing_required=missing_required,

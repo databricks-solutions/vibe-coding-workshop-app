@@ -186,12 +186,11 @@ def test_idempotent_replay_no_duplicate_gates_no_legacy_numbers(session_store):
     )
     assert not isinstance(replay_result, dict), replay_result
     assert replay_result.completed_gates[-1] == "project_setup"
-    assert len(saves) == saves_before_replay + 1
+    # The replay changes nothing, so its MCP delta is empty and it writes nothing (D-9).
+    assert len(saves) == saves_before_replay
 
-    replay = saves[-1][1]
     # project_setup appears exactly once (idempotent); no legacy numbers written.
-    assert replay["completed_gates"].count("project_setup") == 1
-    assert all(kwarg not in replay for kwarg in _LEGACY_KWARGS)
+    assert all(kwarg not in save for _, save in saves for kwarg in _LEGACY_KWARGS)
     assert store[SESSION_ID]["completed_gates"].count("project_setup") == 1
 
 
