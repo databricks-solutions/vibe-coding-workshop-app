@@ -1174,7 +1174,10 @@ def cmd_uninstall(args):
         drop_env = {**os.environ, "DATABRICKS_HOST": ws.get("host", "")}
         if profile:
             drop_env["DATABRICKS_CONFIG_PROFILE"] = profile  # match deploy.sh so CLI auth resolves
-        if _run_sh(setup_lakebase_sh, ["--drop"], cwd=PROJECT_ROOT, env=drop_env).returncode == 0:
+        # Uninstall is an explicit, confirmed destroy: opt in to setup-lakebase.sh's
+        # destructive guard (D-35). The schema is the one rendered into app.yaml.
+        drop_env["VIBE_CONFIRM_DESTRUCTIVE_RESEED"] = lb.get("schema", "")
+        if _run_sh(setup_lakebase_sh, ["--drop", "--yes"], cwd=PROJECT_ROOT, env=drop_env).returncode == 0:
             success("Lakebase tables dropped")
         else:
             warn("Could not drop tables now; they will be removed when the bundle is destroyed.")
