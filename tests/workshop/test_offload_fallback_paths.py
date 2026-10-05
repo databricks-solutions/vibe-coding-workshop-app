@@ -34,6 +34,7 @@ if str(REPO_ROOT) not in sys.path:
 
 from src.backend import mcp_server  # noqa: E402
 from src.backend.api import routes  # noqa: E402
+from src.backend.services import llm  # noqa: E402
 
 INDUSTRY = "Technology"
 USE_CASE = "Genie Accelerator"
@@ -113,8 +114,8 @@ class _FakeClient:
 def _install_client(monkeypatch, api_client, serving_endpoints):
     client = _FakeClient(api_client, serving_endpoints)
     monkeypatch.setattr(routes, "DATABRICKS_SDK_AVAILABLE", True)
-    monkeypatch.setattr(routes, "get_workspace_client", lambda: client)
-    monkeypatch.setattr(routes, "get_best_available_endpoint", lambda: "ep")
+    monkeypatch.setattr(llm, "get_workspace_client", lambda: client)
+    monkeypatch.setattr(llm, "get_best_available_endpoint", lambda: "ep")
     return client
 
 
