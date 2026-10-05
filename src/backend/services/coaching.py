@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import concurrent.futures
 import logging
+import math
 import os
 import re
 import threading
@@ -78,6 +79,27 @@ def coaching_enabled() -> bool:
     """Kill switch, read per call: VIBE_COACHING_ENABLED=0/false/off/no disables."""
 
     return os.getenv("VIBE_COACHING_ENABLED", "").strip().lower() not in _DISABLED_VALUES
+
+
+def _knob(name: str, default: Any, cast: Callable[[str], Any]) -> Any:
+    """Operator override for a D9 knob, read per call (D-29).
+
+    Unset -> ``default``. Non-numeric, non-finite or <= 0 -> ``default`` plus a
+    WARNING that names the variable, never the value. No other clamp.
+    """
+
+    raw = os.getenv(name)
+    if raw is None or not raw.strip():
+        return default
+    try:
+        value = cast(raw.strip())
+        valid = math.isfinite(value) and value > 0
+    except (TypeError, ValueError):
+        valid = False
+    if not valid:
+        logger.warning("Invalid %s; using the default", name)
+        return default
+    return value
 
 
 # --- Leakage scrub (D-25) ----------------------------------------------------
@@ -246,7 +268,9 @@ def build_context(
         ("gate", str(getattr(step, "gate", "") or "")),
         ("execution", str(getattr(step, "execution", "") or "")),
     ]
-    prompt = str(help.get("prompt") or "")[:PROMPT_CAP]
+    prompt_cap = _knob("VIBE_COACH_PROMPT_CAP", PROMPT_CAP, int)
+    excerpt_cap = _knob("VIBE_COACH_EXCERPT_CAP", OUTPUT_EXCERPT_CAP, int)
+    prompt = str(help.get("prompt") or "")[:prompt_cap]
     if prompt:
         sections.append(("prompt", "REFERENCE ONLY — do not restate or paraphrase:\n" + prompt))
     grounded_on = [key for key, value in sections if value]
@@ -257,7 +281,7 @@ def build_context(
         value = captured.get(key)
         if not value:
             continue
-        excerpt = scrub_input(str(value))[:OUTPUT_EXCERPT_CAP]
+        excerpt = scrub_input(str(value))[:excerpt_cap]
         if excerpt:
             output_lines.append(f"- {key}: {excerpt}")
             grounded_on.append(f"captured_outputs:{key}")
@@ -336,7 +360,7 @@ def _single_flight(
             future = concurrent.futures.Future()
             _INFLIGHT[key] = future
 
-    budget = COACH_BUDGET_S
+    budget = _knob("VIBE_COACH_BUDGET_S", COACH_BUDGET_S, float)
     if not is_owner:
         try:
             text = future.result(timeout=budget)
@@ -345,6 +369,7 @@ def _single_flight(
         return (text, "joined") if text is not None else (None, "failed")
 
     scrub_rule: list[str] = []
+    max_tokens = _knob("VIBE_COACH_MAX_TOKENS", COACH_MAX_TOKENS, int)
 
     async def _generate_and_resolve() -> None:
         # Runs on the daemon thread; resolves the Future and writes the cache even
@@ -354,7 +379,7 @@ def _single_flight(
             result = await llm.call_databricks_serving_endpoint(
                 user_message,
                 endpoint_name=None,
-                max_tokens=COACH_MAX_TOKENS,
+                max_tokens=max_tokens,
                 temperature=COACH_TEMPERATURE,
                 system_prompt=COACH_SYSTEM,
             )
@@ -429,6 +454,13 @@ def _record(session_id: str, section_tag: str, focus: str, outcome: CoachOutcome
         logger.warning("Coaching telemetry raised for %s/%s", session_id, section_tag, exc_info=True)
 
 
+_CACHE_LABELS = {"cache_hit": "hit", "negative_cache": "negative", "joined": "joined"}
+
+
+def _ms_since(started: float) -> int:
+    return max(0, int((time.monotonic() - started) * 1000))
+
+
 def coach(
     *,
     session_id: str,
@@ -441,24 +473,32 @@ def coach(
 ) -> CoachOutcome:
     """Coach the learner on ``step`` through ``focus``. Never raises."""
 
+    started = time.monotonic()
+    db_ms = build_ms = model_ms = 0
     try:
         if not coaching_enabled():
             return CoachOutcome(coaching=None, is_fallback=True, reason="disabled")
         section_tag = str(getattr(step, "sectionTag", "") or "")
+        phase = time.monotonic()
         try:
             interactions = lakebase.list_session_interactions(session_id, limit=PRIOR_ANSWERS_CAP)
         except Exception:  # noqa: BLE001 — history is optional grounding
             interactions = []
+        db_ms = _ms_since(phase)
+        phase = time.monotonic()
         user_message, grounded_on = build_context(
             step, state, help, track, interactions, focus=focus
         )
+        build_ms = _ms_since(phase)
         captured = getattr(state, "captured_outputs", None) or {}
         forbidden = [("prompt", str(help.get("prompt") or ""))] + [
             (f"captured_outputs:{key}", str(captured.get(key) or "")) for key in _output_keys(step)
         ]
+        phase = time.monotonic()
         text, reason = _single_flight(
             (session_id, section_tag, focus), user_message, forbidden, run_blocking
         )
+        model_ms = _ms_since(phase)
         outcome = CoachOutcome(
             coaching=text,
             grounded_on=grounded_on if text is not None else [],
@@ -469,5 +509,18 @@ def coach(
         logger.warning("Coaching failed; static help served", exc_info=True)
         outcome = CoachOutcome(coaching=None, is_fallback=True, reason="error")
         section_tag = str(getattr(step, "sectionTag", "") or "")
+    # Phase timings only (D-29): never the prompt, context or model text.
+    logger.info(
+        "coaching timings section=%s focus=%s db_ms=%d build_ms=%d model_ms=%d total_ms=%d"
+        " outcome=%s cache=%s",
+        section_tag,
+        focus,
+        db_ms,
+        build_ms,
+        model_ms,
+        _ms_since(started),
+        "coached" if not outcome.is_fallback else f"fallback:{outcome.reason}",
+        _CACHE_LABELS.get(outcome.reason, "miss"),
+    )
     _record(session_id, section_tag, focus, outcome)
     return outcome

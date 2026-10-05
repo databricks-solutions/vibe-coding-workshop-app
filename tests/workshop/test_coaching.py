@@ -13,6 +13,10 @@ Tampers (each turns the named test red):
 - rename a scrub rule (e.g. "email" -> "mail") -> test_c16_reasons
 - add the rejected text to the scrub INFO line -> test_c16_reject_log_has_rule_not_text
 - drop re.IGNORECASE from the insert-into/delete-from pattern -> test_c5_scrub, test_c16_public_parity
+- COACH_MAX_TOKENS 400 -> 300 -> test_c1_grounding, test_c17_defaults_unchanged
+- let ``_knob`` return a value <= 0 -> test_c18_env_overrides
+- add ``user_message[:30]`` to the timing line -> test_c19_timing_line
+- skip the timing line on a fallback -> test_c19_timing_line
 """
 
 import contextlib
@@ -751,3 +755,228 @@ def test_c16_public_parity():
     assert coaching.scrub_output(CLEAN, forbidden_sources=[PROMPT, BRIEF]) == CLEAN
     prose = "Next, select the table from the list on the left and confirm the brief."
     assert coaching.scrub_output(prose, forbidden_sources=[PROMPT, BRIEF]) == prose
+
+
+# --- C17-C19: latency instrumentation and env knobs (D-29) ---------------------
+
+KNOB_VARS = (
+    "VIBE_COACH_BUDGET_S",
+    "VIBE_COACH_MAX_TOKENS",
+    "VIBE_COACH_PROMPT_CAP",
+    "VIBE_COACH_EXCERPT_CAP",
+)
+TIMING_RE = re.compile(
+    r"^coaching timings section=(\S+) focus=(\S+) db_ms=(\d+) build_ms=(\d+) "
+    r"model_ms=(\d+) total_ms=(\d+) outcome=(\S+) cache=(\S+)$"
+)
+
+
+@pytest.fixture
+def no_knobs(monkeypatch):
+    for name in KNOB_VARS:
+        monkeypatch.delenv(name, raising=False)
+
+
+@pytest.fixture
+def budgets(monkeypatch):
+    """Record the timeout_s each coach() hands to run_blocking."""
+
+    seen = []
+    real = mcp_server._run_async_blocking
+
+    def recording(make_coro, timeout_s=None):
+        seen.append(timeout_s)
+        return real(make_coro, timeout_s=timeout_s)
+
+    monkeypatch.setattr(mcp_server, "_run_async_blocking", recording)
+    return seen
+
+
+def _context_for(prompt, brief):
+    state = types.SimpleNamespace(
+        session_parameters={}, captured_outputs={"use_case_brief": brief}
+    )
+    step = types.SimpleNamespace(consumes=["use_case_brief"], produces=None)
+    message, _ = coaching.build_context(step, state, {"prompt": prompt}, "t", [], focus="why")
+    return message
+
+
+def _brief_line(message):
+    return next(l for l in message.splitlines() if l.startswith("- use_case_brief:"))
+
+
+def test_c17_defaults_unchanged(env, no_knobs, budgets):
+    assert coaching.COACH_MAX_TOKENS == 400
+    assert coaching.COACH_BUDGET_S == 8.0
+    assert coaching.PROMPT_CAP == 4000
+    assert coaching.OUTPUT_EXCERPT_CAP == 600
+    assert coaching.PRIOR_ANSWERS_CAP == 10
+
+    outcome = _coach_direct(focus="why")
+    assert outcome.is_fallback is False
+    assert env.calls[-1]["max_tokens"] == 400
+    assert budgets == [8.0]
+
+    message = _context_for("p" * 5000, "x" * 700)
+    assert "p" * 4000 in message and "p" * 4001 not in message
+    assert _brief_line(message) == "- use_case_brief: " + "x" * 600
+
+
+def test_c18_env_overrides(env, no_knobs, budgets, monkeypatch, caplog):
+    caplog.set_level("WARNING", logger=coaching.logger.name)
+
+    # Honored per call, with no reload.
+    monkeypatch.setenv("VIBE_COACH_MAX_TOKENS", "123")
+    monkeypatch.setenv("VIBE_COACH_BUDGET_S", "5.5")
+    assert _coach_direct(focus="why").is_fallback is False
+    assert env.calls[-1]["max_tokens"] == 123
+    assert budgets[-1] == 5.5
+    monkeypatch.setenv("VIBE_COACH_MAX_TOKENS", "250")
+    monkeypatch.setenv("VIBE_COACH_BUDGET_S", "6")
+    coaching.clear_caches()
+    assert _coach_direct(focus="why").is_fallback is False
+    assert env.calls[-1]["max_tokens"] == 250
+    assert budgets[-1] == 6.0
+
+    monkeypatch.setenv("VIBE_COACH_PROMPT_CAP", "20")
+    monkeypatch.setenv("VIBE_COACH_EXCERPT_CAP", "10")
+    message = _context_for("p" * 50, "x" * 50)
+    assert "p" * 20 in message and "p" * 21 not in message
+    assert _brief_line(message) == "- use_case_brief: " + "x" * 10
+    monkeypatch.setenv("VIBE_COACH_PROMPT_CAP", "30")
+    monkeypatch.setenv("VIBE_COACH_EXCERPT_CAP", "15")
+    message = _context_for("p" * 50, "x" * 50)
+    assert "p" * 30 in message and "p" * 31 not in message
+    assert _brief_line(message) == "- use_case_brief: " + "x" * 15
+    assert not [r for r in caplog.records if r.levelname == "WARNING"]
+
+    # Invalid -> the default plus one WARNING naming the variable, not the value.
+    for bad in ("abc", "0", "-1"):
+        for name in KNOB_VARS:
+            monkeypatch.delenv(name, raising=False)
+        coaching.clear_caches()
+        caplog.clear()
+        monkeypatch.setenv("VIBE_COACH_MAX_TOKENS", bad)
+        monkeypatch.setenv("VIBE_COACH_BUDGET_S", bad)
+        assert _coach_direct(focus="why").is_fallback is False
+        assert env.calls[-1]["max_tokens"] == 400
+        assert budgets[-1] == 8.0
+        monkeypatch.setenv("VIBE_COACH_PROMPT_CAP", bad)
+        monkeypatch.setenv("VIBE_COACH_EXCERPT_CAP", bad)
+        message = _context_for("p" * 5000, "x" * 700)
+        assert "p" * 4000 in message and "p" * 4001 not in message
+        assert _brief_line(message) == "- use_case_brief: " + "x" * 600
+
+        warnings = [r.getMessage() for r in caplog.records if r.levelname == "WARNING"]
+        for name in KNOB_VARS:
+            assert len([w for w in warnings if name in w]) == 1, (bad, name, warnings)
+        for warning in warnings:
+            assert bad not in warning, warning
+
+
+def _timings(caplog):
+    lines = [r.getMessage() for r in caplog.records if r.getMessage().startswith("coaching timings")]
+    parsed = []
+    for line in lines:
+        match = TIMING_RE.match(line)
+        assert match, line
+        section, focus, db, build, model, total, outcome, cache = match.groups()
+        assert section == TAG
+        for value in (db, build, model, total):
+            assert int(value) >= 0
+        parsed.append({"line": line, "focus": focus, "outcome": outcome, "cache": cache})
+    return parsed
+
+
+def test_c19_timing_line(env, no_knobs, monkeypatch, caplog):
+    caplog.set_level("INFO", logger=coaching.logger.name)
+
+    # miss, then hit.
+    assert _coach_direct(focus="why").is_fallback is False
+    context = env.calls[-1]["prompt"]
+    assert _coach_direct(focus="why").is_fallback is False
+    assert [(t["outcome"], t["cache"]) for t in _timings(caplog)] == [
+        ("coached", "miss"),
+        ("coached", "hit"),
+    ]
+
+    # A resolved failure (miss), then the negative cache.
+    caplog.clear()
+    env.model["reply"] = RuntimeError("endpoint exploded")
+    assert _coach_direct(focus="unblock").is_fallback is True
+    assert _coach_direct(focus="unblock").is_fallback is True
+    assert [(t["outcome"], t["cache"]) for t in _timings(caplog)] == [
+        ("fallback:failed", "miss"),
+        ("fallback:negative_cache", "negative"),
+    ]
+
+    # A budget abandonment (miss), set through the env knob.
+    caplog.clear()
+    release = threading.Event()
+
+    def slow():
+        release.wait(5)
+        return {"response": CLEAN}
+
+    env.model["reply"] = slow
+    monkeypatch.setenv("VIBE_COACH_BUDGET_S", "0.2")
+    assert _coach_direct(focus="review").is_fallback is True
+    release.set()
+    assert _wait(lambda: not coaching._INFLIGHT)
+    monkeypatch.delenv("VIBE_COACH_BUDGET_S")
+    assert [(t["outcome"], t["cache"]) for t in _timings(caplog)] == [("fallback:timeout", "miss")]
+
+    # A concurrent joiner.
+    caplog.clear()
+    gate = threading.Event()
+
+    def gated():
+        gate.wait(5)
+        return {"response": CLEAN}
+
+    env.model["reply"] = gated
+    outcomes = {}
+    owner = threading.Thread(target=lambda: outcomes.setdefault("owner", _coach_direct(focus="what_now")))
+    owner.start()
+    assert _wait(lambda: (SESSION_ID, TAG, "what_now") in coaching._INFLIGHT)
+    joiner = threading.Thread(target=lambda: outcomes.setdefault("joiner", _coach_direct(focus="what_now")))
+    joiner.start()
+    time.sleep(0.2)
+    gate.set()
+    owner.join(10)
+    joiner.join(10)
+    assert outcomes["owner"].reason == "generated" and outcomes["joiner"].reason == "joined"
+    assert sorted((t["outcome"], t["cache"]) for t in _timings(caplog)) == [
+        ("coached", "joined"),
+        ("coached", "miss"),
+    ]
+
+    # An internal error still logs exactly one line.
+    caplog.clear()
+    real_build_context = coaching.build_context
+    monkeypatch.setattr(coaching, "build_context", lambda *a, **k: 1 / 0)
+    assert _coach_direct(focus="why").reason == "error"
+    monkeypatch.setattr(coaching, "build_context", real_build_context)
+    assert [(t["outcome"], t["cache"]) for t in _timings(caplog)] == [("fallback:error", "miss")]
+
+    # No content in any timing line: the context, the prompt, the model text.
+    caplog.clear()
+    coaching.clear_caches()
+    env.model["reply"] = {"response": CLEAN}
+    _coach_direct(focus="why")
+    _coach_direct(focus="why")
+    assert [(t["outcome"], t["cache"]) for t in _timings(caplog)] == [
+        ("coached", "miss"),
+        ("coached", "hit"),
+    ]
+    lines = [t["line"] for t in _timings(caplog)]
+    for source in (context, PROMPT, CLEAN, BRIEF):
+        for start in range(len(source) - 19):
+            for line in lines:
+                assert source[start : start + 20] not in line
+
+    # The kill switch logs nothing (D-25a: no work done).
+    caplog.clear()
+    monkeypatch.setenv("VIBE_COACHING_ENABLED", "0")
+    assert _coach_direct(focus="why").reason == "disabled"
+    assert _timings(caplog) == []
