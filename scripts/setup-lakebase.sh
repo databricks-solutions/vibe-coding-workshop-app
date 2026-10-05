@@ -10,13 +10,18 @@
 #
 # USAGE:
 #   ./scripts/setup-lakebase.sh                      # Create tables if not exist + seed
-#   ./scripts/setup-lakebase.sh --recreate           # Drop and recreate tables + seed
-#   ./scripts/setup-lakebase.sh --drop               # Drop tables only
+#   ./scripts/setup-lakebase.sh --recreate --yes     # Drop and recreate tables + seed (DESTRUCTIVE)
+#   ./scripts/setup-lakebase.sh --drop --yes         # Drop tables only (DESTRUCTIVE)
 #   ./scripts/setup-lakebase.sh --status             # Check table status
 #   ./scripts/setup-lakebase.sh --check-instance     # Check if Lakebase instance exists
 #   ./scripts/setup-lakebase.sh --create-instance    # Create Lakebase instance if not exists
 #   ./scripts/setup-lakebase.sh --setup-permissions  # Setup app permissions on Lakebase
-#   ./scripts/setup-lakebase.sh --full-setup         # Full setup: instance + permissions + tables
+#   ./scripts/setup-lakebase.sh --full-setup         # Full setup: instance + permissions + tables (additive)
+#
+# DESTRUCTIVE ACTIONS (D-35):
+#   --recreate and --drop refuse to run unless --yes is passed AND
+#   VIBE_CONFIRM_DESTRUCTIVE_RESEED is set to the exact target schema name.
+#   The refusal happens before any connection is attempted.
 #
 # REQUIREMENTS:
 #   - Python with psycopg2-binary, requests
@@ -84,15 +89,20 @@ AUTO_APPROVE=false
 ACTION="create"
 SETUP_INSTANCE=false
 SETUP_PERMISSIONS=false
+EXPLICIT_RECREATE=false
+EXPLICIT_DROP=false
+FULL_SETUP=false
 
 while [[ $# -gt 0 ]]; do
     case $1 in
         --recreate)
             ACTION="recreate"
+            EXPLICIT_RECREATE=true
             shift
             ;;
         --drop)
             ACTION="drop"
+            EXPLICIT_DROP=true
             shift
             ;;
         --status)
@@ -113,6 +123,7 @@ while [[ $# -gt 0 ]]; do
             ;;
         --full-setup)
             ACTION="full-setup"
+            FULL_SETUP=true
             shift
             ;;
         --app-name)
@@ -133,6 +144,33 @@ while [[ $# -gt 0 ]]; do
             ;;
     esac
 done
+
+# --full-setup wins regardless of flag order; its table step is additive
+# unless --recreate was also passed explicitly (see the full-setup branch).
+if [[ "$FULL_SETUP" == true ]]; then
+    ACTION="full-setup"
+fi
+
+# =============================================================================
+# D-35: destructive actions need --yes AND VIBE_CONFIRM_DESTRUCTIVE_RESEED=<schema>.
+# Checked here, before any network call, so a refusal never touches Lakebase.
+# =============================================================================
+if [[ "$EXPLICIT_RECREATE" == true || "$EXPLICIT_DROP" == true ]]; then
+    if [[ -n "${LAKEBASE_SCHEMA_OVERRIDE:-}" ]]; then
+        CONFIRM_TARGET_SCHEMA="$LAKEBASE_SCHEMA_OVERRIDE"
+    else
+        CONFIRM_TARGET_SCHEMA=$(grep -A1 "name: LAKEBASE_SCHEMA" app.yaml 2>/dev/null | grep "value:" | sed 's/.*value: *"\([^"]*\)".*/\1/' | head -1)
+    fi
+    if [[ "$AUTO_APPROVE" != true \
+          || -z "$CONFIRM_TARGET_SCHEMA" \
+          || "${VIBE_CONFIRM_DESTRUCTIVE_RESEED:-}" != "$CONFIRM_TARGET_SCHEMA" ]]; then
+        echo -e "${RED}Refusing destructive table action (--recreate/--drop).${NC}" >&2
+        echo -e "${RED}It DROPS usecase_descriptions and section_input_prompts (--drop also sessions) in schema '${CONFIRM_TARGET_SCHEMA:-<unknown>}'; --recreate then re-runs every seed. Live prompt, config and session data is lost.${NC}" >&2
+        echo "To proceed deliberately, pass --yes AND set VIBE_CONFIRM_DESTRUCTIVE_RESEED=<target schema name>." >&2
+        echo "For a non-destructive run, omit --recreate/--drop (create-if-not-exists + ON CONFLICT DO NOTHING seed)." >&2
+        exit 1
+    fi
+fi
 
 echo -e "${GREEN}🌊 Lakebase Setup${NC}"
 echo ""
@@ -181,7 +219,13 @@ if [[ "$ACTION" == "full-setup" ]]; then
     # Step 2: Create tables and seed data
     echo ""
     echo -e "${CYAN}Step 2: Table Setup${NC}"
-    ACTION="recreate"  # Continue with table recreation
+    # Additive by default (D-35); recreate only when --recreate was passed explicitly
+    # (already confirmed by the destructive-action guard above).
+    if [[ "$EXPLICIT_RECREATE" == true ]]; then
+        ACTION="recreate"
+    else
+        ACTION="create"
+    fi
 fi
 
 # =============================================================================
