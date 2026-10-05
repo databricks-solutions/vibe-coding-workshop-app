@@ -147,21 +147,54 @@ def _ngrams(text: str, n: int) -> set[tuple[str, ...]]:
     return {tuple(words[i : i + n]) for i in range(len(words) - n + 1)}
 
 
-def _scrub_output(text: str, forbidden_sources: list[str]) -> str | None:
+ForbiddenSources = list[str] | list[tuple[str, str]]
+
+
+def _labelled(forbidden_sources: ForbiddenSources) -> list[tuple[str, str]]:
+    # Plain strings (the public form) are labelled "source<i>".
+    return [
+        source if isinstance(source, tuple) else (f"source{i}", source)
+        for i, source in enumerate(forbidden_sources)
+    ]
+
+
+def _scrub_output(
+    text: str, forbidden_sources: ForbiddenSources
+) -> tuple[str | None, str | None]:
+    # Returns (text, None) on accept, else (None, rule): the first check that
+    # matched. The rule is a static name, never content.
     if not isinstance(text, str) or not text.strip():
-        return None
-    if _EMAIL_RE.search(text) or _has_secret(text):
-        return None
+        return None, "empty"
+    if _EMAIL_RE.search(text):
+        return None, "email"
+    if _has_secret(text):
+        return None, "secret"
     if _CODE_FENCE_RE.search(text):
-        return None
+        return None, "code_fence"
     if any(pattern.search(text) for pattern in _SQL_RES):
-        return None
+        return None, "sql"
     out_grams = _ngrams(text, OVERLAP_WORDS)
     if out_grams:
-        for source in forbidden_sources:
+        for label, source in _labelled(forbidden_sources):
             if source and out_grams & _ngrams(source, OVERLAP_WORDS):
-                return None
-    return text
+                return None, f"overlap:{label}"
+    return text, None
+
+
+def scrub_output_with_reason(
+    text: str, *, forbidden_sources: ForbiddenSources
+) -> tuple[str | None, str | None]:
+    """Like ``scrub_output``, but also return the reject rule (None on accept).
+
+    ``forbidden_sources`` may be (label, text) pairs, so an overlap reject names
+    its source (``overlap:<label>``). A scrub that raises is rule "exception".
+    """
+
+    try:
+        return _scrub_output(text, forbidden_sources)
+    except Exception:  # noqa: BLE001 — a scrub that cannot decide rejects
+        logger.warning("Coaching scrub raised; rejecting output", exc_info=True)
+        return None, "exception"
 
 
 def scrub_output(text: str, *, forbidden_sources: list[str]) -> str | None:
@@ -172,11 +205,7 @@ def scrub_output(text: str, *, forbidden_sources: list[str]) -> str | None:
     statements. Any exception while scrubbing is a reject (fail closed).
     """
 
-    try:
-        return _scrub_output(text, forbidden_sources)
-    except Exception:  # noqa: BLE001 — a scrub that cannot decide rejects
-        logger.warning("Coaching scrub raised; rejecting output", exc_info=True)
-        return None
+    return scrub_output_with_reason(text, forbidden_sources=forbidden_sources)[0]
 
 
 # --- Grounding context (D2 §12.3) ---------------------------------------------
@@ -287,7 +316,7 @@ def _response_text(result: Any) -> str | None:
 def _single_flight(
     key: tuple[str, str, str],
     user_message: str,
-    forbidden_sources: list[str],
+    forbidden_sources: list[tuple[str, str]],
     run_blocking: Callable[..., Any],
 ) -> tuple[str | None, str]:
     """Return (scrubbed coaching or None, reason)."""
@@ -315,6 +344,8 @@ def _single_flight(
             return None, "timeout"
         return (text, "joined") if text is not None else (None, "failed")
 
+    scrub_rule: list[str] = []
+
     async def _generate_and_resolve() -> None:
         # Runs on the daemon thread; resolves the Future and writes the cache even
         # after the owner abandoned the join on budget expiry (late success).
@@ -328,7 +359,14 @@ def _single_flight(
                 system_prompt=COACH_SYSTEM,
             )
             raw = _response_text(result)
-            text = scrub_output(raw, forbidden_sources=forbidden_sources) if raw else None
+            if raw:
+                text, rule = scrub_output_with_reason(raw, forbidden_sources=forbidden_sources)
+                if rule is not None:
+                    scrub_rule.append(rule)
+                    # Never log the rejected text.
+                    logger.info(
+                        "coaching scrub rejected section=%s focus=%s rule=%s", key[1], key[2], rule
+                    )
         except BaseException:  # noqa: BLE001 — coaching is fail-open
             logger.warning("Coaching generation raised for %s", key[1], exc_info=True)
             text = None
@@ -356,7 +394,9 @@ def _single_flight(
             future.set_result(None)
         return None, "failed"
     text = future.result() if future.done() else None
-    return (text, "generated") if text is not None else (None, "failed")
+    if text is not None:
+        return text, "generated"
+    return None, (f"scrub:{scrub_rule[0]}" if scrub_rule else "failed")
 
 
 # --- coach() -----------------------------------------------------------------
@@ -413,8 +453,8 @@ def coach(
             step, state, help, track, interactions, focus=focus
         )
         captured = getattr(state, "captured_outputs", None) or {}
-        forbidden = [str(help.get("prompt") or "")] + [
-            str(captured.get(key) or "") for key in _output_keys(step)
+        forbidden = [("prompt", str(help.get("prompt") or ""))] + [
+            (f"captured_outputs:{key}", str(captured.get(key) or "")) for key in _output_keys(step)
         ]
         text, reason = _single_flight(
             (session_id, section_tag, focus), user_message, forbidden, run_blocking

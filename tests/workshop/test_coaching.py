@@ -10,6 +10,9 @@ Tampers (each turns the named test red):
 - call ``coach()`` even when focus is None -> test_c11_no_focus_parity
 - drop the in-flight registry check -> test_c8_cache_and_single_flight
 - drop ``focus`` from the extended INSERT -> test_c14_lakebase
+- rename a scrub rule (e.g. "email" -> "mail") -> test_c16_reasons
+- add the rejected text to the scrub INFO line -> test_c16_reject_log_has_rule_not_text
+- drop re.IGNORECASE from the insert-into/delete-from pattern -> test_c5_scrub, test_c16_public_parity
 """
 
 import contextlib
@@ -299,11 +302,18 @@ def test_c4_kill_switch(env, monkeypatch):
         "Run delete from the staging rows you no longer need.",
         "Then drop table on the old copy.",
         "Check it with select a from catalog.schema.t first.",
+        "Then run merge into the gold table to apply the changes.",
+        "Next, alter table on the silver copy to add the new field.",
+        "Run truncate table on the staging copy before the reload.",
+        "Then alter table my_table add column c1 int.",
+        "Then create table my_table using delta.",
     ],
     ids=[
         "overlap8", "secret", "email", "code_fence", "sql",
         "bearer", "pem_header", "akia", "sql_insert_into", "sql_create_table",
         "sql_update_set", "sql_delete_from", "sql_drop_table", "sql_select_identifier",
+        "sql_merge_into", "sql_alter_table", "sql_truncate_table",
+        "sql_alter_table_statement", "sql_create_table_statement",
     ],
 )
 def test_c5_scrub(env, planted):
@@ -618,3 +628,126 @@ def test_c15_ddl():
     assert columns == {"is_fallback": "BOOLEAN DEFAULT FALSE", "focus": "VARCHAR(16)"}
     for forbidden in ("DROP", "ALTER COLUMN", "TYPE", "DELETE", "UPDATE", "TRUNCATE", "INSERT", "INDEX"):
         assert forbidden not in body.upper(), forbidden
+
+
+# --- C16: reject reasons (observability only; no pattern change) -------------
+
+LONG_BRIEF = (
+    "Store managers need a weekly demand forecast per store and product so that "
+    "replenishment orders arrive before the shelves run empty"
+)
+
+
+def _coach_outcome(env, monkeypatch, planted):
+    """Run vibe_explain_step(focus="why") on ``planted``; return the CoachOutcome."""
+
+    outcomes = []
+    real_coach = coaching.coach
+
+    def spy(**kwargs):
+        outcome = real_coach(**kwargs)
+        outcomes.append(outcome)
+        return outcome
+
+    coaching.clear_caches()
+    monkeypatch.setattr(mcp_server.coaching, "coach", spy)
+    env.model["reply"] = {"response": planted}
+    result = mcp_server.vibe_explain_step(SESSION_ID, TAG, focus="why")
+    (outcome,) = outcomes
+    assert result.is_fallback is outcome.is_fallback
+    return outcome
+
+
+@pytest.mark.parametrize(
+    "planted, reason",
+    [
+        ("Ask jane.doe@example.com for access to the catalog.", "scrub:email"),
+        (f"Authenticate with {FAKE_TOKEN} before you continue.", "scrub:secret"),
+        ("Run this first:\n```python\nprint(1)\n```", "scrub:code_fence"),
+        ("Then run merge into the gold table to apply the changes.", "scrub:sql"),
+        (
+            "Your PRD should " + "covers the personas goals and success metrics for the governed app" + ".",
+            "scrub:overlap:prompt",
+        ),
+        (
+            "Remember that " + "weekly demand forecast per store and product so that replenishment" + " matters.",
+            "scrub:overlap:captured_outputs:use_case_brief",
+        ),
+        # First matching rule wins: email is checked before SQL.
+        ("Ask jane.doe@example.com to run delete from the staging rows.", "scrub:email"),
+    ],
+    ids=["email", "secret", "code_fence", "sql", "overlap_prompt", "overlap_captured", "order"],
+)
+def test_c16_reasons(env, monkeypatch, planted, reason):
+    env.store[SESSION_ID]["captured_outputs"]["use_case_brief"] = LONG_BRIEF
+    outcome = _coach_outcome(env, monkeypatch, planted)
+    assert outcome.is_fallback is True and outcome.coaching is None
+    assert outcome.reason == reason
+
+
+def test_c16_reasons_direct_and_exception(env, monkeypatch):
+    # "empty" never reaches coach() (an empty response is not scrubbed), so pin it directly.
+    assert coaching.scrub_output_with_reason("  ", forbidden_sources=[]) == (None, "empty")
+    assert coaching.scrub_output_with_reason(CLEAN, forbidden_sources=[PROMPT]) == (CLEAN, None)
+    source = "one two three four five six seven eight nine"
+    planted = "x one two three four five six seven eight y"
+    # The public list[str] form labels sources by position.
+    assert coaching.scrub_output_with_reason(planted, forbidden_sources=["", source]) == (
+        None,
+        "overlap:source1",
+    )
+    assert coaching.scrub_output_with_reason(planted, forbidden_sources=[("prompt", source)]) == (
+        None,
+        "overlap:prompt",
+    )
+    # A clean response is still served with reason "generated".
+    outcome = _coach_outcome(env, monkeypatch, CLEAN)
+    assert outcome.is_fallback is False and outcome.reason == "generated"
+
+    def boom(*args, **kwargs):
+        raise ValueError("scrub broke")
+
+    monkeypatch.setattr(coaching, "_scrub_output", boom)
+    assert coaching.scrub_output_with_reason(CLEAN, forbidden_sources=[]) == (None, "exception")
+    outcome = _coach_outcome(env, monkeypatch, CLEAN)
+    assert outcome.is_fallback is True and outcome.reason == "scrub:exception"
+
+
+def test_c16_reject_log_has_rule_not_text(env, monkeypatch, caplog):
+    planted = "Then run merge into the gold table to apply the changes."
+    caplog.set_level("INFO", logger=coaching.logger.name)
+    outcome = _coach_outcome(env, monkeypatch, planted)
+    assert outcome.reason == "scrub:sql"
+    lines = [r.getMessage() for r in caplog.records if "coaching scrub rejected" in r.getMessage()]
+    assert lines == [f"coaching scrub rejected section={TAG} focus=why rule=sql"]
+    logged = caplog.text
+    for start in range(len(planted) - 19):
+        assert planted[start : start + 20] not in logged
+
+    # An accepted response logs no reject line.
+    caplog.clear()
+    _coach_outcome(env, monkeypatch, CLEAN)
+    assert not [r for r in caplog.records if "coaching scrub rejected" in r.getMessage()]
+
+
+def test_c16_public_parity():
+    """Public scrub_output returns exactly its e775185 result for every C5 input."""
+
+    (mark,) = [m for m in test_c5_scrub.pytestmark if m.name == "parametrize"]
+    planted_inputs = mark.args[1]
+    assert len(planted_inputs) >= 14
+    for planted in planted_inputs:
+        assert coaching.scrub_output(planted, forbidden_sources=[PROMPT, BRIEF]) is None, planted
+    # Case variants of the C5 SQL statements also rejected at e775185.
+    for planted in (
+        "Then run INSERT INTO the staging table to load rows.",
+        "Run Delete From the staging rows you no longer need.",
+    ):
+        assert coaching.scrub_output(planted, forbidden_sources=[PROMPT, BRIEF]) is None, planted
+    source ="one two three four five six seven eight nine"
+    passing = "x one two three four five six seven y"
+    assert coaching.scrub_output("x one two three four five six seven eight y", forbidden_sources=[source]) is None
+    assert coaching.scrub_output(passing, forbidden_sources=[source]) == passing
+    assert coaching.scrub_output(CLEAN, forbidden_sources=[PROMPT, BRIEF]) == CLEAN
+    prose = "Next, select the table from the list on the left and confirm the brief."
+    assert coaching.scrub_output(prose, forbidden_sources=[PROMPT, BRIEF]) == prose
