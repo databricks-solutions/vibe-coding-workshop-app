@@ -246,34 +246,38 @@ CHAINING_LITERAL_REFERENCES: dict[int, dict[str, int]] = {
     73: {"activation_wire_lakebase": 36},
 }
 
-GENIE_CHAINING_LITERAL_OVERRIDES: dict[int, dict[str, int]] = {
-    # prd_generation (3) consumes use_case_brief. The producer, use_case_selection,
-    # was retired as a numbered step (step 70) and is now resolved PRE-JOURNEY —
-    # mirroring the App's step 1 "Define Your Intent" (source step 1), which never
-    # appears in any manifest track's numbered outline. Re-pointed 70 -> 1 (the
-    # pre-journey producer's identity): source step 1 is never in ``present_numbers``,
-    # so no numbered step is stamped as the ``use_case_brief`` producer (the MCP
-    # engine writes it up front via ``resolve_use_case``), while prd_generation still
-    # gets ``consumes: ["use_case_brief"]`` (consumes is keyed on the literal keys,
-    # independent of whether the producer is a present numbered step). Genie-only:
-    # keeping this override off the shared table stops non-genie prd_generation from
-    # gaining a phantom consumes entry. See D11 §3.2–3.3.
+# Shared use-case chaining override (D-33, every track): prd_generation (3)
+# consumes use_case_brief. The producer, use_case_selection, was retired as a
+# numbered step (step 70) and is now resolved PRE-JOURNEY — mirroring the App's
+# step 1 "Define Your Intent" (source step 1), which never appears in any manifest
+# track's numbered outline. Pointed at 1 (the pre-journey producer's identity):
+# source step 1 is never in ``present_numbers``, so no numbered step is stamped as
+# the ``use_case_brief`` producer (the MCP engine writes it up front via
+# ``resolve_use_case``), while prd_generation still gets
+# ``consumes: ["use_case_brief"]`` (consumes is keyed on the literal keys,
+# independent of whether the producer is a present numbered step). Shared since
+# the brief exists on every track once the use case locks; a session whose intent
+# is defined without a lock gets the assembler placeholder. See D11 §3.2–3.3.
+USE_CASE_CHAINING_LITERAL_OVERRIDES: dict[int, dict[str, int]] = {
     3: {"use_case_brief": 1},
+}
+
+# Genie-accelerator-only chaining overrides, merged after the shared ones.
+GENIE_CHAINING_LITERAL_OVERRIDES: dict[int, dict[str, int]] = {
     11: {"table_metadata": 22, "prd_document": 3},
     17: {"prd_document": 3, "table_metadata": 10},
     71: {"metric_view": 60, "prd_document": 3},
     72: {"aibi_dashboard": 71, "prd_document": 3},
 }
 
-# Genie-accelerator ``requiresGate`` overrides — decouple a step's gate from its
-# immediate predecessor in the composed outline. ``prd_generation`` must keep
-# gating on ``use_case_selection`` (resolved pre-journey by the MCP engine) even
-# though use_case_selection is no longer the numbered step preceding it; without
-# this the generator would derive requiresGate="project_setup" from the new
-# previous step and the pre-journey use-case gate would no longer unlock PRD.
-# Genie-only: prd_generation appears in many tracks where use_case_selection was
-# never a gate, so this MUST stay track-scoped (applied in `_metadata`).
-GENIE_REQUIRES_GATE_OVERRIDES: dict[str, str] = {
+# Shared use-case ``requiresGate`` override (D-33, every track) — decouples
+# prd_generation's gate from its immediate predecessor in the composed outline.
+# prd_generation gates on ``use_case_selection`` (resolved pre-journey by the MCP
+# engine, or credited from defined intent by ``build_session_state``, D-34) even
+# though use_case_selection is not the numbered step preceding it; without this
+# the generator would derive requiresGate="project_setup" from the previous step
+# and the use-case gate would no longer unlock PRD.
+USE_CASE_REQUIRES_GATE_OVERRIDES: dict[str, str] = {
     "prd_generation": "use_case_selection",
 }
 
@@ -471,12 +475,11 @@ def _metadata(
     }
     if step.section_tag in GENIE_STEP_METADATA:
         data.update(GENIE_STEP_METADATA[step.section_tag])
-    # Track-scoped requiresGate override (genie-accelerator only): keep
-    # prd_generation gating on the pre-journey use_case_selection gate rather than
-    # its numbered predecessor. Applied after GENIE_STEP_METADATA so it wins for the
-    # genie track and is never stamped on the same step in other tracks.
-    if track_id == "genie-accelerator" and step.section_tag in GENIE_REQUIRES_GATE_OVERRIDES:
-        data["requiresGate"] = GENIE_REQUIRES_GATE_OVERRIDES[step.section_tag]
+    # Shared requiresGate override (every track, D-33): keep prd_generation gating
+    # on the pre-journey use_case_selection gate rather than its numbered
+    # predecessor. Applied after GENIE_STEP_METADATA so it wins.
+    if step.section_tag in USE_CASE_REQUIRES_GATE_OVERRIDES:
+        data["requiresGate"] = USE_CASE_REQUIRES_GATE_OVERRIDES[step.section_tag]
     # Both optional-chapter flags are genie-accelerator-only (mirrors
     # LEVELS_WITH_LAKEHOUSE_TOGGLE / the ontology toggle in workflowSections.ts):
     # their flag DEFINITIONS live only on that track, so a shared lakehouse step
@@ -493,6 +496,7 @@ def _metadata(
 
 def _chaining_references(track_id: str) -> dict[int, dict[str, int]]:
     references = dict(CHAINING_LITERAL_REFERENCES)
+    references.update(USE_CASE_CHAINING_LITERAL_OVERRIDES)
     if track_id == "genie-accelerator":
         references.update(GENIE_CHAINING_LITERAL_OVERRIDES)
     if track_id == "agents-accelerator":

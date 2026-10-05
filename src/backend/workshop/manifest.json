@@ -111,8 +111,10 @@
               "title": "PRD Generation",
               "why": null,
               "gate": null,
-              "requiresGate": "project_setup",
-              "consumes": [],
+              "requiresGate": "use_case_selection",
+              "consumes": [
+                "use_case_brief"
+              ],
               "produces": "prd_document",
               "execution": "agent-doable",
               "surfaces": [
@@ -267,8 +269,10 @@
               "title": "PRD Generation",
               "why": null,
               "gate": null,
-              "requiresGate": "project_setup",
-              "consumes": [],
+              "requiresGate": "use_case_selection",
+              "consumes": [
+                "use_case_brief"
+              ],
               "produces": "prd_document",
               "execution": "agent-doable",
               "surfaces": [
@@ -503,8 +507,10 @@
               "title": "PRD Generation",
               "why": null,
               "gate": null,
-              "requiresGate": "project_setup",
-              "consumes": [],
+              "requiresGate": "use_case_selection",
+              "consumes": [
+                "use_case_brief"
+              ],
               "produces": "prd_document",
               "execution": "agent-doable",
               "surfaces": [
@@ -730,8 +736,10 @@
                   "title": "PRD Generation",
                   "why": null,
                   "gate": null,
-                  "requiresGate": "project_setup",
-                  "consumes": [],
+                  "requiresGate": "use_case_selection",
+                  "consumes": [
+                    "use_case_brief"
+                  ],
                   "produces": "prd_document",
                   "execution": "agent-doable",
                   "surfaces": [
@@ -1121,8 +1129,10 @@
               "title": "PRD Generation",
               "why": null,
               "gate": null,
-              "requiresGate": "project_setup",
-              "consumes": [],
+              "requiresGate": "use_case_selection",
+              "consumes": [
+                "use_case_brief"
+              ],
               "produces": "prd_document",
               "execution": "agent-doable",
               "surfaces": [
@@ -1463,8 +1473,10 @@
                   "title": "PRD Generation",
                   "why": null,
                   "gate": null,
-                  "requiresGate": "project_setup",
-                  "consumes": [],
+                  "requiresGate": "use_case_selection",
+                  "consumes": [
+                    "use_case_brief"
+                  ],
                   "produces": "prd_document",
                   "execution": "agent-doable",
                   "surfaces": [
@@ -1987,8 +1999,10 @@
               "title": "PRD Generation",
               "why": null,
               "gate": null,
-              "requiresGate": "project_setup",
-              "consumes": [],
+              "requiresGate": "use_case_selection",
+              "consumes": [
+                "use_case_brief"
+              ],
               "produces": "prd_document",
               "execution": "agent-doable",
               "surfaces": [
@@ -2459,8 +2473,10 @@
                   "title": "PRD Generation",
                   "why": null,
                   "gate": null,
-                  "requiresGate": "project_setup",
-                  "consumes": [],
+                  "requiresGate": "use_case_selection",
+                  "consumes": [
+                    "use_case_brief"
+                  ],
                   "produces": "prd_document",
                   "execution": "agent-doable",
                   "surfaces": [
@@ -2967,8 +2983,10 @@
               "title": "PRD Generation",
               "why": null,
               "gate": null,
-              "requiresGate": "project_setup",
-              "consumes": [],
+              "requiresGate": "use_case_selection",
+              "consumes": [
+                "use_case_brief"
+              ],
               "produces": "prd_document",
               "execution": "agent-doable",
               "surfaces": [
@@ -3953,8 +3971,10 @@
               "title": "PRD Generation",
               "why": null,
               "gate": null,
-              "requiresGate": "project_setup",
-              "consumes": [],
+              "requiresGate": "use_case_selection",
+              "consumes": [
+                "use_case_brief"
+              ],
               "produces": "prd_document",
               "execution": "agent-doable",
               "surfaces": [
@@ -4379,8 +4399,10 @@
               "title": "PRD Generation",
               "why": null,
               "gate": null,
-              "requiresGate": "project_setup",
-              "consumes": [],
+              "requiresGate": "use_case_selection",
+              "consumes": [
+                "use_case_brief"
+              ],
               "produces": "prd_document",
               "execution": "agent-doable",
               "surfaces": [
@@ -4971,8 +4993,10 @@
               "title": "PRD Generation",
               "why": null,
               "gate": null,
-              "requiresGate": "project_setup",
-              "consumes": [],
+              "requiresGate": "use_case_selection",
+              "consumes": [
+                "use_case_brief"
+              ],
               "produces": "prd_document",
               "execution": "agent-doable",
               "surfaces": [
@@ -5248,8 +5272,10 @@
               "title": "PRD Generation",
               "why": null,
               "gate": null,
-              "requiresGate": "project_setup",
-              "consumes": [],
+              "requiresGate": "use_case_selection",
+              "consumes": [
+                "use_case_brief"
+              ],
               "produces": "prd_document",
               "execution": "agent-doable",
               "surfaces": [
@@ -5632,8 +5658,10 @@
               "title": "PRD Generation",
               "why": null,
               "gate": null,
-              "requiresGate": "project_setup",
-              "consumes": [],
+              "requiresGate": "use_case_selection",
+              "consumes": [
+                "use_case_brief"
+              ],
               "produces": "prd_document",
               "execution": "agent-doable",
               "surfaces": [
@@ -6050,8 +6078,10 @@
               "title": "PRD Generation",
               "why": null,
               "gate": null,
-              "requiresGate": "project_setup",
-              "consumes": [],
+              "requiresGate": "use_case_selection",
+              "consumes": [
+                "use_case_brief"
+              ],
               "produces": "prd_document",
               "execution": "agent-doable",
               "surfaces": [

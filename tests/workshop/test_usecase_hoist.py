@@ -15,7 +15,10 @@ the outline endpoint · H6 no intent beat once intent is defined.
 """
 
 import copy
+import importlib.util
+import json
 import pathlib
+import subprocess
 import sys
 
 import pytest
@@ -29,9 +32,17 @@ from src.backend.services import lakebase
 from src.backend.workshop import engine
 from src.backend.workshop.state import build_session_state, has_defined_intent
 
+BASE_REF = "7329736"
+MANIFEST_RELPATH = "src/backend/workshop/manifest.json"
 USE_CASE_GATE = "use_case_selection"
 INDUSTRY = "travel"
 USE_CASE = "ai_driven_booking"
+
+HEAD_MANIFEST = json.loads((REPO_ROOT / MANIFEST_RELPATH).read_text())
+BASE_MANIFEST = json.loads(
+    subprocess.check_output(["git", "show", f"{BASE_REF}:{MANIFEST_RELPATH}"], cwd=REPO_ROOT)
+)
+ALL_TRACKS = sorted(HEAD_MANIFEST["tracks"])
 
 
 def _spa_record(**overrides):
@@ -156,3 +167,78 @@ def test_h4_bridge_never_persists_the_gate(mcp_env):
     assert not isinstance(result, dict), result
     assert USE_CASE_GATE not in store["spa"]["completed_gates"]
     assert "prd_generation" in store["spa"]["completed_gates"]
+
+
+# --- H1: the manifest carries the hoist on every track (Changes 1–2, D-33) -----
+
+
+def _all_sections(track_data):
+    """Base sections plus every variant's sections (variants replace the base)."""
+
+    yield from track_data["sections"]
+    for variant in track_data.get("variants") or []:
+        yield from variant["sections"]
+
+
+def _prd_steps(track_data):
+    return [
+        (section["id"], step)
+        for section in _all_sections(track_data)
+        for step in section["steps"]
+        if step["sectionTag"] == "prd_generation"
+    ]
+
+
+def test_h1_manifest_requires_gate():
+    assert len(ALL_TRACKS) == 14
+    with_prd = [track for track in ALL_TRACKS if _prd_steps(HEAD_MANIFEST["tracks"][track])]
+    # Every track but skills-accelerator has prd_generation (tracks.md).
+    assert with_prd == [track for track in ALL_TRACKS if track != "skills-accelerator"]
+    for track in with_prd:
+        for section_id, step in _prd_steps(HEAD_MANIFEST["tracks"][track]):
+            assert section_id == "define-usecase", (track, section_id)
+            assert "use_case_brief" in step["consumes"], track
+            assert step["requiresGate"] == USE_CASE_GATE, track
+    # genie-accelerator's subtree is byte-identical to the base (it already had both).
+    assert HEAD_MANIFEST["tracks"]["genie-accelerator"] == BASE_MANIFEST["tracks"]["genie-accelerator"]
+    # The ONLY manifest change is those two prd_generation fields.
+    assert {k: v for k, v in HEAD_MANIFEST.items() if k != "tracks"} == {
+        k: v for k, v in BASE_MANIFEST.items() if k != "tracks"
+    }
+    rolled_back = copy.deepcopy(HEAD_MANIFEST)
+    for track, data in rolled_back["tracks"].items():
+        if track == "genie-accelerator":
+            continue
+        for _, step in _prd_steps(data):
+            step["consumes"] = [key for key in step["consumes"] if key != "use_case_brief"]
+            step["requiresGate"] = "project_setup"
+    assert rolled_back == BASE_MANIFEST
+
+
+# --- H2: the generator reproduces the committed manifest -------------------------
+# (test_manifest_parity.test_manifest_regeneration_is_byte_identical pins the same
+# property by re-running the script; this one builds in-process, writing nothing.)
+
+
+def _generator():
+    spec = importlib.util.spec_from_file_location(
+        "generate_manifest_h2", REPO_ROOT / "scripts" / "generate_manifest.py"
+    )
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module  # dataclasses resolve annotations via sys.modules
+    try:
+        spec.loader.exec_module(module)
+    finally:
+        sys.modules.pop(spec.name, None)
+    return module
+
+
+def test_h2_generator_reproduces_manifest():
+    generator = _generator()
+    built = generator.build_manifest(generator.WORKFLOW_SOURCE.read_text(encoding="utf-8"))
+    emitted = json.dumps(built, indent=2, ensure_ascii=False) + "\n"
+    assert emitted == (REPO_ROOT / MANIFEST_RELPATH).read_text(encoding="utf-8")
+    # The two use-case overrides are shared, not genie-scoped (D-33).
+    assert generator.USE_CASE_REQUIRES_GATE_OVERRIDES == {"prd_generation": USE_CASE_GATE}
+    assert generator.USE_CASE_CHAINING_LITERAL_OVERRIDES == {3: {"use_case_brief": 1}}
+    assert 3 not in generator.GENIE_CHAINING_LITERAL_OVERRIDES
