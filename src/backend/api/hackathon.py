@@ -30,7 +30,7 @@ router = APIRouter()
 # Databricks Model Serving call the rest of the app uses; degrades gracefully to
 # a friendly message when no endpoint is configured (local dev).
 try:
-    from src.backend.api.routes import call_databricks_serving_endpoint
+    from src.backend.services.llm import call_databricks_serving_endpoint
     LLM_AVAILABLE = True
 except Exception:  # pragma: no cover
     LLM_AVAILABLE = False
