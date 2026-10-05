@@ -39,6 +39,9 @@ PROMPT = (
 BRIEF = "Retail demand forecasting for store managers"
 # Built at runtime so no token-shaped literal lives in the repo (secret scan).
 FAKE_TOKEN = "da" + "pi" + "0123456789abcdef" * 2
+FAKE_BEARER = "Bea" + "rer " + "aB3dE5fG7hJ9kL1mN2pQ4rS6tU8"
+FAKE_AKIA = "AK" + "IA" + "ABCDEFGH23456789"
+FAKE_PEM = "-----BEGIN " + "CERTIFICATE-----"
 CLEAN = "This step turns your use case brief into a PRD that every later step builds on."
 STATIC_KEYS = {"sectionTag", "title", "why", "how_to_apply", "expected_output"}
 NEW_DEFAULTS = {"coaching": None, "focus": None, "grounded_on": [], "is_fallback": False}
@@ -272,7 +275,8 @@ def test_c4_kill_switch(env, monkeypatch):
         result = mcp_server.vibe_explain_step(SESSION_ID, TAG, focus="why")
         assert result.is_fallback is True and result.coaching is None
     assert env.calls == []
-    assert coaching.coach  # sanity: the module is wired
+    # D-25a: disabled means nothing was coached, so no session_interactions row.
+    assert env.telemetry == []
     monkeypatch.setenv("VIBE_COACHING_ENABLED", "1")
     assert mcp_server.vibe_explain_step(SESSION_ID, TAG, focus="why").is_fallback is False
     assert len(env.calls) == 1
@@ -286,8 +290,21 @@ def test_c4_kill_switch(env, monkeypatch):
         "Ask jane.doe@example.com for access to the catalog.",
         "Run this first:\n```python\nprint(1)\n```",
         "Then check SELECT name FROM main.sales.orders to confirm.",
+        f"Send the header Authorization: {FAKE_BEARER} with each call.",
+        f"Paste {FAKE_PEM} into the trust store first.",
+        f"Use the key {FAKE_AKIA} to reach the bucket.",
+        "Then run insert into the staging table to load rows.",
+        "Next, create table for the gold layer.",
+        "Run update orders set status to closed.",
+        "Run delete from the staging rows you no longer need.",
+        "Then drop table on the old copy.",
+        "Check it with select a from catalog.schema.t first.",
     ],
-    ids=["overlap8", "secret", "email", "code_fence", "sql"],
+    ids=[
+        "overlap8", "secret", "email", "code_fence", "sql",
+        "bearer", "pem_header", "akia", "sql_insert_into", "sql_create_table",
+        "sql_update_set", "sql_delete_from", "sql_drop_table", "sql_select_identifier",
+    ],
 )
 def test_c5_scrub(env, planted):
     env.model["reply"] = {"response": planted}
@@ -303,6 +320,19 @@ def test_c5_scrub(env, planted):
     assert coaching.scrub_output("x one two three four five six seven y", forbidden_sources=[source]) is not None
     # Clean text passes through unchanged.
     assert coaching.scrub_output(CLEAN, forbidden_sources=[PROMPT, BRIEF]) == CLEAN
+
+
+def test_c5_scrub_allows_select_prose(env):
+    prose = "Next, select the table from the list on the left and confirm the brief."
+    assert coaching.scrub_output(prose, forbidden_sources=[PROMPT, BRIEF]) == prose
+    env.model["reply"] = {"response": prose}
+    result = mcp_server.vibe_explain_step(SESSION_ID, TAG, focus="why")
+    assert result.is_fallback is False and result.coaching == prose
+
+
+def test_c5_scrub_input_drops_new_secret_lines():
+    raw = f"keep me\nauth {FAKE_BEARER}\n{FAKE_PEM}\nkey {FAKE_AKIA}\nkeep too"
+    assert coaching.scrub_input(raw) == "keep me\nkeep too"
 
 
 def test_c5_scrub_raising_is_fallback(env, monkeypatch):

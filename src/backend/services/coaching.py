@@ -89,21 +89,35 @@ _SECRET_RES = (
     re.compile(r"\bsk-[A-Za-z0-9_-]{20,}"),
     re.compile(r"\bAKIA[0-9A-Z]{16}\b"),
     re.compile(r"\bxox[abprs]-[A-Za-z0-9-]{10,}"),
-    re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY-----"),
+    re.compile(r"\bBearer\s+[A-Za-z0-9._~+/=-]{20,}", re.IGNORECASE),
+    # Any PEM header (private key, certificate, ...), not only PRIVATE KEY.
+    re.compile(r"-----BEGIN [A-Z ]+-----"),
     re.compile(r"\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}"),
     re.compile(r"(?i)\b(?:password|passwd|secret|token|api[_-]?key)\s*[:=]\s*\S+"),
     # A long run mixing letters and digits reads like a key or token.
     re.compile(r"\b(?=[A-Za-z0-9_-]*\d)(?=[A-Za-z0-9_-]*[A-Za-z])[A-Za-z0-9_-]{40,}\b"),
 )
 _CODE_FENCE_RE = re.compile(r"```|~~~")
+# An identifier-shaped table reference: quoted, dotted (catalog.schema.t) or
+# snake_case. Plain words ("the list") are not identifiers.
+_SQL_IDENT = r"(?:`[^`\s]+`|\"[^\"\s]+\"|\w+(?:\.\w+)+|\w*_\w*)"
 _SQL_RES = (
+    # Upper-case SELECT ... FROM reads as SQL, never as prose.
     re.compile(r"\bSELECT\b[\s\S]*?\bFROM\b"),
-    re.compile(r"\b(?:INSERT\s+INTO|DELETE\s+FROM|MERGE\s+INTO|ALTER\s+TABLE|TRUNCATE\s+TABLE)\b"),
-    re.compile(r"\bUPDATE\s+[\w.`\"]+\s+SET\b"),
-    re.compile(r"\b(?:CREATE|DROP)\s+(?:OR\s+REPLACE\s+)?(?:TABLE|VIEW|SCHEMA|FUNCTION|CATALOG)\b"),
-    # Lower-case SQL needs a column list right after select, so prose like
-    # "select the table from the list" does not trip it.
-    re.compile(r"\bselect\s+(?:\*|[\w.]+(?:\s*,\s*[\w.]+)*)\s+from\s+[\w.`]+"),
+    # Any-case select ... from rejects only when FROM is followed by an
+    # identifier-shaped token, or the select list is * or a comma list. So
+    # "select the table from the list" passes; "select a from catalog.schema.t" does not.
+    re.compile(r"\bselect\b[\s\S]{1,200}?\bfrom\s+" + _SQL_IDENT, re.IGNORECASE),
+    re.compile(r"\bselect\s+(?:\*|\w+(?:\s*,\s*\w+)+)\s+from\s+\w+", re.IGNORECASE),
+    re.compile(
+        r"\b(?:insert\s+into|delete\s+from|merge\s+into|alter\s+table|truncate\s+table)\b",
+        re.IGNORECASE,
+    ),
+    re.compile(r"\bupdate\s+[\w.`\"]+\s+set\b", re.IGNORECASE),
+    re.compile(
+        r"\b(?:create|drop)\s+(?:or\s+replace\s+)?(?:table|view|schema|function|catalog)\b",
+        re.IGNORECASE,
+    ),
 )
 # A data row: a markdown table row, or a delimited line of 3+ fields.
 _TABLE_ROW_RE = re.compile(r"^\s*\|.*\|\s*$")
