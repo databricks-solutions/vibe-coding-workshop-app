@@ -19,7 +19,9 @@ completed/skipped step sets is on an allowlist with a reason, and the sets those
 reads see are gate-derived (deriveCompletedStepNumbers / mergeStatus). X3b pins
 the copy-based reads (Array.from / new Set / spread) the same way, and X3c pins
 every numeric-literal ``.add(<n>)`` on a completed/skipped set (today only the
-step-1 intent credit, written back as the usecase_selection gate).
+step-1 intent credit, written back as the usecase_selection gate). X3d pins
+numeric-literal adds on any receiver (a renamed copy escapes X3c), and X3e pins
+for-of iteration over the sets (a copy-like read X3b does not see).
 
 All offline: the REAL load_session / save paths run against #84's in-memory
 ``_fake_sessions_db``; the route runs through a TestClient.
@@ -343,6 +345,65 @@ def test_x3c_every_numeric_step_literal_add_is_allowlisted():
         assert all(re.search(r"\.add\(\s*1\s*\)$", m) for m in _NUMERIC_ADD.findall(text)), rel
     sections = (REPO_ROOT / "src" / "constants" / "workflowSections.ts").read_text(encoding="utf-8")
     assert re.search(r"\n\s*1: \{ number: 1,[^\n]*sectionTag: 'usecase_selection'", sections)
+
+
+# X3d: X3c keys on the receiver's name, so a numeric literal added to a copy held
+# under another name (e.g. `newSet.add(5)`) escapes it. This pins every
+# numeric-literal `.add(<n>)` on ANY receiver, step set or not, so a new one shows
+# up for review.
+_ANY_NUMERIC_ADD = re.compile(r"\b[A-Za-z_]\w*\??\.add\(\s*\d+\s*\)")
+
+# file -> (exact count of numeric-literal adds on any receiver, why). Measured at a175f3a.
+NUMERIC_ANY_ADD_ALLOWLIST = {
+    "src/App.tsx": (
+        2,
+        "restoredCompleted.add(1) (restoreSession) and loadedCompleted.add(1) (session "
+        "load): the step-1 intent overlay over the deriveCompletedStepNumbers set when "
+        "industry and use_case are set; written back as usecase_selection by stepNumbersToGates",
+    ),
+    "src/components/WorkflowDiagram.tsx": (
+        2,
+        "newCompletedSteps.add(1) in handlePromptGenerated (the learner picks a use case: "
+        "step 1, passed up via onCompletedStepsChange and written as usecase_selection); "
+        "visibleStepNumbers.add(1) in triggerCelebration is a visibility set for chapter "
+        "completion, not a completion set, and is never persisted",
+    ),
+}
+
+
+def test_x3d_every_numeric_literal_add_on_any_receiver_is_allowlisted():
+    # TAMPER (add `newSet.add(5);` inside handleSetUpProjectComplete in WorkflowDiagram.tsx) -> red.
+    expected = {rel: count for rel, (count, _why) in NUMERIC_ANY_ADD_ALLOWLIST.items()}
+    assert _scan_counts(_ANY_NUMERIC_ADD) == expected, (
+        "numeric-literal .add(<n>) calls changed; a new one may credit a step by number "
+        "through a copy, so allowlist it with a reason (and update the count)"
+    )
+    assert all(why.strip() for _count, why in NUMERIC_ANY_ADD_ALLOWLIST.values())
+
+
+# X3e: a for-of over a completed/skipped set is a copy-like read _NUMERIC_COPY misses.
+_NUMERIC_FOR_OF = re.compile(
+    r"for\s*\(\s*(?:const|let|var)\s+\w+\s+of\s+[\w.]*?(completedSteps|skippedSteps)\b"
+)
+
+# file -> (exact count of for-of reads, why they are allowed). Measured at a175f3a.
+NUMERIC_FOR_OF_ALLOWLIST = {
+    "src/constants/scoring.ts": (
+        1,
+        "getCompletedChapter merges the caller's (projected) skippedSteps into a local "
+        "allDone set for the chapter-done check; pure, never persisted",
+    ),
+}
+
+
+def test_x3e_every_numeric_step_set_for_of_is_allowlisted():
+    # TAMPER (add `for (const s of completedSteps) { void s; }` to App.tsx) -> red.
+    expected = {rel: count for rel, (count, _why) in NUMERIC_FOR_OF_ALLOWLIST.items()}
+    assert _scan_counts(_NUMERIC_FOR_OF) == expected, (
+        "for-of reads of the numeric step sets changed; route a new consumer through the "
+        "gate-derived helpers or allowlist it with a reason (and update the count)"
+    )
+    assert all(why.strip() for _count, why in NUMERIC_FOR_OF_ALLOWLIST.values())
 
 
 def test_x3_numeric_sets_are_gate_derived():
