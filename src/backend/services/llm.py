@@ -64,9 +64,8 @@ def get_workspace_client() -> Optional['WorkspaceClient']:
             _workspace_client = get_tagged_workspace_client()
             logger.info("Databricks WorkspaceClient initialized (UA: %s/%s)", PRODUCT_NAME, PRODUCT_VERSION)
         except Exception as e:
-            logger.warning(f"Could not initialize WorkspaceClient: {e}")
-            import traceback
-            logger.warning(f"  Traceback: {traceback.format_exc()}")
+            logger.warning(f"Could not initialize WorkspaceClient: {type(e).__name__} (status={getattr(e, 'status_code', None)}, error_code={getattr(e, 'error_code', None)}, message length={len(str(e))})")
+            logger.debug("  WorkspaceClient init traceback", exc_info=True)
     return _workspace_client
 
 
@@ -93,7 +92,7 @@ def get_available_serving_endpoints() -> List[str]:
         logger.info(f"Found {len(endpoint_names)} serving endpoints: {endpoint_names}")
         return endpoint_names
     except Exception as e:
-        logger.error(f"Error listing serving endpoints: {e}")
+        logger.error(f"Error listing serving endpoints: {type(e).__name__} (status={getattr(e, 'status_code', None)}, error_code={getattr(e, 'error_code', None)}, message length={len(str(e))})")
         return []
 
 
@@ -339,7 +338,7 @@ async def call_databricks_serving_endpoint(
                 return {"raw": str(result)}
                 
             except Exception as e:
-                logger.error(f"  SDK query failed: {e}")
+                logger.error(f"  SDK query failed for {endpoint}: {type(e).__name__} (status={getattr(e, 'status_code', None)}, error_code={getattr(e, 'error_code', None)}, message length={len(str(e))})")
                 raise
         
         # Bypass SDK's buggy serving_endpoints.query() - use low-level API client instead
@@ -381,7 +380,7 @@ async def call_databricks_serving_endpoint(
         except Exception as openai_err:
             last_error = openai_err
             error_msg = str(openai_err).lower()
-            logger.info(f"  OpenAI format failed: {openai_err}")
+            logger.info(f"  OpenAI format failed for {endpoint}: {type(openai_err).__name__} (status={getattr(openai_err, 'status_code', None)}, error_code={getattr(openai_err, 'error_code', None)}, message length={len(str(openai_err))})")
             
             # Only try Agent format if it's a schema/format error
             if "schema" in error_msg or "missing inputs" in error_msg or "input" in error_msg:
@@ -394,7 +393,7 @@ async def call_databricks_serving_endpoint(
                         last_error = None
                         break
                     except Exception as agent_err:
-                        logger.info(f"  Agent format variation {i+1} failed: {agent_err}")
+                        logger.info(f"  Agent format variation {i+1} failed: {type(agent_err).__name__} (status={getattr(agent_err, 'status_code', None)}, error_code={getattr(agent_err, 'error_code', None)}, message length={len(str(agent_err))})")
                         last_error = agent_err
         
         if last_error:
@@ -425,7 +424,7 @@ async def call_databricks_serving_endpoint(
                         response = query_response.as_dict()
                         logger.info(f"  Converted using as_dict()")
                 except Exception as e:
-                    logger.warning(f"  as_dict() failed: {e}")
+                    logger.warning(f"  as_dict() failed: {type(e).__name__} (message length={len(str(e))})")
             
             # Try to_dict
             if response is None:
@@ -434,7 +433,7 @@ async def call_databricks_serving_endpoint(
                         response = query_response.to_dict()
                         logger.info(f"  Converted using to_dict()")
                 except Exception as e:
-                    logger.warning(f"  to_dict() failed: {e}")
+                    logger.warning(f"  to_dict() failed: {type(e).__name__} (message length={len(str(e))})")
             
             # Try vars/__dict__
             if response is None:
@@ -443,7 +442,7 @@ async def call_databricks_serving_endpoint(
                         response = dict(vars(query_response))
                         logger.info(f"  Converted using vars()")
                 except Exception as e:
-                    logger.warning(f"  vars() failed: {e}")
+                    logger.warning(f"  vars() failed: {type(e).__name__} (message length={len(str(e))})")
             
             # Try JSON serialization
             if response is None:
@@ -451,7 +450,7 @@ async def call_databricks_serving_endpoint(
                     response = json.loads(json.dumps(query_response, default=str))
                     logger.info(f"  Converted using JSON serialization")
                 except Exception as e:
-                    logger.warning(f"  JSON serialization failed: {e}")
+                    logger.warning(f"  JSON serialization failed: {type(e).__name__} (message length={len(str(e))})")
             
             # Ultimate fallback - string
             if response is None:
@@ -615,9 +614,8 @@ async def call_databricks_serving_endpoint(
         error_str = str(e)
         logger.error(f"  ❌ SDK query failed!")
         logger.error(f"     Error type: {type(e).__name__}")
-        logger.error(f"     Error message: {error_str}")
-        import traceback
-        logger.error(f"     Traceback:\n{traceback.format_exc()}")
+        logger.error(f"     Endpoint: {endpoint}, status={getattr(e, 'status_code', None)}, error_code={getattr(e, 'error_code', None)}, message length={len(error_str)}")
+        logger.debug("     SDK query traceback", exc_info=True)
         
         error_msg = error_str.lower()
         if "unauthorized" in error_msg or "403" in error_msg or "401" in error_msg or "permission" in error_msg:

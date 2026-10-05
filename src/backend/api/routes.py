@@ -1217,7 +1217,6 @@ async def generate_prompt_content_with_llm(
         
         logger.info(f"     Response length: {len(generated_prompt)} characters")
         logger.info(f"     Token usage: {usage}")
-        logger.info(f"     Response preview: {generated_prompt[:200]}...")
         
         # Check if response looks like a mock
         is_mock = "[Mock Response" in generated_prompt
@@ -1238,10 +1237,9 @@ async def generate_prompt_content_with_llm(
         }
         
     except Exception as e:
-        logger.error(f"  ❌ ERROR generating prompt with LLM: {str(e)}")
+        logger.error(f"  ❌ ERROR generating prompt with LLM: {type(e).__name__} (status={getattr(e, 'status_code', None)}, error_code={getattr(e, 'error_code', None)}, message length={len(str(e))})")
         logger.error(f"     Exception type: {type(e).__name__}")
-        import traceback
-        logger.error(f"     Traceback: {traceback.format_exc()}")
+        logger.debug("     LLM prompt generation traceback", exc_info=True)
         logger.info("  Falling back to returning input as prompt")
         # Fallback to returning input as prompt
         return {
@@ -1552,7 +1550,7 @@ async def _stream_with_retry(
                 if auth_header:
                     headers.update(auth_header)
             except Exception as auth_err:
-                logger.warning(f"Could not get auth headers (attempt {attempt}): {auth_err}")
+                logger.warning(f"Could not get auth headers for {endpoint} (attempt {attempt}): {type(auth_err).__name__} (error_code={getattr(auth_err, 'error_code', None)}, message length={len(str(auth_err))})")
 
             try:
                 async with http_client.stream("POST", url, json=request_body, headers=headers) as response:
@@ -1560,7 +1558,7 @@ async def _stream_with_retry(
                         error_body = await response.aread()
                         err_msg = error_body.decode()[:500] if error_body else "Unknown error"
                         last_error_msg = f"HTTP {response.status_code}: {err_msg}"
-                        logger.error(f"[LLM Stream] {endpoint} returned {response.status_code}: {err_msg}")
+                        logger.error(f"[LLM Stream] {endpoint} returned {response.status_code} on attempt {attempt} (error body length {len(error_body or b'')})")
 
                         if response.status_code in _RETRYABLE_STATUS_CODES and attempt < _MAX_RETRIES:
                             delay = _BASE_DELAY * (2 ** (attempt - 1))
@@ -1625,7 +1623,7 @@ async def _stream_with_retry(
                 if _is_retryable_exception(e) and attempt < _MAX_RETRIES:
                     delay = _BASE_DELAY * (2 ** (attempt - 1))
                     reason = _friendly_reason(exc=e)
-                    logger.warning(f"Retryable error on attempt {attempt}: {e}, retrying in {delay}s")
+                    logger.warning(f"Retryable error from {endpoint} on attempt {attempt}: {type(e).__name__} (status={getattr(e, 'status_code', None)}, message length={len(str(e))}), retrying in {delay}s")
                     yield _sse_event({
                         "type": "retry",
                         "attempt": attempt,
@@ -1636,11 +1634,11 @@ async def _stream_with_retry(
                     await asyncio.sleep(delay)
                     continue
 
-                logger.error(f"Non-retryable streaming error: {e}")
+                logger.error(f"Non-retryable streaming error from {endpoint} on attempt {attempt}: {type(e).__name__} (status={getattr(e, 'status_code', None)}, error_code={getattr(e, 'error_code', None)}, message length={len(str(e))})")
                 yield _sse_event({"type": "error", "error": last_error_msg})
                 return
 
-    logger.error(f"All {_MAX_RETRIES} attempts failed. Last error: {last_error_msg}")
+    logger.error(f"All {_MAX_RETRIES} attempts failed for {endpoint} (last error length {len(last_error_msg)})")
     yield _sse_event({
         "type": "error",
         "error": f"Generation failed after {_MAX_RETRIES} attempts. Last error: {last_error_msg}",
@@ -1797,8 +1795,8 @@ async def collect_step_prompt_via_stream(
         logger.warning(
             "[MCP collector] stream drain raised for section %s (cause=exception); degrading to template",
             section_tag,
-            exc_info=True,
         )
+        logger.debug("[MCP collector] stream drain traceback for section %s", section_tag, exc_info=True)
         return None
 
     content = "".join(chunks)
