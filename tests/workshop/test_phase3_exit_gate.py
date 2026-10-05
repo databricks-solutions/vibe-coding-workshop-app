@@ -16,7 +16,10 @@ status agreement after mixed-surface progress (one step via MCP
 vibe_complete_step, one via the App's update-metadata with base_completed_gates,
 the #90 path). X3 is a static guard: every direct read of the SPA's numeric
 completed/skipped step sets is on an allowlist with a reason, and the sets those
-reads see are gate-derived (deriveCompletedStepNumbers / mergeStatus).
+reads see are gate-derived (deriveCompletedStepNumbers / mergeStatus). X3b pins
+the copy-based reads (Array.from / new Set / spread) the same way, and X3c pins
+every numeric-literal ``.add(<n>)`` on a completed/skipped set (today only the
+step-1 intent credit, written back as the usecase_selection gate).
 
 All offline: the REAL load_session / save paths run against #84's in-memory
 ``_fake_sessions_db``; the route runs through a TestClient.
@@ -213,9 +216,9 @@ def test_x2_mcp_and_app_completions_read_back_identically(client, db):
 _NUMERIC_READ = re.compile(r"\b(completedSteps|skippedSteps)\??\.(has|size|forEach|values|keys|entries)\b")
 
 # file -> (exact count of direct numeric reads, why they are allowed). Every set
-# these reads see is gate-derived: App hydrates completedSteps/skippedSteps only
-# from deriveCompletedStepNumbers/deriveSkippedStepNumbers(completed_gates /
-# skipped_gates), and WorkflowDiagram receives the mergeStatus projection of the
+# these reads see is gate-derived: App hydrates completedSteps/skippedSteps from
+# deriveCompletedStepNumbers/deriveSkippedStepNumbers(completed_gates /
+# skipped_gates), plus the step-1 intent overlay pinned by X3c, and WorkflowDiagram receives the mergeStatus projection of the
 # endpoint outline (pinned by test_x3_numeric_sets_are_gate_derived).
 NUMERIC_READ_ALLOWLIST = {
     "src/App.tsx": (1, "header progress count (completedSteps.size), display only"),
@@ -260,6 +263,86 @@ def test_x3_every_numeric_step_set_read_is_allowlisted():
         "helpers or allowlist it with a reason (and update the count when one is removed)"
     )
     assert all(why.strip() for _count, why in NUMERIC_READ_ALLOWLIST.values())
+
+
+# X3b: copy-based reads of the same sets escape _NUMERIC_READ, so they are pinned
+# separately: Array.from(...), new Set(...) and spread of completedSteps/skippedSteps.
+_NUMERIC_COPY = re.compile(
+    r"(?:Array\.from\(\s*|new Set\(\s*|\.\.\.\s*)(completedSteps|skippedSteps)\b"
+)
+
+# file -> (exact count of copy-based reads, why they are allowed). Measured at 3d5b700.
+NUMERIC_COPY_ALLOWLIST = {
+    "src/App.tsx": (
+        8,
+        "direction lock and level-switch guards (step >= 4 / >= 2 thresholds), the "
+        "initial expanded step, and the stepNumbersToGates writes (toggle skipped_gates "
+        "and handleSaveSession); includes one comment line naming WorkflowDiagram's seeds",
+    ),
+    "src/components/LevelSelector.tsx": (
+        1,
+        "hasStartedWorkflow (any step >= 2) path-lock threshold over the completedSteps prop",
+    ),
+    "src/components/WorkflowDiagram.tsx": (
+        8,
+        "toggle/reset/skip handler seeds over the mergeStatus-projected prop; the next set "
+        "goes back to App and is written through stepNumbersToGates",
+    ),
+    "src/constants/scoring.ts": (3, "pure points calculator normalising the caller's (projected) sets"),
+}
+
+# X3c: a numeric literal added to a completed/skipped step set bypasses the gates.
+_NUMERIC_ADD = re.compile(r"\b\w*(?:[Cc]ompleted|[Ss]kipped)\w*\??\.add\(\s*\d+\s*\)")
+
+# file -> (exact count of numeric-literal adds, why they are allowed). All are the
+# step-1 "Define Your Intent" credit (ALL_STEPS[1], gate usecase_selection). They
+# are not display-only: stepNumbersToGates writes step 1 back as usecase_selection.
+NUMERIC_ADD_ALLOWLIST = {
+    "src/App.tsx": (
+        2,
+        "step-1 intent overlay on both hydration paths when industry and use_case are set; "
+        "persisted as the usecase_selection gate on the next gate write",
+    ),
+    "src/components/WorkflowDiagram.tsx": (
+        1,
+        "the learner picks a use case: step 1 completes, written as usecase_selection",
+    ),
+}
+
+
+def _scan_counts(pattern):
+    found = {}
+    for rel, text in _frontend_sources():
+        count = len(pattern.findall(text))
+        if count:
+            found[rel] = count
+    return found
+
+
+def test_x3b_every_numeric_step_set_copy_is_allowlisted():
+    # TAMPER (add `const copy = Array.from(completedSteps);` to any scanned file) -> red.
+    expected = {rel: count for rel, (count, _why) in NUMERIC_COPY_ALLOWLIST.items()}
+    assert _scan_counts(_NUMERIC_COPY) == expected, (
+        "copy-based numeric step-set reads changed; route a new consumer through the "
+        "gate-derived helpers or allowlist it with a reason (and update the count)"
+    )
+    assert all(why.strip() for _count, why in NUMERIC_COPY_ALLOWLIST.values())
+
+
+def test_x3c_every_numeric_step_literal_add_is_allowlisted():
+    # TAMPER (add `completedSteps.add(7);` to any scanned file) -> red.
+    expected = {rel: count for rel, (count, _why) in NUMERIC_ADD_ALLOWLIST.items()}
+    assert _scan_counts(_NUMERIC_ADD) == expected, (
+        "numeric-literal adds to a completed/skipped step set changed; a new one "
+        "credits a step by number, not by gate"
+    )
+    assert all(why.strip() for _count, why in NUMERIC_ADD_ALLOWLIST.values())
+    # Every allowlisted add is step 1, and step 1 is the usecase_selection gate.
+    for rel in NUMERIC_ADD_ALLOWLIST:
+        text = (REPO_ROOT / rel).read_text(encoding="utf-8")
+        assert all(re.search(r"\.add\(\s*1\s*\)$", m) for m in _NUMERIC_ADD.findall(text)), rel
+    sections = (REPO_ROOT / "src" / "constants" / "workflowSections.ts").read_text(encoding="utf-8")
+    assert re.search(r"\n\s*1: \{ number: 1,[^\n]*sectionTag: 'usecase_selection'", sections)
 
 
 def test_x3_numeric_sets_are_gate_derived():
