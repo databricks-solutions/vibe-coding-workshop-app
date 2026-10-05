@@ -404,7 +404,7 @@ async def call_databricks_serving_endpoint(
         logger.info(f"  Raw API response type: {type(query_response).__name__}")
         
         elapsed_time = time.time() - start_time
-        logger.info(f"  Response repr: {repr(query_response)[:500]}")
+        logger.info(f"  Response received: type={type(query_response).__name__}")
         
         # Convert response to a plain dict - SDK often returns dict already
         response = None
@@ -473,8 +473,7 @@ async def call_databricks_serving_endpoint(
         if isinstance(response, dict):
             for key, val in response.items():
                 val_type = type(val).__name__
-                val_preview = str(val)[:100] if val else "None"
-                logger.debug(f"    Key '{key}': type={val_type}, value={val_preview}")
+                logger.debug(f"    Key '{key}': type={val_type}, length={len(str(val))}")
             
             # Try OpenAI format (choices)
             if "choices" in response and response["choices"]:
@@ -571,8 +570,6 @@ async def call_databricks_serving_endpoint(
             logger.info(f"     Model: {model_used}")
             logger.info(f"     Response length: {len(str(content))} characters")
             logger.info(f"     Usage: {usage}")
-            preview = str(content)[:150]
-            logger.info(f"     Preview: {preview}{'...' if len(str(content)) > 150 else ''}")
             
             return {
                 "response": content,

@@ -13,7 +13,8 @@ Seven offline tests:
   E5 seam for coaching: llm.call_databricks_serving_endpoint works offline with its
      helpers patched on llm (the owner module).
   E6 body fidelity: each moved function's source is byte-identical to its source in
-     routes.py at the pinned pre-extract base SHA.
+     routes.py at the pinned pre-extract base SHA; call_databricks_serving_endpoint
+     only after applying E6_INTENTIONAL_EDITS (llm-response-log-redact, D-27).
      TAMPER: change one character in llm.call_databricks_serving_endpoint.
      A clone without the base object FAILS (fetch full history), never skips (D-21).
   E7 no stale patch target: no test monkeypatches a moved name (or the
@@ -173,6 +174,41 @@ def _base_routes_source():
     return out.stdout
 
 
+# post-move intentional edits (llm-response-log-redact, D-27): ordered
+# (old_line, new_line_or_None) pairs applied to the base body of
+# call_databricks_serving_endpoint; None deletes the line. Each old line must occur
+# exactly once in the base body; any other difference stays red.
+E6_INTENTIONAL_EDITS = [
+    (
+        '        logger.info(f"  Response repr: {repr(query_response)[:500]}")',
+        '        logger.info(f"  Response received: type={type(query_response).__name__}")',
+    ),
+    ('                val_preview = str(val)[:100] if val else "None"', None),
+    (
+        "                logger.debug(f\"    Key '{key}': type={val_type}, value={val_preview}\")",
+        "                logger.debug(f\"    Key '{key}': type={val_type}, length={len(str(val))}\")",
+    ),
+    ("            preview = str(content)[:150]", None),
+    (
+        "            logger.info(f\"     Preview: {preview}{'...' if len(str(content)) > 150 else ''}\")",
+        None,
+    ),
+]
+E6_EDITED_FUNCTION = "call_databricks_serving_endpoint"
+
+
+def _apply_intentional_edits(body, edits):
+    lines = body.split("\n")
+    for old, new in edits:
+        hits = [i for i, line in enumerate(lines) if line == old]
+        assert len(hits) == 1, f"intentional edit must match exactly once, got {len(hits)}: {old!r}"
+        if new is None:
+            del lines[hits[0]]
+        else:
+            lines[hits[0]] = new
+    return "\n".join(lines)
+
+
 def test_e6_moved_function_bodies_are_byte_identical_to_base():
     base_src = _base_routes_source()
     base_tree = ast.parse(base_src)
@@ -184,7 +220,10 @@ def test_e6_moved_function_bodies_are_byte_identical_to_base():
     assert sorted(base_defs) == sorted(MOVED_FUNCTIONS)
     for name in MOVED_FUNCTIONS:
         moved = inspect.getsource(getattr(llm, name)).rstrip("\n")
-        assert moved == base_defs[name], f"{name} body differs from routes.py@{BASE_SHA[:7]}"
+        expected = base_defs[name]
+        if name == E6_EDITED_FUNCTION:
+            expected = _apply_intentional_edits(expected, E6_INTENTIONAL_EDITS)
+        assert moved == expected, f"{name} body differs from routes.py@{BASE_SHA[:7]}"
 
 
 def test_e7_no_test_patches_a_moved_name_on_routes():
