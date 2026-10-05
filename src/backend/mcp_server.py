@@ -31,6 +31,7 @@ from mcp.types import (
 )
 from pydantic import BaseModel, ConfigDict, Field, RootModel
 
+from .services import coaching
 from .services.lakebase import (
     append_session_interaction,
     is_lakebase_configured,
@@ -214,6 +215,12 @@ class StepHelpResult(BaseModel):
     why: str
     how_to_apply: str
     expected_output: str
+    # Grounded coaching (D-22), set only when the call passes `focus`; with no
+    # focus these keep their defaults and the static help is unchanged (D-23).
+    coaching: str | None = None
+    focus: Literal["what_now", "why", "unblock", "review"] | None = None
+    grounded_on: list[str] = Field(default_factory=list)
+    is_fallback: bool = False
 
 
 class SubmitAnswerResult(BaseModel):
@@ -1399,10 +1406,11 @@ def vibe_next_step(session_id: str, context: Context | None = None) -> NextStepR
 @mcp.tool(
     name="vibe_explain_step",
     description=(
-        "On-demand help for a step: returns `how_to_apply` and `expected_output`, plus `title` and "
-        "`why`. The step payload is deliberately slim and omits these — call this ONLY when the learner "
-        "asks you to explain a step, how to apply it, or what to expect. Args: `session_id`; "
-        "`sectionTag` (optional, defaults to the current step)."
+        "On-demand step help: `how_to_apply`, `expected_output`, `title`, `why` (not in the slim "
+        "payload). Call ONLY when the learner asks to explain a step or what to expect. Args: "
+        "`session_id`; `sectionTag` (optional, default current step). Pass `focus` "
+        "(what_now|why|unblock|review) when they ask what to do now, why it matters, are stuck, or "
+        "want a recap: grounded `coaching`, else `is_fallback: true`."
     ),
     annotations=ToolAnnotations(
         readOnlyHint=True,
@@ -1415,8 +1423,14 @@ def vibe_next_step(session_id: str, context: Context | None = None) -> NextStepR
 def vibe_explain_step(
     session_id: str,
     sectionTag: str | None = None,
+    focus: str | None = None,
     context: Context | None = None,
 ) -> StepHelpResult:
+    if focus is not None and focus not in coaching.FOCI:
+        return _error_result(  # type: ignore[return-value]
+            "INVALID_PARAMETER",
+            f"focus must be one of {', '.join(coaching.FOCI)}.",
+        )
     loaded = _load_session_for_request(session_id, context)
     if loaded is None:
         return _error_result("INVALID_SESSION", "The requested session could not be resolved.")  # type: ignore[return-value]
@@ -1442,6 +1456,7 @@ def vibe_explain_step(
         setup = _project_setup_content(str(state.session_parameters.get("user_email") or ""))
         how_to_apply = setup["how_to_apply"]
         expected_output = setup["expected_output"]
+        prompt = setup["prompt"]
     else:
         industry = state.session_parameters.get("industry", DEFAULT_INDUSTRY)
         use_case = state.session_parameters.get("use_case", DEFAULT_USE_CASE)
@@ -1456,12 +1471,34 @@ def vibe_explain_step(
         )
         how_to_apply = assembled.get("how_to_apply", "")
         expected_output = assembled.get("expected_output", "")
-    return StepHelpResult(
+        prompt = assembled.get("input", "")
+    help_result = StepHelpResult(
         sectionTag=step.sectionTag,
         title=step.title,
         why=step.why or "",
         how_to_apply=how_to_apply,
         expected_output=expected_output,
+    )
+    if focus is None:
+        return help_result
+    # Coaching is read-only and fail-open (D-22): the static fields stay as built
+    # above; a failed or disabled coach() only sets is_fallback.
+    outcome = coaching.coach(
+        session_id=session_id,
+        step=step,
+        state=state,
+        help={**help_result.model_dump(), "prompt": prompt},
+        focus=focus,
+        track=DEFAULT_TRACK,
+        run_blocking=_run_async_blocking,
+    )
+    return help_result.model_copy(
+        update={
+            "coaching": outcome.coaching,
+            "focus": focus,
+            "grounded_on": list(outcome.grounded_on),
+            "is_fallback": outcome.is_fallback,
+        }
     )
 
 
