@@ -1,6 +1,6 @@
 """services/llm.py extract (D4 §1.2, D-20): a move + import rewire, no behavior change.
 
-Six offline tests:
+Seven offline tests:
 
   E1 identity: every re-exported name is the SAME object on routes and services.llm.
      TAMPER: drop a name from the routes re-export -> AttributeError / not-identical.
@@ -15,6 +15,11 @@ Six offline tests:
   E6 body fidelity: each moved function's source is byte-identical to its source in
      routes.py at the pinned pre-extract base SHA.
      TAMPER: change one character in llm.call_databricks_serving_endpoint.
+     A clone without the base object FAILS (fetch full history), never skips (D-21).
+  E7 no stale patch target: no test monkeypatches a moved name (or the
+     DATABRICKS_SDK_AVAILABLE flag the moved code reads from llm) on routes; that
+     patch lands on the re-export and never reaches the moved code.
+     TAMPER: put `routes` back in test_offload_fallback_paths.py's SDK-flag patch.
 """
 
 import ast
@@ -22,6 +27,7 @@ import asyncio
 import inspect
 import os
 import pathlib
+import re
 import shutil
 import subprocess
 import sys
@@ -160,7 +166,10 @@ def _base_routes_source():
         cwd=REPO_ROOT, capture_output=True, text=True,
     )
     if out.returncode != 0:
-        pytest.skip(f"base SHA {BASE_SHA} is not available: {out.stderr.strip()}")
+        pytest.fail(
+            f"base SHA {BASE_SHA} is not in this clone; fetch full history "
+            f"(git fetch --unshallow) — E6 must not skip: {out.stderr.strip()}"
+        )
     return out.stdout
 
 
@@ -176,3 +185,21 @@ def test_e6_moved_function_bodies_are_byte_identical_to_base():
     for name in MOVED_FUNCTIONS:
         moved = inspect.getsource(getattr(llm, name)).rstrip("\n")
         assert moved == base_defs[name], f"{name} body differs from routes.py@{BASE_SHA[:7]}"
+
+
+def test_e7_no_test_patches_a_moved_name_on_routes():
+    names = MOVED_FUNCTIONS + MOVED_STATE + ["DATABRICKS_SDK_AVAILABLE"]
+    pattern = re.compile(
+        r"""monkeypatch\.setattr\(\s*routes\s*,\s*["'](%s)["']"""
+        % "|".join(re.escape(n) for n in names)
+    )
+    this_file = pathlib.Path(__file__).resolve()
+    hits = []
+    for path in sorted((REPO_ROOT / "tests").rglob("*.py")):
+        if path.resolve() == this_file:
+            continue
+        text = path.read_text(encoding="utf-8")
+        for m in pattern.finditer(text):
+            lineno = text.count("\n", 0, m.start()) + 1
+            hits.append(f"{path.relative_to(REPO_ROOT)}:{lineno}: {m.group(1)}")
+    assert hits == [], "patch these on services.llm, not routes:\n" + "\n".join(hits)

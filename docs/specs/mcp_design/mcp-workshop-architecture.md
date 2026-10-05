@@ -27,7 +27,7 @@ and [`designing-mcp-servers-for-genie-code.md` §4](./designing-mcp-servers-for-
 | Identity endpoint | `/api/user/current` `routes.py:6557` |
 | Assembler (one path, both adapters) | `get_section_input_content` `routes.py:1241` |
 | Sessions store | `db/lakebase/ddl/03_sessions.sql` |
-| FMAPI call (coaching, §1.2) | `call_databricks_serving_endpoint(...)` **async** `routes.py:1400`; default endpoint `SERVING_ENDPOINT_NAME` `routes.py:440` |
+| FMAPI call (coaching, §1.2) | `call_databricks_serving_endpoint(...)` **async** `src/backend/services/llm.py:166`; default endpoint `SERVING_ENDPOINT_NAME` `src/backend/services/llm.py:36`; `routes.py` re-exports both (D-20) |
 
 ---
 
@@ -84,11 +84,11 @@ self-serve without pretending the connection is zero-touch.
 ### 1.2 The FMAPI coaching path (Phase 2A)
 
 Adaptive coaching (`vibe_coach`, D2 §3.7 / D1 §4.6) needs an in-workspace LLM. The app already has
-one: `call_databricks_serving_endpoint(...)` (`routes.py:1400`) against `SERVING_ENDPOINT_NAME`
-(`routes.py:440`). Two architecture rules keep this clean:
+one: `call_databricks_serving_endpoint(...)` (`src/backend/services/llm.py:166`) against
+`SERVING_ENDPOINT_NAME` (`:36`; `routes.py` re-exports both, D-20). Two architecture rules keep this clean:
 
 1. **Extract, don't cross layers.** `call_databricks_serving_endpoint` and the endpoint resolution
-   live today in the **API layer** (`routes.py`). Extract them into
+   lived in the **API layer** (`routes.py`) until #98 extracted them into
    **`src/backend/services/llm.py`** so the MCP adapter does not import the web-API module; both
    `routes.py` and `mcp_server.py` then import the service. (Same "one seam, reused by both adapters"
    discipline as the assembler, D3 §7.) No behavior change — it is a move + import rewire.
@@ -103,7 +103,7 @@ one: `call_databricks_serving_endpoint(...)` (`routes.py:1400`) against `SERVING
    │  context, scrub, log telemetry         │
    └───────────────┬────────────────────────┘
                    ▼
-        services/llm.py  (extract of routes.py:1400 + :440)
+        services/llm.py  (llm.py:166 + :36; routes.py re-exports, D-20)
                    ▼
      Databricks serving endpoint  (FMAPI, as the app SP — D7 §6)
 ```
@@ -295,7 +295,7 @@ on in-process state (roadmap "stateless MCP"). Two concurrent sessions never sha
 | `src/backend/mcp_server.py` | FastMCP instance, tools/resources/prompts, in-band layer; **async `vibe_coach` handler + `_COACH_SYSTEM`** | 1 / **2A** |
 | `app.py` | mount `/mcp` before catch-all (`:162`); path-rewrite middleware; compose lifespan (`:34`); `serve_spa` excludes `/mcp` | 1 |
 | `src/backend/workshop/*` | engine core (D3) | 0 |
-| `src/backend/services/llm.py` | **extract** of `call_databricks_serving_endpoint` (`routes.py:1400`) + `SERVING_ENDPOINT_NAME` (`:440`); imported by both `routes.py` and `mcp_server.py` (§1.2) | **2A** |
+| `src/backend/services/llm.py` | **extracted (#98, D-20)**: `call_databricks_serving_endpoint` (`llm.py:166`) + `SERVING_ENDPOINT_NAME` (`:36`); `routes.py` imports and re-exports them; the `mcp_server.py` import is still Phase 2A (§1.2) | **2A** |
 | `db/lakebase/ddl/13_mcp_coaching.sql` | additive coaching columns on `session_interactions` (D6 §7a) | **2A** |
 | `../images/mcp-workshop-engine-architecture.{mmd,png}` | regenerate: add interactivity layer, drop elicitation arrow | 1 |
 
