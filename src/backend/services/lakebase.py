@@ -1796,7 +1796,10 @@ _INTENT_STEP = 1
 
 
 def _has_defined_intent(row: Dict[str, Any]) -> bool:
-    return bool((row.get("industry") or "").strip() and (row.get("use_case") or "").strip())
+    # One rule, shared with build_session_state's use_case_selection credit (D-34).
+    from src.backend.workshop.state import has_defined_intent
+
+    return has_defined_intent(row)
 
 
 def _row_completion_globals(row: Dict[str, Any], inverse_map: Dict[str, int]) -> tuple:

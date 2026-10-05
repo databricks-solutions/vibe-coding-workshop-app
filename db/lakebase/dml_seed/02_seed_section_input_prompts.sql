@@ -110,14 +110,14 @@ INSERT INTO ${catalog}.${schema}.section_input_prompts
 (input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, user_trigger_prompt, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
 VALUES
 (958, 'use_case_selection',
-'Before generating the PRD, lock in the **use case** that anchors everything you build in the Genie Accelerator. The PRD, data model, dashboard, and Genie space all follow from this single choice, so choose deliberately.
+'Before generating the PRD, lock in the **use case** that anchors everything you build in this workshop track. The PRD and every step after it follow from this single choice, so choose deliberately.
 
 ## Start from your industry
 
 1. **Pick an industry.** This step''s payload includes `available_industries` — the curated options, each with a `value` and a `label`. Choose the one that matches your scenario.
 2. **List use cases for that industry.** Call `vibe_set_parameters` with just the `industry` value; the result echoes `available_use_cases` for that industry, certified-first, each carrying `value`, `label`, `category`, and `is_certified`.
-3. **Prefer a certified use case (recommended).** Entries with `is_certified` set to true are curated and tested end to end, so they give the smoothest path through the accelerator. Pick one of these unless you have a specific reason not to.
-4. **Or build your own [Beta].** If none of the certified use cases fit, author a custom use case. Do not write the description yourself — let the app draft a PRD-grade one from its own model so it stays consistent with the accelerator:
+3. **Prefer a certified use case (recommended).** Entries with `is_certified` set to true are curated and tested end to end, so they give the smoothest path through the workshop. Pick one of these unless you have a specific reason not to.
+4. **Or build your own [Beta].** If none of the certified use cases fit, author a custom use case. Do not write the description yourself — let the app draft a PRD-grade one from its own model so it stays consistent with the rest of the workshop:
    1. Call `vibe_set_parameters` with `mode="draft_custom"` and `params` `{"use_case_source": "custom", "industry": <industry value>, "use_case_label": <short title>, "use_case_hints": <optional one-line steer>}`. The app generates the description and returns it as `drafted_description` — nothing is locked yet.
    2. Show `drafted_description` to the learner. Refine the label or hints and redraft if they want, then lock by calling `vibe_set_parameters` again with `use_case_description` set to the approved draft. Custom use cases stay local to this session and are never written to the shared library.
 
@@ -126,12 +126,13 @@ VALUES
 When you have decided, call `vibe_set_parameters` with `params`:
 
 - `industry` — the industry value (for example `retail`)
+- `industry_label` — optional; the industry''s human-readable label (resolved from the curated list when omitted)
 - `use_case` — the use case value
 - `use_case_label` — a human-readable title
 - `use_case_source` — `curated` when you picked from the listing, or `custom` when you authored your own
 - `use_case_description` — required only when `use_case_source` is `custom`; generate it with the `mode="draft_custom"` flow above rather than writing it by hand
 
-`vibe_set_parameters` returns the resolved parameters plus any still-missing required fields. If fields are missing, ask for them in chat and call again. Once the selection locks, it produces the **use case brief** that the PRD step — and every step after it — consumes. You cannot proceed to the PRD until a use case is locked.',
+`vibe_set_parameters` returns the resolved parameters plus any still-missing required fields. If fields are missing, ask for them in chat and call again. Once the selection locks, it produces the **use case brief** — the industry, the use case, their labels, and (for a custom use case) its description — that the PRD step and every step after it consume. You cannot proceed to the PRD until a use case is locked.',
 '',
 'Define Your Use Case',
 'Pick the certified use case (or author your own) that anchors the PRD and every downstream step',
