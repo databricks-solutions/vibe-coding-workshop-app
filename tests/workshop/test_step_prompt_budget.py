@@ -326,9 +326,9 @@ async def _call_endpoint_with_ticker():
 
 def test_serving_endpoint_call_runs_off_loop(monkeypatch):
     # The blocking SDK api_client.do() must run off the shared loop.
-    # TAMPER: remove the asyncio.to_thread wrapper at routes.py:~1605 (call do()
-    # directly) -> the ticker starves during the 0.4s call -> ticks ~= 0.
-    monkeypatch.setattr(routes, "DATABRICKS_SDK_AVAILABLE", True)
+    # TAMPER: remove the asyncio.to_thread wrapper at src/backend/services/llm.py:~368
+    # (call do() directly) -> the ticker starves during the 0.4s call -> ticks ~= 0.
+    monkeypatch.setattr(llm, "DATABRICKS_SDK_AVAILABLE", True)
     monkeypatch.setattr(llm, "get_workspace_client", lambda: _FakeClient())
     monkeypatch.setattr(llm, "get_best_available_endpoint", lambda: "ep")
 
@@ -556,7 +556,7 @@ def test_make_request_agent_fallback_runs_off_loop(monkeypatch):
     # TAMPER M5: revert `await asyncio.to_thread(make_request, agent_payload)` to a
     # direct `make_request(agent_payload)` -> the ticker starves during the 0.4s
     # query() -> ticks ~= 0.
-    monkeypatch.setattr(routes, "DATABRICKS_SDK_AVAILABLE", True)
+    monkeypatch.setattr(llm, "DATABRICKS_SDK_AVAILABLE", True)
     monkeypatch.setattr(llm, "get_workspace_client", lambda: _FakeClientAgentFallback())
     monkeypatch.setattr(llm, "get_best_available_endpoint", lambda: "ep")
 
