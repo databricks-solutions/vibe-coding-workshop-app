@@ -149,6 +149,8 @@ A full deploy (`./vibe2value deploy --full`) runs these steps:
 4. Create and seed Lakebase tables
 5. Final forced app deploy — stop, redeploy, start, verify RUNNING
 
+**Reseed safety:** the tables step (step 4, and `./vibe2value deploy --tables`) is additive: it creates missing tables and seeds with `ON CONFLICT DO NOTHING`, so existing rows and admin edits are kept. A destructive drop + recreate + reseed runs only with the explicit `--tables-recreate` flag on `scripts/deploy.sh` **and** `VIBE_CONFIRM_DESTRUCTIVE_RESEED=<target schema>`; otherwise it refuses before connecting.
+
 The installer prompts for Lakebase mode (autoscaling or provisioned). Autoscaling is the default; it uses a Lakebase project that scales to zero when idle and auto-discovers its endpoint during deploy.
 
 ---

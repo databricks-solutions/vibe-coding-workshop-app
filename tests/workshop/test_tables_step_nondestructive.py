@@ -16,8 +16,9 @@ reseed. These tests pin the fix:
   S6  vibe2value uninstall opts in (sets the confirm env) before calling --drop.
 
 Offline only: every subprocess runs with DATABRICKS_CONFIG_FILE=/dev/null and a
-fake ``databricks`` first on PATH that records its invocation and exits 1, so no
-test can reach a workspace or a database.
+fake ``databricks`` (and a ``python3`` that blocks the Lakebase entry points)
+first on PATH, each recording its invocation and exiting 1, so no test can reach
+a workspace or a database — even against a tampered script.
 """
 
 import ast
@@ -26,6 +27,7 @@ import re
 import shutil
 import stat
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -56,6 +58,17 @@ def offline(tmp_path):
     fake = bin_dir / "databricks"
     fake.write_text(f'#!/bin/bash\necho "databricks $*" >> "{log}"\nexit 1\n')
     fake.chmod(fake.stat().st_mode | stat.S_IEXEC)
+    # python3 passes ``-c`` snippets (local YAML/JSON parsing) to the real
+    # interpreter but blocks the two Lakebase entry points: lakebase_manager.py
+    # and the stdin heredoc runner that opens the database connection.
+    py = bin_dir / "python3"
+    py.write_text(
+        "#!/bin/bash\n"
+        f'if [[ "$1" == "-c" ]]; then exec "{sys.executable}" "$@"; fi\n'
+        f'echo "python3 $*" >> "{log}"\n'
+        "exit 1\n"
+    )
+    py.chmod(py.stat().st_mode | stat.S_IEXEC)
 
     env = {
         k: v
