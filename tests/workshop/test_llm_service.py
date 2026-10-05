@@ -13,8 +13,8 @@ Seven offline tests:
   E5 seam for coaching: llm.call_databricks_serving_endpoint works offline with its
      helpers patched on llm (the owner module).
   E6 body fidelity: each moved function's source is byte-identical to its source in
-     routes.py at the pinned pre-extract base SHA; call_databricks_serving_endpoint
-     only after applying E6_INTENTIONAL_EDITS (llm-response-log-redact, D-27).
+     routes.py at the pinned pre-extract base SHA, after applying that function's
+     E6_INTENTIONAL_EDITS (llm-response-log-redact (D-27) + routes-log-redact (D-28)).
      TAMPER: change one character in llm.call_databricks_serving_endpoint.
      A clone without the base object FAILS (fetch full history), never skips (D-21).
   E7 no stale patch target: no test monkeypatches a moved name (or the
@@ -174,27 +174,84 @@ def _base_routes_source():
     return out.stdout
 
 
-# post-move intentional edits (llm-response-log-redact, D-27): ordered
-# (old_line, new_line_or_None) pairs applied to the base body of
-# call_databricks_serving_endpoint; None deletes the line. Each old line must occur
-# exactly once in the base body; any other difference stays red.
-E6_INTENTIONAL_EDITS = [
-    (
-        '        logger.info(f"  Response repr: {repr(query_response)[:500]}")',
-        '        logger.info(f"  Response received: type={type(query_response).__name__}")',
-    ),
-    ('                val_preview = str(val)[:100] if val else "None"', None),
-    (
-        "                logger.debug(f\"    Key '{key}': type={val_type}, value={val_preview}\")",
-        "                logger.debug(f\"    Key '{key}': type={val_type}, length={len(str(val))}\")",
-    ),
-    ("            preview = str(content)[:150]", None),
-    (
-        "            logger.info(f\"     Preview: {preview}{'...' if len(str(content)) > 150 else ''}\")",
-        None,
-    ),
-]
-E6_EDITED_FUNCTION = "call_databricks_serving_endpoint"
+# post-move intentional edits, llm-response-log-redact (D-27) + routes-log-redact
+# (D-28): per moved function, ordered (old_line, new_line_or_None) pairs applied to
+# its base body; None deletes the line. Each old line must occur exactly once in the
+# base body; any other difference stays red. Functions not listed are compared raw.
+E6_INTENTIONAL_EDITS = {
+    "get_workspace_client": [
+        (
+            '            logger.warning(f"Could not initialize WorkspaceClient: {e}")',
+            '            logger.warning(f"Could not initialize WorkspaceClient: {type(e).__name__} (status={getattr(e, \'status_code\', None)}, error_code={getattr(e, \'error_code\', None)}, message length={len(str(e))})")',
+        ),
+        ("            import traceback", None),
+        (
+            '            logger.warning(f"  Traceback: {traceback.format_exc()}")',
+            '            logger.debug("  WorkspaceClient init traceback", exc_info=True)',
+        ),
+    ],
+    "get_available_serving_endpoints": [
+        (
+            '        logger.error(f"Error listing serving endpoints: {e}")',
+            '        logger.error(f"Error listing serving endpoints: {type(e).__name__} (status={getattr(e, \'status_code\', None)}, error_code={getattr(e, \'error_code\', None)}, message length={len(str(e))})")',
+        ),
+    ],
+    "call_databricks_serving_endpoint": [
+        # D-27
+        (
+            '        logger.info(f"  Response repr: {repr(query_response)[:500]}")',
+            '        logger.info(f"  Response received: type={type(query_response).__name__}")',
+        ),
+        ('                val_preview = str(val)[:100] if val else "None"', None),
+        (
+            "                logger.debug(f\"    Key '{key}': type={val_type}, value={val_preview}\")",
+            "                logger.debug(f\"    Key '{key}': type={val_type}, length={len(str(val))}\")",
+        ),
+        ("            preview = str(content)[:150]", None),
+        (
+            "            logger.info(f\"     Preview: {preview}{'...' if len(str(content)) > 150 else ''}\")",
+            None,
+        ),
+        # D-28
+        (
+            '                logger.error(f"  SDK query failed: {e}")',
+            '                logger.error(f"  SDK query failed for {endpoint}: {type(e).__name__} (status={getattr(e, \'status_code\', None)}, error_code={getattr(e, \'error_code\', None)}, message length={len(str(e))})")',
+        ),
+        (
+            '            logger.info(f"  OpenAI format failed: {openai_err}")',
+            '            logger.info(f"  OpenAI format failed for {endpoint}: {type(openai_err).__name__} (status={getattr(openai_err, \'status_code\', None)}, error_code={getattr(openai_err, \'error_code\', None)}, message length={len(str(openai_err))})")',
+        ),
+        (
+            '                        logger.info(f"  Agent format variation {i+1} failed: {agent_err}")',
+            '                        logger.info(f"  Agent format variation {i+1} failed: {type(agent_err).__name__} (status={getattr(agent_err, \'status_code\', None)}, error_code={getattr(agent_err, \'error_code\', None)}, message length={len(str(agent_err))})")',
+        ),
+        (
+            '                    logger.warning(f"  as_dict() failed: {e}")',
+            '                    logger.warning(f"  as_dict() failed: {type(e).__name__} (message length={len(str(e))})")',
+        ),
+        (
+            '                    logger.warning(f"  to_dict() failed: {e}")',
+            '                    logger.warning(f"  to_dict() failed: {type(e).__name__} (message length={len(str(e))})")',
+        ),
+        (
+            '                    logger.warning(f"  vars() failed: {e}")',
+            '                    logger.warning(f"  vars() failed: {type(e).__name__} (message length={len(str(e))})")',
+        ),
+        (
+            '                    logger.warning(f"  JSON serialization failed: {e}")',
+            '                    logger.warning(f"  JSON serialization failed: {type(e).__name__} (message length={len(str(e))})")',
+        ),
+        (
+            '        logger.error(f"     Error message: {error_str}")',
+            '        logger.error(f"     Endpoint: {endpoint}, status={getattr(e, \'status_code\', None)}, error_code={getattr(e, \'error_code\', None)}, message length={len(error_str)}")',
+        ),
+        ("        import traceback", None),
+        (
+            '        logger.error(f"     Traceback:\\n{traceback.format_exc()}")',
+            '        logger.debug("     SDK query traceback", exc_info=True)',
+        ),
+    ],
+}
 
 
 def _apply_intentional_edits(body, edits):
@@ -221,8 +278,8 @@ def test_e6_moved_function_bodies_are_byte_identical_to_base():
     for name in MOVED_FUNCTIONS:
         moved = inspect.getsource(getattr(llm, name)).rstrip("\n")
         expected = base_defs[name]
-        if name == E6_EDITED_FUNCTION:
-            expected = _apply_intentional_edits(expected, E6_INTENTIONAL_EDITS)
+        if name in E6_INTENTIONAL_EDITS:
+            expected = _apply_intentional_edits(expected, E6_INTENTIONAL_EDITS[name])
         assert moved == expected, f"{name} body differs from routes.py@{BASE_SHA[:7]}"
 
 
