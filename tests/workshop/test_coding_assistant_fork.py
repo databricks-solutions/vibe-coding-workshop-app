@@ -132,6 +132,7 @@ def session_store(monkeypatch):
         SESSION_ID: {
             "session_id": SESSION_ID,
             "created_by": None,
+            "workshop_level": "genie-accelerator",
             # Satisfies gold_layer_design's requiresGate for explicit reads.
             "completed_gates": ["genie_silver_metadata"],
             "captured_outputs": {},

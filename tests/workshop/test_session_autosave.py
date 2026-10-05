@@ -68,6 +68,7 @@ def test_locking_use_case_refines_session_name(monkeypatch):
         SESSION_ID: {
             "session_id": SESSION_ID,
             "created_by": None,
+            "workshop_level": "genie-accelerator",
             "completed_gates": [],
             "captured_outputs": {},
             "session_parameters": {},

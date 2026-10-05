@@ -40,12 +40,18 @@ from .services.lakebase import (
 )
 from .workshop import assembler, engine, manifest
 from .workshop.state import build_session_state
+from .workshop.track_resolution import resolve_track
 
 logger = logging.getLogger(__name__)
 
+# Legacy fallback only (D-30): the walk runs on the session's resolved track; this
+# is the track when there is no session record to resolve against (local dev).
 DEFAULT_TRACK = "genie-accelerator"
 DEFAULT_INDUSTRY = "Technology"
+# genie-accelerator's manifest title; other tracks fall back to their own (D-30a).
 DEFAULT_USE_CASE = "Genie Accelerator"
+# D-31: this track keeps today's session names byte-identical (no track title).
+_UNTITLED_NAME_TRACK = "genie-accelerator"
 # MCP is exclusively the Genie Code client, so every step renders the
 # 'genie-code' prompt fork. Steps without a fork fall back to '__default__'
 # automatically inside the assembler.
@@ -520,12 +526,26 @@ def _coerce_state(value: engine.SessionState | dict[str, Any]) -> engine.Session
     return build_session_state(value)
 
 
+def _session_track(record: dict[str, Any]) -> str:
+    """The track a session walks (D-30): ``resolve_track`` unchanged, the SPA's rule,
+    so the MCP outline equals the SPA outline. Legacy MCP sessions carry
+    coding_assistant="genie-code", which resolves to genie-accelerator."""
+
+    track = resolve_track(record)
+    assert track in engine.MANIFEST.tracks, track
+    return track
+
+
 def _load_session_for_request(
     session_id: str | None,
     context: Context | None = None,
-    track: str = DEFAULT_TRACK,
+    track: str | None = None,
+    _record_out: list[dict[str, Any]] | None = None,
 ) -> tuple[engine.SessionState, str] | None:
-    """Resolve and authorize a session, reading Lakebase on every request."""
+    """Resolve and authorize a session, reading Lakebase on every request.
+
+    ``_record_out``, when given, receives the loaded record so
+    ``_load_session_and_track`` resolves the track without a second read."""
 
     if not session_id:
         return None
@@ -538,7 +558,34 @@ def _load_session_for_request(
     caller = _request_user(context)
     if owner and caller != "unknown" and owner != caller:
         return None
-    return build_session_state(record, track), session_id
+    if _record_out is not None:
+        _record_out.append(record)
+    return build_session_state(record), session_id
+
+
+def _load_session_and_track(
+    session_id: str | None,
+    context: Context | None = None,
+    track: str | None = None,
+) -> tuple[engine.SessionState, str, str] | None:
+    """``_load_session_for_request`` plus the session's track (D-30, D-32).
+
+    An explicit ``track`` (vibe_start_track's validated request) wins; otherwise
+    the track is resolved from the record. With no record (local dev without
+    Lakebase) it is DEFAULT_TRACK."""
+
+    records: list[dict[str, Any]] = []
+    loaded = _load_session_for_request(session_id, context, track, _record_out=records)
+    if loaded is None:
+        return None
+    state, resolved_id = loaded
+    if track:
+        resolved = track
+    elif records:
+        resolved = _session_track(records[0])
+    else:
+        resolved = DEFAULT_TRACK
+    return state, resolved_id, resolved
 
 
 def _persist_mcp_delta(
@@ -583,6 +630,22 @@ def _persist_mcp_delta(
 
 def _outline_items(track: str, state: engine.SessionState) -> list[OutlineItem]:
     return [OutlineItem(**asdict(item)) for item in engine.outline(track, state)]
+
+
+def _default_use_case(track: str) -> str:
+    """The use-case fallback for rendering: the track's manifest title (D-30a)."""
+
+    return engine.MANIFEST.tracks[track].title
+
+
+def _session_name(track: str, use_case: str | None) -> str:
+    """The MCP session name (D-31): the "Genie Code — " client prefix, plus the
+    track title on every track except genie-accelerator (byte-identical names)."""
+
+    if track == _UNTITLED_NAME_TRACK:
+        return f"Genie Code — {use_case}" if use_case else "Genie Code Workshop"
+    title = engine.MANIFEST.tracks[track].title
+    return f"Genie Code — {title}: {use_case}" if use_case else f"Genie Code — {title}"
 
 
 def _next_reference(track: str, state: engine.SessionState, step: manifest.Step) -> StepReference:
@@ -1051,7 +1114,7 @@ def _step_payload(
 ) -> ExplainabilityPayload:
     previous_outputs = engine.resolve_previous_outputs(step, state)
     industry = state.session_parameters.get("industry", DEFAULT_INDUSTRY)
-    use_case = state.session_parameters.get("use_case", DEFAULT_USE_CASE)
+    use_case = state.session_parameters.get("use_case", _default_use_case(track))
     assembled = assembler.get_section_input_content(
         industry=industry,
         use_case=use_case,
@@ -1164,13 +1227,13 @@ def vibe_start_track(
     if track not in engine.MANIFEST.tracks:
         return _error_result("UNKNOWN_TRACK", f"Unknown workshop track: {track}")  # type: ignore[return-value]
     resolved = session_id or str(uuid.uuid4())
-    loaded = _load_session_for_request(resolved, context, track)
+    loaded = _load_session_and_track(resolved, context, track)
     if loaded is None:
         if session_id:
             return _error_result("INVALID_SESSION", "The requested session could not be resolved.")  # type: ignore[return-value]
         state = engine.SessionState()
     else:
-        state, _ = loaded
+        state, _, _ = loaded
     before = copy.deepcopy(state)
     # MCP is exclusively the Genie Code client — mark the session so any other
     # read path (SPA bridge, the vibe://session/{id}/state resource) resolves
@@ -1204,7 +1267,7 @@ def vibe_start_track(
         # Auto-name the new session so it surfaces in the web UI session menu
         # (is_saved requires a name that is set and != "New Session"). Refined to
         # the confirmed use case once it locks in vibe_complete_step (Workstream 3).
-        _initial_name = f"Genie Code — {use_case}" if use_case else "Genie Code Workshop"
+        _initial_name = _session_name(track, use_case)
         _persist_mcp_delta(
             resolved,
             before,
@@ -1230,7 +1293,7 @@ def vibe_start_track(
             # column, NOT a session_parameters JSONB key; save_session COALESCE-
             # preserves it on later writes (see lakebase.save_session). New sessions
             # only — resume never reaches this block, so an existing level is safe.
-            workshop_level=DEFAULT_TRACK,
+            workshop_level=track,
             session_parameters=state.session_parameters,
         )
     if industry:
@@ -1283,10 +1346,10 @@ def vibe_get_step(
     sectionTag: str | None = None,
     context: Context | None = None,
 ) -> ExplainabilityPayload:
-    loaded = _load_session_for_request(session_id, context)
+    loaded = _load_session_and_track(session_id, context)
     if loaded is None:
         return _error_result("INVALID_SESSION", "The requested session could not be resolved.")  # type: ignore[return-value]
-    state, _ = loaded
+    state, _, track = loaded
     state = _coerce_state(state)
     _stash_base_url(state, context)
     # The pre-journey intent beat (Option A) is not a manifest step, so it is
@@ -1294,25 +1357,25 @@ def vibe_get_step(
     # use_case_selection, or the default (sectionTag=None) while the use case is
     # unresolved, returns the beat with its picker payload.
     if sectionTag == _INTENT_BEAT_STEP.sectionTag or (sectionTag is None and _needs_use_case(state)):
-        return _step_payload(DEFAULT_TRACK, state, _INTENT_BEAT_STEP, session_id=session_id)
+        return _step_payload(track, state, _INTENT_BEAT_STEP, session_id=session_id)
     if sectionTag is None:
-        current = engine.next_step(DEFAULT_TRACK, state)
+        current = engine.next_step(track, state)
         if isinstance(current, engine.Done):
             return _error_result("UNKNOWN_STEP", "The track has no remaining step.")  # type: ignore[return-value]
         if isinstance(current, engine.Blocked):
             return _blocked_step_error(current)  # type: ignore[return-value]
         step = current
     else:
-        step = engine.resolve_step(DEFAULT_TRACK, state, sectionTag)
+        step = engine.resolve_step(track, state, sectionTag)
         if step is None:
             return _error_result("UNKNOWN_STEP", f"Unknown workshop step: {sectionTag}", sectionTag=sectionTag)  # type: ignore[return-value]
         # Pass the ordered-outline tags so this explicit lookup is skip-aware too —
         # i.e. vibe_get_step and vibe_next_step agree on whether a step after a
         # (web) skip is open, instead of this call falsely reporting STEP_LOCKED.
-        outline_tags = {item.sectionTag for item in engine.outline(DEFAULT_TRACK, state)}
+        outline_tags = {item.sectionTag for item in engine.outline(track, state)}
         if not engine.can_start(step, state, outline_tags):
             return _error_result("STEP_LOCKED", f"Complete {step.requiresGate} before this step.", sectionTag=sectionTag)  # type: ignore[return-value]
-    return _step_payload(DEFAULT_TRACK, state, step, session_id=session_id)
+    return _step_payload(track, state, step, session_id=session_id)
 
 
 def _blocked_step_error(blocked: engine.Blocked) -> _ContractError:
@@ -1382,10 +1445,10 @@ def _blocked_result(
     structured_output=True,
 )
 def vibe_next_step(session_id: str, context: Context | None = None) -> NextStepResult:
-    loaded = _load_session_for_request(session_id, context)
+    loaded = _load_session_and_track(session_id, context)
     if loaded is None:
         return _error_result("INVALID_SESSION", "The requested session could not be resolved.")  # type: ignore[return-value]
-    state, _ = loaded
+    state, _, track = loaded
     state = _coerce_state(state)
     _stash_base_url(state, context)
     # Pre-journey intent beat (Option A, guardrail #3): before the first numbered
@@ -1393,14 +1456,14 @@ def vibe_next_step(session_id: str, context: Context | None = None) -> NextStepR
     # beat is surfaced until the use_case_selection gate resolves.
     if _needs_use_case(state):
         return NextStepResult.model_validate(
-            _step_payload(DEFAULT_TRACK, state, _INTENT_BEAT_STEP, session_id=session_id)
+            _step_payload(track, state, _INTENT_BEAT_STEP, session_id=session_id)
         )
-    next_item = engine.next_step(DEFAULT_TRACK, state)
+    next_item = engine.next_step(track, state)
     if isinstance(next_item, engine.Done):
         return NextStepResult.model_validate(DoneResult())
     if isinstance(next_item, engine.Blocked):
-        return NextStepResult.model_validate(_blocked_result(DEFAULT_TRACK, state, next_item))
-    return NextStepResult.model_validate(_step_payload(DEFAULT_TRACK, state, next_item, session_id=session_id))
+        return NextStepResult.model_validate(_blocked_result(track, state, next_item))
+    return NextStepResult.model_validate(_step_payload(track, state, next_item, session_id=session_id))
 
 
 @mcp.tool(
@@ -1431,24 +1494,24 @@ def vibe_explain_step(
             "INVALID_PARAMETER",
             f"focus must be one of {', '.join(coaching.FOCI)}.",
         )
-    loaded = _load_session_for_request(session_id, context)
+    loaded = _load_session_and_track(session_id, context)
     if loaded is None:
         return _error_result("INVALID_SESSION", "The requested session could not be resolved.")  # type: ignore[return-value]
-    state, _ = loaded
+    state, _, track = loaded
     state = _coerce_state(state)
     # Mirror vibe_get_step's intent-beat rule so get, next and explain agree on the
     # pre-journey beat; its help comes from the same assembler row as the beat.
     if sectionTag == _INTENT_BEAT_STEP.sectionTag or (sectionTag is None and _needs_use_case(state)):
         step = _INTENT_BEAT_STEP
     elif sectionTag is None:
-        current = engine.next_step(DEFAULT_TRACK, state)
+        current = engine.next_step(track, state)
         if isinstance(current, engine.Done):
             return _error_result("UNKNOWN_STEP", "The track has no remaining step.")  # type: ignore[return-value]
         if isinstance(current, engine.Blocked):
             return _blocked_step_error(current)  # type: ignore[return-value]
         step = current
     else:
-        step = engine.resolve_step(DEFAULT_TRACK, state, sectionTag)
+        step = engine.resolve_step(track, state, sectionTag)
         if step is None:
             return _error_result("UNKNOWN_STEP", f"Unknown workshop step: {sectionTag}", sectionTag=sectionTag)  # type: ignore[return-value]
     if step.sectionTag == "project_setup":
@@ -1459,7 +1522,7 @@ def vibe_explain_step(
         prompt = setup["prompt"]
     else:
         industry = state.session_parameters.get("industry", DEFAULT_INDUSTRY)
-        use_case = state.session_parameters.get("use_case", DEFAULT_USE_CASE)
+        use_case = state.session_parameters.get("use_case", _default_use_case(track))
         previous_outputs = engine.resolve_previous_outputs(step, state)
         assembled = assembler.get_section_input_content(
             industry=industry,
@@ -1489,7 +1552,7 @@ def vibe_explain_step(
         state=state,
         help={**help_result.model_dump(), "prompt": prompt},
         focus=focus,
-        track=DEFAULT_TRACK,
+        track=track,
         run_blocking=_run_async_blocking,
     )
     return help_result.model_copy(
@@ -1745,24 +1808,24 @@ def vibe_complete_step(
     captured_output: str,
     context: Context | None = None,
 ) -> CompleteStepResult:
-    loaded = _load_session_for_request(session_id, context)
+    loaded = _load_session_and_track(session_id, context)
     if loaded is None:
         return _error_result("INVALID_SESSION", "The requested session could not be resolved.")  # type: ignore[return-value]
 
-    state, _ = loaded
+    state, _, track = loaded
     before = copy.deepcopy(state)
     # The intent beat on a track that does not author use_case_selection as a step:
     # vibe_set_parameters' lock is what completes it (D-8). Once locked, re-completing
     # is an idempotent success; while unlocked, the guards below steer to the lock.
     intent_beat = (
         sectionTag == engine.USE_CASE_GATE
-        and engine.resolve_step(DEFAULT_TRACK, state, sectionTag) is None
+        and engine.resolve_step(track, state, sectionTag) is None
     )
     if intent_beat and engine.use_case_resolved(state):
         return CompleteStepResult(
             completed_gates=list(state.completed_gates),
             next=_complete_next_payload(
-                state, engine.next_step(DEFAULT_TRACK, state), session_id
+                track, state, engine.next_step(track, state), session_id
             ),
             post_check=None,
         )
@@ -1813,7 +1876,7 @@ def vibe_complete_step(
             "The lock completes this step.",
             sectionTag=sectionTag,
         )  # type: ignore[return-value]
-    result = engine.complete_step(DEFAULT_TRACK, state, sectionTag, captured_output)
+    result = engine.complete_step(track, state, sectionTag, captured_output)
     if not result.ok:
         messages = {
             "UNKNOWN_TRACK": "Unknown workshop track.",
@@ -1839,7 +1902,7 @@ def vibe_complete_step(
             or state.session_parameters.get("use_case")
         )
         if _label:
-            _refined_name = f"Genie Code — {_label}"
+            _refined_name = _session_name(track, _label)
     # Cross-surface progress rides on completed_gates alone (T5 R4a/R4b): the SPA
     # hydrates its step indicator from the gate set via deriveCompletedStepNumbers,
     # so MCP-driven progress shows up without any retired numeric progress columns.
@@ -1847,12 +1910,13 @@ def vibe_complete_step(
 
     return CompleteStepResult(
         completed_gates=list(result.completed_gates),
-        next=_complete_next_payload(state, result.next_step, session_id),
+        next=_complete_next_payload(track, state, result.next_step, session_id),
         post_check=_pending_post_check(sectionTag, state),
     )
 
 
 def _complete_next_payload(
+    track: str,
     state: engine.SessionState,
     next_step: manifest.Step | engine.Done | engine.Blocked,
     session_id: str,
@@ -1862,8 +1926,8 @@ def _complete_next_payload(
     if isinstance(next_step, engine.Done):
         return DoneResult()
     if isinstance(next_step, engine.Blocked):
-        return _blocked_result(DEFAULT_TRACK, state, next_step)
-    return _step_payload(DEFAULT_TRACK, state, next_step, session_id=session_id)
+        return _blocked_result(track, state, next_step)
+    return _step_payload(track, state, next_step, session_id=session_id)
 
 
 @mcp.tool(
@@ -1888,11 +1952,11 @@ def vibe_submit_answer(
     answer: str,
     context: Context | None = None,
 ) -> SubmitAnswerResult:
-    loaded = _load_session_for_request(session_id, context)
+    loaded = _load_session_and_track(session_id, context)
     if loaded is None:
         return _error_result("INVALID_SESSION", "The requested session could not be resolved.")  # type: ignore[return-value]
 
-    state, _ = loaded
+    state, _, track = loaded
     before = copy.deepcopy(state)
     resolved = _find_interaction(interaction_id)
     if resolved is None:
@@ -1908,7 +1972,7 @@ def vibe_submit_answer(
     # interactions stay answerable even though the beat is not a manifest step
     # (the lock via vibe_set_parameters is what resolves the gate). A Blocked walk
     # has no current step: its locked step cannot be worked, so it is not answerable.
-    current = engine.next_step(DEFAULT_TRACK, state)
+    current = engine.next_step(track, state)
     answerable = {None if isinstance(current, (engine.Done, engine.Blocked)) else current.sectionTag}
     if _needs_use_case(state):
         answerable.add(_INTENT_BEAT_STEP.sectionTag)
@@ -1986,11 +2050,11 @@ def vibe_set_parameters(
     mode: str | None = None,
     context: Context | None = None,
 ) -> SetParametersResult:
-    loaded = _load_session_for_request(session_id, context)
+    loaded = _load_session_and_track(session_id, context)
     if loaded is None:
         return _error_result("INVALID_SESSION", "The requested session could not be resolved.")  # type: ignore[return-value]
 
-    state, _ = loaded
+    state, _, track = loaded
     before = copy.deepcopy(state)
 
     # Reject server-owned keys in the INCOMING params before any update/save, so a
@@ -2149,7 +2213,7 @@ def vibe_set_parameters(
         if newly:
             label = resolved_params.get("use_case_label") or resolved_params.get("use_case")
             if label:
-                refined_name = f"Genie Code — {label}"
+                refined_name = _session_name(track, label)
         # R3 item 3: persist the top-level industry/use_case columns (NOT just the
         # session_parameters JSONB) so this MCP-locked session earns step-1 credit
         # (the aggregation reads industry AND use_case) AND appears in the
@@ -2277,11 +2341,11 @@ def _usecases_for_industry_resource(industry: str) -> str:
 
 
 def _session_state_resource(session_id: str, context: Context | None = None) -> str:
-    loaded = _load_session_for_request(session_id, context)
+    loaded = _load_session_and_track(session_id, context)
     if loaded is None:
         return json.dumps({"isError": True, "error": {"code": "INVALID_SESSION"}})
-    state, _ = loaded
-    outline = [item.model_dump() for item in _outline_items(DEFAULT_TRACK, state)]
+    state, _, track = loaded
+    outline = [item.model_dump() for item in _outline_items(track, state)]
     return json.dumps(
         {
             "outline": outline,
@@ -2361,6 +2425,34 @@ def start_genie_accelerator(use_case: str | None = None, industry: str | None = 
         f"{ORIENTATION_PREAMBLE}\n\n"
         "Start the Genie Accelerator by calling `vibe_start_track` with "
         f'{{track:"genie-accelerator"{suffix}}}, then call `vibe_get_step`. '
+        "Present the returned `prompt` verbatim first, then narrate `why`, the gate, and the next "
+        "step, and show `user_trigger_prompt` verbatim before waiting. Call `vibe_explain_step` if the "
+        "learner asks how to apply the step or what to expect. Keep questions in chat."
+    )
+
+
+@mcp.prompt(
+    name="Start a workshop track",
+    description="Start the first-run orientation on any workshop track and present step one.",
+)
+def start_track(track: str | None = None, use_case: str | None = None, industry: str | None = None) -> str:
+    if track not in engine.MANIFEST.tracks:
+        valid = ", ".join(sorted(engine.MANIFEST.tracks))
+        lead = f"Unknown workshop track: {track}." if track else "Choose a workshop track."
+        return (
+            f"{lead} Valid tracks: {valid}. Start one with this prompt, then present each "
+            "step's `prompt` verbatim first."
+        )
+    parameters = [f'track:"{track}"']
+    if use_case:
+        parameters.append(f'use_case="{use_case}"')
+    if industry:
+        parameters.append(f'industry="{industry}"')
+    title = engine.MANIFEST.tracks[track].title
+    return (
+        f"{ORIENTATION_PREAMBLE}\n\n"
+        f"Start the {title} track by calling `vibe_start_track` with "
+        f"{{{', '.join(parameters)}}}, then call `vibe_get_step`. "
         "Present the returned `prompt` verbatim first, then narrate `why`, the gate, and the next "
         "step, and show `user_trigger_prompt` verbatim before waiting. Call `vibe_explain_step` if the "
         "learner asks how to apply the step or what to expect. Keep questions in chat."

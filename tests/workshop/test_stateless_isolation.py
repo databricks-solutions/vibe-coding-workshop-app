@@ -43,6 +43,7 @@ def _fresh_record(session_id):
     return {
         "session_id": session_id,
         "created_by": None,
+        "workshop_level": "genie-accelerator",
         "completed_gates": [],
         "captured_outputs": {},
         "session_parameters": {},

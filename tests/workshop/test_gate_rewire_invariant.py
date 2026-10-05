@@ -262,6 +262,7 @@ def session_store(monkeypatch):
         SESSION_ID: {
             "session_id": SESSION_ID,
             "created_by": None,
+            "workshop_level": "genie-accelerator",
             "completed_gates": _regression_completed_gates(),
             "captured_outputs": {"use_case_brief": "demo brief"},
             "session_parameters": {"use_case": "demo", "use_case_label": "Demo"},
