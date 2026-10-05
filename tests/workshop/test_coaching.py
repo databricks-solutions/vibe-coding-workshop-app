@@ -62,6 +62,7 @@ def _record():
     return {
         "session_id": SESSION_ID,
         "created_by": None,
+        "workshop_level": "genie-accelerator",
         "completed_gates": ["use_case_selection"],
         "captured_outputs": {"use_case_brief": BRIEF},
         "session_parameters": {"industry": "Retail", "use_case": "demand_forecasting"},

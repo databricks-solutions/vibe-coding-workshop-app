@@ -69,6 +69,7 @@ def session_store(monkeypatch):
         SESSION_ID: {
             "session_id": SESSION_ID,
             "created_by": None,
+            "workshop_level": "genie-accelerator",
             "completed_gates": [],
             "captured_outputs": {},
             "session_parameters": {},

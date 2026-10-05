@@ -540,26 +540,52 @@ def _load_session_for_request(
     session_id: str | None,
     context: Context | None = None,
     track: str | None = None,
-) -> tuple[engine.SessionState, str, str] | None:
+    _record_out: list[dict[str, Any]] | None = None,
+) -> tuple[engine.SessionState, str] | None:
     """Resolve and authorize a session, reading Lakebase on every request.
 
-    Returns ``(state, session_id, track)``. An explicit ``track`` (vibe_start_track's
-    validated request) wins; otherwise the track is resolved from the record. With
-    no record and no Lakebase (local dev) it is ``track`` or DEFAULT_TRACK."""
+    ``_record_out``, when given, receives the loaded record so
+    ``_load_session_and_track`` resolves the track without a second read."""
 
     if not session_id:
         return None
     record = load_session(session_id)
     if record is None:
         if not is_lakebase_configured():
-            return engine.SessionState(), session_id, track or DEFAULT_TRACK
+            return engine.SessionState(), session_id
         return None
     owner = record.get("created_by")
     caller = _request_user(context)
     if owner and caller != "unknown" and owner != caller:
         return None
-    resolved = track or _session_track(record)
-    return build_session_state(record, resolved), session_id, resolved
+    if _record_out is not None:
+        _record_out.append(record)
+    return build_session_state(record), session_id
+
+
+def _load_session_and_track(
+    session_id: str | None,
+    context: Context | None = None,
+    track: str | None = None,
+) -> tuple[engine.SessionState, str, str] | None:
+    """``_load_session_for_request`` plus the session's track (D-30, D-32).
+
+    An explicit ``track`` (vibe_start_track's validated request) wins; otherwise
+    the track is resolved from the record. With no record (local dev without
+    Lakebase) it is DEFAULT_TRACK."""
+
+    records: list[dict[str, Any]] = []
+    loaded = _load_session_for_request(session_id, context, track, _record_out=records)
+    if loaded is None:
+        return None
+    state, resolved_id = loaded
+    if track:
+        resolved = track
+    elif records:
+        resolved = _session_track(records[0])
+    else:
+        resolved = DEFAULT_TRACK
+    return state, resolved_id, resolved
 
 
 def _persist_mcp_delta(
@@ -1201,7 +1227,7 @@ def vibe_start_track(
     if track not in engine.MANIFEST.tracks:
         return _error_result("UNKNOWN_TRACK", f"Unknown workshop track: {track}")  # type: ignore[return-value]
     resolved = session_id or str(uuid.uuid4())
-    loaded = _load_session_for_request(resolved, context, track)
+    loaded = _load_session_and_track(resolved, context, track)
     if loaded is None:
         if session_id:
             return _error_result("INVALID_SESSION", "The requested session could not be resolved.")  # type: ignore[return-value]
@@ -1320,7 +1346,7 @@ def vibe_get_step(
     sectionTag: str | None = None,
     context: Context | None = None,
 ) -> ExplainabilityPayload:
-    loaded = _load_session_for_request(session_id, context)
+    loaded = _load_session_and_track(session_id, context)
     if loaded is None:
         return _error_result("INVALID_SESSION", "The requested session could not be resolved.")  # type: ignore[return-value]
     state, _, track = loaded
@@ -1419,7 +1445,7 @@ def _blocked_result(
     structured_output=True,
 )
 def vibe_next_step(session_id: str, context: Context | None = None) -> NextStepResult:
-    loaded = _load_session_for_request(session_id, context)
+    loaded = _load_session_and_track(session_id, context)
     if loaded is None:
         return _error_result("INVALID_SESSION", "The requested session could not be resolved.")  # type: ignore[return-value]
     state, _, track = loaded
@@ -1468,7 +1494,7 @@ def vibe_explain_step(
             "INVALID_PARAMETER",
             f"focus must be one of {', '.join(coaching.FOCI)}.",
         )
-    loaded = _load_session_for_request(session_id, context)
+    loaded = _load_session_and_track(session_id, context)
     if loaded is None:
         return _error_result("INVALID_SESSION", "The requested session could not be resolved.")  # type: ignore[return-value]
     state, _, track = loaded
@@ -1782,7 +1808,7 @@ def vibe_complete_step(
     captured_output: str,
     context: Context | None = None,
 ) -> CompleteStepResult:
-    loaded = _load_session_for_request(session_id, context)
+    loaded = _load_session_and_track(session_id, context)
     if loaded is None:
         return _error_result("INVALID_SESSION", "The requested session could not be resolved.")  # type: ignore[return-value]
 
@@ -1926,7 +1952,7 @@ def vibe_submit_answer(
     answer: str,
     context: Context | None = None,
 ) -> SubmitAnswerResult:
-    loaded = _load_session_for_request(session_id, context)
+    loaded = _load_session_and_track(session_id, context)
     if loaded is None:
         return _error_result("INVALID_SESSION", "The requested session could not be resolved.")  # type: ignore[return-value]
 
@@ -2024,7 +2050,7 @@ def vibe_set_parameters(
     mode: str | None = None,
     context: Context | None = None,
 ) -> SetParametersResult:
-    loaded = _load_session_for_request(session_id, context)
+    loaded = _load_session_and_track(session_id, context)
     if loaded is None:
         return _error_result("INVALID_SESSION", "The requested session could not be resolved.")  # type: ignore[return-value]
 
@@ -2315,7 +2341,7 @@ def _usecases_for_industry_resource(industry: str) -> str:
 
 
 def _session_state_resource(session_id: str, context: Context | None = None) -> str:
-    loaded = _load_session_for_request(session_id, context)
+    loaded = _load_session_and_track(session_id, context)
     if loaded is None:
         return json.dumps({"isError": True, "error": {"code": "INVALID_SESSION"}})
     state, _, track = loaded
@@ -2409,10 +2435,14 @@ def start_genie_accelerator(use_case: str | None = None, industry: str | None = 
     name="Start a workshop track",
     description="Start the first-run orientation on any workshop track and present step one.",
 )
-def start_track(track: str, use_case: str | None = None, industry: str | None = None) -> str:
+def start_track(track: str | None = None, use_case: str | None = None, industry: str | None = None) -> str:
     if track not in engine.MANIFEST.tracks:
         valid = ", ".join(sorted(engine.MANIFEST.tracks))
-        return f"Unknown workshop track: {track}. Valid tracks: {valid}."
+        lead = f"Unknown workshop track: {track}." if track else "Choose a workshop track."
+        return (
+            f"{lead} Valid tracks: {valid}. Start one with this prompt, then present each "
+            "step's `prompt` verbatim first."
+        )
     parameters = [f'track:"{track}"']
     if use_case:
         parameters.append(f'use_case="{use_case}"')

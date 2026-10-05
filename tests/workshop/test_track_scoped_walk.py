@@ -260,17 +260,20 @@ def test_w3_session_track_is_resolve_track(record, expected):
 def test_w3_load_returns_the_resolved_track(walk_env):
     store, _ = walk_env
     store["s"] = {"session_id": "s", "workshop_level": "lakehouse", "session_parameters": {}}
-    state, sid, track = mcp_server._load_session_for_request("s")
+    state, sid, track = mcp_server._load_session_and_track("s")
     assert (sid, track) == ("s", "lakehouse")
     # An explicit track (vibe_start_track's request) wins.
-    assert mcp_server._load_session_for_request("s", None, "app-only")[2] == "app-only"
+    assert mcp_server._load_session_and_track("s", None, "app-only")[2] == "app-only"
+    # The 2-tuple contract is unchanged (D-32).
+    assert mcp_server._load_session_for_request("s")[1] == "s"
+    assert len(mcp_server._load_session_for_request("s")) == 2
 
 
 def test_w3_no_record_without_lakebase_falls_back_to_genie_accelerator(monkeypatch):
     monkeypatch.setattr(mcp_server, "load_session", lambda sid: None)
     monkeypatch.setattr(mcp_server, "is_lakebase_configured", lambda: False)
-    assert mcp_server._load_session_for_request("local")[2] == "genie-accelerator"
-    assert mcp_server._load_session_for_request("local", None, "lakehouse")[2] == "lakehouse"
+    assert mcp_server._load_session_and_track("local")[2] == "genie-accelerator"
+    assert mcp_server._load_session_and_track("local", None, "lakehouse")[2] == "lakehouse"
 
 
 # --- W4: session names (D-31) ---------------------------------------------------
@@ -355,6 +358,7 @@ def test_w5_start_track_prompt(walk_env):
     assert "Unknown workshop track: nope" in unknown
     for track in ALL_TRACKS:
         assert track in unknown
+    assert "Valid tracks:" in _render("Start a workshop track", {})
 
 
 def test_w5_start_genie_accelerator_is_unchanged():
@@ -393,7 +397,7 @@ def test_w6_explain_focus_passes_the_session_track(walk_env, monkeypatch):
 
 def test_w7_default_track_only_in_its_definition_and_the_fallback():
     tree = ast.parse((REPO_ROOT / "src" / "backend" / "mcp_server.py").read_text())
-    allowed = {"_session_track", "_load_session_for_request"}
+    allowed = {"_session_track", "_load_session_and_track"}
     offenders = []
 
     def visit(node, function):

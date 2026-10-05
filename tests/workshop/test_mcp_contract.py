@@ -150,6 +150,7 @@ def test_prompts_restate_verbatim_first_contract():
     prompts = {prompt.name: prompt for prompt in mcp_server.mcp._prompt_manager.list_prompts()}
     assert set(prompts) == {
         "Start the Genie Accelerator",
+        "Start a workshop track",
         "Continue where I left off",
         "How does this workshop work?",
     }
