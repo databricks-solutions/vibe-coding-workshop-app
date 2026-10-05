@@ -1226,8 +1226,14 @@ def append_session_interaction(
     was_default: bool = False,
     coaching_shown: str = None,
     surface: str = "mcp",
+    is_fallback: bool | None = None,
+    focus: str | None = None,
 ) -> bool:
-    """Append one MCP/UI interaction provenance row to Lakebase."""
+    """Append one MCP/UI interaction provenance row to Lakebase.
+
+    ``is_fallback`` / ``focus`` (coaching telemetry, DDL 13) are written only when
+    either is given; with both None the INSERT is the pre-DDL-13 statement.
+    """
     if not is_lakebase_configured():
         logger.info(f"Lakebase not configured, cannot append interaction for {session_id}")
         return False
@@ -1236,32 +1242,67 @@ def append_session_interaction(
     try:
         with get_connection() as conn:
             cursor = conn.cursor()
-            query = f"""
+            params = (
+                session_id,
+                section_tag,
+                interaction_id,
+                kind,
+                answer,
+                recommended,
+                was_default,
+                coaching_shown,
+                surface,
+            )
+            if is_fallback is None and focus is None:
+                query = f"""
             INSERT INTO {table_name} (
                 session_id, section_tag, interaction_id, kind,
                 answer, recommended, was_default, coaching_shown, surface, created_at
             ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, CURRENT_TIMESTAMP)
             """
-            cursor.execute(
-                query,
-                (
-                    session_id,
-                    section_tag,
-                    interaction_id,
-                    kind,
-                    answer,
-                    recommended,
-                    was_default,
-                    coaching_shown,
-                    surface,
-                ),
-            )
+            else:
+                query = f"""
+            INSERT INTO {table_name} (
+                session_id, section_tag, interaction_id, kind,
+                answer, recommended, was_default, coaching_shown, surface,
+                is_fallback, focus, created_at
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, CURRENT_TIMESTAMP)
+            """
+                params = params + (bool(is_fallback), focus)
+            cursor.execute(query, params)
             conn.commit()
             cursor.close()
             return True
     except Exception as e:
         logger.error(f"Error appending session interaction to Lakebase: {e}", exc_info=True)
         return False
+
+
+def list_session_interactions(session_id: str, limit: int = 10) -> list[dict]:
+    """Read a session's interaction rows, newest first. Never raises; [] on any miss."""
+    if not is_lakebase_configured():
+        return []
+
+    table_name = f"{get_schema()}.session_interactions"
+    try:
+        with get_connection() as conn:
+            cursor = _dict_cursor(conn)
+            cursor.execute(
+                f"""
+                SELECT section_tag, interaction_id, kind, answer, recommended, was_default
+                FROM {table_name}
+                WHERE session_id = %s
+                ORDER BY created_at DESC, id DESC
+                LIMIT %s
+                """,
+                (session_id, int(limit)),
+            )
+            rows = cursor.fetchall()
+            cursor.close()
+            return [dict(row) for row in rows]
+    except Exception as e:
+        logger.error(f"Error listing session interactions from Lakebase: {e}", exc_info=True)
+        return []
 
 
 def delete_session(session_id: str) -> bool:

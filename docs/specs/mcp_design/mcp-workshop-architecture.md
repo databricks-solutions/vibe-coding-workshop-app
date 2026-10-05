@@ -241,6 +241,8 @@ sequenceDiagram
 
 ### 3.5 Adaptive coaching (`vibe_coach`, Phase 2A) — fail-open
 
+> Shipped as the optional `focus` arg on `vibe_explain_step` (D-22, tool count stays 7), in `src/backend/services/coaching.py`; the `vibe_coach` flow below is the original spec.
+
 ```mermaid
 sequenceDiagram
   participant U as Learner
