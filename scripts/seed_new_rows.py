@@ -19,6 +19,11 @@ Model (see docs/superpowers/plans/2026-10-05-seed-new-rows-existing-install.md):
     atomic under the runner's autocommit. F2 a bulk seed of 01/02 is bracketed
     by a ${schema}.seed_bulk_pending marker (DDL 15); a marker left by an
     interrupted run is recovered (ledgered) before the next run gates.
+  * D-40 (docs/superpowers/plans/2026-10-06-seed-unique-conflict.md): an S4
+    insert that hits section_input_prompts' partial unique index
+    uq_section_assistant_version_active (an admin's ACTIVE row already owns the
+    (section_tag, coding_assistant, version) slot) WARNs and is not ledgered,
+    like a PK collision. Any other error still fails closed.
   * Nothing here issues UPDATE, DROP or TRUNCATE. The only DELETE clears our
     own seed_bulk_pending marker row; seed and user data are never deleted.
 """
@@ -32,6 +37,12 @@ SEED_BASELINE_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "s
 
 LEDGER_TABLE = "seed_rows_applied"
 BULK_PENDING_TABLE = "seed_bulk_pending"
+
+# D-40: the one unique violation the S4 apply absorbs (DDL 07's partial unique
+# index on section_input_prompts (section_tag, coding_assistant, version)
+# WHERE is_active). Matched by SQLSTATE + constraint name, no driver import.
+UNIQUE_VIOLATION = "23505"
+ACTIVE_TRIPLE_INDEX = "uq_section_assistant_version_active"
 
 # (table, pk column, seed file) for the two config tables whose seed rows carry
 # explicit SERIAL primary keys and no ON CONFLICT clause.
@@ -290,13 +301,25 @@ def _atomic_apply(stmt: str, pk_col: str, schema: str) -> str:
     )
 
 
+def _is_active_triple_conflict(exc) -> bool:
+    """True iff ``exc`` is a unique violation on ACTIVE_TRIPLE_INDEX.
+
+    psycopg3 spells the SQLSTATE ``sqlstate``, psycopg2 ``pgcode``; both carry
+    ``diag.constraint_name``.
+    """
+    sqlstate = getattr(exc, "sqlstate", None) or getattr(exc, "pgcode", None)
+    constraint = getattr(getattr(exc, "diag", None), "constraint_name", None)
+    return sqlstate == UNIQUE_VIOLATION and constraint == ACTIVE_TRIPLE_INDEX
+
+
 def apply_new_rows(cursor, schema, table, pk_col, rows, baseline, mode, log=print) -> dict:
     """Apply the post-baseline seed rows of one table.
 
     mode="insert" (S4, populated install): insert each post-baseline row that
     is not ledgered, with ON CONFLICT (pk) DO NOTHING, and ledger it in the
     same statement (F1); WARN (nothing ledgered) when an existing row owns the
-    PK; then raise the PK sequence (never lower).
+    PK or, D-40, an active row owns its uq_section_assistant_version_active
+    slot; then raise the PK sequence (never lower).
     mode="ledger" (S5, after a bulk seed): ledger every post-baseline PK that
     now exists in the table. Inserts nothing into ``table``.
     """
@@ -320,7 +343,21 @@ def apply_new_rows(cursor, schema, table, pk_col, rows, baseline, mode, log=prin
     for pk, stmt in post:
         if pk in applied:
             continue
-        cursor.execute(_atomic_apply(stmt, pk_col, schema), (table,))
+        try:
+            cursor.execute(_atomic_apply(stmt, pk_col, schema), (table,))
+        except Exception as e:
+            # The runner connects with autocommit=True (setup-lakebase.sh
+            # ~:582/:589), so the failed statement rolls back alone and the
+            # next row's statement runs normally.
+            if not _is_active_triple_conflict(e):
+                raise
+            log(
+                f"    WARNING: {table} {pk_col}={pk} skipped: an active row for "
+                f"(section_tag, coding_assistant, version) already exists "
+                f"({ACTIVE_TRIPLE_INDEX}); seed row not applied"
+            )
+            result["warnings"] += 1
+            continue
         if cursor.rowcount == 1:
             result["inserted"] += 1
         else:
