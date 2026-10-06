@@ -15,10 +15,14 @@ Pins scripts/seed_new_rows.py and its wiring in scripts/setup-lakebase.sh:
   T-recreate   the ledger survives --recreate; stale ledger rows are harmless.
   T-seq        never-lower sequence raise (NULL / is_called / not is_called).
   T-gating     S6: populated 01/02 + empty step_visibility_overrides -> no 01/02.
-  T-noupdate   the helper never emits UPDATE/DELETE/DROP/TRUNCATE/ALTER.
+  T-noupdate   the helper never emits UPDATE/DROP/TRUNCATE/ALTER, and its only
+               DELETE clears its own seed_bulk_pending marker row (MARKER_CLEAR).
   T-unparseable an INSERT whose PK can't be parsed fails before any write.
   C1-C6 (D-38) F1 one-statement insert+ledger (CTE); F2 seed_bulk_pending
                marker lifecycle, crash recovery, partial bulk, --recreate.
+  V1-V4 (D-40) an S4 insert hitting uq_section_assistant_version_active WARNs,
+               is not ledgered and the run continues; every other error
+               (another constraint or SQLSTATE) re-raises unchanged.
 
 Offline only: a fake in-memory cursor stands in for Lakebase; nothing opens a
 connection, runs setup-lakebase.sh, lakebase_manager.py or psql.
@@ -135,6 +139,7 @@ class FakeDB:
         self.events = []  # ("file", name) / ("mark"|"clear", table) / ("ledger", table, pk) / ("setval", seq)
         self.crash_after = None  # predicate(sql): raise Crash once that statement has run
         self.crash_after_file = None  # seed file name: raise Crash once its rows are written
+        self.fail = None  # predicate(sql) -> exception raised INSTEAD of running that statement
         # sequence relation name -> [last_value, is_called, start_value]
         self.seqs = seqs or {f"{t}_{c}_seq": [1, False, 1] for t, c in PK_COL.items()}
         self.svo_count = svo_count
@@ -177,6 +182,10 @@ class FakeCursor:
         return list(self._rows)
 
     def execute(self, sql, params=None):
+        if self.db.fail and (exc := self.db.fail(sql)):
+            # Autocommit: the failed statement writes nothing and later ones run.
+            self.db.executed.append(sql)
+            raise exc
         self._execute(sql, params)
         if self.db.crash_after and self.db.crash_after(sql):
             raise Crash(sql[:80])
@@ -801,3 +810,119 @@ def test_c6_recreate_branch_brackets_the_reseed_with_the_marker(seed_dir):
     assert leftover == {SIP} and db.markers == set() and db.ledger == ALL_NEW
     assert f"  {SIP}: recovered interrupted bulk seed (2 post-baseline rows ledgered)" in log
     assert not [line for line in log if line.startswith(f"  {UC}: recovered")]
+
+
+# ---------------------------------------------------------------------------
+# D-40: an admin's active row owns the uq_section_assistant_version_active slot
+# ---------------------------------------------------------------------------
+
+ACTIVE_TRIPLE = "uq_section_assistant_version_active"
+
+
+class _Diag:
+    def __init__(self, constraint_name):
+        self.constraint_name = constraint_name
+
+
+class Psycopg3LikeError(Exception):
+    """psycopg3 spelling: ``sqlstate`` + ``diag.constraint_name``."""
+
+    def __init__(self, sqlstate, constraint_name):
+        super().__init__(f"{sqlstate} on {constraint_name}")
+        self.sqlstate = sqlstate
+        self.diag = _Diag(constraint_name)
+
+
+class Psycopg2LikeError(Exception):
+    """psycopg2 spelling: ``pgcode`` + ``diag.constraint_name``."""
+
+    def __init__(self, pgcode, constraint_name):
+        super().__init__(f"{pgcode} on {constraint_name}")
+        self.pgcode = pgcode
+        self.diag = _Diag(constraint_name)
+
+
+def _fail_on(pk, exc):
+    return lambda sql: exc if sql.startswith("WITH ins AS (") and re.search(rf"VALUES\s*\({pk},", sql) else None
+
+
+def test_v1_active_triple_collision_warns_skips_and_the_next_row_applies(seed_dir):
+    db = _populated()
+    db.fail = _fail_on(1001, Psycopg3LikeError("23505", ACTIVE_TRIPLE))
+    log = _run_create(db, seed_dir)
+
+    assert 1001 not in db.tables[SIP] and (SIP, 1001) not in db.ledger, "the skipped row was applied or ledgered"
+    assert 1002 in db.tables[SIP] and (SIP, 1002) in db.ledger, "the next row in the same run was not applied"
+    assert (UC, 5001) in db.ledger
+    warn = [line for line in log if "WARNING" in line]
+    assert warn == [
+        f"    WARNING: {SIP} input_id=1001 skipped: an active row for (section_tag, coding_assistant, version) "
+        f"already exists ({ACTIVE_TRIPLE}); seed row not applied"
+    ], log
+    assert f"    {SIP}: 1 inserted / 1 warnings" in log
+    assert db.seqs["section_input_prompts_input_id_seq"][:2] == [1003, False]  # the run reached the sequence raise
+
+    # U4: a re-run re-warns (not ledgered) and inserts nothing; the admin row owns the slot.
+    log = _run_create(db, seed_dir)
+    assert f"    {SIP}: 0 inserted / 1 warnings" in log
+    assert (SIP, 1001) not in db.ledger and 1001 not in db.tables[SIP]
+
+    # The admin deactivates their row: the next deploy inserts the seed fork.
+    db.fail = None
+    log = _run_create(db, seed_dir)
+    assert f"    {SIP}: 1 inserted / 0 warnings" in log and (SIP, 1001) in db.ledger
+
+
+@pytest.mark.parametrize(
+    "exc",
+    [
+        Psycopg3LikeError("23505", "section_input_prompts_pkey"),
+        Psycopg2LikeError("23505", "uq_some_other_index"),
+        Psycopg3LikeError("23505", None),
+        Psycopg3LikeError("23505", ACTIVE_TRIPLE + "_v2"),
+    ],
+    ids=["pkey", "other_index_pg2", "no_constraint", "near_miss_name"],
+)
+def test_v2_unique_violation_on_another_constraint_reraises(seed_dir, exc):
+    db = _populated()
+    db.fail = _fail_on(1001, exc)
+    log = []
+    with pytest.raises(type(exc)) as raised:
+        snr.run_create_mode_seed(db.cursor(), SCHEMA, str(seed_dir), db.run_sql_file, log=log.append)
+    assert raised.value is exc
+    assert not [line for line in log if "WARNING" in line and "input_id=1001" in line], log
+    assert 1002 not in db.tables[SIP], "the run continued past a fail-closed error"
+
+
+@pytest.mark.parametrize(
+    "exc",
+    [
+        Psycopg3LikeError("23502", ACTIVE_TRIPLE),  # not-null, even with the index's name
+        Psycopg2LikeError("23503", ACTIVE_TRIPLE),  # foreign key
+        RuntimeError("connection dropped"),  # no SQLSTATE at all
+    ],
+    ids=["not_null", "fk_pg2", "no_sqlstate"],
+)
+def test_v3_non_unique_errors_reraise(seed_dir, exc):
+    db = _populated()
+    db.fail = _fail_on(1001, exc)
+    with pytest.raises(type(exc)) as raised:
+        _run_create(db, seed_dir)
+    assert raised.value is exc
+    assert 1002 not in db.tables[SIP] and (SIP, 1001) not in db.ledger
+
+
+@pytest.mark.parametrize("error_cls", [Psycopg3LikeError, Psycopg2LikeError], ids=["sqlstate", "pgcode"])
+def test_v4_both_sqlstate_spellings_are_recognized(seed_dir, error_cls):
+    db = _populated()
+    db.fail = _fail_on(1001, error_cls("23505", ACTIVE_TRIPLE))
+    log = _run_create(db, seed_dir)
+    assert f"    {SIP}: 1 inserted / 1 warnings" in log
+    assert (SIP, 1001) not in db.ledger and (SIP, 1002) in db.ledger
+
+
+def test_v1_runner_connects_with_autocommit():
+    # D-40's skip-and-continue relies on it: a failed statement must not abort the next one.
+    heredoc = SETUP_SH.read_text().split("<< 'PYTHON_EOF'", 1)[1].split("\nPYTHON_EOF", 1)[0]
+    connect = heredoc.split("# Database Connection", 1)[1]
+    assert "autocommit=True," in connect and "conn.autocommit = True" in connect
