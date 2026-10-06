@@ -198,6 +198,21 @@ def test_non_genie_tracks_define_usecase_unchanged():
         assert "use_case_selection" not in tags, track_id
 
 
+def test_app_family_steps_are_all_agent_doable():
+    """P4.3 (D-39): every app-only / app-database step is agent-doable in Genie
+    Code (judgment table in docs/superpowers/plans/2026-10-06-p4-app-family.md).
+    Pinned from both the JSON and the loaded model, per track."""
+    loaded = manifest.load_manifest()
+    data = json.loads((REPO_ROOT / "src/backend/workshop/manifest.json").read_text())["tracks"]
+    for track_id in ("app-only", "app-database"):
+        json_steps = [step for section in data[track_id]["sections"] for step in section["steps"]]
+        assert json_steps, track_id
+        assert {step["sectionTag"]: step["execution"] for step in json_steps} == {
+            step["sectionTag"]: "agent-doable" for step in json_steps
+        }, track_id
+        assert {step.execution for step in loaded.track_steps(track_id)} == {"agent-doable"}, track_id
+
+
 def test_manifest_regeneration_is_byte_identical():
     """Contract 5: re-running the generator changes nothing — the committed
     manifest.json is byte-for-byte what generate_manifest.py emits, so no hand

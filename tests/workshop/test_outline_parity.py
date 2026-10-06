@@ -336,3 +336,65 @@ def test_live_engine_reproduces_frozen_golden_cell_for_cell():
             f"engine no longer reproduces the FROZEN golden for "
             f"{cell['track']}/{cell['combo']}:\n  engine: {live}\n  frozen ts: {cell['ts']}"
         )
+
+
+# --------------------------------------------------------------------------- #
+# P4.3 (D-39) — MCP outline == the SPA's outline endpoint at every step of the
+# app-only / app-database walks, not just at session start.
+# --------------------------------------------------------------------------- #
+@pytest.fixture
+def app_walk_client(monkeypatch):
+    import copy
+
+    from fastapi import FastAPI
+    from starlette.testclient import TestClient
+
+    from src.backend import mcp_server
+    from src.backend.api import routes
+
+    store: dict = {}
+
+    def load_session(session_id):
+        record = store.get(session_id)
+        return copy.deepcopy(record) if record is not None else None
+
+    def save_session(session_id, **fields):
+        store.setdefault(session_id, {"session_id": session_id}).update(copy.deepcopy(fields))
+        return True
+
+    monkeypatch.setattr(mcp_server, "load_session", load_session)
+    monkeypatch.setattr(mcp_server, "save_session", save_session)
+    monkeypatch.setattr(mcp_server, "is_lakebase_configured", lambda: True)
+    monkeypatch.setattr(mcp_server, "_request_user", lambda ctx: "learner@acme.com")
+    monkeypatch.setattr(mcp_server, "_curated_pair_status", lambda industry, use_case: "known")
+    monkeypatch.setattr(mcp_server, "_industry_label_for", lambda industry, echo: "Travel")
+    monkeypatch.setattr(mcp_server, "_use_case_label_for", lambda industry, use_case: None)
+    monkeypatch.setattr(routes, "load_session", load_session)
+    app = FastAPI()
+    app.include_router(routes.router, prefix="/api")
+    return mcp_server, TestClient(app)
+
+
+@pytest.mark.parametrize("track", ["app-only", "app-database"])
+def test_app_family_mcp_outline_matches_endpoint_through_the_walk(app_walk_client, track):
+    mcp_server, client = app_walk_client
+    sid = mcp_server.vibe_start_track(track, use_case="ai_driven_booking", industry="travel").session_id
+
+    def outlines_agree():
+        resource = json.loads(mcp_server._session_state_resource(sid))["outline"]
+        response = client.get("/api/track/auto/outline", params={"session_id": sid})
+        assert response.status_code == 200, response.text
+        assert response.json()["track"] == track
+        assert resource == response.json()["outline"]
+        return resource
+
+    outline = outlines_agree()
+    assert [item["sectionTag"] for item in outline] == _engine_tags(track)
+    for _ in range(len(outline) + 1):
+        nxt = mcp_server.vibe_next_step(sid).root
+        if isinstance(nxt, mcp_server.DoneResult):
+            break
+        assert not isinstance(mcp_server.vibe_complete_step(sid, nxt.sectionTag, "out"), dict)
+        outline = outlines_agree()
+    assert isinstance(nxt, mcp_server.DoneResult)
+    assert {item["status"] for item in outline} == {"done"}
