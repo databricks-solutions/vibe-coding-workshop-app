@@ -19,6 +19,12 @@ TAMPERS (verified, see PR body):
 * T1 map an absent value to "known"          -> U2 fails.
 * T2 map a catalogue failure to "unknown"    -> U3 fails.
 * T3 write use_case unconditionally          -> U2 fails (column/params assertion).
+* X1 state.has_defined_intent -> bool(row.get("industry"))
+                                             -> U7(a)/(b) fail.
+* X2 drop the ``if _has_defined_intent(row):`` guard in
+     lakebase._row_completion_globals        -> U7(b) fails, U7(c) stays green.
+* X3 add ``not session_id and`` to the curated-pair classification condition
+     in vibe_start_track (skip it on resume) -> U8a fails.
 """
 
 import copy
@@ -33,7 +39,9 @@ if str(REPO_ROOT) not in sys.path:
 
 from src.backend import mcp_server
 from src.backend.api import routes
-from src.backend.workshop import engine
+from src.backend.services import lakebase
+from src.backend.workshop import engine, state
+from src.backend.workshop.completion_keying import tag_to_global_number
 
 TRACK = "genie-accelerator"
 
@@ -229,3 +237,78 @@ def test_u6_unknown_industry_writes_neither(env):
     params = row.get("session_parameters") or {}
     assert "industry" not in params and "use_case" not in params
     assert _seed(saves, sid)["session_name"] == "Genie Code Workshop"
+
+
+# --- U7: the unknown pair's row earns no step-1 credit (D-34) ----------------
+
+# Built the way the analytics tests build it
+# (tests/workshop/test_completion_keying_aggregations.py: INVERSE = tag_to_global_number()).
+_INVERSE = tag_to_global_number()
+_INTENT_STEP = 1
+
+
+def test_u7a_unknown_pair_row_has_no_defined_intent(env):
+    store, _, _ = env
+
+    sid = mcp_server.vibe_start_track(TRACK, use_case="bar", industry="travel").session_id
+    row = store[sid]
+
+    assert lakebase._has_defined_intent(row) is False
+    assert state.has_defined_intent(row) is False
+
+
+def test_u7b_unknown_pair_row_gets_no_step_1(env):
+    store, _, _ = env
+
+    sid = mcp_server.vibe_start_track(TRACK, use_case="bar", industry="travel").session_id
+    completed, _skipped = lakebase._row_completion_globals(store[sid], _INVERSE)
+
+    assert _INTENT_STEP not in completed
+
+
+def test_u7c_known_pair_row_gets_step_1(env):
+    # Positive control: U1's known pair has defined intent and earns step 1.
+    store, _, _ = env
+
+    sid = mcp_server.vibe_start_track(TRACK, use_case="booking", industry="travel").session_id
+    row = store[sid]
+    completed, _skipped = lakebase._row_completion_globals(row, _INVERSE)
+
+    assert lakebase._has_defined_intent(row) is True
+    assert _INTENT_STEP in completed
+
+
+# --- U8: resume (session_id) runs the same classification -------------------
+
+
+def test_u8a_resume_unresolved_unknown_pair_does_not_resolve_gate(env):
+    store, saves, _ = env
+
+    sid = mcp_server.vibe_start_track(TRACK).session_id
+    assert engine.USE_CASE_GATE not in (store[sid].get("completed_gates") or [])
+
+    result = mcp_server.vibe_start_track(TRACK, session_id=sid, use_case="bar", industry="travel")
+
+    assert result.session_id == sid
+    row = store[sid]
+    assert engine.USE_CASE_GATE not in (row.get("completed_gates") or [])
+    assert engine.USE_CASE_BRIEF not in (row.get("captured_outputs") or {})
+    assert "use_case" not in (row.get("session_parameters") or {})
+    # Resume seeds no new session.
+    assert {s for (s, _fields) in saves} == {sid}
+    assert mcp_server.vibe_next_step(sid).root.sectionTag == engine.USE_CASE_GATE
+
+
+def test_u8b_resume_resolved_unknown_pair_leaves_pick_unchanged(env):
+    store, _, _ = env
+
+    sid = mcp_server.vibe_start_track(TRACK, use_case="booking", industry="travel").session_id
+    before = copy.deepcopy(store[sid])
+
+    mcp_server.vibe_start_track(TRACK, session_id=sid, use_case="bar", industry="travel")
+
+    row = store[sid]
+    assert row["completed_gates"] == before["completed_gates"]
+    assert row["captured_outputs"][engine.USE_CASE_BRIEF] == before["captured_outputs"][engine.USE_CASE_BRIEF]
+    assert row["use_case"] == before["use_case"] == "booking"
+    assert row["session_parameters"]["use_case"] == before["session_parameters"]["use_case"] == "booking"
