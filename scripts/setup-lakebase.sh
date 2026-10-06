@@ -654,6 +654,16 @@ try:
             count = execute_sql_file(cursor, ddl_file, SCHEMA, ignore_errors=True)
             print(f"({count} statements)")
         
+        # F2 (D-38): mark both seed tables bulk-pending BEFORE the reseed, so a
+        # crash before record_applied_rows is recovered by the next run.
+        try:
+            leftover_bulks = seed_new_rows.mark_bulk_pending(
+                cursor, SCHEMA, [table for table, _, _ in seed_new_rows.SEED_TABLES]
+            )
+        except Exception as e:
+            print(f"❌ seed_new_rows failed: {e}")
+            sys.exit(1)
+
         # Execute DML seed files
         print(f"  Executing DML seed from {DML_SEED_DIR}/...")
         dml_files = get_dml_seed_files()
@@ -678,9 +688,12 @@ try:
         # S5 (D-37): ledger every post-baseline seed row the reseed just wrote,
         # so an admin delete of one is not resurrected by a later create-mode
         # run. seed_rows_applied is not dropped above; stale ledger rows are
-        # harmless because this reseed wrote those rows again.
+        # harmless because this reseed wrote those rows again. A marker left
+        # by an interrupted earlier run is recovered first; record_applied_rows
+        # clears each table's marker after ledgering it (F2, D-38).
         print("  Recording post-baseline seed rows in seed_rows_applied...")
         try:
+            seed_new_rows.recover_interrupted_bulks(cursor, SCHEMA, DML_SEED_DIR, leftover_bulks)
             seed_new_rows.record_applied_rows(cursor, SCHEMA, DML_SEED_DIR)
         except Exception as e:
             print(f"❌ seed_new_rows failed: {e}")

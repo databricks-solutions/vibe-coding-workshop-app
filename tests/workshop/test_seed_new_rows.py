@@ -17,6 +17,8 @@ Pins scripts/seed_new_rows.py and its wiring in scripts/setup-lakebase.sh:
   T-gating     S6: populated 01/02 + empty step_visibility_overrides -> no 01/02.
   T-noupdate   the helper never emits UPDATE/DELETE/DROP/TRUNCATE/ALTER.
   T-unparseable an INSERT whose PK can't be parsed fails before any write.
+  C1-C6 (D-38) F1 one-statement insert+ledger (CTE); F2 seed_bulk_pending
+               marker lifecycle, crash recovery, partial bulk, --recreate.
 
 Offline only: a fake in-memory cursor stands in for Lakebase; nothing opens a
 connection, runs setup-lakebase.sh, lakebase_manager.py or psql.
@@ -37,6 +39,7 @@ SCRIPTS = REPO_ROOT / "scripts"
 SETUP_SH = SCRIPTS / "setup-lakebase.sh"
 DML_SEED = REPO_ROOT / "db" / "lakebase" / "dml_seed"
 DDL_14 = REPO_ROOT / "db" / "lakebase" / "ddl" / "14_seed_rows_applied.sql"
+DDL_15 = REPO_ROOT / "db" / "lakebase" / "ddl" / "15_seed_bulk_pending.sql"
 BASELINE_COMMIT = "ca9ff61"
 
 if str(SCRIPTS) not in sys.path:
@@ -50,6 +53,8 @@ F01, F02 = "01_seed_usecase_descriptions.sql", "02_seed_section_input_prompts.sq
 F03, F08, F09 = "03_seed_workshop_parameters.sql", "08_seed_step_visibility_overrides.sql", "09_seed_path_visibility_overrides.sql"
 PK_COL = {UC: "config_id", SIP: "input_id"}
 DESTRUCTIVE = re.compile(r"^\s*(UPDATE|DELETE|DROP|TRUNCATE|ALTER)\b", re.IGNORECASE)
+# D-38: the one DELETE the helper may issue clears its own bulk-pending marker.
+MARKER_CLEAR = f"DELETE FROM {SCHEMA}.seed_bulk_pending WHERE table_name = %s"
 
 
 # ---------------------------------------------------------------------------
@@ -118,10 +123,18 @@ def _file_pks(path):
 BASELINE = snr.load_baseline()
 
 
+class Crash(Exception):
+    """An injected crash / kill / connection drop."""
+
+
 class FakeDB:
-    def __init__(self, tables=None, ledger=(), seqs=None, svo_count=0):
+    def __init__(self, tables=None, ledger=(), seqs=None, svo_count=0, markers=()):
         self.tables = {UC: set(), SIP: set(), **(tables or {})}
         self.ledger = set(ledger)
+        self.markers = set(markers)  # seed_bulk_pending table_name rows
+        self.events = []  # ("file", name) / ("mark"|"clear", table) / ("ledger", table, pk) / ("setval", seq)
+        self.crash_after = None  # predicate(sql): raise Crash once that statement has run
+        self.crash_after_file = None  # seed file name: raise Crash once its rows are written
         # sequence relation name -> [last_value, is_called, start_value]
         self.seqs = seqs or {f"{t}_{c}_seq": [1, False, 1] for t, c in PK_COL.items()}
         self.svo_count = svo_count
@@ -136,9 +149,19 @@ class FakeDB:
         """Stands in for the runner's execute_sql_file: duplicate keys are skipped."""
         name = os.path.basename(path)
         self.files_run.append(name)
+        self.events.append(("file", name))
         if name in (F01, F02):
             for table, pks in _file_pks(path).items():
                 self.tables[table] |= pks
+        if name == self.crash_after_file:
+            raise Crash(f"after {name}")
+
+    def add_ledger(self, table, pk):
+        if (table, pk) in self.ledger:
+            return 0
+        self.ledger.add((table, pk))
+        self.events.append(("ledger", table, pk))
+        return 1
 
 
 class FakeCursor:
@@ -154,6 +177,11 @@ class FakeCursor:
         return list(self._rows)
 
     def execute(self, sql, params=None):
+        self._execute(sql, params)
+        if self.db.crash_after and self.db.crash_after(sql):
+            raise Crash(sql[:80])
+
+    def _execute(self, sql, params=None):
         db = self.db
         db.executed.append(sql)
         s = " ".join(sql.split())
@@ -166,7 +194,20 @@ class FakeCursor:
         elif re.fullmatch(
             rf"INSERT INTO {SCHEMA}\.seed_rows_applied \(table_name, pk\) VALUES \(%s, %s\) ON CONFLICT DO NOTHING", s
         ):
-            db.ledger.add(tuple(params))
+            db.add_ledger(*params)
+        elif re.fullmatch(rf"SELECT table_name FROM {SCHEMA}\.seed_bulk_pending", s):
+            self._rows = [(t,) for t in sorted(db.markers)]
+        elif re.fullmatch(
+            rf"INSERT INTO {SCHEMA}\.seed_bulk_pending \(table_name\) VALUES \(%s\) ON CONFLICT DO NOTHING", s
+        ):
+            if params[0] not in db.markers:
+                db.markers.add(params[0])
+                db.events.append(("mark", params[0]))
+        elif s == MARKER_CLEAR:
+            db.markers.discard(params[0])
+            db.events.append(("clear", params[0]))
+        elif s.startswith("WITH ins AS ("):
+            self._cte(s, params)
         elif m := re.fullmatch(rf"SELECT (\w+) FROM {SCHEMA}\.(\w+) WHERE (\w+) = ANY\(%s\)", s):
             assert m.group(1) == m.group(3) == PK_COL[m.group(2)]
             self._rows = [(pk,) for pk in sorted(db.tables[m.group(2)] & set(params[0]))]
@@ -182,6 +223,7 @@ class FakeCursor:
             seq, target = params
             db.seqs[seq.split(".", 1)[1]][:2] = [target, False]
             db.setvals.append((seq, target))
+            db.events.append(("setval", seq))
         elif m := re.match(rf"INSERT INTO {SCHEMA}\.(\w+) \((\w+),", s):
             table, col = m.group(1), m.group(2)
             assert col == PK_COL[table], s[:120]
@@ -194,6 +236,27 @@ class FakeCursor:
                 self.rowcount = 1
         else:
             raise AssertionError(f"unexpected SQL: {s[:160]}")
+
+    def _cte(self, s, params):
+        """F1's data-modifying CTE: the table row iff its PK is free; the ledger row iff inserted."""
+        m = re.fullmatch(
+            rf"WITH ins AS \( (INSERT INTO {SCHEMA}\.(\w+) \((\w+),.*) ON CONFLICT \((\w+)\) DO NOTHING "
+            rf"RETURNING (\w+) \) INSERT INTO {SCHEMA}\.seed_rows_applied \(table_name, pk\) "
+            rf"SELECT %s, (\w+) FROM ins ON CONFLICT DO NOTHING",
+            s,
+        )
+        assert m, s[:200]
+        inner, table, col = m.group(1), m.group(2), m.group(3)
+        assert col == m.group(4) == m.group(5) == m.group(6) == PK_COL[table], s[:200]
+        # psycopg pyformat: every '%' is '%%' or the single %s placeholder.
+        assert re.findall(r"%.", s.replace("%%", "")) == ["%s"] and params == (table,), (s[:200], params)
+        assert not inner.rstrip().endswith(";"), inner[-40:]
+        pk = int(re.search(r"VALUES \( ?(\d+)", inner).group(1))
+        if pk in self.db.tables[table]:
+            self.rowcount = 0
+        else:
+            self.db.tables[table].add(pk)
+            self.rowcount = self.db.add_ledger(params[0], pk)
 
 
 def _populated(**kw):
@@ -212,7 +275,7 @@ def _run_create(db, seed_dir):
 
 
 def _seed_inserts(db, table):
-    return [s for s in db.executed if re.match(rf"\s*INSERT INTO {SCHEMA}\.{table}\b", s)]
+    return [s for s in db.executed if re.match(rf"\s*(WITH ins AS \(\s*)?INSERT INTO {SCHEMA}\.{table}\b", s)]
 
 
 # ---------------------------------------------------------------------------
@@ -376,7 +439,7 @@ def test_populated_applies_only_new_unledgered_rows(seed_dir):
 
     sip_inserts = _seed_inserts(db, SIP)
     assert len(sip_inserts) == 1 and re.search(r"VALUES\s*\(1001,", sip_inserts[0])
-    assert sip_inserts[0].rstrip().endswith("ON CONFLICT (input_id) DO NOTHING;")
+    assert "\nON CONFLICT (input_id) DO NOTHING\nRETURNING input_id\n)" in sip_inserts[0]  # D-38 F1
     assert len(_seed_inserts(db, UC)) == 1  # only the 5001 attempt, which conflicted
 
     assert db.files_run == [F08, F09], "populated install re-ran a bulk seed file"
@@ -519,7 +582,7 @@ def test_helper_never_emits_destructive_sql(seed_dir):
         _run_create(db, seed_dir)
         snr.record_applied_rows(db.cursor(), SCHEMA, str(seed_dir), log=lambda _: None)
         runs.extend(db.executed)
-    assert runs and not [s[:80] for s in runs if DESTRUCTIVE.match(s)]
+    assert runs and not [s[:80] for s in runs if DESTRUCTIVE.match(s) and s != MARKER_CLEAR]
 
 
 def test_helper_imports_no_db_driver():
@@ -578,3 +641,163 @@ def test_ddl_14_is_additive():
     assert re.search(r"CREATE TABLE IF NOT EXISTS \$\{schema\}\.seed_rows_applied", code)
     assert re.search(r"PRIMARY KEY \(table_name, pk\)", code)
     assert not re.search(r"\b(ALTER|DROP|DELETE|TRUNCATE|UPDATE)\b", code, re.IGNORECASE)
+
+
+def test_ddl_15_is_additive():
+    sql = DDL_15.read_text()
+    code = "\n".join(line for line in sql.splitlines() if not line.lstrip().startswith("--"))
+    assert re.search(r"CREATE TABLE IF NOT EXISTS \$\{schema\}\.seed_bulk_pending", code)
+    assert re.search(r"table_name VARCHAR\(100\) PRIMARY KEY", code)
+    assert re.search(r"started_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP", code)
+    assert not re.search(r"\b(ALTER|DROP|DELETE|TRUNCATE|UPDATE)\b", code, re.IGNORECASE)
+
+
+# ---------------------------------------------------------------------------
+# D-38: insert/ledger crash windows (C1-C6)
+# ---------------------------------------------------------------------------
+
+PCT_ROW = """
+INSERT INTO ${catalog}.${schema}.section_input_prompts
+(input_id, section_tag, coding_assistant, input_template, system_prompt, version, is_active, inserted_at, updated_at, created_by)
+VALUES
+(1003, 'prd_generation', 'genie-code', 'covers 100% of %(name)s cases', 'sys', 1, TRUE, current_timestamp(), current_timestamp(), 'system');
+"""
+
+ALL_NEW = {(t, pk) for t, pks in NEW_PKS.items() for pk in pks}
+
+
+def _ledger_writes(db):
+    return [s for s in db.executed if re.match(rf"\s*INSERT INTO {SCHEMA}\.seed_rows_applied\b", s)]
+
+
+def test_c1_s4_insert_and_ledger_are_one_statement(seed_dir):
+    with open(seed_dir / F02, "a") as f:
+        f.write(PCT_ROW)
+    db = _populated()
+    _run_create(db, seed_dir)
+
+    writes = [s for s in db.executed if "INSERT INTO" in s]
+    assert len(writes) == 4, [s[:60] for s in writes]  # 5001, 1001, 1002, 1003: one statement each
+    for stmt in writes:
+        assert stmt.startswith("WITH ins AS (\nINSERT INTO "), stmt[:80]
+        assert f"INSERT INTO {SCHEMA}.seed_rows_applied (table_name, pk) SELECT %s," in stmt
+    assert _ledger_writes(db) == [], "a separate ledger statement followed the seed insert"
+    assert db.ledger == ALL_NEW | {(SIP, 1003)} and {1001, 1002, 1003} <= db.tables[SIP]
+    pct = next(s for s in writes if "1003," in s)
+    assert "covers 100%% of %%(name)s cases" in pct  # literal '%' survives pyformat
+
+
+def test_c2_crash_after_the_s4_statement_leaves_table_and_ledger_consistent(seed_dir):
+    db = _populated()
+    db.crash_after = lambda sql: re.search(r"VALUES\s*\(1001,", sql)
+    with pytest.raises(Crash):
+        _run_create(db, seed_dir)
+    for table, pk in ALL_NEW:
+        assert (pk in db.tables[table]) == ((table, pk) in db.ledger), (table, pk)
+    assert 1001 in db.tables[SIP]
+
+    db.crash_after = None
+    log = _run_create(db, seed_dir)
+    assert not [line for line in log if "WARNING" in line], log
+    assert db.ledger == ALL_NEW
+
+    db.tables[SIP].discard(1001)  # admin delete after the retry
+    _run_create(db, seed_dir)
+    assert 1001 not in db.tables[SIP], "a crash-window row was resurrected"
+
+
+def test_c3_interrupted_bulk_is_recovered_and_deletes_stick(seed_dir):
+    db = FakeDB()
+    db.crash_after_file = F02  # both bulk seeds wrote their rows; nothing ledgered yet
+    with pytest.raises(Crash):
+        _run_create(db, seed_dir)
+    assert db.ledger == set() and db.markers == {UC, SIP}
+    assert all(pk in db.tables[t] for t, pk in ALL_NEW)
+
+    db.crash_after_file = None
+    log = _run_create(db, seed_dir)
+    assert f"  {UC}: recovered interrupted bulk seed (1 post-baseline rows ledgered)" in log
+    assert f"  {SIP}: recovered interrupted bulk seed (2 post-baseline rows ledgered)" in log
+    assert db.ledger == ALL_NEW and db.markers == set()
+    assert f"    {UC}: 0 inserted / 0 warnings" in log and f"    {SIP}: 0 inserted / 0 warnings" in log
+    assert not [line for line in log if "WARNING" in line], log
+    assert db.files_run[2:] == [F08, F09]  # no bulk re-run on the retry
+
+    db.tables[SIP].discard(1001)  # admin delete after recovery
+    log = _run_create(db, seed_dir)
+    assert 1001 not in db.tables[SIP], "an interrupted-bulk row was resurrected"
+    assert not [line for line in log if "recovered" in line]
+
+
+def test_c4_marker_lifecycle(seed_dir):
+    db = FakeDB()
+    _run_create(db, seed_dir)
+    ev = db.events
+    for table, seed_file in ((UC, F01), (SIP, F02)):
+        mark, run, clear = ev.index(("mark", table)), ev.index(("file", seed_file)), ev.index(("clear", table))
+        ledgers = [i for i, e in enumerate(ev) if e[:2] == ("ledger", table)]
+        setval = ev.index(("setval", f"{SCHEMA}.{table}_{PK_COL[table]}_seq"))
+        assert mark < run < setval < min(ledgers) and max(ledgers) < clear, (table, ev)
+    assert db.markers == set()
+
+    pop = _populated()
+    _run_create(pop, seed_dir)
+    assert not [e for e in pop.events if e[0] in ("mark", "clear")] and pop.markers == set()
+    assert not [s for s in pop.executed if "seed_bulk_pending" in s and not s.startswith("SELECT")]
+
+
+def test_c5_partial_bulk_rows_are_inserted_atomically_on_rerun(seed_dir):
+    db = _populated(markers={SIP})
+    db.tables[SIP] = set(BASELINE[SIP]) | {1001}  # the interrupted bulk never reached 1002
+    log = _run_create(db, seed_dir)
+    assert f"  {SIP}: recovered interrupted bulk seed (1 post-baseline rows ledgered)" in log
+    assert {(SIP, 1001), (SIP, 1002)} <= db.ledger and 1002 in db.tables[SIP]
+    assert f"    {SIP}: 1 inserted / 0 warnings" in log
+    sip = _seed_inserts(db, SIP)
+    assert len(sip) == 1 and sip[0].startswith("WITH ins AS (") and re.search(r"VALUES\s*\(1002,", sip[0])
+    assert db.markers == set() and F02 not in db.files_run
+
+
+def test_c6_recreate_branch_brackets_the_reseed_with_the_marker(seed_dir):
+    recreate = _branch(SETUP_SH.read_text(), "recreate")
+    code = "\n".join(line for line in recreate.splitlines() if not line.lstrip().startswith("#"))
+    ddl_loop = code.index("ddl_files = get_ddl_files()")
+    mark = code.index("leftover_bulks = seed_new_rows.mark_bulk_pending(")
+    seed_loop = code.index("dml_files = get_dml_seed_files()")
+    recover = code.index("seed_new_rows.recover_interrupted_bulks(cursor, SCHEMA, DML_SEED_DIR, leftover_bulks)")
+    ledger = code.index("seed_new_rows.record_applied_rows(cursor, SCHEMA, DML_SEED_DIR)")
+    assert ddl_loop < mark < seed_loop < recover < ledger
+    assert "sys.exit(1)" in code[mark:seed_loop] and "sys.exit(1)" in code[ledger:]
+
+    def recreate_run(db, crash_before_ledger=False):
+        # The call site's sequence, as test_recreate_keeps_ledger_and_stale_rows_are_harmless drives it.
+        cur, log = db.cursor(), []
+        leftover = snr.mark_bulk_pending(cur, SCHEMA, [t for t, _, _ in snr.SEED_TABLES])
+        db.run_sql_file(str(seed_dir / F01))
+        db.run_sql_file(str(seed_dir / F02))
+        if crash_before_ledger:
+            return leftover, log
+        snr.recover_interrupted_bulks(cur, SCHEMA, str(seed_dir), leftover, log=log.append)
+        snr.record_applied_rows(cur, SCHEMA, str(seed_dir), log=log.append)
+        return leftover, log
+
+    db = FakeDB()
+    leftover, log = recreate_run(db)
+    assert leftover == set() and db.markers == set() and db.ledger == ALL_NEW
+    assert not [line for line in log if "recovered" in line]
+    assert db.events.index(("mark", SIP)) < db.events.index(("file", F01))
+
+    # Crash between the reseed and record_applied_rows: the next create-mode run recovers.
+    db = FakeDB()
+    recreate_run(db, crash_before_ledger=True)
+    assert db.markers == {UC, SIP} and db.ledger == set()
+    log = _run_create(db, seed_dir)
+    assert db.ledger == ALL_NEW and db.markers == set()
+    assert f"  {SIP}: recovered interrupted bulk seed (2 post-baseline rows ledgered)" in log
+
+    # A marker left by an earlier interrupted run is reported, recovered and cleared.
+    db = FakeDB(markers={SIP})
+    leftover, log = recreate_run(db)
+    assert leftover == {SIP} and db.markers == set() and db.ledger == ALL_NEW
+    assert f"  {SIP}: recovered interrupted bulk seed (2 post-baseline rows ledgered)" in log
+    assert not [line for line in log if line.startswith(f"  {UC}: recovered")]
