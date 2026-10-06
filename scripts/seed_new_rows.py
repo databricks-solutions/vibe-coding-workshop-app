@@ -14,7 +14,13 @@ Model (see docs/superpowers/plans/2026-10-05-seed-new-rows-existing-install.md):
   * A post-baseline row that is neither in the baseline nor in the ledger is
     inserted with ON CONFLICT (pk) DO NOTHING. If an admin-created row already
     owns that PK the insert conflicts: we WARN and do not ledger it.
-  * Nothing here issues UPDATE, DELETE, DROP or TRUNCATE.
+  * D-38 (docs/superpowers/plans/2026-10-06-seed-ledger-crash-window.md):
+    F1 the insert and its ledger row are ONE statement (a data-modifying CTE),
+    atomic under the runner's autocommit. F2 a bulk seed of 01/02 is bracketed
+    by a ${schema}.seed_bulk_pending marker (DDL 15); a marker left by an
+    interrupted run is recovered (ledgered) before the next run gates.
+  * Nothing here issues UPDATE, DROP or TRUNCATE. The only DELETE clears our
+    own seed_bulk_pending marker row; seed and user data are never deleted.
 """
 
 import glob
@@ -25,6 +31,7 @@ import re
 SEED_BASELINE_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "seed_baseline.json")
 
 LEDGER_TABLE = "seed_rows_applied"
+BULK_PENDING_TABLE = "seed_bulk_pending"
 
 # (table, pk column, seed file) for the two config tables whose seed rows carry
 # explicit SERIAL primary keys and no ON CONFLICT clause.
@@ -266,20 +273,30 @@ def _ledger(cursor, schema: str, table: str, pk: int) -> None:
     )
 
 
-def _with_on_conflict(stmt: str, pk_col: str) -> str:
+def _atomic_apply(stmt: str, pk_col: str, schema: str) -> str:
+    """F1: the seed INSERT and its ledger row as ONE statement (atomic under autocommit).
+
+    Rows skipped by ON CONFLICT DO NOTHING are not RETURNed, so the ledger row
+    is written iff the seed row was. The statement is executed with the table
+    name as its only parameter, so a literal '%' in the seed text is doubled.
+    """
     body = stmt.rstrip()
     if not body.endswith(';'):
         raise SeedError(f"statement without a terminating ';': {body[:80]!r}")
-    return f"{body[:-1].rstrip()}\nON CONFLICT ({pk_col}) DO NOTHING;"
+    body = body[:-1].rstrip().replace('%', '%%')
+    return (
+        f"WITH ins AS (\n{body}\nON CONFLICT ({pk_col}) DO NOTHING\nRETURNING {pk_col}\n)\n"
+        f"INSERT INTO {schema}.{LEDGER_TABLE} (table_name, pk) SELECT %s, {pk_col} FROM ins ON CONFLICT DO NOTHING"
+    )
 
 
 def apply_new_rows(cursor, schema, table, pk_col, rows, baseline, mode, log=print) -> dict:
     """Apply the post-baseline seed rows of one table.
 
     mode="insert" (S4, populated install): insert each post-baseline row that
-    is not ledgered, with ON CONFLICT (pk) DO NOTHING; ledger it when inserted,
-    WARN (and do not ledger) when an existing row owns the PK; then raise the
-    PK sequence (never lower).
+    is not ledgered, with ON CONFLICT (pk) DO NOTHING, and ledger it in the
+    same statement (F1); WARN (nothing ledgered) when an existing row owns the
+    PK; then raise the PK sequence (never lower).
     mode="ledger" (S5, after a bulk seed): ledger every post-baseline PK that
     now exists in the table. Inserts nothing into ``table``.
     """
@@ -303,9 +320,8 @@ def apply_new_rows(cursor, schema, table, pk_col, rows, baseline, mode, log=prin
     for pk, stmt in post:
         if pk in applied:
             continue
-        cursor.execute(_with_on_conflict(stmt, pk_col))
+        cursor.execute(_atomic_apply(stmt, pk_col, schema), (table,))
         if cursor.rowcount == 1:
-            _ledger(cursor, schema, table, pk)
             result["inserted"] += 1
         else:
             log(f"    WARNING: {table} {pk_col}={pk} is held by an existing row; seed row not applied")
@@ -359,23 +375,84 @@ def _parse_all(schema, dml_dir):
     }
 
 
+# =============================================================================
+# F2 (D-38): bulk-in-progress marker ${schema}.seed_bulk_pending (DDL 15)
+# =============================================================================
+
+
+def _pending_bulk_tables(cursor, schema) -> set:
+    cursor.execute(f"SELECT table_name FROM {schema}.{BULK_PENDING_TABLE}")
+    return {r[0] for r in cursor.fetchall()}
+
+
+def mark_bulk_pending(cursor, schema, tables) -> set:
+    """Write the marker for each table BEFORE its bulk seed.
+
+    Returns the tables that already had a marker, i.e. whose earlier bulk seed
+    was interrupted before it was ledgered.
+    """
+    leftover = _pending_bulk_tables(cursor, schema) & set(tables)
+    for table in tables:
+        cursor.execute(
+            f"INSERT INTO {schema}.{BULK_PENDING_TABLE} (table_name) VALUES (%s) ON CONFLICT DO NOTHING",
+            (table,),
+        )
+    return leftover
+
+
+def _clear_bulk_pending(cursor, schema, table) -> None:
+    # Our own bookkeeping row only; never seed or user data.
+    cursor.execute(f"DELETE FROM {schema}.{BULK_PENDING_TABLE} WHERE table_name = %s", (table,))
+
+
+def _recover(cursor, schema, parsed, baseline, tables, log) -> set:
+    """Ledger the post-baseline rows an interrupted bulk seed left un-ledgered.
+
+    Every post-baseline PK now present in a marked table came from that bulk
+    seed, so it is ledgered (mode="ledger"); then the never-lower sequence
+    raise (F3) and the marker is cleared. Rows the bulk never reached stay
+    absent and un-ledgered; the S4 path inserts them atomically (F1).
+    """
+    recovered = set()
+    for table, pk_col, _ in SEED_TABLES:
+        if table not in tables:
+            continue
+        result = apply_new_rows(cursor, schema, table, pk_col, parsed[table], baseline.get(table, set()), "ledger", log=log)
+        raise_sequence_never_lower(cursor, schema, table, pk_col, log=log)
+        _clear_bulk_pending(cursor, schema, table)
+        log(f"  {table}: recovered interrupted bulk seed ({result['ledgered']} post-baseline rows ledgered)")
+        recovered.add(table)
+    return recovered
+
+
+def recover_interrupted_bulks(cursor, schema, dml_dir, tables, baseline_path=SEED_BASELINE_PATH, log=print) -> set:
+    """--recreate: recover the tables mark_bulk_pending reported as left over."""
+    if not tables:
+        return set()
+    return _recover(cursor, schema, _parse_all(schema, dml_dir), load_baseline(baseline_path), set(tables), log)
+
+
 def record_applied_rows(cursor, schema, dml_dir, baseline_path=SEED_BASELINE_PATH, log=print) -> None:
-    """S5: after a bulk seed, ledger every post-baseline seed PK that now exists."""
+    """S5: after a bulk seed, ledger every post-baseline seed PK that now exists, then clear its marker."""
     parsed = _parse_all(schema, dml_dir)
     baseline = load_baseline(baseline_path)
     for table, pk_col, _ in SEED_TABLES:
         apply_new_rows(cursor, schema, table, pk_col, parsed[table], baseline.get(table, set()), "ledger", log=log)
+        _clear_bulk_pending(cursor, schema, table)
 
 
 def run_create_mode_seed(cursor, schema, dml_dir, run_sql_file, baseline_path=SEED_BASELINE_PATH, log=print) -> None:
     """Create-mode seeding with per-table gating (S4-S6).
 
-    Seed files run in the runner's sorted order (via ``run_sql_file``, the
+    First (F2) any table whose seed_bulk_pending marker survived an interrupted
+    run is recovered: its post-baseline rows are ledgered and the marker cleared.
+    Seed files then run in the runner's sorted order (via ``run_sql_file``, the
     runner's execute_sql_file):
-      * 01/02 only when their own table is EMPTY, followed by a never-lower
-        sequence raise and S5 ledgering. A POPULATED table (COUNT > 0, even
-        partially seeded) gets only the S4 new-row path; missing baseline rows
-        are admin deletions and stay deleted.
+      * 01/02 only when their own table is EMPTY, bracketed by the marker
+        (written before the file, cleared after a never-lower sequence raise
+        and S5 ledgering). A POPULATED table (COUNT > 0, even partially seeded)
+        gets only the S4 new-row path; missing baseline rows are admin
+        deletions and stay deleted.
       * 08/09 every time (ON CONFLICT DO NOTHING / updated_by='seed' guards).
       * any other seed file (the generated 03_seed_workshop_parameters.sql)
         only on a fresh install, i.e. when every SEED_TABLES table is empty,
@@ -383,6 +460,7 @@ def run_create_mode_seed(cursor, schema, dml_dir, run_sql_file, baseline_path=SE
     """
     parsed = _parse_all(schema, dml_dir)
     baseline = load_baseline(baseline_path)
+    _recover(cursor, schema, parsed, baseline, _pending_bulk_tables(cursor, schema), log)
     counts = {table: _count(cursor, schema, table) for table, _, _ in SEED_TABLES}
     by_file = {seed_file: (table, pk_col) for table, pk_col, seed_file in SEED_TABLES}
     fresh = all(count == 0 for count in counts.values())
@@ -394,6 +472,7 @@ def run_create_mode_seed(cursor, schema, dml_dir, run_sql_file, baseline_path=SE
             table, pk_col = by_file[name]
             if counts[table] == 0:
                 log(f"  {table}: empty -> bulk seed {name}")
+                mark_bulk_pending(cursor, schema, [table])
                 run_sql_file(path)
                 bulk.append((table, pk_col))
             else:
@@ -413,6 +492,7 @@ def run_create_mode_seed(cursor, schema, dml_dir, run_sql_file, baseline_path=SE
     for table, pk_col in bulk:
         raise_sequence_never_lower(cursor, schema, table, pk_col, log=log)
         apply_new_rows(cursor, schema, table, pk_col, parsed[table], baseline.get(table, set()), "ledger", log=log)
+        _clear_bulk_pending(cursor, schema, table)
 
     bulk_tables = {table for table, _ in bulk}
     for table, pk_col, _ in SEED_TABLES:
