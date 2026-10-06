@@ -1476,6 +1476,182 @@ graph LR
 ```',
 true, 1, true, current_timestamp(), current_timestamp(), current_user());
 
+-- workspace_setup_deploy (genie-code fork) — prescriptive paths + directives; deploys the Lakebase-wired app under <APP_ROOT> via the SDK SNAPSHOT path (w.apps.deploy; build runs server-side; the SP runs the DDL on first boot) after confirming the REST-attached postgres binding, then E2E-tests every API + the idle reconnect through the 3-hop OAuth session; NO local npm/localhost/auth login, NO bundle-level redeploy of the app; bypass_LLM = TRUE
+INSERT INTO ${catalog}.${schema}.section_input_prompts
+(input_id, section_tag, coding_assistant, input_template, system_prompt,
+ bypass_llm, version, is_active, inserted_at, updated_at, created_by)
+VALUES
+(1001, 'workspace_setup_deploy', 'genie-code',
+'Deploy the Lakebase-wired app to Databricks Apps and run comprehensive end-to-end testing. This is the first deploy with Lakebase code: on first boot the Service Principal creates the database schema, tables, and seed data, and every endpoint flips from mock to live data.
+
+This will involve the following steps:
+
+- **Resolve your environment** — load the workshop state and the app''s saved values (`APP_NAME`, `<APP_ROOT>`, `DB_SCHEMA`).
+- **Confirm the Lakebase preconditions** — the `postgres` resource is bound and the project is `ACTIVE` (both done in **Setup Lakebase**).
+- **Deploy via SDK SNAPSHOT** — ship `<APP_ROOT>`; the build runs server-side and the SP runs the DDL on first boot.
+- **Test every backend API** — through the 3-hop OAuth session, confirming `"source": "live"`.
+- **Check logs and fix Lakebase errors** — up to 3 iterations.
+- **Run the idle connection test** — 3-5 minutes idle, then re-test.
+
+The steps below are the prescriptive runbook for those actions; follow them in order.
+
+**Genie Code — this is a prescriptive runbook. Follow the steps in order. Do NOT improvise paths, do NOT use bare relative paths, do NOT use `@`-mentions. This step DEPLOYS the Lakebase-wired app that the **Wire AppKit App to Lakebase** step authored under `<APP_ROOT>`, then TESTS it end to end on the DEPLOYED URL. There is no local Node toolchain and no local dev server — the Apps runtime builds server-side. The reliable deploy mechanism on Genie Code is the SDK `w.apps.deploy(...)` SNAPSHOT path.**
+
+### 🔴 Non-negotiable execution rules (read before anything)
+
+❌ **NEVER** try to build, install dependencies, or start a dev server on Genie Code — there is **no local Node toolchain** (`genie-code-environment` "AppKit/Node reality"). A SNAPSHOT deploy installs dependencies and runs the Vite build **server-side from the un-built source** under `<APP_ROOT>`, so you deploy source directly.
+
+❌ **DO NOT** treat the CLI app-deploy verb (`app_deploy.verb` in `## Environment Capabilities`) as the primary path — it is page-gated (hard-blocked on dashboard/file-editor pages) and CWD-defeated. If it is blocked, **do not declare deployment impossible** — fall through to the SDK path in Step 3. *blocked ≠ impossible — try the next path.*
+
+✅ The canonical deploy mechanism is the **SDK SNAPSHOT** call run through `executeCode`:
+`w.apps.deploy(<APP_NAME>, AppDeployment(source_code_path="<APP_ROOT>", mode=AppDeploymentMode.SNAPSHOT))`, then poll the deployment + compute state.
+
+🛑 **NEVER delete or regenerate `<APP_ROOT>/package-lock.json`.** On the SDK SNAPSHOT path a missing lockfile **hard-fails the source-export phase in ~10s** (`RESOURCE_DOES_NOT_EXIST`) before the server-side install ever runs.
+
+🛑 **Do NOT re-deploy the app''s bundle (`<APP_ROOT>/databricks.yml`) in this step.** The SNAPSHOT path does not apply bundle resources, and a bundle-level deploy resets the app''s resource list to whatever `databricks.yml` declares — dropping the `postgres` binding that **Setup Lakebase** attached over REST, so the app boots `CRASHED`.
+
+💰 **Optimize for the fewest deploys, not the fewest edits.** A deploy costs **~50s cold / ~30s warm** and emits **no compute-readable build error**. Front-load the precondition check (Step 2) and batch fixes (Step 5) rather than burning blind deploy-fail cycles one edit at a time.
+
+### Step 0 — Resolve your environment (once, before anything else)
+
+Run `skills/vibecoding-state` operation `enter` with `prompt_id: "workspace_setup_deploy"`. Read the resolved `## Environment Capabilities` values and use them literally:
+
+- `client_context` = `genie_code`
+- `artifact_root` = your workshop project root (e.g. `/Workspace/Users/<your-email>/vibe-coding-workshop`), a **git clone** of the workshop repo so generated bundles/apps/docs build in a git working tree and are recognized as Databricks Asset Bundles; the skill tree is **copied** to `/Workspace/Users/<your-email>/.assistant/skills/vibe-coding-workshop` for discovery (skills load from there via `skill_ref_root`, NOT from `artifact_root`)
+- `skill_ref_root` = `skills/vibe-coding-workshop` (substitute your clone folder if different)
+- `app_root` = `<artifact_root>/<app_name>` — the self-contained AppKit app project authored in the build step (a TOP-LEVEL sibling of any `{user_schema_prefix}_<use_case_slug>_dab` bundle, NOT under `apps_lakebase/`). Referred to below as `<APP_ROOT>`; `<APP_ROOT>/.vibecoding-state.md`, `databricks.yml`, `server/`, and `client/` all live here.
+
+**First:** read `<APP_ROOT>/.vibecoding-state.md` (full `<artifact_root>`-anchored path — NOT a bare `@…` mention) for `APP_NAME`, `DB_SCHEMA`, the Lakebase project id, and any resolved issues captured by the **Setup Lakebase** and **Wire AppKit App to Lakebase** steps.
+
+### Step 1 — Confirm `APP_NAME` and `<APP_ROOT>`
+
+You are pre-authenticated — do **NOT** run any CLI login or profile bootstrap. Re-derive identity read-only and re-confirm the app name (max 26 chars, lowercase/numbers/hyphens — no underscores):
+
+```bash
+databricks current-user me --output json
+```
+
+- `APP_NAME` = `<FIRSTNAME>-<LASTINITIAL>-{use_case_slug}` (truncate to 26, strip trailing `-`) — must match the earlier app steps and the Lakebase project / app name `{user_app_name}`.
+- `<APP_ROOT>` = `<artifact_root>/<APP_NAME>`.
+
+> Workspace target: `{workspace_url}`. The session profile placeholder `{databricks_cli_profile}` is **inert on Genie Code** — runDatabricksCli/SDK are pre-authenticated, so omit `--profile`; do NOT run the IDE''s profile-creation fallback.
+>
+> **Host of record is the runtime, not the template.** Derive the workspace from `w.config.host` (or `databricks current-user me`); if `databricks.yml`''s `host:` and `{workspace_url}` disagree, trust the runtime host. The Lakebase host is injected by the `postgres` binding as `PGHOST` — never hard-code `{LAKEBASE_HOST}` anywhere in the app.
+
+### Step 2 — Confirm the Lakebase preconditions (read-only, before deploying)
+
+Load the verification reference with `readSkillFile` — NEVER a bare `@…` mention, NEVER a repo-relative path:
+
+1. `readSkillFile("skills/vibe-coding-workshop/skills/genie-code-environment/SKILL.md")` — deploy routing, the "blocked ≠ impossible" path discipline, and the Apps OAuth gate.
+2. `readSkillFile("skills/vibe-coding-workshop/skills/genie-code-environment/references/app-verification.md")` — the reusable 3-hop OAuth `requests.Session()` snippet used in Steps 4 and 6.
+
+Then, via `executeCode` against warm compute (warm up once with `print("ready")` to absorb the serverless cold start):
+
+- `w.apps.get(APP_NAME).resources` contains a `postgres` entry with `permission: CAN_CONNECT_AND_CREATE`. **If it is missing, STOP and return to the Setup Lakebase step to bind it** — an app that reads `LAKEBASE_ENDPOINT` from the `postgres` resource boots `CRASHED` when deployed unbound.
+- The Lakebase project `projects/<APP_NAME>` reports `ACTIVE` (`runDatabricksCli databricks postgres get-project projects/<APP_NAME> --output json`, or `w.api_client.do("GET", f"/api/2.0/postgres/projects/{APP_NAME}")`).
+- `<APP_ROOT>/server/server.ts` registers `lakebase()` inside `onPluginsReady` (the Wire step''s static gate printed `BLOCKING: OK`). If not, return to the Wire step first.
+
+> The platform auto-injects `PGHOST`, `PGPORT`, `PGDATABASE`, `PGSSLMODE`, `PGUSER` from the binding — none of these should be static values in the app manifest.
+
+### Step 3 — Deploy via the SDK SNAPSHOT path (SP creates database objects)
+
+Run via `executeCode` (keep `timeoutMinutes` generous):
+
+1. Deploy source directly (build runs server-side):
+   `w.apps.deploy(APP_NAME, AppDeployment(source_code_path="<APP_ROOT>", mode=AppDeploymentMode.SNAPSHOT))`.
+2. Poll the returned deployment until it reaches `SUCCEEDED`; confirm `w.apps.get(APP_NAME).compute_status.state == "ACTIVE"`. The primary readiness signal is `compute_status.state: ACTIVE` — `app_status` may lag; if compute is not `ACTIVE`, wait 30 seconds and re-check.
+3. Record `APP_URL = w.apps.get(APP_NAME).url`.
+
+This is the first deploy with Lakebase code. The Service Principal runs the idempotent DDL in `server.ts` on first boot, creating the schema, tables, and seed data. The SP owns every database object it creates, and the `postgres` binding (`CAN_CONNECT_AND_CREATE`) auto-grants its connection — no manual grants are needed.
+
+> **Deploy-first requirement:** the SP must create the schema to own it. If a schema of the same name was created earlier by your personal identity, the SP cannot use it — see the ownership row in Step 5.
+
+If the CLI app-deploy verb happens to be available via `runDatabricksCli` on the current app project page, it is an acceptable equivalent — but the SDK SNAPSHOT call is the cross-page-reliable mechanism. Do NOT hand-create the app or its database objects as a workaround.
+
+**On `FAILED` → `/logz`-human escalation (build logs are NOT readable from compute).** The server-side build error is not retrievable programmatically: `deployment.status.message` says only "check /logz", and the CLI log command (`databricks apps logs <APP_NAME>`) returns an OAuth-token error from compute. Print `f"{w.apps.get(APP_NAME).url}/logz"`, ask the operator to open it in a browser and paste back the exact failing line, fix that file:line, then redeploy.
+
+### Rule: Before Testing ANY API Endpoint
+
+1. Read `<APP_ROOT>/server/server.ts` (via `executeCode`) to identify all registered routes, HTTP methods, and request body schemas.
+2. For POST/PUT endpoints, extract exact field names from the INSERT/UPDATE SQL statements.
+3. Read the seed data in the server code for exact values needed by lookup/filter endpoints (reference numbers, emails, IDs).
+4. Construct test payloads that match the actual code — do NOT guess based on REST conventions.
+5. Only test routes that actually exist in the code.
+
+### Step 4 — Test all backend APIs (3-hop OAuth session, not a raw bearer token)
+
+A deployed App sits behind the Databricks Apps **OAuth gate** — a raw `Authorization: Bearer` token (even SDK `w.config.token`) is rejected (`401`). Replay the **3-hop Apps OAuth handshake in one `requests.Session()`** from the app-verification reference (the CSRF cookie persists through the PKCE callback), then reuse that session for every `/api/*` call:
+
+```python
+s = <the authenticated requests.Session() from app-verification.md>
+for path in ["/api/health/lakebase", "/api/<each data endpoint your UI uses>"]:
+    r = s.get(APP_URL + path, timeout=60)
+    print(path, r.status_code, r.text[:300])
+```
+
+**Verify each response includes:**
+
+- `"source": "live"` (not `"mock"`) when Lakebase is connected
+- Actual data rows from your Lakebase tables
+- Health endpoint returns `{ "status": "connected", "source": "live" }`
+
+If a response is HTML (a login page), a `401`, or an empty `{}`, the session expired — re-run the handshake and retry. If any endpoint returns `"source": "mock"`, there is a Lakebase connection issue — proceed to Step 5.
+
+### Step 5 — Check logs and fix Lakebase errors (up to 3 iterations)
+
+The server log is at `<APP_URL>/logz` in the operator''s browser (the compute-side CLI log command returns an OAuth error). Ask the operator to search it for `lakebase` and paste the relevant lines. A healthy start shows `ConnectionPool initialised`, the server listening on port 8000, and `[Lakebase]`-prefixed query logs with row counts (retries on the first request after scale-to-zero are normal).
+
+| Error | Cause | Fix |
+|-------|-------|-----|
+| `ERR_MODULE_NOT_FOUND` for `@databricks/lakebase` | Dependency missing from `package.json` | Return to the Setup Lakebase step (edit `package.json`, keep the lockfile); redeploy |
+| `error resolving resource postgres for env LAKEBASE_ENDPOINT: resource postgres not found` | The app has no bound `postgres` resource (or a bundle-level deploy reset the resource list) | Re-bind the `postgres` resource over REST exactly as the Setup Lakebase step did; redeploy |
+| `LAKEBASE_ENDPOINT is not set` or `PGHOST is not set` | Missing env wiring or binding | Confirm the manifest maps `LAKEBASE_ENDPOINT` from the `postgres` resource and `w.apps.get(APP_NAME).resources` lists it; redeploy |
+| `role "xxxxxxxx-xxxx-..." does not exist` | Service Principal lacks a Lakebase role | Redeploy so the SP re-creates and owns its objects |
+| `permission denied for sequence` | SP lacks a grant on sequences for SERIAL columns | Redeploy so the SP re-creates its objects |
+| `Connection attempt 1/5 failed` | Normal on the first request — autoscaling cold start | Wait and retry; the connection pool retries automatically |
+| `token''s identity did not match` | OAuth token mismatch | Do NOT set `PGUSER` or `PGPASSWORD` manually; the binding injects them |
+| `permission denied for schema` / `must be owner of schema` | Schema owned by another identity (e.g. a prior manual run) | With the operator''s confirmation, drop that schema from the Lakebase SQL Console and redeploy so the SP re-creates it |
+
+**Fix cycle:** identify the error from `/logz` → apply the fix under `<APP_ROOT>` (write files via `executeCode`) → redeploy with the Step 3 SNAPSHOT call → wait for `ACTIVE` → re-run the Step 4 tests. Repeat up to 3 times. If errors persist after 3 attempts, report them for manual investigation.
+
+### Step 6 — Idle connection test (CRITICAL)
+
+After all endpoints return `"source": "live"`, leave the app idle for 3-5 minutes — Lakebase autoscaling may scale to zero. Run the wait in its own `executeCode` call (`time.sleep(240)` with `timeoutMinutes` above the wait), or ask the operator to wait, then build a **fresh** OAuth session and re-test:
+
+```python
+s = <a fresh authenticated requests.Session() from app-verification.md>
+print(s.get(APP_URL + "/api/health/lakebase", timeout=60).json())
+```
+
+**Expected:** still `"source": "live"` — the Lakebase plugin refreshes OAuth tokens and recovers the connection pool automatically. If it returns `"source": "mock"` or `"disconnected"`, have the operator check `/logz` for `terminating connection` or `Connection attempt failed`; if it does not recover after 2-3 page reloads, revisit the pool settings from the Wire step (`lakebase({ pool: { ... } })` in `server.ts`).
+
+The default prompt''s optional "grant your identity local-development access" step is **IDE-only** — Genie Code runs no local dev server, so skip it here.
+
+### Step 7 — Human render check (required)
+
+**`SUCCEEDED` is necessary but NOT sufficient** — a client-side runtime crash compiles and deploys green while the UI shows a blank page, invisible to the agent. Print `APP_URL` and have the operator open it: they MUST confirm the React UI renders, `ConnectionStatus` shows **"Live Data"**, and no `ErrorBoundary` stack is visible.
+
+### Summary
+
+Your job is complete when:
+
+- [ ] Databricks App is deployed (`SUCCEEDED`) and `compute_status.state` is `ACTIVE`
+- [ ] Web UI renders at `APP_URL` (operator-confirmed React app, not an error page)
+- [ ] ConnectionStatus shows "Live Data" (connected to Lakebase)
+- [ ] `GET /api/health/lakebase` returns `{ "status": "connected", "source": "live" }` through the OAuth session
+- [ ] All data API endpoints return `"source": "live"` with real data from Lakebase
+- [ ] No ERROR-level lines in `/logz`
+- [ ] Idle connection test passes (still "Live Data" after 3-5 minutes idle)
+- [ ] `<APP_ROOT>/.vibecoding-state.md` updated (see below) — step name `## Deploy and E2E Test`, `APP_URL`, test results summary, any resolved issues or workarounds
+
+**State-lock:** this prompt runs between an `enter` (Step 0) and an `exit`. After the gate passes, run `skills/vibecoding-state` op `exit` — params: `prompt_id: "workspace_setup_deploy"`, `gate: "Infrastructure healthy"`, `captured: {app_name, app_url}`. **This `enter`/`exit` pair is a mandatory ritual, not advisory.** Step 0''s `enter` MUST locate — or, if this is the first prompt of the track, bootstrap-create — the canonical live state file at `<app_root>/.vibecoding-state.md` (never the temporary `example/…` bootstrap path). The closing `exit` MUST append this prompt''s Per-Step Log entry, Gate result, and `captured` vars to that file, then **re-read it and echo the appended section to prove the write landed**. **Gate completion rule:** this prompt is NOT complete until that re-read confirms the appended entry — the chat summary is NOT the state store.
+
+**Gate:** `Infrastructure healthy` — the Lakebase-wired app is deployed (SDK SNAPSHOT) and RUNNING (`compute_status.state: "ACTIVE"`), the health endpoint reports source live through the OAuth session, and the idle-resilience re-test still reports live. Verification used the DEPLOYED URL — NO local server was run and NO database objects were hand-created as a workaround.
+
+**🛑 STOP — do not work around a blocked deploy.** If the SDK SNAPSHOT deploy, the binding check, or the OAuth verification fails, STOP and report the exact error and which path (CLI vs SDK) was attempted. Do NOT hand-create the app, do NOT fabricate a URL, and do NOT skip verification. Only take an alternate path if the user explicitly authorizes it.',
+'',
+true, 1, true, current_timestamp(), current_timestamp(), current_user());
+
 -- Step 9: Table Metadata & Data Dictionary (Bronze Layer) - bypass_llm=TRUE
 INSERT INTO ${catalog}.${schema}.section_input_prompts 
 (input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
@@ -6818,6 +6994,155 @@ This append is non-negotiable — the next Step 20 reads it before planning the 
 - [ ] Docs updated for the changed surface only
 - [ ] State file appended with deploy timestamp, smoke test results, gates live, fixes applied',
 'Redeploy just my latest changes and verify they work, then update the docs and state file.',
+true, 1, true, current_timestamp(), current_timestamp(), current_user());
+
+-- redeploy_test (genie-code fork) — prescriptive paths + directives; delta-only redeploy from {iteration_plan}: app code via the SDK SNAPSHOT path, bundle resources via bundle deploy --target dev from the bundle editor (runDatabricksCli), migrations as deploy-time bodies; smoke tests through the 3-hop OAuth session; NO .sh scripts, NO local npm/localhost; bypass_LLM = TRUE
+INSERT INTO ${catalog}.${schema}.section_input_prompts
+(input_id, section_tag, coding_assistant, input_template, system_prompt,
+ bypass_llm, version, is_active, inserted_at, updated_at, created_by)
+VALUES
+(1002, 'redeploy_test', 'genie-code',
+'Deploy and verify **only the changes introduced in this iteration**. Self-heal on failure (max 3 attempts), document only the surface that changed, and update the project state file. Before this step the iteration exists only as source edits; after it, the delta is live in the workspace and every enhancement''s smoke test has passed at the correct gate state.
+
+This will involve the following steps:
+
+- **Read the iteration plan** — `{iteration_plan}` from Iterate & Enhance is the change manifest, smoke tests, regression-risk surface, and migrations.
+- **Diff review** — every changed file must appear in the plan''s Change Manifest.
+- **Pick the deploy mode** — code-only app delta (SDK SNAPSHOT) vs. infra delta (bundle deploy from the bundle editor).
+- **Migrations first** — as bundle-job bodies, never hand-run.
+- **Deploy, poll, self-heal** — max 3 iterations.
+- **Verify the delta only** — each enhancement''s smoke test at the correct gate state, through the 3-hop OAuth session.
+- **Targeted docs + state file** — update only the changed surface, then close the loop.
+
+The steps below are the prescriptive runbook for those actions; follow them in order.
+
+**Genie Code — this is a prescriptive runbook. Follow the steps in order. Do NOT improvise paths, do NOT use bare relative paths, do NOT use `@`-mentions, and do NOT run project shell scripts (deploy/setup/migrate `.sh` files are IDE-only conveniences — RULE_3). App code ships via the SDK `w.apps.deploy(...)` SNAPSHOT path (build runs server-side); bundle resources ship via `bundle deploy --target dev` through `runDatabricksCli` FROM THE BUNDLE EDITOR. There is no local Node toolchain and no local dev server.**
+
+### 🔴 Non-negotiable execution rules (read before anything)
+
+❌ **NEVER** try to build, install dependencies, or start a dev server on Genie Code — there is **no local Node toolchain** (`genie-code-environment` "AppKit/Node reality"). A SNAPSHOT redeploy installs dependencies and runs the Vite build **server-side from the edited source**.
+
+❌ **NEVER run the project''s deploy/setup/migrate shell scripts** the IDE path uses — they assume a local terminal and a CLI profile. Their logic maps onto the two mechanisms below; read a script only to learn which resources and order it touches.
+
+❌ **NEVER create or alter jobs, pipelines, schemas, tables, or volumes by hand — not via `executeCode`, not via `spark.sql`, not via REST.** A migration or DDL change is the **body of the bundle job** (or the app''s idempotent boot DDL in `server.ts`); it comes into existence only by deploying. Do not fall back to direct SQL when a deploy is blocked.
+
+✅ **Bundle deploys:** `runDatabricksCli` `bundle validate --target dev`, then `bundle deploy --target dev` (and `bundle run <job_key> --target dev` for a migration job), each run **from the bundle editor** of the bundle that changed — the CLI''s working directory is the on-page bundle root, there is no `cd`, and a targetless deploy is guardrail-blocked. **`databricks.yml not found`** (or "blocked by safety guardrails") is a **wrong-page signal, not a code bug**: open that bundle''s `databricks.yml` in the **bundle editor** ("Open in bundle editor") and retry — never abandon the bundle.
+
+✅ **App code deploys:** `w.apps.deploy(APP_NAME, AppDeployment(source_code_path="<APP_ROOT>", mode=AppDeploymentMode.SNAPSHOT))` via `executeCode`. The CLI app-deploy verb (`app_deploy.verb`) is page-gated; if it is blocked, fall through to the SDK call — *blocked ≠ impossible — try the next path.*
+
+🛑 **NEVER delete or regenerate `<APP_ROOT>/package-lock.json`** — a missing lockfile hard-fails the SNAPSHOT source export in ~10s (`RESOURCE_DOES_NOT_EXIST`).
+
+### Step 0 — Resolve your environment (once, before anything else)
+
+Run `skills/vibecoding-state` operation `enter` with `prompt_id: "redeploy_test"`. Read the resolved `## Environment Capabilities` values and use them literally:
+
+- `client_context` = `genie_code`
+- `artifact_root` = your workshop project root (e.g. `/Workspace/Users/<your-email>/vibe-coding-workshop`), a **git clone** of the workshop repo; the skill tree is **copied** to `/Workspace/Users/<your-email>/.assistant/skills/vibe-coding-workshop` for discovery (skills load from there via `skill_ref_root`, NOT from `artifact_root`)
+- `skill_ref_root` = `skills/vibe-coding-workshop` (substitute your clone folder if different)
+- `app_root` = `<artifact_root>/<app_name>` — the self-contained AppKit app project (referred to below as `<APP_ROOT>`); `dp_bundle_root` = the data-product bundle root, when your track built one.
+
+**First:** read the project state file — `<app_root>/.vibecoding-state.md` (or `<dp_bundle_root>/.vibecoding-state.md` when this iteration touched only the data-product bundle), by its full `<artifact_root>`-anchored path, NOT a bare `@…` mention — for the app name, URLs, and the previous iteration''s "watch this" items.
+
+**Then read the iteration plan** delivered below as `{iteration_plan}`. If it is empty or contains a `[No iteration_plan provided ...]` placeholder, STOP and return to Iterate & Enhance — there is nothing for this step to verify.
+
+> **Workspace:** `{workspace_url}` · **App name:** `APP_NAME = "{user_app_name}"` (use it literally in every SDK call below). The session profile placeholder `{databricks_cli_profile}` is **inert on Genie Code** — runDatabricksCli/SDK are pre-authenticated, so omit `--profile` and do NOT run any CLI login. Derive the host of record from `w.config.host`.
+
+### Step 1 — Load the skills by their FULL `skill_ref_root`-prefixed paths
+
+Load with `readSkillFile` — NEVER a bare `@…` mention, NEVER a repo-relative path:
+
+1. `readSkillFile("skills/vibe-coding-workshop/skills/genie-code-environment/SKILL.md")` — execution paths, page/CWD rules, the Apps OAuth gate.
+2. `readSkillFile("skills/vibe-coding-workshop/data_product_accelerator/skills/common/databricks-autonomous-operations/SKILL.md")` — the deploy → poll → diagnose → fix → redeploy loop (its Genie Code routing: every CLI call via `runDatabricksCli` from the bundle editor).
+3. `readSkillFile("skills/vibe-coding-workshop/skills/databricks-asset-bundles/SKILL.md")` — bundle validation and the deploy/CWD/FUSE rules (only if the manifest touched bundle resources).
+4. `readSkillFile("skills/vibe-coding-workshop/data_product_accelerator/skills/admin/documentation-organization/SKILL.md")` — Framework Documentation Authoring mode for Step 8. Do its organizational audit in Python via `executeCode`; skip its cleanup shell script.
+5. `readSkillFile("skills/vibe-coding-workshop/skills/genie-code-environment/references/app-verification.md")` — the 3-hop OAuth `requests.Session()` snippet for Step 7.
+
+### Step 2 — Diff review
+
+Run `git -C <artifact_root> diff --stat HEAD` and `git -C <artifact_root> status --short` via `executeCode` (`subprocess.run([...], capture_output=True, text=True)`). Every changed file must appear in the iteration plan''s **Change Manifest**. If git lists files that are NOT in the manifest, the plan is stale — STOP and return to Iterate & Enhance.
+
+### Step 3 — Pick the deploy mode from the manifest
+
+- **Code-only app delta** (only `<APP_ROOT>/client/**` or `<APP_ROOT>/server/**` source, no dependency, manifest, or bundle-resource change): redeploy the app source with the SDK SNAPSHOT call — the Genie Code equivalent of the IDE''s code-only path. It does not touch app resources, permissions, or seeded tables.
+- **Infra delta** (bundle resources, new jobs / pipelines / dashboards, app dependencies or app configuration): `bundle validate --target dev` then `bundle deploy --target dev` via `runDatabricksCli` from the bundle editor of each bundle that changed. If validation fails, fix the YAML and re-validate before deploying. If the app itself changed too, follow with the SNAPSHOT redeploy. **Never** run a bundle-level deploy of the app''s own bundle — it resets the app''s resource list and drops a REST-attached `postgres` binding.
+- **Mixed**: migrations first (Step 4), then the bundle deploy, then the app SNAPSHOT redeploy.
+
+### Step 4 — Run migrations BEFORE the app deploy
+
+If the plan''s **Migrations / Order of Operations** lists anything, apply each item in order — as deploy-time bodies, never as hand-run statements:
+
+- Lakehouse SQL / DDL changes → the body of a bundle job task; `bundle deploy --target dev`, then `bundle run <job_key> --target dev`, from the bundle editor.
+- Lakebase schema changes → the app''s idempotent boot DDL in `<APP_ROOT>/server/server.ts` (applied by the Service Principal when the redeployed app starts).
+- If a migration fails, the self-healing loop fixes the migration first (max 3 attempts). Do NOT deploy app code against a half-migrated database.
+
+### Step 5 — Deploy and poll
+
+Execute the chosen mode from Step 3 (warm up compute once with `print("ready")`, keep `timeoutMinutes` generous):
+
+- **App:** poll the SNAPSHOT deployment until `SUCCEEDED`, then confirm `w.apps.get(APP_NAME).compute_status.state == "ACTIVE"`.
+- **Bundle jobs / pipelines** (only if the manifest lists them): poll the run with 30s → 60s → 120s backoff (`w.jobs.get_run(run_id)`, read-only) until `TERMINATED`, then check `result_state`.
+
+A green deploy is **not sufficient** on its own — the step passes only when the smoke tests in Step 7 pass at the correct gate state.
+
+### Step 6 — On failure, diagnose and self-heal (max 3 iterations)
+
+- **App build/boot failure:** the build error is NOT readable from compute (`deployment.status.message` says only "check /logz", and the CLI log command returns an OAuth error). Print `f"{w.apps.get(APP_NAME).url}/logz"`, ask the operator to open it and paste back the exact failing line, fix that file:line, and redeploy. With no browser available, use the 2–3-file batch ladder: revert to the last `SUCCEEDED` source, re-apply changes 2–3 files at a time, and redeploy after each batch.
+- **Job failure:** use the **task** run_id, not the parent run_id — `w.jobs.get_run(run_id).tasks` → the `FAILED` task''s `run_id` → `w.jobs.get_run_output(task_run_id)` for `notebook_output.result` / `error`.
+- **Blocked bundle deploy:** a page-context signal — open the bundle editor and retry (Step 3).
+
+Apply fix → redeploy (Step 5) → re-poll. Cap at 3 iterations; on the 4th failure, escalate with all errors, fixes attempted, and run page URLs.
+
+### Step 7 — Verify the delta, not the whole app
+
+Deployed Apps sit behind the **OAuth gate** — a raw bearer token is rejected (`401`). Build the 3-hop OAuth `requests.Session()` from the app-verification reference and reuse it for every check. For each enhancement listed in `{iteration_plan}`:
+
+- Run its smoke tests (given / when / then) from the plan, exactly as written.
+- If the enhancement is gated (feature flag, env var, Lakebase visibility row, per-assistant fork, etc.), run with the gate at its **default state per the plan** first and verify pre-existing behavior is intact for cohorts that don''t see the change; then flip the gate to the target state for the target cohort and verify the new behavior.
+- If the enhancement appears under the plan''s **Regression-Risk Surface**, re-run the explicit "preserves pre-existing behavior" check the plan called out. **This is the only regression sweep — there is no broader one.**
+- Record PASS/FAIL with evidence (response body, `/logz` line, screenshot path). Any FAIL re-enters the Step 6 loop — targeting the *enhancement*, not the deploy.
+
+Once-per-deploy checks (run once, not per enhancement): `GET <app-url>/api/health` returns `200` through the OAuth session (and `source: "live"` if the project uses envelope semantics), and the operator confirms `/logz` has no ERROR-level lines. A client-side crash still deploys green, so the operator also confirms the UI renders.
+
+**Exit criteria:** every enhancement smoke test passes at the correct gate state, and `/api/health` is `200`.
+
+### Step 8 — Update docs for the changed surface only
+
+Use the documentation-organization skill in Framework Documentation Authoring mode, scoped to the change manifest. Write every page under `<artifact_root>/docs/` (anchored, never a bare relative path) via `executeCode`:
+
+- For each manifest entry, find the matching page under `<artifact_root>/docs/` and update only that page.
+- For new modules / endpoints / tables, add a new page.
+- For gates introduced this iteration, append to the operations doc under "Active gates / flags" with default state, target cohort, and rollback action.
+- **Do not regenerate the whole `docs/` tree.** Finish with the organizational audit (stray root `.md` files, misplaced docs, kebab-case names) in Python.
+
+### Step 9 — Close the loop on the state file
+
+Append to the project state file with: the step name (`## Redeploy & Test — <iteration label>`); deploy timestamp, target, app URL, run page URLs; smoke test results per enhancement (PASS/FAIL with evidence); gates now live and their current state; and anything the self-healing loop had to fix (so the next Iterate & Enhance picks it up as a "watch this" item).
+
+### Guardrails
+
+- **Never deploy a fix you haven''t smoke-tested.** Each self-healing iteration ends with a smoke test of the enhancement, not just a successful deploy.
+- **Never expand scope inside this step.** If `{iteration_plan}` missed something, return to Iterate & Enhance.
+- **Never skip the close-the-loop append in Step 9.** The next iteration depends on it.
+- **Don''t re-seed Lakebase or re-bind app resources on a code-only delta** — the SNAPSHOT redeploy alone is the incremental path.
+- **Don''t regenerate the whole `docs/` tree** — targeted updates only.
+
+### Done When
+
+- [ ] `{iteration_plan}` was read; `git diff` matches its change manifest
+- [ ] Migrations applied as deploy-time bodies (or N/A) BEFORE the app deploy
+- [ ] Deploy succeeded (within 3 self-heal iterations) using the right mode for the delta
+- [ ] Every enhancement smoke test PASSED at the correct gate state
+- [ ] Regression-risk surface re-verified (only what the plan flagged)
+- [ ] `/api/health` returns `200` through the OAuth session (and `source: "live"` if the project uses envelope semantics)
+- [ ] Docs updated for the changed surface only
+- [ ] State file appended with deploy timestamp, smoke test results, gates live, fixes applied
+
+**State-lock:** this prompt runs between an `enter` (Step 0) and an `exit`. After the gate passes, run `skills/vibecoding-state` op `exit` — params: `prompt_id: "redeploy_test"`, `gate: "Redeployed + smoke passed"`, `captured: {user_app_name}`. **This `enter`/`exit` pair is a mandatory ritual, not advisory.** Step 0''s `enter` MUST locate — or, if this is the first prompt of the track, bootstrap-create — the canonical live state file at `<app_root>/.vibecoding-state.md` (or `<dp_bundle_root>/.vibecoding-state.md` for a data-product-only iteration; never the temporary `example/…` bootstrap path). The closing `exit` MUST append this prompt''s Per-Step Log entry, Gate result, and `captured` vars to that file, then **re-read it and echo the appended section to prove the write landed**. **Gate completion rule:** this prompt is NOT complete until that re-read confirms the appended entry — the chat summary is NOT the state store.
+
+**Gate:** `Redeployed + smoke passed` — every enhancement smoke test passes at the correct gate state and the once-per-deploy health checks pass. A `SUCCEEDED` deploy or a green job run alone is not sufficient: the delta must have shipped through its deploy mechanism (SNAPSHOT for app code, `bundle deploy --target dev` for bundle resources) and been verified on the DEPLOYED URL — no local server, no hand-run DDL.
+
+**🛑 STOP — no workaround / escape hatch.** If a deploy stays blocked or failing after the 3-iteration loop, STOP and report the exact error, the mode, and the path attempted (CLI vs SDK). Do NOT hand-create jobs, tables, or app resources via REST/SDK/direct SQL, and do NOT use the real-CLI escape hatch (`ENABLE_DATABRICKS_CLI=true`) — any such fallback only on the operator''s explicit authorization.',
+'',
 true, 1, true, current_timestamp(), current_timestamp(), current_user());
 
 -- Setup Lakebase (Config Only — Package + Bundle Resources)

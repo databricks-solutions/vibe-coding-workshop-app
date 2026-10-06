@@ -207,6 +207,27 @@ def test_w1_lakehouse_walk_never_leaves_the_lakehouse_steps(walk_env):
     assert len(seen) >= 2, seen
 
 
+# --- W8: the app family walks to Done (P4.3, D-39) ------------------------------
+
+
+@pytest.mark.parametrize("track", ["app-only", "app-database"])
+def test_w8_app_family_walks_every_step_to_done(walk_env, track):
+    sid = _start(track)
+    walked = []
+    for _ in range(len(_json_steps(track)) + 1):
+        nxt = mcp_server.vibe_next_step(sid).root
+        if isinstance(nxt, mcp_server.DoneResult):
+            break
+        got = mcp_server.vibe_get_step(sid, nxt.sectionTag)
+        assert not isinstance(got, dict), got
+        assert got.sectionTag == nxt.sectionTag
+        done = mcp_server.vibe_complete_step(sid, got.sectionTag, "out")
+        assert not isinstance(done, dict), done
+        walked.append(got.sectionTag)
+    assert isinstance(nxt, mcp_server.DoneResult), nxt
+    assert walked == [step["sectionTag"] for step in _json_steps(track)]
+
+
 # --- W1b: cross-track isolation -------------------------------------------------
 
 
