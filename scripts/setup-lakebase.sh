@@ -353,6 +353,14 @@ ENDPOINT_NAME = os.environ.get('ENDPOINT_NAME', '')
 DDL_DIR = os.path.join(PROJECT_ROOT, 'db', 'lakebase', 'ddl')
 DML_SEED_DIR = os.path.join(PROJECT_ROOT, 'db', 'lakebase', 'dml_seed')
 
+# D-37: baseline + ledger additive apply of new seed rows (scripts/seed_new_rows.py)
+sys.path.insert(0, os.path.join(PROJECT_ROOT, 'scripts'))
+try:
+    import seed_new_rows
+except Exception as e:
+    print(f"❌ Could not import scripts/seed_new_rows.py: {e}")
+    sys.exit(1)
+
 print(f"Action: {ACTION}")
 print()
 
@@ -666,7 +674,18 @@ try:
                 print(f"    {table}.{col} sequence reset to {max_val + 1}")
             except Exception as e:
                 print(f"    (sequence for {table}.{col} not found or already correct)")
-        
+
+        # S5 (D-37): ledger every post-baseline seed row the reseed just wrote,
+        # so an admin delete of one is not resurrected by a later create-mode
+        # run. seed_rows_applied is not dropped above; stale ledger rows are
+        # harmless because this reseed wrote those rows again.
+        print("  Recording post-baseline seed rows in seed_rows_applied...")
+        try:
+            seed_new_rows.record_applied_rows(cursor, SCHEMA, DML_SEED_DIR)
+        except Exception as e:
+            print(f"❌ seed_new_rows failed: {e}")
+            sys.exit(1)
+
         print()
         print("✓ Tables recreated and seeded successfully")
     
@@ -687,68 +706,25 @@ try:
             count = execute_sql_file(cursor, ddl_file, SCHEMA, ignore_errors=True)
             print(f"({count} statements)")
         
-        # Check if tables need seeding. We also probe any new
-        # "overrides/lookup" tables (added in later DDL revs) so that their
-        # seed files run on an existing install where the original two tables
-        # are already populated but the new table is empty. All seed files in
-        # this project use ON CONFLICT DO NOTHING, so re-running the full seed
-        # batch is safe and admin-edited content is preserved.
-        cursor.execute(f"SELECT COUNT(*) FROM {SCHEMA}.usecase_descriptions")
-        uc_count = cursor.fetchone()[0]
-        cursor.execute(f"SELECT COUNT(*) FROM {SCHEMA}.section_input_prompts")
-        sip_count = cursor.fetchone()[0]
-
-        # New overrides tables added by later DDLs. Missing table -> treat as
-        # empty (no extra guard needed because DDL just ran above).
-        svo_count = 0
+        # Per-table seed gating (D-37 S4-S6, scripts/seed_new_rows.py):
+        #   * 01 runs only if usecase_descriptions is EMPTY, 02 only if
+        #     section_input_prompts is EMPTY (then a never-lower sequence raise
+        #     and S5 ledgering of post-baseline rows into seed_rows_applied).
+        #   * A POPULATED table gets only post-baseline seed rows that are not
+        #     yet ledgered, inserted with ON CONFLICT DO NOTHING; baseline rows
+        #     an admin deleted stay deleted, and 01's UPDATEs never re-run.
+        #   * 08/09 run every time (ON CONFLICT DO NOTHING inserts;
+        #     updated_by='seed' guards on UPDATEs so admin changes are kept).
+        #   * Other seed files (the generated 03) run only on a fresh install.
+        # An empty step_visibility_overrides no longer re-runs 01/02 in full.
         try:
-            cursor.execute(f"SELECT COUNT(*) FROM {SCHEMA}.step_visibility_overrides")
-            svo_count = cursor.fetchone()[0]
-        except Exception:
-            pass
-
-        if uc_count == 0 or sip_count == 0 or svo_count == 0:
-            print(f"  Executing DML seed from {DML_SEED_DIR}/...")
-            dml_files = get_dml_seed_files()
-            for dml_file in dml_files:
-                filename = os.path.basename(dml_file)
-                print(f"    {filename}...", end=" ")
-                count = execute_sql_file(cursor, dml_file, SCHEMA, ignore_errors=True)
-                print(f"({count} statements)")
-            
-            # Reset sequences after seeding to avoid duplicate key errors
-            print("  Resetting sequences...")
-            for table, col in [('usecase_descriptions', 'config_id'), ('section_input_prompts', 'input_id')]:
-                try:
-                    cursor.execute(f"SELECT MAX({col}) FROM {SCHEMA}.{table}")
-                    max_val = cursor.fetchone()[0] or 0
-                    seq_name = f"{SCHEMA}.{table}_{col}_seq"
-                    cursor.execute(f"SELECT setval('{seq_name}', {max_val + 1}, false)")
-                    print(f"    {table}.{col} sequence reset to {max_val + 1}")
-                except Exception as e:
-                    print(f"    (sequence for {table}.{col} not found or already correct)")
-        else:
-            print(f"  Tables already have data (usecase: {uc_count}, section_prompts: {sip_count})")
-
-            # Existing install: the bulk-seed gate above did NOT fire, so any
-            # new product-default values landing in a seed file would be stuck
-            # on fresh installs only. The files listed below are designed to be
-            # safe on every invocation (ON CONFLICT DO NOTHING for INSERTs;
-            # updated_by='seed' guards on UPDATEs so admin-made changes are
-            # never clobbered). Re-running them here is how product-default
-            # tweaks reach existing installs without a disruptive --recreate.
-            POST_SEED_MIGRATIONS = [
-                '08_seed_step_visibility_overrides.sql',
-                '09_seed_path_visibility_overrides.sql',
-            ]
-            print(f"  Applying idempotent post-seed migrations...")
-            for mig in POST_SEED_MIGRATIONS:
-                mig_path = os.path.join(DML_SEED_DIR, mig)
-                if not os.path.exists(mig_path):
-                    continue
-                print(f"    {mig}...", end=" ")
-                count = execute_sql_file(cursor, mig_path, SCHEMA, ignore_errors=True)
-                print(f"({count} statements)")
+            seed_new_rows.run_create_mode_seed(
+                cursor, SCHEMA, DML_SEED_DIR,
+                lambda path: execute_sql_file(cursor, path, SCHEMA, ignore_errors=True),
+            )
+        except Exception as e:
+            print(f"❌ seed_new_rows failed: {e}")
+            sys.exit(1)
 
         print()
         print("✓ Tables ready")
