@@ -101,13 +101,23 @@ VALUES
 NEW_PKS = {UC: {5001}, SIP: {1001, 1002}}
 
 
+def _at_baseline(path, table):
+    """The real seed file without its post-baseline rows, so the synthetic rows
+    below are the only new ones whatever the real seed has added since."""
+    text = path.read_text()
+    for pk, stmt in snr.seed_rows(str(path), table, PK_COL[table]):
+        if pk not in BASELINE[table]:
+            text = text.replace(stmt, "")
+    return text
+
+
 @pytest.fixture
 def seed_dir(tmp_path):
     """Real 01/02/08/09 plus post-baseline rows, and a generated-03 stand-in."""
     d = tmp_path / "dml_seed"
     d.mkdir()
     (d / F01).write_text((DML_SEED / F01).read_text() + NEW_UC_ROW)
-    (d / F02).write_text((DML_SEED / F02).read_text() + NEW_SIP_ROWS)
+    (d / F02).write_text(_at_baseline(DML_SEED / F02, SIP) + NEW_SIP_ROWS)
     shutil.copy(DML_SEED / F08, d / F08)
     shutil.copy(DML_SEED / F09, d / F09)
     (d / F03).write_text("DELETE FROM ${schema}.workshop_parameters WHERE param_key = 'x';\n")
@@ -309,7 +319,7 @@ def test_split_parity_on_seed_files(seed_file, transformed):
         content = snr.transform_sql_for_postgres(content, SCHEMA)
     ours, theirs = snr.split_statements(content), _shell_splitter()(content)
     assert ours == theirs
-    assert len(ours) == {F01: 48 + 3, F02: 137}[seed_file]
+    assert len(ours) == {F01: 48 + 3, F02: 139}[seed_file]
 
 
 ADVERSARIAL = [
@@ -472,14 +482,17 @@ def test_populated_rerun_is_a_noop_but_rewarns(seed_dir):
     assert f"    {UC}: 0 inserted / 1 warnings" in log
 
 
-def test_populated_at_baseline_seed_files_inserts_nothing():
-    """The live-check expectation: today's seed files on a populated install change nothing."""
+def test_populated_today_seed_files_insert_only_the_post_baseline_rows():
+    """The live-check expectation: today's seed files on a populated install insert
+    exactly the rows added since the baseline (the P4.3 genie-code forks, D-39)."""
     db = _populated()
     log = _run_create(db, DML_SEED)
-    assert _seed_inserts(db, UC) == [] and _seed_inserts(db, SIP) == []
-    assert db.ledger == set() and db.setvals == []
+    assert _seed_inserts(db, UC) == []
+    assert db.ledger == {(SIP, 1001), (SIP, 1002)}
+    # Only section_input_prompts' sequence moves: raised to max 1002 + 1.
+    assert db.setvals == [(f"{SCHEMA}.section_input_prompts_input_id_seq", 1003)]
     assert f"    {UC}: 0 inserted / 0 warnings" in log
-    assert f"    {SIP}: 0 inserted / 0 warnings" in log
+    assert f"    {SIP}: 2 inserted / 0 warnings" in log
 
 
 def test_partially_seeded_populated_table_takes_new_row_path(seed_dir):
