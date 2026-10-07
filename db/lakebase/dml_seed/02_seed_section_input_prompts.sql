@@ -94,7 +94,7 @@
 --   (input_id, section_tag, coding_assistant, input_template, system_prompt,
 --    bypass_llm, version, is_active, inserted_at, updated_at, created_by)
 --   VALUES
---   (1001, 'prd_generation', 'genie-code',
+--   (1999, 'prd_generation', 'genie-code',
 --    'Genie-Code specific instructions for prd_generation...',
 --    'System prompt tuned for Genie Code.',
 --    false, 1, true, current_timestamp(), current_timestamp(), current_user());
@@ -9477,6 +9477,121 @@ When you paste the prompt, the AI reads `@data_product_accelerator/skills/semant
 - [ ] Recommendations for future optimization cycles',
 true, false, 1, true, current_timestamp(), current_timestamp(), current_user());
 
+-- optimize_genie (genie-code fork) — prescriptive paths + directives; native page-locked benchmark → evaluate → optimize → apply → re-evaluate loop (runBenchmarks/getBenchmarkResults), 6 control levers in priority order, append-only fixes written back to the bundle Genie config file (dual persistence), MLflow experiment tracking; full skill_ref_root paths, no @-mentions; bypass_LLM = TRUE
+INSERT INTO ${catalog}.${schema}.section_input_prompts
+(input_id, section_tag, coding_assistant, input_template, system_prompt,
+ bypass_llm, version, is_active, inserted_at, updated_at, created_by)
+VALUES
+(1003, 'optimize_genie', 'genie-code',
+'Optimize your Genie Space for production accuracy — run a systematic **benchmark → evaluate → optimize → apply → re-evaluate** loop until all eight quality targets pass. Before this step the Genie Space is live but unmeasured; after it, every quality target passes on the benchmark, every fix is persisted in the bundle''s Genie config file, and every iteration is tracked in MLflow.
+
+This will involve the following steps:
+
+- **Load the skills** — full `skill_ref_root`-prefixed paths.
+- **Baseline** — snapshot the space, validate the benchmark set (≥ 10 questions with ground-truth SQL), run the native scorer, record iteration 0.
+- **Optimize lever by lever** — the 6 control levers in priority order, one fix at a time, re-evaluating after each.
+- **Persist and verify** — write every applied fix back to its definition file (dual persistence), then run the held-out benchmarks.
+
+The steps below are the prescriptive runbook for those actions; follow them in order.
+
+**Genie Code — this is a prescriptive runbook. Follow the steps in order. Do NOT improvise paths, do NOT use bare relative paths, do NOT use `@`-mentions. Every skill is named by its full `skill_ref_root`-prefixed path; every file is anchored to `<DP_BUNDLE_ROOT>`; every CLI call goes through `runDatabricksCli` with NO `--profile` flag (Genie Code is already authenticated to this workspace).**
+
+### 🔴 Non-negotiable rules (read before anything)
+
+❌ **NEVER** `PATCH /api/2.0/data-rooms/{id}` — it silently wipes the space. The only Genie mutation surfaces are the native curation tools on the Genie Space page and `PATCH /api/2.0/genie/spaces/{id}` with the FULL config read from the file.
+
+❌ **NEVER** replace validated instructions — APPEND fixes. A fix applied live but not written back to its definition file is **drift** and fails the gate.
+
+✅ Optimize ONLY the Genie Space recorded in `<dp_bundle_root>/.vibecoding-state.md` (the `genie_space_id` the Genie Space step captured). Do not mint a new space.
+
+### Step 0 — Resolve your environment (once, before anything else)
+
+Run `skills/vibecoding-state` operation `enter` (params: `prompt_id: "optimize_genie"`). `enter` resolves the `## Environment Capabilities` triple (deploy verb, CLI channel, `state_file_root`) — on Genie Code the CLI channel is `runDatabricksCli` — and locates the live state file. Read these resolved values and use them literally throughout:
+
+- `client_context` = `genie_code`
+- `artifact_root` = your workshop project root (e.g. `/Workspace/Users/<your-email>/vibe-coding-workshop`)
+- `skill_ref_root` = `skills/vibe-coding-workshop` (substitute your clone folder if you cloned somewhere other than `.assistant/skills/vibe-coding-workshop`)
+- `dp_bundle_root` = `<artifact_root>/{user_schema_prefix}_{use_case_slug}_dab` — the SAME data-product bundle the Lakehouse and semantic-layer steps built. Referred to below as `<DP_BUNDLE_ROOT>`.
+- `genie_space_id` and `semantic_warehouse_id` — from the Genie Space step''s Per-Step Log in `<dp_bundle_root>/.vibecoding-state.md`.
+
+Target catalog: `{lakehouse_default_catalog}`
+Gold schema: `{user_schema_prefix}_gold`
+
+### Step 1 — Load the required skills by their FULL `skill_ref_root`-prefixed paths
+
+Load each skill with `readSkillFile` using its fully-qualified `<skill_ref_root>`-prefixed path — NEVER a bare `@…` mention, NEVER a repo-relative path. Read them in ONE batched `readSkillFile` turn:
+
+1. `readSkillFile("skills/vibe-coding-workshop/skills/genie-code-environment/SKILL.md")` — the Genie Code tool surface and its page rules.
+2. `readSkillFile("skills/vibe-coding-workshop/data_product_accelerator/skills/semantic-layer/03-genie-space-patterns/SKILL.md")` — benchmark intake and instruction patterns.
+3. `readSkillFile("skills/vibe-coding-workshop/data_product_accelerator/skills/semantic-layer/04-genie-space-export-import-api/SKILL.md")` — the `serialized_space` contract every write-back follows.
+
+Then load the built-in `benchmark-failure-analysis` skill for the miss-triage methodology.
+
+**🔴 Preflight acknowledgement (hard gate).** Echo a one-line acknowledgement for EACH skill the moment you load it — its full path + the single rule you will apply from it. If you cannot state the rule, you have not read the skill — STOP and read it before continuing.
+
+### Step 2 — Phase 1: Baseline evaluation (iteration 0)
+
+**Genie Code navigation — page precondition:** open the Genie Space page for `genie_space_id`. The native tools (`runBenchmarks`, `getBenchmarkResults`, `readInstructions`, `readTableConfig`, `addInstructionsToSpace`, `addKnowledgeSnippetsToSpace`, `updateColumnSynonyms`, `updateColumnDescriptions`, `configureEntityMatching`) only load there — they are NOT available on a notebook/editor surface. Only if the native scorer is unavailable, fall back to `ask_genie` (Conversation API) and say so in the report.
+
+1. **Snapshot** the current space: `GET /api/2.0/genie/spaces/{id}?include_serialized_space=true`, and write the snapshot to `<DP_BUNDLE_ROOT>/plans/genie_optimization/iteration_0_snapshot.json`. This snapshot is the rollback point.
+2. **Track it in MLflow:** create (or reuse) the experiment `/Users/<your-email>/{user_schema_prefix}_genie_optimization`, log a LoggedModel for the Genie Space config, and log one run per iteration with the eight scores.
+3. **Benchmark set:** confirm ≥ 10 benchmark questions, each with ground-truth SQL; run each ground-truth `SELECT` on `semantic_warehouse_id` (read-only) and fix or drop any that fail. Hold out 2-3 questions — they are NOT used for optimization.
+4. **Evaluate:** `runBenchmarks`, then `getBenchmarkResults` for per-question results (the SQL Genie generated vs. the ground truth). Score them against the eight targets below and record the scores as iteration 0.
+
+## 8 Quality Targets
+
+| Scorer | Target | What It Measures |
+|--------|--------|-----------------|
+| **Syntax Correctness** | ≥ 98% | Generated SQL parses without errors |
+| **Schema Accuracy** | ≥ 95% | All tables/columns exist in the catalog |
+| **Logical Correctness** | ≥ 90% | SQL logic matches the question intent |
+| **Semantic Equivalence** | ≥ 90% | Results equivalent to ground-truth SQL |
+| **Completeness** | ≥ 90% | All requested dimensions/measures present |
+| **Result Correctness** | ≥ 85% | Actual query results match expected values |
+| **Asset Routing** | ≥ 95% | Genie uses the right table/view/TVF |
+| **Repeatability** | ≥ 90% | Same question → same SQL on repeated runs |
+
+### Step 3 — Phase 2: Per-lever optimization (Levers 1→5, up to 5 iterations)
+
+For each lever in priority order:
+
+1. Triage each miss with `benchmark-failure-analysis` and propose ONE change for the current lever. Show me the proposal before applying it.
+2. Apply it with the matching native tool, AND write the same change back to its definition file under `<DP_BUNDLE_ROOT>` (dual persistence) — Genie instructions, snippets and synonyms to `<DP_BUNDLE_ROOT>/src/{user_schema_prefix}_semantic/genie/genie_space_config.json`; column COMMENTs to the Gold YAML under `<DP_BUNDLE_ROOT>/gold_layer_design/yaml/`; Metric View and TVF fixes to their `.yaml` / `.sql` files.
+3. Wait 30 seconds for Genie to pick up the change.
+4. Run a slice evaluation (the affected benchmarks only). If the slice passes, run the full evaluation (P0 gate).
+5. If the P0 gate regresses, **roll back** — restore the file and the live space from the last good snapshot — and move to the next lever.
+
+## 6 Control Levers (Priority Order)
+
+| Lever | Target | What Gets Changed | Native tool / file |
+|-------|--------|-------------------|--------------------|
+| **1: UC Metadata** | Column/table COMMENTs, tags | Add synonyms, clarify ambiguous columns | `updateColumnSynonyms`, `updateColumnDescriptions`, `configureEntityMatching` + Gold YAML |
+| **2: Metric Views** | YAML definitions, measures | Add missing measures, fix aggregation logic | Metric View `.yaml`, re-applied by its job |
+| **3: TVFs** | Function signatures, COMMENTs | Fix parameter types, improve BEST FOR guidance | TVF `.sql`, re-applied by its job |
+| **4: Monitoring Tables** | DQ metrics, freshness views | Add monitoring assets to Genie Space | Genie config file |
+| **5: ML Tables** | Feature tables, predictions | Add ML outputs as Genie data assets | Genie config file |
+| **6: GEPA** | Instructions, data assets | Restructure Genie Space architecture | Genie config file + full-body PATCH |
+
+Re-apply a Metric View or TVF by re-running its semantic job with `runDatabricksCli` (`bundle run`, dev target) — never by hand-run DDL.
+
+### Step 4 — Phase 3: GEPA (Lever 6) — only if still below target
+
+General-purpose architecture changes (add/remove data assets, restructure instructions), applied ONLY after Levers 1-5 have been attempted. Edit the Genie config file first, then `PATCH /api/2.0/genie/spaces/{id}` with that FULL body.
+
+### Step 5 — Phase 4: Promote and verify
+
+1. Promote the best iteration: tag its MLflow run and LoggedModel as the promoted config.
+2. Run the held-out benchmarks (not seen during optimization) and report their scores.
+3. **Extract back:** `GET /api/2.0/genie/spaces/{id}?include_serialized_space=true` and diff it against the Genie config file — 0 differences (live matches file).
+
+Record each iteration''s eight scores, the levers applied, and the gate result in `<dp_bundle_root>/.vibecoding-state.md`.
+
+**State-lock:** this prompt runs between an `enter` (Step 0) and an `exit`. After the gate passes, run `skills/vibecoding-state` op `exit` — params: `prompt_id: "optimize_genie"`, `gate: "Genie quality targets passed"`, `captured: {optimization_progress, genie_space_config}`. **This `enter`/`exit` pair is a mandatory ritual, not advisory.** Step 0''s `enter` MUST locate the canonical live state file at `<dp_bundle_root>/.vibecoding-state.md`. The closing `exit` MUST append this prompt''s Per-Step Log entry, Gate result, and `captured` vars to that file, then **re-read it and echo the appended section to prove the write landed**. **Gate completion rule:** this prompt is NOT complete until that re-read confirms the appended entry — the chat summary is NOT the state store.
+
+**Gate:** `Genie quality targets passed` — all eight Genie quality targets pass on the benchmark (native scorer, or the documented `ask_genie` fallback); every applied fix is written back to its definition file under `<DP_BUNDLE_ROOT>` and the extract-back diff is clean; each iteration is logged in MLflow and in `<dp_bundle_root>/.vibecoding-state.md`.',
+'',
+true, 1, true, current_timestamp(), current_timestamp(), current_user());
+
 -- =============================================================================
 -- AGENT SKILLS ACCELERATOR (Steps 26-30)
 -- =============================================================================
@@ -17466,7 +17581,7 @@ true, 1, true, current_timestamp(), current_timestamp(), current_user());
 -- (input_id, section_tag, coding_assistant, input_template, system_prompt,
 --  bypass_llm, version, is_active, inserted_at, updated_at, created_by)
 -- VALUES
--- (1001, 'prd_generation', 'genie-code',
+-- (1999, 'prd_generation', 'genie-code',
 -- 'Generate a Genie-Code-optimised PRD prompt for {industry_name} / {use_case_title}.
 --
 -- (Put the Genie-Code-specific instructions here. Same {template_variables}
@@ -17481,7 +17596,7 @@ true, 1, true, current_timestamp(), current_timestamp(), current_user());
 -- (input_id, section_tag, coding_assistant, input_template, system_prompt,
 --  bypass_llm, version, is_active, inserted_at, updated_at, created_by)
 -- VALUES
--- (1002, 'setup_lakebase', 'genie-code',
+-- (1998, 'setup_lakebase', 'genie-code',
 -- 'Genie-Code-optimised Lakebase setup prompt for {use_case_title}.
 --
 -- Use {lakebase_instance_name} and {user_schema_prefix}; prefer Genie

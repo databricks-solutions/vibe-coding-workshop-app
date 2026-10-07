@@ -213,6 +213,21 @@ def test_app_family_steps_are_all_agent_doable():
         assert {step.execution for step in loaded.track_steps(track_id)} == {"agent-doable"}, track_id
 
 
+def test_lakehouse_family_steps_are_all_agent_doable():
+    """P4.3 family 2 (D-41): every lakehouse, reverse-lakehouse, lakehouse-di and
+    reverse-lakehouse-di step is agent-doable in Genie Code (judgment table in
+    docs/superpowers/plans/2026-10-06-p4-lakehouse-family.md)."""
+    loaded = manifest.load_manifest()
+    data = json.loads((REPO_ROOT / "src/backend/workshop/manifest.json").read_text())["tracks"]
+    for track_id in ("lakehouse", "reverse-lakehouse", "lakehouse-di", "reverse-lakehouse-di"):
+        json_steps = [step for section in data[track_id]["sections"] for step in section["steps"]]
+        assert json_steps, track_id
+        assert {step["sectionTag"]: step["execution"] for step in json_steps} == {
+            step["sectionTag"]: "agent-doable" for step in json_steps
+        }, track_id
+        assert {step.execution for step in loaded.track_steps(track_id)} == {"agent-doable"}, track_id
+
+
 def test_manifest_regeneration_is_byte_identical():
     """Contract 5: re-running the generator changes nothing — the committed
     manifest.json is byte-for-byte what generate_manifest.py emits, so no hand

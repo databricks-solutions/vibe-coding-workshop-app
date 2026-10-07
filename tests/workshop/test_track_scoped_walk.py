@@ -228,6 +228,12 @@ def test_w8_app_family_walks_every_step_to_done(walk_env, track):
     assert walked == [step["sectionTag"] for step in _json_steps(track)]
 
 
+@pytest.mark.parametrize("track", ["lakehouse", "reverse-lakehouse", "lakehouse-di", "reverse-lakehouse-di"])
+def test_w9_lakehouse_family_walks_every_step_to_done(walk_env, track):
+    """P4.3 family 2 (D-41): start -> next -> get -> complete to Done."""
+    test_w8_app_family_walks_every_step_to_done(walk_env, track)
+
+
 # --- W1b: cross-track isolation -------------------------------------------------
 
 

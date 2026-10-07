@@ -398,3 +398,9 @@ def test_app_family_mcp_outline_matches_endpoint_through_the_walk(app_walk_clien
         outline = outlines_agree()
     assert isinstance(nxt, mcp_server.DoneResult)
     assert {item["status"] for item in outline} == {"done"}
+
+
+@pytest.mark.parametrize("track", ["lakehouse", "reverse-lakehouse", "lakehouse-di", "reverse-lakehouse-di"])
+def test_lakehouse_family_mcp_outline_matches_endpoint_through_the_walk(app_walk_client, track):
+    """P4.3 family 2 (D-41): the same walk-long parity as the app family."""
+    test_app_family_mcp_outline_matches_endpoint_through_the_walk(app_walk_client, track)
