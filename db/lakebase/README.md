@@ -112,7 +112,7 @@ Stores user sessions with workflow progress.
 | step_1_prompt | TEXT | Generated prompt for step 1 |
 | step_prompts | JSONB | Generated prompts for steps 2-31 (keys: "2" to "31"). Default: '{}' |
 | prerequisites_completed | BOOLEAN | Whether prerequisites are done |
-| workshop_level | VARCHAR(20) | Workshop level (app, app-database, end-to-end, accelerator, etc.) |
+| workshop_level | VARCHAR(64) | Workshop level (app, app-database, end-to-end, accelerator, etc.) |
 | session_parameters | JSONB | Per-session parameter overrides. Default: '{}' |
 
 ### 4. saved_usecase_descriptions
