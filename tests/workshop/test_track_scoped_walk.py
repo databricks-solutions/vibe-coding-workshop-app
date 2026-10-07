@@ -234,6 +234,14 @@ def test_w9_lakehouse_family_walks_every_step_to_done(walk_env, track):
     test_w8_app_family_walks_every_step_to_done(walk_env, track)
 
 
+@pytest.mark.parametrize(
+    "track", ["end-to-end", "accelerator", "data-engineering-accelerator", "reverse-lakebase", "reverse-app"]
+)
+def test_w10_covered_families_walk_every_step_to_done(walk_env, track):
+    """P4.3 families 3, 4, 7, 8 (D-43): start -> next -> get -> complete to Done."""
+    test_w8_app_family_walks_every_step_to_done(walk_env, track)
+
+
 # --- W1b: cross-track isolation -------------------------------------------------
 
 

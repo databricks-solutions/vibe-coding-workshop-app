@@ -404,3 +404,11 @@ def test_app_family_mcp_outline_matches_endpoint_through_the_walk(app_walk_clien
 def test_lakehouse_family_mcp_outline_matches_endpoint_through_the_walk(app_walk_client, track):
     """P4.3 family 2 (D-41): the same walk-long parity as the app family."""
     test_app_family_mcp_outline_matches_endpoint_through_the_walk(app_walk_client, track)
+
+
+@pytest.mark.parametrize(
+    "track", ["end-to-end", "accelerator", "data-engineering-accelerator", "reverse-lakebase", "reverse-app"]
+)
+def test_covered_families_mcp_outline_matches_endpoint_through_the_walk(app_walk_client, track):
+    """P4.3 families 3, 4, 7, 8 (D-43): the same walk-long parity as the app family."""
+    test_app_family_mcp_outline_matches_endpoint_through_the_walk(app_walk_client, track)
