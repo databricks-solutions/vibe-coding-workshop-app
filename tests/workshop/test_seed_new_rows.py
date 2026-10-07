@@ -319,7 +319,7 @@ def test_split_parity_on_seed_files(seed_file, transformed):
         content = snr.transform_sql_for_postgres(content, SCHEMA)
     ours, theirs = snr.split_statements(content), _shell_splitter()(content)
     assert ours == theirs
-    assert len(ours) == {F01: 48 + 3, F02: 152}[seed_file]
+    assert len(ours) == {F01: 48 + 3, F02: 153}[seed_file]
 
 
 ADVERSARIAL = [
@@ -484,16 +484,16 @@ def test_populated_rerun_is_a_noop_but_rewarns(seed_dir):
 
 def test_populated_today_seed_files_insert_only_the_post_baseline_rows():
     """The live-check expectation: today's seed files on a populated install insert
-    exactly the rows added since the baseline (the P4.3 genie-code forks, D-39, D-41, D-45, D-47, D-52)."""
+    exactly the rows added since the baseline (the P4.3 genie-code forks, D-39, D-41, D-45, D-47, D-52, D-53)."""
     db = _populated()
     log = _run_create(db, DML_SEED)
     assert _seed_inserts(db, UC) == []
     # D-51 leaves input_id 1009 unused.
-    assert db.ledger == {(SIP, input_id) for input_id in range(1001, 1017) if input_id != 1009}
-    # Only section_input_prompts' sequence moves: raised to max 1016 + 1.
-    assert db.setvals == [(f"{SCHEMA}.section_input_prompts_input_id_seq", 1017)]
+    assert db.ledger == {(SIP, input_id) for input_id in range(1001, 1018) if input_id != 1009}
+    # Only section_input_prompts' sequence moves: raised to max 1017 + 1.
+    assert db.setvals == [(f"{SCHEMA}.section_input_prompts_input_id_seq", 1018)]
     assert f"    {UC}: 0 inserted / 0 warnings" in log
-    assert f"    {SIP}: 15 inserted / 0 warnings" in log
+    assert f"    {SIP}: 16 inserted / 0 warnings" in log
 
 
 def test_partially_seeded_populated_table_takes_new_row_path(seed_dir):
