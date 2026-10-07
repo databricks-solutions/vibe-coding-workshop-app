@@ -12311,6 +12311,91 @@ The generated prompt drives the coding assistant through a deterministic 7-phase
 - [ ] No code or Databricks resources are created',
 true, 1, true, current_timestamp(), current_timestamp(), current_user());
 
+-- agent_spec_design (genie-code fork) — prescriptive paths + directives; <ARTIFACT_ROOT>/<APP_ROOT> via vibecoding-state resolve_root, fully qualified reads/writes, executeCode open().write + read-back, skill via readSkillFile; no @-mentions, no bare relative paths, no --profile; bypass_LLM = TRUE
+INSERT INTO ${catalog}.${schema}.section_input_prompts
+(input_id, section_tag, coding_assistant, input_template, system_prompt,
+ bypass_llm, version, is_active, inserted_at, updated_at, created_by)
+VALUES
+(1007, 'agent_spec_design', 'genie-code',
+'## Your Task
+
+You are a Databricks GenAI agent designer. Author the **Agent Spec** for the **{use_case_slug}** agent — a YAML design artifact at `<ARTIFACT_ROOT>/docs/agent_spec.yaml` that captures intent (purpose, personas, capabilities, model endpoint, MCPs, eval seeds, governance) before any code is written.
+
+**Genie Code — this is a prescriptive runbook. Follow the steps in order. Do NOT improvise paths, do NOT use bare relative paths, do NOT use `@`-mentions. Every file is read and written by its fully qualified path under `<ARTIFACT_ROOT>` or `<APP_ROOT>` (Genie Code resolves a relative path against the page''s current working directory, which is page-type-dependent); the skill is read with `readSkillFile` by its full `skill_ref_root`-prefixed path; any CLI call goes through `runDatabricksCli` with NO profile flag (Genie Code is already authenticated to this workspace).**
+
+### Step 0 — Resolve your roots (once, before anything else)
+
+Run `skills/vibecoding-state` operation `resolve_root` (gate-free; it writes no state file). Read these resolved values and use them literally throughout:
+
+- `client_context` = `genie_code`
+- `<ARTIFACT_ROOT>` = `artifact_root` = your workshop project root (e.g. `/Workspace/Users/<your-email>/vibe-coding-workshop`), a **git clone** of the workshop repo — NOT the page''s current working directory and NOT the `.assistant/skills` copy. The PRD and UI design of the earlier steps live under `<ARTIFACT_ROOT>/docs/`.
+- `<APP_ROOT>` = `<ARTIFACT_ROOT>/<app_name>` — the AppKit app dir of the earlier steps; its live state file is `<APP_ROOT>/.vibecoding-state.md`.
+- `skill_ref_root` = `skills/vibe-coding-workshop` (substitute your clone folder if different)
+
+**First:** Read `<APP_ROOT>/.vibecoding-state.md` if it exists — it contains resolved issues and variable values from prior phases (`APP_NAME`, app URL, workspace URL, `DB_SCHEMA`, API routes, frontend pages).
+
+## IMPORTANT - READ FIRST
+
+Your ONLY task is to create `<ARTIFACT_ROOT>/docs/agent_spec.yaml`. Do NOT generate application code, create Databricks resources, install MCP servers, create UC connections, wire tools into an agent, deploy anything, modify app code, modify SQL seed files, or create/configure AI Gateway endpoints.
+
+**DO NOT predict tool selections.** Tools are not chosen at this step — that''s prompt 39. Therefore:
+
+- ❌ DO NOT author tool-shaped scorers (`ka_citation_present`, `RetrievalGroundedness`, `genie_sql_correctness`, `sql_readonly_compliance`, `genie_response_grounded_in_table`, `uc_function_signature_match`).
+- ❌ DO NOT add tool-specific assertions to `agent.benchmark_seeds.seed_examples[]` or `governance.verification.smoke_test_cases[]` (no "use Genie to look up X", no "expect a KA citation").
+- ❌ DO NOT add Genie-shaped, KA-shaped, Vector-Search-shaped, or SQL-shaped buckets to `agent.benchmark_seeds.coverage_buckets[]`. Buckets are use-case categories ("policy compliance", "edge case: empty input"), not tool categories.
+- ✅ Author only domain-shaped content from the use-case context (`{industry_name}`, `{use_case_title}`, personas, journeys, capabilities). Tool-shaped content lives in `<ARTIFACT_ROOT>/docs/agent_tool_plan.yaml` and is appended by prompt 39.
+
+You MUST:
+- Read `<ARTIFACT_ROOT>/docs/design_prd.md` (step 03 — business intent); compute its sha256 (`executeCode` → `hashlib.sha256(open(path, "rb").read()).hexdigest()`) and record both path and digest as `source_prd`
+- Read `<ARTIFACT_ROOT>/docs/ui_design.md` (step 04 — pages, personas, navigation, user journeys); align Agent Spec personas with this UI
+- Read `<APP_ROOT>/.vibecoding-state.md` (steps 04-07 — APP_NAME, app URL, workspace URL, DB_SCHEMA, API routes, frontend pages)
+- Use the spec contract, loaded with `readSkillFile("skills/vibe-coding-workshop/genai-agents/foundation/00b-agent-spec-and-tool-plan/SKILL.md")` — NEVER a bare `@…` mention, NEVER a repo-relative path. When it names further references, load each the same way (prefix its repo-relative path with `skill_ref_root`).
+- Set `agent.model` to `{agent_model}`. If `{agent_model}` is blank, missing, or still a literal `{agent_model}` placeholder, default to `databricks-claude-sonnet-4-6`. Never record vague labels like "Claude" or "best model".
+- Bronze, Gold, Genie, and Data Intelligence artifacts are NOT prerequisites. If external structured data is needed, record it as optional `mcp_research` candidates and let the Tool Plan (step 39) decide.
+- Create ONLY `<ARTIFACT_ROOT>/docs/agent_spec.yaml` and STOP
+
+If `<ARTIFACT_ROOT>/docs/design_prd.md` or `<ARTIFACT_ROOT>/docs/ui_design.md` is missing, STOP and finish the PRD / UI design step first — do not search other folders for them.
+
+## Use Case Context
+
+- **Industry:** {industry_name}
+- **Use Case:** {use_case_title}
+- **Description:** {use_case_description}
+
+Use the same neutral product naming conventions used in `<ARTIFACT_ROOT>/docs/design_prd.md`.
+
+## Required `<ARTIFACT_ROOT>/docs/agent_spec.yaml` Sections
+
+All field paths below are tool-agnostic — shaped only by the use case (industry, capabilities, personas, journeys). Tool-shaped extensions are added later by prompt 39 into `<ARTIFACT_ROOT>/docs/agent_tool_plan.yaml`.
+
+- `source_prd` — `path` + `sha256` of `<ARTIFACT_ROOT>/docs/design_prd.md`
+- `agent.purpose`, `agent.target_personas[]`, `agent.capabilities[]`, `agent.system_prompt` (first-pass draft), `agent.auth_mode`, `agent.memory`
+- `agent.model` — raw Databricks Model Serving endpoint name (see MUST rule above)
+- `agent.must_do[]` — domain rules the agent must follow (free-text strings, use-case shaped)
+- `agent.must_not_do[]` — domain rules the agent must refuse (free-text strings, use-case shaped)
+- `agent.benchmark_seeds.coverage_buckets[]` — domain coverage labels (e.g. "policy compliance", "edge case: empty input"). NOT tool-shaped.
+- `agent.benchmark_seeds.seed_examples[]` — `{input, expectations}` per persona × user-journey crossing. The `input` is a natural-language prompt; the `expectations` describes the reference behavior. NO tool-specific assertions here.
+- `mcp_recommendations` — managed Databricks MCPs: `sql`, `genie`, `vector_search`, `uc_functions`, plus optional Knowledge Assistant. These are *recommendations*, not selections.
+- `mcp_research.candidates[]` — only if you enable web research (see below); each candidate needs `name`, `provider`, `registry_name`, `registry_status`, `registry_version`, `source_url`, `registry_url`, `integration_method`, `auth_model`, `required_scopes`, `databricks_compatibility`, `confidence`
+- `governance.scorer_suite.guidelines[]` — domain rules → become Guidelines scorers in 51 (each entry: `{name, text, threshold}`)
+- `governance.scorer_suite.custom_scorer_rules[]` — deterministic Python `@scorer` checks (regex / numeric / schema validations) — each entry: `{name, rule}`
+- `governance.scorer_suite.judge_questions[]` — domain quality questions evaluated by LLM judges (each entry: `{name, question, threshold}`). Reference the use-case domain — NOT generic NLP.
+- `governance.verification.smoke_test_cases[]` — 3–5 domain smoke flows consumed by section 46''s smoke gate. Each entry: `{input, expectations}`. NO tool-specific assertions.
+- `governance.llm_role_endpoints.llm_judge_default.endpoint` — the Databricks serving endpoint role binding judges route through (default `databricks-claude-sonnet-4-6`).
+
+## Optional MCP Web Research
+
+If you want external MCP suggestions, set `mcp_research_mode: web_research` and query the official MCP Registry first (`https://registry.modelcontextprotocol.io`, REST API at `https://modelcontextprotocol.io/registry/registry-aggregators#consuming-the-mcp-registry-rest-api`). Skip `status: deleted` entries; mark `status: deprecated` as `confidence: low`. Use broader web search only to enrich registry candidates. NEVER install or configure any MCP connection during spec creation.
+
+## Save and verify the write
+
+Write the file with `executeCode` `open(path, "w").write(...)` where `path` = `<ARTIFACT_ROOT>/docs/agent_spec.yaml` (`os.makedirs` its folder first; make the FIRST `executeCode` a trivial `print("ready")` to absorb the serverless cold start). In the SAME `executeCode` block, verify with `os.path.exists(path)` and read the file back (`open(path).read()`), then parse it with `yaml.safe_load` and confirm `agent.model` is a non-empty endpoint name — NOT `listFiles`, whose REST view lags FUSE-written files.
+
+Save it to: <ARTIFACT_ROOT>/docs/agent_spec.yaml
+STOP after saving. Do NOT create code, install MCPs, create UC connections, or proceed with other tasks.',
+'',
+true, 1, true, current_timestamp(), current_timestamp(), current_user());
+
 -- Step 39 / order 39: Agent Tool Selection
 INSERT INTO ${catalog}.${schema}.section_input_prompts 
 (input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
@@ -12543,6 +12628,154 @@ The generated prompt walks the coding assistant through 7 ordered decisions befo
 - [ ] No value in docs/agent_tool_plan.yaml is a placeholder literal of the form `{some_name}`',
 true, 1, true, current_timestamp(), current_timestamp(), current_user());
 
+-- agent_tool_selection (genie-code fork) — prescriptive paths + directives; <ARTIFACT_ROOT>/<APP_ROOT> via vibecoding-state resolve_root, fully qualified reads/writes, executeCode open().write + read-back, skill via readSkillFile, records the declared `Agent tool plan ready` gate for uc_resources_foundation; no @-mentions, no bare relative paths, no --profile; bypass_LLM = TRUE
+INSERT INTO ${catalog}.${schema}.section_input_prompts
+(input_id, section_tag, coding_assistant, input_template, system_prompt,
+ bypass_llm, version, is_active, inserted_at, updated_at, created_by)
+VALUES
+(1008, 'agent_tool_selection', 'genie-code',
+'## Your Task
+
+You are a Databricks GenAI agent designer. Author the **Agent Tool Plan** for the **{use_case_slug}** agent — a YAML design artifact at `<ARTIFACT_ROOT>/docs/agent_tool_plan.yaml` that pins the user-confirmed tool backends (managed MCPs, optional Knowledge Assistant, dynamic SQL MCP) and preserves the Agent Spec''s `agent.model` under a Gateway-ready runtime route.
+
+**Genie Code — this is a prescriptive runbook. Follow the steps in order. Do NOT improvise paths, do NOT use bare relative paths, do NOT use `@`-mentions. Every file is read and written by its fully qualified path under `<ARTIFACT_ROOT>` or `<APP_ROOT>` (Genie Code resolves a relative path against the page''s current working directory, which is page-type-dependent); the skill is read with `readSkillFile` by its full `skill_ref_root`-prefixed path; any CLI call goes through `runDatabricksCli` with NO profile flag (Genie Code is already authenticated to this workspace).**
+
+### Step 0 — Resolve your roots (once, before anything else)
+
+Run `skills/vibecoding-state` operation `resolve_root` (gate-free; it writes no state file). Read these resolved values and use them literally throughout:
+
+- `client_context` = `genie_code`
+- `<ARTIFACT_ROOT>` = `artifact_root` = your workshop project root (e.g. `/Workspace/Users/<your-email>/vibe-coding-workshop`), a **git clone** of the workshop repo — NOT the page''s current working directory and NOT the `.assistant/skills` copy. The Agent Spec of the previous step is `<ARTIFACT_ROOT>/docs/agent_spec.yaml`.
+- `<APP_ROOT>` = `<ARTIFACT_ROOT>/<app_name>` — the AppKit app dir of the earlier steps; its live state file is `<APP_ROOT>/.vibecoding-state.md`.
+- `skill_ref_root` = `skills/vibe-coding-workshop` (substitute your clone folder if different)
+
+**First:** Read `<APP_ROOT>/.vibecoding-state.md` if it exists — it contains resolved issues and variable values from prior phases.
+
+## IMPORTANT - READ FIRST
+
+Your ONLY task is to create `<ARTIFACT_ROOT>/docs/agent_tool_plan.yaml`. Do NOT generate application code, create Databricks resources, install MCP servers, create UC connections, wire tools into an agent, or deploy anything.
+
+### Placeholder Handling
+
+The Tool Plan MUST NEVER contain placeholder literals (anything matching `^\{[a-z_]+\}$`). The names `agent_sql_catalog`, `agent_sql_schema`, `agent_sql_table_allowlist`, `genie_space_id`, `vs_endpoint`, and `vs_index` may arrive still wrapped in `{...}`. Treat any value that is blank, missing, or still wrapped in `{...}` as a question for the user.
+
+You MUST:
+- Read `<ARTIFACT_ROOT>/docs/agent_spec.yaml` — inherit the agent''s purpose, model endpoint, and recommended tools. If it is missing, STOP and finish the Agent Spec step first — do not search other folders for it.
+- Use the contract loaded with `readSkillFile("skills/vibe-coding-workshop/genai-agents/foundation/00b-agent-spec-and-tool-plan/SKILL.md")` — NEVER a bare `@…` mention, NEVER a repo-relative path. When it names further references (e.g. its `references/tool-plan-schema.md`), load each the same way (prefix its repo-relative path with `skill_ref_root`).
+- ASK ME for any value that is blank, missing, or still wrapped in `{...}` (for example `{agent_sql_catalog}`, `{agent_sql_schema}`, `{agent_sql_table_allowlist}`, `{genie_space_id}`, `{vs_endpoint}`, `{vs_index}`) before writing the Tool Plan. NEVER write a placeholder literal (regex `^\{[a-z_]+\}$`) into `<ARTIFACT_ROOT>/docs/agent_tool_plan.yaml` under any circumstance.
+- If a tool family is not selected, OMIT its keys from `selected_mcp_servers[]` and `selected_tools[]` entirely instead of writing placeholder strings, `"n/a"`, or empty scope fields.
+- Copy the SCALAR value of `agent.model` in `<ARTIFACT_ROOT>/docs/agent_spec.yaml` into `runtime_config.llm.endpoint` AND into every `resource_grants.databricks_yml.serving_endpoints[].name`. NEVER write a file path or YAML-path string (such as `agent_spec.yaml.agent.model`) as the endpoint value — that string is a documentation reference, never the value itself. Writing it verbatim would cause DAB to attempt `CAN_QUERY` against a serving endpoint with that literal name and fail.
+- If `agent.model` in `<ARTIFACT_ROOT>/docs/agent_spec.yaml` is empty, missing, or still wrapped in `{...}`, ASK ME for the endpoint name before writing the Tool Plan. Do not invent a default here — the Agent Spec already defaulted it to `databricks-claude-sonnet-4-6` if it was unset.
+- Do NOT create or configure AI Gateway in this step. The runtime route is intentionally Gateway-ready so a future pre-provisioned Gateway endpoint can be introduced by changing only `provider`, `endpoint`, and `api_base_url` without changing agent code.
+- Create ONLY `<ARTIFACT_ROOT>/docs/agent_tool_plan.yaml` and STOP
+
+## Use Case Context
+
+- **Industry:** {industry_name}
+- **Use Case:** {use_case_title}
+
+## Dynamic SQL MCP Inputs
+
+If SQL MCP is selected, use these values:
+
+- `agent_sql_catalog`: {agent_sql_catalog}
+- `agent_sql_schema`: {agent_sql_schema}
+- `agent_sql_warehouse_id`: {default_warehouse}
+- `agent_sql_table_allowlist`: {agent_sql_table_allowlist}
+
+If `agent_sql_catalog`, `agent_sql_schema`, or `agent_sql_table_allowlist` arrive as literal `{...}` tokens, ASK ME for the values before proceeding. Do NOT write `{agent_sql_catalog}` or any other placeholder literal into the Tool Plan.
+
+To help the user pick, you MAY list catalogs, schemas or tables read-only through `runDatabricksCli` (e.g. `databricks tables list <catalog> <schema> --output json`) — never create or alter anything.
+
+Default SQL MCP policy:
+
+- `readonly: true`
+- allowed statements: `SELECT`, `DESCRIBE`, `EXPLAIN`
+- forbidden statements: `INSERT`, `UPDATE`, `DELETE`, `DROP`, `ALTER`, `CREATE`, `MERGE`, `TRUNCATE`
+- require fully qualified table names as `catalog.schema.table`
+
+## Runtime Model Route (Gateway-Ready)
+
+COPY the SCALAR value of `agent.model` in `<ARTIFACT_ROOT>/docs/agent_spec.yaml` into:
+
+- `runtime_config.llm.endpoint`
+- every entry in `resource_grants.databricks_yml.serving_endpoints[].name` that represents the model route
+
+Concrete example, assuming `<ARTIFACT_ROOT>/docs/agent_spec.yaml` has `agent.model: "databricks-claude-sonnet-4-6"`:
+
+```yaml
+runtime_config:
+  llm:
+    provider: "databricks"
+    endpoint: "databricks-claude-sonnet-4-6"   # copied from agent.model
+    api_base_url: null
+    api_mode: "databricks_openai_compatible"
+    model_config:
+      endpoint_key: "llm_endpoint"
+      api_base_url_key: "llm_api_base_url"
+      api_mode_key: "llm_api_mode"
+resource_grants:
+  databricks_yml:
+    serving_endpoints:
+      - name: "databricks-claude-sonnet-4-6"   # same scalar value as runtime_config.llm.endpoint
+        permission: "CAN_QUERY"
+```
+
+## Tool-Shaped Derivation (mechanical)
+
+The Tool Plan adds **tool-shaped** content that the Spec deliberately omits (the Spec is tool-agnostic — tools are not selected until this step). For every entry in `selected_tools[]`, walk the table below and emit the corresponding `verification.tool_smoke_tests[]` entry and `runtime_guardrails.tool_shaped_scorers[]` hints. Tool families absent from `selected_tools[]` (or with `selected: false`) contribute zero entries.
+
+| Selected tool family | `runtime_guardrails.tool_shaped_scorers[]` to add (deduped) | `verification.tool_smoke_tests[]` prompt shape |
+|---|---|---|
+| Knowledge Assistant (`ka_endpoint_name` present) | `ka_citation_present`, `RetrievalGroundedness` | "What does the {use_case_title} policy say about <X>?" — `expected_signal`: KA span + cited document |
+| Vector Search (managed MCP) | `RetrievalGroundedness` (dedup if KA already added it) | "Find similar past <case> in the corpus" — `expected_signal`: VS span + ≥1 hit returned |
+| Genie | `genie_sql_correctness`, `genie_response_grounded_in_table` | "Show me <metric> for <segment> over the last quarter" — `expected_signal`: Genie span + SQL referencing an allowed table |
+| SQL MCP | `sql_readonly_compliance`, `sql_fully_qualified_names` | "Run a SELECT on `{agent_sql_catalog}.{agent_sql_schema}.<table>` for the top 5 rows" — `expected_signal`: SELECT-only SQL with fully-qualified table names |
+| UC Functions | `uc_function_signature_match` | "Call `<uc_function_name>` with arguments <args>" — `expected_signal`: function call signature matches |
+| External MCP (per high-confidence descriptor) | one entry per `mcp_research.candidates[].confidence == high` selected | use-case query that exercises the specific external MCP — `expected_signal` from descriptor |
+
+Each emitted `verification.tool_smoke_tests[]` entry has the shape `{tool_name, prompt, expected_signal}`. Use the use-case context (`{industry_name}`, `{use_case_title}`, capabilities, schema names) to keep prompts domain-relevant — never write generic placeholders like "list 5 rows from a table".
+
+**Worked example.** If `selected_tools[]` contains only SQL MCP (Knowledge Assistant `selected: false`, Genie not selected, Vector Search not selected), then:
+
+- `verification.tool_smoke_tests[]` has exactly ONE entry (the SQL one).
+- `runtime_guardrails.tool_shaped_scorers[]` is `["sql_readonly_compliance", "sql_fully_qualified_names"]`.
+- No `ka_citation_present`, no `RetrievalGroundedness`, no `genie_*`, no `uc_function_signature_match`.
+
+The downstream prompts (50/51/52/46) read these arrays directly — there is no defaulting or fallback for tools the user didn''t select.
+
+## Tool Plan Decisions to Record
+
+- Managed Databricks MCPs: Genie, Vector Search, SQL, UC Functions (each with explicit `selected: true|false`)
+- Optional external MCPs from `mcp_research.candidates[]` in `<ARTIFACT_ROOT>/docs/agent_spec.yaml`
+- Knowledge Assistant — either selected with `creation_required: true` and `ka_source`, or skipped with `selected: false`
+- Resource grants for `databricks.yml` and the app manifest OAuth scopes (`resource_grants.app_yaml_oauth_scopes`)
+- Runtime guardrails (SQL read-only default, citation requirements) PLUS `runtime_guardrails.tool_shaped_scorers[]` derived from `selected_tools[]`
+- `verification.tool_smoke_tests[]` — one entry per `selected_tools[]` entry, prompt + expected_signal use-case shaped (no entries for unselected tool families)
+- Runtime model route from `agent.model` in `<ARTIFACT_ROOT>/docs/agent_spec.yaml` into `runtime_config.llm`
+
+For SQL MCP specifically, ensure the plan includes:
+
+- `selected_mcp_servers[].meta.warehouse_id` set to `{default_warehouse}`
+- `selected_mcp_servers[].scope.catalog` set to `{agent_sql_catalog}`
+- `selected_mcp_servers[].scope.schema` set to `{agent_sql_schema}`
+- `selected_mcp_servers[].scope.allowed_tables` populated from `{agent_sql_table_allowlist}` (empty list = full schema with read-only guardrails)
+- `selected_tools[].guardrails.allowed_statements` = `["SELECT", "DESCRIBE", "EXPLAIN"]`
+- `selected_tools[].guardrails.forbidden_statements` = `["INSERT", "UPDATE", "DELETE", "DROP", "ALTER", "CREATE", "MERGE", "TRUNCATE"]`
+- `selected_tools[].guardrails.require_fully_qualified_names` = `true`
+
+## Save and verify the write
+
+Write the file with `executeCode` `open(path, "w").write(...)` where `path` = `<ARTIFACT_ROOT>/docs/agent_tool_plan.yaml` (make the FIRST `executeCode` a trivial `print("ready")` to absorb the serverless cold start). In the SAME `executeCode` block, verify with `os.path.exists(path)` and read the file back (`open(path).read()`), parse it with `yaml.safe_load`, and confirm that every `selected_tools[].mcp_server_ref` resolves to a `selected_mcp_servers[].name`, that `runtime_config.llm.endpoint` equals the Spec''s `agent.model`, and that no value matches `^\{[a-z_]+\}$` — NOT `listFiles`, whose REST view lags FUSE-written files.
+
+Save it to: <ARTIFACT_ROOT>/docs/agent_tool_plan.yaml
+
+**State file:** the next step (UC Resources Foundation) requires this step''s gate. After the verified save, run `skills/vibecoding-state` op `exit` — params: `prompt_id: "agent_tool_selection"`, `gate: "Agent tool plan ready"` — so its Per-Step Log entry and Gate result land in `<APP_ROOT>/.vibecoding-state.md`; re-read that file and echo the appended entry to prove the write landed.
+
+STOP after saving. Do not generate any code, install MCPs, create UC connections, or proceed with other tasks.',
+'',
+true, 1, true, current_timestamp(), current_timestamp(), current_user());
+
 -- Step 40 / order 40: Phase 1 / Agent Foundation - UC Resources Foundation
 INSERT INTO ${catalog}.${schema}.section_input_prompts 
 (input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
@@ -12725,6 +12958,108 @@ The skill executes a deterministic 8-phase walk with idempotent guards at every 
 - [ ] **Idempotency check:** running this prompt a second time produces zero new schemas, zero new volumes, zero changed sections in the state file (modulo `resolved_at`), and zero errors.',
 true, 1, true, current_timestamp(), current_timestamp(), current_user());
 
+-- uc_resources_foundation (genie-code fork) — prescriptive paths + directives; identity via the pre-authenticated WorkspaceClient (no --profile), fully qualified hydrate paths under <ARTIFACT_ROOT>/<APP_ROOT>, skill via readSkillFile; keeps the idempotent in-session schema/volume provisioning of the skill (D-47b: TPL 00-uc-resources-foundation declares clients [ide_cli, genie_code]); bypass_LLM = TRUE
+INSERT INTO ${catalog}.${schema}.section_input_prompts
+(input_id, section_tag, coding_assistant, input_template, system_prompt,
+ bypass_llm, version, is_active, inserted_at, updated_at, created_by)
+VALUES
+(1009, 'uc_resources_foundation', 'genie-code',
+'Provision the Unity Catalog **schemas + managed volumes** that every downstream agent skill assumes (MLflow OTel tables, Knowledge Assistant, agent memory, benchmark persistence, monitoring) for the **{use_case_slug}** agent. Today the workspace has no agent-scoped UC homes; after this prompt runs, two schemas (`{db_schema}_agent` and `{db_schema}_ops`) and the canonical managed volumes exist and are ready to consume.
+
+This will involve the following steps:
+
+- **Resolve your roots and enter** — `<ARTIFACT_ROOT>` / `<APP_ROOT>` and the prior gates.
+- **Hydrate state from the design pair** — fully qualified file paths.
+- **Derive user-scoped names** — compute `APP_NAME`, `DB_SCHEMA`, `AGENT_APP_NAME`, and `AGENT_RESOURCE_PREFIX` from your Databricks identity so multiple workshop attendees never collide
+- **Create the agent + ops schemas** — only if they do not exist, for `{lakehouse_default_catalog}.{db_schema}_agent` and `{lakehouse_default_catalog}.{db_schema}_ops`
+- **Provision managed volumes** — create the canonical `knowledge_sources` and `agent_outputs` volumes in the agent schema, plus any extras from `resource_grants.required_volumes[]` in `<ARTIFACT_ROOT>/docs/agent_tool_plan.yaml`
+- **Stay idempotent** — every operation tolerates pre-existing schemas/volumes (warm workspaces from earlier runs are fine)
+- **Capture state for downstream skills** — emit the volume map + convenience paths (`knowledge_source_path`, `agent_outputs_path`) so MLflow tracing, KA, memory, benchmarks, and monitoring can resolve them
+
+The steps below are the prescriptive runbook for those actions; follow them in order.
+
+**Genie Code — this is a prescriptive runbook. Follow the steps in order. Do NOT improvise paths, do NOT use bare relative paths, do NOT use `@`-mentions. Every file is named by its fully qualified path under `<ARTIFACT_ROOT>` or `<APP_ROOT>`; every skill is read with `readSkillFile` by its full `skill_ref_root`-prefixed path; every CLI call goes through `runDatabricksCli` with NO profile flag and every SDK call runs in `executeCode` on serverless with the pre-authenticated `WorkspaceClient` (Genie Code is already authenticated to this workspace — the Session Settings profile `{databricks_cli_profile}` is an IDE setting and is NOT used here).**
+
+### Step 0 — Resolve your roots and enter (once, before anything else)
+
+Run `skills/vibecoding-state` operation `resolve_root`, then `enter` — params: `prompt_id: "uc_resources_foundation"`, `require_prior_gate: [{prompt_id: "workspace_setup_deploy", gate: "Infrastructure healthy"}, {prompt_id: "agent_tool_selection", gate: "Agent tool plan ready"}]` (accepts `"Infrastructure healthy with warnings"`). Read these resolved values and use them literally throughout:
+
+- `client_context` = `genie_code`
+- `<ARTIFACT_ROOT>` = `artifact_root` = your workshop project root (e.g. `/Workspace/Users/<your-email>/vibe-coding-workshop`), a **git clone** of the workshop repo — NOT the page''s current working directory. The design pair lives at `<ARTIFACT_ROOT>/docs/agent_spec.yaml` and `<ARTIFACT_ROOT>/docs/agent_tool_plan.yaml`.
+- `<APP_ROOT>` = `<ARTIFACT_ROOT>/<app_name>` — the AppKit app dir; its live state file is `<APP_ROOT>/.vibecoding-state.md`.
+- `skill_ref_root` = `skills/vibe-coding-workshop` (substitute your clone folder if different)
+- `warehouse_id` = `{default_warehouse}`
+
+**First:** Read `<APP_ROOT>/.vibecoding-state.md` if it exists — it contains resolved issues and variable values from prior phases. If `enter` reports either prior gate is unmet, STOP and finish that prompt first.
+
+### Step 1 — Load the skills by their FULL `skill_ref_root`-prefixed paths
+
+Read them in ONE batched `readSkillFile` turn — NEVER a bare `@…` mention, NEVER a repo-relative path:
+
+1. `readSkillFile("skills/vibe-coding-workshop/skills/genie-code-environment/SKILL.md")` — how CLI, SQL and SDK calls run on Genie Code.
+2. `readSkillFile("skills/vibe-coding-workshop/genai-agents/foundation/00-uc-resources-foundation/SKILL.md")` — the provisioning contract (its frontmatter declares `clients: [ide_cli, genie_code]`: schemas + volumes are created via SDK/DDL identically on both clients).
+
+When a skill names further references, load each the same way (prefix its repo-relative path with `skill_ref_root`).
+
+### Step 2 — Hydrate state from the design pair
+
+Run `skills/vibecoding-state` op `hydrate_from_files` — params: `agent_spec_yaml: "<ARTIFACT_ROOT>/docs/agent_spec.yaml"`, `agent_tool_plan_yaml: "<ARTIFACT_ROOT>/docs/agent_tool_plan.yaml"`, `ui_design_md: "<ARTIFACT_ROOT>/docs/ui_design.md"`, `prd_path: "<ARTIFACT_ROOT>/docs/design_prd.md"`, `state_path: "<APP_ROOT>/.vibecoding-state.md"` (substitute the resolved roots — fully qualified paths, never relative). This populates `state://AgentSpec`, `state://AppSpec` (UI), and `state://Spec Provenance` from the design pair so downstream MLflow SDLC prompts (50–56) can keep reading `state://AgentSpec.*` / `state://AppSpec.*` without rewrites. `state://DataSpec` is stamped `optional: true` when no Lakehouse track has populated it. The operation is idempotent: re-running with the same YAML files is a no-op (the `resolved_at` timestamp may drift). It halts only if a required input file is missing, if `agent.model` in the Agent Spec is empty, or if any value in the design pair is still wrapped in `{...}` — in those cases re-run prompts 38 / 39 with real values.
+
+### Step 3 — Derive user-scoped names
+
+Use the same identity-derived naming pattern as the AppKit and Lakebase prompts. These values keep AppKit apps, Lakebase schemas, UC schemas, volumes, and the Track A Agent App isolated per user and use case. Run in `executeCode` (no shell, no `jq`):
+
+```python
+from databricks.sdk import WorkspaceClient
+w = WorkspaceClient()  # pre-authenticated on Genie Code
+EMAIL = w.current_user.me().user_name
+local = EMAIL.split("@")[0]
+FIRSTNAME = local.split(".")[0]
+LASTINITIAL = (local.split(".")[1] if "." in local else "")[:1]
+APP_PREFIX = FIRSTNAME + "-" + LASTINITIAL
+APP_NAME = APP_PREFIX + "-" + "{use_case_slug}"
+if len(APP_NAME) > 26:
+    APP_NAME = APP_NAME[:26].rstrip("-")
+    print("Truncated AppKit app name to:", APP_NAME)
+DB_SCHEMA = APP_NAME.replace("-", "_")
+AGENT_APP_NAME = APP_NAME + "-agent"
+if len(AGENT_APP_NAME) > 26:
+    AGENT_APP_NAME = APP_NAME[:22].rstrip("-") + "-agt"
+    print("Truncated agent app name to:", AGENT_APP_NAME)
+AGENT_RESOURCE_PREFIX = AGENT_APP_NAME.replace("-", "_")
+print("APP_NAME=" + APP_NAME, "DB_SCHEMA=" + DB_SCHEMA, "AGENT_APP_NAME=" + AGENT_APP_NAME)
+```
+
+(The CLI equivalent is `databricks current-user me --output json` via `runDatabricksCli`, with no profile flag.) Use the resolved values as `{app_name}`, `{db_schema}`, `{agent_app_name}`, and `{agent_resource_prefix}` in the skill parameters below.
+
+### Step 4 — Provision the schemas + volumes exactly as the skill prescribes
+
+Run the `00-uc-resources-foundation` skill''s provisioning code in `executeCode` on serverless with the pre-authenticated `w`, exactly as the skill''s code shows — the schema DDL through `w.statement_execution.execute_statement(..., warehouse_id="{default_warehouse}")` and the SDK volume call for each volume. Params:
+
+- `uc_catalog: "{lakehouse_default_catalog}"`
+- `agent_schema: "{db_schema}_agent"`
+- `ops_schema: "{db_schema}_ops"`
+- `warehouse_id: "{default_warehouse}"`
+- `required_volumes:` default list, extended by `resource_grants.required_volumes[]` in `<ARTIFACT_ROOT>/docs/agent_tool_plan.yaml` after applying the same `{db_schema}_` prefix to each extra volume name.
+  - `{ name: "{db_schema}_knowledge_sources", schema: "agent", comment: "KA + retrieval source files" }`
+  - `{ name: "{db_schema}_agent_outputs",     schema: "agent", comment: "Tool-generated artifacts (CSV, charts)" }`
+- **Returns:** `agent_schema`, `ops_schema`, `uc_volumes` (map of actual volume name → `/Volumes/...` path), and convenience aliases `knowledge_source_path` (= `/Volumes/{lakehouse_default_catalog}/{db_schema}_agent/{db_schema}_knowledge_sources`) and `agent_outputs_path` (= `/Volumes/{lakehouse_default_catalog}/{db_schema}_agent/{db_schema}_agent_outputs`).
+- **Idempotency contract:** every operation is idempotent — each schema is created only if it does not exist, and the SDK volume call is wrapped to treat `databricks.sdk.errors.AlreadyExists` as success. Pre-existing schemas/volumes (whether created by a prior run, by a use-case asset bundle, or by another user) MUST NOT cause a failure. The skill MUST always emit the captured map even on a warm workspace where every resource already exists.
+
+Create ONLY these schemas and volumes — no catalog, no tables, no other resources. If the catalog `{lakehouse_default_catalog}` does not exist or you lack the privilege to create schemas in it, STOP and report; do NOT create a catalog and do NOT switch to another catalog.
+
+### Step 5 — Verify (read-only)
+
+In `executeCode`: `w.schemas.get("{lakehouse_default_catalog}.{db_schema}_agent")` and `..._ops` both return, and every entry in `uc_volumes` is reachable via `w.volumes.read(...)`. Or through `runDatabricksCli`: `databricks volumes list {lakehouse_default_catalog} {db_schema}_agent --output json` lists `{db_schema}_knowledge_sources` and `{db_schema}_agent_outputs`, and `databricks schemas list {lakehouse_default_catalog} --output json` lists both schemas.
+
+**State-lock:** this prompt runs between an `enter` (Step 0) and an `exit`. After the gate passes, run `skills/vibecoding-state` op `exit` — params: `prompt_id: "uc_resources_foundation"`, `gate: "UC resources ready"`, `captured: {app_name, db_schema, agent_app_name, agent_resource_prefix, agent_schema, ops_schema, uc_volumes, knowledge_source_path, agent_outputs_path, hydrated_from_files: true, resolver_version: "3.0"}`. **This `enter`/`exit` pair is a mandatory ritual, not advisory.** Step 0''s `enter` MUST locate the canonical live state file at `<app_root>/.vibecoding-state.md` (`<APP_ROOT>` above; never the temporary `example/…` bootstrap path). The closing `exit` MUST append this prompt''s Per-Step Log entry, Gate result, and `captured` vars to that file, then **re-read it and echo the appended section to prove the write landed**. **Gate completion rule:** this prompt is NOT complete until that re-read confirms the appended entry — the chat summary is NOT the state store.
+
+**Gate:** `UC resources ready` — both schemas exist (`SHOW SCHEMAS IN {lakehouse_default_catalog}` lists them), every entry in `uc_volumes` is reachable via `WorkspaceClient.volumes.read(...)`, and `knowledge_source_path` points to `/Volumes/{lakehouse_default_catalog}/{db_schema}_agent/{db_schema}_knowledge_sources`. Pre-existing resources are explicitly acceptable — the gate proves *existence*, not *first-time creation*.
+
+If a PRD exists at `<ARTIFACT_ROOT>/docs/design_prd.md`, reference it for business requirements, user personas, and workflows.',
+'',
+true, 1, true, current_timestamp(), current_timestamp(), current_user());
+
 -- Step 41 / order 41: Phase 1 / Agent Foundation - MLflow Tracing + UC OTel Storage
 INSERT INTO ${catalog}.${schema}.section_input_prompts 
 (input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
@@ -12860,6 +13195,88 @@ The two skills (`01-mlflow-genai-foundation` then `02-experiment-tracing-and-uc-
 - [ ] MLflow experiment at `{mlflow_experiment_path}` created
 - [ ] 4 UC OTel Delta tables in `{lakehouse_default_catalog}.{db_schema}_agent`
 - [ ] Test trace visible in both MLflow UI and UC',
+true, 1, true, current_timestamp(), current_timestamp(), current_user());
+
+-- mlflow_agent_tracing_uc (genie-code fork) — prescriptive paths + directives; both foundation skills via readSkillFile, experiment path from the state file under <APP_ROOT>, MLflow setup and the test trace in executeCode on serverless with the pre-authenticated client; no @-mentions, no bare relative paths, no --profile; bypass_LLM = TRUE
+INSERT INTO ${catalog}.${schema}.section_input_prompts
+(input_id, section_tag, coding_assistant, input_template, system_prompt,
+ bypass_llm, version, is_active, inserted_at, updated_at, created_by)
+VALUES
+(1010, 'mlflow_agent_tracing_uc', 'genie-code',
+'Stand up MLflow tracing and the Unity Catalog OTel sink for the **{use_case_slug}** agent so every agent run, tool call, LLM span, and retrieval is observable in MLflow and queryable in UC Delta tables. Today the agent runs without any trace plumbing; after this prompt runs, autolog is on, the experiment exists at `{mlflow_experiment_path}`, and 4 OTel Delta tables are landing spans under `{lakehouse_default_catalog}.{db_schema}_agent`.
+
+**Experiment-path derivation (REQUIRED — do not deviate).** `{mlflow_experiment_path}` MUST be `/Users/<user_email>/mlflow/{user_app_name}-agent`, where `<user_email>` is the operator''s email (read from `Global Variables.User email` in `<APP_ROOT>/.vibecoding-state.md`, or from `w.current_user.me().user_name` in `executeCode`) and `{user_app_name}` is the same `${FIRSTNAME}-${LASTINITIAL}-${use_case_slug}` identity that backs `APP_NAME` (e.g. for `jane.doe@example.com` on `stayfinder`: `/Users/<user_email>/mlflow/jane-d-stayfinder-agent`). This guarantees concurrent attendees on a shared workspace cannot collide on a single experiment, and the MLflow UI never lists a generic `Tracing` / `traces` / `Default` entry. Read the pinned value from `state://Resources.mlflow_experiment_path` if `vibecoding-state.migrate_canonical` has already populated it; otherwise derive it here using the formula above and capture the resolved path back into state. Forbidden leaves (HARD STOP if encountered): `Tracing`, `traces`, `tracing`, `Default`, `my-agent`, `my-data-agent`, or any leaf not suffixed with `{user_app_name}-`.
+
+This will involve the following steps:
+
+- **Install MLflow + autolog** — install `mlflow[databricks] >= 3.10.1` and enable `mlflow.openai.autolog()` so every LLM/Tool/Retriever span is captured without per-call decorators
+- **Detect the environment** — export a `detect_environment()` helper so the same instrumentation code runs in local dev, notebooks, Databricks Apps, and Model Serving without branching
+- **Create the experiment** — provision `{mlflow_experiment_path}` with the required experiment tags (e.g. `mlflow.promptRegistryLocation`) so the prompt-registry phase can attach
+- **Wire the UC OTel sink** — provision 4 OTel Delta tables prefixed with `{agent_resource_prefix}_otel` in `{lakehouse_default_catalog}.{db_schema}_agent` and emit grant SQL
+- **Smoke-test the trace pipe** — emit a test trace and verify it lands in BOTH the MLflow UI and the UC OTel tables, then capture `mlflow_experiment_path` as state
+
+The steps below are the prescriptive runbook for those actions; follow them in order.
+
+**Genie Code — this is a prescriptive runbook. Follow the steps in order. Do NOT improvise paths, do NOT use bare relative paths, do NOT use `@`-mentions. Every skill is read with `readSkillFile` by its full `skill_ref_root`-prefixed path; every file is named by its fully qualified path under `<ARTIFACT_ROOT>` or `<APP_ROOT>`; every CLI call goes through `runDatabricksCli` with NO profile flag and every MLflow / SDK call runs in `executeCode` on serverless with the pre-authenticated `WorkspaceClient` (Genie Code is already authenticated to this workspace).**
+
+### Step 0 — Resolve your roots and enter (once, before anything else)
+
+Run `skills/vibecoding-state` operation `resolve_root`, then `enter` — params: `prompt_id: "mlflow_agent_tracing_uc"`, `require_prior_gate: {prompt_id: "uc_resources_foundation", gate: "UC resources ready"}`. Read these resolved values and use them literally throughout:
+
+- `client_context` = `genie_code`
+- `<ARTIFACT_ROOT>` = `artifact_root` = your workshop project root (e.g. `/Workspace/Users/<your-email>/vibe-coding-workshop`), a **git clone** of the workshop repo — NOT the page''s current working directory.
+- `<APP_ROOT>` = `<ARTIFACT_ROOT>/<app_name>` — the AppKit app dir; its live state file is `<APP_ROOT>/.vibecoding-state.md` (it carries `agent_app_name`, `agent_resource_prefix`, `agent_schema` from `uc_resources_foundation`).
+- `skill_ref_root` = `skills/vibe-coding-workshop` (substitute your clone folder if different)
+- `warehouse_id` = `{default_warehouse}`
+
+If `enter` reports the prior gate is unmet, STOP and finish `uc_resources_foundation` first.
+
+### Step 1 — Load the skills by their FULL `skill_ref_root`-prefixed paths
+
+Read them in ONE batched `readSkillFile` turn — NEVER a bare `@…` mention, NEVER a repo-relative path:
+
+1. `readSkillFile("skills/vibe-coding-workshop/skills/genie-code-environment/SKILL.md")` — how CLI, SQL and SDK calls run on Genie Code.
+2. `readSkillFile("skills/vibe-coding-workshop/genai-agents/foundation/01-mlflow-genai-foundation/SKILL.md")` — params:
+   - `agent_name: "{agent_app_name}"`
+   - `mlflow_min_version: "3.10.1"`
+   - `enable_openai_autolog: true`
+   - `workspace_client_pool: true`
+   - `detect_environment_helper: true`
+   - `environments: ["local_dev", "databricks_apps", "model_serving", "notebook"]`
+3. `readSkillFile("skills/vibe-coding-workshop/genai-agents/foundation/02-experiment-tracing-and-uc-storage/SKILL.md")` — params:
+   - `agent_name: "{agent_app_name}"`
+   - `experiment_path: "{mlflow_experiment_path}"`
+   - `uc_catalog: "{lakehouse_default_catalog}"`
+   - `uc_schema: "{db_schema}_agent"`
+   - `warehouse_id: "{default_warehouse}"`
+   - `otel_table_prefix: "{agent_resource_prefix}_otel"`
+   - `enable_trace_decorator: true`
+   - `experiment_tags: ["mlflow.promptRegistryLocation"]`
+   - `emit_grant_sql: true`
+   - `verification: {test_trace_visible_in_uc: true, otel_tables_count: 4}`
+
+When a skill names further references, load each the same way (prefix its repo-relative path with `skill_ref_root`).
+
+### Step 2 — Run the two skills in `executeCode`
+
+Run `01-mlflow-genai-foundation` then `02-experiment-tracing-and-uc-storage` with the params above, in `executeCode` on serverless (make the FIRST `executeCode` a trivial `print("ready")` to absorb the cold start):
+
+- `%pip install "mlflow[databricks]>=3.10.1"` then restart Python, and confirm `mlflow.__version__`.
+- Call `mlflow.openai.autolog()` (or the framework-equivalent the skill names) once at the top of the session.
+- In this session the tracking URI is `databricks` (the `detect_environment()` helper reports `notebook`); the helper itself is code the agent app ships, not something this step deploys.
+- `mlflow.set_experiment("{mlflow_experiment_path}")` (creates it if absent — idempotent) and set the `mlflow.promptRegistryLocation` experiment tag as the skill shows.
+- Set `MLFLOW_TRACING_SQL_WAREHOUSE_ID` = `{default_warehouse}` before linking the UC OTel tables, then provision the 4 OTel Delta tables with prefix `{agent_resource_prefix}_otel` in `{lakehouse_default_catalog}.{db_schema}_agent` exactly as `02-experiment-tracing-and-uc-storage` prescribes, and print the grant SQL it emits (print it — do not run grants on other principals).
+
+Agent-code files the skills describe (e.g. the `detect_environment()` helper and the autolog wiring) are written by the build steps that create the agent app; do not create an agent app here.
+
+### Step 3 — Smoke-test the trace pipe (read-only check)
+
+Emit one test trace in `executeCode` (a `@mlflow.trace`-decorated function call), then verify it is visible in BOTH places: `mlflow.search_traces(...)` on `{mlflow_experiment_path}` returns it, and a `SELECT` on the UC OTel span table in `{lakehouse_default_catalog}.{db_schema}_agent` (through `w.statement_execution.execute_statement(..., warehouse_id="{default_warehouse}")`) returns its `trace_id`. UC ingest can lag a few minutes: poll, do not re-create anything.
+
+**State-lock:** this prompt runs between an `enter` (Step 0) and an `exit`. After the gate passes, run `skills/vibecoding-state` op `exit` — params: `prompt_id: "mlflow_agent_tracing_uc"`, `gate: "Tracing live; UC OTel tables ready"`, `captured: {mlflow_experiment_path}`. **This `enter`/`exit` pair is a mandatory ritual, not advisory.** Step 0''s `enter` MUST locate the canonical live state file at `<app_root>/.vibecoding-state.md` (`<APP_ROOT>` above; never the temporary `example/…` bootstrap path). The closing `exit` MUST append this prompt''s Per-Step Log entry, Gate result, and `captured` vars to that file, then **re-read it and echo the appended section to prove the write landed**. **Gate completion rule:** this prompt is NOT complete until that re-read confirms the appended entry — the chat summary is NOT the state store.
+
+**Gate:** `Tracing live; UC OTel tables ready` — `mlflow[databricks] >= 3.10.1` installed, autolog enabled, experiment visible at `{mlflow_experiment_path}`, 4 UC OTel Delta tables created in `{lakehouse_default_catalog}.{db_schema}_agent`, test trace visible in UC.',
+'',
 true, 1, true, current_timestamp(), current_timestamp(), current_user());
 
 -- Step 42 / order 42: Phase 1 / Agent Foundation - Create Knowledge Assistant
