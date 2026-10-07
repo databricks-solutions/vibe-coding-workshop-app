@@ -14980,6 +14980,64 @@ When you paste the prompt, the AI walks four phases against UC:
 - [ ] Agent loader confirmed working against `prompts://...@production`',
 true, 1, true, current_timestamp(), current_timestamp(), current_user());
 
+-- mlflow_prompt_registry (genie-code fork) — prescriptive paths + directives; resolve_root then the default's enter, the 01 prompt-registry skill via readSkillFile, the spec under <ARTIFACT_ROOT>; MLflow SDK in executeCode on serverless; same gate and captured keys; no @-mentions, no bare relative paths, no --profile; bypass_LLM = TRUE
+INSERT INTO ${catalog}.${schema}.section_input_prompts
+(input_id, section_tag, coding_assistant, input_template, system_prompt,
+ bypass_llm, version, is_active, inserted_at, updated_at, created_by)
+VALUES
+(1011, 'mlflow_prompt_registry', 'genie-code',
+'Register every prompt the **{agent_app_name}** agent loads as a governed Unity Catalog asset with git-style aliases. Today the agent uses inline prompt strings; after this prompt runs, the agent loads via `prompts://...@production` and a release becomes an alias move (no code change). This step opens the MLflow SDLC ("Agents 201") arc — every later step (eval datasets at 50, scorers at 51, eval runs at 52, sign-off at 53, promotion at 54) reads prompts back through `prompts://...@alias`.
+
+This will involve the following steps:
+
+- **Enumerate inline prompts** — find every prompt the agent loads (`agent.system_prompt`, `agent.must_do[]`, `agent.must_not_do[]`) by reading `<ARTIFACT_ROOT>/docs/agent_spec.yaml`
+- **Register each as a UC asset** — create `{lakehouse_default_catalog}.{db_schema}_agent.<prompt_name>` for each one, version 1
+- **Pin `@production` alias** — alias the current versions so the agent''s runtime loader resolves them
+- **Reserve `@staging` alias** — leave it free for the next iteration''s candidate version
+- **Verify the loader** — boot the agent against `prompts://...@production` and assert it loads cleanly (no silent fallback to inline strings)
+- **Tag the experiment** — record `mlflow.promptRegistryLocation` so future eval runs trace back to the exact prompt versions
+
+The steps below are the prescriptive runbook for those actions; follow them in order.
+
+**Genie Code — this is a prescriptive runbook. Follow the steps in order. Do NOT improvise paths, do NOT use bare relative paths, do NOT use `@`-mentions. Every skill is read with `readSkillFile` by its full `skill_ref_root`-prefixed path; every file is named by its fully qualified path under `<ARTIFACT_ROOT>` or `<APP_ROOT>`; every CLI call goes through `runDatabricksCli` with NO profile flag and every MLflow / SDK call runs in `executeCode` on serverless with the pre-authenticated `WorkspaceClient` (Genie Code is already authenticated to this workspace).**
+
+> **Genie Code execution.** These are pure MLflow SDK operations — on Genie Code run them directly via `executeCode` on serverless (the full `mlflow`/`mlflow.genai` Python SDK), exactly as the IDE/CLI flow runs them in‑session. **No job, no bundle.** Call `mlflow.set_experiment("{mlflow_experiment_path}")` first so registrations and traces land in the agent''s experiment. Verify with the native `search_prompts` / `get_prompt_details` tools rather than re‑deriving. Run any incidental CLI step through `runDatabricksCli` (pre‑authenticated). Use full clone‑rooted skill paths (`skills/...`), never bare `@`-mentions. See `skills/genie-code-environment`.
+
+### Step 0 — Resolve your roots and enter (once, before anything else)
+
+Run `skills/vibecoding-state` operation `resolve_root`, then `enter` — params: `prompt_id: "mlflow_prompt_registry"`, `require_prior_gate: {prompt_id: "mlflow_agent_tracing_uc", gate: "Tracing live; UC OTel tables ready"}`.
+Read these resolved values and use them literally throughout:
+
+- `client_context` = `genie_code`
+- `<ARTIFACT_ROOT>` = `artifact_root` = your workshop project root (e.g. `/Workspace/Users/<your-email>/vibe-coding-workshop`), a **git clone** of the workshop repo — NOT the page''s current working directory.
+- `<APP_ROOT>` = `<ARTIFACT_ROOT>/<app_name>` — the AppKit app dir; its live state file is `<APP_ROOT>/.vibecoding-state.md`.
+- `skill_ref_root` = `skills/vibe-coding-workshop` (substitute your clone folder if different)
+
+If `enter` reports the prior gate is unmet, STOP and finish `mlflow_agent_tracing_uc` first.
+
+### Step 1 — Load the skills by their FULL `skill_ref_root`-prefixed paths
+
+Read them in ONE batched `readSkillFile` turn — NEVER a bare `@…` mention, NEVER a repo-relative path:
+
+1. `readSkillFile("skills/vibe-coding-workshop/genai-agents/sdlc/01-prompt-registry/SKILL.md")` — params:
+   - `agent_name: "{agent_app_name}"`
+   - `uc_catalog: "{lakehouse_default_catalog}"`
+   - `uc_schema: "{db_schema}_agent"`
+   - `aliases: ["@production", "@staging"]`
+   - `verify_loader: "prompts://"`
+
+When a skill names further references, load each the same way (prefix its repo-relative path with `skill_ref_root`).
+
+### Step 2 — Run the skill in `executeCode`
+
+Run `01-prompt-registry` with the params above in `executeCode` on serverless (make the FIRST `executeCode` a trivial `print("ready")` to absorb the cold start), reading the inline prompts from `<ARTIFACT_ROOT>/docs/agent_spec.yaml` with `open(...)`. Register, alias, verify the loader and tag the experiment exactly as the skill prescribes.
+
+**State-lock:** this prompt runs between an `enter` (Step 0) and an `exit`. After the gate passes, run `skills/vibecoding-state` op `exit` — params: `prompt_id: "mlflow_prompt_registry"`, `gate: "Prompts registered in UC; @production and @staging aliases set"`. **This `enter`/`exit` pair is a mandatory ritual, not advisory.** Step 0''s `enter` MUST locate the canonical live state file at `<app_root>/.vibecoding-state.md` (`<APP_ROOT>` above; never the temporary `example/…` bootstrap path). The closing `exit` MUST append this prompt''s Per-Step Log entry, Gate result, and `captured` vars to that file, then **re-read it and echo the appended section to prove the write landed**. **Gate completion rule:** this prompt is NOT complete until that re-read confirms the appended entry — the chat summary is NOT the state store.
+
+**Gate:** `Prompts registered in UC; @production and @staging aliases set` — every prompt the agent loads is now governed in UC and addressable via `prompts://...@alias` instead of inline strings.',
+'',
+true, 1, true, current_timestamp(), current_timestamp(), current_user());
+
 -- Step 50 / order 50: Phase 1 / Build the Quality Suite - Evaluation Datasets
 -- Split from live DDL row 147 (Skill 02: evaluation datasets).
 INSERT INTO ${catalog}.${schema}.section_input_prompts 
@@ -15110,6 +15168,67 @@ When you paste the prompt, the AI walks four phases:
 - [ ] Every `ui.user_journeys[]` covered by ≥ 1 benchmark row
 - [ ] Every `docs/agent_tool_plan.yaml.verification.tool_smoke_tests[]` entry has ≥ 1 corresponding tool-shaped benchmark row (KA-shaped only if KA selected, Genie-shaped only if Genie selected, SQL-shaped only if SQL MCP selected)
 - [ ] Schema includes `expectations` and `human_assessments` columns ready for sync-back from labeling sessions',
+true, 1, true, current_timestamp(), current_timestamp(), current_user());
+
+-- mlflow_evaluation_datasets (genie-code fork) — prescriptive paths + directives; resolve_root then the default's enter, the 02 evaluation-datasets skill via readSkillFile, the tool plan under <ARTIFACT_ROOT>; MLflow SDK in executeCode on serverless; same gate and captured keys; no @-mentions, no bare relative paths, no --profile; bypass_LLM = TRUE
+INSERT INTO ${catalog}.${schema}.section_input_prompts
+(input_id, section_tag, coding_assistant, input_template, system_prompt,
+ bypass_llm, version, is_active, inserted_at, updated_at, created_by)
+VALUES
+(1012, 'mlflow_evaluation_datasets', 'genie-code',
+'Build the **{agent_app_name}** agent''s evaluation dataset — the canonical question-set every downstream prompt / model / agent change is graded against. Today there is no benchmark table; after this prompt runs, `{lakehouse_default_catalog}.{db_schema}_agent.{agent_resource_prefix}_benchmarks` exists with ≥ 20 rows, every coverage bucket and user journey is covered, and `expectations` + `human_assessments` columns are ready for sync-back from labeling sessions.
+
+This will involve the following steps:
+
+- **Pull seed cases from the Spec (generic)** — read `agent.benchmark_seeds.coverage_buckets[]`, `agent.benchmark_seeds.seed_examples[]`, and `ui.user_journeys[]` from state. These are use-case shaped, NOT tool-shaped.
+- **Sample real production traces** — optionally mine the OTel trace tables for representative real-world inputs to add to the seed set
+- **Expand into ≥ 20 benchmark rows** — synthesize across seeds × buckets × journeys, LLM-augmented where the seed set is thin
+- **Append tool-shaped rows from the Plan** — read `<ARTIFACT_ROOT>/docs/agent_tool_plan.yaml.verification.tool_smoke_tests[]` and APPEND ≥1 row per entry. KA absent in `selected_tools[]` ⇒ no KA-shaped rows; Genie absent ⇒ no Genie-shaped rows; SQL MCP absent ⇒ no SQL rows. The append is mechanical — no defaulting.
+- **Author expected outputs** — populate the `expectations` column with per-row reference behavior so judges and scorers have ground truth to grade against
+- **Enforce the coverage contract** — assert every coverage bucket has ≥ 1 row, every UI user journey has ≥ 1 row, AND every entry in `verification.tool_smoke_tests[]` has ≥ 1 row before writing
+- **Register the dataset table** — write to `{lakehouse_default_catalog}.{db_schema}_agent.{agent_resource_prefix}_benchmarks` with `expectations` + `human_assessments` columns ready for the labeling sessions in 53
+
+The steps below are the prescriptive runbook for those actions; follow them in order.
+
+**Genie Code — this is a prescriptive runbook. Follow the steps in order. Do NOT improvise paths, do NOT use bare relative paths, do NOT use `@`-mentions. Every skill is read with `readSkillFile` by its full `skill_ref_root`-prefixed path; every file is named by its fully qualified path under `<ARTIFACT_ROOT>` or `<APP_ROOT>`; every CLI call goes through `runDatabricksCli` with NO profile flag and every MLflow / SDK call runs in `executeCode` on serverless with the pre-authenticated `WorkspaceClient` (Genie Code is already authenticated to this workspace).**
+
+> **Genie Code execution.** These are pure MLflow GenAI SDK operations — on Genie Code run them directly via `executeCode` on serverless (`mlflow.genai.datasets`), exactly as the IDE/CLI flow runs them in‑session. **No job, no bundle.** Call `mlflow.set_experiment("{mlflow_experiment_path}")` first. Verify the dataset with the native `list_datasets` / `get_dataset_records` tools rather than re‑deriving. Run any incidental CLI step through `runDatabricksCli` (pre‑authenticated). Use full clone‑rooted skill paths (`skills/...`), never bare `@`-mentions. See `skills/genie-code-environment`.
+
+### Step 0 — Resolve your roots and enter (once, before anything else)
+
+Run `skills/vibecoding-state` operation `resolve_root`, then `enter` — params: `prompt_id: "mlflow_evaluation_datasets"`, `require_prior_gate: {prompt_id: "mlflow_prompt_registry", gate: "Prompts registered in UC; @production and @staging aliases set"}`.
+Read these resolved values and use them literally throughout:
+
+- `client_context` = `genie_code`
+- `<ARTIFACT_ROOT>` = `artifact_root` = your workshop project root (e.g. `/Workspace/Users/<your-email>/vibe-coding-workshop`), a **git clone** of the workshop repo — NOT the page''s current working directory.
+- `<APP_ROOT>` = `<ARTIFACT_ROOT>/<app_name>` — the AppKit app dir; its live state file is `<APP_ROOT>/.vibecoding-state.md`.
+- `skill_ref_root` = `skills/vibe-coding-workshop` (substitute your clone folder if different)
+
+If `enter` reports the prior gate is unmet, STOP and finish `mlflow_prompt_registry` first.
+
+### Step 1 — Load the skills by their FULL `skill_ref_root`-prefixed paths
+
+Read them in ONE batched `readSkillFile` turn — NEVER a bare `@…` mention, NEVER a repo-relative path:
+
+1. `readSkillFile("skills/vibe-coding-workshop/genai-agents/sdlc/02-evaluation-datasets/SKILL.md")` — params:
+   - `agent_name: "{agent_app_name}"`
+   - `agent_spec_ref: "state://AgentSpec"`
+   - `agent_tool_plan_ref: "<ARTIFACT_ROOT>/docs/agent_tool_plan.yaml"`
+   - `app_spec_ref: "state://AppSpec"`
+   - `target_table: "{lakehouse_default_catalog}.{db_schema}_agent.{agent_resource_prefix}_benchmarks"`
+   - `min_rows: 20`
+   - The skill reads `agent.benchmark_seeds.coverage_buckets[]`, `agent.benchmark_seeds.seed_examples[]`, and `ui.user_journeys[]` (every journey must have at least one benchmark row), AND `<ARTIFACT_ROOT>/docs/agent_tool_plan.yaml.verification.tool_smoke_tests[]` (one tool-shaped row appended per entry; tool families with `selected: false` contribute zero rows).
+
+When a skill names further references, load each the same way (prefix its repo-relative path with `skill_ref_root`).
+
+### Step 2 — Run the skill in `executeCode`
+
+Run `02-evaluation-datasets` with the params above in `executeCode` on serverless (make the FIRST `executeCode` a trivial `print("ready")` to absorb the cold start), reading `<ARTIFACT_ROOT>/docs/agent_tool_plan.yaml` with `open(...)`. Expand the seeds, append the tool-shaped rows, enforce the coverage contract and register the benchmark table exactly as the skill prescribes.
+
+**State-lock:** this prompt runs between an `enter` (Step 0) and an `exit`. After the gate passes, run `skills/vibecoding-state` op `exit` — params: `prompt_id: "mlflow_evaluation_datasets"`, `gate: "≥ 20 benchmark rows; every user journey covered"`. **This `enter`/`exit` pair is a mandatory ritual, not advisory.** Step 0''s `enter` MUST locate the canonical live state file at `<app_root>/.vibecoding-state.md` (`<APP_ROOT>` above; never the temporary `example/…` bootstrap path). The closing `exit` MUST append this prompt''s Per-Step Log entry, Gate result, and `captured` vars to that file, then **re-read it and echo the appended section to prove the write landed**. **Gate completion rule:** this prompt is NOT complete until that re-read confirms the appended entry — the chat summary is NOT the state store.
+
+**Gate:** `≥ 20 benchmark rows; every user journey covered` — the benchmark table at `{lakehouse_default_catalog}.{db_schema}_agent.{agent_resource_prefix}_benchmarks` is the single source of truth for scorers (input_id 211) and eval runs (input_id 212). Coverage assertion holds across THREE axes: every `agent.benchmark_seeds.coverage_buckets[]`, every `ui.user_journeys[]`, AND every `verification.tool_smoke_tests[]` entry from the Tool Plan has ≥ 1 row.',
+'',
 true, 1, true, current_timestamp(), current_timestamp(), current_user());
 
 -- Step 51 / order 51: Phase 1 / Build the Quality Suite - Scorers and Judges
@@ -15252,6 +15371,68 @@ When you paste the prompt, the AI walks five phases against `{mlflow_experiment_
 - [ ] Tool-shaped scorers from `docs/agent_tool_plan.yaml.runtime_guardrails.tool_shaped_scorers[]` are registered conditionally — `RetrievalGroundedness` only with KA or Vector Search selected; `ka_citation_present` only with KA selected; `genie_*` only with Genie selected; `sql_*` only with SQL MCP selected; `uc_function_signature_match` only with UC Functions selected
 - [ ] No tool-shaped scorer is registered for a tool family absent from `selected_tools[]`
 - [ ] Scorers ready for the first scored eval at input_id 212',
+true, 1, true, current_timestamp(), current_timestamp(), current_user());
+
+-- mlflow_scorers_and_judges (genie-code fork) — prescriptive paths + directives; resolve_root then the default's enter, the 03 scorers-and-judges skill via readSkillFile, the tool plan under <ARTIFACT_ROOT>; MLflow SDK in executeCode on serverless; same gate and captured keys; no @-mentions, no bare relative paths, no --profile; bypass_LLM = TRUE
+INSERT INTO ${catalog}.${schema}.section_input_prompts
+(input_id, section_tag, coding_assistant, input_template, system_prompt,
+ bypass_llm, version, is_active, inserted_at, updated_at, created_by)
+VALUES
+(1013, 'mlflow_scorers_and_judges', 'genie-code',
+'Define the scorer suite for the **{agent_app_name}** agent — built-in scorers (Correctness, Safety, Guidelines, RetrievalGroundedness) plus custom `@scorer` functions and LLM judges aligned to the governance rules captured in the Agent Spec. Today there is no scoring stack; after this prompt runs, every scorer needed to grade a benchmark row is registered against `{mlflow_experiment_path}` with explicit thresholds, and every `make_judge` call routes through the resolved `llm_judge_default` role binding (never the raw `{llm_endpoint}`).
+
+This will involve the following steps:
+
+- **Import built-in scorers** — register `safety` (threshold 0.95, 100% sampling), `relevance` (threshold 0.8), and any other first-party scorers the use case needs
+- **Author custom `@scorer` functions** — materialize deterministic checks (schema validation, regex, currency-code matching) from `agent.must_do[]` and `agent.must_not_do[]` rules and `governance.scorer_suite.custom_scorer_rules[]`
+- **Convert Guidelines into judges** — turn each free-text guideline in `governance.scorer_suite.guidelines[]` into a Guidelines scorer
+- **Configure LLM judges** — convert `governance.scorer_suite.judge_questions[]` into `make_judge` scorers routed through `{llm_role_endpoints.llm_judge_default.endpoint}` (per `runtime_config.llm_role_endpoints`)
+- **Register tool-shaped scorers from the Plan** — read `<ARTIFACT_ROOT>/docs/agent_tool_plan.yaml.runtime_guardrails.tool_shaped_scorers[]` and register each entry as an additional scorer. KA absent in `selected_tools[]` ⇒ no `ka_citation_present`, no `RetrievalGroundedness`. Genie absent ⇒ no `genie_sql_correctness`. SQL MCP absent ⇒ no `sql_readonly_compliance`. The union is deduped — `RetrievalGroundedness` only registers once even if both KA and Vector Search are selected.
+- **Bind scorers to the eval dataset** — attach the unioned scorer suite (Spec generic ∪ Plan tool-shaped) to the benchmark dataset from prompt 50 so the first scored eval can pick it up
+- **Smoke-test each scorer** — run each scorer against a known-good and known-bad example to confirm thresholds fire as expected
+
+The steps below are the prescriptive runbook for those actions; follow them in order.
+
+**Genie Code — this is a prescriptive runbook. Follow the steps in order. Do NOT improvise paths, do NOT use bare relative paths, do NOT use `@`-mentions. Every skill is read with `readSkillFile` by its full `skill_ref_root`-prefixed path; every file is named by its fully qualified path under `<ARTIFACT_ROOT>` or `<APP_ROOT>`; every CLI call goes through `runDatabricksCli` with NO profile flag and every MLflow / SDK call runs in `executeCode` on serverless with the pre-authenticated `WorkspaceClient` (Genie Code is already authenticated to this workspace).**
+
+> **Genie Code execution.** These are pure MLflow GenAI SDK operations — on Genie Code register scorers/judges directly via `executeCode` on serverless (full `mlflow.genai.scorers` SDK; `scorer.register()`/`.start()` for scheduled scorers), exactly as the IDE/CLI flow runs them in‑session. **No job, no bundle.** Call `mlflow.set_experiment("{mlflow_experiment_path}")` first so scorers bind to the agent''s experiment. Verify with the native `get_scheduled_scorers` tool rather than re‑deriving. Every `make_judge` call routes through the resolved `llm_judge_default` role binding. Run any incidental CLI step through `runDatabricksCli`. Use full clone‑rooted skill paths (`skills/...`), never bare `@`-mentions. See `skills/genie-code-environment`.
+
+### Step 0 — Resolve your roots and enter (once, before anything else)
+
+Run `skills/vibecoding-state` operation `resolve_root`, then `enter` — params: `prompt_id: "mlflow_scorers_and_judges"`, `require_prior_gate: {prompt_id: "mlflow_evaluation_datasets", gate: "≥ 20 benchmark rows; every user journey covered"}`.
+Read these resolved values and use them literally throughout:
+
+- `client_context` = `genie_code`
+- `<ARTIFACT_ROOT>` = `artifact_root` = your workshop project root (e.g. `/Workspace/Users/<your-email>/vibe-coding-workshop`), a **git clone** of the workshop repo — NOT the page''s current working directory.
+- `<APP_ROOT>` = `<ARTIFACT_ROOT>/<app_name>` — the AppKit app dir; its live state file is `<APP_ROOT>/.vibecoding-state.md`.
+- `skill_ref_root` = `skills/vibe-coding-workshop` (substitute your clone folder if different)
+
+If `enter` reports the prior gate is unmet, STOP and finish `mlflow_evaluation_datasets` first.
+
+### Step 1 — Load the skills by their FULL `skill_ref_root`-prefixed paths
+
+Read them in ONE batched `readSkillFile` turn — NEVER a bare `@…` mention, NEVER a repo-relative path:
+
+1. `readSkillFile("skills/vibe-coding-workshop/genai-agents/sdlc/03-scorers-and-judges/SKILL.md")` — params:
+   - `agent_name: "{agent_app_name}"`
+   - `agent_spec_ref: "state://AgentSpec"`
+   - `agent_tool_plan_ref: "<ARTIFACT_ROOT>/docs/agent_tool_plan.yaml"`
+   - `mlflow_experiment_path: "{mlflow_experiment_path}"`
+   - `judge_endpoint: "{llm_role_endpoints.llm_judge_default.endpoint}"` (every `make_judge` call routes through the resolved `llm_judge_default` role binding — never the raw `{llm_endpoint}`)
+   - `builtins: [{name: "safety", sampling: 1.0, threshold: 0.95}, {name: "relevance", threshold: 0.8}]`
+   - The skill reads the GENERIC suite from `governance.scorer_suite.guidelines[]`, `governance.scorer_suite.custom_scorer_rules[]`, `governance.scorer_suite.judge_questions[]` (use-case shaped, tool-agnostic) AND the TOOL-SHAPED suite from `<ARTIFACT_ROOT>/docs/agent_tool_plan.yaml.runtime_guardrails.tool_shaped_scorers[]` (derived mechanically from `selected_tools[]`). The two are unioned and deduped.
+   - `RetrievalGroundedness` is registered ONLY if KA or Vector Search appears in `selected_tools[]`. `ka_citation_present` only if KA selected. `genie_sql_correctness` and `genie_response_grounded_in_table` only if Genie selected. `sql_readonly_compliance` and `sql_fully_qualified_names` only if SQL MCP selected. `uc_function_signature_match` only if UC Functions selected. There is NO defaulting for tool families absent from `selected_tools[]`.
+
+When a skill names further references, load each the same way (prefix its repo-relative path with `skill_ref_root`).
+
+### Step 2 — Run the skill in `executeCode`
+
+Run `03-scorers-and-judges` with the params above in `executeCode` on serverless (make the FIRST `executeCode` a trivial `print("ready")` to absorb the cold start), reading `<ARTIFACT_ROOT>/docs/agent_tool_plan.yaml` with `open(...)`. Register the unioned scorer suite and smoke-test each scorer exactly as the skill prescribes.
+
+**State-lock:** this prompt runs between an `enter` (Step 0) and an `exit`. After the gate passes, run `skills/vibecoding-state` op `exit` — params: `prompt_id: "mlflow_scorers_and_judges"`, `gate: "Scorer suite registered with thresholds"`. **This `enter`/`exit` pair is a mandatory ritual, not advisory.** Step 0''s `enter` MUST locate the canonical live state file at `<app_root>/.vibecoding-state.md` (`<APP_ROOT>` above; never the temporary `example/…` bootstrap path). The closing `exit` MUST append this prompt''s Per-Step Log entry, Gate result, and `captured` vars to that file, then **re-read it and echo the appended section to prove the write landed**. **Gate completion rule:** this prompt is NOT complete until that re-read confirms the appended entry — the chat summary is NOT the state store.
+
+**Gate:** `Scorer suite registered with thresholds` — every scorer the use case needs (builtins + Guidelines + custom code scorers + LLM judges from the Spec) UNIONED with every tool-shaped scorer hint from `<ARTIFACT_ROOT>/docs/agent_tool_plan.yaml.runtime_guardrails.tool_shaped_scorers[]` is registered against `{mlflow_experiment_path}` with explicit thresholds. No `RetrievalGroundedness` / `ka_citation_present` / `genie_*` / `sql_*` scorer registers unless its tool family is in `selected_tools[]`. Ready for the first scored eval (input_id 212).',
+'',
 true, 1, true, current_timestamp(), current_timestamp(), current_user());
 
 -- Step 52 / order 52: Phase 1 / Build the Quality Suite - First Scored Eval + Iteration Entry
@@ -15442,6 +15623,105 @@ When you paste the prompt, the AI walks five phases:
 - [ ] Gate fired: either `Eval thresholds met` OR `Eval regressed — iterate` with the routing branch recorded',
 true, 1, true, current_timestamp(), current_timestamp(), current_user());
 
+-- mlflow_evaluation_runs_and_iteration (genie-code fork) — prescriptive paths + directives; resolve_root then the default's enter, the 04 evaluation-runs skill and both routing targets via readSkillFile, the tool plan under <ARTIFACT_ROOT>; MLflow SDK in executeCode on serverless; same gate and captured keys; no @-mentions, no bare relative paths, no --profile; bypass_LLM = TRUE
+INSERT INTO ${catalog}.${schema}.section_input_prompts
+(input_id, section_tag, coding_assistant, input_template, system_prompt,
+ bypass_llm, version, is_active, inserted_at, updated_at, created_by)
+VALUES
+(1014, 'mlflow_evaluation_runs_and_iteration', 'genie-code',
+'Run the first scored eval for the **{agent_app_name}** agent against the registered prompts + dataset + scorer suite, then route failures to the right iteration track (instruction → prompt iteration; retrieval → retrieval tuning; tool → fix). Today the agent has no scored eval signal; after this prompt runs, `mlflow.genai.evaluate()` has scored every benchmark row at `{lakehouse_default_catalog}.{db_schema}_agent.{agent_resource_prefix}_benchmarks`, the run is logged at `{mlflow_experiment_path}` with `mlflow.promptRegistryLocation` tagged, the per-scorer pass/fail table is captured, and the failure-shape classification routes the next iteration cycle.
+
+This will involve the following steps:
+
+- **Populate the System Prompt Review preflight** — author a worked example for every `agent.must_do[]` / `agent.must_not_do[]` clause and stamp `complete: true` BEFORE any benchmark runs
+- **Run the scored eval** — call `mlflow.genai.evaluate()` against the benchmark table using the registered scorer suite from prompt 51 (which is itself the union of generic Spec scorers + tool-shaped Plan scorers — KA absent ⇒ no KA scorer ran)
+- **Tag the run for traceability** — log the run under `{mlflow_experiment_path}` with `mlflow.promptRegistryLocation` so the eval can be tied back to the exact prompt versions
+- **Classify the failure shape** — compute `failure_shape_classification.primary_shape` (instruction / tool_call_empty / retrieval / safety / other) and `safety_buffer` per scorer. `tool_call_empty` ONLY fires for tools present in `<ARTIFACT_ROOT>/docs/agent_tool_plan.yaml.selected_tools[]`; tools absent from `selected_tools[]` cannot be the cause of a `tool_call_empty` failure (they were never wired)
+- **Route the next iteration** — instruction-shape (no L1 failure) → Skill 08b prompt hand-authoring; tool-call-empty → Track A Skill 08 direct trace debug, scoped to the SPECIFIC selected tool that returned empty (not generic "tool failed"); retrieval → retrieval tuning ONLY if KA or Vector Search is in `selected_tools[]`; L1 floor breach → architecture redesign
+- **Fire the either-or gate** — emit `Eval thresholds met` OR `Eval regressed — iterate` with the routing branch and full failure-shape schema captured into state
+
+The steps below are the prescriptive runbook for those actions; follow them in order.
+
+**Genie Code — this is a prescriptive runbook. Follow the steps in order. Do NOT improvise paths, do NOT use bare relative paths, do NOT use `@`-mentions. Every skill is read with `readSkillFile` by its full `skill_ref_root`-prefixed path; every file is named by its fully qualified path under `<ARTIFACT_ROOT>` or `<APP_ROOT>`; every CLI call goes through `runDatabricksCli` with NO profile flag and every MLflow / SDK call runs in `executeCode` on serverless with the pre-authenticated `WorkspaceClient` (Genie Code is already authenticated to this workspace).**
+
+> **Genie Code execution.** `mlflow.genai.evaluate()` runs via the MLflow SDK on serverless — on Genie Code invoke it directly via `executeCode`, exactly as the IDE/CLI flow runs it in‑session. **No job, no bundle.** Call `mlflow.set_experiment("{mlflow_experiment_path}")` first so the eval run + traces land in the agent''s experiment. Inspect the run and per‑row traces with the native `search_runs` (`mlflow.runType = ''evaluation''`) / `get_trace` / `get_assessments` tools rather than re‑deriving. Run any incidental CLI step through `runDatabricksCli`. Use full clone‑rooted skill paths (`skills/...`), never bare `@`-mentions. See `skills/genie-code-environment`.
+
+### Step 0 — Resolve your roots and enter (once, before anything else)
+
+Run `skills/vibecoding-state` operation `resolve_root`, then `enter` — params: `prompt_id: "mlflow_evaluation_runs_and_iteration"`, `require_prior_gate: {prompt_id: "mlflow_scorers_and_judges", gate: "Scorer suite registered with thresholds"}`.
+Read these resolved values and use them literally throughout:
+
+- `client_context` = `genie_code`
+- `<ARTIFACT_ROOT>` = `artifact_root` = your workshop project root (e.g. `/Workspace/Users/<your-email>/vibe-coding-workshop`), a **git clone** of the workshop repo — NOT the page''s current working directory.
+- `<APP_ROOT>` = `<ARTIFACT_ROOT>/<app_name>` — the AppKit app dir; its live state file is `<APP_ROOT>/.vibecoding-state.md`.
+- `skill_ref_root` = `skills/vibe-coding-workshop` (substitute your clone folder if different)
+
+If `enter` reports the prior gate is unmet, STOP and finish `mlflow_scorers_and_judges` first.
+
+Before Step 1, `enter` also runs this prompt''s preflight:
+
+This prompt maps to the canonical `first_scored_eval` role. Before any benchmark run, `enter` MUST evaluate the following preflight checks (a halt unblocks only via a `state_overrides[]` entry with `gate_type: preflight_check` whose `affected_state_field` matches the failing clause):
+```yaml
+preflight_checks:
+  - system_prompt_review.complete == true
+  - count(system_prompt_review.must_do_worked_examples) >= count(agent.must_do)
+  - count(system_prompt_review.must_not_do_worked_examples) >= count(agent.must_not_do)
+```
+The `## System Prompt Review` block in the live state file is populated by THIS prompt: read every `agent.must_do[]` clause and append a `must_do_worked_examples[]` entry with `rule`, `positive_example`, and `expected_behavior`; do the same for every `agent.must_not_do[]` clause into `must_not_do_worked_examples[]` with `rule`, `negative_example`, and `refusal_or_correction`. Set `complete: true`, stamp `reviewed_at` (ISO8601 UTC), and write `reviewed_by` (operator email). The audit MUST happen BEFORE Step 2 (`readSkillFile("skills/vibe-coding-workshop/genai-agents/sdlc/04-evaluation-runs/SKILL.md")`) runs.
+
+### Step 1 — Load the skills by their FULL `skill_ref_root`-prefixed paths
+
+Read them in ONE batched `readSkillFile` turn — NEVER a bare `@…` mention, NEVER a repo-relative path:
+
+1. `readSkillFile("skills/vibe-coding-workshop/genai-agents/sdlc/04-evaluation-runs/SKILL.md")` — params:
+   - `agent_name: "{agent_app_name}"`
+   - `agent_tool_plan_ref: "<ARTIFACT_ROOT>/docs/agent_tool_plan.yaml"`
+   - `mlflow_experiment_path: "{mlflow_experiment_path}"`
+   - `benchmarks_table: "{lakehouse_default_catalog}.{db_schema}_agent.{agent_resource_prefix}_benchmarks"`
+   - `predict_fn_from_prompt: "track_a_agent_auth_memory"`
+   - `scorer_suite_from_prompt: "mlflow_scorers_and_judges"`
+   - `record_per_scorer_table: true`
+   - The skill reads `<ARTIFACT_ROOT>/docs/agent_tool_plan.yaml.selected_tools[]` to scope failure-shape classification — `primary_shape: tool_call_empty` and the `tool_call_empty` routing branch only fire for tools present in `selected_tools[]`. Tools that were never wired cannot fail.
+
+When a skill names further references, load each the same way (prefix its repo-relative path with `skill_ref_root`).
+
+### Step 2 — Run the skill in `executeCode`
+
+After the preflight passes, run `04-evaluation-runs` with the params above in `executeCode` on serverless (make the FIRST `executeCode` a trivial `print("ready")` to absorb the cold start), reading `<ARTIFACT_ROOT>/docs/agent_tool_plan.yaml` with `open(...)`. Run the scored eval, tag the run, classify the failure shape and route the next iteration exactly as the skill prescribes. Load a routing target below with `readSkillFile` only when its branch fires.
+
+**Captured failure-shape schema (mandatory in `captured` at `exit`):**
+
+```yaml
+failure_shape_classification:
+  primary_shape: enum                # one of: instruction | tool_call_empty | retrieval | safety | other
+  failing_scorers_if_regressed: [string]
+  l1_failures: [string]              # L1 scorer names below floor (e.g. safety, relevance, correctness)
+  failing_trace_ids:
+    - trace_id: string
+      failing_scorers: [string]
+      predict_fn_status: string      # ok | exception | sentinel | dropout
+safety_buffer:
+  <scorer_name>: float               # mean - threshold (signed; negative = below floor)
+predict_fn_exception_count: integer
+predict_fn_sentinel_count_per_run: integer
+judges_with_silent_aggregation_dropouts: [string]
+mlflow_eval_predict_fn_signature: string
+```
+
+**Iteration routing (decision tree at `exit` when Gate is `Eval regressed — iterate`):**
+
+1. If `l1_failures` is non-empty → route to **architecture / system-prompt redesign** (do NOT route to Skill 08b — instruction-only iteration cannot recover an L1 scorer that is below floor). Open the failure-shape redesign loop instead.
+2. Else if `primary_shape == "instruction"` AND `l1_failures` is empty → route to `readSkillFile("skills/vibe-coding-workshop/genai-agents/sdlc/08b-prompt-handauthoring/SKILL.md")` (the next prompt, `mlflow_logged_model_uc_registration`, gates step 2 on exactly this branch).
+3. Else if `primary_shape == "tool_call_empty"` → route to `readSkillFile("skills/vibe-coding-workshop/genai-agents/tracks/A-custom-agent-apps/08-debugging/SKILL.md")` (direct trace debugging), scoped to the specific tool from `selected_tools[]` that returned empty (the `failing_trace_ids[].failing_scorers` and `selected_tools[]` together identify which tool to debug — never "tool failed" in the generic).
+4. Else if `primary_shape == "retrieval"` → route to **retrieval tuning** (chunking / embedding / top-k / filters in the KA tool or vector index). This route ONLY exists when KA or Vector Search is in `selected_tools[]`; if neither retrieval tool was selected, `primary_shape` cannot be `retrieval` and this branch never fires.
+5. Else (`safety`, `other`) → escalate to the agent owner; do NOT auto-iterate.
+
+**State-lock:** this prompt runs between an `enter` (Step 0) and an `exit`. After the gate passes, run `skills/vibecoding-state` op `exit` — params: `prompt_id: "mlflow_evaluation_runs_and_iteration"`, `gate: "<Eval thresholds met | Eval regressed — iterate>"`, `captured: {per_scorer_pass_fail_table, failing_scorers_if_regressed, failure_shape_classification, safety_buffer, predict_fn_exception_count, predict_fn_sentinel_count_per_run, judges_with_silent_aggregation_dropouts, mlflow_eval_predict_fn_signature}`. **This `enter`/`exit` pair is a mandatory ritual, not advisory.** Step 0''s `enter` MUST locate the canonical live state file at `<app_root>/.vibecoding-state.md` (`<APP_ROOT>` above; never the temporary `example/…` bootstrap path). The closing `exit` MUST append this prompt''s Per-Step Log entry, Gate result, and `captured` vars to that file, then **re-read it and echo the appended section to prove the write landed**. **Gate completion rule:** this prompt is NOT complete until that re-read confirms the appended entry — the chat summary is NOT the state store.
+
+**Gate:** either `Eval thresholds met` OR `Eval regressed — iterate` — record which scorers failed AND the routing branch fired (via `failure_shape_classification.primary_shape` and `l1_failures`); the next prompt (`mlflow_logged_model_uc_registration`) gates only the instruction-shaped, no-L1-failure branch via Skill 08b — direct tool/retrieval debugging or architecture redesign handles the rest.',
+'',
+true, 1, true, current_timestamp(), current_timestamp(), current_user());
+
 -- Step 53 / order 53: Phase 2 / Human Review - Labeling + Stakeholder Sign-Off
 -- Verbatim from live DDL row 148 (mlflow_agent_human_review). The
 -- `Decision: APPROVED` path at
@@ -15609,6 +15889,93 @@ When you paste the prompt, the AI walks seven phases across two roles:
 - [ ] `signoff_decision` captured in state',
 true, 1, true, current_timestamp(), current_timestamp(), current_user());
 
+-- mlflow_human_review_and_signoff (genie-code fork) — prescriptive paths + directives; resolve_root then the default's enter, the labeling, issue-subset and sign-off skills via readSkillFile; an explicit SME STOP before the sync and the sign-off; MLflow SDK in executeCode on serverless; same gate and captured keys; no @-mentions, no bare relative paths, no --profile; bypass_LLM = TRUE
+INSERT INTO ${catalog}.${schema}.section_input_prompts
+(input_id, section_tag, coding_assistant, input_template, system_prompt,
+ bypass_llm, version, is_active, inserted_at, updated_at, created_by)
+VALUES
+(1015, 'mlflow_human_review_and_signoff', 'genie-code',
+'Open the Human Review phase for the **{agent_app_name}** agent: stakeholders label/grade traces in MLflow''s review UI, the sign-off `Decision: APPROVED` (or `REJECTED`) tag is set on the eval run at `{mlflow_experiment_path}`, and that decision becomes the gate to promote the candidate prompt versions. Today there is no human-graded signal beyond automated scorers; after this prompt runs, ≥ 10 production traces are SME-labeled, the labels sync back into `{lakehouse_default_catalog}.{db_schema}_agent.{agent_resource_prefix}_benchmarks`, and `{signoff_decision}` is captured into state from a stakeholder-signed `decision.md` at the ops volume.
+
+This will involve the following steps:
+
+- **Configure the labeling schema** — pre-fill reviewer role from `agent.reviewer_role` and bind the labeling session to `{mlflow_experiment_path}`
+- **Send traces to stakeholders** — sample 15 production traces and route them through the MLflow labeling-session UI for SME pass/fail + `expectations` + `human_assessments`
+- **Sync labels back into benchmarks** — write the SME labels into the benchmark table at `{lakehouse_default_catalog}.{db_schema}_agent.{agent_resource_prefix}_benchmarks` so the dataset grows
+- **Materialize the regression subset** — tag the failing-trace subset `provenance: issue_failing_trace`, `regression_pass_rate: 1.0` so future evals never re-regress
+- **Run the stakeholder sign-off gate** — generate the one-page metrics report + 5 failing / 5 passing walkthrough rows + compliance checklist
+- **Aggregate into a `Decision: APPROVED | REJECTED` tag** — write `/Volumes/{lakehouse_default_catalog}/{db_schema}_ops/signoffs/v1/decision.md` with `rollback_trigger`
+- **Capture sign-off as state** — persist `{signoff_decision}` for the promotion hard-assert in 54
+
+The steps below are the prescriptive runbook for those actions; follow them in order.
+
+**Genie Code — this is a prescriptive runbook. Follow the steps in order. Do NOT improvise paths, do NOT use bare relative paths, do NOT use `@`-mentions. Every skill is read with `readSkillFile` by its full `skill_ref_root`-prefixed path; every file is named by its fully qualified path under `<ARTIFACT_ROOT>` or `<APP_ROOT>`; every CLI call goes through `runDatabricksCli` with NO profile flag and every MLflow / SDK call runs in `executeCode` on serverless with the pre-authenticated `WorkspaceClient` (Genie Code is already authenticated to this workspace).**
+
+> **Genie Code execution.** The labeling setup + sync run via the MLflow SDK (`mlflow.genai.labeling` — confirmed available on Genie Code), but labeling itself is a **human step**. On Genie Code: (1) via `executeCode`, build the label schemas and call `create_labeling_session(name=..., label_schemas=[...])` (the `label_schemas` arg is REQUIRED), then `session.add_traces(<pandas DataFrame with a `trace_id` column>)` — a bare list silently no‑ops; (2) surface the **Review App URL** via `openAsset` and then **STOP** — the SME labels in the Review App UI; the agent does NOT label and does NOT proceed to sync until the operator confirms labeling is complete; (3) resume via `executeCode` with `session.sync(to_dataset=...)` then `merge_records_from_session(...)`. Pin the trace destination to `{mlflow_experiment_path}` so `add_traces` sees the right traces. Verify the session/schemas with the native `readAssetById(mlflowLabelingSchema)` / `list_labeling_sessions` tools. The `decision.md` write is an ordinary UC‑volume file write. **No job, no bundle.** Use full clone‑rooted skill paths (`skills/...`), never bare `@`-mentions. See `skills/genie-code-environment`.
+
+### Step 0 — Resolve your roots and enter (once, before anything else)
+
+Run `skills/vibecoding-state` operation `resolve_root`, then `enter` — params: `prompt_id: "mlflow_human_review_and_signoff"`, `require_prior_gate: {prompt_id: "mlflow_evaluation_runs_and_iteration", gate: "Eval thresholds met | Eval regressed — iterate"}`.
+Read these resolved values and use them literally throughout:
+
+- `client_context` = `genie_code`
+- `<ARTIFACT_ROOT>` = `artifact_root` = your workshop project root (e.g. `/Workspace/Users/<your-email>/vibe-coding-workshop`), a **git clone** of the workshop repo — NOT the page''s current working directory.
+- `<APP_ROOT>` = `<ARTIFACT_ROOT>/<app_name>` — the AppKit app dir; its live state file is `<APP_ROOT>/.vibecoding-state.md`.
+- `skill_ref_root` = `skills/vibe-coding-workshop` (substitute your clone folder if different)
+
+If `enter` reports the prior gate is unmet, STOP and finish `mlflow_evaluation_runs_and_iteration` first.
+
+### Step 1 — Load the skills by their FULL `skill_ref_root`-prefixed paths
+
+Read them in ONE batched `readSkillFile` turn — NEVER a bare `@…` mention, NEVER a repo-relative path:
+
+1. `readSkillFile("skills/vibe-coding-workshop/genai-agents/sdlc/04-evaluation-runs/SKILL.md")` op `labeling_session` — params:
+   - `agent_name: "{agent_app_name}"`
+   - `agent_spec_ref: "state://AgentSpec"`
+   - `mlflow_experiment_path: "{mlflow_experiment_path}"`
+   - `trace_sample_size: 15`
+   - `sync_back_into: "{lakehouse_default_catalog}.{db_schema}_agent.{agent_resource_prefix}_benchmarks"`
+   - `sync_fields: ["expectations", "human_assessments"]`
+   - The skill reads `agent.reviewer_role` to pre-fill the labeling-session reviewer-role field.
+2. `readSkillFile("skills/vibe-coding-workshop/genai-agents/sdlc/02-evaluation-datasets/references/benchmark-generation.md")` section `11-issue-focused-subset` — params:
+   - `source: "negative_feedback_traces"`
+   - `tag: {provenance: "issue_failing_trace"}`
+   - `regression_pass_rate: 1.0`
+3. `readSkillFile("skills/vibe-coding-workshop/genai-agents/sdlc/04b-stakeholder-signoff/SKILL.md")` — params:
+   - `agent_name: "{agent_app_name}"`
+   - `agent_spec_ref: "state://AgentSpec"`
+   - `one_page_metrics_report: true`
+   - `walkthrough_rows: {failing: 5, passing: 5, source: "latest_eval_run"}`
+   - `compliance_checklist: true`
+   - `decision_record_path: "/Volumes/{lakehouse_default_catalog}/{db_schema}_ops/signoffs/v1/decision.md"`
+   - `required_fields: ["Decision: APPROVED", "rollback_trigger"]`
+   - `capture_into_state: ["signoff_decision"]`
+   - The skill reads `governance.monitoring.rollback_trigger_example` for the hint wording.
+
+When a skill names further references, load each the same way (prefix its repo-relative path with `skill_ref_root`).
+
+### Step 2 — Build the labeling session in `executeCode`
+
+Run item 1 (`04-evaluation-runs` op `labeling_session`) up to the session in `executeCode` on serverless (make the FIRST `executeCode` a trivial `print("ready")` to absorb the cold start): build the label schemas with `mlflow.genai.labeling`, pre-fill the reviewer role from `agent.reviewer_role`, create the labeling session bound to `{mlflow_experiment_path}`, add the sampled traces, then print the session''s Review App URL for the SME (and surface it via `openAsset`).
+
+### Step 3 — SME handoff (STOP)
+
+Labeling itself is a human step: the SME labels the traces in the Review App; the agent does NOT label. **STOP here** — do not run the sync or the sign-off until the operator confirms ≥ 10 traces are labeled.
+
+### Step 4 — Sync the labels back (after the operator confirms)
+
+Resume in `executeCode`: sync the session''s labels into the benchmark table (item 1''s `sync_back_into` / `sync_fields`), then materialize the regression subset with item 2.
+
+### Step 5 — Stakeholder sign-off
+
+Run item 3 (`04b-stakeholder-signoff`) in `executeCode` and write the decision record to its `decision_record_path` on the UC volume.
+
+**State-lock:** this prompt runs between an `enter` (Step 0) and an `exit`. After the gate passes, run `skills/vibecoding-state` op `exit` — params: `prompt_id: "mlflow_human_review_and_signoff"`, `gate: "<Signoff APPROVED | Signoff REJECTED — block promotion>"`, `captured: {signoff_decision}`. **This `enter`/`exit` pair is a mandatory ritual, not advisory.** Step 0''s `enter` MUST locate the canonical live state file at `<app_root>/.vibecoding-state.md` (`<APP_ROOT>` above; never the temporary `example/…` bootstrap path). The closing `exit` MUST append this prompt''s Per-Step Log entry, Gate result, and `captured` vars to that file, then **re-read it and echo the appended section to prove the write landed**. **Gate completion rule:** this prompt is NOT complete until that re-read confirms the appended entry — the chat summary is NOT the state store.
+
+**Gate:** `Signoff APPROVED` (or `Signoff REJECTED — block promotion`) — decision markdown committed to the UC volume; CI promotion gates on `Decision: APPROVED`.',
+'',
+true, 1, true, current_timestamp(), current_timestamp(), current_user());
+
 -- Step 54 / order 54: Phase 3 / Promote with Governance - Logged Model + UC Registration
 -- Split from live DDL row 149 (Skill 08b conditional + Skill 05). The
 -- hard_assert {var: signoff_decision, equals: APPROVED} is preserved verbatim
@@ -15771,6 +16138,80 @@ When you paste the prompt, the AI walks five phases:
 - [ ] `prompt_handauthoring_iterations` and `prompt_handauthoring_template_diff_summaries` captured (if Skill 08b ran)
 - [ ] Model registered at `{lakehouse_default_catalog}.{db_schema}_agent.{agent_resource_prefix}@champion`
 - [ ] `@champion` alias moved IFF eval scores meet or exceed prior champion',
+true, 1, true, current_timestamp(), current_timestamp(), current_user());
+
+-- mlflow_logged_model_uc_registration (genie-code fork) — prescriptive paths + directives; resolve_root then the default's enter, the 08b and 05 skills via readSkillFile; the same enter with hard_assert signoff_decision == APPROVED; MLflow SDK in executeCode on serverless; same gate and captured keys; no @-mentions, no bare relative paths, no --profile; bypass_LLM = TRUE
+INSERT INTO ${catalog}.${schema}.section_input_prompts
+(input_id, section_tag, coding_assistant, input_template, system_prompt,
+ bypass_llm, version, is_active, inserted_at, updated_at, created_by)
+VALUES
+(1016, 'mlflow_logged_model_uc_registration', 'genie-code',
+'Log the approved **{agent_app_name}** agent (binding of registered prompts + scorer suite + tool plan) as an MLflow model in Unity Catalog and pin the `@champion` alias. The logged model is the unit of promotion — every later environment promotes by alias move, not by re-deploying code. Today there is no UC-registered agent; after this prompt runs, `{lakehouse_default_catalog}.{db_schema}_agent.{agent_resource_prefix}` is registered, the `@champion` alias is set IFF eval scores match-or-beat the prior champion, and `{prompt_iteration_ran}` is captured (if the conditional Skill 08b hand-authoring branch fired).
+
+This will involve the following steps:
+
+- **Hard-assert sign-off** — refuse to advance unless `signoff_decision == APPROVED` from the prior human-review gate
+- **(Optional) Run hand-authored prompt iteration** — if the prior eval was instruction-shaped with no L1 failure, run Skill 08b against the full eval dataset and promote `@staging` → `@production` IFF all target scorer means meet-or-beat baseline
+- **Snapshot the agent code + dependencies** — capture the current code state (prompts, tools, scorer bindings) for reproducible logging
+- **Log via `mlflow.pyfunc.log_model`** — log the agent with prompt-registry references and tool-plan refs in `metadata` so the model is self-describing
+- **Register to UC** — register at `{lakehouse_default_catalog}.{db_schema}_agent.{agent_resource_prefix}` with `{llm_endpoint}` recorded in `metadata`
+- **Pin `@champion` alias** — move the alias to the new version only when eval scores meet-or-beat the prior champion (promote-if-better, never blind)
+- **Smoke-load from UC** — load the UC-registered model in a fresh thread to confirm the alias resolves and the model boots cleanly
+
+If the prior scored eval (input_id 212) produced `Eval regressed — iterate` and the failure shape is *instruction-shaped*, run hand-authored prompt iteration first (Skill 08b against the full eval dataset). The default flow no longer routes to GEPA — Skill 08 (`08-prompt-optimization`) is an optional/advanced path retained only for operators who explicitly declare `prompt_iteration_strategy: gepa`.
+
+The steps below are the prescriptive runbook for those actions; follow them in order.
+
+**Genie Code — this is a prescriptive runbook. Follow the steps in order. Do NOT improvise paths, do NOT use bare relative paths, do NOT use `@`-mentions. Every skill is read with `readSkillFile` by its full `skill_ref_root`-prefixed path; every file is named by its fully qualified path under `<ARTIFACT_ROOT>` or `<APP_ROOT>`; every CLI call goes through `runDatabricksCli` with NO profile flag and every MLflow / SDK call runs in `executeCode` on serverless with the pre-authenticated `WorkspaceClient` (Genie Code is already authenticated to this workspace).**
+
+> **Genie Code execution.** Logging + UC registration run via the MLflow SDK — on Genie Code run `mlflow.models.log_model` / `register_model` (+ `@champion` alias) directly via `executeCode` on serverless, exactly as the IDE/CLI flow runs them in‑session. **No job, no bundle resource required** (the native `register_model_to_uc` tool is also available). Call `mlflow.set_experiment("{mlflow_experiment_path}")` first; the UC model lands under the per‑user prefixed `{lakehouse_default_catalog}.{db_schema}_agent.{agent_resource_prefix}`. Verify with `list_artifacts` / `search_runs`. Run any incidental CLI step through `runDatabricksCli`. Use full clone‑rooted skill paths (`skills/...`), never bare `@`-mentions. See `skills/genie-code-environment`.
+
+### Step 0 — Resolve your roots and enter (once, before anything else)
+
+Run `skills/vibecoding-state` operation `resolve_root`, then `enter` — params: `prompt_id: "mlflow_logged_model_uc_registration"`, `require_prior_gate: {prompt_id: "mlflow_human_review_and_signoff", gate: "Signoff APPROVED"}`, `hard_assert: {var: "signoff_decision", equals: "APPROVED"}`.
+Read these resolved values and use them literally throughout:
+
+- `client_context` = `genie_code`
+- `<ARTIFACT_ROOT>` = `artifact_root` = your workshop project root (e.g. `/Workspace/Users/<your-email>/vibe-coding-workshop`), a **git clone** of the workshop repo — NOT the page''s current working directory.
+- `<APP_ROOT>` = `<ARTIFACT_ROOT>/<app_name>` — the AppKit app dir; its live state file is `<APP_ROOT>/.vibecoding-state.md`.
+- `skill_ref_root` = `skills/vibe-coding-workshop` (substitute your clone folder if different)
+
+If `enter` reports the prior gate is unmet, STOP and finish `mlflow_human_review_and_signoff` first.
+
+### Step 1 — Load the skills by their FULL `skill_ref_root`-prefixed paths
+
+Read them in ONE batched `readSkillFile` turn — NEVER a bare `@…` mention, NEVER a repo-relative path:
+
+1. **(Optional, only if `failing_scorers_if_regressed` is non-empty AND `failure_shape == instruction` AND no L1 scorer failure)** `readSkillFile("skills/vibe-coding-workshop/genai-agents/sdlc/08b-prompt-handauthoring/SKILL.md")` — params:
+   - `agent_spec_ref: "state://AgentSpec"`
+   - `prompt_ref: "prompts:/{lakehouse_default_catalog}.{db_schema}_agent.system_instructions@production"`
+   - `target_scorers: <from first_scored_eval failing_scorers_if_regressed>`
+   - `rerun_prompt_role: "first_scored_eval"`
+   - `write_alias: "@staging"`
+   - `promote_if: "all_target_scorers_meet_or_beat_baseline_on_full_dataset"`
+   - `promote_from: "@staging"`
+   - `promote_to: "@production"`
+   - `reflection_lm_role: "reflection_lm"`
+   - `reflection_lm_endpoint: "{llm_role_endpoints.reflection_lm.endpoint}"` (the diff-summary helper routes through the resolved `reflection_lm` role binding — never the raw `{llm_endpoint}`)
+   - `preflight_checks: ["reflection_lm_large_context_probe"]`
+   - `capture_into_state: ["prompt_iteration_ran", "prompt_handauthoring_iterations", "prompt_handauthoring_template_diff_summaries"]`
+
+2. `readSkillFile("skills/vibe-coding-workshop/genai-agents/sdlc/05-logged-model-and-uc-registration/SKILL.md")` — params:
+   - `agent_name: "{agent_app_name}"`
+   - `uc_model: "{lakehouse_default_catalog}.{db_schema}_agent.{agent_resource_prefix}"`
+   - `promotion_alias: "@champion"`
+   - `promote_if: "eval_scores_ge_prior_champion"`
+
+When a skill names further references, load each the same way (prefix its repo-relative path with `skill_ref_root`).
+
+### Step 2 — Run the skills in `executeCode`
+
+The `hard_assert` in Step 0 must hold before anything runs. Run item 1 only when its condition holds, then `05-logged-model-and-uc-registration`, each with the params above in `executeCode` on serverless (make the FIRST `executeCode` a trivial `print("ready")` to absorb the cold start), exactly as the skills prescribe.
+
+**State-lock:** this prompt runs between an `enter` (Step 0) and an `exit`. After the gate passes, run `skills/vibecoding-state` op `exit` — params: `prompt_id: "mlflow_logged_model_uc_registration"`, `gate: "@champion set"`, `captured: {prompt_iteration_ran}`. **This `enter`/`exit` pair is a mandatory ritual, not advisory.** Step 0''s `enter` MUST locate the canonical live state file at `<app_root>/.vibecoding-state.md` (`<APP_ROOT>` above; never the temporary `example/…` bootstrap path). The closing `exit` MUST append this prompt''s Per-Step Log entry, Gate result, and `captured` vars to that file, then **re-read it and echo the appended section to prove the write landed**. **Gate completion rule:** this prompt is NOT complete until that re-read confirms the appended entry — the chat summary is NOT the state store.
+
+**Gate:** `@champion set` — the agent is logged via `mlflow.models.log_model`, registered at `{lakehouse_default_catalog}.{db_schema}_agent.{agent_resource_prefix}`, and the `@champion` alias is moved to the new version IFF eval scores are ≥ the prior champion. Promotion is hard-asserted on `signoff_decision == APPROVED` from input_id 213.',
+'',
 true, 1, true, current_timestamp(), current_timestamp(), current_user());
 
 -- Step 55 / order 55: Phase 3 / Promote with Governance - AI Gateway + Asset-Bundle Deployment
