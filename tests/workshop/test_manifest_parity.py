@@ -228,6 +228,22 @@ def test_lakehouse_family_steps_are_all_agent_doable():
         assert {step.execution for step in loaded.track_steps(track_id)} == {"agent-doable"}, track_id
 
 
+def test_covered_families_steps_are_all_agent_doable():
+    """P4.3 families 3, 4, 7, 8 (D-43): every end-to-end, accelerator,
+    data-engineering-accelerator, reverse-lakebase and reverse-app step is
+    agent-doable in Genie Code (judgment table in
+    docs/superpowers/plans/2026-10-07-p4-covered-families.md)."""
+    loaded = manifest.load_manifest()
+    data = json.loads((REPO_ROOT / "src/backend/workshop/manifest.json").read_text())["tracks"]
+    for track_id in ("end-to-end", "accelerator", "data-engineering-accelerator", "reverse-lakebase", "reverse-app"):
+        json_steps = [step for section in data[track_id]["sections"] for step in section["steps"]]
+        assert json_steps, track_id
+        assert {step["sectionTag"]: step["execution"] for step in json_steps} == {
+            step["sectionTag"]: "agent-doable" for step in json_steps
+        }, track_id
+        assert {step.execution for step in loaded.track_steps(track_id)} == {"agent-doable"}, track_id
+
+
 def test_skills_accelerator_steps_are_all_agent_doable():
     """P4.3 family 5 (D-45): every skills-accelerator step is agent-doable in Genie
     Code (judgment table in docs/superpowers/plans/2026-10-07-p4-skills-accelerator.md)."""
