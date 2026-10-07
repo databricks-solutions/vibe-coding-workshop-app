@@ -319,7 +319,7 @@ def test_split_parity_on_seed_files(seed_file, transformed):
         content = snr.transform_sql_for_postgres(content, SCHEMA)
     ours, theirs = snr.split_statements(content), _shell_splitter()(content)
     assert ours == theirs
-    assert len(ours) == {F01: 48 + 3, F02: 147}[seed_file]
+    assert len(ours) == {F01: 48 + 3, F02: 146}[seed_file]
 
 
 ADVERSARIAL = [
@@ -488,11 +488,12 @@ def test_populated_today_seed_files_insert_only_the_post_baseline_rows():
     db = _populated()
     log = _run_create(db, DML_SEED)
     assert _seed_inserts(db, UC) == []
-    assert db.ledger == {(SIP, input_id) for input_id in range(1001, 1011)}
+    # D-51 leaves input_id 1009 unused.
+    assert db.ledger == {(SIP, input_id) for input_id in range(1001, 1011) if input_id != 1009}
     # Only section_input_prompts' sequence moves: raised to max 1010 + 1.
     assert db.setvals == [(f"{SCHEMA}.section_input_prompts_input_id_seq", 1011)]
     assert f"    {UC}: 0 inserted / 0 warnings" in log
-    assert f"    {SIP}: 10 inserted / 0 warnings" in log
+    assert f"    {SIP}: 9 inserted / 0 warnings" in log
 
 
 def test_partially_seeded_populated_table_takes_new_row_path(seed_dir):

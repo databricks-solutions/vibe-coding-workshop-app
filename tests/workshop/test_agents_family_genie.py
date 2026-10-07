@@ -9,15 +9,16 @@ A1 marker lint: every step in the agents-accelerator MCP outline, served to a
    genie-code session with a resolved learner email, carries EXACTLY the reviewed
    number of each local-IDE marker (0 unless allowed). The six MLflow SDLC steps
    still on their default rows are a NAMED pending set (p4-agents-b) and are not
-   linted until their forks land; each must still be unforked.
-A2 fork resolution: every forked tag of the track, including 1007-1010, resolves to
-   its fork for a genie-code session and to the default row otherwise; every step is
-   forked, judged or pending.
-A3 paths: 1007-1010 name no bare relative `docs/` or `.vibecoding-state.md` path, and
-   pass no `--profile` flag.
+   linted until their forks land; each must still be unforked. uc_resources_foundation
+   is a NAMED pending set too (D-51: no fork until a human RULE_10 ruling); its
+   default 200 is linted with exact-count allowances and must stay unforked.
+A2 fork resolution: every forked tag of the track, including 1007, 1008 and 1010,
+   resolves to its fork for a genie-code session and to the default row otherwise;
+   every step is forked, judged or pending.
+A3 paths: 1007, 1008 and 1010 name no bare relative `docs/` or `.vibecoding-state.md`
+   path, and pass no `--profile` flag.
 A4 mechanics: 1007/1008 write with executeCode open().write and read back; 1008
-   records the `Agent tool plan ready` gate that 1009's `enter` requires; 1009 keeps
-   the skill's idempotent in-session provisioning (D-47b) and creates no catalog.
+   records the `Agent tool plan ready` gate that default 200's `enter` requires.
 """
 
 import re
@@ -53,7 +54,6 @@ FORK_ID = {
     "workspace_setup_deploy": 1001,
     "agent_spec_design": 1007,
     "agent_tool_selection": 1008,
-    "uc_resources_foundation": 1009,
     "mlflow_agent_tracing_uc": 1010,
     "knowledge_assistant_create": 913,
     "track_a_agent_app_clone_framework": 914,
@@ -69,7 +69,6 @@ FORK_ID = {
 NEW_FORKS = {
     "agent_spec_design": 1007,
     "agent_tool_selection": 1008,
-    "uc_resources_foundation": 1009,
     "mlflow_agent_tracing_uc": 1010,
 }
 # The recorded no-fork judgments (plan table): project_setup is virtual; prd_generation
@@ -86,6 +85,11 @@ PENDING_B = {
     "mlflow_human_review_and_signoff": "p4-agents-b",
     "mlflow_logged_model_uc_registration": "p4-agents-b",
 }
+# D-51: forking this step either restates the in-session create (the INSESSION_CREATE
+# audit grows, which genie_gate_diff never waives) or hides it (reviewer BLOCK on
+# 0287450), so it stays on its default until a human rules on RULE_10.
+_RULE10 = "D-51: in-session UC provisioning needs a human RULE_10 ruling; served from default 200 until then"
+PENDING_RULE10 = {"uc_resources_foundation": _RULE10}
 
 # Reviewed allowances: (section_tag, marker) -> (exact hit count, reason). The app
 # forks' entries come from #114 (via test_covered_families_genie); the rest are the
@@ -102,6 +106,8 @@ ALLOWED = {
     ("track_a_agent_eval_deploy", "localhost"): (2, _PROHIBITIONS),
     ("appkit_agent_app_proxy_chat", "localhost"): (4, _PROHIBITIONS),
     ("appkit_chat_feedback_mlflow", "localhost"): (3, _PROHIBITIONS),
+    # Default 200 @-mentions its skill and the PRD; both lapse when its fork lands.
+    **{(tag, "@-mention"): (2, reason) for tag, reason in PENDING_RULE10.items()},
 }
 
 
@@ -131,13 +137,20 @@ def test_a1_every_allowance_is_on_the_track_with_a_reason():
     assert all(reason for _, reason in ALLOWED.values())
 
 
-def test_a1_pending_b_tags_are_still_unforked():
+@pytest.mark.parametrize("pending", [PENDING_B, PENDING_RULE10], ids=["PENDING_B", "PENDING_RULE10"])
+def test_a1_pending_tags_are_still_unforked(pending):
     """Each pending tag is on the outline, has a reason, and has no genie-code row
-    yet: when p4-agents-b adds a fork, its tag must leave PENDING_B."""
+    yet: when its fork lands (p4-agents-b, or 1009 after the RULE_10 ruling), its
+    tag must leave the set."""
     forked = {row["section_tag"] for row in SEED_ROWS.values() if row.get("coding_assistant") == "genie-code"}
-    assert set(PENDING_B) <= set(_outline_tags(TRACK))
-    assert all(PENDING_B.values())
-    assert not set(PENDING_B) & forked, set(PENDING_B) & forked
+    assert set(pending) <= set(_outline_tags(TRACK))
+    assert all(pending.values())
+    assert not set(pending) & forked, set(pending) & forked
+
+
+def test_a1_input_id_1009_stays_free():
+    """D-51 leaves the gap so the later uc_resources_foundation fork can take 1009."""
+    assert 1009 not in SEED_ROWS
 
 
 def test_a1_new_forks_are_marker_clean():
@@ -150,8 +163,9 @@ def test_a1_new_forks_are_marker_clean():
 
 
 def test_a2_every_step_is_forked_judged_or_pending():
-    assert set(_outline_tags(TRACK)) == set(FORK_ID) | NO_FORK | set(PENDING_B)
-    assert not set(FORK_ID) & NO_FORK and not set(FORK_ID) & set(PENDING_B) and not NO_FORK & set(PENDING_B)
+    groups = [set(FORK_ID), NO_FORK, set(PENDING_B), set(PENDING_RULE10)]
+    assert set(_outline_tags(TRACK)) == set().union(*groups)
+    assert sum(len(group) for group in groups) == len(set().union(*groups)), "a tag is in two groups"
 
 
 @pytest.mark.parametrize("tag", sorted(NEW_FORKS))
@@ -241,7 +255,7 @@ def test_a3_skills_load_by_readskillfile(fork_id):
     assert "vibecoding-state` operation `resolve_root`" in body, fork_id
 
 
-# --- A4: write mechanics, the 1008 gate, 1009 provisioning (D-47b) -----------------
+# --- A4: write mechanics and the 1008 gate ------------------------------------------
 
 _OPEN_WRITE = '`executeCode` `open(path, "w").write(...)`'
 
@@ -258,22 +272,10 @@ def test_a4_design_files_are_written_and_read_back(fork_id, path):
 
 
 def test_a4_tool_selection_records_the_gate_uc_foundation_requires():
+    """Default 200 (served until D-51 is ruled) consumes the gate in its `enter`."""
     body = _fork(1008)
     assert '`prompt_id: "agent_tool_selection"`, `gate: "Agent tool plan ready"`' in body
-    assert '{prompt_id: "agent_tool_selection", gate: "Agent tool plan ready"}' in _fork(1009)
+    consumer = _fork(DEFAULT_ID["uc_resources_foundation"])
+    assert '{prompt_id: "agent_tool_selection", gate: "Agent tool plan ready"}' in consumer
     assert body.index("os.path.exists(path)") < body.index('gate: "Agent tool plan ready"')
 
-
-def test_a4_uc_foundation_keeps_idempotent_in_session_provisioning():
-    """D-47b: the shipped TPL skill declares genie_code provisioning via SDK/DDL, so
-    1009 runs the skill's own provisioning code in-session — only-if-absent schemas +
-    AlreadyExists-as-success volumes — and creates no catalog."""
-    body = _fork(1009)
-    assert "provisioning code in `executeCode` on serverless" in body
-    assert "exactly as the skill's code shows" in body
-    assert "each schema is created only if it does not exist" in body
-    assert "databricks.sdk.errors.AlreadyExists` as success" in body
-    assert "MUST NOT cause a failure" in body
-    assert "do NOT create a catalog" in body
-    creates = [line for line in body.splitlines() if re.search(r"\bCREATE\s+(?:CATALOG|TABLE|VIEW|FUNCTION|CONNECTION)\b", line)]
-    assert creates == [], creates
