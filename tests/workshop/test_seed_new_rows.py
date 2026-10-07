@@ -319,7 +319,7 @@ def test_split_parity_on_seed_files(seed_file, transformed):
         content = snr.transform_sql_for_postgres(content, SCHEMA)
     ours, theirs = snr.split_statements(content), _shell_splitter()(content)
     assert ours == theirs
-    assert len(ours) == {F01: 48 + 3, F02: 153}[seed_file]
+    assert len(ours) == {F01: 48 + 3, F02: 154}[seed_file]
 
 
 ADVERSARIAL = [
@@ -488,12 +488,34 @@ def test_populated_today_seed_files_insert_only_the_post_baseline_rows():
     db = _populated()
     log = _run_create(db, DML_SEED)
     assert _seed_inserts(db, UC) == []
-    # D-51 leaves input_id 1009 unused.
-    assert db.ledger == {(SIP, input_id) for input_id in range(1001, 1018) if input_id != 1009}
+    # D-56 fills 1009, the gap D-51 left.
+    assert db.ledger == {(SIP, input_id) for input_id in range(1001, 1018)}
     # Only section_input_prompts' sequence moves: raised to max 1017 + 1.
     assert db.setvals == [(f"{SCHEMA}.section_input_prompts_input_id_seq", 1018)]
     assert f"    {UC}: 0 inserted / 0 warnings" in log
-    assert f"    {SIP}: 16 inserted / 0 warnings" in log
+    assert f"    {SIP}: 17 inserted / 0 warnings" in log
+
+
+def test_populated_release_with_1009_inserts_only_1009_and_keeps_the_sequence():
+    """The D-56 release on the live install: every other post-baseline row is applied
+    and ledgered and the sequence already sits at 1018, so the reseed inserts 1009
+    alone and the sequence stays (1009 is below it)."""
+    applied = set(range(1001, 1018)) - {1009}
+    db = _populated(
+        ledger={(SIP, input_id) for input_id in applied},
+        seqs={
+            "usecase_descriptions_config_id_seq": [max(BASELINE[UC]), True, 1],
+            "section_input_prompts_input_id_seq": [1017, True, 1],
+        },
+    )
+    db.tables[SIP] |= applied
+    log = _run_create(db, DML_SEED)
+    assert [re.search(r"VALUES\s*\((\d+),", s).group(1) for s in _seed_inserts(db, SIP)] == ["1009"]
+    assert (SIP, 1009) in db.ledger and 1009 in db.tables[SIP]
+    assert db.setvals == []
+    assert f"    {SIP}: 1 inserted / 0 warnings" in log
+    assert f"    {SIP}.input_id sequence kept at 1018 (max input_id 1017)" in log
+    assert not any("sequence raised" in line for line in log), log
 
 
 def test_partially_seeded_populated_table_takes_new_row_path(seed_dir):
