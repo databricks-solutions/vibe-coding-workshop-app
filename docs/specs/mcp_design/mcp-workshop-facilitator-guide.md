@@ -40,6 +40,9 @@
    available.
 5. If it doesn't appear, see Troubleshooting (§7) — the usual cause is the 307 or an `mcp-` name.
 
+Then start: on the Genie Accelerator say "Start the Genie Accelerator"; on any other track say
+"Start a workshop track" with the track id shown in the app.
+
 ---
 
 ## 3. Start the track / continue

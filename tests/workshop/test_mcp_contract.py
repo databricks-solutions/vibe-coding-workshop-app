@@ -1,6 +1,7 @@
 import asyncio
 import json
 import pathlib
+import re
 import sys
 
 import jsonschema
@@ -158,3 +159,19 @@ def test_prompts_restate_verbatim_first_contract():
         messages = asyncio.run(prompt.render({}))
         text = "\n".join(message.content.text for message in messages)
         assert "verbatim" in text.lower()
+
+
+def test_spa_start_prompt_names_match_mcp_prompts():
+    # startPromptForTrack (D-59) returns only these two constants; each must be
+    # a registered prompt name, or the panel tells the learner to say a prompt
+    # Genie Code does not have.
+    source = (REPO_ROOT / "src/constants/genieCodeMcpConnection.ts").read_text()
+    names = {
+        constant: re.search(rf"export const {constant} = '([^']+)';", source).group(1)
+        for constant in ("GENIE_ACCELERATOR_START_PROMPT", "GENERIC_TRACK_START_PROMPT")
+    }
+    returned = set(re.findall(r"prompt: (\w+_START_PROMPT)", source))
+    assert returned == set(names)
+    prompt_names = {prompt.name for prompt in mcp_server.mcp._prompt_manager.list_prompts()}
+    for constant, name in names.items():
+        assert name in prompt_names, f"{constant}={name!r} is not an MCP prompt"
