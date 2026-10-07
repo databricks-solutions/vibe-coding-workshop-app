@@ -2,7 +2,7 @@ import { test, expect } from '@playwright/test';
 import fs from 'fs';
 import path from 'path';
 import {
-  GENIE_ACCELERATOR_START_PROMPT,
+  GENERIC_TRACK_START_PROMPT,
   GENIE_CODE_MCP_CONNECTION_STEPS,
 } from '../../src/constants/genieCodeMcpConnection';
 
@@ -33,7 +33,9 @@ test.describe('Connect to Genie Code on-ramp', () => {
       await expect(panel.getByText(step, { exact: true })).toBeVisible();
     }
 
-    await expect(panel.getByText(GENIE_ACCELERATOR_START_PROMPT, { exact: false })).toBeVisible();
+    // A fresh session's level is end-to-end (D-59), so the panel names the generic prompt.
+    await expect(panel.getByText(GENERIC_TRACK_START_PROMPT, { exact: false })).toBeVisible();
+    await expect(panel.getByTestId('start-prompt-track')).toHaveText('end-to-end');
     await expect(panel.getByText(/then say/i)).toBeVisible();
   });
 

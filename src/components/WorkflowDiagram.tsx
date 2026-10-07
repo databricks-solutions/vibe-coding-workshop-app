@@ -3479,7 +3479,7 @@ export function WorkflowDiagram({
     <ReadOnlyProvider value={readOnly}>
     <div className="space-y-5">
       {/* Self-serve Genie Code MCP on-ramp (D4 §1.1) — visible with only the app URL */}
-      <ConnectToGenieCodePanel />
+      <ConnectToGenieCodePanel workshopLevel={workshopLevel} />
 
       {/* Stage 0: Workshop Introduction */}
       <WorkshopIntro
