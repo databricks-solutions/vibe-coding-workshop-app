@@ -9703,6 +9703,84 @@ After exploring, you should have:
 - Your use case describes capabilities not covered by existing skills',
 true, 1, true, current_timestamp(), current_timestamp(), current_user());
 
+-- skill_install_explore (genie-code fork) — prescriptive paths + directives; reads both skills by their published readSkillFile paths, <REPO_ROOT> via vibecoding-state resolve_root, read-only; no @-mentions, no bare relative paths; bypass_LLM = TRUE
+INSERT INTO ${catalog}.${schema}.section_input_prompts
+(input_id, section_tag, coding_assistant, input_template, system_prompt,
+ bypass_llm, version, is_active, inserted_at, updated_at, created_by)
+VALUES
+(1004, 'skill_install_explore', 'genie-code',
+'## Step 1: Explore Existing Skills in Your Template Repository
+
+Explore the Agent Skills that ship with the workshop template and identify the gap your new skill will fill. Before this step you have a cloned, published template; after it, you know how a skill is structured, what the existing skills already cover, and what your new skill must add.
+
+### Your Use Case: {use_case_title}
+{use_case_description}
+
+**Genie Code — this is a prescriptive runbook. Follow the steps in order. Do NOT improvise paths, do NOT use bare relative paths, do NOT use `@`-mentions. Every skill is read with `readSkillFile` by its full `skill_ref_root`-prefixed path; every file location is anchored to `<REPO_ROOT>`; every CLI call goes through `runDatabricksCli` with NO `--profile` flag (Genie Code is already authenticated to this workspace).**
+
+### Step 0 — Resolve your environment (once, before anything else)
+
+Run `skills/vibecoding-state` operation `resolve_root`, then `enter` (params: `prompt_id: "skill_install_explore"`). Read these resolved values and use them literally throughout:
+
+- `client_context` = `genie_code`
+- `state_file_root` = `artifact_root` = your cloned workshop repository (e.g. `/Workspace/Users/<your-email>/vibe-coding-workshop`). Referred to below as `<REPO_ROOT>`.
+- `skills_install_root` = `/Workspace/Users/<your-email>/.assistant/skills/vibe-coding-workshop` — the published copy of `<REPO_ROOT>` that the Project Setup step made. Skills load from there, not from `<REPO_ROOT>`.
+- `skill_ref_root` = `skills/vibe-coding-workshop` (substitute your clone folder if you cloned somewhere other than `.assistant/skills/vibe-coding-workshop`)
+
+### Step 1 — Read the two key skills by their FULL `skill_ref_root`-prefixed paths
+
+Read both in ONE batched `readSkillFile` turn — NEVER a bare `@…` mention, NEVER a repo-relative path (Genie Code has no repo-root-relative resolution):
+
+1. `readSkillFile("skills/vibe-coding-workshop/data_product_accelerator/skills/common/naming-tagging-standards/SKILL.md")`
+2. `readSkillFile("skills/vibe-coding-workshop/data_product_accelerator/skills/admin/create-agent-skill/SKILL.md")`
+
+If either read fails, the skills copy is missing or stale: STOP and re-run the Project Setup step''s publish (it copies `<REPO_ROOT>` into `skills_install_root`). Do not read the files from another location.
+
+To see the folder layout of a skill (SKILL.md + references/ + assets/), list it read-only with `executeCode` → `os.listdir("/Workspace/Users/<your-email>/.assistant/skills/vibe-coding-workshop/data_product_accelerator/skills/common/naming-tagging-standards")`.
+
+### What to Look For
+
+**In `naming-tagging-standards/SKILL.md`:**
+- How tags are defined (naming conventions, owner, domain)
+- The SET TAGS SQL patterns used
+- What governance tags are currently covered
+- What capabilities are **missing** that your use case requires
+
+**In `create-agent-skill/SKILL.md`:**
+- The standard folder structure for new skills (SKILL.md, assets/, references/)
+- How instructions are organized as numbered steps
+- How references and assets are declared
+- The agentskills.io specification patterns
+- Its Genie Code rule: a new skill folder is written under `<REPO_ROOT>` (= `state_file_root`), never at a bare relative path
+
+This step is read-only: do not write, tag, or create anything.
+
+### Identify the Gap
+
+Review the **Measures / Rules** and **Extends** sections from your use case description above. The existing skills provide a foundation, but they do **not** address the specific capabilities your new skill needs.
+
+### Your Target Assets
+
+{gold_table_target}
+
+### Deliverables
+
+After exploring, you should understand:
+- [ ] How existing skills are structured (SKILL.md + references/ + assets/)
+- [ ] What the existing skills already cover
+- [ ] What specific gap your new skill ({use_case_title}) will fill
+- [ ] Which target assets (tables, schemas) you will work with
+
+### Key Observations
+- The existing naming-tagging skill uses `ALTER TABLE ... SET TAGS` syntax
+- Skills follow a standard structure: SKILL.md + assets/ + references/
+- The `create-agent-skill` template provides the scaffolding for new skills
+- Your use case describes capabilities not covered by existing skills
+
+**State file:** this prompt runs between an `enter` (Step 0) and an `exit`. When the deliverables above are met, run `skills/vibecoding-state` op `exit` — params: `prompt_id: "skill_install_explore"`, `gate: "Existing skills explored"`, `captured: {exploration_findings}` (the gap and the target assets, in a few lines). **This `enter`/`exit` pair is a mandatory ritual, not advisory.** Step 0''s `enter` MUST locate — or, if this is the first prompt of the track, bootstrap-create — the live `.vibecoding-state.md` file under `<REPO_ROOT>` (`state_file_root`). The closing `exit` MUST append this prompt''s Per-Step Log entry and `captured` vars to that file, then **re-read it and echo the appended section to prove the write landed**. This prompt is NOT complete until that re-read confirms the appended entry — the chat summary is NOT the state store.',
+'',
+true, 1, true, current_timestamp(), current_timestamp(), current_user());
+
 -- Step 27: Define Skill Strategy
 INSERT INTO ${catalog}.${schema}.section_input_prompts 
 (input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
@@ -9894,6 +9972,85 @@ SHOW TAGS ON TABLE <catalog>.<schema>.<table_name>;
 Confirm your skill folder matches the expected structure from your SKILL.md output.',
 true, 1, true, current_timestamp(), current_timestamp(), current_user());
 
+-- skill_apply_contracts (genie-code fork) — save the skill under <REPO_ROOT>, publish just that folder into .assistant/skills, verify both with os.path.exists, load it via readSkillFile; DRY RUN only (generate the SET TAGS statements + read-only information_schema checks, recorded under references/; the next step's bundle job applies them, D-46); bypass_LLM = TRUE
+INSERT INTO ${catalog}.${schema}.section_input_prompts
+(input_id, section_tag, coding_assistant, input_template, system_prompt,
+ bypass_llm, version, is_active, inserted_at, updated_at, created_by)
+VALUES
+(1005, 'skill_apply_contracts', 'genie-code',
+'## Step 4: Apply & Test Your New Skill
+
+Save your Agent Skill package (SKILL.md + references + assets) to your project, publish it so Genie Code can load it, and test it against your target assets. Before this step the skill exists only as the previous step''s output; after it, the skill is saved under `<REPO_ROOT>`, published under the skills copy, and has been exercised against at least one target asset as a **dry run** whose statements the next step (Validate & Automate) applies through its bundle-deployed job.
+
+### Your Use Case: {use_case_title}
+
+**Genie Code — this is a prescriptive runbook. Follow the steps in order. Do NOT improvise paths, do NOT use bare relative paths, do NOT use `@`-mentions. Every skill is read with `readSkillFile` by its full `skill_ref_root`-prefixed path; every file is written to a fully qualified `/Workspace/Users/<your-email>/…` path; every CLI call goes through `runDatabricksCli` with NO `--profile` flag (Genie Code is already authenticated to this workspace).**
+
+### 🔴 Non-negotiable rule (read before anything)
+
+❌ **NEVER** run `ALTER TABLE … SET TAGS`, `UNSET TAGS`, or any DDL / DML against the target tables in this step — not with `executeCode`, not with `spark.sql`, not in a notebook cell. The workshop changes warehouse state only through a deployed bundle job, and the next step''s validator job is the one that applies the tags.
+
+✅ The ONLY statements you run here are **read-only**: `SELECT` from `system.information_schema.table_tags`, and `DESCRIBE TABLE`.
+
+**IMPORTANT: These are EXISTING gold-layer tables. Do NOT create new schemas or tables. Your skill should read and govern the tables already in this schema.**
+
+Target: **{gold_table_target}**
+
+### Step 0 — Resolve your environment (once, before anything else)
+
+Run `skills/vibecoding-state` operation `enter` (params: `prompt_id: "skill_apply_contracts"`). Read these resolved values and use them literally throughout:
+
+- `client_context` = `genie_code`
+- `state_file_root` = `artifact_root` = your cloned workshop repository (e.g. `/Workspace/Users/<your-email>/vibe-coding-workshop`). Referred to below as `<REPO_ROOT>`.
+- `skills_install_root` = `/Workspace/Users/<your-email>/.assistant/skills/vibe-coding-workshop` — the published skills copy Genie Code loads skills from.
+- `skill_ref_root` = `skills/vibe-coding-workshop` (substitute your clone folder if you cloned somewhere other than `.assistant/skills/vibe-coding-workshop`)
+- `<skill-name>` = the skill name from the previous step''s SKILL.md output (Skill Identity).
+
+### Step 1 — Save the skill under `<REPO_ROOT>`
+
+Write every generated file under `<REPO_ROOT>/data_product_accelerator/skills/common/<skill-name>/`, keeping the exact file names and folder structure from the previous step''s output:
+
+```
+<REPO_ROOT>/data_product_accelerator/skills/common/<skill-name>/
+├── SKILL.md
+├── references/
+│   └── <reference-doc>.md
+└── assets/
+    └── <config-file>.yaml
+```
+
+Write each file with `executeCode` `open(path, "w").write(...)`, one call per file, using its fully qualified path (make the FIRST `executeCode` a trivial `print("ready")` to absorb the serverless cold start). Never write to a bare relative path: Genie Code''s working directory depends on the page you are on.
+
+### Step 2 — Publish the skill so Genie Code can load it
+
+A skill saved only in `<REPO_ROOT>` is not loadable: Genie Code loads skills only from the published copy under `.assistant/skills`. Publish JUST this skill''s folder (do not delete or re-copy the rest of the published tree), in ONE `executeCode` block:
+
+- `import shutil; shutil.copytree("<REPO_ROOT>/data_product_accelerator/skills/common/<skill-name>", "/Workspace/Users/<your-email>/.assistant/skills/vibe-coding-workshop/data_product_accelerator/skills/common/<skill-name>", dirs_exist_ok=True)`
+
+Then, in the SAME `executeCode` block, verify BOTH copies with `os.path.exists(...)` on each file (NOT `listFiles`, which lags FUSE writes) — the saved `<REPO_ROOT>/…/<skill-name>/SKILL.md` and the published `/Workspace/Users/<your-email>/.assistant/skills/vibe-coding-workshop/…/<skill-name>/SKILL.md`. If either is missing, STOP and fix the write before going on.
+
+### Step 3 — Use the new skill (dry run against your target assets)
+
+1. Load it by its published path: `readSkillFile("skills/vibe-coding-workshop/data_product_accelerator/skills/common/<skill-name>/SKILL.md")`, and echo one line naming the rule you will apply from it. If the read fails, the publish did not land — go back to Step 2.
+2. Follow the skill against at least one target table to GENERATE (as text only — do NOT run them) the exact `ALTER TABLE … SET TAGS` statements it calls for, plus the validation SQL from its reference document.
+3. Record the current (before) state read-only: `SELECT * FROM system.information_schema.table_tags WHERE catalog_name = ''<catalog>'' AND schema_name = ''<schema>'' AND table_name = ''<table_name>''`, and `DESCRIBE TABLE` on the same table.
+4. Run the validation SQL only where it is a read-only `SELECT`, and show me the generated statements, the before-state and the validation results.
+5. Save that dry-run output (the generated statements, the before-state, the validation results) with `executeCode` `open(path, "w").write(...)` to `<REPO_ROOT>/data_product_accelerator/skills/common/<skill-name>/references/dry_run_output.md`, publish it the same way as Step 2, and verify it with `os.path.exists(...)`.
+
+The generated statements are applied in the next step (Validate & Automate) by its bundle-deployed validator job — do NOT run them here.
+
+### Deliverables
+
+- [ ] All skill files saved to the correct folder structure under `<REPO_ROOT>`
+- [ ] Skill published to the skills copy and loaded via `readSkillFile`
+- [ ] Skill exercised against at least one target asset: statements generated and dry-run validated (read-only)
+- [ ] Results verified with the read-only `system.information_schema.table_tags` query
+- [ ] No errors during skill execution, and application handed to Validate & Automate
+
+**State file:** this prompt runs between an `enter` (Step 0) and an `exit`. When the deliverables above are met, run `skills/vibecoding-state` op `exit` — params: `prompt_id: "skill_apply_contracts"`, `gate: "Skill saved, published and dry-run tested"`, `captured: {applied_skill}` (the skill name, both paths, and the dry-run output path). **This `enter`/`exit` pair is a mandatory ritual, not advisory.** Step 0''s `enter` MUST locate the live `.vibecoding-state.md` file under `<REPO_ROOT>` (`state_file_root`). The closing `exit` MUST append this prompt''s Per-Step Log entry and `captured` vars to that file, then **re-read it and echo the appended section to prove the write landed**. This prompt is NOT complete until that re-read confirms the appended entry — the chat summary is NOT the state store.',
+'',
+true, 1, true, current_timestamp(), current_timestamp(), current_user());
+
 -- Step 30: Validate & Automate
 INSERT INTO ${catalog}.${schema}.section_input_prompts 
 (input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
@@ -9973,6 +10130,142 @@ asset_4                  | 6/6           | COMPLIANT
 - [ ] `skill_validator.py` -- Validation notebook
 - [ ] `skill_validation_job.yml` -- DAB job config
 - [ ] Job deployed and running on schedule',
+true, 1, true, current_timestamp(), current_timestamp(), current_user());
+
+-- skill_certify_tables (genie-code fork) — self-contained bundle <REPO_ROOT>/{user_schema_prefix}_skill_validation_dab created as fork 901 creates <DP_BUNDLE_ROOT> (executeCode open().write, verified writes, source_linked_deployment: false); validate -> deploy --target dev -> run from the bundle-editor page; the validator job applies the tags; bypass_LLM = TRUE
+INSERT INTO ${catalog}.${schema}.section_input_prompts
+(input_id, section_tag, coding_assistant, input_template, system_prompt,
+ bypass_llm, version, is_active, inserted_at, updated_at, created_by)
+VALUES
+(1006, 'skill_certify_tables', 'genie-code',
+'## Step 5: Build a Validation & Automation Pipeline
+
+Automate the validation and compliance workflow for your **{use_case_title}** skill so it runs continuously. Before this step the skill is saved, published and dry-run tested, and its tag statements have not been applied; after it, a self-contained bundle under `<SKILL_BUNDLE_ROOT>` is deployed, its validator job has run (applying or removing the compliance tags), and the job is scheduled for recurring validation.
+
+This will involve the following steps:
+
+- **Resolve the bundle root** — `<SKILL_BUNDLE_ROOT>`, a dedicated folder under `<REPO_ROOT>`.
+- **Load the skills** — full `skill_ref_root`-prefixed paths, including the skill you published in the previous step.
+- **Write the bundle files** — `databricks.yml`, the validator notebook and the job YAML, each written with `executeCode` and verified.
+- **Deploy and run from the bundle-editor page** — validate, deploy to dev, then run the validator job.
+
+The steps below are the prescriptive runbook for those actions; follow them in order.
+
+**Genie Code — this is a prescriptive runbook. Follow the steps in order. Do NOT improvise paths, do NOT use bare relative paths, do NOT use `@`-mentions, and do NOT apply tags directly. Every skill is named by its full `skill_ref_root`-prefixed path; every bundle file is anchored to `<SKILL_BUNDLE_ROOT>`; every CLI call goes through `runDatabricksCli` with NO `--profile` flag (Genie Code is already authenticated to this workspace).**
+
+### 🔴 Non-negotiable execution rule (read before anything)
+
+**IMPORTANT: The target assets below are EXISTING gold-layer tables. Do NOT create new schemas or tables. Your validation should query the tables already in this schema.**
+
+❌ **NEVER** run `ALTER TABLE … SET TAGS` / `UNSET TAGS` or any other DDL directly via `executeCode` / `spark.sql` / a notebook cell. Applying and removing the compliance tags is the **body of the bundle job** (`skill_validator.py`), which changes the tables only when the deployed job runs (Step 3).
+
+✅ The ONLY things you run directly are (a) **read-only** inspection (`SELECT` from `system.information_schema.table_tags`, `DESCRIBE TABLE`) and (b) `databricks bundle validate` / `deploy` / `run` through `runDatabricksCli`. If a `bundle` command is blocked, FIX the page context (Step 3) — do **not** fall back to direct SQL.
+
+### Step 0 — Resolve your environment (once, before anything else)
+
+Run `skills/vibecoding-state` operation `enter` (params: `prompt_id: "skill_certify_tables"`). Read these resolved values and use them literally throughout:
+
+- `client_context` = `genie_code`
+- `state_file_root` = `artifact_root` = your cloned workshop repository (e.g. `/Workspace/Users/<your-email>/vibe-coding-workshop`). Referred to below as `<REPO_ROOT>`.
+- `skill_ref_root` = `skills/vibe-coding-workshop` (substitute your clone folder if you cloned somewhere other than `.assistant/skills/vibe-coding-workshop`)
+- `<skill-name>` = the skill you saved and published in the previous step (from that step''s `captured` entry in the state file).
+- `skill_bundle_root` = `<REPO_ROOT>/{user_schema_prefix}_skill_validation_dab` — the **self-contained Databricks Asset Bundle project** for this step. Your cloned repository has no `databricks.yml` for this track, so this step creates one here — NOT at `<REPO_ROOT>` itself. This folder holds `databricks.yml`, `src/` and `resources/`, and it is the **page you deploy from**. Referred to below as `<SKILL_BUNDLE_ROOT>`; record it in the state file.
+- deploy verb = `bundle deploy --target dev`, run through the `runDatabricksCli` tool
+
+### Step 1 — Load the required skills by their FULL `skill_ref_root`-prefixed paths
+
+Read them in ONE batched `readSkillFile` turn — NEVER a bare `@…` mention, NEVER a repo-relative path:
+
+1. `readSkillFile("skills/vibe-coding-workshop/skills/genie-code-environment/SKILL.md")` — the Genie Code tool surface, page rules and file-write tiers (§10).
+2. `readSkillFile("skills/vibe-coding-workshop/skills/databricks-asset-bundles/SKILL.md")` — serverless job YAML, `notebook_task`, `base_parameters`. **You will not write any `databricks.yml` or job YAML until you have read this.**
+3. `readSkillFile("skills/vibe-coding-workshop/data_product_accelerator/skills/common/<skill-name>/SKILL.md")` — your published skill; its reference document holds the validation patterns.
+
+**🔴 Preflight acknowledgement (hard gate).** Echo a one-line acknowledgement for EACH skill the moment you load it — its full path + the single rule you will apply from it. If you cannot state the rule, you have not read the skill — STOP and read it before writing anything.
+
+### Step 2 — Author the bundle. Do NOT execute anything yet.
+
+Using the skills above, AUTHOR (write files only — no execution) three files:
+
+#### 1. Validation Notebook: `<SKILL_BUNDLE_ROOT>/src/skill_validator.py`
+
+A Databricks notebook that, when the job runs it:
+- Lists all target assets ({gold_table_target})
+- For each asset, reads its current tags/state via the appropriate method
+- Runs the validation checks from your skill''s reference document
+- Collects pass/fail results for each measure/rule
+- Updates the asset''s status based on results (applies or removes the compliance tags — the statements your previous step generated as a dry run)
+- Outputs a summary report of which assets passed/failed and why
+
+Use the **Validation Approach** and **Certification Criteria** from your use case specification to drive the logic.
+
+#### 2. Job Configuration: `<SKILL_BUNDLE_ROOT>/resources/skill_validation_job.yml`
+
+A Databricks Asset Bundle (DAB) job YAML, job key `skill_validation_job`, that:
+- Runs `src/skill_validator.py` on a schedule (from the use case specification''s scheduling recommendations)
+- Uses the default SQL warehouse: `{default_warehouse}`
+- Sends email alerts on failure
+- Tags the job with a descriptive purpose tag
+- Carries the per-user prefix in its `name:` (e.g. `"[${bundle.target} ${workspace.current_user.short_name}] Skill Validation"`) so attendees in a shared workspace never collide
+
+#### 3. Bundle root config: `<SKILL_BUNDLE_ROOT>/databricks.yml`
+
+`bundle: { name: {user_schema_prefix}_skill_validation_dab }` (the same name as the folder), `include: [resources/*.yml]`, and a `dev` target. 🔴 **It MUST disable source-linked deployment from the start:**
+
+```yaml
+targets:
+  dev:
+    mode: development
+    default: true
+    presets:
+      source_linked_deployment: false
+```
+
+With source-linked deployment ON, a `notebook_task` whose source is a workspace file resolves to the in-place editor file rather than the uploaded bundle artifact and fails at run time with "Unable to access the notebook".
+
+### Step 3 — Write the files to `<SKILL_BUNDLE_ROOT>`, then deploy FROM the bundle-editor page
+
+- **File-write tier (Genie Code — `genie-code-environment` §10).** Write each file with `executeCode` `open(path, "w").write(...)`, one call per file, creating its folder with `os.makedirs(..., exist_ok=True)` first. Make the FIRST `executeCode` a trivial `print("ready")` to absorb the ~3–5 min serverless cold start, and never set `timeoutMinutes` below 15. **NEVER** write the bundle files with `createAsset` or `editAsset`: files created through the workspace API may not reach the CLI''s FUSE mount, so the bundle commands would not see them. Write every file UNDER `<SKILL_BUNDLE_ROOT>` — never `<REPO_ROOT>` itself, never `/tmp`, never a bare relative path:
+  - `<SKILL_BUNDLE_ROOT>/databricks.yml`
+  - `<SKILL_BUNDLE_ROOT>/src/skill_validator.py`
+  - `<SKILL_BUNDLE_ROOT>/resources/skill_validation_job.yml`
+- 🔴 **Verify every write with `os.path.exists(path)` (or a read-back) in the SAME `executeCode` block — NOT `listFiles`:** the workspace REST API behind `listFiles` lags FUSE-written files and returns false "missing-file" negatives.
+- **Open the bundle editor BEFORE any `bundle` command — and surface its link.** As soon as `<SKILL_BUNDLE_ROOT>/databricks.yml` exists, the workspace file browser shows an **"Open in bundle editor"** affordance on that folder. Its page CWD IS `<SKILL_BUNDLE_ROOT>` — the bundle-root page the bundle commands require, where Genie Code runs them pre-approved. **Do not make the operator hunt for the icon** — build a clickable link with the pre-authenticated `WorkspaceClient` (`w`) and print it:
+  - `host = w.config.host`; `o = w.get_workspace_id()`
+  - `file_id = w.workspace.get_status("<SKILL_BUNDLE_ROOT>/databricks.yml").object_id`
+  - `folder_id = w.workspace.get_status("<SKILL_BUNDLE_ROOT>").object_id`
+  - **Bundle editor:** `{host}/editor/files/{file_id}?o={o}&contextId=folder%3A{folder_id}` (plain folder: `{host}/browse/folders/{folder_id}?o={o}`)
+
+  Tell the operator to open the **bundle-editor link**, then run every `databricks bundle …` command below from that page.
+- Validate → deploy → run through `runDatabricksCli`, **from the bundle-editor page**, each with `--target dev` (mandatory — a target-less deploy is guardrail-blocked). Deploy FIRST, so the job runs the notebook you just wrote:
+  - `databricks bundle validate --target dev` (must report no source-linked warning)
+  - `databricks bundle deploy --target dev`
+  - `databricks bundle run --target dev skill_validation_job`
+- Poll the run (`w.jobs.get_run(run_id)`, read-only) until it terminates, open the notebook output, and confirm the compliance status on at least one target asset with a read-only `SELECT` from `system.information_schema.table_tags`.
+- **🛑 If a `bundle` command is blocked or fails, STOP — do not work around it.** A `databricks.yml not found` error or a "blocked by safety guardrails" message means you are NOT on the bundle page: open the **bundle-editor link** above and retry. If it STILL fails from the bundle editor, STOP and report the blocker to the operator. Do **NOT** create the job via the Jobs REST API (`jobs/create`), the SDK, or apply the tags with direct SQL to "get it done" — that silently defeats the bundle (no version control, no `bundle destroy` cleanup) and FAILS the gate. The REST/SDK route is an **escape hatch available only if the operator explicitly authorizes it.**
+
+### Deliverables
+
+- [ ] `skill_validator.py` notebook created and tested
+- [ ] `skill_validation_job.yml` DAB config created
+- [ ] Validation job deployed and run successfully
+- [ ] At least one target asset shows the expected compliance status
+- [ ] Summary report showing pass/fail results
+- [ ] Job scheduled for recurring validation
+
+### Validation Results (example)
+```
+Asset                    | Measures Pass | Status
+-------------------------|---------------|----------
+asset_1                  | 6/6           | COMPLIANT
+asset_2                  | 6/6           | COMPLIANT
+asset_3                  | 5/6           | FAILED
+asset_4                  | 6/6           | COMPLIANT
+```
+
+**State file:** this prompt runs between an `enter` (Step 0) and an `exit`. After the gate passes, run `skills/vibecoding-state` op `exit` — params: `prompt_id: "skill_certify_tables"`, `gate: "Skill validation job deployed and run"`, `captured: {skill_bundle_root, skill_validation_job}`. **This `enter`/`exit` pair is a mandatory ritual, not advisory.** Step 0''s `enter` MUST locate the live `.vibecoding-state.md` file under `<REPO_ROOT>` (`state_file_root`). The closing `exit` MUST append this prompt''s Per-Step Log entry, Gate result, and `captured` vars to that file, then **re-read it and echo the appended section to prove the write landed**. This prompt is NOT complete until that re-read confirms the appended entry — the chat summary is NOT the state store.
+
+**Gate:** `Skill validation job deployed and run` — the validator job was **created by `bundle deploy` and executed by `bundle run`** from the bundle-editor page (the job is visible in Workflows and returned a successful run ID), AND at least one target asset shows the expected compliance status. Tags present on the tables is **necessary but NOT sufficient** — if the tags were applied by direct SQL instead of the deployed job, the gate FAILS and you must redo this via the bundle.',
+'',
 true, 1, true, current_timestamp(), current_timestamp(), current_user());
 
 -- =============================================================================

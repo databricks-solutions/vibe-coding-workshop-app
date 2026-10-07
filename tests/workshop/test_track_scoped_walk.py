@@ -234,6 +234,11 @@ def test_w9_lakehouse_family_walks_every_step_to_done(walk_env, track):
     test_w8_app_family_walks_every_step_to_done(walk_env, track)
 
 
+def test_w10_skills_accelerator_walks_every_step_to_done(walk_env):
+    """P4.3 family 5 (D-45): start (use case build_skill) -> next -> get -> complete to Done."""
+    test_w8_app_family_walks_every_step_to_done(walk_env, "skills-accelerator")
+
+
 # --- W1b: cross-track isolation -------------------------------------------------
 
 
