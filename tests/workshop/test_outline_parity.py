@@ -376,9 +376,9 @@ def app_walk_client(monkeypatch):
 
 
 @pytest.mark.parametrize("track", ["app-only", "app-database"])
-def test_app_family_mcp_outline_matches_endpoint_through_the_walk(app_walk_client, track):
+def test_app_family_mcp_outline_matches_endpoint_through_the_walk(app_walk_client, track, use_case="ai_driven_booking"):
     mcp_server, client = app_walk_client
-    sid = mcp_server.vibe_start_track(track, use_case="ai_driven_booking", industry="travel").session_id
+    sid = mcp_server.vibe_start_track(track, use_case=use_case, industry="travel").session_id
 
     def outlines_agree():
         resource = json.loads(mcp_server._session_state_resource(sid))["outline"]
@@ -412,3 +412,11 @@ def test_lakehouse_family_mcp_outline_matches_endpoint_through_the_walk(app_walk
 def test_covered_families_mcp_outline_matches_endpoint_through_the_walk(app_walk_client, track):
     """P4.3 families 3, 4, 7, 8 (D-43): the same walk-long parity as the app family."""
     test_app_family_mcp_outline_matches_endpoint_through_the_walk(app_walk_client, track)
+
+
+def test_skills_accelerator_mcp_outline_matches_endpoint_through_the_walk(app_walk_client):
+    """P4.3 family 5 (D-45): the same walk-long parity; resolve_track keeps
+    skills-accelerator only for its locked use case (build_skill)."""
+    test_app_family_mcp_outline_matches_endpoint_through_the_walk(
+        app_walk_client, "skills-accelerator", use_case="build_skill"
+    )
