@@ -13061,6 +13061,149 @@ The skill executes a deterministic 8-phase walk with idempotent guards at every 
 - [ ] **Idempotency check:** running this prompt a second time produces zero new schemas, zero new volumes, zero changed sections in the state file (modulo `resolved_at`), and zero errors.',
 true, 1, true, current_timestamp(), current_timestamp(), current_user());
 
+-- uc_resources_foundation (genie-code fork) — prescriptive paths + directives; identity via the pre-authenticated WorkspaceClient (no profile flag), fully qualified hydrate paths under <ARTIFACT_ROOT>/<APP_ROOT>, skill via readSkillFile; the two schemas and the managed volumes are provisioned by literal IF NOT EXISTS DDL through a fail-closed run_ddl, as the 00-uc-resources-foundation skill does (RULE_10 foundation carve-out, D-56/D-56a); bypass_LLM = TRUE
+INSERT INTO ${catalog}.${schema}.section_input_prompts
+(input_id, section_tag, coding_assistant, input_template, system_prompt,
+ bypass_llm, version, is_active, inserted_at, updated_at, created_by)
+VALUES
+(1009, 'uc_resources_foundation', 'genie-code',
+'Provision the Unity Catalog **schemas + managed volumes** that every downstream agent skill assumes (MLflow OTel tables, Knowledge Assistant, agent memory, benchmark persistence, monitoring) for the **{use_case_slug}** agent. Today the workspace has no agent-scoped UC homes; after this prompt runs, two schemas (`{db_schema}_agent` and `{db_schema}_ops`) and the canonical managed volumes exist and are ready to consume.
+
+This will involve the following steps:
+
+- **Resolve your roots and enter** — `<ARTIFACT_ROOT>` / `<APP_ROOT>` and the prior gates.
+- **Hydrate state from the design pair** — fully qualified file paths.
+- **Derive user-scoped names** — compute `APP_NAME`, `DB_SCHEMA`, `AGENT_APP_NAME`, and `AGENT_RESOURCE_PREFIX` from your Databricks identity so multiple workshop attendees never collide
+- **Create the agent + ops schemas** — only if they do not exist, for `{lakehouse_default_catalog}.{db_schema}_agent` and `{lakehouse_default_catalog}.{db_schema}_ops`
+- **Provision managed volumes** — create the canonical `knowledge_sources` and `agent_outputs` volumes in the agent schema, plus any extras from `resource_grants.required_volumes[]` in `<ARTIFACT_ROOT>/docs/agent_tool_plan.yaml`
+- **Stay idempotent** — every operation tolerates pre-existing schemas/volumes (warm workspaces from earlier runs are fine)
+- **Capture state for downstream skills** — emit the volume map + convenience paths (`knowledge_source_path`, `agent_outputs_path`) so MLflow tracing, KA, memory, benchmarks, and monitoring can resolve them
+
+The steps below are the prescriptive runbook for those actions; follow them in order.
+
+**Genie Code — this is a prescriptive runbook. Follow the steps in order. Do NOT improvise paths, do NOT use bare relative paths, do NOT use `@`-mentions. Every file is named by its fully qualified path under `<ARTIFACT_ROOT>` or `<APP_ROOT>`; every skill is read with `readSkillFile` by its full `skill_ref_root`-prefixed path; every CLI call goes through `runDatabricksCli` with NO profile flag and every SDK call runs in `executeCode` on serverless with the pre-authenticated `WorkspaceClient` (Genie Code is already authenticated to this workspace — the Session Settings profile `{databricks_cli_profile}` is an IDE setting and is NOT used here).**
+
+### Step 0 — Resolve your roots and enter (once, before anything else)
+
+Run `skills/vibecoding-state` operation `resolve_root`, then `enter` — params: `prompt_id: "uc_resources_foundation"`, `require_prior_gate: [{prompt_id: "workspace_setup_deploy", gate: "Infrastructure healthy"}, {prompt_id: "agent_tool_selection", gate: "Agent tool plan ready"}]` (accepts `"Infrastructure healthy with warnings"`). Read these resolved values and use them literally throughout:
+
+- `client_context` = `genie_code`
+- `<ARTIFACT_ROOT>` = `artifact_root` = your workshop project root (e.g. `/Workspace/Users/<your-email>/vibe-coding-workshop`), a **git clone** of the workshop repo — NOT the page''s current working directory. The design pair lives at `<ARTIFACT_ROOT>/docs/agent_spec.yaml` and `<ARTIFACT_ROOT>/docs/agent_tool_plan.yaml`.
+- `<APP_ROOT>` = `<ARTIFACT_ROOT>/<app_name>` — the AppKit app dir; its live state file is `<APP_ROOT>/.vibecoding-state.md`.
+- `skill_ref_root` = `skills/vibe-coding-workshop` (substitute your clone folder if different)
+- `warehouse_id` = `{default_warehouse}`
+
+**First:** Read `<APP_ROOT>/.vibecoding-state.md` if it exists — it contains resolved issues and variable values from prior phases. If `enter` reports either prior gate is unmet, STOP and finish that prompt first.
+
+### Step 1 — Load the skills by their FULL `skill_ref_root`-prefixed paths
+
+Read them in ONE batched `readSkillFile` turn — NEVER a bare `@…` mention, NEVER a repo-relative path:
+
+1. `readSkillFile("skills/vibe-coding-workshop/skills/genie-code-environment/SKILL.md")` — how CLI, SQL and SDK calls run on Genie Code.
+2. `readSkillFile("skills/vibe-coding-workshop/genai-agents/foundation/00-uc-resources-foundation/SKILL.md")` — the provisioning contract (its frontmatter declares `clients: [ide_cli, genie_code]`: the schemas + volumes come from the same idempotent DDL on both clients).
+
+When a skill names further references, load each the same way (prefix its repo-relative path with `skill_ref_root`).
+
+### Step 2 — Hydrate state from the design pair
+
+Run `skills/vibecoding-state` op `hydrate_from_files` — params: `agent_spec_yaml: "<ARTIFACT_ROOT>/docs/agent_spec.yaml"`, `agent_tool_plan_yaml: "<ARTIFACT_ROOT>/docs/agent_tool_plan.yaml"`, `ui_design_md: "<ARTIFACT_ROOT>/docs/ui_design.md"`, `prd_path: "<ARTIFACT_ROOT>/docs/design_prd.md"`, `state_path: "<APP_ROOT>/.vibecoding-state.md"` (substitute the resolved roots — fully qualified paths, never relative). This populates `state://AgentSpec`, `state://AppSpec` (UI), and `state://Spec Provenance` from the design pair so downstream MLflow SDLC prompts (50–56) can keep reading `state://AgentSpec.*` / `state://AppSpec.*` without rewrites. `state://DataSpec` is stamped `optional: true` when no Lakehouse track has populated it. The operation is idempotent: re-running with the same YAML files is a no-op (the `resolved_at` timestamp may drift). It halts only if a required input file is missing, if `agent.model` in the Agent Spec is empty, or if any value in the design pair is still wrapped in `{...}` — in those cases re-run prompts 38 / 39 with real values.
+
+### Step 3 — Derive user-scoped names
+
+Use the same identity-derived naming pattern as the AppKit and Lakebase prompts. These values keep AppKit apps, Lakebase schemas, UC schemas, volumes, and the Track A Agent App isolated per user and use case. Run in `executeCode` (no shell, no `jq`):
+
+```python
+from databricks.sdk import WorkspaceClient
+w = WorkspaceClient()  # pre-authenticated on Genie Code
+EMAIL = w.current_user.me().user_name
+local = EMAIL.split("@")[0]
+FIRSTNAME = local.split(".")[0]
+LASTINITIAL = (local.split(".")[1] if "." in local else "")[:1]
+APP_PREFIX = FIRSTNAME + "-" + LASTINITIAL
+APP_NAME = APP_PREFIX + "-" + "{use_case_slug}"
+if len(APP_NAME) > 26:
+    APP_NAME = APP_NAME[:26].rstrip("-")
+    print("Truncated AppKit app name to:", APP_NAME)
+DB_SCHEMA = APP_NAME.replace("-", "_")
+AGENT_APP_NAME = APP_NAME + "-agent"
+if len(AGENT_APP_NAME) > 26:
+    AGENT_APP_NAME = APP_NAME[:22].rstrip("-") + "-agt"
+    print("Truncated agent app name to:", AGENT_APP_NAME)
+AGENT_RESOURCE_PREFIX = AGENT_APP_NAME.replace("-", "_")
+print("APP_NAME=" + APP_NAME, "DB_SCHEMA=" + DB_SCHEMA, "AGENT_APP_NAME=" + AGENT_APP_NAME)
+```
+
+(The CLI equivalent is `databricks current-user me --output json` via `runDatabricksCli`, with no profile flag.) Use the resolved values as `{app_name}`, `{db_schema}`, `{agent_app_name}`, and `{agent_resource_prefix}` in the steps below.
+
+### Step 4 — Provision the schemas + volumes exactly as the skill prescribes
+
+Run the `00-uc-resources-foundation` skill''s provisioning in `executeCode` on serverless with the pre-authenticated `w` from Step 3, in the skill''s fail-closed shape: every statement goes through `run_ddl`, which runs it on the warehouse `{default_warehouse}` with `w.statement_execution.execute_statement`, polls `w.statement_execution.get_statement` until the statement is terminal (cancelling it and raising `TimeoutError` if it never is), and raises unless it SUCCEEDED. `IF NOT EXISTS` is the idempotency: a pre-existing schema or volume (from a prior run, a use-case asset bundle, or another user) succeeds unchanged, so a warm workspace still emits the full captured map. In every statement string, `{db_schema}` is the resolved `DB_SCHEMA` from Step 3.
+
+```python
+import time
+from databricks.sdk.service.sql import StatementState
+
+DDL_TIMEOUT_S = 300
+
+def run_ddl(statement):
+    """Run one DDL statement to a terminal state; raise unless it SUCCEEDED (fail closed)."""
+    resp = w.statement_execution.execute_statement(
+        warehouse_id="{default_warehouse}", statement=statement, wait_timeout="30s",
+    )
+    deadline = time.monotonic() + DDL_TIMEOUT_S
+    while resp.status.state in (StatementState.PENDING, StatementState.RUNNING):
+        if time.monotonic() > deadline:
+            w.statement_execution.cancel_execution(resp.statement_id)
+            raise TimeoutError("DDL still " + resp.status.state.value + " after " + str(DDL_TIMEOUT_S) + "s: " + statement)
+        time.sleep(2)
+        resp = w.statement_execution.get_statement(resp.statement_id)
+    if resp.status.state != StatementState.SUCCEEDED:  # FAILED / CANCELED / CLOSED
+        error = resp.status.error.message if resp.status.error else "no error message"
+        raise RuntimeError("DDL " + resp.status.state.value + ": " + error + " (" + statement + ")")
+
+# 1. The agent and ops schemas
+run_ddl("CREATE SCHEMA IF NOT EXISTS {lakehouse_default_catalog}.{db_schema}_agent")
+run_ddl("CREATE SCHEMA IF NOT EXISTS {lakehouse_default_catalog}.{db_schema}_ops")
+
+# 2. MANAGED volumes: (statement, /Volumes path) pairs; append the extras below before the loop
+VOLUMES = [
+    ("CREATE VOLUME IF NOT EXISTS {lakehouse_default_catalog}.{db_schema}_agent.{db_schema}_knowledge_sources",
+     "/Volumes/{lakehouse_default_catalog}/{db_schema}_agent/{db_schema}_knowledge_sources"),
+    ("CREATE VOLUME IF NOT EXISTS {lakehouse_default_catalog}.{db_schema}_agent.{db_schema}_agent_outputs",
+     "/Volumes/{lakehouse_default_catalog}/{db_schema}_agent/{db_schema}_agent_outputs"),
+]
+uc_volumes = {}
+for statement, path in VOLUMES:
+    run_ddl(statement)  # raises unless SUCCEEDED, so only confirmed volumes are captured
+    uc_volumes[path.rsplit("/", 1)[1]] = path
+print(uc_volumes)
+```
+
+**Extra volumes:** for each entry of `resource_grants.required_volumes[]` in `<ARTIFACT_ROOT>/docs/agent_tool_plan.yaml`, prefix its name with `{db_schema}_` (call the result `{db_schema}_{extra_volume}`) and append one pair of the same form to `VOLUMES` before the loop runs:
+
+```python
+    ("CREATE VOLUME IF NOT EXISTS {lakehouse_default_catalog}.{db_schema}_agent.{db_schema}_{extra_volume}",
+     "/Volumes/{lakehouse_default_catalog}/{db_schema}_agent/{db_schema}_{extra_volume}"),
+```
+
+(For an entry whose `schema` is `ops`, use `{db_schema}_ops` in place of `{db_schema}_agent` in both strings.)
+
+- **Returns:** `agent_schema` (= `{db_schema}_agent`), `ops_schema` (= `{db_schema}_ops`), `uc_volumes` (map of actual volume name → `/Volumes/...` path), and convenience aliases `knowledge_source_path` (= `/Volumes/{lakehouse_default_catalog}/{db_schema}_agent/{db_schema}_knowledge_sources`) and `agent_outputs_path` (= `/Volumes/{lakehouse_default_catalog}/{db_schema}_agent/{db_schema}_agent_outputs`).
+
+Provision ONLY these two schemas and these volumes: no tables, no catalog, no other Unity Catalog objects, and no SDK provisioning calls. If the catalog `{lakehouse_default_catalog}` does not exist, or `run_ddl` raises because you lack the privilege to add schemas to it, STOP and report the error; do NOT switch to another catalog.
+
+### Step 5 — Verify (read-only)
+
+In `executeCode`: `w.schemas.get("{lakehouse_default_catalog}.{db_schema}_agent")` and `..._ops` both return, and every entry in `uc_volumes` is reachable via `w.volumes.read(...)`. Or through `runDatabricksCli`: `databricks volumes list {lakehouse_default_catalog} {db_schema}_agent --output json` lists `{db_schema}_knowledge_sources` and `{db_schema}_agent_outputs`, and `databricks schemas list {lakehouse_default_catalog} --output json` lists both schemas.
+
+**State-lock:** this prompt runs between an `enter` (Step 0) and an `exit`. After the gate passes, run `skills/vibecoding-state` op `exit` — params: `prompt_id: "uc_resources_foundation"`, `gate: "UC resources ready"`, `captured: {app_name, db_schema, agent_app_name, agent_resource_prefix, agent_schema, ops_schema, uc_volumes, knowledge_source_path, agent_outputs_path, hydrated_from_files: true, resolver_version: "3.0"}`. **This `enter`/`exit` pair is a mandatory ritual, not advisory.** Step 0''s `enter` MUST locate the canonical live state file at `<app_root>/.vibecoding-state.md` (`<APP_ROOT>` above; never the temporary `example/…` bootstrap path). The closing `exit` MUST append this prompt''s Per-Step Log entry, Gate result, and `captured` vars to that file, then **re-read it and echo the appended section to prove the write landed**. **Gate completion rule:** this prompt is NOT complete until that re-read confirms the appended entry — the chat summary is NOT the state store.
+
+**Gate:** `UC resources ready` — both schemas exist (`SHOW SCHEMAS IN {lakehouse_default_catalog}` lists them), every entry in `uc_volumes` is reachable via `WorkspaceClient.volumes.read(...)`, and `knowledge_source_path` points to `/Volumes/{lakehouse_default_catalog}/{db_schema}_agent/{db_schema}_knowledge_sources`. Pre-existing resources are explicitly acceptable — the gate proves *existence*, not *first-time creation*.
+
+If a PRD exists at `<ARTIFACT_ROOT>/docs/design_prd.md`, reference it for business requirements, user personas, and workflows.',
+'',
+true, 1, true, current_timestamp(), current_timestamp(), current_user());
+
 -- Step 41 / order 41: Phase 1 / Agent Foundation - MLflow Tracing + UC OTel Storage
 INSERT INTO ${catalog}.${schema}.section_input_prompts 
 (input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, bypass_llm, version, is_active, inserted_at, updated_at, created_by)

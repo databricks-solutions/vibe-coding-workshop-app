@@ -7,16 +7,19 @@ parsed and served in place of the Lakebase cache.
 
 A1 marker lint: every step in the agents-accelerator MCP outline, served to a
    genie-code session with a resolved learner email, carries EXACTLY the reviewed
-   number of each local-IDE marker (0 unless allowed). uc_resources_foundation
-   is a NAMED pending set (D-51: no fork until a human RULE_10 ruling); its
-   default 200 is linted with exact-count allowances and must stay unforked.
-A2 fork resolution: every forked tag of the track, including 1007, 1008, 1010 and
+   number of each local-IDE marker (0 unless allowed). The pending set is empty
+   since D-56 ruled on RULE_10 and uc_resources_foundation got its fork 1009.
+A2 fork resolution: every forked tag of the track, including 1007-1010 and
    1011-1016, resolves to its fork for a genie-code session and to the default row
    otherwise; every step is forked, judged or pending.
 A3 paths: the new forks name no bare relative `docs/` or `.vibecoding-state.md`
    path, and pass no `--profile` flag.
 A4 mechanics: 1007/1008 write with executeCode open().write and read back; 1008
-   records the `Agent tool plan ready` gate that default 200's `enter` requires.
+   records the `Agent tool plan ready` gate that 200's and 1009's `enter` require.
+A9-A10 (D-56, the RULE_10 foundation carve-out): 1009 provisions only through the
+   literal prefixed `CREATE SCHEMA|VOLUME IF NOT EXISTS` statements, with no SDK
+   create call and no table, each run by a fail-closed `run_ddl` in the shape of
+   the 00-uc-resources-foundation skill.
 B1-B5 (part B, 1011-1016, the MLflow SDLC loop from defaults 209-214): no skill
    @-mention and only the defaults' MLflow `@` tokens, at the defaults' counts;
    resolve_root then the default's own `enter`; every skill read by a pinned
@@ -58,6 +61,7 @@ FORK_ID = {
     "workspace_setup_deploy": 1001,
     "agent_spec_design": 1007,
     "agent_tool_selection": 1008,
+    "uc_resources_foundation": 1009,
     "mlflow_agent_tracing_uc": 1010,
     "mlflow_prompt_registry": 1011,
     "mlflow_evaluation_datasets": 1012,
@@ -79,6 +83,7 @@ FORK_ID = {
 A_FORKS = {
     "agent_spec_design": 1007,
     "agent_tool_selection": 1008,
+    "uc_resources_foundation": 1009,
     "mlflow_agent_tracing_uc": 1010,
 }
 # Part B (D-52): the MLflow SDLC loop, each fork from its default 209-214.
@@ -94,11 +99,9 @@ NEW_FORKS = {**A_FORKS, **B_FORKS}
 # The recorded no-fork judgments (plan table): project_setup is virtual; prd_generation
 # is LLM over the default; iterate_enhance and workspace_cleanup per D-39.
 NO_FORK = {"project_setup", "prd_generation", "iterate_enhance", "workspace_cleanup"}
-# D-51: forking this step either restates the in-session create (the INSESSION_CREATE
-# audit grows, which genie_gate_diff never waives) or hides it (reviewer BLOCK on
-# 0287450), so it stays on its default until a human rules on RULE_10.
-_RULE10 = "D-51: in-session UC provisioning needs a human RULE_10 ruling; served from default 200 until then"
-PENDING_RULE10 = {"uc_resources_foundation": _RULE10}
+# Steps waiting on a human RULE_10 ruling: none since D-56 sanctioned the foundation
+# provisioning that fork 1009 states literally (D-51 had parked it here).
+PENDING_RULE10 = {}
 
 # Reviewed allowances: (section_tag, marker) -> (exact hit count, reason). The app
 # forks' entries come from #114 (via test_covered_families_genie); the rest are the
@@ -115,8 +118,6 @@ ALLOWED = {
     ("track_a_agent_eval_deploy", "localhost"): (2, _PROHIBITIONS),
     ("appkit_agent_app_proxy_chat", "localhost"): (4, _PROHIBITIONS),
     ("appkit_chat_feedback_mlflow", "localhost"): (3, _PROHIBITIONS),
-    # Default 200 @-mentions its skill and the PRD; both lapse when its fork lands.
-    **{(tag, "@-mention"): (2, reason) for tag, reason in PENDING_RULE10.items()},
 }
 
 
@@ -146,18 +147,13 @@ def test_a1_every_allowance_is_on_the_track_with_a_reason():
 
 def test_a1_pending_tags_are_still_unforked():
     """Each pending tag is on the outline, has a reason, and has no genie-code row
-    yet: when its fork lands (1009 after the RULE_10 ruling), its tag must leave
-    the set."""
+    yet: when its fork lands, its tag must leave the set (as uc_resources_foundation
+    did with 1009)."""
     pending = PENDING_RULE10
     forked = {row["section_tag"] for row in SEED_ROWS.values() if row.get("coding_assistant") == "genie-code"}
     assert set(pending) <= set(_outline_tags(TRACK))
     assert all(pending.values())
     assert not set(pending) & forked, set(pending) & forked
-
-
-def test_a1_input_id_1009_stays_free():
-    """D-51 leaves the gap so the later uc_resources_foundation fork can take 1009."""
-    assert 1009 not in SEED_ROWS
 
 
 def test_a1_new_forks_are_marker_clean():
@@ -279,12 +275,96 @@ def test_a4_design_files_are_written_and_read_back(fork_id, path):
 
 
 def test_a4_tool_selection_records_the_gate_uc_foundation_requires():
-    """Default 200 (served until D-51 is ruled) consumes the gate in its `enter`."""
+    """Default 200 and its fork 1009 both consume the gate in their `enter`."""
     body = _fork(1008)
     assert '`prompt_id: "agent_tool_selection"`, `gate: "Agent tool plan ready"`' in body
-    consumer = _fork(DEFAULT_ID["uc_resources_foundation"])
-    assert '{prompt_id: "agent_tool_selection", gate: "Agent tool plan ready"}' in consumer
+    for consumer_id in (DEFAULT_ID["uc_resources_foundation"], FORK_ID["uc_resources_foundation"]):
+        assert '{prompt_id: "agent_tool_selection", gate: "Agent tool plan ready"}' in _fork(consumer_id)
     assert body.index("os.path.exists(path)") < body.index('gate: "Agent tool plan ready"')
+
+
+# --- A9-A10: 1009's provisioning (D-56, RULE_10 foundation carve-out) ---------------
+
+# Every line naming a UC create, as the template's audit reads them (its INSESSION_CREATE
+# pattern, scripts/audit_genie_compat.py @edb07a9), including SDK `.create(` calls.
+_UC_CREATE = re.compile(
+    r"databricks\s+(jobs|pipelines|schemas|volumes)\s+create|createAsset\s*\(|\.\w+\.create\s*\("
+    r"|CREATE\s+(SCHEMA|VOLUME|TABLE)\b",
+    re.I,
+)
+# A statement line: the whole line is one quoted DDL string passed to run_ddl or a VOLUMES pair.
+_STATEMENT_LINE = re.compile(r'\s*(?:run_ddl\(|\()"(CREATE [^"]+)"(?:\)|,)\s*')
+_SANCTIONED_FORM = re.compile(
+    r"CREATE (SCHEMA|VOLUME) IF NOT EXISTS \{lakehouse_default_catalog\}\.\{db_schema\}_\w+"
+    r"(\.\{db_schema\}_[\w{}]+)?"
+)
+A9_STATEMENTS = [
+    "CREATE SCHEMA IF NOT EXISTS {lakehouse_default_catalog}.{db_schema}_agent",
+    "CREATE SCHEMA IF NOT EXISTS {lakehouse_default_catalog}.{db_schema}_ops",
+    "CREATE VOLUME IF NOT EXISTS {lakehouse_default_catalog}.{db_schema}_agent.{db_schema}_knowledge_sources",
+    "CREATE VOLUME IF NOT EXISTS {lakehouse_default_catalog}.{db_schema}_agent.{db_schema}_agent_outputs",
+    # The template line for each extra from resource_grants.required_volumes[].
+    "CREATE VOLUME IF NOT EXISTS {lakehouse_default_catalog}.{db_schema}_agent.{db_schema}_{extra_volume}",
+]
+
+
+def _create_lines(body):
+    """Each line of ``body`` that names a UC create: its quoted statement, else the raw line."""
+    lines = []
+    for line in body.splitlines():
+        if _UC_CREATE.search(line):
+            statement = _STATEMENT_LINE.fullmatch(line)
+            lines.append(statement.group(1) if statement else line.strip())
+    return lines
+
+
+def test_a9_1009_provisions_only_the_literal_prefixed_statements():
+    """No prose names a create trigger: every such line is one sanctioned statement,
+    so 1009 adds 0 counted INSESSION_CREATE lines (it is a new section for the audit)."""
+    body = _fork(FORK_ID["uc_resources_foundation"])
+    found = _create_lines(body)
+    assert [line for line in found if not _SANCTIONED_FORM.fullmatch(line)] == []
+    assert found == A9_STATEMENTS
+    assert ".create(" not in body
+    assert not re.search(r"CREATE\s+TABLE", body, re.I)
+
+
+_RUN_DDL_SHAPE = [
+    "def run_ddl(statement):",
+    "w.statement_execution.execute_statement(",
+    'statement=statement, wait_timeout="30s"',
+    "deadline = time.monotonic() + DDL_TIMEOUT_S",
+    "while resp.status.state in (StatementState.PENDING, StatementState.RUNNING):",
+    "if time.monotonic() > deadline:",
+    "w.statement_execution.cancel_execution(resp.statement_id)",
+    "raise TimeoutError(",
+    "resp = w.statement_execution.get_statement(resp.statement_id)",
+    "if resp.status.state != StatementState.SUCCEEDED:  # FAILED / CANCELED / CLOSED",
+    "raise RuntimeError(",
+]
+
+
+def test_a10_run_ddl_fails_closed_like_the_f0_skill():
+    """FORK_INTENT_PARITY with 00-uc-resources-foundation @edb07a9: poll to a terminal
+    state within a bounded wait, raise on every non-SUCCEEDED state, and capture a
+    volume path only after its statement SUCCEEDED."""
+    body = _fork(FORK_ID["uc_resources_foundation"])
+    start = body.index("def run_ddl(statement):")
+    helper = body[start : body.index("# 1. The agent and ops schemas", start)]
+    missing = [step for step in _RUN_DDL_SHAPE if step not in helper]
+    assert missing == [], missing
+    at = [helper.index(step) for step in _RUN_DDL_SHAPE]
+    assert at == sorted(at), dict(zip(_RUN_DDL_SHAPE, at))
+    assert not _UC_CREATE.search(helper), "the helper itself names no create trigger"
+    # Every statement goes through the helper; the only direct execute_statement is inside it.
+    assert body.count("execute_statement(") == 1
+    assert body.count('run_ddl("CREATE SCHEMA IF NOT EXISTS ') == 2
+    capture = (
+        "for statement, path in VOLUMES:\n"
+        "    run_ddl(statement)  # raises unless SUCCEEDED, so only confirmed volumes are captured\n"
+        '    uc_volumes[path.rsplit("/", 1)[1]] = path\n'
+    )
+    assert body.count(capture) == 1
 
 
 
