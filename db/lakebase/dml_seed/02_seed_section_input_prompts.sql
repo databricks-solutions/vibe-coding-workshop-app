@@ -9531,7 +9531,7 @@ Then load the built-in `benchmark-failure-analysis` skill for the miss-triage me
 
 ### Step 2 — Phase 1: Baseline evaluation (iteration 0)
 
-**Genie Code navigation — page precondition:** open the Genie Space page for `genie_space_id`. The native tools (`runBenchmarks`, `getBenchmarkResults`, `readInstructions`, `readTableConfig`, `addInstructionsToSpace`, `addKnowledgeSnippetsToSpace`, `updateColumnSynonyms`, `updateColumnDescriptions`, `configureEntityMatching`) only load there — they are NOT available on a notebook/editor surface. Only if the native scorer is unavailable, fall back to `ask_genie` (Conversation API) and say so in the report.
+**Genie Code navigation — page precondition:** open the Genie Space page for `genie_space_id` — for the Genie-side steps ONLY (benchmarks and the native curation tools). Every `bundle` command in this prompt runs from the data-product bundle''s editor page instead (Step 3a), never from the Genie Space page. The native tools (`runBenchmarks`, `getBenchmarkResults`, `readInstructions`, `readTableConfig`, `addInstructionsToSpace`, `addKnowledgeSnippetsToSpace`, `updateColumnSynonyms`, `updateColumnDescriptions`, `configureEntityMatching`) only load there — they are NOT available on a notebook/editor surface. Only if the native scorer is unavailable, fall back to `ask_genie` (Conversation API) and say so in the report.
 
 1. **Snapshot** the current space: `GET /api/2.0/genie/spaces/{id}?include_serialized_space=true`, and write the snapshot to `<DP_BUNDLE_ROOT>/plans/genie_optimization/iteration_0_snapshot.json`. This snapshot is the rollback point.
 2. **Track it in MLflow:** create (or reuse) the experiment `/Users/<your-email>/{user_schema_prefix}_genie_optimization`, log a LoggedModel for the Genie Space config, and log one run per iteration with the eight scores.
@@ -9556,7 +9556,7 @@ Then load the built-in `benchmark-failure-analysis` skill for the miss-triage me
 For each lever in priority order:
 
 1. Triage each miss with `benchmark-failure-analysis` and propose ONE change for the current lever. Show me the proposal before applying it.
-2. Apply it with the matching native tool, AND write the same change back to its definition file under `<DP_BUNDLE_ROOT>` (dual persistence) — Genie instructions, snippets and synonyms to `<DP_BUNDLE_ROOT>/src/{user_schema_prefix}_semantic/genie/genie_space_config.json`; column COMMENTs to the Gold YAML under `<DP_BUNDLE_ROOT>/gold_layer_design/yaml/`; Metric View and TVF fixes to their `.yaml` / `.sql` files.
+2. Apply it with the matching native tool (a Lever 2/3 fix is applied from the bundle editor — Step 3a), AND write the same change back to its definition file under `<DP_BUNDLE_ROOT>` (dual persistence) — Genie instructions, snippets and synonyms to `<DP_BUNDLE_ROOT>/src/{user_schema_prefix}_semantic/genie/genie_space_config.json`; column COMMENTs to the Gold YAML under `<DP_BUNDLE_ROOT>/gold_layer_design/yaml/`; Metric View and TVF fixes to their `.yaml` / `.sql` files.
 3. Wait 30 seconds for Genie to pick up the change.
 4. Run a slice evaluation (the affected benchmarks only). If the slice passes, run the full evaluation (P0 gate).
 5. If the P0 gate regresses, **roll back** — restore the file and the live space from the last good snapshot — and move to the next lever.
@@ -9572,7 +9572,27 @@ For each lever in priority order:
 | **5: ML Tables** | Feature tables, predictions | Add ML outputs as Genie data assets | Genie config file |
 | **6: GEPA** | Instructions, data assets | Restructure Genie Space architecture | Genie config file + full-body PATCH |
 
-Re-apply a Metric View or TVF by re-running its semantic job with `runDatabricksCli` (`bundle run`, dev target) — never by hand-run DDL.
+### Step 3a — Re-apply a Metric View or TVF fix FROM the bundle editor (Levers 2-3 only)
+
+A Lever 2/3 fix changes a `.yaml` / `.sql` file the semantic bundle owns, so it reaches the live object only through the bundle. Leave the Genie Space page for this, and come back to it for the slice evaluation.
+
+- **Open the bundle editor BEFORE any `bundle` command — and surface its link.** `<DP_BUNDLE_ROOT>/databricks.yml` already exists, so the workspace file browser shows the **"Open in bundle editor"** affordance on that folder (and an **"Open in editor"** button at the top). Its page CWD IS `<DP_BUNDLE_ROOT>` — the bundle-root page `bundle deploy`/`run` require, where Genie Code runs deploy/run pre-approved. **Do not make the operator hunt for the icon** — build a clickable link with the pre-authenticated `WorkspaceClient` (`w`) and print it:
+  - `host = w.config.host`; `o = w.get_workspace_id()`
+  - `file_id = w.workspace.get_status("<DP_BUNDLE_ROOT>/databricks.yml").object_id`
+  - `folder_id = w.workspace.get_status("<DP_BUNDLE_ROOT>").object_id`
+  - **Bundle editor:** `{host}/editor/files/{file_id}?o={o}&contextId=folder%3A{folder_id}` (plain folder: `{host}/browse/folders/{folder_id}?o={o}`)
+
+  Tell the operator to open the **bundle-editor link**, then run every `databricks bundle …` command below from that page.
+- **Confirm `targets.dev.presets.source_linked_deployment: false` is present** in the bundle''s `databricks.yml` (set by Bronze) — `bundle validate --target dev` must report no source-linked warning. Never enable it; it breaks file-backed `notebook_task` sources.
+- Validate → deploy → run through `runDatabricksCli`, **from the bundle-editor page**, each with `--target dev` (mandatory — a target-less deploy is guardrail-blocked). Deploy FIRST, so the job runs the file you just edited, not the last uploaded body:
+  - `databricks bundle validate --target dev`
+  - `databricks bundle deploy --target dev`
+  - `databricks bundle run --target dev tvf_job`            ← Lever 3 fixes; confirm `information_schema.routines.routine_definition` matches the `.sql` file
+  - `databricks bundle run --target dev metric_views_job`   ← Lever 2 fixes; confirm `view_query_text` matches the `.yaml` file
+- **NEVER hand-run the DDL with `executeCode` or `spark.sql`** — the change is the body of the bundle job, and a hand-run statement is drift.
+- **🛑 If a `bundle` command is blocked, STOP — do not work around it.** A `databricks.yml not found` error or a "blocked by safety guardrails" message means you are NOT on the bundle page: open the **bundle-editor link** above and retry (CONFIRMED — the same `bundle deploy`/`run` that is "blocked" from a file page succeeds from the bundle editor). If it STILL fails from the bundle editor, STOP and report the blocker. Do **NOT** apply the fix via direct SQL, the Jobs REST API (`jobs/create`), or the SDK to "get it done" — that silently defeats the bundle and FAILS the gate. The REST/SDK route is an **escape hatch available only if the operator explicitly authorizes it.**
+
+Then return to the Genie Space page and continue at Step 3 item 3.
 
 ### Step 4 — Phase 3: GEPA (Lever 6) — only if still below target
 
@@ -9588,7 +9608,7 @@ Record each iteration''s eight scores, the levers applied, and the gate result i
 
 **State-lock:** this prompt runs between an `enter` (Step 0) and an `exit`. After the gate passes, run `skills/vibecoding-state` op `exit` — params: `prompt_id: "optimize_genie"`, `gate: "Genie quality targets passed"`, `captured: {optimization_progress, genie_space_config}`. **This `enter`/`exit` pair is a mandatory ritual, not advisory.** Step 0''s `enter` MUST locate the canonical live state file at `<dp_bundle_root>/.vibecoding-state.md`. The closing `exit` MUST append this prompt''s Per-Step Log entry, Gate result, and `captured` vars to that file, then **re-read it and echo the appended section to prove the write landed**. **Gate completion rule:** this prompt is NOT complete until that re-read confirms the appended entry — the chat summary is NOT the state store.
 
-**Gate:** `Genie quality targets passed` — all eight Genie quality targets pass on the benchmark (native scorer, or the documented `ask_genie` fallback); every applied fix is written back to its definition file under `<DP_BUNDLE_ROOT>` and the extract-back diff is clean; each iteration is logged in MLflow and in `<dp_bundle_root>/.vibecoding-state.md`.',
+**Gate:** `Genie quality targets passed` — all eight Genie quality targets pass on the benchmark (native scorer, or the documented `ask_genie` fallback); every applied fix is written back to its definition file under `<DP_BUNDLE_ROOT>` and the extract-back diff is clean; every Metric View / TVF fix reached the live object by `bundle deploy` + `bundle run` from the bundle editor (a live object that matches its file is necessary but NOT sufficient — a hand-run fix FAILS the gate); each iteration is logged in MLflow and in `<dp_bundle_root>/.vibecoding-state.md`.',
 '',
 true, 1, true, current_timestamp(), current_timestamp(), current_user());
 

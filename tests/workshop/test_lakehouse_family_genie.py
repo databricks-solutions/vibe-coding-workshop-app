@@ -5,14 +5,19 @@ active ``section_input_prompts`` INSERT is parsed and served in place of the
 Lakebase cache.
 
 L1 marker lint: every step in the MCP outline of lakehouse, reverse-lakehouse,
-   lakehouse-di and reverse-lakehouse-di, served to a genie-code session, carries
-   no local-IDE marker. There are no allowances.
+   lakehouse-di and reverse-lakehouse-di, served to a genie-code session with a
+   resolved learner email (as live), carries no local-IDE marker. The one
+   allowance is project_setup's own /Workspace/Users/<email>/... skill path.
 L2 fork resolution: a genie-code session gets the 901-910, 1002 and 1003 fork
    bodies; a non-genie session still gets the default rows.
 L3 the MCP outline of the -di tracks contains optimize_genie, although its default
    row sets step_enabled = FALSE: the SPA hides it, MCP does not. This is why
    optimize_genie needs the 1003 fork.
+L4 the 1003 body runs no `bundle run` before the bundle-editor page and the dev
+   deploy (the sibling deploy forks' mechanics).
 """
+
+import re
 
 import pytest
 
@@ -34,8 +39,18 @@ from .test_app_family_genie_forks import (  # noqa: F401  (seeded/store are fixt
 LAKEHOUSE_TRACKS = ("lakehouse", "reverse-lakehouse", "lakehouse-di", "reverse-lakehouse-di")
 DI_TRACKS = ("lakehouse-di", "reverse-lakehouse-di")
 GENIE_PARAMS = {"industry": INDUSTRY, "use_case": USE_CASE, "coding_assistant": "genie-code"}
-# Reviewed allowances: (section_tag, marker) -> (max hits, reason). None today.
-ALLOWED: dict = {}
+# A live session has the learner's email; project_setup renders its paths from it.
+USER_EMAIL = "learner@databricks.com"
+# Reviewed allowances: (section_tag, marker) -> (exempt pattern, reason). Only the
+# text the pattern matches is exempt; any other hit of the marker still fails.
+ALLOWED = {
+    ("project_setup", "@-mention"): (
+        re.compile(r"/Workspace/Users/" + re.escape(USER_EMAIL) + r"/[\w./-]+\.md\b"),
+        "reviewed 2026-10-07: the learner's own workspace path to the published "
+        "genie-code-environment SKILL.md (mcp_server._project_setup_content); the "
+        "email's '@domain/...SKILL.md' tail is not an @-mention of a repo file",
+    ),
+}
 
 # section_tag -> genie-code fork input_id: 901-910 (lakehouse forks), 1002 (#114),
 # 1003 (this PR).
@@ -62,6 +77,12 @@ DEFAULT_ID = {
 FORKS = {tag: (fork_id, DEFAULT_ID[tag]) for tag, fork_id in FORK_ID.items()}
 
 
+def _served_live(track, tag):
+    """The prompt _step_payload serves a genie-code session whose email is resolved."""
+    state = engine.SessionState(session_parameters=dict(GENIE_PARAMS, user_email=USER_EMAIL))
+    return mcp_server._step_payload(track, state, engine.resolve_step(track, state, tag)).prompt
+
+
 def _outline_tags(track):
     """The step tags the MCP server outlines for a genie-code session on ``track``."""
     state = engine.SessionState(session_parameters=dict(GENIE_PARAMS))
@@ -75,11 +96,21 @@ def _outline_tags(track):
 def test_l1_lakehouse_family_bodies_carry_no_local_ide_markers(seeded, track):
     excess = {}
     for tag in _outline_tags(track):
-        for marker, count in _hits(_served(track, tag)).items():
-            allowed = ALLOWED.get((tag, marker), (0, None))[0]
-            if count > allowed:
-                excess[(tag, marker)] = (count, allowed)
-    assert excess == {}, f"{track}: local-IDE markers over the allowance {excess}"
+        body = _served_live(track, tag)
+        for marker in _hits(body):
+            exempt = ALLOWED.get((tag, marker))
+            found = _hits(exempt[0].sub("", body) if exempt else body).get(marker)
+            if found:
+                excess[(tag, marker)] = found
+    assert excess == {}, f"{track}: local-IDE markers outside the allowances {excess}"
+
+
+def test_l1_project_setup_allowance_is_live(seeded):
+    """The allowance is needed (the live path does hit) and covers every hit."""
+    body = _served_live("lakehouse-di", "project_setup")
+    exempt = ALLOWED[("project_setup", "@-mention")][0]
+    assert _hits(body).get("@-mention")
+    assert "@-mention" not in _hits(exempt.sub("", body))
 
 
 def test_l1_lakehouse_forks_are_marker_clean():
@@ -155,3 +186,23 @@ def test_l2_non_genie_session_still_gets_the_default(seeded, tag, assistant):
 def test_l3_mcp_outline_contains_optimize_genie(track):
     """MCP ignores step_enabled (the SPA's get_disabled_step_tags); change it on purpose."""
     assert "optimize_genie" in _outline_tags(track)
+
+
+# --- L4: bundle commands only from the bundle editor, deploy first ----------------
+
+_BUNDLE_PAGE = "Open the bundle editor BEFORE any `bundle` command"
+_DEPLOY = "`databricks bundle deploy --target dev`"
+
+
+def test_l4_optimize_genie_fork_deploys_from_the_bundle_page_before_any_run(seeded):
+    """Fork 1003 re-applies Metric View / TVF fixes through the bundle. Like forks
+    904/905/909/1002, every `bundle run` follows the bundle-editor page and a dev
+    deploy (with source_linked_deployment off, a run without a deploy re-runs the
+    last uploaded body), and a `databricks.yml not found` STOP is present."""
+    body = _served_live("lakehouse-di", "optimize_genie")
+    runs = [m.start() for m in re.finditer(r"bundle run", body)]
+    assert runs, "1003 no longer re-applies through the bundle; revisit this pin"
+    assert _BUNDLE_PAGE in body and _DEPLOY in body
+    assert body.index(_BUNDLE_PAGE) < body.index(_DEPLOY) < min(runs)
+    assert "databricks.yml not found" in body
+    assert "source_linked_deployment: false" in body
