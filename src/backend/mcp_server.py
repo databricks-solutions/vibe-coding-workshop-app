@@ -1268,7 +1268,7 @@ def vibe_start_track(
         # (is_saved requires a name that is set and != "New Session"). Refined to
         # the confirmed use case once it locks in vibe_complete_step (Workstream 3).
         _initial_name = _session_name(track, use_case)
-        _persist_mcp_delta(
+        saved = _persist_mcp_delta(
             resolved,
             before,
             state,
@@ -1296,6 +1296,14 @@ def vibe_start_track(
             workshop_level=track,
             session_parameters=state.session_parameters,
         )
+        # D-49: fail closed. save_session_applying_mcp_delta logs and returns
+        # False on any error, so a failed save would otherwise hand back a
+        # session_id that does not exist in Lakebase.
+        if not saved:
+            return _error_result(  # type: ignore[return-value]
+                "SESSION_NOT_SAVED",
+                "The new session could not be saved; nothing was started. Retry, or report this error.",
+            )
     if industry:
         state.session_parameters["industry"] = industry
     if use_case:
