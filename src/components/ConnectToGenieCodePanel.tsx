@@ -3,18 +3,20 @@ import { Plug, ChevronRight } from 'lucide-react';
 import { CopyButton } from './CopyButton';
 import { useCopyToClipboard } from '../hooks/useCopyToClipboard';
 import {
-  GENIE_ACCELERATOR_START_PROMPT,
   GENIE_CODE_MCP_CONNECTION_STEPS,
   mcpUrlFromOrigin,
+  startPromptForTrack,
 } from '../constants/genieCodeMcpConnection';
 
 /**
  * Self-serve "Connect to Genie Code" on-ramp (D4 §1.1).
  *
  * Step copy comes from {@link GENIE_CODE_MCP_CONNECTION_STEPS} — the same source
- * locked to D10 §2 by the on-ramp Playwright suite.
+ * locked to D10 §2 by the on-ramp Playwright suite. The start prompt follows the
+ * session's track ({@link startPromptForTrack}, D-59).
  */
-export function ConnectToGenieCodePanel() {
+export function ConnectToGenieCodePanel({ workshopLevel }: { workshopLevel?: string } = {}) {
+  const { prompt, track } = startPromptForTrack(workshopLevel);
   const mcpUrl = useMemo(
     () => mcpUrlFromOrigin(typeof window !== 'undefined' ? window.location.origin : ''),
     [],
@@ -81,8 +83,16 @@ export function ConnectToGenieCodePanel() {
           <span>
             Then say{' '}
             <span className="font-semibold text-foreground">
-              &lsquo;{GENIE_ACCELERATOR_START_PROMPT}&rsquo;
+              &lsquo;{prompt}&rsquo;
             </span>
+            {track && (
+              <>
+                {' '}with track{' '}
+                <code data-testid="start-prompt-track" className="font-mono text-foreground">
+                  {track}
+                </code>
+              </>
+            )}
             .
           </span>
         </p>

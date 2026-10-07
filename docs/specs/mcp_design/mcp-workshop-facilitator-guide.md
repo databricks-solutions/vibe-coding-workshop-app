@@ -40,12 +40,17 @@
    available.
 5. If it doesn't appear, see Troubleshooting (§7) — the usual cause is the 307 or an `mcp-` name.
 
+Then start: on the Genie Accelerator say "Start the Genie Accelerator"; on any other track say
+"Start a workshop track" with the track id shown in the app.
+
 ---
 
 ## 3. Start the track / continue
 
-- Type or pick the prompt **"Start the Genie Accelerator"** — Genie Code calls `vibe_start_track`,
-  then `vibe_get_step`, and presents step 1 (the prompt **verbatim**, then the why/how).
+- Type or pick the start prompt for your track: on the Genie Accelerator, **"Start the Genie
+  Accelerator"**; on any other track, **"Start a workshop track"** with the track id shown in the
+  app. Genie Code calls `vibe_start_track`, then `vibe_get_step`, and presents step 1 (the prompt
+  **verbatim**, then the why/how).
 - To resume later, use **"Continue where I left off"** — it calls `vibe_next_step` from your saved
   progress (state is server-side, keyed to you).
 - Answer the occasional in-band question in chat (§6). Silence accepts the recommended default —
