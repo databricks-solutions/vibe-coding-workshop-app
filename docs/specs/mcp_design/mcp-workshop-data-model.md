@@ -45,7 +45,7 @@ CREATE TABLE ${schema}.sessions (
     step_1_prompt       TEXT,
     step_prompts        JSONB DEFAULT '{}',             -- {stepNumber -> prompt text}  (number-keyed!)
     current_step        INTEGER DEFAULT 1,
-    workshop_level      VARCHAR(20) DEFAULT '300',      -- the track id
+    workshop_level      VARCHAR(64) DEFAULT '300',      -- the track id
     completed_steps     TEXT,                           -- serialized list of step NUMBERS
     skipped_steps       TEXT DEFAULT '[]',
     session_parameters  JSONB DEFAULT '{}',             -- per-session param + flag overrides
