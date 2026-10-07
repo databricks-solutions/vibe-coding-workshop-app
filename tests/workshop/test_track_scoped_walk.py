@@ -247,6 +247,11 @@ def test_w11_skills_accelerator_walks_every_step_to_done(walk_env):
     test_w8_app_family_walks_every_step_to_done(walk_env, "skills-accelerator")
 
 
+def test_w12_agents_accelerator_walks_every_step_to_done(walk_env):
+    """P4.3 family 6 (D-47): start -> next -> get -> complete to Done."""
+    test_w8_app_family_walks_every_step_to_done(walk_env, "agents-accelerator")
+
+
 # --- W1b: cross-track isolation -------------------------------------------------
 
 

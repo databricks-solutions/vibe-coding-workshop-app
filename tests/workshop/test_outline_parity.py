@@ -420,3 +420,8 @@ def test_skills_accelerator_mcp_outline_matches_endpoint_through_the_walk(app_wa
     test_app_family_mcp_outline_matches_endpoint_through_the_walk(
         app_walk_client, "skills-accelerator", use_case="build_skill"
     )
+
+
+def test_agents_accelerator_mcp_outline_matches_endpoint_through_the_walk(app_walk_client):
+    """P4.3 family 6 (D-47): the same walk-long parity as the app family."""
+    test_app_family_mcp_outline_matches_endpoint_through_the_walk(app_walk_client, "agents-accelerator")

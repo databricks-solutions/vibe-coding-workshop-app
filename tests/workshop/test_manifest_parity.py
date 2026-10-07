@@ -257,6 +257,19 @@ def test_skills_accelerator_steps_are_all_agent_doable():
     assert {step.execution for step in loaded.track_steps("skills-accelerator")} == {"agent-doable"}
 
 
+def test_agents_accelerator_steps_are_all_agent_doable():
+    """P4.3 family 6 (D-47): every agents-accelerator step is agent-doable in Genie
+    Code (judgment table in docs/superpowers/plans/2026-10-07-p4-agents-a.md)."""
+    loaded = manifest.load_manifest()
+    data = json.loads((REPO_ROOT / "src/backend/workshop/manifest.json").read_text())["tracks"]
+    json_steps = [step for section in data["agents-accelerator"]["sections"] for step in section["steps"]]
+    assert json_steps
+    assert {step["sectionTag"]: step["execution"] for step in json_steps} == {
+        step["sectionTag"]: "agent-doable" for step in json_steps
+    }
+    assert {step.execution for step in loaded.track_steps("agents-accelerator")} == {"agent-doable"}
+
+
 def test_manifest_regeneration_is_byte_identical():
     """Contract 5: re-running the generator changes nothing — the committed
     manifest.json is byte-for-byte what generate_manifest.py emits, so no hand
