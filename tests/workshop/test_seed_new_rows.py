@@ -319,7 +319,7 @@ def test_split_parity_on_seed_files(seed_file, transformed):
         content = snr.transform_sql_for_postgres(content, SCHEMA)
     ours, theirs = snr.split_statements(content), _shell_splitter()(content)
     assert ours == theirs
-    assert len(ours) == {F01: 48 + 3, F02: 154}[seed_file]
+    assert len(ours) == {F01: 48 + 3, F02: 169}[seed_file]
 
 
 ADVERSARIAL = [
@@ -484,23 +484,44 @@ def test_populated_rerun_is_a_noop_but_rewarns(seed_dir):
 
 def test_populated_today_seed_files_insert_only_the_post_baseline_rows():
     """The live-check expectation: today's seed files on a populated install insert
-    exactly the rows added since the baseline (the P4.3 genie-code forks, D-39, D-41, D-45, D-47, D-52, D-53)."""
+    exactly the rows added since the baseline (the P4.3 genie-code forks, D-39, D-41, D-45, D-47, D-52, D-53, D-57)."""
     db = _populated()
     log = _run_create(db, DML_SEED)
     assert _seed_inserts(db, UC) == []
-    # D-56 fills 1009, the gap D-51 left.
-    assert db.ledger == {(SIP, input_id) for input_id in range(1001, 1018)}
-    # Only section_input_prompts' sequence moves: raised to max 1017 + 1.
-    assert db.setvals == [(f"{SCHEMA}.section_input_prompts_input_id_seq", 1018)]
+    # D-56 fills 1009, the gap D-51 left; D-57 adds the v2 forks 1018-1032.
+    assert db.ledger == {(SIP, input_id) for input_id in range(1001, 1033)}
+    # Only section_input_prompts' sequence moves: raised to max 1032 + 1.
+    assert db.setvals == [(f"{SCHEMA}.section_input_prompts_input_id_seq", 1033)]
     assert f"    {UC}: 0 inserted / 0 warnings" in log
-    assert f"    {SIP}: 17 inserted / 0 warnings" in log
+    assert f"    {SIP}: 32 inserted / 0 warnings" in log
 
 
 def test_populated_release_with_1009_inserts_only_1009_and_keeps_the_sequence():
     """The D-56 release on the live install: every other post-baseline row is applied
-    and ledgered and the sequence already sits at 1018, so the reseed inserts 1009
+    and ledgered and the sequence already sits past them, so the reseed inserts 1009
     alone and the sequence stays (1009 is below it)."""
-    applied = set(range(1001, 1018)) - {1009}
+    applied = set(range(1001, 1033)) - {1009}
+    db = _populated(
+        ledger={(SIP, input_id) for input_id in applied},
+        seqs={
+            "usecase_descriptions_config_id_seq": [max(BASELINE[UC]), True, 1],
+            "section_input_prompts_input_id_seq": [1032, True, 1],
+        },
+    )
+    db.tables[SIP] |= applied
+    log = _run_create(db, DML_SEED)
+    assert [re.search(r"VALUES\s*\((\d+),", s).group(1) for s in _seed_inserts(db, SIP)] == ["1009"]
+    assert (SIP, 1009) in db.ledger and 1009 in db.tables[SIP]
+    assert db.setvals == []
+    assert f"    {SIP}: 1 inserted / 0 warnings" in log
+    assert f"    {SIP}.input_id sequence kept at 1033 (max input_id 1032)" in log
+    assert not any("sequence raised" in line for line in log), log
+
+
+def test_populated_release_with_d57_inserts_1018_to_1032_and_raises_the_sequence():
+    """The D-57 release on the live install: 1001-1017 are applied and the sequence
+    sits at 1018, so the reseed inserts the 15 v2 forks and raises it to 1033."""
+    applied = set(range(1001, 1018))
     db = _populated(
         ledger={(SIP, input_id) for input_id in applied},
         seqs={
@@ -510,12 +531,34 @@ def test_populated_release_with_1009_inserts_only_1009_and_keeps_the_sequence():
     )
     db.tables[SIP] |= applied
     log = _run_create(db, DML_SEED)
-    assert [re.search(r"VALUES\s*\((\d+),", s).group(1) for s in _seed_inserts(db, SIP)] == ["1009"]
-    assert (SIP, 1009) in db.ledger and 1009 in db.tables[SIP]
-    assert db.setvals == []
-    assert f"    {SIP}: 1 inserted / 0 warnings" in log
-    assert f"    {SIP}.input_id sequence kept at 1018 (max input_id 1017)" in log
-    assert not any("sequence raised" in line for line in log), log
+    inserted = [int(re.search(r"VALUES\s*\((\d+),", s).group(1)) for s in _seed_inserts(db, SIP)]
+    assert sorted(inserted) == list(range(1018, 1033))
+    assert db.ledger == {(SIP, input_id) for input_id in range(1001, 1033)}
+    assert db.setvals == [(f"{SCHEMA}.section_input_prompts_input_id_seq", 1033)]
+    assert f"    {SIP}: 15 inserted / 0 warnings" in log
+    assert f"    {SIP}.input_id sequence raised 1018 -> 1033" in log
+
+
+def _active_index_keys(seed_file):
+    """(section_tag, coding_assistant, version) of every active INSERT row in a seed
+    file: the key of the partial unique index uq_section_assistant_version_active."""
+    keys = []
+    for _, stmt in snr.seed_rows(str(DML_SEED / seed_file), SIP, "input_id"):
+        cols, end = snr._read_paren_group(stmt, snr._INSERT_RE.match(stmt).end() - 1)
+        values, _ = snr._read_paren_group(stmt, re.compile(r"\s*VALUES\s*", re.IGNORECASE).match(stmt, end).end())
+        row = {c.strip().lower(): v.strip() for c, v in zip(cols, values)}
+        if row.get("is_active", "true").lower() != "false":
+            keys.append((row["section_tag"], row.get("coding_assistant", "'__default__'"), row.get("version", "1")))
+    return keys
+
+
+def test_seed_new_rows_unique_index():
+    """D-57: a v2 fork shares (section_tag, coding_assistant) with its v1, so it must
+    carry version = 2; two active rows on one key would abort the bulk seed."""
+    keys = _active_index_keys(F02)
+    dupes = sorted({key for key in keys if keys.count(key) > 1})
+    assert dupes == [], f"active rows share a uq_section_assistant_version_active key: {dupes}"
+    assert ("'ontology_routing'", "'genie-code'", "2") in keys
 
 
 def test_partially_seeded_populated_table_takes_new_row_path(seed_dir):
