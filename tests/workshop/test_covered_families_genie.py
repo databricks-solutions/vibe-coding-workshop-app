@@ -76,11 +76,12 @@ FORK_ID = {
     "workspace_setup_deploy": 1001,
     "redeploy_test": 1002,
     "optimize_genie": 1003,
+    "workspace_cleanup": 1033,
 }
 # The recorded no-fork judgments (plan table): project_setup is virtual; prd_generation
 # is LLM over the default; bronze_table_metadata is already client-aware (D-41);
-# iterate_enhance and workspace_cleanup per D-39.
-NO_FORK = {"project_setup", "prd_generation", "bronze_table_metadata", "iterate_enhance", "workspace_cleanup"}
+# iterate_enhance per D-39 (workspace_cleanup got fork 1033, D-58).
+NO_FORK = {"project_setup", "prd_generation", "bronze_table_metadata", "iterate_enhance"}
 
 # Reviewed allowances: (section_tag, marker) -> (exact hit count, reason). The app
 # forks' entries come from #114; the rest are the forks first served by these tracks.

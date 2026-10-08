@@ -79,6 +79,7 @@ FORK_ID = {
     "mlflow_gateway_and_deployment": 920,
     "mlflow_production_monitoring_and_debugging": 921,
     "redeploy_test": 1002,
+    "workspace_cleanup": 1033,
 }
 A_FORKS = {
     "agent_spec_design": 1007,
@@ -97,8 +98,8 @@ B_FORKS = {
 }
 NEW_FORKS = {**A_FORKS, **B_FORKS}
 # The recorded no-fork judgments (plan table): project_setup is virtual; prd_generation
-# is LLM over the default; iterate_enhance and workspace_cleanup per D-39.
-NO_FORK = {"project_setup", "prd_generation", "iterate_enhance", "workspace_cleanup"}
+# is LLM over the default; iterate_enhance per D-39 (workspace_cleanup got fork 1033, D-58).
+NO_FORK = {"project_setup", "prd_generation", "iterate_enhance"}
 # Steps waiting on a human RULE_10 ruling: none since D-56 sanctioned the foundation
 # provisioning that fork 1009 states literally (D-51 had parked it here).
 PENDING_RULE10 = {}
