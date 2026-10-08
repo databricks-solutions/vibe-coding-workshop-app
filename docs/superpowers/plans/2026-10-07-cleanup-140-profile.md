@@ -46,3 +46,10 @@ L4 7 tools, /health 200, clean log.
 
 ## Reverse
 Delete row 1033 (default 140 serves again) and restore NO_FORK.
+
+## Amendment r1 (PR #126 review round 1)
+- F1 (blocking) The Lakebase UC catalog path is a strict subset of 140's single target. A catalog row is a candidate only if (a) its name contains `lakebase`, case-insensitive (140's Step 0d discriminator), AND (b) it is not the bundle's `variables.catalog.default`, its `variables.source_catalog.default`, or `{lakehouse_default_catalog}`, AND (c) it passes the MINE rule. A catalog that fails (a) or (b) is listed as `not mine: skipped (not the Lakebase catalog)`. The rule is stated once (`is_my_lakebase_catalog` + **The catalog rule**), next to the MINE rule and before the STOP. No other catalog is ever dropped; the lakehouse catalog only has the bundle's own schemas dropped inside it.
+- F2 `run_sql` raises unless the terminal state is SUCCEEDED (`if resp.status.state != StatementState.SUCCEEDED:  # FAILED / CANCELED / CLOSED`), like the merged F0 run_ddl; pinned by C6.
+- F3 test_cleanup_genie.py's DELETE_CALL also matches `w.api_client.do("DELETE", …)`, so C2/C3 treat the Lakebase project delete as a delete.
+- C5 every DROP CATALOG is the single `mine["Lakebase UC catalog"]` line, gated by the catalog rule (contains `lakebase`; excludes catalog.default / source_catalog.default), and the rule appears before the STOP.
+- Tampers: X6 remove the `lakebase` name condition → C5 red; X7 remove the lakehouse-catalog exclusion → C5 red; X8 raise only on FAILED → C6 red; X9 move the Lakebase project `w.api_client.do("DELETE", …)` line before the `confirm cleanup` STOP → C2 red.

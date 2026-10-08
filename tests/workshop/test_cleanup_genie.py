@@ -15,6 +15,10 @@ C3 the MINE rule (participant prefix AND creator/owner == the current user where
    iterates the MINE rows.
 C4 no keyword-only selection rule survives: none of 140's keyword lists, and a
    name without the prefix is "not mine: skipped".
+C5 every DROP CATALOG is gated by the catalog rule (name contains `lakebase`; not the
+   bundle's catalog.default / source_catalog.default), stated before the STOP, so
+   the fork drops at most 140's single Lakebase UC catalog.
+C6 run_sql fails closed like the F0 run_ddl: it raises unless the statement SUCCEEDED.
 """
 
 import re
@@ -29,10 +33,11 @@ from .test_lakehouse_family_genie import DEFAULT_ID, _served_live
 
 TAG, FORK, DEFAULT = "workspace_cleanup", 1033, 140
 
-# A call that removes something: an SDK delete / trash / stop, a DROP statement,
-# or a CLI delete verb.
+# A call that removes something: an SDK delete / trash / stop, a raw REST DELETE,
+# a DROP statement, or a CLI delete verb.
 DELETE_CALL = re.compile(
-    r"\.(?:delete|trash|trash_space|stop)\(|\bDROP\s+(?:SCHEMA|CATALOG)\b|\bdelete-project\b|"
+    r"\.(?:delete|trash|trash_space|stop)\(|\bapi_client\.do\(\s*\"DELETE\"|"
+    r"\bDROP\s+(?:SCHEMA|CATALOG)\b|\bdelete-project\b|"
     r"\bdatabricks\s+(?:jobs|pipelines|serving-endpoints|apps)\s+delete\b|\bapi\s+delete\b"
 )
 CONFIRM_STOP = "STOP and ask the operator to reply exactly `confirm cleanup`"
@@ -133,6 +138,62 @@ def test_c4_no_keyword_selection_survives():
     assert KEYWORD_SELECTION.findall(_body()) == []
     assert _body().count(NO_PREFIX) == 1
     assert "is listed as `not mine: skipped` and is never deleted" in _body()
+
+
+# --- C5: DROP CATALOG only for 140's single Lakebase UC catalog ---------------------
+
+CATALOG_RULE = "**The catalog rule**"
+CATALOG_CHECKS = [
+    "def is_my_lakebase_catalog(name, owner):",
+    'excluded = {c.lower() for c in LAKEHOUSE_CATALOGS | {"{lakehouse_default_catalog}"} if c and "<" not in c and "{" not in c}',
+    'if "lakebase" not in n:',
+    "if n in excluded:",
+    "return is_mine(name, owner)",
+]
+CATALOG_EXCLUDES = ("`lakebase`", "`variables.catalog.default`", "`variables.source_catalog.default`")
+
+
+def test_c5_drop_catalog_is_gated_by_the_catalog_rule():
+    body = _body()
+    stop = body.index(CONFIRM_STOP)
+    assert body.count(CATALOG_RULE) == 1 and body.index(MINE_RULE) < body.index(CATALOG_RULE) < stop
+    rule = body[body.index(CATALOG_RULE):].split("\n\n", 1)[0]
+    assert all(term in rule for term in CATALOG_EXCLUDES), rule
+    for check in CATALOG_CHECKS:
+        assert body.count(check) == 1 and body.index(check) < stop, check
+    fn = body[body.index(CATALOG_CHECKS[0]):body.index(CATALOG_CHECKS[-1])]
+    assert fn.index('if "lakebase" not in n:') < fn.index("if n in excluded:")
+    assert body.count("Add the two catalog names to `LAKEHOUSE_CATALOGS` before classifying any catalog.") == 1
+    assert "classified ONLY by `is_my_lakebase_catalog(name, owner)` (the catalog rule)" in body
+    drops = [line for line in body.splitlines() if re.search(r"\bDROP\s+CATALOG\b", line)]
+    assert drops == ['for c in mine["Lakebase UC catalog"]: run_sql("DROP CATALOG IF EXISTS `" + c.name + "` CASCADE")']
+
+
+# --- C6: run_sql fails closed --------------------------------------------------------
+
+_RUN_SQL_SHAPE = [
+    "def run_sql(statement):",
+    "w.statement_execution.execute_statement(",
+    'statement=statement, wait_timeout="30s"',
+    "deadline = time.monotonic() + SQL_TIMEOUT_S",
+    "while resp.status.state in (StatementState.PENDING, StatementState.RUNNING):",
+    "if time.monotonic() > deadline:",
+    "w.statement_execution.cancel_execution(resp.statement_id)",
+    "raise TimeoutError(",
+    "resp = w.statement_execution.get_statement(resp.statement_id)",
+    "if resp.status.state != StatementState.SUCCEEDED:  # FAILED / CANCELED / CLOSED",
+    "raise RuntimeError(",
+]
+
+
+def test_c6_run_sql_raises_unless_succeeded():
+    body = _body()
+    fn = body[body.index(_RUN_SQL_SHAPE[0]):]
+    fn = fn[: fn.index("\n\n")]
+    pos = [fn.find(part) for part in _RUN_SQL_SHAPE]
+    assert -1 not in pos, [part for part, at in zip(_RUN_SQL_SHAPE, pos) if at == -1]
+    assert pos == sorted(pos)
+    assert "StatementState.FAILED" not in fn
 
 
 # --- served on every track ----------------------------------------------------------

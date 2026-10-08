@@ -10846,9 +10846,25 @@ def is_mine(name, creator=None):
 
 **The MINE rule** (stated once here; every later step refers to it): a resource is MINE only if its name carries one of your participant prefixes — `{db_schema}`, `{user_schema_prefix}`, or the `APP_NAME` / `AGENT_APP_NAME` from `<STATE_FILE>` — AND, where the object exposes a creator or owner, that creator/owner equals the current user. A name that only looks like the workshop (a use-case word, a layer name, a product word) without your prefix is listed as `not mine: skipped` and is never deleted. Something owned by another user is `not mine: skipped` even if it carries your prefix.
 
+```python
+LAKEHOUSE_CATALOGS = set()  # Step 2 adds the bundle''s variables.catalog.default and variables.source_catalog.default
+
+def is_my_lakebase_catalog(name, owner):
+    """The catalog rule: (verdict, why). The only rule a Lakebase UC catalog row uses."""
+    n = (name or "").lower()
+    excluded = {c.lower() for c in LAKEHOUSE_CATALOGS | {"{lakehouse_default_catalog}"} if c and "<" not in c and "{" not in c}
+    if "lakebase" not in n:
+        return False, "not mine: skipped (not the Lakebase catalog)"
+    if n in excluded:
+        return False, "not mine: skipped (not the Lakebase catalog)"
+    return is_mine(name, owner)
+```
+
+**The catalog rule** (stated once here, next to the MINE rule): a UC catalog is a Lakebase UC catalog candidate only if (a) its name contains `lakebase` (case-insensitive), AND (b) it is NOT the bundle''s `variables.catalog.default`, NOT its `variables.source_catalog.default`, and NOT `{lakehouse_default_catalog}`, AND (c) it passes the MINE rule (prefix AND owner equals the current user). A catalog that fails (a) or (b) is listed as `not mine: skipped (not the Lakebase catalog)` even if it carries your prefix, and is never dropped. No other catalog is ever dropped: the lakehouse catalog only ever has the bundle''s own schemas dropped inside it.
+
 ### Step 2 — Discover and classify (read-only)
 
-Read `<DP_BUNDLE_ROOT>/databricks.yml` and `<APP_ROOT>/databricks.yml` with `open()` in `executeCode` (`yaml.safe_load`) for: `variables.catalog.default`, `variables.bronze_schema.default`, `variables.silver_schema.default`, `variables.gold_schema.default`, `variables.source_schema.default`, `variables.source_catalog.default`, `resources.apps.app.name`, and `resources.postgres_projects.*.project_id`. A missing file or key is a skip, not an error.
+Read `<DP_BUNDLE_ROOT>/databricks.yml` and `<APP_ROOT>/databricks.yml` with `open()` in `executeCode` (`yaml.safe_load`) for: `variables.catalog.default`, `variables.bronze_schema.default`, `variables.silver_schema.default`, `variables.gold_schema.default`, `variables.source_schema.default`, `variables.source_catalog.default`, `resources.apps.app.name`, and `resources.postgres_projects.*.project_id`. A missing file or key is a skip, not an error. Add the two catalog names to `LAKEHOUSE_CATALOGS` before classifying any catalog.
 
 Then build one table, each row `(type, name, id, creator/owner, verdict, why)` with `is_mine`:
 
@@ -10861,10 +10877,10 @@ Then build one table, each row `(type, name, id, creator/owner, verdict, why)` w
 | Serving endpoint | `w.serving_endpoints.list()` (`name`) | `creator` |
 | App | `w.apps.list()` (`name`) | `creator` |
 | Lakebase project | the bundle''s `project_id`, checked with `w.api_client.do("GET", "/api/2.0/postgres/projects/" + pid)` | none exposed |
-| Lakebase UC catalog | `w.catalogs.list()` (`name`) | `owner` |
+| Lakebase UC catalog | `w.catalogs.list()` (`name`), classified ONLY by `is_my_lakebase_catalog(name, owner)` (the catalog rule) | `owner` |
 | Schema | only the bundle''s schema names, each read with `w.schemas.get(catalog + "." + schema)` | `owner` |
 
-Pass the creator/owner to `is_mine` only where the table names one. Schemas come ONLY from the bundles'' `databricks.yml`, never from a catalog-wide listing. Keep the MINE rows as `mine = {type: [row, ...]}` (each row with `.name`, `.id`, and for a schema its `.catalog`). Print each row, e.g. `print(kind + " " + name + " [" + oid + "]", f"(creator: {creator})", "-> " + why)`.
+Pass the creator/owner to `is_mine` only where the table names one; a catalog row goes through the catalog rule, never `is_mine` alone. Schemas come ONLY from the bundles'' `databricks.yml`, never from a catalog-wide listing. Keep the MINE rows as `mine = {type: [row, ...]}` (each row with `.name`, `.id`, and for a schema its `.catalog`). Print each row, e.g. `print(kind + " " + name + " [" + oid + "]", f"(creator: {creator})", "-> " + why)`.
 
 ### Step 3 — STOP: confirm before anything is deleted
 
@@ -10904,7 +10920,7 @@ def run_sql(statement):
             raise TimeoutError("statement still " + resp.status.state.value + ": " + statement)
         time.sleep(2)
         resp = w.statement_execution.get_statement(resp.statement_id)
-    if resp.status.state in (StatementState.FAILED, StatementState.CANCELED, StatementState.CLOSED):
+    if resp.status.state != StatementState.SUCCEEDED:  # FAILED / CANCELED / CLOSED
         raise RuntimeError(statement + " -> " + resp.status.state.value + ": " + str(resp.status.error))
 
 for s in mine["Schema"]: run_sql("DROP SCHEMA IF EXISTS `" + s.catalog + "`.`" + s.name + "` CASCADE")
