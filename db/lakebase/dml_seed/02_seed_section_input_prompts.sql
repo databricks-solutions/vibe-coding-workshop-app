@@ -6674,6 +6674,186 @@ What areas could be improved?
 'Let''s iterate on my app — help me add a new feature and improve the experience.',
 1, true, current_timestamp(), current_timestamp(), current_user());
 
+-- Iterate & Enhance App v2 (D-77): v1 + the output length contract (900 words)
+INSERT INTO ${catalog}.${schema}.section_input_prompts 
+(input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, user_trigger_prompt, version, is_active, inserted_at, updated_at, created_by)
+VALUES
+(1034, 'iterate_enhance',
+'Iterate and enhance the application based on user feedback and business needs.
+
+---
+
+## Potential Enhancements
+
+Review the current application and identify areas for improvement:
+
+### UI/UX Improvements
+- Dark mode support
+- Better visualizations and charts
+- Improved navigation and user flows
+- Mobile responsiveness
+- Accessibility improvements
+
+### Data Features
+- Additional filters and search capabilities
+- Data export functionality (CSV, Excel, PDF)
+- Saved views and bookmarks
+- Custom dashboards per user
+
+### Agent Enhancements
+- Additional tools and capabilities
+- Conversation history and context
+- Multi-turn conversations
+- Integration with more data sources
+
+### Performance Optimizations
+- Query caching strategies
+- Pagination for large datasets
+- Lazy loading for UI components
+- Database query optimization
+
+### Integration Enhancements
+- Additional data source connections
+- External API integrations
+- Webhook notifications
+- SSO/authentication improvements
+
+---
+
+## Iteration Process
+
+### Step 1: Gather User Feedback
+- Conduct user interviews
+- Review usage analytics
+- Collect feature requests
+- Identify pain points
+
+### Step 2: Prioritize Enhancements
+Use MoSCoW method:
+- **Must Have**: Critical for user success
+- **Should Have**: Important but not critical
+- **Could Have**: Nice to have
+- **Won''t Have**: Out of scope for now
+
+### Step 3: Plan Implementation
+- Break down into sprints
+- Estimate effort for each enhancement
+- Identify dependencies
+- Create implementation tickets
+
+### Step 4: Implement Changes
+- Work on one enhancement at a time
+- Write tests for new features
+- Document changes
+- Review code before merging
+
+### Step 5: Test and Validate
+- Unit tests for new functionality
+- Integration tests for workflows
+- User acceptance testing
+- Performance testing
+
+### Step 6: Deploy and Monitor
+- Deploy to staging first
+- Validate in staging environment
+- Deploy to production
+- Monitor for issues
+
+---
+
+## Industry Context
+Industry: {industry}
+Use Case: {use_case}
+
+Review the current implementation and identify enhancements specific to the {industry} {use_case} use case.
+
+---
+
+## Output contract for the next step (Redeploy & Test)
+
+End your generated plan with these four sections, exactly named, so Step 21 (Redeploy & Test) can consume them programmatically. Step 21 receives this entire plan as `{iteration_plan}` and looks for these section headings verbatim — do not rename, reorder, or merge them.
+
+### Change Manifest
+List every file path, API endpoint, database table, env var, secret, config key, and gate (feature flag, Lakebase visibility row, per-assistant fork, env-driven toggle) you propose to touch, grouped by enhancement. Include for each: the enhancement name, the artifact, and a one-line "why" so the Step 21 reviewer can sanity-check the diff against this manifest before deploying.
+
+### Smoke Tests (per enhancement)
+For each enhancement, write 1–3 given / when / then steps a human can execute in under 5 minutes to prove the new behavior works. Each test must specify the gate state required (default vs target) and the observable signal (HTTP status, JSON field, log line, UI element). If the enhancement has no observable signal, redesign it before listing it here.
+
+### Regression-Risk Surface
+Call out any "preserves pre-existing behavior" guarantee — i.e., a code path you intend to leave behaviorally unchanged even though the file containing it was touched. For each, name the call site, the input that exercises the unchanged path, and the expected output. Step 21 re-verifies these explicitly. Leave the section heading present with the text "None." if there are no such guarantees.
+
+### Migrations / Order of Operations
+Ordered list of schema changes, DDL, seed updates, env var changes, or permission grants that must run before the app code deploys. Each entry: the artifact (SQL file path, CLI command, or description), and the reason it must precede the app deploy. Leave the section heading present with the text "None." if there are no migrations.
+
+## Output length contract
+Keep the prompt you write under 900 words. Prefer a short ordered checklist over prose; name each file, command or check once; do not restate this specification, the PRD or earlier outputs; omit examples unless one is essential. If the full scope does not fit, cover the highest-value items and end with one line listing what was left out.',
+'You are a product manager and developer specializing in iterative application development.
+Generate a detailed, actionable prompt for enhancing the application based on user feedback.
+Focus on:
+- Identifying high-impact improvements
+- Prioritizing based on user value
+- Breaking down into manageable tasks
+- Ensuring quality through testing',
+'Iterate & Enhance App',
+'Iterate on the application to add new features, update functionality, and improve user experience',
+18,
+'## Prerequisite
+
+**Run this in your cloned Template Repository** (see Prerequisites in Step 0). These prompts assume you are working in that codebase with a coding assistant enabled.
+
+---
+
+## Steps to Iterate and Enhance
+
+### Step 1: Review Current State
+```
+@codebase What are the main features of this application? 
+What areas could be improved?
+```
+
+### Step 2: Gather Feedback
+- Review user feedback
+- Analyze usage patterns
+- Identify pain points
+
+### Step 3: Prioritize Enhancements
+- Use MoSCoW method
+- Consider effort vs impact
+- Plan sprint backlog
+
+### Step 4: Implement Changes
+- One enhancement at a time
+- Write tests
+- Document changes
+
+### Step 5: Test and Deploy
+- Run all tests
+- Deploy to staging
+- Validate and deploy to production',
+'## Expected Enhancement Outcomes
+
+### UI/UX Improvements
+- [ ] Dark mode implemented
+- [ ] Better visualizations
+- [ ] Improved navigation
+
+### Data Features
+- [ ] Export functionality
+- [ ] Advanced filters
+- [ ] Saved views
+
+### Performance
+- [ ] Faster load times
+- [ ] Optimized queries
+- [ ] Better caching
+
+### Documentation
+- [ ] Updated user guide
+- [ ] API documentation
+- [ ] Release notes',
+'Let''s iterate on my app — help me add a new feature and improve the experience.',
+2, true, current_timestamp(), current_timestamp(), current_user());
+
 -- Step 21: Redeploy & Test - consumes Step 20's iteration_plan, verifies the delta only - bypass_LLM = TRUE
 INSERT INTO ${catalog}.${schema}.section_input_prompts 
 (input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, user_trigger_prompt, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
@@ -9937,6 +10117,62 @@ Structure the strategy as a clear, actionable document with sections for each ar
 '',
 false, 1, true, current_timestamp(), current_timestamp(), current_user());
 
+-- Step 27: Define Skill Strategy v2 (D-77): v1 + the output length contract (900 words)
+INSERT INTO ${catalog}.${schema}.section_input_prompts 
+(input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
+VALUES
+(1035, 'skill_define_strategy',
+'Generate a comprehensive **Skill Strategy** document for the **{use_case_title}** skill in a {industry_name} data platform.
+
+## Use Case Specification
+{use_case_description}
+
+## Target Assets
+{gold_table_target}
+
+## Exploration Findings (from previous step)
+{exploration_findings}
+
+## Requirements
+
+Using the **Measures / Rules**, **Validation Approach**, and **Certification Criteria** sections from the use case specification above, generate a complete strategy document that covers:
+
+### 1. Measures & Rules
+For each measure/rule defined in the use case specification:
+- **Tag key** and **value format** (with examples)
+- **Description** of what it enforces
+- **Default value** for new assets
+
+### 2. Validation SQL
+For each measure, provide a SQL query that validates compliance. The SQL should:
+- Query `system.information_schema` or the target asset itself
+- Return a boolean pass/fail result
+- Be parameterizable for any table/asset name
+
+### 3. Success / Certification Criteria
+Define the rules from the use case specification for when an asset is considered compliant:
+- Which measures must pass
+- Grace periods for newly created assets
+- What happens when compliance fails
+
+### 4. Scheduling & Automation Recommendations
+- How often should validation run?
+- Should it run as a Databricks Job or Lakehouse Monitor?
+- Alert/notification strategy for failures
+
+## Output Format
+Structure the strategy as a clear, actionable document with sections for each area above. Use code blocks for SQL examples. Tailor all content to the specific use case described above.
+
+## Output length contract
+Keep the prompt you write under 900 words. Prefer a short ordered checklist over prose; name each file, command or check once; do not restate this specification, the PRD or earlier outputs; omit examples unless one is essential. If the full scope does not fit, cover the highest-value items and end with one line listing what was left out.',
+'You are an expert in Databricks data governance, Unity Catalog, and data quality best practices. Generate a comprehensive skill strategy based on the provided use case specification. The strategy should define measures as Unity Catalog tags, provide validation SQL for each measure, and specify success/certification criteria. The strategy should be practical, follow Databricks best practices, and be ready to implement as an Agent Skill following the agentskills.io standard.',
+'Define Skill Strategy',
+'Generate a comprehensive strategy for your Agent Skill based on your use case specification',
+27,
+'',
+'',
+false, 2, true, current_timestamp(), current_timestamp(), current_user());
+
 -- Step 28: Create SKILL.md
 INSERT INTO ${catalog}.${schema}.section_input_prompts 
 (input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
@@ -9991,6 +10227,64 @@ Generate all files with clear file path headers. Use proper markdown for SKILL.m
 '',
 '',
 false, 1, true, current_timestamp(), current_timestamp(), current_user());
+
+-- Step 28: Create SKILL.md v2 (D-77): v1 + the output length contract (1200 words)
+INSERT INTO ${catalog}.${schema}.section_input_prompts 
+(input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
+VALUES
+(1036, 'skill_create_skillmd',
+'Generate a complete **Agent Skill package** for **{use_case_title}**, following the agentskills.io SKILL.md standard.
+
+## Use Case Specification
+{use_case_description}
+
+## Skill Strategy (from previous step)
+{skill_strategy}
+
+## Target Assets
+{gold_table_target}
+
+## Requirements
+
+Using the **Skill Identity** and **Skill Artifacts** sections from the use case specification, plus the detailed strategy from the previous step, generate a complete Agent Skill package.
+
+### File 1: `<skill-name>/SKILL.md`
+
+The primary skill file following the agentskills.io standard with:
+- **Name**: from the Skill Identity section
+- **Description**: One-line summary of what the skill does
+- **Triggers**: from the Skill Identity section — when should this skill activate
+- **Instructions**: Numbered step-by-step instructions the AI agent should follow, derived from the strategy
+- **References**: List any reference files
+- **Assets**: List any asset files (configs, templates)
+
+### File 2: `<skill-name>/references/<reference-doc>.md`
+
+A reference document containing:
+- Validation or execution patterns (SQL, code, etc.) from the strategy
+- Example outputs showing pass/fail or expected results
+- Parameterized patterns that work with any target asset name
+
+### File 3: `<skill-name>/assets/<config-file>.yaml`
+
+A YAML configuration file defining:
+- All measures/rules with their keys, value formats, and defaults
+- Success/certification criteria
+- Scheduling or automation defaults
+- Asset filter patterns (which tables/objects to include/exclude)
+
+## Output Format
+Generate all files with clear file path headers. Use proper markdown for SKILL.md, standard markdown for the reference doc, and valid YAML for the config file. Derive all file names, folder names, and content from the use case specification.
+
+## Output length contract
+Keep the prompt you write under 1200 words. Prefer a short ordered checklist over prose; name each file, command or check once; do not restate this specification, the PRD or earlier outputs; omit examples unless one is essential. If the full scope does not fit, cover the highest-value items and end with one line listing what was left out.',
+'You are an expert Agent Skills author following the agentskills.io specification. Generate a complete, production-ready Agent Skill package based on the provided use case specification and skill strategy. The SKILL.md must be clear, actionable, and follow the standard structure. All patterns must use real Databricks SQL syntax where applicable. Config files must be valid YAML. Derive the skill name, folder structure, and all content from the use case specification.',
+'Create SKILL.md',
+'Generate the complete SKILL.md package with references and assets based on your skill strategy',
+28,
+'',
+'',
+false, 2, true, current_timestamp(), current_timestamp(), current_user());
 
 -- Step 29: Apply & Test Skill
 INSERT INTO ${catalog}.${schema}.section_input_prompts 
