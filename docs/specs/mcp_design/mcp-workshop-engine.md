@@ -386,6 +386,27 @@ The Genie Accelerator is delivered by **data**, not bespoke code:
   the tool contract (`vibe_get_step`) is unchanged — only the assembler branch differs.
 - **New surface** (e.g. a CLI) = a third thin adapter over the same engine.
 
+**As shipped (Phase 4, 2026-10; [Phase 4 exit report](../../superpowers/plans/2026-10-08-phase4-exit-report.md)).**
+All **14 manifest tracks** (`src/backend/workshop/manifest.json:77` `tracks`) are walkable over MCP:
+- **Track-scoped walk (P4.1, #107, D-30):** every tool resolves the session's track through the
+  unchanged `track_resolution.resolve_track` (`_session_track`, `mcp_server.py:529`); `DEFAULT_TRACK` (genie-accelerator)
+  is only the definition and the no-record fallback, and a failed first save returns
+  `SESSION_NOT_SAVED` (`mcp_server.py:1304`; #122, D-55). Tool count still 7.
+- **Shared use-case gate (P4.2, #108, D-33/D-34):** `prd_generation` `requiresGate: "use_case_selection"`
+  on every track that has it (`manifest.json`, e.g. :114, :272, :510).
+- **Genie-code fork mechanism (P4.3):** the "new fork column" above, as built, is a `genie-code` row in
+  `db/lakebase/dml_seed/02_seed_section_input_prompts.sql` (input_id 1000+, D-2) for each step whose
+  default body cannot run in Genie Code, or a recorded no-fork. A shipped fork is corrected by a
+  **versioned** row (v2 1018–1032), because the additive seed never updates an existing row (D-57);
+  3 v2 rows are held on v1 (D-61).
+- **LLM-generated steps (P4.4):** served on every track through the #77–#79 step-prompt path with a
+  template fail-open; within budget only for `prd_generation` (PARTIAL, D-62).
+- **Per-track parity tests:** `tests/workshop/test_track_scoped_walk.py` (all 14 tracks) and the
+  per-family tests `test_app_family_genie_forks.py`, `test_lakehouse_family_genie.py`,
+  `test_covered_families_genie.py`, `test_skills_family_genie.py`, `test_agents_family_genie.py`,
+  `test_genie_family_genie.py`, `test_cleanup_genie.py` (Phase 4 exit report §3).
+- **New surface:** not shipped; Genie Code over MCP and the SPA are the only surfaces (FORGE RUN.md:120-121).
+
 ---
 
 ## 12. File-by-file change list

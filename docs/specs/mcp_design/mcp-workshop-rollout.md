@@ -39,9 +39,9 @@ interactivity layer is its own phase that does NOT wait on any capability upgrad
 | **1** ✅ | Mount FastMCP `/mcp/`; **read-only** tools (`start_track`, `get_step`, `next_step`) + engine REST routes; the self-serve on-ramp: orientation prompt, `vibe://guide/getting-started`, and the SPA "Connect to Genie Code" panel (D1 §1a, D4 §1.1). | D8 §3, §5 green; live smoke §8 read path; **self-serve acceptance** (below) | Genie Code walks the track verbatim — **no copy-paste**. **Ships now; no elicitation dependency.** |
 | **2** ✅ | **Interactivity + state (in-band):** `complete_step`, `submit_answer`, `set_parameters`, resources, the `interaction` block (D1), Lakebase columns + interaction log (D6), auth + annotations. | D8 §4, §6, §7 green | Full guided loop: gates, decisions, comprehension checks — **all in-band, no elicitation**. **Shared session store + cross-surface handoff** (same `session_id`, OBO-scoped): each surface can resume the other's session. *Step-progress **visibility** in the SPA is NOT yet delivered here* — MCP writes `completed_gates`/`captured_outputs` while the legacy SPA reads `current_step`/`completed_steps`; that reconciliation is Phase 2B (bridge) / Phase 3 (canonical). **Shipped: PRs #40–#44, deployed to `fevm-serverless`, smoke green (6 tools).** |
 | **2B** ✅ | **Continuity & correctness (in-band, additive, ZERO new tools):** the shared **use-case selection** step before PRD — industry → certified-first use cases → author-your-own — producing the track-agnostic `use_case_brief` gate ([D11 §3](./mcp-workshop-usecase-selection.md)); and the **step-sync bridge** so the existing SPA reflects MCP progress ([D11 §4.3](./mcp-workshop-usecase-selection.md)). **Genie Accelerator only** (generalization is Phase 4). | D8 use-case-gate + sync-bridge tests green ([D11 §6](./mcp-workshop-usecase-selection.md)); **Phase 2 shipped** | **Shipped: PRs #45–#49, deployed to `fevm-serverless`.** `use_case_selection` step `produces:"use_case_brief"` (`manifest.json:1819,1825`); `prd_generation` `requiresGate:"use_case_selection"` (`manifest.json:1839`); sync bridge dual-writes `current_step`/`completed_steps` via `_legacy_progress` (`mcp_server.py:1256-1283`). Fixes the PRD-jump; a learner sees the same step across MCP and the web app. **(Historical: that `_legacy_progress` dual-write was retired in Phase 3 T5 R4a (#70) and all reads went gates-only in R4b (#71) — the bridge is superseded by gate-first reads; see the Phase 3 row.)** |
-| **2A** | **Adaptive coaching — delivered as a *consolidation*, not a new tool (DEFERRED, not built).** The specced 7th tool `vibe_coach` (D2 §3.7) overlaps almost entirely with the **shipped** `vibe_explain_step` (`mcp_server.py:995`): same on-demand help niche, same current-step default, same grounding fields (`title/why/how_to_apply/expected_output`), and the coach's fail-open fallback *is* the static help `vibe_explain_step` already returns. **Plan:** extend `vibe_explain_step` with an optional `focus` (`what_now\|why\|unblock\|review`), LLM-enrich over the context it already assembles + `captured_outputs`/prior interactions, and **degrade to today's static `StepHelpResult`** (`is_fallback:true`). Still needs `services/llm.py` extract (D4 §1.2), `_COACH_SYSTEM` (D2 §12), leakage firewall (D7 §6.1), `13_mcp_coaching.sql` (D6 §7a). Cost/endpoint signed off 2026-09-24 (§9 q4). | D8 §4a green; **Phase 2 shipped** | On-demand, grounded coaching ("what now / why / unblock / review") — **fail-open** to static help; **tool count stays 7 (budget honored by design)**. Sequenced as its **own charter after Phase 3**. |
-| **3** ◧ | Repoint UI to the engine; retire TS orchestration; live-sync mirror (engine-backed `GET /api/track/{track}/outline?session_id`, D4 §3.3). **Subsumes the 2B bridge** — makes the section/gate model the single source of truth, sync bidirectional. | parity stable; number↔tag flip (D6 §5) | Single brain; divergence eliminated. **Scoped 2026-09-27; Task 0 persists the track and fixes the live "0/28" resume defect.** **Shipped: T0–T4 (PRs #50/#51/#52/#53/#57/#59/#61) — track persistence, the `/api/track/{track}/outline` endpoint, the engine-vs-TS parity harness, the SPA read-path repoint, and the `getFilteredSections` TS-orchestration retirement. T5 (gates-only contract) is at R4b (#71): the legacy `current_step`/`completed_steps`/`skipped_steps` dual-write stopped in R4a (#70) and all reads went gates-only in R4b — deployed and soaking; the legacy-column DROP (D6 §5/§9) is pending (human holds the soak clock).** |
-| **4** | Generalize to all tracks (incl. LLM-generated steps) + other surfaces. **Includes hoisting `use_case_selection` into the shared `define-usecase` section for all ten tracks** (D11 open q1). | — | Whole workshop is dual-surface. |
+| **2A** | **Adaptive coaching — delivered as a *consolidation*, not a new tool (planned as DEFERRED, not built; SHIPPED in #98–#105, D-22, see the [Phase 2A gate report](../../superpowers/plans/2026-10-05-phase2a-gate-report.md)).** The specced 7th tool `vibe_coach` (D2 §3.7) overlaps almost entirely with the **shipped** `vibe_explain_step` (`mcp_server.py:995`): same on-demand help niche, same current-step default, same grounding fields (`title/why/how_to_apply/expected_output`), and the coach's fail-open fallback *is* the static help `vibe_explain_step` already returns. **Plan:** extend `vibe_explain_step` with an optional `focus` (`what_now\|why\|unblock\|review`), LLM-enrich over the context it already assembles + `captured_outputs`/prior interactions, and **degrade to today's static `StepHelpResult`** (`is_fallback:true`). Still needs `services/llm.py` extract (D4 §1.2), `_COACH_SYSTEM` (D2 §12), leakage firewall (D7 §6.1), `13_mcp_coaching.sql` (D6 §7a). Cost/endpoint signed off 2026-09-24 (§9 q4). | D8 §4a green; **Phase 2 shipped** | On-demand, grounded coaching ("what now / why / unblock / review") — **fail-open** to static help; **tool count stays 7 (budget honored by design)**. Sequenced as its **own charter after Phase 3**. **Shipped:** every RUN.md §B requirement has code, a pinning test and, where observable, a probe number; row 12 (every track) PASS with caveat; 764 passed, 0 failed at 7e2b537 (Phase 2A gate report :3, :19, :38). |
+| **3** ◧ | Repoint UI to the engine; retire TS orchestration; live-sync mirror (engine-backed `GET /api/track/{track}/outline?session_id`, D4 §3.3). **Subsumes the 2B bridge** — makes the section/gate model the single source of truth, sync bidirectional. | parity stable; number↔tag flip (D6 §5) | Single brain; divergence eliminated. **Scoped 2026-09-27; Task 0 persists the track and fixes the live "0/28" resume defect.** **Shipped: T0–T4 (PRs #50/#51/#52/#53/#57/#59/#61) — track persistence, the `/api/track/{track}/outline` endpoint, the engine-vs-TS parity harness, the SPA read-path repoint, and the `getFilteredSections` TS-orchestration retirement. T5 (gates-only contract) is at R4b (#71): the legacy `current_step`/`completed_steps`/`skipped_steps` dual-write stopped in R4a (#70) and all reads went gates-only in R4b — deployed and soaking; the legacy-column DROP (D6 §5/§9) is pending (human holds the soak clock).** **Exit gate PASS** ([Phase 3 exit report](../../superpowers/plans/2026-10-04-phase3-exit-report.md), #80–#95, 662 passed at 0f05bed): outline matches the golden matrix, no number-key consumers, MCP outline == SPA outline for one session_id. The optional legacy-column DROP stays a human step in the APP release-candidate upgrade notes (FORGE RUN.md:109-111). |
+| **4** ◧ | Generalize to all tracks (incl. LLM-generated steps) + other surfaces. **Includes hoisting `use_case_selection` into the shared `define-usecase` section** (D11 open q1) of the 14 manifest tracks: app-only, app-database, lakehouse, lakehouse-di, end-to-end, accelerator, genie-accelerator, data-engineering-accelerator, skills-accelerator, agents-accelerator, reverse-lakehouse, reverse-lakehouse-di, reverse-lakebase, reverse-app (`manifest.json:77` `tracks`). 13 have `define-usecase` = `project_setup` → `prd_generation`; skills-accelerator has `project_setup` only, and `skill_install_explore` follows (`manifest.json:4179`, :4186, :4210; `tests/workshop/test_usecase_hoist.py:202-204`). | — | Whole workshop is dual-surface. **Shipped per the [Phase 4 exit report](../../superpowers/plans/2026-10-08-phase4-exit-report.md) §1–§2 (APP #107–#126, TPL #18/#19; still 7 tools):** P4.1 track-scoped walk **PASS with caveat** (#107, D-30; `skills-track-silent-fallback` open); P4.2 use-case hoist **PASS** (#108, D-33/D-34); P4.3 every track walkable in Genie Code **PASS with caveat** (genie-code forks 1001–1022, 1024–1027, 1030–1033; v2 rows 1023/1028/1029 **held** on v1 934/940/941 by D-61; `agents-213-execution-label` open); P4.4 step-prompt generation **PARTIAL** (D-62: served on every track, within the 90 s budget only for `prd_generation`); P4.5 SPA any-track connect **PASS** (#124, D-59). **Other surfaces: not shipped** (out of the run's scope, FORGE RUN.md:120-121). |
 
 **Key change from the pre-probe roadmap:** interactivity (Phase 2) is **not** gated on Genie Code
 elicitation. It is built in-band and ships independently. If elicitation later appears (§8), it is a
@@ -60,7 +60,7 @@ order. It is still an in-band pattern (server-side FMAPI, not a server→client 
 **With 2B shipped, the recommended NEXT increment is Phase 3** ([`polly-charter-phase3.md`](./polly-charter-phase3.md)).
 Phase 3's UI-repoint **subsumes** the 2B sync bridge (the bridge is the fast, backward-compatible
 path; the repoint is the canonical one), and Phase 4 **generalizes** 2B's `use_case_selection` step to
-all ten tracks. No renumbering of Phase 3→4. (Phase 2A — the coaching *consolidation* into
+every track with `prd_generation`, 13 of the 14 manifest tracks (skills-accelerator has none, `tests/workshop/test_usecase_hoist.py:202-204`; shipped in #108, D-33; `manifest.json` `requiresGate: "use_case_selection"`, e.g. :114, :272, :510). No renumbering of Phase 3→4. (Phase 2A — the coaching *consolidation* into
 `vibe_explain_step` — is its own charter *after* Phase 3.)
 
 **Shipped outside the phase plan (2026-09-27 reconciliation — code-verified).** The deployed MCP
@@ -153,6 +153,16 @@ Before any `/mcp` deploy (plan §1.3 / generic §4 / D4 §2):
 - **Number↔tag flip** (Phase 3) → confirm no external consumer reads legacy number keys (D6 §9).
 - **`databricks bundle init`** → never run (destroys config; roadmap).
 
+**Human gates as shipped in the autonomous run (2026-10):**
+- **Budget changes** → human. Raising the coaching budget (`VIBE_COACH_BUDGET_S`, the §9 q4 values)
+  or `STEP_PROMPT_BUDGET_S` (`mcp_server.py:798`) is not taken by the run: it measures and parks
+  (D-29; D-62; Phase 4 exit report §6 Q2).
+- **Destructive data operations** → never automatic. The deploy tables step is additive by default and a
+  destructive reseed needs a double opt-in (#109, D-35); the release deploy guard denies a tables
+  reseed whose `db/` diff adds non-additive SQL ("destructive operations are human-only", D-50).
+- **`main`** in either repo → human-only: no agent commits to, pushes to, or merges into `main`
+  (D-5); the release-candidate PRs into `main` are opened, never merged, by the run (FORGE RUN.md:108).
+
 ---
 
 ## 6. Rollback
@@ -174,12 +184,22 @@ Before any `/mcp` deploy (plan §1.3 / generic §4 / D4 §2):
 | 0 | D8 §2 (engine/parity/byte-parity) |
 | 1 | D8 §3 (contract), §5 (307/mount/lifespan), §8 read-path smoke |
 | 2 | D8 §4 (interactivity), §6 (isolation), §7 (data model), §8 full smoke |
-| 2A | D8 §4a (coaching: grounding, fail-open, leakage scrub, read-only, provenance) + §7 coaching migration |
+| 2A | D8 §4a (coaching: grounding, fail-open, leakage scrub, read-only, provenance) + §7 coaching migration. **As run:** [Phase 2A gate report](../../superpowers/plans/2026-10-05-phase2a-gate-report.md) (#98–#105; 764 passed, 0 failed at 7e2b537) |
 | 2B | D11 §6: manifest parity (`use_case_selection` before PRD; PRD `requiresGate`+`consumes`); resources certified-first; PRD locked-before-render gate; custom = session-local (no `saved_usecase_descriptions` write); sync bridge updates `current_step`/`completed_steps` |
 | 3 | parity stable across UI repoint; no number-key consumers |
-| 4 | per-track parity for each newly onboarded track |
+| 4 | per-track parity for each newly onboarded track. **As run:** [Phase 4 exit report](../../superpowers/plans/2026-10-08-phase4-exit-report.md) §2–§4 (per-track parity tests and live walks for all 14 tracks; 1640 passed, 0 failed at 89ee6f0) |
 
 No CI today (D8 §11) — run the suites locally and record results in the PR before each deploy.
+
+**Gate actually used per PR in the autonomous run (Phases 2A, 3 cleanup, 4):**
+- **Offline suite floor:** `pytest tests/workshop tests/api -q` with 0 failed and passed ≥ the current
+  floor (1640 at 89ee6f0, Phase 4 exit report :5-11; 764 at 7e2b537, Phase 2A gate report :3).
+- **Genie gate:** FORGE `tools/genie_gate_diff.py` must print no new findings and no audit-key growth
+  for any seed or template change (Phase 4 exit report §4; a held fork whose key grows does not ship, D-61).
+- **Tampers:** each acceptance check is made red by a scripted tamper and restored byte-identically
+  (e.g. the Phase 3 exit report's T1–T4 and X3b/X3c).
+- **Live probe:** after each app merge and deploy, the forge prober walks the deployed app over HTTP and
+  MCP and reads the served text only; no served instruction is executed (Phase 4 exit report :13, §5).
 
 ---
 
@@ -199,11 +219,24 @@ If the probe shows `elicitation` is now advertised, open a follow-up to enable D
 
 1. **Deploy target names** — confirm the `-t <target>` values (e.g. `production`) and the canonical
    workspace for the MCP app.
+   **PARTLY RESOLVED (2026-10):** the canonical workspace is `fevm-serverless`, app
+   `mcp-vibe-coding-workshop-app` (FORGE RUN.md:6-7; every Phase 2B–4 deploy, §1). **Still open:** the `-t` target name for installs from `main`.
 2. **MCP mount feature-flag** — env var name + default (recommend default-off until Phase 1 sign-off).
+   **RESOLVED (shipped code decides):** `MCP_MOUNT_ENABLED`, default off in code (`app.py:31`), set to
+   `"true"` in the deploy template (`app.yaml.template:82-83`).
 3. **Who owns the re-probe cadence** — tie it to a release checklist or a periodic reminder.
+   **Still open.**
 4. **Coaching model + cost (Phase 2A)** — **RESOLVED 2026-09-24 (ship enabled).** Reuse the **app
    default** endpoint (`databricks-claude-sonnet-4-5`); `max_tokens≈400`; `≈8 s` timeout with
    **fail-open** to static coaching; **cache per `(session_id, sectionTag, focus)`** (D2 §12 q4). Keep
    a coaching **kill-switch** env (default **on**) so it can be disabled without a code revert (§6).
    The per-invocation FMAPI cost was reviewed and accepted; the remaining human gate is the deploy
    itself (§5), not the endpoint/knob choice.
+5. **Genie gate change for the held v2 rows (Phase 4, D-61)** *(open, human)* — the gate counts
+   superseded seed versions, so v2 rows 1023/1028/1029 cannot ship unchanged. (a) count only the
+   highest active version per (section_tag, coding_assistant), or (b) keep the gate and leave the
+   three tags on v1 934/940/941 (Phase 4 exit report §6 Q1).
+6. **Step-prompt budget (Phase 4, D-62)** *(open, human)* — `iterate_enhance`, `skill_define_strategy`
+   and `skill_create_skillmd` exceed the 90 s budget (`mcp_server.py:798`). (a) larger max_tokens or a
+   smaller output contract for rows 14/131/132, (b) async or deferred generation, (c) accept the
+   template fallback (current), or (d) raise `STEP_PROMPT_BUDGET_S` (Phase 4 exit report §6 Q2).

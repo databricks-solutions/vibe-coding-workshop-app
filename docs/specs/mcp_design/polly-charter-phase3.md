@@ -1,3 +1,5 @@
+> **Superseded (2026-10-08)** by [polly-charter-autonomous.md](./polly-charter-autonomous.md); kept as history.
+
 # Polly Build Charter — Phase 3: UI-Repoint (one engine, two surfaces)
 
 **Status:** Draft · **Date:** 2026-09-27 · **Target repo:** `vibe-coding-workshop-app`

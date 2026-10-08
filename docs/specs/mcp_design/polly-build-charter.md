@@ -1,3 +1,5 @@
+> **Superseded (2026-10-08)** by [polly-charter-autonomous.md](./polly-charter-autonomous.md); kept as history.
+
 # Polly Build Charter — MCP Interactive Track  ·  HISTORICAL / EXECUTED
 
 > ⚠️ **HISTORICAL RECORD — DO NOT RUN (annotated 2026-09-27).** This is the original Phase 0→2/2A
