@@ -6,9 +6,9 @@ cache. Both opt-in flags (includeLakehouse, includeGenieOntology) are on, so the
 outline is the full 31-step manifest outline.
 
 G1 inventory: every outline step is a genie-code fork (FORK_ID: the 26 shipped forks
-   plus 1017 genie_silver_metadata and the D-58 workspace_cleanup fork 1033, with 12
-   of them served by their D-57 v2 rows in 1018-1032; 1023/1028/1029 are held by
-   D-61) or a recorded no-fork with a reason (NO_FORK); the union equals the outline
+   plus 1017 genie_silver_metadata and the D-58 workspace_cleanup fork 1033, with 15
+   of them served by their D-57 v2 rows in 1018-1032, 1023/1028/1029 shipped by D-70)
+   or a recorded no-fork with a reason (NO_FORK); the union equals the outline
    exactly.
 G2 served source: a genie-code session gets every FORK_ID row; a non-genie session
    still gets the default row.
@@ -63,13 +63,13 @@ FORK_ID = {
     "semlayer_measures": 1020,
     "semlayer_metric_view": 1021,
     "semlayer_synonyms": 1022,
-    "gagent_describe": 934,
+    "gagent_describe": 1023,
     "gagent_instructions": 1024,
     "gagent_verified": 1025,
     "gagent_benchmarks": 1026,
     "gagent_optimize": 1027,
-    "gaccel_dashboard": 940,
-    "gaccel_activation": 941,
+    "gaccel_dashboard": 1028,
+    "gaccel_activation": 1029,
     "activation_table_design": 924,
     "activation_reverse_sync": 925,
     "activation_app_design": 926,
@@ -94,13 +94,14 @@ V1_ID = {
     "gagent_instructions": 954,
     "gagent_verified": 955,
     "gagent_benchmarks": 956,
+    "gagent_describe": 934,
     "gagent_optimize": 935,
     "ontology_domain": 936,
     "ontology_pages": 937,
     "ontology_routing": 938,
+    "gaccel_dashboard": 940,
+    "gaccel_activation": 941,
 }
-# D-61: v2 held (still served by v1 in FORK_ID); its input_id stays reserved.
-HELD_V2_ID = {"gagent_describe": 1023, "gaccel_dashboard": 1028, "gaccel_activation": 1029}
 NO_FORK = {
     "project_setup": "virtual step: mcp_server._project_setup_content, no seed body",
     "prd_generation": "LLM step: the model writes the PRD over the default row",
@@ -320,12 +321,9 @@ ALLOWED[("workspace_cleanup", "bare path")] = (
 # STOP rule: a real instruction that reads or writes `docs/…` / `.vibecoding-state.md`
 # by a bare relative path (it resolves against the page's cwd, not the project root)
 # is never allowed: its tag is listed here with the reason, exempt but still hitting,
-# until a seed task roots it. D-57 rooted 12 genie-accelerator forks; D-61 holds 3.
-_HELD_BY_D61 = (
-    "v2 held by D-61: the raw-seed audit counts the repeated v1 line as growth; "
-    "ships once the gate counts superseded versions"
-)
-PENDING = {(tag, "bare path"): _HELD_BY_D61 for tag in HELD_V2_ID}
+# until a seed task roots it. D-57 rooted 12 genie-accelerator forks; D-70 ships the
+# 3 D-61 held, so none is pending.
+PENDING = {}
 
 
 def _in_code(body):
@@ -457,11 +455,11 @@ def test_g7_v2_defines_state_file():
         assert body.startswith(ROOT_BLOCK + "\n\n" + STATE_FILE_DEFINITION), f"{pk}: definition is not at the top"
 
 
-def test_g7_held_v2_ids_stay_free():
-    """D-61 leaves 1023/1028/1029 unused so the held v2 rows can ship unchanged later."""
-    assert not set(HELD_V2_ID.values()) & set(SEED_ROWS)
-    assert not set(HELD_V2_ID) & set(V1_ID)
-    assert all(SEED_ROWS[FORK_ID[tag]]["version"] == 1 for tag in HELD_V2_ID)
+def test_g6_d61_held_rows_ship_as_ordinary_v2_rows():
+    """D-70: 1023/1028/1029, held by D-61, are served v2 rows of 934/940/941 (G6/G7/S3)."""
+    shipped = {"gagent_describe": (934, 1023), "gaccel_dashboard": (940, 1028), "gaccel_activation": (941, 1029)}
+    assert {tag: (V1_ID[tag], FORK_ID[tag]) for tag in shipped} == shipped
+    assert len(V1_ID) == 15 and PENDING == {}
 
 
 # --- S3: the resolver serves the highest active version ---------------------------

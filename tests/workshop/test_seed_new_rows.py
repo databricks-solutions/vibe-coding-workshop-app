@@ -319,7 +319,7 @@ def test_split_parity_on_seed_files(seed_file, transformed):
         content = snr.transform_sql_for_postgres(content, SCHEMA)
     ours, theirs = snr.split_statements(content), _shell_splitter()(content)
     assert ours == theirs
-    assert len(ours) == {F01: 48 + 3, F02: 167}[seed_file]
+    assert len(ours) == {F01: 48 + 3, F02: 170}[seed_file]
 
 
 ADVERSARIAL = [
@@ -482,25 +482,25 @@ def test_populated_rerun_is_a_noop_but_rewarns(seed_dir):
     assert f"    {UC}: 0 inserted / 1 warnings" in log
 
 
-# D-61 holds the v2 rows 1023 / 1028 / 1029; their ids stay unused.
-D57_V2_IDS = sorted(set(range(1018, 1033)) - {1023, 1028, 1029})
+# D-57 v2 forks; D-70 ships 1023 / 1028 / 1029, the three D-61 held.
+D57_V2_IDS = sorted(range(1018, 1033))
 # D-58 adds the workspace_cleanup fork 1033.
 POST_BASELINE_SIP = set(range(1001, 1018)) | set(D57_V2_IDS) | {1033}
 
 
 def test_populated_today_seed_files_insert_only_the_post_baseline_rows():
     """The live-check expectation: today's seed files on a populated install insert
-    exactly the rows added since the baseline (the P4.3 genie-code forks, D-39, D-41, D-45, D-47, D-52, D-53, D-57, D-58)."""
+    exactly the rows added since the baseline (the P4.3 genie-code forks, D-39, D-41, D-45, D-47, D-52, D-53, D-57, D-58, D-70)."""
     db = _populated()
     log = _run_create(db, DML_SEED)
     assert _seed_inserts(db, UC) == []
-    # D-56 fills 1009, the gap D-51 left; D-57 adds the v2 forks 1018-1032 less the
-    # three D-61 holds; D-58 adds 1033.
+    # D-56 fills 1009, the gap D-51 left; D-57 adds the v2 forks 1018-1032 (D-70
+    # ships the three D-61 held); D-58 adds 1033.
     assert db.ledger == {(SIP, input_id) for input_id in POST_BASELINE_SIP}
     # Only section_input_prompts' sequence moves: raised to max 1033 + 1.
     assert db.setvals == [(f"{SCHEMA}.section_input_prompts_input_id_seq", 1034)]
     assert f"    {UC}: 0 inserted / 0 warnings" in log
-    assert f"    {SIP}: 30 inserted / 0 warnings" in log
+    assert f"    {SIP}: 33 inserted / 0 warnings" in log
 
 
 def test_populated_release_with_1009_inserts_only_1009_and_keeps_the_sequence():
@@ -525,9 +525,9 @@ def test_populated_release_with_1009_inserts_only_1009_and_keeps_the_sequence():
     assert not any("sequence raised" in line for line in log), log
 
 
-def test_populated_release_with_d57_inserts_the_12_v2_rows_and_raises_the_sequence():
+def test_populated_release_with_d57_inserts_the_15_v2_rows_and_raises_the_sequence():
     """The D-57 release on the live install: 1001-1017 are applied and the sequence
-    sits at 1018, so the reseed inserts the 12 shipped v2 forks (D-61 holds 3), plus
+    sits at 1018, so the reseed inserts the 15 v2 forks (D-70 ships the 3 D-61 held), plus
     today's D-58 fork 1033, and raises it to 1034 (max input_id 1033)."""
     applied = set(range(1001, 1018))
     db = _populated(
@@ -543,7 +543,7 @@ def test_populated_release_with_d57_inserts_the_12_v2_rows_and_raises_the_sequen
     assert sorted(inserted) == D57_V2_IDS + [1033]
     assert db.ledger == {(SIP, input_id) for input_id in POST_BASELINE_SIP}
     assert db.setvals == [(f"{SCHEMA}.section_input_prompts_input_id_seq", 1034)]
-    assert f"    {SIP}: 13 inserted / 0 warnings" in log
+    assert f"    {SIP}: 16 inserted / 0 warnings" in log
     assert f"    {SIP}.input_id sequence raised 1018 -> 1034" in log
 
 
