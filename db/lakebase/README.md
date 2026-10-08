@@ -18,7 +18,19 @@ db/lakebase/
 │   ├── 03_sessions.sql
 │   ├── 04_workshop_parameters.sql
 │   ├── 05_saved_usecase_descriptions.sql
-│   └── 06_apply_tags.sql
+│   ├── 06_apply_tags.sql
+│   ├── 07_add_coding_assistant_column.sql
+│   ├── 08_step_visibility_overrides.sql
+│   ├── 09_add_category_columns.sql
+│   ├── 10_add_is_certified.sql
+│   ├── 10_hackathons.sql
+│   ├── 11_hackathon_teams_submissions.sql
+│   ├── 12_mcp_engine_state.sql
+│   ├── 13_mcp_coaching.sql
+│   ├── 14_seed_rows_applied.sql
+│   ├── 15_seed_bulk_pending.sql
+│   ├── 16_widen_workshop_level.sql
+│   └── 17_add_user_trigger_prompt.sql
 └── dml_seed/              # Initial seed data (DML)
     ├── 01_seed_usecase_descriptions.sql
     ├── 02_seed_section_input_prompts.sql
