@@ -18,7 +18,8 @@ db/lakebase/
 │   ├── 03_sessions.sql
 │   ├── 04_workshop_parameters.sql
 │   ├── 05_saved_usecase_descriptions.sql
-│   └── 06_apply_tags.sql
+│   ├── 06_apply_tags.sql
+│   └── 17_add_user_trigger_prompt.sql
 └── dml_seed/              # Initial seed data (DML)
     ├── 01_seed_usecase_descriptions.sql
     ├── 02_seed_section_input_prompts.sql
