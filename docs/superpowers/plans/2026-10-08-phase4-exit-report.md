@@ -54,7 +54,7 @@ TPL (`git log origin/main..origin/feature/genie-code-mcp-integration`):
 | #18 | 775bebc | forge/tpl-audit-bare-sh: fix(audit): catch bare ./x.sh in SETUP_SCRIPT / SCRIPT_DEPLOY (D-42) (1d6ee10) |
 | #19 | edb07a9 | forge/tpl-rule10-foundation: feat(audit): RULE_10 foundation carve-out for prefixed CREATE SCHEMA/VOLUME IF NOT EXISTS (D-56) (4b94f59), fix(audit,F0) (77a8b60) |
 
-**Verdict:** P4.1, P4.2, P4.3 and P4.5 have shipped code, pinning tests and live evidence. P4.3 passes with a caveat: 3 v2 rows are held (D-61), and one queue row is still open (agents-213-execution-label). P4.4 is PARTIAL (D-62): it is served on every track, but within budget only for prd_generation. Section 5 lists what is not proven. Section 6 lists the three questions for a human.
+**Verdict:** P4.1, P4.2, P4.3 and P4.5 have shipped code, pinning tests and live evidence. P4.3 passes with a caveat: 3 v2 rows are held (D-61), and one queue row is still open (agents-213-execution-label). P4.4 is PARTIAL (D-62): it is served on every track, but within budget only for prd_generation. Section 5 lists what is not proven. Section 6 lists the two questions for a human.
 
 ## 2. Requirement matrix (RUN.md P4.1–P4.5)
 
@@ -141,23 +141,19 @@ Decisions:
   - iterate_enhance, skill_define_strategy and skill_create_skillmd go over the 90 s budget. iterate_enhance generations run 107.7–133.6 s and then truncate.
   - The "within budget" half is parked (Q2).
 
-FORGE/state/lead/queue.md rows not done. These are rows whose scope column starts with P4, or whose source or notes tie them to a Phase 4 task. The list was computed from queue.md, including the rows packed onto one physical line with `\n` separators. Status is quoted as recorded:
+FORGE/state/lead/queue.md rows not done. These are rows whose scope column starts with P4, or whose source or notes tie them to a Phase 4 task. The list was computed from queue.md, including the rows packed onto one physical line with `\n` separators. Rows the queue now records as done (p4-lakehouse-family, tpl-audit-bare-sh :50, p4-covered-families, cleanup-140-profile) are not listed; they appear in §1 and §3. Status is quoted as recorded:
 
 | Row (queue.md line) | Scope | Status as recorded | Reason / note as recorded |
 |---|---|---|---|
 | start-track-usecase-resolved-null (:35) | P4 | verified-harmless (#108: StartTrackResult has no use_case_resolved field; only SetParametersResult) | probe 7329736: use_case_resolved null on 3/3 starts |
 | app-family-fork-nits (:39) | P4 | partly planned: comment renumbering in p4-lakehouse-family S1b; nits 1-2 (fork 1001 BODY edits) **HELD** | an existing-row edit never reaches a live install (D-37 additive); the notes on genie-forks-bare-paths (:71) record that the v2 mechanism now unblocks it |
-| tpl-audit-bare-sh (:39, first row) | P4 (strengthens every P4.3 fork's gate) | todo | superseded by the :50 row, which records "DONE: merged 775bebc" (TPL #18) |
+| tpl-audit-bare-sh (:39, the duplicate first row) | P4 (strengthens every P4.3 fork's gate) | todo | the second tpl-audit-bare-sh row (:50) records "done (template #18 merged 775bebc)", so this duplicate looks stale |
 | fresh-install-crash-skips-03 (:40) | P4 | todo | #112 note: a crash during the 01/02 bulk seed makes the retry skip 03; low priority |
 | seed-958-help-wording (:41) | P4 | todo | row 958 how_to_apply / expected_output still say "Genie Code journey" / "Genie space"; the live row is a human follow-up |
-| p4-lakehouse-family (:49) | P4.3 | status column opens "impl: hold LIFTED …" | the same cell records "done (merge 9710bbd, deploy 01f1c210…, live PASS 6/6)" |
-| tpl-audit-bare-sh (:50) | P4 (gate tooling) | the status column holds "template #18 head 1d6ee10…" (columns shifted) | notes: "DONE: merged 775bebc (2026-10-07)" |
 | tpl-gate-preexisting-overages (:51) | P4 (gate tooling) | todo: investigate first (real Genie Code issues, or a stale lock?) | at TPL a26c6d0 genie_gate.py exceeds its lock: apps_lakebase::GENIE_RESOURCE 8→14, data_product_accelerator::BARE_ARTIFACT_PATH 8→10, skills::APP_DEPLOY 108→114, skills::INSESSION_CREATE 14→17 |
-| p4-covered-families (:53) | P4.3 | status column opens "planning: critic r1 BLOCK …" | the same cell records "merged 0b07fc0, deployed 01f1c218…" |
 | workshop-level-too-narrow (:54) | P4 | PARKED (D-50) | superseded by workshop-level-reland (D-55), which is DONE (:57, merge 7e4144d) |
 | skills-track-silent-fallback (:59) | P4 (P4.1 track-scoped walk correctness) | todo: investigate first | without the build_skill lock, skills-accelerator silently runs as end-to-end |
 | agents-213-execution-label (:66) | P4.3 | todo (after p4-agents-b) | D-52b: 213 says labelling is a human step, but the manifest serves mlflow_human_review_and_signoff as agent-doable; needs a charter exception |
-| cleanup-140-profile (:72) | P4.3 | status column opens "planning: D-58 …; impl: … implementer dispatched" | merged in git as #126 (89ee6f0); live PASS 5/5 (89ee6f0…-cleanup-140-profile.md) |
 | p4-llm-steps (:73) | P4.4 | PARTLY DONE / PARKED (D-62) | → HUMAN: budget vs max_tokens/output size vs async vs accept template |
 | p4-exit-gate (:75) | P4.6 | todo | this report |
 | x3-fence-nits (:30) | B | todo | notes include the #111 review (8272438) U8b test gap |
@@ -193,4 +189,5 @@ This report takes none of these decisions.
     - (b) async or deferred generation
     - (c) accept the template fallback (current; fails open, never empty)
     - (d) raise `STEP_PROMPT_BUDGET_S` (mcp_server.py:798)
-- **Q3: cost.** Not measured. `omnigent usage` returned 403 Forbidden for the whole run (FORGE/state/lead/status.md:268). The human directive of 2026-10-04 stopped cost tracking until it blocks the run (FORGE/state/lead/decisions.md:21). No cost figure exists for Phase 4.
+
+Cost is not a question. The human directive of 2026-10-04 says to stop tracking cost until it actually blocks the run (`Spend`, FORGE/state/lead/decisions.md:21).
