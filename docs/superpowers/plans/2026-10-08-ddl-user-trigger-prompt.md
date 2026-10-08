@@ -36,3 +36,10 @@ L0 active deployment newer than 01f1c2d688001ca68fd495a2257e7fc3, nothing pendin
 
 ## Reverse
 Revert the PR (ADD COLUMN IF NOT EXISTS left the column where it was; nothing to undo on the dev install).
+
+## Amendment r1 (review)
+F1 db/lakebase/README.md: the DDL tree lists every file in db/lakebase/ddl/ at the head, in filename order, in the existing tree style (no other README change).
+F2 tests/workshop/test_user_trigger_prompt_ddl.py: U5 stays, its docstring now says only what it checks (seed INSERT columns are a subset of DDL 02's CREATE TABLE).
+U6 a frozen MAIN_COLUMNS baseline (literal dict; source origin/main 9f9cf6def6ce841e34f27c38c0019da3ae52091d, parsed from `git show 9f9cf6d:db/lakebase/ddl/<file>` for every CREATE TABLE on main). For each head CREATE TABLE IF NOT EXISTS whose table is in the baseline, every column not in the baseline must be added by an `ALTER TABLE ${schema}.<table> ADD COLUMN IF NOT EXISTS <column>` in some DDL file. Tables new since main are exempt; removed columns are allowed.
+X6 delete DDL 17 in a temp copy of ddl/ → U6 red naming section_input_prompts.user_trigger_prompt.
+X7 add a made-up column to DDL 02's CREATE TABLE in a temp copy of ddl/ → U6 red.

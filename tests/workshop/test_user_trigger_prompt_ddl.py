@@ -17,7 +17,12 @@ U3 setup-lakebase.sh runs DDL files sorted by filename
    before any seed file.
 U4 DDL 17 adds the column with DDL 02's type.
 U5 every column a seed INSERT into section_input_prompts names is in DDL 02's
-   CREATE TABLE, so a future seed column cannot repeat this gap silently.
+   CREATE TABLE (a seed column DDL 02 does not create fails here).
+U6 every column a CREATE TABLE IF NOT EXISTS declares beyond what that table had
+   on main is also added by an `ALTER TABLE ${schema}.<table> ADD COLUMN IF NOT
+   EXISTS <column>`, so a column added only to a CREATE TABLE cannot repeat this
+   gap. Tables new since main are exempt (created whole); removed columns are
+   allowed.
 
 TAMPER (verified, see PR body):
 * X1 ADD COLUMN IF NOT EXISTS -> ADD COLUMN -> U1 fails.
@@ -26,6 +31,9 @@ TAMPER (verified, see PR body):
 * X4 TEXT -> VARCHAR(20) -> U4 fails.
 * X5 a made-up column in one seed INSERT column list (on a copy of the seed
   directory) -> U5 fails.
+* X6 delete DDL 17 (on a copy of ddl/) -> U6 fails, naming
+  section_input_prompts.user_trigger_prompt.
+* X7 a made-up column in DDL 02's CREATE TABLE (on a copy of ddl/) -> U6 fails.
 """
 
 import pathlib
@@ -47,6 +55,84 @@ _CREATE_BODY = re.compile(
     r"CREATE\s+TABLE\s+IF\s+NOT\s+EXISTS\s+\$\{schema\}\.section_input_prompts\s*\((.*?)\n\);",
     re.IGNORECASE | re.DOTALL,
 )
+_ANY_CREATE = re.compile(
+    r"CREATE\s+TABLE\s+IF\s+NOT\s+EXISTS\s+\$\{schema\}\.(\w+)\s*\((.*?)\n\s*\);",
+    re.IGNORECASE | re.DOTALL,
+)
+_ANY_ADD_COLUMN = re.compile(
+    r"ALTER\s+TABLE\s+\$\{schema\}\.(\w+)\s+ADD\s+COLUMN\s+IF\s+NOT\s+EXISTS\s+(\w+)",
+    re.IGNORECASE,
+)
+_NOT_A_COLUMN = {"CONSTRAINT", "PRIMARY", "UNIQUE", "FOREIGN", "CHECK", "EXCLUDE"}
+
+# Columns each table's CREATE TABLE IF NOT EXISTS declared on origin/main
+# (9f9cf6def6ce841e34f27c38c0019da3ae52091d), parsed from
+# `git show 9f9cf6d:db/lakebase/ddl/<file>`. An install upgraded from main has
+# at least these; anything else needs an ALTER. Frozen: do not edit.
+MAIN_COLUMNS = {
+    "usecase_descriptions": (
+        "config_id", "industry", "industry_label", "use_case", "use_case_label",
+        "prompt_template", "version", "is_active", "inserted_at", "updated_at",
+        "created_by", "path_type", "category", "category_order", "display_order",
+        "is_certified",
+    ),
+    "section_input_prompts": (
+        "input_id", "section_tag", "section_title", "section_description", "input_template",
+        "system_prompt", "order_number", "how_to_apply", "expected_output",
+        "how_to_apply_images", "expected_output_images", "bypass_llm", "coding_assistant",
+        "step_enabled", "version", "is_active", "inserted_at", "updated_at", "created_by",
+    ),
+    "sessions": (
+        "session_id", "created_by", "session_name", "session_description", "industry",
+        "industry_label", "use_case", "use_case_label", "feedback_rating",
+        "feedback_comment", "feedback_request_followup", "chapter_feedback",
+        "step_1_prompt", "step_prompts", "prerequisites_completed", "current_step",
+        "workshop_level", "completed_steps", "skipped_steps", "session_parameters",
+        "created_at", "updated_at",
+    ),
+    "workshop_parameters": (
+        "param_id", "param_key", "param_label", "param_value", "param_description",
+        "param_type", "display_order", "is_required", "is_active", "allow_session_override",
+        "inserted_at", "updated_at", "created_by",
+    ),
+    "saved_usecase_descriptions": (
+        "id", "created_by", "display_name", "updated_by", "industry", "use_case_name",
+        "description", "version", "is_active", "created_at", "updated_at",
+    ),
+    "step_visibility_overrides": (
+        "section_key", "coding_assistant", "enabled", "updated_at", "updated_by",
+    ),
+    "hackathons": (
+        "hackathon_id", "title", "description", "short_description", "status",
+        "hackathon_type", "location", "venue", "registration_start", "registration_end",
+        "start_date", "end_date", "submission_deadline", "max_participants",
+        "max_team_size", "min_team_size", "total_prize_pool", "prize_description", "rules",
+        "topics", "judging_criteria", "has_team_matching", "has_chat", "has_voting",
+        "created_by", "created_at", "updated_at",
+    ),
+    "hackathon_judges": (
+        "hackathon_id", "judge_email", "status", "assigned_by", "created_at",
+    ),
+    "hackathon_teams": (
+        "team_id", "hackathon_id", "name", "description", "leader_email", "max_members",
+        "is_public", "created_at",
+    ),
+    "hackathon_team_members": (
+        "team_id", "member_email", "role", "joined_at",
+    ),
+    "hackathon_submissions": (
+        "submission_id", "hackathon_id", "team_id", "submitted_by", "title", "description",
+        "repo_url", "demo_url", "video_url", "slides_url", "is_submitted", "created_at",
+        "updated_at",
+    ),
+    "hackathon_scores": (
+        "score_id", "submission_id", "judge_email", "criteria", "overall", "feedback",
+        "ai_assisted", "created_at", "updated_at",
+    ),
+    "hackathon_votes": (
+        "submission_id", "voter_email", "created_at",
+    ),
+}
 _SEED_INSERT = re.compile(
     r"^INSERT\s+INTO\s+\$\{catalog\}\.\$\{schema\}\.section_input_prompts\s*\(([^)]*)\)",
     re.IGNORECASE | re.MULTILINE,
@@ -95,6 +181,46 @@ def _seed_insert_columns(seed_dir: pathlib.Path) -> dict:
             assert all(re.fullmatch(r"\w+", c) for c in cols), (path.name, cols)
             found.setdefault(path.name, set()).update(cols)
     return found
+
+
+def _create_table_columns(ddl_dir: pathlib.Path) -> dict:
+    """{table: its CREATE TABLE IF NOT EXISTS column names} across ddl_dir."""
+
+    tables = {}
+    for path in sorted(ddl_dir.glob("*.sql")):
+        for table, body in _ANY_CREATE.findall(_sql(path)):
+            assert table not in tables, (path.name, table)
+            # Split on top-level commas only (types and defaults have their own).
+            depth, quoted, parts, part = 0, False, [], ""
+            for ch in body:
+                quoted ^= ch == "'"
+                if not quoted:
+                    depth += {"(": 1, ")": -1}.get(ch, 0)
+                if ch == "," and depth == 0 and not quoted:
+                    parts.append(part)
+                    part = ""
+                else:
+                    part += ch
+            parts.append(part)
+            words = [p.split()[0] for p in parts if p.strip()]
+            tables[table] = {w.lower() for w in words if w.upper() not in _NOT_A_COLUMN}
+    return tables
+
+
+def _unaltered_new_columns(ddl_dir: pathlib.Path) -> list:
+    """`table.column` a CREATE TABLE adds beyond main that no ALTER adds."""
+
+    altered = set()
+    for path in sorted(ddl_dir.glob("*.sql")):
+        altered.update((t.lower(), c.lower()) for t, c in _ANY_ADD_COLUMN.findall(_sql(path)))
+    gaps = []
+    for table, columns in _create_table_columns(ddl_dir).items():
+        if table not in MAIN_COLUMNS:
+            continue
+        for column in sorted(columns - set(MAIN_COLUMNS[table])):
+            if (table, column) not in altered:
+                gaps.append(f"{table}.{column}")
+    return gaps
 
 
 # --- U1 exactly one additive, idempotent statement ---------------------------
@@ -168,3 +294,14 @@ def test_u5_every_seed_insert_column_is_in_ddl_02():
     assert "user_trigger_prompt" in seeded["02_seed_section_input_prompts.sql"]
     missing = {name: sorted(cols - columns) for name, cols in seeded.items() if cols - columns}
     assert not missing, missing
+
+
+# --- U6 every column new since main has an ALTER ------------------------------
+
+
+def test_u6_every_column_new_since_main_is_added_by_an_alter():
+    tables = _create_table_columns(DDL_DIR)
+    assert set(MAIN_COLUMNS) <= set(tables), set(MAIN_COLUMNS) - set(tables)
+    assert "user_trigger_prompt" in tables["section_input_prompts"]
+    gaps = _unaltered_new_columns(DDL_DIR)
+    assert not gaps, f"added only inside CREATE TABLE IF NOT EXISTS, no ALTER: {gaps}"
