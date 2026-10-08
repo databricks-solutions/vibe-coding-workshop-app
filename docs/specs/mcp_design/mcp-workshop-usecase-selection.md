@@ -3,7 +3,7 @@
 **Status:** Draft · **Date:** 2026-09-23 · **Target repo:** `vibe-coding-workshop-app`
 **Series:** [`README.md`](./README.md) · **Phase:** **2B — recommended next increment** (a decoupled,
 additive fast-follow on shipped Phase 2; see [D9 §1](./mcp-workshop-rollout.md#1-revised-phasing-elicitation-decoupled)).
-Genie Accelerator now; **generalizing `use_case_selection` to all 14 manifest tracks is Phase 4** (shipped in #108, D-33; see §7 q1); the full
+Genie Accelerator now; **generalizing `use_case_selection` to every track with `prd_generation` (13 of the 14 manifest tracks; skills-accelerator has none, `tests/workshop/test_usecase_hoist.py:202-204`) is Phase 4** (shipped in #108, D-33; see §7 q1); the full
 UI-repoint that makes cross-surface sync *canonical* is **Phase 3** (this doc ships the **bridge**).
 **Anchors verified live 2026-09-23** against this checkout.
 
@@ -41,8 +41,10 @@ including PRD — renders against whatever use case is in the session**. With no
 no gate, the agent completes `project_setup` (environment config, `produces: null`) and proceeds to
 `prd_generation` (`produces: "prd_document"`), authoring a PRD for the **default** use case.
 
-The shared section is identical in **all 14 manifest tracks** (`manifest.json:77` `tracks`) — `define-usecase` = `project_setup` →
-`prd_generation` (e.g. genie-accelerator `manifest.json:1786-1815`). Nothing currently produces a
+The shared section is the same in **13 of the 14 manifest tracks** (`manifest.json:77` `tracks`) — `define-usecase` = `project_setup` →
+`prd_generation` (e.g. genie-accelerator `manifest.json:3326`, `prd_generation` :3349); skills-accelerator's
+`define-usecase` has `project_setup` only, and `skill_install_explore` follows (`manifest.json:4179`, :4186, :4210;
+`tests/workshop/test_usecase_hoist.py:202-204`). Nothing currently produces a
 `use_case`-shaped artifact, and `prd_generation.consumes = []`.
 
 ### 1.2 What already exists (SPA/HTTP only — MCP can't reach it)
@@ -71,10 +73,11 @@ simply missing in-band.
    start until *some* use case is locked (§4.3).
 3. **Flow starts from industry.** Offer **industries first** → then **use cases for that industry**
    (certified-first) → plus an explicit **"make your own"** option. Two-hop selection.
-4. **`use_case_brief` is track-agnostic.** Verified: the `define-usecase` section is byte-identical
-   across all 14 manifest tracks, so the artifact and the step live in the **shared** section, produced once
-   and consumed by `prd_generation` (and available downstream via the engine's produces/consumes
-   resolution).
+4. **`use_case_brief` is track-agnostic.** Verified: the `define-usecase` section is `project_setup` →
+   `prd_generation` on 13 of the 14 manifest tracks; skills-accelerator's has `project_setup` only
+   (`manifest.json:4179`, :4186; `tests/workshop/test_usecase_hoist.py:202-204`). So the artifact and the step
+   live in the **shared** section, produced once and consumed by `prd_generation` wherever it exists (and
+   available downstream via the engine's produces/consumes resolution).
 
 ---
 
@@ -263,11 +266,11 @@ the same step highlighted — and the reverse.
 
 1. **Where does the step live** — **RESOLVED:** implement `use_case_selection` on the
    **Genie Accelerator (`DEFAULT_TRACK`) only** in Phase 2B (it's the sole active track and the
-   defect surface); **hoisting a shared `define-usecase` definition across all 14 manifest tracks is Phase 4**
+   defect surface); **hoisting a shared `define-usecase` definition across the tracks with `prd_generation` (13 of 14) is Phase 4**
    ([D9 §1](./mcp-workshop-rollout.md#1-revised-phasing-elicitation-decoupled)).
    **Phase 4 follow-up RESOLVED by P4.2 (#108, merge 7c76a62; D-33, D-34):** the hoist is authored once as
    shared generator overrides (`scripts/generate_manifest.py:281` `"prd_generation": "use_case_selection"`),
-   so every track's `prd_generation` carries `requiresGate: "use_case_selection"` (`manifest.json`, e.g.
+   so every track's `prd_generation` (13 tracks; skills-accelerator has none, `test_usecase_hoist.py:202-204`) carries `requiresGate: "use_case_selection"` (`manifest.json`, e.g.
    :114, :272, :510; 16 occurrences); SPA sessions get the read-side credit through `USE_CASE_GATE` /
    `resolve_use_case` (`engine.py:317`, `:327`). Pinned by `tests/workshop/test_usecase_hoist.py`
    (`test_h1_manifest_requires_gate` :199 … `test_h6_no_intent_beat_when_intent_defined` :393); live

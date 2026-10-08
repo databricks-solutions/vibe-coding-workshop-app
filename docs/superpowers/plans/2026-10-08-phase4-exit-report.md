@@ -81,7 +81,7 @@ How the no-fork reasons are recorded:
 - `bronze_table_metadata` is the D-41 no-fork (already client-aware).
 - `use_case_selection` is the shared P4.2 intent beat, served from default 958.
 
-The first four are recorded in `NO_FORK` in test_covered_families_genie.py:84, test_agents_family_genie.py:102 and test_genie_family_genie.py:104; `use_case_selection` has no `NO_FORK` entry because it is not a numbered outline step but the pre-journey intent beat (Option A), recorded in tests/workshop/test_usecase_ghost_retirement.py:5-10. workspace_cleanup was a D-39 no-fork until D-58. It now forks to 1033 on every track.
+project_setup, prd_generation and iterate_enhance are recorded in `NO_FORK` in test_covered_families_genie.py:84, test_agents_family_genie.py:102 and test_genie_family_genie.py:104; bronze_table_metadata only in test_covered_families_genie.py:84; `use_case_selection` has no `NO_FORK` entry because it is not a numbered outline step but the pre-journey intent beat (Option A), recorded in tests/workshop/test_usecase_ghost_retirement.py:5-10. workspace_cleanup was a D-39 no-fork until D-58. It now forks to 1033 on every track.
 
 | Track | Family | Parity tests | Live walk (latest probe) | Phase 4 genie-code forks reached (input_ids) | Left ui-driven / no-fork / held / parked |
 |---|---|---|---|---|---|

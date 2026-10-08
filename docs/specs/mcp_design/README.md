@@ -66,13 +66,17 @@ Two orthogonal axes that are easy to conflate — the crisp definitions live in
 - **`coding_assistant`** (the `__default__` / `genie-code` / `coda` fork on each prompt row) decides
   **which prompt body a step renders** (content).
 
-**What the MCP adapter pins:** `mcp_server.py` fixes `DEFAULT_TRACK = "genie-accelerator"` and
+**What the MCP adapter pinned (before P4.1):** `mcp_server.py` fixes `DEFAULT_TRACK = "genie-accelerator"` and
 `DEFAULT_CODING_ASSISTANT = "genie-code"`, and leaves the optional-chapter flags at their defaults
 (both OFF), so the default MCP walk is Foundation → Semantic Layer → Genie Agent → Activate →
 Refinement → Clean Up (Lakehouse and Ontology are opt-in via `vibe_set_parameters`). **There is no
 "Genie Code track" row** — the Genie Code experience is `genie-accelerator` + the `genie-code` fork +
 default flags. "Genie Code has its own track" is a statement about *this pinned combination*, never a
 separate `WorkshopLevel`.
+
+**Since P4.1 (#107, D-30) the MCP walk is track-scoped:** every tool resolves the session's own track
+through `track_resolution.resolve_track` (`_session_track`, `mcp_server.py:529`); `DEFAULT_TRACK` is now
+only the definition and the fallback for a session with no record (Phase 4 exit report §2 row P4.1).
 
 ---
 
@@ -117,7 +121,7 @@ Phasing authority is [D9 §1](./mcp-workshop-rollout.md#1-revised-phasing-elicit
   FMAPI path, fail-open to the static help), **no 8th tool**. Cost/endpoint signed off 2026-09-24.
 - **Phase 4 — SHIPPED per its report** (#107–#126, TPL #18/#19;
   [Phase 4 exit report](../../superpowers/plans/2026-10-08-phase4-exit-report.md)): all **14 manifest
-  tracks** walkable over MCP; P4.1, P4.2, P4.5 PASS, P4.3 PASS with caveat (3 v2 rows held, D-61),
+  tracks** walkable over MCP; P4.1 PASS with caveat (`skills-track-silent-fallback`), P4.2 and P4.5 PASS, P4.3 PASS with caveat (3 v2 rows held, D-61),
   P4.4 PARTIAL (D-62). See [D9 §1](./mcp-workshop-rollout.md#1-revised-phasing-elicitation-decoupled).
 
 Charters (the paste-ready supervisor commands for Polly):

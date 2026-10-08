@@ -43,3 +43,11 @@ MERGE repo=app reseed=no.
 
 ## Reverse
 Revert the PR.
+
+## Amendment r1 (review/gate round 1, PR #128 head c0f9d2c)
+F1 Every passage that says define-usecase is identical / project_setup → prd_generation on all 14 tracks (D11 :44-45, :74-77, and D9 rollout :44) says instead: 13 tracks have project_setup → prd_generation; skills-accelerator has project_setup only (skill_install_explore follows). Cite manifest.json (the skills-accelerator define-usecase line) and tests/workshop/test_usecase_hoist.py:202-204. Also correct the D11 citation of genie-accelerator's define-usecase from manifest.json:1786-1815 to the right lines.
+F2 (reviewer nonblocking, taken; authorised outside S1's named passages): D9 rollout :42-43 Phase 2A row and Phase 3 row → their shipped status, citing docs/superpowers/plans/2026-10-05-phase2a-gate-report.md and docs/superpowers/plans/2026-10-04-phase3-exit-report.md; docs/specs/mcp_design/README.md:69 (DEFAULT_TRACK as the MCP pin) → the track-scoped walk since P4.1 (D-30); README.md:120 P4.1 → 'PASS with caveat (skills-track-silent-fallback)'.
+F3 Phase 4 exit report :84: make the NO_FORK sentence exact (bronze_table_metadata is only in tests/workshop/test_covered_families_genie.py:84); keep the use_case_selection citation.
+F4 polly-charter-autonomous.md: one line stating the decision log's HALT set is exactly five entries (an unnumbered 'HALT (2026-10-06T07:35Z)', #2, #3, #4, #7), there is no HALT #1, and #5/#6 are recorded only in the forge status log.
+F5 decision-log.md: append verbatim, in FORGE order, the FORGE state/lead/decisions.md entries whose IDs are missing from the APP log (ID match per D-64).
+Acceptance adds: no passage claims prd_generation / an identical define-usecase on all 14 tracks.

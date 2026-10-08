@@ -101,6 +101,9 @@ or a guard that should have denied and did not; a `clean_checkouts` or `current_
 HALT (lead charter :240-247). The roster preflight also HALTs on a failed launch check or a collapsed
 model-family separation (lead charter :170-179).
 
+The decision log's HALT set is exactly five entries: an unnumbered "HALT (2026-10-06T07:35Z)", HALT #2,
+#3, #4 and #7. There is no "HALT #1" entry; #5 and #6 are recorded only in the forge status log (cited below).
+
 - **HALT (2026-10-06T07:35Z):** unauthorized writes by a non-implementer role into the APP main
   checkout; a guard that should have denied did not (decision log, "HALT (2026-10-06T07:35Z)").
 - **HALT #2 (2026-10-06T23:30Z):** plan_critic ran `git checkout` and `genie_gate.py` in the human's TPL
