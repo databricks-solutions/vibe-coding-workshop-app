@@ -13,7 +13,7 @@ Facts this script relies on, all at APP `99660a9` (the deployed SHA, FORGE/state
    - Its MCP endpoint is https://mcp-vibe-coding-workshop-app-7474656657532371.aws.databricksapps.com/mcp
    - The endpoint is mounted at app.py:284, `app.mount("/mcp", mcp_app, name="mcp")`, behind `MCP_MOUNT_ENABLED` (app.py:283).
    - It is documented in docs/specs/mcp_design/mcp-workshop-facilitator-guide.md:38.
-3. Add the app as a Custom MCP server. The steps below are quoted from the facilitator guide §2 (:36-40):
+3. Add the app as a Custom MCP server. The steps below are quoted from the facilitator guide §2 (:36-41):
 
    > 1. Open **Genie Code** in your workspace and switch to **Agent mode**.
    > 2. Open the MCP / custom-tools settings and **Add a custom MCP server**.
@@ -151,7 +151,7 @@ Other rules for every answer (coaching.py:40-60):
 - 2-5 sentences of prose, grounded in the step context.
 - It never restates the step's prompt, and it never emits benchmark text, sample values, secrets or PII.
 
-**Fail-open.** If the coach is disabled, errors, runs past its 8.0 s budget (coaching.py:65, `COACH_BUDGET_S`) or is rejected by the scrub, `vibe_explain_step` still returns the static `how_to_apply` / `expected_output`. In that case `coaching` is null and `is_fallback: true` (mcp_server.py:1554-1574; D-22). Record `is_fallback` for each call.
+**Fail-open.** If the coach is disabled, errors, runs past its 8.0 s budget (coaching.py:66, `COACH_BUDGET_S`) or is rejected by the scrub, `vibe_explain_step` still returns the static `how_to_apply` / `expected_output`. In that case `coaching` is null and `is_fallback: true` (mcp_server.py:1566-1572; D-22). Record `is_fallback` for each call.
 
 ### Step-prompt fail-open
 
