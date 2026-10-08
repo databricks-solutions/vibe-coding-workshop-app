@@ -10778,6 +10778,178 @@ Both bundles are destroyed automatically in Phase 9 — the data-product bundle 
 'Help me safely clean up and delete all the Databricks resources I created during the workshop.',
 true, 1, true, current_timestamp(), current_timestamp(), current_user());
 
+-- workspace_cleanup (genie-code fork) — D-58: participant-scoped, confirm-before-delete; identity from the pre-authenticated WorkspaceClient (no profile step, no local config, no shell pipes); discovery read-only in executeCode, every resource classified by the MINE rule (participant prefix AND creator/owner = the current user where exposed), name-only matches skipped; STOP for `confirm cleanup` before any delete; schema drops through a fail-closed statement poll; <ARTIFACT_ROOT> / <STATE_FILE> paths; bypass_LLM = TRUE
+INSERT INTO ${catalog}.${schema}.section_input_prompts
+(input_id, section_tag, coding_assistant, input_template, system_prompt,
+ bypass_llm, version, is_active, inserted_at, updated_at, created_by)
+VALUES
+(1033, 'workspace_cleanup', 'genie-code',
+'> **Artifact root (client-aware).** Resolve `<ARTIFACT_ROOT>` via `vibecoding-state.resolve_root` (it reads `artifact_root` from `## Environment Capabilities`, or detects the active client, `artifact_root` + `skills_install_root`) and write every artifact under it. On Cursor/Copilot that is your repo root; on Databricks Genie Code it is your user project root `/Workspace/Users/<email>/<repo>` (your user project is a **git clone** of the workshop repo so bundles are recognized; the skill tree is **copied** to `/Workspace/Users/<email>/.assistant/skills/<repo>` for skill loading only) — never the page''s current working directory.
+
+`<STATE_FILE>` = the live state file that `skills/vibecoding-state` resolves by its state-path rule (`<app_root>` → `<agent_app_root>` → `<dp_bundle_root>` → the bootstrap path, creating the canonical file if none exists yet), never `.vibecoding-state.md` relative to the page.
+
+Clean up the Databricks resources YOU created during the Vibe Coding Workshop. Delete only your own resources, and only after you confirm the list: if a resource exists, delete it; if it does not exist, skip it and move on. Never fail on a missing resource.
+
+This will involve the following steps:
+
+- **Resolve your environment** — `<ARTIFACT_ROOT>`, `<STATE_FILE>`, your identity, and your participant prefixes.
+- **Discover (read-only)** — list jobs, pipelines, dashboards, Genie spaces, serving endpoints, apps, Lakebase, and the schemas named in your bundles, and classify each one with the MINE rule.
+- **STOP for your confirmation** — show the full table; nothing is deleted until you reply `confirm cleanup`.
+- **Delete what is MINE** — children before parents, each one skipped if it is already gone.
+- **Report** — deleted / skipped / errors, and record the gate in `<STATE_FILE>`.
+
+The steps below are the prescriptive runbook for those actions; follow them in order.
+
+**Genie Code — this is a prescriptive runbook. Follow the steps in order. Do NOT improvise paths, do NOT use bare relative paths, do NOT use `@`-mentions. Every file is named by its fully qualified path under `<ARTIFACT_ROOT>`; every list and delete call runs in `executeCode` on serverless with the pre-authenticated `WorkspaceClient` `w` (Genie Code is already authenticated to this workspace). There is no CLI profile step and no local config file: the Session Settings profile `{databricks_cli_profile}` is an IDE setting and is NOT used here, and nothing is piped through a shell. If you use `runDatabricksCli` for a single read, pass no profile flag and no pipe.**
+
+## Workspace Context
+
+- **Workspace URL**: {workspace_url}
+- **User Email**: {created_by}
+
+All other values are discovered at runtime from your bundles and `<STATE_FILE>`. Do NOT hardcode resource names.
+
+### Step 0 — Resolve your environment (once, before anything else)
+
+Run `skills/vibecoding-state` operation `resolve_root`, then `enter` — params: `prompt_id: "workspace_cleanup"`. Read these resolved values and use them literally throughout:
+
+- `client_context` = `genie_code`
+- `<ARTIFACT_ROOT>` = `artifact_root` = your workshop project root — NOT the page''s current working directory.
+- `<DP_BUNDLE_ROOT>` = `<ARTIFACT_ROOT>/{user_schema_prefix}_<use_case_slug>_dab` (the data-product bundle) and `<APP_ROOT>` = `<ARTIFACT_ROOT>/<APP_NAME>` (the app bundle).
+
+Read `<STATE_FILE>` for `APP_NAME` and, on the agents track, `AGENT_APP_NAME`. Then load `readSkillFile("skills/vibe-coding-workshop/skills/genie-code-environment/SKILL.md")` — how SDK and SQL calls run on Genie Code.
+
+### Step 1 — Identity and the MINE rule
+
+In `executeCode` (make the FIRST call a trivial `print("ready")` to absorb the serverless cold start):
+
+```python
+import re
+w_me = w.current_user.me().user_name          # should equal {created_by}
+APP_NAME = "<APP_NAME from <STATE_FILE>>"
+AGENT_APP_NAME = "<AGENT_APP_NAME from <STATE_FILE>, or empty>"
+PREFIXES = [p for p in ("{db_schema}", "{user_schema_prefix}", APP_NAME, AGENT_APP_NAME) if p and "<" not in p and "{" not in p]
+
+def _norm(text):
+    return re.sub(r"[^a-z0-9]+", "_", (text or "").lower())
+
+def is_mine(name, creator=None):
+    """The MINE rule: (verdict, why). Used for every resource in Step 2."""
+    n = _norm(name)
+    hit = next((p for p in PREFIXES if re.search(r"(?<![a-z0-9])" + re.escape(_norm(p)) + r"(?![a-z0-9])", n)), None)
+    if hit is None:
+        return False, "not mine: skipped (no participant prefix)"
+    if creator is not None and creator.lower() != w_me.lower():
+        return False, f"not mine: skipped (creator {creator})"
+    return True, "prefix " + hit + ("" if creator is None else ", creator is you")
+```
+
+**The MINE rule** (stated once here; every later step refers to it): a resource is MINE only if its name carries one of your participant prefixes — `{db_schema}`, `{user_schema_prefix}`, or the `APP_NAME` / `AGENT_APP_NAME` from `<STATE_FILE>` — AND, where the object exposes a creator or owner, that creator/owner equals the current user. A name that only looks like the workshop (a use-case word, a layer name, a product word) without your prefix is listed as `not mine: skipped` and is never deleted. Something owned by another user is `not mine: skipped` even if it carries your prefix.
+
+### Step 2 — Discover and classify (read-only)
+
+Read `<DP_BUNDLE_ROOT>/databricks.yml` and `<APP_ROOT>/databricks.yml` with `open()` in `executeCode` (`yaml.safe_load`) for: `variables.catalog.default`, `variables.bronze_schema.default`, `variables.silver_schema.default`, `variables.gold_schema.default`, `variables.source_schema.default`, `variables.source_catalog.default`, `resources.apps.app.name`, and `resources.postgres_projects.*.project_id`. A missing file or key is a skip, not an error.
+
+Then build one table, each row `(type, name, id, creator/owner, verdict, why)` with `is_mine`:
+
+| Type | List call | Creator / owner field |
+|------|-----------|----------------------|
+| Job | `w.jobs.list()` (name `settings.name`, id `job_id`) | `creator_user_name` |
+| Pipeline | `w.pipelines.list_pipelines()` (`name`, `pipeline_id`) | `creator_user_name` |
+| AI/BI dashboard | `w.lakeview.list()` (`display_name`, `dashboard_id`) | none exposed |
+| Genie space | `w.genie.list_spaces()`, paged by `next_page_token` (`title`, `space_id`) | none exposed |
+| Serving endpoint | `w.serving_endpoints.list()` (`name`) | `creator` |
+| App | `w.apps.list()` (`name`) | `creator` |
+| Lakebase project | the bundle''s `project_id`, checked with `w.api_client.do("GET", "/api/2.0/postgres/projects/" + pid)` | none exposed |
+| Lakebase UC catalog | `w.catalogs.list()` (`name`) | `owner` |
+| Schema | only the bundle''s schema names, each read with `w.schemas.get(catalog + "." + schema)` | `owner` |
+
+Pass the creator/owner to `is_mine` only where the table names one. Schemas come ONLY from the bundles'' `databricks.yml`, never from a catalog-wide listing. Keep the MINE rows as `mine = {type: [row, ...]}` (each row with `.name`, `.id`, and for a schema its `.catalog`). Print each row, e.g. `print(kind + " " + name + " [" + oid + "]", f"(creator: {creator})", "-> " + why)`.
+
+### Step 3 — STOP: confirm before anything is deleted
+
+Print the full table, grouped into **MINE (will be deleted)** and **not mine: skipped**, with type, name, id, and why each row matched. Then STOP and ask the operator to reply exactly `confirm cleanup`. Do nothing destructive before that reply: no delete, trash, stop, or DROP call of any kind. Any other reply (or none) ends the step with nothing deleted. If nothing is MINE, report that, record the gate, and finish.
+
+### Step 4 — Delete what is MINE (only after `confirm cleanup`)
+
+Run in `executeCode`, in this order (children before parents, consumers before producers), only over the rows Step 2 marked MINE (`mine[...]` below). Wrap each call: `NotFound` → `skipped (not found)`; any other error → record it and continue.
+
+```python
+from databricks.sdk.errors import NotFound
+
+for job in mine["Job"]: w.jobs.delete(job.id)
+for p in mine["Pipeline"]: w.pipelines.delete(p.id)
+for d in mine["AI/BI dashboard"]: w.lakeview.trash(d.id)
+for s in mine["Genie space"]: w.genie.trash_space(s.id)
+for e in mine["Serving endpoint"]: w.serving_endpoints.delete(e.name)
+```
+
+Schemas, then the Lakebase UC catalog, through `run_sql` (warehouse `{default_warehouse}`, or the first running one from `w.warehouses.list()`), which polls to a terminal state and fails closed:
+
+```python
+import time
+from databricks.sdk.service.sql import StatementState
+
+SQL_TIMEOUT_S = 300
+
+def run_sql(statement):
+    """Run one statement to a terminal state; raise unless it SUCCEEDED (fail closed)."""
+    resp = w.statement_execution.execute_statement(
+        warehouse_id=WAREHOUSE_ID, statement=statement, wait_timeout="30s",
+    )
+    deadline = time.monotonic() + SQL_TIMEOUT_S
+    while resp.status.state in (StatementState.PENDING, StatementState.RUNNING):
+        if time.monotonic() > deadline:
+            w.statement_execution.cancel_execution(resp.statement_id)
+            raise TimeoutError("statement still " + resp.status.state.value + ": " + statement)
+        time.sleep(2)
+        resp = w.statement_execution.get_statement(resp.statement_id)
+    if resp.status.state in (StatementState.FAILED, StatementState.CANCELED, StatementState.CLOSED):
+        raise RuntimeError(statement + " -> " + resp.status.state.value + ": " + str(resp.status.error))
+
+for s in mine["Schema"]: run_sql("DROP SCHEMA IF EXISTS `" + s.catalog + "`.`" + s.name + "` CASCADE")
+for c in mine["Lakebase UC catalog"]: run_sql("DROP CATALOG IF EXISTS `" + c.name + "` CASCADE")
+```
+
+Then the Lakebase project and the app:
+
+```python
+for lp in mine["Lakebase project"]: w.api_client.do("DELETE", "/api/2.0/postgres/projects/" + lp.id)
+for a in mine["App"]:
+    w.apps.stop(a.name)   # ignore an already-stopped app
+    w.apps.delete(a.name)
+```
+
+A provisioned (shared) Lakebase instance is never deleted: only an autoscaling project that is MINE. The bundle source folders under `<ARTIFACT_ROOT>` stay in place; their deployed jobs, pipelines and app are removed one by one above.
+
+### Step 5 — Report and record the gate
+
+Print the summary:
+
+```
+============================================================
+                 WORKSHOP CLEANUP SUMMARY
+============================================================
+ Type                 | Deleted | Skipped (not mine) | Skipped (not found) | Errors
+----------------------|---------|--------------------|---------------------|-------
+ Jobs                 |    N    |         M          |          K          |   E
+ Pipelines            |   ...   |        ...         |         ...         |  ...
+ AI/BI Dashboards     |   ...   |        ...         |         ...         |  ...
+ Genie Spaces         |   ...   |        ...         |         ...         |  ...
+ Serving Endpoints    |   ...   |        ...         |         ...         |  ...
+ Schemas              |   ...   |        ...         |         ...         |  ...
+ Lakebase UC Catalog  |   ...   |        ...         |         ...         |  ...
+ Lakebase Project     |   ...   |        ...         |         ...         |  ...
+ Apps                 |   ...   |        ...         |         ...         |  ...
+============================================================
+```
+
+**State-lock:** after the summary, run `skills/vibecoding-state` op `exit` — params: `prompt_id: "workspace_cleanup"`, `gate: "Workspace cleaned up"`, `captured: {deleted, skipped, errors}`. **This `enter`/`exit` pair is a mandatory ritual, not advisory.** The `exit` MUST append this prompt''s Per-Step Log entry, gate result, and counts to `<STATE_FILE>` (the canonical `<app_root>/.vibecoding-state.md` when your app exists), then **re-read it and echo the appended section to prove the write landed**. **Gate completion rule:** this prompt is NOT complete until that re-read confirms the appended entry.
+
+**Gate:** `Workspace cleaned up` — the table was shown and the operator replied `confirm cleanup` before any delete; only rows the MINE rule marked MINE were deleted; every `not mine: skipped` row is untouched; the summary and gate are recorded in `<STATE_FILE>`.',
+'',
+true, 1, true, current_timestamp(), current_timestamp(), current_user());
+
 -- Activation: Reverse ETL (Steps 32-36)
 INSERT INTO ${catalog}.${schema}.section_input_prompts 
 (input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, user_trigger_prompt, bypass_llm, version, is_active, inserted_at, updated_at, created_by)

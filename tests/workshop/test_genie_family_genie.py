@@ -6,9 +6,10 @@ cache. Both opt-in flags (includeLakehouse, includeGenieOntology) are on, so the
 outline is the full 31-step manifest outline.
 
 G1 inventory: every outline step is a genie-code fork (FORK_ID: the 26 shipped forks
-   plus 1017 genie_silver_metadata, with 12 of them served by their D-57 v2 rows
-   in 1018-1032; 1023/1028/1029 are held by D-61) or a recorded no-fork with a
-   reason (NO_FORK); the union equals the outline exactly.
+   plus 1017 genie_silver_metadata and the D-58 workspace_cleanup fork 1033, with 12
+   of them served by their D-57 v2 rows in 1018-1032; 1023/1028/1029 are held by
+   D-61) or a recorded no-fork with a reason (NO_FORK); the union equals the outline
+   exactly.
 G2 served source: a genie-code session gets every FORK_ID row; a non-genie session
    still gets the default row.
 G3 marker lint: every served fork body carries EXACTLY the reviewed number of each
@@ -22,7 +23,8 @@ G5 the hybrid / ui-driven execution classes stay as shipped.
 G6 (D-57) each shipped v2 row in 1018-1032 is its v1 fork once the added root block + state-file
    definition is removed and `<ARTIFACT_ROOT>/docs/` -> `docs/`, `<STATE_FILE>` ->
    `.vibecoding-state.md` are reversed (the 1017-vs-114 pattern); v1 stays active.
-G7 every row that uses `<STATE_FILE>` defines it with the one fixed sentence.
+G7 every row that uses `<STATE_FILE>` (the v2 rows and 1033) defines it with the one
+   fixed sentence.
 S3 with v1 and v2 both active, the genie-code resolver serves v2 (DISTINCT ON ...
    version DESC) and the shared help fields still come from the Default row.
 """
@@ -80,6 +82,7 @@ FORK_ID = {
     "ontology_routing": 1032,
     "redeploy_test": 1002,
     "genie_silver_metadata": 1017,
+    "workspace_cleanup": 1033,
 }
 # D-57: section_tag -> the v1 fork each v2 row above supersedes (v1 stays in the seed).
 V1_ID = {
@@ -102,7 +105,6 @@ NO_FORK = {
     "project_setup": "virtual step: mcp_server._project_setup_content, no seed body",
     "prd_generation": "LLM step: the model writes the PRD over the default row",
     "iterate_enhance": "D-39: marker-clean default; start-narrow promotion rule",
-    "workspace_cleanup": "D-39: marker-clean default; start-narrow promotion rule",
 }
 
 
@@ -128,7 +130,7 @@ def test_g1_outline_is_the_full_manifest_outline():
 def test_g1_every_step_is_forked_or_judged():
     assert set(_outline_tags()) == set(FORK_ID) | set(NO_FORK)
     assert not set(FORK_ID) & set(NO_FORK)
-    assert len(FORK_ID) == 27 and all(NO_FORK.values())
+    assert len(FORK_ID) == 28 and all(NO_FORK.values())
 
 
 @pytest.mark.parametrize("tag", sorted(FORK_ID))
@@ -308,6 +310,13 @@ ALLOWED.update(
         for tag in V1_ID
     }
 )
+# D-58: 1033 defines `<STATE_FILE>` with the same fixed sentence (G7); every real
+# read/write is `<STATE_FILE>` or rooted at `<ARTIFACT_ROOT>`.
+ALLOWED[("workspace_cleanup", "bare path")] = (
+    1,
+    "D-58 fork: the fixed `<STATE_FILE>` definition's prohibition 'never "
+    "`.vibecoding-state.md` relative to the page'; every real read/write is rooted",
+)
 # STOP rule: a real instruction that reads or writes `docs/…` / `.vibecoding-state.md`
 # by a bare relative path (it resolves against the page's cwd, not the project root)
 # is never allowed: its tag is listed here with the reason, exempt but still hitting,
@@ -441,7 +450,7 @@ def test_g6_v2_equals_v1_after_reversing_substitutions(tag):
 
 def test_g7_v2_defines_state_file():
     users = {pk: row for pk, row in SEED_ROWS.items() if "<STATE_FILE>" in (row.get("input_template") or "")}
-    assert set(users) == {FORK_ID[tag] for tag in V1_ID}
+    assert set(users) == {FORK_ID[tag] for tag in V1_ID} | {FORK_ID["workspace_cleanup"]}
     for pk, row in users.items():
         body = row["input_template"]
         assert body.count(STATE_FILE_DEFINITION) == 1, f"{pk} does not define <STATE_FILE> exactly once"
