@@ -6,8 +6,9 @@ cache. Both opt-in flags (includeLakehouse, includeGenieOntology) are on, so the
 outline is the full 31-step manifest outline.
 
 G1 inventory: every outline step is a genie-code fork (FORK_ID: the 26 shipped forks
-   plus 1017 genie_silver_metadata, this PR) or a recorded no-fork with a reason
-   (NO_FORK); the union equals the outline exactly.
+   plus 1017 genie_silver_metadata, with 12 of them served by their D-57 v2 rows
+   in 1018-1032; 1023/1028/1029 are held by D-61) or a recorded no-fork with a
+   reason (NO_FORK); the union equals the outline exactly.
 G2 served source: a genie-code session gets every FORK_ID row; a non-genie session
    still gets the default row.
 G3 marker lint: every served fork body carries EXACTLY the reviewed number of each
@@ -18,8 +19,15 @@ G3 marker lint: every served fork body carries EXACTLY the reviewed number of ea
    real instruction is never allowed: its tag is PENDING with the reason (STOP rule).
 G4 1017 is default 114 with only `docs/genie_plan.md` -> `<ARTIFACT_ROOT>/docs/genie_plan.md`.
 G5 the hybrid / ui-driven execution classes stay as shipped.
+G6 (D-57) each shipped v2 row in 1018-1032 is its v1 fork once the added root block + state-file
+   definition is removed and `<ARTIFACT_ROOT>/docs/` -> `docs/`, `<STATE_FILE>` ->
+   `.vibecoding-state.md` are reversed (the 1017-vs-114 pattern); v1 stays active.
+G7 every row that uses `<STATE_FILE>` defines it with the one fixed sentence.
+S3 with v1 and v2 both active, the genie-code resolver serves v2 (DISTINCT ON ...
+   version DESC) and the shared help fields still come from the Default row.
 """
 
+import inspect
 import re
 
 import pytest
@@ -48,16 +56,16 @@ FORK_ID = {
     "gold_layer_design": 903,
     "gold_layer_pipeline": 904,
     "deploy_lakehouse_assets": 905,
-    "semlayer_locate": 932,
-    "semlayer_profile": 951,
-    "semlayer_measures": 952,
-    "semlayer_metric_view": 933,
-    "semlayer_synonyms": 953,
+    "semlayer_locate": 1018,
+    "semlayer_profile": 1019,
+    "semlayer_measures": 1020,
+    "semlayer_metric_view": 1021,
+    "semlayer_synonyms": 1022,
     "gagent_describe": 934,
-    "gagent_instructions": 954,
-    "gagent_verified": 955,
-    "gagent_benchmarks": 956,
-    "gagent_optimize": 935,
+    "gagent_instructions": 1024,
+    "gagent_verified": 1025,
+    "gagent_benchmarks": 1026,
+    "gagent_optimize": 1027,
     "gaccel_dashboard": 940,
     "gaccel_activation": 941,
     "activation_table_design": 924,
@@ -67,12 +75,29 @@ FORK_ID = {
     "activation_wire_lakebase": 928,
     "activation_wire_genie": 957,
     "activation_deploy_validate": 929,
-    "ontology_domain": 936,
-    "ontology_pages": 937,
-    "ontology_routing": 938,
+    "ontology_domain": 1030,
+    "ontology_pages": 1031,
+    "ontology_routing": 1032,
     "redeploy_test": 1002,
     "genie_silver_metadata": 1017,
 }
+# D-57: section_tag -> the v1 fork each v2 row above supersedes (v1 stays in the seed).
+V1_ID = {
+    "semlayer_locate": 932,
+    "semlayer_profile": 951,
+    "semlayer_measures": 952,
+    "semlayer_metric_view": 933,
+    "semlayer_synonyms": 953,
+    "gagent_instructions": 954,
+    "gagent_verified": 955,
+    "gagent_benchmarks": 956,
+    "gagent_optimize": 935,
+    "ontology_domain": 936,
+    "ontology_pages": 937,
+    "ontology_routing": 938,
+}
+# D-61: v2 held (still served by v1 in FORK_ID); its input_id stays reserved.
+HELD_V2_ID = {"gagent_describe": 1023, "gaccel_dashboard": 1028, "gaccel_activation": 1029}
 NO_FORK = {
     "project_setup": "virtual step: mcp_server._project_setup_content, no seed body",
     "prd_generation": "LLM step: the model writes the PRD over the default row",
@@ -272,34 +297,26 @@ ALLOWED = {
         "existing fork, reviewed 2026-10-07: both are 'do not regenerate the whole `docs/` tree' prohibitions",
     ),
 }
-# STOP rule: real instructions, never allowed. Each fork tells Genie Code to read or
-# write `docs/…` / `.vibecoding-state.md` by a bare relative path, which resolves
-# against the page's cwd, not the project root. A seed task must root them; until
-# then the marker is exempt here but must still hit (so the entry is removed with the fix).
-_BARE_READS = (
-    "STOP 2026-10-07: real instructions ('Read `docs/…` and `.vibecoding-state.md` first', "
-    "'record … in `.vibecoding-state.md`', the gate's `docs/genie_brief.md`) by bare relative path"
+# D-57: each v2 row's only bare-path hit is the fixed `<STATE_FILE>` definition (G7).
+ALLOWED.update(
+    {
+        (tag, "bare path"): (
+            1,
+            "D-57 v2 fork: the fixed `<STATE_FILE>` definition's prohibition 'never "
+            "`.vibecoding-state.md` relative to the page'; every real read/write is rooted",
+        )
+        for tag in V1_ID
+    }
 )
-PENDING = {
-    (tag, "bare path"): _BARE_READS
-    for tag in (
-        "semlayer_locate",
-        "semlayer_profile",
-        "semlayer_measures",
-        "semlayer_metric_view",
-        "semlayer_synonyms",
-        "gagent_describe",
-        "gagent_instructions",
-        "gagent_verified",
-        "gagent_benchmarks",
-        "gagent_optimize",
-        "gaccel_dashboard",
-        "gaccel_activation",
-        "ontology_domain",
-        "ontology_pages",
-        "ontology_routing",
-    )
-}
+# STOP rule: a real instruction that reads or writes `docs/…` / `.vibecoding-state.md`
+# by a bare relative path (it resolves against the page's cwd, not the project root)
+# is never allowed: its tag is listed here with the reason, exempt but still hitting,
+# until a seed task roots it. D-57 rooted 12 genie-accelerator forks; D-61 holds 3.
+_HELD_BY_D61 = (
+    "v2 held by D-61: the raw-seed audit counts the repeated v1 line as growth; "
+    "ships once the gate counts superseded versions"
+)
+PENDING = {(tag, "bare path"): _HELD_BY_D61 for tag in HELD_V2_ID}
 
 
 def _in_code(body):
@@ -389,3 +406,94 @@ def test_g5_execution_classes_stay_as_shipped():
     state = engine.SessionState(session_parameters=dict(SESSION_PARAMS))
     outlined = {item.sectionTag: item.execution for item in engine.outline(TRACK, state)}
     assert {tag: outlined[tag] for tag in EXECUTION} == EXECUTION
+
+
+# --- G6 / G7: the D-57 v2 rows are mechanics-only copies of their v1 forks ---------
+
+# 1017 serves 114's how_to_apply, which opens with the "Artifact root (client-aware)" block.
+ROOT_BLOCK = SEED_ROWS[114]["how_to_apply"].split("\n\n", 1)[0]
+STATE_FILE_DEFINITION = (
+    "`<STATE_FILE>` = the live state file that `skills/vibecoding-state` resolves by its "
+    "state-path rule (`<app_root>` → `<agent_app_root>` → `<dp_bundle_root>` → the bootstrap "
+    "path, creating the canonical file if none exists yet), never `.vibecoding-state.md` "
+    "relative to the page."
+)
+V2_PREAMBLE = ROOT_BLOCK + "\n\n" + STATE_FILE_DEFINITION + "\n\n"
+
+
+def test_g6_root_block_is_the_shipped_a3_block():
+    assert ROOT_BLOCK.startswith("> **Artifact root (client-aware).** Resolve `<ARTIFACT_ROOT>` via `vibecoding-state.resolve_root`")
+    assert ROOT_BLOCK.endswith("— never the page's current working directory.") and "\n" not in ROOT_BLOCK
+
+
+@pytest.mark.parametrize("tag", sorted(V1_ID))
+def test_g6_v2_equals_v1_after_reversing_substitutions(tag):
+    v2, v1 = SEED_ROWS[FORK_ID[tag]], SEED_ROWS[V1_ID[tag]]
+    assert (v2["section_tag"], v2["coding_assistant"]) == (v1["section_tag"], v1["coding_assistant"]) == (tag, "genie-code")
+    assert (v1["version"], v1["is_active"], v2["version"], v2["is_active"]) == (1, True, 2, True)
+    assert (v2["system_prompt"], v2["bypass_llm"]) == (v1["system_prompt"], v1["bypass_llm"])
+    assert "<ARTIFACT_ROOT>" not in v1["input_template"] and "<STATE_FILE>" not in v1["input_template"]
+    assert v2["input_template"].startswith(V2_PREAMBLE)
+    rest = v2["input_template"][len(V2_PREAMBLE):]
+    assert MARKERS["bare path"].findall(rest) == []
+    assert rest.replace("<ARTIFACT_ROOT>/docs/", "docs/").replace("<STATE_FILE>", ".vibecoding-state.md") == v1["input_template"]
+
+
+def test_g7_v2_defines_state_file():
+    users = {pk: row for pk, row in SEED_ROWS.items() if "<STATE_FILE>" in (row.get("input_template") or "")}
+    assert set(users) == {FORK_ID[tag] for tag in V1_ID}
+    for pk, row in users.items():
+        body = row["input_template"]
+        assert body.count(STATE_FILE_DEFINITION) == 1, f"{pk} does not define <STATE_FILE> exactly once"
+        assert body.startswith(ROOT_BLOCK + "\n\n" + STATE_FILE_DEFINITION), f"{pk}: definition is not at the top"
+
+
+def test_g7_held_v2_ids_stay_free():
+    """D-61 leaves 1023/1028/1029 unused so the held v2 rows can ship unchanged later."""
+    assert not set(HELD_V2_ID.values()) & set(SEED_ROWS)
+    assert not set(HELD_V2_ID) & set(V1_ID)
+    assert all(SEED_ROWS[FORK_ID[tag]]["version"] == 1 for tag in HELD_V2_ID)
+
+
+# --- S3: the resolver serves the highest active version ---------------------------
+
+
+def _distinct_on(rows, order):
+    """Postgres ``SELECT DISTINCT ON (section_tag, coding_assistant) … ORDER BY
+    section_tag, coding_assistant, version <order>``: the first row per key."""
+    first = {}
+    for row in sorted(rows, key=lambda r: r.get("version", 1), reverse=order == "DESC"):
+        first.setdefault((row["section_tag"], row["coding_assistant"]), row)
+    return list(first.values())
+
+
+@pytest.fixture
+def every_active_version(monkeypatch):
+    """The cache query run over every active seed row, v1 and v2 alike."""
+    active = [
+        dict(row, coding_assistant=row.get("coding_assistant") or routes.DEFAULT_CODING_ASSISTANT_KEY)
+        for row in SEED_ROWS.values()
+        if row.get("is_active") is not False
+    ]
+    rows = _distinct_on(active, "DESC")
+    routes.clear_lakebase_cache()
+    monkeypatch.setattr(routes, "get_section_input_prompts_from_lakebase", lambda: rows)
+    yield
+    routes.clear_lakebase_cache()
+
+
+def test_s3_cache_query_orders_by_version_desc():
+    assert "ORDER BY section_tag, coding_assistant, version DESC" in inspect.getsource(routes._refresh_lakebase_cache)
+
+
+@pytest.mark.parametrize("tag", sorted(V1_ID))
+def test_s3_served_version(every_active_version, tag):
+    v1, v2, default = SEED_ROWS[V1_ID[tag]], SEED_ROWS[FORK_ID[tag]], SEED_ROWS[DEFAULT_ID[tag]]
+    assert v1.get("is_active") is not False and v2.get("is_active") is not False
+    served = routes.get_section_input_template(tag, "genie-code")
+    assert served["input"] == v2["input_template"]
+    assert (served["how_to_apply"], served["expected_output"]) == (
+        default.get("how_to_apply") or "",
+        default.get("expected_output") or "",
+    )
+    assert routes.get_section_input_template(tag, None)["input"] == default["input_template"]
