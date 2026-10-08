@@ -20911,6 +20911,49 @@ Record the space id and the gate result in `.vibecoding-state.md`.
 '',
 true, 1, true, current_timestamp(), current_timestamp(), current_user());
 
+-- gagent_describe (genie-code fork, v2) — D-57: fork 934 with its bare `docs/…` rooted at `<ARTIFACT_ROOT>/docs/…` and its bare `.vibecoding-state.md` read as `<STATE_FILE>` (the Artifact root block + the `<STATE_FILE>` definition added at the top); nothing else changes. v1 934 stays; the resolvers serve the highest active version; bypass_LLM = TRUE
+INSERT INTO ${catalog}.${schema}.section_input_prompts
+(input_id, section_tag, coding_assistant, input_template, system_prompt,
+ bypass_llm, version, is_active, inserted_at, updated_at, created_by)
+VALUES
+(1023, 'gagent_describe', 'genie-code',
+'> **Artifact root (client-aware).** Resolve `<ARTIFACT_ROOT>` via `vibecoding-state.resolve_root` (it reads `artifact_root` from `## Environment Capabilities`, or detects the active client, `artifact_root` + `skills_install_root`) and write every artifact under it. On Cursor/Copilot that is your repo root; on Databricks Genie Code it is your user project root `/Workspace/Users/<email>/<repo>` (your user project is a **git clone** of the workshop repo so bundles are recognized; the skill tree is **copied** to `/Workspace/Users/<email>/.assistant/skills/<repo>` for skill loading only) — never the page''s current working directory.
+
+`<STATE_FILE>` = the live state file that `skills/vibecoding-state` resolves by its state-path rule (`<app_root>` → `<agent_app_root>` → `<dp_bundle_root>` → the bootstrap path, creating the canonical file if none exists yet), never `.vibecoding-state.md` relative to the page.
+
+**Create a Genie Agent scoped from the PRD personas. Attach the governed Metric View (for measures) AND its base detail table(s) one grain below (for row-level questions), validate the serialized config, and review it before you create the space.**
+
+**Genie Code navigation:** the space is minted with the native `createAsset(assetType:"genie", tableIdentifiers=[…])` shell, then populated with `PATCH /api/2.0/genie/spaces/{id}` using the full body. **Never `PATCH /api/2.0/data-rooms/{id}`** — it silently wipes the space. Run this from a **workspace / Genie surface**, not a bundle-editor page. Leans on `semantic-layer/04-genie-space-export-import-api` (the `serialized_space` contract, the `_assert_sql_arrays` validator, and `sort_genie_config`) and `03-genie-space-patterns`.
+
+Read `<ARTIFACT_ROOT>/docs/design_prd.md`, `<ARTIFACT_ROOT>/docs/genie_brief.md`, and `<STATE_FILE>` first — the agent''s users and the topics it covers come straight from the PRD''s personas and User Journeys, and the exact Metric View FQN is the one recorded in state.
+
+**Prior step, implicit approval.** If Step 5 left a synonym diff shown but not yet applied to the Metric View, my running this prompt approves it: rebuild the Metric View with those synonyms (`CREATE OR REPLACE`) and record it in `<STATE_FILE>` first, then create the agent. Don''t re-ask about the previous step.
+
+Create a Genie space (Genie Agent) for {use_case_title}. This agent answers questions about what my team reviews for {use_case_title}. Its users are the PRD personas, and they typically ask about the top two or three topics in the brief.
+
+Attach two kinds of data source, read from `<STATE_FILE>`:
+
+- The governed **Metric View** (the FQN recorded in state) — the source for every measure/metric.
+- The **base detail table(s) one grain below** that Metric View (the fact table(s) it aggregates from), which still carry the row-level and narrative columns — individual records, descriptions, free text — the Metric View drops. Attach these so the agent can answer "show / list / export the individual records" questions the Metric View structurally can''t.
+
+Do NOT attach the whole raw `{chapter_3_lakehouse_catalog}.{chapter_3_lakehouse_schema}` schema — only the Metric View plus the one-grain-below detail table(s). On the detail table''s lookup columns (the identifiers and categories users name), set `column_configs` with `enable_entity_matching` (and `build_value_dictionary` for high-cardinality categoricals).
+
+Build the full `serialized_space`, run `_assert_sql_arrays` and `sort_genie_config` on it before the POST/PATCH, then after creation GET it back with `?include_serialized_space=true` and confirm the Metric View resolved. The live workspace may return the Metric View under `data_sources.tables` rather than `data_sources.metric_views` — accept either as long as it validates and resolves; do not fail the step over the slot name.
+
+Show me the space''s serialized config before you create it, then create it.
+
+**Open + auto-navigate (so the space-scoped tools/skills load).** Once the space is created and GET-confirmed, call `openAsset(assetType:"genie", assetId=<genie_space_id>)` to navigate me onto the new space''s page — Genie Code''s space-scoped native tools/skills only load on the asset page, and the next steps (Author Instructions → Verified Queries → Optimize) run there. `openAsset` is best-effort for `genie` assets, so ALWAYS print a clickable link as the guaranteed fallback: `{host}/genie/rooms/{genie_space_id}?o={o}`, built with the pre-authenticated `w` (`host = w.config.host`, `o = w.get_workspace_id()`).
+
+Record the space id and the gate result in `<STATE_FILE>`.
+
+**State-lock:** after the space is created, append this step''s Per-Step Log entry, gate result, and the captured `genie_space_id` to `<STATE_FILE>`, then re-read to confirm the write landed.
+
+**Gate:** `Agent scaffolded` — a live Genie space exists for `{use_case_title}` with a plain-language scope; the governed Metric View is attached for measures AND the base detail table(s) one grain below are attached for row-level questions (the whole raw schema is NOT attached); the config was validated (`_assert_sql_arrays`) and the Metric View is GET-confirmed to resolve (slot-agnostic); the serialized config was reviewed before creation; the space id is recorded in `<STATE_FILE>`.
+
+**➡️ Next step.** Author lean general instructions (Step 7) — a `MEASURE()`-vs-detail routing rule and a scope boundary.',
+'',
+true, 2, true, current_timestamp(), current_timestamp(), current_user());
+
 -- gagent_optimize (genie-code fork) — native page-locked benchmark loop (runBenchmarks/getBenchmarkResults + benchmark-failure-analysis skill), append-only 6-mode fixers, 2-3 iterations, ask_genie fallback; bypass_LLM = TRUE
 INSERT INTO ${catalog}.${schema}.section_input_prompts
 (input_id, section_tag, coding_assistant, input_template, system_prompt,
@@ -21665,6 +21708,30 @@ Read `docs/genie_brief.md`, `docs/design_prd.md`, and `.vibecoding-state.md` fir
 '',
 true, 1, true, current_timestamp(), current_timestamp(), current_user());
 
+-- gaccel_dashboard (genie-code fork, v2) — D-57: fork 940 with its bare `docs/…` rooted at `<ARTIFACT_ROOT>/docs/…` and its bare `.vibecoding-state.md` read as `<STATE_FILE>` (the Artifact root block + the `<STATE_FILE>` definition added at the top); nothing else changes. v1 940 stays; the resolvers serve the highest active version; bypass_LLM = TRUE
+INSERT INTO ${catalog}.${schema}.section_input_prompts
+(input_id, section_tag, coding_assistant, input_template, system_prompt,
+ bypass_llm, version, is_active, inserted_at, updated_at, created_by)
+VALUES
+(1028, 'gaccel_dashboard', 'genie-code',
+'> **Artifact root (client-aware).** Resolve `<ARTIFACT_ROOT>` via `vibecoding-state.resolve_root` (it reads `artifact_root` from `## Environment Capabilities`, or detects the active client, `artifact_root` + `skills_install_root`) and write every artifact under it. On Cursor/Copilot that is your repo root; on Databricks Genie Code it is your user project root `/Workspace/Users/<email>/<repo>` (your user project is a **git clone** of the workshop repo so bundles are recognized; the skill tree is **copied** to `/Workspace/Users/<email>/.assistant/skills/<repo>` for skill loading only) — never the page''s current working directory.
+
+`<STATE_FILE>` = the live state file that `skills/vibecoding-state` resolves by its state-path rule (`<app_root>` → `<agent_app_root>` → `<dp_bundle_root>` → the bootstrap path, creating the canonical file if none exists yet), never `.vibecoding-state.md` relative to the page.
+
+**Build an AI/BI dashboard across the PRD-relevant Gold data using your native dashboard capability — governed `MEASURE()` tiles plus supporting detail — review the tile plan first, then inventory the tables it uses so Choose What to Activate knows what to sync.**
+
+**Genie Code navigation:** create the dashboard with `createAsset(assetType:"dashboard")`, then `openAsset(assetType:"dashboard", assetId=<uuid>)` to auto-navigate to the **canvas** — widget editing has no reliable remote API, so authoring happens there. Print a clickable link (`{host}/dashboardsv3/{id}/edit?o={o}`) built with the pre-authenticated `w`. Governed tiles query the Metric View via `MEASURE()`, never the raw tables.
+
+Read `<ARTIFACT_ROOT>/docs/genie_brief.md`, `<ARTIFACT_ROOT>/docs/design_prd.md`, and `<STATE_FILE>` first. Using your built-in AI/BI dashboard capability, create a dashboard for {use_case_title} covering the PRD-relevant data in `{lakehouse_default_catalog}.{user_schema_prefix}_gold`: governed measures from the Metric View, plus the key dimensions and facts the PRD calls for. Add a tile per governed measure (via `MEASURE()`) sliced by the brief''s dimensions, plus any supporting detail tiles from the underlying Gold tables. Show me the tile plan first, then create the dashboard, open it on the canvas, give me the link, and save the dashboard id to `<STATE_FILE>`. Finally, write a TABLE INVENTORY to `<STATE_FILE>` — every Gold dimension + fact the dashboard uses — so the next step (Choose What to Activate) knows what to sync.
+
+**State-lock:** append this step''s Per-Step Log entry, gate result, the captured dashboard id, and the table inventory to `<STATE_FILE>`, then re-read to confirm the write landed.
+
+**Gate:** `Dashboard live` — an AI/BI dashboard covering the PRD-relevant Gold data exists; governed measures use `MEASURE()`; the dashboard was opened on the canvas; the dashboard id and a table inventory (Gold dims + facts used) are recorded in `<STATE_FILE>`.
+
+**➡️ Next step.** Choose What to Activate — decide which Gold dimensions + facts feed the app and dashboard. The table inventory you just recorded feeds that selection, which then hands off to the Synced Tables sequence.',
+'',
+true, 2, true, current_timestamp(), current_timestamp(), current_user());
+
 -- gaccel_activation (genie-code fork), SELECTION-ONLY wrapper: decide which Gold dims+facts feed the app/dashboard (business reason only; keys/grain/mode deferred to step 32), then hand off to Design & Provision Synced Tables; bypass_LLM = TRUE
 INSERT INTO ${catalog}.${schema}.section_input_prompts
 (input_id, section_tag, coding_assistant, input_template, system_prompt,
@@ -21688,6 +21755,34 @@ Read `docs/genie_brief.md`, `docs/design_prd.md`, and `.vibecoding-state.md` fir
 **➡️ Next step.** Design & Provision Synced Tables — run the reused activation sequence (Synced Tables → Design → Build → Wire → Deploy) against these selected tables.',
 '',
 true, 1, true, current_timestamp(), current_timestamp(), current_user());
+
+-- gaccel_activation (genie-code fork, v2) — D-57: fork 941 with its bare `docs/…` rooted at `<ARTIFACT_ROOT>/docs/…` and its bare `.vibecoding-state.md` read as `<STATE_FILE>` (the Artifact root block + the `<STATE_FILE>` definition added at the top); nothing else changes. v1 941 stays; the resolvers serve the highest active version; bypass_LLM = TRUE
+INSERT INTO ${catalog}.${schema}.section_input_prompts
+(input_id, section_tag, coding_assistant, input_template, system_prompt,
+ bypass_llm, version, is_active, inserted_at, updated_at, created_by)
+VALUES
+(1029, 'gaccel_activation', 'genie-code',
+'> **Artifact root (client-aware).** Resolve `<ARTIFACT_ROOT>` via `vibecoding-state.resolve_root` (it reads `artifact_root` from `## Environment Capabilities`, or detects the active client, `artifact_root` + `skills_install_root`) and write every artifact under it. On Cursor/Copilot that is your repo root; on Databricks Genie Code it is your user project root `/Workspace/Users/<email>/<repo>` (your user project is a **git clone** of the workshop repo so bundles are recognized; the skill tree is **copied** to `/Workspace/Users/<email>/.assistant/skills/<repo>` for skill loading only) — never the page''s current working directory.
+
+`<STATE_FILE>` = the live state file that `skills/vibecoding-state` resolves by its state-path rule (`<app_root>` → `<agent_app_root>` → `<dp_bundle_root>` → the bootstrap path, creating the canonical file if none exists yet), never `.vibecoding-state.md` relative to the page.
+
+**Choose what to activate — decide which Gold dimension + fact tables (and why) should feed the app and dashboard, never the Metric View itself — and record the approved selection for the Synced Tables sequence. Business selection only; keys, grain, dependency order, and sync modes are the next step''s job.**
+
+**Genie Code navigation:** this is a read + select beat — inspect the Metric View source, the Gold schema, and the dashboard''s table inventory (e.g. `DESCRIBE` / `information_schema`, the ERD) just to see which base tables exist. Do NOT call the synced-tables REST API, `apps init`, or any deploy here, and do NOT work out PKs, grain, dependency order, or sync modes — the next step (`activation_reverse_sync`, Design & Provision Synced Tables) owns all of that. Skills: `databricks-lakebase` (reference only at this beat).
+
+Read `<ARTIFACT_ROOT>/docs/genie_brief.md`, `<ARTIFACT_ROOT>/docs/design_prd.md`, and `<STATE_FILE>` first. Produce an ACTIVATION SELECTION (business selection only — do NOT create synced tables, an app, or deploy anything, and do NOT record keys/grain/modes):
+
+1. List the Gold BASE TABLES to activate — the dims + facts in `{lakehouse_default_catalog}.{user_schema_prefix}_gold` behind my Metric View and the tables the AI/BI dashboard uses. Do NOT select the Metric View itself (a view syncs nothing); include every dim + fact the app needs.
+2. For each table, give a one-line reason it earns a place — the app screen, dashboard tile, or PRD journey it serves. Leave PK / grain / dependency order / sync mode alone; that is worked out in the next step.
+3. Summarize the selection as a table I can approve, and record the approved tables to `<STATE_FILE>` so the next step (Design & Provision Synced Tables) picks them up and works out the sync mechanics.
+
+**State-lock:** append this step''s Per-Step Log entry, gate result, and the captured table selection (table list + one-line reasons) to `<STATE_FILE>`, then re-read to confirm the write landed.
+
+**Gate:** `Activation planned` — an approved list of Gold dims + facts to activate (not the MV), each with a one-line business reason, is recorded in `<STATE_FILE>`. Keys, grain, dependency order, and sync modes are deliberately deferred to Design & Provision Synced Tables. No synced tables, app, or deploy at this beat.
+
+**➡️ Next step.** Design & Provision Synced Tables — run the reused activation sequence (Synced Tables → Design → Build → Wire → Deploy) against these selected tables.',
+'',
+true, 2, true, current_timestamp(), current_timestamp(), current_user());
 
 -- gaccel_productionize (genie-code fork) — LIGHT hand-off to databricks-asset-bundles; bundle-editor page navigation; bypass_LLM = TRUE
 INSERT INTO ${catalog}.${schema}.section_input_prompts
