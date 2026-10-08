@@ -13,7 +13,7 @@ docs.** Read in the order below.
 
 | # | Document | Kind | Status | What it is |
 |---|---|---|---|---|
-| 1 | [`mcp-workshop-engine.md`](./mcp-workshop-engine.md) | Roadmap / handoff | Written (2026-09-19) | The origin spec: lift orchestration into a backend Workshop Engine that both the UI and an MCP adapter consume. The substrate everything else builds on. **Predates the probe.** |
+| 1 | [`mcp-workshop-engine.md`](./mcp-workshop-engine.md) | Roadmap / handoff | Written (2026-09-19; §11 refreshed to the 14 shipped tracks 2026-10-08) | The origin spec: lift orchestration into a backend Workshop Engine that both the UI and an MCP adapter consume. The substrate everything else builds on. **Predates the probe.** |
 | 2 | [`mcp-research-and-findings.md`](./mcp-research-and-findings.md) | Reference | Written (2026-09-21) | The research that grounds the design: MCP `2026-07-28` protocol landscape, the interactivity thesis, and code-grounded corrections — **reconciled against the live probe** (probe wins on conflict). |
 | 3 | [`mcp-interactive-track-doc-plan.md`](./mcp-interactive-track-doc-plan.md) | Build plan | Written (2026-09-21) | **§1 = the authoritative probe findings.** Then the D1–D10 document set to build, with content, dependencies, and write order. |
 | 4 | [`designing-mcp-servers-for-genie-code.md`](./designing-mcp-servers-for-genie-code.md) | Generic spec | Written (2026-09-22) | **Product-agnostic.** How *any* agent should design, deploy, and verify an MCP server that works with Genie Code — client ground truth, deployment requirements, tool/prompt/resource design, in-band interaction patterns, a reusable capability probe, and a checklist. |
@@ -24,10 +24,10 @@ docs.** Read in the order below.
 | 9 | [`mcp-workshop-architecture.md`](./mcp-workshop-architecture.md) | Spec (D4) | **Draft (2026-09-22)** | Components, the Databricks Apps deployment topology (probe gotchas encoded), and the sequence diagrams (start/param intake, step walk + gate, cross-surface sync, Step-9 hard-stop). |
 | 10 | [`mcp-workshop-data-model.md`](./mcp-workshop-data-model.md) | Spec (D6) | **Draft (2026-09-22)** | Additive Lakebase changes: `captured_outputs` / `completed_gates` columns, the `session_interactions` log, session-parameter keys, number↔tag migration, and the migration DDL. |
 | 11 | [`mcp-workshop-security.md`](./mcp-workshop-security.md) | Spec (D7) | **Draft (2026-09-22)** | Identity → `session_id`, MCP-session≠auth, managed-proxy identity nuance, CORS reconciliation, the `/mcp` rate-limit decision, and stateless-concurrency isolation. |
-| 12 | [`mcp-workshop-test-plan.md`](./mcp-workshop-test-plan.md) | Spec (D8) | **Draft (2026-09-22)** | Engine/parity, MCP contract, interactivity, the 307/mount/lifespan regressions, statelessness, data-model migration, the live Genie Code smoke, and the reusable re-probe harness — with a spec→test coverage matrix. |
-| 13 | [`mcp-workshop-rollout.md`](./mcp-workshop-rollout.md) | Spec (D9) | **Draft (2026-09-22; +Phase 2A 2026-09-23)** | The revised phasing (Phase 1 ships now; interactivity decoupled from elicitation; **Phase 2A adaptive coaching**, decoupled from Phase 3), reseed-vs-redeploy matrix, dependency pinning, the deploy preflight checklist, STOP-and-ask gates, rollback, and the re-probe trigger. |
+| 12 | [`mcp-workshop-test-plan.md`](./mcp-workshop-test-plan.md) | Spec (D8) | **Draft (2026-09-22; §8 split into prober / human smoke 2026-10-08)** | Engine/parity, MCP contract, interactivity, the 307/mount/lifespan regressions, statelessness, data-model migration, the live Genie Code smoke, and the reusable re-probe harness — with a spec→test coverage matrix. |
+| 13 | [`mcp-workshop-rollout.md`](./mcp-workshop-rollout.md) | Spec (D9) | **Draft (2026-09-22; +Phase 2A 2026-09-23; Phase 4 / §5 / §7 / §9 refreshed to shipped state 2026-10-08)** | The revised phasing (Phase 1 ships now; interactivity decoupled from elicitation; **Phase 2A adaptive coaching**, decoupled from Phase 3), reseed-vs-redeploy matrix, dependency pinning, the deploy preflight checklist, STOP-and-ask gates, rollback, and the re-probe trigger. |
 | 14 | [`mcp-workshop-facilitator-guide.md`](./mcp-workshop-facilitator-guide.md) | Guide (D10) | **Draft (2026-09-22)** | How a learner adds the app as a Custom MCP server, the dual-surface projector setup, the 20-tool caveat, what in-band interactivity looks like, and a troubleshooting table. |
-| 15 | [`mcp-workshop-usecase-selection.md`](./mcp-workshop-usecase-selection.md) | Spec (D11) | **Draft (2026-09-23)** | Post-smoke addendum: an in-band use-case discovery/selection stage (industry → certified-first use cases → author-your-own) that gates PRD and produces a track-agnostic `use_case_brief` — **zero new tools** (resources + existing tools). Plus cross-surface MCP↔SPA step sync (the bridge + the Phase 3 repoint), and a paste-ready Polly charter task. |
+| 15 | [`mcp-workshop-usecase-selection.md`](./mcp-workshop-usecase-selection.md) | Spec (D11) | **Draft (2026-09-23; 14 tracks, open q1 resolved by #108, 2026-10-08)** | Post-smoke addendum: an in-band use-case discovery/selection stage (industry → certified-first use cases → author-your-own) that gates PRD and produces a track-agnostic `use_case_brief` — **zero new tools** (resources + existing tools). Plus cross-surface MCP↔SPA step sync (the bridge + the Phase 3 repoint), and a paste-ready Polly charter task. |
 
 ---
 
@@ -100,8 +100,10 @@ Phasing authority is [D9 §1](./mcp-workshop-rollout.md#1-revised-phasing-elicit
 
 - **Phases 0, 1, 2, 2B — SHIPPED** (PRs #40–#44 + #45–#49, deployed to `fevm-serverless`, smoke green;
   **7 tools** — the 7th is `vibe_explain_step`, not `vibe_coach`; see the reconciliation in
-  [D9 §1](./mcp-workshop-rollout.md#1-revised-phasing-elicitation-decoupled)).
-- **Phase 3 — T0–T4 SHIPPED; T5 soaking** ([D9 §1](./mcp-workshop-rollout.md), scoped 2026-09-27):
+  [D9 §1](./mcp-workshop-rollout.md#1-revised-phasing-elicitation-decoupled)). Still **7 tools** after
+  Phase 4 (`mcp_server.py:1204-2055`; [Phase 4 exit report](../../superpowers/plans/2026-10-08-phase4-exit-report.md) :3).
+- **Phase 3 — SHIPPED** (exit gate PASS: [Phase 3 exit report](../../superpowers/plans/2026-10-04-phase3-exit-report.md),
+  #80–#95). History: **T0–T4 SHIPPED; T5 soaking** ([D9 §1](./mcp-workshop-rollout.md), scoped 2026-09-27):
   repoint the SPA to the engine outline (`GET /api/track/{track}/outline`, D4 §3.3) and retire the TS
   orchestration. T0 persists the track and fixed the live "0/28" resume defect (PR #50); T1–T4
   (PRs #51/#52/#53/#57/#59/#61) land the outline endpoint, the engine-vs-TS parity harness, the SPA
@@ -110,16 +112,22 @@ Phasing authority is [D9 §1](./mcp-workshop-rollout.md#1-revised-phasing-elicit
   and all reads went gates-only in R4b — **deployed and soaking; the legacy-column DROP (D6 §5/§9) is
   pending** (human holds the soak clock). Charter:
   [`polly-charter-phase3.md`](./polly-charter-phase3.md).
-- **Phase 2A — its own charter *after* Phase 3**: adaptive coaching delivered as a **consolidation** —
-  extend `vibe_explain_step` (optional `focus`, FMAPI path, fail-open to the static help), **no 8th
-  tool**. Cost/endpoint signed off 2026-09-24. **Phase 4** (generalize `use_case_selection` to all
-  tracks) follows.
+- **Phase 2A — SHIPPED** (#98–#105, D-22; [Phase 2A gate report](../../superpowers/plans/2026-10-05-phase2a-gate-report.md)):
+  adaptive coaching delivered as a **consolidation** — extend `vibe_explain_step` (optional `focus`,
+  FMAPI path, fail-open to the static help), **no 8th tool**. Cost/endpoint signed off 2026-09-24.
+- **Phase 4 — SHIPPED per its report** (#107–#126, TPL #18/#19;
+  [Phase 4 exit report](../../superpowers/plans/2026-10-08-phase4-exit-report.md)): all **14 manifest
+  tracks** walkable over MCP; P4.1, P4.2, P4.5 PASS, P4.3 PASS with caveat (3 v2 rows held, D-61),
+  P4.4 PARTIAL (D-62). See [D9 §1](./mcp-workshop-rollout.md#1-revised-phasing-elicitation-decoupled).
 
 Charters (the paste-ready supervisor commands for Polly):
 - [`polly-build-charter.md`](./polly-build-charter.md) — the original Phase 0→2/2A charter.
 - [`polly-charter-next.md`](./polly-charter-next.md) — Phase 2B → 2A (**2B shipped; superseded** — 2A is
   reframed as a consolidation into `vibe_explain_step` and moved after Phase 3).
 - [`polly-charter-phase3.md`](./polly-charter-phase3.md) — **Phase 3 (UI-repoint): T0–T4 shipped; T5 (gates-only contract) soaking, DROP pending.**
+- [`polly-charter-autonomous.md`](./polly-charter-autonomous.md) — **current:** how the 2026-10 autonomous
+  run (Phase 3 cleanup, 2A, 4) was governed. It supersedes the three charters above, which carry a
+  "Superseded (2026-10-08)" banner and are kept as history.
 
 **Later addition — Phase 2A: adaptive coaching (2026-09-23; reframed as a consolidation 2026-09-27).**
 Adaptive coaching — delivered by **extending `vibe_explain_step`** (no separate `vibe_coach` tool) —

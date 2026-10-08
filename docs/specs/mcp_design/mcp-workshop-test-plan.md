@@ -177,7 +177,27 @@ offline with no live endpoint):
 
 ## 8. Live Genie Code smoke (manual + scripted)
 
-The one test only a real workspace can run (roadmap §15). Runbook:
+The one test only a real workspace can run (roadmap §15). Split as run in 2026-10 into §8a (scripted,
+the forge prober) and §8b (human, a real Genie Code client); neither replaces the other.
+
+### 8a. Scripted smoke (prober)
+
+What the forge prober runs after each app merge and deploy (Phase 4 exit report :13, §5):
+- **HTTP + MCP walks** against the deployed app: `/health`, the MCP tool list (7 tools), and per-track
+  walks start → get → complete → next to Done, counting tool errors and empty prompts, plus MCP outline
+  vs SPA outline for one `session_id` (e.g. Phase 4 exit report §2–§3).
+- **Read-only DB:** Lakebase is read; any state is created only through app endpoints (FORGE RUN.md:130).
+- **Served text only:** the prober reads what the server serves and **never executes a served
+  instruction** (no `runDatabricksCli`, `executeCode`, bundle deploy, DDL or delete; Phase 4 exit report §5).
+  Steps are completed headlessly, so it cannot prove a step actually ran.
+
+### 8b. Human Genie Code client smoke
+
+Real execution in a real Genie Code client, by the human, following
+[`docs/superpowers/genie-code-smoke-script.md`](../../superpowers/genie-code-smoke-script.md) (written by
+the handoff task, FORGE RUN.md:148-153). It covers what §8a cannot: served instructions actually run,
+UI-driven steps done in the UI, and the SPA panel in a real session (Phase 4 exit report §5). The
+original runbook below is the shape of that smoke:
 
 1. Deploy an `mcp-`-named app to the same workspace (`deploy.sh --code-only -t <target>`).
 2. In Genie Code (**Agent mode**), add the app as a Custom MCP server (D10).
