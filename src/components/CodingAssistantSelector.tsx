@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { ChevronDown, CheckCircle, ExternalLink, Download, Sparkles, Star, Terminal, Lock, Info } from 'lucide-react';
 import { BorderBeamButton } from './BorderBeamButton';
 import { AiGatewaySetupGuide } from './AiGatewaySetupGuide';
@@ -250,12 +250,12 @@ export function CodingAssistantSelector({
   selectionExplicit = true,
 }: CodingAssistantSelectorProps) {
   const [userOverride, setUserOverride] = useState<boolean | null>(null);
-  const prevForceCollapsed = useRef(forceCollapsed);
+  const [prevForceCollapsed, setPrevForceCollapsed] = useState(forceCollapsed);
 
-  useEffect(() => {
-    if (forceCollapsed && !prevForceCollapsed.current) setUserOverride(null);
-    prevForceCollapsed.current = forceCollapsed;
-  }, [forceCollapsed]);
+  if (forceCollapsed !== prevForceCollapsed) {
+    setPrevForceCollapsed(forceCollapsed);
+    if (forceCollapsed) setUserOverride(null);
+  }
 
   // ------------------------------------------------------------------------
   // Admin-configured visibility / order / recommended state.

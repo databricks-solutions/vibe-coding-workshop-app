@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState } from 'react';
 import { ChevronDown, ChevronRight, ChevronLeft, Lock, Map, ArrowRight } from 'lucide-react';
 import { LevelSelectorContent } from './LevelSelector';
 import { ArchitectureDiagramContent } from './ArchitectureDiagram';
@@ -62,14 +62,12 @@ export function PathAndArchitecture({
   disabledWorkshopLevels,
 }: PathAndArchitectureProps) {
   const [userOverride, setUserOverride] = useState<boolean | null>(null);
-  const prevForceCollapsed = useRef(forceCollapsed);
+  const [prevForceCollapsed, setPrevForceCollapsed] = useState(forceCollapsed);
 
-  useEffect(() => {
-    if (forceCollapsed && !prevForceCollapsed.current) {
-      setUserOverride(null);
-    }
-    prevForceCollapsed.current = forceCollapsed;
-  }, [forceCollapsed]);
+  if (forceCollapsed !== prevForceCollapsed) {
+    setPrevForceCollapsed(forceCollapsed);
+    if (forceCollapsed) setUserOverride(null);
+  }
 
   // forceExpanded is authoritative; forceCollapsed sets the default (user can still override)
   const isExpanded = forceExpanded ? true : (userOverride ?? (forceCollapsed ? false : true));

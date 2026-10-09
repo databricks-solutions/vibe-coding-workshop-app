@@ -1,42 +1,25 @@
 import { useState, useEffect, useRef } from 'react';
 import { CheckCircle2, ExternalLink, ArrowUpRight, Loader2 } from 'lucide-react';
 import { apiClient } from '../api/client';
-import { STEP_VERIFICATION_LINKS } from '../constants/verificationLinks';
+import { hasVerificationLinks, resolveVerificationLinks } from './VerificationLinks.utils';
 
 interface VerificationLinksProps {
   sectionTag: string;
   sessionId: string | null;
 }
 
-function resolveUrl(template: string, params: Record<string, string>): string | null {
-  const workspaceUrl = (params.workspace_url || '').replace(/\/+$/, '');
-  const resolvedParams: Record<string, string> = { ...params, workspace_url: workspaceUrl ? workspaceUrl + '/' : '' };
-
-  let url = template;
-  const placeholders = template.match(/\{(\w+)\}/g);
-  if (!placeholders) return template;
-
-  for (const ph of placeholders) {
-    const key = ph.slice(1, -1);
-    const val = resolvedParams[key];
-    if (!val) return null;
-    const isAbsoluteUrl = /^https?:\/\//i.test(val);
-    url = url.replace(ph, isAbsoluteUrl ? val : encodeURIComponent(val));
-  }
-  return url;
-}
-
 export function VerificationLinks({ sectionTag, sessionId }: VerificationLinksProps) {
-  const linkDefs = STEP_VERIFICATION_LINKS[sectionTag];
-  if (!linkDefs || linkDefs.length === 0) return null;
+  const hasLinks = hasVerificationLinks(sectionTag);
 
   const [params, setParams] = useState<Record<string, string> | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const fetchedRef = useRef<string | null>(null);
 
   useEffect(() => {
-    if (!sessionId || fetchedRef.current === sessionId) return;
+    // Steps without verification links never fetch session parameters.
+    if (!hasLinks || !sessionId || fetchedRef.current === sessionId) return;
     fetchedRef.current = sessionId;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- loading flag for the session-parameters fetch this effect starts
     setIsLoading(true);
     apiClient.getSessionParameters(sessionId)
       .then(data => {
@@ -48,7 +31,9 @@ export function VerificationLinks({ sectionTag, sessionId }: VerificationLinksPr
       })
       .catch(err => { console.error('Failed to fetch session parameters for verification links:', err); setParams(null); })
       .finally(() => setIsLoading(false));
-  }, [sessionId]);
+  }, [hasLinks, sessionId]);
+
+  if (!hasLinks) return null;
 
   if (isLoading) {
     return (
@@ -61,9 +46,7 @@ export function VerificationLinks({ sectionTag, sessionId }: VerificationLinksPr
 
   if (!params) return null;
 
-  const resolvedLinks = linkDefs
-    .map(link => ({ ...link, url: resolveUrl(link.urlTemplate, params) }))
-    .filter(link => link.url !== null);
+  const resolvedLinks = resolveVerificationLinks(sectionTag, params);
 
   if (resolvedLinks.length === 0) return null;
 
@@ -85,7 +68,7 @@ export function VerificationLinks({ sectionTag, sessionId }: VerificationLinksPr
         {resolvedLinks.map((link, idx) => (
           <a
             key={idx}
-            href={link.url!}
+            href={link.url}
             target="_blank"
             rel="noopener noreferrer"
             className="block rounded-md bg-secondary/30 hover:bg-secondary/50 p-3 transition-colors group"

@@ -610,8 +610,12 @@ def cmd_install(args):
     # ── Step 4: Configure resources ───────────────────────────────────
     step(4, TOTAL, "Configure resources")
     defaults = {
-        "app_name": existing_config.get("app", {}).get("name", "vibe-coding-workshop-app"),
-        "instance_name": existing_config.get("lakebase", {}).get("instance_name", "vibe-coding-workshop-lakebase"),
+        # "mcp-" prefixed: this branch enables the MCP mount by default, so a fresh install
+        # is the MCP workshop variant. The prefix isolates the app + Lakebase from a plain
+        # vibe-coding-workshop-app deployment (see user-config.yaml.example). 28 chars, within
+        # the 2-30 app-name limit enforced below.
+        "app_name": existing_config.get("app", {}).get("name", "mcp-vibe-coding-workshop-app"),
+        "instance_name": existing_config.get("lakebase", {}).get("instance_name", "mcp-vibe-workshop-lb"),
         "catalog": existing_config.get("lakebase", {}).get("catalog", "vibe_coding_workshop_catalog"),
         "schema": existing_config.get("lakebase", {}).get("schema", "vibe_coding_workshop"),
         "endpoint": existing_config.get("app", {}).get("serving_endpoint", "databricks-claude-sonnet-4-5"),
@@ -1170,7 +1174,10 @@ def cmd_uninstall(args):
         drop_env = {**os.environ, "DATABRICKS_HOST": ws.get("host", "")}
         if profile:
             drop_env["DATABRICKS_CONFIG_PROFILE"] = profile  # match deploy.sh so CLI auth resolves
-        if _run_sh(setup_lakebase_sh, ["--drop"], cwd=PROJECT_ROOT, env=drop_env).returncode == 0:
+        # Uninstall is an explicit, confirmed destroy: opt in to setup-lakebase.sh's
+        # destructive guard (D-35). The schema is the one rendered into app.yaml.
+        drop_env["VIBE_CONFIRM_DESTRUCTIVE_RESEED"] = lb.get("schema", "")
+        if _run_sh(setup_lakebase_sh, ["--drop", "--yes"], cwd=PROJECT_ROOT, env=drop_env).returncode == 0:
             success("Lakebase tables dropped")
         else:
             warn("Could not drop tables now; they will be removed when the bundle is destroyed.")

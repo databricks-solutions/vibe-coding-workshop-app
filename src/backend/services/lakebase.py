@@ -433,11 +433,29 @@ def _is_retriable_connection_error(exc: Exception) -> bool:
     ))
 
 
+def _sql_fingerprint(sql: str, limit: int = 120) -> str:
+    """A whitespace-normalized, truncated fingerprint of a SQL string for logs.
+
+    NEVER includes params — those carry emails and session content. Collapses
+    runs of whitespace to single spaces and truncates to ``limit`` chars so an
+    ERROR log points at the offending query (which query silently returned [],
+    e.g. the PR3c B2 JSONB-vs-'' parse failure) without leaking data or spamming
+    the log with a multi-line statement.
+    """
+    normalized = " ".join((sql or "").split())
+    return normalized[:limit] + ("…" if len(normalized) > limit else "")
+
+
 def execute_query(sql: str, params: tuple = None) -> List[Dict]:
     """Execute a SELECT query and return results as list of dicts.
 
     Retries once on transient connection errors (e.g. Lakebase scale-to-zero
     killing a pooled connection between the pool health-check and query execution).
+
+    On failure the [] return contract is unchanged (callers depend on it), but the
+    ERROR log now carries the exception class + a normalized SQL fingerprint so a
+    query that silently swallows to [] (the class of bug behind PR3c B2) is
+    diagnosable from logs alone. Params are deliberately never logged.
     """
     if not is_lakebase_configured():
         logger.info("Lakebase not configured - returning empty results")
@@ -457,9 +475,15 @@ def execute_query(sql: str, params: tuple = None) -> List[Dict]:
             if attempt == 0 and _is_retriable_connection_error(e):
                 logger.warning(f"Retriable connection error in execute_query, retrying once: {e}")
                 continue
-            logger.error(f"Error executing query: {e}")
+            logger.error(
+                f"Error executing query [{type(e).__name__}]: {e} "
+                f"| sql: {_sql_fingerprint(sql)}"
+            )
             return []
-    logger.error(f"Error executing query after retry: {last_err}")
+    logger.error(
+        f"Error executing query after retry [{type(last_err).__name__}]: {last_err} "
+        f"| sql: {_sql_fingerprint(sql)}"
+    )
     return []
 
 
@@ -589,6 +613,105 @@ def _get_sessions_table_name() -> str:
     return f"{get_schema()}.{SESSIONS_TABLE}"
 
 
+def _session_upsert(
+    table_name: str,
+    session_id: str,
+    industry: str = None,
+    industry_label: str = None,
+    use_case: str = None,
+    use_case_label: str = None,
+    session_name: str = None,
+    session_description: str = None,
+    feedback_rating: str = None,
+    feedback_comment: str = None,
+    feedback_request_followup: bool = None,
+    prerequisites_completed: bool = None,
+    workshop_level: str = None,
+    step_prompts: Dict[int, str] = None,
+    created_by: str = None,
+    captured_outputs: Dict[str, str] = None,
+    completed_gates: List[str] = None,
+    session_parameters: Dict[str, Any] = None,
+) -> tuple:
+    """Build the sessions UPSERT ``(sql, params)``.
+
+    Shared by ``save_session`` and ``save_session_merging_gates`` so both run the
+    exact same COALESCE-preserving statement."""
+    # Step 1 stored in dedicated column, steps 2-20 stored in JSONB
+    step_1_prompt_value = step_prompts.get(1) if step_prompts else None
+    
+    # Build step_prompts JSONB for steps 2-20 (exclude step 1)
+    step_prompts_jsonb = {}
+    if step_prompts:
+        for step_num, prompt_text in step_prompts.items():
+            if step_num != 1 and prompt_text:  # Skip step 1, include steps 2-20
+                step_prompts_jsonb[str(step_num)] = prompt_text
+    step_prompts_json = json.dumps(step_prompts_jsonb)
+
+    # Serialize JSONB payloads. None => SQL NULL so COALESCE preserves the
+    # existing DB value (never clobbers on a partial save).
+    captured_outputs_json = json.dumps(captured_outputs) if captured_outputs is not None else None
+    completed_gates_json = json.dumps(completed_gates) if completed_gates is not None else None
+    session_parameters_json = json.dumps(session_parameters) if session_parameters is not None else None
+    
+    # Current timestamp
+    now = datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')
+    
+    # Build the UPSERT SQL
+    upsert_sql = f"""
+    INSERT INTO {table_name} (
+        session_id, created_by,
+        session_name, session_description,
+        industry, industry_label, use_case, use_case_label,
+        feedback_rating, feedback_comment, feedback_request_followup,
+        step_1_prompt, step_prompts,
+        prerequisites_completed, workshop_level,
+        captured_outputs, completed_gates, session_parameters,
+        created_at, updated_at
+    ) VALUES (
+        %s, %s,
+        %s, %s,
+        %s, %s, %s, %s,
+        %s, %s, %s,
+        %s, %s,
+        %s, %s,
+        %s, %s, %s,
+        %s, %s
+    )
+    ON CONFLICT (session_id) DO UPDATE SET
+        industry = COALESCE(EXCLUDED.industry, {table_name}.industry),
+        industry_label = COALESCE(EXCLUDED.industry_label, {table_name}.industry_label),
+        use_case = COALESCE(EXCLUDED.use_case, {table_name}.use_case),
+        use_case_label = COALESCE(EXCLUDED.use_case_label, {table_name}.use_case_label),
+        session_name = COALESCE(EXCLUDED.session_name, {table_name}.session_name),
+        session_description = COALESCE(EXCLUDED.session_description, {table_name}.session_description),
+        feedback_rating = COALESCE(EXCLUDED.feedback_rating, {table_name}.feedback_rating),
+        feedback_comment = COALESCE(EXCLUDED.feedback_comment, {table_name}.feedback_comment),
+        feedback_request_followup = COALESCE(EXCLUDED.feedback_request_followup, {table_name}.feedback_request_followup),
+        prerequisites_completed = COALESCE(EXCLUDED.prerequisites_completed, {table_name}.prerequisites_completed),
+        workshop_level = COALESCE(EXCLUDED.workshop_level, {table_name}.workshop_level),
+        captured_outputs = COALESCE(EXCLUDED.captured_outputs, {table_name}.captured_outputs),
+        completed_gates = COALESCE(EXCLUDED.completed_gates, {table_name}.completed_gates),
+        session_parameters = COALESCE(EXCLUDED.session_parameters, {table_name}.session_parameters),
+        step_1_prompt = COALESCE(EXCLUDED.step_1_prompt, {table_name}.step_1_prompt),
+        step_prompts = COALESCE({table_name}.step_prompts, '{{}}'::jsonb) || COALESCE(EXCLUDED.step_prompts, '{{}}'::jsonb),
+        updated_at = EXCLUDED.updated_at
+    """
+    
+    params = (
+        session_id, created_by or "",
+        session_name, session_description,
+        industry, industry_label, use_case, use_case_label,
+        feedback_rating, feedback_comment, feedback_request_followup,
+        step_1_prompt_value, step_prompts_json,
+        prerequisites_completed, workshop_level,
+        captured_outputs_json, completed_gates_json, session_parameters_json,
+        now,
+        now,
+    )
+    return upsert_sql, params
+
+
 def save_session(
     session_id: str,
     industry: str = None,
@@ -601,12 +724,12 @@ def save_session(
     feedback_comment: str = None,
     feedback_request_followup: bool = None,
     prerequisites_completed: bool = None,
-    current_step: int = None,
     workshop_level: str = None,
-    completed_steps: List[int] = None,
-    skipped_steps: List[int] = None,
     step_prompts: Dict[int, str] = None,
     created_by: str = None,
+    captured_outputs: Dict[str, str] = None,
+    completed_gates: List[str] = None,
+    session_parameters: Dict[str, Any] = None,
 ) -> bool:
     """
     Save or update a session in Lakebase.
@@ -627,11 +750,11 @@ def save_session(
         feedback_rating: 'thumbs_up', 'thumbs_down', or None
         feedback_comment: User feedback text
         feedback_request_followup: Whether user requests follow-up support
-        current_step: Current step number (None preserves existing)
-        completed_steps: List of completed step numbers (None preserves existing)
-        skipped_steps: List of skipped step numbers (None preserves existing)
         step_prompts: Dict mapping step number to generated prompt text
         created_by: User email
+        captured_outputs: Dict mapping produces keys to captured output text
+        completed_gates: List of completed section tags
+        session_parameters: Per-session parameter overrides
     
     Returns:
         True if successful, False otherwise
@@ -644,102 +767,260 @@ def save_session(
     
     # Defensive logging: track exactly which fields are being written
     _fields_being_set = []
-    if completed_steps is not None: _fields_being_set.append(f"completed_steps({len(completed_steps)} items)")
-    if skipped_steps is not None: _fields_being_set.append(f"skipped_steps({len(skipped_steps)} items)")
-    if current_step is not None: _fields_being_set.append(f"current_step={current_step}")
     if workshop_level is not None: _fields_being_set.append(f"workshop_level={workshop_level}")
     if industry is not None: _fields_being_set.append("industry")
     if use_case is not None: _fields_being_set.append("use_case")
     if prerequisites_completed is not None: _fields_being_set.append(f"prerequisites_completed={prerequisites_completed}")
     if step_prompts is not None: _fields_being_set.append(f"step_prompts({len(step_prompts)} keys)")
+    if captured_outputs is not None: _fields_being_set.append(f"captured_outputs({len(captured_outputs)} keys)")
+    if completed_gates is not None: _fields_being_set.append(f"completed_gates({len(completed_gates)} items)")
+    if session_parameters is not None: _fields_being_set.append(f"session_parameters({len(session_parameters)} keys)")
     if session_name is not None: _fields_being_set.append(f"session_name={session_name}")
     if feedback_rating is not None: _fields_being_set.append("feedback")
     logger.info(f"Saving session {session_id}: fields=[{', '.join(_fields_being_set) or 'none'}]")
     
     try:
-        # Step 1 stored in dedicated column, steps 2-20 stored in JSONB
-        step_1_prompt_value = step_prompts.get(1) if step_prompts else None
-        
-        # Build step_prompts JSONB for steps 2-20 (exclude step 1)
-        step_prompts_jsonb = {}
-        if step_prompts:
-            for step_num, prompt_text in step_prompts.items():
-                if step_num != 1 and prompt_text:  # Skip step 1, include steps 2-20
-                    step_prompts_jsonb[str(step_num)] = prompt_text
-        step_prompts_json = json.dumps(step_prompts_jsonb)
-        
-        # Serialize completed_steps and skipped_steps to JSON
-        # Use SQL NULL (None) when not provided so COALESCE preserves existing DB values
-        # Deduplicate step IDs to prevent inflated scores from duplicate entries
-        if completed_steps is not None:
-            completed_steps = list(set(completed_steps))
-        completed_steps_json = json.dumps(completed_steps) if completed_steps is not None else None
-        skipped_steps_json = json.dumps(skipped_steps) if skipped_steps is not None else None
-        
-        # Current timestamp
-        now = datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')
-        
+        upsert_sql, params = _session_upsert(
+            table_name,
+            session_id,
+            industry=industry,
+            industry_label=industry_label,
+            use_case=use_case,
+            use_case_label=use_case_label,
+            session_name=session_name,
+            session_description=session_description,
+            feedback_rating=feedback_rating,
+            feedback_comment=feedback_comment,
+            feedback_request_followup=feedback_request_followup,
+            prerequisites_completed=prerequisites_completed,
+            workshop_level=workshop_level,
+            step_prompts=step_prompts,
+            created_by=created_by,
+            captured_outputs=captured_outputs,
+            completed_gates=completed_gates,
+            session_parameters=session_parameters,
+        )
+
         with get_connection() as conn:
             cursor = conn.cursor()
-            
-            # Build the UPSERT SQL
-            upsert_sql = f"""
-            INSERT INTO {table_name} (
-                session_id, created_by,
-                session_name, session_description,
-                industry, industry_label, use_case, use_case_label,
-                feedback_rating, feedback_comment, feedback_request_followup,
-                step_1_prompt, step_prompts,
-                prerequisites_completed, current_step, workshop_level, completed_steps, skipped_steps,
-                created_at, updated_at
-            ) VALUES (
-                %s, %s,
-                %s, %s,
-                %s, %s, %s, %s,
-                %s, %s, %s,
-                %s, %s,
-                %s, %s, %s, %s, %s,
-                %s, %s
-            )
-            ON CONFLICT (session_id) DO UPDATE SET
-                industry = COALESCE(EXCLUDED.industry, {table_name}.industry),
-                industry_label = COALESCE(EXCLUDED.industry_label, {table_name}.industry_label),
-                use_case = COALESCE(EXCLUDED.use_case, {table_name}.use_case),
-                use_case_label = COALESCE(EXCLUDED.use_case_label, {table_name}.use_case_label),
-                session_name = COALESCE(EXCLUDED.session_name, {table_name}.session_name),
-                session_description = COALESCE(EXCLUDED.session_description, {table_name}.session_description),
-                feedback_rating = COALESCE(EXCLUDED.feedback_rating, {table_name}.feedback_rating),
-                feedback_comment = COALESCE(EXCLUDED.feedback_comment, {table_name}.feedback_comment),
-                feedback_request_followup = COALESCE(EXCLUDED.feedback_request_followup, {table_name}.feedback_request_followup),
-                prerequisites_completed = COALESCE(EXCLUDED.prerequisites_completed, {table_name}.prerequisites_completed),
-                current_step = COALESCE(EXCLUDED.current_step, {table_name}.current_step),
-                workshop_level = COALESCE(EXCLUDED.workshop_level, {table_name}.workshop_level),
-                completed_steps = COALESCE(EXCLUDED.completed_steps, {table_name}.completed_steps),
-                skipped_steps = COALESCE(EXCLUDED.skipped_steps, {table_name}.skipped_steps),
-                step_1_prompt = COALESCE(EXCLUDED.step_1_prompt, {table_name}.step_1_prompt),
-                step_prompts = COALESCE({table_name}.step_prompts, '{{}}'::jsonb) || COALESCE(EXCLUDED.step_prompts, '{{}}'::jsonb),
-                updated_at = EXCLUDED.updated_at
-            """
-            
-            params = (
-                session_id, created_by or "",
-                session_name, session_description,
-                industry, industry_label, use_case, use_case_label,
-                feedback_rating, feedback_comment, feedback_request_followup,
-                step_1_prompt_value, step_prompts_json,
-                prerequisites_completed, current_step, workshop_level, completed_steps_json, skipped_steps_json,
-                now,
-                now,
-            )
-            
+
             cursor.execute(upsert_sql, params)
             conn.commit()
             cursor.close()
             logger.info(f"Session {session_id} saved successfully to Lakebase")
             return True
-            
+
     except Exception as e:
         logger.error(f"Error saving session to Lakebase: {e}", exc_info=True)
+        return False
+
+
+def save_session_merging_gates(
+    session_id: str,
+    *,
+    app_completed_gates: Optional[List[str]],
+    app_skipped_gates: Optional[List[str]],
+    base_completed_gates: Optional[List[str]] = None,
+    base_skipped_gates: Optional[List[str]] = None,
+    **save_kwargs: Any,
+) -> bool:
+    """App gate write: locked read -> ``_merge_app_gates`` -> upsert, atomically.
+
+    Closes the read-modify-write race on the App path: a separate
+    ``load_session`` followed by ``save_session`` let an MCP write that landed in
+    between (e.g. resolving the non-representable ``use_case_selection`` gate) be
+    overwritten by the App's merged list. Here the stored gates are read with
+    ``SELECT ... FOR UPDATE`` and the merged result is written by the same
+    ``_session_upsert`` statement ``save_session`` uses, on ONE connection in ONE
+    transaction, so no concurrent writer can commit in between.
+
+    ``app_completed_gates`` / ``app_skipped_gates`` follow ``_merge_app_gates``:
+    None = preserve-on-absent. ``base_completed_gates`` / ``base_skipped_gates``
+    are the gate sets the SPA last saw, passed to the merge as ``base`` (None =
+    App-authoritative, today's behavior). ``completed_gates`` lands in its column (the
+    upsert COALESCE-preserves None); ``skipped_gates`` is patched into
+    ``session_parameters`` with the same JSONB ``||`` merge the routes use, inside
+    the same transaction. No stored row => nothing to preserve; the upsert
+    inserts. ``save_kwargs`` are the remaining ``save_session`` fields.
+
+    Returns False when Lakebase is not configured (same as ``save_session``) or
+    on any DB error (the transaction is rolled back)."""
+    if not is_lakebase_configured():
+        logger.warning(f"Lakebase not configured, cannot save session {session_id}")
+        return False
+
+    from src.backend.workshop.gate_merge import _merge_app_gates
+
+    table_name = _get_sessions_table_name()
+    logger.info(
+        f"Saving session {session_id} with locked gate merge: "
+        f"completed_gates={'set' if app_completed_gates is not None else 'absent'}, "
+        f"skipped_gates={'set' if app_skipped_gates is not None else 'absent'}"
+    )
+
+    try:
+        with get_connection() as conn:
+            # The autoscaling pool hands out autocommit connections; the lock
+            # must be held from the read through the upsert, so run an explicit
+            # transaction and restore the connection's mode afterwards.
+            prior_autocommit = conn.autocommit
+            conn.autocommit = False
+            try:
+                cursor = conn.cursor()
+                cursor.execute(
+                    f"SELECT completed_gates, session_parameters FROM {table_name} "
+                    f"WHERE session_id = %s FOR UPDATE",
+                    (session_id,),
+                )
+                row = cursor.fetchone()
+                stored_completed = _parse_json_list(row[0]) if row else []
+                stored_skipped = (
+                    _parse_json_list(_parse_json_obj(row[1]).get("skipped_gates")) if row else []
+                )
+                merged_completed = _merge_app_gates(
+                    app_completed_gates, stored_completed, base_completed_gates
+                )
+                merged_skipped = _merge_app_gates(app_skipped_gates, stored_skipped, base_skipped_gates)
+
+                upsert_sql, params = _session_upsert(
+                    table_name, session_id, completed_gates=merged_completed, **save_kwargs
+                )
+                cursor.execute(upsert_sql, params)
+                if merged_skipped is not None:
+                    cursor.execute(
+                        f"""
+                        UPDATE {table_name}
+                        SET session_parameters = COALESCE(session_parameters, '{{}}'::jsonb) || %s::jsonb,
+                            updated_at = CURRENT_TIMESTAMP
+                        WHERE session_id = %s
+                        """,
+                        (json.dumps({"skipped_gates": merged_skipped}), session_id),
+                    )
+                conn.commit()
+                cursor.close()
+            except Exception:
+                conn.rollback()
+                raise
+            finally:
+                conn.autocommit = prior_autocommit
+            logger.info(f"Session {session_id} saved successfully to Lakebase (locked gate merge)")
+            return True
+
+    except Exception as e:
+        logger.error(f"Error saving session with gate merge to Lakebase: {e}", exc_info=True)
+        return False
+
+
+def _apply_mcp_delta(
+    stored_gates: List[str],
+    stored_outputs: Dict[str, str],
+    stored_params: Dict[str, Any],
+    *,
+    add_gates: List[str],
+    set_outputs: Dict[str, str],
+    set_params: Dict[str, Any],
+) -> tuple:
+    """Apply an MCP delta to the stored JSONB values -> ``(gates, outputs, params)``.
+
+    Gates: stored, then each added gate not already stored (order kept).
+    Outputs / params: stored, with the delta keys overlaid."""
+    merged_gates = list(stored_gates) + [
+        gate for gate in dict.fromkeys(add_gates) if gate not in stored_gates
+    ]
+    merged_outputs = {**stored_outputs, **set_outputs}
+    merged_params = {**stored_params, **set_params}
+    return merged_gates, merged_outputs, merged_params
+
+
+def save_session_applying_mcp_delta(
+    session_id: str,
+    *,
+    add_gates: List[str],
+    set_outputs: Dict[str, str],
+    set_params: Dict[str, Any],
+    **save_kwargs: Any,
+) -> bool:
+    """MCP write: locked read -> apply the MCP delta -> upsert, atomically.
+
+    The mirror of ``save_session_merging_gates`` for the MCP path. An MCP tool
+    used to persist the FULL ``completed_gates`` / ``captured_outputs`` /
+    ``session_parameters`` it had loaded and mutated, so an App write that
+    committed between the MCP read and the MCP write was overwritten. Here only
+    the MCP's own delta is applied, onto the stored row read with
+    ``SELECT ... FOR UPDATE``, on ONE connection in ONE transaction:
+
+    - gates: stored + each ``add_gates`` entry not already stored (order kept);
+    - outputs / params: stored, with the ``set_outputs`` / ``set_params`` keys
+      overlaid.
+
+    A key or gate the App removed is not in the delta, so it is not resurrected;
+    a key or gate the App added is in the stored row, so it survives. The MCP
+    path only adds (D-9). ``save_kwargs`` are the remaining ``save_session``
+    fields, with their COALESCE semantics. No stored row => the upsert inserts
+    the delta.
+
+    An empty delta with no non-None ``save_kwargs`` is a no-op returning True,
+    without touching the DB. Returns False when Lakebase is not configured (same
+    as ``save_session``) or on any DB error (the transaction is rolled back)."""
+    if not is_lakebase_configured():
+        logger.warning(f"Lakebase not configured, cannot save session {session_id}")
+        return False
+
+    save_kwargs = {key: value for key, value in save_kwargs.items() if value is not None}
+    if not (add_gates or set_outputs or set_params or save_kwargs):
+        return True
+
+    table_name = _get_sessions_table_name()
+    logger.info(
+        f"Saving session {session_id} with locked MCP delta: "
+        f"add_gates={list(add_gates)}, set_outputs={sorted(set_outputs)}, "
+        f"set_params={sorted(set_params)}, fields={sorted(save_kwargs)}"
+    )
+
+    try:
+        with get_connection() as conn:
+            # Same transaction discipline as save_session_merging_gates: the lock
+            # is held from the read through the upsert.
+            prior_autocommit = conn.autocommit
+            conn.autocommit = False
+            try:
+                cursor = conn.cursor()
+                cursor.execute(
+                    f"SELECT completed_gates, captured_outputs, session_parameters FROM {table_name} "
+                    f"WHERE session_id = %s FOR UPDATE",
+                    (session_id,),
+                )
+                row = cursor.fetchone()
+                merged_gates, merged_outputs, merged_params = _apply_mcp_delta(
+                    _parse_json_list(row[0]) if row else [],
+                    _parse_json_obj(row[1]) if row else {},
+                    _parse_json_obj(row[2]) if row else {},
+                    add_gates=add_gates,
+                    set_outputs=set_outputs,
+                    set_params=set_params,
+                )
+
+                upsert_sql, params = _session_upsert(
+                    table_name,
+                    session_id,
+                    completed_gates=merged_gates,
+                    captured_outputs=merged_outputs,
+                    session_parameters=merged_params,
+                    **save_kwargs,
+                )
+                cursor.execute(upsert_sql, params)
+                conn.commit()
+                cursor.close()
+            except Exception:
+                conn.rollback()
+                raise
+            finally:
+                conn.autocommit = prior_autocommit
+            logger.info(f"Session {session_id} saved successfully to Lakebase (locked MCP delta)")
+            return True
+
+    except Exception as e:
+        logger.error(f"Error saving session MCP delta to Lakebase: {e}", exc_info=True)
         return False
 
 
@@ -824,40 +1105,26 @@ def load_session(session_id: str) -> Optional[Dict]:
             cursor = _dict_cursor(conn)
             
             query = f"""
-            SELECT 
+            SELECT
                 session_id, industry, industry_label, use_case, use_case_label,
                 session_name, session_description, feedback_rating, feedback_comment,
-                prerequisites_completed, current_step, workshop_level, completed_steps, skipped_steps,
+                prerequisites_completed, workshop_level,
                 step_1_prompt, step_prompts,
+                COALESCE(captured_outputs, '{{}}') as captured_outputs,
+                COALESCE(completed_gates, '[]') as completed_gates,
                 COALESCE(session_parameters, '{{}}') as session_parameters,
                 created_by, created_at, updated_at
             FROM {table_name}
             WHERE session_id = %s
             """
-            
+
             cursor.execute(query, (session_id,))
             row = cursor.fetchone()
             cursor.close()
-            
+
             if row:
                 logger.info(f"Session {session_id} found in Lakebase")
-                
-                # Parse completed_steps from JSON
-                completed_steps = []
-                if row.get("completed_steps"):
-                    try:
-                        completed_steps = json.loads(row["completed_steps"])
-                    except:
-                        completed_steps = []
-                
-                # Parse skipped_steps from JSON
-                skipped_steps = []
-                if row.get("skipped_steps"):
-                    try:
-                        skipped_steps = json.loads(row["skipped_steps"])
-                    except:
-                        skipped_steps = []
-                
+
                 # Build step_prompts dict: step_1 from column + steps 2-20 from JSONB
                 step_prompts = {}
                 if row.get("step_1_prompt"):
@@ -899,6 +1166,24 @@ def load_session(session_id: str) -> Optional[Dict]:
                         session_params = json.loads(session_params) if session_params else {}
                     except:
                         session_params = {}
+
+                captured_outputs = row.get("captured_outputs", {})
+                if isinstance(captured_outputs, str):
+                    try:
+                        captured_outputs = json.loads(captured_outputs) if captured_outputs else {}
+                    except:
+                        captured_outputs = {}
+                if not isinstance(captured_outputs, dict):
+                    captured_outputs = {}
+
+                completed_gates = row.get("completed_gates", [])
+                if isinstance(completed_gates, str):
+                    try:
+                        completed_gates = json.loads(completed_gates) if completed_gates else []
+                    except:
+                        completed_gates = []
+                if not isinstance(completed_gates, list):
+                    completed_gates = []
                 
                 return {
                     "session_id": row["session_id"],
@@ -911,11 +1196,10 @@ def load_session(session_id: str) -> Optional[Dict]:
                     "feedback_rating": row.get("feedback_rating"),
                     "feedback_comment": row.get("feedback_comment"),
                     "prerequisites_completed": row.get("prerequisites_completed", False),
-                    "current_step": row.get("current_step", 1),
                     "workshop_level": row.get("workshop_level", "300"),
-                    "completed_steps": completed_steps,
-                    "skipped_steps": skipped_steps,
                     "step_prompts": step_prompts,
+                    "captured_outputs": captured_outputs,
+                    "completed_gates": completed_gates,
                     "session_parameters": session_params,
                     "created_by": row.get("created_by"),
                     "created_at": created_at,
@@ -925,10 +1209,100 @@ def load_session(session_id: str) -> Optional[Dict]:
             
             logger.info(f"Session {session_id} not found in Lakebase")
             return None
-            
+
+
     except Exception as e:
         logger.error(f"Error loading session from Lakebase: {e}", exc_info=True)
         return None
+
+
+def append_session_interaction(
+    session_id: str,
+    section_tag: str,
+    interaction_id: str,
+    kind: str,
+    answer: str = None,
+    recommended: str = None,
+    was_default: bool = False,
+    coaching_shown: str = None,
+    surface: str = "mcp",
+    is_fallback: bool | None = None,
+    focus: str | None = None,
+) -> bool:
+    """Append one MCP/UI interaction provenance row to Lakebase.
+
+    ``is_fallback`` / ``focus`` (coaching telemetry, DDL 13) are written only when
+    either is given; with both None the INSERT is the pre-DDL-13 statement.
+    """
+    if not is_lakebase_configured():
+        logger.info(f"Lakebase not configured, cannot append interaction for {session_id}")
+        return False
+
+    table_name = f"{get_schema()}.session_interactions"
+    try:
+        with get_connection() as conn:
+            cursor = conn.cursor()
+            params = (
+                session_id,
+                section_tag,
+                interaction_id,
+                kind,
+                answer,
+                recommended,
+                was_default,
+                coaching_shown,
+                surface,
+            )
+            if is_fallback is None and focus is None:
+                query = f"""
+            INSERT INTO {table_name} (
+                session_id, section_tag, interaction_id, kind,
+                answer, recommended, was_default, coaching_shown, surface, created_at
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, CURRENT_TIMESTAMP)
+            """
+            else:
+                query = f"""
+            INSERT INTO {table_name} (
+                session_id, section_tag, interaction_id, kind,
+                answer, recommended, was_default, coaching_shown, surface,
+                is_fallback, focus, created_at
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, CURRENT_TIMESTAMP)
+            """
+                params = params + (bool(is_fallback), focus)
+            cursor.execute(query, params)
+            conn.commit()
+            cursor.close()
+            return True
+    except Exception as e:
+        logger.error(f"Error appending session interaction to Lakebase: {e}", exc_info=True)
+        return False
+
+
+def list_session_interactions(session_id: str, limit: int = 10) -> list[dict]:
+    """Read a session's interaction rows, newest first. Never raises; [] on any miss."""
+    if not is_lakebase_configured():
+        return []
+
+    table_name = f"{get_schema()}.session_interactions"
+    try:
+        with get_connection() as conn:
+            cursor = _dict_cursor(conn)
+            cursor.execute(
+                f"""
+                SELECT section_tag, interaction_id, kind, answer, recommended, was_default
+                FROM {table_name}
+                WHERE session_id = %s
+                ORDER BY created_at DESC, id DESC
+                LIMIT %s
+                """,
+                (session_id, int(limit)),
+            )
+            rows = cursor.fetchall()
+            cursor.close()
+            return [dict(row) for row in rows]
+    except Exception as e:
+        logger.error(f"Error listing session interactions from Lakebase: {e}", exc_info=True)
+        return []
 
 
 def delete_session(session_id: str) -> bool:
@@ -972,17 +1346,23 @@ def get_user_sessions(created_by: str, limit: int = 50, saved_only: bool = True)
         with get_connection() as conn:
             cursor = _dict_cursor(conn)
             
-            # Build query - if saved_only, filter to sessions with a name
+            # Build query - if saved_only, filter to sessions with a name.
+            # completed_gates/session_parameters are pulled so the
+            # completed_step_count is gate-derived (T5 R3/R4b): the same per-row
+            # resolution the leaderboard/analytics use. Widening them is
+            # load-bearing — the count comes from completed_gates, and step-1
+            # credit needs industry/use_case (already selected).
             if saved_only:
                 query = f"""
-                SELECT 
+                SELECT
                     session_id, session_name, session_description,
                     industry, industry_label, use_case, use_case_label,
-                    current_step, feedback_rating,
+                    feedback_rating,
+                    completed_gates, session_parameters,
                     created_by, created_at, updated_at
                 FROM {table_name}
                 WHERE created_by = %s
-                  AND session_name IS NOT NULL 
+                  AND session_name IS NOT NULL
                   AND session_name != ''
                   AND session_name != 'New Session'
                 ORDER BY updated_at DESC
@@ -990,10 +1370,11 @@ def get_user_sessions(created_by: str, limit: int = 50, saved_only: bool = True)
                 """
             else:
                 query = f"""
-                SELECT 
+                SELECT
                     session_id, session_name, session_description,
                     industry, industry_label, use_case, use_case_label,
-                    current_step, feedback_rating,
+                    feedback_rating,
+                    completed_gates, session_parameters,
                     created_by, created_at, updated_at
                 FROM {table_name}
                 WHERE created_by = %s
@@ -1004,7 +1385,13 @@ def get_user_sessions(created_by: str, limit: int = 50, saved_only: bool = True)
             cursor.execute(query, (created_by, limit))
             rows = cursor.fetchall()
             cursor.close()
-            
+
+            # Build PR1's tag->GLOBAL-number inverse map ONCE (reused per row, the
+            # get_leaderboard way) so the gate-derived completed_step_count never
+            # rebuilds the map per row.
+            from src.backend.workshop.completion_keying import tag_to_global_number
+            inverse_map = tag_to_global_number()
+
             sessions = []
             for row in rows:
                 created_at = row.get("created_at")
@@ -1013,7 +1400,13 @@ def get_user_sessions(created_by: str, limit: int = 50, saved_only: bool = True)
                     created_at = created_at.strftime('%Y-%m-%d %H:%M:%S')
                 if hasattr(updated_at, 'strftime'):
                     updated_at = updated_at.strftime('%Y-%m-%d %H:%M:%S')
-                
+
+                # Gate-derived completed count (T5 R3/R4b) for the list display.
+                # _row_completion_globals maps completed_gates to GLOBAL numbers
+                # and unions step-1 credit when the row has defined intent,
+                # reusing the SAME rule the aggregations do.
+                completed_global, _skipped_global = _row_completion_globals(row, inverse_map)
+
                 sessions.append({
                     "session_id": row["session_id"],
                     "session_name": row.get("session_name"),
@@ -1022,14 +1415,14 @@ def get_user_sessions(created_by: str, limit: int = 50, saved_only: bool = True)
                     "industry_label": row.get("industry_label"),
                     "use_case": row.get("use_case"),
                     "use_case_label": row.get("use_case_label"),
-                    "current_step": row.get("current_step", 1),
+                    "completed_step_count": len(completed_global),
                     "feedback_rating": row.get("feedback_rating"),
                     "created_by": row.get("created_by"),
                     "created_at": created_at,
                     "updated_at": updated_at,
                     "is_saved": bool(row.get("session_name") and row["session_name"] != "New Session"),
                 })
-            
+
             return sessions
             
     except Exception as e:
@@ -1039,13 +1432,12 @@ def get_user_sessions(created_by: str, limit: int = 50, saved_only: bool = True)
 
 def get_user_default_session(created_by: str) -> Optional[Dict]:
     """
-    Get the user's default "New Session" - prioritizing the one with MOST PROGRESS.
+    Get the user's default "New Session" - the most recently updated one.
     This ensures users don't lose their work if multiple sessions exist.
-    
-    Priority order:
-    1. Session with highest current_step (most progress)
-    2. Most recently updated (tie-breaker)
-    
+
+    Orphan cleanup normally keeps a single unsaved session per user, so the
+    "most recently touched" one (R4-D2) is the right resume target.
+
     Returns:
         Session data dict if found, None otherwise
     """
@@ -1060,54 +1452,32 @@ def get_user_default_session(created_by: str) -> Optional[Dict]:
         with get_connection() as conn:
             cursor = _dict_cursor(conn)
             
-            # Find the "New Session" with MOST PROGRESS for this user
-            # Simple and robust: order by current_step (progress), then recency
-            # Avoid complex JSON operations in SQL that might fail
+            # Pick the most recently updated "New Session" for this user (R4-D2).
+            # Avoid complex JSON operations in SQL that might fail.
             query = f"""
-            SELECT 
+            SELECT
                 session_id, industry, industry_label, use_case, use_case_label,
                 session_name, session_description, feedback_rating, feedback_comment,
-                prerequisites_completed, current_step, workshop_level, completed_steps, skipped_steps,
+                prerequisites_completed, workshop_level,
                 step_1_prompt, step_prompts,
+                COALESCE(completed_gates, '[]') as completed_gates,
                 COALESCE(session_parameters, '{{}}') as session_parameters,
                 created_by, created_at, updated_at
             FROM {table_name}
             WHERE created_by = %s
               AND session_name = 'New Session'
-            ORDER BY 
-                current_step DESC,
+            ORDER BY
                 updated_at DESC
             LIMIT 1
             """
-            
+
             cursor.execute(query, (created_by,))
             row = cursor.fetchone()
             cursor.close()
-            
+
             if row:
-                current_step = row.get('current_step', 1)
-                logger.info(f"Found default session {row['session_id']} for user {created_by} (current_step={current_step})")
-                
-                # Parse completed_steps
-                completed_steps = row.get("completed_steps")
-                if completed_steps is None:
-                    completed_steps = []
-                elif isinstance(completed_steps, str):
-                    try:
-                        completed_steps = json.loads(completed_steps)
-                    except:
-                        completed_steps = []
-                
-                # Parse skipped_steps
-                skipped_steps = row.get("skipped_steps")
-                if skipped_steps is None:
-                    skipped_steps = []
-                elif isinstance(skipped_steps, str):
-                    try:
-                        skipped_steps = json.loads(skipped_steps)
-                    except:
-                        skipped_steps = []
-                
+                logger.info(f"Found default session {row['session_id']} for user {created_by}")
+
                 # Build step_prompts dict: step_1 from column + steps 2-20 from JSONB
                 step_prompts = {}
                 if row.get("step_1_prompt"):
@@ -1146,7 +1516,19 @@ def get_user_default_session(created_by: str) -> Optional[Dict]:
                         session_params = json.loads(session_params) if session_params else {}
                     except:
                         session_params = {}
-                
+
+                # completed_gates is the hydration source (T5 R4b): the SPA resumes
+                # progress from the gate set, so surface it (the write path keeps it
+                # current). skipped_gates rides along in session_parameters.
+                completed_gates = row.get("completed_gates", [])
+                if isinstance(completed_gates, str):
+                    try:
+                        completed_gates = json.loads(completed_gates) if completed_gates else []
+                    except:
+                        completed_gates = []
+                if not isinstance(completed_gates, list):
+                    completed_gates = []
+
                 return {
                     "session_id": row["session_id"],
                     "industry": row.get("industry"),
@@ -1158,10 +1540,8 @@ def get_user_default_session(created_by: str) -> Optional[Dict]:
                     "feedback_rating": row.get("feedback_rating"),
                     "feedback_comment": row.get("feedback_comment"),
                     "prerequisites_completed": row.get("prerequisites_completed", False),
-                    "current_step": row.get("current_step", 1),
                     "workshop_level": row.get("workshop_level", "300"),
-                    "completed_steps": completed_steps,
-                    "skipped_steps": skipped_steps,
+                    "completed_gates": completed_gates,
                     "step_prompts": step_prompts,
                     "session_parameters": session_params,
                     "created_by": row.get("created_by"),
@@ -1332,6 +1712,16 @@ STEP_SCORES = {
     38: 50, 39: 50, 40: 50, 41: 50, 42: 50, 43: 50, 44: 50, 45: 50, 46: 50,
     # Agents Accelerator — MLflow for Gen-AI (steps 47-54): 50 points each
     47: 50, 48: 50, 49: 50, 50: 50, 51: 50, 52: 50, 53: 50, 54: 50,
+    # Agents Accelerator — MLflow tail (steps 55-56): 50 points each (T5 PR3c)
+    55: 50, 56: 50,
+    # Genie Accelerator — Semantic Layer (steps 57-61): 50 points each (T5 PR3c)
+    57: 50, 58: 50, 59: 50, 60: 50, 61: 50,
+    # Genie Accelerator — Genie Agent (steps 62-66, 71): 50 points each (T5 PR3c)
+    62: 50, 63: 50, 64: 50, 65: 50, 66: 50, 71: 50,
+    # Genie Accelerator — Genie Ontology (steps 67-69): 50 points each (T5 PR3c)
+    67: 50, 68: 50, 69: 50,
+    # Genie Accelerator — Genie Activation (steps 72-73): 40 points each (T5 PR3c)
+    72: 40, 73: 40,
 }
 
 # Chapter definitions for progress tracking (must match src/constants/scoring.ts)
@@ -1344,7 +1734,14 @@ CHAPTERS = {
     'Activation': {'steps': {32, 33, 34, 35, 36, 37}, 'display': 'Reverse ETL'},
     'Refinement': {'steps': {20, 21}, 'display': 'Refinement'},
     'Agent Skills': {'steps': {26, 27, 28, 29, 30}, 'display': 'Agent Skills'},
-    'Agents Accelerator': {'steps': {38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54}, 'display': 'Agents Accelerator'},
+    'Agents Accelerator': {'steps': {38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56}, 'display': 'Agents Accelerator'},
+    # Genie Accelerator chapters (T5 PR3c) — mirror the manifest's genie-accelerator
+    # section groupings; kept as their own chapters (not merged into the shared
+    # 'Chapter 4'/'Activation' sets) so cross-track chapter-completion is unaffected.
+    'Semantic Layer': {'steps': {57, 58, 59, 60, 61}, 'display': 'Semantic Layer'},
+    'Genie Agent': {'steps': {62, 63, 64, 65, 66, 71}, 'display': 'Genie Agent'},
+    'Genie Ontology': {'steps': {67, 68, 69}, 'display': 'Genie Ontology'},
+    'Genie Activation': {'steps': {72, 73}, 'display': 'Genie Activation'},
     'Clean Up': {'steps': {31}, 'display': 'Clean Up'},
 }
 
@@ -1352,23 +1749,110 @@ CHAPTERS = {
 AVATAR_EMOJIS = ['🦊', '🐙', '🦄', '🐼', '🦉', '🐬', '🦁', '🐸', '🦋', '🐯', '🦈', '🐨', '🦩', '🐻', '🦖']
 
 
-def _calculate_score(completed_steps: List[int], skipped_steps: List[int] = None) -> int:
-    """Calculate total score from completed steps. Skipped steps earn 0."""
-    skipped = set(skipped_steps) if skipped_steps else set()
-    unique_steps = set(completed_steps)
+def _calculate_score(completed_globals: List[int], skipped_globals: List[int] = None) -> int:
+    """Calculate total score from completed GLOBAL step numbers. Skipped earn 0."""
+    skipped = set(skipped_globals) if skipped_globals else set()
+    unique_steps = set(completed_globals)
     return sum(STEP_SCORES.get(step, 0) for step in unique_steps if step not in skipped)
 
 
-def _get_chapter_status(completed_steps: List[int], skipped_steps: List[int] = None) -> tuple:
+# --- T5 R4b: completion aggregations are gate-derived ------------------------
+# GLOBAL step numbers. STEP_SCORES / CHAPTERS are keyed by GLOBAL ``ALL_STEPS``
+# numbers. These helpers resolve each row to canonical GLOBAL numbers from the
+# authoritative gate sets via the ``step_number_to_tag`` inverse map (reused,
+# not re-derived) so gate-only + mixed cohorts score and count correctly. See
+# workshop/completion_keying.py.
+
+
+def _parse_json_list(value: Any) -> list:
+    """Parse a JSON-array column (TEXT or already-decoded) into a list."""
+    if isinstance(value, str):
+        try:
+            return json.loads(value) if value else []
+        except Exception:
+            return []
+    return value or []
+
+
+def _parse_json_obj(value: Any) -> dict:
+    """Parse a JSONB column (TEXT or already-decoded) into a dict."""
+    if isinstance(value, str):
+        try:
+            return json.loads(value) if value else {}
+        except Exception:
+            return {}
+    return value if isinstance(value, dict) else {}
+
+
+# Global step 1 ("Define Your Intent" / usecase_selection) is credited when the
+# use case is defined. The MCP engine gate is "use_case_selection" (engine.py),
+# which has NO global number (manifest global 1 is "usecase_selection"), so it
+# never resolves through the tag->number map and step 1 is dropped for MCP
+# sessions. Mirror the App's rule (App.tsx — industry AND use_case set
+# => completedSteps.add(1)) at the aggregation layer, for App- AND MCP-origin
+# rows alike, using the top-level industry/use_case TEXT columns (no JSONB-vs-''
+# comparison; no string special-case for the gate literal).
+_INTENT_STEP = 1
+
+
+def _has_defined_intent(row: Dict[str, Any]) -> bool:
+    # One rule, shared with build_session_state's use_case_selection credit (D-34).
+    from src.backend.workshop.state import has_defined_intent
+
+    return has_defined_intent(row)
+
+
+def _row_completion_globals(row: Dict[str, Any], inverse_map: Dict[str, int]) -> tuple:
+    """Canonical (completed, skipped) GLOBAL step-number sets for one sessions row.
+
+    Reads the ``completed_gates`` column (JSON tag array) and ``skipped_gates``
+    (nested in the ``session_parameters`` JSONB), then maps each tag to its GLOBAL
+    number via the inverse map (T5 R4b — gates are the only source). Global step 1
+    is unioned into completed when the row has defined intent (industry AND
+    use_case), mirroring the App (GAP 2); idempotent when it is already present."""
+    from src.backend.workshop.completion_keying import resolve_completion_globals
+
+    session_params = _parse_json_obj(row.get("session_parameters"))
+    completed, skipped = resolve_completion_globals(
+        completed_gates=_parse_json_list(row.get("completed_gates")),
+        skipped_gates=session_params.get("skipped_gates") or [],
+        inverse_map=inverse_map,
+    )
+    if _has_defined_intent(row):
+        completed = completed | {_INTENT_STEP}
+    return completed, skipped
+
+
+def _aggregate_step_completion(rows: List[Dict[str, Any]], inverse_map: Dict[str, int]) -> List[Dict[str, Any]]:
+    """Per-GLOBAL-step completed/skipped counts across sessions rows, gate-derived.
+
+    Replaces the old ``json_array_elements_text`` SQL unnest over the raw numeric
+    column, which counted dense MCP positions and dropped gate-only rows."""
+    completed_map: Dict[int, int] = {}
+    skipped_map: Dict[int, int] = {}
+    for row in rows:
+        completed_global, skipped_global = _row_completion_globals(row, inverse_map)
+        for step in completed_global:
+            completed_map[step] = completed_map.get(step, 0) + 1
+        for step in skipped_global:
+            skipped_map[step] = skipped_map.get(step, 0) + 1
+    all_step_nums = sorted(set(completed_map) | set(skipped_map))
+    return [
+        {"step_number": s, "completed": completed_map.get(s, 0), "skipped": skipped_map.get(s, 0)}
+        for s in all_step_nums
+    ]
+
+
+def _get_chapter_status(completed_globals: List[int], skipped_globals: List[int] = None) -> tuple:
     """
     Determine which chapters are completed and which are in progress.
     Skipped steps count as "done" for chapter completion check.
-    
+
     Returns:
         Tuple of (completed_chapters: list, in_progress_chapters: list)
     """
-    completed_set = set(completed_steps)
-    skipped_set = set(skipped_steps) if skipped_steps else set()
+    completed_set = set(completed_globals)
+    skipped_set = set(skipped_globals) if skipped_globals else set()
     done_set = completed_set | skipped_set
     completed_chapters = []
     in_progress_chapters = []
@@ -1452,64 +1936,58 @@ def get_leaderboard(limit: int = 10) -> List[Dict]:
         with get_connection() as conn:
             cursor = _dict_cursor(conn)
             
-            # Get all sessions with completed_steps
-            # We'll process scoring in Python for flexibility
+            # Get all sessions with any completion signal. Scoring runs in Python
+            # (T5 R4b) off gate-derived GLOBAL numbers, so the row set is admitted
+            # purely on authoritative completed_gates. completed_gates (column) +
+            # skipped_gates (in session_parameters) are pulled for the per-row
+            # resolution.
             query = f"""
-            SELECT 
+            SELECT
                 session_id,
                 created_by,
-                completed_steps,
-                skipped_steps,
+                completed_gates,
+                session_parameters,
+                industry,
+                use_case,
                 updated_at,
                 workshop_level
             FROM {table_name}
-            WHERE created_by IS NOT NULL 
+            WHERE created_by IS NOT NULL
               AND created_by != ''
-              AND completed_steps IS NOT NULL
-              AND completed_steps != '[]'
+              AND (completed_gates IS NOT NULL AND completed_gates != '[]')
             ORDER BY created_by, updated_at DESC
             """
-            
+
             cursor.execute(query)
             rows = cursor.fetchall()
             cursor.close()
-            
+
             # Aggregate by user - keep session with highest score
-            user_scores = {}  # email -> {score, completed_steps, updated_at}
-            
+            user_scores = {}  # email -> {score, completed_globals, updated_at}
+
+            # Build the tag->GLOBAL-number inverse map ONCE (reused per row).
+            from src.backend.workshop.completion_keying import tag_to_global_number
+            inverse_map = tag_to_global_number()
+
             for row in rows:
                 email = row.get('created_by', '')
                 if not email:
                     continue
-                
-                # Parse completed_steps
-                completed_steps_raw = row.get('completed_steps', '[]')
-                try:
-                    if isinstance(completed_steps_raw, str):
-                        completed_steps = json.loads(completed_steps_raw)
-                    else:
-                        completed_steps = completed_steps_raw or []
-                except:
-                    completed_steps = []
-                
-                if not completed_steps:
+
+                # Resolve canonical GLOBAL step numbers (T5 R4b): map the gate tags
+                # to globals via the inverse map. Gates are the only source.
+                completed_global, skipped_global = _row_completion_globals(row, inverse_map)
+                completed_globals = sorted(completed_global)
+                skipped_globals = sorted(skipped_global)
+
+                if not completed_globals:
                     continue
-                
-                # Parse skipped_steps
-                skipped_steps_raw = row.get('skipped_steps', '[]')
-                try:
-                    if isinstance(skipped_steps_raw, str):
-                        skipped_steps = json.loads(skipped_steps_raw)
-                    else:
-                        skipped_steps = skipped_steps_raw or []
-                except:
-                    skipped_steps = []
-                
-                score = _calculate_score(completed_steps, skipped_steps)
+
+                score = _calculate_score(completed_globals, skipped_globals)
                 updated_at = row.get('updated_at')
-                
+
                 workshop_level = row.get('workshop_level')
-                
+
                 session_id = row.get('session_id')
 
                 # Keep the best session for each user
@@ -1517,8 +1995,8 @@ def get_leaderboard(limit: int = 10) -> List[Dict]:
                     user_scores[email] = {
                         'session_id': session_id,
                         'score': score,
-                        'completed_steps': completed_steps,
-                        'skipped_steps': skipped_steps,
+                        'completed_globals': completed_globals,
+                        'skipped_globals': skipped_globals,
                         'updated_at': updated_at,
                         'workshop_level': workshop_level,
                     }
@@ -1528,8 +2006,8 @@ def get_leaderboard(limit: int = 10) -> List[Dict]:
                             user_scores[email] = {
                                 'session_id': session_id,
                                 'score': score,
-                                'completed_steps': completed_steps,
-                                'skipped_steps': skipped_steps,
+                                'completed_globals': completed_globals,
+                                'skipped_globals': skipped_globals,
                                 'updated_at': updated_at,
                                 'workshop_level': workshop_level,
                             }
@@ -1543,15 +2021,15 @@ def get_leaderboard(limit: int = 10) -> List[Dict]:
             # Build leaderboard entries
             leaderboard = []
             for rank, (email, data) in enumerate(sorted_users[:limit], start=1):
-                completed_chapters, in_progress_chapters = _get_chapter_status(data['completed_steps'], data.get('skipped_steps', []))
-                
+                completed_chapters, in_progress_chapters = _get_chapter_status(data['completed_globals'], data.get('skipped_globals', []))
+
                 # Format updated_at
                 updated_at = data['updated_at']
                 if hasattr(updated_at, 'isoformat'):
                     updated_at = updated_at.isoformat()
                 elif hasattr(updated_at, 'strftime'):
                     updated_at = updated_at.strftime('%Y-%m-%dT%H:%M:%S')
-                
+
                 leaderboard.append({
                     'rank': rank,
                     'user_id': email,  # Used for tracking movement
@@ -1559,8 +2037,12 @@ def get_leaderboard(limit: int = 10) -> List[Dict]:
                     'display_name': _format_display_name(email),
                     'avatar': _get_avatar_for_user(email),
                     'score': data['score'],
-                    'completed_steps': sorted(set(data['completed_steps'])),
-                    'skipped_steps': sorted(data.get('skipped_steps', [])),
+                    'completed_globals': sorted(set(data['completed_globals'])),
+                    'skipped_globals': sorted(set(data.get('skipped_globals', []))),
+                    # Gate-derived count the leaderboard UI displays (T5 R4b) — the
+                    # number of canonical GLOBAL steps done, from completed_gates.
+                    'completed_step_count': len(set(data['completed_globals'])),
+                    'skipped_step_count': len(set(data.get('skipped_globals', []))),
                     'completed_chapters': completed_chapters,
                     'in_progress_chapters': in_progress_chapters,
                     'updated_at': updated_at,
@@ -1696,17 +2178,11 @@ def get_analytics() -> Dict[str, Any]:
         summary = summary_rows[0] if summary_rows else _empty["summary"]
 
         # -- Usage metrics ----------------------------------------------------
+        # avg_steps_per_session is computed in Python (below, off
+        # _row_completion_globals) so the per-row numerator is the gate-derived
+        # completed count. prereqs_completed / saved_sessions stay in SQL.
         usage_rows = execute_query(f"""
             SELECT
-                COALESCE(
-                    (SELECT ROUND(AVG(
-                        CASE WHEN completed_steps IS NOT NULL
-                             AND completed_steps != ''
-                             AND completed_steps != '[]'
-                        THEN json_array_length(completed_steps::json)
-                        ELSE 0 END
-                    )::numeric, 1) FROM {table_name}),
-                0) AS avg_steps_per_session,
                 (SELECT COUNT(*) FROM {table_name}
                  WHERE prerequisites_completed = TRUE) AS prereqs_completed,
                 (SELECT COUNT(*) FROM {table_name}
@@ -1732,27 +2208,51 @@ def get_analytics() -> Dict[str, Any]:
         """)
         total_prompts = int(prompts_rows[0].get("total_prompts", 0)) if prompts_rows else 0
 
-        # Average score — fetch all sessions and compute in Python (like leaderboard)
+        # Average score — fetch all sessions and compute in Python (like leaderboard).
+        # T5 R4b: score off gate-derived GLOBAL numbers, admitting rows purely on
+        # authoritative completed_gates.
+        from src.backend.workshop.completion_keying import tag_to_global_number
+        _inverse_map = tag_to_global_number()
         score_rows = execute_query(f"""
-            SELECT completed_steps, skipped_steps
+            SELECT completed_gates, session_parameters, industry, use_case
             FROM {table_name}
-            WHERE completed_steps IS NOT NULL
-              AND completed_steps != ''
-              AND completed_steps != '[]'
+            WHERE (completed_gates IS NOT NULL AND completed_gates != '[]')
         """)
         scores = []
         for sr in score_rows:
             try:
-                cs = json.loads(sr["completed_steps"]) if isinstance(sr["completed_steps"], str) else (sr["completed_steps"] or [])
-                sk_raw = sr.get("skipped_steps", "[]")
-                sk = json.loads(sk_raw) if isinstance(sk_raw, str) else (sk_raw or [])
-                scores.append(_calculate_score(cs, sk))
+                cs_global, sk_global = _row_completion_globals(sr, _inverse_map)
+                if not cs_global:
+                    continue
+                scores.append(_calculate_score(sorted(cs_global), sorted(sk_global)))
             except Exception:
                 pass
         avg_score = round(sum(scores) / len(scores), 1) if scores else 0
 
+        # avg_steps_per_session — same semantics as the retired SQL AVG: average
+        # the per-row completed count over ALL rows (a row with no completion
+        # counts as 0), rounded to 1 decimal, 0 on an empty table. The per-row
+        # numerator is len(completed) via _row_completion_globals (gate-derived,
+        # step-1 credit included). Pull ALL rows (no WHERE) so the denominator
+        # stays every row.
+        avg_rows = execute_query(f"""
+            SELECT completed_gates, session_parameters, industry, use_case
+            FROM {table_name}
+        """)
+        if avg_rows:
+            _step_total = 0
+            for ar in avg_rows:
+                try:
+                    _completed, _ = _row_completion_globals(ar, _inverse_map)
+                    _step_total += len(_completed)
+                except Exception:
+                    pass
+            avg_steps_per_session = round(_step_total / len(avg_rows), 1)
+        else:
+            avg_steps_per_session = 0
+
         usage = {
-            "avg_steps_per_session": float(usage_base.get("avg_steps_per_session", 0)),
+            "avg_steps_per_session": float(avg_steps_per_session),
             "prereqs_completed": int(usage_base.get("prereqs_completed", 0)),
             "total_prompts_generated": total_prompts,
             "saved_sessions": int(usage_base.get("saved_sessions", 0)),
@@ -1796,33 +2296,19 @@ def get_analytics() -> Dict[str, Any]:
             })
 
         # -- Step completion counts -------------------------------------------
-        completed_step_rows = execute_query(f"""
-            SELECT step::int AS step_number, COUNT(*) AS cnt
-            FROM {table_name},
-                 json_array_elements_text(completed_steps::json) AS step
-            WHERE completed_steps IS NOT NULL
-              AND completed_steps != ''
-              AND completed_steps != '[]'
-            GROUP BY step::int
-            ORDER BY step::int
+        # T5 R4b: aggregate in Python over gate-derived GLOBAL numbers. Admit rows
+        # on authoritative completed_gates OR a non-empty skipped_gates (nested in
+        # the session_parameters JSONB) so a skipped-only session still contributes
+        # its skips — _row_completion_globals sources skipped from skipped_gates.
+        # JSONB-to-JSONB comparison only (never compare a JSONB column to '').
+        step_rows = execute_query(f"""
+            SELECT completed_gates, session_parameters, industry, use_case
+            FROM {table_name}
+            WHERE (completed_gates IS NOT NULL AND completed_gates != '[]')
+               OR (session_parameters -> 'skipped_gates' IS NOT NULL
+                   AND session_parameters -> 'skipped_gates' != '[]'::jsonb)
         """)
-        skipped_step_rows = execute_query(f"""
-            SELECT step::int AS step_number, COUNT(*) AS cnt
-            FROM {table_name},
-                 json_array_elements_text(skipped_steps::json) AS step
-            WHERE skipped_steps IS NOT NULL
-              AND skipped_steps != ''
-              AND skipped_steps != '[]'
-            GROUP BY step::int
-            ORDER BY step::int
-        """)
-        completed_map = {int(r["step_number"]): int(r["cnt"]) for r in completed_step_rows}
-        skipped_map = {int(r["step_number"]): int(r["cnt"]) for r in skipped_step_rows}
-        all_step_nums = sorted(set(list(completed_map.keys()) + list(skipped_map.keys())))
-        step_completion_counts = [
-            {"step_number": s, "completed": completed_map.get(s, 0), "skipped": skipped_map.get(s, 0)}
-            for s in all_step_nums
-        ]
+        step_completion_counts = _aggregate_step_completion(step_rows, _inverse_map)
 
         # -- Chapter feedback -------------------------------------------------
         cf_rows = execute_query(f"""
@@ -1850,9 +2336,14 @@ def get_analytics() -> Dict[str, Any]:
         ]
 
         # -- Recent sessions --------------------------------------------------
+        # T5 R3/R4b: completed_count off gate-derived GLOBAL numbers via
+        # _row_completion_globals. SELECT carries completed_gates/session_parameters
+        # + industry/use_case (step-1 credit) the per-row resolver reads.
         recent_rows = execute_query(f"""
             SELECT session_id, created_by, industry_label, use_case_label,
-                   workshop_level, completed_steps, created_at
+                   workshop_level, created_at,
+                   completed_gates, session_parameters,
+                   industry, use_case
             FROM {table_name}
             ORDER BY created_at DESC
             LIMIT 10
@@ -1860,12 +2351,8 @@ def get_analytics() -> Dict[str, Any]:
         recent_sessions = []
         for rr in recent_rows:
             email = rr.get("created_by", "")
-            cs_raw = rr.get("completed_steps", "[]")
-            try:
-                cs = json.loads(cs_raw) if isinstance(cs_raw, str) else (cs_raw or [])
-                completed_count = len(cs)
-            except Exception:
-                completed_count = 0
+            completed, _skipped = _row_completion_globals(rr, _inverse_map)
+            completed_count = len(completed)
             lvl = rr.get("workshop_level") or ""
             ca = rr.get("created_at")
             if hasattr(ca, "isoformat"):
@@ -1884,8 +2371,11 @@ def get_analytics() -> Dict[str, Any]:
             })
 
         # -- User activity ----------------------------------------------------
+        # T5 R4b: total_steps + best_score off gate-derived GLOBAL numbers
+        # (completed_gates + skipped_gates pulled for the per-row resolution).
         user_rows = execute_query(f"""
-            SELECT created_by, session_id, completed_steps, skipped_steps, feedback_rating
+            SELECT created_by, session_id,
+                   completed_gates, session_parameters, industry, use_case, feedback_rating
             FROM {table_name}
             WHERE created_by IS NOT NULL AND created_by != ''
         """)
@@ -1897,15 +2387,9 @@ def get_analytics() -> Dict[str, Any]:
             if email not in user_agg:
                 user_agg[email] = {"sessions": set(), "total_steps": 0, "best_score": 0, "feedback_given": 0}
             user_agg[email]["sessions"].add(ur.get("session_id"))
-            cs_raw = ur.get("completed_steps", "[]")
-            sk_raw = ur.get("skipped_steps", "[]")
-            try:
-                cs = json.loads(cs_raw) if isinstance(cs_raw, str) else (cs_raw or [])
-                sk = json.loads(sk_raw) if isinstance(sk_raw, str) else (sk_raw or [])
-            except Exception:
-                cs, sk = [], []
-            user_agg[email]["total_steps"] += len(set(cs))
-            score = _calculate_score(cs, sk)
+            cs_global, sk_global = _row_completion_globals(ur, _inverse_map)
+            user_agg[email]["total_steps"] += len(cs_global)
+            score = _calculate_score(sorted(cs_global), sorted(sk_global))
             if score > user_agg[email]["best_score"]:
                 user_agg[email]["best_score"] = score
             if ur.get("feedback_rating"):
@@ -1968,104 +2452,6 @@ def get_analytics() -> Dict[str, Any]:
     except Exception as e:
         logger.warning("Analytics query failed: %s", e)
         return _empty
-
-
-def cleanup_session_steps() -> Dict[str, int]:
-    """
-    Clean up session data:
-    1. Replace step 41 with step 4 in all completed_steps arrays
-    2. Update current_step to be max(completed_steps) for each session
-    
-    Returns:
-        Dict with counts: {'sessions_fixed': n, 'step_41_replaced': n}
-    """
-    if not is_lakebase_configured():
-        logger.warning("Lakebase not configured - cannot cleanup sessions")
-        return {'sessions_fixed': 0, 'step_41_replaced': 0}
-    
-    table_name = _get_sessions_table_name()
-    logger.info(f"Starting session cleanup on {table_name}")
-    
-    stats = {'sessions_fixed': 0, 'step_41_replaced': 0}
-    
-    try:
-        with get_connection() as conn:
-            cursor = _dict_cursor(conn)
-            
-            # Get all sessions with completed_steps
-            query = f"""
-            SELECT session_id, completed_steps, current_step
-            FROM {table_name}
-            WHERE completed_steps IS NOT NULL
-            """
-            
-            cursor.execute(query)
-            rows = cursor.fetchall()
-            
-            for row in rows:
-                session_id = row['session_id']
-                completed_steps_raw = row.get('completed_steps', '[]')
-                current_step = row.get('current_step', 1)
-                
-                # Parse completed_steps
-                try:
-                    if isinstance(completed_steps_raw, str):
-                        completed_steps = json.loads(completed_steps_raw)
-                    else:
-                        completed_steps = completed_steps_raw or []
-                except:
-                    completed_steps = []
-                
-                if not completed_steps:
-                    continue
-                
-                needs_update = False
-                
-                # Fix step 41 -> 4
-                if 41 in completed_steps:
-                    completed_steps = [4 if s == 41 else s for s in completed_steps]
-                    # Remove duplicates while preserving order
-                    seen = set()
-                    completed_steps = [s for s in completed_steps if not (s in seen or seen.add(s))]
-                    stats['step_41_replaced'] += 1
-                    needs_update = True
-                
-                # Fix current_step to be max of completed_steps
-                if completed_steps:
-                    correct_current_step = max(completed_steps)
-                    if current_step != correct_current_step:
-                        current_step = correct_current_step
-                        needs_update = True
-                
-                # Update if needed
-                if needs_update:
-                    update_cursor = conn.cursor()
-                    update_sql = f"""
-                    UPDATE {table_name}
-                    SET completed_steps = %s,
-                        current_step = %s,
-                        updated_at = %s
-                    WHERE session_id = %s
-                    """
-                    now = datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')
-                    update_cursor.execute(update_sql, (
-                        json.dumps(completed_steps),
-                        current_step,
-                        now,
-                        session_id
-                    ))
-                    update_cursor.close()
-                    stats['sessions_fixed'] += 1
-            
-            conn.commit()
-            cursor.close()
-            
-            logger.info(f"Session cleanup complete: {stats}")
-            return stats
-            
-    except Exception as e:
-        logger.error(f"Error during session cleanup: {e}", exc_info=True)
-        return stats
 
 
 # =============================================================================
@@ -2214,4 +2600,3 @@ def delete_saved_usecase(uc_id: int) -> bool:
     except Exception as e:
         logger.error(f"Error deleting use case id={uc_id}: {e}", exc_info=True)
         return False
-

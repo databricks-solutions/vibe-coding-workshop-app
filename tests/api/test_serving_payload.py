@@ -31,6 +31,7 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from src.backend.api import routes  # noqa: E402
+from src.backend.services import llm  # noqa: E402
 
 
 class TestExtractText(unittest.TestCase):
@@ -71,8 +72,8 @@ class TestExtractText(unittest.TestCase):
 class TestBestAvailableEndpoint(unittest.TestCase):
     def _run(self, primary, available, env=None):
         env = env or {}
-        with patch.object(routes, "SERVING_ENDPOINT_NAME", primary), \
-             patch.object(routes, "get_available_serving_endpoints", return_value=available), \
+        with patch.object(llm, "SERVING_ENDPOINT_NAME", primary), \
+             patch.object(llm, "get_available_serving_endpoints", return_value=available), \
              patch.dict(os.environ, env, clear=False):
             return routes.get_best_available_endpoint()
 

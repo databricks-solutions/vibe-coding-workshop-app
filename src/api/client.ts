@@ -293,12 +293,28 @@ export interface SessionSaveRequest {
   session_description?: string;
   feedback_rating?: 'thumbs_up' | 'thumbs_down' | null;
   feedback_comment?: string;
-  current_step: number;
   workshop_level?: string;
   direction?: string;
   include_lakehouse?: boolean;
   include_genie_ontology?: boolean;
-  completed_steps: number[];
+  // Engine composition inputs (Phase 3 T3b-2a). Persisted into session_parameters
+  // (chain_context -> chainContext; flags -> nested flags object) so the outline
+  // endpoint composes the same variant/sub-toggle outline the UI shows. The SPA
+  // wiring that populates these from UI state lands in T3b-2b.
+  chain_context?: string;
+  flags?: Record<string, boolean>;
+  // Gate write (Phase 3 T5). The COMPLETE gate set (sectionTags for ALL
+  // completed/skipped steps, derived from the live step numbers via
+  // stepNumbersToGates). Must be complete, never a delta — the backend read path
+  // trusts non-empty gates verbatim. The legacy numeric progress fields were
+  // retired in R4a (writes stopped).
+  completed_gates?: string[];
+  skipped_gates?: string[];
+  // The gate sets the SPA last received from or wrote to the server (D-12,
+  // src/utils/gateBase.ts). The server removes only gates in the base that the
+  // write drops; absent => App-authoritative.
+  base_completed_gates?: string[];
+  base_skipped_gates?: string[];
   step_prompts: Record<number, string>;
 }
 
@@ -321,10 +337,12 @@ export interface SessionLoadResponse {
   feedback_rating?: string;
   feedback_comment?: string;
   prerequisites_completed?: boolean;
-  current_step: number;
   workshop_level?: string;
-  completed_steps: number[];
-  skipped_steps?: number[];
+  completed_gates?: string[];
+  // Skipped-side gate mirror (Phase 3 T5 PR3b′). Surfaced from
+  // session_parameters['skipped_gates'] by the load response, symmetric to
+  // completed_gates, so the App can hydrate skipped steps gate-first.
+  skipped_gates?: string[];
   step_prompts: Record<number, string>;
   session_parameters?: Record<string, string>;
   created_by?: string;
@@ -336,6 +354,23 @@ export interface SessionLoadResponse {
 
 export interface NewSessionResponse {
   session_id: string;
+}
+
+// Track outline (Phase 3). The flat, engine-composed step order for a track —
+// the SAME sequence the MCP server's outline tool returns. `status` is the
+// engine's per-step state; the SPA read path (T3b-2b) consumes `sectionTag` for
+// ORDER and defers `status` projection to a later task.
+export interface TrackOutlineItem {
+  sectionTag: string;
+  title: string;
+  status: 'done' | 'current' | 'locked' | 'skipped';
+  execution: string;
+}
+
+export interface TrackOutlineResponse {
+  track: string;
+  session_id: string | null;
+  outline: TrackOutlineItem[];
 }
 
 export interface FeedbackRequest {
@@ -366,8 +401,15 @@ export interface UpdateSessionMetadataRequest {
   use_case_label?: string;
   prerequisites_completed?: boolean;
   workshop_level?: string;
-  completed_steps?: number[];
-  skipped_steps?: number[];
+  // Gate write (Phase 3 T5) — see SessionSaveRequest. Optional on this
+  // partial-update path: omit to leave persisted gates untouched; when present
+  // they are the complete set. The legacy numeric progress fields were retired
+  // in R4a (writes stopped).
+  completed_gates?: string[];
+  skipped_gates?: string[];
+  // Merge bases (D-12) — see SessionSaveRequest.
+  base_completed_gates?: string[];
+  base_skipped_gates?: string[];
   custom_use_case_label?: string;
   custom_use_case_description?: string;
   level_explicitly_selected?: boolean;
@@ -376,6 +418,9 @@ export interface UpdateSessionMetadataRequest {
   coding_assistant?: string;
   include_lakehouse?: boolean;
   include_genie_ontology?: boolean;
+  // Engine composition inputs (Phase 3 T3b-2a) — see SessionSaveRequest above.
+  chain_context?: string;
+  flags?: Record<string, boolean>;
 }
 
 export interface SessionListItem {
@@ -386,7 +431,11 @@ export interface SessionListItem {
   industry_label?: string;
   use_case?: string;
   use_case_label?: string;
-  current_step: number;
+  // Gate-derived count of canonical GLOBAL completed steps (T5 R3/R4b). The
+  // backend surfaces this so the session list renders progress from the gate set
+  // alone. Optional: a cached/older response may omit it, in which case the UI
+  // shows "Not started".
+  completed_step_count?: number;
   feedback_rating?: string;
   created_at?: string;
   updated_at?: string;
@@ -402,8 +451,13 @@ export interface LeaderboardEntry {
   display_name: string;
   avatar: string;
   score: number;
-  completed_steps: number[];
-  skipped_steps: number[];
+  completed_globals: number[];
+  skipped_globals: number[];
+  // Gate-derived counts of canonical GLOBAL steps (T5 PR3c/R4b). The backend
+  // re-keys completion off completed_gates; the UI reads these counts directly
+  // rather than measuring an array length.
+  completed_step_count?: number;
+  skipped_step_count?: number;
   completed_chapters: string[];
   in_progress_chapters: string[];
   updated_at?: string;
@@ -1233,6 +1287,46 @@ class ApiClient {
       ? `?coding_assistant=${encodeURIComponent(codingAssistant)}`
       : '';
     return this.fetch(`/config/visibility${qs}`);
+  }
+
+  /** Fetch the engine-composed step outline for a track (Phase 3 T3b-2b). The
+   * response is FLAT and ordered — the same sequence the MCP outline tool
+   * returns — reflecting the session's PERSISTED composition inputs
+   * (chainContext / flags). Pass `sessionId` to compose the saved variant;
+   * omit it for the fresh (all-locked-after-first) outline. Mirrors
+   * `getVisibility`: a thin GET the caller wraps in a cancelled-flag effect. */
+  async getTrackOutline(
+    track: string,
+    sessionId?: string,
+  ): Promise<TrackOutlineResponse> {
+    const qs = sessionId ? `?session_id=${encodeURIComponent(sessionId)}` : '';
+    return this.fetch<TrackOutlineResponse>(
+      `/track/${encodeURIComponent(track)}/outline${qs}`,
+    );
+  }
+
+  /** Fetch the engine-composed step outline for an EPHEMERAL, UNPERSISTED
+   * composition (Phase 3 T4a). Sibling to `getTrackOutline` — it does NOT overload
+   * the session-only GET. It POSTs the composition inputs the /config/test-scenario
+   * sandbox is previewing (direction + AI/medallion/genie `flags`) with NO session
+   * id, so the backend builds a bare SessionState and returns engine.outline without
+   * loading or persisting anything. The arbitrary client-side disabled-tag filter
+   * (per-assistant hides, cleanup/iterate tail sections) is applied by the caller on
+   * top of the returned order, exactly as `orderedSectionsForRead` does. */
+  async previewTrackOutline(
+    track: string,
+    params: { direction?: 'forward' | 'reverse'; flags?: Record<string, boolean> } = {},
+  ): Promise<TrackOutlineResponse> {
+    return this.fetch<TrackOutlineResponse>(
+      `/track/${encodeURIComponent(track)}/outline/preview`,
+      {
+        method: 'POST',
+        body: JSON.stringify({
+          ...(params.direction != null ? { direction: params.direction } : {}),
+          ...(params.flags != null ? { flags: params.flags } : {}),
+        }),
+      },
+    );
   }
 
   /** Admin: full three-column visibility matrix (Default / CoDA / Genie Code).

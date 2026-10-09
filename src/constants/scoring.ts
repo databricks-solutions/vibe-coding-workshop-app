@@ -30,6 +30,16 @@ export const STEP_SCORES: Record<number, number> = {
   38: 50, 39: 50, 40: 50, 41: 50, 42: 50, 43: 50, 44: 50, 45: 50, 46: 50,
   // Agents Accelerator — MLflow for Gen-AI (steps 47-54): 50 points each
   47: 50, 48: 50, 49: 50, 50: 50, 51: 50, 52: 50, 53: 50, 54: 50,
+  // Agents Accelerator — MLflow tail (steps 55-56): 50 points each (T5 PR3c)
+  55: 50, 56: 50,
+  // Genie Accelerator — Semantic Layer (steps 57-61): 50 points each (T5 PR3c)
+  57: 50, 58: 50, 59: 50, 60: 50, 61: 50,
+  // Genie Accelerator — Genie Agent (steps 62-66, 71): 50 points each (T5 PR3c)
+  62: 50, 63: 50, 64: 50, 65: 50, 66: 50, 71: 50,
+  // Genie Accelerator — Genie Ontology (steps 67-69): 50 points each (T5 PR3c)
+  67: 50, 68: 50, 69: 50,
+  // Genie Accelerator — Genie Activation (steps 72-73): 40 points each (T5 PR3c)
+  72: 40, 73: 40,
 };
 
 // Chapter definitions for milestone detection
@@ -42,7 +52,14 @@ export const CHAPTERS: Record<string, { steps: Set<number>; display: string }> =
   'Activation': { steps: new Set([32, 33, 34, 35, 36, 37]), display: 'Reverse ETL' },
   'Refinement': { steps: new Set([20, 21]), display: 'Refinement' },
   'Agent Skills': { steps: new Set([26, 27, 28, 29, 30]), display: 'Agent Skills' },
-  'Agents Accelerator': { steps: new Set([38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54]), display: 'Agents Accelerator' },
+  'Agents Accelerator': { steps: new Set([38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56]), display: 'Agents Accelerator' },
+  // Genie Accelerator chapters (T5 PR3c) — mirror the manifest's genie-accelerator
+  // section groupings; kept as their own chapters (not merged into the shared
+  // 'Chapter 4'/'Activation' sets) so cross-track chapter-completion is unaffected.
+  'Semantic Layer': { steps: new Set([57, 58, 59, 60, 61]), display: 'Semantic Layer' },
+  'Genie Agent': { steps: new Set([62, 63, 64, 65, 66, 71]), display: 'Genie Agent' },
+  'Genie Ontology': { steps: new Set([67, 68, 69]), display: 'Genie Ontology' },
+  'Genie Activation': { steps: new Set([72, 73]), display: 'Genie Activation' },
   'Clean Up': { steps: new Set([31]), display: 'Clean Up' },
 };
 

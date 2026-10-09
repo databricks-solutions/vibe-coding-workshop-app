@@ -14,7 +14,8 @@
 #           2a. Unity Catalog permissions (ALL_PRIVILEGES on catalog)
 #           2b. Lakebase database roles (DATABRICKS_SUPERUSER for SP, user, account users)
 #               + CAN_USE on Lakebase instance for account users
-#   Step 3: Create and seed Lakebase tables (DDL + DML)
+#   Step 3: Create and seed Lakebase tables (DDL + DML), additively by default:
+#           create-if-not-exists + ON CONFLICT DO NOTHING seed (D-35)
 #   Step 4: Final app deploy:
 #           4a-b. Sync final app.yaml via bundle deploy (LAST bundle deploy)
 #           4c.   Apply app-level permissions (resource link + CAN_USE)
@@ -34,7 +35,10 @@
 #   ./scripts/deploy.sh --target production    # Deploy to production
 #   ./scripts/deploy.sh --target development --profile my-profile
 #   ./scripts/deploy.sh --skip-tables          # Skip table setup
-#   ./scripts/deploy.sh --tables-only          # Only run table setup
+#   ./scripts/deploy.sh --tables-only          # Only run table setup (additive)
+#   ./scripts/deploy.sh --tables-only --tables-recreate
+#                                              # DESTRUCTIVE: drop + recreate + reseed; also
+#                                              # requires VIBE_CONFIRM_DESTRUCTIVE_RESEED=<schema>
 #   ./scripts/deploy.sh --skip-permissions     # Skip permission setup
 #   ./scripts/deploy.sh --code-only            # Quick deploy (builds frontend + syncs + deploys)
 #   ./scripts/deploy.sh --watch                # Continuous sync on file changes
@@ -95,6 +99,7 @@ BUNDLE_ONLY=false
 PERMISSIONS_ONLY=false
 PROFILE=""
 AUTO_APPROVE=false
+TABLES_RECREATE=false
 
 # Parse arguments
 while [[ $# -gt 0 ]]; do
@@ -113,6 +118,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --tables-only)
             TABLES_ONLY=true
+            shift
+            ;;
+        --tables-recreate)
+            TABLES_RECREATE=true
             shift
             ;;
         --skip-permissions)
@@ -151,7 +160,9 @@ while [[ $# -gt 0 ]]; do
             echo "  --target, -t <target>    Bundle target (default: development)"
             echo "  --profile, -p <profile>  Databricks CLI profile"
             echo "  --skip-tables            Skip Lakebase table setup"
-            echo "  --tables-only            Only run Lakebase table setup"
+            echo "  --tables-only            Only run Lakebase table setup (additive)"
+            echo "  --tables-recreate        DESTRUCTIVE: drop + recreate + reseed the tables;"
+            echo "                           requires VIBE_CONFIRM_DESTRUCTIVE_RESEED=<schema>"
             echo "  --skip-permissions       Skip catalog permissions setup"
             echo "  --bundle-only            Only deploy DAB bundle (infra)"
             echo "  --permissions-only       Only setup permissions"
@@ -173,6 +184,20 @@ while [[ $# -gt 0 ]]; do
             ;;
     esac
 done
+
+# D-35: a destructive tables recreate needs --tables-recreate AND
+# VIBE_CONFIRM_DESTRUCTIVE_RESEED=<target schema>. Refuse before any network call;
+# the value is matched against the target schema once it is resolved below.
+refuse_tables_recreate() {
+    echo -e "${RED}Refusing --tables-recreate: $1${NC}" >&2
+    echo -e "${RED}A recreate DROPS usecase_descriptions and section_input_prompts and re-runs every seed: live prompt and config data is lost.${NC}" >&2
+    echo "To proceed deliberately, set VIBE_CONFIRM_DESTRUCTIVE_RESEED=<target schema name>." >&2
+    echo "Without --tables-recreate the tables step is additive (create-if-not-exists + ON CONFLICT DO NOTHING seed)." >&2
+    exit 1
+}
+if [[ "$TABLES_RECREATE" == true && -z "${VIBE_CONFIRM_DESTRUCTIVE_RESEED:-}" ]]; then
+    refuse_tables_recreate "VIBE_CONFIRM_DESTRUCTIVE_RESEED is not set."
+fi
 
 # Build profile flag and export for child scripts (e.g. setup-lakebase.sh)
 PROFILE_FLAG=""
@@ -405,6 +430,10 @@ LAKEBASE_INSTANCE=$(get_target_var "lakebase_instance_name")
 LAKEBASE_CATALOG=$(get_target_var "lakebase_catalog")
 LAKEBASE_SCHEMA=$(get_target_var "lakebase_schema")
 WORKSPACE_URL=$(get_workspace_host)
+
+if [[ "$TABLES_RECREATE" == true && ( -z "$LAKEBASE_SCHEMA" || "$VIBE_CONFIRM_DESTRUCTIVE_RESEED" != "$LAKEBASE_SCHEMA" ) ]]; then
+    refuse_tables_recreate "VIBE_CONFIRM_DESTRUCTIVE_RESEED='$VIBE_CONFIRM_DESTRUCTIVE_RESEED' does not match the target schema '${LAKEBASE_SCHEMA:-<unknown>}'."
+fi
 
 # Detect Lakebase mode from user-config.yaml (autoscaling or provisioned)
 LAKEBASE_MODE="autoscaling"
@@ -1217,9 +1246,18 @@ if [[ "$SKIP_TABLES" != true ]]; then
         export DATABRICKS_CONFIG_PROFILE="$PROFILE"
     fi
     
-    # Run table setup with explicit schema override
-    if ./scripts/setup-lakebase.sh --recreate --yes; then
-        print_success "Lakebase tables created and seeded in schema: $LAKEBASE_SCHEMA"
+    # Run table setup with explicit schema override. Additive by default (D-35);
+    # the destructive recreate only under --tables-recreate, confirmed at startup.
+    if [[ "$TABLES_RECREATE" == true ]]; then
+        export VIBE_CONFIRM_DESTRUCTIVE_RESEED
+        if ./scripts/setup-lakebase.sh --recreate --yes; then
+            print_success "Lakebase tables RECREATED and reseeded (destructive, confirmed) in schema: $LAKEBASE_SCHEMA"
+        else
+            print_error "Table setup failed"
+            exit 1
+        fi
+    elif ./scripts/setup-lakebase.sh --yes; then
+        print_success "Lakebase tables applied additively (create-if-not-exists + ON CONFLICT DO NOTHING seed) in schema: $LAKEBASE_SCHEMA"
     else
         print_error "Table setup failed"
         exit 1

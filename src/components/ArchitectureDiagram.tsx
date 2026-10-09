@@ -10,7 +10,7 @@
  * - Service popovers (click for details + chat) via shared ServicePopover component
  */
 
-import { useState, useEffect, useRef, Fragment } from 'react';
+import { useState, useEffect, Fragment } from 'react';
 import { 
   ChevronDown,
   Users, 
@@ -152,28 +152,29 @@ const BULLET_STAGGER_MS = 100;
 // On hide:  transition opacity 1→0 -> unmount after FADE_MS
 // ---------------------------------------------------------------------------
 function useFadeTransition(visible: boolean) {
-  const isInitial = useRef(true);
   const [shouldRender, setShouldRender] = useState(visible);
   const [isVisible, setIsVisible] = useState(visible);
 
-  useEffect(() => {
-    // Skip animation on the very first render so elements appear instantly
-    if (isInitial.current) {
-      isInitial.current = false;
-      return;
-    }
+  // On a visibility change, mount (show) or start the exit transition (hide)
+  // during render. Initial state already matches `visible`, so the first
+  // render needs no adjustment and appears instantly.
+  const [prevVisible, setPrevVisible] = useState(visible);
+  if (visible !== prevVisible) {
+    setPrevVisible(visible);
+    if (visible) setShouldRender(true);
+    else setIsVisible(false);
+  }
 
+  useEffect(() => {
     if (visible) {
-      // Mount first, then trigger CSS transition on next frame
-      setShouldRender(true);
+      // Trigger CSS transition on next frame (a no-op on the initial mount)
       requestAnimationFrame(() => {
         requestAnimationFrame(() => {
           setIsVisible(true);
         });
       });
     } else {
-      // Trigger exit transition, then unmount after it completes
-      setIsVisible(false);
+      // Unmount after the exit transition completes (a no-op on the initial mount)
       const timer = setTimeout(() => setShouldRender(false), FADE_MS);
       return () => clearTimeout(timer);
     }
@@ -779,41 +780,28 @@ export function ArchitectureDiagramContent({
   const showGold = !isAgentsAccelerator && shouldShowMedallionLayer(workshopLevel, 'gold', medallionLayers);
   const [bulletsRevealed, setBulletsRevealed] = useState(false);
 
+  // Re-stagger bullets when the workshop level or direction changes: hide them
+  // during render, then the effect below reveals them two frames later.
+  const [revealedFor, setRevealedFor] = useState({ workshopLevel, direction });
+  if (revealedFor.workshopLevel !== workshopLevel || revealedFor.direction !== direction) {
+    setRevealedFor({ workshopLevel, direction });
+    setBulletsRevealed(false);
+  }
+
   useEffect(() => {
     const frame = requestAnimationFrame(() => {
       requestAnimationFrame(() => setBulletsRevealed(true));
     });
     return () => cancelAnimationFrame(frame);
-  }, []);
-
-  const prevLevelRef = useRef(workshopLevel);
-  useEffect(() => {
-    if (workshopLevel !== prevLevelRef.current) {
-      prevLevelRef.current = workshopLevel;
-      setBulletsRevealed(false);
-      requestAnimationFrame(() => {
-        requestAnimationFrame(() => setBulletsRevealed(true));
-      });
-    }
-  }, [workshopLevel]);
-
-  const prevDirectionRef = useRef(direction);
-  useEffect(() => {
-    if (direction !== prevDirectionRef.current) {
-      prevDirectionRef.current = direction;
-      setBulletsRevealed(false);
-      requestAnimationFrame(() => {
-        requestAnimationFrame(() => setBulletsRevealed(true));
-      });
-    }
-  }, [direction]);
+  }, [workshopLevel, direction]);
 
   const isSkillsAccelerator = workshopLevel === 'skills-accelerator';
   const [expandedCard, setExpandedCard] = useState<number | null>(null);
 
-  useEffect(() => {
-    if (!isSkillsAccelerator) setExpandedCard(null);
-  }, [isSkillsAccelerator]);
+  // Leaving the Skills Accelerator collapses any expanded card
+  if (!isSkillsAccelerator && expandedCard !== null) {
+    setExpandedCard(null);
+  }
 
   const isGenie = workshopLevel === 'genie-accelerator';
   // Genie Accelerator is a reverse-ETL arc (Lakehouse → AI and Agents → App),
@@ -1520,23 +1508,28 @@ export function ArchitectureDiagramContent({
 
 export function ArchitectureDiagram({ forceCollapsed = false, workshopLevel = 'end-to-end', onStartBuild }: ArchitectureDiagramProps) {
   const [userOverride, setUserOverride] = useState<boolean | null>(null);
-  const prevForceCollapsed = useRef(forceCollapsed);
+  const [prevForceCollapsed, setPrevForceCollapsed] = useState(forceCollapsed);
 
   // Staggered bullet reveal
   const [bulletsRevealed, setBulletsRevealed] = useState(false);
 
   // When forceCollapsed transitions to true, reset override so auto-collapse kicks in
-  useEffect(() => {
-    if (forceCollapsed && !prevForceCollapsed.current) {
-      setUserOverride(null);
-    }
-    prevForceCollapsed.current = forceCollapsed;
-  }, [forceCollapsed]);
+  if (forceCollapsed !== prevForceCollapsed) {
+    setPrevForceCollapsed(forceCollapsed);
+    if (forceCollapsed) setUserOverride(null);
+  }
 
   const autoExpanded = !forceCollapsed;
   const isExpanded = userOverride !== null ? userOverride : autoExpanded;
 
-  // Initial mount: trigger bullet stagger
+  // Re-stagger bullets when workshop level changes: hide them during render,
+  // then the effect below reveals them two frames later (also on initial mount).
+  const [revealedForLevel, setRevealedForLevel] = useState(workshopLevel);
+  if (revealedForLevel !== workshopLevel) {
+    setRevealedForLevel(workshopLevel);
+    setBulletsRevealed(false);
+  }
+
   useEffect(() => {
     const frame = requestAnimationFrame(() => {
       requestAnimationFrame(() => {
@@ -1544,20 +1537,6 @@ export function ArchitectureDiagram({ forceCollapsed = false, workshopLevel = 'e
       });
     });
     return () => cancelAnimationFrame(frame);
-  }, []);
-
-  // Re-stagger bullets when workshop level changes
-  const prevLevelRef = useRef(workshopLevel);
-  useEffect(() => {
-    if (workshopLevel !== prevLevelRef.current) {
-      prevLevelRef.current = workshopLevel;
-      setBulletsRevealed(false);
-      requestAnimationFrame(() => {
-        requestAnimationFrame(() => {
-          setBulletsRevealed(true);
-        });
-      });
-    }
   }, [workshopLevel]);
 
   // Compute visibility directly from workshopLevel (no delayed rendering)

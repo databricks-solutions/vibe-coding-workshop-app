@@ -14,9 +14,12 @@ export function SkillDetailDrawer({ skillId, onClose, onNavigate, onLearn }: Ski
   const s = skillId ? SKILL_MAP[skillId] : null;
   const [copied, setCopied] = useState(false);
 
-  useEffect(() => {
+  // A different skill starts un-copied
+  const [prevSkillId, setPrevSkillId] = useState(skillId);
+  if (skillId !== prevSkillId) {
+    setPrevSkillId(skillId);
     setCopied(false);
-  }, [skillId]);
+  }
 
   // Escape closes the panel while it's open.
   useEffect(() => {

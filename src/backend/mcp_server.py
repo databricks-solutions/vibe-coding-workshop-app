@@ -1,0 +1,2511 @@
+"""MCP adapter for the Vibe Coding Workshop."""
+
+from __future__ import annotations
+
+import asyncio
+import concurrent.futures
+import contextvars
+import copy
+import hashlib
+import json
+import logging
+import threading
+import time
+import uuid
+from dataclasses import asdict
+from datetime import datetime, timezone
+from typing import Any, Callable, Literal
+
+import jsonschema
+from fastapi import Request
+from mcp.server.fastmcp import Context, FastMCP
+from mcp.server.fastmcp.resources.types import FunctionResource, TextResource
+from mcp.server.transport_security import TransportSecuritySettings
+from mcp.types import (
+    CallToolRequest,
+    CallToolResult,
+    ListToolsRequest,
+    ServerResult,
+    TextContent,
+    ToolAnnotations,
+)
+from pydantic import BaseModel, ConfigDict, Field, RootModel
+
+from .services import coaching
+from .services.lakebase import (
+    append_session_interaction,
+    is_lakebase_configured,
+    load_session,
+    save_session_applying_mcp_delta,
+)
+from .workshop import assembler, engine, manifest
+from .workshop.state import build_session_state
+from .workshop.track_resolution import resolve_track
+
+logger = logging.getLogger(__name__)
+
+# Legacy fallback only (D-30): the walk runs on the session's resolved track; this
+# is the track when there is no session record to resolve against (local dev).
+DEFAULT_TRACK = "genie-accelerator"
+DEFAULT_INDUSTRY = "Technology"
+# genie-accelerator's manifest title; other tracks fall back to their own (D-30a).
+DEFAULT_USE_CASE = "Genie Accelerator"
+# D-31: this track keeps today's session names byte-identical (no track title).
+_UNTITLED_NAME_TRACK = "genie-accelerator"
+# MCP is exclusively the Genie Code client, so every step renders the
+# 'genie-code' prompt fork. Steps without a fork fall back to '__default__'
+# automatically inside the assembler.
+DEFAULT_CODING_ASSISTANT = "genie-code"
+
+ORIENTATION_PREAMBLE = (
+    "First-run orientation: answer questions in chat; silence accepts the recommended default. "
+    "Each step is learner-triggered — present the step, hand over its `user_trigger_prompt` (the "
+    "plain-English ask), and WAIT for the learner to submit it before doing the work. Never auto-run "
+    "the next step on your own. Step payloads are lean; call `vibe_explain_step` when the learner asks "
+    "how to apply a step or what to expect. "
+    "The track saves progress server-side and does not block, except for one benchmark hard stop. "
+    "You can mirror progress in the web UI using the same session. If tools go missing, disconnect "
+    "other MCP servers to stay within the 20-tool budget."
+)
+
+# Re-injected on EVERY step that authors a trigger (not just step 1): MCP is
+# advisory, so the wait doctrine has to ride each payload or the agent drifts
+# back into auto-running the next step (Workstream #4).
+STEP_WAIT_DIRECTIVE = (
+    "STOP — this step is learner-triggered. Surface `user_trigger_prompt` to the "
+    "learner verbatim and WAIT for them to send it back. Do not call "
+    "vibe_complete_step or vibe_next_step until the learner responds in a fresh "
+    "turn; never chain steps on your own."
+)
+
+GETTING_STARTED_GUIDE = """# Getting started
+
+This workshop is a guided conversation. Start a track, read each prompt verbatim, then narrate why
+it matters. Step payloads are lean — call `vibe_explain_step` for how-to detail and expected
+deliverables when the learner asks. Answer questions in chat; silence accepts the recommended
+default. Progress is saved server-side and can be mirrored in the web UI using the same session.
+
+Steps are learner-triggered. After you present a step, hand the learner its `user_trigger_prompt` —
+a simple English prompt they submit back to you — and wait for them to send it before you do the
+work. Do not auto-execute the next step; the trigger to move forward always comes from the learner.
+
+There is one hard stop: the benchmark step requires an explicit confirmation before it can advance.
+Everything else is designed to keep moving without pop-up forms or client elicitation.
+
+Troubleshooting:
+- 20-tool budget: disconnect other MCP servers if these tools are missing.
+- Stateless server: every request reads current session state from Lakebase.
+- 307 redirect: the app must mount the MCP HTTP app before the SPA catch-all.
+"""
+
+VIBECODING_STYLE = """# Vibe Coding gate ledger
+
+Use `.vibecoding-state.md` as the server-side progress ledger. Keep Tier-G READ and RECORD
+bookends around important actions. The MCP surface is additive to the web UI: it reads the same
+session state and presents the same step prompts without rewriting their verbatim bodies.
+"""
+
+
+class OutlineItem(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    sectionTag: str
+    title: str
+    status: Literal["done", "current", "locked", "skipped"]
+    execution: str
+
+
+class StepReference(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    sectionTag: str
+    title: str
+
+
+class DoneResult(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    done: Literal[True] = True
+
+
+class InteractionOption(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: str
+    label: str
+
+
+class Interaction(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: str
+    type: Literal["comprehension", "decision", "confirm"]
+    question: str
+    options: list[InteractionOption] = Field(default_factory=list)
+    recommended: str | None = None
+    skippable: bool
+    coaching: dict[str, str] = Field(default_factory=dict)
+
+
+class ExplainabilityPayload(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+    sectionTag: str
+    title: str
+    why: str
+    prompt: str
+    # The plain-English ask the learner submits to START this step. The agent
+    # presents it and waits for the learner to say it, rather than auto-running
+    # the step (suggestion c). Empty when a step authors no trigger.
+    user_trigger_prompt: str = ""
+    # Per-step wait doctrine, present on every step that authors a trigger so the
+    # agent re-reads "present the trigger and WAIT" on each turn (Workstream #4).
+    # Kept adjacent to user_trigger_prompt so the trigger + wait doctrine ride
+    # together near the top of a deliberately slim payload. how_to_apply and
+    # expected_output moved OFF the step payload to the on-demand vibe_explain_step
+    # tool: the big markdown blocks inflated context and let the client drift out
+    # of the "present trigger -> WAIT" ritual on later steps.
+    instruction: str | None = None
+    gate: str | None
+    requiresGate: str | None
+    consumes: list[str]
+    produces: str | None
+    execution: Literal["agent-doable", "ui-driven", "hybrid"]
+    next: StepReference
+    interaction: dict[str, Interaction | None] | None = None
+    orientation: str | None = None
+    # Use-case discovery inlined into the tool payload (Workstream D): the Genie
+    # Code agent cannot read vibe:// resources, so the use_case_selection step
+    # carries the curated industry options here, plus the certified-first use
+    # cases for the chosen industry once one is set. None on every other step.
+    available_industries: list[dict[str, Any]] | None = None
+    available_use_cases: list[dict[str, Any]] | None = None
+    # Data-location CUJ (Workstream 1): the effective source {catalog, schema,
+    # is_overridden} on the Locate Data step, mirroring the web LakehouseParams
+    # editor. None on every other step.
+    data_location: dict[str, Any] | None = None
+
+
+class StartTrackResult(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    session_id: str
+    track: str
+    outline: list[OutlineItem]
+    # Deep-link handoff (Workstream 2): a ready-to-open web-UI URL for this session
+    # (``<base>?sessionId=<id>``), or None when the request host is unavailable.
+    session_url: str | None = None
+
+
+class CompleteStepResult(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    completed_gates: list[str]
+    next: ExplainabilityPayload | DoneResult | BlockedResult
+    # Advisory re-surfacing of the just-completed step's post-comprehension check
+    # (answer key redacted). Non-gating: it nudges the agent to ask the quiz at
+    # the moment it is due, since the slim step payload + long-run drift let the
+    # client silently skip the optional post check. None when the step has no
+    # post check or the learner already answered it.
+    post_check: Interaction | None = None
+
+
+class StepHelpResult(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    # On-demand help for a step (how_to_apply + expected_output), moved OFF the
+    # step payload to keep it slim. Fetched only when the learner asks how to
+    # apply a step or what to expect.
+    sectionTag: str
+    title: str
+    why: str
+    how_to_apply: str
+    expected_output: str
+    # Grounded coaching (D-22), set only when the call passes `focus`; with no
+    # focus these keep their defaults and the static help is unchanged (D-23).
+    coaching: str | None = None
+    focus: Literal["what_now", "why", "unblock", "review"] | None = None
+    grounded_on: list[str] = Field(default_factory=list)
+    is_fallback: bool = False
+
+
+class SubmitAnswerResult(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    recorded: bool
+    coaching: str
+    unblocks: str | None
+
+
+class SetParametersResult(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    resolved_params: dict[str, Any]
+    missing_required: list[str]
+    # PRD-grade custom use-case draft returned by the ``draft_custom`` mode. It is
+    # returned for review and is NOT persisted until the learner confirms it back
+    # through a normal ``vibe_set_parameters`` call carrying ``use_case_description``.
+    drafted_description: str | None = None
+    # Use-case discovery echoed back to the agent (Workstream D). Populated on any
+    # selection-touching call so the agent never has to read a vibe:// resource:
+    # the curated industries, and the certified-first use cases once a valid
+    # industry is resolved. None on plain non-selection merges.
+    available_industries: list[dict[str, Any]] | None = None
+    available_use_cases: list[dict[str, Any]] | None = None
+    # True when THIS call resolved the pre-journey use-case gate (Option A): a
+    # fully-locked selection wrote use_case_selection -> completed_gates and the
+    # use_case_brief artifact, so the walk can proceed to the first numbered step
+    # and prd_generation is unlocked. False on plain merges and partial selections.
+    use_case_resolved: bool = False
+
+
+class _ContractError(dict):
+    """Marker returned by handlers so the HTTP adapter can set `isError`."""
+
+
+class BlockedBy(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    sectionTag: str
+    title: str
+    requiresGate: str | None
+
+
+class BlockedResult(BaseModel):
+    # Third `vibe_next_step` outcome (PR B): the walk is wedged behind an
+    # unsatisfiable gate. Deliberately carries NO top-level sectionTag/title so a
+    # blocked payload can never be mistaken for a step; `blocked_by` names the
+    # offending step. DoneResult is untouched, so a client keying on `done` never
+    # sees a false `done:true` — a blocked walk reports `blocked`, not `done`.
+    model_config = ConfigDict(extra="forbid")
+
+    blocked: Literal[True] = True
+    blocked_by: BlockedBy
+    message: str
+
+
+class NextStepResult(RootModel[ExplainabilityPayload | DoneResult | BlockedResult]):
+    pass
+
+
+def _run_sync_tool_in_thread(tool: Any, arguments: dict[str, Any], context: Any) -> Any:
+    """Drive a SYNC FastMCP tool's ``run`` coroutine to completion off the loop.
+
+    ``tool.run`` is a coroutine, but for a sync tool it never awaits anything that
+    suspends — ``call_fn_with_arg_validation`` validates the arguments, injects the
+    Context and calls ``fn(**kwargs)`` with no I/O await. Stepping the coroutine
+    once therefore runs the whole body synchronously in this worker thread, and
+    ``StopIteration`` carries the return value (including a ``_ContractError``).
+    This is invoked via ``asyncio.to_thread`` so the event loop stays free; if a
+    tool declared sync ever actually awaits (it must not), we close the coroutine
+    and raise rather than silently falling back to blocking the loop.
+    """
+
+    coro = tool.run(arguments, context=context, convert_result=False)
+    try:
+        coro.send(None)
+    except StopIteration as stop:
+        return stop.value
+    coro.close()
+    raise RuntimeError(
+        f"sync MCP tool {getattr(tool, 'name', '?')!r} unexpectedly awaited; "
+        "cannot run off-loop"
+    )
+
+
+class WorkshopFastMCP(FastMCP):
+    """FastMCP 1.x compatibility shim for the app's `http_app` contract."""
+
+    def http_app(
+        self,
+        path: str = "/",
+        transport: str = "streamable-http",
+        stateless_http: bool = True,
+    ) -> Any:
+        if transport != "streamable-http":
+            raise ValueError("Phase 1 exposes only streamable-http")
+        self.settings.streamable_http_path = path
+        self.settings.stateless_http = stateless_http
+        return self.streamable_http_app()
+
+    def _install_error_aware_handler(self) -> None:
+        """Preserve structured error bodies while using FastMCP's tool catalog."""
+
+        async def handle(request: CallToolRequest) -> ServerResult:
+            tool_name = request.params.name
+            arguments = request.params.arguments or {}
+            tool = self._tool_manager.get_tool(tool_name)
+            if tool is None:
+                return ServerResult(
+                    CallToolResult(
+                        content=[TextContent(type="text", text=f"Unknown tool: {tool_name}")],
+                        isError=True,
+                    )
+                )
+            try:
+                jsonschema.validate(instance=arguments, schema=tool.parameters)
+                # Off-loop execution: the app runs ONE uvicorn event loop shared by
+                # the web UI and /mcp (app.py). FastMCP calls a SYNC tool body
+                # directly on that loop (func_metadata: `return fn(**args)`), so a
+                # slow tool (e.g. an uncached MCP step-prompt render) would freeze
+                # every concurrent request. Run sync tool bodies in a worker thread
+                # instead. `get_context()` is called here (on the loop) so the
+                # request context is captured eagerly; `asyncio.to_thread` copies
+                # contextvars, so the OBO auth context propagates into the thread.
+                # Arg validation, Context injection and the tool body run inside
+                # `tool.run` (in the thread). The _ContractError contract, result
+                # conversion and output-schema validation stay ON-LOOP below, after
+                # the thread returns (convert_result=False keeps them out of the
+                # worker thread).
+                context = self.get_context()
+                if tool.is_async:
+                    result = await tool.run(arguments, context=context, convert_result=False)
+                else:
+                    result = await asyncio.to_thread(
+                        _run_sync_tool_in_thread, tool, arguments, context
+                    )
+                if isinstance(result, _ContractError):
+                    structured = result["structuredContent"]
+                    return ServerResult(
+                        CallToolResult(
+                            content=[TextContent(type="text", text=json.dumps(structured, sort_keys=True))],
+                            structuredContent=structured,
+                            isError=True,
+                        )
+                    )
+                converted = tool.fn_metadata.convert_result(result)
+                if isinstance(converted, tuple) and len(converted) == 2:
+                    _, structured = converted
+                else:
+                    structured = None
+                if tool.output_schema is not None:
+                    jsonschema.validate(instance=structured, schema=tool.output_schema)
+                return ServerResult(
+                    CallToolResult(
+                        content=[TextContent(type="text", text=json.dumps(structured, sort_keys=True))],
+                        structuredContent=structured,
+                        isError=False,
+                    )
+                )
+            except Exception as error:  # noqa: BLE001
+                return ServerResult(
+                    CallToolResult(
+                        content=[TextContent(type="text", text=str(error))],
+                        isError=True,
+                    )
+                )
+
+        self._mcp_server.request_handlers[CallToolRequest] = handle
+
+        # Genie Code's save-time validation (protocolVersion 2025-11-25) rejects
+        # a tools/list whose entries carry `outputSchema` / `annotations`: the
+        # server lists but the "Add MCP server" Save silently fails (the client
+        # re-runs initialize + tools/list in a loop and never persists). The
+        # proven Genie Code reference returns ONLY name/description/inputSchema
+        # (external-to-managed-table-migration-toolkit register-mcp.ts). Mirror
+        # that by stripping the two optional fields from the tools/list result.
+        # Structured output still flows to tolerant clients at tools/call time
+        # (CallToolResult.structuredContent above); only the *listing* is slimmed.
+        original_list_tools = self._mcp_server.request_handlers.get(ListToolsRequest)
+
+        if original_list_tools is not None:
+
+            async def list_tools(request: ListToolsRequest) -> ServerResult:
+                result = await original_list_tools(request)
+                for tool in result.root.tools:
+                    tool.outputSchema = None
+                    tool.annotations = None
+                return result
+
+            self._mcp_server.request_handlers[ListToolsRequest] = list_tools
+
+
+# FastMCP defaults host to 127.0.0.1 and, for localhost, auto-enables DNS-
+# rebinding protection with a localhost-only Origin allowlist
+# (mcp/server/fastmcp/server.py). Behind the Databricks Apps proxy the app
+# binds to 127.0.0.1, so that auto-protection rejects Genie Code's real
+# workspace Origin (…cloud.databricks.com / …azuredatabricks.net) with
+# 403 "Invalid Origin header" — which blocks "Add MCP server" from saving.
+# DNS-rebinding protection is redundant in this topology: the app is a public
+# HTTPS endpoint gated by the Databricks OAuth proxy, and browser origins are
+# already restricted by CORSMiddleware (ALLOWED_ORIGINS) in app.py. Disable the
+# transport-level check so the intended cross-origin browser client works.
+# Ref: https://docs.databricks.com/aws/en/genie-code/mcp
+_MCP_TRANSPORT_SECURITY = TransportSecuritySettings(
+    enable_dns_rebinding_protection=False,
+)
+
+mcp = WorkshopFastMCP(
+    name="vibe-coding-workshop",
+    instructions=(
+        "Use the prompts and resources to orient the learner. Present every workshop prompt "
+        "verbatim before narrating it. All interactions stay in-band."
+    ),
+    stateless_http=True,
+    # Reply with plain JSON instead of an SSE stream for maximum client
+    # tolerance. Genie Code's browser save-time validation is happier with a
+    # JSON body. Note: this does NOT relax the transport's Accept gate (see the
+    # Accept-header normalization in app.py) — the POST handler still requires
+    # both application/json and text/event-stream in Accept regardless.
+    json_response=True,
+    transport_security=_MCP_TRANSPORT_SECURITY,
+)
+
+
+def _error_result(code: str, message: str, **details: str) -> _ContractError:
+    error = {"code": code, "message": message, **details}
+    structured = {"isError": True, "error": error}
+    return _ContractError(
+        isError=True,
+        error=error,
+        structuredContent=structured,
+        content=[TextContent(type="text", text=json.dumps(structured, sort_keys=True))],
+    )
+
+
+def _request_user(context: Context | None) -> str:
+    if context is not None:
+        try:
+            request = context.request_context.request
+            if isinstance(request, Request):
+                for header in (
+                    "x-forwarded-email",
+                    "x-forwarded-user",
+                    "x-databricks-user-email",
+                    "x-databricks-user",
+                    "x-user-email",
+                    "x-user-id",
+                ):
+                    value = request.headers.get(header, "")
+                    if "@" in value:
+                        return value
+        except (LookupError, ValueError, AttributeError):
+            pass
+    import os
+
+    value = os.getenv("PGUSER", "")
+    return value if "@" in value else "unknown"
+
+
+def _request_base_url(context: Context | None) -> str | None:
+    """Derive the app's own base URL from the forwarded request headers, mirroring
+    the web save endpoint (routes.save_session_endpoint). Returns None when it
+    cannot be resolved (no request context, or a localhost host), so the deep-link
+    handoff degrades gracefully rather than emitting a broken URL."""
+    if context is None:
+        return None
+    try:
+        request = context.request_context.request
+    except (LookupError, AttributeError):
+        return None
+    if not isinstance(request, Request):
+        return None
+    forwarded_host = request.headers.get("x-forwarded-host")
+    if forwarded_host:
+        protocol = request.headers.get("x-forwarded-proto", "https")
+        return f"{protocol}://{forwarded_host}"
+    host_header = request.headers.get("host")
+    if host_header and "localhost" not in host_header:
+        return f"https://{host_header}"
+    return None
+
+
+def _stash_base_url(state: engine.SessionState, context: Context | None) -> None:
+    """Stash the derived base URL onto the in-memory session state so _step_payload
+    can render a web-UI deep link in the step-1 orientation. Only read-only callers
+    use this and it is never saved, so it does not pollute persisted
+    session_parameters."""
+    base = _request_base_url(context)
+    if base:
+        state.session_parameters.setdefault("app_base_url", base)
+
+
+def _coerce_state(value: engine.SessionState | dict[str, Any]) -> engine.SessionState:
+    if isinstance(value, engine.SessionState):
+        return value
+    return build_session_state(value)
+
+
+def _session_track(record: dict[str, Any]) -> str:
+    """The track a session walks (D-30): ``resolve_track`` unchanged, the SPA's rule,
+    so the MCP outline equals the SPA outline. Legacy MCP sessions carry
+    coding_assistant="genie-code", which resolves to genie-accelerator."""
+
+    track = resolve_track(record)
+    assert track in engine.MANIFEST.tracks, track
+    return track
+
+
+def _load_session_for_request(
+    session_id: str | None,
+    context: Context | None = None,
+    track: str | None = None,
+    _record_out: list[dict[str, Any]] | None = None,
+) -> tuple[engine.SessionState, str] | None:
+    """Resolve and authorize a session, reading Lakebase on every request.
+
+    ``_record_out``, when given, receives the loaded record so
+    ``_load_session_and_track`` resolves the track without a second read."""
+
+    if not session_id:
+        return None
+    record = load_session(session_id)
+    if record is None:
+        if not is_lakebase_configured():
+            return engine.SessionState(), session_id
+        return None
+    owner = record.get("created_by")
+    caller = _request_user(context)
+    if owner and caller != "unknown" and owner != caller:
+        return None
+    if _record_out is not None:
+        _record_out.append(record)
+    return build_session_state(record), session_id
+
+
+def _load_session_and_track(
+    session_id: str | None,
+    context: Context | None = None,
+    track: str | None = None,
+) -> tuple[engine.SessionState, str, str] | None:
+    """``_load_session_for_request`` plus the session's track (D-30, D-32).
+
+    An explicit ``track`` (vibe_start_track's validated request) wins; otherwise
+    the track is resolved from the record. With no record (local dev without
+    Lakebase) it is DEFAULT_TRACK."""
+
+    records: list[dict[str, Any]] = []
+    loaded = _load_session_for_request(session_id, context, track, _record_out=records)
+    if loaded is None:
+        return None
+    state, resolved_id = loaded
+    if track:
+        resolved = track
+    elif records:
+        resolved = _session_track(records[0])
+    else:
+        resolved = DEFAULT_TRACK
+    return state, resolved_id, resolved
+
+
+def _persist_mcp_delta(
+    session_id: str,
+    before: engine.SessionState,
+    after: engine.SessionState,
+    *,
+    session_parameters: dict[str, Any] | None = None,
+    **save_kwargs: Any,
+) -> bool:
+    """Persist only what this MCP call changed, under the row lock (D-9).
+
+    ``before`` is a deep copy of the state taken right after
+    ``_load_session_for_request``; ``after`` is the mutated state. The delta is
+    the gates ``after`` adds, the output keys that are new or changed, and the
+    keys of ``session_parameters`` (the resolved params; omitted => no parameter
+    write) that are new or changed versus ``before``. Writing full values would
+    overwrite an App write that committed between the MCP read and this write;
+    the MCP path never removes a gate or key, so the delta is all it needs.
+    ``save_kwargs`` are the non-JSONB ``save_session`` columns (COALESCE).
+    """
+
+    add_gates = [gate for gate in after.completed_gates if gate not in before.completed_gates]
+    set_outputs = {
+        key: value
+        for key, value in after.captured_outputs.items()
+        if key not in before.captured_outputs or before.captured_outputs[key] != value
+    }
+    set_params = {
+        key: value
+        for key, value in (session_parameters or {}).items()
+        if key not in before.session_parameters or before.session_parameters[key] != value
+    }
+    return save_session_applying_mcp_delta(
+        session_id,
+        add_gates=add_gates,
+        set_outputs=set_outputs,
+        set_params=set_params,
+        **save_kwargs,
+    )
+
+
+def _outline_items(track: str, state: engine.SessionState) -> list[OutlineItem]:
+    return [OutlineItem(**asdict(item)) for item in engine.outline(track, state)]
+
+
+def _default_use_case(track: str) -> str:
+    """The use-case fallback for rendering: the track's manifest title (D-30a)."""
+
+    return engine.MANIFEST.tracks[track].title
+
+
+def _session_name(track: str, use_case: str | None) -> str:
+    """The MCP session name (D-31): the "Genie Code — " client prefix, plus the
+    track title on every track except genie-accelerator (byte-identical names)."""
+
+    if track == _UNTITLED_NAME_TRACK:
+        return f"Genie Code — {use_case}" if use_case else "Genie Code Workshop"
+    title = engine.MANIFEST.tracks[track].title
+    return f"Genie Code — {title}: {use_case}" if use_case else f"Genie Code — {title}"
+
+
+def _next_reference(track: str, state: engine.SessionState, step: manifest.Step) -> StepReference:
+    # Order against the SAME composition engine.outline uses — _ordered_steps
+    # threads BOTH flags and composition inputs (direction / chainContext), so the
+    # "next" pointer stays consistent with the outline on the variant tracks
+    # (lakehouse climb, end-to-end reverse). Passing flags but omitting inputs
+    # here ordered against the input-blind default and disagreed mid-track.
+    ordered = engine._ordered_steps(track, state)
+    ordered_tags = {candidate.sectionTag for candidate in ordered}
+    # Pre-journey intent beat (Option A): use_case_selection is not a numbered step,
+    # so it has no position in the ordered outline — its "next" is the first
+    # numbered step (project_setup) the learner reaches once the use case locks.
+    if step.sectionTag == _INTENT_BEAT_STEP.sectionTag and step.sectionTag not in ordered_tags:
+        if ordered:
+            return StepReference(sectionTag=ordered[0].sectionTag, title=ordered[0].title)
+        return StepReference(sectionTag="", title="Track complete")
+    index = next((idx for idx, candidate in enumerate(ordered) if candidate.sectionTag == step.sectionTag), None)
+    if index is not None and index + 1 < len(ordered):
+        following = ordered[index + 1]
+        return StepReference(sectionTag=following.sectionTag, title=following.title)
+    # Off-outline step (an explicitly requested flag-filtered tag, resolved via
+    # the authored-manifest fallback, D-16/D-17): "next after this step" in the
+    # learner's track order. Walk the outline IN OUTLINE ORDER — consistent with
+    # the variant tracks, where climb/reverse compose an order that differs from
+    # authored order — and take the first step authored after this one. Only
+    # outline steps qualify, so it never points at another filtered step.
+    if index is None:
+        authored_index = {
+            candidate.sectionTag: idx for idx, candidate in enumerate(engine.MANIFEST.track_steps(track))
+        }
+        position = authored_index.get(step.sectionTag)
+        if position is not None:
+            for candidate in ordered:
+                if authored_index.get(candidate.sectionTag, -1) > position:
+                    return StepReference(sectionTag=candidate.sectionTag, title=candidate.title)
+    return StepReference(sectionTag="", title="Track complete")
+
+
+def decision_capture_key(section_tag: str, interaction_id: str) -> str:
+    return f"interaction_decision:{section_tag}:{interaction_id}"
+
+
+def interaction_answered_key(section_tag: str, interaction_id: str) -> str:
+    """Marker that a comprehension check was answered (suppresses the post-check
+    reminder in vibe_complete_step). Distinct namespace from decision_capture_key
+    so it never collides with gating or produce keys."""
+    return f"interaction_answered:{section_tag}:{interaction_id}"
+
+
+def _quiz_view(interaction: Interaction) -> Interaction:
+    """Redact the answer key from a comprehension check before it ships.
+
+    Comprehension quizzes must be *asked*, not announced: leaking `recommended`
+    (the correct option) or `coaching` (the per-option verdicts) into the step
+    payload lets the agent front-run the answer. Strip both for
+    ``type == "comprehension"`` only — decisions/confirms legitimately surface
+    their recommended default. The verdict still reaches the learner AFTER they
+    answer, via `vibe_submit_answer`/`_resolve_interaction_answer`, which reads
+    the un-redacted block straight from the manifest (`_find_interaction`), so
+    silence-accepts-recommended is unaffected.
+    """
+
+    if interaction.type != "comprehension":
+        return interaction
+    return interaction.model_copy(update={"recommended": None, "coaching": {}})
+
+
+def _interaction_payload(section_tag: str) -> dict[str, Interaction | None] | None:
+    blocks = manifest.interactions_for(section_tag)
+    if not blocks:
+        return None
+    return {
+        slot: _quiz_view(Interaction.model_validate(block)) if block is not None else None
+        for slot in manifest.INTERACTION_SLOTS
+        for block in [blocks.get(slot)]
+    }
+
+
+def _pending_post_check(
+    section_tag: str, state: engine.SessionState
+) -> Interaction | None:
+    """The just-completed step's post comprehension check, redacted, if still due.
+
+    vibe_complete_step re-surfaces this so the agent asks the quiz at the moment
+    it is due — the slim step payload plus long-run drift let the client skip the
+    optional post check silently. Only comprehension checks are re-surfaced, and
+    only until the learner has answered (marker recorded by vibe_submit_answer).
+    """
+    blocks = manifest.interactions_for(section_tag) or {}
+    post = blocks.get("post")
+    if not isinstance(post, dict) or post.get("type") != "comprehension":
+        return None
+    if interaction_answered_key(section_tag, str(post.get("id") or "")) in state.captured_outputs:
+        return None
+    return _quiz_view(Interaction.model_validate(post))
+
+
+def _find_interaction(
+    interaction_id: str,
+) -> tuple[str, str, Interaction] | None:
+    for section_tag, blocks in manifest.load_interactions().items():
+        for slot in manifest.INTERACTION_SLOTS:
+            block = blocks.get(slot)
+            if isinstance(block, dict) and block.get("id") == interaction_id:
+                return section_tag, slot, Interaction.model_validate(block)
+    return None
+
+
+def _resolve_interaction_answer(
+    interaction: Interaction, answer: str
+) -> tuple[str, bool, str]:
+    silent = not answer.strip()
+    if silent and interaction.skippable and interaction.recommended is not None:
+        resolved = interaction.recommended
+        was_default = True
+    else:
+        resolved = answer.strip()
+        was_default = False
+
+    for option in interaction.options:
+        if resolved == option.id or resolved.casefold() == option.label.casefold():
+            resolved = option.id
+            break
+    coaching = interaction.coaching.get(
+        resolved,
+        "Thanks — I’ll carry that answer forward without blocking the track.",
+    )
+    return resolved, was_default, coaching
+
+
+# Cache of FMAPI-generated step prompts, keyed by (session, section, input-hash).
+# The web path renders each copy-paste prompt through the app's streaming
+# generator (`stream_llm_response`); the MCP path drains that same generator
+# (`collect_step_prompt_via_stream`) for consistency, but re-generating on every
+# `vibe_get_step`/`vibe_next_step` read would be slow and costly. Cache only
+# successful ("llm_generated") outputs so a failed result is retried once its
+# negative-cache entry (below) expires.
+_STEP_PROMPT_CACHE: dict[tuple[str, str, str], str] = {}
+
+# Wall-clock budget for a single MCP step-prompt generation on the MCP read
+# path. It bounds how long the READER waits, not the generation: the SDK/httpx
+# timeouts only bound a stalled or failed request (120s is per-read, between
+# chunks), so a flowing stream has no total bound and can outlast 90s (plan
+# 2026-10-02-latency-generation-success §6). 90s is kept well under the observed
+# Genie Code client default. On expiry the read degrades to the
+# assembled template (identical to any FMAPI failure); the generation keeps
+# running on a daemon thread and still populates the cache on success, so the
+# next read is instant (late-success caching).
+STEP_PROMPT_BUDGET_S = 90.0
+
+# Single-flight registry: at most one in-flight generation per cache key. Reads
+# arriving while a generation for the same key is running JOIN its Future (with
+# their own budget) instead of starting a second generation. The daemon
+# generation thread resolves the Future and writes _STEP_PROMPT_CACHE on success,
+# then pops the key — so a generation that finishes after every waiting read
+# timed out still lands in the cache (late-success caching).
+_STEP_PROMPT_LOCK = threading.Lock()
+_STEP_PROMPT_INFLIGHT: dict[tuple[str, str, str], "concurrent.futures.Future[str | None]"] = {}
+
+# Negative cache: a key maps to the monotonic time at which its "this generation
+# truly failed" verdict expires. Checked under _STEP_PROMPT_LOCK BEFORE electing or
+# joining, so a read for a known-failing key returns the template instantly instead
+# of re-running a (slow, truncating, or erroring) generation on every poll. Written
+# ONLY on a TRUE failure that the generation RESOLVED (exception, error event,
+# truncation, empty content) — NEVER on a budget abandonment, which leaves the
+# generation in flight so a late success can still land and cache (late-success
+# caching). On TTL expiry the key is dropped and the next read elects a fresh
+# generation, so the PR #77 retry-after-failure contract holds across the TTL.
+_STEP_PROMPT_NEGATIVE_TTL_S = 300.0
+_STEP_PROMPT_NEGATIVE: dict[tuple[str, str, str], float] = {}
+
+
+def _extract_llm_generated(result: Any) -> str | None:
+    """Return the generated prompt only for a genuine LLM result, else None.
+
+    Every non-``llm_generated`` source (mock_llm, fallback_due_to_error,
+    bypass_llm, input_only_no_llm) already returns the raw input, so the MCP path
+    keeps its assembled (genie-code) template by degrading to None.
+    """
+
+    if not isinstance(result, dict) or result.get("source") != "llm_generated":
+        return None
+    generated = (result.get("prompt") or "").strip()
+    return generated or None
+
+
+def _generate_step_prompt(
+    industry: str,
+    use_case: str,
+    section_tag: str,
+    assembled: dict[str, Any],
+    previous_outputs: dict[str, str] | None,
+    session_id: str | None,
+) -> str | None:
+    """Generate the copy-paste prompt via the app FMAPI, matching the web path.
+
+    Returns the LLM-generated prompt, or ``None`` to signal "use the assembled
+    template verbatim". None is returned for ``bypass_llm`` sections, whenever the
+    generation fails (error event, truncated or empty stream, exception) or is
+    negative-cached from a recent failure, and when the read budget expires, so
+    the step never fails to render.
+    """
+
+    if assembled.get("bypass_llm"):
+        return None
+    input_text = assembled.get("input") or ""
+    if not input_text:
+        return None
+    cache_key = (
+        session_id or "",
+        section_tag,
+        hashlib.sha256(input_text.encode("utf-8")).hexdigest(),
+    )
+    cached = _STEP_PROMPT_CACHE.get(cache_key)
+    if cached is not None:
+        return cached
+
+    # Single-flight: the first reader for this key becomes the owner and starts
+    # the generation; overlapping readers join the same Future. Guard the
+    # registry with the lock so exactly one owner is elected per key.
+    with _STEP_PROMPT_LOCK:
+        # Re-check the cache under the lock (TOCTOU): a generation that completed
+        # between the unlocked check above and here has already written the cache
+        # and popped the registry, so electing a fresh owner would redundantly
+        # regenerate. The success-only semantics are unchanged — a failed
+        # generation writes nothing, so a later read still re-generates.
+        cached = _STEP_PROMPT_CACHE.get(cache_key)
+        if cached is not None:
+            return cached
+        # Negative cache: a key whose last generation truly failed degrades straight
+        # to the template for the TTL, without electing or joining a generation. On
+        # expiry we drop the entry and fall through to a fresh election (retry).
+        neg_expiry = _STEP_PROMPT_NEGATIVE.get(cache_key)
+        if neg_expiry is not None:
+            if neg_expiry > time.monotonic():
+                return None
+            del _STEP_PROMPT_NEGATIVE[cache_key]
+        future = _STEP_PROMPT_INFLIGHT.get(cache_key)
+        is_owner = future is None
+        if is_owner:
+            future = concurrent.futures.Future()
+            _STEP_PROMPT_INFLIGHT[cache_key] = future
+
+    if is_owner:
+        async def _generate_and_resolve() -> None:
+            # Runs on the daemon generation thread (see _run_async_blocking). It
+            # resolves the Future and writes the cache even if the owner already
+            # abandoned the join on budget expiry, so a late success still lands
+            # (late-success caching). Always degrade to the template (None) on any
+            # failure — generation is best-effort. A TRULY-RESOLVED failure (the
+            # collector returned None, or raised) writes the negative-cache entry so
+            # the next read within the TTL short-circuits to the template; a budget
+            # abandonment resolves nothing here (the stream is still draining) and so
+            # writes NO negative entry, keeping late-success caching possible.
+            try:
+                from .api.routes import collect_step_prompt_via_stream
+
+                result = await collect_step_prompt_via_stream(
+                    industry=industry,
+                    use_case=use_case,
+                    section_tag=section_tag,
+                    previous_outputs=previous_outputs,
+                    session_id=session_id,
+                    coding_assistant=DEFAULT_CODING_ASSISTANT,
+                )
+                generated = _extract_llm_generated(result)
+                if generated is not None:
+                    _STEP_PROMPT_CACHE[cache_key] = generated
+                else:
+                    # True failure (collector named the cause in its own WARNING):
+                    # record the negative entry and degrade to the template.
+                    with _STEP_PROMPT_LOCK:
+                        _STEP_PROMPT_NEGATIVE[cache_key] = time.monotonic() + _STEP_PROMPT_NEGATIVE_TTL_S
+                    logger.info(
+                        "MCP step-prompt generation failed for %s; template served, "
+                        "negative-cached for %.0fs",
+                        section_tag,
+                        _STEP_PROMPT_NEGATIVE_TTL_S,
+                    )
+                future.set_result(generated)
+            except BaseException:  # noqa: BLE001 — best-effort; degrade to template
+                with _STEP_PROMPT_LOCK:
+                    _STEP_PROMPT_NEGATIVE[cache_key] = time.monotonic() + _STEP_PROMPT_NEGATIVE_TTL_S
+                logger.warning(
+                    "MCP step-prompt generation raised for %s; using assembled template, "
+                    "negative-cached for %.0fs",
+                    section_tag,
+                    _STEP_PROMPT_NEGATIVE_TTL_S,
+                    exc_info=True,
+                )
+                future.set_result(None)
+            finally:
+                with _STEP_PROMPT_LOCK:
+                    _STEP_PROMPT_INFLIGHT.pop(cache_key, None)
+
+        try:
+            # The daemon thread drives generation to completion (and resolves the
+            # Future) regardless of this join; we wait only up to the budget.
+            _run_async_blocking(_generate_and_resolve, timeout_s=STEP_PROMPT_BUDGET_S)
+        except TimeoutError:
+            logger.warning(
+                "MCP step-prompt generation exceeded %.0fs budget for %s; using assembled template",
+                STEP_PROMPT_BUDGET_S,
+                section_tag,
+            )
+            return None
+        # Completed within budget: the coroutine already resolved the Future.
+        return future.result()
+
+    # Joiner: never starts a second generation — wait on the owner's Future with
+    # this read's own budget, degrading to the template on expiry.
+    try:
+        return future.result(timeout=STEP_PROMPT_BUDGET_S)
+    except concurrent.futures.TimeoutError:
+        logger.warning(
+            "MCP step-prompt generation exceeded %.0fs budget for %s; using assembled template",
+            STEP_PROMPT_BUDGET_S,
+            section_tag,
+        )
+        return None
+
+
+# Repo the workshop clones from. Kept in lockstep with the genie-code variant in
+# frontend `src/components/SetUpProjectStep.tsx` (REPO_URL / the three genie-*
+# commands / genieVerifyPrompt) — the web UI and the MCP path must run the SAME
+# one-time setup. There is no shared TS<->Py module, so this mirror is the single
+# backend copy; update both together.
+_WORKSHOP_TEMPLATE_REPO = "https://github.com/databricks-solutions/vibe-coding-workshop-template.git"
+
+
+def _project_setup_content(email: str) -> dict[str, str]:
+    """Render the Genie Code one-time setup (clone -> publish skills -> validate).
+
+    ``project_setup`` authors no seed row, so the MCP path used to surface an
+    empty template. The real setup lives in the web UI's ``SetUpProjectStep``
+    (genie-code variant); this mirrors it so the agent runs the exact same three
+    gated commands transparently and reports the result, instead of skipping the
+    step. ``email`` falls back to a visible placeholder when the session has not
+    resolved the learner's identity yet (same as the frontend).
+    """
+
+    email = email.strip() or "<your_email>"
+    user_root = f"/Workspace/Users/{email}"
+    project_path = f"{user_root}/vibe-coding-workshop"
+    skill_check = (
+        f"{user_root}/.assistant/skills/vibe-coding-workshop/"
+        "skills/genie-code-environment/SKILL.md"
+    )
+    clone_cmd = f"git clone {_WORKSHOP_TEMPLATE_REPO} {project_path}"
+    copy_cmd = (
+        f'D={user_root}; rm -rf "$D/.assistant/skills/vibe-coding-workshop"; '
+        'mkdir -p "$D/.assistant/skills"; '
+        'cp -R "$D/vibe-coding-workshop" "$D/.assistant/skills/"'
+    )
+    validate_cmd = (
+        f'D={user_root}; '
+        'test -d "$D/vibe-coding-workshop/.git" && echo "✅ 1/2 project cloned" '
+        '|| echo "❌ 1/2 re-run command 1"; '
+        'test -f "$D/.assistant/skills/vibe-coding-workshop/skills/'
+        'genie-code-environment/SKILL.md" && echo "✅ 2/2 skills published" '
+        '|| echo "❌ 2/2 re-run command 2"'
+    )
+    prompt = (
+        "One-time project setup for Genie Code. Run these three terminal commands "
+        "in order in the Genie Code terminal, show the learner each command and its "
+        "output, and STOP if validation is not two green checks.\n\n"
+        f"1) Clone the workshop into your project folder:\n{clone_cmd}\n\n"
+        f"2) Publish the whole clone into your skills folder:\n{copy_cmd}\n\n"
+        f"3) Validate (gate) — do not continue until you see two ✅:\n{validate_cmd}\n\n"
+        "Then, in ONE executeCode block, re-verify with os.path.exists (NOT "
+        f"listFiles): {project_path}/.git and {skill_check}. If either is missing, "
+        "STOP and tell the learner which command to re-run. Finally load the "
+        "behavior manifest with readSkillFile(\"skills/vibe-coding-workshop/skills/"
+        "genie-code-environment/SKILL.md\") and confirm 'Setup verified ✅'."
+    )
+    how_to_apply = (
+        "You are inside Genie Code — pre-authenticated and serverless (no "
+        "`databricks auth login`, no model setup). Present each command verbatim, "
+        "run it, and report the output. Command 2 is safe to re-run. The paths are "
+        f"filled with the learner's Databricks email ({email})."
+    )
+    expected_output = (
+        "The validate step prints two green checks:\n"
+        "✅ 1/2 project cloned\n"
+        "✅ 2/2 skills published\n"
+        "and the re-verify confirms both paths exist before the manifest loads."
+    )
+    user_trigger_prompt = (
+        "Set up my project: clone the workshop repo into my workspace, publish the "
+        "skills folder, and validate that setup is complete."
+    )
+    return {
+        "prompt": prompt,
+        "how_to_apply": how_to_apply,
+        "expected_output": expected_output,
+        "user_trigger_prompt": user_trigger_prompt,
+    }
+
+
+# --- Pre-journey use-case intent beat (Option A) -----------------------------
+# use_case_selection was retired as a numbered outline step. A fresh Genie Code
+# learner who has NOT pre-picked a use case is still asked ONCE, up front, before
+# the first numbered step (guardrail #3) — mirroring the App's step 1 "Define Your
+# Intent". This synthetic step is surfaced by vibe_next_step / vibe_get_step /
+# vibe_explain_step while the use case is unresolved; it is NOT a manifest step and
+# is never advanced THROUGH via vibe_complete_step, which on the beat follows D-8
+# (idempotent success once locked; GATE_REQUIRED steering to vibe_set_parameters
+# while unlocked). Locking the use case (vibe_set_parameters, or
+# vibe_start_track with industry+use_case) resolves the gate via
+# engine.resolve_use_case, after which the walk proceeds to project_setup.
+_INTENT_BEAT_STEP = manifest.Step(
+    order=1,
+    sectionTag=engine.USE_CASE_GATE,
+    title="Define Your Use Case",
+    why=(
+        "Lock the use case up front so the PRD, semantic layer, agent, and "
+        "dashboard are all built for one governed target."
+    ),
+    requiresGate=None,
+    consumes=[],
+    produces=engine.USE_CASE_BRIEF,
+    execution="agent-doable",
+)
+
+
+def _needs_use_case(state: engine.SessionState) -> bool:
+    """Whether the pre-journey use-case pick is still due for this session."""
+
+    return not engine.use_case_resolved(state)
+
+
+def _build_use_case_brief(params: dict[str, Any]) -> str:
+    """Assemble the ``use_case_brief`` artifact (D11 §3.3) from locked parameters.
+
+    Track-agnostic; its job is to lock and record the choice (provenance +
+    downstream narrative), not to re-plumb rendering — the assembler already keys
+    on ``industry``/``use_case`` in session_parameters. ``description`` is present
+    for a custom (author-your-own) use case, carrying the FMAPI-drafted brief.
+    """
+
+    source = "custom" if params.get("use_case_source") == "custom" else "curated"
+    brief: dict[str, Any] = {
+        "industry": str(params.get("industry") or ""),
+        "use_case": str(params.get("use_case") or ""),
+        "use_case_label": str(params.get("use_case_label") or params.get("use_case") or ""),
+        "source": source,
+        "selected_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+    }
+    if source == "custom":
+        description = str(
+            params.get("use_case_description")
+            or params.get("custom_drafted_description")
+            or ""
+        ).strip()
+        if description:
+            brief["description"] = description
+    return json.dumps(brief)
+
+
+def _step_payload(
+    track: str,
+    state: engine.SessionState,
+    step: manifest.Step,
+    session_id: str | None = None,
+) -> ExplainabilityPayload:
+    previous_outputs = engine.resolve_previous_outputs(step, state)
+    industry = state.session_parameters.get("industry", DEFAULT_INDUSTRY)
+    use_case = state.session_parameters.get("use_case", _default_use_case(track))
+    assembled = assembler.get_section_input_content(
+        industry=industry,
+        use_case=use_case,
+        section_tag=step.sectionTag,
+        previous_outputs=previous_outputs,
+        session_id=session_id,
+        coding_assistant_override=DEFAULT_CODING_ASSISTANT,
+    )
+    if step.sectionTag == "project_setup":
+        # Surface the real one-time setup (clone -> publish skills -> validate ->
+        # verify) that otherwise lives only in the web UI. Fixed procedure, so no
+        # FMAPI call; the email drives the learner's /Workspace paths.
+        setup = _project_setup_content(str(state.session_parameters.get("user_email") or ""))
+        prompt = setup["prompt"]
+        user_trigger_prompt = setup["user_trigger_prompt"]
+    else:
+        # Match the web path: render the prompt through the app FMAPI, falling back
+        # to the assembled template when the endpoint is bypassed or unavailable.
+        generated_prompt = _generate_step_prompt(
+            industry=industry,
+            use_case=use_case,
+            section_tag=step.sectionTag,
+            assembled=assembled,
+            previous_outputs=previous_outputs,
+            session_id=session_id,
+        )
+        prompt = generated_prompt if generated_prompt is not None else assembled.get("input", "")
+        user_trigger_prompt = assembled.get("user_trigger_prompt", "")
+    orientation = None
+    if not state.completed_gates and step.order == 1:
+        orientation = ORIENTATION_PREAMBLE
+        # Deep-link handoff (Workstream 2): if a base URL was stashed on the state,
+        # append a ready-to-open web-UI link so the learner can jump between MCP and
+        # the app mid-run using the same session.
+        _base = state.session_parameters.get("app_base_url")
+        if _base and session_id:
+            orientation = f"{orientation}\n\nOpen in the workshop UI: {_base}?sessionId={session_id}"
+    payload = ExplainabilityPayload(
+        sectionTag=step.sectionTag,
+        title=step.title,
+        why=step.why or "",
+        prompt=prompt,
+        user_trigger_prompt=user_trigger_prompt,
+        gate=step.gate,
+        requiresGate=step.requiresGate,
+        consumes=list(step.consumes),
+        produces=step.produces,
+        execution=step.execution,
+        next=_next_reference(track, state, step),
+        interaction=_interaction_payload(step.sectionTag),
+        orientation=orientation,
+        # The wait doctrine rides every triggered step, not just step 1.
+        instruction=STEP_WAIT_DIRECTIVE if user_trigger_prompt else None,
+    )
+    # Workstream D: the use-case picker inlines its options so the Genie Code agent
+    # never has to read a vibe:// resource. Best-effort — a data-layer hiccup must
+    # never keep the step from rendering, so the lists degrade to None.
+    if step.sectionTag == "use_case_selection":
+        try:
+            payload.available_industries = _available_industries()
+            chosen = state.session_parameters.get("industry")
+            if chosen:
+                payload.available_use_cases = _available_use_cases(str(chosen))
+        except Exception:  # noqa: BLE001 — options are advisory, never fatal
+            pass
+    # Data-location CUJ (Workstream 1): surface the effective source catalog/schema
+    # on the Locate Data step — the MCP analog of the web LakehouseParams editor — so
+    # the agent can confirm the default or persist a change via vibe_set_parameters.
+    if step.sectionTag == "semlayer_locate":
+        try:
+            from .api.routes import get_effective_workshop_parameters
+
+            _eff = get_effective_workshop_parameters(session_id)
+            payload.data_location = {
+                "catalog": _eff.get("chapter_3_lakehouse_catalog", "samples"),
+                "schema": _eff.get("chapter_3_lakehouse_schema", "wanderbricks"),
+                "is_overridden": (
+                    "chapter_3_lakehouse_catalog" in state.session_parameters
+                    or "chapter_3_lakehouse_schema" in state.session_parameters
+                ),
+            }
+        except Exception:  # noqa: BLE001 — enrichment is advisory, never fatal
+            pass
+    return payload
+
+
+@mcp.tool(
+    name="vibe_start_track",
+    description=(
+        "Start or resume a guided workshop track (e.g. the Genie Accelerator) for the current user. "
+        "Call this first, in Agent mode, before any other vibe tool. Args: `track` (required), optional "
+        "`use_case`/`industry`/`session_id`. Returns the session id, a `session_url` deep link to open "
+        "the same session in the web UI, and the ordered step outline. Errors if `track` is unknown."
+    ),
+    annotations=ToolAnnotations(
+        readOnlyHint=False,
+        destructiveHint=False,
+        idempotentHint=True,
+        openWorldHint=True,
+    ),
+    structured_output=True,
+)
+def vibe_start_track(
+    track: str,
+    use_case: str | None = None,
+    industry: str | None = None,
+    session_id: str | None = None,
+    context: Context | None = None,
+) -> StartTrackResult:
+    if track not in engine.MANIFEST.tracks:
+        return _error_result("UNKNOWN_TRACK", f"Unknown workshop track: {track}")  # type: ignore[return-value]
+    resolved = session_id or str(uuid.uuid4())
+    loaded = _load_session_and_track(resolved, context, track)
+    if loaded is None:
+        if session_id:
+            return _error_result("INVALID_SESSION", "The requested session could not be resolved.")  # type: ignore[return-value]
+        state = engine.SessionState()
+    else:
+        state, _, _ = loaded
+    before = copy.deepcopy(state)
+    # MCP is exclusively the Genie Code client — mark the session so any other
+    # read path (SPA bridge, the vibe://session/{id}/state resource) resolves
+    # the genie-code fork too. setdefault never clobbers an explicit choice.
+    state.session_parameters.setdefault("coding_assistant", DEFAULT_CODING_ASSISTANT)
+    # Persist the learner's email so the project_setup step can render their
+    # /Workspace/Users/<email> clone + skills paths (Workstream #5). setdefault so
+    # an explicit value is never clobbered; only a real address is stored.
+    _email = _request_user(context)
+    if "@" in _email:
+        state.session_parameters.setdefault("user_email", _email)
+    # D-13 / D-15: an uncatalogued use case is ignored — no gate, no use_case
+    # column or param, default session name — so the intent beat elicits a real
+    # pick and the row earns no step-1 credit. A catalogued industry is still
+    # recorded (by_industry analytics); an uncatalogued one is dropped too. A
+    # catalogue outage ("unavailable") fails open to today's behavior.
+    if industry and use_case and _curated_pair_status(industry, use_case) == "unknown":
+        keep_industry = _industry_label_for(industry, None) is not None
+        logger.info(
+            "vibe_start_track ignoring uncatalogued use case session=%s industry=%r "
+            "use_case=%r keep_industry=%s",
+            resolved,
+            industry,
+            use_case,
+            keep_industry,
+        )
+        use_case = None
+        if not keep_industry:
+            industry = None
+    if not session_id and is_lakebase_configured():
+        # Auto-name the new session so it surfaces in the web UI session menu
+        # (is_saved requires a name that is set and != "New Session"). Refined to
+        # the confirmed use case once it locks in vibe_complete_step (Workstream 3).
+        _initial_name = _session_name(track, use_case)
+        saved = _persist_mcp_delta(
+            resolved,
+            before,
+            state,
+            industry=industry,
+            # R3.1: also persist the *_label columns the by_industry / by_use_case
+            # analytics GROUP BY, so a start-track-only session (which never walks
+            # the selection lock) is not dropped from those breakdowns. Resolved
+            # from the curated list; None when unresolved so save_session COALESCE-
+            # preserves rather than writing a raw id as a label. vibe_start_track
+            # has no use_case_label input, so it is resolved via _use_case_label_for
+            # (NOT a use_case fallback — see that helper's docstring).
+            industry_label=_industry_label_for(industry or "", None),
+            use_case=use_case,
+            use_case_label=_use_case_label_for(industry or "", use_case or ""),
+            session_name=_initial_name,
+            created_by=_request_user(context),
+            # Stamp the walked track as the top-level workshop_level column so the
+            # SPA (which reads response.workshop_level) rebuilds the SAME filtered
+            # outline the MCP walk uses. Without this, a resumed genie-code session
+            # falls back to the assistant cold-start level and the genie gates map
+            # to steps absent from the outline (the live 0/28 defect). This is the
+            # column, NOT a session_parameters JSONB key; save_session COALESCE-
+            # preserves it on later writes (see lakebase.save_session). New sessions
+            # only — resume never reaches this block, so an existing level is safe.
+            workshop_level=track,
+            session_parameters=state.session_parameters,
+        )
+        # D-49: fail closed. save_session_applying_mcp_delta logs and returns
+        # False on any error, so a failed save would otherwise hand back a
+        # session_id that does not exist in Lakebase.
+        if not saved:
+            return _error_result(  # type: ignore[return-value]
+                "SESSION_NOT_SAVED",
+                "The new session could not be saved; nothing was started. Retry, or report this error.",
+            )
+    if industry:
+        state.session_parameters["industry"] = industry
+    if use_case:
+        state.session_parameters["use_case"] = use_case
+    # Pre-journey use-case resolution (Option A): starting a track with BOTH an
+    # industry and a use case resolves the use_case_selection gate up front (writes
+    # the gate string + use_case_brief), so the learner never has to walk a numbered
+    # use-case step and prd_generation is unlocked. Without both, the pre-journey
+    # intent beat elicits the pick on the first vibe_next_step (guardrail #3).
+    if industry and use_case and not engine.use_case_resolved(state):
+        engine.resolve_use_case(state, _build_use_case_brief(state.session_parameters))
+        if is_lakebase_configured():
+            _persist_mcp_delta(
+                resolved, before, state, session_parameters=state.session_parameters
+            )
+    # Deep-link handoff (Workstream 2): hand back a ready-to-open web-UI URL for this
+    # same session so the learner can move freely between MCP and the app. None when
+    # the request headers do not expose a usable host (degrades gracefully).
+    _base = _request_base_url(context)
+    session_url = f"{_base}?sessionId={resolved}" if _base else None
+    return StartTrackResult(
+        session_id=resolved,
+        track=track,
+        outline=_outline_items(track, state),
+        session_url=session_url,
+    )
+
+
+@mcp.tool(
+    name="vibe_get_step",
+    description=(
+        "Fetch one workshop step to present. Returns the prompt to run **verbatim**, why it matters, "
+        "the gate, the next step, and `user_trigger_prompt` — the plain-English ask you MUST show the "
+        "learner verbatim BEFORE doing any work, then WAIT for them to send it (never auto-run or chain "
+        "steps). Call `vibe_explain_step` for how-to or expected output. Args: `session_id`; "
+        "`sectionTag` (optional)."
+    ),
+    annotations=ToolAnnotations(
+        readOnlyHint=True,
+        destructiveHint=False,
+        idempotentHint=True,
+        openWorldHint=True,
+    ),
+    structured_output=True,
+)
+def vibe_get_step(
+    session_id: str,
+    sectionTag: str | None = None,
+    context: Context | None = None,
+) -> ExplainabilityPayload:
+    loaded = _load_session_and_track(session_id, context)
+    if loaded is None:
+        return _error_result("INVALID_SESSION", "The requested session could not be resolved.")  # type: ignore[return-value]
+    state, _, track = loaded
+    state = _coerce_state(state)
+    _stash_base_url(state, context)
+    # The pre-journey intent beat (Option A) is not a manifest step, so it is
+    # resolved here rather than via engine.resolve_step: an explicit request for
+    # use_case_selection, or the default (sectionTag=None) while the use case is
+    # unresolved, returns the beat with its picker payload.
+    if sectionTag == _INTENT_BEAT_STEP.sectionTag or (sectionTag is None and _needs_use_case(state)):
+        return _step_payload(track, state, _INTENT_BEAT_STEP, session_id=session_id)
+    if sectionTag is None:
+        current = engine.next_step(track, state)
+        if isinstance(current, engine.Done):
+            return _error_result("UNKNOWN_STEP", "The track has no remaining step.")  # type: ignore[return-value]
+        if isinstance(current, engine.Blocked):
+            return _blocked_step_error(current)  # type: ignore[return-value]
+        step = current
+    else:
+        step = engine.resolve_step(track, state, sectionTag)
+        if step is None:
+            return _error_result("UNKNOWN_STEP", f"Unknown workshop step: {sectionTag}", sectionTag=sectionTag)  # type: ignore[return-value]
+        # Pass the ordered-outline tags so this explicit lookup is skip-aware too —
+        # i.e. vibe_get_step and vibe_next_step agree on whether a step after a
+        # (web) skip is open, instead of this call falsely reporting STEP_LOCKED.
+        outline_tags = {item.sectionTag for item in engine.outline(track, state)}
+        if not engine.can_start(step, state, outline_tags):
+            return _error_result("STEP_LOCKED", f"Complete {step.requiresGate} before this step.", sectionTag=sectionTag)  # type: ignore[return-value]
+    return _step_payload(track, state, step, session_id=session_id)
+
+
+def _blocked_step_error(blocked: engine.Blocked) -> _ContractError:
+    """UNKNOWN_STEP for a default (sectionTag=None) lookup on a Blocked walk.
+
+    vibe_get_step / vibe_explain_step keep their single-payload contracts: a
+    blocked walk is a workshop-configuration defect that `vibe_next_step`
+    reports, so these surfaces return an error naming the dangling gate rather
+    than rendering the locked step."""
+
+    return _error_result(
+        "UNKNOWN_STEP",
+        f"The workshop cannot advance because '{blocked.title}' requires "
+        f"'{blocked.requiresGate}' — workshop configuration problem.",
+        sectionTag=blocked.sectionTag,
+    )
+
+
+def _blocked_result(
+    track: str, state: engine.SessionState, blocked: engine.Blocked
+) -> BlockedResult:
+    """Build the blocked payload and emit the defect-signal WARNING.
+
+    After the T5 PR A gate rewire a blocked `next_step` is unreachable on authored
+    data, so any occurrence is a workshop-configuration defect worth a server-side
+    warning. The log carries the track, the composition flags, and the dangling
+    gate only — never session parameters or learner content (no PII)."""
+
+    logger.warning(
+        "vibe_next_step blocked (workshop-config defect): track=%s flags=%s "
+        "locked_step=%s requiresGate=%s",
+        track,
+        engine._flags_for(track, state),
+        blocked.sectionTag,
+        blocked.requiresGate,
+    )
+    message = (
+        f"The workshop cannot advance because '{blocked.title}' requires "
+        f"'{blocked.requiresGate}'. This indicates a workshop configuration "
+        "problem, not a learner action. Tell the learner and stop."
+    )
+    return BlockedResult(
+        blocked_by=BlockedBy(
+            sectionTag=blocked.sectionTag,
+            title=blocked.title,
+            requiresGate=blocked.requiresGate,
+        ),
+        message=message,
+    )
+
+
+@mcp.tool(
+    name="vibe_next_step",
+    description=(
+        "Advance to the first not-yet-completed step in order and return it (same shape as "
+        "`vibe_get_step`, incl. `user_trigger_prompt`). Show its trigger verbatim, then WAIT for the "
+        "learner to submit it — never auto-run or chain steps. Returns `{done:true}` when complete, "
+        "or `{blocked:true, blocked_by}` when that step's prerequisite gate is not yet satisfied. "
+        "Args: `session_id`."
+    ),
+    annotations=ToolAnnotations(
+        readOnlyHint=True,
+        destructiveHint=False,
+        idempotentHint=True,
+        openWorldHint=True,
+    ),
+    structured_output=True,
+)
+def vibe_next_step(session_id: str, context: Context | None = None) -> NextStepResult:
+    loaded = _load_session_and_track(session_id, context)
+    if loaded is None:
+        return _error_result("INVALID_SESSION", "The requested session could not be resolved.")  # type: ignore[return-value]
+    state, _, track = loaded
+    state = _coerce_state(state)
+    _stash_base_url(state, context)
+    # Pre-journey intent beat (Option A, guardrail #3): before the first numbered
+    # step, a learner who has not yet locked a use case is asked to pick one. The
+    # beat is surfaced until the use_case_selection gate resolves (_walk_next_payload).
+    return NextStepResult.model_validate(_walk_next_payload(track, state, session_id))
+
+
+@mcp.tool(
+    name="vibe_explain_step",
+    description=(
+        "On-demand step help: `how_to_apply`, `expected_output`, `title`, `why` (not in the slim "
+        "payload). Call ONLY when the learner asks to explain a step or what to expect. Args: "
+        "`session_id`; `sectionTag` (optional, default current step). Pass `focus` "
+        "(what_now|why|unblock|review) when they ask what to do now, why it matters, are stuck, or "
+        "want a recap: grounded `coaching`, else `is_fallback: true`."
+    ),
+    annotations=ToolAnnotations(
+        readOnlyHint=True,
+        destructiveHint=False,
+        idempotentHint=True,
+        openWorldHint=True,
+    ),
+    structured_output=True,
+)
+def vibe_explain_step(
+    session_id: str,
+    sectionTag: str | None = None,
+    focus: str | None = None,
+    context: Context | None = None,
+) -> StepHelpResult:
+    if focus is not None and focus not in coaching.FOCI:
+        return _error_result(  # type: ignore[return-value]
+            "INVALID_PARAMETER",
+            f"focus must be one of {', '.join(coaching.FOCI)}.",
+        )
+    loaded = _load_session_and_track(session_id, context)
+    if loaded is None:
+        return _error_result("INVALID_SESSION", "The requested session could not be resolved.")  # type: ignore[return-value]
+    state, _, track = loaded
+    state = _coerce_state(state)
+    # Mirror vibe_get_step's intent-beat rule so get, next and explain agree on the
+    # pre-journey beat; its help comes from the same assembler row as the beat.
+    if sectionTag == _INTENT_BEAT_STEP.sectionTag or (sectionTag is None and _needs_use_case(state)):
+        step = _INTENT_BEAT_STEP
+    elif sectionTag is None:
+        current = engine.next_step(track, state)
+        if isinstance(current, engine.Done):
+            return _error_result("UNKNOWN_STEP", "The track has no remaining step.")  # type: ignore[return-value]
+        if isinstance(current, engine.Blocked):
+            return _blocked_step_error(current)  # type: ignore[return-value]
+        step = current
+    else:
+        step = engine.resolve_step(track, state, sectionTag)
+        if step is None:
+            return _error_result("UNKNOWN_STEP", f"Unknown workshop step: {sectionTag}", sectionTag=sectionTag)  # type: ignore[return-value]
+    if step.sectionTag == "project_setup":
+        # project_setup authors no seed row; mirror _step_payload's synthesized content.
+        setup = _project_setup_content(str(state.session_parameters.get("user_email") or ""))
+        how_to_apply = setup["how_to_apply"]
+        expected_output = setup["expected_output"]
+        prompt = setup["prompt"]
+    else:
+        industry = state.session_parameters.get("industry", DEFAULT_INDUSTRY)
+        use_case = state.session_parameters.get("use_case", _default_use_case(track))
+        previous_outputs = engine.resolve_previous_outputs(step, state)
+        assembled = assembler.get_section_input_content(
+            industry=industry,
+            use_case=use_case,
+            section_tag=step.sectionTag,
+            previous_outputs=previous_outputs,
+            session_id=session_id,
+            coding_assistant_override=DEFAULT_CODING_ASSISTANT,
+        )
+        how_to_apply = assembled.get("how_to_apply", "")
+        expected_output = assembled.get("expected_output", "")
+        prompt = assembled.get("input", "")
+    help_result = StepHelpResult(
+        sectionTag=step.sectionTag,
+        title=step.title,
+        why=step.why or "",
+        how_to_apply=how_to_apply,
+        expected_output=expected_output,
+    )
+    if focus is None:
+        return help_result
+    # Coaching is read-only and fail-open (D-22): the static fields stay as built
+    # above; a failed or disabled coach() only sets is_fallback.
+    outcome = coaching.coach(
+        session_id=session_id,
+        step=step,
+        state=state,
+        help={**help_result.model_dump(), "prompt": prompt},
+        focus=focus,
+        track=track,
+        run_blocking=_run_async_blocking,
+    )
+    return help_result.model_copy(
+        update={
+            "coaching": outcome.coaching,
+            "focus": focus,
+            "grounded_on": list(outcome.grounded_on),
+            "is_fallback": outcome.is_fallback,
+        }
+    )
+
+
+# --- Use-case selection lock (D11 §3.3, §3.5) --------------------------------
+# The learner's use case is locked into ``session_parameters`` via
+# ``vibe_set_parameters``. A curated selection needs an industry + use_case; a
+# custom ("author your own") selection additionally needs its authored brief
+# (``use_case_description``) before it can lock. Custom selections stay
+# SESSION-LOCAL — never written to the community library
+# ``saved_usecase_descriptions`` (D11 §2.1 / guardrail #5).
+_SELECTION_REQUIRED = ("industry", "use_case", "use_case_label")
+_CUSTOM_REQUIRED = ("industry", "use_case", "use_case_label", "use_case_description")
+
+# Server-owned keys the engine/draft paths set internally — never a learner input.
+# ``skipped_gates`` is the skip ledger ``engine.can_start`` reads; ``skippedSteps`` is
+# the retired camelCase alias (the engine no longer reads it) — still rejected so an
+# agent cannot plant the old key in ``session_parameters``; ``custom_draft_ready`` /
+# ``custom_drafted_description`` are the FMAPI draft-first markers the use-case confirm
+# gate requires. ``vibe_set_parameters`` merges ``params`` straight into
+# ``session_parameters``, so a Genie Code agent could otherwise forge a skip (or plant
+# the retired skippedSteps alias) or defeat the draft gate; these are rejected on the
+# incoming params before any save.
+_RESERVED_PARAM_KEYS = (
+    "skipped_gates",
+    "skippedSteps",
+    "custom_draft_ready",
+    "custom_drafted_description",
+)
+
+
+def _is_selection_call(params: dict[str, Any]) -> bool:
+    """A ``vibe_set_parameters`` call is a use-case selection when it carries a source."""
+
+    return "use_case_source" in params
+
+
+# Keys whose presence means THIS call is about picking a use case, so the result
+# should echo the inlined discovery lists (Workstream D). Broader than
+# ``_is_selection_call`` on purpose: a bare ``{"industry": ...}`` call — the
+# reworded step body's way to fetch use cases without a vibe:// resource — must
+# still echo ``available_use_cases``.
+_SELECTION_TOUCH_KEYS = (
+    "industry",
+    "use_case",
+    "use_case_label",
+    "use_case_source",
+    "use_case_description",
+    "use_case_hints",
+)
+
+
+def _touches_usecase_selection(params: dict[str, Any]) -> bool:
+    return any(key in params for key in _SELECTION_TOUCH_KEYS)
+
+
+def _selection_missing_required(params: dict[str, Any]) -> list[str]:
+    required = _CUSTOM_REQUIRED if params.get("use_case_source") == "custom" else _SELECTION_REQUIRED
+    return [key for key in required if not str(params.get(key) or "").strip()]
+
+
+def _custom_usecase_locked(params: dict[str, Any]) -> bool:
+    """True once a custom ("author your own") use case is fully locked in-session."""
+
+    return params.get("use_case_source") == "custom" and not _selection_missing_required(params)
+
+
+def _mirror_custom_usecase(params: dict[str, Any]) -> None:
+    """Land a locked custom use case in the fields the assembler actually reads.
+
+    The selection lock is keyed on ``use_case_description``/``use_case_label`` but
+    the prompt assembler resolves ``{use_case_description}`` (and the title) from
+    ``custom_use_case_description``/``custom_use_case_label`` (assembler.py). Without
+    this mirror an MCP-authored custom use case is silently dropped from the PRD
+    and every downstream prompt. Mutates ``params`` in place; never overwrites an
+    explicit custom_* value already present.
+    """
+
+    if params.get("use_case_source") != "custom":
+        return
+    desc = str(params.get("use_case_description") or "").strip()
+    if desc and not str(params.get("custom_use_case_description") or "").strip():
+        params["custom_use_case_description"] = desc
+    label = str(params.get("use_case_label") or "").strip()
+    if label and not str(params.get("custom_use_case_label") or "").strip():
+        params["custom_use_case_label"] = label
+
+
+def _industry_label_for(industry: str, echo: list[dict[str, Any]] | None) -> str | None:
+    """Best-effort value->display-label for an industry (Workstream — R3 item 3).
+
+    The analytics ``by_industry`` breakdown GROUPs BY the top-level
+    ``industry_label`` column, so an MCP session that persists only ``industry``
+    (the value) is dropped from it. The MCP selection contract never carries
+    ``industry_label`` (``_SELECTION_REQUIRED`` is industry/use_case/use_case_label),
+    so it is resolved here from the SAME curated list the echo uses. Reuses the
+    already-computed ``echo`` list when present; otherwise does one best-effort
+    lookup. Returns None when unresolved so ``save_session`` COALESCE-preserves any
+    existing value rather than clobbering it with an empty string.
+    """
+
+    if not industry:
+        return None
+    options = echo
+    if options is None:
+        try:
+            options = _available_industries()
+        except Exception:  # noqa: BLE001 — label resolution is best-effort
+            options = []
+    for opt in options or []:
+        if str(opt.get("value") or "") == industry:
+            label = str(opt.get("label") or "").strip()
+            return label or None
+    return None
+
+
+def _curated_pair_status(industry: str, use_case: str) -> Literal["known", "unknown", "unavailable"]:
+    """Classify an (industry, use_case) pair against the curated catalogue (D-13).
+
+    Built on the SAME ``_available_use_cases(industry)`` list as
+    ``_use_case_label_for``. ``known``: the value is listed. ``unknown``: the list is
+    non-empty and the value is absent — or the list is empty because the industry
+    itself is absent from a non-empty industry list (D-15). ``unavailable``: a lookup
+    raised or the catalogue is empty (down / offline) — callers fail open on it.
+    """
+
+    try:
+        options = _available_use_cases(industry)
+        if not options:
+            industries = _available_industries()
+            if industries and not any(
+                str(opt.get("value") or "") == industry for opt in industries
+            ):
+                return "unknown"
+            return "unavailable"
+    except Exception:  # noqa: BLE001 — a catalogue outage must never break the caller
+        return "unavailable"
+    if any(str(opt.get("value") or "") == use_case for opt in options):
+        return "known"
+    return "unknown"
+
+
+def _use_case_label_for(industry: str, use_case: str) -> str | None:
+    """Best-effort value->display-label for a use case (R3.1 — start-track gap).
+
+    The analytics ``by_use_case`` breakdown GROUPs BY the top-level
+    ``use_case_label`` column, so a start-track-only MCP session that persists only
+    ``use_case`` (the value) is dropped from it. Unlike the selection lock path,
+    ``vibe_start_track`` has NO ``use_case_label`` input, so it is resolved here
+    from the SAME curated list the echo uses — ``_available_use_cases(industry)`` —
+    matching value -> label exactly as ``_industry_label_for`` resolves industries.
+    Returns None when unresolved (unknown pair, or either arg missing) so
+    ``save_session`` COALESCE-preserves any existing value. Crucially NOT the lock
+    path's ``use_case_label or use_case`` fallback: with no label input that would
+    always write the raw id (e.g. ``"booking"``) as a label and forge a second wrong
+    ``by_use_case`` group. Never raises — a lookup failure degrades to None so
+    session creation is never broken.
+    """
+
+    if not industry or not use_case:
+        return None
+    try:
+        options = _available_use_cases(industry)
+    except Exception:  # noqa: BLE001 — label resolution is best-effort
+        options = []
+    for opt in options or []:
+        if str(opt.get("value") or "") == use_case:
+            label = str(opt.get("label") or "").strip()
+            return label or None
+    return None
+
+
+def _run_async_blocking(make_coro: Callable[[], Any], timeout_s: float | None = None) -> Any:
+    """Run an async coroutine to completion from a sync MCP tool.
+
+    FastMCP invokes sync tools directly on the running event loop, so
+    ``asyncio.run`` here would raise "cannot be called from a running event loop".
+    Instead run the coroutine in a dedicated thread with its own loop, wrapped in a
+    copied context so the OBO auth ContextVar propagates (SP fallback otherwise).
+
+    ``timeout_s`` bounds how long the caller waits for the thread. With the default
+    ``None`` the caller waits indefinitely (behaviour-identical to before). With a
+    budget set, the caller raises ``TimeoutError`` on expiry and the thread — a
+    daemon, so it never blocks interpreter shutdown — keeps running to completion;
+    callers that want its late result arrange for it via a side channel (e.g. the
+    step-prompt single-flight Future).
+    """
+
+    ctx = contextvars.copy_context()
+    box: dict[str, Any] = {}
+
+    def runner() -> None:
+        loop = asyncio.new_event_loop()
+        try:
+            box["value"] = loop.run_until_complete(make_coro())
+        except BaseException as exc:  # noqa: BLE001 — re-raised on the calling thread
+            box["error"] = exc
+        finally:
+            # A partially-consumed async generator (truncated FMAPI stream) leaves
+            # its athrow finalizer task scheduled but never run; closing the loop
+            # under it logs "Task was destroyed but it is pending!" on every
+            # generation. Run both shutdowns on the still-open loop, each in its own
+            # try so one failing does not skip the other; a shutdown failure must
+            # never mask the original result/error above.
+            try:
+                loop.run_until_complete(loop.shutdown_asyncgens())
+            except BaseException:  # noqa: BLE001 — best-effort cleanup only
+                logger.debug("shutdown_asyncgens failed on private loop", exc_info=True)
+            try:
+                loop.run_until_complete(loop.shutdown_default_executor())
+            except BaseException:  # noqa: BLE001 — best-effort cleanup only
+                logger.debug("shutdown_default_executor failed on private loop", exc_info=True)
+            loop.close()
+
+    thread = threading.Thread(target=lambda: ctx.run(runner), daemon=True)
+    thread.start()
+    thread.join(timeout_s)
+    if thread.is_alive():
+        raise TimeoutError(f"async operation exceeded {timeout_s}s budget")
+    if "error" in box:
+        raise box["error"]
+    return box["value"]
+
+
+@mcp.tool(
+    name="vibe_complete_step",
+    description=(
+        "Record that the current step's gate passed and store its captured output (the gate = this "
+        "call); advances the walk. Call ONLY after the learner triggered and ran the step in a fresh "
+        "turn — never chain it yourself. If its `interaction` has a `post` check, ask it via "
+        "`vibe_submit_answer` first. Not for `execution:ui-driven` steps. Args: `session_id`, "
+        "`sectionTag`, `captured_output`."
+    ),
+    annotations=ToolAnnotations(
+        readOnlyHint=False,
+        destructiveHint=False,
+        idempotentHint=True,
+        openWorldHint=True,
+    ),
+    structured_output=True,
+)
+def vibe_complete_step(
+    session_id: str,
+    sectionTag: str,
+    captured_output: str,
+    context: Context | None = None,
+) -> CompleteStepResult:
+    loaded = _load_session_and_track(session_id, context)
+    if loaded is None:
+        return _error_result("INVALID_SESSION", "The requested session could not be resolved.")  # type: ignore[return-value]
+
+    state, _, track = loaded
+    before = copy.deepcopy(state)
+    # The intent beat on a track that does not author use_case_selection as a step:
+    # vibe_set_parameters' lock is what completes it (D-8). Once locked, re-completing
+    # is an idempotent success; while unlocked, the guards below steer to the lock.
+    intent_beat = (
+        sectionTag == engine.USE_CASE_GATE
+        and engine.resolve_step(track, state, sectionTag) is None
+    )
+    if intent_beat and engine.use_case_resolved(state):
+        return CompleteStepResult(
+            completed_gates=list(state.completed_gates),
+            next=_walk_next_payload(track, state, session_id),
+            post_check=None,
+        )
+    blocking = manifest.blocking_interactions(sectionTag)
+    if blocking:
+        confirmed = any(
+            decision_capture_key(sectionTag, block["id"]) in state.captured_outputs
+            for block in blocking
+        )
+        # Custom-path unblock (D11 §3.5): a learner who authors their own use case
+        # locks it via vibe_set_parameters; that lock is the recommend-and-proceed
+        # unblock for use_case_selection — proceeding WITHOUT a semantically-wrong
+        # 'use_certified' answer. Scoped to use_case_selection so the generic
+        # gagent_benchmarks gate (answer==recommended only) is provably untouched.
+        if (
+            not confirmed
+            and sectionTag == "use_case_selection"
+            and _custom_usecase_locked(state.session_parameters)
+        ):
+            # Workstream #3: a locked custom use case must have been drafted via the
+            # app FMAPI (draft_custom). Without that marker, refuse the unblock and
+            # steer the agent to the draft rather than a self-authored description.
+            if not state.session_parameters.get("custom_draft_ready"):
+                return _error_result(  # type: ignore[return-value]
+                    "CUSTOM_DRAFT_REQUIRED",
+                    "Draft the custom use case through the app FMAPI first: call "
+                    'vibe_set_parameters(mode="draft_custom"), then confirm the draft.',
+                    sectionTag=sectionTag,
+                )
+            confirmed = True
+        if not confirmed:
+            message = (
+                "Confirm the use case selection before completing this step."
+                if sectionTag == "use_case_selection"
+                else "Confirm the benchmark decision before completing this step."
+            )
+            return _error_result(
+                "GATE_REQUIRED",
+                message,
+                sectionTag=sectionTag,
+            )  # type: ignore[return-value]
+    if intent_beat:
+        # engine.complete_step would answer UNKNOWN_STEP: the beat is not a manifest step.
+        return _error_result(
+            "GATE_REQUIRED",
+            "Lock the use case with vibe_set_parameters (curated: industry, use_case, "
+            'use_case_label, use_case_source; custom: draft first with mode="draft_custom"). '
+            "The lock completes this step.",
+            sectionTag=sectionTag,
+        )  # type: ignore[return-value]
+    result = engine.complete_step(track, state, sectionTag, captured_output)
+    if not result.ok:
+        messages = {
+            "UNKNOWN_TRACK": "Unknown workshop track.",
+            "UNKNOWN_STEP": f"Unknown workshop step: {sectionTag}",
+            "STEP_LOCKED": "The requested step is locked until its prerequisite gate is complete.",
+            "UI_DRIVEN_STEP": "This step is coached and must be completed in the web UI.",
+            "GATE_REQUIRED": "Confirm the blocking interaction before completing this step.",
+        }
+        code = result.error_code or "UNKNOWN_STEP"
+        return _error_result(
+            code,
+            messages.get(code, "The workshop step could not be completed."),
+            sectionTag=sectionTag,
+        )  # type: ignore[return-value]
+
+    # Workstream 3: once the use case locks, refine the auto-name so the web UI
+    # session menu shows what this session is building. None on every other step so
+    # COALESCE preserves any name the learner set in the UI.
+    _refined_name = None
+    if sectionTag == "use_case_selection":
+        _label = (
+            state.session_parameters.get("use_case_label")
+            or state.session_parameters.get("use_case")
+        )
+        if _label:
+            _refined_name = _session_name(track, _label)
+    # Cross-surface progress rides on completed_gates alone (T5 R4a/R4b): the SPA
+    # hydrates its step indicator from the gate set via deriveCompletedStepNumbers,
+    # so MCP-driven progress shows up without any retired numeric progress columns.
+    _persist_mcp_delta(session_id, before, state, session_name=_refined_name)
+
+    return CompleteStepResult(
+        completed_gates=list(result.completed_gates),
+        next=_walk_next_payload(track, state, session_id),
+        post_check=_pending_post_check(sectionTag, state),
+    )
+
+
+def _walk_next_payload(
+    track: str,
+    state: engine.SessionState,
+    session_id: str,
+) -> ExplainabilityPayload | DoneResult | BlockedResult:
+    """What the walk does next: shared by vibe_next_step and vibe_complete_step's ``next``.
+
+    While the use case is unresolved this is the pre-journey intent beat (Option A,
+    guardrail #3), so completing project_setup cannot route past the use-case pick
+    (D-78); otherwise it is the engine's strict-order next step.
+    """
+
+    if _needs_use_case(state):
+        return _step_payload(track, state, _INTENT_BEAT_STEP, session_id=session_id)
+    return _complete_next_payload(track, state, engine.next_step(track, state), session_id)
+
+
+def _complete_next_payload(
+    track: str,
+    state: engine.SessionState,
+    next_step: manifest.Step | engine.Done | engine.Blocked,
+    session_id: str,
+) -> ExplainabilityPayload | DoneResult | BlockedResult:
+    """The ``next`` of a vibe_complete_step result: Done, Blocked, or the step payload."""
+
+    if isinstance(next_step, engine.Done):
+        return DoneResult()
+    if isinstance(next_step, engine.Blocked):
+        return _blocked_result(track, state, next_step)
+    return _step_payload(track, state, next_step, session_id=session_id)
+
+
+@mcp.tool(
+    name="vibe_submit_answer",
+    description=(
+        "Record the learner's answer to a step's `interaction` question — a comprehension check or a "
+        "recommend-and-proceed decision/override — and return coaching feedback. Optional for skippable "
+        "questions (silence applies the recommended default). Args: `session_id`, `interaction_id`, "
+        "`answer` (all required)."
+    ),
+    annotations=ToolAnnotations(
+        readOnlyHint=False,
+        destructiveHint=False,
+        idempotentHint=True,
+        openWorldHint=True,
+    ),
+    structured_output=True,
+)
+def vibe_submit_answer(
+    session_id: str,
+    interaction_id: str,
+    answer: str,
+    context: Context | None = None,
+) -> SubmitAnswerResult:
+    loaded = _load_session_and_track(session_id, context)
+    if loaded is None:
+        return _error_result("INVALID_SESSION", "The requested session could not be resolved.")  # type: ignore[return-value]
+
+    state, _, track = loaded
+    before = copy.deepcopy(state)
+    resolved = _find_interaction(interaction_id)
+    if resolved is None:
+        return _error_result(
+            "UNKNOWN_INTERACTION",
+            f"Unknown workshop interaction: {interaction_id}",
+            interaction_id=interaction_id,
+        )  # type: ignore[return-value]
+    section_tag, slot, interaction = resolved
+    # Which step's interactions are answerable right now. The engine's current step
+    # is always eligible; while the use case is unresolved the pre-journey intent
+    # beat (Option A) is ALSO eligible, so its use_case_selection confirm/comprehension
+    # interactions stay answerable even though the beat is not a manifest step
+    # (the lock via vibe_set_parameters is what resolves the gate). A Blocked walk
+    # has no current step: its locked step cannot be worked, so it is not answerable.
+    current = engine.next_step(track, state)
+    answerable = {None if isinstance(current, (engine.Done, engine.Blocked)) else current.sectionTag}
+    if _needs_use_case(state):
+        answerable.add(_INTENT_BEAT_STEP.sectionTag)
+    # This is the post check that vibe_complete_step re-surfaces for an
+    # already-completed step: by then the engine has moved on, so it is never the
+    # current step. Only a completed step's POST comprehension widens; its pre and
+    # decision/confirm interactions, and any step not yet completed, stay rejected.
+    is_completed_post_check = (
+        slot == "post"
+        and interaction.type == "comprehension"
+        and section_tag in state.completed_gates
+    )
+    if section_tag not in answerable and not is_completed_post_check:
+        return _error_result(
+            "UNKNOWN_INTERACTION",
+            f"Interaction {interaction_id} is not on the current workshop step.",
+            interaction_id=interaction_id,
+        )  # type: ignore[return-value]
+
+    resolved_answer, was_default, coaching = _resolve_interaction_answer(interaction, answer)
+    recorded = append_session_interaction(
+        session_id=session_id,
+        section_tag=section_tag,
+        interaction_id=interaction.id,
+        kind=interaction.type,
+        answer=resolved_answer,
+        recommended=interaction.recommended,
+        was_default=was_default,
+        coaching_shown=coaching,
+        surface="mcp",
+    )
+
+    unblocks = None
+    if recorded and interaction.type in {"decision", "confirm"}:
+        confirmed = (
+            interaction.type == "decision"
+            or (not was_default and resolved_answer == interaction.recommended)
+        )
+        if confirmed:
+            state.captured_outputs[decision_capture_key(section_tag, interaction.id)] = resolved_answer
+            _persist_mcp_delta(session_id, before, state)
+            unblocks = section_tag
+    elif recorded and interaction.type == "comprehension" and slot == "post":
+        # Mark the POST comprehension as answered so vibe_complete_step stops
+        # re-surfacing it as a reminder. Scoped to the post slot (the only one the
+        # reminder targets) so pre/decision checks never touch captured_outputs.
+        # Non-gating — this only suppresses the advisory nudge; a silent accept
+        # still counts as answered.
+        state.captured_outputs[interaction_answered_key(section_tag, interaction.id)] = resolved_answer
+        _persist_mcp_delta(session_id, before, state)
+
+    return SubmitAnswerResult(recorded=recorded, coaching=coaching, unblocks=unblocks)
+
+
+@mcp.tool(
+    name="vibe_set_parameters",
+    description=(
+        "Set/update session parameters, feature flags, and the use-case lock. "
+        "Selection: pass `use_case_source` (curated/custom) with `industry`, `use_case`, "
+        "`use_case_label`; custom also needs `use_case_description` (session-local). "
+        "For a PRD-grade custom brief pass `mode=\"draft_custom\"` (+`use_case_hints`), "
+        "then confirm by resending `use_case_description`. Args: `session_id`, `params`, `mode`."
+    ),
+    annotations=ToolAnnotations(
+        readOnlyHint=False,
+        destructiveHint=False,
+        idempotentHint=True,
+        openWorldHint=True,
+    ),
+    structured_output=True,
+)
+def vibe_set_parameters(
+    session_id: str,
+    params: dict[str, Any],
+    mode: str | None = None,
+    context: Context | None = None,
+) -> SetParametersResult:
+    loaded = _load_session_and_track(session_id, context)
+    if loaded is None:
+        return _error_result("INVALID_SESSION", "The requested session could not be resolved.")  # type: ignore[return-value]
+
+    state, _, track = loaded
+    before = copy.deepcopy(state)
+
+    # Reject server-owned keys in the INCOMING params before any update/save, so a
+    # rejected call persists nothing (all-or-nothing). These are set only by the
+    # engine/draft paths — a learner must never forge a skip or the draft markers.
+    reserved = [key for key in _RESERVED_PARAM_KEYS if key in params]
+    if reserved:
+        return _error_result(  # type: ignore[return-value]
+            "INVALID_PARAMETER",
+            f"{', '.join(reserved)} are server-owned and cannot be set via vibe_set_parameters.",
+        )
+
+    # Friendly data-location aliases (Workstream 1): map the web LakehouseParams
+    # editor's catalog/schema fields onto the workshop parameter keys the assembler
+    # substitutes ({chapter_3_lakehouse_catalog}.{chapter_3_lakehouse_schema}), so an
+    # MCP learner retargets the Locate Data source the same way the UI does. Raw keys
+    # still work; a blank value is rejected rather than silently clearing the default.
+    _DATA_LOCATION_ALIASES = {
+        "data_catalog": "chapter_3_lakehouse_catalog",
+        "data_schema": "chapter_3_lakehouse_schema",
+    }
+    for _alias, _target in _DATA_LOCATION_ALIASES.items():
+        if _alias in params:
+            _value = str(params.pop(_alias) or "").strip()
+            if not _value:
+                return _error_result(  # type: ignore[return-value]
+                    "INVALID_PARAMETER",
+                    f"{_alias} must be a non-empty catalog/schema name.",
+                )
+            params[_target] = _value
+
+    # Reject an unknown industry BEFORE persisting anything (Workstream D). The
+    # authoritative set is the industries that actually have use cases
+    # (``get_use_cases_map()`` keys) — NOT ``get_industries()``, whose YAML fallback
+    # can omit an industry that still has curated use cases. Fail-open on an empty
+    # map so a data-layer outage never blocks a selection.
+    if "industry" in params:
+        from .api.routes import get_use_cases_map
+
+        known_industries = set(get_use_cases_map().keys())
+        industry_val = str(params.get("industry") or "")
+        if known_industries and industry_val not in known_industries:
+            return _error_result(  # type: ignore[return-value]
+                "UNKNOWN_INDUSTRY",
+                f"Unknown industry '{industry_val}'. Choose one from available_industries.",
+            )
+
+    state.session_parameters.update(params)
+    # MCP is exclusively Genie Code: keep the fork marker present so a merge that
+    # omits it never silently drops the session back to the __default__ prompt.
+    state.session_parameters.setdefault("coding_assistant", DEFAULT_CODING_ASSISTANT)
+    # A confirmed custom use case must land in the fields the assembler reads.
+    _mirror_custom_usecase(state.session_parameters)
+    resolved_params = dict(state.session_parameters)
+
+    # Echo the inlined discovery lists on any selection-touching call so the agent
+    # never has to read a vibe:// resource (Workstream D). Best-effort; None on a
+    # plain non-selection merge (e.g. {"catalog": ...}).
+    echo_industries: list[dict[str, Any]] | None = None
+    echo_use_cases: list[dict[str, Any]] | None = None
+    if _touches_usecase_selection(params):
+        try:
+            echo_industries = _available_industries()
+            chosen = str(resolved_params.get("industry") or "").strip()
+            if chosen:
+                echo_use_cases = _available_use_cases(chosen)
+        except Exception:  # noqa: BLE001 — echo is advisory, never fatal
+            pass
+
+    # draft_custom: generate a PRD-grade brief from the app's use-case builder and
+    # return it for review WITHOUT persisting a description (the learner confirms
+    # it back through a normal call carrying use_case_description).
+    if mode == "draft_custom":
+        if resolved_params.get("use_case_source") != "custom":
+            return _error_result(  # type: ignore[return-value]
+                "DRAFT_PRECONDITION",
+                "draft_custom requires use_case_source=custom.",
+            )
+        name = str(
+            resolved_params.get("use_case_label") or resolved_params.get("use_case") or ""
+        ).strip()
+        hints = str(resolved_params.get("use_case_hints") or "").strip()
+        if not (name or hints):
+            return _error_result(  # type: ignore[return-value]
+                "DRAFT_PRECONDITION",
+                "Provide a use case name (use_case_label) or use_case_hints to draft.",
+            )
+        # Persist the merged inputs (industry/source/label/hints) but NOT a draft.
+        _persist_mcp_delta(session_id, before, state, session_parameters=resolved_params)
+        from .api.routes import UseCaseGenerateRequest, generate_usecase_description
+
+        industry = str(resolved_params.get("industry") or "").strip() or None
+        request_body = UseCaseGenerateRequest(
+            industry=industry,
+            use_case_name=name or None,
+            hints=hints or None,
+            mode="generate",
+        )
+        drafted = _run_async_blocking(lambda: generate_usecase_description(request_body))
+        # Record that the app FMAPI produced a draft for THIS session. The confirm
+        # gate (both here and in vibe_complete_step) requires this marker, so a
+        # custom use case can never be locked from a self-authored description —
+        # the learner must route through the FMAPI draft first (Workstream #3).
+        resolved_params["custom_draft_ready"] = True
+        resolved_params["custom_drafted_description"] = drafted
+        _persist_mcp_delta(session_id, before, state, session_parameters=resolved_params)
+        return SetParametersResult(
+            resolved_params=resolved_params,
+            missing_required=_selection_missing_required(resolved_params),
+            drafted_description=drafted,
+            available_industries=echo_industries,
+            available_use_cases=echo_use_cases,
+        )
+
+    # Workstream #3: a custom use case cannot be locked from a self-authored
+    # description — it must come from the app FMAPI draft. Reject a completed
+    # custom selection (source=custom, nothing missing) that never ran
+    # draft_custom (no ``custom_draft_ready`` marker), pointing the agent at it.
+    if (
+        _is_selection_call(params)
+        and _custom_usecase_locked(resolved_params)
+        and not resolved_params.get("custom_draft_ready")
+    ):
+        return _error_result(  # type: ignore[return-value]
+            "CUSTOM_DRAFT_REQUIRED",
+            'Custom use cases must be drafted through the app FMAPI first. Call '
+            'vibe_set_parameters(mode="draft_custom") with use_case_source=custom '
+            "and a use_case_label or use_case_hints, then confirm the returned draft.",
+        )
+
+    # Whether THIS call is a use-case selection is decided from the incoming
+    # params — never from the accumulated resolved state — so an unrelated later
+    # merge (e.g. {"catalog": ...}) keeps the plain-merge contract even after a
+    # prior selection left use_case_source in session_parameters (B2).
+    missing_required = (
+        _selection_missing_required(resolved_params)
+        if _is_selection_call(params)
+        else []
+    )
+
+    # Pre-journey use-case resolution (Option A). A fully-locked selection (this
+    # call carries a source and nothing required is missing) resolves the
+    # use_case_selection gate up front — writing the gate string to completed_gates
+    # AND the use_case_brief artifact to captured_outputs, mirroring App step 1.
+    # A custom selection has already cleared the FMAPI-draft gate above, so a lock
+    # here is legitimate. This replaces the retired vibe_complete_step path for
+    # use_case_selection; the gate then unlocks prd_generation
+    # (requiresGate="use_case_selection", consumes=["use_case_brief"]).
+    resolved_use_case = False
+    if _is_selection_call(params) and not missing_required:
+        newly = engine.resolve_use_case(state, _build_use_case_brief(resolved_params))
+        resolved_use_case = engine.use_case_resolved(state)
+        # Refine the auto-name to what this session is building — only when the
+        # gate is newly resolved, so COALESCE preserves a name the learner set.
+        refined_name = None
+        if newly:
+            label = resolved_params.get("use_case_label") or resolved_params.get("use_case")
+            if label:
+                refined_name = _session_name(track, label)
+        # R3 item 3: persist the top-level industry/use_case columns (NOT just the
+        # session_parameters JSONB) so this MCP-locked session earns step-1 credit
+        # (the aggregation reads industry AND use_case) AND appears in the
+        # industry/use-case analytics breakdowns (which GROUP BY the *_label
+        # columns). Labels: use_case_label is carried in resolved_params (a
+        # selection required key); industry_label is resolved here from the same
+        # curated list the echo uses. save_session COALESCE-preserves None, so a
+        # missing value never clobbers an existing one (pass None, not "").
+        _lock_industry = str(resolved_params.get("industry") or "").strip() or None
+        _lock_use_case = str(resolved_params.get("use_case") or "").strip() or None
+        _lock_use_case_label = (
+            str(resolved_params.get("use_case_label") or resolved_params.get("use_case") or "").strip()
+            or None
+        )
+        _lock_industry_label = (
+            str(resolved_params.get("industry_label") or "").strip()
+            or _industry_label_for(_lock_industry or "", echo_industries)
+        )
+        _persist_mcp_delta(
+            session_id,
+            before,
+            state,
+            session_name=refined_name,
+            industry=_lock_industry,
+            industry_label=_lock_industry_label,
+            use_case=_lock_use_case,
+            use_case_label=_lock_use_case_label,
+            session_parameters=resolved_params,
+        )
+    else:
+        _persist_mcp_delta(session_id, before, state, session_parameters=resolved_params)
+    return SetParametersResult(
+        resolved_params=resolved_params,
+        missing_required=missing_required,
+        available_industries=echo_industries,
+        available_use_cases=echo_use_cases,
+        use_case_resolved=resolved_use_case,
+    )
+
+
+def _track_overview(track: str) -> str:
+    if track not in engine.MANIFEST.tracks:
+        return json.dumps({"error": "UNKNOWN_TRACK", "track": track})
+    selected = engine.MANIFEST.tracks[track]
+    sections = [
+        {"id": section.id, "title": section.title, "chapter": section.chapter, "why": section.why}
+        for section in selected.sections
+    ]
+    return json.dumps({"track": track, "title": selected.title, "sections": sections}, indent=2)
+
+
+def read_getting_started() -> str:
+    return GETTING_STARTED_GUIDE
+
+
+def _available_industries() -> list[dict[str, Any]]:
+    """Curated industry options as a list of {value, label} dicts.
+
+    The single source of truth for both the ``vibe://usecases/industries`` resource
+    (SPA/user-attach path) and the inlined tool payload / ``vibe_set_parameters``
+    echo (Workstream D — the Genie Code agent cannot read resources). Backed by the
+    SAME ``get_industries()`` seam the SPA uses; lazy-imported so nothing triggers a
+    Databricks/Lakebase call at registration time. The leading ``value == ""``
+    placeholder ("Select an industry...") is a dropdown affordance and is dropped so
+    an agent sees only real options.
+    """
+    from .api.routes import get_industries
+
+    return [
+        {"value": opt.get("value"), "label": opt.get("label")}
+        for opt in get_industries()
+        if opt.get("value")
+    ]
+
+
+def _available_use_cases(industry: str) -> list[dict[str, Any]]:
+    """Use cases for one industry, CERTIFIED-FIRST, as a list of dicts.
+
+    Shared by the ``vibe://usecases/{industry}`` resource and the inlined payload /
+    echo. Backed by ``get_use_cases_map()``, which returns RAW Lakebase order —
+    certified-first is frontend-only today — so the ordering is enforced here with a
+    stable sort (``is_certified`` True sorts ahead; original order preserved within
+    each group). The empty ``"Select a use case..."`` placeholder is dropped. Each
+    entry carries value/label/category/is_certified.
+    """
+    from .api.routes import get_use_cases_map
+
+    entries = [e for e in get_use_cases_map().get(industry, []) if e.get("value")]
+    ordered = sorted(entries, key=lambda e: not bool(e.get("is_certified")))
+    return [
+        {
+            "value": e.get("value"),
+            "label": e.get("label"),
+            "category": e.get("category"),
+            "is_certified": bool(e.get("is_certified")),
+        }
+        for e in ordered
+    ]
+
+
+def _usecase_industries_resource() -> str:
+    """Curated industry options for use-case selection (D11 §3.1).
+
+    Backed by the SAME seam the SPA uses — ``get_industries()`` — so there is one
+    source of truth and no fork. Lazy-imported so registration triggers no
+    import-time Databricks/Lakebase call. The leading ``value == ""`` placeholder
+    ("Select an industry...") is a dropdown affordance and is dropped here so an
+    agent sees only real options.
+    """
+    return json.dumps({"industries": _available_industries()}, indent=2)
+
+
+def _usecases_for_industry_resource(industry: str) -> str:
+    """Use cases for one industry, CERTIFIED-FIRST (D11 §3.1).
+
+    Backed by ``get_use_cases_map()``. That seam returns RAW Lakebase order —
+    certified-first is frontend-only today — so the ordering is enforced here with
+    a stable sort (``is_certified`` True sorts ahead; original order preserved
+    within each group). The empty ``"Select a use case..."`` placeholder is
+    dropped. Each entry carries value/label/category/is_certified.
+    """
+    return json.dumps(
+        {"industry": industry, "use_cases": _available_use_cases(industry)}, indent=2
+    )
+
+
+def _session_state_resource(session_id: str, context: Context | None = None) -> str:
+    loaded = _load_session_and_track(session_id, context)
+    if loaded is None:
+        return json.dumps({"isError": True, "error": {"code": "INVALID_SESSION"}})
+    state, _, track = loaded
+    outline = [item.model_dump() for item in _outline_items(track, state)]
+    return json.dumps(
+        {
+            "outline": outline,
+            "completed_gates": list(state.completed_gates),
+            "captured_output_keys": sorted(state.captured_outputs),
+        },
+        indent=2,
+    )
+
+
+mcp._resource_manager.add_template(
+    _track_overview,
+    uri_template="vibe://track/{track}/overview",
+    name="vibe-track-overview",
+    description="Track narrative and manifest sections.",
+    meta={"ttlMs": 3_600_000, "cacheScope": "global"},
+)
+mcp._resource_manager.add_template(
+    _session_state_resource,
+    uri_template="vibe://session/{session_id}/state",
+    name="vibe-session-state",
+    description="Fresh live session state and gate ledger.",
+    meta={"ttlMs": 0, "cacheScope": "session"},
+)
+mcp.add_resource(
+    TextResource(
+        uri="vibe://style/vibecoding",
+        name="vibe-style-vibecoding",
+        description="Vibe Coding gate-ledger convention.",
+        mime_type="text/markdown",
+        text=VIBECODING_STYLE,
+        meta={"ttlMs": 86_400_000, "cacheScope": "global"},
+    )
+)
+mcp.add_resource(
+    TextResource(
+        uri="vibe://guide/getting-started",
+        name="vibe-guide-getting-started",
+        description="Self-serve workshop orientation and troubleshooting.",
+        mime_type="text/markdown",
+        text=GETTING_STARTED_GUIDE,
+        meta={"ttlMs": 86_400_000, "cacheScope": "global"},
+    )
+)
+mcp.add_resource(
+    FunctionResource(
+        uri="vibe://usecases/industries",
+        name="vibe-usecases-industries",
+        description="Curated industry options (value/label) for use-case selection.",
+        mime_type="application/json",
+        fn=_usecase_industries_resource,
+        meta={"ttlMs": 3_600_000, "cacheScope": "global"},
+    )
+)
+mcp._resource_manager.add_template(
+    _usecases_for_industry_resource,
+    uri_template="vibe://usecases/{industry}",
+    name="vibe-usecases-for-industry",
+    description="Use cases for an industry, certified-first, each with value/label/category/is_certified.",
+    mime_type="application/json",
+    meta={"ttlMs": 3_600_000, "cacheScope": "global"},
+)
+
+
+@mcp.prompt(
+    name="Start the Genie Accelerator",
+    description="Start the first-run Genie Accelerator orientation and present step one.",
+)
+def start_genie_accelerator(use_case: str | None = None, industry: str | None = None) -> str:
+    parameters = []
+    if use_case:
+        parameters.append(f'use_case="{use_case}"')
+    if industry:
+        parameters.append(f'industry="{industry}"')
+    suffix = ", " + ", ".join(parameters) if parameters else ""
+    return (
+        f"{ORIENTATION_PREAMBLE}\n\n"
+        "Start the Genie Accelerator by calling `vibe_start_track` with "
+        f'{{track:"genie-accelerator"{suffix}}}, then call `vibe_get_step`. '
+        "Present the returned `prompt` verbatim first, then narrate `why`, the gate, and the next "
+        "step, and show `user_trigger_prompt` verbatim before waiting. Call `vibe_explain_step` if the "
+        "learner asks how to apply the step or what to expect. Keep questions in chat."
+    )
+
+
+@mcp.prompt(
+    name="Start a workshop track",
+    description="Start the first-run orientation on any workshop track and present step one.",
+)
+def start_track(track: str | None = None, use_case: str | None = None, industry: str | None = None) -> str:
+    if track not in engine.MANIFEST.tracks:
+        valid = ", ".join(sorted(engine.MANIFEST.tracks))
+        lead = f"Unknown workshop track: {track}." if track else "Choose a workshop track."
+        return (
+            f"{lead} Valid tracks: {valid}. Start one with this prompt, then present each "
+            "step's `prompt` verbatim first."
+        )
+    parameters = [f'track:"{track}"']
+    if use_case:
+        parameters.append(f'use_case="{use_case}"')
+    if industry:
+        parameters.append(f'industry="{industry}"')
+    title = engine.MANIFEST.tracks[track].title
+    return (
+        f"{ORIENTATION_PREAMBLE}\n\n"
+        f"Start the {title} track by calling `vibe_start_track` with "
+        f"{{{', '.join(parameters)}}}, then call `vibe_get_step`. "
+        "Present the returned `prompt` verbatim first, then narrate `why`, the gate, and the next "
+        "step, and show `user_trigger_prompt` verbatim before waiting. Call `vibe_explain_step` if the "
+        "learner asks how to apply the step or what to expect. Keep questions in chat."
+    )
+
+
+@mcp.prompt(
+    name="Continue where I left off",
+    description="Resume the current workshop session without repeating first-run orientation.",
+)
+def continue_where_left_off() -> str:
+    return (
+        "Read `vibe://session/{session_id}/state`, call `vibe_next_step`, and resume the learner. "
+        "Present the returned `prompt` verbatim first, then narrate the supporting fields."
+    )
+
+
+@mcp.prompt(
+    name="How does this workshop work?",
+    description="Explain the workshop using the server-side getting-started guide.",
+)
+def how_workshop_works() -> str:
+    return (
+        "Read `vibe://guide/getting-started` and explain how to answer in chat, how progress and "
+        "gates work, the one benchmark hard stop, troubleshooting, and how to mirror progress in "
+        "the web UI. When presenting a step later, always present its prompt verbatim first."
+    )
+
+
+def contract_error_results_for_tests() -> dict[str, _ContractError]:
+    """Expose representative typed failures for the D8 contract test."""
+
+    return {
+        code: _error_result(code, f"Expected workshop error: {code}")
+        for code in ("UNKNOWN_TRACK", "INVALID_SESSION", "UNKNOWN_STEP", "STEP_LOCKED")
+    }
+
+
+mcp._install_error_aware_handler()
+
+
+mcp_app = mcp.http_app(path="/", transport="streamable-http", stateless_http=True)

@@ -53,9 +53,11 @@ export function ConfigurationPage() {
   const [toasts, setToasts] = useState<Toast[]>([]);
   
   // Update active tab when URL changes
-  useEffect(() => {
+  const [prevTab, setPrevTab] = useState(tab);
+  if (tab !== prevTab) {
+    setPrevTab(tab);
     setActiveTab(getActiveTab());
-  }, [tab]);
+  }
 
   // Auto-dismiss toasts
   useEffect(() => {

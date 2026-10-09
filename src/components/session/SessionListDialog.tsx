@@ -189,7 +189,15 @@ export function SessionListDialog({
                         )}
                         
                         <span className="flex items-center gap-1">
-                          Step {session.current_step} of 20
+                          {(() => {
+                            // T5 R3/R4b: gate-derived completed count, surfaced by
+                            // the backend (completed_step_count). No fixed
+                            // denominator — the track length varies with
+                            // level/toggles, so "of X" would be wrong.
+                            const done = session.completed_step_count ?? 0;
+                            if (done === 0) return 'Not started';
+                            return `${done} ${done === 1 ? 'step' : 'steps'} done`;
+                          })()}
                         </span>
                         
                         {session.updated_at && (

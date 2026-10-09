@@ -96,19 +96,28 @@ export const DEFAULT_CODING_ASSISTANTS_CONFIG: CodingAssistantConfigEntry[] = [
 ];
 
 /**
- * Per-assistant cold-start workshop level. Applied ONLY when the user picks
- * an assistant on a fresh session that hasn't had an explicit level chosen
- * yet. Saved sessions and explicit user selections are never overridden.
+ * Per-assistant cold-start workshop level, used as a LEGACY FALLBACK only.
  *
- * Genie Code doesn't yet give the best experience on the full Apps + Lakebase
- * chapters end-to-end, so we default new Genie Code sessions to the 4h
- * Lakehouse + AI/Agents flow (`lakehouse-di`) which it can run cleanly. Other
- * assistants fall through to the system default (end-to-end).
+ * Applied when the user picks an assistant on a fresh session (and when a
+ * resumed session has no meaningful persisted `workshop_level` — see
+ * `resolveRestoredLevel` in constants/restoreLevel.ts). A real persisted
+ * `workshop_level` now
+ * wins ABOVE this map on resume; saved explicit selections and use-case locks
+ * still win over everything.
+ *
+ * MCP is exclusively the Genie Code client and walks the `genie-accelerator`
+ * track, so Genie Code's cold-start default is `genie-accelerator` — the track
+ * whose outline actually contains the genie gates. (It used to be
+ * `lakehouse-di`, whose outline strips the genie sections; a resumed genie-code
+ * session then mapped its genie gates to absent steps and collapsed to 0/28.)
+ * This value also rescues pre-fix genie-code sessions still holding the bare
+ * legacy `workshop_level='300'`, which does not normalize to a real track.
+ * Other assistants fall through to the system default (end-to-end).
  *
  * Stored as a string literal to keep this module free of cross-imports from
  * workflowSections.ts. Consumers narrow it via `WorkshopLevel` at the call
  * site.
  */
 export const DEFAULT_LEVEL_BY_ASSISTANT: Partial<Record<AssistantId, string>> = {
-  'genie-code': 'lakehouse-di',
+  'genie-code': 'genie-accelerator',
 };

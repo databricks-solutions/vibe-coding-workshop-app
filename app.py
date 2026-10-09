@@ -4,10 +4,12 @@ Databricks Apps Entry Point - FastAPI Application
 Serves both the React frontend and API endpoints.
 """
 
+import asyncio
 import os
 import sys
 import time
 from collections import deque
+from contextlib import asynccontextmanager
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -18,12 +20,123 @@ if backend_path not in sys.path:
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
 
 # Import the API router
-from src.backend.api.routes import router as api_router
 from src.backend.api.hackathon import router as hackathon_router
+from src.backend.api.routes import router as api_router
+from src.backend.executor import configure_default_executor, shutdown_executor
+
+MCP_MOUNT_ENABLED = os.environ.get("MCP_MOUNT_ENABLED", "").strip().lower() in {
+    "1",
+    "true",
+    "yes",
+    "on",
+}
+
+
+if MCP_MOUNT_ENABLED:
+    from src.backend.mcp_server import mcp_app
+
+
+@asynccontextmanager
+async def app_lifespan(_app):
+    # The dedicated default executor (VIBE_THREAD_POOL_SIZE) is installed on the
+    # running loop whether or not /mcp is mounted; the MCP session manager's
+    # lifespan is wrapped inside it when the mount is enabled.
+    configure_default_executor(asyncio.get_running_loop())
+    try:
+        if MCP_MOUNT_ENABLED:
+            async with mcp_app.router.lifespan_context(mcp_app):
+                yield
+        else:
+            yield
+    finally:
+        shutdown_executor()
+
+
+_MCP_DUAL_ACCEPT = b"application/json, text/event-stream"
+
+_MCP_METHOD_NOT_ALLOWED_BODY = (
+    b'{"jsonrpc":"2.0","error":{"code":-32000,'
+    b'"message":"Method not allowed (stateless server)."},"id":null}'
+)
+
+
+async def _mcp_method_not_allowed(send):
+    """Send a 405 JSON-RPC error (CORS headers are added by CORSMiddleware)."""
+    await send({
+        "type": "http.response.start",
+        "status": 405,
+        "headers": [
+            (b"content-type", b"application/json"),
+            (b"content-length", str(len(_MCP_METHOD_NOT_ALLOWED_BODY)).encode()),
+        ],
+    })
+    await send({"type": "http.response.body", "body": _MCP_METHOD_NOT_ALLOWED_BODY})
+
+
+def _normalize_mcp_accept(headers):
+    """Widen a JSON-only / wildcard / empty Accept to the dual MCP value.
+
+    The Streamable HTTP transport's POST handler returns 406 unless Accept lists
+    BOTH application/json and text/event-stream. Genie Code's browser save-time
+    validation (and gateway probes) send Accept: application/json or */*, so the
+    handshake 406s and the "Add MCP server" entry silently fails to persist.
+    Since the server runs with json_response=True, replying with plain JSON is
+    always valid, so widening the Accept is safe. A client that already lists
+    text/event-stream is left untouched. Ref:
+    https://docs.databricks.com/aws/en/genie-code/mcp
+    """
+    result = []
+    seen = False
+    for name, value in headers:
+        if name == b"accept":
+            seen = True
+            lower = value.lower()
+            has_json = b"application/json" in lower or b"*/*" in lower
+            has_event_stream = b"text/event-stream" in lower
+            if not (has_json and has_event_stream):
+                value = _MCP_DUAL_ACCEPT
+        result.append((name, value))
+    if not seen:
+        result.append((b"accept", _MCP_DUAL_ACCEPT))
+    return result
+
+
+class _MCPPathRewrite:
+    """Rewrite the exact MCP path + normalize Accept before Starlette routes."""
+
+    def __init__(self, app):
+        # Param MUST be named `app`: Starlette instantiates middleware as
+        # cls(app=app, ...) (by keyword), so a different name (e.g. asgi_app)
+        # raises TypeError at middleware-stack build time and 500s every route.
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        path = scope.get("path", "") if scope["type"] == "http" else ""
+        if path == "/mcp" or path.startswith("/mcp/"):
+            if scope.get("method") in {"GET", "DELETE"}:
+                # Stateless server: there is no standalone server->client SSE
+                # stream and no session to tear down. FastMCP answers GET with a
+                # 200 text/event-stream that hangs forever (no data). Genie Code
+                # opens that stream during "Add MCP server" validation and stalls
+                # waiting on it, so the entry never persists. Match the proven
+                # Genie Code reference (register-mcp.ts) and reject GET/DELETE
+                # with 405 so the client proceeds instead of waiting.
+                await _mcp_method_not_allowed(send)
+                return
+            scope = dict(scope)
+            if path == "/mcp":
+                scope["path"] = "/mcp/"
+                # Deterministic + idempotent: we only reach here when
+                # path == "/mcp", so the rewritten raw_path is unambiguously
+                # b"/mcp/". Appending would double-slash if this ran twice.
+                scope["raw_path"] = b"/mcp/"
+            # Clear the transport's 406 Accept gate for JSON-only/`*/*` clients.
+            scope["headers"] = _normalize_mcp_accept(scope.get("headers", []))
+        await self.app(scope, receive, send)
 
 # Get the directory where this script is located
 BASE_DIR = Path(__file__).resolve().parent
@@ -35,7 +148,10 @@ app = FastAPI(
     title="Vibe Coding Workshop API",
     description="AI-Powered Development Workflow Application - All UI data served from backend",
     version="2.0.0",
+    lifespan=app_lifespan,
 )
+if MCP_MOUNT_ENABLED:
+    app.add_middleware(_MCPPathRewrite)
 
 # ============== Security Configuration ==============
 # All values below are env-tunable so prod can override without code changes.
@@ -106,9 +222,15 @@ async def security_middleware(request: Request, call_next):
 app.add_middleware(
     CORSMiddleware,
     allow_origins=ALLOWED_ORIGINS,
-    allow_credentials=False,
+    # Genie Code connects to /mcp cross-origin (workspace origin -> app origin)
+    # with credentials. Browsers require an explicit origin (never "*") together
+    # with credentials, and the MCP client must be able to read mcp-session-id.
+    # ALLOWED_ORIGINS carries the workspace URL. Ref:
+    # https://docs.databricks.com/aws/en/genie-code/mcp
+    allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
     allow_headers=["*"],
+    expose_headers=["mcp-session-id", "mcp-protocol-version"],
 )
 
 # Include the API router with /api prefix
@@ -158,12 +280,22 @@ UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
 app.mount("/uploads", StaticFiles(directory=str(UPLOADS_DIR)), name="uploads")
 
 
+if MCP_MOUNT_ENABLED:
+    app.mount("/mcp", mcp_app, name="mcp")
+
+
 # Catch-all route for React SPA - must be LAST
 @app.get("/{full_path:path}")
 async def serve_spa(full_path: str):
     """Serve the React SPA for all non-API routes."""
     # Don't serve index.html for API routes
-    if full_path.startswith("api/") or full_path == "health" or full_path == "docs" or full_path == "openapi.json":
+    if (
+        full_path.startswith("api/")
+        or full_path == "health"
+        or full_path == "docs"
+        or full_path == "openapi.json"
+        or (MCP_MOUNT_ENABLED and (full_path == "mcp" or full_path.startswith("mcp/")))
+    ):
         return JSONResponse({"error": "Not found"}, status_code=404)
     
     # Serve static files from dist/ if they exist (e.g. brand-config.json)

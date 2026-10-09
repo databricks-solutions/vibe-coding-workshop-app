@@ -17,12 +17,13 @@ import math
 import time
 import asyncio
 import yaml
+from dataclasses import asdict
 from pathlib import Path
 import uuid
 from fastapi import APIRouter, HTTPException, Response, UploadFile, File, Form, Request
 from fastapi.responses import StreamingResponse, FileResponse
-from pydantic import BaseModel, Field
-from typing import List, Dict, Optional, Any, AsyncGenerator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
+from typing import List, Dict, Literal, Optional, Any, AsyncGenerator
 from datetime import datetime, timezone
 
 SECTION_TAG_RE = re.compile(r"^[a-zA-Z0-9_-]{1,64}$")
@@ -215,7 +216,7 @@ def _refresh_lakebase_cache():
                 SELECT DISTINCT ON (section_tag, coding_assistant)
                     section_tag, coding_assistant, input_template, system_prompt,
                     section_title, section_description,
-                    order_number, version, how_to_apply, expected_output, bypass_llm,
+                    order_number, version, how_to_apply, expected_output, user_trigger_prompt, bypass_llm,
                     how_to_apply_images, expected_output_images
                 FROM {schema}.section_input_prompts
                 WHERE is_active = TRUE
@@ -342,16 +343,22 @@ def _parse_image_field(value: Any) -> List[Any]:
 
 
 def _section_row_to_template(row: Dict[str, Any]) -> Dict[str, Any]:
-    """Convert a section_input_prompts row into the legacy template dict shape."""
+    """Convert a section_input_prompts row into the legacy template dict shape.
+
+    Text fields use `or ""` (not a default arg): a nullable column deserializes
+    to a key that is PRESENT with value None, so `.get(k, "")` would leak None
+    downstream and crash the assembler's `.replace` substitution.
+    """
     return {
-        "input": row.get("input_template", ""),
-        "system_prompt": row.get("system_prompt", ""),
-        "how_to_apply": row.get("how_to_apply", ""),
-        "expected_output": row.get("expected_output", ""),
+        "input": row.get("input_template") or "",
+        "system_prompt": row.get("system_prompt") or "",
+        "how_to_apply": row.get("how_to_apply") or "",
+        "expected_output": row.get("expected_output") or "",
+        "user_trigger_prompt": row.get("user_trigger_prompt") or "",
         "how_to_apply_images": _parse_image_field(row.get("how_to_apply_images")),
         "expected_output_images": _parse_image_field(row.get("expected_output_images")),
-        "section_title": row.get("section_title", ""),
-        "section_description": row.get("section_description", ""),
+        "section_title": row.get("section_title") or "",
+        "section_description": row.get("section_description") or "",
         "order_number": row.get("order_number", 99),
         "bypass_llm": row.get("bypass_llm", False),
     }
@@ -400,6 +407,7 @@ def get_section_input_template(
             "section_description",
             "how_to_apply",
             "expected_output",
+            "user_trigger_prompt",
             "how_to_apply_images",
             "expected_output_images",
             "order_number",
@@ -430,139 +438,17 @@ except ImportError:
 # When running as a Databricks App, the SDK automatically uses OAuth credentials
 # injected by the platform - no token needed!
 
-# Default serving endpoint - can be overridden via environment variable
-# Common endpoint names in Databricks workspaces:
-# - databricks-meta-llama-3-1-70b-instruct (Foundation Model API)
-# - databricks-dbrx-instruct (Foundation Model API)
-# - databricks-mixtral-8x7b-instruct (Foundation Model API)
-# - Custom endpoints deployed in your workspace
-# Default endpoint (Claude Sonnet 4.5)
-SERVING_ENDPOINT_NAME = os.getenv("DATABRICKS_SERVING_ENDPOINT", "databricks-claude-sonnet-4-5")
-
-# Fallback endpoints to try if the configured/default endpoint is not deployed in
-# the current workspace (e.g. Claude is unavailable on Databricks Free Edition).
-# Ordered instruct-first (plain string content) then reasoning models.
-FALLBACK_ENDPOINTS = [
-    "databricks-meta-llama-3-3-70b-instruct",
-    "databricks-llama-4-maverick",
-    "databricks-gemma-3-12b",
-    "databricks-meta-llama-3-1-8b-instruct",
-    "databricks-qwen3-next-80b-a3b-instruct",
-    "databricks-gpt-oss-120b",
-]
-
-# Initialize WorkspaceClient - automatically handles auth when running as Databricks App
-# Uses OAuth from environment when deployed, falls back to config file for local dev
-_workspace_client = None
-_available_endpoints_cache = None
-
-def get_workspace_client() -> Optional['WorkspaceClient']:
-    """
-    Get or create the Databricks WorkspaceClient.
-    When running as a Databricks App, authentication is automatic via OAuth.
-    """
-    global _workspace_client
-    if _workspace_client is None and DATABRICKS_SDK_AVAILABLE:
-        try:
-            from src.backend.identity import get_tagged_workspace_client, PRODUCT_NAME, PRODUCT_VERSION
-            _workspace_client = get_tagged_workspace_client()
-            logger.info("Databricks WorkspaceClient initialized (UA: %s/%s)", PRODUCT_NAME, PRODUCT_VERSION)
-        except Exception as e:
-            logger.warning(f"Could not initialize WorkspaceClient: {e}")
-            import traceback
-            logger.warning(f"  Traceback: {traceback.format_exc()}")
-    return _workspace_client
-
-
-def get_available_serving_endpoints() -> List[str]:
-    """
-    Get list of available serving endpoints in the workspace.
-    Results are cached to avoid repeated API calls.
-    """
-    global _available_endpoints_cache
-    
-    if _available_endpoints_cache is not None:
-        return _available_endpoints_cache
-    
-    client = get_workspace_client()
-    if not client:
-        logger.warning("Cannot list endpoints - WorkspaceClient not available")
-        return []
-    
-    try:
-        logger.info("Fetching available serving endpoints from workspace...")
-        endpoints = client.serving_endpoints.list()
-        endpoint_names = [ep.name for ep in endpoints if ep.name]
-        _available_endpoints_cache = endpoint_names
-        logger.info(f"Found {len(endpoint_names)} serving endpoints: {endpoint_names}")
-        return endpoint_names
-    except Exception as e:
-        logger.error(f"Error listing serving endpoints: {e}")
-        return []
-
-
-def get_best_available_endpoint() -> Optional[str]:
-    """
-    Resolve the serving endpoint to use, with environment-aware fallback.
-
-    The configured/default endpoint (``SERVING_ENDPOINT_NAME``) is the primary.
-    When fallback is enabled (default) and the primary is not deployed in this
-    workspace - e.g. Claude on Databricks Free Edition - the first available
-    endpoint from ``FALLBACK_ENDPOINTS`` is used instead. If endpoints cannot be
-    listed, the primary is returned unchanged (identical to prior behavior).
-
-    Set ``DATABRICKS_ENDPOINT_FALLBACK=false`` to disable and always return the
-    primary (kill-switch).
-    """
-    primary = SERVING_ENDPOINT_NAME
-
-    # Kill-switch: preserve prior behavior exactly (return the configured primary).
-    if os.getenv("DATABRICKS_ENDPOINT_FALLBACK", "true").strip().lower() == "false":
-        return primary
-
-    available = get_available_serving_endpoints()  # cached; [] on any failure
-
-    # If we cannot list endpoints, or the primary is deployed here, use the primary.
-    if not available or primary in available:
-        return primary
-
-    # Primary not deployed in this workspace: fall back to a known available model.
-    for fallback in FALLBACK_ENDPOINTS:
-        if fallback in available:
-            logger.info(
-                f"Primary endpoint '{primary}' not available; using fallback: {fallback}"
-            )
-            return fallback
-
-    first_available = available[0]
-    logger.info(
-        f"Primary endpoint '{primary}' not available and no known fallback present; "
-        f"using first available endpoint: {first_available}"
-    )
-    return first_available
-
-
-def _extract_text(content: Any) -> str:
-    """Normalize a serving-endpoint message/delta ``content`` to a plain string.
-
-    Reasoning models (e.g. gpt-oss, qwen35 on Free Edition) return ``content`` as
-    a list of parts such as
-    ``[{"type": "reasoning", ...}, {"type": "text", "text": "Hi"}]``; only the
-    ``text`` parts are user-facing. Plain chat models return a string, which
-    passes through unchanged so existing (Claude/Llama/Gemma) behavior is
-    identical.
-    """
-    if isinstance(content, str):
-        return content
-    if isinstance(content, list):
-        return "".join(
-            part["text"]
-            for part in content
-            if isinstance(part, dict)
-            and part.get("type") == "text"
-            and isinstance(part.get("text"), str)
-        )
-    return "" if content is None else str(content)
+# Serving-endpoint seam: lives in src.backend.services.llm (D-20); re-exported
+# here so routes.<name> and every in-routes caller keep working unchanged.
+from src.backend.services.llm import (
+    SERVING_ENDPOINT_NAME,
+    FALLBACK_ENDPOINTS,
+    get_workspace_client,
+    get_available_serving_endpoints,
+    get_best_available_endpoint,
+    _extract_text,
+    call_databricks_serving_endpoint,
+)
 
 # ============== Data Models ==============
 
@@ -1238,292 +1124,11 @@ def get_effective_workshop_parameters(session_id: Optional[str] = None) -> Dict[
     return params
 
 
-def get_section_input_content(industry: str, use_case: str, section_tag: str, previous_outputs: Optional[Dict[str, str]] = None, session_id: Optional[str] = None, coding_assistant_override: Optional[str] = None) -> Dict[str, str]:
-    """
-    Get the input content (context/requirements) for a specific section.
-    Templates are loaded from prompts_config.yaml with parameter substitution.
-    
-    Parameters substituted:
-      - {industry_name}: Formatted industry name
-      - {use_case_title}: Formatted use case title
-      - {use_case_description}: Full prompt template text for this use case
-      - {section_tag}: The section identifier
-      - {prd_document}: PRD document from Step 2 (for UI design steps)
-      - Workshop parameters: {workspace_url}, {lakebase_instance_name}, {lakebase_host_name}, {default_warehouse}
-      - Any other keys from previous_outputs dict
-    """
-    industry_name = format_industry_name(industry)
-    use_case_title = format_use_case_name(use_case)
-    
-    # Look up the detailed use case description from prompt_templates
-    prompt_templates = get_prompt_templates_map()
-    use_case_description = ""
-    
-    if industry.lower() in prompt_templates:
-        industry_templates = prompt_templates[industry.lower()]
-        if use_case.lower() in industry_templates:
-            use_case_description = industry_templates[use_case.lower()]
-    
-    # Fallback description if not found
-    if not use_case_description:
-        use_case_description = f"Build a {use_case_title} solution for the {industry_name} industry."
-    
-    # Get workshop parameters (includes session-specific overrides if session_id is provided)
-    workshop_params = get_effective_workshop_parameters(session_id)
-    
-    # Check for session-level use case overrides (user-edited name/description)
-    if session_id:
-        custom_desc = workshop_params.get('custom_use_case_description', '').strip()
-        if custom_desc:
-            use_case_description = custom_desc
-        custom_title = workshop_params.get('custom_use_case_label', '').strip()
-        if custom_title:
-            use_case_title = custom_title
-    
-    # Load section inputs from config
-    section_input_prompts_config = get_section_input_prompts_map()
-
-    # Resolve the correct prompt for the session's coding assistant.
-    # Falls back to the legacy 'default' section_tag entry if the requested tag
-    # has no row in the database at all (preserves pre-existing behavior).
-    # When `coding_assistant_override` is provided (Test Scenario tab), it takes
-    # priority over the session lookup so an explicit choice can drive fork
-    # resolution without persisting anything to a session.
-    if coding_assistant_override is not None and coding_assistant_override != "":
-        assistant_key = _normalize_coding_assistant(coding_assistant_override)
-    else:
-        assistant_key = _get_session_coding_assistant(session_id)
-    fork_template = get_section_input_template(section_tag, assistant_key)
-    template = (
-        fork_template
-        or section_input_prompts_config.get(section_tag)
-        or section_input_prompts_config.get('default', {})
-    )
-    # Resolve which assistant variant actually provided the prompt content.
-    # If a fork row exists for (section_tag, assistant_key), the fork wins;
-    # otherwise the Default row is used (even when a non-default assistant is
-    # selected). This value is returned to the UI so it can render a pill.
-    resolved_variant = DEFAULT_CODING_ASSISTANT_KEY
-    if assistant_key != DEFAULT_CODING_ASSISTANT_KEY:
-        _rows = get_section_input_prompts_from_lakebase() or []
-        _has_fork = any(
-            r.get("section_tag") == section_tag and r.get("coding_assistant") == assistant_key
-            for r in _rows
-        )
-        if _has_fork:
-            resolved_variant = assistant_key
-        logger.info(
-            f"[Prompt Resolver] section_tag={section_tag} assistant={assistant_key} "
-            f"variant={'fork' if _has_fork else 'default'}"
-        )
-    
-    # Replace parameters in templates
-    input_text = template.get('input', '')
-    input_template_raw = input_text  # Keep the raw template with variables for reference
-    system_prompt = template.get('system_prompt', '')
-    how_to_apply = template.get('how_to_apply', '')
-    expected_output = template.get('expected_output', '')
-    how_to_apply_images = template.get('how_to_apply_images', [])
-    expected_output_images = template.get('expected_output_images', [])
-    bypass_llm = template.get('bypass_llm', False)  # Check if this section bypasses LLM
-    
-    # Substitute all parameters including use_case_description
-    params = {
-        '{industry_name}': industry_name,
-        '{use_case_title}': use_case_title,
-        '{use_case_description}': use_case_description,
-        '{section_tag}': section_tag,
-    }
-
-    # Scoped strictly to the Iterate & Enhance step. Its template is the only one
-    # that uses the bare {industry}/{use_case} tokens; gating on section_tag
-    # guarantees no other step's substitution behavior changes.
-    if section_tag == 'iterate_enhance':
-        params['{industry}'] = industry_name
-        params['{use_case}'] = use_case_title
-    
-    # Add workshop parameters to substitution params
-    for key, value in workshop_params.items():
-        params['{' + key + '}'] = value
-    
-    # Add previous outputs to params (e.g., {prd_document})
-    if previous_outputs:
-        for key, value in previous_outputs.items():
-            params['{' + key + '}'] = value or f"[No {key} provided - please complete Step 2 first]"
-    
-    # Set default for {prd_document} if not provided (for UI design steps)
-    if '{prd_document}' not in params:
-        params['{prd_document}'] = "[PRD not provided - please complete Step 2 (PRD Generation) first to include the PRD in your UI design]"
-    
-    for key, value in params.items():
-        input_text = input_text.replace(key, str(value))
-        system_prompt = system_prompt.replace(key, str(value))
-        how_to_apply = how_to_apply.replace(key, str(value))
-        expected_output = expected_output.replace(key, str(value))
-    
-    # Conditional branding injection -- only when company_brand_url is specified
-    # Session overrides may store empty string for brand URL (e.g. from initial
-    # "Get Started" before URL was populated). Fall back to the global workshop
-    # parameter when the effective value is empty.
-    brand_url = (workshop_params.get('company_brand_url') or '').strip()
-    if not brand_url and session_id:
-        brand_url = (get_workshop_parameters_sync().get('company_brand_url') or '').strip()
-    if brand_url and section_tag in (
-        'prd_generation', 'figma_ui_design', 'cursor_copilot_ui_design',
-        'activation_app_design', 'activation_build_wire', 'gaccel_dashboard',
-    ):
-        _company_display = ''
-        try:
-            from urllib.parse import urlparse
-            _parsed = urlparse(brand_url)
-            _path = _parsed.path.strip('/')
-            if _path:
-                _last_seg = _path.split('/')[-1]
-                if any(c.isalpha() for c in _last_seg) and len(_last_seg) > 2:
-                    _company_display = _last_seg.replace('-', ' ').replace('_', ' ').title()
-        except Exception:
-            pass
-
-        if section_tag == 'prd_generation':
-            if _company_display:
-                branding_section = f"""
-
----
-
-## Company Context and Branding
-
-This application is being built for **{_company_display}**.
-- Reference {brand_url} for the company's brand identity, colors, and visual assets
-- Contextualize all user personas, workflows, and terminology to align with {_company_display}'s business domain and customer base
-- Use {_company_display}-appropriate product naming, voice, and tone throughout the PRD
-- User journeys should reflect realistic scenarios within {_company_display}'s industry and operations
-- Include brand identity considerations (name, logo, color palette) in any UI-related requirements sections"""
-            else:
-                branding_section = f"""
-
----
-
-## Company Context and Branding
-
-This application is being built for the company defined at the following URL.
-- Reference {brand_url} for the company's brand identity, colors, and visual assets
-- Contextualize all user personas, workflows, and terminology to align with the company's business domain and customer base
-- Use company-appropriate product naming, voice, and tone throughout the PRD
-- User journeys should reflect realistic scenarios within the company's industry and operations
-- Include brand identity considerations (name, logo, color palette) in any UI-related requirements sections"""
-        else:
-            # Concrete brand assets extracted at install time (may be blank).
-            # Fall back to the global workshop parameters when the session copy
-            # is empty, mirroring the brand_url resolution above.
-            def _brand_param(key: str) -> str:
-                val = (workshop_params.get(key) or '').strip()
-                if not val and session_id:
-                    val = (get_workshop_parameters_sync().get(key) or '').strip()
-                return val
-
-            _primary = _brand_param('company_primary_color')
-            _secondary = _brand_param('company_secondary_color')
-            _accent = _brand_param('company_accent_color')
-            _logo = _brand_param('company_logo_url')
-            _name = _brand_param('company_name') or _company_display
-
-            _brand_label = f"**{_name}**" if _name else "the brand defined at the following URL"
-
-            # Build the concrete-color palette lines only for colors we actually
-            # have. Each carries the oklch triple so the agent can drop it
-            # straight into the AppKit scaffold's client/src/index.css variables.
-            _palette_lines = []
-            for _label, _var, _hex in (
-                ("Primary", "--primary", _primary),
-                ("Secondary", "--secondary", _secondary),
-                ("Accent", "--accent", _accent),
-            ):
-                if _hex:
-                    _oklch = _hex_to_oklch(_hex)
-                    _oklch_str = f" -> `oklch({_oklch})`" if _oklch else ""
-                    _palette_lines.append(f"- {_label}: `{_hex}`{_oklch_str} (set the `{_var}` CSS variable)")
-
-            if _palette_lines:
-                _palette_block = "\n".join(_palette_lines)
-                _logo_line = (
-                    f"- Logo: place `{_logo}` in the header/navbar and use it as the favicon"
-                    if _logo else
-                    f"- Logo: use the company logo from {brand_url} in the header/navbar and as the favicon"
-                )
-                branding_section = f"""
-
----
-
-## Branding Guidelines
-
-Theme this application for {_brand_label} using the concrete brand assets below (extracted from {brand_url}).
-
-### Brand palette (exact values)
-{_palette_block}
-
-Uncomment and set these as the oklch CSS custom properties in the AppKit scaffold's `client/src/index.css` (the scaffold ships them commented out). Every brand color MUST flow through these CSS variables and be referenced via Tailwind classes (e.g. `bg-primary`, `text-primary-foreground`) — never inline hex, which bypasses dark mode.
-
-### Logo
-{_logo_line}
-
-### Apply throughout
-- Apply the primary and secondary brand colors to the theme, buttons, headers, chart series, and accents
-- Ensure text on brand-colored backgrounds meets WCAG AA contrast (4.5:1 normal, 3:1 large)
-- Ensure all UI elements, buttons, and accents align with the brand's visual identity"""
-            elif _name or _company_display:
-                _label = _name or _company_display
-                branding_section = f"""
-
----
-
-## Branding Guidelines
-
-Use **{_label}** as the brand for this application.
-- Reference {brand_url} for the official brand color codes and assets
-- Apply the company's primary and secondary brand colors throughout the UI as oklch CSS variables in `client/src/index.css` (theme, buttons, headers, accents)
-- Use the company's logo where appropriate (e.g., header/navbar, favicon)
-- Ensure all UI elements, buttons, and accents align with the brand's visual identity"""
-            else:
-                branding_section = f"""
-
----
-
-## Branding Guidelines
-
-Use the brand defined at the following URL for this application.
-- Reference {brand_url} for the official brand color codes and assets
-- Apply the brand's primary and secondary colors throughout the UI as oklch CSS variables in `client/src/index.css` (theme, buttons, headers, accents)
-- Use the brand's logo where appropriate (e.g., header/navbar, favicon)
-- Ensure all UI elements, buttons, and accents align with the brand's visual identity"""
-        input_text += branding_section
-    
-    # If no config found, use fallback
-    if not input_text:
-        input_text = f"""Generate content for {section_tag} in {industry_name} for {use_case_title}.
-
-## Use Case Context
-{use_case_description}
-
-Industry: {industry_name}
-Use Case: {use_case_title}
-Section: {section_tag}
-
-Please provide detailed requirements and specifications for this section."""
-        system_prompt = f"""You are an expert Databricks solutions architect.
-Generate a detailed, actionable prompt for {section_tag} in a {industry_name} {use_case_title} application."""
-    
-    return {
-        "input": input_text,
-        "input_template": input_template_raw,
-        "system_prompt": system_prompt,
-        "how_to_apply": how_to_apply,
-        "expected_output": expected_output,
-        "how_to_apply_images": how_to_apply_images,
-        "expected_output_images": expected_output_images,
-        "bypass_llm": bypass_llm,
-        "_brand_url": brand_url,
-        "coding_assistant_variant": resolved_variant,
-    }
+# get_section_input_content is defined in src/backend/workshop/assembler.py
+# (D3 §7). It is re-exported here so callers keep using
+# routes.get_section_input_content unchanged, while there remains exactly ONE
+# implementation of the assembler (D3 invariant I2 — "no second assembler").
+from src.backend.workshop.assembler import get_section_input_content
 
 
 async def generate_prompt_content_with_llm(
@@ -1612,7 +1217,6 @@ async def generate_prompt_content_with_llm(
         
         logger.info(f"     Response length: {len(generated_prompt)} characters")
         logger.info(f"     Token usage: {usage}")
-        logger.info(f"     Response preview: {generated_prompt[:200]}...")
         
         # Check if response looks like a mock
         is_mock = "[Mock Response" in generated_prompt
@@ -1633,10 +1237,9 @@ async def generate_prompt_content_with_llm(
         }
         
     except Exception as e:
-        logger.error(f"  ❌ ERROR generating prompt with LLM: {str(e)}")
+        logger.error(f"  ❌ ERROR generating prompt with LLM: {type(e).__name__} (status={getattr(e, 'status_code', None)}, error_code={getattr(e, 'error_code', None)}, message length={len(str(e))})")
         logger.error(f"     Exception type: {type(e).__name__}")
-        import traceback
-        logger.error(f"     Traceback: {traceback.format_exc()}")
+        logger.debug("     LLM prompt generation traceback", exc_info=True)
         logger.info("  Falling back to returning input as prompt")
         # Fallback to returning input as prompt
         return {
@@ -1677,478 +1280,6 @@ def generate_prompt_content(industry: str, use_case: str, section_tag: str, prev
 
 
 # ============== Databricks Serving Endpoint Functions ==============
-
-async def call_databricks_serving_endpoint(
-    prompt: str,
-    endpoint_name: str = None,
-    max_tokens: int = 4000,  # Full response length
-    temperature: float = 0.5,  # Lower temp = faster generation
-    system_prompt: str = None
-) -> Dict[str, Any]:
-    """
-    Call a Databricks Model Serving endpoint using the SDK's API client.
-    
-    When running as a Databricks App, authentication is automatic via OAuth -
-    no token needed! The SDK uses the app's service principal credentials.
-    
-    Args:
-        prompt: The user prompt to send to the model
-        endpoint_name: Name of the serving endpoint (auto-discovered if not provided)
-        max_tokens: Maximum tokens in the response
-        temperature: Sampling temperature (0.0-1.0)
-        system_prompt: Optional system prompt for the model
-    
-    Returns:
-        Dict containing the response, model info, and usage stats
-    """
-    # Auto-discover endpoint if not specified
-    endpoint = endpoint_name or get_best_available_endpoint()
-    
-    if not endpoint:
-        logger.error("  ❌ No serving endpoint available!")
-        logger.error("     Please configure DATABRICKS_SERVING_ENDPOINT or deploy a model serving endpoint")
-        available = get_available_serving_endpoints()
-        logger.error(f"     Available endpoints in workspace: {available if available else 'None found'}")
-        return {
-            "response": "[Error] No serving endpoint configured or available. Please set DATABRICKS_SERVING_ENDPOINT environment variable or deploy a model serving endpoint in your Databricks workspace.",
-            "model": "none",
-            "usage": {}
-        }
-    
-    
-    # Get the workspace client (handles auth automatically)
-    client = get_workspace_client()
-    
-    
-    if not client or not DATABRICKS_SDK_AVAILABLE:
-        logger.warning("  ⚠️ Databricks SDK not available or client not initialized")
-        logger.warning("  ⚠️ Returning MOCK response")
-        return {
-            "response": f"[Mock Response - SDK not available] This is a simulated response for: {prompt[:100]}...",
-            "model": endpoint,
-            "usage": {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
-        }
-    
-    # Build messages list for SDK query (OpenAI chat format)
-    messages = []
-    if system_prompt:
-        messages.append({"role": "system", "content": system_prompt})
-    messages.append({"role": "user", "content": prompt})
-    
-    
-    # Raw HTTP to the serving endpoint (avoids SDK query() serialization issues)
-    
-    import time
-    start_time = time.time()
-    
-    try:
-        
-        # Get the workspace host from the SDK client
-        workspace_host = client.config.host.rstrip('/')
-        
-        # Try OpenAI-compatible format first (most common)
-        openai_payload = {
-            "messages": messages,
-            "max_tokens": max_tokens,
-            "temperature": temperature
-        }
-        
-        # Build a combined prompt string for simple input format
-        combined_prompt = prompt
-        if messages:
-            parts = []
-            for msg in messages:
-                role = msg.get("role", "")
-                content = msg.get("content", "")
-                if role == "system":
-                    parts.append(f"[System] {content}")
-                else:
-                    parts.append(content)
-            combined_prompt = "\n\n".join(parts)
-        
-        # Agent format payloads - try multiple variations
-        agent_payloads = [
-            # Variation 1: Messages as input (like OpenAI but different key)
-            {"input": messages, "max_output_tokens": max_tokens, "temperature": temperature},
-            # Variation 2: Simple string input in array
-            {"input": [combined_prompt], "max_output_tokens": max_tokens, "temperature": temperature},
-            # Variation 3: Just the string input
-            {"input": combined_prompt, "max_output_tokens": max_tokens, "temperature": temperature},
-            # Variation 4: Minimal with just input
-            {"input": combined_prompt},
-        ]
-        
-        import json as json_lib
-        
-        
-        # Use SDK's serving_endpoints.query() directly - it handles auth automatically
-        def make_request(payload):
-            """Make request using SDK's serving_endpoints API."""
-            try:
-                # Check if it's OpenAI format (has 'messages')
-                if 'messages' in payload:
-                    # Use only required parameters to avoid SDK adding extra keys
-                    result = client.serving_endpoints.query(
-                        name=endpoint,
-                        messages=payload.get('messages'),
-                        max_tokens=payload.get('max_tokens', max_tokens),
-                        temperature=payload.get('temperature', temperature)
-                    )
-                else:
-                    # For Agent/custom format, use inputs with ONLY the input key
-                    input_data = payload.get('input', '')
-                    
-                    # Ensure input is always a list of message dicts for Agent endpoints
-                    if isinstance(input_data, str):
-                        input_list = [{"role": "user", "content": input_data}]
-                    elif isinstance(input_data, list):
-                        if all(isinstance(x, dict) for x in input_data):
-                            input_list = input_data
-                        else:
-                            input_list = [{"role": "user", "content": str(input_data)}]
-                    else:
-                        input_list = [{"role": "user", "content": str(input_data)}]
-                    
-                    logger.info(f"  Input list length: {len(input_list)}")
-                    # Use only inputs parameter - no other parameters
-                    result = client.serving_endpoints.query(
-                        name=endpoint,
-                        input=input_list  # Try 'input' instead of 'inputs'
-                    )
-                
-                logger.info(f"  SDK query returned type: {type(result).__name__}")
-                
-                # Safely convert result to dict
-                if result is None:
-                    return {}
-                if isinstance(result, dict):
-                    return result
-                    
-                # Try to convert to dict without calling as_dict (which causes the bug)
-                result_dict = {}
-                for attr in ['choices', 'usage', 'model', 'id', 'object', 'created', 'output', 'predictions']:
-                    if hasattr(result, attr):
-                        val = getattr(result, attr)
-                        if val is not None:
-                            # Convert nested objects
-                            if isinstance(val, list):
-                                result_dict[attr] = []
-                                for item in val:
-                                    if isinstance(item, dict):
-                                        result_dict[attr].append(item)
-                                    elif hasattr(item, '__dict__'):
-                                        result_dict[attr].append({k: v for k, v in vars(item).items() if not k.startswith('_')})
-                                    else:
-                                        result_dict[attr].append(item)
-                            elif isinstance(val, dict):
-                                result_dict[attr] = val
-                            elif hasattr(val, '__dict__'):
-                                result_dict[attr] = {k: v for k, v in vars(val).items() if not k.startswith('_')}
-                            else:
-                                result_dict[attr] = val
-                
-                if result_dict:
-                    return result_dict
-                    
-                # Last resort - try to stringify
-                return {"raw": str(result)}
-                
-            except Exception as e:
-                logger.error(f"  SDK query failed: {e}")
-                raise
-        
-        # Bypass SDK's buggy serving_endpoints.query() - use low-level API client instead
-        query_response = None
-        last_error = None
-        
-        # Build payload for OpenAI-compatible endpoint.
-        # Send the minimal Chat Completions body accepted by every Databricks-served
-        # chat model; do NOT send extra_params (strict FM chat schemas reject it).
-        openai_request_body: Dict[str, Any] = {
-            "messages": messages,
-            "max_tokens": max_tokens,
-        }
-        ep_lower = endpoint.lower()
-        if "mini" not in ep_lower:
-            openai_request_body["temperature"] = temperature
-        
-        
-        try:
-            # Use SDK's api_client.do() which handles auth but doesn't have the as_dict bug
-            raw_result = client.api_client.do(
-                method="POST",
-                path=f"/serving-endpoints/{endpoint}/invocations",
-                body=openai_request_body
-            )
-            
-            # The api_client.do() returns a dict directly
-            if isinstance(raw_result, dict):
-                query_response = raw_result
-            else:
-                query_response = {"raw": str(raw_result)}
-        except Exception as openai_err:
-            last_error = openai_err
-            error_msg = str(openai_err).lower()
-            logger.info(f"  OpenAI format failed: {openai_err}")
-            
-            # Only try Agent format if it's a schema/format error
-            if "schema" in error_msg or "missing inputs" in error_msg or "input" in error_msg:
-                for i, agent_payload in enumerate(agent_payloads):
-                    try:
-                        logger.info(f"  Trying Agent format variation {i+1}...")
-                        query_response = make_request(agent_payload)
-                        last_error = None
-                        break
-                    except Exception as agent_err:
-                        logger.info(f"  Agent format variation {i+1} failed: {agent_err}")
-                        last_error = agent_err
-        
-        if last_error:
-            logger.error(f"  ❌ All formats failed!")
-            raise last_error
-        
-        logger.info(f"  Raw API response type: {type(query_response).__name__}")
-        
-        elapsed_time = time.time() - start_time
-        logger.info(f"  Response repr: {repr(query_response)[:500]}")
-        
-        # Convert response to a plain dict - SDK often returns dict already
-        response = None
-        
-        # Case 1: Already a plain dict - use it directly
-        if isinstance(query_response, dict):
-            response = query_response
-            logger.info(f"  Response is already a dict, using directly")
-        
-        # Case 2: SDK object - try various conversion methods (each wrapped in try/except)
-        elif query_response is not None:
-            import json
-            
-            # Try as_dict first
-            if response is None:
-                try:
-                    if hasattr(query_response, 'as_dict'):
-                        response = query_response.as_dict()
-                        logger.info(f"  Converted using as_dict()")
-                except Exception as e:
-                    logger.warning(f"  as_dict() failed: {e}")
-            
-            # Try to_dict
-            if response is None:
-                try:
-                    if hasattr(query_response, 'to_dict'):
-                        response = query_response.to_dict()
-                        logger.info(f"  Converted using to_dict()")
-                except Exception as e:
-                    logger.warning(f"  to_dict() failed: {e}")
-            
-            # Try vars/__dict__
-            if response is None:
-                try:
-                    if hasattr(query_response, '__dict__'):
-                        response = dict(vars(query_response))
-                        logger.info(f"  Converted using vars()")
-                except Exception as e:
-                    logger.warning(f"  vars() failed: {e}")
-            
-            # Try JSON serialization
-            if response is None:
-                try:
-                    response = json.loads(json.dumps(query_response, default=str))
-                    logger.info(f"  Converted using JSON serialization")
-                except Exception as e:
-                    logger.warning(f"  JSON serialization failed: {e}")
-            
-            # Ultimate fallback - string
-            if response is None:
-                response = {"raw_response": str(query_response)}
-                logger.info(f"  Using string fallback")
-        
-        if response is None:
-            response = {"error": "Empty response from SDK"}
-            
-        logger.info(f"  Final response type: {type(response).__name__}")
-        
-        logger.info(f"  Response keys: {list(response.keys()) if isinstance(response, dict) else 'N/A'}")
-        
-        # Parse the response
-        content = None
-        usage = {}
-        model_used = endpoint
-        
-        if isinstance(response, dict):
-            for key, val in response.items():
-                val_type = type(val).__name__
-                val_preview = str(val)[:100] if val else "None"
-                logger.debug(f"    Key '{key}': type={val_type}, value={val_preview}")
-            
-            # Try OpenAI format (choices)
-            if "choices" in response and response["choices"]:
-                choice = response["choices"][0]
-                logger.info(f"  Choice type: {type(choice).__name__}")
-                
-                # Handle choice as dict
-                if isinstance(choice, dict):
-                    message = choice.get("message", {})
-                    if isinstance(message, dict):
-                        content = _extract_text(message.get("content", ""))
-                    elif hasattr(message, 'content'):
-                        content = _extract_text(getattr(message, 'content', ''))
-                # Handle choice as SDK object
-                elif hasattr(choice, 'message'):
-                    message = choice.message
-                    if isinstance(message, dict):
-                        content = _extract_text(message.get("content", ""))
-                    elif hasattr(message, 'content'):
-                        content = _extract_text(getattr(message, 'content', ''))
-                
-                if "usage" in response:
-                    usage_data = response["usage"]
-                    if isinstance(usage_data, dict):
-                        usage = {
-                            "prompt_tokens": usage_data.get("prompt_tokens", 0),
-                            "completion_tokens": usage_data.get("completion_tokens", 0),
-                            "total_tokens": usage_data.get("total_tokens", 0)
-                        }
-                    elif hasattr(usage_data, 'prompt_tokens'):
-                        usage = {
-                            "prompt_tokens": getattr(usage_data, 'prompt_tokens', 0),
-                            "completion_tokens": getattr(usage_data, 'completion_tokens', 0),
-                            "total_tokens": getattr(usage_data, 'total_tokens', 0)
-                        }
-                model_used = response.get("model", endpoint)
-            
-            # Try output format (agent endpoints)
-            elif "output" in response:
-                content = response["output"]
-                if isinstance(content, list):
-                    content = content[0] if content else ""
-                elif isinstance(content, dict):
-                    content = content.get("content") or content.get("text") or str(content)
-                usage = response.get("usage", {})
-            
-            # Try predictions format
-            elif "predictions" in response:
-                content = response["predictions"]
-                if isinstance(content, list):
-                    content = content[0] if content else ""
-            
-            # Try result format
-            elif "result" in response:
-                content = response["result"]
-                if isinstance(content, list):
-                    content = content[0] if content else ""
-                elif isinstance(content, dict):
-                    content = content.get("content") or content.get("text") or str(content)
-            
-            # Try response format (nested)
-            elif "response" in response:
-                content = response["response"]
-                if isinstance(content, list):
-                    content = content[0] if content else ""
-                elif isinstance(content, dict):
-                    content = content.get("content") or content.get("text") or str(content)
-            
-            # Try data format
-            elif "data" in response:
-                data = response["data"]
-                if isinstance(data, list) and data:
-                    item = data[0]
-                    content = item.get("content") if isinstance(item, dict) else str(item)
-                elif isinstance(data, dict):
-                    content = data.get("content") or data.get("text") or str(data)
-                else:
-                    content = str(data)
-            
-            # Try text format
-            elif "text" in response:
-                content = response["text"]
-            
-            # Try content format directly
-            elif "content" in response:
-                content = response["content"]
-            
-            # Fallback
-            else:
-                content = str(response)
-        
-        # Check for empty content (common with reasoning models that use all tokens for reasoning)
-        if content is not None and content != "":
-            logger.info(f"     Model: {model_used}")
-            logger.info(f"     Response length: {len(str(content))} characters")
-            logger.info(f"     Usage: {usage}")
-            preview = str(content)[:150]
-            logger.info(f"     Preview: {preview}{'...' if len(str(content)) > 150 else ''}")
-            
-            return {
-                "response": content,
-                "model": model_used,
-                "usage": usage,
-                "source": "llm_generated"
-            }
-        else:
-            # Check if this is a reasoning model that exhausted tokens
-            finish_reason = None
-            reasoning_tokens = 0
-            if isinstance(response, dict) and "choices" in response and response["choices"]:
-                choice = response["choices"][0]
-                if isinstance(choice, dict):
-                    finish_reason = choice.get("finish_reason")
-            if isinstance(response, dict) and "usage" in response:
-                usage_details = response["usage"]
-                if isinstance(usage_details, dict):
-                    reasoning_tokens = usage_details.get("completion_tokens_details", {}).get("reasoning_tokens", 0)
-            
-            logger.warning(f"  ⚠️ Empty content in response!")
-            logger.warning(f"     Finish reason: {finish_reason}")
-            logger.warning(f"     Reasoning tokens: {reasoning_tokens}")
-            logger.warning(f"     This model may have used all tokens for internal reasoning.")
-            
-            # Return a more helpful message
-            if finish_reason == "length" and reasoning_tokens > 0:
-                return {
-                    "response": f"[Model used {reasoning_tokens} reasoning tokens but produced no visible output. This is a reasoning model - try increasing max_tokens or using a different model.]",
-                    "model": model_used,
-                    "usage": usage,
-                    "source": "llm_reasoning_exhausted"
-                }
-            else:
-                return {
-                    "response": str(response) if response else "[Empty response from LLM]",
-                    "model": model_used,
-                    "usage": usage,
-                    "source": "llm_empty_response"
-                }
-            
-    except Exception as e:
-        error_str = str(e)
-        logger.error(f"  ❌ SDK query failed!")
-        logger.error(f"     Error type: {type(e).__name__}")
-        logger.error(f"     Error message: {error_str}")
-        import traceback
-        logger.error(f"     Traceback:\n{traceback.format_exc()}")
-        
-        error_msg = error_str.lower()
-        if "unauthorized" in error_msg or "403" in error_msg or "401" in error_msg or "permission" in error_msg:
-            logger.error("     ❌ AUTHENTICATION ERROR - Check app permissions for serving endpoints")
-            logger.error("     Make sure the serving endpoint resource is added in the Databricks App UI!")
-            raise HTTPException(
-                status_code=403,
-                detail=f"Authentication failed. Ensure the app has permission to access the serving endpoint '{endpoint}'. "
-                       f"Add the endpoint as a resource in the Databricks App settings. Error: {error_str}"
-            )
-        elif "not found" in error_msg or "404" in error_msg or "does not exist" in error_msg:
-            logger.error(f"     ❌ ENDPOINT NOT FOUND - '{endpoint}' does not exist")
-            raise HTTPException(
-                status_code=404,
-                detail=f"Serving endpoint '{endpoint}' not found. Check the endpoint name and ensure it exists in your workspace."
-            )
-        else:
-            raise HTTPException(
-                status_code=500,
-                detail=f"Error calling serving endpoint '{endpoint}': {error_str}"
-            )
-
 
 async def enhance_prompt_with_llm(
     base_prompt: str,
@@ -2419,7 +1550,7 @@ async def _stream_with_retry(
                 if auth_header:
                     headers.update(auth_header)
             except Exception as auth_err:
-                logger.warning(f"Could not get auth headers (attempt {attempt}): {auth_err}")
+                logger.warning(f"Could not get auth headers for {endpoint} (attempt {attempt}): {type(auth_err).__name__} (error_code={getattr(auth_err, 'error_code', None)}, message length={len(str(auth_err))})")
 
             try:
                 async with http_client.stream("POST", url, json=request_body, headers=headers) as response:
@@ -2427,7 +1558,7 @@ async def _stream_with_retry(
                         error_body = await response.aread()
                         err_msg = error_body.decode()[:500] if error_body else "Unknown error"
                         last_error_msg = f"HTTP {response.status_code}: {err_msg}"
-                        logger.error(f"[LLM Stream] {endpoint} returned {response.status_code}: {err_msg}")
+                        logger.error(f"[LLM Stream] {endpoint} returned {response.status_code} on attempt {attempt} (error body length {len(error_body or b'')})")
 
                         if response.status_code in _RETRYABLE_STATUS_CODES and attempt < _MAX_RETRIES:
                             delay = _BASE_DELAY * (2 ** (attempt - 1))
@@ -2492,7 +1623,7 @@ async def _stream_with_retry(
                 if _is_retryable_exception(e) and attempt < _MAX_RETRIES:
                     delay = _BASE_DELAY * (2 ** (attempt - 1))
                     reason = _friendly_reason(exc=e)
-                    logger.warning(f"Retryable error on attempt {attempt}: {e}, retrying in {delay}s")
+                    logger.warning(f"Retryable error from {endpoint} on attempt {attempt}: {type(e).__name__} (status={getattr(e, 'status_code', None)}, message length={len(str(e))}), retrying in {delay}s")
                     yield _sse_event({
                         "type": "retry",
                         "attempt": attempt,
@@ -2503,11 +1634,11 @@ async def _stream_with_retry(
                     await asyncio.sleep(delay)
                     continue
 
-                logger.error(f"Non-retryable streaming error: {e}")
+                logger.error(f"Non-retryable streaming error from {endpoint} on attempt {attempt}: {type(e).__name__} (status={getattr(e, 'status_code', None)}, error_code={getattr(e, 'error_code', None)}, message length={len(str(e))})")
                 yield _sse_event({"type": "error", "error": last_error_msg})
                 return
 
-    logger.error(f"All {_MAX_RETRIES} attempts failed. Last error: {last_error_msg}")
+    logger.error(f"All {_MAX_RETRIES} attempts failed for {endpoint} (last error length {len(last_error_msg)})")
     yield _sse_event({
         "type": "error",
         "error": f"Generation failed after {_MAX_RETRIES} attempts. Last error: {last_error_msg}",
@@ -2594,6 +1725,104 @@ async def stream_llm_response(
             section_tag=section_tag, industry=industry, use_case=use_case,
         ):
             yield event
+
+
+async def collect_step_prompt_via_stream(
+    industry: str,
+    use_case: str,
+    section_tag: str,
+    previous_outputs: Optional[Dict[str, str]] = None,
+    session_id: Optional[str] = None,
+    coding_assistant: str = "genie-code",
+) -> Optional[Dict[str, Any]]:
+    """Drain the WEB streaming generator and collect a complete, UNTRUNCATED prompt.
+
+    The MCP step-prompt read path must serve the SAME copy-paste prompt the web UI
+    renders. Rather than rebuild messages (which would duplicate the system prompt,
+    request text, brand appendix and bypass handling and silently drift), this drains
+    ``stream_llm_response`` itself — the one web generator — with the MCP coding-assistant
+    fork (``genie-code``). It never touches ``clear_lakebase_cache`` (a web-path concern)
+    and leaves the generator byte-identical.
+
+    SUCCESS (and the ONLY case that returns a prompt) is a clean terminal stream:
+    a ``done`` event AND non-empty content AND NO ``max_tokens`` (truncation) warning
+    AND NO ``error`` event AND a model that is not ``bypass_llm``. On success it returns
+    the ``llm_generated`` dict shape (``{"source": "llm_generated", "prompt": ...}``) so
+    the caller's existing ``_extract_llm_generated`` gate is unchanged.
+
+    ANYTHING ELSE is a FAILURE and returns ``None`` (caller degrades to the assembled
+    template). A truncated prompt is a failure — it must never be served or cached. The
+    distinct failure cause is named in a WARNING here (the only site that observes the
+    stream events); the MCP caller records the negative-cache entry and the template
+    degrade.
+    """
+    chunks: List[str] = []
+    saw_done = False
+    saw_error = False
+    saw_truncation = False
+    model: Optional[str] = None
+
+    try:
+        async for raw in stream_llm_response(
+            industry,
+            use_case,
+            section_tag,
+            previous_outputs=previous_outputs,
+            session_id=session_id,
+            coding_assistant_override=coding_assistant,
+        ):
+            # Each item is an SSE "data: {json}\n\n" line emitted by the generator.
+            payload = raw[len("data: "):] if raw.startswith("data: ") else raw
+            payload = payload.strip()
+            if not payload:
+                continue
+            try:
+                event = json.loads(payload)
+            except json.JSONDecodeError:
+                continue
+            etype = event.get("type")
+            if etype == "start":
+                model = event.get("model")
+            elif etype == "content":
+                chunks.append(event.get("content", ""))
+            elif etype == "warning" and event.get("code") == "max_tokens":
+                saw_truncation = True
+            elif etype == "error":
+                saw_error = True
+            elif etype == "done":
+                saw_done = True
+    except Exception:
+        logger.warning(
+            "[MCP collector] stream drain raised for section %s (cause=exception); degrading to template",
+            section_tag,
+        )
+        logger.debug("[MCP collector] stream drain traceback for section %s", section_tag, exc_info=True)
+        return None
+
+    content = "".join(chunks)
+    if saw_done and content and not saw_truncation and not saw_error and model != "bypass_llm":
+        return {"source": "llm_generated", "prompt": content}
+
+    # Name the distinct failure cause (no PII) so operators can tell a truncation
+    # (content/prompt-body issue) from an endpoint error or a bypass section.
+    if saw_error:
+        cause = "error"
+    elif saw_truncation:
+        cause = "truncation"
+    elif model == "bypass_llm":
+        cause = "bypass"
+    elif not content:
+        cause = "empty"
+    elif not saw_done:
+        cause = "no-done"
+    else:
+        cause = "unknown"
+    logger.warning(
+        "[MCP collector] step-prompt generation failed for section %s (cause=%s); degrading to template",
+        section_tag,
+        cause,
+    )
+    return None
 
 
 @router.post("/generate-prompt-stream", summary="Stream prompt generation (SSE)")
@@ -5648,6 +4877,7 @@ async def auto_set_lakehouse_params_from_lakebase(session_id: str) -> LakehouseP
 try:
     from src.backend.services.lakebase import (
         save_session,
+        save_session_merging_gates,
         save_chapter_feedback,
         load_session,
         delete_session,
@@ -5656,7 +4886,6 @@ try:
         delete_user_unsaved_sessions,
         update_step_prompt,
         get_leaderboard,
-        cleanup_session_steps,
         get_analytics,
     )
     SESSION_FUNCTIONS_AVAILABLE = True
@@ -5665,6 +4894,8 @@ except ImportError:
     logger.warning("Session functions not available")
     
     def save_session(*args, **kwargs):
+        return False
+    def save_session_merging_gates(*args, **kwargs):
         return False
     def load_session(*args, **kwargs):
         return None
@@ -5676,12 +4907,13 @@ except ImportError:
         return None
     def get_leaderboard(*args, **kwargs):
         return []
-    def cleanup_session_steps(*args, **kwargs):
-        return {'sessions_fixed': 0, 'step_41_replaced': 0}
     def delete_user_unsaved_sessions(*args, **kwargs):
         return 0
     def update_step_prompt(*args, **kwargs):
         return False
+
+
+from src.backend.workshop.gate_merge import _merge_app_gates  # noqa: E402,F401 — one implementation (moved)
 
 
 # Session Pydantic Models
@@ -5696,12 +4928,35 @@ class SessionSaveRequest(BaseModel):
     session_description: Optional[str] = Field(None, max_length=500, description="Session description")
     feedback_rating: Optional[str] = Field(None, description="Feedback rating: thumbs_up or thumbs_down")
     feedback_comment: Optional[str] = Field(None, description="Feedback comment")
-    current_step: int = Field(1, description="Current step number (1-22)")
     workshop_level: Optional[str] = Field(None, description="Workshop level: app-only, app-database, lakehouse, lakehouse-di, end-to-end, accelerator, or genie-accelerator")
     direction: Optional[str] = Field(None, description="Workflow direction: forward or reverse")
     include_lakehouse: Optional[bool] = Field(None, description="Genie Accelerator: include the optional Lakehouse (Bronze -> Gold) block")
     include_genie_ontology: Optional[bool] = Field(None, description="Genie Accelerator: include the optional Genie Ontology block")
-    completed_steps: List[int] = Field(default_factory=list, description="List of completed step numbers")
+    # Engine composition inputs (Phase 3 T3b-2a). Persisted into session_parameters
+    # under the exact keys engine._inputs_for / _flags_for read, so GET
+    # /api/track/{track}/outline composes the same variant/sub-toggle outline the
+    # UI shows. `chain_context` -> top-level `chainContext` (read by _inputs_for);
+    # `flags` -> a nested `flags` object (read by _flags_for). Additive: the
+    # existing snake_case direction/include_* keys stay for other consumers.
+    chain_context: Optional[str] = Field(None, description="Additive-chain context: app | lakehouse | reverse (persisted as session_parameters.chainContext)")
+    flags: Optional[Dict[str, bool]] = Field(None, description="Engine composition flags (e.g. includeLakehouse, ai.genie, medallion.bronze) persisted under session_parameters.flags")
+    # Gate write (Phase 3 T5). The SPA writes the COMPLETE App-derived gate set
+    # (sectionTags for ALL completed/skipped steps). The legacy numeric progress
+    # fields were retired in R4a (writes stopped); a legacy tab may still POST
+    # them, but Pydantic's default extra='ignore' drops them.
+    # Optional/None (NOT []-default) so an omitting save — composition-only or an
+    # older client — leaves the persisted gates untouched (present => server-side
+    # MERGE, absent/None => preserve). See `_merge_app_gates`: App-representable
+    # gates are authoritative from the App; non-representable stored gates (e.g.
+    # MCP-only `use_case_selection`) are add-only preserved so an App write can't
+    # re-lock a step whose gate they satisfy.
+    completed_gates: Optional[List[str]] = Field(None, description="Complete set of App-completed step sectionTags (server-side merged with non-representable stored gates)")
+    skipped_gates: Optional[List[str]] = Field(None, description="Complete set of App-skipped step sectionTags (dual-write; persisted under session_parameters.skipped_gates, same merge)")
+    # The gate sets the SPA last received from or wrote to the server (D-12). When
+    # present, the merge removes only gates the App saw and dropped; gates added
+    # elsewhere (MCP) since then survive. Absent => App-authoritative (old clients).
+    base_completed_gates: Optional[List[str]] = Field(None, description="completed_gates as the SPA last saw them (merge base; absent => App-authoritative)")
+    base_skipped_gates: Optional[List[str]] = Field(None, description="skipped_gates as the SPA last saw them (merge base; absent => App-authoritative)")
     step_prompts: Dict[int, str] = Field(default_factory=dict, description="Map of step number to generated prompt")
 
 
@@ -5726,10 +4981,9 @@ class SessionLoadResponse(BaseModel):
     feedback_rating: Optional[str] = Field(None)
     feedback_comment: Optional[str] = Field(None)
     prerequisites_completed: bool = Field(False)
-    current_step: int = Field(1)
     workshop_level: Optional[str] = Field(None, description="Workshop level: app-only, app-database, lakehouse, lakehouse-di, end-to-end, accelerator, or genie-accelerator")
-    completed_steps: List[int] = Field(default_factory=list)
-    skipped_steps: List[int] = Field(default_factory=list)
+    completed_gates: List[str] = Field(default_factory=list, description="Completed step sectionTags (engine/MCP source of truth for cross-surface numbering)")
+    skipped_gates: List[str] = Field(default_factory=list, description="Skipped step sectionTags (surfaced from session_parameters['skipped_gates']; skipped-side mirror of completed_gates for gate-first hydration)")
     step_prompts: Dict[int, str] = Field(default_factory=dict)
     session_parameters: Optional[Dict[str, Any]] = Field(default_factory=dict, description="Session parameter overrides (JSONB)")
     created_by: Optional[str] = Field(None)
@@ -5737,6 +4991,15 @@ class SessionLoadResponse(BaseModel):
     updated_at: Optional[str] = Field(None)
     is_saved: bool = Field(False)
     message: str = Field(..., description="Status message")
+
+    @field_validator("prerequisites_completed", "is_saved", mode="before")
+    @classmethod
+    def _coerce_none_bool_to_false(cls, v: object) -> object:
+        # MCP-created sessions can persist NULL for these BOOLEAN columns.
+        # Pydantic v2's strict bool rejects None, which 500s the load endpoint
+        # and silently drops the SPA back to the default (end-to-end) session —
+        # the true cause of the "0/28" resume defect. Coerce None -> False.
+        return False if v is None else v
 
 
 class NewSessionResponse(BaseModel):
@@ -5769,7 +5032,12 @@ class SessionListItem(BaseModel):
     industry_label: Optional[str]
     use_case: Optional[str]
     use_case_label: Optional[str]
-    current_step: int
+    # Gate-derived count of canonical GLOBAL completed steps (T5 R3/R4b). Surfaced
+    # server-side (the leaderboard's completed_step_count way) so the session list
+    # can show progress from the gate set alone. Optional so a cached/older-shape
+    # dict that omits it still constructs (Pydantic v2 extra='ignore' otherwise
+    # strips an undeclared field before the client ever sees it).
+    completed_step_count: Optional[int] = None
     feedback_rating: Optional[str]
     created_at: Optional[str]
     updated_at: Optional[str]
@@ -5834,8 +5102,6 @@ async def create_new_session(request: Request) -> NewSessionResponse:
         success = save_session(
             session_id=session_id,
             session_name="New Session",
-            current_step=1,
-            completed_steps=[],
             created_by=created_by,
         )
         if success:
@@ -5864,12 +5130,11 @@ async def get_or_create_default_session(request: Request) -> SessionLoadResponse
         
         if session_data:
             session_id = session_data['session_id']
-            current_step = session_data.get("current_step") or 1
-            completed_steps = session_data.get("completed_steps") or []
+            completed_gates = session_data.get("completed_gates") or []
             prereqs = session_data.get("prerequisites_completed")
             prerequisites_completed = prereqs if prereqs is not None else False
-            
-            logger.info(f"[Session API] Found existing default session: {session_id}, step={current_step}, completed={len(completed_steps)} steps")
+
+            logger.info(f"[Session API] Found existing default session: {session_id}, completed_gates={len(completed_gates)}")
             
             # Clean up orphan unsaved sessions, keeping only this one
             try:
@@ -5891,10 +5156,12 @@ async def get_or_create_default_session(request: Request) -> SessionLoadResponse
                 feedback_rating=session_data.get("feedback_rating"),
                 feedback_comment=session_data.get("feedback_comment"),
                 prerequisites_completed=prerequisites_completed,
-                current_step=current_step,
                 workshop_level=session_data.get("workshop_level", "300"),
-                completed_steps=completed_steps,
-                skipped_steps=session_data.get("skipped_steps") or [],
+                completed_gates=completed_gates,
+                # skipped_gates lives in session_parameters (the write path patches
+                # it there); surface it top-level, symmetric to completed_gates, so
+                # the App can hydrate skipped steps gate-first (PR3b′).
+                skipped_gates=(session_data.get("session_parameters") or {}).get("skipped_gates") or [],
                 step_prompts=session_data.get("step_prompts") or {},
                 session_parameters=session_data.get("session_parameters") or {},
                 created_by=session_data.get("created_by"),
@@ -5914,8 +5181,6 @@ async def get_or_create_default_session(request: Request) -> SessionLoadResponse
         success = save_session(
             session_id=session_id,
             session_name="New Session",
-            current_step=1,
-            completed_steps=[],
             created_by=created_by,
         )
         if success:
@@ -5931,9 +5196,7 @@ async def get_or_create_default_session(request: Request) -> SessionLoadResponse
         session_id=session_id,
         session_name="New Session",
         prerequisites_completed=False,
-        current_step=1,
         workshop_level="300",
-        completed_steps=[],
         step_prompts={},
         created_by=created_by,
         is_saved=False,
@@ -5964,25 +5227,53 @@ async def save_session_endpoint(request_body: SessionSaveRequest, request: Reque
         else:
             base_url = str(request.base_url).rstrip("/")
         
-        # Save to Lakebase
-        success = save_session(
-            session_id=request_body.session_id,
-            industry=request_body.industry,
-            industry_label=request_body.industry_label,
-            use_case=request_body.use_case,
-            use_case_label=request_body.use_case_label,
-            session_name=request_body.session_name or "Saved Session",
-            session_description=request_body.session_description,
-            feedback_rating=request_body.feedback_rating,
-            feedback_comment=request_body.feedback_comment,
-            current_step=request_body.current_step,
-            workshop_level=request_body.workshop_level,
-            completed_steps=request_body.completed_steps,
-            step_prompts=request_body.step_prompts,
-            created_by=current_user,
-        )
-        
+        # Gate dual-write (T5 PR3a): MERGE-on-present / PRESERVE-on-absent for both
+        # completed_gates (column) and skipped_gates (session_parameters). When the
+        # request carries either, the stored gates are read under FOR UPDATE, merged
+        # (`_merge_app_gates` add-only preserves non-representable stored gates, e.g.
+        # MCP `use_case_selection`) and written in ONE transaction, so a concurrent
+        # MCP gate write cannot be lost between read and write. Runs off the event
+        # loop; to_thread copies contextvars (OBO/user context unchanged).
+        if request_body.completed_gates is not None or request_body.skipped_gates is not None:
+            success = await asyncio.to_thread(
+                save_session_merging_gates,
+                request_body.session_id,
+                app_completed_gates=request_body.completed_gates,
+                app_skipped_gates=request_body.skipped_gates,
+                base_completed_gates=request_body.base_completed_gates,
+                base_skipped_gates=request_body.base_skipped_gates,
+                industry=request_body.industry,
+                industry_label=request_body.industry_label,
+                use_case=request_body.use_case,
+                use_case_label=request_body.use_case_label,
+                session_name=request_body.session_name or "Saved Session",
+                session_description=request_body.session_description,
+                feedback_rating=request_body.feedback_rating,
+                feedback_comment=request_body.feedback_comment,
+                workshop_level=request_body.workshop_level,
+                step_prompts=request_body.step_prompts,
+                created_by=current_user,
+            )
+        else:
+            # Save to Lakebase
+            success = save_session(
+                session_id=request_body.session_id,
+                industry=request_body.industry,
+                industry_label=request_body.industry_label,
+                use_case=request_body.use_case,
+                use_case_label=request_body.use_case_label,
+                session_name=request_body.session_name or "Saved Session",
+                session_description=request_body.session_description,
+                feedback_rating=request_body.feedback_rating,
+                feedback_comment=request_body.feedback_comment,
+                workshop_level=request_body.workshop_level,
+                completed_gates=None,  # None => COALESCE preserves
+                step_prompts=request_body.step_prompts,
+                created_by=current_user,
+            )
+
         # Persist direction / include_lakehouse / include_genie_ontology in session_parameters if provided
+        # (skipped_gates is written inside the locked gate transaction above).
         _save_param_patch = {}
         if request_body.direction:
             _save_param_patch["direction"] = request_body.direction
@@ -5990,6 +5281,12 @@ async def save_session_endpoint(request_body: SessionSaveRequest, request: Reque
             _save_param_patch["include_lakehouse"] = request_body.include_lakehouse
         if request_body.include_genie_ontology is not None:
             _save_param_patch["include_genie_ontology"] = request_body.include_genie_ontology
+        # Engine composition inputs (Phase 3 T3b-2a) — mirror the update-metadata
+        # path so a full save also persists chainContext + flags for GET /outline.
+        if request_body.chain_context is not None:
+            _save_param_patch["chainContext"] = request_body.chain_context
+        if request_body.flags is not None:
+            _save_param_patch["flags"] = request_body.flags
         if success and _save_param_patch:
             try:
                 schema = get_schema()
@@ -6046,10 +5343,12 @@ async def load_session_endpoint(session_id: str) -> SessionLoadResponse:
                 feedback_rating=session_data.get("feedback_rating"),
                 feedback_comment=session_data.get("feedback_comment"),
                 prerequisites_completed=session_data.get("prerequisites_completed", False),
-                current_step=session_data.get("current_step", 1),
                 workshop_level=session_data.get("workshop_level", "300"),
-                completed_steps=session_data.get("completed_steps", []),
-                skipped_steps=session_data.get("skipped_steps", []),
+                completed_gates=session_data.get("completed_gates") or [],
+                # skipped_gates lives in session_parameters (the write path patches
+                # it there); surface it top-level, symmetric to completed_gates, so
+                # the App can hydrate skipped steps gate-first (PR3b′).
+                skipped_gates=(session_data.get("session_parameters") or {}).get("skipped_gates") or [],
                 step_prompts=session_data.get("step_prompts", {}),
                 session_parameters=session_data.get("session_parameters", {}),
                 created_by=session_data.get("created_by"),
@@ -6070,6 +5369,152 @@ async def load_session_endpoint(session_id: str) -> SessionLoadResponse:
     except Exception as e:
         logger.error(f"[Session API] Error loading session {session_id}: {e}")
         raise HTTPException(status_code=500, detail=f"Error loading session: {str(e)}")
+
+
+# =============================================================================
+# TRACK OUTLINE (Phase 3 T1) — thin transport over engine.outline
+# =============================================================================
+# A pure adapter: it resolves a track, rebuilds the engine SessionState through
+# the SAME shared builder the MCP server uses (number->gate backfill included),
+# and returns engine.outline verbatim. Zero workshop logic lives here, and it
+# imports the workshop package (never mcp_server) so the FastMCP app stays out
+# of the REST layer. Flat MCP parity: no section grouping/metadata (DECISION-T1-2).
+
+class TrackOutlineItem(BaseModel):
+    """Mirror of mcp_server.OutlineItem — the exact flat wire shape (extra=forbid)."""
+    model_config = ConfigDict(extra="forbid")
+
+    sectionTag: str
+    title: str
+    status: Literal["done", "current", "locked", "skipped"]
+    execution: str
+
+
+class TrackOutlineResponse(BaseModel):
+    """Flat MCP-parity payload: resolved track, echoed session id, ordered outline."""
+    track: str = Field(..., description="Resolved track id (a manifest track key)")
+    session_id: Optional[str] = Field(None, description="Echo of the requested session id")
+    outline: List[TrackOutlineItem] = Field(default_factory=list)
+
+
+@router.get("/track/{track}/outline")
+async def get_track_outline(
+    track: str, session_id: Optional[str] = None
+) -> TrackOutlineResponse:
+    """Return the ordered step outline for a track, as engine.outline computes it.
+
+    Track resolution (DECISION-T1-1): an explicit ``{track}`` that is a valid
+    manifest track key is used directly (the client asked for it). The documented
+    sentinel ``auto`` — and any other non-track value — resolves the track from the
+    loaded session via ``resolve_track`` (which tolerates legacy workshop_level
+    None/'300'). With no session to resolve against, a non-track path is a 404.
+
+    A ``session_id`` that is PROVIDED but cannot be loaded is a 404 for BOTH the
+    explicit and auto paths (symmetric) — the route never serves a fresh outline
+    while echoing a session id that failed to load. The fresh-outline 200 applies
+    only when ``session_id`` was omitted entirely.
+    """
+    from src.backend.workshop import engine
+    from src.backend.workshop.state import build_session_state
+    from src.backend.workshop.track_resolution import is_track, resolve_track
+
+    record = None
+    if session_id:
+        try:
+            record = load_session(session_id)
+        except Exception as e:  # never surface a load error as a 500 for a read
+            logger.warning(f"[Track Outline] load_session failed for {session_id}: {e}")
+            record = None
+        if record is None:
+            # A session_id was PROVIDED but could not be loaded. Symmetric with the
+            # auto path: never serve a misleading fresh/all-locked outline while
+            # echoing a session id that failed to load. (The T1-B8 no-session 200
+            # path only applies when session_id was not provided at all.)
+            raise HTTPException(status_code=404, detail=f"Session '{session_id}' not found")
+
+    if is_track(track):
+        resolved = track  # explicit client request wins
+    elif record is not None:
+        resolved = resolve_track(record)  # 'auto' / any non-track value
+    else:
+        # Nothing to resolve against — an unknown track with no session.
+        raise HTTPException(status_code=404, detail=f"Unknown track '{track}'")
+
+    # resolved is guaranteed a valid manifest key here (explicit or resolve_track),
+    # but guard defensively so a future resolver change can never 500 the route.
+    if not is_track(resolved):
+        raise HTTPException(status_code=404, detail=f"Unknown track '{track}'")
+
+    state = build_session_state(record, resolved) if record is not None else engine.SessionState()
+    outline = [asdict(item) for item in engine.outline(resolved, state)]
+    return TrackOutlineResponse(track=resolved, session_id=session_id, outline=outline)
+
+
+# --- Additive preview sibling (Phase 3 T4a) ----------------------------------
+# The /config/test-scenario dev sandbox needs the engine's ordered outline for a
+# track composed from the params the user is *previewing* (direction + AI/medallion
+# + genie sub-toggle flags) WITHOUT creating or touching a session. This POST is a
+# strict SIBLING to GET /track/{track}/outline above: it does NOT overload or change
+# that session-only route. It never loads or persists a session, never touches the
+# database, and never resolves 'auto' — the caller always passes an explicit track.
+# It builds a fresh, EPHEMERAL engine.SessionState from the inline composition
+# inputs (mirroring the exact session_parameters shape the persisted save path
+# writes — top-level `direction` read by engine._inputs_for; nested `flags` read by
+# engine._flags_for) and returns engine.outline verbatim. The arbitrary client-side
+# disabled-tag filtering (per-assistant hides, cleanup/iterate tail sections) stays
+# CLIENT-SIDE in the sandbox exactly as it does in the production read path
+# (orderedSectionsForRead) — it is not an engine concern and is not sent here.
+
+class TrackOutlinePreviewRequest(BaseModel):
+    """Inline composition inputs for the ephemeral (session-less) outline preview.
+
+    ``direction`` selects the reverse variant on variant-having tracks (end-to-end
+    + the four reverse-* tracks bake reverse as their default); it is read by
+    engine._inputs_for. ``flags`` are the AI-module / medallion / genie sub-toggles
+    (ai.*/medallion.* + includeLakehouse/includeGenieOntology) read by
+    engine._flags_for. Both are optional — an absent input yields the track's baked
+    default composition, identical to a fresh session."""
+    model_config = ConfigDict(extra="forbid")
+
+    direction: Optional[Literal["forward", "reverse"]] = Field(
+        None, description="Workflow direction; selects the reverse variant where a track has one"
+    )
+    flags: Optional[Dict[str, bool]] = Field(
+        None, description="Engine composition flags (ai.*/medallion.* + includeLakehouse/includeGenieOntology)"
+    )
+
+
+@router.post("/track/{track}/outline/preview")
+async def preview_track_outline(
+    track: str, request_body: TrackOutlinePreviewRequest
+) -> TrackOutlineResponse:
+    """Return engine.outline for an EPHEMERAL, UNPERSISTED composition (Phase 3 T4a).
+
+    Sibling to GET /track/{track}/outline. Unlike that route this one takes NO
+    session id, loads NO session, and writes NOTHING: it builds a bare
+    engine.SessionState carrying only the inline direction + flags, then returns the
+    same flat engine.outline payload. ``track`` must be an explicit, valid manifest
+    track key (no 'auto' resolution — there is no session to resolve against); any
+    other value is a 404.
+    """
+    from src.backend.workshop import engine
+    from src.backend.workshop.track_resolution import is_track
+
+    if not is_track(track):
+        raise HTTPException(status_code=404, detail=f"Unknown track '{track}'")
+
+    # Mirror the persisted session_parameters shape (routes.py save path): top-level
+    # `direction` (engine._inputs_for) + nested `flags` (engine._flags_for). No DB,
+    # no session-id, no persist — this SessionState lives only for this call.
+    session_parameters: Dict[str, Any] = {}
+    if request_body.direction is not None:
+        session_parameters["direction"] = request_body.direction
+    if request_body.flags is not None:
+        session_parameters["flags"] = request_body.flags
+
+    state = engine.SessionState(session_parameters=session_parameters)
+    outline = [asdict(item) for item in engine.outline(track, state)]
+    return TrackOutlineResponse(track=track, session_id=None, outline=outline)
 
 
 @router.delete("/session/{session_id}")
@@ -6126,8 +5571,18 @@ class SessionUpdateMetadataRequest(BaseModel):
     use_case_label: Optional[str] = Field(None, description="Use case display label")
     prerequisites_completed: Optional[bool] = Field(None, description="Whether prerequisites are completed")
     workshop_level: Optional[str] = Field(None, description="Workshop level: app-only, app-database, lakehouse, lakehouse-di, end-to-end, accelerator, or genie-accelerator")
-    completed_steps: Optional[List[int]] = Field(None, description="List of completed step numbers")
-    skipped_steps: Optional[List[int]] = Field(None, description="List of skipped step numbers")
+    # Gate write (Phase 3 T5) — see SessionSaveRequest for the contract. The legacy
+    # numeric progress fields were retired in R4a (writes stopped); a legacy tab
+    # may still POST them, but Pydantic's default extra='ignore' drops them.
+    # Optional/None on this partial-update path so an
+    # update that carries no gates (e.g. an industry-only save) leaves the persisted
+    # gates untouched (COALESCE for the column, no patch key for skipped_gates).
+    # When present they MUST be the complete set.
+    completed_gates: Optional[List[str]] = Field(None, description="Complete set of completed step sectionTags")
+    skipped_gates: Optional[List[str]] = Field(None, description="Complete set of skipped step sectionTags (persisted under session_parameters.skipped_gates)")
+    # Merge bases (D-12) — see SessionSaveRequest.
+    base_completed_gates: Optional[List[str]] = Field(None, description="completed_gates as the SPA last saw them (merge base; absent => App-authoritative)")
+    base_skipped_gates: Optional[List[str]] = Field(None, description="skipped_gates as the SPA last saw them (merge base; absent => App-authoritative)")
     custom_use_case_label: Optional[str] = Field(None, max_length=30, description="User-edited use case name override")
     custom_use_case_description: Optional[str] = Field(None, description="User-edited use case description override")
     level_explicitly_selected: Optional[bool] = Field(None, description="Whether the user explicitly clicked a level button")
@@ -6136,6 +5591,11 @@ class SessionUpdateMetadataRequest(BaseModel):
     coding_assistant: Optional[str] = Field(None, description="Selected coding assistant: cursor, copilot, or vscode")
     include_lakehouse: Optional[bool] = Field(None, description="Genie Accelerator: include the optional Lakehouse (Bronze -> Gold) block")
     include_genie_ontology: Optional[bool] = Field(None, description="Genie Accelerator: include the optional Genie Ontology block")
+    # Engine composition inputs (Phase 3 T3b-2a) — see SessionSaveRequest for the
+    # rationale. Persisted alongside the snake_case keys so GET /outline reflects
+    # the UI's climb / reverse / AI+medallion / genie-opt-in state.
+    chain_context: Optional[str] = Field(None, description="Additive-chain context: app | lakehouse | reverse (persisted as session_parameters.chainContext)")
+    flags: Optional[Dict[str, bool]] = Field(None, description="Engine composition flags (e.g. includeLakehouse, ai.genie, medallion.bronze) persisted under session_parameters.flags")
 
 
 @router.post("/session/update-metadata")
@@ -6153,41 +5613,53 @@ async def update_session_metadata_endpoint(request_body: SessionUpdateMetadataRe
             'industry': request_body.industry, 'use_case': request_body.use_case,
             'workshop_level': request_body.workshop_level,
             'prerequisites_completed': request_body.prerequisites_completed,
-            'completed_steps': request_body.completed_steps,
-            'skipped_steps': request_body.skipped_steps,
+            'completed_gates': request_body.completed_gates,
+            'skipped_gates': request_body.skipped_gates,
         }.items() if v is not None]
         logger.info(f"[Session API] Updating metadata for session {request_body.session_id}: fields={_updating}")
-        
-        # Deduplicate step IDs to prevent score inflation from duplicate entries
-        if request_body.completed_steps is not None:
-            request_body.completed_steps = list(set(request_body.completed_steps))
-        
-        # Safety: warn if completed_steps is being explicitly set to empty
-        if request_body.completed_steps is not None and len(request_body.completed_steps) == 0:
-            logger.warning(f"[Session API] CAUTION: completed_steps being set to EMPTY for session {request_body.session_id}")
-        
-        # Calculate current_step from completed_steps if provided
-        current_step = None
-        if request_body.completed_steps:
-            current_step = max(request_body.completed_steps) if request_body.completed_steps else None
-        
-        success = save_session(
-            session_id=request_body.session_id,
-            industry=request_body.industry,
-            industry_label=request_body.industry_label,
-            use_case=request_body.use_case,
-            use_case_label=request_body.use_case_label,
-            created_by=current_user,
-            prerequisites_completed=request_body.prerequisites_completed,
-            workshop_level=request_body.workshop_level,
-            completed_steps=request_body.completed_steps,
-            skipped_steps=request_body.skipped_steps,
-            current_step=current_step,
-        )
-        
+
+        # Gate write (T5): MERGE-on-present / PRESERVE-on-absent, symmetric
+        # for completed_gates (column) and skipped_gates (session_parameters). When
+        # the request carries either, the stored gates are read under FOR UPDATE,
+        # merged (`_merge_app_gates` add-only preserves non-representable stored
+        # gates, e.g. MCP `use_case_selection`, which the App can't represent as
+        # numbers and would otherwise destroy — re-locking any step whose
+        # requiresGate they satisfy) and written in ONE transaction, so a concurrent
+        # MCP gate write cannot be lost between read and write. Runs off the event
+        # loop; to_thread copies contextvars (OBO/user context unchanged).
+        if request_body.completed_gates is not None or request_body.skipped_gates is not None:
+            success = await asyncio.to_thread(
+                save_session_merging_gates,
+                request_body.session_id,
+                app_completed_gates=request_body.completed_gates,
+                app_skipped_gates=request_body.skipped_gates,
+                base_completed_gates=request_body.base_completed_gates,
+                base_skipped_gates=request_body.base_skipped_gates,
+                industry=request_body.industry,
+                industry_label=request_body.industry_label,
+                use_case=request_body.use_case,
+                use_case_label=request_body.use_case_label,
+                created_by=current_user,
+                prerequisites_completed=request_body.prerequisites_completed,
+                workshop_level=request_body.workshop_level,
+            )
+        else:
+            success = save_session(
+                session_id=request_body.session_id,
+                industry=request_body.industry,
+                industry_label=request_body.industry_label,
+                use_case=request_body.use_case,
+                use_case_label=request_body.use_case_label,
+                created_by=current_user,
+                prerequisites_completed=request_body.prerequisites_completed,
+                workshop_level=request_body.workshop_level,
+                completed_gates=None,  # None => COALESCE preserves
+            )
+
         # Store custom use case overrides and derive user_schema_prefix
+        # (skipped_gates is written inside the locked gate transaction above).
         _session_param_patch = {}
-        
+
         if request_body.custom_use_case_label is not None:
             _session_param_patch['custom_use_case_label'] = request_body.custom_use_case_label
         if request_body.custom_use_case_description is not None:
@@ -6204,7 +5676,15 @@ async def update_session_metadata_endpoint(request_body: SessionUpdateMetadataRe
             _session_param_patch['include_lakehouse'] = request_body.include_lakehouse
         if request_body.include_genie_ontology is not None:
             _session_param_patch['include_genie_ontology'] = request_body.include_genie_ontology
-        
+        # Engine composition inputs (Phase 3 T3b-2a): persist under the exact keys
+        # engine._inputs_for (top-level chainContext) and _flags_for (nested flags)
+        # read, so GET /outline mirrors the UI. The JSONB `||` merge replaces the
+        # `flags` object wholesale — the SPA sends the complete flag set each save.
+        if request_body.chain_context is not None:
+            _session_param_patch['chainContext'] = request_body.chain_context
+        if request_body.flags is not None:
+            _session_param_patch['flags'] = request_body.flags
+
         # Derive user_schema_prefix from email + use case name (or source schema for accelerator)
         # Triggered when use case is selected, custom label is edited, or workshop_level changes
         _uc_name = (
@@ -6404,8 +5884,13 @@ class LeaderboardEntry(BaseModel):
     display_name: str = Field(..., description="Formatted display name (e.g., 'John D.')")
     avatar: str = Field(..., description="Emoji avatar for the user")
     score: int = Field(..., description="Total score based on completed steps")
-    completed_steps: List[int] = Field(default_factory=list, description="List of completed step numbers")
-    skipped_steps: List[int] = Field(default_factory=list, description="List of skipped step numbers")
+    completed_globals: List[int] = Field(default_factory=list, description="Completed GLOBAL step numbers (gate-derived)")
+    skipped_globals: List[int] = Field(default_factory=list, description="Skipped GLOBAL step numbers (gate-derived)")
+    # Gate-derived canonical GLOBAL-step counts (T5 PR3c/R4b). Optional/None so
+    # cached or older-shape entries still construct; the FE reads these counts
+    # directly rather than measuring an array length.
+    completed_step_count: Optional[int] = Field(None, description="Gate-derived count of completed GLOBAL steps")
+    skipped_step_count: Optional[int] = Field(None, description="Gate-derived count of skipped GLOBAL steps")
     completed_chapters: List[str] = Field(default_factory=list, description="Fully completed chapters")
     in_progress_chapters: List[str] = Field(default_factory=list, description="Chapters with some progress")
     updated_at: Optional[str] = Field(None, description="Last update timestamp")
@@ -6488,40 +5973,6 @@ async def get_user_sessions_by_email(email: str) -> List[SessionListItem]:
     except Exception as e:
         logger.error(f"[Workshop Users API] Error fetching sessions for {email}: {e}", exc_info=True)
         return []
-
-
-@router.post("/admin/cleanup-sessions")
-async def cleanup_sessions_endpoint(request: Request) -> Dict[str, Any]:
-    """
-    Admin endpoint to clean up session data.
-    
-    Fixes:
-    1. Replaces step 41 with step 4 in completed_steps arrays
-    2. Updates current_step to match max(completed_steps) for each session
-    
-    Returns count of sessions fixed.
-    """
-    try:
-        # Get current user for logging
-        current_user = _get_session_user(request)
-        logger.info(f"[Admin API] Session cleanup triggered by {current_user}")
-        
-        stats = cleanup_session_steps()
-        
-        logger.info(f"[Admin API] Cleanup complete: {stats}")
-        return {
-            "success": True,
-            "message": f"Cleanup complete. Fixed {stats['sessions_fixed']} sessions, replaced step 41 in {stats['step_41_replaced']} sessions.",
-            "stats": stats
-        }
-        
-    except Exception as e:
-        logger.error(f"[Admin API] Cleanup error: {e}", exc_info=True)
-        return {
-            "success": False,
-            "message": str(e),
-            "stats": {'sessions_fixed': 0, 'step_41_replaced': 0}
-        }
 
 
 # ============================================================
@@ -7121,6 +6572,33 @@ async def _stream_usecase_generation(
 
     async for event in _stream_with_retry(messages, max_tokens=LLM_MAX_OUTPUT_TOKENS, temperature=0.5):
         yield event
+
+
+async def generate_usecase_description(request_body: UseCaseGenerateRequest) -> str:
+    """Non-streaming wrapper: aggregate the builder's SSE content into one string.
+
+    Reuses the exact PRD-grade message-building of ``_stream_usecase_generation``
+    (system prompt, industry/use_case/hints) and only collapses the SSE transport
+    so a non-streaming caller (e.g. the MCP ``draft_custom`` path) gets the full
+    Markdown draft. Concatenates every ``content`` delta in order; an ``error``
+    event is fatal.
+    """
+    import json as _json
+
+    parts: list[str] = []
+    async for event in _stream_usecase_generation(request_body):
+        if not event.startswith("data: "):
+            continue
+        payload = _json.loads(event[6:].strip())
+        etype = payload.get("type")
+        if etype == "content":
+            parts.append(payload.get("content", ""))
+        elif etype == "error":
+            raise RuntimeError(payload.get("error", "use case generation failed"))
+    text = "".join(parts).strip()
+    if not text:
+        raise RuntimeError("use case generation returned no content")
+    return text
 
 
 @router.post("/usecase-builder/generate", summary="Generate use case description (streaming SSE)")

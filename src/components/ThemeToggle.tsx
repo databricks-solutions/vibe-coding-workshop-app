@@ -3,32 +3,24 @@ import { Sun, Moon } from 'lucide-react';
 
 type Theme = 'dark' | 'light';
 
+function applyTheme(newTheme: Theme) {
+  const root = document.documentElement;
+  if (newTheme === 'light') {
+    root.classList.add('light');
+  } else {
+    root.classList.remove('light');
+  }
+}
+
 export function ThemeToggle() {
-  const [theme, setTheme] = useState<Theme>('dark');
+  // Initialize theme from localStorage; with nothing stored, default to dark
+  // (the old system-preference check resolved to dark either way).
+  const [theme, setTheme] = useState<Theme>(() => (localStorage.getItem('theme') as Theme | null) || 'dark');
 
-  // Initialize theme from localStorage or system preference
+  // Keep the document class in sync with the theme
   useEffect(() => {
-    const stored = localStorage.getItem('theme') as Theme | null;
-    if (stored) {
-      setTheme(stored);
-      applyTheme(stored);
-    } else {
-      // Check system preference
-      const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-      const initialTheme = prefersDark ? 'dark' : 'dark'; // Default to dark
-      setTheme(initialTheme);
-      applyTheme(initialTheme);
-    }
-  }, []);
-
-  const applyTheme = (newTheme: Theme) => {
-    const root = document.documentElement;
-    if (newTheme === 'light') {
-      root.classList.add('light');
-    } else {
-      root.classList.remove('light');
-    }
-  };
+    applyTheme(theme);
+  }, [theme]);
 
   const toggleTheme = () => {
     const newTheme = theme === 'dark' ? 'light' : 'dark';

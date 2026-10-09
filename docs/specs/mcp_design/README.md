@@ -1,0 +1,173 @@
+# MCP Design — Interactive Genie Accelerator over MCP
+
+This folder is the **coherent document series** for turning the vibe-coding workshop app into an
+MCP server that Genie Code walks in-conversation — turning the Genie Accelerator track from a
+copy-paste sequence into an interactive, tutor-style experience.
+
+It is organized as: **origin roadmap → research → probe-grounded plan → (to-be-written) design
+docs.** Read in the order below.
+
+---
+
+## The series (reading order)
+
+| # | Document | Kind | Status | What it is |
+|---|---|---|---|---|
+| 1 | [`mcp-workshop-engine.md`](./mcp-workshop-engine.md) | Roadmap / handoff | Written (2026-09-19; §11 refreshed to the 14 shipped tracks 2026-10-08) | The origin spec: lift orchestration into a backend Workshop Engine that both the UI and an MCP adapter consume. The substrate everything else builds on. **Predates the probe.** |
+| 2 | [`mcp-research-and-findings.md`](./mcp-research-and-findings.md) | Reference | Written (2026-09-21) | The research that grounds the design: MCP `2026-07-28` protocol landscape, the interactivity thesis, and code-grounded corrections — **reconciled against the live probe** (probe wins on conflict). |
+| 3 | [`mcp-interactive-track-doc-plan.md`](./mcp-interactive-track-doc-plan.md) | Build plan | Written (2026-09-21) | **§1 = the authoritative probe findings.** Then the D1–D10 document set to build, with content, dependencies, and write order. |
+| 4 | [`designing-mcp-servers-for-genie-code.md`](./designing-mcp-servers-for-genie-code.md) | Generic spec | Written (2026-09-22) | **Product-agnostic.** How *any* agent should design, deploy, and verify an MCP server that works with Genie Code — client ground truth, deployment requirements, tool/prompt/resource design, in-band interaction patterns, a reusable capability probe, and a checklist. |
+| 5 | [`workshop-engine-domain.md`](./workshop-engine-domain.md) | Spec (D3) | **Draft (2026-09-22)** | The backend domain: manifest JSON Schema, progression functions, assembler-parity contract, state model. Transport-agnostic keystone. |
+| 6 | [`mcp-workshop-interactivity.md`](./mcp-workshop-interactivity.md) | Spec (D1) | **Draft (2026-09-22; +§4.6 coaching 2026-09-23)** | The no-elicitation interaction model: the in-band patterns (four core + orientation + Phase 2A adaptive coaching), the `interaction` payload block, capability negotiation, the Step-9 hard-stop, and the elicitation upgrade path. |
+| 7 | [`mcp-interface-contract.md`](./mcp-interface-contract.md) | Spec (D2) | **Draft (2026-09-22; +Phase 2A coaching 2026-09-23; +2A consolidation 2026-09-27)** | The IDL: 7 tools (6 core + `vibe_explain_step`; Phase-2A coaching folds into `vibe_explain_step` per §9 amendment; name, description-as-prompt, input/output schemas, all four annotations, error taxonomy), resources, prompts, the tool-budget accounting, and the adaptive-coaching internals (`CoachResult` + `_COACH_SYSTEM`, §12). |
+| 8 | [`mcp-workshop-pedagogy.md`](./mcp-workshop-pedagogy.md) | Spec (D5) | **Draft (2026-09-22)** | The learning model, where comprehension checks + decision points sit per section, the recommend-and-proceed doctrine, question-bank authoring via the `sections/*.md` pipeline, in-band phrasing, and the tone contract. |
+| 9 | [`mcp-workshop-architecture.md`](./mcp-workshop-architecture.md) | Spec (D4) | **Draft (2026-09-22)** | Components, the Databricks Apps deployment topology (probe gotchas encoded), and the sequence diagrams (start/param intake, step walk + gate, cross-surface sync, Step-9 hard-stop). |
+| 10 | [`mcp-workshop-data-model.md`](./mcp-workshop-data-model.md) | Spec (D6) | **Draft (2026-09-22)** | Additive Lakebase changes: `captured_outputs` / `completed_gates` columns, the `session_interactions` log, session-parameter keys, number↔tag migration, and the migration DDL. |
+| 11 | [`mcp-workshop-security.md`](./mcp-workshop-security.md) | Spec (D7) | **Draft (2026-09-22)** | Identity → `session_id`, MCP-session≠auth, managed-proxy identity nuance, CORS reconciliation, the `/mcp` rate-limit decision, and stateless-concurrency isolation. |
+| 12 | [`mcp-workshop-test-plan.md`](./mcp-workshop-test-plan.md) | Spec (D8) | **Draft (2026-09-22; §8 split into prober / human smoke 2026-10-08)** | Engine/parity, MCP contract, interactivity, the 307/mount/lifespan regressions, statelessness, data-model migration, the live Genie Code smoke, and the reusable re-probe harness — with a spec→test coverage matrix. |
+| 13 | [`mcp-workshop-rollout.md`](./mcp-workshop-rollout.md) | Spec (D9) | **Draft (2026-09-22; +Phase 2A 2026-09-23; Phase 4 / §5 / §7 / §9 refreshed to shipped state 2026-10-08)** | The revised phasing (Phase 1 ships now; interactivity decoupled from elicitation; **Phase 2A adaptive coaching**, decoupled from Phase 3), reseed-vs-redeploy matrix, dependency pinning, the deploy preflight checklist, STOP-and-ask gates, rollback, and the re-probe trigger. |
+| 14 | [`mcp-workshop-facilitator-guide.md`](./mcp-workshop-facilitator-guide.md) | Guide (D10) | **Draft (2026-09-22)** | How a learner adds the app as a Custom MCP server, the dual-surface projector setup, the 20-tool caveat, what in-band interactivity looks like, and a troubleshooting table. |
+| 15 | [`mcp-workshop-usecase-selection.md`](./mcp-workshop-usecase-selection.md) | Spec (D11) | **Draft (2026-09-23; 14 tracks, open q1 resolved by #108, 2026-10-08)** | Post-smoke addendum: an in-band use-case discovery/selection stage (industry → certified-first use cases → author-your-own) that gates PRD and produces a track-agnostic `use_case_brief` — **zero new tools** (resources + existing tools). Plus cross-surface MCP↔SPA step sync (the bridge + the Phase 3 repoint), and a paste-ready Polly charter task. |
+
+---
+
+## The one fact that shapes everything (probe result)
+
+A live capability probe (Genie Code → custom MCP server, `fevm-serverless`, 2026-09-21) found that
+**Genie Code connects as a legacy `initialize` client at protocol `2025-11-25` and declares empty
+capabilities (`{}`)** — **no elicitation, no MRTR, no sampling.** It enumerates
+tools/prompts/resources, and nothing more.
+
+**Consequence:** interactivity is built **in-band** (questions as text the agent reads out, answers
+in chat, progression via tools + next-prompt-as-approval). Protocol elicitation is kept only as a
+**forward-compatible upgrade behind capability negotiation** — never a hard dependency. The
+canonical statement is [plan §1](./mcp-interactive-track-doc-plan.md#1-probe-findings-authoritative-constraints--do-not-re-litigate-without-a-re-probe);
+the reasoning and reconciliation are in [research §2–§3](./mcp-research-and-findings.md).
+
+**Design invariant — self-serve by construction ([D1 §1a](./mcp-workshop-interactivity.md)).** A
+first-time learner goes from "I have the app URL" to completing the track with **no human
+facilitator and no external doc**: the app's landing page carries the connection on-ramp
+([D4 §1.1](./mcp-workshop-architecture.md)), and the server orients + helps in-band via the
+`How does this workshop work?` prompt and the `vibe://guide/getting-started` resource
+([D2 §4–§5](./mcp-interface-contract.md)). The one honest boundary is the manual paste of the
+`/mcp` URL into Genie Code (no protocol lets a server self-register); everything after it is
+server-driven. The [facilitator guide (D10)](./mcp-workshop-facilitator-guide.md) is a fallback, not
+a prerequisite.
+
+---
+
+## Vocabulary: `track` vs `coding_assistant` (and what MCP pins)
+
+Two orthogonal axes that are easy to conflate — the crisp definitions live in
+[D3 §2.1](./workshop-engine-domain.md); the MCP-specific pinning lives here:
+
+- **`track`** (a `WorkshopLevel`: `genie-accelerator`, `lakehouse`, …) + its optional-chapter
+  **flags** (`includeGenieOntology`, `includeLakehouse`) decide **which steps appear** (composition).
+- **`coding_assistant`** (the `__default__` / `genie-code` / `coda` fork on each prompt row) decides
+  **which prompt body a step renders** (content).
+
+**What the MCP adapter pinned (before P4.1):** `mcp_server.py` fixes `DEFAULT_TRACK = "genie-accelerator"` and
+`DEFAULT_CODING_ASSISTANT = "genie-code"`, and leaves the optional-chapter flags at their defaults
+(both OFF), so the default MCP walk is Foundation → Semantic Layer → Genie Agent → Activate →
+Refinement → Clean Up (Lakehouse and Ontology are opt-in via `vibe_set_parameters`). **There is no
+"Genie Code track" row** — the Genie Code experience is `genie-accelerator` + the `genie-code` fork +
+default flags. "Genie Code has its own track" is a statement about *this pinned combination*, never a
+separate `WorkshopLevel`.
+
+**Since P4.1 (#107, D-30) the MCP walk is track-scoped:** every tool resolves the session's own track
+through `track_resolution.resolve_track` (`_session_track`, `mcp_server.py:529`); `DEFAULT_TRACK` is now
+only the definition and the fallback for a session with no record (Phase 4 exit report §2 row P4.1).
+
+---
+
+## Document set (from the plan) — all drafted ✅
+
+Write order (complete): **D1 + D3** → **D2 + D5** → **D4 + D6 + D7** → **D8 + D9** → **D10**.
+
+- **D1** ✅ [`mcp-workshop-interactivity.md`](./mcp-workshop-interactivity.md) — keystone: the no-elicitation interaction model + patterns (four core + orientation + Phase 2A coaching). *(Draft)*
+- **D3** ✅ [`workshop-engine-domain.md`](./workshop-engine-domain.md) — manifest schema, progression semantics, assembler-parity contract. *(Draft)*
+- **D2** ✅ [`mcp-interface-contract.md`](./mcp-interface-contract.md) — the tool/resource/prompt IDL. *(Draft)*
+- **D5** ✅ [`mcp-workshop-pedagogy.md`](./mcp-workshop-pedagogy.md) — learning model + question authoring. *(Draft)*
+- **D4** ✅ [`mcp-workshop-architecture.md`](./mcp-workshop-architecture.md) — components + sequences + deployment topology. *(Draft)*
+- **D6** ✅ [`mcp-workshop-data-model.md`](./mcp-workshop-data-model.md) — Lakebase DDL incl. the interaction/decision log. *(Draft)*
+- **D7** ✅ [`mcp-workshop-security.md`](./mcp-workshop-security.md) — identity, CORS reconciliation, `/mcp` rate-limit decision. *(Draft)*
+- **D8** ✅ [`mcp-workshop-test-plan.md`](./mcp-workshop-test-plan.md) — parity, contract, 307-regression, re-probe harness. *(Draft)*
+- **D9** ✅ [`mcp-workshop-rollout.md`](./mcp-workshop-rollout.md) — phasing (Phase 1 ships now), version pinning, deploy gates. *(Draft)*
+- **D10** ✅ [`mcp-workshop-facilitator-guide.md`](./mcp-workshop-facilitator-guide.md) — setup + troubleshooting. *(Draft)*
+
+All D1–D10 are drafted; D11 (post-smoke) adds the use-case layer + sync. Full content-per-doc and
+the dependency graph are in [`mcp-interactive-track-doc-plan.md`](./mcp-interactive-track-doc-plan.md).
+
+### Build charters & current status
+
+Phasing authority is [D9 §1](./mcp-workshop-rollout.md#1-revised-phasing-elicitation-decoupled).
+
+- **Phases 0, 1, 2, 2B — SHIPPED** (PRs #40–#44 + #45–#49, deployed to `fevm-serverless`, smoke green;
+  **7 tools** — the 7th is `vibe_explain_step`, not `vibe_coach`; see the reconciliation in
+  [D9 §1](./mcp-workshop-rollout.md#1-revised-phasing-elicitation-decoupled)). Still **7 tools** after
+  Phase 4 (`mcp_server.py:1204-2055`; [Phase 4 exit report](../../superpowers/plans/2026-10-08-phase4-exit-report.md) :3).
+- **Phase 3 — SHIPPED** (exit gate PASS: [Phase 3 exit report](../../superpowers/plans/2026-10-04-phase3-exit-report.md),
+  #80–#95). History: **T0–T4 SHIPPED; T5 soaking** ([D9 §1](./mcp-workshop-rollout.md), scoped 2026-09-27):
+  repoint the SPA to the engine outline (`GET /api/track/{track}/outline`, D4 §3.3) and retire the TS
+  orchestration. T0 persists the track and fixed the live "0/28" resume defect (PR #50); T1–T4
+  (PRs #51/#52/#53/#57/#59/#61) land the outline endpoint, the engine-vs-TS parity harness, the SPA
+  read-path repoint, and the `getFilteredSections` retirement. **T5 (gates-only contract)** is at R4b
+  (#71): the legacy `current_step`/`completed_steps`/`skipped_steps` dual-write stopped in R4a (#70)
+  and all reads went gates-only in R4b — **deployed and soaking; the legacy-column DROP (D6 §5/§9) is
+  pending** (human holds the soak clock). Charter:
+  [`polly-charter-phase3.md`](./polly-charter-phase3.md).
+- **Phase 2A — SHIPPED** (#98–#105, D-22; [Phase 2A gate report](../../superpowers/plans/2026-10-05-phase2a-gate-report.md)):
+  adaptive coaching delivered as a **consolidation** — extend `vibe_explain_step` (optional `focus`,
+  FMAPI path, fail-open to the static help), **no 8th tool**. Cost/endpoint signed off 2026-09-24.
+- **Phase 4 — SHIPPED per its report** (#107–#126, TPL #18/#19;
+  [Phase 4 exit report](../../superpowers/plans/2026-10-08-phase4-exit-report.md)): all **14 manifest
+  tracks** walkable over MCP; P4.1 PASS with caveat (`skills-track-silent-fallback`), P4.2 and P4.5 PASS, P4.3 PASS with caveat (3 v2 rows held, D-61),
+  P4.4 PARTIAL (D-62). See [D9 §1](./mcp-workshop-rollout.md#1-revised-phasing-elicitation-decoupled).
+
+Charters (the paste-ready supervisor commands for Polly):
+- [`polly-build-charter.md`](./polly-build-charter.md) — the original Phase 0→2/2A charter.
+- [`polly-charter-next.md`](./polly-charter-next.md) — Phase 2B → 2A (**2B shipped; superseded** — 2A is
+  reframed as a consolidation into `vibe_explain_step` and moved after Phase 3).
+- [`polly-charter-phase3.md`](./polly-charter-phase3.md) — **Phase 3 (UI-repoint): T0–T4 shipped; T5 (gates-only contract) soaking, DROP pending.**
+- [`polly-charter-autonomous.md`](./polly-charter-autonomous.md) — **current:** how the 2026-10 autonomous
+  run (Phase 3 cleanup, 2A, 4) was governed. It supersedes the three charters above, which carry a
+  "Superseded (2026-10-08)" banner and are kept as history.
+
+**Later addition — Phase 2A: adaptive coaching (2026-09-23; reframed as a consolidation 2026-09-27).**
+Adaptive coaching — delivered by **extending `vibe_explain_step`** (no separate `vibe_coach` tool) —
+turns the track from "canned step + canned help" into a live tutor: it calls an in-workspace **FMAPI** model
+with the prompts/state the server already holds and coaches the learner on *what's happening and
+why* (`what_now`/`why`/`unblock`/`review`). It is **in-band** (server-side model call, not
+server→client sampling), **fail-open** to the authored static coaching, **read-only**, and
+**firewalled**. It is decoupled from Phase 3 (depends only on Phase 2). The design threads
+through the series: pattern [D1 §4.6](./mcp-workshop-interactivity.md); tool + `CoachResult` +
+`_COACH_SYSTEM` [D2 §3.7/§12](./mcp-interface-contract.md); doctrine [D5 §11](./mcp-workshop-pedagogy.md);
+provenance [D6 §3a/§7a](./mcp-workshop-data-model.md); firewall [D7 §6.1](./mcp-workshop-security.md);
+`services/llm.py` + sequence [D4 §1.2/§3.5](./mcp-workshop-architecture.md); tests
+[D8 §4a](./mcp-workshop-test-plan.md); phasing [D9 §1 Phase 2A](./mcp-workshop-rollout.md); and the
+reusable generic pattern in
+[`designing-mcp-servers-for-genie-code.md` §7.5](./designing-mcp-servers-for-genie-code.md).
+
+---
+
+## Related specs (parent folder, `../`)
+
+The Genie Accelerator track content these docs orchestrate lives one level up in `docs/specs/`:
+[`PLAN.md`](../PLAN.md),
+[`genie-accelerator-prompt-standardization.md`](../genie-accelerator-prompt-standardization.md),
+[`genie-track-activation-and-step-cleanup.md`](../genie-track-activation-and-step-cleanup.md),
+[`genie-accelerator-diagram-and-optional-lakehouse.md`](../genie-accelerator-diagram-and-optional-lakehouse.md),
+[`genie-accelerator-locate-daisychain-and-prompt-cleanup.md`](../genie-accelerator-locate-daisychain-and-prompt-cleanup.md).
+Architecture image: [`../images/mcp-workshop-engine-architecture.png`](../images/mcp-workshop-engine-architecture.png)
+(source `.mmd` alongside it).
+
+---
+
+## Open decisions (before D1 is written)
+
+1. **Companion files vs. inline** — keep D1–D10 as focused `.md` files in this folder
+   (recommended) or fold some into `mcp-workshop-engine.md`.
+2. **v1 ambition** — ship read-only fetch-and-narrate first (unblocked today), then layer in-band
+   interactivity (recommended); or build the interactive layer in the first cut.
+3. **Re-probe trigger** — when to re-run the capability probe to check whether Genie Code has
+   gained elicitation (e.g., next Genie Code release; or before committing the interactivity phase).

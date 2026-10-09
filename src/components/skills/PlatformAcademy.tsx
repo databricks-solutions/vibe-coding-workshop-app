@@ -50,16 +50,22 @@ function Quiz({ quiz }: { quiz: NonNullable<AcademyModule['quiz']> }) {
 
 /** Mode 4 — Platform Academy: module sidebar + sectioned content + quiz. */
 export function PlatformAcademy({ requestedModuleId, onModuleConsumed }: PlatformAcademyProps) {
-  const [activeId, setActiveId] = useState<string | null>(null);
+  // Honor external requests to open a specific module: open it during render
+  // (or at mount), then tell the parent the request was consumed from an
+  // effect, since that updates the parent's state.
+  const isValidRequest = !!requestedModuleId && ACADEMY.some((m) => m.id === requestedModuleId);
+  const [activeId, setActiveId] = useState<string | null>(isValidRequest ? requestedModuleId : null);
   const mainRef = useRef<HTMLDivElement | null>(null);
 
-  // Honor external requests to open a specific module.
+  const [prevRequestedModuleId, setPrevRequestedModuleId] = useState(requestedModuleId);
+  if (requestedModuleId !== prevRequestedModuleId) {
+    setPrevRequestedModuleId(requestedModuleId);
+    if (isValidRequest) setActiveId(requestedModuleId);
+  }
+
   useEffect(() => {
-    if (requestedModuleId && ACADEMY.some((m) => m.id === requestedModuleId)) {
-      setActiveId(requestedModuleId);
-      onModuleConsumed?.();
-    }
-  }, [requestedModuleId, onModuleConsumed]);
+    if (isValidRequest) onModuleConsumed?.();
+  }, [isValidRequest, requestedModuleId, onModuleConsumed]);
 
   const active = useMemo(() => ACADEMY.find((m) => m.id === activeId) || null, [activeId]);
   const sections = useMemo(() => (active ? splitAcadContent(active.content) : []), [active]);

@@ -10,13 +10,18 @@
 #
 # USAGE:
 #   ./scripts/setup-lakebase.sh                      # Create tables if not exist + seed
-#   ./scripts/setup-lakebase.sh --recreate           # Drop and recreate tables + seed
-#   ./scripts/setup-lakebase.sh --drop               # Drop tables only
+#   ./scripts/setup-lakebase.sh --recreate --yes     # Drop and recreate tables + seed (DESTRUCTIVE)
+#   ./scripts/setup-lakebase.sh --drop --yes         # Drop tables only (DESTRUCTIVE)
 #   ./scripts/setup-lakebase.sh --status             # Check table status
 #   ./scripts/setup-lakebase.sh --check-instance     # Check if Lakebase instance exists
 #   ./scripts/setup-lakebase.sh --create-instance    # Create Lakebase instance if not exists
 #   ./scripts/setup-lakebase.sh --setup-permissions  # Setup app permissions on Lakebase
-#   ./scripts/setup-lakebase.sh --full-setup         # Full setup: instance + permissions + tables
+#   ./scripts/setup-lakebase.sh --full-setup         # Full setup: instance + permissions + tables (additive)
+#
+# DESTRUCTIVE ACTIONS (D-35):
+#   --recreate and --drop refuse to run unless --yes is passed AND
+#   VIBE_CONFIRM_DESTRUCTIVE_RESEED is set to the exact target schema name.
+#   The refusal happens before any connection is attempted.
 #
 # REQUIREMENTS:
 #   - Python with psycopg2-binary, requests
@@ -84,15 +89,20 @@ AUTO_APPROVE=false
 ACTION="create"
 SETUP_INSTANCE=false
 SETUP_PERMISSIONS=false
+EXPLICIT_RECREATE=false
+EXPLICIT_DROP=false
+FULL_SETUP=false
 
 while [[ $# -gt 0 ]]; do
     case $1 in
         --recreate)
             ACTION="recreate"
+            EXPLICIT_RECREATE=true
             shift
             ;;
         --drop)
             ACTION="drop"
+            EXPLICIT_DROP=true
             shift
             ;;
         --status)
@@ -113,6 +123,7 @@ while [[ $# -gt 0 ]]; do
             ;;
         --full-setup)
             ACTION="full-setup"
+            FULL_SETUP=true
             shift
             ;;
         --app-name)
@@ -133,6 +144,33 @@ while [[ $# -gt 0 ]]; do
             ;;
     esac
 done
+
+# --full-setup wins regardless of flag order; its table step is additive
+# unless --recreate was also passed explicitly (see the full-setup branch).
+if [[ "$FULL_SETUP" == true ]]; then
+    ACTION="full-setup"
+fi
+
+# =============================================================================
+# D-35: destructive actions need --yes AND VIBE_CONFIRM_DESTRUCTIVE_RESEED=<schema>.
+# Checked here, before any network call, so a refusal never touches Lakebase.
+# =============================================================================
+if [[ "$EXPLICIT_RECREATE" == true || "$EXPLICIT_DROP" == true ]]; then
+    if [[ -n "${LAKEBASE_SCHEMA_OVERRIDE:-}" ]]; then
+        CONFIRM_TARGET_SCHEMA="$LAKEBASE_SCHEMA_OVERRIDE"
+    else
+        CONFIRM_TARGET_SCHEMA=$(grep -A1 "name: LAKEBASE_SCHEMA" app.yaml 2>/dev/null | grep "value:" | sed 's/.*value: *"\([^"]*\)".*/\1/' | head -1)
+    fi
+    if [[ "$AUTO_APPROVE" != true \
+          || -z "$CONFIRM_TARGET_SCHEMA" \
+          || "${VIBE_CONFIRM_DESTRUCTIVE_RESEED:-}" != "$CONFIRM_TARGET_SCHEMA" ]]; then
+        echo -e "${RED}Refusing destructive table action (--recreate/--drop).${NC}" >&2
+        echo -e "${RED}It DROPS usecase_descriptions and section_input_prompts (--drop also sessions) in schema '${CONFIRM_TARGET_SCHEMA:-<unknown>}'; --recreate then re-runs every seed. Live prompt, config and session data is lost.${NC}" >&2
+        echo "To proceed deliberately, pass --yes AND set VIBE_CONFIRM_DESTRUCTIVE_RESEED=<target schema name>." >&2
+        echo "For a non-destructive run, omit --recreate/--drop (create-if-not-exists + ON CONFLICT DO NOTHING seed)." >&2
+        exit 1
+    fi
+fi
 
 echo -e "${GREEN}🌊 Lakebase Setup${NC}"
 echo ""
@@ -181,7 +219,13 @@ if [[ "$ACTION" == "full-setup" ]]; then
     # Step 2: Create tables and seed data
     echo ""
     echo -e "${CYAN}Step 2: Table Setup${NC}"
-    ACTION="recreate"  # Continue with table recreation
+    # Additive by default (D-35); recreate only when --recreate was passed explicitly
+    # (already confirmed by the destructive-action guard above).
+    if [[ "$EXPLICIT_RECREATE" == true ]]; then
+        ACTION="recreate"
+    else
+        ACTION="create"
+    fi
 fi
 
 # =============================================================================
@@ -308,6 +352,14 @@ ENDPOINT_NAME = os.environ.get('ENDPOINT_NAME', '')
 # Paths to SQL files
 DDL_DIR = os.path.join(PROJECT_ROOT, 'db', 'lakebase', 'ddl')
 DML_SEED_DIR = os.path.join(PROJECT_ROOT, 'db', 'lakebase', 'dml_seed')
+
+# D-37: baseline + ledger additive apply of new seed rows (scripts/seed_new_rows.py)
+sys.path.insert(0, os.path.join(PROJECT_ROOT, 'scripts'))
+try:
+    import seed_new_rows
+except Exception as e:
+    print(f"❌ Could not import scripts/seed_new_rows.py: {e}")
+    sys.exit(1)
 
 print(f"Action: {ACTION}")
 print()
@@ -602,6 +654,16 @@ try:
             count = execute_sql_file(cursor, ddl_file, SCHEMA, ignore_errors=True)
             print(f"({count} statements)")
         
+        # F2 (D-38): mark both seed tables bulk-pending BEFORE the reseed, so a
+        # crash before record_applied_rows is recovered by the next run.
+        try:
+            leftover_bulks = seed_new_rows.mark_bulk_pending(
+                cursor, SCHEMA, [table for table, _, _ in seed_new_rows.SEED_TABLES]
+            )
+        except Exception as e:
+            print(f"❌ seed_new_rows failed: {e}")
+            sys.exit(1)
+
         # Execute DML seed files
         print(f"  Executing DML seed from {DML_SEED_DIR}/...")
         dml_files = get_dml_seed_files()
@@ -622,7 +684,21 @@ try:
                 print(f"    {table}.{col} sequence reset to {max_val + 1}")
             except Exception as e:
                 print(f"    (sequence for {table}.{col} not found or already correct)")
-        
+
+        # S5 (D-37): ledger every post-baseline seed row the reseed just wrote,
+        # so an admin delete of one is not resurrected by a later create-mode
+        # run. seed_rows_applied is not dropped above; stale ledger rows are
+        # harmless because this reseed wrote those rows again. A marker left
+        # by an interrupted earlier run is recovered first; record_applied_rows
+        # clears each table's marker after ledgering it (F2, D-38).
+        print("  Recording post-baseline seed rows in seed_rows_applied...")
+        try:
+            seed_new_rows.recover_interrupted_bulks(cursor, SCHEMA, DML_SEED_DIR, leftover_bulks)
+            seed_new_rows.record_applied_rows(cursor, SCHEMA, DML_SEED_DIR)
+        except Exception as e:
+            print(f"❌ seed_new_rows failed: {e}")
+            sys.exit(1)
+
         print()
         print("✓ Tables recreated and seeded successfully")
     
@@ -643,68 +719,25 @@ try:
             count = execute_sql_file(cursor, ddl_file, SCHEMA, ignore_errors=True)
             print(f"({count} statements)")
         
-        # Check if tables need seeding. We also probe any new
-        # "overrides/lookup" tables (added in later DDL revs) so that their
-        # seed files run on an existing install where the original two tables
-        # are already populated but the new table is empty. All seed files in
-        # this project use ON CONFLICT DO NOTHING, so re-running the full seed
-        # batch is safe and admin-edited content is preserved.
-        cursor.execute(f"SELECT COUNT(*) FROM {SCHEMA}.usecase_descriptions")
-        uc_count = cursor.fetchone()[0]
-        cursor.execute(f"SELECT COUNT(*) FROM {SCHEMA}.section_input_prompts")
-        sip_count = cursor.fetchone()[0]
-
-        # New overrides tables added by later DDLs. Missing table -> treat as
-        # empty (no extra guard needed because DDL just ran above).
-        svo_count = 0
+        # Per-table seed gating (D-37 S4-S6, scripts/seed_new_rows.py):
+        #   * 01 runs only if usecase_descriptions is EMPTY, 02 only if
+        #     section_input_prompts is EMPTY (then a never-lower sequence raise
+        #     and S5 ledgering of post-baseline rows into seed_rows_applied).
+        #   * A POPULATED table gets only post-baseline seed rows that are not
+        #     yet ledgered, inserted with ON CONFLICT DO NOTHING; baseline rows
+        #     an admin deleted stay deleted, and 01's UPDATEs never re-run.
+        #   * 08/09 run every time (ON CONFLICT DO NOTHING inserts;
+        #     updated_by='seed' guards on UPDATEs so admin changes are kept).
+        #   * Other seed files (the generated 03) run only on a fresh install.
+        # An empty step_visibility_overrides no longer re-runs 01/02 in full.
         try:
-            cursor.execute(f"SELECT COUNT(*) FROM {SCHEMA}.step_visibility_overrides")
-            svo_count = cursor.fetchone()[0]
-        except Exception:
-            pass
-
-        if uc_count == 0 or sip_count == 0 or svo_count == 0:
-            print(f"  Executing DML seed from {DML_SEED_DIR}/...")
-            dml_files = get_dml_seed_files()
-            for dml_file in dml_files:
-                filename = os.path.basename(dml_file)
-                print(f"    {filename}...", end=" ")
-                count = execute_sql_file(cursor, dml_file, SCHEMA, ignore_errors=True)
-                print(f"({count} statements)")
-            
-            # Reset sequences after seeding to avoid duplicate key errors
-            print("  Resetting sequences...")
-            for table, col in [('usecase_descriptions', 'config_id'), ('section_input_prompts', 'input_id')]:
-                try:
-                    cursor.execute(f"SELECT MAX({col}) FROM {SCHEMA}.{table}")
-                    max_val = cursor.fetchone()[0] or 0
-                    seq_name = f"{SCHEMA}.{table}_{col}_seq"
-                    cursor.execute(f"SELECT setval('{seq_name}', {max_val + 1}, false)")
-                    print(f"    {table}.{col} sequence reset to {max_val + 1}")
-                except Exception as e:
-                    print(f"    (sequence for {table}.{col} not found or already correct)")
-        else:
-            print(f"  Tables already have data (usecase: {uc_count}, section_prompts: {sip_count})")
-
-            # Existing install: the bulk-seed gate above did NOT fire, so any
-            # new product-default values landing in a seed file would be stuck
-            # on fresh installs only. The files listed below are designed to be
-            # safe on every invocation (ON CONFLICT DO NOTHING for INSERTs;
-            # updated_by='seed' guards on UPDATEs so admin-made changes are
-            # never clobbered). Re-running them here is how product-default
-            # tweaks reach existing installs without a disruptive --recreate.
-            POST_SEED_MIGRATIONS = [
-                '08_seed_step_visibility_overrides.sql',
-                '09_seed_path_visibility_overrides.sql',
-            ]
-            print(f"  Applying idempotent post-seed migrations...")
-            for mig in POST_SEED_MIGRATIONS:
-                mig_path = os.path.join(DML_SEED_DIR, mig)
-                if not os.path.exists(mig_path):
-                    continue
-                print(f"    {mig}...", end=" ")
-                count = execute_sql_file(cursor, mig_path, SCHEMA, ignore_errors=True)
-                print(f"({count} statements)")
+            seed_new_rows.run_create_mode_seed(
+                cursor, SCHEMA, DML_SEED_DIR,
+                lambda path: execute_sql_file(cursor, path, SCHEMA, ignore_errors=True),
+            )
+        except Exception as e:
+            print(f"❌ seed_new_rows failed: {e}")
+            sys.exit(1)
 
         print()
         print("✓ Tables ready")
