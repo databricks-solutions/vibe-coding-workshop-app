@@ -33,6 +33,8 @@ export interface ReleaseItem {
   category: ReleaseItemCategory;
   audience?: ReleaseItemAudience;
   icon?: ReleaseItemIcon;
+  /** Feature is shipped but still in beta; shown with a Beta badge. */
+  beta?: boolean;
 }
 
 export interface Release {
@@ -44,6 +46,39 @@ export interface Release {
 }
 
 export const RELEASES: Release[] = [
+  {
+    version: '2.4.0',
+    date: '2026-10-09',
+    title: 'Ideate (Beta) and a cleaner sidebar',
+    items: [
+      {
+        title: 'Ideate: shape a raw idea into a decision-ready brief',
+        description:
+          'A new Ideate section in the left nav. Speak or type a rough idea, and the AI walks you through five short steps: Spark, Industry Map, Clarify, Shape, and Brief. It asks the questions, you pick the answers, and nothing moves on without your approval. Ideas are saved in your browser. This feature is in beta, so expect changes.',
+        category: 'new',
+        audience: 'attendee',
+        icon: 'sparkles',
+        beta: true,
+      },
+      {
+        title: 'Built-in reviewer and gap check',
+        description:
+          'Every Ideate step has "Challenge me" for a reviewer\'s pushback and "Change something" for voice or text edits. The brief adds a Clarity score, a six-dimension gap check with one-click fixes, assumption tracking, and Given/When/Then test scenarios.',
+        category: 'new',
+        audience: 'attendee',
+        icon: 'search',
+        beta: true,
+      },
+      {
+        title: 'Redesigned left navigation',
+        description:
+          'The sidebar is now organized into Workshop (Workflow, Leaderboard, Agent Skills Navigator, Hackathons, Ideate) and Admin (Analytics, Configuration) groups, with a pinned Resources section for the repository template, Databricks docs, feature requests, and Release Notes. The app version and connection status moved to the footer, and desktop and mobile now share the same navigation.',
+        category: 'improved',
+        audience: 'attendee',
+        icon: 'palette',
+      },
+    ],
+  },
   {
     version: '2.3.0',
     date: '2026-09-21',

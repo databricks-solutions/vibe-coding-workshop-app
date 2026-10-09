@@ -9,10 +9,13 @@ import { HackathonsPage } from './components/hackathon/HackathonsPage';
 import { HackathonDetailPage } from './components/hackathon/HackathonDetailPage';
 import { HackathonPlaybook } from './components/hackathon/HackathonPlaybook';
 import { ReleaseNotesPage } from './components/ReleaseNotesPage';
+import { AppSidebar } from './components/layout/AppSidebar';
 // Agent Skills Navigator is a large, self-contained feature (galaxy map + tours +
 // academy with a big static data module). Lazy-load it so it never weighs down
 // the initial workflow bundle that every workshop participant hits first.
 const SkillsNavigatorPage = lazy(() => import('./components/skills/SkillsNavigatorPage'));
+// Ideate (beta) is self-contained and lazy-loaded so it never affects the workflow bundle.
+const IdeateApp = lazy(() => import('./components/ideate/IdeateApp'));
 import { 
   HeaderSessionMenu,
   SaveSessionDialog, 
@@ -20,7 +23,7 @@ import {
   SessionListDialog 
 } from './components/session';
 import { apiClient } from './api/client';
-import { Zap, MessageSquare, Trophy, Plus, PanelLeftClose, PanelLeft, Menu, X, BarChart3, Eye, Compass, Award, ChevronDown, List, BookOpen, Rocket } from 'lucide-react';
+import { MessageSquare, Plus, Menu, Eye } from 'lucide-react';
 import { normalizeLevel, getFilteredSections, getCumulativeOverrides, USE_CASE_LEVEL_LOCK, isForwardProgression, getDisabledTagsForAIModules, ALL_AI_MODULES, getDisabledTagsForMedallionLayers, normalizeMedallionLayers, ALL_MEDALLION_LAYERS, getDisabledTagsForLakehouse, getDisabledTagsForGenieOntology, computeChainContext, deriveInitialChainContext, type WorkshopLevel, type WorkflowDirection, type AIAgentModule, type MedallionLayer, type ChainContext } from './constants/workflowSections';
 import { DEFAULT_LEVEL_BY_ASSISTANT, parseCodingAssistantsConfig } from './constants/codingAssistants';
 
@@ -48,16 +51,10 @@ export default function App() {
   const isLeaderboardPage = location.pathname === '/leaderboard';
   const isAnalyticsPage = location.pathname === '/analytics';
   const isHackathonsPage = location.pathname.startsWith('/hackathons');
-
-  // Accordion: Hackathons sub-links in the left sidebar. Auto-open on a
-  // hackathon route; otherwise user-toggleable.
-  const [hackathonsExpanded, setHackathonsExpanded] = useState(false);
-  useEffect(() => {
-    if (isHackathonsPage) setHackathonsExpanded(true);
-  }, [isHackathonsPage]);
   const isSkillsPage = location.pathname === '/skills';
   const isReleaseNotesPage = location.pathname === '/release-notes';
-  const isWorkflowPage = !isConfigPage && !isLeaderboardPage && !isAnalyticsPage && !isHackathonsPage && !isSkillsPage && !isReleaseNotesPage;  
+  const isIdeatePage = location.pathname === '/ideate' || location.pathname.startsWith('/ideate/');
+  const isWorkflowPage = !isConfigPage && !isLeaderboardPage && !isAnalyticsPage && !isHackathonsPage && !isSkillsPage && !isReleaseNotesPage && !isIdeatePage;  
   // Data refresh key - incremented when navigating from Config to Workflow
   // This forces PromptGenerator and other components to re-fetch data
   const [dataRefreshKey, setDataRefreshKey] = useState(0);
@@ -913,353 +910,32 @@ export default function App() {
 
   return (
     <div className="min-h-screen flex bg-background">
-      {/* Mobile Sidebar Overlay */}
+      {/* Mobile navigation drawer */}
       {mobileSidebarOpen && (
         <div className="fixed inset-0 z-40 md:hidden animate-backdrop-fade-in">
           <div className="absolute inset-0 bg-black/60" onClick={() => setMobileSidebarOpen(false)} />
-          <aside className="relative w-52 h-full bg-sidebar border-r border-sidebar-border flex flex-col animate-slide-in-left">
-            <div className="px-4 py-4 border-b border-sidebar-border flex items-center justify-between">
-              <Link to="/" onClick={() => setMobileSidebarOpen(false)} className="flex items-center gap-2.5 cursor-pointer">
-                <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-primary to-emerald-500 flex items-center justify-center flex-shrink-0 overflow-hidden">
-                  {brandConfig?.logo_url ? (
-                    <img src={brandConfig.logo_url} alt="" className="w-full h-full object-contain" onError={(e) => { e.currentTarget.style.display = 'none'; e.currentTarget.nextElementSibling?.removeAttribute('style'); }} />
-                  ) : null}
-                  <Zap className="w-4 h-4 text-white" style={brandConfig?.logo_url ? { display: 'none' } : undefined} />
-                </div>
-                <div className="min-w-0">
-                  <h1 className="font-semibold text-sidebar-foreground text-ui-md tracking-tight whitespace-nowrap">{brandConfig?.company_name || 'V2V: Vibe-to-Value'}</h1>
-                  <p className="text-ui-xs text-muted-foreground whitespace-nowrap">Vibe Coding Workshop</p>
-                  <p className="text-ui-2xs text-muted-foreground/60 whitespace-nowrap">v{__APP_VERSION__}</p>
-                </div>
-              </Link>
-              <button
-                onClick={() => setMobileSidebarOpen(false)}
-                className="p-1 rounded-md text-muted-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-foreground transition-colors flex-shrink-0"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-            <nav className="flex-1 px-2.5 py-3">
-              <div className="space-y-0.5">
-                <Link to={sessionId ? `/?sessionId=${sessionId}` : '/'} onClick={() => setMobileSidebarOpen(false)} className={`w-full flex items-center gap-2.5 px-2.5 py-2 rounded-md text-ui-base font-medium transition-all duration-200 ${isWorkflowPage ? 'bg-sidebar-accent text-sidebar-primary' : 'text-muted-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-foreground'}`}>
-                  <svg className={`w-4 h-4 flex-shrink-0 ${isWorkflowPage ? 'text-primary' : 'text-muted-foreground'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M4 5a1 1 0 011-1h14a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM4 13a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H5a1 1 0 01-1-1v-6zM16 13a1 1 0 011-1h2a1 1 0 011 1v6a1 1 0 01-1 1h-2a1 1 0 01-1-1v-6z" /></svg>
-                  <span>Workflow</span>
-                </Link>
-                <Link to="/leaderboard" onClick={() => setMobileSidebarOpen(false)} className={`w-full flex items-center gap-2.5 px-2.5 py-2 rounded-md text-ui-base font-medium transition-all duration-200 ${isLeaderboardPage ? 'bg-sidebar-accent text-sidebar-primary' : 'text-muted-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-foreground'}`}>
-                  <Trophy className={`w-4 h-4 flex-shrink-0 ${isLeaderboardPage ? 'text-primary' : 'text-muted-foreground'}`} />
-                  <span>Leaderboard</span>
-                </Link>
-                <Link to="/skills" onClick={() => setMobileSidebarOpen(false)} className={`w-full flex items-center gap-2.5 px-2.5 py-2 rounded-md text-ui-base font-medium transition-all duration-200 ${isSkillsPage ? 'bg-sidebar-accent text-sidebar-primary' : 'text-muted-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-foreground'}`}>
-                  <Compass className={`w-4 h-4 flex-shrink-0 ${isSkillsPage ? 'text-primary' : 'text-muted-foreground'}`} />
-                  <span>Agent Skills Navigator</span>
-                </Link>
-                <Link to="/analytics" onClick={() => setMobileSidebarOpen(false)} className={`w-full flex items-center gap-2.5 px-2.5 py-2 rounded-md text-ui-base font-medium transition-all duration-200 ${isAnalyticsPage ? 'bg-sidebar-accent text-sidebar-primary' : 'text-muted-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-foreground'}`}>
-                  <BarChart3 className={`w-4 h-4 flex-shrink-0 ${isAnalyticsPage ? 'text-primary' : 'text-muted-foreground'}`} />
-                  <span>Analytics</span>
-                </Link>
-                <Link to="/hackathons" onClick={() => setMobileSidebarOpen(false)} className={`w-full flex items-center gap-2.5 px-2.5 py-2 rounded-md text-ui-base font-medium transition-all duration-200 ${isHackathonsPage ? 'bg-sidebar-accent text-sidebar-primary' : 'text-muted-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-foreground'}`}>
-                  <Award className={`w-4 h-4 flex-shrink-0 ${isHackathonsPage ? 'text-primary' : 'text-muted-foreground'}`} />
-                  <span className="flex items-center gap-1.5">
-                    Hackathons
-                    <span className="text-ui-2xs font-semibold uppercase tracking-wide text-amber-400 bg-amber-500/15 rounded px-1 py-0.5 leading-none">Beta</span>
-                  </span>
-                </Link>
-                <Link to="/config" onClick={() => setMobileSidebarOpen(false)} className={`w-full flex items-center gap-2.5 px-2.5 py-2 rounded-md text-ui-base font-medium transition-all duration-200 ${isConfigPage ? 'bg-sidebar-accent text-sidebar-primary' : 'text-muted-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-foreground'}`}>
-                  <svg className={`w-4 h-4 flex-shrink-0 ${isConfigPage ? 'text-primary' : 'text-muted-foreground'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" /></svg>
-                  <span>Configuration</span>
-                </Link>
-              </div>
-            </nav>
-            <div className="px-2.5 py-2 border-t border-sidebar-border">
-              <Link to="/release-notes" onClick={() => setMobileSidebarOpen(false)} className={`w-full flex items-center gap-2.5 px-2.5 py-2 rounded-md text-ui-base font-medium transition-all duration-200 ${isReleaseNotesPage ? 'bg-sidebar-accent text-sidebar-primary' : 'text-muted-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-foreground'}`}>
-                <Rocket className={`w-4 h-4 flex-shrink-0 ${isReleaseNotesPage ? 'text-primary' : 'text-muted-foreground'}`} />
-                <span>Release Notes</span>
-              </Link>
-            </div>
-            <div className="px-4 py-3 border-t border-sidebar-border">
-              <div className="flex items-center gap-1.5 text-ui-xs text-muted-foreground">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse flex-shrink-0"></span>
-                <span>Connected</span>
-              </div>
-            </div>
-          </aside>
+          <AppSidebar
+            variant="mobile"
+            brand={brandConfig}
+            sessionId={sessionId}
+            onClose={() => setMobileSidebarOpen(false)}
+          />
         </div>
       )}
 
-      {/* Left Sidebar Navigation - Collapsible (hidden on mobile) */}
-      <aside className={`hidden md:flex sticky top-0 h-screen ${sidebarCollapsed ? 'w-14' : 'w-52'} bg-sidebar border-r border-sidebar-border flex-col flex-shrink-0 transition-all duration-300 ease-in-out overflow-hidden`}>
-        {/* Logo/Brand + Toggle */}
-        <div className={`${sidebarCollapsed ? 'px-2' : 'px-4'} py-4 border-b border-sidebar-border transition-all duration-300`}>
-          <div className="flex items-center justify-between">
-            <Link to="/" className={`flex items-center ${sidebarCollapsed ? 'justify-center w-full' : 'gap-2.5'} cursor-pointer`}>
-              <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-primary to-emerald-500 flex items-center justify-center flex-shrink-0 overflow-hidden">
-                {brandConfig?.logo_url ? (
-                  <img src={brandConfig.logo_url} alt="" className="w-full h-full object-contain" onError={(e) => { e.currentTarget.style.display = 'none'; e.currentTarget.nextElementSibling?.removeAttribute('style'); }} />
-                ) : null}
-                <Zap className="w-4 h-4 text-white" style={brandConfig?.logo_url ? { display: 'none' } : undefined} />
-              </div>
-              {!sidebarCollapsed && (
-                <div className="min-w-0">
-                  <h1 className="font-semibold text-sidebar-foreground text-ui-md tracking-tight whitespace-nowrap">{brandConfig?.company_name || 'V2V: Vibe-to-Value'}</h1>
-                  <p className="text-ui-xs text-muted-foreground whitespace-nowrap">Vibe Coding Workshop</p>
-                  <p className="text-ui-2xs text-muted-foreground/60 whitespace-nowrap">v{__APP_VERSION__}</p>
-                </div>
-              )}
-            </Link>
-            {!sidebarCollapsed && (
-              <button
-                onClick={toggleSidebar}
-                className="p-1 rounded-md text-muted-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-foreground transition-colors flex-shrink-0"
-                title="Collapse sidebar"
-              >
-                <PanelLeftClose className="w-4 h-4" />
-              </button>
-            )}
-          </div>
-          {sidebarCollapsed && (
-            <button
-              onClick={toggleSidebar}
-              className="w-full mt-2 p-1.5 rounded-md text-muted-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-foreground transition-colors flex items-center justify-center"
-              title="Expand sidebar"
-            >
-              <PanelLeft className="w-4 h-4" />
-            </button>
-          )}
-        </div>
-
-        {/* Navigation */}
-        <nav className={`flex-1 min-h-0 overflow-y-auto overflow-x-hidden ${sidebarCollapsed ? 'px-1.5' : 'px-2.5'} py-3 transition-all duration-300`}>
-          <div className="space-y-0.5">
-            <Link
-              to={sessionId ? `/?sessionId=${sessionId}` : '/'}
-              title="Workflow"
-              className={`w-full flex items-center ${sidebarCollapsed ? 'justify-center px-0 py-2.5' : 'gap-2.5 px-2.5 py-2'} rounded-md text-ui-base font-medium transition-all duration-200 ${
-                isWorkflowPage
-                  ? 'bg-sidebar-accent text-sidebar-primary'
-                  : 'text-muted-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-foreground'
-              }`}
-            >
-              <svg className={`w-4 h-4 flex-shrink-0 ${isWorkflowPage ? 'text-primary' : 'text-muted-foreground'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M4 5a1 1 0 011-1h14a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM4 13a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H5a1 1 0 01-1-1v-6zM16 13a1 1 0 011-1h2a1 1 0 011 1v6a1 1 0 01-1 1h-2a1 1 0 01-1-1v-6z" />
-              </svg>
-              {!sidebarCollapsed && <span className="whitespace-nowrap">Workflow</span>}
-            </Link>
-
-            <Link
-              to="/leaderboard"
-              title="Leaderboard"
-              className={`w-full flex items-center ${sidebarCollapsed ? 'justify-center px-0 py-2.5' : 'gap-2.5 px-2.5 py-2'} rounded-md text-ui-base font-medium transition-all duration-200 ${
-                isLeaderboardPage
-                  ? 'bg-sidebar-accent text-sidebar-primary'
-                  : 'text-muted-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-foreground'
-              }`}
-            >
-              <Trophy className={`w-4 h-4 flex-shrink-0 ${isLeaderboardPage ? 'text-primary' : 'text-muted-foreground'}`} />
-              {!sidebarCollapsed && <span className="whitespace-nowrap">Leaderboard</span>}
-            </Link>
-
-            <Link
-              to="/skills"
-              title="Agent Skills Navigator"
-              className={`w-full flex items-center ${sidebarCollapsed ? 'justify-center px-0 py-2.5' : 'gap-2.5 px-2.5 py-2'} rounded-md text-ui-base font-medium transition-all duration-200 ${
-                isSkillsPage
-                  ? 'bg-sidebar-accent text-sidebar-primary'
-                  : 'text-muted-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-foreground'
-              }`}
-            >
-              <Compass className={`w-4 h-4 flex-shrink-0 ${isSkillsPage ? 'text-primary' : 'text-muted-foreground'}`} />
-              {!sidebarCollapsed && <span className="whitespace-nowrap">Agent Skills Navigator</span>}
-            </Link>
-
-            <Link
-              to="/analytics"
-              title="Analytics"
-              className={`w-full flex items-center ${sidebarCollapsed ? 'justify-center px-0 py-2.5' : 'gap-2.5 px-2.5 py-2'} rounded-md text-ui-base font-medium transition-all duration-200 ${
-                isAnalyticsPage
-                  ? 'bg-sidebar-accent text-sidebar-primary'
-                  : 'text-muted-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-foreground'
-              }`}
-            >
-              <BarChart3 className={`w-4 h-4 flex-shrink-0 ${isAnalyticsPage ? 'text-primary' : 'text-muted-foreground'}`} />
-              {!sidebarCollapsed && <span className="whitespace-nowrap">Analytics</span>}
-            </Link>
-
-            {/* Hackathons — accordion with sub-links when expanded */}
-            <div>
-              <div
-                className={`w-full flex items-center ${sidebarCollapsed ? 'justify-center px-0 py-2.5' : 'gap-2.5 px-2.5 py-2'} rounded-md text-ui-base font-medium transition-all duration-200 ${
-                  isHackathonsPage
-                    ? 'bg-sidebar-accent text-sidebar-primary'
-                    : 'text-muted-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-foreground'
-                }`}
-              >
-                <Link to="/hackathons" title="Hackathons (Beta)" className="flex items-center gap-2.5 flex-1 min-w-0">
-                  <Award className={`w-4 h-4 flex-shrink-0 ${isHackathonsPage ? 'text-primary' : 'text-muted-foreground'}`} />
-                  {!sidebarCollapsed && (
-                    <span className="whitespace-nowrap flex items-center gap-1.5">
-                      Hackathons
-                      <span className="text-ui-2xs font-semibold uppercase tracking-wide text-amber-400 bg-amber-500/15 rounded px-1 py-0.5 leading-none">Beta</span>
-                    </span>
-                  )}
-                </Link>
-                {!sidebarCollapsed && (
-                  <button
-                    onClick={() => setHackathonsExpanded((v) => !v)}
-                    className="p-0.5 rounded hover:bg-sidebar-accent/60 transition-colors"
-                    title={hackathonsExpanded ? 'Collapse' : 'Expand'}
-                  >
-                    <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-200 ${hackathonsExpanded ? 'rotate-180' : ''}`} />
-                  </button>
-                )}
-              </div>
-
-              {/* Sub-links */}
-              {!sidebarCollapsed && hackathonsExpanded && (
-                <div className="ml-3 mt-0.5 pl-3 border-l border-sidebar-border space-y-0.5">
-                  <Link
-                    to="/hackathons"
-                    className={`w-full flex items-center gap-2 px-2.5 py-1.5 rounded-md text-ui-sm transition-all duration-200 ${
-                      location.pathname === '/hackathons'
-                        ? 'text-sidebar-primary font-medium'
-                        : 'text-muted-foreground hover:text-sidebar-foreground'
-                    }`}
-                  >
-                    <List className="w-3.5 h-3.5 flex-shrink-0" />
-                    <span>All Hackathons</span>
-                  </Link>
-                  <Link
-                    to="/hackathons?create=1"
-                    className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-md text-ui-sm text-muted-foreground hover:text-sidebar-foreground transition-all duration-200"
-                  >
-                    <Plus className="w-3.5 h-3.5 flex-shrink-0" />
-                    <span>Create Hackathon</span>
-                  </Link>
-                  <Link
-                    to="/hackathons/playbook"
-                    className={`w-full flex items-center gap-2 px-2.5 py-1.5 rounded-md text-ui-sm transition-all duration-200 ${
-                      location.pathname === '/hackathons/playbook'
-                        ? 'text-sidebar-primary font-medium'
-                        : 'text-muted-foreground hover:text-sidebar-foreground'
-                    }`}
-                  >
-                    <BookOpen className="w-3.5 h-3.5 flex-shrink-0" />
-                    <span>Playbook</span>
-                  </Link>
-                </div>
-              )}
-            </div>
-
-            <div className="relative">
-              <Link
-                to="/config"
-                title="Configuration"
-                className={`w-full flex items-center ${sidebarCollapsed ? 'justify-center px-0 py-2.5' : 'gap-2.5 px-2.5 py-2'} rounded-md text-ui-base font-medium transition-all duration-200 ${
-                  isConfigPage
-                    ? 'bg-sidebar-accent text-sidebar-primary'
-                    : 'text-muted-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-foreground'
-                }`}
-              >
-                <svg className={`w-4 h-4 flex-shrink-0 ${isConfigPage ? 'text-primary' : 'text-muted-foreground'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />
-                </svg>
-                {!sidebarCollapsed && <span className="whitespace-nowrap">Configuration</span>}
-              </Link>
-              
-              {/* Bouncing Arrow Hint */}
-              {showConfigHint && !sidebarCollapsed && (
-                <Link 
-                  to="/config"
-                  className="absolute -right-1 top-1/2 animate-bounce-horizontal flex items-center gap-1.5 cursor-pointer z-20"
-                  onClick={() => {
-                    setShowConfigHint(false);
-                    setHintDismissed(true);
-                  }}
-                >
-                  <div className="relative">
-                    <div className="bg-primary rounded-full p-0.5 animate-pulse-glow">
-                      <svg 
-                        className="w-4 h-4 text-primary-foreground transform rotate-180" 
-                        fill="currentColor" 
-                        viewBox="0 0 24 24"
-                      >
-                        <path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/>
-                      </svg>
-                    </div>
-                  </div>
-                  <div className="absolute left-8 top-1/2 -translate-y-1/2 bg-primary text-primary-foreground text-ui-xs font-medium px-2.5 py-1.5 rounded shadow-lg whitespace-nowrap">
-                    <div className="absolute -left-1.5 top-1/2 -translate-y-1/2 w-0 h-0 border-t-[5px] border-t-transparent border-b-[5px] border-b-transparent border-r-[6px] border-r-primary"></div>
-                    Configure prompts here!
-                  </div>
-                </Link>
-              )}
-            </div>
-          </div>
-        </nav>
-
-        <div className={`${sidebarCollapsed ? 'px-1.5' : 'px-2.5'} py-2 border-t border-sidebar-border transition-all duration-300`}>
-          {/* Resources Section - hidden when collapsed */}
-          {!sidebarCollapsed && (
-            <div className="pt-1 pb-2 mb-1 border-b border-sidebar-border">
-              <p className="text-ui-2xs text-muted-foreground uppercase font-semibold tracking-wider mb-2 px-2.5">Resources</p>
-              <div className="space-y-0">
-                <a
-                  href="https://github.com/databricks-solutions/vibe-coding-workshop-template"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-md text-ui-sm text-muted-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-foreground transition-all duration-200"
-                >
-                  <svg className="w-3.5 h-3.5 flex-shrink-0" fill="currentColor" viewBox="0 0 24 24">
-                    <path fillRule="evenodd" clipRule="evenodd" d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.531 1.032 1.531 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z" />
-                  </svg>
-                  <span className="whitespace-nowrap">Repository template</span>
-                </a>
-                <a
-                  href="https://docs.databricks.com"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-md text-ui-sm text-muted-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-foreground transition-all duration-200"
-                >
-                  <svg className="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
-                  </svg>
-                  <span className="whitespace-nowrap">Databricks Docs</span>
-                </a>
-                <a
-                  href="https://github.com/databricks-solutions/vibe-coding-workshop-app/issues/new"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-md text-ui-sm text-muted-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-foreground transition-all duration-200"
-                >
-                  <svg className="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
-                  </svg>
-                  <span className="whitespace-nowrap">Submit Feature Request</span>
-                </a>
-              </div>
-            </div>
-          )}
-          <Link
-            to="/release-notes"
-            title="Release Notes"
-            className={`w-full flex items-center ${sidebarCollapsed ? 'justify-center px-0 py-2.5' : 'gap-2.5 px-2.5 py-2'} rounded-md text-ui-base font-medium transition-all duration-200 ${
-              isReleaseNotesPage
-                ? 'bg-sidebar-accent text-sidebar-primary'
-                : 'text-muted-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-foreground'
-            }`}
-          >
-            <Rocket className={`w-4 h-4 flex-shrink-0 ${isReleaseNotesPage ? 'text-primary' : 'text-muted-foreground'}`} />
-            {!sidebarCollapsed && <span className="whitespace-nowrap">Release Notes</span>}
-          </Link>
-        </div>
-
-        {/* Footer */}
-        <div className={`${sidebarCollapsed ? 'px-2 flex justify-center' : 'px-4'} py-3 border-t border-sidebar-border transition-all duration-300`}>
-          <div className={`flex items-center ${sidebarCollapsed ? 'justify-center' : 'gap-1.5'} text-ui-xs text-muted-foreground`}>
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse flex-shrink-0"></span>
-            {!sidebarCollapsed && <span className="whitespace-nowrap">Connected · v{__APP_VERSION__}</span>}
-          </div>
-        </div>
-      </aside>
+      {/* Desktop navigation (collapsible, hidden on mobile) */}
+      <AppSidebar
+        variant="desktop"
+        brand={brandConfig}
+        sessionId={sessionId}
+        collapsed={sidebarCollapsed}
+        onToggleCollapsed={toggleSidebar}
+        showConfigHint={showConfigHint}
+        onDismissConfigHint={() => {
+          setShowConfigHint(false);
+          setHintDismissed(true);
+        }}
+      />
 
       {/* Main Content */}
       <main className="flex-1 flex flex-col overflow-hidden">
@@ -1500,6 +1176,15 @@ export default function App() {
                 }
               >
                 <SkillsNavigatorPage onOpenMobileNav={() => setMobileSidebarOpen(true)} />
+              </Suspense>
+            }
+          />
+
+          <Route
+            path="/ideate/*"
+            element={
+              <Suspense fallback={<div className="flex-1 bg-background" />}>
+                <IdeateApp onOpenMobileNav={() => setMobileSidebarOpen(true)} />
               </Suspense>
             }
           />

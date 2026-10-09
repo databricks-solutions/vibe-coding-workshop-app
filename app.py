@@ -25,6 +25,13 @@ from fastapi.responses import FileResponse, JSONResponse
 from src.backend.api.routes import router as api_router
 from src.backend.api.hackathon import router as hackathon_router
 
+# Ideate is a beta, self-contained feature: it must never block the app from starting.
+try:
+    from src.backend.api.ideate import router as ideate_router
+except Exception as _ideate_err:  # pragma: no cover
+    print(f"[Ideate] disabled, failed to load: {_ideate_err}", file=sys.stderr)
+    ideate_router = None
+
 # Get the directory where this script is located
 BASE_DIR = Path(__file__).resolve().parent
 DIST_DIR = BASE_DIR / "dist"
@@ -114,6 +121,8 @@ app.add_middleware(
 # Include the API router with /api prefix
 app.include_router(api_router, prefix="/api", tags=["API"])
 app.include_router(hackathon_router, prefix="/api", tags=["Hackathons"])
+if ideate_router is not None:
+    app.include_router(ideate_router, prefix="/api", tags=["Ideate"])
 
 
 # ============== Health Check ==============

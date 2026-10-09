@@ -1808,6 +1808,82 @@ class ApiClient {
     return controller;
   }
 
+  // ===========================================================================
+  // IDEATE
+  // ===========================================================================
+
+  /** Run one structured Ideate step. Throws with a friendly message on failure. */
+  async ideateStep<T = unknown>(
+    step: string,
+    idea: Record<string, unknown>,
+    feedback?: string,
+  ): Promise<T> {
+    const response = await fetch(`${this.baseUrl}/ideate/step`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ step, idea, feedback }),
+    });
+    const body = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(body.error || `Request failed (${response.status})`);
+    }
+    return body.data as T;
+  }
+
+  /** Stream the Ideate brief (SSE). Returns an AbortController to cancel. */
+  ideateBriefStream(
+    params: { idea: Record<string, unknown>; feedback?: string; current_brief?: string },
+    onContent: (content: string) => void,
+    onComplete: () => void,
+    onError: (error: string) => void,
+  ): AbortController {
+    const controller = new AbortController();
+
+    (async () => {
+      try {
+        const response = await fetch(`${this.baseUrl}/ideate/brief`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(params),
+          signal: controller.signal,
+        });
+        if (!response.ok) throw new Error(`API error: ${response.status}`);
+        const reader = response.body?.getReader();
+        if (!reader) throw new Error('No response body');
+
+        const decoder = new TextDecoder();
+        let buffer = '';
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) {
+            onComplete();
+            return;
+          }
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split('\n');
+          buffer = lines.pop() || '';
+          for (const line of lines) {
+            if (!line.startsWith('data: ')) continue;
+            const jsonStr = line.slice(6).trim();
+            if (!jsonStr) continue;
+            try {
+              const data = JSON.parse(jsonStr);
+              if (data.type === 'content' && data.content) onContent(data.content);
+              else if (data.type === 'done') { onComplete(); return; }
+              else if (data.type === 'error') { onError(data.error || 'Unknown error'); return; }
+            } catch {
+              // Skip malformed chunks
+            }
+          }
+        }
+      } catch (err) {
+        if ((err as Error).name !== 'AbortError') onError((err as Error).message || 'Streaming failed');
+      }
+    })();
+
+    return controller;
+  }
+
   /** Save a use case description to the community library */
   async saveUseCase(data: {
     industry: string;

@@ -89,6 +89,11 @@ function ReleaseItemRow({ item }: { item: ReleaseItem }) {
           <span className={`text-ui-2xs font-semibold uppercase tracking-wide rounded px-1.5 py-0.5 leading-none border ${meta.chip}`}>
             {meta.label}
           </span>
+          {item.beta && (
+            <span className="text-ui-2xs font-semibold uppercase tracking-wide rounded px-1.5 py-0.5 leading-none border border-amber-500/40 bg-amber-500/10 text-amber-400">
+              Beta
+            </span>
+          )}
           {item.audience && (
             <span className="text-ui-2xs font-medium rounded px-1.5 py-0.5 leading-none border border-border text-muted-foreground">
               {AUDIENCE_LABEL[item.audience]}
