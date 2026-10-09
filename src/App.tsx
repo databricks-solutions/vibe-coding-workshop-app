@@ -8,7 +8,7 @@ import { AnalyticsDashboard } from './components/AnalyticsDashboard';
 import { HackathonsPage } from './components/hackathon/HackathonsPage';
 import { HackathonDetailPage } from './components/hackathon/HackathonDetailPage';
 import { HackathonPlaybook } from './components/hackathon/HackathonPlaybook';
-
+import { ReleaseNotesPage } from './components/ReleaseNotesPage';
 // Agent Skills Navigator is a large, self-contained feature (galaxy map + tours +
 // academy with a big static data module). Lazy-load it so it never weighs down
 // the initial workflow bundle that every workshop participant hits first.
@@ -20,7 +20,7 @@ import {
   SessionListDialog 
 } from './components/session';
 import { apiClient } from './api/client';
-import { Zap, MessageSquare, Trophy, Plus, PanelLeftClose, PanelLeft, Menu, X, BarChart3, Eye, Compass, Award, ChevronDown, List, BookOpen } from 'lucide-react';
+import { Zap, MessageSquare, Trophy, Plus, PanelLeftClose, PanelLeft, Menu, X, BarChart3, Eye, Compass, Award, ChevronDown, List, BookOpen, Rocket } from 'lucide-react';
 import { normalizeLevel, getFilteredSections, getCumulativeOverrides, USE_CASE_LEVEL_LOCK, isForwardProgression, getDisabledTagsForAIModules, ALL_AI_MODULES, getDisabledTagsForMedallionLayers, normalizeMedallionLayers, ALL_MEDALLION_LAYERS, getDisabledTagsForLakehouse, getDisabledTagsForGenieOntology, computeChainContext, deriveInitialChainContext, type WorkshopLevel, type WorkflowDirection, type AIAgentModule, type MedallionLayer, type ChainContext } from './constants/workflowSections';
 import { DEFAULT_LEVEL_BY_ASSISTANT, parseCodingAssistantsConfig } from './constants/codingAssistants';
 
@@ -56,8 +56,8 @@ export default function App() {
     if (isHackathonsPage) setHackathonsExpanded(true);
   }, [isHackathonsPage]);
   const isSkillsPage = location.pathname === '/skills';
-  const isWorkflowPage = !isConfigPage && !isLeaderboardPage && !isAnalyticsPage && !isHackathonsPage && !isSkillsPage;
-  
+  const isReleaseNotesPage = location.pathname === '/release-notes';
+  const isWorkflowPage = !isConfigPage && !isLeaderboardPage && !isAnalyticsPage && !isHackathonsPage && !isSkillsPage && !isReleaseNotesPage;  
   // Data refresh key - incremented when navigating from Config to Workflow
   // This forces PromptGenerator and other components to re-fetch data
   const [dataRefreshKey, setDataRefreshKey] = useState(0);
@@ -970,6 +970,12 @@ export default function App() {
                 </Link>
               </div>
             </nav>
+            <div className="px-2.5 py-2 border-t border-sidebar-border">
+              <Link to="/release-notes" onClick={() => setMobileSidebarOpen(false)} className={`w-full flex items-center gap-2.5 px-2.5 py-2 rounded-md text-ui-base font-medium transition-all duration-200 ${isReleaseNotesPage ? 'bg-sidebar-accent text-sidebar-primary' : 'text-muted-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-foreground'}`}>
+                <Rocket className={`w-4 h-4 flex-shrink-0 ${isReleaseNotesPage ? 'text-primary' : 'text-muted-foreground'}`} />
+                <span>Release Notes</span>
+              </Link>
+            </div>
             <div className="px-4 py-3 border-t border-sidebar-border">
               <div className="flex items-center gap-1.5 text-ui-xs text-muted-foreground">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse flex-shrink-0"></span>
@@ -981,7 +987,7 @@ export default function App() {
       )}
 
       {/* Left Sidebar Navigation - Collapsible (hidden on mobile) */}
-      <aside className={`hidden md:flex ${sidebarCollapsed ? 'w-14' : 'w-52'} bg-sidebar border-r border-sidebar-border flex-col flex-shrink-0 transition-all duration-300 ease-in-out overflow-hidden`}>
+      <aside className={`hidden md:flex sticky top-0 h-screen ${sidebarCollapsed ? 'w-14' : 'w-52'} bg-sidebar border-r border-sidebar-border flex-col flex-shrink-0 transition-all duration-300 ease-in-out overflow-hidden`}>
         {/* Logo/Brand + Toggle */}
         <div className={`${sidebarCollapsed ? 'px-2' : 'px-4'} py-4 border-b border-sidebar-border transition-all duration-300`}>
           <div className="flex items-center justify-between">
@@ -1022,7 +1028,7 @@ export default function App() {
         </div>
 
         {/* Navigation */}
-        <nav className={`flex-1 ${sidebarCollapsed ? 'px-1.5' : 'px-2.5'} py-3 transition-all duration-300`}>
+        <nav className={`flex-1 min-h-0 overflow-y-auto overflow-x-hidden ${sidebarCollapsed ? 'px-1.5' : 'px-2.5'} py-3 transition-all duration-300`}>
           <div className="space-y-0.5">
             <Link
               to={sessionId ? `/?sessionId=${sessionId}` : '/'}
@@ -1188,10 +1194,12 @@ export default function App() {
               )}
             </div>
           </div>
+        </nav>
 
+        <div className={`${sidebarCollapsed ? 'px-1.5' : 'px-2.5'} py-2 border-t border-sidebar-border transition-all duration-300`}>
           {/* Resources Section - hidden when collapsed */}
           {!sidebarCollapsed && (
-            <div className="mt-6 pt-4 border-t border-sidebar-border">
+            <div className="pt-1 pb-2 mb-1 border-b border-sidebar-border">
               <p className="text-ui-2xs text-muted-foreground uppercase font-semibold tracking-wider mb-2 px-2.5">Resources</p>
               <div className="space-y-0">
                 <a
@@ -1230,7 +1238,19 @@ export default function App() {
               </div>
             </div>
           )}
-        </nav>
+          <Link
+            to="/release-notes"
+            title="Release Notes"
+            className={`w-full flex items-center ${sidebarCollapsed ? 'justify-center px-0 py-2.5' : 'gap-2.5 px-2.5 py-2'} rounded-md text-ui-base font-medium transition-all duration-200 ${
+              isReleaseNotesPage
+                ? 'bg-sidebar-accent text-sidebar-primary'
+                : 'text-muted-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-foreground'
+            }`}
+          >
+            <Rocket className={`w-4 h-4 flex-shrink-0 ${isReleaseNotesPage ? 'text-primary' : 'text-muted-foreground'}`} />
+            {!sidebarCollapsed && <span className="whitespace-nowrap">Release Notes</span>}
+          </Link>
+        </div>
 
         {/* Footer */}
         <div className={`${sidebarCollapsed ? 'px-2 flex justify-center' : 'px-4'} py-3 border-t border-sidebar-border transition-all duration-300`}>
@@ -1455,6 +1475,8 @@ export default function App() {
           
           {/* Leaderboard Page */}
           <Route path="/leaderboard" element={<LeaderboardPage />} />
+
+          <Route path="/release-notes" element={<ReleaseNotesPage />} />
           
           {/* Analytics Page */}
           <Route path="/analytics" element={<AnalyticsDashboard />} />

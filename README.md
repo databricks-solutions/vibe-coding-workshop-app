@@ -240,6 +240,19 @@ Deploy changes: `./vibe2value deploy` (macOS/Linux) or `.\vibe2value deploy` (Wi
 
 ---
 
+## Cutting a Release
+
+Release notes are shown in the app at `/release-notes` and live in [`src/constants/releaseNotes.ts`](src/constants/releaseNotes.ts) (newest first).
+
+1. List what changed since the last tag: `git log $(git describe --tags --abbrev=0)..HEAD --no-merges`
+2. Group related changes into one release and bump the version (minor for new features, patch for fixes only).
+3. Add a new entry at the top of `RELEASES`. Write each item for the reader (what changed and why it matters), tag it `new` / `improved` / `fix`, mark the audience (`attendee` or `installer`), and skip internal-only changes.
+4. Set the same version in `VERSION` and `package.json` (`npm version X.Y.Z --no-git-tag-version`).
+5. Run `python3 -m unittest tests.test_release_notes_version` to confirm the versions match.
+6. After merging, tag the release: `git tag -a vX.Y.Z -m "vX.Y.Z: <title>" && git push origin vX.Y.Z`
+
+---
+
 ## Cost to Run
 
 Running the workshop costs **under $300/month** with the app up 24/7 — and significantly less with default settings and typical usage.
