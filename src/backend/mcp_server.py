@@ -1438,10 +1438,10 @@ def _blocked_result(
 @mcp.tool(
     name="vibe_next_step",
     description=(
-        "Advance to the first not-yet-completed step whose prerequisite gate is satisfied and return "
-        "it (same shape as `vibe_get_step`, incl. `user_trigger_prompt`). Show its trigger verbatim, "
-        "then WAIT for the learner to submit it — never auto-run or chain steps. Returns `{done:true}` "
-        "when complete, or `{blocked:true, blocked_by}` when a step is behind an unsatisfiable gate. "
+        "Advance to the first not-yet-completed step in order and return it (same shape as "
+        "`vibe_get_step`, incl. `user_trigger_prompt`). Show its trigger verbatim, then WAIT for the "
+        "learner to submit it — never auto-run or chain steps. Returns `{done:true}` when complete, "
+        "or `{blocked:true, blocked_by}` when that step's prerequisite gate is not yet satisfied. "
         "Args: `session_id`."
     ),
     annotations=ToolAnnotations(
@@ -1461,17 +1461,8 @@ def vibe_next_step(session_id: str, context: Context | None = None) -> NextStepR
     _stash_base_url(state, context)
     # Pre-journey intent beat (Option A, guardrail #3): before the first numbered
     # step, a learner who has not yet locked a use case is asked to pick one. The
-    # beat is surfaced until the use_case_selection gate resolves.
-    if _needs_use_case(state):
-        return NextStepResult.model_validate(
-            _step_payload(track, state, _INTENT_BEAT_STEP, session_id=session_id)
-        )
-    next_item = engine.next_step(track, state)
-    if isinstance(next_item, engine.Done):
-        return NextStepResult.model_validate(DoneResult())
-    if isinstance(next_item, engine.Blocked):
-        return NextStepResult.model_validate(_blocked_result(track, state, next_item))
-    return NextStepResult.model_validate(_step_payload(track, state, next_item, session_id=session_id))
+    # beat is surfaced until the use_case_selection gate resolves (_walk_next_payload).
+    return NextStepResult.model_validate(_walk_next_payload(track, state, session_id))
 
 
 @mcp.tool(
@@ -1832,9 +1823,7 @@ def vibe_complete_step(
     if intent_beat and engine.use_case_resolved(state):
         return CompleteStepResult(
             completed_gates=list(state.completed_gates),
-            next=_complete_next_payload(
-                track, state, engine.next_step(track, state), session_id
-            ),
+            next=_walk_next_payload(track, state, session_id),
             post_check=None,
         )
     blocking = manifest.blocking_interactions(sectionTag)
@@ -1918,9 +1907,26 @@ def vibe_complete_step(
 
     return CompleteStepResult(
         completed_gates=list(result.completed_gates),
-        next=_complete_next_payload(track, state, result.next_step, session_id),
+        next=_walk_next_payload(track, state, session_id),
         post_check=_pending_post_check(sectionTag, state),
     )
+
+
+def _walk_next_payload(
+    track: str,
+    state: engine.SessionState,
+    session_id: str,
+) -> ExplainabilityPayload | DoneResult | BlockedResult:
+    """What the walk does next: shared by vibe_next_step and vibe_complete_step's ``next``.
+
+    While the use case is unresolved this is the pre-journey intent beat (Option A,
+    guardrail #3), so completing project_setup cannot route past the use-case pick
+    (D-78); otherwise it is the engine's strict-order next step.
+    """
+
+    if _needs_use_case(state):
+        return _step_payload(track, state, _INTENT_BEAT_STEP, session_id=session_id)
+    return _complete_next_payload(track, state, engine.next_step(track, state), session_id)
 
 
 def _complete_next_payload(

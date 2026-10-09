@@ -258,9 +258,11 @@ def test_h2_generator_reproduces_manifest():
 
 # genie-accelerator's prd_generation already required use_case_selection at the
 # base, so an SPA-shaped genie session had prd_generation locked there (a defect
-# Change 0 fixes). Recorded here, not asserted equal (see the PR body).
+# Change 0 fixes). Recorded here, not asserted equal (see the PR body). Under the
+# strict-order engine (D-78) the base walk no longer scans past that locked step to
+# the ungated semlayer_locate: it is Blocked on prd_generation.
 GENIE_BASE_PRD_STATUS = "locked"
-GENIE_BASE_NEXT_AFTER_SETUP = ("Step", "semlayer_locate")
+GENIE_BASE_NEXT_AFTER_SETUP = ("Blocked", "prd_generation")
 
 SPA_PROGRESS = (
     ["usecase_selection"],

@@ -36,12 +36,13 @@ class Done:
 class Blocked:
     """No step is ``current`` yet a step remains ``locked``.
 
-    Returned by ``next_step`` in place of ``Done()`` when the scan finds no
-    ``current`` step but at least one ``locked`` step survives — a gate the
-    composition can never satisfy (a dangling ``requiresGate``). After the T5 PR A
-    gate rewire this is unreachable on authored data; it is the safety net that
-    turns a FUTURE gate-data defect into an explicit signal instead of a false
-    ``Done``. Carries the FIRST locked step in outline order."""
+    Returned by ``next_step`` in place of ``Done()`` when the first unfinished
+    step cannot start: its gate is not yet satisfied (e.g. prd_generation before
+    the pre-journey use case is locked) or can never be (a dangling
+    ``requiresGate``, the safety net that turns a gate-data defect into an
+    explicit signal instead of a false ``Done``). Under strict order (D-78) it
+    carries the FIRST locked step in outline order, which is the first
+    unfinished step."""
 
     sectionTag: str
     title: str
@@ -126,13 +127,19 @@ def _ordered_steps(track_id: str, session: SessionState) -> list[Step]:
 
 
 def outline(track_id: str, session: SessionState) -> list[StepStatus]:
-    """Return the visible ordered steps with their progression status."""
+    """Return the visible ordered steps with their progression status.
+
+    Strict order (D-78): the FIRST step that is neither ``done`` nor ``skipped``
+    is ``current`` when it can start and ``locked`` otherwise; every later
+    unfinished step is ``locked``. The scan never looks past an unfinished step,
+    so an ungated later step cannot jump the queue.
+    """
 
     steps = _ordered_steps(track_id, session)
     completed = set(session.completed_gates)
     skipped = _skipped_tags(session)
     outline_tags = {step.sectionTag for step in steps}
-    current_tag: str | None = None
+    frontier_seen = False
 
     statuses: list[StepStatus] = []
     for step in steps:
@@ -140,10 +147,11 @@ def outline(track_id: str, session: SessionState) -> list[StepStatus]:
             status: Status = "done"
         elif step.sectionTag in skipped:
             status = "skipped"
-        elif current_tag is None and can_start(step, session, outline_tags):
-            current_tag = step.sectionTag
+        elif not frontier_seen and can_start(step, session, outline_tags):
+            frontier_seen = True
             status = "current"
         else:
+            frontier_seen = True
             status = "locked"
         statuses.append(
             StepStatus(
@@ -158,15 +166,15 @@ def outline(track_id: str, session: SessionState) -> list[StepStatus]:
 
 
 def next_step(track_id: str, session: SessionState) -> Step | Done | Blocked:
-    """Return the first current step, a done sentinel, or a blocked signal.
+    """Return the first unfinished step, a done sentinel, or a blocked signal.
 
-    When a ``current`` step exists it is returned. Otherwise the scan is either
-    complete (every step ``done`` or ``skipped`` -> ``Done``) or wedged behind an
-    unsatisfiable gate (a ``locked`` step with none ``current`` ahead of it ->
-    ``Blocked`` naming the FIRST such step). ``Blocked`` never fires while a step
-    is ``current`` and ``Done`` never fires while a step is ``locked`` — the two
-    are mutually exclusive, so a caller can trust ``Done`` to mean truly finished.
-    This is a pure function of the existing scan; it introduces no skip source.
+    Invariant (D-78): next is always the first unfinished, unskipped step in the
+    ordered outline, or ``Blocked`` on it. When that step can start it is
+    ``current`` and returned; when it cannot, it is the first ``locked`` step
+    and ``Blocked`` names it. Only when every step is ``done`` or ``skipped`` is
+    the result ``Done``, so a caller can trust ``Done`` to mean truly finished.
+    This is a pure function of the strict outline scan; it introduces no skip
+    source.
     """
 
     statuses = outline(track_id, session)
@@ -280,6 +288,14 @@ def complete_step(
 
     outline_tags = {candidate.sectionTag for candidate in _ordered_steps(track_id, session)}
     if not can_start(step, session, outline_tags):
+        return _result_error(session, "STEP_LOCKED")
+    # Strict order (D-78): an outline step behind an unfinished step is locked
+    # even when its own gate is satisfied. Skipped and off-outline steps carry
+    # no ``locked`` status here and keep the gate-only check above.
+    if any(
+        status.sectionTag == section_tag and status.status == "locked"
+        for status in outline(track_id, session)
+    ):
         return _result_error(session, "STEP_LOCKED")
 
     if step.execution == "ui-driven":
