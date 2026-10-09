@@ -41,6 +41,7 @@ export function IdeaStepper({ idea, viewStep, onSelect }: IdeaStepperProps) {
               </span>
               <span className={`hidden md:inline text-ui-sm font-medium whitespace-nowrap ${active ? 'text-foreground' : 'text-muted-foreground'}`}>
                 {s.label}
+                {s.optional && <span className="ml-1 text-ui-3xs font-normal text-muted-foreground/60">optional</span>}
               </span>
             </button>
             {i < STEPS.length - 1 && (

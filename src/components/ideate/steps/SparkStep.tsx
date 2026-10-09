@@ -33,15 +33,32 @@ export function SparkStep({ flow }: { flow: IdeaFlow }) {
           rows={3}
           className="w-full resize-none bg-transparent text-ui-lg text-foreground leading-relaxed outline-none rounded-lg border border-transparent hover:border-border focus:border-primary/60 p-2 -m-2 transition-colors"
         />
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <span className="text-ui-xs text-muted-foreground">Industry</span>
           <input
             value={spark.industry}
-            onChange={e => set({ industry: e.target.value })}
+            onChange={e => set({ industry: e.target.value, industryAlternatives: [] })}
             className="px-2.5 py-1 rounded-full bg-primary/10 text-primary text-ui-sm font-medium outline-none border border-transparent focus:border-primary/50 w-auto"
             size={Math.max(8, spark.industry.length)}
           />
+          {spark.catalogIndustryLabel && spark.catalogIndustryLabel.toLowerCase() !== spark.industry.toLowerCase() && (
+            <span className="text-ui-xs text-muted-foreground" title="Where this lands in the use case catalog">in {spark.catalogIndustryLabel}</span>
+          )}
         </div>
+        {!!spark.industryAlternatives?.length && (
+          <div className="flex flex-wrap items-center gap-1.5 animate-fade-in">
+            <span className="text-ui-xs text-muted-foreground">Did you mean</span>
+            {spark.industryAlternatives.map(alt => (
+              <button
+                key={alt}
+                onClick={() => set({ industry: alt, industryAlternatives: spark.industryAlternatives!.filter(a => a !== alt).concat(spark.industry) })}
+                className="px-2 py-0.5 rounded-full border border-border text-ui-xs text-muted-foreground hover:text-foreground hover:border-primary/40"
+              >
+                {alt}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );

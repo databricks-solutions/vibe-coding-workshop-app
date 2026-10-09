@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, Navigate, useParams } from 'react-router-dom';
-import { ArrowLeft, Lightbulb, Menu, RefreshCw } from 'lucide-react';
+import { ArrowLeft, Lightbulb, Menu, RefreshCw, SkipForward } from 'lucide-react';
 import { useIdeaFlow } from '../../hooks/useIdeaFlow';
 import { ExpandableErrorBanner } from '../ExpandableErrorBanner';
 import { AssumptionsDrawer } from './AssumptionsDrawer';
@@ -16,6 +16,7 @@ import { SparkStep } from './steps/SparkStep';
 import { MapStep } from './steps/MapStep';
 import { ClarifyStep } from './steps/ClarifyStep';
 import { ShapeStep } from './steps/ShapeStep';
+import { ImpactStep } from './steps/ImpactStep';
 import { BriefStep } from './steps/BriefStep';
 
 const THINKING: Record<StepKey, string> = {
@@ -23,6 +24,7 @@ const THINKING: Record<StepKey, string> = {
   map: 'Mapping your industry',
   clarify: 'Thinking of the right questions',
   shape: 'Sketching three different approaches',
+  impact: 'Working out what it could be worth',
   brief: 'Writing your brief',
 };
 
@@ -32,6 +34,7 @@ function hasOutput(idea: Idea, step: StepKey) {
     case 'map': return !!idea.map;
     case 'clarify': return !!idea.questions?.length;
     case 'shape': return !!idea.shapes?.length;
+    case 'impact': return !!idea.impact;
     case 'brief': return !!idea.brief;
   }
 }
@@ -91,6 +94,7 @@ function IdeaFlowView({ ideaId, onOpenMobileNav }: IdeaFlowProps & { ideaId: str
       case 'map': return !!idea.map?.placedLeafId;
       case 'clarify': return !!idea.questions?.length && idea.questions.every(q => idea.answers[q.id]) && loading !== 'followup';
       case 'shape': return !!idea.chosenShapeId;
+      case 'impact': return !!idea.impact && (!!idea.impact.skipped || idea.impact.questions.every(q => idea.impact!.answers[q.key]));
       case 'brief': return !!idea.brief && !streamingBrief && !approved;
     }
   })();
@@ -105,7 +109,8 @@ function IdeaFlowView({ ideaId, onOpenMobileNav }: IdeaFlowProps & { ideaId: str
     flow.run(viewStep);
   };
 
-  const StepView = { spark: SparkStep, map: MapStep, clarify: ClarifyStep, shape: ShapeStep, brief: BriefStep }[viewStep];
+  const StepView = { spark: SparkStep, map: MapStep, clarify: ClarifyStep, shape: ShapeStep, impact: ImpactStep, brief: BriefStep }[viewStep];
+  const canSkip = viewStep === 'impact' && canReach(idea, 'impact') && !approved && !idea.impact?.skipped;
 
   return (
     <div className="flex-1 min-h-0 overflow-y-auto bg-background">
@@ -138,7 +143,17 @@ function IdeaFlowView({ ideaId, onOpenMobileNav }: IdeaFlowProps & { ideaId: str
       </div>
 
       <div className="max-w-5xl mx-auto px-5 py-8">
-        <StepIntro step={viewStep} />
+        <div className="relative">
+          <StepIntro step={viewStep} />
+          {canSkip && (
+            <button
+              onClick={flow.skipImpact}
+              className="absolute top-0 right-0 flex items-center gap-1 px-2.5 py-1 rounded-lg text-ui-sm text-muted-foreground hover:text-foreground hover:bg-secondary/60"
+            >
+              Skip this step <SkipForward className="w-3.5 h-3.5" />
+            </button>
+          )}
+        </div>
 
         {error && (
           <div className="mb-6 space-y-2">

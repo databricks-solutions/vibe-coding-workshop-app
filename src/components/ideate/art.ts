@@ -1,4 +1,4 @@
-import { FileText, Map as MapIcon, MessagesSquare, Shapes, Sparkles } from 'lucide-react';
+import { FileText, Map as MapIcon, MessagesSquare, Shapes, Sparkles, TrendingUp } from 'lucide-react';
 import type { StepKey } from './types';
 
 const BASE = '/ideate';
@@ -14,6 +14,7 @@ export const STEP_ART: Record<StepKey, { image: string; icon: typeof Sparkles; p
   map: { image: `${BASE}/step-map.webp`, icon: MapIcon, promise: 'Plus who it helps and what it touches' },
   clarify: { image: `${BASE}/step-clarify.webp`, icon: MessagesSquare, promise: 'Pick answers, no essays needed' },
   shape: { image: `${BASE}/step-shape.webp`, icon: Shapes, promise: 'Each one comes with its biggest risk' },
+  impact: { image: `${BASE}/step-map.webp`, icon: TrendingUp, promise: 'Pick rough answers, or skip. Not sure is fine.' },
   brief: { image: `${BASE}/step-brief.webp`, icon: FileText, promise: 'Review it, check for gaps, then decide' },
 };
 

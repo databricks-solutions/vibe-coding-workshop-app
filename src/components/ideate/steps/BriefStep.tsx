@@ -1,11 +1,13 @@
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import ReactMarkdown from 'react-markdown';
-import { Archive, Check, CheckCircle2, Copy, Download, Loader2, Plus, Rocket, Search, Shuffle, TriangleAlert, X } from 'lucide-react';
+import { Archive, Briefcase, Check, CheckCircle2, Copy, Download, Loader2, Plus, Rocket, Search, Send, Shuffle, TriangleAlert, X } from 'lucide-react';
+import { SubmitDialog } from '../SubmitDialog';
 import type { IdeaFlow } from '../../../hooks/useIdeaFlow';
 import { useCopyToClipboard } from '../../../hooks/useCopyToClipboard';
 import { MARKDOWN_COMPONENTS, REMARK_PLUGINS } from '../../MarkdownContent';
-import { briefAsMarkdown, chosenShape, placedLeaf } from '../ideaContext';
+import { briefAsMarkdown, caseFigures, chosenShape, placedLeaf } from '../ideaContext';
+import { money } from '../businessCase';
 import { ART, avatarFor } from '../art';
 import { DIMENSIONS } from '../types';
 
@@ -20,8 +22,11 @@ export function BriefStep({ flow }: { flow: IdeaFlow }) {
   const { copied, handleCopy } = useCopyToClipboard();
   const [celebrate, setCelebrate] = useState(0);
   const [toast, setToast] = useState<string | null>(null);
+  const [submitOpen, setSubmitOpen] = useState(false);
+  const openCase = () => navigate(`/ideate/${idea.id}/business-case`);
   const shape = chosenShape(idea);
   const personas = placedLeaf(idea)?.personas ?? [];
+  const figures = caseFigures(idea);
 
   const done = useMemo(() => {
     const heads = (text.match(/^##\s+(.+)$/gm) ?? []).map(h => h.replace(/^##\s+/, '').toLowerCase());
@@ -58,6 +63,11 @@ export function BriefStep({ flow }: { flow: IdeaFlow }) {
           <p className="text-ui-lg font-semibold text-foreground truncate">{idea.title}</p>
           {shape && <p className="text-ui-sm text-muted-foreground truncate">{shape.title}</p>}
         </div>
+        {figures && (
+          <span className="flex-shrink-0 px-2.5 py-1 rounded-full bg-emerald-500/10 text-emerald-400 text-ui-xs font-semibold" title="Expected annual value from the Impact step">
+            ~{money(figures.value.expected)} a year
+          </span>
+        )}
         {personas.length > 0 && (
           <div className="flex -space-x-2 flex-shrink-0" title={personas.join(', ')}>
             {personas.slice(0, 3).map(p => (
@@ -98,6 +108,9 @@ export function BriefStep({ flow }: { flow: IdeaFlow }) {
               {flow.loading === 'gaps' ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Search className="w-3.5 h-3.5" />} Find gaps
             </button>
             <div className="flex-1" />
+            <button onClick={openCase} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary/10 text-primary text-ui-sm font-medium hover:bg-primary/20">
+              <Briefcase className="w-3.5 h-3.5" /> Business case
+            </button>
             <button onClick={() => handleCopy(briefAsMarkdown(idea))} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-ui-sm text-muted-foreground hover:text-foreground hover:bg-secondary/60">
               {copied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />} {copied ? 'Copied' : 'Copy'}
             </button>
@@ -138,12 +151,18 @@ export function BriefStep({ flow }: { flow: IdeaFlow }) {
                 <img src={ART.celebrate} alt="" width={240} height={160} className="w-60 rounded-xl" />
                 <div className="text-center sm:text-left">
                   <p className="text-ui-xl font-semibold text-foreground">Committed. Nice work.</p>
-                  <p className="text-ui-sm text-muted-foreground mt-1">Your brief is ready to share or take into the workshop.</p>
+                  <p className="text-ui-sm text-muted-foreground mt-1">
+                    {idea.catalogRef ? 'It\'s on the use case map, waiting for review.' : 'Submit it to the use case map so others can build it in the workshop.'}
+                  </p>
                   <div className="flex flex-wrap justify-center sm:justify-start gap-2 mt-4">
-                    <button onClick={download} className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-primary text-primary-foreground text-ui-sm font-semibold hover:opacity-90">
-                      <Download className="w-4 h-4" /> Download brief
+                    <SubmitButton submitted={!!idea.catalogRef} onClick={() => setSubmitOpen(true)} primary />
+                    <button onClick={openCase} className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-secondary text-foreground text-ui-sm font-medium hover:bg-secondary/80">
+                      <Briefcase className="w-4 h-4" /> Business case
                     </button>
-                    <button onClick={() => navigate('/ideate')} className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-secondary text-foreground text-ui-sm font-medium hover:bg-secondary/80">
+                    <button onClick={download} className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-ui-sm font-medium text-muted-foreground hover:text-foreground hover:bg-secondary/60">
+                      <Download className="w-4 h-4" /> Brief
+                    </button>
+                    <button onClick={() => navigate('/ideate')} className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-ui-sm font-medium text-muted-foreground hover:text-foreground hover:bg-secondary/60">
                       <Plus className="w-4 h-4" /> Start another idea
                     </button>
                   </div>
@@ -157,6 +176,7 @@ export function BriefStep({ flow }: { flow: IdeaFlow }) {
                 <button onClick={commit} className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-ui-sm font-semibold transition-all active:scale-95 ${idea.status === 'committed' ? 'bg-emerald-500 text-white' : 'bg-primary text-primary-foreground hover:opacity-90'}`}>
                   <Rocket className="w-4 h-4" /> {idea.status === 'committed' ? 'Committed' : 'Commit'}
                 </button>
+                {idea.status === 'committed' && <SubmitButton submitted={!!idea.catalogRef} onClick={() => setSubmitOpen(true)} />}
                 <button onClick={flow.pivot} className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-ui-sm font-medium text-muted-foreground hover:text-foreground hover:bg-secondary/60">
                   <Shuffle className="w-4 h-4" /> Pivot
                 </button>
@@ -184,6 +204,26 @@ export function BriefStep({ flow }: { flow: IdeaFlow }) {
       {toast && (
         <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 px-4 py-2 rounded-xl bg-foreground text-background text-ui-sm shadow-lg animate-slide-up-fade">{toast}</div>
       )}
+
+      {submitOpen && <SubmitDialog idea={idea} onClose={() => setSubmitOpen(false)} />}
     </div>
+  );
+}
+
+function SubmitButton({ submitted, onClick, primary }: { submitted: boolean; onClick: () => void; primary?: boolean }) {
+  if (submitted) {
+    return (
+      <button onClick={onClick} title="Resubmit with your latest changes" className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-emerald-500/10 text-emerald-400 text-ui-sm font-medium hover:bg-emerald-500/20">
+        <CheckCircle2 className="w-4 h-4" /> On the use case map
+      </button>
+    );
+  }
+  return (
+    <button
+      onClick={onClick}
+      className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-ui-sm font-semibold transition-all active:scale-95 ${primary ? 'bg-primary text-primary-foreground hover:opacity-90' : 'bg-primary/10 text-primary hover:bg-primary/20'}`}
+    >
+      <Send className="w-4 h-4" /> Submit to use case map
+    </button>
   );
 }

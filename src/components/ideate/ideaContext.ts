@@ -1,6 +1,12 @@
+import { computeCase, figuresAsContext, hasNumbers } from './businessCase';
 import { DIMENSIONS, NOT_SURE, STEPS, type Dimension, type Idea, type StepKey } from './types';
 
 export const stepIndex = (s: StepKey) => STEPS.findIndex(x => x.key === s);
+
+/** Business case figures, or null when the Impact step was skipped or not done yet. */
+export function caseFigures(idea: Idea) {
+  return hasNumbers(idea.impact) ? computeCase(idea.impact, chosenShape(idea)) : null;
+}
 
 export function placedLeaf(idea: Idea) {
   const map = idea.map;
@@ -45,6 +51,8 @@ export function buildContext(idea: Idea, includeDraftsFor?: StepKey): Record<str
     ctx.chosenShape = shape;
     ctx.rejectedShapes = (idea.shapes ?? []).filter(s => s.id !== shape.id).map(s => s.title);
   }
+  const figures = ok('impact') ? caseFigures(idea) : null;
+  if (figures) ctx.businessImpact = { scope: idea.impact!.scope, ...figuresAsContext(figures) };
   if (ok('brief') && idea.brief) ctx.brief = idea.brief;
   const accepted = idea.assumptions.filter(a => a.status === 'accepted').map(a => a.text);
   const openQs = idea.assumptions.filter(a => a.status === 'question').map(a => a.text);
@@ -58,8 +66,9 @@ export function clarityByDimension(idea: Idea): Record<Dimension, number> {
   const real = (dim: string) => answeredPairs(idea).some(a => a.dimension === dim && a.answer !== NOT_SURE);
   const has = (s: StepKey) => idea.approved.includes(s);
   const brief = !!idea.brief;
+  const sized = has('impact') && hasNumbers(idea.impact);
   const scores: Record<Dimension, number> = {
-    business: (has('spark') ? 0.34 : 0) + (real('business') ? 0.33 : 0) + (brief ? 0.33 : 0),
+    business: (has('spark') ? 0.25 : 0) + (real('business') ? 0.25 : 0) + (sized ? 0.25 : 0) + (brief ? 0.25 : 0),
     user: (has('map') ? 0.34 : 0) + (real('user') ? 0.33 : 0) + (brief ? 0.33 : 0),
     functional: (has('spark') ? 0.25 : 0) + (has('shape') ? 0.5 : 0) + (brief ? 0.25 : 0),
     technical: (has('map') ? 0.5 : 0) + (has('shape') ? 0.25 : 0) + (brief ? 0.25 : 0),

@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowRight, Copy, Lightbulb, Menu, MoreHorizontal, Pencil, Trash2 } from 'lucide-react';
+import { ArrowRight, Copy, Lightbulb, Menu, MoreHorizontal, Pencil, Send, Trash2 } from 'lucide-react';
 import { useIdeas } from '../../hooks/useIdeas';
 import { VoiceTextarea } from './VoiceTextarea';
+import { SubmitDialog } from './SubmitDialog';
 import { STEPS, type Idea, type IdeaStatus } from './types';
 import { stepIndex } from './ideaContext';
 import { ART, STEP_ART } from './art';
@@ -32,7 +33,8 @@ export function IdeasHome({ onOpenMobileNav }: { onOpenMobileNav?: () => void })
   const navigate = useNavigate();
   const [seed, setSeed] = useState('');
   const [industry, setIndustry] = useState('');
-  const [filter, setFilter] = useState<IdeaStatus | 'all'>('all');
+  const [filter, setFilter] = useState<IdeaStatus | 'all' | 'submitted'>('all');
+  const [submitting, setSubmitting] = useState<Idea | null>(null);
   const [promptIdx, setPromptIdx] = useState(0);
 
   useEffect(() => {
@@ -47,7 +49,11 @@ export function IdeasHome({ onOpenMobileNav }: { onOpenMobileNav?: () => void })
     navigate(`/ideate/${idea.id}`);
   };
 
-  const visible = useMemo(() => ideas.filter(i => filter === 'all' || i.status === filter), [ideas, filter]);
+  const visible = useMemo(
+    () => ideas.filter(i => filter === 'all' || (filter === 'submitted' ? !!i.catalogRef : i.status === filter)),
+    [ideas, filter],
+  );
+  const anySubmitted = ideas.some(i => i.catalogRef);
 
   return (
     <div className="flex-1 min-h-0 overflow-y-auto bg-background">
@@ -65,7 +71,7 @@ export function IdeasHome({ onOpenMobileNav }: { onOpenMobileNav?: () => void })
             </p>
             <h1 className="text-ui-3xl font-semibold text-foreground leading-tight mt-2">Say the messy version.<br />I'll ask the questions.</h1>
             <p className="text-ui-base text-muted-foreground mt-3 max-w-md">
-              Five short steps turn a rough idea into a one-page brief. You pick, the AI does the heavy lifting.
+              A few short steps turn a rough idea into a one-page brief and a business case you can submit. You pick, the AI does the heavy lifting.
             </p>
           </div>
           <img src={ART.hero} alt="" width={320} height={213} className="hidden md:block w-full rounded-3xl" />
@@ -103,13 +109,13 @@ export function IdeasHome({ onOpenMobileNav }: { onOpenMobileNav?: () => void })
           <div className="mt-10">
             <div className="flex items-center gap-2 mb-4">
               <h2 className="text-ui-lg font-semibold text-foreground mr-2">My ideas</h2>
-              {(['all', 'exploring', 'committed', 'parked'] as const).map(f => (
+              {(['all', 'exploring', 'committed', 'parked', ...(anySubmitted ? ['submitted' as const] : [])] as const).map(f => (
                 <button
                   key={f}
                   onClick={() => setFilter(f)}
                   className={`px-2.5 py-1 rounded-full text-ui-xs font-medium transition-colors ${filter === f ? 'bg-foreground text-background' : 'text-muted-foreground hover:bg-secondary'}`}
                 >
-                  {f === 'all' ? `All ${ideas.length}` : STATUS[f].label}
+                  {f === 'all' ? `All ${ideas.length}` : f === 'submitted' ? 'Submitted' : STATUS[f].label}
                 </button>
               ))}
             </div>
@@ -123,18 +129,22 @@ export function IdeasHome({ onOpenMobileNav }: { onOpenMobileNav?: () => void })
                   onRename={title => updateIdea(idea.id, { title })}
                   onDuplicate={() => duplicateIdea(idea.id)}
                   onDelete={() => deleteIdea(idea.id)}
+                  onSubmit={() => setSubmitting(idea)}
                 />
               ))}
               {visible.length === 0 && (
                 <div className="sm:col-span-2 flex flex-col items-center py-6 text-center">
                   <img src={ART.empty} alt="" width={200} height={133} className="w-48 rounded-2xl opacity-90" />
-                  <p className="text-ui-sm text-muted-foreground mt-3">No {filter === 'all' ? '' : STATUS[filter as IdeaStatus].label.toLowerCase()} ideas yet.</p>
+                  <p className="text-ui-sm text-muted-foreground mt-3">
+                    No {filter === 'all' ? '' : filter === 'submitted' ? 'submitted' : STATUS[filter].label.toLowerCase()} ideas yet.
+                  </p>
                 </div>
               )}
             </div>
           </div>
         )}
       </div>
+      {submitting && <SubmitDialog idea={ideas.find(i => i.id === submitting.id) ?? submitting} onClose={() => setSubmitting(null)} />}
     </div>
   );
 }
@@ -146,9 +156,10 @@ interface IdeaCardProps {
   onRename: (title: string) => void;
   onDuplicate: () => void;
   onDelete: () => void;
+  onSubmit: () => void;
 }
 
-function IdeaCard({ idea, delay, onOpen, onRename, onDuplicate, onDelete }: IdeaCardProps) {
+function IdeaCard({ idea, delay, onOpen, onRename, onDuplicate, onDelete, onSubmit }: IdeaCardProps) {
   const [menu, setMenu] = useState(false);
   const [renaming, setRenaming] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -207,7 +218,17 @@ function IdeaCard({ idea, delay, onOpen, onRename, onDuplicate, onDelete }: Idea
       <p className="text-ui-sm text-muted-foreground line-clamp-2 mt-1 min-h-[2.5em]">{idea.spark?.statement ?? idea.seed}</p>
       <div className="flex items-center gap-2 mt-3">
         <span className={`px-2 py-0.5 rounded-full text-ui-2xs font-semibold ${status.cls}`}>{status.label}</span>
-        {(idea.spark?.industry || idea.industry) && <span className="text-ui-2xs text-muted-foreground">{idea.spark?.industry || idea.industry}</span>}
+        {idea.catalogRef ? (
+          <span className="px-2 py-0.5 rounded-full text-ui-2xs font-semibold bg-violet-500/10 text-violet-400" title={`${idea.catalogRef.industryLabel} / ${idea.catalogRef.useCaseLabel}`}>Submitted</span>
+        ) : idea.status === 'committed' && idea.brief ? (
+          <button
+            onClick={e => { e.stopPropagation(); onSubmit(); }}
+            className="flex items-center gap-1 px-2 py-0.5 rounded-full text-ui-2xs font-semibold text-primary hover:bg-primary/10"
+          >
+            <Send className="w-3 h-3" /> Submit
+          </button>
+        ) : null}
+        {(idea.spark?.industry || idea.industry) && <span className="text-ui-2xs text-muted-foreground truncate">{idea.spark?.industry || idea.industry}</span>}
         <span className="ml-auto text-ui-2xs text-muted-foreground">{STEPS[stepIndex(idea.step)].label} · {timeAgo(idea.updatedAt)}</span>
       </div>
       <div className="h-0.5 rounded-full bg-secondary mt-3 overflow-hidden">

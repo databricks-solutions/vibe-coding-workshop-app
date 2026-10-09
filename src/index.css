@@ -2111,3 +2111,17 @@ select option {
 @media (prefers-reduced-motion: reduce) {
   .ideate-flip-inner { transition: none; }
 }
+
+/* Ideate business case: a print-only copy is portaled to <body>; printing shows only that. */
+@layer base {
+  .bc-page p { color: inherit; }
+}
+.bc-print { display: none; }
+@media print {
+  @page { size: letter; margin: 0.45in; }
+  html, body { background: #fff !important; }
+  body > #root { display: none !important; }
+  .bc-print { display: block; color: #262626; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .bc-print .bc-page { box-shadow: none; border-radius: 0; width: auto; min-height: 0; height: auto; padding: 0; }
+  .bc-print .bc-page + .bc-page { break-before: page; }
+}

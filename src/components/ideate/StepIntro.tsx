@@ -6,7 +6,7 @@ import { stepIndex } from './ideaContext';
 export function StepIntro({ step }: { step: StepKey }) {
   const reduce = useReducedMotion();
   const { image, promise } = STEP_ART[step];
-  const { hint } = STEPS[stepIndex(step)];
+  const { hint, optional } = STEPS[stepIndex(step)];
 
   return (
     <motion.div
@@ -25,7 +25,7 @@ export function StepIntro({ step }: { step: StepKey }) {
       />
       <div className="min-w-0">
         <p className="text-ui-2xs uppercase tracking-wider font-semibold text-primary/80">
-          Step {stepIndex(step) + 1} of {STEPS.length}
+          Step {stepIndex(step) + 1} of {STEPS.length}{optional && ' · Optional'}
         </p>
         <h2 className="text-ui-xl sm:text-ui-2xl font-semibold text-foreground leading-tight">{hint}</h2>
         <p className="text-ui-sm text-muted-foreground mt-0.5">{promise}</p>

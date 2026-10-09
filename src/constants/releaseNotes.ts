@@ -54,10 +54,19 @@ export const RELEASES: Release[] = [
       {
         title: 'Ideate: shape a raw idea into a decision-ready brief',
         description:
-          'A new Ideate section in the left nav. Speak or type a rough idea, and the AI walks you through five short steps: Spark, Industry Map, Clarify, Shape, and Brief. It asks the questions, you pick the answers, and nothing moves on without your approval. Ideas are saved in your browser. This feature is in beta, so expect changes.',
+          'A new Ideate section in the left nav. Speak or type a rough idea, and the AI walks you through short steps: Spark, Industry Map, Clarify, Shape, an optional Impact step, and Brief. It asks the questions, you pick the answers, and nothing moves on without your approval. Ideas are saved in your browser. This feature is in beta, so expect changes.',
         category: 'new',
         audience: 'attendee',
         icon: 'sparkles',
+        beta: true,
+      },
+      {
+        title: 'Business case you can download and submit',
+        description:
+          'The optional Impact step asks three or four quick questions about time, frequency, and people, with "estimate for me" and skip options. From the Brief, open a two-page business case with annual value, first-year cost, return, payback, and cautious, expected, and upside scenarios, then download it as a PDF. Committed ideas can be submitted to the use case map; they land in Configuration as inactive until an admin turns them on. Spark now names the specific industry, such as Airlines rather than Aviation.',
+        category: 'new',
+        audience: 'attendee',
+        icon: 'rocket',
         beta: true,
       },
       {

@@ -1830,6 +1830,27 @@ class ApiClient {
     return body.data as T;
   }
 
+  /** Submit a committed idea to the use case catalog. It lands inactive until an admin turns it on. */
+  async ideateSubmit(params: {
+    idea: Record<string, unknown>;
+    business_case?: Record<string, unknown> | null;
+    brief?: string;
+    industry?: string;
+    industry_label: string;
+    use_case_label: string;
+    category?: string;
+    use_case?: string;
+  }): Promise<{ industry: string; industryLabel: string; useCase: string; useCaseLabel: string; version: number }> {
+    const response = await fetch(`${this.baseUrl}/ideate/submit`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(params),
+    });
+    const body = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(body.error || `Request failed (${response.status})`);
+    return body;
+  }
+
   /** Stream the Ideate brief (SSE). Returns an AbortController to cancel. */
   ideateBriefStream(
     params: { idea: Record<string, unknown>; feedback?: string; current_brief?: string },

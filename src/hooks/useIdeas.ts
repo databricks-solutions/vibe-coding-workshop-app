@@ -1,5 +1,6 @@
 import { useCallback, useSyncExternalStore } from 'react';
 import { STEPS, type Idea } from '../components/ideate/types';
+import { skippedImpact } from '../components/ideate/businessCase';
 
 const STORAGE_KEY = 'v2v.ideate.ideas.v1';
 
@@ -26,10 +27,17 @@ function load(): Idea[] {
         decisions: Array.isArray(i.decisions) ? i.decisions : [],
         createdAt: i.createdAt ?? new Date().toISOString(),
         updatedAt: i.updatedAt ?? new Date().toISOString(),
-      }));
+      }))
+      .map(withImpactStep);
   } catch {
     return [];
   }
+}
+
+/** Ideas saved before the Impact step existed already sit at the Brief; treat Impact as skipped. */
+function withImpactStep(idea: Idea): Idea {
+  if (idea.approved.includes('impact') || !idea.approved.includes('shape') || idea.step !== 'brief') return idea;
+  return { ...idea, impact: idea.impact ?? skippedImpact(), approved: [...idea.approved, 'impact'] };
 }
 
 let snapshot: Idea[] = typeof window !== 'undefined' ? load() : [];
@@ -103,7 +111,7 @@ export function useIdeas() {
     const src = snapshot.find(i => i.id === id);
     if (!src) return;
     const now = new Date().toISOString();
-    commit([{ ...src, id: newId(), title: `${src.title} (copy)`, status: 'exploring', createdAt: now, updatedAt: now }, ...snapshot]);
+    commit([{ ...src, id: newId(), title: `${src.title} (copy)`, status: 'exploring', catalogRef: undefined, createdAt: now, updatedAt: now }, ...snapshot]);
   }, []);
 
   return { ideas, createIdea, updateIdea, deleteIdea, duplicateIdea };

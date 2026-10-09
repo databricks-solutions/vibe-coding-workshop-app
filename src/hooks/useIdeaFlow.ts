@@ -1,14 +1,18 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { apiClient } from '../api/client';
 import { useIdeas } from './useIdeas';
-import { buildContext, chosenShape, placedLeaf, stepIndex } from '../components/ideate/ideaContext';
+import { buildContext, caseFigures, chosenShape, placedLeaf, stepIndex } from '../components/ideate/ideaContext';
+import { money, skippedImpact } from '../components/ideate/businessCase';
 import {
   STEPS,
   type Assumption,
+  type CaseSummary,
   type ClarifyQuestion,
   type GapResult,
   type Idea,
   type IdeaStatus,
+  type Impact,
+  type ImpactAnswer,
   type IndustryMap,
   type ShapeOption,
   type SparkResult,
@@ -28,11 +32,13 @@ function resetFrom(idea: Idea, step: StepKey): Partial<Idea> {
     approved: idea.approved.filter(s => !after(s)),
     assumptions: idea.assumptions.filter(a => !after(a.step)),
     gaps: undefined,
+    summary: undefined,
   };
   if (after('spark')) patch.spark = undefined;
   if (after('map')) patch.map = undefined;
   if (after('clarify')) Object.assign(patch, { questions: undefined, answers: {}, followupChecked: false });
   if (after('shape')) Object.assign(patch, { shapes: undefined, chosenShapeId: undefined });
+  if (after('impact')) patch.impact = undefined;
   if (after('brief')) patch.brief = undefined;
   return patch;
 }
@@ -114,8 +120,9 @@ export function useIdeaFlow(ideaId: string) {
     if (step === 'spark') {
       const r = await call<WithAssumptions<SparkResult>>('spark', 'spark', ctx, feedback);
       if (!r) return;
-      patch({ spark: { title: r.title, statement: r.statement, industry: r.industry }, title: r.title || current.title });
-      mergeAssumptions('spark', r.assumptions);
+      const { assumptions, ...spark } = r;
+      patch({ spark, title: r.title || current.title });
+      mergeAssumptions('spark', assumptions);
     } else if (step === 'map') {
       const r = await call<WithAssumptions<IndustryMap>>('map', 'map', ctx, feedback);
       if (!r) return;
@@ -130,28 +137,59 @@ export function useIdeaFlow(ideaId: string) {
       if (!r) return;
       patch({ shapes: r.options, chosenShapeId: undefined });
       mergeAssumptions('shape', r.assumptions);
+    } else if (step === 'impact') {
+      const r = await call<Omit<Impact, 'answers'>>('impact', 'impact', ctx, feedback);
+      if (!r || ideaRef.current?.impact?.skipped) return;
+      patch({ impact: { ...r, answers: {} }, summary: undefined });
     }
   }, [call, logDecision, mergeAssumptions, patch, streamBrief]);
+
+  const markApproved = useCallback((step: StepKey, note: string) => {
+    const next = STEPS[Math.min(stepIndex(step) + 1, STEPS.length - 1)].key;
+    patch(i => ({
+      approved: i.approved.includes(step) ? i.approved : [...i.approved, step],
+      step: stepIndex(next) > stepIndex(i.step) ? next : i.step,
+    }));
+    logDecision(note);
+    if (step !== 'brief') setViewStep(next);
+  }, [logDecision, patch]);
 
   const approve = useCallback((step: StepKey) => {
     const current = ideaRef.current;
     if (!current) return;
-    const nextIdx = Math.min(stepIndex(step) + 1, STEPS.length - 1);
-    const next = STEPS[nextIdx].key;
+    const figures = caseFigures(current);
     const label: Record<StepKey, string> = {
       spark: `Confirmed intent: "${current.spark?.statement ?? ''}"`,
       map: `Placed on industry map: ${placedLeaf(current)?.name ?? 'unplaced'}`,
       clarify: 'Answered clarifying questions',
       shape: `Chose shape: ${chosenShape(current)?.title ?? ''}`,
+      impact: figures ? `Sized business impact: about ${money(figures.value.expected)} a year` : 'Skipped business impact',
       brief: 'Approved the brief',
     };
-    patch(i => ({
-      approved: i.approved.includes(step) ? i.approved : [...i.approved, step],
-      step: stepIndex(next) > stepIndex(i.step) ? next : i.step,
-    }));
-    logDecision(label[step]);
-    if (step !== 'brief') setViewStep(next);
+    markApproved(step, label[step]);
+  }, [markApproved]);
+
+  const answerImpact = useCallback((key: string, answer: ImpactAnswer) => {
+    patch(i => (i.impact ? { impact: { ...i.impact, answers: { ...i.impact.answers, [key]: answer } }, summary: undefined } : {}));
+  }, [patch]);
+
+  const skipImpact = useCallback(() => {
+    patch({ impact: skippedImpact(), summary: undefined });
+    markApproved('impact', 'Skipped business impact');
+  }, [markApproved, patch]);
+
+  /** Bring a skipped Impact step back; the flow regenerates its questions. Leaves the brief alone. */
+  const addImpact = useCallback(() => {
+    patch(i => ({ impact: undefined, summary: undefined, approved: i.approved.filter(s => s !== 'impact') }));
+    logDecision('Added business impact numbers');
   }, [logDecision, patch]);
+
+  const generateSummary = useCallback(async () => {
+    const current = ideaRef.current;
+    if (!current) return;
+    const r = await call<CaseSummary>('summary', 'summary', buildContext(current, 'brief'));
+    if (r) patch({ summary: r });
+  }, [call, patch]);
 
   const answer = useCallback(async (questionId: string, value: string) => {
     patch(i => ({ answers: { ...i.answers, [questionId]: value } }));
@@ -193,8 +231,10 @@ export function useIdeaFlow(ideaId: string) {
 
   const pivot = useCallback(() => {
     patch(i => ({
-      approved: i.approved.filter(s => s !== 'shape' && s !== 'brief'),
+      approved: i.approved.filter(s => s !== 'shape' && s !== 'impact' && s !== 'brief'),
       brief: undefined,
+      impact: undefined,
+      summary: undefined,
       gaps: undefined,
       step: 'shape',
       status: 'exploring',
@@ -223,6 +263,10 @@ export function useIdeaFlow(ideaId: string) {
     setStatus,
     pivot,
     logDecision,
+    answerImpact,
+    skipImpact,
+    addImpact,
+    generateSummary,
   };
 }
 
