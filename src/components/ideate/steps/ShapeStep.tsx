@@ -20,8 +20,8 @@ export function ShapeStep({ flow }: { flow: IdeaFlow }) {
 
   return (
     <div className="space-y-6">
-      <p className="text-ui-base text-muted-foreground animate-fade-in">
-        Three genuinely different ways to deliver it. <span className="text-foreground">Flip a card to see what could sink it.</span>
+      <p className="text-ui-sm text-muted-foreground animate-fade-in">
+        Pick one. Tap <span className="text-foreground">Risk</span> on a card to see what could sink it.
       </p>
       <div className="grid gap-4 md:grid-cols-3">
         {shapes.map((s, i) => {
@@ -34,18 +34,18 @@ export function ShapeStep({ flow }: { flow: IdeaFlow }) {
             <div key={s.id} className="ideate-flip h-72 animate-cascade-in" style={{ animationDelay: `${i * 120}ms` }}>
               <div className={`ideate-flip-inner ${isFlipped ? 'is-flipped' : ''}`}>
                 <div className={`ideate-flip-face rounded-2xl border p-5 flex flex-col bg-card transition-colors ${chosen ? 'border-primary ring-2 ring-primary/30' : 'border-border'}`}>
-                  <div className="flex items-center justify-between">
-                    <span className={`flex items-center gap-1.5 px-2 py-1 rounded-full text-ui-xs font-semibold ${k.tint}`}>
-                      <Icon className="w-3.5 h-3.5" /> {k.label}
+                  <div className="flex items-center gap-3">
+                    <span className={`w-10 h-10 rounded-xl flex items-center justify-center ${k.tint}`}>
+                      <Icon className="w-5 h-5" />
                     </span>
-                    <span className="text-ui-2xs text-muted-foreground">Effort: {EFFORT[s.effort] ?? s.effort}</span>
+                    <span className="min-w-0">
+                      <span className="block text-ui-sm font-semibold text-foreground">{k.label}</span>
+                      <span className="block text-ui-2xs text-muted-foreground">{EFFORT[s.effort] ?? s.effort} effort</span>
+                    </span>
                   </div>
                   <p className="text-ui-lg font-semibold text-foreground mt-4 leading-snug">{s.title}</p>
-                  <p className="text-ui-base text-muted-foreground mt-2 flex-1">{s.value}</p>
-                  <div className="flex flex-wrap gap-1 mb-3">
-                    {s.surfaces.map(x => <span key={x} className="px-1.5 py-0.5 rounded border border-border text-ui-2xs text-muted-foreground">{x}</span>)}
-                  </div>
-                  <div className="flex items-center gap-2">
+                  <p className="text-ui-sm text-muted-foreground mt-2 flex-1 line-clamp-4">{s.value}</p>
+                  <div className="flex items-center gap-2 mt-3">
                     <button onClick={toggle} className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-ui-xs text-muted-foreground hover:text-foreground hover:bg-secondary/60">
                       <RotateCcw className="w-3 h-3" /> Risk
                     </button>
@@ -64,7 +64,12 @@ export function ShapeStep({ flow }: { flow: IdeaFlow }) {
                       <p className="text-ui-sm text-muted-foreground mt-1">{s.cheapTest}</p>
                     </>
                   )}
-                  <div className="flex items-center gap-2 mt-auto">
+                  {s.surfaces.length > 0 && (
+                    <div className="flex flex-wrap gap-1 mt-3">
+                      {s.surfaces.map(x => <span key={x} className="px-1.5 py-0.5 rounded border border-border text-ui-2xs text-muted-foreground">{x}</span>)}
+                    </div>
+                  )}
+                  <div className="flex items-center gap-2 mt-auto pt-3">
                     <button onClick={toggle} className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-ui-xs text-muted-foreground hover:text-foreground hover:bg-secondary/60">
                       <RotateCcw className="w-3 h-3" /> Back
                     </button>

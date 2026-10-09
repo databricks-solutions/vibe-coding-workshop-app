@@ -7,6 +7,9 @@ import { AssumptionsDrawer } from './AssumptionsDrawer';
 import { ClarityRing } from './ClarityRing';
 import { IdeaStepper } from './IdeaStepper';
 import { StepFooter, Thinking } from './StepFooter';
+import { StepIntro } from './StepIntro';
+import { STEP_ART } from './art';
+import { motion, useReducedMotion } from 'framer-motion';
 import { stepIndex } from './ideaContext';
 import { STEPS, type Idea, type StepKey } from './types';
 import { SparkStep } from './steps/SparkStep';
@@ -52,6 +55,13 @@ function IdeaFlowView({ ideaId, onOpenMobileNav }: IdeaFlowProps & { ideaId: str
   const { idea, viewStep, loading, error } = flow;
   const [drawerOpen, setDrawerOpen] = useState(false);
   const autoRan = useRef<string | null>(null);
+  const reduceMotion = useReducedMotion();
+  const [lastStep, setLastStep] = useState(viewStep);
+  const [direction, setDirection] = useState(1);
+  if (viewStep !== lastStep) {
+    setDirection(stepIndex(viewStep) > stepIndex(lastStep) ? 1 : -1);
+    setLastStep(viewStep);
+  }
 
   const missing = !!idea && !hasOutput(idea, viewStep) && canReach(idea, viewStep);
 
@@ -70,7 +80,6 @@ function IdeaFlowView({ ideaId, onOpenMobileNav }: IdeaFlowProps & { ideaId: str
   if (!idea) return <Navigate to="/ideate" replace />;
 
   const openAssumptions = idea.assumptions.filter(a => a.status === 'open').length;
-  const step = STEPS[stepIndex(viewStep)];
   const approved = idea.approved.includes(viewStep);
   const streamingBrief = viewStep === 'brief' && loading === 'brief';
   const stepLoading = loading === viewStep && !streamingBrief;
@@ -129,9 +138,7 @@ function IdeaFlowView({ ideaId, onOpenMobileNav }: IdeaFlowProps & { ideaId: str
       </div>
 
       <div className="max-w-5xl mx-auto px-5 py-8">
-        <div key={viewStep} className="mb-6 animate-fade-in">
-          <h2 className="text-ui-2xl font-semibold text-foreground">{step.hint}</h2>
-        </div>
+        <StepIntro step={viewStep} />
 
         {error && (
           <div className="mb-6 space-y-2">
@@ -145,9 +152,14 @@ function IdeaFlowView({ ideaId, onOpenMobileNav }: IdeaFlowProps & { ideaId: str
         {!canReach(idea, viewStep) && !hasOutput(idea, viewStep) ? (
           <p className="text-ui-base text-muted-foreground">Approve the previous step first.</p>
         ) : stepLoading || (!showContent && !error) ? (
-          <Thinking label={THINKING[viewStep]} />
+          <Thinking label={THINKING[viewStep]} image={STEP_ART[viewStep].image} />
         ) : showContent ? (
-          <div key={`${viewStep}-view`}>
+          <motion.div
+            key={`${viewStep}-view`}
+            initial={reduceMotion ? false : { opacity: 0, x: 16 * direction }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ duration: 0.25, ease: 'easeOut' }}
+          >
             <StepView flow={flow} />
             <StepFooter
               canApprove={canApprove}
@@ -161,8 +173,9 @@ function IdeaFlowView({ ideaId, onOpenMobileNav }: IdeaFlowProps & { ideaId: str
               busy={!!loading && loading !== 'challenge'}
               approved={approved}
               onContinue={onContinue}
+              showKeyHint={idea.approved.length === 0}
             />
-          </div>
+          </motion.div>
         ) : null}
       </div>
 

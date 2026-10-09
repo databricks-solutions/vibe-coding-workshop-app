@@ -5,6 +5,7 @@ import { useIdeas } from '../../hooks/useIdeas';
 import { VoiceTextarea } from './VoiceTextarea';
 import { STEPS, type Idea, type IdeaStatus } from './types';
 import { stepIndex } from './ideaContext';
+import { ART, STEP_ART } from './art';
 
 const STATUS: Record<IdeaStatus, { label: string; cls: string }> = {
   exploring: { label: 'Exploring', cls: 'bg-sky-500/10 text-sky-400' },
@@ -51,22 +52,23 @@ export function IdeasHome({ onOpenMobileNav }: { onOpenMobileNav?: () => void })
   return (
     <div className="flex-1 min-h-0 overflow-y-auto bg-background">
       <div className="max-w-4xl mx-auto px-5 py-8 md:py-12">
-        <div className="flex items-center gap-2 mb-8">
-          {onOpenMobileNav && (
-            <button onClick={onOpenMobileNav} className="md:hidden p-2 -ml-2 rounded-lg hover:bg-secondary" aria-label="Open navigation">
-              <Menu className="w-5 h-5" />
-            </button>
-          )}
-          <div className="w-9 h-9 rounded-xl bg-primary/10 flex items-center justify-center">
-            <Lightbulb className="w-5 h-5 text-primary" />
-          </div>
+        {onOpenMobileNav && (
+          <button onClick={onOpenMobileNav} className="md:hidden p-2 -ml-2 mb-2 rounded-lg hover:bg-secondary" aria-label="Open navigation">
+            <Menu className="w-5 h-5" />
+          </button>
+        )}
+        <div className="grid items-center gap-6 md:grid-cols-[1fr_minmax(0,320px)] mb-6 animate-fade-in">
           <div>
-            <h1 className="flex items-center gap-2 text-ui-2xl font-semibold text-foreground">
-              Ideate
+            <p className="flex items-center gap-2 text-ui-sm font-medium text-primary">
+              <Lightbulb className="w-4 h-4" /> Ideate
               <span className="px-1.5 py-0.5 rounded text-ui-2xs font-semibold uppercase tracking-wide bg-amber-500/15 text-amber-400">Beta</span>
-            </h1>
-            <p className="text-ui-sm text-muted-foreground">Say the messy version. I'll ask the questions.</p>
+            </p>
+            <h1 className="text-ui-3xl font-semibold text-foreground leading-tight mt-2">Say the messy version.<br />I'll ask the questions.</h1>
+            <p className="text-ui-base text-muted-foreground mt-3 max-w-md">
+              Five short steps turn a rough idea into a one-page brief. You pick, the AI does the heavy lifting.
+            </p>
           </div>
+          <img src={ART.hero} alt="" width={320} height={213} className="hidden md:block w-full rounded-3xl" />
         </div>
 
         <div className="rounded-3xl border border-border bg-card p-5 md:p-6 shadow-sm animate-slide-up-fade">
@@ -123,7 +125,12 @@ export function IdeasHome({ onOpenMobileNav }: { onOpenMobileNav?: () => void })
                   onDelete={() => deleteIdea(idea.id)}
                 />
               ))}
-              {visible.length === 0 && <p className="text-ui-sm text-muted-foreground">Nothing here yet.</p>}
+              {visible.length === 0 && (
+                <div className="sm:col-span-2 flex flex-col items-center py-6 text-center">
+                  <img src={ART.empty} alt="" width={200} height={133} className="w-48 rounded-2xl opacity-90" />
+                  <p className="text-ui-sm text-muted-foreground mt-3">No {filter === 'all' ? '' : STATUS[filter as IdeaStatus].label.toLowerCase()} ideas yet.</p>
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -148,6 +155,7 @@ function IdeaCard({ idea, delay, onOpen, onRename, onDuplicate, onDelete }: Idea
   const ref = useRef<HTMLDivElement>(null);
   const progress = (idea.approved.length / STEPS.length) * 100;
   const status = STATUS[idea.status];
+  const StepIcon = STEP_ART[idea.step].icon;
 
   useEffect(() => {
     if (!menu) return;
@@ -159,10 +167,13 @@ function IdeaCard({ idea, delay, onOpen, onRename, onDuplicate, onDelete }: Idea
   return (
     <div
       onClick={() => !renaming && onOpen()}
-      className="group relative text-left rounded-2xl border border-border bg-card/60 p-4 cursor-pointer transition-all hover:border-primary/40 hover:-translate-y-0.5 hover:shadow-md animate-cascade-in"
+      className="group relative text-left rounded-2xl border border-border bg-card/60 p-4 cursor-pointer transition-colors hover:border-primary/40 hover:bg-card animate-cascade-in"
       style={{ animationDelay: `${delay}ms` }}
     >
-      <div className="flex items-start gap-2">
+      <div className="flex items-start gap-2.5">
+        <span className="w-8 h-8 rounded-lg bg-primary/10 text-primary flex items-center justify-center flex-shrink-0" title={`At: ${STEPS[stepIndex(idea.step)].label}`}>
+          <StepIcon className="w-4 h-4" />
+        </span>
         {renaming ? (
           <input
             autoFocus
@@ -173,7 +184,7 @@ function IdeaCard({ idea, delay, onOpen, onRename, onDuplicate, onDelete }: Idea
             className="flex-1 bg-transparent text-ui-base font-semibold outline-none border-b border-primary/50"
           />
         ) : (
-          <p className="flex-1 text-ui-base font-semibold text-foreground line-clamp-1">{idea.title}</p>
+          <p className="flex-1 text-ui-base font-semibold text-foreground line-clamp-1 mt-1">{idea.title}</p>
         )}
         <div ref={ref} className="relative" onClick={e => e.stopPropagation()}>
           <button onClick={() => setMenu(m => !m)} className="p-1 rounded-md text-muted-foreground opacity-0 group-hover:opacity-100 focus:opacity-100 hover:bg-secondary" aria-label="Idea actions">

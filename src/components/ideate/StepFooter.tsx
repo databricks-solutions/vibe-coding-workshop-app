@@ -15,6 +15,8 @@ interface StepFooterProps {
   approved: boolean;
   /** Shown instead of "Looks good" when the step is already approved and not the current step. */
   onContinue?: () => void;
+  /** Show the "Enter" keyboard hint (only useful until the user has learned it). */
+  showKeyHint?: boolean;
 }
 
 /**
@@ -33,6 +35,7 @@ export function StepFooter({
   busy,
   approved,
   onContinue,
+  showKeyHint = false,
 }: StepFooterProps) {
   const [editing, setEditing] = useState(false);
   const [feedback, setFeedback] = useState('');
@@ -59,7 +62,7 @@ export function StepFooter({
   }, [approved, busy, canApprove, editing, onApprove, onContinue]);
 
   return (
-    <div className="mt-8 space-y-3">
+    <div className="mt-8 pt-5 border-t border-border/60 space-y-3">
       {pushbacks && (
         <div className="rounded-xl border border-violet-500/30 bg-violet-500/5 p-3.5 animate-slide-up-fade">
           <div className="flex items-center justify-between mb-2">
@@ -127,7 +130,7 @@ export function StepFooter({
         </button>
 
         <div className="ml-auto flex items-center gap-3">
-          <span className="hidden sm:inline text-ui-2xs text-muted-foreground/60">Enter ↵</span>
+          {showKeyHint && <span className="hidden sm:inline text-ui-2xs text-muted-foreground/60">Press Enter ↵</span>}
           {approved && onContinue ? (
             <button
               onClick={onContinue}
@@ -150,14 +153,14 @@ export function StepFooter({
   );
 }
 
-export function Thinking({ label }: { label: string }) {
+export function Thinking({ label, image }: { label: string; image?: string }) {
   return (
-    <div className="flex flex-col items-center justify-center py-16 gap-4 animate-fade-in">
-      <div className="relative w-12 h-12">
-        <span className="absolute inset-0 rounded-full bg-primary/20 animate-ping" />
-        <span className="absolute inset-2 rounded-full bg-primary/40 animate-pulse" />
-        <span className="absolute inset-4 rounded-full bg-primary" />
-      </div>
+    <div className="flex flex-col items-center justify-center py-14 gap-4 animate-fade-in">
+      {image ? (
+        <img src={image} alt="" width={128} height={128} className="w-32 h-32 rounded-3xl object-cover ring-1 ring-border/60 animate-pulse [animation-duration:2.4s]" />
+      ) : (
+        <span className="w-10 h-10 rounded-full bg-primary/30 animate-pulse" />
+      )}
       <p className="text-ui-md text-muted-foreground">{label}<span className="loading-dots-inline">...</span></p>
     </div>
   );

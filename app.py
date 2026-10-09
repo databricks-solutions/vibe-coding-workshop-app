@@ -4,12 +4,16 @@ Databricks Apps Entry Point - FastAPI Application
 Serves both the React frontend and API endpoints.
 """
 
+import mimetypes
 import os
 import sys
 import time
 from collections import deque
 from pathlib import Path
 from urllib.parse import urlparse
+
+# Some container images ship a mime table without WebP; with nosniff, images need the right type.
+mimetypes.add_type("image/webp", ".webp")
 
 # Add the src/backend directory to the Python path
 backend_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'src', 'backend')
@@ -105,7 +109,7 @@ async def security_middleware(request: Request, call_next):
     response.headers.setdefault("X-Frame-Options", "SAMEORIGIN")
     response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
     response.headers.setdefault(
-        "Permissions-Policy", "geolocation=(), microphone=(), camera=()"
+        "Permissions-Policy", "geolocation=(), microphone=(self), camera=()"
     )
     return response
 

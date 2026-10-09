@@ -1,5 +1,5 @@
-import { forwardRef, useCallback } from 'react';
-import { Mic, Square } from 'lucide-react';
+import { forwardRef, useCallback, useEffect, useRef } from 'react';
+import { Mic, MicOff, Square } from 'lucide-react';
 import { useSpeechToText } from '../../hooks/useSpeechToText';
 
 interface VoiceTextareaProps {
@@ -18,9 +18,14 @@ export const VoiceTextarea = forwardRef<HTMLTextAreaElement, VoiceTextareaProps>
   { value, onChange, placeholder, rows = 3, autoFocus, size = 'md', onSubmit, className = '' },
   ref,
 ) {
+  const valueRef = useRef(value);
+  useEffect(() => { valueRef.current = value; }, [value]);
   const append = useCallback((text: string) => {
-    onChange((value ? `${value.trimEnd()} ` : '') + text.trim());
-  }, [onChange, value]);
+    const current = valueRef.current;
+    const next = (current ? `${current.trimEnd()} ` : '') + text.trim();
+    valueRef.current = next;
+    onChange(next);
+  }, [onChange]);
 
   const speech = useSpeechToText({ onFinalTranscript: append });
 
@@ -49,6 +54,19 @@ export const VoiceTextarea = forwardRef<HTMLTextAreaElement, VoiceTextareaProps>
         <p className={`absolute left-0 right-14 bottom-2.5 truncate text-ui-sm italic text-muted-foreground ${size === 'lg' ? 'px-5' : 'px-3.5'}`}>
           {speech.interimTranscript || 'Listening…'}
         </p>
+      )}
+      {speech.error && !speech.isListening && (
+        <p role="alert" className={`absolute left-0 right-14 bottom-2 flex items-start gap-1.5 text-ui-xs leading-snug text-amber-400 line-clamp-2 ${size === 'lg' ? 'px-5' : 'px-3.5'}`}>
+          <MicOff className="w-3.5 h-3.5 mt-px flex-shrink-0" /> {speech.error}
+        </p>
+      )}
+      {!speech.isSupported && (
+        <span
+          title="Voice input needs Chrome, Edge or Safari. You can still type."
+          className={`absolute right-2.5 bottom-2.5 flex items-center justify-center rounded-full bg-secondary/60 text-muted-foreground/50 cursor-not-allowed ${size === 'lg' ? 'w-10 h-10' : 'w-8 h-8'}`}
+        >
+          <MicOff className="w-4 h-4" />
+        </span>
       )}
       {speech.isSupported && (
         <button

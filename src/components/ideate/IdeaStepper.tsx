@@ -1,5 +1,6 @@
 import { Check } from 'lucide-react';
 import { stepIndex } from './ideaContext';
+import { STEP_ART } from './art';
 import { STEPS, type Idea, type StepKey } from './types';
 
 interface IdeaStepperProps {
@@ -16,6 +17,7 @@ export function IdeaStepper({ idea, viewStep, onSelect }: IdeaStepperProps) {
         const approved = idea.approved.includes(s.key);
         const reachable = i <= furthest;
         const active = s.key === viewStep;
+        const Icon = STEP_ART[s.key].icon;
         return (
           <li key={s.key} className="flex items-center gap-1 sm:gap-2 flex-1 last:flex-none">
             <button
@@ -27,7 +29,7 @@ export function IdeaStepper({ idea, viewStep, onSelect }: IdeaStepperProps) {
               }`}
             >
               <span
-                className={`w-6 h-6 rounded-full flex items-center justify-center text-ui-2xs font-semibold transition-all ${
+                className={`w-7 h-7 rounded-full flex items-center justify-center text-ui-2xs font-semibold transition-all duration-300 ${
                   approved
                     ? 'bg-emerald-500 text-white'
                     : active
@@ -35,7 +37,7 @@ export function IdeaStepper({ idea, viewStep, onSelect }: IdeaStepperProps) {
                       : 'bg-secondary text-muted-foreground'
                 }`}
               >
-                {approved ? <Check className="w-3.5 h-3.5" /> : i + 1}
+                {approved ? <Check className="w-3.5 h-3.5" /> : <Icon className="w-3.5 h-3.5" />}
               </span>
               <span className={`hidden md:inline text-ui-sm font-medium whitespace-nowrap ${active ? 'text-foreground' : 'text-muted-foreground'}`}>
                 {s.label}

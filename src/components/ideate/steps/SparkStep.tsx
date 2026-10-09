@@ -21,11 +21,13 @@ export function SparkStep({ flow }: { flow: IdeaFlow }) {
       <div className="space-y-4">
         <p className="text-ui-2xs uppercase tracking-wider font-semibold text-primary">Here's how I understood it</p>
         <input
+          title="Click to edit"
           value={spark.title}
           onChange={e => set({ title: e.target.value })}
           className="w-full bg-transparent text-ui-3xl font-semibold text-foreground outline-none border-b border-transparent hover:border-border focus:border-primary/60 pb-1 transition-colors"
         />
         <textarea
+          title="Click to edit"
           value={spark.statement}
           onChange={e => set({ statement: e.target.value })}
           rows={3}
@@ -40,7 +42,6 @@ export function SparkStep({ flow }: { flow: IdeaFlow }) {
             size={Math.max(8, spark.industry.length)}
           />
         </div>
-        <p className="text-ui-xs text-muted-foreground/70">Click any text to edit it directly.</p>
       </div>
     </div>
   );
