@@ -48,7 +48,11 @@ def test_outline_status_transitions_after_completion():
     assert result.ok
     statuses = {status.sectionTag: status.status for status in engine.outline(TRACK, session)}
     assert statuses[first.sectionTag] == "done"
-    assert statuses[result.next_step.sectionTag] == "current"
+    # Strict order (D-78): the next step is the first unfinished one. Without the
+    # use case it is Blocked on prd_generation (locked), not a later ungated step.
+    assert isinstance(result.next_step, engine.Blocked)
+    assert result.next_step.sectionTag == "prd_generation"
+    assert statuses["prd_generation"] == "locked"
 
 
 def test_complete_step_idempotent_success():  # D3 F3
