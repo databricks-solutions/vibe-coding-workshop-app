@@ -50,6 +50,7 @@ export function UseCaseCardGrid({ useCases, selectedUseCase, onSelect, disabled 
                 {uc.is_certified && <CertifiedBadge size="md" className="animate-scale-in" />}
               </div>
               <h4 className={`text-ui-base font-semibold text-foreground ${uc.is_certified ? 'pr-12' : 'pr-6'}`}>{uc.label}</h4>
+              {uc.home_label && <p className="mt-1 text-ui-2xs font-medium uppercase tracking-wide text-muted-foreground">From {uc.home_label}</p>}
             </button>
           );
         })}

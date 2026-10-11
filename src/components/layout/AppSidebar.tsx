@@ -13,6 +13,7 @@ import {
   BookOpen,
   ChevronDown,
   GraduationCap,
+  LibraryBig,
   Lightbulb,
   List,
   PanelLeft,
@@ -245,6 +246,7 @@ export function AppSidebar({
 
         <SidebarSectionLabel label="Admin" collapsed={collapsed} />
         <div className="space-y-0.5">
+          {item({ to: '/library', icon: <LibraryBig />, label: 'Use Case Library', active: path.startsWith('/library') })}
           {item({ to: '/analytics', icon: <BarChart3 />, label: 'Analytics', active: path === '/analytics' })}
           <div className="relative">
             {item({ to: '/config', icon: ConfigIcon, label: 'Configuration', active: path.startsWith('/config') })}

@@ -62,6 +62,15 @@ export interface SelectOption {
   display_order?: number;
   /** Certified use cases sort to the top of each section and show a Certified badge. */
   is_certified?: boolean;
+  /** Collection options only: industry (vertical), business function or technical solution (horizontal). */
+  kind?: 'industry' | 'function' | 'solution';
+  /** Collection options only: lucide icon name and palette color token chosen in the Library. */
+  icon?: string | null;
+  color?: string | null;
+  description?: string | null;
+  /** Use cases cross-listed into another collection: the collection that owns the content. */
+  home_industry?: string;
+  home_label?: string;
 }
 
 export interface GeneratedContent {

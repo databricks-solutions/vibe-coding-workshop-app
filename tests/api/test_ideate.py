@@ -154,12 +154,26 @@ class TestSubmit(unittest.TestCase):
         self.assertEqual(out["industry"], "airlines")
         self.assertEqual(out["industryLabel"], "Airlines")
 
-    def test_falls_back_to_legacy_columns(self):
+    def test_tags_submission_source_for_review_queue(self):
+        self._submit(industry="travel")
+        sql, _ = self.inserts[0]
+        self.assertIn("source", sql)
+        self.assertIn("'ideate'", sql)
+
+    def test_falls_back_without_source_column(self):
         calls = []
         ideate.execute_insert = lambda sql, params=None: calls.append(sql) or len(calls) > 1
         self._submit(industry="travel")
         self.assertEqual(len(calls), 2)
-        self.assertNotIn("category", calls[1])
+        self.assertNotIn("source", calls[1])
+        self.assertIn("category", calls[1])
+
+    def test_falls_back_to_legacy_columns(self):
+        calls = []
+        ideate.execute_insert = lambda sql, params=None: calls.append(sql) or len(calls) > 2
+        self._submit(industry="travel")
+        self.assertEqual(len(calls), 3)
+        self.assertNotIn("category", calls[2])
 
 
 if __name__ == "__main__":

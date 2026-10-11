@@ -696,6 +696,9 @@ try:
             POST_SEED_MIGRATIONS = [
                 '08_seed_step_visibility_overrides.sql',
                 '09_seed_path_visibility_overrides.sql',
+                '10_seed_usecase_collections.sql',
+                '11_seed_industry_outcome_maps.sql',
+                '12_seed_office_plays.sql',
             ]
             print(f"  Applying idempotent post-seed migrations...")
             for mig in POST_SEED_MIGRATIONS:

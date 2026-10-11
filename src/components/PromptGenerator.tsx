@@ -345,8 +345,10 @@ export function PromptGenerator({
         const useCaseLabel = editedUseCaseLabel || selectedOption?.label || selectedUsecase;
         const customDesc = (editedDescription && editedDescription !== defaultDescription) ? editedDescription : undefined;
         const isCertified = !!selectedOption?.is_certified;
+        const homeIndustry = selectedOption?.home_industry || selectedIndustry;
+        const homeLabel = selectedOption?.home_industry ? (selectedOption.home_label || selectedOption.home_industry) : industryLabel;
         
-        onPromptGenerated(prompt, selectedIndustry, selectedUsecase, industryLabel, useCaseLabel, customDesc, isCertified);
+        onPromptGenerated(prompt, homeIndustry, selectedUsecase, homeLabel, useCaseLabel, customDesc, isCertified);
       } catch (err) {
         console.error('Failed to generate prompt:', err);
       } finally {

@@ -4,8 +4,8 @@
  * Updated to match dark theme
  * 
  * URL Routes:
- * - /config or /config/prompts -> Use Case Descriptions tab
- * - /config/section-inputs -> Section Input Prompts tab
+ * - /config or /config/section-inputs -> Section Input Prompts tab
+ * - /config/prompts -> redirects to the Use Case Library (/library)
  * - /config/workshop-parameters -> Workshop Parameters tab
  * - /config/step-visibility -> Visibility tab (steps + workshop paths; URL kept for bookmark compat)
  * - /config/ai-gateway -> Set up AI Gateway Endpoint tab
@@ -13,14 +13,13 @@
 
 import { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { PromptsConfig } from './PromptsConfig';
 import { SectionInputsConfig } from './SectionInputsConfig';
 import { WorkshopParametersConfig } from './WorkshopParametersConfig';
 import { StepVisibilityConfig } from './StepVisibilityConfig';
 import { AiGatewayEndpointConfig } from './AiGatewayEndpointConfig';
 import { TestScenarioConfig } from './TestScenarioConfig';
 
-type TabType = 'prompts' | 'section-inputs' | 'workshop-parameters' | 'step-visibility' | 'ai-gateway' | 'test-scenario';
+type TabType = 'section-inputs' | 'workshop-parameters' | 'step-visibility' | 'ai-gateway' | 'test-scenario';
 
 interface Toast {
   id: number;
@@ -30,7 +29,6 @@ interface Toast {
 
 // Map URL params to tab types
 const tabParamMap: Record<string, TabType> = {
-  'prompts': 'prompts',
   'section-inputs': 'section-inputs',
   'workshop-parameters': 'workshop-parameters',
   'step-visibility': 'step-visibility',
@@ -41,12 +39,12 @@ const tabParamMap: Record<string, TabType> = {
 export function ConfigurationPage() {
   const { tab } = useParams<{ tab?: string }>();
   
-  // Determine active tab from URL param, default to 'prompts'
+  // Determine active tab from URL param, default to 'section-inputs'
   const getActiveTab = (): TabType => {
     if (tab && tabParamMap[tab]) {
       return tabParamMap[tab];
     }
-    return 'prompts';
+    return 'section-inputs';
   };
   
   const [activeTab, setActiveTab] = useState<TabType>(getActiveTab());
@@ -85,21 +83,6 @@ export function ConfigurationPage() {
       {/* Tab Navigation */}
       <div className="flex-shrink-0 bg-card border-b border-border">
         <div className="px-6 flex gap-1">
-          <Link
-            to="/config/prompts"
-            className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
-              activeTab === 'prompts'
-                ? 'border-primary text-primary'
-                : 'border-transparent text-muted-foreground hover:text-foreground hover:border-border'
-            }`}
-          >
-            <span className="flex items-center gap-2">
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-              </svg>
-              Use Case Descriptions
-            </span>
-          </Link>
           <Link
             to="/config/section-inputs"
             className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
@@ -183,7 +166,6 @@ export function ConfigurationPage() {
       {/* Tab Content */}
       <div className="flex-1 overflow-hidden bg-background p-6">
         <div className="h-full">
-          {activeTab === 'prompts' && <PromptsConfig onToast={showToast} />}
           {activeTab === 'section-inputs' && <SectionInputsConfig onToast={showToast} />}
           {activeTab === 'workshop-parameters' && <WorkshopParametersConfig onToast={showToast} />}
           {activeTab === 'step-visibility' && <StepVisibilityConfig onToast={showToast} />}

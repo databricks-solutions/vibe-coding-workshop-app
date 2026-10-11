@@ -3,6 +3,7 @@ import { Routes, Route, Link, useLocation, Navigate } from 'react-router-dom';
 import { WorkflowDiagram } from './components/WorkflowDiagram';
 import { ThemeToggle } from './components/ThemeToggle';
 import { ConfigurationPage } from './components/config/ConfigurationPage';
+import { LibraryPage } from './components/library/LibraryPage';
 import { LeaderboardPage } from './components/LeaderboardPage';
 import { AnalyticsDashboard } from './components/AnalyticsDashboard';
 import { HackathonsPage } from './components/hackathon/HackathonsPage';
@@ -47,7 +48,7 @@ export default function App() {
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
 
   // Determine current page from URL
-  const isConfigPage = location.pathname.startsWith('/config');
+  const isConfigPage = location.pathname.startsWith('/config') || location.pathname.startsWith('/library');
   const isLeaderboardPage = location.pathname === '/leaderboard';
   const isAnalyticsPage = location.pathname === '/analytics';
   const isHackathonsPage = location.pathname.startsWith('/hackathons');
@@ -1145,8 +1146,11 @@ export default function App() {
             </div>
           } />
           
+          <Route path="/library/*" element={<LibraryPage />} />
+
           {/* Configuration Pages with tab-based routing */}
-          <Route path="/config" element={<ConfigurationPage />} />
+          <Route path="/config" element={<Navigate to="/config/section-inputs" replace />} />
+          <Route path="/config/prompts" element={<Navigate to="/library" replace />} />
           <Route path="/config/:tab" element={<ConfigurationPage />} />
           
           {/* Leaderboard Page */}

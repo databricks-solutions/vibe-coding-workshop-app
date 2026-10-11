@@ -63,7 +63,7 @@ export const RELEASES: Release[] = [
       {
         title: 'Business case you can download and submit',
         description:
-          'The optional Impact step asks three or four quick questions about time, frequency, and people, with "estimate for me" and skip options. From the Brief, open a two-page business case with annual value, first-year cost, return, payback, and cautious, expected, and upside scenarios, then download it as a PDF. Committed ideas can be submitted to the use case map; they land in Configuration as inactive until an admin turns them on. Spark now names the specific industry, such as Airlines rather than Aviation.',
+          'The optional Impact step asks three or four quick questions about time, frequency, and people, with "estimate for me" and skip options. From the Brief, open a two-page business case with annual value, first-year cost, return, payback, and cautious, expected, and upside scenarios, then download it as a PDF. Committed ideas can be submitted to the use case map; they land in the Use Case Library\'s Needs review queue, hidden until an admin approves them. Spark now names the specific industry, such as Airlines rather than Aviation.',
         category: 'new',
         audience: 'attendee',
         icon: 'rocket',
@@ -103,9 +103,33 @@ export const RELEASES: Release[] = [
         beta: true,
       },
       {
+        title: 'Use Case Library',
+        description:
+          'Use case descriptions moved out of Configuration into their own Use Case Library page under Admin. Use cases are grouped into collections: industries, business functions such as the Office of the CFO, and technical solutions. A use case can appear in more than one collection, and any collection or use case can be switched off. The Library has a coverage map, a board and list view per collection, search (⌘K), version history, and a review queue for ideas submitted from Ideate.',
+        category: 'new',
+        audience: 'installer',
+        icon: 'database',
+      },
+      {
+        title: 'Explore use cases by industry or business function',
+        description:
+          'When picking a use case, an Explore by switch lets you browse by industry or by business function when an admin has turned on functions. Cards that come from another collection show where they came from, and every card now shows its features.',
+        category: 'improved',
+        audience: 'attendee',
+        icon: 'diagram',
+      },
+      {
+        title: 'Full CPG and Retail outcome maps, plus Office of the CFO, CMO, COO and CHRO plays',
+        description:
+          'CPG and Retail now have full build specs laid out like Travel & Hospitality (Operations, Revenue, Customer and Workforce columns), and Travel gains a Workforce column. Each business-function office has four Genie-led plays (a Genie space, a cockpit, a forecast and an agent) plus the matching industry cards. The offices ship switched off; turn them on from the Library.',
+        category: 'new',
+        audience: 'attendee',
+        icon: 'sparkles',
+      },
+      {
         title: 'Redesigned left navigation',
         description:
-          'The sidebar is now organized into Workshop (Workflow, Learning Academy, Leaderboard, Hackathons, Ideate) and Admin (Analytics, Configuration) groups, with a pinned Resources section for the repository template, Databricks docs, feature requests, and Release Notes. The app version and connection status moved to the footer, and desktop and mobile now share the same navigation.',
+          'The sidebar is now organized into Workshop (Workflow, Learning Academy, Leaderboard, Hackathons, Ideate) and Admin (Use Case Library, Analytics, Configuration) groups, with a pinned Resources section for the repository template, Databricks docs, feature requests, and Release Notes. The app version and connection status moved to the footer, and desktop and mobile now share the same navigation.',
         category: 'improved',
         audience: 'attendee',
         icon: 'palette',

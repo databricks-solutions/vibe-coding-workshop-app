@@ -477,10 +477,16 @@ async def ideate_submit(body: IdeateSubmitRequest, request: Request):
     base_cols = "industry, industry_label, use_case, use_case_label, prompt_template, version, is_active, inserted_at, updated_at, created_by"
     base_vals = (industry, industry_label, use_case, label, template, version, user)
     ok = execute_insert(
-        f"INSERT INTO {schema}.usecase_descriptions ({base_cols}, category, category_order, display_order) "
-        f"VALUES (%s, %s, %s, %s, %s, %s, FALSE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, %s, %s, %s, %s)",
+        f"INSERT INTO {schema}.usecase_descriptions ({base_cols}, category, category_order, display_order, source) "
+        f"VALUES (%s, %s, %s, %s, %s, %s, FALSE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, %s, %s, %s, %s, 'ideate')",
         base_vals + (category, position["category_order"], position["display_order"]),
     )
+    if not ok:
+        ok = execute_insert(
+            f"INSERT INTO {schema}.usecase_descriptions ({base_cols}, category, category_order, display_order) "
+            f"VALUES (%s, %s, %s, %s, %s, %s, FALSE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, %s, %s, %s, %s)",
+            base_vals + (category, position["category_order"], position["display_order"]),
+        )
     if not ok:
         ok = execute_insert(
             f"INSERT INTO {schema}.usecase_descriptions ({base_cols}) "
