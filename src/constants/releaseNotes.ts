@@ -70,6 +70,30 @@ export const RELEASES: Release[] = [
         beta: true,
       },
       {
+        title: 'Agent Skills Navigator redesign',
+        description:
+          'The Agent Skills Navigator now matches the rest of the app and shows details only when you ask for them. Pick a starting point (big picture, guided tour, or a concept), open one track at a time on the Map, or browse every skill in the new Skills tab with filters. Tours have a simpler control bar, clickable progress, and a mobile toggle between the explanation and the skill tree. Lessons have a table of contents, one-question-at-a-time quizzes, and progress saved in your browser. Press ⌘K or / to search skills, tours, and lessons. Every view, tour step, and skill has a shareable link.',
+        category: 'improved',
+        audience: 'attendee',
+        icon: 'palette',
+      },
+      {
+        title: 'Latest skills from the workshop template',
+        description:
+          'The navigator is synced with the latest Databricks workshop template: 108 skills across five tracks, including the new Agents + MLflow and Genie Accelerator tracks, two new guided tours (App to Agent, and Data to Genie Agent), and five new lessons. A "What\'s new" note on the Map links straight to them.',
+        category: 'new',
+        audience: 'attendee',
+        icon: 'diagram',
+      },
+      {
+        title: 'Repeatable navigator content sync',
+        description:
+          'Run node scripts/sync_skills_navigator.mjs to pull navigator content from the template repo at a pinned commit (--ref to choose one, --check to verify without writing). It checks that every skill, tour, and lesson reference resolves before regenerating the data file, and records what changed for the "What\'s new" note.',
+        category: 'new',
+        audience: 'installer',
+        icon: 'terminal',
+      },
+      {
         title: 'Built-in reviewer and gap check',
         description:
           'Every Ideate step has "Challenge me" for a reviewer\'s pushback and "Change something" for voice or text edits. The brief adds a Clarity score, a six-dimension gap check with one-click fixes, assumption tracking, and Given/When/Then test scenarios.',
