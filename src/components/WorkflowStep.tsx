@@ -537,7 +537,7 @@ export function WorkflowStep({
                     : 'text-muted-foreground hover:text-foreground hover:bg-secondary/40'
                 }`}
               >
-                <Workflow className="w-3.5 h-3.5 inline mr-1" /> Agent Skills Navigator
+                <Workflow className="w-3.5 h-3.5 inline mr-1" /> Skill Blueprint
               </button>
             )}
           </div>
@@ -553,7 +553,7 @@ export function WorkflowStep({
                 {activeTab === 'prompt' && '💡 Generated Prompt:'}
                 {activeTab === 'how_to_apply' && '🚀 Steps to Apply:'}
                 {activeTab === 'expected_output' && '✅ Verify Your Results:'}
-                {activeTab === 'skill_blueprint' && '⚡ How the Agent Skills Navigator Powers This Prompt:'}
+                {activeTab === 'skill_blueprint' && '⚡ How the Agent Skills Power This Prompt:'}
               </span>
               {/* Action buttons for all tabs */}
               <div className="flex items-center gap-2">
@@ -593,7 +593,7 @@ export function WorkflowStep({
                 {activeTab === 'skill_blueprint' && skillBlueprint && (
                   <SkillBlueprintFullScreenModal
                     config={skillBlueprint}
-                    title={`${title} - Agent Skills Navigator`}
+                    title={`${title} - Skill Blueprint`}
                   />
                 )}
               </div>

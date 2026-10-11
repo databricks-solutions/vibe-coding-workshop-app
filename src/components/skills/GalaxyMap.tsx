@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
-import { ChevronDown, ChevronRight, Compass, GraduationCap, Map as MapIcon, Route, Sparkles, X } from 'lucide-react';
+import { BookOpen, ChevronDown, ChevronRight, Compass, Map as MapIcon, Route, Sparkles, X } from 'lucide-react';
 import { NAV_META, PHASES, SKILLS, SKILL_MAP, type NavStage, type TourId } from '../../constants/skillsNavigatorData';
 import {
   TRACKS,
@@ -99,7 +99,7 @@ function StartHere({ onDismiss, onPick }: { onDismiss: () => void; onPick: (choi
   const options = [
     { id: 'map' as const, icon: MapIcon, title: 'See the big picture', body: 'Open a track and see how its skills fit together.' },
     { id: 'tours' as const, icon: Route, title: 'Walk me through it', body: 'A guided tour explains each step and why it exists.' },
-    { id: 'learn' as const, icon: GraduationCap, title: 'Learn a concept', body: 'Short lessons on Apps, Lakebase, Genie, agents, and more.' },
+    { id: 'learn' as const, icon: BookOpen, title: 'Learn a concept', body: 'Short lessons on Apps, Lakebase, Genie, agents, and more.' },
   ];
   return (
     <section className="relative rounded-2xl border border-border bg-card p-5 md:p-6 shadow-sm animate-fade-in" aria-label="Start here">

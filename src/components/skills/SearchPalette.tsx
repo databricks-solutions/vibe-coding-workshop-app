@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { CornerDownLeft, GraduationCap, Route, Search } from 'lucide-react';
+import { BookOpen, CornerDownLeft, Route, Search } from 'lucide-react';
 import { ACADEMY, SKILLS, SKILL_MAP, type TourId } from '../../constants/skillsNavigatorData';
 import { TOUR_LIST, plainText, readStore, summaryOf, tint, trackOf, typeInfo } from './navModel';
 import { cx } from './uiStyles';
@@ -146,7 +146,7 @@ export function SearchPalette({
             const header =
               r.kind !== lastKind ? (emptyQuery && r.kind === 'skill' ? 'Recently opened' : emptyQuery && r.kind === 'tour' ? 'Start a tour' : GROUP_LABEL[r.kind]) : null;
             lastKind = r.kind;
-            const Icon = r.kind === 'tour' ? Route : r.kind === 'module' ? GraduationCap : null;
+            const Icon = r.kind === 'tour' ? Route : r.kind === 'module' ? BookOpen : null;
             return (
               <div key={`${r.kind}-${r.id}`}>
                 {header && <p className="px-3 pt-3 pb-1 text-ui-2xs font-semibold uppercase tracking-wider text-muted-foreground">{header}</p>}

@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 
 /**
- * Agent Skills Navigator (/skills). Frontend-only: the page reads static data,
+ * Learning Academy (/skills). Frontend-only: the page reads static data,
  * so these tests need no backend state.
  */
 
@@ -11,7 +11,7 @@ test.beforeEach(async ({ page }) => {
 
 test('switches between the four views and keeps the view in the URL', async ({ page }) => {
   await page.goto('/skills');
-  const tabs = page.getByRole('tablist', { name: 'Navigator views' });
+  const tabs = page.getByRole('tablist', { name: 'Academy sections' });
   await expect(page.getByText('Pick how you want to start')).toBeVisible();
 
   await tabs.getByRole('tab', { name: 'Tours' }).click();
@@ -22,7 +22,7 @@ test('switches between the four views and keeps the view in the URL', async ({ p
   await expect(page).toHaveURL(/view=skills/);
   await expect(page.getByRole('textbox', { name: 'Filter skills' })).toBeVisible();
 
-  await tabs.getByRole('tab', { name: 'Learn' }).click();
+  await tabs.getByRole('tab', { name: 'Lessons' }).click();
   await expect(page).toHaveURL(/view=learn/);
   await expect(page.getByText(/lessons completed/)).toBeVisible();
 

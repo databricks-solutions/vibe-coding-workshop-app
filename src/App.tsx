@@ -10,8 +10,8 @@ import { HackathonDetailPage } from './components/hackathon/HackathonDetailPage'
 import { HackathonPlaybook } from './components/hackathon/HackathonPlaybook';
 import { ReleaseNotesPage } from './components/ReleaseNotesPage';
 import { AppSidebar } from './components/layout/AppSidebar';
-// Agent Skills Navigator is a large, self-contained feature (galaxy map + tours +
-// academy with a big static data module). Lazy-load it so it never weighs down
+// Learning Academy is a large, self-contained feature (map + tours + lessons +
+// skill library with a big static data module). Lazy-load it so it never weighs down
 // the initial workflow bundle that every workshop participant hits first.
 const SkillsNavigatorPage = lazy(() => import('./components/skills/SkillsNavigatorPage'));
 // Ideate (beta) is self-contained and lazy-loaded so it never affects the workflow bundle.
@@ -1161,7 +1161,7 @@ export default function App() {
           <Route path="/hackathons" element={<HackathonsPage />} />
           <Route path="/hackathons/playbook" element={<HackathonPlaybook />} />
           <Route path="/hackathons/:id" element={<HackathonDetailPage />} />
-          {/* Agent Skills Navigator Page (lazy-loaded) */}
+          {/* Learning Academy page (lazy-loaded) */}
           <Route
             path="/skills"
             element={
@@ -1170,7 +1170,7 @@ export default function App() {
                   <div className="flex-1 flex items-center justify-center bg-background">
                     <div className="flex items-center gap-3 text-muted-foreground">
                       <div className="w-5 h-5 rounded-full border-2 border-primary/30 border-t-primary animate-spin" />
-                      <span className="text-ui-md font-medium">Loading Agent Skills Navigator…</span>
+                      <span className="text-ui-md font-medium">Loading Learning Academy…</span>
                     </div>
                   </div>
                 }

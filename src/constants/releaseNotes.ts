@@ -49,7 +49,7 @@ export const RELEASES: Release[] = [
   {
     version: '2.4.0',
     date: '2026-10-09',
-    title: 'Ideate (Beta) and a cleaner sidebar',
+    title: 'Ideate (Beta), a new Learning Academy, and a cleaner sidebar',
     items: [
       {
         title: 'Ideate: shape a raw idea into a decision-ready brief',
@@ -70,25 +70,25 @@ export const RELEASES: Release[] = [
         beta: true,
       },
       {
-        title: 'Agent Skills Navigator redesign',
+        title: 'New Learning Academy (formerly Agent Skills Navigator)',
         description:
-          'The Agent Skills Navigator now matches the rest of the app and shows details only when you ask for them. Pick a starting point (big picture, guided tour, or a concept), open one track at a time on the Map, or browse every skill in the new Skills tab with filters. Tours have a simpler control bar, clickable progress, and a mobile toggle between the explanation and the skill tree. Lessons have a table of contents, one-question-at-a-time quizzes, and progress saved in your browser. Press ⌘K or / to search skills, tours, and lessons. Every view, tour step, and skill has a shareable link.',
-        category: 'improved',
+          'The Agent Skills Navigator is now the Learning Academy, right after Workflow in the sidebar: one place to learn how AI agents build on Databricks, then do it yourself. It has four tabs. Map shows the five tracks and how their skills fit together. Tours walk you through a build step by step. Lessons are short reads on the building blocks, each with a quiz, with progress saved in your browser. Skills lists every skill with filters and a ready-made prompt to copy. Details open only when you ask for them, ⌘K or / searches everything, and every view, tour step, and skill has a shareable link. Existing links keep working. In each Workflow step, the tab that shared the old name is now called Skill Blueprint.',
+        category: 'new',
         audience: 'attendee',
-        icon: 'palette',
+        icon: 'route',
       },
       {
         title: 'Latest skills from the workshop template',
         description:
-          'The navigator is synced with the latest Databricks workshop template: 108 skills across five tracks, including the new Agents + MLflow and Genie Accelerator tracks, two new guided tours (App to Agent, and Data to Genie Agent), and five new lessons. A "What\'s new" note on the Map links straight to them.',
+          'The Learning Academy is synced with the latest Databricks workshop template: 108 skills across five tracks, including the new Agents + MLflow and Genie Accelerator tracks, two new guided tours (App to Agent, and Data to Genie Agent), and five new lessons. A "What\'s new" note on the Map links straight to them.',
         category: 'new',
         audience: 'attendee',
         icon: 'diagram',
       },
       {
-        title: 'Repeatable navigator content sync',
+        title: 'Repeatable Learning Academy content sync',
         description:
-          'Run node scripts/sync_skills_navigator.mjs to pull navigator content from the template repo at a pinned commit (--ref to choose one, --check to verify without writing). It checks that every skill, tour, and lesson reference resolves before regenerating the data file, and records what changed for the "What\'s new" note.',
+          'Run node scripts/sync_skills_navigator.mjs to pull Learning Academy content from the template repo at a pinned commit (--ref to choose one, --check to verify without writing). It checks that every skill, tour, and lesson reference resolves before regenerating the data file, and records what changed for the "What\'s new" note.',
         category: 'new',
         audience: 'installer',
         icon: 'terminal',
@@ -105,7 +105,7 @@ export const RELEASES: Release[] = [
       {
         title: 'Redesigned left navigation',
         description:
-          'The sidebar is now organized into Workshop (Workflow, Leaderboard, Agent Skills Navigator, Hackathons, Ideate) and Admin (Analytics, Configuration) groups, with a pinned Resources section for the repository template, Databricks docs, feature requests, and Release Notes. The app version and connection status moved to the footer, and desktop and mobile now share the same navigation.',
+          'The sidebar is now organized into Workshop (Workflow, Learning Academy, Leaderboard, Hackathons, Ideate) and Admin (Analytics, Configuration) groups, with a pinned Resources section for the repository template, Databricks docs, feature requests, and Release Notes. The app version and connection status moved to the footer, and desktop and mobile now share the same navigation.',
         category: 'improved',
         audience: 'attendee',
         icon: 'palette',

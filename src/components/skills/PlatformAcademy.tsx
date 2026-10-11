@@ -359,7 +359,7 @@ function Lesson({
   );
 }
 
-/** Learn: a landing page of grouped lessons, then one lesson at a time. */
+/** Lessons: a landing page of grouped lessons, then one lesson at a time. */
 export function PlatformAcademy({ moduleId, onOpenModule, onOpenSkill }: PlatformAcademyProps) {
   const { done, mark } = useCompleted();
   const scrollRef = useRef<HTMLDivElement | null>(null);

@@ -12,7 +12,7 @@ import {
   BarChart3,
   BookOpen,
   ChevronDown,
-  Compass,
+  GraduationCap,
   Lightbulb,
   List,
   PanelLeft,
@@ -213,8 +213,8 @@ export function AppSidebar({
         <SidebarSectionLabel label="Workshop" collapsed={collapsed} />
         <div className="space-y-0.5">
           {item({ to: sessionId ? `/?sessionId=${sessionId}` : '/', icon: WorkflowIcon, label: 'Workflow', active: path === '/' })}
+          {item({ to: '/skills', icon: <GraduationCap />, label: 'Learning Academy', active: path === '/skills' })}
           {item({ to: '/leaderboard', icon: <Trophy />, label: 'Leaderboard', active: path === '/leaderboard' })}
-          {item({ to: '/skills', icon: <Compass />, label: 'Agent Skills Navigator', active: path === '/skills' })}
           {item({
             to: '/hackathons',
             icon: <Award />,

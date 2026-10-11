@@ -1,4 +1,4 @@
-import { ChevronRight, GraduationCap, Route } from 'lucide-react';
+import { BookOpen, ChevronRight, Route } from 'lucide-react';
 import { SKILL_MAP, type NavSkill, type TourId } from '../../constants/skillsNavigatorData';
 import { highlightCode } from './skillsNavUtils';
 import {
@@ -86,7 +86,7 @@ export function SkillDetail({ skill, onNavigate, onLearn, onOpenTour }: SkillDet
           {copyable && <CopyButton text={skill.prompt!} />}
           {module && (
             <button type="button" className={BTN_SECONDARY} onClick={() => onLearn(module.id)}>
-              <GraduationCap className="w-4 h-4" />
+              <BookOpen className="w-4 h-4" />
               Learn {module.title}
             </button>
           )}

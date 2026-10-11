@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Compass, GraduationCap, LayoutGrid, Map as MapIcon, Menu, Route, Search } from 'lucide-react';
+import { BookOpen, GraduationCap, LayoutGrid, Map as MapIcon, Menu, Route, Search } from 'lucide-react';
 import { ThemeToggle } from '../ThemeToggle';
 import type { TourId } from '../../constants/skillsNavigatorData';
 import { GalaxyMap } from './GalaxyMap';
@@ -16,8 +16,8 @@ import './skillsNavigator.css';
 const VIEWS: { id: View; label: string; icon: typeof MapIcon }[] = [
   { id: 'map', label: 'Map', icon: MapIcon },
   { id: 'tours', label: 'Tours', icon: Route },
+  { id: 'learn', label: 'Lessons', icon: BookOpen },
   { id: 'skills', label: 'Skills', icon: LayoutGrid },
-  { id: 'learn', label: 'Learn', icon: GraduationCap },
 ];
 
 interface SkillsNavigatorPageProps {
@@ -107,10 +107,10 @@ export function SkillsNavigatorPage({ onOpenMobileNav }: SkillsNavigatorPageProp
             <Menu className="w-5 h-5" />
           </button>
           <div className="hidden sm:grid place-items-center w-10 h-10 rounded-xl bg-gradient-to-br from-primary to-emerald-500 shadow-lg shadow-primary/30 shrink-0">
-            <Compass className="w-5 h-5 text-white" />
+            <GraduationCap className="w-5 h-5 text-white" />
           </div>
           <div className="min-w-0 flex-1">
-            <h1 className="truncate text-ui-xl font-bold tracking-tight text-foreground">Agent Skills Navigator</h1>
+            <h1 className="truncate text-ui-xl font-bold tracking-tight text-foreground">Learning Academy</h1>
             <p className="truncate text-ui-xs text-muted-foreground">{VIEW_HINTS[nav.view]}</p>
           </div>
           <button
@@ -126,7 +126,7 @@ export function SkillsNavigatorPage({ onOpenMobileNav }: SkillsNavigatorPageProp
           <ThemeToggle />
         </div>
         <div className="px-4 pb-3 pt-3 md:px-6">
-          <div role="tablist" aria-label="Navigator views" className="inline-flex max-w-full gap-1 overflow-x-auto rounded-xl bg-secondary p-1">
+          <div role="tablist" aria-label="Academy sections" className="inline-flex max-w-full gap-1 overflow-x-auto rounded-xl bg-secondary p-1">
             {VIEWS.map((v, i) => {
               const active = nav.view === v.id;
               return (
