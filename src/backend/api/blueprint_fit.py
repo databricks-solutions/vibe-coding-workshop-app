@@ -225,7 +225,8 @@ async def blueprint_fit(slug: str, body: FitRequest):
     questions = [_text(q, 200) for q in body.questions if _text(q, 200)][:MAX_QUESTIONS]
     if not context and not questions:
         raise HTTPException(status_code=400, detail="Describe the use case or add a question.")
-    key = cache_key("fit", slug, digest.get("version", ""), body.flavour, context, *questions)
+    sha = (digest.get("source") or {}).get("commitSha", "")
+    key = cache_key("fit", slug, digest.get("version", ""), sha, body.flavour, context, *questions)
     hit = _cache_get(key, CACHE_TTL_S)
     if hit is not None:
         return hit
