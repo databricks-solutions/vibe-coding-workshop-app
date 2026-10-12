@@ -1,0 +1,143 @@
+import type { BlueprintChoice } from './blueprint/types';
+import type { ApprovedUseCase } from './usecases/useCaseApi';
+
+export type DataSource = 'existing' | 'upload' | 'sample' | 'blueprint';
+
+export interface InsightsBrief {
+  name: string;
+  industryLabel: string;
+  questions: string[];
+  dataSource: DataSource;
+  dataLocation: string;
+  blueprint?: BlueprintChoice | null;
+  useCase?: ApprovedUseCase | null;
+}
+
+const QUESTIONS_HEADER = 'Questions this should answer:';
+const DATA_HEADER = 'Data:';
+const BLUEPRINT_HEADER = 'Blueprint:';
+const USE_CASE_HEADER = 'Approved use case:';
+const BLUEPRINT_REPO = 'github.com/databricks-industry-solutions/lakehouse-industry-data-models';
+
+const DATA_PHRASES: Record<DataSource, string> = {
+  existing: 'Use data that already exists in Databricks',
+  upload: 'Use a file I will upload',
+  sample: 'Use realistic sample data',
+  blueprint: 'Use the industry data model',
+};
+
+export const toSlug = (s: string) =>
+  s.trim().toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
+
+function blueprintLines(b: BlueprintChoice): string[] {
+  return [
+    `${BLUEPRINT_HEADER} ${b.slug} ${b.version} ${b.flavour} @${b.commitSha.slice(0, 7)} | catalog: ${b.catalog} | areas: ${b.areas.join(', ') || 'all'} | KPIs: ${b.kpis.join(', ') || 'none picked'}`,
+    `Source: ${BLUEPRINT_REPO} (data-models/${b.slug}/${b.version}/${b.flavour}, commit ${b.commitSha}). Tables, foreign keys, sensitive-field tags and metric views come from that model; the rows are generated sample data.`,
+  ];
+}
+
+/**
+ * The brief is stored as the session's custom use-case description, so every
+ * generated prompt sees the questions. `parseBrief` must keep reading what
+ * `composeBrief` writes.
+ */
+export function composeBrief(b: InsightsBrief): string {
+  const audience = b.industryLabel ? `${b.industryLabel} ` : '';
+  const bp = b.dataSource === 'blueprint' ? b.blueprint : null;
+  const source: DataSource = b.dataSource === 'blueprint' && !bp ? 'existing' : b.dataSource;
+  const dataDetail = bp
+    ? ` "${bp.label}" (${bp.catalog})`
+    : b.dataSource === 'existing' && b.dataLocation ? ` (${b.dataLocation})` : '';
+  const lines = [
+    `${b.name}: a Genie space that lets ${audience}business users ask questions about their data in plain English and get trusted, consistent answers, plus an AI/BI dashboard built on the same governed metrics. It builds on data that already exists; no new apps or pipelines.`,
+    '',
+    QUESTIONS_HEADER,
+    ...b.questions.map(q => `- ${q}`),
+    '',
+    `${DATA_HEADER} ${DATA_PHRASES[source]}${dataDetail}.`,
+    ...(bp ? blueprintLines(bp) : []),
+    ...(b.useCase ? [approvedUseCaseLine(b.useCase)] : []),
+  ];
+  return lines.join('\n');
+}
+
+function approvedUseCaseLine(u: ApprovedUseCase): string {
+  const clean = (v: string) => v.replace(/\|/g, '/').trim();
+  return `${USE_CASE_HEADER} ${clean(u.label)} | ${clean(u.industryLabel)} | ${u.industry}/${u.useCase}${u.certified ? ' | certified' : ''}${u.category ? ` | ${clean(u.category)}` : ''}`;
+}
+
+function parseUseCase(line: string): ApprovedUseCase | null {
+  const parts = line.slice(USE_CASE_HEADER.length).split('|').map(p => p.trim());
+  const ids = parts[2]?.match(/^([A-Za-z0-9_-]+)\/([A-Za-z0-9_-]+)$/);
+  if (!parts[0] || !ids) return null;
+  const rest = parts.slice(3);
+  return {
+    label: parts[0],
+    industryLabel: parts[1] ?? '',
+    industry: ids[1],
+    useCase: ids[2],
+    certified: rest.includes('certified'),
+    category: rest.find(r => r !== 'certified') ?? '',
+  };
+}
+
+function parseBlueprint(line: string, label: string): BlueprintChoice | null {
+  const m = line.slice(BLUEPRINT_HEADER.length).trim().match(/^(\S+)\s+(\S+)\s+(\S+)\s+@(\S+)\s*\|(.*)$/);
+  if (!m) return null;
+  const [, slug, version, flavour, sha, rest] = m;
+  const field = (name: string) => rest.match(new RegExp(`${name}:\\s*([^|]*)`))?.[1].trim() ?? '';
+  const list = (v: string) => (v && v !== 'all' && v !== 'none picked' ? v.split(',').map(s => s.trim()).filter(Boolean) : []);
+  return {
+    slug,
+    version,
+    flavour,
+    commitSha: sha,
+    label: label || slug,
+    catalog: field('catalog') || `idm_${slug}_${flavour}`,
+    areas: list(field('areas')),
+    kpis: list(field('KPIs')),
+  };
+}
+
+export function parseBrief(description: string): {
+  questions: string[]; dataSource: DataSource; dataLocation: string; blueprint: BlueprintChoice | null; useCase: ApprovedUseCase | null;
+} {
+  const questions: string[] = [];
+  let dataSource: DataSource = 'existing';
+  let dataLocation = '';
+  let blueprint: BlueprintChoice | null = null;
+  if (!description) return { questions, dataSource, dataLocation, blueprint, useCase: null };
+
+  const lines = description.split('\n');
+  const start = lines.findIndex(l => l.trim() === QUESTIONS_HEADER);
+  if (start >= 0) {
+    for (const line of lines.slice(start + 1)) {
+      const t = line.trim();
+      if (!t.startsWith('- ')) break;
+      questions.push(t.slice(2).trim());
+    }
+  }
+
+  const dataLine = lines.find(l => l.startsWith(DATA_HEADER));
+  if (dataLine) {
+    const rest = dataLine.slice(DATA_HEADER.length).trim();
+    if (rest.startsWith(DATA_PHRASES.upload)) dataSource = 'upload';
+    else if (rest.startsWith(DATA_PHRASES.sample)) dataSource = 'sample';
+    else if (rest.startsWith(DATA_PHRASES.blueprint)) {
+      const label = rest.match(/"([^"]+)"/)?.[1] ?? '';
+      const bpLine = lines.find(l => l.startsWith(BLUEPRINT_HEADER));
+      blueprint = bpLine ? parseBlueprint(bpLine, label) : null;
+      // Without a readable Blueprint line, fall back to the plain existing-data path.
+      if (blueprint) {
+        dataSource = 'blueprint';
+        dataLocation = blueprint.catalog;
+      }
+    }
+    if (dataSource !== 'blueprint') {
+      const loc = rest.match(/\(([^)]+)\)/);
+      if (loc) dataLocation = loc[1];
+    }
+  }
+  const ucLine = lines.find(l => l.startsWith(USE_CASE_HEADER));
+  return { questions, dataSource, dataLocation, blueprint, useCase: ucLine ? parseUseCase(ucLine) : null };
+}

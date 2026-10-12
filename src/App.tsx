@@ -17,6 +17,11 @@ import { AppSidebar } from './components/layout/AppSidebar';
 const SkillsNavigatorPage = lazy(() => import('./components/skills/SkillsNavigatorPage'));
 // Ideate (beta) is self-contained and lazy-loaded so it never affects the workflow bundle.
 const IdeateApp = lazy(() => import('./components/ideate/IdeateApp'));
+// Insights is an opt-in, simpler view of the workflow; lazy so the default view's bundle is unchanged.
+const InsightsFlow = lazy(() => import('./components/insights/InsightsFlow'));
+import { ViewModeToggle } from './components/insights/ViewModeToggle';
+import type { InsightsSetup } from './components/insights/types';
+import { useWorkflowViewMode } from './hooks/useWorkflowViewMode';
 import { 
   HeaderSessionMenu,
   SaveSessionDialog, 
@@ -46,6 +51,8 @@ export default function App() {
 
   // Mobile sidebar overlay state (for screens < md)
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
+
+  const [viewMode, setViewMode] = useWorkflowViewMode();
 
   // Determine current page from URL
   const isConfigPage = location.pathname.startsWith('/config') || location.pathname.startsWith('/library');
@@ -736,6 +743,58 @@ export default function App() {
     }
   }, [readOnly, sessionId]);
 
+  // Insights view: one tap configures the whole session for the Genie path.
+  // Saved in a single metadata call so the backend never sees an intermediate level.
+  const handleInsightsStart = useCallback((setup: InsightsSetup) => {
+    if (readOnly) return;
+    setSelectedIndustry(setup.industry);
+    setSelectedIndustryLabel(setup.industryLabel);
+    setSelectedUseCase(setup.useCase);
+    setSelectedUseCaseLabel(setup.useCaseLabel);
+    setSelectedUseCaseCertified(false);
+    setUseCaseLockedLevel(null);
+    setCustomUseCaseLabel(setup.useCaseLabel);
+    setCustomDescription(setup.description);
+    setCodingAssistant('genie-code');
+    setCodingAssistantExplicit(true);
+    setWorkshopLevel('genie-accelerator');
+    setChainContext(null);
+    setLevelExplicitlySelected(true);
+    setDirection('forward');
+    setIncludeLakehouse(false);
+    setIncludeGenieOntology(false);
+    setAiAgentsModules(new Set(ALL_AI_MODULES));
+    setMedallionLayers(new Set(ALL_MEDALLION_LAYERS));
+    setStepPrompts(prev => ({ ...prev, 1: setup.description }));
+    const nextCompleted = new Set(completedSteps);
+    nextCompleted.add(1);
+    setCompletedSteps(nextCompleted);
+    if (sessionId) {
+      apiClient.updateSessionMetadata({
+        session_id: sessionId,
+        industry: setup.industry,
+        industry_label: setup.industryLabel,
+        use_case: setup.useCase,
+        use_case_label: setup.useCaseLabel,
+        custom_use_case_label: setup.useCaseLabel,
+        custom_use_case_description: setup.description,
+        coding_assistant: 'genie-code',
+        workshop_level: 'genie-accelerator',
+        level_explicitly_selected: true,
+        direction: 'forward',
+        include_lakehouse: false,
+        include_genie_ontology: false,
+        completed_steps: Array.from(nextCompleted),
+      }).catch(err => console.error('Error saving Insights setup:', err));
+      apiClient.updateStepPrompt({
+        session_id: sessionId,
+        step_number: 1,
+        prompt_text: setup.description,
+        workshop_level: 'genie-accelerator',
+      }).catch(err => console.error('Error saving Insights brief:', err));
+    }
+  }, [readOnly, sessionId, completedSteps, setMedallionLayers]);
+
   const handleSaveSession = async (name: string, description: string, rating?: 'thumbs_up' | 'thumbs_down', comment?: string) => {
     if (!sessionId || readOnly) return;
     
@@ -996,12 +1055,17 @@ export default function App() {
                     </button>
                     <Link to="/" className="min-w-0 cursor-pointer">
                       <h1 className="text-ui-lg sm:text-ui-xl font-semibold text-foreground tracking-tight truncate">V2V: Vibe-to-Value - Vibe Coding Workshop</h1>
-                      <p className="hidden sm:block text-ui-base text-muted-foreground">Turning ideas into measurable business outcomes faster with reusable patterns, and guided best practices</p>
+                      <p className="hidden sm:block text-ui-base text-muted-foreground">
+                        {viewMode === 'insights'
+                          ? 'Turn the data you already have into answers your team can trust'
+                          : 'Turning ideas into measurable business outcomes faster with reusable patterns, and guided best practices'}
+                      </p>
                     </Link>
                   </div>
                   
                   {/* Theme Toggle & Session Menu in Header */}
                   <div className="flex items-center gap-2 sm:gap-3 flex-shrink-0">
+                    <ViewModeToggle mode={viewMode} onChange={setViewMode} />
                     <ThemeToggle />
                     {readOnly ? (
                       <div className="flex items-center gap-2 text-muted-foreground text-ui-base">
@@ -1039,6 +1103,32 @@ export default function App() {
               {/* Content Area */}
               <div className="p-3 sm:p-6 xl:px-10 2xl:px-14">
                 <div className="max-w-7xl xl:max-w-[88rem] 2xl:max-w-[96rem] mx-auto">
+                  {viewMode === 'insights' ? (
+                    <Suspense fallback={<div className="min-h-[50vh]" />}>
+                      <InsightsFlow
+                        sessionId={sessionId}
+                        isSessionLoaded={!isSessionLoading}
+                        readOnly={readOnly}
+                        currentUser={currentUser}
+                        workshopLevel={workshopLevel}
+                        codingAssistant={codingAssistant}
+                        selectedIndustry={selectedIndustry}
+                        selectedIndustryLabel={selectedIndustryLabel}
+                        selectedUseCase={selectedUseCase}
+                        selectedUseCaseLabel={selectedUseCaseLabel}
+                        customUseCaseLabel={customUseCaseLabel}
+                        customDescription={customDescription}
+                        stepPrompts={stepPrompts}
+                        completedSteps={completedSteps}
+                        skippedSteps={skippedSteps}
+                        onStepPromptGenerated={handleStepPromptGenerated}
+                        onCompletedStepsChange={handleCompletedStepsChange}
+                        onStart={handleInsightsStart}
+                        onNewSession={() => setShowNewSessionConfirm(true)}
+                        onSwitchToTechnical={() => setViewMode('technical')}
+                      />
+                    </Suspense>
+                  ) : (
                   <WorkflowDiagram
                     sessionId={sessionId}
                     stepPrompts={stepPrompts}
@@ -1141,6 +1231,7 @@ export default function App() {
                     defaultCatalog={defaultCatalog}
                     readOnly={readOnly}
                   />
+                  )}
                 </div>
               </div>
             </div>

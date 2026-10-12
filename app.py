@@ -37,6 +37,19 @@ except Exception as _ideate_err:  # pragma: no cover
     print(f"[Ideate] disabled, failed to load: {_ideate_err}", file=sys.stderr)
     ideate_router = None
 
+# Industry blueprints (Insights view) are optional too: a failure only hides them.
+try:
+    from src.backend.api.blueprints import router as blueprints_router
+except Exception as _blueprints_err:  # pragma: no cover
+    print(f"[Blueprints] disabled, failed to load: {_blueprints_err}", file=sys.stderr)
+    blueprints_router = None
+
+try:
+    from src.backend.api.insights import router as insights_router
+except Exception as _insights_err:  # pragma: no cover
+    print(f"[Insights] use case previews disabled, failed to load: {_insights_err}", file=sys.stderr)
+    insights_router = None
+
 # Get the directory where this script is located
 BASE_DIR = Path(__file__).resolve().parent
 DIST_DIR = BASE_DIR / "dist"
@@ -129,6 +142,10 @@ app.include_router(hackathon_router, prefix="/api", tags=["Hackathons"])
 app.include_router(library_router, prefix="/api", tags=["Library"])
 if ideate_router is not None:
     app.include_router(ideate_router, prefix="/api", tags=["Ideate"])
+if blueprints_router is not None:
+    app.include_router(blueprints_router, prefix="/api", tags=["Blueprints"])
+if insights_router is not None:
+    app.include_router(insights_router, prefix="/api", tags=["Insights"])
 
 
 # ============== Health Check ==============

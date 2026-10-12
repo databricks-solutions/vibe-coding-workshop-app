@@ -49,8 +49,32 @@ export const RELEASES: Release[] = [
   {
     version: '2.4.0',
     date: '2026-10-09',
-    title: 'Ideate (Beta), a new Learning Academy, and a cleaner sidebar',
+    title: 'Insights view, Ideate (Beta), a new Learning Academy, and a cleaner sidebar',
     items: [
+      {
+        title: 'Insights: a simpler path from questions to a Genie and a dashboard',
+        description:
+          'A new Technical / Insights switch in the header. Insights is a shorter workflow for analysts: write the questions you wish you could ask your data, pick where the data comes from (existing tables, a file, sample data, or a ready-made industry model), name it, and the Genie Accelerator chapters build a Genie space your team can chat with, plus a matching dashboard. "Compare paths" shows how the two views line up. Progress is shared with the session, and ?view=insights in the link opens the view directly.',
+        category: 'new',
+        audience: 'attendee',
+        icon: 'sparkles',
+      },
+      {
+        title: 'Start Insights from a sample or an approved use case',
+        description:
+          'On the Ask step, "Start from an approved use case" lists the Samples collection alongside every industry, with counts on each tab, search, and a Certified only filter. The first use case opens straight away, showing who it is for, the data it covers, and the questions it was built to answer; tick the ones you want and your project is linked to that use case. Use cases shared from another collection show where they came from.',
+        category: 'new',
+        audience: 'attendee',
+        icon: 'search',
+      },
+      {
+        title: 'Industry data models for Insights',
+        description:
+          'The Data step can install a model from the Databricks Industry Solutions data-model gallery: tables, connections, sensitive-field labels, and KPI views, filled with realistic sample rows. Each model is installed once per workspace into a shared idm_ catalog with read access for everyone. Approved use case previews can be turned off with INSIGHTS_USECASES_ENABLED=false.',
+        category: 'new',
+        audience: 'installer',
+        icon: 'database',
+      },
       {
         title: 'Ideate: shape a raw idea into a decision-ready brief',
         description:
