@@ -553,6 +553,13 @@ export default function App() {
         // Trigger fade-out animation
         finishSessionLoading();
       } else {
+        // An idea whose project is gone (e.g. never saved) gets a new project instead of the start screen.
+        const orphan = response.missing ? ideas.find(i => i.sessionId === id) : undefined;
+        if (orphan && !readOnly) {
+          console.warn(`Project ${id} for "${orphan.title}" was not found; starting a new one`);
+          void startBuildFromIdea({ ...orphan, sessionId: undefined });
+          return;
+        }
         // Session ID not found - try to load user's default session instead
         console.warn(`Session ${id} not found, loading default session`);
         getOrCreateDefaultSession(); // This will handle finishSessionLoading

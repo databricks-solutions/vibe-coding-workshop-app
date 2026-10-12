@@ -473,129 +473,6 @@ CURRENT_USER=$(databricks $PROFILE_FLAG current-user me --output json 2>/dev/nul
 print_success "Authenticated as: $CURRENT_USER"
 
 # =============================================================================
-# FAST PATH: Code-Only Deployment (--code-only or --watch)
-# =============================================================================
-# This mode provides quick code updates with automatic frontend build:
-#
-# Steps (--code-only):
-#   1. Build frontend (npm run build) - ensures dist/ is up to date
-#   2. Sync files to workspace (databricks bundle sync)
-#   3. Trigger rolling deployment (databricks apps deploy)
-#
-# Use cases:
-#   - Quick frontend (React/dist) updates
-#   - Backend Python code changes
-#   - Configuration file updates
-#
-# Flags:
-#   --skip-build    Skip npm build (for backend-only changes)
-#
-# Note: For changes requiring new dependencies or env vars,
-#       use full deployment instead.
-# =============================================================================
-
-if [[ "$CODE_ONLY" == true ]]; then
-    if [[ "$WATCH_MODE" == true ]]; then
-        print_header "WATCH MODE - Continuous Code Sync"
-        echo -e "${YELLOW}Watching for file changes...${NC}"
-        echo -e "Press ${BOLD}Ctrl+C${NC} to stop"
-        echo ""
-        echo -e "Files synced based on databricks.yml sync configuration:"
-        echo -e "  Include: src/**, dist/**, app.yaml, app.py, requirements.txt, scripts/**, db/**"
-        echo -e "  Exclude: node_modules/**, __pycache__/**, *.pyc, .git/**, deploy.py"
-        echo ""
-        echo -e "${YELLOW}⚠️  IMPORTANT for UI changes:${NC}"
-        echo -e "   Watch mode syncs files but does NOT run npm build or trigger deployment."
-        echo -e "   For UI changes to take effect:"
-        echo -e "   1. Run ${BOLD}npm run build${NC} in another terminal when you make React changes"
-        echo -e "   2. After done, run ${BOLD}./scripts/deploy.sh --code-only -t $TARGET${NC} to deploy"
-        echo ""
-        echo -e "   Or use ${BOLD}--code-only${NC} instead for one-shot deploys with auto-build."
-        echo ""
-        
-        # Run bundle sync in watch mode
-        databricks bundle sync -t "$TARGET" $PROFILE_FLAG --watch
-        exit 0
-    else
-        print_header "CODE-ONLY DEPLOYMENT - Quick UI Update"
-        
-        # Step 1: Build frontend (ensures dist/ is up to date)
-        if [[ "$SKIP_BUILD" == true ]]; then
-            print_step "Step 1/3: Skipping frontend build (--skip-build flag)"
-            print_warning "Using existing dist/ files - ensure they are up to date!"
-        else
-            print_step "Step 1/3: Building frontend..."
-            if [[ -f "package.json" ]]; then
-                if npm run build 2>&1; then
-                    print_success "Frontend built successfully"
-                else
-                    print_error "Frontend build failed"
-                    exit 1
-                fi
-            else
-                print_warning "No package.json found - skipping frontend build"
-            fi
-        fi
-        echo ""
-        
-        # Step 2: Sync code changes
-        print_step "Step 2/3: Syncing code changes to workspace..."
-        echo -e "  Target: ${CYAN}$TARGET${NC}"
-        echo ""
-        
-        if ! databricks bundle sync -t "$TARGET" $PROFILE_FLAG 2>&1; then
-            print_error "Code sync failed"
-            exit 1
-        fi
-        print_success "Code synced to workspace"
-        echo ""
-        
-        # Step 3: Trigger rolling deployment (picks up new code without full restart)
-        print_step "Step 3/3: Triggering app deployment (rolling update)..."
-
-        SOURCE_PATH=$(get_source_path)
-        echo -e "  Source path: ${CYAN}$SOURCE_PATH${NC}"
-
-        if ! ensure_app_running; then
-            print_error "App is not running -- cannot deploy code"
-            echo -e "  Try: ${CYAN}databricks apps start $APP_NAME${NC}"
-            exit 1
-        fi
-
-        if deploy_app_code "$SOURCE_PATH"; then
-            echo ""
-            echo -e "${GREEN}✓ Rolling deployment in progress - zero downtime${NC}"
-            echo -e "${GREEN}✓ New code will be live in ~30-60 seconds${NC}"
-        else
-            print_error "App code deployment failed"
-            echo -e "  Try: ${CYAN}databricks apps deploy $APP_NAME --source-code-path $SOURCE_PATH${NC}"
-            exit 1
-        fi
-        
-        echo ""
-        
-        # Get app URL for convenience
-        APP_INFO=$(databricks apps get "$APP_NAME" $PROFILE_FLAG --output json 2>/dev/null) || true
-        if [[ -n "$APP_INFO" ]]; then
-            APP_URL=$(echo "$APP_INFO" | $PYTHON_BIN -c "import sys,json; print(json.load(sys.stdin).get('url',''))" 2>/dev/null) || true
-            APP_STATE=$(echo "$APP_INFO" | $PYTHON_BIN -c "import sys,json; print(json.load(sys.stdin).get('app_status',{}).get('state',''))" 2>/dev/null) || true
-            if [[ -n "$APP_URL" ]]; then
-                echo -e "${BOLD}${GREEN}🚀 App URL: $APP_URL${NC}"
-                echo -e "   Status:  ${CYAN}$APP_STATE${NC}"
-            fi
-        fi
-        
-        echo ""
-        echo -e "${BOLD}Quick Commands:${NC}"
-        echo -e "  Check status:  ${BLUE}databricks apps get $APP_NAME $PROFILE_FLAG${NC}"
-        echo -e "  View logs:     ${BLUE}databricks apps logs $APP_NAME $PROFILE_FLAG${NC}"
-        echo -e "  Watch mode:    ${BLUE}./scripts/deploy.sh --watch -t $TARGET${NC}"
-        echo -e "  Full deploy:   ${BLUE}./scripts/deploy.sh -t $TARGET${NC}"
-        exit 0
-    fi
-fi
-
-# =============================================================================
 # Lakebase host discovery helper (works for both modes)
 # =============================================================================
 # Autoscaling: walk project → branches → endpoints via separate API calls
@@ -710,6 +587,143 @@ update_app_yaml_lakebase() {
     fi
     rm -f app.yaml.bak
 }
+
+# =============================================================================
+# FAST PATH: Code-Only Deployment (--code-only or --watch)
+# =============================================================================
+# This mode provides quick code updates with automatic frontend build:
+#
+# Steps (--code-only):
+#   1. Build frontend (npm run build) - ensures dist/ is up to date
+#   2. Sync files to workspace (databricks bundle sync)
+#   3. Trigger rolling deployment (databricks apps deploy)
+#
+# Use cases:
+#   - Quick frontend (React/dist) updates
+#   - Backend Python code changes
+#   - Configuration file updates
+#
+# Flags:
+#   --skip-build    Skip npm build (for backend-only changes)
+#
+# Note: For changes requiring new dependencies or env vars,
+#       use full deployment instead.
+# =============================================================================
+
+if [[ "$CODE_ONLY" == true ]]; then
+    if [[ "$WATCH_MODE" == true ]]; then
+        print_header "WATCH MODE - Continuous Code Sync"
+        echo -e "${YELLOW}Watching for file changes...${NC}"
+        echo -e "Press ${BOLD}Ctrl+C${NC} to stop"
+        echo ""
+        echo -e "Files synced based on databricks.yml sync configuration:"
+        echo -e "  Include: src/**, dist/**, app.yaml, app.py, requirements.txt, scripts/**, db/**"
+        echo -e "  Exclude: node_modules/**, __pycache__/**, *.pyc, .git/**, deploy.py"
+        echo ""
+        echo -e "${YELLOW}⚠️  IMPORTANT for UI changes:${NC}"
+        echo -e "   Watch mode syncs files but does NOT run npm build or trigger deployment."
+        echo -e "   For UI changes to take effect:"
+        echo -e "   1. Run ${BOLD}npm run build${NC} in another terminal when you make React changes"
+        echo -e "   2. After done, run ${BOLD}./scripts/deploy.sh --code-only -t $TARGET${NC} to deploy"
+        echo ""
+        echo -e "   Or use ${BOLD}--code-only${NC} instead for one-shot deploys with auto-build."
+        echo ""
+        
+        # Run bundle sync in watch mode
+        databricks bundle sync -t "$TARGET" $PROFILE_FLAG --watch
+        exit 0
+    else
+        print_header "CODE-ONLY DEPLOYMENT - Quick UI Update"
+        
+        # Step 1: Build frontend (ensures dist/ is up to date)
+        if [[ "$SKIP_BUILD" == true ]]; then
+            print_step "Step 1/3: Skipping frontend build (--skip-build flag)"
+            print_warning "Using existing dist/ files - ensure they are up to date!"
+        else
+            print_step "Step 1/3: Building frontend..."
+            if [[ -f "package.json" ]]; then
+                if npm run build 2>&1; then
+                    print_success "Frontend built successfully"
+                else
+                    print_error "Frontend build failed"
+                    exit 1
+                fi
+            else
+                print_warning "No package.json found - skipping frontend build"
+            fi
+        fi
+        echo ""
+        
+        # app.yaml is regenerated with a blank host by configure; the app then runs without Lakebase.
+        if grep -q 'name: USE_LAKEBASE' app.yaml && grep -A1 'name: USE_LAKEBASE' app.yaml | grep -q '"true"' \
+            && grep -A1 'name: LAKEBASE_HOST' app.yaml | grep -q 'value: ""'; then
+            print_step "Filling in the Lakebase host in app.yaml..."
+            discover_lakebase_host
+            if [[ -z "$TARGET_LAKEBASE_HOST" ]]; then
+                print_error "Lakebase is on but its host is blank in app.yaml and could not be found. Run a full deploy: ./scripts/deploy.sh -t $TARGET"
+                exit 1
+            fi
+            update_app_yaml_lakebase
+            print_success "Lakebase host: $TARGET_LAKEBASE_HOST"
+        fi
+
+        # Step 2: Sync code changes
+        print_step "Step 2/3: Syncing code changes to workspace..."
+        echo -e "  Target: ${CYAN}$TARGET${NC}"
+        echo ""
+        
+        if ! databricks bundle sync -t "$TARGET" $PROFILE_FLAG 2>&1; then
+            print_error "Code sync failed"
+            exit 1
+        fi
+        print_success "Code synced to workspace"
+        echo ""
+        
+        # Step 3: Trigger rolling deployment (picks up new code without full restart)
+        print_step "Step 3/3: Triggering app deployment (rolling update)..."
+
+        SOURCE_PATH=$(get_source_path)
+        echo -e "  Source path: ${CYAN}$SOURCE_PATH${NC}"
+
+        if ! ensure_app_running; then
+            print_error "App is not running -- cannot deploy code"
+            echo -e "  Try: ${CYAN}databricks apps start $APP_NAME${NC}"
+            exit 1
+        fi
+
+        if deploy_app_code "$SOURCE_PATH"; then
+            echo ""
+            echo -e "${GREEN}✓ Rolling deployment in progress - zero downtime${NC}"
+            echo -e "${GREEN}✓ New code will be live in ~30-60 seconds${NC}"
+        else
+            print_error "App code deployment failed"
+            echo -e "  Try: ${CYAN}databricks apps deploy $APP_NAME --source-code-path $SOURCE_PATH${NC}"
+            exit 1
+        fi
+        
+        echo ""
+        
+        # Get app URL for convenience
+        APP_INFO=$(databricks apps get "$APP_NAME" $PROFILE_FLAG --output json 2>/dev/null) || true
+        if [[ -n "$APP_INFO" ]]; then
+            APP_URL=$(echo "$APP_INFO" | $PYTHON_BIN -c "import sys,json; print(json.load(sys.stdin).get('url',''))" 2>/dev/null) || true
+            APP_STATE=$(echo "$APP_INFO" | $PYTHON_BIN -c "import sys,json; print(json.load(sys.stdin).get('app_status',{}).get('state',''))" 2>/dev/null) || true
+            if [[ -n "$APP_URL" ]]; then
+                echo -e "${BOLD}${GREEN}🚀 App URL: $APP_URL${NC}"
+                echo -e "   Status:  ${CYAN}$APP_STATE${NC}"
+            fi
+        fi
+        
+        echo ""
+        echo -e "${BOLD}Quick Commands:${NC}"
+        echo -e "  Check status:  ${BLUE}databricks apps get $APP_NAME $PROFILE_FLAG${NC}"
+        echo -e "  View logs:     ${BLUE}databricks apps logs $APP_NAME $PROFILE_FLAG${NC}"
+        echo -e "  Watch mode:    ${BLUE}./scripts/deploy.sh --watch -t $TARGET${NC}"
+        echo -e "  Full deploy:   ${BLUE}./scripts/deploy.sh -t $TARGET${NC}"
+        exit 0
+    fi
+fi
+
 
 # =============================================================================
 # Step 0: Update app.yaml with target-specific Lakebase config

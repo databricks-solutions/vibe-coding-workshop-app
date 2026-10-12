@@ -1,21 +1,22 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
-  ArrowLeft, ArrowRight, Check, ChevronDown, Gauge, Loader2, Map as MapIcon, MessageCircleQuestion, Network, RefreshCw, ShieldCheck, Table2, TriangleAlert,
+  ArrowLeft, ArrowRight, Check, ChevronDown, CircleDashed, Gauge, Loader2, Map as MapIcon, MessageCircleQuestion, Network, RefreshCw, ShieldCheck, Sparkles, Table2, TriangleAlert,
 } from 'lucide-react';
 import { FadeIn, GhostButton, PrimaryButton, SecondaryButton } from '../../journeykit';
 import { AnswerRecipe } from './AnswerRecipe';
 import { AreaXray } from './AreaXray';
-import { blueprintApi, useBlueprintCatalog, useBlueprintDigest, useInstallStatus, useInstalledModels } from './blueprintApi';
+import { blueprintApi, useBlueprintCatalog, useBlueprintDigest, useBlueprintFit, useInstallStatus, useInstalledModels } from './blueprintApi';
 import { DataMap } from './DataMap';
 import { ErDiagram } from './ErDiagram';
 import { KpiLibrary } from './KpiLibrary';
-import { blueprintForIndustry, pickModel, type ModelHint } from './industryMap';
-import { matchQuestion, suggestAreas } from './match';
+import type { ModelHint } from './industryMap';
+import { matchQuestion, rankAreas, recipeFor, type AreaPick } from './match';
 import { MiniConstellation } from './MiniConstellation';
 import { SourceFooter, SourcePill } from './SourcePill';
 import { TableCatalog } from './TableCatalog';
-import type { BlueprintCatalog, BlueprintChoice, BlueprintDigest, Capabilities, InstallStatus } from './types';
+import type { BlueprintCatalog, BlueprintChoice, BlueprintDigest, BlueprintFit, Capabilities, InstallStatus } from './types';
+import { useModelPick } from './useModelPick';
 
 const FOCUS_SOFT_CAP = 30;
 
@@ -34,6 +35,8 @@ interface BlueprintScreenProps {
   initialSlug: string | null;
   /** Used to pick the closest model when there is no earlier choice. */
   hint: ModelHint;
+  /** The idea in plain text, for matching it to areas and tables. */
+  context: string;
   initialChoice: BlueprintChoice | null;
   progress?: ReactNode;
   onBack: () => void;
@@ -190,13 +193,22 @@ function LoadingState({ label }: { label: string }) {
   );
 }
 
-export function BlueprintScreen({ questions, initialSlug, hint, initialChoice, progress, onBack, onNext }: BlueprintScreenProps) {
+type AreaNote = { role: 'core' | 'supporting'; why: string };
+
+const notesFromRank = (picks: AreaPick[]): Record<string, AreaNote> =>
+  Object.fromEntries(picks.map(p => [p.name, { role: p.role, why: p.words.length ? `Your idea mentions ${p.words.join(', ')}` : 'Connected to your main areas' }]));
+
+const notesFromFit = (fit: BlueprintFit): Record<string, AreaNote> =>
+  Object.fromEntries(fit.areas.map(a => [a.name, { role: a.role, why: a.why }]));
+
+export function BlueprintScreen({ questions, initialSlug, hint, context, initialChoice, progress, onBack, onNext }: BlueprintScreenProps) {
   const catalog = useBlueprintCatalog();
+  const modelPick = useModelPick(hint);
   const [slug, setSlug] = useState<string | null>(initialChoice?.slug ?? initialSlug);
   const [autoPicked, setAutoPicked] = useState(!!slug);
-  if (!autoPicked && (catalog.data || catalog.error)) {
+  if (!autoPicked && modelPick.ready) {
     setAutoPicked(true);
-    setSlug(catalog.data ? pickModel(hint, catalog.data.industries) : blueprintForIndustry(hint.industryId));
+    setSlug(modelPick.slug);
   }
   const [attempt, setAttempt] = useState(0);
   const digest = useBlueprintDigest(slug, attempt);
@@ -209,11 +221,26 @@ export function BlueprintScreen({ questions, initialSlug, hint, initialChoice, p
   const [selectedArea, setSelectedArea] = useState<string | null>(null);
   const [diagramArea, setDiagramArea] = useState<string | null>(null);
   const [seededFor, setSeededFor] = useState<string | null>(null);
+  const [notes, setNotes] = useState<Record<string, AreaNote>>({});
+  /** The user changed areas or KPIs by hand, so a late AI match only offers itself. */
+  const [edited, setEdited] = useState(false);
+  const [fitApplied, setFitApplied] = useState<BlueprintFit | null>(null);
 
   useEffect(() => { blueprintApi.capabilities().then(setCaps).catch(() => setCaps(null)); }, []);
 
   const d = digest.data;
-  const recipes = useMemo(() => (d ? questions.map(q => matchQuestion(q, d)) : []), [d, questions]);
+  const fit = useBlueprintFit(d?.slug ?? null, context, questions);
+  const fitData = fit.data && fit.data.slug === d?.slug ? fit.data : null;
+  const recipes = useMemo(() => {
+    if (!d) return [];
+    return questions.map((q, i) => {
+      const r = matchQuestion(q, d);
+      if (r.confidence !== 'none') return r;
+      const kpiId = fitData?.questions.find(x => x.index === i)?.kpi;
+      const kpi = kpiId ? d.kpis.find(k => k.id === kpiId) : null;
+      return kpi ? recipeFor(kpi, q) : r;
+    });
+  }, [d, questions, fitData]);
   const uncovered = recipes.filter(r => r.confidence === 'none').length;
   const matchedAreas = useMemo(() => Array.from(new Set(recipes.filter(r => r.kpi && r.confidence !== 'none').map(r => r.kpi!.area))), [recipes]);
 
@@ -222,16 +249,35 @@ export function BlueprintScreen({ questions, initialSlug, hint, initialChoice, p
     if (initialChoice && initialChoice.slug === d.slug) {
       setFocus(initialChoice.areas);
       setPinned(initialChoice.kpis);
+      setNotes({});
+      setEdited(true);
     } else {
-      const areas = suggestAreas(recipes, d);
-      setFocus(areas);
+      const picks = rankAreas(d, [context, ...questions].join('\n'), recipes);
+      setFocus(picks.map(p => p.name));
+      setNotes(notesFromRank(picks));
       setPinned(Array.from(new Set(recipes.filter(r => r.kpi && r.confidence !== 'none').map(r => r.kpi!.id))));
+      setEdited(false);
     }
+    setFitApplied(null);
     setSelectedArea(null);
   }
 
-  const toggleFocus = (area: string) => setFocus(f => (f.includes(area) ? f.filter(a => a !== area) : [...f, area]));
+  const applyFit = (f: BlueprintFit) => {
+    setFitApplied(f);
+    setFocus(f.areas.map(a => a.name));
+    setNotes(notesFromFit(f));
+    setPinned(Array.from(new Set(recipes.filter(r => r.kpi && r.confidence !== 'none').map(r => r.kpi!.id))));
+    setEdited(false);
+  };
+  if (d && fitData && fitApplied !== fitData && seededFor === d.slug && !edited) applyFit(fitData);
+  const fitOffered = !!fitData && fitApplied !== fitData && edited;
+
+  const toggleFocus = (area: string) => {
+    setEdited(true);
+    setFocus(f => (f.includes(area) ? f.filter(a => a !== area) : [...f, area]));
+  };
   const togglePin = (kpiId: string) => {
+    setEdited(true);
     const kpi = d?.kpis.find(k => k.id === kpiId);
     setPinned(p => (p.includes(kpiId) ? p.filter(x => x !== kpiId) : [...p, kpiId]));
     if (kpi && !pinned.includes(kpiId)) setFocus(f => (f.includes(kpi.area) ? f : [...f, kpi.area]));
@@ -263,7 +309,9 @@ export function BlueprintScreen({ questions, initialSlug, hint, initialChoice, p
   };
 
   let body: React.ReactNode;
-  if (!slug) {
+  if (!slug && !autoPicked) {
+    body = <LoadingState label="gallery" />;
+  } else if (!slug) {
     body = catalog.data ? (
       <div className="rounded-2xl border border-dashed border-border p-8 text-center space-y-4">
         <MiniConstellation nodes={10} size={64} />
@@ -280,7 +328,20 @@ export function BlueprintScreen({ questions, initialSlug, hint, initialChoice, p
   } else {
     body = (
       <div className="space-y-6">
-        <FadeIn delay={0.05}><TrustStrip digest={d} /></FadeIn>
+        <FadeIn delay={0.05}>
+          <FitPanel
+            digest={d}
+            fit={fitData}
+            loading={fit.loading}
+            focus={focus}
+            notes={notes}
+            offered={fitOffered}
+            onUseSuggested={() => fitData && applyFit(fitData)}
+            onShowArea={showArea}
+            onToggleArea={toggleFocus}
+          />
+        </FadeIn>
+        <FadeIn delay={0.07}><TrustStrip digest={d} /></FadeIn>
 
         {uncovered * 2 > recipes.length && (
           <FadeIn delay={0.08} className="flex items-start gap-3 rounded-2xl border border-amber-500/30 bg-amber-500/5 px-4 py-3">
@@ -357,9 +418,12 @@ export function BlueprintScreen({ questions, initialSlug, hint, initialChoice, p
             {lens === 'map' && (
               <div className="grid lg:grid-cols-[minmax(0,1fr)_340px] gap-4 items-start">
                 <div className="rounded-2xl border border-border bg-card p-3 sm:p-4">
-                  <DataMap digest={d} focus={focus} matched={matchedAreas} selected={selectedArea} onSelect={setSelectedArea} />
+                  <DataMap digest={d} focus={focus} supporting={focus.filter(a => notes[a]?.role === 'supporting')} matched={matchedAreas} selected={selectedArea} onSelect={setSelectedArea} />
                   <div className="flex flex-wrap items-center gap-x-4 gap-y-1 px-2 pt-1 text-ui-xs text-muted-foreground">
                     <span className="inline-flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-primary" /> in your Genie</span>
+                    {focus.some(a => notes[a]?.role === 'supporting') && (
+                      <span className="inline-flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full border-2 border-primary bg-primary/15" /> supporting</span>
+                    )}
                     <span className="inline-flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-amber-400" /> your questions land here</span>
                     <span>Number = tables · thicker thread = more connections</span>
                   </div>
@@ -414,6 +478,9 @@ export function BlueprintScreen({ questions, initialSlug, hint, initialChoice, p
         <div className="flex flex-wrap items-center gap-3">
           <h1 className="text-3xl sm:text-4xl font-semibold tracking-tight text-foreground leading-[1.1]">Start from a proven model</h1>
           {catalog.data && slug && <IndustryPicker catalog={catalog.data} value={slug} onChange={s => { setSlug(s); setAttempt(0); }} />}
+          {!initialChoice && modelPick.slug === slug && modelPick.why && (
+            <span className="inline-flex items-center gap-1.5 text-ui-sm text-muted-foreground"><Sparkles className="w-3.5 h-3.5 text-primary" /> {modelPick.why}</span>
+          )}
         </div>
         <p className="text-ui-lg text-muted-foreground max-w-2xl leading-relaxed">
           {d ? d.description : 'A complete, connected industry data model your Genie can stand on: tables, connections and ready-made KPIs.'}
@@ -437,6 +504,97 @@ export function BlueprintScreen({ questions, initialSlug, hint, initialChoice, p
               Use this model <ArrowRight className="w-4 h-4" />
             </PrimaryButton>
           </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+const FIT_LABEL: Record<BlueprintFit['fit'], { text: string; tone: string }> = {
+  strong: { text: 'Strong fit', tone: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400' },
+  partial: { text: 'Partial fit', tone: 'bg-amber-500/10 text-amber-600 dark:text-amber-400' },
+  weak: { text: 'Weak fit', tone: 'bg-rose-500/10 text-rose-600 dark:text-rose-400' },
+};
+
+interface FitPanelProps {
+  digest: BlueprintDigest;
+  fit: BlueprintFit | null;
+  loading: boolean;
+  focus: string[];
+  notes: Record<string, AreaNote>;
+  /** A fresh match arrived after the user edited the areas. */
+  offered: boolean;
+  onUseSuggested: () => void;
+  onShowArea: (area: string) => void;
+  onToggleArea: (area: string) => void;
+}
+
+/** The areas picked for the idea and, once the AI has read it, what the use case needs from the model. */
+function FitPanel({ digest, fit, loading, focus, notes, offered, onUseSuggested, onShowArea, onToggleArea }: FitPanelProps) {
+  const labelOf = (name: string) => digest.areas.find(a => a.name === name)?.label ?? name;
+  const ordered = [...focus].sort((a, b) => Number(notes[a]?.role === 'supporting') - Number(notes[b]?.role === 'supporting'));
+  const needs = fit ? [...fit.needs].sort((a, b) => Number(!!a.gap) - Number(!!b.gap) || Number(a.importance === 'nice') - Number(b.importance === 'nice')) : [];
+  const gaps = needs.filter(n => n.gap).length;
+  return (
+    <div className="rounded-2xl border border-border bg-card p-4 sm:p-5 space-y-4">
+      <div className="flex flex-wrap items-center gap-2">
+        <p className="text-ui-md font-semibold text-foreground">Picked for your use case</p>
+        {fit && <span className={`px-2 py-0.5 rounded-full text-ui-xs font-medium ${FIT_LABEL[fit.fit].tone}`}>{FIT_LABEL[fit.fit].text}</span>}
+        {loading && (
+          <span className="inline-flex items-center gap-1.5 text-ui-xs text-muted-foreground">
+            <Loader2 className="w-3.5 h-3.5 animate-spin text-primary" /> Reading your use case to match it to the model…
+          </span>
+        )}
+        {offered && (
+          <button onClick={onUseSuggested} className="ml-auto inline-flex items-center gap-1.5 text-ui-sm font-semibold text-primary hover:underline underline-offset-2">
+            <Sparkles className="w-3.5 h-3.5" /> Use the suggested areas
+          </button>
+        )}
+      </div>
+      {fit?.summary && <p className="text-ui-sm text-muted-foreground leading-relaxed -mt-2">{fit.summary}</p>}
+
+      <div className="flex flex-wrap gap-2">
+        {ordered.map(name => (
+          <div key={name} className={`group inline-flex items-start gap-2 rounded-xl border px-3 py-2 max-w-sm ${notes[name]?.role === 'supporting' ? 'border-primary/30 bg-primary/[0.03]' : 'border-primary/50 bg-primary/[0.07]'}`}>
+            <button onClick={() => onShowArea(name)} className="text-left min-w-0" title="Look inside this area">
+              <span className="flex items-center gap-1.5">
+                <span className={`w-2 h-2 rounded-full shrink-0 ${notes[name]?.role === 'supporting' ? 'border-2 border-primary' : 'bg-primary'}`} />
+                <span className="text-ui-sm font-semibold text-foreground">{labelOf(name)}</span>
+                <span className="text-ui-2xs uppercase tracking-wider text-muted-foreground">{notes[name]?.role ?? 'added by you'}</span>
+              </span>
+              {notes[name]?.why && <span className="block text-ui-xs text-muted-foreground mt-0.5 leading-snug">{notes[name].why}</span>}
+            </button>
+            <button onClick={() => onToggleArea(name)} aria-label={`Remove ${labelOf(name)}`} className="text-muted-foreground/60 hover:text-foreground text-ui-sm leading-none mt-0.5">×</button>
+          </div>
+        ))}
+        {!ordered.length && <p className="text-ui-sm text-muted-foreground">No areas yet. Tap an area on the map to include it.</p>}
+      </div>
+
+      {needs.length > 0 && (
+        <div className="border-t border-border/70 pt-3 space-y-2">
+          <p className="text-ui-sm font-semibold text-foreground">
+            What your use case needs
+            <span className="ml-2 font-normal text-muted-foreground">{needs.length - gaps} of {needs.length} in this model</span>
+          </p>
+          <ul className="grid sm:grid-cols-2 gap-x-5 gap-y-2">
+            {needs.map(n => (
+              <li key={n.need} className="flex items-start gap-2 text-ui-sm">
+                {n.gap
+                  ? <CircleDashed className="w-4 h-4 mt-0.5 shrink-0 text-amber-500" />
+                  : <Check className="w-4 h-4 mt-0.5 shrink-0 text-emerald-500" strokeWidth={3} />}
+                <span className="min-w-0">
+                  <span className="text-foreground">{n.need}</span>
+                  {n.importance === 'nice' && <span className="ml-1.5 text-ui-2xs uppercase tracking-wider text-muted-foreground">nice to have</span>}
+                  <span className="block text-ui-xs text-muted-foreground leading-snug">
+                    {n.gap || `In ${n.areas.map(labelOf).join(', ')}${n.grain ? ` · ${n.grain}` : ''}`}
+                  </span>
+                </span>
+              </li>
+            ))}
+          </ul>
+          {gaps > 0 && (
+            <p className="text-ui-xs text-muted-foreground">Genie Code adds what's missing in your own schema, next to the model's tables.</p>
+          )}
         </div>
       )}
     </div>

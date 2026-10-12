@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import type { BlueprintCatalog, BlueprintDigest, Capabilities, InstallStatus, InstalledModel } from './types';
+import type { BlueprintCatalog, BlueprintDigest, BlueprintFit, Capabilities, InstallStatus, InstalledModel } from './types';
 
 const BASE = '/api/blueprints';
 
@@ -16,6 +16,9 @@ async function getJson<T>(url: string, init?: RequestInit): Promise<T> {
 let catalogPromise: Promise<BlueprintCatalog> | null = null;
 let installedPromise: Promise<InstalledModel[]> | null = null;
 const digestPromises = new Map<string, Promise<BlueprintDigest>>();
+const fitPromises = new Map<string, Promise<BlueprintFit>>();
+type ModelPickReply = { slug: string; label: string; why: string };
+const pickPromises = new Map<string, Promise<ModelPickReply>>();
 
 export const blueprintApi = {
   catalog(): Promise<BlueprintCatalog> {
@@ -48,6 +51,37 @@ export const blueprintApi = {
         });
     }
     return installedPromise;
+  },
+  fit(slug: string, context: string, questions: string[]): Promise<BlueprintFit> {
+    const key = JSON.stringify([slug, context, questions]);
+    let p = fitPromises.get(key);
+    if (!p) {
+      p = getJson<BlueprintFit>(`${BASE}/${encodeURIComponent(slug)}/fit`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ context, questions }),
+      }).catch(err => {
+        fitPromises.delete(key);
+        throw err;
+      });
+      fitPromises.set(key, p);
+    }
+    return p;
+  },
+  pick(context: string): Promise<ModelPickReply> {
+    let p = pickPromises.get(context);
+    if (!p) {
+      p = getJson<ModelPickReply>(`${BASE}/pick`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ context }),
+      }).catch(err => {
+        pickPromises.delete(context);
+        throw err;
+      });
+      pickPromises.set(context, p);
+    }
+    return p;
   },
   capabilities: () => getJson<Capabilities>(`${BASE}/capabilities`),
   status: (slug: string) => getJson<InstallStatus>(`${BASE}/${encodeURIComponent(slug)}/status`),
@@ -97,6 +131,25 @@ export function useBlueprintDigest(slug: string | null, attempt = 0): Loadable<B
   if (!slug) return { data: null, error: null, loading: false };
   if (result?.key === key) return { data: result.data, error: result.error, loading: false };
   return { data: null, error: null, loading: true };
+}
+
+/** The AI's match of the idea to a loaded model; `data` stays null while it thinks or when it fails. */
+export function useBlueprintFit(slug: string | null, context: string, questions: string[]) {
+  const enabled = !!slug && (!!context.trim() || questions.length > 0);
+  const key = enabled ? JSON.stringify([slug, context, questions]) : '';
+  const [result, setResult] = useState<{ key: string; data: BlueprintFit | null; failed: boolean } | null>(null);
+  useEffect(() => {
+    if (!key) return;
+    const [s, c, q] = JSON.parse(key) as [string, string, string[]];
+    let alive = true;
+    blueprintApi.fit(s, c, q)
+      .then(data => alive && setResult({ key, data, failed: false }))
+      .catch(() => alive && setResult({ key, data: null, failed: true }));
+    return () => { alive = false; };
+  }, [key]);
+  if (!enabled) return { data: null, loading: false, failed: false };
+  if (result?.key === key) return { data: result.data, loading: false, failed: result.failed };
+  return { data: null, loading: true, failed: false };
 }
 
 /** Polls install status; fast while installing, slow otherwise. */

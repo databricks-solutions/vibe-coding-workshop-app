@@ -43,6 +43,11 @@ try:
 except Exception as _blueprints_err:  # pragma: no cover
     print(f"[Blueprints] disabled, failed to load: {_blueprints_err}", file=sys.stderr)
     blueprints_router = None
+try:
+    from src.backend.api.blueprint_fit import router as blueprint_fit_router
+except Exception as _blueprint_fit_err:  # pragma: no cover
+    print(f"[Blueprints] use case matching disabled, failed to load: {_blueprint_fit_err}", file=sys.stderr)
+    blueprint_fit_router = None
 
 try:
     from src.backend.api.insights import router as insights_router
@@ -142,6 +147,8 @@ app.include_router(hackathon_router, prefix="/api", tags=["Hackathons"])
 app.include_router(library_router, prefix="/api", tags=["Library"])
 if ideate_router is not None:
     app.include_router(ideate_router, prefix="/api", tags=["Ideate"])
+if blueprint_fit_router is not None:
+    app.include_router(blueprint_fit_router, prefix="/api", tags=["Blueprints"])
 if blueprints_router is not None:
     app.include_router(blueprints_router, prefix="/api", tags=["Blueprints"])
 if insights_router is not None:

@@ -3,7 +3,8 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { ArrowLeft, ArrowRight, Check, Database, FileUp, FlaskConical, Info, Sparkles } from 'lucide-react';
 import type { DataSource } from '../brief';
 import { useBlueprintCatalog, useInstalledModels } from '../blueprint/blueprintApi';
-import { pickModel, type ModelHint } from '../blueprint/industryMap';
+import type { ModelHint } from '../blueprint/industryMap';
+import { useModelPick } from '../blueprint/useModelPick';
 import { MiniConstellation } from '../blueprint/MiniConstellation';
 import type { ReactNode } from 'react';
 import { FadeIn, GhostButton, Headline, PrimaryButton } from '../../journeykit';
@@ -42,9 +43,10 @@ interface DataScreenProps {
 
 function useBlueprintOption(hint: ModelHint): Option | null {
   const { data } = useBlueprintCatalog();
+  const pick = useModelPick(hint);
   if (!data) return null;
-  const slug = pickModel(hint, data.industries);
-  const match = data.industries.find(i => i.slug === slug);
+  const match = data.industries.find(i => i.slug === pick.slug);
+  const size = match ? ` ${match.counts.tables} connected tables and ${match.counts.kpiSets} sets of KPIs, set up with realistic sample data.` : '';
   return {
     id: 'blueprint',
     icon: null,
@@ -52,8 +54,10 @@ function useBlueprintOption(hint: ModelHint): Option | null {
     tag: 'New',
     title: 'Start from an industry data model',
     body: match
-      ? `Explore a ready-made ${match.label} model: ${match.counts.tables} connected tables and ${match.counts.kpiSets} sets of KPIs, set up with realistic sample data.`
-      : `Pick from ${data.industries.length} ready-made industry models with connected tables and KPIs, set up with realistic sample data.`,
+      ? `Best fit for your idea: the ${match.label} model.${pick.why ? ` ${pick.why}` : ''}${size}`
+      : pick.loading
+        ? 'Finding the closest of the ready-made industry models for your idea…'
+        : `Pick from ${data.industries.length} ready-made industry models with connected tables and KPIs, set up with realistic sample data.`,
     footnote: 'From Databricks Industry Solutions · lakehouse-industry-data-models',
   };
 }
@@ -61,12 +65,12 @@ function useBlueprintOption(hint: ModelHint): Option | null {
 export function DataScreen({ hint, value, location, progress, onChange, onLocationChange, onBack, onNext, onOpenInstalled }: DataScreenProps) {
   const blueprintOption = useBlueprintOption(hint);
   const { data: catalog } = useBlueprintCatalog();
+  // Only the model that fits this idea; other installed models are a distraction here.
   const installed = useInstalledModels()
-    .filter(m => m.ready && m.slug)
-    .map(m => ({ ...m, label: catalog?.industries.find(i => i.slug === m.slug)?.label ?? m.slug }))
-    .filter(m => catalog?.industries.some(i => i.slug === m.slug));
+    .filter(m => m.ready && m.slug && m.slug === blueprintOption?.slug)
+    .map(m => ({ ...m, label: catalog?.industries.find(i => i.slug === m.slug)?.label ?? m.slug }));
   const options = blueprintOption ? [...OPTIONS, blueprintOption] : OPTIONS;
-  const matchInstalled = !!blueprintOption?.slug && installed.some(m => m.slug === blueprintOption.slug);
+  const matchInstalled = installed.length > 0;
   const recommended: { id: DataSource; why: string } = matchInstalled
     ? { id: 'blueprint', why: 'A matching industry model is already in your workspace, with data ready to ask questions of.' }
     : { id: 'existing', why: 'Most teams already have this data in Databricks. Nothing moves, and the answers are on real numbers.' };
@@ -149,7 +153,7 @@ export function DataScreen({ hint, value, location, progress, onChange, onLocati
                 {opt.id === 'blueprint' && installed.length > 0 && onOpenInstalled && (
                   <div className="flex flex-wrap items-center gap-1.5 px-5 pb-4 pl-[4.75rem] -mt-1">
                     <span className="flex items-center gap-1.5 text-ui-xs font-medium text-muted-foreground mr-1">
-                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" /> Already in your workspace:
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" /> Already in your workspace, ready to explore:
                     </span>
                     {installed.map(m => (
                       <button

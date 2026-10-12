@@ -76,6 +76,22 @@ export const RELEASES: Release[] = [
         icon: 'database',
       },
       {
+        title: 'The industry data model is matched to your use case',
+        description:
+          'The Data step recommends the model that fits your idea and says why, and only shows an installed model when it is that one. On the model screen the AI reads your brief, lists the data your use case needs, and maps each need to the model\'s areas and tables or names it as a gap (for example ground staff shifts in the Airlines model). It picks several areas, core and supporting, with a reason for each, instead of only the areas your questions happened to land in. A word-based pick shows instantly while the AI thinks, and your own edits are never overwritten.',
+        category: 'improved',
+        audience: 'attendee',
+        icon: 'database',
+      },
+      {
+        title: 'Ideas always reopen their build',
+        description:
+          'Opening an idea whose project was never saved now starts a fresh project for it at the Data step instead of the Insights start screen. The idea is only relinked when the database confirms the project is gone, never when it is just unreachable. Code-only deploys also fill in the Lakebase host when app.yaml has it blank, so a regenerated app.yaml can no longer leave the app running without its database.',
+        category: 'fix',
+        audience: 'installer',
+        icon: 'wrench',
+      },
+      {
         title: 'Ideate: a business case sized like a finance partner would',
         description:
           'The "What could it be worth?" step now sizes the pilot, then scales it to the full rollout, adds up to two more value levers, and counts time saved at a capture rate so hard and soft dollars stay separate. Every question has a best guess and a running estimate. The business case is an executive page (value, the pilot ask, payback, cost of waiting, go and stop criteria) plus an appendix with scenarios, inputs, costs, and a three-year view. Approved use cases show what they are typically worth, and ideas started from them begin from those numbers.',

@@ -5,7 +5,7 @@ import { apiClient } from '../../api/client';
 import { ASSISTANT_CATALOG } from '../../constants/codingAssistants';
 import { WORKSHOP_LEVELS } from '../../constants/workflowSections';
 import {
-  BusinessCaseSheet, JourneyProgress, JourneyScreen, SHAPE_KINDS, answerFor, caseFigures, chosenShape, money, placedLeaf, seedFromUseCase, useIdeas,
+  BusinessCaseSheet, JourneyProgress, JourneyScreen, SHAPE_KINDS, answerFor, caseFigures, chosenShape, matchingContext, money, placedLeaf, seedFromUseCase, useIdeas,
   type Idea, type StepKey,
 } from '../journeykit';
 import { composeBrief, fitName, parseBrief, toSlug, type DataSource, type IdeaBrief } from './brief';
@@ -200,10 +200,11 @@ function InsightsFlowInner(props: InsightsFlowProps) {
   const questions = idea?.genieQuestions ?? [];
   const useCase = idea?.sourceUseCase ?? null;
   const industryId = industryIdOf(idea, startIndustry);
+  const ideaText = useMemo(() => matchingContext(idea), [idea]);
   const modelHint: ModelHint = {
     industryId,
-    industry: idea?.spark?.industry,
-    text: [idea?.title, idea?.seed, idea?.spark?.statement, ...questions].filter(Boolean).join(' '),
+    industry: idea?.spark?.industry || idea?.sourceUseCase?.industryLabel,
+    text: [ideaText, ...questions].filter(Boolean).join('\n'),
   };
   const usingBlueprint = dataSource === 'blueprint';
 
@@ -390,6 +391,7 @@ function InsightsFlowInner(props: InsightsFlowProps) {
             questions={questions}
             initialSlug={preferredSlug}
             hint={modelHint}
+            context={ideaText}
             initialChoice={blueprint}
             progress={progress}
             onBack={() => setStage('data')}

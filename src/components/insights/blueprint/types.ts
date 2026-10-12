@@ -155,6 +155,24 @@ export interface Capabilities {
 }
 
 /** What the user picked in the explorer; persisted inside the brief. */
+/** How an idea maps onto a model, from POST /blueprints/{slug}/fit. Every id is in the digest. */
+export interface BlueprintFit {
+  slug: string;
+  needs: {
+    need: string;
+    grain: string;
+    importance: 'must' | 'nice';
+    areas: string[];
+    tables: string[];
+    /** Set when the model has nothing for this need. */
+    gap: string;
+  }[];
+  areas: { name: string; role: 'core' | 'supporting'; why: string }[];
+  questions: { index: number; kpi: string | null }[];
+  fit: 'strong' | 'partial' | 'weak';
+  summary: string;
+}
+
 export interface BlueprintChoice {
   slug: string;
   label: string;

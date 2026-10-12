@@ -216,13 +216,116 @@ export function createMatcher(vocab: MatchVocabulary = DEFAULT_VOCABULARY) {
     };
   }
 
-  return { matchQuestion };
+  /** One document per area: what it is about and what its tables hold. */
+  const areaDocsCache = new WeakMap<BlueprintDigest, { name: string; words: Set<string> }[]>();
+  function areaDocs(digest: BlueprintDigest) {
+    let docs = areaDocsCache.get(digest);
+    if (docs) return docs;
+    const byArea = new Map<string, string[]>();
+    for (const t of digest.tables ?? []) {
+      const parts = byArea.get(t.area) ?? [];
+      parts.push(t.label, spaced(t.name), t.subdomain ?? '', t.purpose ?? '');
+      byArea.set(t.area, parts);
+    }
+    docs = (digest.areas ?? []).map(a => ({
+      name: a.name,
+      words: tokenSet([a.label, a.description, ...(a.subdomains ?? []), ...(byArea.get(a.name) ?? [])].join(' ')),
+    }));
+    areaDocsCache.set(digest, docs);
+    return docs;
+  }
+
+  /**
+   * Areas the idea is about, best first: rare idea words found in an area's tables
+   * count most, and areas where the questions landed get a boost.
+   */
+  function rankAreas(digest: BlueprintDigest, context: string, recipes: Recipe[] = [], max = 4): AreaPick[] {
+    const docs = areaDocs(digest);
+    if (!docs.length) return [];
+    const df = new Map<string, number>();
+    for (const d of docs) for (const w of d.words) df.set(w, (df.get(w) ?? 0) + 1);
+    const idf = (w: string) => Math.log((docs.length + 1) / ((df.get(w) ?? docs.length) + 0.5));
+
+    const surface = new Map<string, string>();
+    for (const raw of context.toLowerCase().match(/[a-z][a-z0-9]+/g) ?? []) {
+      const s = stem(raw);
+      if (!surface.has(s) && !vocab.stop.has(raw)) surface.set(s, raw);
+    }
+    const counts = new Map<string, number>();
+    for (const w of tokens(context)) counts.set(w, (counts.get(w) ?? 0) + 1);
+    const bag = new Map<string, { weight: number; from: string }>();
+    for (const [w, c] of counts) {
+      if (vocab.generic.has(w)) continue;
+      const weight = Math.min(2, 1 + Math.log(c) / 2);
+      if ((bag.get(w)?.weight ?? 0) < weight) bag.set(w, { weight, from: w });
+      for (const s of synonymsOf(w)) if ((bag.get(s)?.weight ?? 0) < weight * 0.45) bag.set(s, { weight: weight * 0.45, from: w });
+    }
+
+    const ideaScore = new Map<string, number>();
+    const because = new Map<string, Map<string, number>>();
+    const avgSize = docs.reduce((n, d) => n + d.words.size, 0) / docs.length || 1;
+    for (const d of docs) {
+      let score = 0;
+      const why = new Map<string, number>();
+      for (const [w, { weight, from }] of bag) {
+        if (!d.words.has(w)) continue;
+        const v = weight * Math.max(0, idf(w));
+        score += v;
+        why.set(from, (why.get(from) ?? 0) + v);
+      }
+      // Big areas mention more words by chance; don't let size alone win.
+      ideaScore.set(d.name, score / Math.sqrt(Math.max(0.5, d.words.size / avgSize)));
+      because.set(d.name, why);
+    }
+    const topIdea = Math.max(0, ...ideaScore.values());
+    const questionScore = new Map<string, number>();
+    for (const r of recipes) {
+      if (!r.kpi || r.confidence === 'none') continue;
+      questionScore.set(r.kpi.area, (questionScore.get(r.kpi.area) ?? 0) + (r.confidence === 'strong' ? 3 : 1));
+    }
+
+    const scored = docs
+      .map(d => ({
+        name: d.name,
+        score: (topIdea > 0 ? (10 * (ideaScore.get(d.name) ?? 0)) / topIdea : 0) + (questionScore.get(d.name) ?? 0),
+        words: [...(because.get(d.name) ?? new Map()).entries()].sort((a, b) => b[1] - a[1]).slice(0, 3).map(([w]) => surface.get(w) ?? w),
+      }))
+      .filter(s => s.score > 0)
+      .sort((a, b) => b.score - a.score);
+    if (!scored.length) return suggestAreas(recipes, digest, 2).map(name => ({ name, role: 'core', words: [] }));
+
+    const cut = scored[0].score * 0.45;
+    const kept = scored.filter((s, i) => i < 2 || s.score >= cut).slice(0, max);
+    const picks: AreaPick[] = kept.map((s, i) => ({
+      name: s.name,
+      role: i === 0 || s.score >= scored[0].score * 0.6 ? 'core' : 'supporting',
+      words: s.words,
+    }));
+    if (picks.length < 2) {
+      const extra = neighbours(picks[0].name, digest).find(n => !picks.some(p => p.name === n.area));
+      if (extra) picks.push({ name: extra.area, role: 'supporting', words: [] });
+    }
+    return picks;
+  }
+
+  return { matchQuestion, rankAreas };
+}
+
+export interface AreaPick {
+  name: string;
+  role: 'core' | 'supporting';
+  /** Words from the idea that point here, for a short reason. */
+  words: string[];
 }
 
 const defaultMatcher = createMatcher();
 
 /** Matches a question to the model's best KPI with the default vocabulary. */
 export const matchQuestion = (question: string, digest: BlueprintDigest): Recipe => defaultMatcher.matchQuestion(question, digest);
+
+/** Areas an idea is about, with the default vocabulary. */
+export const rankAreas = (digest: BlueprintDigest, context: string, recipes: Recipe[] = [], max = 4): AreaPick[] =>
+  defaultMatcher.rankAreas(digest, context, recipes, max);
 
 export function recipeFor(kpi: BlueprintKpi, question: string): Recipe {
   const wantsTime = TIME_WORDS.test(question);

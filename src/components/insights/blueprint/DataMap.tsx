@@ -5,6 +5,8 @@ import type { BlueprintDigest } from './types';
 interface DataMapProps {
   digest: BlueprintDigest;
   focus: string[];
+  /** Focus areas that only add joins; drawn outlined instead of filled. */
+  supporting?: string[];
   matched: string[];
   selected: string | null;
   onSelect: (area: string) => void;
@@ -14,7 +16,7 @@ const W = 640;
 const H = 460;
 
 /** Business areas on a ring, grouped by division; threads are foreign-key connections. */
-export function DataMap({ digest, focus, matched, selected, onSelect }: DataMapProps) {
+export function DataMap({ digest, focus, supporting = [], matched, selected, onSelect }: DataMapProps) {
   const [hover, setHover] = useState<string | null>(null);
 
   const layout = useMemo(() => {
@@ -53,6 +55,7 @@ export function DataMap({ digest, focus, matched, selected, onSelect }: DataMapP
 
   const focusSet = new Set(focus);
   const matchedSet = new Set(matched);
+  const supportSet = new Set(supporting);
 
   return (
     <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-auto select-none" role="img" aria-label={`Map of the ${digest.label} data model`}>
@@ -77,6 +80,7 @@ export function DataMap({ digest, focus, matched, selected, onSelect }: DataMapP
       {layout.nodes.map((n, i) => {
         const name = n.area.name;
         const inFocus = focusSet.has(name);
+        const filled = inFocus && !supportSet.has(name);
         const dim = neighbourSet ? !neighbourSet.has(name) : false;
         const right = Math.cos(n.angle) >= -0.05;
         const labelX = n.x + Math.cos(n.angle) * (n.r + 8);
@@ -102,10 +106,10 @@ export function DataMap({ digest, focus, matched, selected, onSelect }: DataMapP
               cx={n.x}
               cy={n.y}
               r={n.r}
-              className={inFocus ? 'fill-primary stroke-primary' : 'fill-card stroke-border'}
-              strokeWidth={1.5}
+              className={filled ? 'fill-primary stroke-primary' : inFocus ? 'fill-primary/15 stroke-primary' : 'fill-card stroke-border'}
+              strokeWidth={inFocus && !filled ? 2 : 1.5}
             />
-            <text x={n.x} y={n.y + 4} textAnchor="middle" className={`text-[11px] font-semibold tabular-nums pointer-events-none ${inFocus ? 'fill-primary-foreground' : 'fill-muted-foreground'}`}>
+            <text x={n.x} y={n.y + 4} textAnchor="middle" className={`text-[11px] font-semibold tabular-nums pointer-events-none ${filled ? 'fill-primary-foreground' : inFocus ? 'fill-foreground' : 'fill-muted-foreground'}`}>
               {n.area.tableIds.length}
             </text>
             {matchedSet.has(name) && (

@@ -1044,6 +1044,11 @@ async def installed_blueprints():
 @router.get("/blueprints/{slug}", summary="Analyst digest of one industry blueprint")
 async def get_blueprint(slug: str, request: Request, flavour: str = "mvm"):
     _guard()
+    return _gzip_json(request, await load_digest(slug, flavour), max_age=3600)
+
+
+async def load_digest(slug: str, flavour: str = "mvm") -> Dict[str, Any]:
+    """The cached analyst digest of one model; raises HTTPException when it can't be had."""
     _check_slug(slug)
     if flavour not in ("mvm", "ecm"):
         raise HTTPException(status_code=400, detail="flavour must be mvm or ecm")
@@ -1059,7 +1064,7 @@ async def get_blueprint(slug: str, request: Request, flavour: str = "mvm"):
             raise HTTPException(status_code=502, detail=f"Could not reach the blueprint library: {str(e)[:120]}")
         digest = await asyncio.to_thread(_build_digest, slug, version, flavour, sha, data)
         _cache_put(key, digest)
-    return _gzip_json(request, digest, max_age=3600)
+    return digest
 
 
 @router.get("/blueprints/{slug}/status", summary="Install status of a blueprint")

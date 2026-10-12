@@ -340,6 +340,8 @@ export interface SessionLoadResponse {
   created_at?: string;
   updated_at?: string;
   is_saved: boolean;
+  /** The store answered and has no such session; false when it could not be reached. */
+  missing?: boolean;
   message: string;
 }
 

@@ -82,6 +82,27 @@ export function buildContext(idea: Idea, includeDraftsFor?: StepKey): Record<str
   return ctx;
 }
 
+const MATCHING_BRIEF_CHARS = 6000;
+
+/** Plain-text description of the idea for matching it to data: what it is, who uses it, what it decides. */
+export function matchingContext(idea: Idea | null | undefined): string {
+  if (!idea) return '';
+  const uc = idea.useCaseContext;
+  const shape = chosenShape(idea);
+  return [
+    idea.title,
+    idea.spark?.industry && `Industry: ${idea.spark.industry}`,
+    idea.spark?.statement ?? idea.seed,
+    idea.sourceUseCase && `Use case: ${idea.sourceUseCase.label}`,
+    uc?.summary,
+    uc?.personas?.length && `Personas: ${uc.personas.map(p => `${p.name} (${p.role})`).join(', ')}`,
+    uc?.entities?.length && `Data it uses: ${uc.entities.join(', ')}`,
+    ...answeredPairs(idea).filter(a => a.answer !== NOT_SURE).map(a => `${a.question} ${a.answer}`),
+    shape && `Chosen approach: ${shape.title}. ${shape.value}`,
+    idea.brief?.slice(0, MATCHING_BRIEF_CHARS),
+  ].filter(Boolean).join('\n');
+}
+
 /** 0..1 coverage per AI-DLC completeness dimension, derived from what exists so far. */
 export function clarityByDimension(idea: Idea): Record<Dimension, number> {
   const real = (dim: string) => answeredPairs(idea).some(a => a.dimension === dim && a.answer !== NOT_SURE);

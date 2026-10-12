@@ -5897,6 +5897,7 @@ try:
         save_session,
         save_chapter_feedback,
         load_session,
+        session_exists,
         delete_session,
         get_user_sessions,
         get_user_default_session,
@@ -5914,6 +5915,8 @@ except ImportError:
     def save_session(*args, **kwargs):
         return False
     def load_session(*args, **kwargs):
+        return None
+    def session_exists(*args, **kwargs):
         return None
     def delete_session(*args, **kwargs):
         return False
@@ -5983,6 +5986,7 @@ class SessionLoadResponse(BaseModel):
     created_at: Optional[str] = Field(None)
     updated_at: Optional[str] = Field(None)
     is_saved: bool = Field(False)
+    missing: bool = Field(False, description="The store answered and has no such session (not set when it could not be reached)")
     message: str = Field(..., description="Status message")
 
 
@@ -6312,6 +6316,7 @@ async def load_session_endpoint(session_id: str) -> SessionLoadResponse:
                 success=False,
                 session_id=session_id,
                 is_saved=False,
+                missing=session_exists(session_id) is False,
                 message="Session not found. It may have been deleted or never saved.",
             )
             

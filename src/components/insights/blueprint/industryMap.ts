@@ -25,15 +25,23 @@ export interface ModelHint {
 const words = (s: string) => s.toLowerCase().replace(/&/g, ' ').replace(/[^a-z0-9 ]+/g, ' ').split(/\s+/).filter(w => w.length > 2 && w !== 'and');
 const escape = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
+export interface ModelPick {
+  slug: string | null;
+  /** What decided it: several domain words, the industry's name, or only the broad industry. */
+  basis: 'domain' | 'name' | 'fallback' | 'none';
+  /** Domain words from the idea that point at this model. */
+  words: string[];
+}
+
 /**
  * The gallery model closest to the idea, in order of evidence: several domain words for one model,
  * then the idea's industry name, then the broad industry's model. Ties go to the broad industry's model.
  */
-export function pickModel(
+export function pickModelWithReason(
   hint: ModelHint,
   industries: { slug: string; label: string }[],
   domainWords: Record<string, string[]> = DOMAIN_WORDS,
-): string | null {
+): ModelPick {
   const known = new Set(industries.map(i => i.slug));
   const fallback = blueprintForIndustry(hint.industryId);
   const named = new Set(words(hint.industry ?? '').map(stem));
@@ -42,17 +50,25 @@ export function pickModel(
   const scored = industries.map(ind => {
     const label = words(ind.label ?? '').map(stem);
     const hits = label.filter(w => named.has(w)).length;
-    return {
-      slug: ind.slug,
-      name: hits ? hits / label.length + hits : 0,
-      domain: (domainWords[ind.slug] ?? []).filter(w => new RegExp(`\\b${escape(w.toLowerCase())}s?\\b`).test(text)).length,
-    };
+    const found = (domainWords[ind.slug] ?? []).filter(w => new RegExp(`\\b${escape(w.toLowerCase())}s?\\b`).test(text));
+    return { slug: ind.slug, name: hits ? hits / label.length + hits : 0, domain: found.length, found };
   });
   const best = (key: 'name' | 'domain', min: number) => {
     const top = Math.max(0, ...scored.map(s => s[key]));
     if (top < min) return null;
     const tied = scored.filter(s => s[key] === top);
-    return (tied.find(s => s.slug === fallback) ?? tied[0]).slug;
+    return tied.find(s => s.slug === fallback) ?? tied[0];
   };
-  return best('domain', 2) ?? best('name', 1) ?? (fallback && known.has(fallback) ? fallback : null);
+  const byDomain = best('domain', 2);
+  if (byDomain) return { slug: byDomain.slug, basis: 'domain', words: byDomain.found };
+  const byName = best('name', 1);
+  if (byName) return { slug: byName.slug, basis: 'name', words: byName.found };
+  if (fallback && known.has(fallback)) return { slug: fallback, basis: 'fallback', words: [] };
+  return { slug: null, basis: 'none', words: [] };
 }
+
+export const pickModel = (
+  hint: ModelHint,
+  industries: { slug: string; label: string }[],
+  domainWords: Record<string, string[]> = DOMAIN_WORDS,
+): string | null => pickModelWithReason(hint, industries, domainWords).slug;
