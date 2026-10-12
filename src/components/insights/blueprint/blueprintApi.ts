@@ -52,14 +52,14 @@ export const blueprintApi = {
     }
     return installedPromise;
   },
-  fit(slug: string, context: string, questions: string[]): Promise<BlueprintFit> {
-    const key = JSON.stringify([slug, context, questions]);
+  fit(slug: string, context: string, questions: string[], suggested: string[] = []): Promise<BlueprintFit> {
+    const key = JSON.stringify([slug, context, questions, suggested]);
     let p = fitPromises.get(key);
     if (!p) {
       p = getJson<BlueprintFit>(`${BASE}/${encodeURIComponent(slug)}/fit`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ context, questions }),
+        body: JSON.stringify({ context, questions, suggested }),
       }).catch(err => {
         fitPromises.delete(key);
         throw err;
@@ -134,15 +134,15 @@ export function useBlueprintDigest(slug: string | null, attempt = 0): Loadable<B
 }
 
 /** The AI's match of the idea to a loaded model; `data` stays null while it thinks or when it fails. */
-export function useBlueprintFit(slug: string | null, context: string, questions: string[]) {
+export function useBlueprintFit(slug: string | null, context: string, questions: string[], suggested: string[] = []) {
   const enabled = !!slug && (!!context.trim() || questions.length > 0);
-  const key = enabled ? JSON.stringify([slug, context, questions]) : '';
+  const key = enabled ? JSON.stringify([slug, context, questions, suggested]) : '';
   const [result, setResult] = useState<{ key: string; data: BlueprintFit | null; failed: boolean } | null>(null);
   useEffect(() => {
     if (!key) return;
-    const [s, c, q] = JSON.parse(key) as [string, string, string[]];
+    const [s, c, q, sg] = JSON.parse(key) as [string, string, string[], string[]];
     let alive = true;
-    blueprintApi.fit(s, c, q)
+    blueprintApi.fit(s, c, q, sg)
       .then(data => alive && setResult({ key, data, failed: false }))
       .catch(() => alive && setResult({ key, data: null, failed: true }));
     return () => { alive = false; };

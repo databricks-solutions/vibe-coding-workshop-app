@@ -167,7 +167,10 @@ export interface BlueprintFit {
     /** Set when the model has nothing for this need. */
     gap: string;
   }[];
-  areas: { name: string; role: 'core' | 'supporting'; why: string }[];
+  /** `join` is a real cross-area link [from_table, to_table] tying the area to another chosen one. */
+  areas: { name: string; role: 'core' | 'supporting'; why: string; join?: [string, string] }[];
+  /** Areas from the quick pick the AI left out, with what their tables actually hold. */
+  skipped?: { name: string; why: string }[];
   questions: { index: number; kpi: string | null }[];
   fit: 'strong' | 'partial' | 'weak';
   summary: string;

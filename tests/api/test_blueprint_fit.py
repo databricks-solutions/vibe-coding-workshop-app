@@ -16,9 +16,14 @@ DIGEST = {
         {"name": "finance", "label": "Finance", "description": "Money"},
     ],
     "tables": [
-        {"id": "flight.flight_leg", "label": "Flight leg", "area": "flight", "purpose": "One leg"},
-        {"id": "airport.turnaround", "label": "Turnaround", "area": "airport", "purpose": "A turn"},
-        {"id": "crew.roster", "label": "Roster", "area": "crew", "purpose": "Who flies"},
+        {"id": "flight.flight_leg", "label": "Flight leg", "area": "flight", "purpose": "One leg",
+         "linksTo": [{"to": "flight.schedule", "via": "Schedule", "reason": ""}]},
+        {"id": "flight.schedule", "label": "Schedule", "area": "flight", "purpose": "Timetable"},
+        {"id": "airport.turnaround", "label": "Turnaround", "area": "airport", "purpose": "A turn",
+         "linksTo": [{"to": "flight.flight_leg", "via": "Inbound leg", "reason": ""}]},
+        {"id": "crew.roster", "label": "Roster", "area": "crew", "purpose": "Who flies",
+         "linksTo": [{"to": "flight.flight_leg", "via": "Leg", "reason": ""}]},
+        {"id": "finance.ledger", "label": "Ledger", "area": "finance", "purpose": "Money in and out"},
     ],
     "kpis": [{"id": "otp", "label": "On-time", "area": "flight"}],
     "links": [{"a": "flight", "b": "airport", "n": 9}, {"a": "flight", "b": "crew", "n": 3}],
@@ -28,8 +33,53 @@ DIGEST = {
 def test_catalog_groups_tables_under_areas():
     cat = fit.catalog_of(DIGEST)
     flight = next(a for a in cat["areas"] if a["name"] == "flight")
-    assert flight["tables"] == [["flight.flight_leg", "Flight leg", "One leg"]]
+    assert flight["tables"][0] == ["flight.flight_leg", "Flight leg", "One leg"]
     assert cat["kpis"] == [["otp", "On-time", "flight"]]
+
+
+def test_catalog_lists_cross_area_joins_busiest_first():
+    joins = fit.catalog_of(DIGEST)["joins"]
+    assert joins == [["airport.turnaround", "flight.flight_leg", "Inbound leg"], ["crew.roster", "flight.flight_leg", "Leg"]]
+
+
+def test_a_named_join_is_kept_only_when_real():
+    out = fit.normalize_fit({"areas": [
+        {"name": "airport", "role": "core", "join": ["airport.turnaround", "flight.flight_leg"]},
+        {"name": "flight", "role": "core", "join": ["flight.flight_leg", "made.up"]},
+    ]}, DIGEST, 0)
+    joins = {a["name"]: a.get("join") for a in out["areas"]}
+    assert joins["airport"] == ["airport.turnaround", "flight.flight_leg"]
+    assert joins["flight"] == ["airport.turnaround", "flight.flight_leg"]
+
+
+def test_a_supporting_area_that_joins_nothing_is_dropped():
+    out = fit.normalize_fit({"areas": [
+        {"name": "flight", "role": "core"}, {"name": "airport", "role": "core"}, {"name": "finance", "role": "supporting"},
+    ]}, DIGEST, 0)
+    assert [a["name"] for a in out["areas"]] == ["flight", "airport"]
+
+
+def test_separate_core_areas_get_a_bridge():
+    out = fit.normalize_fit({"areas": [{"name": "airport", "role": "core"}, {"name": "crew", "role": "core"}]}, DIGEST, 0)
+    bridge = out["areas"][-1]
+    assert (bridge["name"], bridge["role"]) == ("flight", "supporting")
+    assert bridge["why"] == "Connects Airport and Crew"
+    assert all(a.get("join") for a in out["areas"])
+
+
+def test_skipped_keeps_real_unchosen_areas_with_a_reason():
+    out = fit.normalize_fit({
+        "areas": [{"name": "flight", "role": "core"}, {"name": "airport", "role": "core"}],
+        "skipped": [{"name": "crew", "why": "Flight crew only"}, {"name": "airport", "why": "x"},
+                    {"name": "ground", "why": "x"}, {"name": "finance", "why": ""}],
+    }, DIGEST, 0)
+    assert out["skipped"] == [{"name": "crew", "why": "Flight crew only"}]
+
+
+def test_prompt_judges_by_tables_and_sets_the_language():
+    assert "the user's language" not in fit.FIT_PROMPT
+    assert "language the USE CASE is written in" in fit.FIT_PROMPT
+    assert "never by its name" in fit.FIT_PROMPT
 
 
 def test_unknown_ids_are_dropped_and_need_areas_follow_tables():
@@ -78,7 +128,8 @@ def test_bad_role_and_fit_fall_back():
 
 
 def test_fit_retries_once_then_caches(monkeypatch):
-    replies = iter(["not json", '{"areas": [{"name": "flight", "role": "core"}, {"name": "airport", "role": "supporting"}], "fit": "strong"}'])
+    good = '{"areas": [{"name": "flight", "role": "core"}, {"name": "airport", "role": "supporting"}], "fit": "strong"}'
+    replies = iter(["not json", good, good])
     calls = []
 
     async def fake_ask(system_prompt, prompt, max_tokens):
@@ -97,6 +148,9 @@ def test_fit_retries_once_then_caches(monkeypatch):
     assert len(calls) == 2 and "previous reply" in calls[1]
     again = asyncio.run(fit.blueprint_fit("airlines", body))
     assert again == out and len(calls) == 2
+    nudged = fit.FitRequest(context=body.context, questions=body.questions, suggested=["crew", "nope"])
+    asyncio.run(fit.blueprint_fit("airlines", nudged))
+    assert len(calls) == 3 and "SUGGESTED AREAS:\ncrew\n" in calls[2]
 
 
 def test_fit_needs_some_text(monkeypatch):

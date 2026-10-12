@@ -193,13 +193,16 @@ function LoadingState({ label }: { label: string }) {
   );
 }
 
-type AreaNote = { role: 'core' | 'supporting'; why: string };
+type AreaNote = { role: 'core' | 'supporting'; why: string; join?: [string, string] };
+
+/** What a late AI match changed in the quick pick, so it can be explained and undone. */
+type FitChange = { removed: { name: string; why: string }[]; added: string[]; prevFocus: string[]; prevNotes: Record<string, AreaNote> };
 
 const notesFromRank = (picks: AreaPick[]): Record<string, AreaNote> =>
   Object.fromEntries(picks.map(p => [p.name, { role: p.role, why: p.words.length ? `Your idea mentions ${p.words.join(', ')}` : 'Connected to your main areas' }]));
 
 const notesFromFit = (fit: BlueprintFit): Record<string, AreaNote> =>
-  Object.fromEntries(fit.areas.map(a => [a.name, { role: a.role, why: a.why }]));
+  Object.fromEntries(fit.areas.map(a => [a.name, { role: a.role, why: a.why, join: a.join }]));
 
 export function BlueprintScreen({ questions, initialSlug, hint, context, initialChoice, progress, onBack, onNext }: BlueprintScreenProps) {
   const catalog = useBlueprintCatalog();
@@ -225,22 +228,25 @@ export function BlueprintScreen({ questions, initialSlug, hint, context, initial
   /** The user changed areas or KPIs by hand, so a late AI match only offers itself. */
   const [edited, setEdited] = useState(false);
   const [fitApplied, setFitApplied] = useState<BlueprintFit | null>(null);
+  const [change, setChange] = useState<FitChange | null>(null);
 
   useEffect(() => { blueprintApi.capabilities().then(setCaps).catch(() => setCaps(null)); }, []);
 
   const d = digest.data;
-  const fit = useBlueprintFit(d?.slug ?? null, context, questions);
+  const wordRecipes = useMemo(() => (d ? questions.map(q => matchQuestion(q, d)) : []), [d, questions]);
+  const quickPick = useMemo(() => (d ? rankAreas(d, [context, ...questions].join('\n'), wordRecipes) : []), [d, context, questions, wordRecipes]);
+  const fit = useBlueprintFit(d?.slug ?? null, context, questions, quickPick.map(p => p.name));
   const fitData = fit.data && fit.data.slug === d?.slug ? fit.data : null;
   const recipes = useMemo(() => {
     if (!d) return [];
     return questions.map((q, i) => {
-      const r = matchQuestion(q, d);
+      const r = wordRecipes[i];
       if (r.confidence !== 'none') return r;
       const kpiId = fitData?.questions.find(x => x.index === i)?.kpi;
       const kpi = kpiId ? d.kpis.find(k => k.id === kpiId) : null;
       return kpi ? recipeFor(kpi, q) : r;
     });
-  }, [d, questions, fitData]);
+  }, [d, questions, wordRecipes, fitData]);
   const uncovered = recipes.filter(r => r.confidence === 'none').length;
   const matchedAreas = useMemo(() => Array.from(new Set(recipes.filter(r => r.kpi && r.confidence !== 'none').map(r => r.kpi!.area))), [recipes]);
 
@@ -252,32 +258,57 @@ export function BlueprintScreen({ questions, initialSlug, hint, context, initial
       setNotes({});
       setEdited(true);
     } else {
-      const picks = rankAreas(d, [context, ...questions].join('\n'), recipes);
-      setFocus(picks.map(p => p.name));
-      setNotes(notesFromRank(picks));
+      setFocus(quickPick.map(p => p.name));
+      setNotes(notesFromRank(quickPick));
       setPinned(Array.from(new Set(recipes.filter(r => r.kpi && r.confidence !== 'none').map(r => r.kpi!.id))));
       setEdited(false);
     }
     setFitApplied(null);
+    setChange(null);
     setSelectedArea(null);
   }
 
-  const applyFit = (f: BlueprintFit) => {
+  const applyFit = (f: BlueprintFit, auto = false) => {
+    const next = f.areas.map(a => a.name);
+    const removed = focus.filter(n => !next.includes(n)).map(name => ({
+      name,
+      why: f.skipped?.find(s => s.name === name)?.why || 'Not needed for the data this use case depends on',
+    }));
+    const added = next.filter(n => !focus.includes(n));
+    setChange(auto && (removed.length || added.length) ? { removed, added, prevFocus: focus, prevNotes: notes } : null);
     setFitApplied(f);
-    setFocus(f.areas.map(a => a.name));
+    setFocus(next);
     setNotes(notesFromFit(f));
     setPinned(Array.from(new Set(recipes.filter(r => r.kpi && r.confidence !== 'none').map(r => r.kpi!.id))));
     setEdited(false);
   };
-  if (d && fitData && fitApplied !== fitData && seededFor === d.slug && !edited) applyFit(fitData);
+  if (d && fitData && fitApplied !== fitData && seededFor === d.slug && !edited) applyFit(fitData, true);
   const fitOffered = !!fitData && fitApplied !== fitData && edited;
+
+  const undoChange = () => {
+    if (!change) return;
+    setFocus(change.prevFocus);
+    setNotes(change.prevNotes);
+    setEdited(true);
+    setChange(null);
+  };
+  const addBack = (area: string) => {
+    if (!change) return;
+    setFocus(f => (f.includes(area) ? f : [...f, area]));
+    setNotes(n => ({ ...n, [area]: change.prevNotes[area] ?? { role: 'supporting', why: 'Added back by you' } }));
+    setEdited(true);
+    const removed = change.removed.filter(r => r.name !== area);
+    setChange(removed.length || change.added.length ? { ...change, removed } : null);
+  };
 
   const toggleFocus = (area: string) => {
     setEdited(true);
+    setChange(null);
     setFocus(f => (f.includes(area) ? f.filter(a => a !== area) : [...f, area]));
   };
   const togglePin = (kpiId: string) => {
     setEdited(true);
+    setChange(null);
     const kpi = d?.kpis.find(k => k.id === kpiId);
     setPinned(p => (p.includes(kpiId) ? p.filter(x => x !== kpiId) : [...p, kpiId]));
     if (kpi && !pinned.includes(kpiId)) setFocus(f => (f.includes(kpi.area) ? f : [...f, kpi.area]));
@@ -336,6 +367,10 @@ export function BlueprintScreen({ questions, initialSlug, hint, context, initial
             focus={focus}
             notes={notes}
             offered={fitOffered}
+            refining={fit.loading && !fitApplied && !edited}
+            change={change}
+            onUndo={undoChange}
+            onAddBack={addBack}
             onUseSuggested={() => fitData && applyFit(fitData)}
             onShowArea={showArea}
             onToggleArea={toggleFocus}
@@ -524,14 +559,26 @@ interface FitPanelProps {
   notes: Record<string, AreaNote>;
   /** A fresh match arrived after the user edited the areas. */
   offered: boolean;
+  /** The quick word-based pick is showing and the AI is still reading the tables. */
+  refining: boolean;
+  change: FitChange | null;
+  onUndo: () => void;
+  onAddBack: (area: string) => void;
   onUseSuggested: () => void;
   onShowArea: (area: string) => void;
   onToggleArea: (area: string) => void;
 }
 
 /** The areas picked for the idea and, once the AI has read it, what the use case needs from the model. */
-function FitPanel({ digest, fit, loading, focus, notes, offered, onUseSuggested, onShowArea, onToggleArea }: FitPanelProps) {
+function FitPanel({ digest, fit, loading, focus, notes, offered, refining, change, onUndo, onAddBack, onUseSuggested, onShowArea, onToggleArea }: FitPanelProps) {
   const labelOf = (name: string) => digest.areas.find(a => a.name === name)?.label ?? name;
+  const tableOf = (id: string) => digest.tables.find(t => t.id === id);
+  const joinText = (area: string, join?: [string, string]) => {
+    if (!join) return '';
+    const other = join.map(tableOf).find(t => t && t.area !== area);
+    const [from, to] = join.map(id => tableOf(id)?.label ?? id);
+    return other ? `Joins ${labelOf(other.area)} via ${from} → ${to}` : '';
+  };
   const ordered = [...focus].sort((a, b) => Number(notes[a]?.role === 'supporting') - Number(notes[b]?.role === 'supporting'));
   const needs = fit ? [...fit.needs].sort((a, b) => Number(!!a.gap) - Number(!!b.gap) || Number(a.importance === 'nice') - Number(b.importance === 'nice')) : [];
   const gaps = needs.filter(n => n.gap).length;
@@ -542,7 +589,8 @@ function FitPanel({ digest, fit, loading, focus, notes, offered, onUseSuggested,
         {fit && <span className={`px-2 py-0.5 rounded-full text-ui-xs font-medium ${FIT_LABEL[fit.fit].tone}`}>{FIT_LABEL[fit.fit].text}</span>}
         {loading && (
           <span className="inline-flex items-center gap-1.5 text-ui-xs text-muted-foreground">
-            <Loader2 className="w-3.5 h-3.5 animate-spin text-primary" /> Reading your use case to match it to the model…
+            <Loader2 className="w-3.5 h-3.5 animate-spin text-primary" />
+            {refining ? 'First guess from your words. Reading the tables to refine it…' : 'Reading your use case to match it to the model…'}
           </span>
         )}
         {offered && (
@@ -552,6 +600,26 @@ function FitPanel({ digest, fit, loading, focus, notes, offered, onUseSuggested,
         )}
       </div>
       {fit?.summary && <p className="text-ui-sm text-muted-foreground leading-relaxed -mt-2">{fit.summary}</p>}
+
+      {change && (
+        <div className="rounded-xl border border-primary/25 bg-primary/[0.04] px-3 py-2.5 space-y-1.5">
+          <div className="flex items-center gap-2">
+            <Sparkles className="w-3.5 h-3.5 text-primary shrink-0" />
+            <p className="text-ui-sm text-foreground">
+              Updated after reading the tables
+              {change.removed.length > 0 && <>: removed {change.removed.map(r => labelOf(r.name)).join(', ')}</>}
+              {change.added.length > 0 && <>{change.removed.length ? '; added ' : ': added '}{change.added.map(labelOf).join(', ')}</>}
+            </p>
+            <button onClick={onUndo} className="ml-auto text-ui-sm font-semibold text-primary hover:underline underline-offset-2">Undo</button>
+          </div>
+          {change.removed.map(r => (
+            <div key={r.name} className="flex items-start gap-2 pl-5 text-ui-xs">
+              <span className="text-muted-foreground leading-snug"><span className="font-medium text-foreground">{labelOf(r.name)}</span>: {r.why}</span>
+              <button onClick={() => onAddBack(r.name)} className="ml-auto shrink-0 font-medium text-primary hover:underline underline-offset-2">Add back</button>
+            </div>
+          ))}
+        </div>
+      )}
 
       <div className="flex flex-wrap gap-2">
         {ordered.map(name => (
@@ -563,6 +631,9 @@ function FitPanel({ digest, fit, loading, focus, notes, offered, onUseSuggested,
                 <span className="text-ui-2xs uppercase tracking-wider text-muted-foreground">{notes[name]?.role ?? 'added by you'}</span>
               </span>
               {notes[name]?.why && <span className="block text-ui-xs text-muted-foreground mt-0.5 leading-snug">{notes[name].why}</span>}
+              {joinText(name, notes[name]?.join) && (
+                <span className="block text-ui-2xs text-muted-foreground/80 mt-1 leading-snug">{joinText(name, notes[name]?.join)}</span>
+              )}
             </button>
             <button onClick={() => onToggleArea(name)} aria-label={`Remove ${labelOf(name)}`} className="text-muted-foreground/60 hover:text-foreground text-ui-sm leading-none mt-0.5">×</button>
           </div>

@@ -26,7 +26,7 @@ from typing import Any, Dict, List
 os.environ.setdefault("USE_LAKEBASE", "false")
 
 from src.backend.api import blueprints  # noqa: E402
-from src.backend.api.blueprint_fit import FitRequest, PickRequest, blueprint_fit, blueprint_pick  # noqa: E402
+from src.backend.api.blueprint_fit import FitRequest, PickRequest, _adjacency, _groups, blueprint_fit, blueprint_pick  # noqa: E402
 
 GOLDEN: List[Dict[str, Any]] = [
     {
@@ -47,6 +47,27 @@ GOLDEN: List[Dict[str, Any]] = [
         "expect": ["airport", "flight"],
         "acceptable": ["crew", "fleet", "maintenance", "passenger", "finance", "route", "reservation", "inventory"],
         "gaps": ["equipment", "gse", "ground staff", "ground support", "roster"],
+    },
+    {
+        "id": "gate_crew",
+        "slug": "airlines",
+        "context": (
+            "Gate Crew Assignment Optimizer. Gate Operations Supervisors see crew coverage gaps by gate and bank before "
+            "each push, not after a missed one. Ramp and gate managers assign crew manually or reactively; a missed push "
+            "or ATC slot loss costs $5k-$15k. A Bank Readiness Dashboard with Genie shows crew coverage by gate and bank "
+            "for the current and next bank, flags gates below minimum crew before push, and shows idle crew available "
+            "for redeployment. Success: 10-20% fewer controllable ground delay minutes per departure bank. Data comes "
+            "from existing gate scheduling and crew assignment systems. Out of scope: payroll, HR, automated dispatch."
+        ),
+        "questions": [
+            "Which gates are short of crew in the next bank?",
+            "How many controllable ground delay minutes did we have per departure bank last week?",
+            "Which crew are idle right now?",
+        ],
+        "suggested": ["crew", "route", "flight", "airport"],
+        "expect": ["airport", "flight"],
+        "acceptable": ["route"],
+        "gaps": ["ground staff", "ramp", "shift", "roster", "gate crew", "crew assignment", "staff"],
     },
     {
         "id": "retail_stockouts",
@@ -104,7 +125,7 @@ GOLDEN: List[Dict[str, Any]] = [
 
 
 def _clear_llm_cache() -> None:
-    for k in [k for k in blueprints._CACHE if k.startswith(("fit:", "pick:"))]:
+    for k in [k for k in blueprints._CACHE if k.startswith(("fit2:", "pick:"))]:
         blueprints._CACHE.pop(k, None)
 
 
@@ -116,11 +137,14 @@ async def run_case(case: Dict[str, Any]) -> Dict[str, Any]:
     except Exception as e:  # noqa: BLE001
         out["pick"] = f"error: {e}"
     try:
-        fit = await blueprint_fit(case["slug"], FitRequest(context=case["context"], questions=case["questions"]))
+        body = FitRequest(context=case["context"], questions=case["questions"], suggested=case.get("suggested", []))
+        fit = await blueprint_fit(case["slug"], body)
     except Exception as e:  # noqa: BLE001
         out["error"] = str(getattr(e, "detail", e))
         return out
     areas = [a["name"] for a in fit["areas"]]
+    digest = await blueprints.load_digest(case["slug"])
+    connected = len(_groups(areas, _adjacency(digest))) == 1
     allowed = set(case["expect"]) | set(case["acceptable"])
     gap_text = " ".join(n["gap"].lower() + " " + n["need"].lower() for n in fit["needs"] if n["gap"])
     out.update({
@@ -132,8 +156,11 @@ async def run_case(case: Dict[str, Any]) -> Dict[str, Any]:
         "recall": sum(a in areas for a in case["expect"]) / len(case["expect"]),
         "precision": sum(a in allowed for a in areas) / len(areas) if areas else 0.0,
         "gap_ok": (not case["gaps"]) or any(g in gap_text for g in case["gaps"]),
+        "connected": connected,
+        "joins": {a["name"]: a.get("join") for a in fit["areas"]},
+        "skipped": fit.get("skipped", []),
     })
-    out["pass"] = out["pick_ok"] and out["recall"] == 1 and out["precision"] >= 0.75 and out["gap_ok"]
+    out["pass"] = out["pick_ok"] and out["recall"] == 1 and out["precision"] >= 0.75 and out["gap_ok"] and connected
     return out
 
 
@@ -168,6 +195,7 @@ async def main() -> int:
         flag = "PASS" if r["pass"] else "FAIL"
         print(f"{flag} {case['id']:<17} pick={r.get('pick')} areas={r.get('areas')} fit={r.get('fit')} "
               f"recall={r.get('recall')} precision={round(r.get('precision', 0), 2)} gap_ok={r.get('gap_ok')} "
+              f"connected={r.get('connected')} "
               f"agreement={r['agreement']}" + (f" error={r['error']}" if r.get("error") else ""))
         for i, x in enumerate(runs[1:], 2):
             if not x.get("pass"):
