@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { BookOpen, GraduationCap, LayoutGrid, Map as MapIcon, Menu, Route, Search } from 'lucide-react';
-import { ThemeToggle } from '../ThemeToggle';
 import type { TourId } from '../../constants/skillsNavigatorData';
 import { GalaxyMap } from './GalaxyMap';
 import { GuidedTours } from './GuidedTours';
@@ -123,7 +122,6 @@ export function SkillsNavigatorPage({ onOpenMobileNav }: SkillsNavigatorPageProp
             <span className="hidden md:inline flex-1 text-left">Search</span>
             <kbd className="hidden md:inline rounded border border-border px-1.5 text-ui-2xs">⌘K</kbd>
           </button>
-          <ThemeToggle />
         </div>
         <div className="px-4 pb-3 pt-3 md:px-6">
           <div role="tablist" aria-label="Academy sections" className="inline-flex max-w-full gap-1 overflow-x-auto rounded-xl bg-secondary p-1">

@@ -1,18 +1,27 @@
 import { Component, Suspense, lazy, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { AnimatePresence, MotionConfig, motion } from 'framer-motion';
+import { Route } from 'lucide-react';
 import { apiClient } from '../../api/client';
 import { ASSISTANT_CATALOG } from '../../constants/codingAssistants';
 import { WORKSHOP_LEVELS } from '../../constants/workflowSections';
-import { composeBrief, parseBrief, toSlug, type DataSource } from './brief';
-import { blueprintForIndustry } from './blueprint/industryMap';
+import {
+  BusinessCaseSheet, JourneyProgress, JourneyScreen, SHAPE_KINDS, answerFor, caseFigures, chosenShape, money, placedLeaf, seedFromUseCase, useIdeas,
+  type Idea, type StepKey,
+} from '../journeykit';
+import { composeBrief, fitName, parseBrief, toSlug, type DataSource, type IdeaBrief } from './brief';
+import type { ModelHint } from './blueprint/industryMap';
 import type { BlueprintChoice } from './blueprint/types';
 import { INDUSTRY_IDEAS } from './journey';
-import { insightsIndustryFor, type ApprovedUseCase } from './usecases/useCaseApi';
-import { AskScreen } from './screens/AskScreen';
+import { openPathComparison } from './pathEvents';
+import { insightsPhases, type InsightsStage } from './progress';
+import { insightsIndustryFor } from './usecases/useCaseApi';
 import { DataScreen } from './screens/DataScreen';
+import { IdeaLockedScreen } from './screens/IdeaLockedScreen';
+import { IdeaStage } from './screens/IdeaStage';
 import { LaunchScreen } from './screens/LaunchScreen';
 import { NoticeScreen } from './screens/NoticeScreen';
 import { ReadyScreen } from './screens/ReadyScreen';
+import { StartScreen } from './screens/StartScreen';
 import { InsightsStudio } from './studio/InsightsStudio';
 import type { InsightsFlowProps, WorkspaceLinks } from './types';
 
@@ -96,7 +105,29 @@ function useWorkspaceLinks(): WorkspaceLinks {
   return links;
 }
 
-type OnboardingStep = 'ask' | 'data' | 'blueprint' | 'ready';
+/** The shaped idea as the labelled lines the build prompts read. */
+function ideaBriefOf(idea: Idea): IdeaBrief {
+  const shape = chosenShape(idea);
+  const figures = caseFigures(idea);
+  const who = placedLeaf(idea)?.personas ?? idea.useCaseContext?.personas.map(p => p.name) ?? [];
+  return {
+    headline: idea.title,
+    problem: idea.spark?.statement,
+    who: who.join(', '),
+    metric: answerFor(idea, 'business'),
+    approach: shape ? `${shape.title} (${SHAPE_KINDS[shape.kind].label}): ${shape.value}` : undefined,
+    value: figures ? `about ${money(figures.value.expected)} a year from ${figures.driverLabel.toLowerCase()}` : undefined,
+    origin: idea.sourceUseCase ? `the approved use case "${idea.sourceUseCase.label}"` : 'their own idea',
+  };
+}
+
+function industryIdOf(idea: Idea | undefined, fallback: string): string {
+  if (!idea) return fallback;
+  if (idea.sourceUseCase) return insightsIndustryFor(idea.sourceUseCase.industry) || fallback;
+  return INDUSTRY_IDEAS.find(i => i.label === idea.industry)?.id
+    || insightsIndustryFor(idea.spark?.catalogIndustry ?? '')
+    || fallback;
+}
 
 function InsightsFlowInner(props: InsightsFlowProps) {
   const {
@@ -107,45 +138,106 @@ function InsightsFlowInner(props: InsightsFlowProps) {
 
   const links = useWorkspaceLinks();
   const parsed = useMemo(() => parseBrief(customDescription || stepPrompts[1] || ''), [customDescription, stepPrompts]);
+  const { ideas, createIdea, updateIdea, deleteIdea } = useIdeas();
 
-  const [step, setStep] = useState<OnboardingStep>('ask');
-  const [questions, setQuestions] = useState<string[]>([]);
-  const [industryId, setIndustryId] = useState('');
+  const [stage, setStage] = useState<InsightsStage>('start');
+  const [ideaId, setIdeaId] = useState<string | null>(null);
+  const [lockSeen, setLockSeen] = useState<string | undefined>();
+  const [startIndustry, setStartIndustry] = useState('');
   const [dataSource, setDataSource] = useState<DataSource | null>(null);
   const [dataLocation, setDataLocation] = useState('');
   const [blueprint, setBlueprint] = useState<BlueprintChoice | null>(null);
-  const [useCase, setUseCase] = useState<ApprovedUseCase | null>(null);
   const [preferredSlug, setPreferredSlug] = useState<string | null>(null);
   const [name, setName] = useState('');
   const [launching, setLaunching] = useState(false);
-  const [seededFor, setSeededFor] = useState<string | null>(null);
+  const [seededFor, setSeededFor] = useState<string | null | undefined>(undefined);
+  const [caseOpen, setCaseOpen] = useState(false);
 
-  // Start each session's onboarding from whatever brief it already has.
+  const idea = ideaId ? ideas.find(i => i.id === ideaId) : undefined;
+
+  // Each project starts from its linked idea, if it has one. A project created from
+  // an unlinked idea keeps it, so starting the build never loses your place.
   if (isSessionLoaded && seededFor !== sessionId) {
     setSeededFor(sessionId);
-    setStep('ask');
-    setQuestions(parsed.questions);
-    setDataSource(parsed.questions.length ? parsed.dataSource : null);
-    setDataLocation(parsed.dataLocation);
-    setBlueprint(parsed.blueprint);
-    setUseCase(parsed.useCase);
-    setName(parsed.questions.length ? (customUseCaseLabel || selectedUseCaseLabel) : '');
-    setIndustryId(INDUSTRY_IDEAS.find(i => i.label === selectedIndustryLabel)?.id ?? insightsIndustryFor(selectedIndustry));
+    const carried = idea && !idea.sessionId ? idea : undefined;
+    if (!carried) {
+      const linked = sessionId ? ideas.find(i => (i.mode === 'insights' || i.buildTarget === 'insights') && i.sessionId === sessionId) : undefined;
+      setIdeaId(linked?.id ?? null);
+      setLockSeen(linked?.lockedAt);
+      setStage(linked ? (linked.lockedAt ? (linked.buildStage === 'data' && linked.genieQuestions?.length ? 'data' : 'locked') : 'idea') : 'start');
+      setDataSource(parsed.questions.length ? parsed.dataSource : null);
+      setDataLocation(parsed.dataLocation);
+      setBlueprint(parsed.blueprint);
+      setName(fitName(linked?.title ?? (parsed.questions.length ? (customUseCaseLabel || selectedUseCaseLabel) : '')));
+      setStartIndustry(INDUSTRY_IDEAS.find(i => i.label === selectedIndustryLabel)?.id ?? insightsIndustryFor(selectedIndustry));
+    }
+  }
+
+  // Locking the brief hands the idea to the build.
+  if (stage === 'idea' && idea?.lockedAt && idea.lockedAt !== lockSeen) {
+    setLockSeen(idea.lockedAt);
+    setName(fitName(idea.title));
+    setStage('locked');
+  }
+  // Building needs a locked idea; editing one sends you back to finish it.
+  if ((stage === 'locked' || stage === 'data' || stage === 'blueprint' || stage === 'ready') && !idea?.lockedAt) {
+    setStage(idea ? 'idea' : 'start');
   }
 
   useEffect(() => {
+    if (idea && !idea.sessionId && sessionId && !readOnly) updateIdea(idea.id, { sessionId });
+  }, [idea, sessionId, readOnly, updateIdea]);
+
+  useEffect(() => {
     document.querySelector('main .overflow-auto')?.scrollTo({ top: 0, behavior: 'smooth' });
-  }, [step, launching]);
+  }, [stage, launching]);
 
   const isGeniePath = workshopLevel === 'genie-accelerator';
   const ready = isGeniePath && completedSteps.has(1) && !!selectedUseCase;
   const builtElsewhere = !isGeniePath && Array.from(completedSteps).some(s => s >= 2);
   const assistantName = ASSISTANT_CATALOG.find(a => a.id === codingAssistant)?.name ?? 'Genie Code';
 
+  const questions = idea?.genieQuestions ?? [];
+  const useCase = idea?.sourceUseCase ?? null;
+  const industryId = industryIdOf(idea, startIndustry);
+  const modelHint: ModelHint = {
+    industryId,
+    industry: idea?.spark?.industry,
+    text: [idea?.title, idea?.seed, idea?.spark?.statement, ...questions].filter(Boolean).join(' '),
+  };
+  const usingBlueprint = dataSource === 'blueprint';
+
+  const phases = (viewStep?: StepKey | null) => insightsPhases({ stage, idea, viewStep, blueprint: usingBlueprint });
+  const progress = <JourneyProgress phases={phases()} trailing="then 4 build chapters" />;
+  const compare = (
+    <button onClick={openPathComparison} className="inline-flex items-center gap-1.5 text-ui-sm text-muted-foreground hover:text-foreground transition-colors">
+      <Route className="w-4 h-4" /> <span className="hidden lg:inline">Compare paths</span>
+    </button>
+  );
+
+  const openIdea = (next: Idea) => {
+    setIdeaId(next.id);
+    setLockSeen(undefined);
+    setStage('idea');
+  };
+
+  const discardIdea = () => {
+    if (idea) deleteIdea(idea.id);
+    setIdeaId(null);
+    setStage('start');
+  };
+
+  const editIdea = () => {
+    setLockSeen(idea?.lockedAt);
+    setStage('idea');
+  };
+
+  const openCase = idea?.brief ? () => setCaseOpen(true) : undefined;
+
   const start = () => {
-    if (!dataSource || readOnly) return;
+    if (!dataSource || readOnly || !idea) return;
     const industry = INDUSTRY_IDEAS.find(i => i.id === industryId);
-    const finalName = name.trim() || 'My Insights Genie';
+    const finalName = fitName(name) || fitName(idea.title) || 'My Insights Genie';
     const useBlueprint = dataSource === 'blueprint' && blueprint;
     onStart({
       industry: useCase?.industry ?? industry?.id ?? 'general',
@@ -160,6 +252,7 @@ function InsightsFlowInner(props: InsightsFlowProps) {
         dataLocation: useBlueprint ? blueprint.catalog : dataLocation.trim(),
         blueprint: useBlueprint ? blueprint : null,
         useCase,
+        idea: ideaBriefOf(idea),
       }),
     });
     setLaunching(true);
@@ -219,72 +312,91 @@ function InsightsFlowInner(props: InsightsFlowProps) {
         onSwitchToTechnical={onSwitchToTechnical}
       />
     );
-  } else if (step === 'ask') {
-    key = 'ask';
+  } else if (stage === 'start' || !idea) {
+    key = 'start';
     content = (
-      <AskScreen
-        questions={questions}
-        onQuestionsChange={setQuestions}
+      <JourneyScreen progress={progress} tools={compare}>
+        <StartScreen
+          industryId={startIndustry}
+          onIndustryChange={setStartIndustry}
+          replacingExisting={completedSteps.has(1)}
+          onApproved={(uc, qs, preview) => openIdea(seedFromUseCase(createIdea, {
+            uc,
+            context: { summary: preview.summary, personas: preview.personas, entities: preview.entities, capabilities: preview.capabilities, valueProfile: preview.valueProfile ?? null },
+            questions: qs,
+            sessionId,
+          }))}
+          onOwn={text => openIdea(createIdea(text, INDUSTRY_IDEAS.find(i => i.id === startIndustry)?.label ?? '', {
+            mode: 'insights',
+            sessionId,
+            startPath: 'own',
+          }))}
+        />
+      </JourneyScreen>
+    );
+  } else if (stage === 'idea') {
+    key = `idea-${idea.id}`;
+    content = (
+      <IdeaStage
+        key={idea.id}
+        ideaId={idea.id}
         industryId={industryId}
-        onIndustryChange={setIndustryId}
-        replacingExisting={completedSteps.has(1)}
-        useCase={useCase}
-        onUseCaseApply={(uc, qs) => {
-          setUseCase(uc);
-          setQuestions(prev => [...prev, ...qs.filter(q => !prev.includes(q))].slice(0, 6));
-          if (!industryId) setIndustryId(insightsIndustryFor(uc.industry));
-          if (!name.trim() || name === useCase?.label) setName(uc.label);
-        }}
-        onUseCaseClear={() => setUseCase(null)}
-        onNext={() => setStep('data')}
+        phasesFor={phases}
+        tools={compare}
+        onBackFromFirst={idea.approved.length === 0 ? discardIdea : undefined}
+        onChangeUseCase={discardIdea}
       />
     );
-  } else if (step === 'data') {
+  } else if (stage === 'locked') {
+    key = 'locked';
+    content = (
+      <JourneyScreen progress={progress} tools={compare}>
+        <IdeaLockedScreen idea={idea} readOnly={readOnly} onEdit={editIdea} onOpenCase={openCase} onNext={() => setStage('data')} />
+      </JourneyScreen>
+    );
+  } else if (stage === 'data') {
     key = 'data';
     content = (
       <DataScreen
-        industryId={industryId}
+        hint={modelHint}
         value={dataSource}
         location={dataLocation}
+        progress={progress}
         onChange={setDataSource}
         onLocationChange={setDataLocation}
-        onBack={() => setStep('ask')}
+        onBack={() => setStage('locked')}
         onOpenInstalled={slug => {
           setDataSource('blueprint');
           setPreferredSlug(slug);
           if (blueprint && blueprint.slug !== slug) setBlueprint(null);
-          setStep('blueprint');
+          setStage('blueprint');
         }}
         onNext={() => {
           if (dataSource === 'blueprint') {
-            setStep('blueprint');
+            setStage('blueprint');
             return;
           }
-          if (!name.trim()) {
-            const industry = INDUSTRY_IDEAS.find(i => i.id === industryId);
-            setName(industry ? `${industry.label} Insights` : 'My Insights Genie');
-          }
-          setStep('ready');
+          if (!name.trim()) setName(fitName(idea.title));
+          setStage('ready');
         }}
       />
     );
-  } else if (step === 'blueprint') {
+  } else if (stage === 'blueprint') {
     key = 'blueprint';
     content = (
-      <BlueprintBoundary onBack={() => setStep('data')} onSwitchToTechnical={onSwitchToTechnical}>
+      <BlueprintBoundary onBack={() => setStage('data')} onSwitchToTechnical={onSwitchToTechnical}>
         <Suspense fallback={<div className="min-h-[50vh]" />}>
           <BlueprintScreen
             questions={questions}
-            initialSlug={preferredSlug ?? blueprintForIndustry(industryId)}
+            initialSlug={preferredSlug}
+            hint={modelHint}
             initialChoice={blueprint}
-            onBack={() => setStep('data')}
+            progress={progress}
+            onBack={() => setStage('data')}
             onNext={choice => {
               setBlueprint(choice);
-              if (!name.trim()) {
-                const industry = INDUSTRY_IDEAS.find(i => i.id === industryId);
-                setName(`${industry?.label ?? choice.label} Insights`);
-              }
-              setStep('ready');
+              if (!name.trim()) setName(fitName(idea.title || `${choice.label} Insights`));
+              setStage('ready');
             }}
           />
         </Suspense>
@@ -292,15 +404,20 @@ function InsightsFlowInner(props: InsightsFlowProps) {
     );
   } else {
     key = 'ready';
+    const shape = chosenShape(idea);
     content = (
       <ReadyScreen
+        progress={progress}
+        idea={{ headline: idea.title, problem: idea.spark?.statement, approach: shape ? { label: shape.title, kind: shape.kind } : undefined }}
+        onEditIdea={editIdea}
+        onOpenCase={openCase}
         name={name}
         onNameChange={setName}
         questionCount={questions.length}
-        dataLabel={dataSource === 'blueprint' && blueprint ? `the ${blueprint.label} industry data model` : DATA_LABELS[dataSource && dataSource !== 'blueprint' ? dataSource : 'existing']}
-        blueprint={dataSource === 'blueprint' ? blueprint : null}
+        dataLabel={usingBlueprint && blueprint ? `the ${blueprint.label} industry data model` : DATA_LABELS[dataSource && dataSource !== 'blueprint' ? dataSource : 'existing']}
+        blueprint={usingBlueprint ? blueprint : null}
         useCase={useCase}
-        onBack={() => setStep(dataSource === 'blueprint' ? 'blueprint' : 'data')}
+        onBack={() => setStage(usingBlueprint ? 'blueprint' : 'data')}
         onStart={start}
         readOnly={readOnly}
       />
@@ -308,11 +425,16 @@ function InsightsFlowInner(props: InsightsFlowProps) {
   }
 
   return (
-    <AnimatePresence mode="wait" initial={false}>
-      <motion.div key={key} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }} className="pb-24">
-        {content}
-      </motion.div>
-    </AnimatePresence>
+    <>
+      <AnimatePresence mode="wait" initial={false}>
+        <motion.div key={key} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }} className="pb-24">
+          {content}
+        </motion.div>
+      </AnimatePresence>
+      {caseOpen && idea && (
+        <BusinessCaseSheet ideaId={idea.id} onClose={() => setCaseOpen(false)} onAddNumbers={() => { setCaseOpen(false); editIdea(); }} />
+      )}
+    </>
   );
 }
 

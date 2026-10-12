@@ -1,10 +1,8 @@
 import { useMemo } from 'react';
 import { motion, useReducedMotion } from 'framer-motion';
 import { ArrowRight } from 'lucide-react';
-import { ART } from '../../ideate/art';
+import { ART, PrimaryButton } from '../../journeykit';
 import { CHAPTERS, type ChapterId } from '../journey';
-import { PrimaryButton } from '../ui';
-
 const CONFETTI_COLORS = ['bg-primary', 'bg-emerald-400', 'bg-amber-400', 'bg-sky-400', 'bg-pink-400'];
 
 /** Deterministic 0..1 scatter so renders stay pure. */

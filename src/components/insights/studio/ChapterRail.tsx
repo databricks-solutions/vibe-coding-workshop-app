@@ -1,4 +1,5 @@
 import { Check } from 'lucide-react';
+import { StepSegment } from '../../journeykit';
 import { CHAPTERS, MOMENTS, momentsIn } from '../journey';
 
 interface ChapterRailProps {
@@ -53,11 +54,7 @@ export function ChapterRail({ activeStep, isDone, reachableUpTo, onSelect }: Cha
                     onClick={() => onSelect(m.step)}
                     className="flex-1 py-1.5 group/seg disabled:cursor-not-allowed"
                   >
-                    <span
-                      className={`block h-1.5 rounded-full transition-all duration-500 ${
-                        done ? 'bg-primary' : current ? 'bg-primary/40 ring-2 ring-primary/30' : 'bg-border group-hover/seg:bg-muted-foreground/40'
-                      } ${current ? 'scale-y-125' : ''}`}
-                    />
+                    <StepSegment state={done ? 'done' : current ? 'current' : 'upcoming'} />
                   </button>
                 );
               })}

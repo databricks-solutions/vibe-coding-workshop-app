@@ -1,3 +1,5 @@
+import { DOMAIN_WORDS, stem } from './vocabulary';
+
 /** Insights industry ideas (journey.ts) to their closest data model in the gallery. */
 export const INDUSTRY_TO_BLUEPRINT: Record<string, string> = {
   retail: 'retail',
@@ -9,3 +11,48 @@ export const INDUSTRY_TO_BLUEPRINT: Record<string, string> = {
 };
 
 export const blueprintForIndustry = (industryId: string): string | null => INDUSTRY_TO_BLUEPRINT[industryId] ?? null;
+
+/** What we know about the idea when choosing a data model. */
+export interface ModelHint {
+  /** Broad Insights industry id, the fallback. */
+  industryId: string;
+  /** The idea's own industry, e.g. "Airlines", from the idea or its use case. */
+  industry?: string;
+  /** Title, problem and questions. */
+  text?: string;
+}
+
+const words = (s: string) => s.toLowerCase().replace(/&/g, ' ').replace(/[^a-z0-9 ]+/g, ' ').split(/\s+/).filter(w => w.length > 2 && w !== 'and');
+const escape = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+/**
+ * The gallery model closest to the idea, in order of evidence: several domain words for one model,
+ * then the idea's industry name, then the broad industry's model. Ties go to the broad industry's model.
+ */
+export function pickModel(
+  hint: ModelHint,
+  industries: { slug: string; label: string }[],
+  domainWords: Record<string, string[]> = DOMAIN_WORDS,
+): string | null {
+  const known = new Set(industries.map(i => i.slug));
+  const fallback = blueprintForIndustry(hint.industryId);
+  const named = new Set(words(hint.industry ?? '').map(stem));
+  const text = ` ${(hint.text ?? '').toLowerCase()} `;
+
+  const scored = industries.map(ind => {
+    const label = words(ind.label ?? '').map(stem);
+    const hits = label.filter(w => named.has(w)).length;
+    return {
+      slug: ind.slug,
+      name: hits ? hits / label.length + hits : 0,
+      domain: (domainWords[ind.slug] ?? []).filter(w => new RegExp(`\\b${escape(w.toLowerCase())}s?\\b`).test(text)).length,
+    };
+  });
+  const best = (key: 'name' | 'domain', min: number) => {
+    const top = Math.max(0, ...scored.map(s => s[key]));
+    if (top < min) return null;
+    const tied = scored.filter(s => s[key] === top);
+    return (tied.find(s => s.slug === fallback) ?? tied[0]).slug;
+  };
+  return best('domain', 2) ?? best('name', 1) ?? (fallback && known.has(fallback) ? fallback : null);
+}

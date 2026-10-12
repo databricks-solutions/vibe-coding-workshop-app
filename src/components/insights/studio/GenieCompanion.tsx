@@ -3,7 +3,7 @@ import { ArrowUpRight, Check, Circle, Copy, Loader2, Sparkles } from 'lucide-rea
 import { useState } from 'react';
 import { useCopyToClipboard } from '../../../hooks/useCopyToClipboard';
 import { MOMENTS } from '../journey';
-import { ProgressRing } from '../ui';
+import { ProgressRing } from '../../journeykit';
 
 const GENIE_CREATED_STEP = 62;
 const GENIE_TUNED_STEP = 66;

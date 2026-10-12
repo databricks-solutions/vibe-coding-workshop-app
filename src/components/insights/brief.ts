@@ -11,6 +11,19 @@ export interface InsightsBrief {
   dataLocation: string;
   blueprint?: BlueprintChoice | null;
   useCase?: ApprovedUseCase | null;
+  idea?: IdeaBrief | null;
+}
+
+/** The shaped idea, written as one labelled line per field above the questions. */
+export interface IdeaBrief {
+  headline: string;
+  problem?: string;
+  who?: string;
+  metric?: string;
+  approach?: string;
+  notDoing?: string[];
+  value?: string;
+  origin?: string;
 }
 
 const QUESTIONS_HEADER = 'Questions this should answer:';
@@ -25,6 +38,23 @@ const DATA_PHRASES: Record<DataSource, string> = {
   sample: 'Use realistic sample data',
   blueprint: 'Use the industry data model',
 };
+
+/** The session API rejects longer custom use case labels. */
+export const MAX_NAME_LENGTH = 30;
+
+/** Shortens a name to fit, at a word boundary where possible. */
+export function fitName(s: string): string {
+  const t = s.trim().replace(/\s+/g, ' ');
+  if (t.length <= MAX_NAME_LENGTH) return t;
+  const cut = t.slice(0, MAX_NAME_LENGTH + 1);
+  const space = cut.lastIndexOf(' ');
+  let out = space > 12 ? cut.slice(0, space) : t.slice(0, MAX_NAME_LENGTH);
+  for (let prev = ''; prev !== out;) {
+    prev = out;
+    out = out.replace(/[\s,;:–-]+$/, '').replace(/\s+(for|of|and|or|the|to|in|on|with|a|an|by|at|from)$/i, '');
+  }
+  return out;
+}
 
 export const toSlug = (s: string) =>
   s.trim().toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
@@ -51,6 +81,7 @@ export function composeBrief(b: InsightsBrief): string {
   const lines = [
     `${b.name}: a Genie space that lets ${audience}business users ask questions about their data in plain English and get trusted, consistent answers, plus an AI/BI dashboard built on the same governed metrics. It builds on data that already exists; no new apps or pipelines.`,
     '',
+    ...(b.idea ? [...ideaLines(b.idea), ''] : []),
     QUESTIONS_HEADER,
     ...b.questions.map(q => `- ${q}`),
     '',
@@ -59,6 +90,21 @@ export function composeBrief(b: InsightsBrief): string {
     ...(b.useCase ? [approvedUseCaseLine(b.useCase)] : []),
   ];
   return lines.join('\n');
+}
+
+function ideaLines(i: IdeaBrief): string[] {
+  const one = (v?: string) => (v ?? '').replace(/\s+/g, ' ').trim();
+  const fields: [string, string][] = [
+    ['Idea', one(i.headline)],
+    ['Problem', one(i.problem)],
+    ['Who', one(i.who)],
+    ['Success metric', one(i.metric)],
+    ['Approach', one(i.approach)],
+    ['First version will not', (i.notDoing ?? []).map(one).filter(Boolean).join('; ')],
+    ['Value', one(i.value)],
+    ['Started from', one(i.origin)],
+  ];
+  return fields.filter(([, v]) => v).map(([k, v]) => `${k}: ${v}`);
 }
 
 function approvedUseCaseLine(u: ApprovedUseCase): string {

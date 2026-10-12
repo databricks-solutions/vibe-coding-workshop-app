@@ -1,9 +1,9 @@
 import { useMemo, useRef, useState, type KeyboardEvent } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { ArrowRight, Check, Database, Layers, Loader2, Search, Users, X } from 'lucide-react';
+import { ArrowRight, Check, Database, Loader2, Search, Users, X } from 'lucide-react';
 import { CertifiedBadge } from '../../CertifiedBadge';
-import { collectionIcon, iconForUseCase } from '../../library/theme';
-import { PrimaryButton } from '../ui';
+import { collectionIcon } from '../../library/theme';
+import { PersonaChip, PrimaryButton, UseCaseIcon, typicalRange } from '../../journeykit';
 import {
   catalogIndustryFor,
   prefetchPreview,
@@ -15,6 +15,7 @@ import {
   type ApprovedIndustry,
   type ApprovedUseCase,
   type QuestionSource,
+  type UseCasePreview,
 } from './useCaseApi';
 
 const SOURCE_NOTE: Record<QuestionSource, string> = {
@@ -31,13 +32,15 @@ interface UseCasePickerProps {
   selected: ApprovedUseCase | null;
   /** How many more questions fit. */
   room: number;
-  onApply: (uc: ApprovedUseCase, questions: string[]) => void;
+  onApply: (uc: ApprovedUseCase, questions: string[], preview: UseCasePreview) => void;
+  /** Primary button label; defaults to naming the questions it will use. */
+  applyLabel?: string;
 }
 
 const sameUseCase = (a: ApprovedUseCase | null, b: ApprovedUseCase | null) =>
   !!a && !!b && a.useCase === b.useCase && a.industry === b.industry;
 
-export function UseCasePicker({ insightsIndustryId, selected, room, onApply }: UseCasePickerProps) {
+export function UseCasePicker({ insightsIndustryId, selected, room, onApply, applyLabel }: UseCasePickerProps) {
   const { data: industries, failed } = useApprovedIndustries();
   const counts = useUseCaseCounts(industries);
   const [industryId, setIndustryId] = useState<string | null>(null);
@@ -183,7 +186,6 @@ export function UseCasePicker({ insightsIndustryId, selected, room, onApply }: U
                       const on = sameUseCase(uc, current);
                       const applied = sameUseCase(uc, selected);
                       const crossListed = effectiveIndustry && uc.industry !== effectiveIndustry.id;
-                      const Icon = iconForUseCase({ use_case: uc.useCase, use_case_label: uc.label }, Layers);
                       return (
                         <button
                           key={`${uc.industry}/${uc.useCase}`}
@@ -196,9 +198,7 @@ export function UseCasePicker({ insightsIndustryId, selected, room, onApply }: U
                             on ? 'border-primary/60 bg-primary/[0.06] shadow-sm' : 'border-border bg-card hover:border-foreground/25 hover:bg-secondary/30'
                           }`}
                         >
-                          <span className={`flex items-center justify-center w-9 h-9 rounded-lg shrink-0 transition-colors ${on ? 'bg-primary/15 text-primary' : 'bg-secondary/70 text-muted-foreground group-hover:text-foreground'}`}>
-                            <Icon className="w-[18px] h-[18px]" />
-                          </span>
+                          <UseCaseIcon uc={uc} active={on} />
                           <span className="flex-1 min-w-0">
                             <span className="block text-ui-md font-medium text-foreground truncate">{uc.label}</span>
                             {(applied || crossListed) && (
@@ -222,7 +222,7 @@ export function UseCasePicker({ insightsIndustryId, selected, room, onApply }: U
           <AnimatePresence mode="wait" initial={false}>
             {current ? (
               <motion.div key={`${current.industry}/${current.useCase}`} initial={{ opacity: 0, x: 8 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0 }} transition={{ duration: 0.16 }}>
-                <PreviewPanel uc={current} room={room} onApply={onApply} />
+                <PreviewPanel uc={current} room={room} onApply={onApply} applyLabel={applyLabel} />
               </motion.div>
             ) : useCases === null ? (
               <motion.div key="loading" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="hidden md:block rounded-2xl border border-border bg-card p-5 space-y-3 min-h-[300px]">
@@ -238,7 +238,7 @@ export function UseCasePicker({ insightsIndustryId, selected, room, onApply }: U
   );
 }
 
-function PreviewPanel({ uc, room, onApply }: { uc: ApprovedUseCase; room: number; onApply: (uc: ApprovedUseCase, q: string[]) => void }) {
+function PreviewPanel({ uc, room, onApply, applyLabel }: { uc: ApprovedUseCase; room: number; onApply: UseCasePickerProps['onApply']; applyLabel?: string }) {
   const { data, failed } = useUseCasePreview(uc);
   const [unchecked, setUnchecked] = useState<Set<string>>(new Set());
   const chosen = (data?.questions ?? []).filter(q => !unchecked.has(q)).slice(0, Math.max(room, 0));
@@ -272,13 +272,23 @@ function PreviewPanel({ uc, room, onApply }: { uc: ApprovedUseCase; room: number
         <>
           {data.summary && <p className="text-ui-md text-foreground/85 leading-relaxed">{data.summary}</p>}
 
+          {data.valueProfile && (
+            <div className="flex flex-wrap items-center gap-1.5" title={data.valueProfile.source === 'submitted' ? 'From a business case built for this use case' : 'Estimated from the use case description'}>
+              <span className="h-6 inline-flex items-center px-2 rounded-md bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 text-ui-xs font-semibold tabular-nums">
+                Typically {typicalRange(data.valueProfile)}
+              </span>
+              {data.valueProfile.driverLabel && <span className="h-6 inline-flex items-center px-2 rounded-md border border-border text-ui-xs text-muted-foreground">{data.valueProfile.driverLabel}</span>}
+              {data.valueProfile.rolloutFull && data.valueProfile.rolloutUnit && (
+                <span className="h-6 inline-flex items-center px-2 rounded-md border border-border text-ui-xs text-muted-foreground">across ~{data.valueProfile.rolloutFull} {data.valueProfile.rolloutUnit}</span>
+              )}
+            </div>
+          )}
+
           {data.personas.length > 0 && (
             <div className="space-y-1.5">
               <p className="flex items-center gap-1.5 text-ui-xs font-semibold uppercase tracking-wide text-muted-foreground"><Users className="w-3.5 h-3.5" /> Who it is for</p>
               <div className="flex flex-wrap gap-1.5">
-                {data.personas.map(p => (
-                  <span key={p.name} title={p.role} className="h-7 inline-flex items-center px-2.5 rounded-full bg-secondary/70 text-ui-sm text-foreground">{p.name}</span>
-                ))}
+                {data.personas.map(p => <PersonaChip key={p.name} name={p.name} role={p.role} />)}
               </div>
             </div>
           )}
@@ -326,10 +336,10 @@ function PreviewPanel({ uc, room, onApply }: { uc: ApprovedUseCase; room: number
 
           <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
             <p className="text-ui-xs text-muted-foreground">
-              {room <= 0 ? 'Your question list is full. Remove one to add more.' : 'Your project will be linked to this approved use case.'}
+              {room <= 0 ? 'Your question list is full. Remove one to add more.' : 'Ticked questions carry into "Questions for Genie". Your project will be linked to this use case.'}
             </p>
-            <PrimaryButton onClick={() => onApply(uc, chosen)} disabled={!data}>
-              {chosen.length ? `Use ${chosen.length} question${chosen.length === 1 ? '' : 's'}` : 'Use this use case'} <ArrowRight className="w-4 h-4" />
+            <PrimaryButton onClick={() => data && onApply(uc, chosen, data)} disabled={!data}>
+              {applyLabel ?? (chosen.length ? `Use ${chosen.length} question${chosen.length === 1 ? '' : 's'}` : 'Use this use case')} <ArrowRight className="w-4 h-4" />
             </PrimaryButton>
           </div>
         </>

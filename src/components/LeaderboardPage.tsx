@@ -35,7 +35,6 @@ import {
   ExternalLink
 } from 'lucide-react';
 import { apiClient, type LeaderboardEntry, type WorkshopUser, type SessionListItem } from '../api/client';
-import { ThemeToggle } from './ThemeToggle';
 import { WORKSHOP_LEVELS, type WorkshopLevel } from '../constants/workflowSections';
 
 // Movement type for rank changes
@@ -562,7 +561,6 @@ export function LeaderboardPage() {
                 <RefreshCw className={`w-4 h-4 text-foreground ${isRefreshing ? 'animate-spin' : ''}`} />
               </button>
 
-              <ThemeToggle />
             </div>
           </div>
         </div>

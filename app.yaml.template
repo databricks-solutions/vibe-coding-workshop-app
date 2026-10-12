@@ -28,6 +28,11 @@ env:
   # LLM Model endpoint
   - name: DATABRICKS_SERVING_ENDPOINT
     value: "__SERVING_ENDPOINT__"
+
+  # Optional stronger model for Ideate's impact sizing and business case.
+  # Blank uses DATABRICKS_SERVING_ENDPOINT.
+  - name: IDEATE_ANALYSIS_ENDPOINT
+    value: "__IDEATE_ANALYSIS_ENDPOINT__"
   
   # ---------------------------------------------------------------------------
   # Lakebase PostgreSQL Configuration

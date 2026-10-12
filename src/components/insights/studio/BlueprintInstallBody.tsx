@@ -7,7 +7,7 @@ import { composeGenieInstall, composeHandoff } from '../blueprint/messages';
 import { SourcePill } from '../blueprint/SourcePill';
 import type { BlueprintChoice, Capabilities } from '../blueprint/types';
 import type { WorkspaceLinks } from '../types';
-import { PrimaryButton } from '../ui';
+import { PrimaryButton } from '../../journeykit';
 import { CopyRow } from './SetupBody';
 
 interface BlueprintInstallBodyProps {

@@ -1,4 +1,4 @@
-import { ArrowLeft, ArrowRight, BadgeCheck, LayoutDashboard, MessagesSquare, Pencil, ShieldCheck, Sparkles } from 'lucide-react';
+import { ArrowLeft, ArrowRight, BadgeCheck, Briefcase, LayoutDashboard, MessagesSquare, Pencil, ShieldCheck, Sparkles } from 'lucide-react';
 import { CertifiedBadge } from '../../CertifiedBadge';
 import type { ApprovedUseCase } from '../usecases/useCaseApi';
 import { sourceFromChoice } from '../blueprint/links';
@@ -6,9 +6,21 @@ import { MiniConstellation } from '../blueprint/MiniConstellation';
 import { SourcePill } from '../blueprint/SourcePill';
 import type { BlueprintChoice } from '../blueprint/types';
 import { CHAPTERS, TOTAL_MINUTES, chapterMinutes, formatMinutes } from '../journey';
-import { FadeIn, GhostButton, Headline, OnboardingProgress, PrimaryButton } from '../ui';
+import type { ReactNode } from 'react';
+import { MAX_NAME_LENGTH } from '../brief';
+import { FadeIn, GhostButton, Headline, PrimaryButton, SHAPE_KINDS, type ShapeKind } from '../../journeykit';
+
+export interface IdeaRecap {
+  headline: string;
+  problem?: string;
+  approach?: { label: string; kind: ShapeKind };
+}
 
 interface ReadyScreenProps {
+  progress?: ReactNode;
+  idea?: IdeaRecap | null;
+  onEditIdea?: () => void;
+  onOpenCase?: () => void;
   name: string;
   onNameChange: (v: string) => void;
   questionCount: number;
@@ -20,17 +32,17 @@ interface ReadyScreenProps {
   readOnly: boolean;
 }
 
-export function ReadyScreen({ name, onNameChange, questionCount, dataLabel, blueprint, useCase, onBack, onStart, readOnly }: ReadyScreenProps) {
-  const outcomes = [
-    { icon: MessagesSquare, title: 'A Genie your team can chat with', body: 'Ask in plain English, get an answer in seconds.' },
-    { icon: ShieldCheck, title: `Trusted answers to your ${questionCount} question${questionCount === 1 ? '' : 's'}`, body: 'Tested and tuned until they come back right.' },
-    { icon: LayoutDashboard, title: 'A dashboard to share', body: 'Built on the same numbers, so charts and Genie always agree.' },
-  ];
+export function ReadyScreen({ progress, idea, onEditIdea, onOpenCase, name, onNameChange, questionCount, dataLabel, blueprint, useCase, onBack, onStart, readOnly }: ReadyScreenProps) {
+  const genie = { icon: MessagesSquare, title: 'A Genie your team can chat with', body: 'Ask in plain English, get an answer in seconds.' };
+  const trusted = { icon: ShieldCheck, title: `Trusted answers to your ${questionCount} question${questionCount === 1 ? '' : 's'}`, body: 'Tested and tuned until they come back right.' };
+  const dashboard = { icon: LayoutDashboard, title: 'A dashboard to share', body: 'Built on the same numbers, so charts and Genie always agree.' };
+  const outcomes = idea?.approach?.kind === 'monitor' ? [dashboard, genie, trusted] : [genie, trusted, dashboard];
+  const kind = idea?.approach ? SHAPE_KINDS[idea.approach.kind] : null;
 
   return (
-    <div className="max-w-3xl mx-auto px-1 py-6 sm:py-10 space-y-8">
-      <FadeIn className="flex items-center justify-between">
-        <OnboardingProgress index={blueprint ? 3 : 2} total={blueprint ? 4 : 3} />
+    <div className="max-w-4xl mx-auto px-1 py-6 sm:py-10 space-y-8">
+      <FadeIn className="flex items-center justify-between gap-4">
+        {progress}
         <GhostButton onClick={onBack}><ArrowLeft className="w-4 h-4" /> Back</GhostButton>
       </FadeIn>
 
@@ -47,12 +59,31 @@ export function ReadyScreen({ name, onNameChange, questionCount, dataLabel, blue
               value={name}
               onChange={e => onNameChange(e.target.value)}
               placeholder="Name your Genie"
+              maxLength={MAX_NAME_LENGTH}
               className="w-full bg-transparent outline-none text-ui-xl font-semibold text-foreground placeholder:text-muted-foreground/50"
             />
           </span>
           <Pencil className="w-4 h-4 text-muted-foreground/60 group-focus-within:text-primary" />
         </label>
       </FadeIn>
+
+      {idea && (
+        <FadeIn delay={0.105} className="flex items-start gap-4 rounded-2xl border border-border bg-card px-5 py-4">
+          <span className={`flex items-center justify-center w-11 h-11 rounded-xl shrink-0 ${kind ? kind.tint : 'bg-primary/10 text-primary'}`}>
+            {kind ? <kind.icon className="w-5 h-5" /> : <Sparkles className="w-5 h-5" />}
+          </span>
+          <div className="flex-1 min-w-0">
+            <p className="text-ui-xs font-medium uppercase tracking-wider text-muted-foreground">Your idea</p>
+            <p className="text-ui-md font-semibold text-foreground">{idea.headline}</p>
+            {idea.problem && <p className="text-ui-sm text-muted-foreground line-clamp-2">{idea.problem}</p>}
+            {idea.approach && <p className="text-ui-sm text-muted-foreground mt-0.5">Approach: <span className="text-foreground/85">{idea.approach.label}</span></p>}
+          </div>
+          <div className="flex items-center gap-1 shrink-0">
+            {onOpenCase && <GhostButton onClick={onOpenCase}><Briefcase className="w-3.5 h-3.5" /> <span className="hidden sm:inline">Business case</span></GhostButton>}
+            {onEditIdea && !readOnly && <GhostButton onClick={onEditIdea}><Pencil className="w-3.5 h-3.5" /> Edit</GhostButton>}
+          </div>
+        </FadeIn>
+      )}
 
       {useCase && (
         <FadeIn delay={0.11} className="flex items-center gap-4 rounded-2xl border border-border bg-card px-5 py-4">

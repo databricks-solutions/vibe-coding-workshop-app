@@ -119,5 +119,23 @@ class TestBestAvailableEndpoint(unittest.TestCase):
         )
 
 
+class TestEndpointSelection(unittest.TestCase):
+    def test_claude_5_and_mini_models_skip_temperature(self):
+        self.assertTrue(routes._supports_temperature("databricks-claude-sonnet-4-6"))
+        self.assertTrue(routes._supports_temperature("databricks-meta-llama-3-3-70b-instruct"))
+        self.assertFalse(routes._supports_temperature("databricks-claude-sonnet-5-5"))
+        self.assertFalse(routes._supports_temperature("databricks-claude-opus-5-5"))
+        self.assertFalse(routes._supports_temperature("databricks-gpt-5-mini"))
+
+    def test_resolve_keeps_available_preferred_and_falls_back_otherwise(self):
+        with patch.object(routes, "get_available_serving_endpoints", return_value=["a", "b"]), \
+             patch.object(routes, "get_best_available_endpoint", return_value="best"):
+            self.assertEqual(routes.resolve_endpoint("a"), "a")
+            self.assertEqual(routes.resolve_endpoint("missing"), "best")
+            self.assertEqual(routes.resolve_endpoint(""), "best")
+        with patch.object(routes, "get_available_serving_endpoints", return_value=[]):
+            self.assertEqual(routes.resolve_endpoint("unlisted"), "unlisted")
+
+
 if __name__ == "__main__":
     unittest.main()

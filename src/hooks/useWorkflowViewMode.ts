@@ -1,24 +1,31 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 
 export type WorkflowViewMode = 'technical' | 'insights';
 
-const STORAGE_KEY = 'v2v.workflow.viewMode';
-
-function readInitialMode(): WorkflowViewMode {
-  const fromUrl = new URLSearchParams(window.location.search).get('view');
-  if (fromUrl === 'insights' || fromUrl === 'technical') {
-    localStorage.setItem(STORAGE_KEY, fromUrl);
-    return fromUrl;
-  }
-  return localStorage.getItem(STORAGE_KEY) === 'insights' ? 'insights' : 'technical';
+/** The view named in the address bar, if any. */
+function viewFromUrl(): WorkflowViewMode | null {
+  const v = new URLSearchParams(window.location.search).get('view');
+  return v === 'insights' || v === 'technical' ? v : null;
 }
 
-/** Presentation preference only; workshop progress always lives in the session. */
+/** Sessions started from the Insights view are set up on the Genie path with Genie Code. */
+export function isInsightsSession(workshopLevel?: string | null, codingAssistant?: string | null) {
+  return workshopLevel === 'genie-accelerator' && codingAssistant === 'genie-code';
+}
+
+/**
+ * Presentation preference only; workshop progress always lives in the session.
+ * Opening the page starts in Technical unless the link says `?view=`, or the
+ * session that loads on open was started in Insights.
+ */
 export function useWorkflowViewMode() {
-  const [mode, setModeState] = useState<WorkflowViewMode>(readInitialMode);
+  const [explicit] = useState(viewFromUrl);
+  const decided = useRef(false);
+  const [mode, setModeState] = useState<WorkflowViewMode>(explicit ?? 'technical');
+
   const setMode = useCallback((next: WorkflowViewMode) => {
+    decided.current = true;
     setModeState(next);
-    localStorage.setItem(STORAGE_KEY, next);
     // Keep ?view= in the address bar current so the link always reopens this view.
     const url = new URL(window.location.href);
     if (url.searchParams.get('view') !== next) {
@@ -26,5 +33,13 @@ export function useWorkflowViewMode() {
       window.history.replaceState(window.history.state, '', url.toString());
     }
   }, []);
-  return [mode, setMode] as const;
+
+  /** Called once the first session has loaded; only an Insights session changes the view. */
+  const adoptSessionView = useCallback((insights: boolean) => {
+    if (decided.current) return;
+    decided.current = true;
+    if (!explicit && insights) setModeState('insights');
+  }, [explicit]);
+
+  return [mode, setMode, adoptSessionView] as const;
 }

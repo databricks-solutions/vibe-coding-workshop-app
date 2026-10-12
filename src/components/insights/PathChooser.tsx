@@ -3,6 +3,7 @@ import { motion } from 'framer-motion';
 import { ArrowRight, Check, Code2, Link2, Sparkles } from 'lucide-react';
 import { WORKFLOW_SECTIONS } from '../../constants/workflowSections';
 import type { WorkflowViewMode } from '../../hooks/useWorkflowViewMode';
+import { ideaMinutes } from '../journeykit';
 import { CHAPTERS, TOTAL_MINUTES, chapterMinutes, formatMinutes } from './journey';
 
 /** Technical sections the Insights path also runs, through the Genie Accelerator. */
@@ -15,7 +16,7 @@ interface Stage {
 }
 
 const INSIGHTS_STAGES: Stage[] = [
-  { label: 'Ask', detail: 'Your questions, or an approved use case' },
+  { label: 'Idea', detail: `Start from an approved use case or your own idea, and shape it in short steps \u00b7 about ${formatMinutes(ideaMinutes('insights'))}` },
   { label: 'Data', detail: 'Existing tables, a file, sample data or an industry model' },
   { label: 'Plan', detail: 'Name it and see what you will get' },
   ...CHAPTERS.map(c => ({ label: c.title, detail: `${c.promise} \u00b7 ${formatMinutes(chapterMinutes(c.id))}`, shared: true })),

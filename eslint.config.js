@@ -20,4 +20,13 @@ export default defineConfig([
       globals: globals.browser,
     },
   },
+  {
+    // Ideate and Insights share one journey kit; reach it through its index only.
+    files: ['src/components/ideate/**/*.{ts,tsx}', 'src/components/insights/**/*.{ts,tsx}'],
+    rules: {
+      'no-restricted-imports': ['error', {
+        patterns: [{ group: ['**/journeykit/*', '**/journeykit/**'], message: "Import from '../journeykit' (the index) instead." }],
+      }],
+    },
+  },
 ])

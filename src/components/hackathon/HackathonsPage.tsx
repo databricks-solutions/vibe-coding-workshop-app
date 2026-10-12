@@ -19,7 +19,6 @@ import {
   AlertCircle,
 } from 'lucide-react';
 import { apiClient, type HackathonSummary } from '../../api/client';
-import { ThemeToggle } from '../ThemeToggle';
 import { StatusBadge, RoleBadge, PrimaryButton } from './hackathonShared';
 import { displayName, STATUS_META } from './hackathonStyles';
 import { CreateHackathonForm } from './CreateHackathonForm';
@@ -98,7 +97,6 @@ export function HackathonsPage() {
               </PrimaryButton>
             </span>
             <DevPersonaPicker />
-            <ThemeToggle />
           </div>
         </div>
       </div>

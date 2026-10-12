@@ -1,12 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowRight, Copy, Lightbulb, Menu, MoreHorizontal, Pencil, Send, Trash2 } from 'lucide-react';
-import { useIdeas } from '../../hooks/useIdeas';
-import { VoiceTextarea } from './VoiceTextarea';
-import { SubmitDialog } from './SubmitDialog';
-import { STEPS, type Idea, type IdeaStatus } from './types';
-import { stepIndex } from './ideaContext';
-import { ART, STEP_ART } from './art';
+import { ArrowRight, Copy, Hammer, Lightbulb, Menu, MoreHorizontal, Pencil, Send, Trash2 } from 'lucide-react';
+import {
+  ART, BUILD_TARGET_LABEL, PrimaryButton, STEP_ART, SubmitDialog, VoiceTextarea, buildTargetFor, caseFigures, isBuilding, money, openBuildHref, startBuildHref, stepMeta, stepsOf, useIdeas,
+  type Idea, type IdeaStatus,
+} from '../journeykit';
 
 const STATUS: Record<IdeaStatus, { label: string; cls: string }> = {
   exploring: { label: 'Exploring', cls: 'bg-sky-500/10 text-sky-400' },
@@ -33,7 +31,8 @@ export function IdeasHome({ onOpenMobileNav }: { onOpenMobileNav?: () => void })
   const navigate = useNavigate();
   const [seed, setSeed] = useState('');
   const [industry, setIndustry] = useState('');
-  const [filter, setFilter] = useState<IdeaStatus | 'all' | 'submitted'>('all');
+  const [filter, setFilter] = useState<IdeaStatus | 'all' | 'submitted' | 'building'>('all');
+  const [sort, setSort] = useState<'recent' | 'value'>('recent');
   const [submitting, setSubmitting] = useState<Idea | null>(null);
   const [promptIdx, setPromptIdx] = useState(0);
 
@@ -49,11 +48,17 @@ export function IdeasHome({ onOpenMobileNav }: { onOpenMobileNav?: () => void })
     navigate(`/ideate/${idea.id}`);
   };
 
-  const visible = useMemo(
-    () => ideas.filter(i => filter === 'all' || (filter === 'submitted' ? !!i.catalogRef : i.status === filter)),
-    [ideas, filter],
-  );
+  const values = useMemo(() => new Map(ideas.map(i => [i.id, caseFigures(i)?.value.expected ?? 0])), [ideas]);
+  const visible = useMemo(() => {
+    const list = ideas.filter(i =>
+      filter === 'all' || (filter === 'submitted' ? !!i.catalogRef : filter === 'building' ? isBuilding(i) && i.buildStatus !== 'later' : i.status === filter));
+    return sort === 'value' ? [...list].sort((a, b) => (values.get(b.id) ?? 0) - (values.get(a.id) ?? 0)) : list;
+  }, [ideas, filter, sort, values]);
   const anySubmitted = ideas.some(i => i.catalogRef);
+  const anyBuilding = ideas.some(i => isBuilding(i) && i.buildStatus !== 'later');
+  const sized = ideas.filter(i => i.status !== 'parked' && (values.get(i.id) ?? 0) > 0);
+  const portfolio = sized.reduce((a, i) => a + (values.get(i.id) ?? 0), 0);
+  const open = (idea: Idea) => navigate(isBuilding(idea) && idea.buildStatus !== 'later' ? openBuildHref(idea)! : idea.mode === 'insights' ? (openBuildHref(idea) ?? '/?view=insights') : `/ideate/${idea.id}`);
 
   return (
     <div className="flex-1 min-h-0 overflow-y-auto bg-background">
@@ -95,13 +100,9 @@ export function IdeasHome({ onOpenMobileNav }: { onOpenMobileNav?: () => void })
               className="flex-1 min-w-[10rem] bg-secondary/50 rounded-xl px-3 py-2 text-ui-sm outline-none border border-transparent focus:border-primary/40"
               onKeyDown={e => e.key === 'Enter' && start()}
             />
-            <button
-              onClick={start}
-              disabled={!seed.trim()}
-              className="flex items-center gap-1.5 px-5 py-2 rounded-xl bg-primary text-primary-foreground text-ui-sm font-semibold transition-all hover:opacity-90 active:scale-95 disabled:opacity-40"
-            >
+            <PrimaryButton onClick={start} disabled={!seed.trim()}>
               Start ideating <ArrowRight className="w-4 h-4" />
-            </button>
+            </PrimaryButton>
           </div>
         </div>
 
@@ -109,15 +110,25 @@ export function IdeasHome({ onOpenMobileNav }: { onOpenMobileNav?: () => void })
           <div className="mt-10">
             <div className="flex items-center gap-2 mb-4">
               <h2 className="text-ui-lg font-semibold text-foreground mr-2">My ideas</h2>
-              {(['all', 'exploring', 'committed', 'parked', ...(anySubmitted ? ['submitted' as const] : [])] as const).map(f => (
+              {(['all', 'exploring', 'committed', 'parked', ...(anyBuilding ? ['building' as const] : []), ...(anySubmitted ? ['submitted' as const] : [])] as const).map(f => (
                 <button
                   key={f}
                   onClick={() => setFilter(f)}
                   className={`px-2.5 py-1 rounded-full text-ui-xs font-medium transition-colors ${filter === f ? 'bg-foreground text-background' : 'text-muted-foreground hover:bg-secondary'}`}
                 >
-                  {f === 'all' ? `All ${ideas.length}` : f === 'submitted' ? 'Submitted' : STATUS[f].label}
+                  {f === 'all' ? `All ${ideas.length}` : f === 'submitted' ? 'Submitted' : f === 'building' ? 'Building' : STATUS[f].label}
                 </button>
               ))}
+              <div className="ml-auto flex items-center gap-3">
+                {portfolio > 0 && (
+                  <span className="hidden sm:inline text-ui-xs text-muted-foreground" title="Sum of the expected yearly value of ideas that are not parked">
+                    <span className="text-emerald-600 dark:text-emerald-400 font-semibold">{money(portfolio)}</span> a year across {sized.length} idea{sized.length === 1 ? '' : 's'}
+                  </span>
+                )}
+                <button onClick={() => setSort(x => (x === 'recent' ? 'value' : 'recent'))} className="px-2 py-1 rounded-lg text-ui-xs text-muted-foreground hover:text-foreground hover:bg-secondary">
+                  {sort === 'recent' ? 'Sort by value' : 'Sort by recent'}
+                </button>
+              </div>
             </div>
             <div className="grid gap-3 sm:grid-cols-2">
               {visible.map((idea, i) => (
@@ -125,7 +136,9 @@ export function IdeasHome({ onOpenMobileNav }: { onOpenMobileNav?: () => void })
                   key={idea.id}
                   idea={idea}
                   delay={i * 50}
-                  onOpen={() => navigate(`/ideate/${idea.id}`)}
+                  value={values.get(idea.id) ?? 0}
+                  onOpen={() => open(idea)}
+                  onBuild={() => navigate(idea.buildStatus === 'later' && idea.sessionId ? (updateIdea(idea.id, { buildStatus: 'building', status: 'committed' }), openBuildHref(idea)!) : startBuildHref(idea))}
                   onRename={title => updateIdea(idea.id, { title })}
                   onDuplicate={() => duplicateIdea(idea.id)}
                   onDelete={() => deleteIdea(idea.id)}
@@ -136,7 +149,7 @@ export function IdeasHome({ onOpenMobileNav }: { onOpenMobileNav?: () => void })
                 <div className="sm:col-span-2 flex flex-col items-center py-6 text-center">
                   <img src={ART.empty} alt="" width={200} height={133} className="w-48 rounded-2xl opacity-90" />
                   <p className="text-ui-sm text-muted-foreground mt-3">
-                    No {filter === 'all' ? '' : filter === 'submitted' ? 'submitted' : STATUS[filter].label.toLowerCase()} ideas yet.
+                    No {filter === 'all' ? '' : filter === 'submitted' ? 'submitted' : filter === 'building' ? 'building' : STATUS[filter].label.toLowerCase()} ideas yet.
                   </p>
                 </div>
               )}
@@ -157,14 +170,20 @@ interface IdeaCardProps {
   onDuplicate: () => void;
   onDelete: () => void;
   onSubmit: () => void;
+  onBuild: () => void;
+  value: number;
 }
 
-function IdeaCard({ idea, delay, onOpen, onRename, onDuplicate, onDelete, onSubmit }: IdeaCardProps) {
+function IdeaCard({ idea, delay, value, onOpen, onRename, onDuplicate, onDelete, onSubmit, onBuild }: IdeaCardProps) {
+  const building = isBuilding(idea);
+  const later = idea.buildStatus === 'later';
+  const canBuild = idea.mode !== 'insights' && !!idea.brief && (!building || later);
   const [menu, setMenu] = useState(false);
   const [renaming, setRenaming] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
-  const progress = (idea.approved.length / STEPS.length) * 100;
+  const progress = (idea.approved.length / stepsOf(idea).length) * 100;
+  const stepLabel = stepMeta(idea, idea.step).label;
   const status = STATUS[idea.status];
   const StepIcon = STEP_ART[idea.step].icon;
 
@@ -182,7 +201,7 @@ function IdeaCard({ idea, delay, onOpen, onRename, onDuplicate, onDelete, onSubm
       style={{ animationDelay: `${delay}ms` }}
     >
       <div className="flex items-start gap-2.5">
-        <span className="w-8 h-8 rounded-lg bg-primary/10 text-primary flex items-center justify-center flex-shrink-0" title={`At: ${STEPS[stepIndex(idea.step)].label}`}>
+        <span className="w-8 h-8 rounded-lg bg-primary/10 text-primary flex items-center justify-center flex-shrink-0" title={`At: ${stepLabel}`}>
           <StepIcon className="w-4 h-4" />
         </span>
         {renaming ? (
@@ -217,9 +236,25 @@ function IdeaCard({ idea, delay, onOpen, onRename, onDuplicate, onDelete, onSubm
       </div>
       <p className="text-ui-sm text-muted-foreground line-clamp-2 mt-1 min-h-[2.5em]">{idea.spark?.statement ?? idea.seed}</p>
       <div className="flex items-center gap-2 mt-3">
-        <span className={`px-2 py-0.5 rounded-full text-ui-2xs font-semibold ${status.cls}`}>{status.label}</span>
+        {building && later ? (
+          <span className="px-2 py-0.5 rounded-full text-ui-2xs font-semibold bg-amber-500/10 text-amber-600 dark:text-amber-400">Build later</span>
+        ) : idea.buildTarget && building ? (
+          <span className="px-2 py-0.5 rounded-full text-ui-2xs font-semibold bg-primary/10 text-primary">Building in {BUILD_TARGET_LABEL[idea.buildTarget]}</span>
+        ) : idea.mode === 'insights' ? (
+          <span className="px-2 py-0.5 rounded-full text-ui-2xs font-semibold bg-primary/10 text-primary">{idea.lockedAt ? 'Building in Insights' : 'Shaping in Insights'}</span>
+        ) : (
+          <span className={`px-2 py-0.5 rounded-full text-ui-2xs font-semibold ${status.cls}`}>{status.label}</span>
+        )}
         {idea.catalogRef ? (
           <span className="px-2 py-0.5 rounded-full text-ui-2xs font-semibold bg-violet-500/10 text-violet-400" title={`${idea.catalogRef.industryLabel} / ${idea.catalogRef.useCaseLabel}`}>Submitted</span>
+        ) : canBuild ? (
+          <button
+            onClick={e => { e.stopPropagation(); onBuild(); }}
+            title={later ? 'Pick up the parked build' : `Start a project in ${BUILD_TARGET_LABEL[buildTargetFor(idea)]}`}
+            className="flex items-center gap-1 px-2 py-0.5 rounded-full text-ui-2xs font-semibold text-primary hover:bg-primary/10"
+          >
+            <Hammer className="w-3 h-3" /> {later ? 'Resume build' : 'Build'}
+          </button>
         ) : idea.status === 'committed' && idea.brief ? (
           <button
             onClick={e => { e.stopPropagation(); onSubmit(); }}
@@ -228,11 +263,12 @@ function IdeaCard({ idea, delay, onOpen, onRename, onDuplicate, onDelete, onSubm
             <Send className="w-3 h-3" /> Submit
           </button>
         ) : null}
+        {value > 0 && <span className="text-ui-2xs font-semibold text-emerald-600 dark:text-emerald-400 tabular-nums">{money(value)}/yr</span>}
         {(idea.spark?.industry || idea.industry) && <span className="text-ui-2xs text-muted-foreground truncate">{idea.spark?.industry || idea.industry}</span>}
-        <span className="ml-auto text-ui-2xs text-muted-foreground">{STEPS[stepIndex(idea.step)].label} · {timeAgo(idea.updatedAt)}</span>
+        <span className="ml-auto text-ui-2xs text-muted-foreground">{stepLabel} · {timeAgo(idea.updatedAt)}</span>
       </div>
       <div className="h-0.5 rounded-full bg-secondary mt-3 overflow-hidden">
-        <div className="h-full bg-primary transition-all duration-500" style={{ width: `${progress}%` }} />
+        <div className="h-full bg-emerald-500 transition-all duration-500" style={{ width: `${progress}%` }} />
       </div>
     </div>
   );

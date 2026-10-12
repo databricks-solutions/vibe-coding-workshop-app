@@ -2,6 +2,7 @@ import { useState, useMemo, useRef, useImperativeHandle, forwardRef, useEffect }
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { Maximize2, Minimize2 } from 'lucide-react';
+import { useTheme } from '../lib/theme';
 
 export const REMARK_PLUGINS = [remarkGfm];
 
@@ -10,6 +11,7 @@ export const REMARK_PLUGINS = [remarkGfm];
 // On any parse/render error it degrades gracefully to the raw Mermaid source.
 let mermaidIdCounter = 0;
 function Mermaid({ chart }: { chart: string }) {
+  const [theme] = useTheme();
   const [svg, setSvg] = useState<string>('');
   const [error, setError] = useState(false);
 
@@ -19,7 +21,7 @@ function Mermaid({ chart }: { chart: string }) {
     (async () => {
       try {
         const mermaid = (await import('mermaid')).default;
-        mermaid.initialize({ startOnLoad: false, theme: 'dark', securityLevel: 'strict' });
+        mermaid.initialize({ startOnLoad: false, theme: theme === 'light' ? 'default' : 'dark', securityLevel: 'strict' });
         const { svg } = await mermaid.render(id, chart);
         if (!cancelled) { setSvg(svg); setError(false); }
       } catch {
@@ -27,7 +29,7 @@ function Mermaid({ chart }: { chart: string }) {
       }
     })();
     return () => { cancelled = true; };
-  }, [chart]);
+  }, [chart, theme]);
 
   if (error) {
     // Graceful degradation — show the readable Mermaid source.

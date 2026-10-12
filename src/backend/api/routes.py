@@ -539,13 +539,15 @@ except ImportError:
 # - databricks-dbrx-instruct (Foundation Model API)
 # - databricks-mixtral-8x7b-instruct (Foundation Model API)
 # - Custom endpoints deployed in your workspace
-# Default endpoint (Claude Sonnet 4.5)
-SERVING_ENDPOINT_NAME = os.getenv("DATABRICKS_SERVING_ENDPOINT", "databricks-claude-sonnet-4-5")
+# Default endpoint (Claude Sonnet 4.6)
+SERVING_ENDPOINT_NAME = os.getenv("DATABRICKS_SERVING_ENDPOINT", "databricks-claude-sonnet-4-6")
 
 # Fallback endpoints to try if the configured/default endpoint is not deployed in
 # the current workspace (e.g. Claude is unavailable on Databricks Free Edition).
-# Ordered instruct-first (plain string content) then reasoning models.
+# Ordered: the previous Claude default, then instruct models (plain string content),
+# then reasoning models.
 FALLBACK_ENDPOINTS = [
+    "databricks-claude-sonnet-4-5",
     "databricks-meta-llama-3-3-70b-instruct",
     "databricks-llama-4-maverick",
     "databricks-gemma-3-12b",
@@ -643,6 +645,30 @@ def get_best_available_endpoint() -> Optional[str]:
         f"using first available endpoint: {first_available}"
     )
     return first_available
+
+
+_NO_TEMPERATURE = re.compile(r"mini|claude-(?:opus|sonnet|haiku|fable)-5", re.IGNORECASE)
+
+
+def _supports_temperature(endpoint: str) -> bool:
+    """Mini models and the Claude 5 family reject the ``temperature`` parameter."""
+    return not _NO_TEMPERATURE.search(endpoint or "")
+
+
+def resolve_endpoint(preferred: Optional[str]) -> Optional[str]:
+    """``preferred`` when this workspace serves it, otherwise the usual best available endpoint.
+
+    When endpoints cannot be listed the preferred one is trusted, matching how the
+    primary is treated in ``get_best_available_endpoint``.
+    """
+    preferred = (preferred or "").strip()
+    if not preferred:
+        return get_best_available_endpoint()
+    available = get_available_serving_endpoints()
+    if not available or preferred in available:
+        return preferred
+    logger.info(f"Preferred endpoint '{preferred}' not available; using the default resolution")
+    return get_best_available_endpoint()
 
 
 def _extract_text(content: Any) -> str:
@@ -2050,8 +2076,7 @@ async def call_databricks_serving_endpoint(
             "messages": messages,
             "max_tokens": max_tokens,
         }
-        ep_lower = endpoint.lower()
-        if "mini" not in ep_lower:
+        if _supports_temperature(endpoint):
             openai_request_body["temperature"] = temperature
         
         
@@ -2580,8 +2605,7 @@ async def _stream_with_retry(
         "max_tokens": max_tokens,
         "stream": True,
     }
-    ep_lower = endpoint.lower()
-    if "mini" not in ep_lower:
+    if _supports_temperature(endpoint):
         request_body["temperature"] = temperature
 
     workspace_host = client.config.host.rstrip("/")
@@ -6268,17 +6292,18 @@ async def load_session_endpoint(session_id: str) -> SessionLoadResponse:
                 session_description=session_data.get("session_description"),
                 feedback_rating=session_data.get("feedback_rating"),
                 feedback_comment=session_data.get("feedback_comment"),
-                prerequisites_completed=session_data.get("prerequisites_completed", False),
-                current_step=session_data.get("current_step", 1),
+                # Columns can hold NULL for sessions that were created but never set up.
+                prerequisites_completed=bool(session_data.get("prerequisites_completed")),
+                current_step=session_data.get("current_step") or 1,
                 workshop_level=session_data.get("workshop_level", "300"),
-                completed_steps=session_data.get("completed_steps", []),
-                skipped_steps=session_data.get("skipped_steps", []),
-                step_prompts=session_data.get("step_prompts", {}),
-                session_parameters=session_data.get("session_parameters", {}),
+                completed_steps=session_data.get("completed_steps") or [],
+                skipped_steps=session_data.get("skipped_steps") or [],
+                step_prompts=session_data.get("step_prompts") or {},
+                session_parameters=session_data.get("session_parameters") or {},
                 created_by=session_data.get("created_by"),
                 created_at=session_data.get("created_at"),
                 updated_at=session_data.get("updated_at"),
-                is_saved=session_data.get("is_saved", False),
+                is_saved=bool(session_data.get("is_saved")),
                 message="Session loaded successfully",
             )
         else:

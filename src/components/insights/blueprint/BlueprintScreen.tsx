@@ -1,15 +1,16 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
-  ArrowLeft, ArrowRight, Check, ChevronDown, Gauge, Loader2, Map as MapIcon, MessageCircleQuestion, Network, RefreshCw, ShieldCheck, Table2,
+  ArrowLeft, ArrowRight, Check, ChevronDown, Gauge, Loader2, Map as MapIcon, MessageCircleQuestion, Network, RefreshCw, ShieldCheck, Table2, TriangleAlert,
 } from 'lucide-react';
-import { FadeIn, GhostButton, OnboardingProgress, PrimaryButton, SecondaryButton } from '../ui';
+import { FadeIn, GhostButton, PrimaryButton, SecondaryButton } from '../../journeykit';
 import { AnswerRecipe } from './AnswerRecipe';
 import { AreaXray } from './AreaXray';
 import { blueprintApi, useBlueprintCatalog, useBlueprintDigest, useInstallStatus, useInstalledModels } from './blueprintApi';
 import { DataMap } from './DataMap';
 import { ErDiagram } from './ErDiagram';
 import { KpiLibrary } from './KpiLibrary';
+import { blueprintForIndustry, pickModel, type ModelHint } from './industryMap';
 import { matchQuestion, suggestAreas } from './match';
 import { MiniConstellation } from './MiniConstellation';
 import { SourceFooter, SourcePill } from './SourcePill';
@@ -31,7 +32,10 @@ const LENSES: { id: Lens; label: string; icon: typeof MapIcon }[] = [
 interface BlueprintScreenProps {
   questions: string[];
   initialSlug: string | null;
+  /** Used to pick the closest model when there is no earlier choice. */
+  hint: ModelHint;
   initialChoice: BlueprintChoice | null;
+  progress?: ReactNode;
   onBack: () => void;
   onNext: (choice: BlueprintChoice) => void;
 }
@@ -186,15 +190,20 @@ function LoadingState({ label }: { label: string }) {
   );
 }
 
-export function BlueprintScreen({ questions, initialSlug, initialChoice, onBack, onNext }: BlueprintScreenProps) {
+export function BlueprintScreen({ questions, initialSlug, hint, initialChoice, progress, onBack, onNext }: BlueprintScreenProps) {
   const catalog = useBlueprintCatalog();
   const [slug, setSlug] = useState<string | null>(initialChoice?.slug ?? initialSlug);
+  const [autoPicked, setAutoPicked] = useState(!!slug);
+  if (!autoPicked && (catalog.data || catalog.error)) {
+    setAutoPicked(true);
+    setSlug(catalog.data ? pickModel(hint, catalog.data.industries) : blueprintForIndustry(hint.industryId));
+  }
   const [attempt, setAttempt] = useState(0);
   const digest = useBlueprintDigest(slug, attempt);
   const { status, update } = useInstallStatus(digest.data ? slug : null);
   const [caps, setCaps] = useState<Capabilities | null>(null);
   const [starting, setStarting] = useState(false);
-  const [lens, setLens] = useState<Lens>(questions.length ? 'answers' : 'map');
+  const [lens, setLens] = useState<Lens>('map');
   const [focus, setFocus] = useState<string[]>([]);
   const [pinned, setPinned] = useState<string[]>([]);
   const [selectedArea, setSelectedArea] = useState<string | null>(null);
@@ -205,6 +214,7 @@ export function BlueprintScreen({ questions, initialSlug, initialChoice, onBack,
 
   const d = digest.data;
   const recipes = useMemo(() => (d ? questions.map(q => matchQuestion(q, d)) : []), [d, questions]);
+  const uncovered = recipes.filter(r => r.confidence === 'none').length;
   const matchedAreas = useMemo(() => Array.from(new Set(recipes.filter(r => r.kpi && r.confidence !== 'none').map(r => r.kpi!.area))), [recipes]);
 
   if (d && seededFor !== d.slug) {
@@ -271,6 +281,20 @@ export function BlueprintScreen({ questions, initialSlug, initialChoice, onBack,
     body = (
       <div className="space-y-6">
         <FadeIn delay={0.05}><TrustStrip digest={d} /></FadeIn>
+
+        {uncovered * 2 > recipes.length && (
+          <FadeIn delay={0.08} className="flex items-start gap-3 rounded-2xl border border-amber-500/30 bg-amber-500/5 px-4 py-3">
+            <TriangleAlert className="w-4 h-4 mt-0.5 text-amber-500 shrink-0" />
+            <div className="text-ui-sm leading-relaxed">
+              <p className="font-semibold text-foreground">
+                {uncovered} of your {recipes.length} questions aren't in the {d.label} model
+              </p>
+              <p className="text-muted-foreground">
+                Your Genie is built on this model's tables, so it should be about the same business as your idea. Pick a closer industry above, or keep this one and Genie Code will add what's missing in your own schema.
+              </p>
+            </div>
+          </FadeIn>
+        )}
 
         <FadeIn delay={0.1}>
           <div role="tablist" className="flex gap-1 p-1 rounded-2xl bg-secondary/50 overflow-x-auto">
@@ -380,8 +404,8 @@ export function BlueprintScreen({ questions, initialSlug, initialChoice, onBack,
 
   return (
     <div className="max-w-5xl mx-auto px-1 py-6 sm:py-10 space-y-6">
-      <FadeIn className="flex items-center justify-between">
-        <OnboardingProgress index={2} total={4} />
+      <FadeIn className="flex items-center justify-between gap-4">
+        {progress}
         <GhostButton onClick={onBack}><ArrowLeft className="w-4 h-4" /> Back</GhostButton>
       </FadeIn>
 

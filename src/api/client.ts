@@ -1827,6 +1827,15 @@ class ApiClient {
     idea: Record<string, unknown>,
     feedback?: string,
   ): Promise<T> {
+    return (await this.ideateStepWithModel<T>(step, idea, feedback)).data;
+  }
+
+  /** Same as `ideateStep`, plus which model answered and whether it was a fallback. */
+  async ideateStepWithModel<T = unknown>(
+    step: string,
+    idea: Record<string, unknown>,
+    feedback?: string,
+  ): Promise<{ data: T; model: string; fallback: boolean }> {
     const response = await fetch(`${this.baseUrl}/ideate/step`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -1834,15 +1843,16 @@ class ApiClient {
     });
     const body = await response.json().catch(() => ({}));
     if (!response.ok) {
-      throw new Error(body.error || `Request failed (${response.status})`);
+      throw Object.assign(new Error(body.error || `Request failed (${response.status})`), { status: response.status });
     }
-    return body.data as T;
+    return { data: body.data as T, model: body.model ?? '', fallback: !!body.fallback };
   }
 
   /** Submit a committed idea to the use case catalog. It lands inactive until an admin turns it on. */
   async ideateSubmit(params: {
     idea: Record<string, unknown>;
     business_case?: Record<string, unknown> | null;
+    value_profile?: Record<string, unknown> | null;
     brief?: string;
     industry?: string;
     industry_label: string;

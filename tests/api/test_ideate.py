@@ -88,6 +88,134 @@ class TestNormalize(unittest.TestCase):
         self.assertEqual(out["industryAlternatives"], ["Airports"])
         self.assertEqual(out["catalogIndustry"], "travel")
 
+    def test_impact_keeps_distinct_secondary_levers_rollout_and_capture(self):
+        out = ideate._normalize("impact", {
+            **IMPACT,
+            "questions": IMPACT["questions"] + [
+                {"key": "rollout_units", "question": "How many hubs?", "unit": "units",
+                 "options": [{"label": "5", "value": 5}, {"label": "10", "value": 10}]},
+            ],
+            "assumed": [{"key": "hourly_rate", "label": "Rate", "value": 45, "unit": "$/hour", "from_answer": True}],
+            "secondary": [
+                {"driver": "time_saved", "label": "same as primary", "inputs": [{"key": "headcount", "value": 3}]},
+                {"driver": "cost_avoided", "label": "Fewer delays", "inputs": [
+                    {"key": "events_per_year", "value": 300, "unit": "events"},
+                    {"key": "events_per_year", "value": 1},
+                    {"key": "bogus", "value": 1},
+                ]},
+                {"driver": "cost_avoided", "label": "duplicate driver", "inputs": [{"key": "cost_per_event", "value": 1}]},
+                {"driver": "revenue_uplift", "label": "no numbers", "inputs": [{"key": "uplift_pct", "value": "x"}]},
+            ],
+            "rollout": {"unit": "hubs", "pilot": 0, "full": 99999, "why": "network"},
+            "capture_rate": 3,
+        })
+        self.assertEqual(out["questions"][-1]["key"], "rollout_units")
+        self.assertTrue(out["assumed"][0]["fromAnswer"])
+        self.assertEqual([s["driver"] for s in out["secondary"]], ["cost_avoided"])
+        self.assertEqual([i["key"] for i in out["secondary"][0]["inputs"]], ["events_per_year"])
+        self.assertEqual(out["rollout"], {"unit": "hubs", "pilot": 1.0, "full": 10000.0, "why": "network"})
+        self.assertEqual(out["captureRate"], 1.0)
+
+    def test_impact_drops_rollout_question_without_rollout_and_needs_two_real_questions(self):
+        rollout_q = {"key": "rollout_units", "question": "How many?", "unit": "units",
+                     "options": [{"label": "5", "value": 5}, {"label": "10", "value": 10}]}
+        out = ideate._normalize("impact", {**IMPACT, "questions": IMPACT["questions"] + [rollout_q]})
+        self.assertNotIn("rollout_units", [q["key"] for q in out["questions"]])
+        self.assertIsNone(out["rollout"])
+        self.assertIsNone(out["captureRate"])
+        only_one = {**IMPACT, "questions": IMPACT["questions"][:1] + [rollout_q], "rollout": {"unit": "hubs"}}
+        self.assertIsNone(ideate._normalize("impact", only_one))
+
+    def test_clarify_and_followup_carry_why_recommended_and_multi(self):
+        out = ideate._normalize("clarify", {"questions": [
+            {"dimension": "user", "question": "Who?", "why": "Names the persona", "options": ["a", "b"], "recommended": 1, "multi": True},
+            {"dimension": "scope", "question": "Not do?", "options": ["a", "b"], "recommended": 7, "multi": True},
+            {"dimension": "cost", "question": "Cost?", "options": ["a", "b"], "recommended": True},
+        ]})
+        user, scope, cost = out["questions"]
+        self.assertEqual((user["why"], user["recommended"], user["multi"]), ("Names the persona", 1, False))
+        self.assertEqual((scope["recommended"], scope["multi"]), (-1, True))
+        self.assertEqual(cost["recommended"], -1)
+        f = ideate._normalize("followup", {"followup": {"question": "Scale?", "options": ["a", "b"], "recommended": 0, "multi": True}})["followup"]
+        self.assertEqual((f["dimension"], f["recommended"], f["multi"], f["isFollowup"]), ("business", 0, False, True))
+
+    def test_shape_keeps_one_recommendation_and_valid_value_fields(self):
+        out = ideate._normalize("shape", {"options": [
+            {"kind": "copilot", "title": "A", "value_lever": "cost_avoided", "value_size": "$$$", "hard_share": "Mostly Hard",
+             "recommended": True, "recommended_why": "Biggest hard dollars"},
+            {"kind": "automation", "title": "B", "value_lever": "vibes", "value_size": "lots", "recommended": True, "recommended_why": "x"},
+        ]})
+        a, b = out["options"]
+        self.assertEqual((a["valueLever"], a["valueSize"], a["hardShare"], a["recommended"]), ("cost_avoided", "$$$", "mostly hard", True))
+        self.assertEqual((b["valueLever"], b["valueSize"], b["recommended"], b["recommendedWhy"]), (None, None, False, ""))
+
+    def test_summary_and_spark_value_fields(self):
+        out = ideate._normalize("summary", {
+            "subtitle": "s", "what_we_build": "w", "problem_today": "p", "metric": {"label": "m"},
+            "pilot_success": "Down 15% in 8 weeks", "kill_criterion": "No change", "unlocks_next": ["a", "b", "c"],
+        })
+        self.assertEqual((out["pilotSuccess"], out["killCriterion"], out["unlocksNext"]), ("Down 15% in 8 weeks", "No change", ["a", "b"]))
+        spark = ideate._normalize("spark", {"title": "t", "statement": "s", "industry": "Airlines", "business_line": "Cost", "value_hypothesis": "v"})
+        self.assertEqual((spark["businessLine"], spark["valueHypothesis"]), ("cost", "v"))
+        self.assertIsNone(ideate._normalize("spark", {"title": "t", "statement": "s", "industry": "x", "business_line": "fun"})["businessLine"])
+
+
+class TestInsightsMode(unittest.TestCase):
+    def test_insights_prompts_limit_surfaces_and_use_insight_shapes(self):
+        prompt = ideate.build_step_system_prompt("shape", "insights")
+        self.assertIn('"ask"', prompt)
+        self.assertIn('"signal"', prompt)
+        self.assertNotIn('"Agent"', prompt)
+        self.assertIn('"copilot"', ideate.build_step_system_prompt("shape"))
+
+    def test_insights_brief_has_question_and_data_sections(self):
+        prompt = ideate.brief_prompt_for("insights")
+        self.assertIn("## Questions It Will Answer", prompt)
+        self.assertIn("## Data It Needs", prompt)
+        self.assertNotIn("## Test Scenarios", prompt)
+        self.assertIn("## Test Scenarios", ideate.brief_prompt_for("ideate"))
+
+    def test_shape_kinds_follow_mode(self):
+        data = {"options": [{"kind": "copilot", "title": "A"}, {"kind": "Monitor", "title": "B"}]}
+        kinds = [o["kind"] for o in ideate._normalize("shape", data, {"mode": "insights"})["options"]]
+        self.assertEqual(kinds, ["ask", "monitor"])
+        kinds = [o["kind"] for o in ideate._normalize("shape", data)["options"]]
+        self.assertEqual(kinds, ["copilot", "copilot"])
+
+    def test_questions_keep_provided_first_and_dedupe(self):
+        out = ideate._normalize("questions", {"questions": [
+            "Which stores missed target last week?",
+            "1. which stores missed target last week",
+            "- What drove returns this month",
+            "30-day churn by region?",
+            "A?", "B?", "C?",
+        ]}, {"providedQuestions": ["Which stores missed target last week?"]})
+        self.assertEqual(out["questions"][:3], [
+            "Which stores missed target last week?",
+            "What drove returns this month?",
+            "30-day churn by region?",
+        ])
+        self.assertEqual(len(out["questions"]), ideate.MAX_GENIE_QUESTIONS)
+
+    def test_questions_alternates_are_distinct_from_the_main_set(self):
+        out = ideate._normalize("questions", {
+            "questions": ["Which stores missed target?", "What drove returns?"],
+            "alternates": ["which stores missed target", "Shrink by region?", "Top late suppliers?", "A?", "B?", "C?"],
+        }, {})
+        self.assertEqual(out["questions"], ["Which stores missed target?", "What drove returns?"])
+        self.assertEqual(out["alternates"][:2], ["Shrink by region?", "Top late suppliers?"])
+        self.assertEqual(len(out["alternates"]), ideate.MAX_GENIE_ALTERNATES)
+
+    def test_insights_business_case_describes_a_genie_build(self):
+        prompt = ideate.build_step_system_prompt("summary", "insights")
+        self.assertIn("Genie space", prompt)
+        self.assertNotIn("Declarative Pipelines", prompt)
+        self.assertIn("Declarative Pipelines", ideate.build_step_system_prompt("summary"))
+
+    def test_questions_step_is_known(self):
+        self.assertIn("questions", ideate.STEP_PROMPTS)
+        self.assertIsNone(ideate._normalize("questions", {"questions": []}, {}))
+
 
 class _Req:
     headers: dict = {}

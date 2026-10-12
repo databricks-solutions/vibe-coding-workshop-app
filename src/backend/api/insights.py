@@ -150,12 +150,17 @@ async def use_case_preview(industry: str, use_case: str):
     if hit and time.time() - hit[0] < _CACHE_TTL_S:
         return hit[1]
 
+    from src.backend.api.value_profiles import profile_for
+
     preview = parse_template(template)
-    if not preview["questions"]:
-        suggested = await _suggest(template)
-        if suggested:
-            preview["questions"] = suggested
-            preview["questionSource"] = "suggested"
+    suggested, profile = await asyncio.gather(
+        _suggest(template) if not preview["questions"] else asyncio.sleep(0, result=[]),
+        profile_for(industry, use_case, template),
+    )
+    if suggested:
+        preview["questions"] = suggested
+        preview["questionSource"] = "suggested"
+    preview["valueProfile"] = profile
     preview.update({"industry": industry, "useCase": use_case})
     if preview["questionSource"] != "none":
         _cache[key] = (time.time(), preview)

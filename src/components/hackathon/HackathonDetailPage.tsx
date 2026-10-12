@@ -27,7 +27,6 @@ import {
   Trophy,
 } from 'lucide-react';
 import { apiClient, type HackathonDetail } from '../../api/client';
-import { ThemeToggle } from '../ThemeToggle';
 import { StatusBadge, RoleBadge } from './hackathonShared';
 import { DevPersonaPicker } from './DevPersonaPicker';
 import { OverviewTab } from './tabs/OverviewTab';
@@ -99,7 +98,6 @@ export function HackathonDetailPage() {
             </div>
             <div className="flex items-center gap-3">
               <DevPersonaPicker />
-              <ThemeToggle />
             </div>
           </div>
           {detail && (

@@ -20,7 +20,6 @@ import {
   PlayCircle,
   ChevronDown,
 } from 'lucide-react';
-import { ThemeToggle } from '../ThemeToggle';
 
 const MEDIA = '/hackathon-docs';
 
@@ -99,7 +98,6 @@ export function HackathonPlaybook() {
               <ArrowLeft className="w-4 h-4" />
               All hackathons
             </Link>
-            <ThemeToggle />
           </div>
           <div className="flex items-center gap-3 mt-3">
             <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary to-emerald-500 flex items-center justify-center shadow-lg shadow-primary/30">

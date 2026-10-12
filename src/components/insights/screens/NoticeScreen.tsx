@@ -1,6 +1,5 @@
 import { ArrowRight, Code2 } from 'lucide-react';
-import { ART } from '../../ideate/art';
-import { FadeIn, PrimaryButton, SecondaryButton } from '../ui';
+import { ART, FadeIn, PrimaryButton, SecondaryButton } from '../../journeykit';
 
 interface NoticeScreenProps {
   title: string;

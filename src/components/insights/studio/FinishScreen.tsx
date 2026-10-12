@@ -1,9 +1,7 @@
 import { ArrowRight, ArrowUpRight, Check, Code2, LayoutDashboard, Link2, MessagesSquare, RotateCcw } from 'lucide-react';
 import { useCopyToClipboard } from '../../../hooks/useCopyToClipboard';
-import { ART } from '../../ideate/art';
+import { ART, FadeIn, GhostButton, SecondaryButton } from '../../journeykit';
 import type { WorkspaceLinks } from '../types';
-import { FadeIn, GhostButton, SecondaryButton } from '../ui';
-
 interface FinishScreenProps {
   name: string;
   questions: string[];

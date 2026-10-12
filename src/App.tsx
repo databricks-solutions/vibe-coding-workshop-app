@@ -1,7 +1,6 @@
-import { useState, useEffect, useCallback, useMemo, lazy, Suspense } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef, lazy, Suspense } from 'react';
 import { Routes, Route, Link, useLocation, Navigate } from 'react-router-dom';
 import { WorkflowDiagram } from './components/WorkflowDiagram';
-import { ThemeToggle } from './components/ThemeToggle';
 import { ConfigurationPage } from './components/config/ConfigurationPage';
 import { LibraryPage } from './components/library/LibraryPage';
 import { LeaderboardPage } from './components/LeaderboardPage';
@@ -21,7 +20,12 @@ const IdeateApp = lazy(() => import('./components/ideate/IdeateApp'));
 const InsightsFlow = lazy(() => import('./components/insights/InsightsFlow'));
 import { ViewModeToggle } from './components/insights/ViewModeToggle';
 import type { InsightsSetup } from './components/insights/types';
-import { useWorkflowViewMode } from './hooks/useWorkflowViewMode';
+import { isInsightsSession, useWorkflowViewMode } from './hooks/useWorkflowViewMode';
+import { useIdeas } from './components/journeykit/engine/useIdeas';
+import { buildContext } from './components/journeykit/engine/ideaContext';
+import { buildDescription, buildTargetFor, slugOf, useLinkedIdea } from './components/journeykit/engine/handoff';
+import type { Idea, QuestionSource } from './components/journeykit/engine/types';
+import { BuildLinkBar } from './components/journeykit/stage/BuildLinkBar';
 import { 
   HeaderSessionMenu,
   SaveSessionDialog, 
@@ -52,7 +56,7 @@ export default function App() {
   // Mobile sidebar overlay state (for screens < md)
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
 
-  const [viewMode, setViewMode] = useWorkflowViewMode();
+  const [viewMode, setViewMode, adoptSessionView] = useWorkflowViewMode();
 
   // Determine current page from URL
   const isConfigPage = location.pathname.startsWith('/config') || location.pathname.startsWith('/library');
@@ -220,6 +224,8 @@ export default function App() {
     if (urlSessionId) {
       // Load specific session from URL
       loadSession(urlSessionId);
+    } else if (urlParams.get('openSession') || urlParams.get('buildIdea')) {
+      // Opening an idea's project, or starting one, is handled by the navigation effect below.
     } else {
       // Get or create default session (continues where user left off)
       getOrCreateDefaultSession();
@@ -373,6 +379,7 @@ export default function App() {
         setIncludeGenieOntology(!!sessionParams.include_genie_ontology);
         setCodingAssistant(sessionParams.coding_assistant || null);
         setCodingAssistantExplicit(!!sessionParams.coding_assistant);
+        adoptSessionView(isInsightsSession(restoredLevel, sessionParams.coding_assistant));
         
         // Find the next incomplete step using the actual section order for this workshop level
         const nextStep = getNextIncompleteStep(Array.from(restoredCompleted), skippedStepsArray, restoredLevel);
@@ -397,10 +404,13 @@ export default function App() {
   };
 
   // Create a brand new session (user explicitly wants to start fresh)
-  const createNewSession = async () => {
+  /** `onCreated` runs with the new id before any state changes, so linked ideas are ready when the view renders. */
+  const createNewSession = async (onCreated?: (id: string) => void): Promise<string | null> => {
     setIsCreatingNewSession(true);
+    setViewMode('technical');
     try {
       const response = await apiClient.createNewSession();
+      onCreated?.(response.session_id);
       setSessionId(response.session_id);
       setSessionOwner(null);
       setSessionSaved(false);
@@ -429,8 +439,10 @@ export default function App() {
       setIncludeLakehouse(false);
       setIncludeGenieOntology(false);
       window.history.replaceState({}, '', `?sessionId=${response.session_id}`);
+      return response.session_id;
     } catch (err) {
       console.error('Error creating session:', err);
+      return null;
     } finally {
       setTimeout(() => {
         setIsCreatingFadingOut(true);
@@ -527,6 +539,7 @@ export default function App() {
         setIncludeGenieOntology(!!sessionParams.include_genie_ontology);
         setCodingAssistant(sessionParams.coding_assistant || null);
         setCodingAssistantExplicit(!!sessionParams.coding_assistant);
+        adoptSessionView(isInsightsSession(effectiveRestoredLevel, sessionParams.coding_assistant));
         
         // Navigate to the next incomplete step using the actual section order
         const nextStep = getNextIncompleteStep(
@@ -875,6 +888,143 @@ export default function App() {
     setShowSaveDialog(true);
   };
 
+  const { ideas, updateIdea } = useIdeas();
+  const linkedIdea = useLinkedIdea(sessionId);
+
+  /**
+   * Hands an idea to a build: saves the current project if it has unsaved progress
+   * (a new session clears unsaved ones), starts a fresh project linked to the idea,
+   * and opens it in the view that builds it. An idea that already has a project reopens it.
+   */
+  const startBuildFromIdea = async (idea: Idea) => {
+    const target = buildTargetFor(idea);
+    if (idea.sessionId) {
+      updateIdea(idea.id, { buildTarget: target, buildStatus: 'building', status: 'committed' });
+      handleLoadSession(idea.sessionId);
+      setViewMode(target);
+      return;
+    }
+    setIsCreatingNewSession(true);
+    try {
+      const current = await apiClient.getDefaultSession();
+      const steps: number[] = current.completed_steps || [];
+      if (current.success && !current.is_saved && (steps.length > 0 || current.use_case)) {
+        await apiClient.saveSession({
+          session_id: current.session_id,
+          industry: current.industry,
+          industry_label: current.industry_label,
+          use_case: current.use_case,
+          use_case_label: current.use_case_label,
+          session_name: current.session_name && current.session_name !== 'New Session' ? current.session_name : `${current.use_case_label || 'My project'} (autosaved)`,
+          session_description: current.session_description,
+          current_step: Math.max(1, ...steps),
+          workshop_level: current.workshop_level,
+          completed_steps: steps,
+          step_prompts: current.step_prompts || {},
+        });
+      }
+    } catch (err) {
+      console.error('Could not save the current project before building; keeping it open:', err);
+      setIsCreatingNewSession(false);
+      getOrCreateDefaultSession();
+      return;
+    }
+
+    let questions = idea.genieQuestions ?? [];
+    let sources: Record<string, QuestionSource> = idea.genieQuestionSources ?? {};
+    let alternates = idea.genieAlternates;
+    if (target === 'insights' && !questions.length) {
+      try {
+        const r = await apiClient.ideateStep<{ questions: string[]; alternates?: string[] }>('questions', { ...buildContext(idea), providedQuestions: [] });
+        questions = r.questions.slice(0, 6);
+        sources = Object.fromEntries(questions.map(q => [q, 'ai' as const]));
+        alternates = r.alternates;
+      } catch {
+        // Insights asks for the questions on the locked screen instead.
+      }
+    }
+
+    const now = new Date().toISOString();
+    const newId = await createNewSession(id => updateIdea(idea.id, {
+      sessionId: id,
+      buildTarget: target,
+      buildStatus: 'building',
+      status: 'committed',
+      ...(target === 'insights' ? { lockedAt: idea.lockedAt ?? now, buildStage: 'data' as const, genieQuestions: questions, genieQuestionSources: sources, genieAlternates: alternates } : {}),
+      decisions: [...idea.decisions, { at: now, text: `Started building in ${target === 'insights' ? 'Insights' : 'the Technical workflow'}` }],
+    }));
+    finishSessionLoading();
+    if (!newId) return;
+    setViewMode(target);
+
+    const industry = idea.spark?.catalogIndustry || 'general';
+    const industryLabel = idea.spark?.catalogIndustryLabel || idea.spark?.industry || idea.industry || 'General';
+    const label = idea.title.slice(0, 30);
+    const description = buildDescription(idea);
+    const technical = target === 'technical';
+    if (technical) {
+      setSelectedIndustry(industry);
+      setSelectedIndustryLabel(industryLabel);
+      setSelectedUseCase(slugOf(idea.title));
+      setSelectedUseCaseLabel(label);
+      setSelectedUseCaseCertified(false);
+      setCustomUseCaseLabel(label);
+      setCustomDescription(description);
+      setStepPrompts({ 1: description });
+      setCompletedSteps(new Set([1]));
+      apiClient.updateSessionMetadata({
+        session_id: newId,
+        industry,
+        industry_label: industryLabel,
+        use_case: slugOf(idea.title),
+        use_case_label: label,
+        custom_use_case_label: label,
+        custom_use_case_description: description,
+        completed_steps: [1],
+      }).catch(err => console.error('Error saving the idea as the use case:', err));
+      apiClient.updateStepPrompt({ session_id: newId, step_number: 1, prompt_text: description, workshop_level: 'end-to-end' })
+        .catch(err => console.error('Error saving the idea brief:', err));
+    }
+    apiClient.saveSession({
+      session_id: newId,
+      industry: technical ? industry : undefined,
+      industry_label: technical ? industryLabel : undefined,
+      use_case: technical ? slugOf(idea.title) : undefined,
+      use_case_label: technical ? label : undefined,
+      session_name: idea.title,
+      session_description: idea.spark?.statement ?? idea.seed,
+      current_step: 1,
+      workshop_level: 'end-to-end',
+      completed_steps: technical ? [1] : [],
+      step_prompts: technical ? { 1: description } : {},
+    }).then(r => {
+      if (!r.success) return;
+      setSessionSaved(true);
+      setSessionName(idea.title);
+      setShareUrl(r.share_url || null);
+    }).catch(err => console.error('Error saving the new project:', err));
+  };
+
+  // Links from Ideate: `?buildIdea=` starts (or reopens) a build, `?openSession=` opens an idea's project.
+  const handledNav = useRef<string | null>(null);
+  useEffect(() => {
+    if (location.pathname !== '/' || handledNav.current === location.key) return;
+    const params = new URLSearchParams(location.search);
+    const build = params.get('buildIdea');
+    const open = params.get('openSession');
+    if (!build && !open) return;
+    handledNav.current = location.key;
+    if (build) {
+      const idea = ideas.find(i => i.id === build);
+      if (idea && !readOnly) void startBuildFromIdea(idea);
+      else if (!sessionId) getOrCreateDefaultSession();
+      return;
+    }
+    if (open && open !== sessionId) handleLoadSession(open);
+    setViewMode(params.get('view') === 'insights' ? 'insights' : 'technical');
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- runs once per navigation
+  }, [location.key]);
+
   const handleDiscardAndNewSession = () => {
     setShowNewSessionConfirm(false);
     window.history.replaceState({}, '', window.location.pathname);
@@ -1063,10 +1213,9 @@ export default function App() {
                     </Link>
                   </div>
                   
-                  {/* Theme Toggle & Session Menu in Header */}
+                  {/* View mode & Session Menu in Header */}
                   <div className="flex items-center gap-2 sm:gap-3 flex-shrink-0">
                     <ViewModeToggle mode={viewMode} onChange={setViewMode} />
-                    <ThemeToggle />
                     {readOnly ? (
                       <div className="flex items-center gap-2 text-muted-foreground text-ui-base">
                         <Eye className="w-3.5 h-3.5" />
@@ -1103,6 +1252,7 @@ export default function App() {
               {/* Content Area */}
               <div className="p-3 sm:p-6 xl:px-10 2xl:px-14">
                 <div className="max-w-7xl xl:max-w-[88rem] 2xl:max-w-[96rem] mx-auto">
+                  {linkedIdea && !isSessionLoading && <BuildLinkBar idea={linkedIdea} readOnly={readOnly} />}
                   {viewMode === 'insights' ? (
                     <Suspense fallback={<div className="min-h-[50vh]" />}>
                       <InsightsFlow

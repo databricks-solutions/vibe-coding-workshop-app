@@ -22,7 +22,6 @@ import {
   Wrench,
   type LucideIcon,
 } from 'lucide-react';
-import { ThemeToggle } from './ThemeToggle';
 import {
   RELEASES,
   type Release,
@@ -169,7 +168,6 @@ export function ReleaseNotesPage() {
               <p className="text-ui-xs text-muted-foreground">Stay up to date with the latest features and improvements</p>
             </div>
           </div>
-          <ThemeToggle />
         </div>
       </div>
 

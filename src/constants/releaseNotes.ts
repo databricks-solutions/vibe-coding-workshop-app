@@ -75,6 +75,38 @@ export const RELEASES: Release[] = [
         audience: 'installer',
         icon: 'database',
       },
+      {
+        title: 'Ideate: a business case sized like a finance partner would',
+        description:
+          'The "What could it be worth?" step now sizes the pilot, then scales it to the full rollout, adds up to two more value levers, and counts time saved at a capture rate so hard and soft dollars stay separate. Every question has a best guess, a running estimate, and "Looks good" works at any point. The business case is an executive page (value, the pilot ask, payback, cost of waiting, go and stop criteria) plus an appendix with scenarios, inputs, costs, and a three-year view. Approved use cases show what they are typically worth, and ideas started from them begin from those numbers.',
+        category: 'improved',
+        audience: 'attendee',
+        icon: 'sparkles',
+      },
+      {
+        title: 'From an idea to a build in one click',
+        description:
+          'Clarify, Shape, Impact, and the Genie questions step now offer a recommended option with the reason, keyboard shortcuts, and multi-select where it fits. "I\'m ready to build" opens a new project linked to the idea: insight ideas land on the Insights data step, copilots and automations on the Technical workflow with the use case filled in. "Build later" parks it, and My ideas shows what is building, sorted by value.',
+        category: 'new',
+        audience: 'attendee',
+        icon: 'route',
+      },
+      {
+        title: 'One light and dark setting, in the sidebar',
+        description:
+          'Appearance now lives at the bottom of the left sidebar on every page and applies across the whole app before the page draws, so Ideate, the Library, and Configuration no longer switch back. The Workflow page opens on the Technical view unless the session is an Insights one, and starting a new session always goes to Technical.',
+        category: 'fix',
+        audience: 'attendee',
+        icon: 'palette',
+      },
+      {
+        title: 'Separate model for the analysis steps',
+        description:
+          'Set app.analysis_endpoint in user-config.yaml (IDEATE_ANALYSIS_ENDPOINT) to run the Impact and summary steps on a stronger model; the step says when a fallback model answered. Use case value profiles are stored in a new usecase_value_profiles table that the app creates on first use (also in db/lakebase/ddl/13_usecase_value_profiles.sql).',
+        category: 'new',
+        audience: 'installer',
+        icon: 'cpu',
+      },
     ],
   },
   {

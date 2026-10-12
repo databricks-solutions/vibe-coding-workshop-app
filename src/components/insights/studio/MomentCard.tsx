@@ -4,7 +4,7 @@ import { AlertCircle, ArrowLeft, ArrowRight, Check, Copy, Eye, Lock, RotateCcw, 
 import { useCopyToClipboard } from '../../../hooks/useCopyToClipboard';
 import { chapterOf, momentsIn, type Moment } from '../journey';
 import { useMomentPrompt } from '../useMomentPrompt';
-import { GhostButton, PrimaryButton, SecondaryButton } from '../ui';
+import { GhostButton, PrimaryButton, SecondaryButton } from '../../journeykit';
 import { UnderTheHood } from './UnderTheHood';
 
 const WRITING_HINTS = [

@@ -25,6 +25,7 @@ import {
   Zap,
 } from 'lucide-react';
 import { BetaChip, SidebarNavItem, SidebarSectionLabel } from './SidebarNavItem';
+import { ThemeToggle } from '../ThemeToggle';
 
 export interface SidebarBrand {
   company_name?: string;
@@ -278,6 +279,11 @@ export function AppSidebar({
             onClick={onNavigate}
           />
         </div>
+      </div>
+
+      {/* Appearance */}
+      <div className={`${collapsed ? 'px-1.5' : 'px-2.5'} py-1.5 border-t border-sidebar-border flex-shrink-0`}>
+        <ThemeToggle collapsed={collapsed} />
       </div>
 
       {/* Footer */}

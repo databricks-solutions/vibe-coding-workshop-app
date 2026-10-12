@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { apiClient } from '../../../api/client';
+import type { ValueProfile } from '../../journeykit';
 
 export interface ApprovedIndustry {
   id: string;
@@ -29,6 +30,7 @@ export interface UseCasePreview {
   capabilities: string[];
   questions: string[];
   questionSource: QuestionSource;
+  valueProfile?: ValueProfile | null;
 }
 
 /** Workshop catalog industries map onto the Insights industry ideas where they overlap. */
