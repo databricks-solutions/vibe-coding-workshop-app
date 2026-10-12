@@ -47,9 +47,9 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
-    version: '2.4.0',
-    date: '2026-10-09',
-    title: 'Insights view, Ideate (Beta), a new Learning Academy, and a cleaner sidebar',
+    version: '2.5.0',
+    date: '2026-10-11',
+    title: 'Insights: a questions-first path to a Genie and a dashboard',
     items: [
       {
         title: 'Insights: a simpler path from questions to a Genie and a dashboard',
@@ -75,6 +75,13 @@ export const RELEASES: Release[] = [
         audience: 'installer',
         icon: 'database',
       },
+    ],
+  },
+  {
+    version: '2.4.0',
+    date: '2026-10-09',
+    title: 'Ideate (Beta), a new Learning Academy, and a cleaner sidebar',
+    items: [
       {
         title: 'Ideate: shape a raw idea into a decision-ready brief',
         description:
