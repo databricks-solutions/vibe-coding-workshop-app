@@ -83,7 +83,7 @@ export function IdeaStepStage({ flow, unavailable, onBackFromFirst, onChangeUseC
       case 'clarify': return !!idea.questions?.length && idea.questions.every(q => idea.answers[q.id]) && loading !== 'followup';
       case 'shape': return !!idea.chosenShapeId;
       case 'questions': return !!idea.genieQuestions?.length;
-      case 'impact': return !!idea.impact;
+      case 'impact': return !!idea.impact && (!!idea.impact.skipped || idea.impact.questions.every(q => idea.impact!.answers[q.key]));
       case 'brief': return !!idea.brief && !streamingBrief && !approved;
     }
   })();

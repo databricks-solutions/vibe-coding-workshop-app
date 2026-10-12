@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { AlertTriangle, Check, Loader2, Pencil, Plus, RefreshCw, TrendingUp } from 'lucide-react';
 import type { IdeaFlow } from '../engine/useIdeaFlow';
 import { QuestionCard } from '../ui/QuestionCard';
+import { AnswerTrail } from '../ui/AnswerTrail';
 import { caseFigures } from '../engine/ideaContext';
 import { RAMP, money, multiple, payback, pct, typicalRange, units } from '../engine/businessCase';
 import type { ImpactQuestion } from '../engine/types';
@@ -55,6 +56,10 @@ export function ImpactStep({ flow }: { flow: IdeaFlow }) {
   const active = editing ?? (firstOpen === -1 ? null : firstOpen);
   const q = active !== null ? questions[active] : null;
   const answeredCount = questions.filter(x => impact.answers[x.key]).length;
+  const lastOpen = questions.filter(x => !impact.answers[x.key]).length <= 1;
+  const trail = questions
+    .map((x, index) => ({ key: x.key, index, question: x.question, answer: impact.answers[x.key]?.label ?? '', soft: impact.answers[x.key]?.source === 'assumed' }))
+    .filter(x => x.answer && x.index !== active);
   const typical = idea.useCaseContext?.valueProfile;
 
   const save = (key: string, label: string, value: number, source: 'you said' | 'assumed') => {
@@ -97,6 +102,7 @@ export function ImpactStep({ flow }: { flow: IdeaFlow }) {
           reorder={false}
           hint={q.why}
           notSureLabel={ESTIMATE}
+          confirmLabel={editing !== null || lastOpen ? 'Done' : 'Next'}
           onPick={pick}
           onNotSure={() => save(q.key, q.estimate.label, q.estimate.value, 'assumed')}
           validateOther={text => (parseNumber(text, q.unit) === null ? 'Include a number, like 20' : null)}
@@ -104,6 +110,8 @@ export function ImpactStep({ flow }: { flow: IdeaFlow }) {
       )}
 
       {q && answeredCount > 0 && <RunningEstimate flow={flow} />}
+
+      {q && <AnswerTrail items={trail} onEdit={setEditing} />}
 
       {!q && <ImpactRecap flow={flow} onEdit={setEditing} />}
 

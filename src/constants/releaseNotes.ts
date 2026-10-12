@@ -78,7 +78,7 @@ export const RELEASES: Release[] = [
       {
         title: 'Ideate: a business case sized like a finance partner would',
         description:
-          'The "What could it be worth?" step now sizes the pilot, then scales it to the full rollout, adds up to two more value levers, and counts time saved at a capture rate so hard and soft dollars stay separate. Every question has a best guess, a running estimate, and "Looks good" works at any point. The business case is an executive page (value, the pilot ask, payback, cost of waiting, go and stop criteria) plus an appendix with scenarios, inputs, costs, and a three-year view. Approved use cases show what they are typically worth, and ideas started from them begin from those numbers.',
+          'The "What could it be worth?" step now sizes the pilot, then scales it to the full rollout, adds up to two more value levers, and counts time saved at a capture rate so hard and soft dollars stay separate. Every question has a best guess and a running estimate. The business case is an executive page (value, the pilot ask, payback, cost of waiting, go and stop criteria) plus an appendix with scenarios, inputs, costs, and a three-year view. Approved use cases show what they are typically worth, and ideas started from them begin from those numbers.',
         category: 'improved',
         audience: 'attendee',
         icon: 'sparkles',
@@ -86,7 +86,7 @@ export const RELEASES: Release[] = [
       {
         title: 'From an idea to a build in one click',
         description:
-          'Clarify, Shape, Impact, and the Genie questions step now offer a recommended option with the reason, keyboard shortcuts, and multi-select where it fits. "I\'m ready to build" opens a new project linked to the idea: insight ideas land on the Insights data step, copilots and automations on the Technical workflow with the use case filled in. "Build later" parks it, and My ideas shows what is building, sorted by value.',
+          'Clarify, Shape, Impact, and the Genie questions step now offer a recommended option with the reason, keyboard shortcuts, and multi-select where it fits. Picking an answer only highlights it; Next (or Enter) saves it and moves on, and "Your answers so far" lets you check and change earlier answers. "I\'m ready to build" opens a new project linked to the idea: insight ideas land on the Insights data step, copilots and automations on the Technical workflow with the use case filled in. "Build later" parks it, and My ideas shows what is building, sorted by value.',
         category: 'new',
         audience: 'attendee',
         icon: 'route',

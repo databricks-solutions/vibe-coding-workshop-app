@@ -217,14 +217,8 @@ export function useIdeaFlow(ideaId: string) {
   }, [logDecision, patch]);
 
   const approve = useCallback((step: StepKey) => {
-    let current = ideaRef.current;
+    const current = ideaRef.current;
     if (!current) return;
-    if (step === 'impact' && current.impact && !current.impact.skipped) {
-      const answers = { ...current.impact.answers };
-      for (const q of current.impact.questions) answers[q.key] ??= { ...q.estimate, source: 'assumed' };
-      current = { ...current, impact: { ...current.impact, answers } };
-      patch({ impact: current.impact, summary: undefined });
-    }
     const figures = caseFigures(current);
     const n = current.genieQuestions?.length ?? 0;
     const label: Record<StepKey, string> = {

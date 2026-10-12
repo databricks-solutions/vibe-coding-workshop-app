@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Check, Loader2, Pencil } from 'lucide-react';
 import type { IdeaFlow } from '../engine/useIdeaFlow';
 import { QuestionCard } from '../ui/QuestionCard';
+import { AnswerTrail } from '../ui/AnswerTrail';
 import { NOT_SURE } from '../engine/types';
 
 export function ClarifyStep({ flow }: { flow: IdeaFlow }) {
@@ -13,6 +14,10 @@ export function ClarifyStep({ flow }: { flow: IdeaFlow }) {
   const active = editing ?? (firstOpen === -1 ? null : firstOpen);
   const q = active !== null ? questions[active] : null;
   const answeredCount = questions.filter(x => idea.answers[x.id]).length;
+  const lastOpen = questions.filter(x => !idea.answers[x.id]).length <= 1;
+  const trail = questions
+    .map((x, index) => ({ key: x.id, index, question: x.question, answer: idea.answers[x.id], soft: idea.answers[x.id] === NOT_SURE }))
+    .filter(x => x.answer && x.index !== active);
 
   const pick = (value: string) => {
     if (!q || !value.trim()) return;
@@ -45,10 +50,13 @@ export function ClarifyStep({ flow }: { flow: IdeaFlow }) {
           recommended={q.recommended}
           multi={q.multi}
           eyebrow={q.isFollowup && <p className="text-ui-2xs uppercase tracking-wider font-semibold text-amber-400 mb-1">One quick follow-up</p>}
+          confirmLabel={editing !== null || lastOpen ? 'Done' : 'Next'}
           onPick={pick}
           onNotSure={() => pick(NOT_SURE)}
         />
       )}
+
+      {q && <AnswerTrail items={trail} onEdit={setEditing} />}
 
       {!q && flow.loading === 'followup' && (
         <p className="flex items-center gap-2 text-ui-sm text-muted-foreground animate-fade-in">
