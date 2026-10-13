@@ -197,6 +197,13 @@ patterns; §4.5 is the first-run on-ramp; §4.6 is the Phase 2A coaching layer.
 - **Still in-band, still no server→client call:** the model call is a **server-side** FMAPI request
   (server → serving endpoint), not an MCP server→client protocol call. It respects the probe floor
   (§2, §10) — the agent invokes a normal tool and reads the result aloud.
+- **Inline visuals (D12):** the server builds at most one markdown table or one ```` ```text ````
+  box-drawing diagram per `vibe_explain_step` call, from manifest step titles and output key names
+  only. The model may refer to it but never draws it (D12 spec §1 F9). The shape follows `focus` as
+  in the D2 §3.8 selection matrix. Visuals are fail-open: any error gives a null visual, never a
+  tool error. On MCP the step help also serves hand-converted twins in place of its Mermaid
+  diagrams, which Genie Code does not render. Design:
+  [`mcp-workshop-coach-visuals.md`](./mcp-workshop-coach-visuals.md).
 
 ---
 
