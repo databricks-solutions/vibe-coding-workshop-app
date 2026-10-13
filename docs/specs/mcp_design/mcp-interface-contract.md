@@ -310,6 +310,7 @@ description-as-prompt, `inputSchema`, `outputSchema`, annotations, errors, and t
   `/api/session/{id}/parameters` + `lakehouse-params`.
 
 ### 3.7 `vibe_coach`  *(net-new, Phase 2A — from D5 §11 adaptive coaching)*
+> Shipped as `vibe_explain_step` (§3.8; §9 Phase 2A amendment). This section is the historical coaching contract.
 > **Description (as-prompt):** "Coach the learner on **what is happening at their current step and
 > why**, grounded in their own progress — call it on demand when they ask 'why does this matter?',
 > 'what do I do now?', or 'I'm stuck'. Read-only; never blocks or advances the track. Args:
@@ -346,6 +347,108 @@ description-as-prompt, `inputSchema`, `outputSchema`, annotations, errors, and t
 - **Maps to:** D5 §11 (pedagogy/doctrine) via `services/llm.py` (extract of
   `call_databricks_serving_endpoint`, `routes.py:1400`; D4 §1.2). **No REST twin required** for v1
   (the SPA renders its own coaching); add `GET /api/track/{track}/coach` later if the UI needs it.
+
+### 3.8 `vibe_explain_step`  *(shipped 2026-09-27; Phase 2A coaching; D12 coach visuals 2026-10-13)*
+The shipped IDL of the seventh tool (D-99 REVISED). It hosts the §3.7/§12 coaching contract (§9
+Phase 2A amendment) and the D12 coach visuals
+([`mcp-workshop-coach-visuals.md`](./mcp-workshop-coach-visuals.md)). Where the shipped code differs
+from the D12 spec, this section follows the code and names the decision (D-101). Source:
+`src/backend/mcp_server.py` (`vibe_explain_step`, `StepHelpResult`).
+
+> **Description (as-prompt):** "Step help: `how_to_apply`, `expected_output`, `why`. Call ONLY when the learner asks about a step; `sectionTag` defaults to current. Pass `focus` (what_now|why|unblock|review) for grounded `coaching` (else `is_fallback`). Pass `visual` (table|diagram) when the learner asks to see, show, draw or map something. Present `coaching`, then `visual` exactly as given, then `visual_caption`."
+
+```jsonc
+"inputSchema": {
+  "type": "object",
+  "required": ["session_id"],
+  "properties": {
+    "session_id": { "type": "string" },
+    "sectionTag": { "type": "string", "description": "Defaults to the current step." },
+    "focus":      { "type": "string", "enum": ["what_now","why","unblock","review"],
+                    "description": "Grounded coaching lens (coaching.FOCI). Omit for the static help only." },
+    "visual":     { "type": "string", "enum": ["auto","none","table","diagram"],
+                    "description": "Inline visual (coach_visuals.VISUALS). Defaults to auto when focus is set, else none." }
+  },
+  "additionalProperties": false
+}
+"outputSchema": {
+  "type": "object",
+  "required": ["sectionTag", "title", "why", "how_to_apply", "expected_output"],
+  "properties": {
+    "sectionTag":      { "type": "string" },
+    "title":           { "type": "string" },
+    "why":             { "type": "string" },
+    "how_to_apply":    { "type": "string" },
+    "expected_output": { "type": "string" },
+    "coaching":        { "type": ["string", "null"], "description": "Set only when focus is passed (D-22)." },
+    "focus":           { "enum": ["what_now","why","unblock","review", null] },
+    "grounded_on":     { "type": "array", "items": { "type": "string" } },
+    "is_fallback":     { "type": "boolean", "default": false },
+    "visual":          { "type": ["string", "null"], "description": "A markdown table, or a ```text fenced diagram." },
+    "visual_kind":     { "enum": ["table", "diagram", null] },
+    "visual_caption":  { "type": ["string", "null"], "description": "Takeaway; diagram captions start with the DIAGRAM_CAPTION line." }
+  },
+  "additionalProperties": false
+}
+```
+- **Annotations:** `readOnly:true, destructive:false, idempotent:true, openWorld:true` (as
+  registered on `@mcp.tool(name="vibe_explain_step")`).
+- **Errors:** `INVALID_PARAMETER` (a `focus` not in `coaching.FOCI`, or a `visual` not in
+  `coach_visuals.VISUALS`; both checked before the session is loaded), `INVALID_SESSION`,
+  `UNKNOWN_STEP` (an explicit `sectionTag` that does not resolve, or a default lookup on a finished
+  track), and `UNKNOWN_STEP` for a default lookup on a blocked walk (`_blocked_step_error`: the
+  message names the dangling gate as a workshop configuration problem). Coaching and visuals never
+  raise (fail-open, below).
+- **Maps to:** `mcp_server.vibe_explain_step` → `assembler.get_section_input_content(...,
+  render_target="mcp")` (`src/backend/workshop/assembler.py`) for the static help →
+  `coach_visuals.build_visual` (`src/backend/services/coach_visuals.py`) → `coaching.coach`
+  (`src/backend/services/coaching.py`) when `focus` is set.
+
+#### D12 coach visuals (2026-10-13)
+- **Description.** The description above is the shipped one (385 characters). It replaces the
+  2026-09-27 wording rather than appending the spec §3.6 sentence to it, so it stays inside the
+  200–400 character bound (D-92).
+- **inputSchema delta.** One optional argument, invalid values give `INVALID_PARAMETER`:
+
+  ```jsonc
+  "visual": { "type": "string", "enum": ["auto","none","table","diagram"],
+              "description": "Inline visual. Defaults to auto when focus is set, and to none otherwise (spec §3.4)." }
+  ```
+- **outputSchema delta.** `StepHelpResult` gains `visual` (string|null), `visual_kind`
+  ("table"|"diagram"|null) and `visual_caption` (string|null). `extra="forbid"` stays.
+- **Selection matrix** (spec §3.4; `coach_visuals.SELECTION`, `coach_visuals.select_shape`):
+
+  | `focus` | `visual="auto"` | `visual="table"` | `visual="diagram"` |
+  |---|---|---|---|
+  | `what_now` | Progress table | Progress table | Curated diagram, else downstream chain |
+  | `why` | Curated diagram, else downstream chain | Progress table | Curated diagram, else downstream chain |
+  | `unblock` | Unblock checklist | Unblock checklist | Curated diagram, else downstream chain |
+  | `review` | Built-so-far chain | Progress table | Built-so-far chain |
+  | none (static help) | no visual | Progress table | Curated diagram, else downstream chain |
+
+  A visual without `focus` makes **no model call**: `vibe_explain_step` returns before
+  `coaching.coach` when `focus` is None.
+- **Shipped specifics.** Labels are manifest step titles and `key_label` of output key names
+  (D-93). The progress table shows the session frontier, not the requested step, and its caption
+  is `<d> of <n> steps done. Now: <title>.` (D-94), where `n` is the full outline with skipped
+  steps included (D-98). The curated diagram is the step's `how_to_apply.1` twin only when this
+  call actually served it, else the downstream chain (D-95, `coach_visuals._curated`). Diagram
+  captions start with `Diagram only, nothing to run.` (`visuals.DIAGRAM_CAPTION`).
+- **Fail-open.** Any visual error, or a visual that fails `lint_visual`, gives a null triple
+  (`visual`, `visual_kind`, `visual_caption` all null) and one WARNING naming only the section tag
+  and shape; never a tool error (`coach_visuals.build_visual`, plus the guard around it in
+  `vibe_explain_step`).
+- **Kill switch.** `VIBE_COACH_VISUALS_ENABLED`, read per call (`coach_visuals.visuals_enabled`),
+  with the same off values as the coaching switch. When off, the triple is always null. The twin
+  swap below is a defect fix and is not behind this switch.
+- **MCP twin swap.** `vibe_explain_step` calls the assembler with `render_target="mcp"`, which swaps
+  each Mermaid fence in `how_to_apply`/`expected_output` for its hand-converted twin
+  (`src/backend/workshop/mcp_visuals/`), with the plain line `Diagram only, nothing to run.` after
+  diagram twins only (D-84). A fence whose twin is missing, unreadable or stale degrades on its own
+  to `(This step has a diagram in the workshop web UI.)` (`visuals.FALLBACK_LINE`; per fence,
+  D-89), and a post-substitution net catches any fence that arrives later (D-87). No raw Mermaid
+  reaches MCP. Web callers keep the default `render_target="web"` and their output is
+  byte-identical.
 
 ---
 
@@ -543,6 +646,11 @@ class CoachResult(BaseModel):
     is_fallback: bool = False
 ```
 
+> **Shipped surface.** On the shipped tool the coaching fields (`coaching`, `focus`, `grounded_on`,
+> `is_fallback`) live on `StepHelpResult`, the `vibe_explain_step` output (§3.8), and the D12 visual
+> triple (`visual`, `visual_kind`, `visual_caption`) sits beside them. `CoachResult` above stays as
+> the historical contract.
+
 ### 12.2 `_COACH_SYSTEM` (the model system prompt)
 
 Passed as `system_prompt` to `call_databricks_serving_endpoint` (`routes.py:1400` → `services/llm.py`,
@@ -579,7 +687,11 @@ STYLE
 - No emoji, no numbered/decorated headers, no marketing adjectives, no filler (economist/humanizer
   bars, D5 §7). Precise and literal about tokens, gate names, and definitions — do not vague them.
 - Output prose only. No JSON, no markdown headings — the tool wraps your text into CoachResult.
+- If the CONTEXT has `visual`, a visual is shown after your text. You may point to it ("the table below"). Never draw one, and never describe it line by line.
 ```
+
+> **D12 (2026-10-13):** the last STYLE line was added by D12 coach visuals (`coaching.COACH_SYSTEM`,
+> `src/backend/services/coaching.py`).
 
 ### 12.3 Grounding context (the user message)
 
@@ -594,6 +706,14 @@ session history — **never** taken from tool arguments:
 | `captured_outputs` (relevant `consumes`/`produces` keys) | `engine.resolve_previous_outputs` (D3 §6) |
 | prior answers/decisions | `session_interactions` (D6 §3) |
 | `industry`, `use_case` | `session_parameters` (D6 §4) |
+| `visual` | kind and caption only (`visual: <kind>, <caption>`), never the visual text (`coaching.build_context`) |
 
 `grounded_on` in the result echoes which of these keys were non-empty, for transparency and the
 D8 grounding test (§4).
+
+> **D12 (2026-10-13):** the visual is built before the model call, so the prose can point at it
+> (§3.8). The coaching single-flight, cache and negative cache are keyed by
+> `(session_id, sectionTag, focus, visual_kind or "none")` (D-96, `coaching.coach`), so prose that
+> says "the table below" is never reused with a different or absent visual. The `coaching timings`
+> log line ends with a `visual=<kind|none>` field; its format string is
+> `coaching timings section=%s focus=%s db_ms=%d build_ms=%d model_ms=%d total_ms=%d outcome=%s cache=%s visual=%s`.

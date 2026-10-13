@@ -212,6 +212,60 @@ original runbook below is the shape of that smoke:
 Scriptable parts (handshake, tool calls, 307 check) can run headless against the deployed `/mcp`;
 the Genie-Code-driven parts are manual.
 
+### 8c. Coach visuals human smoke (D12)
+
+The human smoke from the D12 spec §6.3 ([`mcp-workshop-coach-visuals.md`](./mcp-workshop-coach-visuals.md),
+D-100). [`docs/superpowers/genie-code-smoke-script.md`](../../superpowers/genie-code-smoke-script.md)
+is not changed by it.
+
+1. Deploy the app from the integration branch (`feature/genie-code-mcp-integration`).
+2. Paste the spec's Appendix A re-probe prompt into Genie Code chat. Verbatim:
+
+````text
+Don't call any tools. Reproduce everything between BEGIN and END exactly, character for character, with no commentary and no changes to spacing.
+
+BEGIN
+
+| Step | Status |
+|---|---|
+| PRD Generation | Done |
+| **Locate Data & Bring Context** | **Now** |
+| Profile Your Schema | Next |
+
+```text
+Write instructions ◀──────┐
+│                         │
+▼                         │
+Add verified queries      │
+│                         │
+▼                         │
+Load benchmarks           │
+│                         │
+▼                         │
+Benchmarks at target ─ no ┘
+│
+yes
+▼
+Done
+```
+
+Diagram only, nothing to run. The optimize loop repeats until benchmarks hit the target.
+
+END
+````
+
+3. Pass every item of the spec §6.3 checklist:
+
+- [ ] The progress table renders as a table, with no ▶.
+- [ ] Every diagram is aligned, with no indent guides or fold arrows.
+- [ ] Every diagram caption starts with "Diagram only, nothing to run."
+- [ ] On a live session, `focus=why` on `semlayer_metric_view` shows prose, then the twin
+      diagram, then the caption, with no raw Mermaid anywhere.
+- [ ] `focus=unblock` shows the checklist table.
+
+Re-run the Appendix A re-probe after a Genie Code release, and before changing any rule in the
+spec's §3.2.
+
 ---
 
 ## 9. Capability re-probe harness (reusable)
@@ -264,6 +318,9 @@ before every deploy (D9 §7).
 | 307-no-redirect (plan §1.3.2) | §5 |
 | Stateless isolation (D7 §5) | §6 |
 | Additive, reseed-safe DDL (D6) | §7 |
+| No raw Mermaid on MCP; twins cover every seed fence (D12 §3.5) | `tests/workshop/test_mcp_visual_twins.py` |
+| Coach visuals: matrix, firewall, fail-open, kill switch, no model call (D12 §3.4/§3.1/§3.7) | `tests/workshop/test_coach_visuals.py` |
+| Web output unchanged by D12 | `tests/workshop/test_mcp_visual_twins.py` web byte-identity (`test_web_byte_identity`) |
 
 ---
 
