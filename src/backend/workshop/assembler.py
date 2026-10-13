@@ -331,7 +331,7 @@ Generate a detailed, actionable prompt for {section_tag} in a {industry_name} {u
     if render_target == "mcp":
         how_to_apply = visuals.strip_residual_mermaid(how_to_apply, section_tag, "how_to_apply")
         expected_output = visuals.strip_residual_mermaid(expected_output, section_tag, "expected_output")
-    
+
     return {
         "input": input_text,
         "input_template": input_template_raw,

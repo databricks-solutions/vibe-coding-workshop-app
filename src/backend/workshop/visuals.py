@@ -174,20 +174,34 @@ def mermaid_hash(body: str) -> str:
 
 @lru_cache(maxsize=1)
 def load_twins() -> Optional[dict]:
-    """``{name: (sha256, kind, text)}`` from ``index.json``; None on any load error."""
+    """``{name: (sha256, kind, text)}`` from ``index.json``.
+
+    Only a missing or unparseable index is global (None: every fence falls
+    back). A twin file that is missing, unreadable or fails ``lint_visual``
+    drops just its own entry, so only its fence falls back (spec §3.5, D-89).
+    """
 
     try:
         index = json.loads(INDEX_PATH.read_text(encoding="utf-8"))
-        twins = {}
-        for name, entry in index.items():
+        if not isinstance(index, dict):
+            raise ValueError("index.json is not an object")
+    except Exception:
+        logger.warning("MCP visual twin index failed to load; every Mermaid fence falls back")
+        return None
+    twins = {}
+    for name, entry in index.items():
+        try:
             kind = entry["kind"]
             suffix = {"diagram": ".txt", "table": ".md"}[kind]
             text = (TWIN_DIR / f"{name}{suffix}").read_text(encoding="utf-8").rstrip("\n")
+            # Tables carry no caption when served; lint the body with a stand-in.
+            caption = DIAGRAM_CAPTION if kind == "diagram" else "twin"
+            if lint_visual(text, kind, caption):
+                raise ValueError("twin fails lint_visual")
             twins[name] = (entry["sha256"], kind, text)
-        return twins
-    except Exception:
-        logger.warning("MCP visual twins failed to load; every Mermaid fence falls back")
-        return None
+        except Exception:
+            logger.warning("MCP visual twin %s dropped (missing, unreadable or failing lint); its fence falls back", name)
+    return twins
 
 
 def _twin_text(kind: str, text: str) -> str:

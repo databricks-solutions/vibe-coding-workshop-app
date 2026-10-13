@@ -134,3 +134,15 @@ D-83/D-85/D-86 human-approved as written.
 Release (human ruling, D-88): PR 1 is held open after ACCEPT+PASS; the human reviews the twin
 side-by-side; merge only after TPL #21 then APP #130 merge; default merge-only, the human deploys
 and runs the §6.3 smoke. Live checks run after the human's deploy.
+
+## Fix-up r1 (D-89)
+After ACCEPT + PASS on 9a2aedc (one lead ruling, one nit), spec §3.5 is applied per fence:
+`load_twins` treats only a missing or unparseable `index.json` as global (every fence falls back,
+one content-free WARNING). A twin file that is missing, unreadable or fails `lint_visual` drops
+only its own entry, with one WARNING naming the twin key and no content; every other fence still
+swaps. The D-84 caption, the D-87 residual net, render_target gating and the web path are
+unchanged (A4 golden unchanged). New tests: `test_missing_twin_file_degrades_only_its_fence`,
+`test_lint_failing_twin_degrades_only_its_fence` (tmp copy of mcp_visuals; the broken
+semlayer_profile how_to_apply twin falls back, its expected_output table twin and
+semlayer_metric_view still swap). Tamper: revert to all-or-nothing → both red. Nit: trailing
+whitespace removed at assembler.py:334 (`git diff --check` clean).

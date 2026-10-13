@@ -300,6 +300,46 @@ def test_load_error_fails_open(seeded, monkeypatch, tmp_path):
     assert FENCE not in result["how_to_apply"]
 
 
+def _twin_copy(monkeypatch, tmp_path):
+    """Serve twins from a tmp copy of mcp_visuals, so a test can break one file."""
+    copy_dir = tmp_path / "mcp_visuals"
+    copy_dir.mkdir()
+    for path in visuals.TWIN_DIR.iterdir():
+        (copy_dir / path.name).write_bytes(path.read_bytes())
+    monkeypatch.setattr(visuals, "TWIN_DIR", copy_dir)
+    monkeypatch.setattr(visuals, "INDEX_PATH", copy_dir / "index.json")
+    visuals.load_twins.cache_clear()
+    return copy_dir
+
+
+def _assert_only_profile_diagram_falls_back(caplog):
+    with caplog.at_level(logging.WARNING, logger=visuals.logger.name):
+        profile = _assemble("semlayer_profile", render_target="mcp")
+        other = _assemble("semlayer_metric_view", render_target="mcp")
+    assert profile["how_to_apply"].count(visuals.FALLBACK_LINE) == 1
+    assert FENCE not in profile["how_to_apply"]
+    # The other fence on the same step, and a fence on another step, still swap.
+    assert _twin_text("semlayer_profile.expected_output.1") in profile["expected_output"]
+    assert f"{_twin_text('semlayer_metric_view.how_to_apply.1')}\n\n{CAPTION}" in other["how_to_apply"]
+    dropped = [r.getMessage() for r in caplog.records if "dropped" in r.getMessage()]
+    assert len(dropped) == 1 and "semlayer_profile.how_to_apply.1" in dropped[0]
+    assert "profile (read-only)" not in dropped[0] and "ERD" not in dropped[0]
+
+
+def test_missing_twin_file_degrades_only_its_fence(seeded, monkeypatch, tmp_path, caplog):
+    copy_dir = _twin_copy(monkeypatch, tmp_path)
+    (copy_dir / "semlayer_profile.how_to_apply.1.txt").unlink()
+    _assert_only_profile_diagram_falls_back(caplog)
+
+
+def test_lint_failing_twin_degrades_only_its_fence(seeded, monkeypatch, tmp_path, caplog):
+    copy_dir = _twin_copy(monkeypatch, tmp_path)
+    path = copy_dir / "semlayer_profile.how_to_apply.1.txt"
+    path.write_text(path.read_text(encoding="utf-8").replace("\n│\n", "\n │\n", 1), encoding="utf-8")
+    assert visuals.lint_visual(path.read_text(encoding="utf-8"), "diagram", CAPTION) != []
+    _assert_only_profile_diagram_falls_back(caplog)
+
+
 def test_text_without_a_fence_is_unchanged():
     text = "Step help\n```sql\nSELECT 1\n```\n"
     assert visuals.swap_mermaid_for_mcp(text, "t", "how_to_apply") is text
