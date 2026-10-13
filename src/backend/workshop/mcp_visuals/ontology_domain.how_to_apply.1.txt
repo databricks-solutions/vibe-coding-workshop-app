@@ -1,0 +1,14 @@
+```text
+PRD scope
+│
+▼
+Discover domain (UI, or pre-created)
+│
+▼
+3-5 subdomains
+│
+▼
+capture domain ID + subdomain IDs to state
+├─▶ Pages (Step 12)
+└─▶ Routing Page (Step 13)
+```

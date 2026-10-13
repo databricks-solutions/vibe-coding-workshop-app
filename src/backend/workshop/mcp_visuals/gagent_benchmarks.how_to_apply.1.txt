@@ -1,0 +1,17 @@
+```text
+Metric View + detail table + PRD User Journeys
+│
+▼
+15 questions, from lookups to comparisons
+(at least 1 metric, at least 1 detail)
+│
+▼
+expected SQL per question
+(MEASURE() or detail) + confidence
+│
+▼
+STOP: you verify the flagged answers
+│
+▼
+optimize loop (Step 10)
+```

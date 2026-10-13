@@ -1,0 +1,10 @@
+```text
+Local Machine:
+Browser (localhost:8000)
+│
+▼
+Vite Dev Server (HMR + Proxy)
+│
+▼
+AppKit Backend (Node.js/Express)
+```

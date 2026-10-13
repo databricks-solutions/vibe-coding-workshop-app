@@ -1,0 +1,18 @@
+```text
+Step 2 profile + dropped glossary
+│
+▼
+inventory of up to 5 measures
+(definition, source, grain, owner, conflict)
+│
+▼
+same measure, two readings?
+├─ yes: write BOTH + recommend one ─┐
+│  (discovered, not injected)       │
+└─ none ────────────────────────────┤
+┌───────────────────────────────────┘
+▼
+STOP: your sign-off (or next step = approval)
+├─ approved ─▶ Metric View (Step 4)
+└─ no named owner ─▶ default owner to PRD role
+```

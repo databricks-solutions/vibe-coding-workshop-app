@@ -1,0 +1,15 @@
+```text
+governed Metric View (measures) ────────────────────┐
+base detail table(s), one grain below (row detail) ─┤
+PRD personas + User Journeys ───────────────────────┤
+┌───────────────────────────────────────────────────┘
+▼
+Genie space (Agent)
+│
+▼
+validate + review config
+(MV resolves; slot-agnostic)
+│ create
+▼
+space id saved to .vibecoding-state.md
+```

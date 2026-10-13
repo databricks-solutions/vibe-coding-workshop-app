@@ -1,0 +1,18 @@
+```text
+run built-in scorer (SQL chosen vs expected)
+│
+▼
+cluster misses
+│
+▼
+ONE fix per miss (6 fix modes)
+│
+▼
+APPEND to instructions (never replace)
+│
+▼
+re-run scorer
+│ 2-3 iterations, about 85%
+▼
+Gate: agent optimized
+```

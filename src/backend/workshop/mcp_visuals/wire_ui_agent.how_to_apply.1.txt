@@ -1,0 +1,9 @@
+```text
+Chat UI ◀───────────────────────────┐
+│ message                           │
+▼                                   │
+Serving plugin                      │
+│                                   │
+▼                                   │
+Agent endpoint ─ streamed tokens ───┘
+```

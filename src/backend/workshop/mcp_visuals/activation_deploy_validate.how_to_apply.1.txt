@@ -1,0 +1,14 @@
+```text
+Lakehouse Gold
+│ synced tables
+▼
+Lakebase (Postgres)   Genie space
+│ read-only           │ chat to SQL
+│                     │
+├─────────────────────┘
+▼
+Analytics App on Databricks Apps
+│
+▼
+Users
+```

@@ -1,0 +1,13 @@
+```text
+source schema (your lakehouse catalog and schema)
+│
+▼
+profile (read-only)
+grain, joins, PK/FK, hidden meaning
+│
+├─▶ ERD ─────────────────────────────────────────────┐
+└─▶ per-measure verdict: can or can't support today ─┤
+┌────────────────────────────────────────────────────┘
+▼
+review, no assets created
+```

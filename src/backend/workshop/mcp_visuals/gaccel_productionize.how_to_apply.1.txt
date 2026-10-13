@@ -1,0 +1,14 @@
+```text
+Metric View ────────────┐
+Genie space export ─────┤
+.lvdash.json dashboard ─┤
+synced-table specs ─────┤
+┌───────────────────────┘
+▼
+Databricks Asset Bundle
+(extend existing, don't fork)
+│
+▼
+validate, then deploy to the dev target
+(from the bundle-editor page)
+```

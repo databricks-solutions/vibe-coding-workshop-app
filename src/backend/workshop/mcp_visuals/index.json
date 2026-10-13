@@ -1,0 +1,146 @@
+{
+  "activation_app_design.how_to_apply.1": {
+    "sha256": "9e8cb6c0f10a33429c1ffba4c1a0ad511d4cc219a2b380c3979e75bbe704c5ec",
+    "kind": "diagram"
+  },
+  "activation_build_wire.how_to_apply.1": {
+    "sha256": "e2f0657dbda1e2b28df6b135081d19855330ead69d4fdb0d0c9a528fbc6fe75a",
+    "kind": "diagram"
+  },
+  "activation_deploy_validate.how_to_apply.1": {
+    "sha256": "6fa54fc830df982acd9f9b36834d3ef94a46b54b8d04d032137fb486f150c856",
+    "kind": "diagram"
+  },
+  "activation_reverse_sync.how_to_apply.1": {
+    "sha256": "057062b1eec1ef2503adbe3793c36967eac7540963f308230869f84e50ebf8cb",
+    "kind": "diagram"
+  },
+  "activation_table_design.how_to_apply.1": {
+    "sha256": "6d3708e0c094a03351b763fb6e116e39c0bb4afeb42b99a883a478768f989aae",
+    "kind": "diagram"
+  },
+  "activation_wire_genie.how_to_apply.1": {
+    "sha256": "7888fd7064c041f4cc886e8941c795dc4ab0baf8bf480a1315a6c04b2fd689be",
+    "kind": "diagram"
+  },
+  "activation_wire_lakebase.how_to_apply.1": {
+    "sha256": "c8c1278a48da7780cf0508734a6ca6e18e93b78a501061b92bd5dbfb0e28e8d0",
+    "kind": "diagram"
+  },
+  "agent_framework.how_to_apply.1": {
+    "sha256": "a3e88140e7a0caaa68995d81731d9aa891ae2ce0b38cf7f6fd68186012e92b8e",
+    "kind": "diagram"
+  },
+  "cursor_copilot_ui_design.expected_output.1": {
+    "sha256": "aa5c17ff5374feb71b8955028e2c3b3b37864fe7d189d9ffb0a99f11a6236ac2",
+    "kind": "diagram"
+  },
+  "cursor_copilot_ui_design.how_to_apply.1": {
+    "sha256": "56f3a6aa59f3d08768d80b2d806035a27fae310f1c7255009b0ad69a5ca897ab",
+    "kind": "diagram"
+  },
+  "deploy_databricks_app.expected_output.1": {
+    "sha256": "bc7c908067049cd982b7b9bce74a4113eeb44b1f6d389486805ecc828d969599",
+    "kind": "diagram"
+  },
+  "deploy_databricks_app.how_to_apply.1": {
+    "sha256": "7b97f9d396d1b374f4f6376733fdc78116723469c6b8d70cae42c596bdbcedaf",
+    "kind": "diagram"
+  },
+  "gaccel_activation.how_to_apply.1": {
+    "sha256": "7f03a39446cea7f95d0f44efb1bae39a76fe4237eab2db93d5d9843a1637b19f",
+    "kind": "diagram"
+  },
+  "gaccel_dashboard.how_to_apply.1": {
+    "sha256": "46d209b0226cfcb69197d4409a147549309f5e308804f7c69db10226c17ff31c",
+    "kind": "diagram"
+  },
+  "gaccel_productionize.how_to_apply.1": {
+    "sha256": "b3aa8df8f17483c41b2cd846c0518c513c6d6b324c5baa867c47f2145b23e3f0",
+    "kind": "diagram"
+  },
+  "gagent_benchmarks.how_to_apply.1": {
+    "sha256": "06fcf9492c3ac273d49e5e36e87b14dc58830689e69b5390556c48fe0f61899f",
+    "kind": "diagram"
+  },
+  "gagent_describe.how_to_apply.1": {
+    "sha256": "80613ad47bfbf000d9893e3e7a148d7f9f3abdb05fd7a5e2d30dbe1b2f95f470",
+    "kind": "diagram"
+  },
+  "gagent_instructions.how_to_apply.1": {
+    "sha256": "64d3ca2426a960d588d74633759c91e32a3b94cd25c733c35b4f969e9f9f0e8d",
+    "kind": "diagram"
+  },
+  "gagent_optimize.how_to_apply.1": {
+    "sha256": "f6e98d2fe06be9b99a583370a497ae80badb12f23d5b1128ea1d6e2fe74e453a",
+    "kind": "diagram"
+  },
+  "gagent_share.how_to_apply.1": {
+    "sha256": "79b3484f90d8b315041714c0411fba0f0907b346d6cda7738056234126ccfc9e",
+    "kind": "diagram"
+  },
+  "gagent_verified.how_to_apply.1": {
+    "sha256": "9e790d29c5258ee67a5a4f9384b1a3c8fee224b3df7b1aface98ddd3d47cb70c",
+    "kind": "diagram"
+  },
+  "ontology_domain.how_to_apply.1": {
+    "sha256": "f6c017d8a03d236a9cf6459f863e851cebc7e01c41cdc8b6e8683b6a4aa16404",
+    "kind": "diagram"
+  },
+  "ontology_pages.how_to_apply.1": {
+    "sha256": "0b43d57c0e49df794429c97d1d3e11884aa837b8f9a35a85b7b1d52b9086118f",
+    "kind": "diagram"
+  },
+  "ontology_routing.how_to_apply.1": {
+    "sha256": "052e5fff34db6c92a5c9727686afc3f856310180b207f95594081ea437323836",
+    "kind": "diagram"
+  },
+  "semlayer_locate.how_to_apply.1": {
+    "sha256": "a1acc0fb75867455c93ea076ba2d66d312114eb14666721c6c08b13adac2ad11",
+    "kind": "diagram"
+  },
+  "semlayer_measures.how_to_apply.1": {
+    "sha256": "46bdc4b75c73273d2ed332c9866871b8533f6c3e861895ada9854ccb714f8729",
+    "kind": "diagram"
+  },
+  "semlayer_metric_view.how_to_apply.1": {
+    "sha256": "90d1728f039278c5851fd6ed791d1372614daae5be26bdb026b0311204d2d2e1",
+    "kind": "diagram"
+  },
+  "semlayer_metric_view_importbi.how_to_apply.1": {
+    "sha256": "2354cecb4ecd43f71c67a1fb59b2dabc76997bf0e3b302fc3f5b118d87d8cc72",
+    "kind": "diagram"
+  },
+  "semlayer_profile.expected_output.1": {
+    "sha256": "6864fdc79475e7720276667ae5d0bbc612c551fc3c92cc9d675e7f3c908c92cd",
+    "kind": "table"
+  },
+  "semlayer_profile.how_to_apply.1": {
+    "sha256": "4c15991c2c56e6043762dfbe1027140651205c10f2da5c096a1bcb67e466ec76",
+    "kind": "diagram"
+  },
+  "semlayer_synonyms.how_to_apply.1": {
+    "sha256": "75d51c8caa298d00b1194dd29139ff9afb44dd50efd65d0ec3e7635fc830790b",
+    "kind": "diagram"
+  },
+  "setup_lakebase.how_to_apply.1": {
+    "sha256": "0a43f9a6cd3f07417bce7ddfad97b8d7bcb575feb646cb20947afdaf41a546be",
+    "kind": "diagram"
+  },
+  "sync_from_lakebase.how_to_apply.1": {
+    "sha256": "602e97bfb7182f57ca5fa1ac2a9260ee94876d182a882d8a47e5205b6b81b614",
+    "kind": "diagram"
+  },
+  "wire_ui_agent.how_to_apply.1": {
+    "sha256": "31a88cdf9de0fd7d06fe0c79ebad95f170b06075ba53d72f6d7a365ae17977be",
+    "kind": "diagram"
+  },
+  "wire_ui_lakebase.how_to_apply.1": {
+    "sha256": "5c3cb32b614418b2b9e0a9b35f37cb0bda0203a8506de453c556f6abcf6d90a9",
+    "kind": "diagram"
+  },
+  "workspace_setup_deploy.expected_output.1": {
+    "sha256": "54bf729e28cc8e4071cd691de55f026eadaf65b5c5d9c16ed4b9879a050f6087",
+    "kind": "diagram"
+  }
+}

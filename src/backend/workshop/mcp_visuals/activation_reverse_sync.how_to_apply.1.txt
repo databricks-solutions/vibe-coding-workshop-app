@@ -1,0 +1,18 @@
+```text
+activation_sync_plan.md (candidates, PKs, modes)
+│
+▼
+Enable CDF on Delta TRIGGERED sources only
+│
+▼
+Create synced tables (dims, then facts) ◀──┐
+│                                          │
+▼                                          │
+Poll until healthy (up to 15 min)          │
+│                                          │
+├─ failed ─▶ Delete + recreate ────────────┘
+│            (never edit in place)
+│ healthy
+▼
+Verify row counts in Lakebase
+```

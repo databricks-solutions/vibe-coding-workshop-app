@@ -1,0 +1,19 @@
+```text
+Metric View (synonyms from Step 4)
+│
+▼
+review current synonyms
+│
+▼
+expand per field ◀─ field aliases ─ imported BI file?
+(acronym, informal, legacy)
+│
+▼
+show diff (up to 10 per field)
+│ approve (or next step)
+▼
+rebuild MV natively
+│
+▼
+Gate: synonyms reviewed
+```
