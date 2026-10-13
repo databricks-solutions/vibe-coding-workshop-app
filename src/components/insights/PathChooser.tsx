@@ -4,6 +4,7 @@ import { ArrowRight, Check, Code2, Link2, Sparkles } from 'lucide-react';
 import { WORKFLOW_SECTIONS } from '../../constants/workflowSections';
 import type { WorkflowViewMode } from '../../hooks/useWorkflowViewMode';
 import { ideaMinutes } from '../journeykit';
+import { BetaChip } from '../layout/SidebarNavItem';
 import { CHAPTERS, TOTAL_MINUTES, chapterMinutes, formatMinutes } from './journey';
 
 /** Technical sections the Insights path also runs, through the Genie Accelerator. */
@@ -110,6 +111,7 @@ function StreamCard({ id, icon: Icon, title, promise, who, time, stages, current
         <div className="flex-1 min-w-0">
           <p className="flex items-center gap-2 text-ui-lg font-semibold text-foreground">
             {title}
+            {id === 'insights' && <BetaChip />}
             {current && <span className="text-[10px] font-semibold uppercase tracking-wider text-primary bg-primary/10 rounded-full px-2 py-0.5">You are here</span>}
           </p>
           <p className="text-ui-sm text-muted-foreground">{who} · {time}</p>

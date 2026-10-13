@@ -2,14 +2,15 @@ import { Suspense, lazy, useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import { Code2, Route, Sparkles } from 'lucide-react';
 import type { WorkflowViewMode } from '../../hooks/useWorkflowViewMode';
+import { BetaChip } from '../layout/SidebarNavItem';
 
 import { COMPARE_PATHS_EVENT } from './pathEvents';
 
 const PathChooserModal = lazy(() => import('./PathChooserModal'));
 
-const OPTIONS: { id: WorkflowViewMode; label: string; icon: typeof Code2; hint: string }[] = [
+const OPTIONS: { id: WorkflowViewMode; label: string; icon: typeof Code2; hint: string; beta?: boolean }[] = [
   { id: 'technical', label: 'Technical', icon: Code2, hint: 'The full workshop: apps, pipelines, agents and every option' },
-  { id: 'insights', label: 'Insights', icon: Sparkles, hint: 'A simpler path: get answers and dashboards from data you already have' },
+  { id: 'insights', label: 'Insights', icon: Sparkles, hint: 'A simpler path: get answers and dashboards from data you already have', beta: true },
 ];
 
 export function ViewModeToggle({ mode, onChange }: { mode: WorkflowViewMode; onChange: (m: WorkflowViewMode) => void }) {
@@ -26,13 +27,14 @@ export function ViewModeToggle({ mode, onChange }: { mode: WorkflowViewMode; onC
         {OPTIONS.map(opt => {
           const active = mode === opt.id;
           const Icon = opt.icon;
+          const name = opt.beta ? `${opt.label} (Beta)` : opt.label;
           return (
             <button
               key={opt.id}
               role="radio"
               aria-checked={active}
-              aria-label={`${opt.label} view`}
-              title={`${opt.label}: ${opt.hint}`}
+              aria-label={`${name} view`}
+              title={`${name}: ${opt.hint}`}
               onClick={() => onChange(opt.id)}
               className={`relative z-10 flex items-center gap-1.5 h-8 px-2 2xl:px-3 rounded-md text-ui-sm font-medium transition-colors ${
                 active ? 'text-foreground' : 'text-muted-foreground hover:text-foreground'
@@ -46,7 +48,10 @@ export function ViewModeToggle({ mode, onChange }: { mode: WorkflowViewMode; onC
                 />
               )}
               <Icon className={`w-3.5 h-3.5 ${active && opt.id === 'insights' ? 'text-primary' : ''}`} />
-              <span className="hidden 2xl:inline">{opt.label}</span>
+              <span className="hidden 2xl:inline-flex items-center gap-1.5">
+                {opt.label}
+                {opt.beta && <BetaChip />}
+              </span>
             </button>
           );
         })}
