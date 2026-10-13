@@ -135,12 +135,15 @@ def _progress(request: _Request) -> Visual | None:
     steps = _steps(request)
     done = [step for step, status in steps if status == "done"]
     unfinished = [step for step, status in steps if status != "done"]
-    n = len(steps)
+    # D-98: n is the full outline, skipped entries included (the beat is not in it).
+    n = len(engine.outline(request.track, request.state))
     if not unfinished and not request.needs_use_case:
         if not done:
             return None
         rows = [[step.title, "Done"] for step in done[-PROGRESS_DONE_ALL:]]
-        return Visual(_table(["Step", "Status"], rows), "table", f"All {n} steps done.")
+        d = len(done)
+        caption = f"All {n} steps done." if d == n else f"{d} of {n} steps done. The rest were skipped."
+        return Visual(_table(["Step", "Status"], rows), "table", caption)
     if request.needs_use_case:
         now_title, later = request.beat_title, unfinished
     else:

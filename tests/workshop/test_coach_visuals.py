@@ -72,6 +72,8 @@ def _states(track):
         "mid": (_state(tags[:3], {"use_case_brief": "x", "prd_document": "y"}), False),
         "all_done": (_state(tags, {"use_case_brief": "x", "prd_document": "y"}), False),
         "blocked": (_state(["project_setup"], use_case=False), True),
+        # D-98: a skipped step stays in n but is never a row.
+        "skipped": (_state(params={"skipped_gates": ["project_setup"]}), False),
     }
 
 
@@ -158,6 +160,12 @@ PROGRESS_BLOCKED = """| Step | Status |
 | PRD Generation | Next |
 | Locate Data & Bring Context | Next |
 | 21 more steps | Later |"""
+PROGRESS_SKIPPED = """| Step | Status |
+|---|---|
+| **PRD Generation** | **Now** |
+| Locate Data & Bring Context | Next |
+| Profile Your Schema | Next |
+| 20 more steps | Later |"""
 UNBLOCK_DASHBOARD = """| Kind | Needs | Status |
 |---|---|---|
 | Previous step | Draft the Metric View | {gate} |
@@ -187,6 +195,8 @@ GENIE_SNAPSHOTS = [
     ("mid", "progress", "gaccel_dashboard", (PROGRESS_MID, "table", "3 of 24 steps done. Now: Profile Your Schema.")),
     ("all_done", "progress", "gaccel_dashboard", (PROGRESS_ALL_DONE, "table", "All 24 steps done.")),
     ("blocked", "progress", "gaccel_dashboard", (PROGRESS_BLOCKED, "table", "1 of 24 steps done. Now: Define Your Use Case.")),
+    ("skipped", "progress", "gaccel_dashboard", (PROGRESS_SKIPPED, "table", "0 of 24 steps done. Now: PRD Generation.")),
+    ("skipped", "built", "gaccel_dashboard", None),
     ("fresh", "unblock", "gaccel_dashboard",
      (UNBLOCK_DASHBOARD.format(gate="Not done", prd="Missing"), "table", "0 of 3 needs met.")),
     ("mid", "unblock", "gaccel_dashboard",
@@ -273,6 +283,27 @@ def test_builders_snapshot_app_only():
         _chain("Set Up Project", "PRD Generation ─▶ PRD document"),
         "diagram", f"{CAPTION} What you have built so far.",
     ))
+
+
+def test_progress_denominator_counts_skipped_steps():
+    """D-98 regression: n is the full outline length, skipped entries included."""
+
+    state = _state(params={"skipped_gates": ["project_setup"]})
+    assert len(engine.outline(GENIE, state)) == 24
+    built = _build(GENIE, "prd_generation", state, False, None, "table")
+    assert built.caption == "0 of 24 steps done. Now: PRD Generation."
+    assert "Set Up Project" not in built.text
+
+
+def test_progress_all_done_with_one_skipped():
+    tags = _tags(GENIE)
+    state = _state([t for t in tags if t != "project_setup"], params={"skipped_gates": ["project_setup"]})
+    built = _build(GENIE, "prd_generation", state, False, "what_now", "table")
+    assert built.caption == "23 of 24 steps done. The rest were skipped."
+    assert built.text == PROGRESS_ALL_DONE
+    # With nothing skipped, all done still reads "All <n> steps done."
+    done = _state(tags)
+    assert _build(GENIE, "prd_generation", done, False, "what_now", "table").caption == "All 24 steps done."
 
 
 def test_unblock_overflow_row():
@@ -471,6 +502,7 @@ def test_firewall(track):
         (_state(captured=captured, params=params, use_case=False), True),
         (_state(tags[: len(tags) // 2], captured, params=params), False),
         (_state(tags, captured, params=params), False),
+        (_state(captured=captured, params={**params, "skipped_gates": tags[:1]}), False),
     ]
     served = f"how to apply {TOKEN}"
     built_any = 0

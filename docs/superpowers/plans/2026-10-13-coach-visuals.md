@@ -159,6 +159,18 @@ Shapes (§3.3):
 - (a) the second description-bound pin is in test_c12_tool_count_and_annotations in test_coaching.py (cited as :536 and :541 by different reads; locate it by name).
 - (d-93a) Post-ACCEPT casing amendment (length-neutral): the critic's label scan shows "Mlflow evaluation runs and iteration". key_label maps the whole word "mlflow" to "MLflow" (same length; still ≤ 36, and ≤ 40 bolded).
 
+## Fix-up r1 (D-98; gatekeeper FAIL @f83d560, PLAN_PROGRESS_DENOMINATOR)
+- Progress caption: n = len(engine.outline(track, state)), the full outline including skipped entries; the intent beat is not counted. d = the number of outline entries with status "done". Skipped steps are still not rows.
+- No unfinished step left (every entry is done or skipped):
+  - if d == n, the caption is "All <n> steps done.";
+  - otherwise it is "<d> of <n> steps done. The rest were skipped.";
+  - the rows are the last ≤ 4 done steps either way.
+- New tests, on genie-accelerator:
+  - with project_setup skipped, "0 of 24 steps done. Now: PRD Generation." (the gatekeeper's regression);
+  - all-done with one skipped, "23 of 24 steps done. The rest were skipped.";
+  - the snapshots and the firewall state set gain one skipped_gates state.
+- Fence unchanged: coach_visuals.py, test_coach_visuals.py, this plan (re-copied byte-identical) and decision-log.md (append D-98).
+
 ## Decisions carried into docs/superpowers/decision-log.md
 D-90, D-91 (human), D-92..D-97 (this plan), verbatim in substance from FORGE/state/lead/decisions.md.
 
