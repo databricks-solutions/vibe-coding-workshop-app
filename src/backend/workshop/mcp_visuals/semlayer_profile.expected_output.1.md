@@ -1,4 +1,4 @@
-| Entity | Key columns | Relates to |
+| Entity | Columns | Relates to |
 |---|---|---|
 | REGION | r_regionkey | has many NATION |
 | NATION | n_nationkey | has many CUSTOMER |

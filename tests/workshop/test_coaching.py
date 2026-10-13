@@ -51,10 +51,13 @@ FAKE_AKIA = "AK" + "IA" + "ABCDEFGH23456789"
 FAKE_PEM = "-----BEGIN " + "CERTIFICATE-----"
 CLEAN = "This step turns your use case brief into a PRD that every later step builds on."
 STATIC_KEYS = {"sectionTag", "title", "why", "how_to_apply", "expected_output"}
-NEW_DEFAULTS = {"coaching": None, "focus": None, "grounded_on": [], "is_fallback": False}
+NEW_DEFAULTS = {
+    "coaching": None, "focus": None, "grounded_on": [], "is_fallback": False,
+    "visual": None, "visual_kind": None, "visual_caption": None,
+}
 CONTEXT_KEYS = {
     "focus", "track", "title", "why", "how_to_apply", "expected_output", "gate",
-    "execution", "prompt", "captured_outputs", "prior_answers", "industry", "use_case",
+    "execution", "prompt", "visual", "captured_outputs", "prior_answers", "industry", "use_case",
 }
 
 
@@ -212,7 +215,7 @@ def test_c1_grounding(env):
     expected += ["why"] if step.why else []
     expected += ["how_to_apply", "expected_output"]
     expected += ["gate"] if step.gate else []
-    expected += ["execution", "prompt", "captured_outputs:use_case_brief", "prior_answers", "industry", "use_case"]
+    expected += ["execution", "prompt", "visual", "captured_outputs:use_case_brief", "prior_answers", "industry", "use_case"]
     assert result.grounded_on == expected
 
     # Grounding excerpts drop data rows, secrets and emails, and are capped.
@@ -420,6 +423,15 @@ def test_c8_cache_and_single_flight(env):
     mcp_server.vibe_explain_step(SESSION_ID, TAG, focus="what_now")
     assert len(env.calls) == 2
 
+    # D-96: the visual kind is in the key, so prose written beside a table is
+    # never reused for a call with a different visual or none.
+    mcp_server.vibe_explain_step(SESSION_ID, TAG, focus="unblock", visual="table")
+    assert len(env.calls) == 3
+    mcp_server.vibe_explain_step(SESSION_ID, TAG, focus="unblock", visual="none")
+    assert len(env.calls) == 4
+    mcp_server.vibe_explain_step(SESSION_ID, TAG, focus="unblock", visual="table")
+    assert len(env.calls) == 4
+
     # N concurrent joiners on a fresh key -> one model call.
     def slow():
         time.sleep(0.4)
@@ -439,13 +451,13 @@ def test_c8_cache_and_single_flight(env):
         thread.start()
     for thread in threads:
         thread.join(10)
-    assert len(env.calls) == 3
+    assert len(env.calls) == 5
     assert len(outcomes) == joiners
     assert all(o.coaching == CLEAN and o.is_fallback is False for o in outcomes)
 
 
 def test_c9_retry_after_failure(env, monkeypatch):
-    key = (SESSION_ID, TAG, "why")
+    key = (SESSION_ID, TAG, "why", "diagram")
     env.model["reply"] = RuntimeError("boom")
     assert mcp_server.vibe_explain_step(SESSION_ID, TAG, focus="why").is_fallback is True
     assert key in coaching._NEGATIVE
@@ -468,7 +480,7 @@ def test_c9_retry_after_failure(env, monkeypatch):
 
 
 def test_c10_late_success(env, monkeypatch):
-    key = (SESSION_ID, TAG, "why")
+    key = (SESSION_ID, TAG, "why", "diagram")
     release = threading.Event()
     monkeypatch.setattr(coaching, "COACH_BUDGET_S", 0.2)
 
@@ -534,6 +546,8 @@ def test_c12_tool_count_and_annotations():
     assert "focus" in tool.parameters["properties"]
     assert "focus" not in tool.parameters.get("required", [])
     assert 200 <= len(tool.description) <= 400
+    assert "visual" in tool.parameters["properties"]
+    assert "visual" not in tool.parameters.get("required", [])
 
 
 def test_c13_every_track(env):
@@ -768,7 +782,7 @@ KNOB_VARS = (
 )
 TIMING_RE = re.compile(
     r"^coaching timings section=(\S+) focus=(\S+) db_ms=(\d+) build_ms=(\d+) "
-    r"model_ms=(\d+) total_ms=(\d+) outcome=(\S+) cache=(\S+)$"
+    r"model_ms=(\d+) total_ms=(\d+) outcome=(\S+) cache=(\S+) visual=(\S+)$"
 )
 
 
@@ -881,8 +895,10 @@ def _timings(caplog):
     for line in lines:
         match = TIMING_RE.match(line)
         assert match, line
-        section, focus, db, build, model, total, outcome, cache = match.groups()
+        section, focus, db, build, model, total, outcome, cache, visual = match.groups()
         assert section == TAG
+        # coach() called directly passes no visual (D-96 key element "none").
+        assert visual == "none", line
         for value in (db, build, model, total):
             assert int(value) >= 0
         parsed.append({"line": line, "focus": focus, "outcome": outcome, "cache": cache})
@@ -939,7 +955,7 @@ def test_c19_timing_line(env, no_knobs, monkeypatch, caplog):
     outcomes = {}
     owner = threading.Thread(target=lambda: outcomes.setdefault("owner", _coach_direct(focus="what_now")))
     owner.start()
-    assert _wait(lambda: (SESSION_ID, TAG, "what_now") in coaching._INFLIGHT)
+    assert _wait(lambda: (SESSION_ID, TAG, "what_now", "none") in coaching._INFLIGHT)
     joiner = threading.Thread(target=lambda: outcomes.setdefault("joiner", _coach_direct(focus="what_now")))
     joiner.start()
     time.sleep(0.2)

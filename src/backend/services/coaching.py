@@ -6,7 +6,9 @@ help with ``is_fallback=True``. The model call runs off the event loop through
 mcp_server's ``_run_async_blocking``, passed in as ``run_blocking`` so this module
 never imports mcp_server (no circular import).
 
-Single flight + negative cache (D-24), keyed by (session_id, sectionTag, focus):
+Single flight + negative cache (D-24), keyed by (session_id, sectionTag, focus,
+visual kind or "none") (D-96), so prose that points at a visual is never reused
+without it:
   - a success cache, so a repeat call is a cache hit with no model call;
   - an in-flight Future registry, so concurrent joiners never start a second call;
   - a negative entry written ONLY on a truly resolved failure (exception, error or
@@ -57,7 +59,8 @@ STYLE
 - 2–5 sentences. Confident guide, not a form or a quiz. Recommend, don't interrogate (D5 §3, §7).
 - No emoji, no numbered/decorated headers, no marketing adjectives, no filler (economist/humanizer
   bars, D5 §7). Precise and literal about tokens, gate names, and definitions — do not vague them.
-- Output prose only. No JSON, no markdown headings — the tool wraps your text into CoachResult."""
+- Output prose only. No JSON, no markdown headings — the tool wraps your text into CoachResult.
+- If the CONTEXT has `visual`, a visual is shown after your text. You may point to it ("the table below"). Never draw one, and never describe it line by line."""
 
 FOCI = ("what_now", "why", "unblock", "review")
 
@@ -249,11 +252,14 @@ def build_context(
     interactions: list[dict[str, Any]],
     *,
     focus: str = "what_now",
+    visual_kind: str | None = None,
+    visual_caption: str | None = None,
 ) -> tuple[str, list[str]]:
     """Assemble the coaching user message from server-side sources only.
 
     Returns the user message and ``grounded_on``: the non-empty context keys, with
-    ``captured_outputs:<key>`` for each captured output that fed the message.
+    ``captured_outputs:<key>`` for each captured output that fed the message. A
+    built visual adds only ``visual: <kind>, <caption>``, never its text.
     """
 
     params = getattr(state, "session_parameters", None) or {}
@@ -273,6 +279,8 @@ def build_context(
     prompt = str(help.get("prompt") or "")[:prompt_cap]
     if prompt:
         sections.append(("prompt", "REFERENCE ONLY — do not restate or paraphrase:\n" + prompt))
+    if visual_kind:
+        sections.append(("visual", f"{visual_kind}, {visual_caption or ''}"))
     grounded_on = [key for key, value in sections if value]
     lines = [f"{key}: {value}" for key, value in sections if value]
 
@@ -312,9 +320,9 @@ def build_context(
 # --- Single flight + negative cache (D-24) ------------------------------------
 
 _LOCK = threading.Lock()
-_CACHE: dict[tuple[str, str, str], str] = {}
-_INFLIGHT: dict[tuple[str, str, str], "concurrent.futures.Future[str | None]"] = {}
-_NEGATIVE: dict[tuple[str, str, str], float] = {}
+_CACHE: dict[tuple[str, str, str, str], str] = {}
+_INFLIGHT: dict[tuple[str, str, str, str], "concurrent.futures.Future[str | None]"] = {}
+_NEGATIVE: dict[tuple[str, str, str, str], float] = {}
 
 
 def clear_caches() -> None:
@@ -338,7 +346,7 @@ def _response_text(result: Any) -> str | None:
 
 
 def _single_flight(
-    key: tuple[str, str, str],
+    key: tuple[str, str, str, str],
     user_message: str,
     forbidden_sources: list[tuple[str, str]],
     run_blocking: Callable[..., Any],
@@ -470,6 +478,8 @@ def coach(
     focus: str,
     track: str,
     run_blocking: Callable[..., Any],
+    visual_kind: str | None = None,
+    visual_caption: str | None = None,
 ) -> CoachOutcome:
     """Coach the learner on ``step`` through ``focus``. Never raises."""
 
@@ -487,7 +497,14 @@ def coach(
         db_ms = _ms_since(phase)
         phase = time.monotonic()
         user_message, grounded_on = build_context(
-            step, state, help, track, interactions, focus=focus
+            step,
+            state,
+            help,
+            track,
+            interactions,
+            focus=focus,
+            visual_kind=visual_kind,
+            visual_caption=visual_caption,
         )
         build_ms = _ms_since(phase)
         captured = getattr(state, "captured_outputs", None) or {}
@@ -496,7 +513,10 @@ def coach(
         ]
         phase = time.monotonic()
         text, reason = _single_flight(
-            (session_id, section_tag, focus), user_message, forbidden, run_blocking
+            (session_id, section_tag, focus, visual_kind or "none"),
+            user_message,
+            forbidden,
+            run_blocking,
         )
         model_ms = _ms_since(phase)
         outcome = CoachOutcome(
@@ -512,7 +532,7 @@ def coach(
     # Phase timings only (D-29): never the prompt, context or model text.
     logger.info(
         "coaching timings section=%s focus=%s db_ms=%d build_ms=%d model_ms=%d total_ms=%d"
-        " outcome=%s cache=%s",
+        " outcome=%s cache=%s visual=%s",
         section_tag,
         focus,
         db_ms,
@@ -521,6 +541,7 @@ def coach(
         _ms_since(started),
         "coached" if not outcome.is_fallback else f"fallback:{outcome.reason}",
         _CACHE_LABELS.get(outcome.reason, "miss"),
+        visual_kind or "none",
     )
     _record(session_id, section_tag, focus, outcome)
     return outcome
