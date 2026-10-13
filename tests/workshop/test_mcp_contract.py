@@ -34,6 +34,17 @@ EXPECTED_ANNOTATIONS = {
 }
 
 
+# D-92: the exact vibe_explain_step description (385 chars); the two §3.6
+# sentences close it verbatim.
+EXPLAIN_STEP_DESCRIPTION = (
+    "Step help: `how_to_apply`, `expected_output`, `why`. Call ONLY when the learner asks about a "
+    "step; `sectionTag` defaults to current. Pass `focus` (what_now|why|unblock|review) for "
+    "grounded `coaching` (else `is_fallback`). Pass `visual` (table|diagram) when the learner asks "
+    "to see, show, draw or map something. Present `coaching`, then `visual` exactly as given, then "
+    "`visual_caption`."
+)
+
+
 def _tools_by_name():
     return {tool.name: tool for tool in mcp_server.mcp._tool_manager.list_tools()}
 
@@ -42,6 +53,8 @@ def test_exactly_seven_tools_with_contract_metadata():
     tools = _tools_by_name()
     assert set(tools) == EXPECTED_TOOLS
     assert len(tools) == 7
+    assert tools["vibe_explain_step"].description == EXPLAIN_STEP_DESCRIPTION
+    assert len(EXPLAIN_STEP_DESCRIPTION) == 385
 
     for name, tool in tools.items():
         assert 200 <= len(tool.description or "") <= 400, name

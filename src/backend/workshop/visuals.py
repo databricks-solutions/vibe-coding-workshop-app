@@ -204,6 +204,13 @@ def load_twins() -> Optional[dict]:
     return twins
 
 
+def twin_visual(name: str) -> Optional[Tuple[str, str]]:
+    """``(text, kind)`` of the loaded twin ``name`` (no caption), or None (PR 2 coach reuse)."""
+
+    twin = (load_twins() or {}).get(name)
+    return (twin[2], twin[1]) if twin is not None else None
+
+
 def _twin_text(kind: str, text: str) -> str:
     return f"{text}\n\n{DIAGRAM_CAPTION}" if kind == "diagram" else text
 

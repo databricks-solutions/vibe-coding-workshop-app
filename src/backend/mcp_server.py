@@ -31,7 +31,7 @@ from mcp.types import (
 )
 from pydantic import BaseModel, ConfigDict, Field, RootModel
 
-from .services import coaching
+from .services import coach_visuals, coaching
 from .services.lakebase import (
     append_session_interaction,
     is_lakebase_configured,
@@ -227,6 +227,10 @@ class StepHelpResult(BaseModel):
     focus: Literal["what_now", "why", "unblock", "review"] | None = None
     grounded_on: list[str] = Field(default_factory=list)
     is_fallback: bool = False
+    # Server-built inline visual (D12 §3.6); null unless one was built.
+    visual: str | None = None  # markdown table, or a ```text fenced diagram
+    visual_kind: Literal["table", "diagram"] | None = None
+    visual_caption: str | None = None  # takeaway; diagrams prefixed "Diagram only, nothing to run."
 
 
 class SubmitAnswerResult(BaseModel):
@@ -1468,11 +1472,11 @@ def vibe_next_step(session_id: str, context: Context | None = None) -> NextStepR
 @mcp.tool(
     name="vibe_explain_step",
     description=(
-        "On-demand step help: `how_to_apply`, `expected_output`, `title`, `why` (not in the slim "
-        "payload). Call ONLY when the learner asks to explain a step or what to expect. Args: "
-        "`session_id`; `sectionTag` (optional, default current step). Pass `focus` "
-        "(what_now|why|unblock|review) when they ask what to do now, why it matters, are stuck, or "
-        "want a recap: grounded `coaching`, else `is_fallback: true`."
+        "Step help: `how_to_apply`, `expected_output`, `why`. Call ONLY when the learner asks about "
+        "a step; `sectionTag` defaults to current. Pass `focus` (what_now|why|unblock|review) for "
+        "grounded `coaching` (else `is_fallback`). Pass `visual` (table|diagram) when the learner "
+        "asks to see, show, draw or map something. Present `coaching`, then `visual` exactly as "
+        "given, then `visual_caption`."
     ),
     annotations=ToolAnnotations(
         readOnlyHint=True,
@@ -1486,12 +1490,18 @@ def vibe_explain_step(
     session_id: str,
     sectionTag: str | None = None,
     focus: str | None = None,
+    visual: str | None = None,
     context: Context | None = None,
 ) -> StepHelpResult:
     if focus is not None and focus not in coaching.FOCI:
         return _error_result(  # type: ignore[return-value]
             "INVALID_PARAMETER",
             f"focus must be one of {', '.join(coaching.FOCI)}.",
+        )
+    if visual is not None and visual not in coach_visuals.VISUALS:
+        return _error_result(  # type: ignore[return-value]
+            "INVALID_PARAMETER",
+            f"visual must be one of {', '.join(coach_visuals.VISUALS)}.",
         )
     loaded = _load_session_and_track(session_id, context)
     if loaded is None:
@@ -1542,6 +1552,27 @@ def vibe_explain_step(
         how_to_apply=how_to_apply,
         expected_output=expected_output,
     )
+    # The visual is built before coach() so the prose can point at it (§3.6).
+    # build_visual is fail-open; the second guard keeps a visual from ever
+    # failing the tool (§3.1 inv. 4).
+    try:
+        built = coach_visuals.build_visual(
+            step=step,
+            state=state,
+            track=track,
+            focus=focus,
+            visual=visual,
+            served_how_to_apply=how_to_apply,
+            needs_use_case=_needs_use_case(state),
+            beat_title=_INTENT_BEAT_STEP.title,
+        )
+    except Exception:  # noqa: BLE001
+        logger.warning("Coach visual failed section=%s", step.sectionTag)
+        built = None
+    if built is not None:
+        help_result = help_result.model_copy(
+            update={"visual": built.text, "visual_kind": built.kind, "visual_caption": built.caption}
+        )
     if focus is None:
         return help_result
     # Coaching is read-only and fail-open (D-22): the static fields stay as built
@@ -1550,10 +1581,15 @@ def vibe_explain_step(
         session_id=session_id,
         step=step,
         state=state,
-        help={**help_result.model_dump(), "prompt": prompt},
+        help={
+            **help_result.model_dump(exclude={"visual", "visual_kind", "visual_caption"}),
+            "prompt": prompt,
+        },
         focus=focus,
         track=track,
         run_blocking=_run_async_blocking,
+        visual_kind=built.kind if built is not None else None,
+        visual_caption=built.caption if built is not None else None,
     )
     return help_result.model_copy(
         update={
