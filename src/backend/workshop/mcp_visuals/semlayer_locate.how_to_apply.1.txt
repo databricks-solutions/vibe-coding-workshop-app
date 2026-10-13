@@ -1,0 +1,16 @@
+```text
+design_prd.md (journeys, data entities) ───────────┐
+dropped definitions (Excel, CSV, docs, BI export) ─┤
+data mode (extract, upload or synthetic) ──────────┤
+┌──────────────────────────────────────────────────┘
+▼
+docs/genie_brief.md
+(function, candidate measures, user questions)
+│
+▼
+ONE batched question list (pre-assumed),
+then your corrections
+│
+▼
+Gate: brief ready
+```

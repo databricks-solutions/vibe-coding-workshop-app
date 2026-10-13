@@ -1,0 +1,16 @@
+```text
+one real question (you needed this quarter)
+│
+▼
+Genie Agent
+│
+▼
+check 3 behaviors:
+MEASURE()? time anchor? scope?
+│
+▼
+note: what it got right + ONE thing to curate next
+│
+▼
+seeds the next optimize round
+```

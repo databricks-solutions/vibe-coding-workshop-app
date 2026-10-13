@@ -12,10 +12,12 @@ maps, workshop-parameter resolution, brand oklch conversion, …) remain in
 cycle. A byte-parity test (tests/workshop/test_assembler_parity.py, D8 §2.4)
 guards this extraction.
 """
-from typing import Dict, Optional
+from typing import Dict, Literal, Optional
+
+from src.backend.workshop import visuals
 
 
-def get_section_input_content(industry: str, use_case: str, section_tag: str, previous_outputs: Optional[Dict[str, str]] = None, session_id: Optional[str] = None, coding_assistant_override: Optional[str] = None) -> Dict[str, str]:
+def get_section_input_content(industry: str, use_case: str, section_tag: str, previous_outputs: Optional[Dict[str, str]] = None, session_id: Optional[str] = None, coding_assistant_override: Optional[str] = None, render_target: Literal["web", "mcp"] = "web") -> Dict[str, str]:
     """
     Get the input content (context/requirements) for a specific section.
     Templates are loaded from prompts_config.yaml with parameter substitution.
@@ -28,6 +30,11 @@ def get_section_input_content(industry: str, use_case: str, section_tag: str, pr
       - {prd_document}: PRD document from Step 2 (for UI design steps)
       - Workshop parameters: {workspace_url}, {lakebase_instance_name}, {lakebase_host_name}, {default_warehouse}
       - Any other keys from previous_outputs dict
+
+    ``render_target="mcp"`` (vibe_explain_step only) swaps each Mermaid fence in
+    how_to_apply / expected_output for its text twin before substitution, and
+    drops any fence still present afterwards (D12 §3.5, D-87). The "web"
+    default leaves the output byte-identical.
     """
     # Deferred import breaks the routes<->assembler import cycle: routes.py
     # re-exports this function at module-load time, so importing routes lazily
@@ -156,6 +163,11 @@ def get_section_input_content(industry: str, use_case: str, section_tag: str, pr
     # Set default for {prd_document} if not provided (for UI design steps)
     if '{prd_document}' not in params:
         params['{prd_document}'] = "[PRD not provided - please complete Step 2 (PRD Generation) first to include the PRD in your UI design]"
+
+    # MCP only: twins are keyed by the hash of the RAW fence, so swap before substitution.
+    if render_target == "mcp":
+        how_to_apply = visuals.swap_mermaid_for_mcp(how_to_apply, section_tag, "how_to_apply")
+        expected_output = visuals.swap_mermaid_for_mcp(expected_output, section_tag, "expected_output")
     
     for key, value in params.items():
         input_text = input_text.replace(key, str(value))
@@ -315,6 +327,11 @@ Please provide detailed requirements and specifications for this section."""
         system_prompt = f"""You are an expert Databricks solutions architect.
 Generate a detailed, actionable prompt for {section_tag} in a {industry_name} {use_case_title} application."""
     
+    # D-87: a fence can still arrive through a substituted value; never serve it on MCP.
+    if render_target == "mcp":
+        how_to_apply = visuals.strip_residual_mermaid(how_to_apply, section_tag, "how_to_apply")
+        expected_output = visuals.strip_residual_mermaid(expected_output, section_tag, "expected_output")
+
     return {
         "input": input_text,
         "input_template": input_template_raw,

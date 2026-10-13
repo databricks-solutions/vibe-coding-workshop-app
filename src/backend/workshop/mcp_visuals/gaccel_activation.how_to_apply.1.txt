@@ -1,0 +1,15 @@
+```text
+Metric View              AI/BI dashboard
+(a VIEW, not syncable)   table inventory
+│                        │
+├────────────────────────┘
+▼
+resolve base tables (dims + facts in _gold)
+│
+▼
+activation selection (tables + why)
+│
+▼
+Design & Provision Synced Tables
+(keys, grain, order, mode)
+```

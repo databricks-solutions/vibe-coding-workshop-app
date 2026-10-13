@@ -1,0 +1,11 @@
+```text
+User question
+│
+▼
+Agent (LLM + tools) ◀─ rows ─┐
+│                            │
+├─ tool call ─▶ Genie Space ─┘
+│               (question to SQL)
+▼
+Grounded answer
+```

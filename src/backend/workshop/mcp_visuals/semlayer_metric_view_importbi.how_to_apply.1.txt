@@ -1,0 +1,19 @@
+```text
+Tableau / Power BI file
+│
+▼
+/importBI: dashboard + LOCAL metric views
+│
+▼
+promote matching view to UC
+(Export to a Unity Catalog metric view)
+│
+▼
+governed Metric View (your gold schema)
+│
+▼
+MEASURE() query proves each measure returns
+│
+▼
+Gate: MV live
+```

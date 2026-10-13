@@ -1,0 +1,14 @@
+```text
+brief guardrails ────────────────────────┐
+MEASURE() vs detail routing rule ────────┤
+scope boundary (what it does NOT cover) ─┤
+┌────────────────────────────────────────┘
+▼
+lean rules (one text_instructions entry)
+│
+▼
+cut anything not load-bearing
+│
+▼
+PATCH serialized_space
+```

@@ -1,0 +1,21 @@
+```text
+reverse_etl.md (env) ──────────────────────────┐
+activation_sync_plan.md (synced tables + PKs) ─┤
+gold_layer_design.md (metrics) ────────────────┤
+design_prd.md (personas + journeys) ───────────┤
+┌──────────────────────────────────────────────┘
+▼
+analytics_ui_design.md (pages, KPIs, sources)
+│
+▼
+Build Analytics App
+│
+▼
+Wire to Lakebase
+│
+▼
+Wire Genie
+│
+▼
+Deploy & Validate
+```

@@ -1,0 +1,12 @@
+```text
+Install Lakebase plugin
+│
+▼
+Declare Lakebase as an app resource (databricks.yml)
+│
+▼
+Point app.yaml + .env at the database/schema
+│
+▼
+Wire Lakebase Backend (next)
+```

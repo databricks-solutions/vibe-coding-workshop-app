@@ -1530,6 +1530,7 @@ def vibe_explain_step(
             previous_outputs=previous_outputs,
             session_id=session_id,
             coding_assistant_override=DEFAULT_CODING_ASSISTANT,
+            render_target="mcp",
         )
         how_to_apply = assembled.get("how_to_apply", "")
         expected_output = assembled.get("expected_output", "")
