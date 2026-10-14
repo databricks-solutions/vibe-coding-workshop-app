@@ -47,6 +47,8 @@ USE_CASE = "ai_driven_booking"
 # its lock (USE_CASE_LEVEL_LOCK: build_skill), exactly as the SPA does, so the
 # skills-accelerator walk is started with that use case.
 USE_CASE_FOR = {"skills-accelerator": "build_skill"}
+# D-115: vibe_start_track refuses any industry but sample on skills-accelerator.
+INDUSTRY_FOR = {"skills-accelerator": "sample"}
 # W1 walks this many steps past the first through vibe_next_step.
 WALK_DEPTH = 3
 
@@ -133,8 +135,9 @@ def walk_env(monkeypatch):
     return store, saves
 
 
-def _start(track, *, use_case=None, industry=INDUSTRY):
+def _start(track, *, use_case=None, industry=None):
     use_case = use_case or USE_CASE_FOR.get(track, USE_CASE)
+    industry = industry or INDUSTRY_FOR.get(track, INDUSTRY)
     started = mcp_server.vibe_start_track(track, use_case=use_case, industry=industry)
     assert not isinstance(started, dict), started
     return started.session_id

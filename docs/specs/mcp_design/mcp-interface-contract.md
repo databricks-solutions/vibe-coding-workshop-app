@@ -150,6 +150,12 @@ description-as-prompt, `inputSchema`, `outputSchema`, annotations, errors, and t
 - **Annotations:** `readOnly:false, destructive:false, idempotent:true, openWorld:true`
   (resuming with the same `session_id` is idempotent).
 - **Errors:** `UNKNOWN_TRACK`.
+- **Skills-accelerator lock (D-115, D-120):** on `track="skills-accelerator"` (new session, or a
+  resumed one with no use case yet) the tool locks `industry="sample"`, `use_case="build_skill"`
+  before the first save, so the session stays on that track and the intent beat never appears. Any
+  other `industry`/`use_case` gives `INVALID_PARAMETER`; a catalogue that answers without that pair
+  gives `USE_CASE_UNAVAILABLE`; both create nothing. A catalogue outage starts anyway on the same
+  lock (label "Build a Data Contract Skill") and logs one WARNING.
 - **Maps to:** D3 `outline(track, session)`; REST twin `GET /api/track/{track}/outline` (roadmap §9).
 
 ### 3.2 `vibe_get_step`
@@ -320,6 +326,9 @@ description-as-prompt, `inputSchema`, `outputSchema`, annotations, errors, and t
 ```
 - **Annotations:** `readOnly:false, destructive:false, idempotent:true, openWorld:true`.
 - **Errors:** `INVALID_SESSION`, `INVALID_PARAM` (unknown key with a strict flag, else ignored).
+- **Skills-accelerator lock (D-115):** on a session that resolves to skills-accelerator (build_skill
+  locked), a `use_case` other than `build_skill`, an `industry` other than `sample`, or
+  `use_case_source="custom"` gives `INVALID_PARAMETER` and persists nothing; other keys are unaffected.
 - **Maps to:** D3 §4 session_parameters + the outline flag filter (D3 §5.1); reuses
   `/api/session/{id}/parameters` (`GET` `src/backend/api/routes.py:4433`, `PUT`
   `src/backend/api/routes.py:4520`) + `lakehouse-params`.
@@ -527,6 +536,7 @@ error (generic §5.5). Shape:
 | `GATE_REQUIRED` | Step-9 confirm answer not yet recorded | `complete_step` | D1 §11 |
 | `UNKNOWN_INTERACTION` | `interaction_id` not on the current step | `submit_answer` | D1 §6 |
 | `INVALID_PARAM` | unknown/invalid parameter (strict mode) | `set_parameters` | D3 §4 |
+| `USE_CASE_UNAVAILABLE` | skills-accelerator start, but the catalogue has no sample/build_skill | `start_track` | D-115, D-120 |
 
 `complete_step` on an already-completed gate is **not** an error — it is idempotent success
 (D3 F3). `vibe_explain_step` with `focus` **never** returns an FMAPI error — model/timeout

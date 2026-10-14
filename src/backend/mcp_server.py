@@ -1205,6 +1205,15 @@ def _step_payload(
     return payload
 
 
+# D-115: refusal for any non-build_skill pick on skills-accelerator (vibe_start_track
+# and vibe_set_parameters share it).
+_SKILLS_TRACK_LOCK_MESSAGE = (
+    "The skills-accelerator track always builds the Data Contract Skill (use case build_skill). "
+    "To work on a different use case, start the end-to-end track with "
+    'vibe_start_track(track="end-to-end").'
+)
+
+
 @mcp.tool(
     name="vibe_start_track",
     description=(
@@ -1249,6 +1258,36 @@ def vibe_start_track(
     _email = _request_user(context)
     if "@" in _email:
         state.session_parameters.setdefault("user_email", _email)
+    # D-115 / D-120: skills-accelerator always means build_skill (the web app reaches
+    # the track only via that use case, and resolve_track keeps a session on it only
+    # while build_skill is locked). Lock the pair before the D-13 check and the first
+    # persist so the record carries it from the first write; refuse any other pick.
+    # A pair missing from a catalogue that answers fails; an outage starts anyway on
+    # the constant lock. A session that already has a use case is left as it is.
+    skills_lock: dict[str, Any] = {}
+    if track == "skills-accelerator" and not state.session_parameters.get("use_case"):
+        if (industry and industry != "sample") or (use_case and use_case != "build_skill"):
+            return _error_result("INVALID_PARAMETER", _SKILLS_TRACK_LOCK_MESSAGE)  # type: ignore[return-value]
+        industry, use_case = "sample", "build_skill"
+        pair_status = _curated_pair_status(industry, use_case)
+        if pair_status == "unknown":
+            return _error_result(  # type: ignore[return-value]
+                "USE_CASE_UNAVAILABLE",
+                "The skills-accelerator track needs the 'Build a Data Contract Skill' use case, "
+                "which is not in this workspace's use-case catalogue. Start end-to-end instead, "
+                "or ask the facilitator to reseed use cases.",
+            )
+        if pair_status == "unavailable":
+            logger.warning(
+                "skills-accelerator start: use-case catalogue unavailable; "
+                "locked build_skill with constant label"
+            )
+        skills_lock = {
+            "industry": industry,
+            "industry_label": _industry_label_for(industry, None),
+            "use_case": use_case,
+            "use_case_label": _use_case_label_for(industry, use_case) or "Build a Data Contract Skill",
+        }
     # D-13 / D-15: an uncatalogued use case is ignored — no gate, no use_case
     # column or param, default session name — so the intent beat elicits a real
     # pick and the row earns no step-1 credit. A catalogued industry is still
@@ -1286,7 +1325,8 @@ def vibe_start_track(
             # (NOT a use_case fallback — see that helper's docstring).
             industry_label=_industry_label_for(industry or "", None),
             use_case=use_case,
-            use_case_label=_use_case_label_for(industry or "", use_case or ""),
+            use_case_label=skills_lock.get("use_case_label")
+            or _use_case_label_for(industry or "", use_case or ""),
             session_name=_initial_name,
             created_by=_request_user(context),
             # Stamp the walked track as the top-level workshop_level column so the
@@ -1320,8 +1360,10 @@ def vibe_start_track(
     if industry and use_case and not engine.use_case_resolved(state):
         engine.resolve_use_case(state, _build_use_case_brief(state.session_parameters))
         if is_lakebase_configured():
+            # A resumed unlocked skills session gets the lock columns here (the
+            # new-session seed above already wrote them; COALESCE makes this a no-op).
             _persist_mcp_delta(
-                resolved, before, state, session_parameters=state.session_parameters
+                resolved, before, state, session_parameters=state.session_parameters, **skills_lock
             )
     # Deep-link handoff (Workstream 2): hand back a ready-to-open web-UI URL for this
     # same session so the learner can move freely between MCP and the app. None when
@@ -2117,6 +2159,15 @@ def vibe_set_parameters(
             "INVALID_PARAMETER",
             f"{', '.join(reserved)} are server-owned and cannot be set via vibe_set_parameters.",
         )
+
+    # D-115: a skills-accelerator session (resolve_track gives that only while
+    # build_skill is locked) cannot switch use case; refuse before anything persists.
+    if track == "skills-accelerator" and (
+        ("use_case" in params and params.get("use_case") != "build_skill")
+        or ("industry" in params and params.get("industry") != "sample")
+        or params.get("use_case_source") == "custom"
+    ):
+        return _error_result("INVALID_PARAMETER", _SKILLS_TRACK_LOCK_MESSAGE)  # type: ignore[return-value]
 
     # Friendly data-location aliases (Workstream 1): map the web LakehouseParams
     # editor's catalog/schema fields onto the workshop parameter keys the assembler
