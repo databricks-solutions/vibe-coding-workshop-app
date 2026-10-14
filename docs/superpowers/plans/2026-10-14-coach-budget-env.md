@@ -20,7 +20,7 @@ non-numeric, non-finite or <= 0 values with a WARNING and no other clamp.
 r1 claimed a 20 s budget blocks the uvicorn event loop because FastMCP calls sync tools
 directly. At 5c37937 it doesn't: `WorkshopFastMCP._install_error_aware_handler`
 (src/backend/mcp_server.py:335, installed at :2545) wraps every tool call in
-`asyncio.to_thread` (:368), so `_run_async_blocking`'s `thread.join(timeout_s)` (:1827) blocks a
+`asyncio.to_thread` (:368), so `_run_async_blocking`'s `thread.join(timeout_s)` (:1816) blocks a
 worker thread, not the loop (commit 78ea6ce). Live proof (FORGE/state/probes/mcp-loop-blocking.md,
 deployment 01f1c75e…): during 5 coaching calls holding the server 7.7–8.0 s each, /health max
 stayed 0.247–0.297 s (baseline 0.252–0.261 s), all 392 polls returned 200, and a concurrent
@@ -92,6 +92,10 @@ Never app.yaml (git-ignored, the human's), never src/, never db/.
 - L3 during one cache-miss coaching call, poll /health every 0.25 s: max latency stays under 1 s
   and every poll returns 200 (the mcp-loop-blocking method), and a concurrent no-focus
   vibe_explain_step from another probe session returns in under 2 s.
+
+## Fix-up r1 (gate r1 FAIL A6)
+The plan cited `thread.join(timeout_s)` at mcp_server.py:1827; it is at :1816 (:1827 is the
+vibe_complete_step description). Lead's citation error in this plan, now corrected; no other change.
 
 ## Reversal
 Remove the env entry from app.yaml (or the template) and redeploy: the budget returns to 8.0 s.
