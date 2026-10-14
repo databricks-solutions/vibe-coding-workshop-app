@@ -109,7 +109,7 @@ CREATE INDEX IF NOT EXISTS idx_session_interactions_tag ON ${schema}.session_int
 
 ### 3a. Coaching provenance (Phase 2A — reuse the same table, two additive columns)
 
-Adaptive coaching (`vibe_coach`, D2 §3.7 / D5 §11) reuses `session_interactions` rather than adding
+Adaptive coaching (the `vibe_explain_step` `focus` path, D2 §3.8 / D5 §11) reuses `session_interactions` rather than adding
 a new table — a coaching turn is just another interaction:
 
 - `kind = 'coaching'`, `interaction_id = "coach.<focus>"` (e.g. `coach.why`), `answer = NULL`,
@@ -119,9 +119,9 @@ a new table — a coaching turn is just another interaction:
 | Column | Type | Purpose |
 |---|---|---|
 | `is_fallback` | `BOOLEAN DEFAULT FALSE` | TRUE ⇒ the FMAPI call failed/timed out (or no endpoint configured) and the static option-keyed coaching was returned (D5 §11.4). Drives the **fallback-rate** metric. |
-| `focus` | `VARCHAR(16)` | The coaching lens: `what_now` \| `why` \| `unblock` \| `review` (D2 §3.7). NULL for non-coaching rows. |
+| `focus` | `VARCHAR(16)` | The coaching lens: `what_now` \| `why` \| `unblock` \| `review` (D2 §3.8). NULL for non-coaching rows. |
 
-- The write is **best-effort telemetry** — a failed insert must **not** fail the `vibe_coach` call
+- The write is **best-effort telemetry** — a failed insert must **not** fail the `vibe_explain_step` call
   (coaching is fail-open, D5 §11.4). This matches the existing `append_session_interaction(...)`
   behavior in `src/backend/services/lakebase.py`, which already returns `False` (never raises) on a
   persistence failure.
@@ -174,7 +174,7 @@ source of truth.
   correctness.
 - **Delta writes:** `complete_step` appends to `completed_gates` (set semantics — idempotent, D3 F3)
   and sets one `captured_outputs` key. `submit_answer` inserts one `session_interactions` row.
-  `coach` (§3a) reads the session row + upstream `captured_outputs`, then **best-effort** inserts one
+  `vibe_explain_step` with `focus` (§3a) reads the session row + upstream `captured_outputs`, then **best-effort** inserts one
   `kind='coaching'` row (a failed insert never fails the tool).
 - **No cross-session reads** in the hot path (D7 §5).
 
