@@ -82,14 +82,22 @@ Tools are prefixed `vibe_` and named `verb_object`. Resources use the `vibe://` 
 {
   "sectionTag": "string", "title": "string", "why": "string",
   "prompt": "string",                 // verbatim for bypass_llm (D3 §7.5)
-  "how_to_apply": "string", "expected_output": "string",
+  "user_trigger_prompt": "string",    // the plain-English ask the learner sends to start the step; "" if none
+  "instruction": ["string","null"],   // per-step "present the trigger, then WAIT" doctrine
   "gate": ["string","null"], "requiresGate": ["string","null"],
   "consumes": ["string"], "produces": ["string","null"],
   "execution": { "enum": ["agent-doable","ui-driven","hybrid"] },
   "next": { "sectionTag":"string", "title":"string" },
-  "interaction": ["Interaction-map","null"]   // { pre?, decision?, post? } — D1 §6
+  "interaction": ["Interaction-map","null"],  // { pre?, decision?, post? } — D1 §6
+  "orientation": ["string","null"],           // first-run preamble on step 1 of a fresh session; else null
+  "available_industries": ["array","null"],   // use_case_selection step only
+  "available_use_cases": ["array","null"],    // use_case_selection step only, once an industry is set
+  "data_location": ["object","null"]          // Locate Data step only: { catalog, schema, is_overridden }
 }
 ```
+Shipped as `ExplainabilityPayload` in `src/backend/mcp_server.py`: the `vibe_get_step` output and
+the step member of the `vibe_next_step` union (§3.3). `how_to_apply` and `expected_output` are not
+on it; they moved to `vibe_explain_step` (§3.8).
 
 ### 2.3 Identity → session resolution
 Every tool resolves the Databricks caller to a `session_id` server-side (reuse `/api/user/current`,
@@ -100,7 +108,8 @@ identity source; `clientInfo.name` is the connection name, not the user (probe f
 ### 2.4 Annotation semantics
 `readOnlyHint` = no state change · `destructiveHint` = removes/overwrites data ·
 `idempotentHint` = same args ⇒ same effect (safe to retry) · `openWorldHint` = touches an external
-system. All seven tools set `openWorldHint: true` (Lakebase; plus FMAPI for `vibe_coach`, §3.7).
+system. All seven tools set `openWorldHint: true` (Lakebase; plus FMAPI for `vibe_explain_step`
+with `focus`, §3.8).
 
 ---
 
@@ -112,8 +121,9 @@ description-as-prompt, `inputSchema`, `outputSchema`, annotations, errors, and t
 ### 3.1 `vibe_start_track`
 > **Description (as-prompt):** "Start or resume a guided workshop track (e.g. the Genie
 > Accelerator) for the current user. Call this first, in Agent mode, before any other vibe tool.
-> Args: `track` (required), optional `use_case`/`industry`/`session_id`. Returns the session id and
-> the ordered step outline. Errors if `track` is unknown."
+> Args: `track` (required), optional `use_case`/`industry`/`session_id`. Returns the session id, a
+> `session_url` deep link to open the same session in the web UI, and the ordered step outline.
+> Errors if `track` is unknown."
 
 ```jsonc
 "inputSchema": {
@@ -143,11 +153,11 @@ description-as-prompt, `inputSchema`, `outputSchema`, annotations, errors, and t
 - **Maps to:** D3 `outline(track, session)`; REST twin `GET /api/track/{track}/outline` (roadmap §9).
 
 ### 3.2 `vibe_get_step`
-> **Description (as-prompt):** "Fetch one workshop step to present to the learner. Returns the
-> prompt to run **verbatim**, plus why it matters, how to apply it, the expected output, the gate,
-> and the next step — and an optional `interaction` question to ask in chat. Present `prompt`
-> verbatim first, then narrate. Args: `session_id` (required), `sectionTag` (optional; defaults to
-> the current step)."
+> **Description (as-prompt):** "Fetch one workshop step to present. Returns the prompt to run
+> **verbatim**, why it matters, the gate, the next step, and `user_trigger_prompt` — the
+> plain-English ask you MUST show the learner verbatim BEFORE doing any work, then WAIT for them to
+> send it (never auto-run or chain steps). Call `vibe_explain_step` for how-to or expected output.
+> Args: `session_id`; `sectionTag` (optional)."
 
 ```jsonc
 "inputSchema": {
@@ -164,14 +174,14 @@ description-as-prompt, `inputSchema`, `outputSchema`, annotations, errors, and t
 - **Annotations:** `readOnly:true, destructive:false, idempotent:true, openWorld:true`.
 - **Errors:** `INVALID_SESSION`, `UNKNOWN_STEP`, `STEP_LOCKED` (if an explicit locked `sectionTag`
   is requested; D3 F2).
-- **Maps to:** D3 explainability payload + assembler (D3 §7–§8); REST twin
-  `GET /api/track/{track}/step/{sectionTag}`.
+- **Maps to:** D3 explainability payload + assembler (D3 §7–§8); REST twin — (not built).
 
 ### 3.3 `vibe_next_step`
-> **Description (as-prompt):** "Advance to the first not-yet-completed step whose prerequisite gate
-> is satisfied, and return it (same shape as vibe_get_step). Returns `{done:true}` when the track is
-> complete, or `{blocked:true, blocked_by}` when a step is wedged behind an unsatisfiable gate. Call
-> after a step's gate is recorded. Args: `session_id` (required)."
+> **Description (as-prompt):** "Advance to the first not-yet-completed step in order and return it
+> (same shape as `vibe_get_step`, incl. `user_trigger_prompt`). Show its trigger verbatim, then WAIT
+> for the learner to submit it — never auto-run or chain steps. Returns `{done:true}` when complete,
+> or `{blocked:true, blocked_by}` when that step's prerequisite gate is not yet satisfied. Args:
+> `session_id`."
 
 ```jsonc
 "inputSchema": { "type":"object", "required":["session_id"],
@@ -192,22 +202,25 @@ description-as-prompt, `inputSchema`, `outputSchema`, annotations, errors, and t
 - **Annotations:** `readOnly:true, destructive:false, idempotent:true, openWorld:true`.
 - **Errors:** `INVALID_SESSION`.
 - **Blocked variant (T5 PR B):** the invariant is that `vibe_next_step` NEVER reports `{done:true}`
-  while the track is unfinished. When the engine scan finds no `current` step yet a `locked` step
-  survives (a dangling `requiresGate`), it returns `blocked` — naming the first locked step and its
-  gate — plus a deterministic (no-LLM) `message` telling the agent this is a workshop-configuration
+  while the track is unfinished. The walk is strictly ordered (D-78): the next step is always the
+  first unfinished, unskipped step, and when that step cannot start (its `requiresGate` is not yet
+  satisfied, or can never be) it returns `blocked` — naming that step and its gate — plus a
+  deterministic (no-LLM) `message` telling the agent this is a workshop-configuration
   defect, not a learner action, and to stop. The server also logs a WARNING (track, flags, dangling
   gate; no PII). `DoneResult` is unchanged, so an old client keying on `done` never sees a false
   `done:true`. After the T5 PR A gate rewire this path is unreachable on authored data; it is a
   safety net for a future gate-data defect. **Scope note:** only `vibe_next_step` surfaces `blocked`
   — `vibe_get_step`/`vibe_complete_step` are unchanged because the locked-only state is unreachable
-  by construction post-PR-A.
-- **Maps to:** D3 `next_step(session)`; REST twin `GET /api/track/{track}/next`.
+  by construction post-PR-A. No later step jumps the queue; completing one out of order is
+  `vibe_complete_step`'s `STEP_LOCKED` (§3.4).
+- **Maps to:** D3 `next_step(session)`; REST twin — (not built).
 
 ### 3.4 `vibe_complete_step`
-> **Description (as-prompt):** "Record that the current step's gate passed and store the step's
-> captured output (the gate = this call, i.e. next-action-as-approval). Advances the walk. Do **not**
-> call this for `execution:ui-driven` steps — those are coached and hand off to the UI. Args:
-> `session_id`, `sectionTag`, `captured_output` (all required)."
+> **Description (as-prompt):** "Record that the current step's gate passed and store its captured
+> output (the gate = this call); advances the walk. Call ONLY after the learner triggered and ran the
+> step in a fresh turn — never chain it yourself. If its `interaction` has a `post` check, ask it via
+> `vibe_submit_answer` first. Not for `execution:ui-driven` steps. Args: `session_id`,
+> `sectionTag`, `captured_output`."
 
 ```jsonc
 "inputSchema": {
@@ -235,7 +248,7 @@ description-as-prompt, `inputSchema`, `outputSchema`, annotations, errors, and t
 - **Errors:** `INVALID_SESSION`, `UNKNOWN_STEP`, `STEP_LOCKED` (D3 F2), `UI_DRIVEN_STEP`
   (coached, not agent-completable, D3 §5.4 / D1 §4.3), `GATE_REQUIRED` (Step-9 hard-stop: the
   confirm answer must be recorded first, D1 §11).
-- **Maps to:** D3 `complete_step(...)`; REST twin `POST /api/track/{track}/complete`.
+- **Maps to:** D3 `complete_step(...)`; REST twin — (not built).
 
 ### 3.5 `vibe_submit_answer`  *(net-new, from D1 §5)*
 > **Description (as-prompt):** "Record the learner's answer to a step's `interaction` question — a
@@ -270,10 +283,11 @@ description-as-prompt, `inputSchema`, `outputSchema`, annotations, errors, and t
   log (D6). No REST twin required (UI has its own controls).
 
 ### 3.6 `vibe_set_parameters`
-> **Description (as-prompt):** "Set or update session parameters and feature flags (catalog, schema
-> prefix, `includeGenieOntology`, `includeLakehouse`, Lakebase instance). Returns the resolved
-> parameters and any still-missing required ones — ask the learner in chat for those, then call
-> again. Args: `session_id`, `params` (object)."
+> **Description (as-prompt):** "Set/update session parameters, feature flags, and the use-case lock.
+> Selection: pass `use_case_source` (curated/custom) with `industry`, `use_case`, `use_case_label`;
+> custom also needs `use_case_description` (session-local). For a PRD-grade custom brief pass
+> `mode="draft_custom"` (+`use_case_hints`), then confirm by resending `use_case_description`. Args:
+> `session_id`, `params`, `mode`."
 
 ```jsonc
 "inputSchema": {
@@ -426,12 +440,16 @@ from the D12 spec, this section follows the code and names the decision (D-101).
   | `review` | Built-so-far chain | Progress table | Built-so-far chain |
   | none (static help) | no visual | Progress table | Curated diagram, else downstream chain |
 
+  `visual=none` returns no visual for any `focus`.
+
   A visual without `focus` makes **no model call**: `vibe_explain_step` returns before
   `coaching.coach` when `focus` is None.
 - **Shipped specifics.** Labels are manifest step titles and `key_label` of output key names
   (D-93). The progress table shows the session frontier, not the requested step, and its caption
   is `<d> of <n> steps done. Now: <title>.` (D-94), where `n` is the full outline with skipped
-  steps included (D-98). The curated diagram is the step's `how_to_apply.1` twin only when this
+  steps included (D-98). When no unfinished step is left, the caption is `All N steps done.` if
+  every outline step is done, else `D of N steps done. The rest were skipped.`, where N is the full
+  outline and D the done steps (D-98, `coach_visuals._progress`). The curated diagram is the step's `how_to_apply.1` twin only when this
   call actually served it, else the downstream chain (D-95, `coach_visuals._curated`). Diagram
   captions start with `Diagram only, nothing to run.` (`visuals.DIAGRAM_CAPTION`).
 - **Fail-open.** Any visual error, or a visual that fails `lint_visual`, gives a null triple
@@ -510,9 +528,9 @@ error (generic §5.5). Shape:
 | `INVALID_PARAM` | unknown/invalid parameter (strict mode) | `set_parameters` | D3 §4 |
 
 `complete_step` on an already-completed gate is **not** an error — it is idempotent success
-(D3 F3). `vibe_coach` **never** returns an FMAPI error — model/timeout failures degrade to the
-static fallback with `is_fallback:true` (§3.7 / D5 §11.4); only `INVALID_SESSION`/`UNKNOWN_STEP`
-(bad inputs, before any model call) are `isError`.
+(D3 F3). `vibe_explain_step` with `focus` **never** returns an FMAPI error — model/timeout
+failures degrade to the static fallback with `is_fallback:true` (§3.8 / D5 §11.4); only
+`INVALID_SESSION`/`UNKNOWN_STEP` (bad inputs, before any model call) are `isError`.
 
 `vibe_next_step`'s `blocked` variant (§3.3, T5 PR B) is likewise **not** an error — it is a
 schema-valid success-channel result (not `isError`), the third `NextStepResult` union member. It
@@ -543,7 +561,9 @@ never returns malformed structured output.
 | `vibe_complete_step` | ❌ | ❌ | ✅ | ✅ |
 | `vibe_submit_answer` | ❌ | ❌ | ✅ | ✅ |
 | `vibe_set_parameters` | ❌ | ❌ | ✅ | ✅ |
-| `vibe_coach` | ✅ | ❌ | ✅ | ✅ |
+| `vibe_explain_step` | ✅ | ❌ | ✅ | ✅ |
+
+`vibe_coach` was planned (§3.7) and never built; its slot is `vibe_explain_step` (§9).
 
 None are `destructive`: completion/answers are additive and idempotent; coaching mutates no workshop
 state; rollback is a whole-snapshot concern handled elsewhere, never a tool-level destroy.
@@ -572,8 +592,9 @@ surfaces (the help resource + the orientation prompt, D1 §1a) are free — the 
 **Reconciliation with the roadmap §8.2:** the roadmap listed 6 tools *including* `vibe_track_outline`
 but *excluding* `vibe_submit_answer`. D1 requires `submit_answer`; to stay at 6 **core** tools we
 **demote `track_outline` to the session-state resource** (§4). Net: 6 core tools, and the read-only
-listing lives where reads belong (generic §6). **Phase 2A** then adds `vibe_coach` (§3.7) for a
-total of **7** — still far under the shared ~20-tool ceiling.
+listing lives where reads belong (generic §6). The 7th tool is `vibe_explain_step` (shipped
+2026-09-27); **Phase 2A** extended it with `focus` instead of adding the planned `vibe_coach` (§3.7),
+so the total stays **7** — still far under the shared ~20-tool ceiling.
 
 ---
 
@@ -582,12 +603,12 @@ total of **7** — still far under the shared ~20-tool ceiling.
 | Tool | D3 engine fn | D1 interaction | REST twin (roadmap §9) |
 |---|---|---|---|
 | `vibe_start_track` | `outline` | — | `GET /api/track/{track}/outline` |
-| `vibe_get_step` | payload + assembler | carries `interaction` | `GET /api/track/{track}/step/{sectionTag}` |
-| `vibe_next_step` | `next_step` | — | `GET /api/track/{track}/next` |
-| `vibe_complete_step` | `complete_step` | gate = next-action-as-approval (§4.3) | `POST /api/track/{track}/complete` |
+| `vibe_get_step` | payload + assembler | carries `interaction` | — (not built) |
+| `vibe_next_step` | `next_step` | — | — (not built) |
+| `vibe_complete_step` | `complete_step` | gate = next-action-as-approval (§4.3) | — (not built) |
 | `vibe_submit_answer` | (writes interaction log) | §4.1/§4.2 + §11 | — (UI-native) |
-| `vibe_set_parameters` | session_parameters + outline filter | §4.4 | `POST /api/session/{id}/parameters` |
-| `vibe_coach` | reads state + assembler context; calls FMAPI (`services/llm.py`) | D1 §4.6 (adaptive coaching) | — (UI-native; optional `GET …/coach` later) |
+| `vibe_set_parameters` | session_parameters + outline filter | §4.4 | `PUT /api/session/{session_id}/parameters` |
+| `vibe_explain_step` | payload + assembler; with `focus`, the `services/coaching.py` model call | D1 §4.6 (adaptive coaching) | — (MCP-only) |
 
 ---
 
@@ -611,12 +632,14 @@ total of **7** — still far under the shared ~20-tool ceiling.
 
 ## 12. Adaptive-coaching internals (`CoachResult` + `_COACH_SYSTEM`)
 
-The shape and the model contract behind `vibe_coach` (§3.7). Bound by the D8 coaching tests (§4).
+The shape and the model contract behind `vibe_explain_step`'s `focus` (§3.8), first planned for
+`vibe_coach` (§3.7). `CoachResult` below is kept as the historical shape. Bound by the D8 coaching
+tests (§4).
 
 ### 12.1 `CoachResult` (output type)
 
 ```jsonc
-// CoachResult — the vibe_coach outputSchema (structuredContent + mirrored text, §7)
+// CoachResult — the planned vibe_coach outputSchema (historical; shipped fields: StepHelpResult, §3.8)
 "CoachResult": {
   "type": "object",
   "required": ["coaching", "focus", "section_tag", "is_fallback"],
@@ -659,7 +682,7 @@ learner- or agent-supplied. The **user message** is the assembled grounding cont
 system prompt fixes the role, the guardrails, and the output shape.
 
 ```text
-You are the coach for a hands-on Databricks "Genie Accelerator" workshop. A learner is working
+You are the coach for a hands-on Databricks workshop (the track named in the CONTEXT). A learner is working
 through it inside an AI coding agent. Your job: explain, in plain language, WHAT is happening at
 their current step and WHY it matters — grounded ONLY in the CONTEXT provided in the user message
 (the step's purpose, how-to-apply, expected output, the learner's own prior outputs and answers,

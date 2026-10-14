@@ -110,26 +110,27 @@ CI-equivalent: run locally; a red parity test blocks the change (D3 §9).
 ### 4a. Adaptive-coaching tests (D1 §4.6 / D2 §3.7 / D5 §11) — *Phase 2A*
 
 `tests/workshop/test_coaching.py` (mock the FMAPI seam — `services/llm.py`, D4 §1.2 — so these run
-offline with no live endpoint):
+offline with no live endpoint). The tool under test is `vibe_explain_step` with `focus` (D2 §3.8;
+planned as `vibe_coach`, D2 §3.7):
 
-- **Grounding** — with a mocked model that echoes its inputs, assert `vibe_coach` sends only the
+- **Grounding** — with a mocked model that echoes its inputs, assert `vibe_explain_step` sends only the
   server-assembled context keys (D2 §12.3), `_COACH_SYSTEM` as the system prompt, and that
   `grounded_on` reflects the non-empty context keys.
 - **Verbatim / no re-issue** — assert the step's verbatim `prompt` body is passed as *reference*
   context but the returned `coaching` is not required to equal it; the contract is enforced by
   `_COACH_SYSTEM` (assert the system prompt text carries the "never restate the prompt" rule).
-- **Fail-open (the important one)** — (a) mock the model to raise/timeout → `vibe_coach` returns the
+- **Fail-open (the important one)** — (a) mock the model to raise/timeout → `vibe_explain_step` returns the
   static option-keyed fallback with `is_fallback:true`, **not** an `isError`; (b) unset the endpoint
   (`DATABRICKS_SERVING_ENDPOINT` empty) → still returns useful static coaching, `is_fallback:true`.
 - **Leakage scrub (D7 §6.1)** — feed the mock a response containing a planted benchmark-style
   string / literal; assert it is scrubbed from both the returned `coaching` **and** the stored
   `coaching_shown`; assert a scrub failure falls back to static (never ships unscrubbed).
-- **Read-only** — `vibe_coach` changes no `completed_gates`/`captured_outputs`/answers; a coaching
+- **Read-only** — `vibe_explain_step` changes no `completed_gates`/`captured_outputs`/answers; a coaching
   call does not advance `next_step`.
 - **Provenance (D6 §3a)** — a successful call best-effort inserts exactly one `session_interactions`
   row with `kind='coaching'`, the `focus`, and `is_fallback`; assert a telemetry-insert failure does
   **not** fail the tool.
-- **Annotations** — `vibe_coach` is `readOnly:true, idempotent:true, openWorld:true` (D2 §8).
+- **Annotations** — `vibe_explain_step` is `readOnly:true, idempotent:true, openWorld:true` (D2 §8).
 
 ---
 
@@ -270,7 +271,8 @@ spec's §3.2.
 
 ## 9. Capability re-probe harness (reusable)
 
-Keep the probe server from generic spec §9.2 runnable (a `tests/tools/mcp_probe/`). Purpose: detect
+Keep the probe server from generic spec §9.2 runnable (a `tests/tools/mcp_probe/`, planned and not
+built). Purpose: detect
 the day Genie Code advertises `elicitation` (which flips D1's upgrade path from optional to
 available). Run it against the target workspace on each Genie Code release or before committing the
 interactivity phase (D9 §8). Output: the captured `initialize` `capabilities` (plan §1.1).
