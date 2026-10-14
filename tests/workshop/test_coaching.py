@@ -820,9 +820,9 @@ def _brief_line(message):
     return next(l for l in message.splitlines() if l.startswith("- use_case_brief:"))
 
 
-def test_c17_defaults_unchanged(env, no_knobs, budgets):
+def test_c17_defaults_unchanged(env, no_knobs, budgets, monkeypatch):
     assert coaching.COACH_MAX_TOKENS == 400
-    assert coaching.COACH_BUDGET_S == 8.0
+    assert coaching.COACH_BUDGET_S == 20.0
     assert coaching.PROMPT_CAP == 4000
     assert coaching.OUTPUT_EXCERPT_CAP == 600
     assert coaching.PRIOR_ANSWERS_CAP == 10
@@ -830,7 +830,14 @@ def test_c17_defaults_unchanged(env, no_knobs, budgets):
     outcome = _coach_direct(focus="why")
     assert outcome.is_fallback is False
     assert env.calls[-1]["max_tokens"] == 400
-    assert budgets == [8.0]
+    assert budgets == [20.0]
+
+    # Unset env: the code default reaches the model call through the call site, so a
+    # default regression can't hide behind app.yaml.template (D-108).
+    coaching.clear_caches()
+    monkeypatch.delenv("VIBE_COACH_BUDGET_S", raising=False)
+    assert _coach_direct(focus="why").is_fallback is False
+    assert budgets[-1] == 20.0
 
     message = _context_for("p" * 5000, "x" * 700)
     assert "p" * 4000 in message and "p" * 4001 not in message
@@ -875,7 +882,7 @@ def test_c18_env_overrides(env, no_knobs, budgets, monkeypatch, caplog):
         monkeypatch.setenv("VIBE_COACH_BUDGET_S", bad)
         assert _coach_direct(focus="why").is_fallback is False
         assert env.calls[-1]["max_tokens"] == 400
-        assert budgets[-1] == 8.0
+        assert budgets[-1] == 20.0
         monkeypatch.setenv("VIBE_COACH_PROMPT_CAP", bad)
         monkeypatch.setenv("VIBE_COACH_EXCERPT_CAP", bad)
         message = _context_for("p" * 5000, "x" * 700)

@@ -66,7 +66,7 @@ FOCI = ("what_now", "why", "unblock", "review")
 
 # Knobs (D9 §9 q4). The endpoint is the app default (llm.SERVING_ENDPOINT_NAME).
 COACH_MAX_TOKENS = 400
-COACH_BUDGET_S = 8.0
+COACH_BUDGET_S = 20.0
 COACH_NEGATIVE_TTL_S = 300.0
 COACH_TEMPERATURE = 0.3
 

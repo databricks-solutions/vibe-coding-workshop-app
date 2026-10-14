@@ -151,7 +151,7 @@ Other rules for every answer (coaching.py:40-60):
 - 2-5 sentences of prose, grounded in the step context.
 - It never restates the step's prompt, and it never emits benchmark text, sample values, secrets or PII.
 
-**Fail-open.** If the coach is disabled, errors, runs past its time budget (8.0 s by default, coaching.py:69 `COACH_BUDGET_S`; 20 s where app.yaml sets `VIBE_COACH_BUDGET_S`, D-106) or is rejected by the scrub, `vibe_explain_step` still returns the static `how_to_apply` / `expected_output`. In that case `coaching` is null and `is_fallback: true` (mcp_server.py:1578-1601; D-22). Record `is_fallback` for each call.
+**Fail-open.** If the coach is disabled, errors, runs past its time budget (20 s by default, coaching.py:69 `COACH_BUDGET_S`, overridable with `VIBE_COACH_BUDGET_S`; D-108) or is rejected by the scrub, `vibe_explain_step` still returns the static `how_to_apply` / `expected_output`. In that case `coaching` is null and `is_fallback: true` (mcp_server.py:1578-1601; D-22). Record `is_fallback` for each call.
 
 ### Step-prompt fail-open
 
@@ -633,7 +633,7 @@ Report it as a comment on the APP release-candidate PR (ledger L3: "see rc-app")
 - **D-62: budget fallbacks.**
   - iterate_enhance is served row 14's assembled template, about 4,000 characters, instead of a generated plan, on every track. On skills-accelerator, the same happens to skill_define_strategy (131) and skill_create_skillmd (132).
   - It fails open: the prompt is never empty. Record "template" and continue.
-  - Coaching can also fall back (`is_fallback: true`), for example on prd_generation, whose coaching ran past the 8.0 s budget in probe 54e255e (D-29). The budget is 8.0 s by default (coaching.py:69 `COACH_BUDGET_S`) and 20 s where app.yaml sets `VIBE_COACH_BUDGET_S` (D-106).
+  - Coaching can also fall back (`is_fallback: true`), for example on prd_generation, whose coaching ran past the 8.0 s budget in probe 54e255e (D-29). The budget is now 20 s by default (coaching.py:69 `COACH_BUDGET_S`), overridable with `VIBE_COACH_BUDGET_S` (D-108).
 - **deploy-stale-worktree-files.** The code deploy's build log listed files under `.worktrees/mcp-p1-server/` uploaded into the app source (probe-p4-exit-gate, d97a3df). This is unresolved (queue.md:76). If the deployed app behaves like older code anywhere, note the step and the behaviour; do not delete anything.
 - **Others the queue records** (ledger L4). These may show up in a walk:
   - complete-project-setup-latency: completing project_setup takes 17-38 s, which risks a client timeout.

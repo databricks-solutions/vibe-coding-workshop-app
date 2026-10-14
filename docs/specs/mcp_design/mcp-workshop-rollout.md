@@ -157,11 +157,12 @@ Before any `/mcp` deploy (plan §1.3 / generic §4 / D4 §2):
 - **Budget changes** → human. Raising the coaching budget (`VIBE_COACH_BUDGET_S`, the §9 q4 values)
   or `STEP_PROMPT_BUDGET_S` (`mcp_server.py:802`) is not taken by the run: it measures and parks
   (D-29; D-62; Phase 4 exit report §6 Q2).
-  The human raised `VIBE_COACH_BUDGET_S` to 20 s on 2026-10-14 (D-106), set in `app.yaml.template`;
-  the code default stays 8.0 (`coaching.py:69`, `COACH_BUDGET_S`).
+  The human raised the coaching budget to 20 s on 2026-10-14 (D-106); since D-108 that is the code
+  default (`coaching.py:69`, `COACH_BUDGET_S = 20.0`), and the `VIBE_COACH_BUDGET_S` entry in
+  `app.yaml.template` is an operator override.
   Each coaching call holds a worker thread (`asyncio.to_thread`, `mcp_server.py:368`) for up to the
-  budget, so a burst of slow calls larger than the 32-worker pool (`executor.py:25`) queues other
-  MCP tool calls (not the event loop).
+  budget, so on every deployment a burst of slow calls larger than the 32-worker pool
+  (`executor.py:25`) queues other MCP tool calls (not the event loop).
 - **Destructive data operations** → never automatic. The deploy tables step is additive by default and a
   destructive reseed needs a double opt-in (#109, D-35); the release deploy guard denies a tables
   reseed whose `db/` diff adds non-additive SQL ("destructive operations are human-only", D-50).
