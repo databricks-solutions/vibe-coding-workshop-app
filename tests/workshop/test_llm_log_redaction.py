@@ -38,6 +38,7 @@ Offline tests:
      removed from both, so the PR changes logging only. A clone without the base
      object FAILS, never skips (D-21).
      TAMPER: insert `x = str(e)` in generate_prompt_content_with_llm's except -> red.
+     One intentional non-log edit is applied to the base first (R8_INTENTIONAL_EDITS).
 """
 
 import ast
@@ -724,6 +725,28 @@ R8_EDITED = {
 }
 
 
+# post-redact intentional non-log edits, coach-endpoint (D-113, D-118): per file,
+# (old_line, new_line) pairs applied to the base source before the comparison. Each
+# old line must occur exactly once in the base file; any other difference stays red.
+R8_INTENTIONAL_EDITS = {
+    "src/backend/services/llm.py": [
+        (
+            '        if "mini" not in ep_lower:',
+            '        if temperature is not None and "mini" not in ep_lower:',
+        ),
+    ],
+}
+
+
+def _apply_r8_edits(rel_path, source):
+    lines = source.split("\n")
+    for old, new in R8_INTENTIONAL_EDITS.get(rel_path, []):
+        hits = [i for i, line in enumerate(lines) if line == old]
+        assert len(hits) == 1, f"intentional edit must match exactly once, got {len(hits)}: {old!r}"
+        lines[hits[0]] = new
+    return "\n".join(lines)
+
+
 def _is_logger_stmt(stmt):
     return isinstance(stmt, ast.Expr) and _is_logger_call(stmt.value)
 
@@ -776,7 +799,7 @@ def _base_source(rel_path):
 @pytest.mark.parametrize("rel_path", sorted(R8_EDITED))
 def test_r8_edited_functions_change_only_logging(rel_path):
     names = R8_EDITED[rel_path]
-    base = _top_level_functions(_base_source(rel_path), names)
+    base = _top_level_functions(_apply_r8_edits(rel_path, _base_source(rel_path)), names)
     head = _top_level_functions((REPO_ROOT / rel_path).read_text(encoding="utf-8"), names)
     for name in names:
         assert _log_free_dump(head[name]) == _log_free_dump(base[name]), (

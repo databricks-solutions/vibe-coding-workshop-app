@@ -203,6 +203,21 @@ r2 changes:
   endpoint, including opus-4-6, which the app already calls; no grant expected. Live check L1 = "the
   first coached call on sonnet succeeds"; a permission error there parks the task.
 
+### r2.2 (implementer finding, lead ruling D-118) — amends the r2.1 fence
+
+- Finding: `tests/workshop/test_llm_log_redaction.py::test_r8_edited_functions_change_only_logging[src/backend/services/llm.py]`
+  (R8, `:709-785`, pinned `R8_BASE_SHA` 4b57581) requires `call_databricks_serving_endpoint` to equal its
+  4b57581 body once logger calls are stripped. The one-line D-113 guard at `llm.py:356` is a non-logging edit,
+  so R8 goes red. Neither the plan nor the critic listed R8 (only E6 in `test_llm_service.py`).
+- Fence (r2.2) = r2.1 fence + `tests/workshop/test_llm_log_redaction.py`, limited to one named allowance for
+  the D-113 line, in the same shape as `E6_INTENTIONAL_EDITS` (`test_llm_service.py:230`): before comparing,
+  replace exactly `        if "mini" not in ep_lower:` with `        if temperature is not None and "mini" not in ep_lower:`
+  in the base source, and only for `llm.py`. Every other difference stays red; `test_r8_strip_keeps_a_non_log_change_visible`
+  (`:787`) and all other R8 assertions unchanged.
+- New tamper X11: change any other non-logging line of `call_databricks_serving_endpoint` → R8 still red (the
+  allowance is exact, not a blanket skip). X12: widen the allowance to skip `llm.py` entirely → X11 goes green, so
+  the gatekeeper rejects it on the diff.
+
 Queued, not in this plan: `llm-newer-model-compat` (app-wide: every other caller sends temperature, so
 moving DATABRICKS_SERVING_ENDPOINT to a 5.x model would break PRD generation and the other prompts) and
 `coach-timeout-ask-again` (the "ask again in about 30 s" hint; C5 showed late generations fill the cache).
