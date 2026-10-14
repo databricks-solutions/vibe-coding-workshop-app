@@ -50,6 +50,8 @@ ALL_TRACKS = sorted(HEAD_MANIFEST["tracks"])
 # resolve_track downgrades skills-accelerator to end-to-end unless the use case is
 # its lock (USE_CASE_LEVEL_LOCK: build_skill), exactly as the SPA does.
 USE_CASE_FOR = {"skills-accelerator": "build_skill"}
+# D-115: vibe_start_track refuses any industry but sample on skills-accelerator.
+INDUSTRY_FOR = {"skills-accelerator": "sample"}
 
 
 def _spa_record(**overrides):
@@ -375,7 +377,7 @@ def test_h5_mcp_outline_matches_endpoint(mcp_env, outline_client, track):
     store, _, _ = mcp_env
     use_case = USE_CASE_FOR.get(track, USE_CASE)
     # (a) a fresh MCP session after the lock.
-    started = mcp_server.vibe_start_track(track, use_case=use_case, industry=INDUSTRY)
+    started = mcp_server.vibe_start_track(track, use_case=use_case, industry=INDUSTRY_FOR.get(track, INDUSTRY))
     assert not isinstance(started, dict), started
     assert USE_CASE_GATE in store[started.session_id]["completed_gates"]
     _assert_mcp_matches_endpoint(outline_client, store, started.session_id, track)
