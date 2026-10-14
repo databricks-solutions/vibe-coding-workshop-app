@@ -28,6 +28,11 @@ env:
   # LLM Model endpoint
   - name: DATABRICKS_SERVING_ENDPOINT
     value: "__SERVING_ENDPOINT__"
+
+  # Coaching model time budget in seconds, read per call by
+  # services/coaching.py; the code default is 8.0 when unset (D-106).
+  - name: VIBE_COACH_BUDGET_S
+    value: "20"
   
   # ---------------------------------------------------------------------------
   # Lakebase PostgreSQL Configuration
