@@ -33,6 +33,12 @@ env:
   # services/coaching.py; matches the code default; set to override.
   - name: VIBE_COACH_BUDGET_S
     value: "20"
+
+  # Coaching-only serving endpoint, read per call by services/coaching.py;
+  # unset = DATABRICKS_SERVING_ENDPOINT. The app service principal needs
+  # CAN_QUERY on it.
+  - name: VIBE_COACH_ENDPOINT
+    value: "databricks-claude-sonnet-5-5"
   
   # ---------------------------------------------------------------------------
   # Lakebase PostgreSQL Configuration

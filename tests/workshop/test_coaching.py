@@ -13,10 +13,17 @@ Tampers (each turns the named test red):
 - rename a scrub rule (e.g. "email" -> "mail") -> test_c16_reasons
 - add the rejected text to the scrub INFO line -> test_c16_reject_log_has_rule_not_text
 - drop re.IGNORECASE from the insert-into/delete-from pattern -> test_c5_scrub, test_c16_public_parity
-- COACH_MAX_TOKENS 400 -> 300 -> test_c1_grounding, test_c17_defaults_unchanged
+- COACH_MAX_TOKENS 800 -> 300 -> test_c1_grounding, test_c17_defaults_unchanged
 - let ``_knob`` return a value <= 0 -> test_c18_env_overrides
 - add ``user_message[:30]`` to the timing line -> test_c19_timing_line
 - skip the timing line on a fallback -> test_c19_timing_line
+- hard-code ``endpoint_name=None`` -> test_coach_endpoint_override_set
+- read VIBE_COACH_ENDPOINT once at import -> test_coach_endpoint_override_set
+- pass the override as ``system_prompt`` -> test_coach_endpoint_override_set
+- drop ``endpoint=`` from the timing line -> test_coach_endpoint_override_set
+- send ``temperature=0.3`` from the coach -> test_coach_endpoint_override_set
+- give VIBE_COACH_ENDPOINT a code default -> test_coach_endpoint_override_unset
+- COACH_MAX_TOKENS 800 -> 400 -> test_coach_max_tokens_pin
 """
 
 import contextlib
@@ -75,6 +82,7 @@ def _record():
 @pytest.fixture(autouse=True)
 def _clean(monkeypatch):
     monkeypatch.delenv("VIBE_COACHING_ENABLED", raising=False)
+    monkeypatch.delenv("VIBE_COACH_ENDPOINT", raising=False)
     coaching.clear_caches()
     yield
     coaching.clear_caches()
@@ -198,8 +206,8 @@ def test_c1_grounding(env):
     assert len(env.calls) == 1
     call = env.calls[0]
     assert call["system_prompt"] == coaching.COACH_SYSTEM
-    assert call["max_tokens"] == 400
-    assert call["temperature"] == coaching.COACH_TEMPERATURE
+    assert call["max_tokens"] == 800
+    assert call["temperature"] is None
     assert call["endpoint_name"] is None
     message = call["prompt"]
     top_keys = set(re.findall(r"^([a-z_]+):", message, flags=re.MULTILINE))
@@ -782,7 +790,7 @@ KNOB_VARS = (
 )
 TIMING_RE = re.compile(
     r"^coaching timings section=(\S+) focus=(\S+) db_ms=(\d+) build_ms=(\d+) "
-    r"model_ms=(\d+) total_ms=(\d+) outcome=(\S+) cache=(\S+) visual=(\S+)$"
+    r"model_ms=(\d+) total_ms=(\d+) outcome=(\S+) cache=(\S+) visual=(\S+) endpoint=(\S+)$"
 )
 
 
@@ -821,7 +829,7 @@ def _brief_line(message):
 
 
 def test_c17_defaults_unchanged(env, no_knobs, budgets, monkeypatch):
-    assert coaching.COACH_MAX_TOKENS == 400
+    assert coaching.COACH_MAX_TOKENS == 800
     assert coaching.COACH_BUDGET_S == 20.0
     assert coaching.PROMPT_CAP == 4000
     assert coaching.OUTPUT_EXCERPT_CAP == 600
@@ -829,7 +837,7 @@ def test_c17_defaults_unchanged(env, no_knobs, budgets, monkeypatch):
 
     outcome = _coach_direct(focus="why")
     assert outcome.is_fallback is False
-    assert env.calls[-1]["max_tokens"] == 400
+    assert env.calls[-1]["max_tokens"] == 800
     assert budgets == [20.0]
 
     # Unset env: the code default reaches the model call through the call site, so a
@@ -881,7 +889,7 @@ def test_c18_env_overrides(env, no_knobs, budgets, monkeypatch, caplog):
         monkeypatch.setenv("VIBE_COACH_MAX_TOKENS", bad)
         monkeypatch.setenv("VIBE_COACH_BUDGET_S", bad)
         assert _coach_direct(focus="why").is_fallback is False
-        assert env.calls[-1]["max_tokens"] == 400
+        assert env.calls[-1]["max_tokens"] == 800
         assert budgets[-1] == 20.0
         monkeypatch.setenv("VIBE_COACH_PROMPT_CAP", bad)
         monkeypatch.setenv("VIBE_COACH_EXCERPT_CAP", bad)
@@ -902,7 +910,7 @@ def _timings(caplog):
     for line in lines:
         match = TIMING_RE.match(line)
         assert match, line
-        section, focus, db, build, model, total, outcome, cache, visual = match.groups()
+        section, focus, db, build, model, total, outcome, cache, visual, endpoint = match.groups()
         assert section == TAG
         # coach() called directly passes no visual (D-96 key element "none").
         assert visual == "none", line
@@ -1004,3 +1012,64 @@ def test_c19_timing_line(env, no_knobs, monkeypatch, caplog):
     monkeypatch.setenv("VIBE_COACHING_ENABLED", "0")
     assert _coach_direct(focus="why").reason == "disabled"
     assert _timings(caplog) == []
+
+
+# --- Coaching-only endpoint and no temperature (D-111, D-113) -------------------------------------
+
+
+def _timing_endpoints(caplog):
+    lines = [r.getMessage() for r in caplog.records if r.getMessage().startswith("coaching timings")]
+    return [TIMING_RE.match(line).group(10) for line in lines]
+
+
+def test_coach_endpoint_override_unset(env, no_knobs, caplog):
+    caplog.set_level("INFO", logger=coaching.logger.name)
+    assert coaching._coach_endpoint() is None
+    assert _coach_direct(focus="why").is_fallback is False
+    assert env.calls[-1]["endpoint_name"] is None
+    assert env.calls[-1]["temperature"] is None
+    assert _timing_endpoints(caplog) == ["default"]
+
+
+def test_coach_endpoint_override_set(env, no_knobs, monkeypatch, caplog):
+    caplog.set_level("INFO", logger=coaching.logger.name)
+
+    # Read per call: set, blank, unset, set again (stripped).
+    seen = []
+    for value in ("x-endpoint", "  ", None, "  y-endpoint "):
+        if value is None:
+            monkeypatch.delenv("VIBE_COACH_ENDPOINT", raising=False)
+        else:
+            monkeypatch.setenv("VIBE_COACH_ENDPOINT", value)
+        coaching.clear_caches()
+        assert _coach_direct(focus="why").is_fallback is False
+        seen.append(env.calls[-1]["endpoint_name"])
+    assert seen == ["x-endpoint", None, None, "y-endpoint"]
+    assert _timing_endpoints(caplog) == ["x-endpoint", "default", "default", "y-endpoint"]
+
+    # Only endpoint_name differs from the unset call; the scrub result is the same.
+    for reply in (CLEAN, "Then run merge into the gold table to apply the changes."):
+        env.model["reply"] = {"response": reply}
+        results = []
+        for value in (None, "x-endpoint"):
+            if value is None:
+                monkeypatch.delenv("VIBE_COACH_ENDPOINT", raising=False)
+            else:
+                monkeypatch.setenv("VIBE_COACH_ENDPOINT", value)
+            coaching.clear_caches()
+            outcome = _coach_direct(focus="why")
+            call = dict(env.calls[-1])
+            assert call.pop("endpoint_name") == value
+            results.append((call, outcome.coaching, outcome.is_fallback, outcome.reason))
+        assert results[0] == results[1]
+        call = results[0][0]
+        assert call["system_prompt"] == coaching.COACH_SYSTEM
+        assert call["max_tokens"] == 800
+        assert call["temperature"] is None
+    assert results[0][3] == "scrub:sql"
+
+
+def test_coach_max_tokens_pin(env, no_knobs):
+    assert coaching.COACH_MAX_TOKENS == 800
+    assert _coach_direct(focus="why").is_fallback is False
+    assert env.calls[-1]["max_tokens"] == 800

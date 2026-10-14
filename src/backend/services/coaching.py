@@ -64,11 +64,11 @@ STYLE
 
 FOCI = ("what_now", "why", "unblock", "review")
 
-# Knobs (D9 §9 q4). The endpoint is the app default (llm.SERVING_ENDPOINT_NAME).
-COACH_MAX_TOKENS = 400
+# Knobs (D9 §9 q4). Endpoint: VIBE_COACH_ENDPOINT, else llm.SERVING_ENDPOINT_NAME; no temperature.
+COACH_MAX_TOKENS = 800
 COACH_BUDGET_S = 20.0
 COACH_NEGATIVE_TTL_S = 300.0
-COACH_TEMPERATURE = 0.3
+COACH_ENDPOINT_ENV = "VIBE_COACH_ENDPOINT"
 
 PROMPT_CAP = 4000
 OUTPUT_EXCERPT_CAP = 600
@@ -82,6 +82,12 @@ def coaching_enabled() -> bool:
     """Kill switch, read per call: VIBE_COACHING_ENABLED=0/false/off/no disables."""
 
     return os.getenv("VIBE_COACHING_ENABLED", "").strip().lower() not in _DISABLED_VALUES
+
+
+def _coach_endpoint() -> str | None:
+    """Coaching-only serving endpoint, read per call (D-111). Unset or blank -> None (app default)."""
+
+    return (os.getenv(COACH_ENDPOINT_ENV) or "").strip() or None
 
 
 def _knob(name: str, default: Any, cast: Callable[[str], Any]) -> Any:
@@ -386,9 +392,9 @@ def _single_flight(
         try:
             result = await llm.call_databricks_serving_endpoint(
                 user_message,
-                endpoint_name=None,
+                endpoint_name=_coach_endpoint(),
                 max_tokens=max_tokens,
-                temperature=COACH_TEMPERATURE,
+                temperature=None,
                 system_prompt=COACH_SYSTEM,
             )
             raw = _response_text(result)
@@ -532,7 +538,7 @@ def coach(
     # Phase timings only (D-29): never the prompt, context or model text.
     logger.info(
         "coaching timings section=%s focus=%s db_ms=%d build_ms=%d model_ms=%d total_ms=%d"
-        " outcome=%s cache=%s visual=%s",
+        " outcome=%s cache=%s visual=%s endpoint=%s",
         section_tag,
         focus,
         db_ms,
@@ -542,6 +548,7 @@ def coach(
         "coached" if not outcome.is_fallback else f"fallback:{outcome.reason}",
         _CACHE_LABELS.get(outcome.reason, "miss"),
         visual_kind or "none",
+        _coach_endpoint() or "default",
     )
     _record(session_id, section_tag, focus, outcome)
     return outcome

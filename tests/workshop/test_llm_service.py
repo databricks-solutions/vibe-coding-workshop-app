@@ -21,6 +21,11 @@ Seven offline tests:
      DATABRICKS_SDK_AVAILABLE flag the moved code reads from llm) on routes; that
      patch lands on the re-export and never reaches the moved code.
      TAMPER: put `routes` back in test_offload_fallback_paths.py's SDK-flag patch.
+
+Plus the live request body (coach-endpoint, D-113): temperature=None omits the field;
+a float caller's body is unchanged; the "mini" rule is unchanged.
+     TAMPER: send "temperature": None -> test_temperature_none_omits_field.
+     TAMPER: omit temperature for every caller -> test_temperature_float_includes_field.
 """
 
 import ast
@@ -159,6 +164,50 @@ def test_e5_llm_seam_works_offline_with_helpers_patched_on_llm(monkeypatch):
     assert result["response"] == "coach says hi"
 
 
+class _RecordingApiClient:
+    def __init__(self):
+        self.bodies = []
+
+    def do(self, method, path, body):  # noqa: ARG002 — mimics the SDK signature
+        self.bodies.append(body)
+        return {"choices": [{"message": {"content": "ok"}}], "model": "ep"}
+
+
+def _sent_body(monkeypatch, endpoint, **kwargs):
+    api_client = _RecordingApiClient()
+    client = type("_Client", (_FakeClient,), {"api_client": api_client})()
+    monkeypatch.setattr(llm, "DATABRICKS_SDK_AVAILABLE", True)
+    monkeypatch.setattr(llm, "get_workspace_client", lambda: client)
+    asyncio.run(
+        llm.call_databricks_serving_endpoint(
+            "hi", endpoint_name=endpoint, max_tokens=50, system_prompt="sys", **kwargs
+        )
+    )
+    assert len(api_client.bodies) == 1
+    return api_client.bodies[0]
+
+
+MESSAGES = [{"role": "system", "content": "sys"}, {"role": "user", "content": "hi"}]
+
+
+def test_temperature_none_omits_field(monkeypatch):
+    body = _sent_body(monkeypatch, "databricks-claude-sonnet-5-5", temperature=None)
+    assert body == {"messages": MESSAGES, "max_tokens": 50}
+    assert "temperature" not in body
+
+
+def test_temperature_float_includes_field(monkeypatch):
+    # A float caller's body is the base body: same keys, order and values.
+    body = _sent_body(monkeypatch, "databricks-claude-opus-4-6", temperature=0.7)
+    assert list(body.items()) == [("messages", MESSAGES), ("max_tokens", 50), ("temperature", 0.7)]
+    body = _sent_body(monkeypatch, "databricks-claude-opus-4-6")
+    assert list(body.items()) == [("messages", MESSAGES), ("max_tokens", 50), ("temperature", 0.5)]
+
+    # The "mini" rule is unchanged: no temperature for a *mini* endpoint, float or None.
+    assert _sent_body(monkeypatch, "gpt-4o-mini", temperature=0.7) == {"messages": MESSAGES, "max_tokens": 50}
+    assert _sent_body(monkeypatch, "gpt-4o-mini", temperature=None) == {"messages": MESSAGES, "max_tokens": 50}
+
+
 def _base_routes_source():
     if shutil.which("git") is None:
         pytest.skip("git is not available")
@@ -175,7 +224,7 @@ def _base_routes_source():
 
 
 # post-move intentional edits, llm-response-log-redact (D-27) + routes-log-redact
-# (D-28): per moved function, ordered (old_line, new_line_or_None) pairs applied to
+# (D-28) + coach-endpoint (D-113): per moved function, ordered (old_line, new_line_or_None) pairs applied to
 # its base body; None deletes the line. Each old line must occur exactly once in the
 # base body; any other difference stays red. Functions not listed are compared raw.
 E6_INTENTIONAL_EDITS = {
@@ -249,6 +298,11 @@ E6_INTENTIONAL_EDITS = {
         (
             '        logger.error(f"     Traceback:\\n{traceback.format_exc()}")',
             '        logger.debug("     SDK query traceback", exc_info=True)',
+        ),
+        # D-113
+        (
+            '        if "mini" not in ep_lower:',
+            '        if temperature is not None and "mini" not in ep_lower:',
         ),
     ],
 }
