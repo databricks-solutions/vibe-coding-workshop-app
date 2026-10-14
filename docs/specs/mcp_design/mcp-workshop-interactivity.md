@@ -181,13 +181,13 @@ patterns; §4.5 is the first-run on-ramp; §4.6 is the Phase 2A coaching layer.
   `captured_outputs` and prior answers (D6), the parameters — **and** in-workspace access to an FMAPI
   model via `call_databricks_serving_endpoint` (`routes.py:1400`). §4.1's coaching is a static
   option→text lookup; §4.6 composes those same inputs into a grounded, personalized narration.
-- **Content source:** server-assembled grounding context (D2 §12.3) + the `_COACH_SYSTEM` constant
+- **Content source:** server-assembled grounding context (D2 §12.3) + the `COACH_SYSTEM` constant
   (D2 §12.2). The static per-option coaching bank (D5 §5.1) remains the **fallback** (below).
 - **Mechanism:** the read-only tool **`vibe_explain_step`** with `focus` (D2 §3.8; planned as a
   separate `vibe_coach` tool, D2 §3.7), that the learner invokes in chat
   ("why does this matter?", "what now?", "I'm stuck") with an optional `focus`
   (`what_now`/`why`/`unblock`/`review`). The server reads state fresh, assembles the context, calls
-  the model with `_COACH_SYSTEM`, scrubs the output for leakage (D7 §6), and returns the step help
+  the model with `COACH_SYSTEM`, scrubs the output for leakage (D7 §6), and returns the step help
   with `coaching`, `focus`, `grounded_on` and `is_fallback` (`StepHelpResult`, D2 §3.8). It
   **changes no workshop state** and **never blocks or advances** the track.
 - **Fail-open (non-negotiable):** any model error/timeout degrades to the static option-keyed

@@ -155,7 +155,7 @@ Before any `/mcp` deploy (plan §1.3 / generic §4 / D4 §2):
 
 **Human gates as shipped in the autonomous run (2026-10):**
 - **Budget changes** → human. Raising the coaching budget (`VIBE_COACH_BUDGET_S`, the §9 q4 values)
-  or `STEP_PROMPT_BUDGET_S` (`mcp_server.py:798`) is not taken by the run: it measures and parks
+  or `STEP_PROMPT_BUDGET_S` (`mcp_server.py:802`) is not taken by the run: it measures and parks
   (D-29; D-62; Phase 4 exit report §6 Q2).
   The human raised `VIBE_COACH_BUDGET_S` to 20 s on 2026-10-14 (D-106), set in `app.yaml.template`;
   the code default stays 8.0 (`coaching.py:69`, `COACH_BUDGET_S`).
@@ -242,6 +242,6 @@ If the probe shows `elicitation` is now advertised, open a follow-up to enable D
    highest active version per (section_tag, coding_assistant), or (b) keep the gate and leave the
    three tags on v1 934/940/941 (Phase 4 exit report §6 Q1).
 6. **Step-prompt budget (Phase 4, D-62)** *(open, human)* — `iterate_enhance`, `skill_define_strategy`
-   and `skill_create_skillmd` exceed the 90 s budget (`mcp_server.py:798`). (a) larger max_tokens or a
+   and `skill_create_skillmd` exceed the 90 s budget (`mcp_server.py:802`). (a) larger max_tokens or a
    smaller output contract for rows 14/131/132, (b) async or deferred generation, (c) accept the
    template fallback (current), or (d) raise `STEP_PROMPT_BUDGET_S` (Phase 4 exit report §6 Q2).

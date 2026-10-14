@@ -236,13 +236,13 @@ and coaching whether driving Genie Code or the UI. Answers persist to the intera
 §4–§9 cover **authored** pedagogy: the seeded question bank and the static, option-keyed coaching
 that ships in `sections/*.md`. §11 adds a **live** layer on top: the server can *generate*
 coaching, grounded in the learner's own progress, on demand. The mechanism is D1 §4.6 (the
-`vibe_coach` tool, D2 §3.7); this section is the **content/pedagogy contract** for what that tool is
+`focus` argument on the `vibe_explain_step` tool, D2 §3.8); this section is the **content/pedagogy contract** for what that tool is
 allowed to say and how it stays trustworthy. It is **additive and optional** — the authored coaching
 (§5.1) is always the floor and the fallback.
 
 ### 11.1 When it fires
 Learner-pulled, never auto-injected: the learner asks in chat ("why does this matter?", "what do I
-do now?", "I'm stuck", "where am I?") and the agent calls `vibe_coach` with a `focus`. It never
+do now?", "I'm stuck", "where am I?") and the agent calls `vibe_explain_step` with a `focus`. It never
 blocks, never advances a gate, and never replaces the verbatim prompt or the authored questions.
 
 ### 11.2 Grounding (facts lead)
@@ -250,13 +250,13 @@ Coaching is only as good as its grounding. The server assembles the context from
 holds — the step's `why`/`how_to_apply`/`expected_output`/`gate`, the verbatim `prompt` (as a
 *reference to explain*, never to rewrite), the learner's `captured_outputs` and prior
 `session_interactions` answers, and `industry`/`use_case` (full list in D2 §12.3). The model is
-instructed (`_COACH_SYSTEM`, D2 §12.2) to ground every claim in that context and, when the context
+instructed (`COACH_SYSTEM`, D2 §12.2) to ground every claim in that context and, when the context
 is thin, to point at the next concrete action rather than invent facts, table names, or results.
 The **READ-bookend discipline** (§2) carries over: coaching draws on what the learner already
 produced, so it never re-asks a settled question.
 
 ### 11.3 Focus modes
-One lens per call, chosen by the learner's phrasing (D2 §3.7 `focus` enum):
+One lens per call, chosen by the learner's phrasing (D2 §3.8 `focus` enum):
 
 | `focus` | Pedagogical job |
 |---|---|
@@ -267,8 +267,10 @@ One lens per call, chosen by the learner's phrasing (D2 §3.7 `focus` enum):
 
 ### 11.4 Fail-open to authored coaching
 The generated layer must **degrade to the authored layer**, never to nothing. On any FMAPI
-error/timeout — or when no serving endpoint is configured — `vibe_coach` returns the static,
-option-keyed coaching from the question bank (§5.1) with `is_fallback:true` (D2 §3.7). A learner
+error/timeout — or when no serving endpoint is configured — `vibe_explain_step` with `focus` returns the static,
+option-keyed coaching from the question bank (§5.1) with `is_fallback:true` (D2 §3.8). (As shipped, the
+fallback is the static step help — `why`/`how_to_apply`/`expected_output` — with `coaching` null,
+`coaching.py:3–5`.) A learner
 always gets useful coaching; the LLM only makes it *better and more personal* when available.
 
 ### 11.5 Tone & guardrails (same bars as authored prose)
@@ -296,8 +298,8 @@ Each coaching turn is logged to `session_interactions` with `kind='coaching'` an
 2. **Comprehension-check density.** One-per-section default (recommended) vs. author's discretion.
    Too many turns the track back into the interrogation §17 removed.
 3. **Coaching for free-text answers — resolved by §11.** Static, option-keyed coaching stays the
-   authored floor and the deterministic fallback; §11's adaptive layer (`vibe_coach`) handles
+   authored floor and the deterministic fallback; §11's adaptive layer (`vibe_explain_step` with `focus`) handles
    free-text and open "why/what-now" questions with a **grounded, guarded** LLM call. Open sub-q:
    should `vibe_submit_answer` *also* route free-text comprehension answers through the coaching
-   model (richer) or keep returning the static option coaching and let the learner pull `vibe_coach`
+   model (richer) or keep returning the static option coaching and let the learner pull `vibe_explain_step` with `focus`
    (simpler)? Recommend the latter for Phase 2A, then evaluate.

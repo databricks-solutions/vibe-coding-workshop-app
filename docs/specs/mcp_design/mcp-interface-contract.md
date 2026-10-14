@@ -321,7 +321,8 @@ description-as-prompt, `inputSchema`, `outputSchema`, annotations, errors, and t
 - **Annotations:** `readOnly:false, destructive:false, idempotent:true, openWorld:true`.
 - **Errors:** `INVALID_SESSION`, `INVALID_PARAM` (unknown key with a strict flag, else ignored).
 - **Maps to:** D3 §4 session_parameters + the outline flag filter (D3 §5.1); reuses
-  `/api/session/{id}/parameters` + `lakehouse-params`.
+  `/api/session/{id}/parameters` (`GET` `src/backend/api/routes.py:4433`, `PUT`
+  `src/backend/api/routes.py:4520`) + `lakehouse-params`.
 
 ### 3.7 `vibe_coach`  *(net-new, Phase 2A — from D5 §11 adaptive coaching)*
 > Shipped as `vibe_explain_step` (§3.8; §9 Phase 2A amendment). This section is the historical coaching contract.
@@ -356,7 +357,7 @@ description-as-prompt, `inputSchema`, `outputSchema`, annotations, errors, and t
 - **Grounding (server-assembled, never client-supplied):** the current step's `title`/`why`/
   `how_to_apply`/`expected_output`/`gate` + the verbatim `prompt` (as *reference to explain*, never
   to rewrite — §7 / D1 §7), the learner's `captured_outputs`, prior `session_interactions` answers,
-  and `industry`/`use_case` (D5 §11.2). The model call carries `_COACH_SYSTEM` (§12) as
+  and `industry`/`use_case` (D5 §11.2). The model call carries `COACH_SYSTEM` (§12) as
   `system_prompt`.
 - **Maps to:** D5 §11 (pedagogy/doctrine) via `services/llm.py` (extract of
   `call_databricks_serving_endpoint`, `routes.py:1400`; D4 §1.2). **No REST twin required** for v1
@@ -520,7 +521,7 @@ error (generic §5.5). Shape:
 |---|---|---|---|
 | `UNKNOWN_TRACK` | `track` not in manifest | `start_track` | — |
 | `INVALID_SESSION` | session id unresolvable | all | — |
-| `UNKNOWN_STEP` | `sectionTag` not in track | `get_step`, `complete_step`, `coach` | D3 F1 |
+| `UNKNOWN_STEP` | `sectionTag` not in track | `get_step`, `complete_step`, `explain_step` | D3 F1 |
 | `STEP_LOCKED` | prerequisite gate not met | `get_step`, `complete_step` | D3 F2 |
 | `UI_DRIVEN_STEP` | step is coached, not agent-completable | `complete_step` | D3 §5.4 / D1 §4.3 |
 | `GATE_REQUIRED` | Step-9 confirm answer not yet recorded | `complete_step` | D1 §11 |
@@ -630,7 +631,7 @@ so the total stays **7** — still far under the shared ~20-tool ceiling.
 
 ---
 
-## 12. Adaptive-coaching internals (`CoachResult` + `_COACH_SYSTEM`)
+## 12. Adaptive-coaching internals (`CoachResult` + `COACH_SYSTEM`) — `CoachResult` is the historical name; the shipped result is `StepHelpResult` (§3.8)
 
 The shape and the model contract behind `vibe_explain_step`'s `focus` (§3.8), first planned for
 `vibe_coach` (§3.7). `CoachResult` below is kept as the historical shape. Bound by the D8 coaching
@@ -674,7 +675,7 @@ class CoachResult(BaseModel):
 > triple (`visual`, `visual_kind`, `visual_caption`) sits beside them. `CoachResult` above stays as
 > the historical contract.
 
-### 12.2 `_COACH_SYSTEM` (the model system prompt)
+### 12.2 `COACH_SYSTEM` (the model system prompt)
 
 Passed as `system_prompt` to `call_databricks_serving_endpoint` (`routes.py:1400` → `services/llm.py`,
 D4 §1.2). It is a **server-owned constant** (like `ORIENTATION_PREAMBLE` in `mcp_server.py`), never

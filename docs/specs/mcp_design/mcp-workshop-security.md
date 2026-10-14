@@ -123,7 +123,7 @@ that `startswith("/api/")` (`app.py:64`). Consequences and the required decision
 - The app runs as its **service principal** for its own resources (Lakebase); OBO identity is used
   only to attribute the session (`created_by`) and authorize session access (§1).
 - No new secrets are introduced by the MCP surface. Reuse existing env config (roadmap env vars).
-- **Adaptive coaching (`vibe_coach`, D2 §3.7) calls FMAPI as the app SP** via the existing
+- **Adaptive coaching (`vibe_explain_step` with `focus`, D2 §3.8) calls FMAPI as the app SP** via the existing
   `call_databricks_serving_endpoint` path (`routes.py:1400`) and the existing
   `DATABRICKS_SERVING_ENDPOINT` config (`routes.py:440`) — **no new endpoint, credential, or secret**.
   The learner's OBO identity is not forwarded to the model call; coaching is generated under the SP,
@@ -133,11 +133,11 @@ that `startswith("/api/")` (`app.py:64`). Consequences and the required decision
 
 ### 6.1 Coaching firewall (the LLM path — hard)
 
-An LLM that sees step context could parrot contaminating content, so `vibe_coach` is firewalled on
+An LLM that sees step context could parrot contaminating content, so `vibe_explain_step` (`focus`) is firewalled on
 **both** sides of the model call:
 
 - **Input side.** The grounding context (D2 §12.3) is assembled from concepts and the learner's own
-  artifacts — never raw benchmark question text, sample data rows, secrets, or PII. `_COACH_SYSTEM`
+  artifacts — never raw benchmark question text, sample data rows, secrets, or PII. `COACH_SYSTEM`
   (D2 §12.2) explicitly forbids emitting any of those.
 - **Output side.** The generated text is **leakage-scrubbed before it is returned to the agent and
   before it is stored** in `session_interactions.coaching_shown` (D6 §3a). A scrub failure fails
@@ -157,7 +157,7 @@ An LLM that sees step context could parrot contaminating content, so `vibe_coach
 | `/mcp` abuse / floods | Auth-gated + idempotent tools; optional stateless per-identity limit (§4) |
 | State corruption under concurrency | Session-scoped reads, set-semantics gates, append-only log (§5) |
 | Data exfiltration in payloads | No literals/PII in outputs or logs (§6) |
-| Coaching LLM leaks benchmark text / data / PII | Input-side firewall in `_COACH_SYSTEM` + concept-only context; output-side scrub before return **and** store; scrub failure → static fallback (§6.1) |
+| Coaching LLM leaks benchmark text / data / PII | Input-side firewall in `COACH_SYSTEM` + concept-only context; output-side scrub before return **and** store; scrub failure → static fallback (§6.1) |
 
 ---
 
@@ -171,7 +171,7 @@ An LLM that sees step context could parrot contaminating content, so `vibe_coach
 - [ ] Explicit `/mcp` rate-limit decision recorded; no in-process bucket on `/mcp` (§4).
 - [ ] Two-session isolation test passes (§5, D8).
 - [ ] No literals/PII in tool outputs, resources, or interaction logs (§6).
-- [ ] `vibe_coach` output is leakage-scrubbed before return **and** before store; scrub failure →
+- [ ] `vibe_explain_step` (`focus`) output is leakage-scrubbed before return **and** before store; scrub failure →
       static fallback; no new secret/endpoint (§6.1, D8 §4).
 
 ---

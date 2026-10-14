@@ -107,18 +107,18 @@ CI-equivalent: run locally; a red parity test blocks the change (D3 §9).
   orientation-free client can reach "step 1 presented" using only prompts + resources (the
   self-serve acceptance, D9 Phase 1).
 
-### 4a. Adaptive-coaching tests (D1 §4.6 / D2 §3.7 / D5 §11) — *Phase 2A*
+### 4a. Adaptive-coaching tests (D1 §4.6 / D2 §3.8 / D5 §11) — *Phase 2A*
 
 `tests/workshop/test_coaching.py` (mock the FMAPI seam — `services/llm.py`, D4 §1.2 — so these run
 offline with no live endpoint). The tool under test is `vibe_explain_step` with `focus` (D2 §3.8;
-planned as `vibe_coach`, D2 §3.7):
+planned as `vibe_coach`, D2 §3.7, now D2 §3.8):
 
 - **Grounding** — with a mocked model that echoes its inputs, assert `vibe_explain_step` sends only the
-  server-assembled context keys (D2 §12.3), `_COACH_SYSTEM` as the system prompt, and that
+  server-assembled context keys (D2 §12.3), `COACH_SYSTEM` as the system prompt, and that
   `grounded_on` reflects the non-empty context keys.
 - **Verbatim / no re-issue** — assert the step's verbatim `prompt` body is passed as *reference*
   context but the returned `coaching` is not required to equal it; the contract is enforced by
-  `_COACH_SYSTEM` (assert the system prompt text carries the "never restate the prompt" rule).
+  `COACH_SYSTEM` (assert the system prompt text carries the "never restate the prompt" rule).
 - **Fail-open (the important one)** — (a) mock the model to raise/timeout → `vibe_explain_step` returns the
   static option-keyed fallback with `is_fallback:true`, **not** an `isError`; (b) unset the endpoint
   (`DATABRICKS_SERVING_ENDPOINT` empty) → still returns useful static coaching, `is_fallback:true`.
@@ -314,7 +314,7 @@ before every deploy (D9 §7).
 | Self-serve by construction (D1 §1a) | §4 self-serve / first-run |
 | Adaptive coaching fail-open (D1 §4.6 / D5 §11.4) | §4a fail-open |
 | Coaching firewall / scrub (D7 §6.1) | §4a leakage scrub |
-| Coaching is read-only + fail-open telemetry (D2 §3.7 / D6 §3a) | §4a read-only + provenance |
+| Coaching is read-only + fail-open telemetry (D2 §3.8 / D6 §3a) | §4a read-only + provenance |
 | Recommend-and-proceed default (D5 §3) | §4 + §10 |
 | Step-9 hard-stop (D1 §11) | §4 |
 | 307-no-redirect (plan §1.3.2) | §5 |
