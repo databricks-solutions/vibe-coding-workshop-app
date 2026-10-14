@@ -47,6 +47,70 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    version: '2.6.0',
+    date: '2026-10-13',
+    title: 'Insights follows the Genie Accelerator',
+    items: [
+      {
+        title: 'Insights builds follow the Genie Accelerator',
+        description:
+          'Every Insights step now uses the Genie Accelerator prompt for that step and links to the Accelerator skill it follows in the Skills Navigator. Optional add-ons can join a build without changing the four chapters: map your business domain (Ontology), alerts on your governed metrics, view your data in an app, or a copilot app that saves to Lakebase with Genie inside it. Optional steps can be skipped. The add-ons stay off until each one has been verified.',
+        category: 'new',
+        audience: 'attendee',
+        icon: 'sparkles',
+        beta: true,
+      },
+      {
+        title: 'Ideate: every approach shows what it builds, and comes with Genie',
+        description:
+          'Approach cards now say up front what you will get: a Genie space and a dashboard, an app with Genie inside it, or an agent with an app, Genie and a dashboard, plus a question people could ask. Genie is only left out with a stated reason, and the brief and the build carry it through. Cards no longer spill outside their border.',
+        category: 'improved',
+        audience: 'attendee',
+        icon: 'sparkles',
+      },
+      {
+        title: 'Go back to the idea, change an answer, then update the build',
+        description:
+          'A Back link sits at the top of every idea step, and the build bar has "Back to the idea" in both Ideate and Insights. Changing an approved answer reopens the steps after it for a quick re-check; the build keeps working until you choose Update build. Insights projects now always show the idea they were built from.',
+        category: 'improved',
+        audience: 'attendee',
+        icon: 'route',
+      },
+      {
+        title: 'Ideate samples for Retail, CPG and Airlines',
+        description:
+          'The Ideate home has a Samples section: three finished ideas from the use case library, with every step and the business case filled in. Walk through one read-only, or choose Make it mine to copy it into My ideas.',
+        category: 'new',
+        audience: 'attendee',
+        icon: 'sparkles',
+      },
+      {
+        title: 'Business case 1-pager button',
+        description:
+          'The business case 1-pager has a clear, glowing button on the idea, so it is easy to find and open.',
+        category: 'improved',
+        audience: 'attendee',
+        icon: 'palette',
+      },
+      {
+        title: 'Genie Accelerator first, with its options grouped under it',
+        description:
+          'Genie Accelerator is now first in the Accelerators list. "Include Lakehouse" and "Include Genie Ontology" sit directly under it instead of below the Agents Accelerator, and the architecture diagram has a lighter look that matches the rest of the app.',
+        category: 'improved',
+        audience: 'attendee',
+        icon: 'diagram',
+      },
+      {
+        title: 'Turn on Insights add-ons one at a time',
+        description:
+          'New INSIGHTS_BUILD_RECIPES setting in app.yaml (blank by default; a comma list of ontology, alerts, app_view, copilot, or all). Testers can preview in their own browser with ?recipes=all. The Insights-only prompts are added with scripts/apply_prompt_versions.py, which appends new versions through the config API (dry run by default) and never reseeds.',
+        category: 'new',
+        audience: 'installer',
+        icon: 'wrench',
+      },
+    ],
+  },
+  {
     version: '2.5.0',
     date: '2026-10-11',
     title: 'Insights: a questions-first path to a Genie and a dashboard',

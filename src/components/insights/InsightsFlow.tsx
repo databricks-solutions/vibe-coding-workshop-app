@@ -1,18 +1,20 @@
 import { Component, Suspense, lazy, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { AnimatePresence, MotionConfig, motion } from 'framer-motion';
-import { Route } from 'lucide-react';
+import { Hammer, Route } from 'lucide-react';
 import { apiClient } from '../../api/client';
 import { ASSISTANT_CATALOG } from '../../constants/codingAssistants';
 import { WORKSHOP_LEVELS } from '../../constants/workflowSections';
 import {
-  BusinessCaseSheet, JourneyProgress, JourneyScreen, SHAPE_KINDS, answerFor, caseFigures, chosenShape, matchingContext, money, placedLeaf, seedFromUseCase, useIdeas,
-  type Idea, type StepKey,
+  BusinessCaseSheet, JourneyProgress, JourneyScreen, REVIEW_IDEA_EVENT, SHAPE_KINDS, answerFor, buildLines, caseFigures, chosenShape, matchingContext, money,
+  needsBuildUpdate, placedLeaf, seedFromUseCase, useEnabledAddOns, useIdeas,
+  type Idea, type ReviewIdeaDetail, type StepKey,
 } from '../journeykit';
 import { composeBrief, fitName, parseBrief, toSlug, type DataSource, type IdeaBrief } from './brief';
 import type { ModelHint } from './blueprint/industryMap';
 import type { BlueprintChoice } from './blueprint/types';
 import { INDUSTRY_IDEAS } from './journey';
 import { openPathComparison } from './pathEvents';
+import { addOnAvailable, defaultAddOns, momentsFor, normalizeAddOns, offeredAddOns, useTagAvailability, type AddOn } from './recipes';
 import { insightsPhases, type InsightsStage } from './progress';
 import { insightsIndustryFor } from './usecases/useCaseApi';
 import { DataScreen } from './screens/DataScreen';
@@ -115,7 +117,7 @@ function ideaBriefOf(idea: Idea): IdeaBrief {
     problem: idea.spark?.statement,
     who: who.join(', '),
     metric: answerFor(idea, 'business'),
-    approach: shape ? `${shape.title} (${SHAPE_KINDS[shape.kind].label}): ${shape.value}` : undefined,
+    approach: shape ? [`${shape.title} (${SHAPE_KINDS[shape.kind].label}): ${shape.value}`, ...buildLines(shape)].join('. ') : undefined,
     value: figures ? `about ${money(figures.value.expected)} a year from ${figures.driverLabel.toLowerCase()}` : undefined,
     origin: idea.sourceUseCase ? `the approved use case "${idea.sourceUseCase.label}"` : 'their own idea',
   };
@@ -133,7 +135,7 @@ function InsightsFlowInner(props: InsightsFlowProps) {
   const {
     sessionId, isSessionLoaded, readOnly, currentUser, workshopLevel, codingAssistant,
     selectedIndustry, selectedIndustryLabel, selectedUseCase, selectedUseCaseLabel, customUseCaseLabel, customDescription,
-    stepPrompts, completedSteps, skippedSteps, onStepPromptGenerated, onCompletedStepsChange, onStart, onNewSession, onSwitchToTechnical,
+    stepPrompts, completedSteps, skippedSteps, onStepPromptGenerated, onCompletedStepsChange, onSkippedStepsChange, onStart, onNewSession, onSwitchToTechnical,
   } = props;
 
   const links = useWorkspaceLinks();
@@ -152,6 +154,13 @@ function InsightsFlowInner(props: InsightsFlowProps) {
   const [launching, setLaunching] = useState(false);
   const [seededFor, setSeededFor] = useState<string | null | undefined>(undefined);
   const [caseOpen, setCaseOpen] = useState(false);
+  // Looking back at the idea behind a build, or choosing to keep a build its idea has moved on from.
+  const [reviewing, setReviewing] = useState(false);
+  const [keepCurrent, setKeepCurrent] = useState(false);
+  // Add-ons picked on the plan screen; null follows the idea's approach.
+  const [addOnChoice, setAddOnChoice] = useState<AddOn[] | null>(null);
+  const enabledAddOns = useEnabledAddOns();
+  const availability = useTagAvailability();
 
   const idea = ideaId ? ideas.find(i => i.id === ideaId) : undefined;
 
@@ -159,6 +168,9 @@ function InsightsFlowInner(props: InsightsFlowProps) {
   // an unlinked idea keeps it, so starting the build never loses your place.
   if (isSessionLoaded && seededFor !== sessionId) {
     setSeededFor(sessionId);
+    setReviewing(false);
+    setKeepCurrent(false);
+    setAddOnChoice(null);
     const carried = idea && !idea.sessionId ? idea : undefined;
     if (!carried) {
       const linked = sessionId ? ideas.find(i => (i.mode === 'insights' || i.buildTarget === 'insights') && i.sessionId === sessionId) : undefined;
@@ -190,10 +202,36 @@ function InsightsFlowInner(props: InsightsFlowProps) {
 
   useEffect(() => {
     document.querySelector('main .overflow-auto')?.scrollTo({ top: 0, behavior: 'smooth' });
-  }, [stage, launching]);
+  }, [stage, launching, reviewing]);
+
+  useEffect(() => {
+    const onReview = (e: Event) => {
+      const detail = (e as CustomEvent<ReviewIdeaDetail>).detail;
+      if (!detail || !idea || detail.ideaId !== idea.id) return;
+      setReviewing(true);
+      setKeepCurrent(false);
+      setLockSeen(idea.lockedAt);
+      setStage(detail.to === 'update' && idea.lockedAt ? 'locked' : 'idea');
+    };
+    window.addEventListener(REVIEW_IDEA_EVENT, onReview);
+    return () => window.removeEventListener(REVIEW_IDEA_EVENT, onReview);
+  }, [idea]);
 
   const isGeniePath = workshopLevel === 'genie-accelerator';
-  const ready = isGeniePath && completedSteps.has(1) && !!selectedUseCase;
+  const sessionName = customUseCaseLabel || selectedUseCaseLabel;
+  // The project's set-up only belongs to its linked idea if this idea did it. A project
+  // reused from something else (another idea, an older use case) resumes at the data step.
+  const builtFromIdea = !idea
+    || idea.buildStage === 'studio'
+    || (parsed.ideaHeadline ? parsed.ideaHeadline === idea.title.replace(/\s+/g, ' ').trim() : fitName(idea.title) === sessionName);
+  const ready = isGeniePath && completedSteps.has(1) && !!selectedUseCase && builtFromIdea;
+  const updatePending = ready && !!idea?.lockedAt && needsBuildUpdate(idea) && !keepCurrent;
+  const showStudio = ready && (readOnly || (!reviewing && !updatePending));
+
+  // Projects set up before builds were tracked are recognised once, so renaming the idea later cannot unlink them.
+  useEffect(() => {
+    if (ready && idea && idea.buildStage !== 'studio' && !readOnly) updateIdea(idea.id, { buildStage: 'studio', builtRevision: idea.revision ?? 0 });
+  }, [ready, idea, readOnly, updateIdea]);
   const builtElsewhere = !isGeniePath && Array.from(completedSteps).some(s => s >= 2);
   const assistantName = ASSISTANT_CATALOG.find(a => a.id === codingAssistant)?.name ?? 'Genie Code';
 
@@ -207,6 +245,10 @@ function InsightsFlowInner(props: InsightsFlowProps) {
     text: [ideaText, ...questions].filter(Boolean).join('\n'),
   };
   const usingBlueprint = dataSource === 'blueprint';
+  const offered = offeredAddOns(idea, enabledAddOns).filter(a => addOnAvailable(a, availability));
+  const chosenAddOns = normalizeAddOns((addOnChoice ?? defaultAddOns(idea, enabledAddOns)).filter(a => offered.includes(a)));
+  const toggleAddOn = (a: AddOn) => setAddOnChoice(chosenAddOns.includes(a) ? chosenAddOns.filter(x => x !== a) : [...chosenAddOns, a]);
+  const builtMoments = useMemo(() => momentsFor(parsed.addOns), [parsed.addOns]);
 
   const phases = (viewStep?: StepKey | null) => insightsPhases({ stage, idea, viewStep, blueprint: usingBlueprint });
   const progress = <JourneyProgress phases={phases()} trailing="then 4 build chapters" />;
@@ -217,6 +259,7 @@ function InsightsFlowInner(props: InsightsFlowProps) {
   );
 
   const openIdea = (next: Idea) => {
+    setAddOnChoice(null);
     setIdeaId(next.id);
     setLockSeen(undefined);
     setStage('idea');
@@ -231,7 +274,19 @@ function InsightsFlowInner(props: InsightsFlowProps) {
   const editIdea = () => {
     setLockSeen(idea?.lockedAt);
     setStage('idea');
+    if (ready) setReviewing(true);
   };
+
+  const backToBuild = () => {
+    setReviewing(false);
+    setKeepCurrent(true);
+  };
+
+  const backToBuildButton = (
+    <button onClick={backToBuild} className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-ui-sm font-medium text-primary hover:bg-primary/10 transition-colors">
+      <Hammer className="w-4 h-4" /> <span className="hidden sm:inline">Back to the build</span>
+    </button>
+  );
 
   const openCase = idea?.brief ? () => setCaseOpen(true) : undefined;
 
@@ -254,9 +309,47 @@ function InsightsFlowInner(props: InsightsFlowProps) {
         blueprint: useBlueprint ? blueprint : null,
         useCase,
         idea: ideaBriefOf(idea),
+        addOns: chosenAddOns,
       }),
     });
+    markBuilt(idea, 'Set up the build');
+    setReviewing(false);
+    setKeepCurrent(false);
     setLaunching(true);
+  };
+
+  const markBuilt = (built: Idea, note: string) => updateIdea(built.id, i => ({
+    buildStage: 'studio',
+    builtRevision: i.revision ?? 0,
+    decisions: [...i.decisions, { at: new Date().toISOString(), text: note }],
+  }));
+
+  /** Rewrites the project's brief from the idea's latest answers, keeping its data choices. */
+  const updateBuild = () => {
+    if (readOnly || !idea) return;
+    const finalName = fitName(idea.title) || sessionName;
+    onStart({
+      industry: selectedIndustry,
+      industryLabel: selectedIndustryLabel,
+      useCase: selectedUseCase,
+      useCaseLabel: finalName,
+      description: composeBrief({
+        name: finalName,
+        industryLabel: INDUSTRY_IDEAS.find(i => i.id === industryId)?.label ?? parsed.blueprint?.label ?? '',
+        questions,
+        dataSource: parsed.dataSource,
+        dataLocation: parsed.dataLocation,
+        blueprint: parsed.blueprint,
+        useCase,
+        idea: ideaBriefOf(idea),
+        addOns: parsed.addOns,
+      }),
+      resetPrompts: true,
+    });
+    markBuilt(idea, 'Updated the build with the latest answers');
+    setName(finalName);
+    setReviewing(false);
+    setKeepCurrent(false);
   };
 
   let content: ReactNode;
@@ -280,14 +373,16 @@ function InsightsFlowInner(props: InsightsFlowProps) {
         onSwitchToTechnical={onSwitchToTechnical}
       />
     );
-  } else if (ready) {
+  } else if (showStudio) {
     key = 'studio';
     content = (
       <InsightsStudio
-        name={customUseCaseLabel || selectedUseCaseLabel}
+        name={idea ? fitName(idea.title) || sessionName : sessionName}
         questions={parsed.questions}
         dataSource={parsed.dataSource}
         blueprint={parsed.blueprint}
+        moments={builtMoments}
+        addOns={parsed.addOns}
         industry={selectedIndustry}
         useCase={selectedUseCase}
         sessionId={sessionId}
@@ -301,6 +396,7 @@ function InsightsFlowInner(props: InsightsFlowProps) {
         skippedSteps={skippedSteps}
         onStepPromptGenerated={onStepPromptGenerated}
         onCompletedStepsChange={onCompletedStepsChange}
+        onSkippedStepsChange={onSkippedStepsChange}
         onSwitchToTechnical={onSwitchToTechnical}
       />
     );
@@ -343,7 +439,7 @@ function InsightsFlowInner(props: InsightsFlowProps) {
         ideaId={idea.id}
         industryId={industryId}
         phasesFor={phases}
-        tools={compare}
+        tools={ready ? <>{compare}{backToBuildButton}</> : compare}
         onBackFromFirst={idea.approved.length === 0 ? discardIdea : undefined}
         onChangeUseCase={discardIdea}
       />
@@ -352,7 +448,14 @@ function InsightsFlowInner(props: InsightsFlowProps) {
     key = 'locked';
     content = (
       <JourneyScreen progress={progress} tools={compare}>
-        <IdeaLockedScreen idea={idea} readOnly={readOnly} onEdit={editIdea} onOpenCase={openCase} onNext={() => setStage('data')} />
+        <IdeaLockedScreen
+          idea={idea}
+          readOnly={readOnly}
+          onEdit={editIdea}
+          onOpenCase={openCase}
+          onNext={() => setStage('data')}
+          build={ready ? { changed: needsBuildUpdate(idea), onUpdate: updateBuild, onOpen: backToBuild } : undefined}
+        />
       </JourneyScreen>
     );
   } else if (stage === 'data') {
@@ -422,6 +525,10 @@ function InsightsFlowInner(props: InsightsFlowProps) {
         onBack={() => setStage(usingBlueprint ? 'blueprint' : 'data')}
         onStart={start}
         readOnly={readOnly}
+        moments={momentsFor(chosenAddOns)}
+        offeredAddOns={offered}
+        addOns={chosenAddOns}
+        onToggleAddOn={toggleAddOn}
       />
     );
   }

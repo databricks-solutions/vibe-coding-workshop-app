@@ -1,11 +1,14 @@
 import { useEffect, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { ChevronDown, Wrench } from 'lucide-react';
+import { ArrowUpRight, ChevronDown, GraduationCap, Wrench } from 'lucide-react';
 import { apiClient } from '../../../api/client';
+import { ACCELERATOR_SKILLS } from '../journey';
 import { MarkdownContent } from '../../MarkdownContent';
 
 interface UnderTheHoodProps {
   tag: string;
+  /** Skills Navigator id of the Genie Accelerator skill behind this step. */
+  skill?: string;
   industry: string;
   useCase: string;
   sessionId: string | null;
@@ -13,7 +16,8 @@ interface UnderTheHoodProps {
 }
 
 /** Everything the Technical view shows for a step, folded away by default. */
-export function UnderTheHood({ tag, industry, useCase, sessionId, prompt }: UnderTheHoodProps) {
+export function UnderTheHood({ tag, skill, industry, useCase, sessionId, prompt }: UnderTheHoodProps) {
+  const skillName = skill ? ACCELERATOR_SKILLS[skill] : undefined;
   const [open, setOpen] = useState(false);
   const [tab, setTab] = useState<'instructions' | 'how'>('instructions');
   const [howTo, setHowTo] = useState<string | null>(null);
@@ -43,6 +47,18 @@ export function UnderTheHood({ tag, industry, useCase, sessionId, prompt }: Unde
         {open && (
           <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden">
             <div className="px-6 sm:px-8 pb-6 space-y-3">
+              {skill && skillName && (
+                <a
+                  href={`/skills?skill=${encodeURIComponent(skill)}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="flex items-center gap-2 text-ui-sm text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  <GraduationCap className="w-3.5 h-3.5" />
+                  Follows the Genie Accelerator skill <span className="font-medium text-foreground/85">{skillName}</span>
+                  <ArrowUpRight className="w-3.5 h-3.5" />
+                </a>
+              )}
               <div className="inline-flex p-0.5 rounded-lg bg-secondary/60">
                 {(['instructions', 'how'] as const).map(t => (
                   <button

@@ -9,6 +9,7 @@ export { useIdeas } from './engine/useIdeas';
 export { useIdeaFlow, MAX_GENIE_QUESTIONS, type IdeaFlow } from './engine/useIdeaFlow';
 export { seedFromUseCase } from './engine/seedFromUseCase';
 export * from './engine/handoff';
+export { SWITCHED_ADD_ONS, enabledAddOns, useEnabledAddOns, type SwitchedAddOn } from './engine/buildRecipes';
 export { MODE_CONFIG, SHAPE_KINDS, modeOf, ideaMinutes, type ModeConfig } from './modes';
 export { ART, STEP_ART, avatarFor } from './art';
 
@@ -34,3 +35,9 @@ export { AssumptionsDrawer } from './ui/AssumptionsDrawer';
 export { ClarityRing } from './ui/ClarityRing';
 export { SubmitDialog } from './ui/SubmitDialog';
 export { BusinessCaseView, BusinessCaseSheet } from './ui/BusinessCase';
+export { BusinessCaseButton } from './ui/BusinessCaseButton';
+export { SurfaceChips } from './ui/SurfaceChips';
+export { IndustryBadge } from './ui/IndustryBadge';
+export { SampleBanner, MakeItMineButton } from './ui/SampleBanner';
+export { SAMPLES, isSampleId } from './samples';
+export { shapeBuild, buildLines, type Surface } from './engine/surfaces';

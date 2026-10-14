@@ -970,6 +970,106 @@
   }
 }
 
+/* Business case 1-pager call to action: a lit, gradient button with a soft halo.
+   [data-invite] adds a slow breathing halo and a light sheen until the 1-pager is first opened. */
+.case-cta {
+  --cta-halo: hsla(var(--brand-h), var(--brand-s), 50%, 0.4);
+  --cta-halo-strong: hsla(var(--brand-h), var(--brand-s), 55%, 0.6);
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  color: #fff;
+  background: linear-gradient(135deg,
+    hsl(var(--brand-h), var(--brand-s), 34%) 0%,
+    hsl(calc(var(--brand-h) - 14), var(--brand-s), 30%) 100%);
+  box-shadow:
+    inset 0 1px 0 hsla(0, 0%, 100%, 0.22),
+    0 1px 2px hsla(0, 0%, 0%, 0.2),
+    0 6px 18px -4px var(--cta-halo);
+  transition: transform 160ms ease, box-shadow 220ms ease, filter 220ms ease;
+  animation: case-cta-enter 360ms cubic-bezier(0.2, 0.8, 0.2, 1) backwards;
+}
+.light .case-cta {
+  --cta-halo: hsla(var(--brand-h), var(--brand-s), 38%, 0.35);
+  --cta-halo-strong: hsla(var(--brand-h), var(--brand-s), 38%, 0.55);
+}
+.case-cta:hover {
+  transform: translateY(-1px);
+  filter: brightness(1.08);
+  box-shadow:
+    inset 0 1px 0 hsla(0, 0%, 100%, 0.28),
+    0 2px 4px hsla(0, 0%, 0%, 0.2),
+    0 10px 28px -4px var(--cta-halo-strong);
+}
+.case-cta:active {
+  transform: translateY(0) scale(0.98);
+}
+.case-cta:focus-visible {
+  outline: 2px solid hsl(var(--ring));
+  outline-offset: 3px;
+}
+.case-cta[data-invite] {
+  animation:
+    case-cta-enter 360ms cubic-bezier(0.2, 0.8, 0.2, 1) backwards,
+    case-cta-breathe 3s ease-in-out 400ms infinite;
+}
+.case-cta[data-invite]:hover {
+  animation: none;
+}
+.case-cta[data-invite]::after {
+  content: '';
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 40%;
+  z-index: -1;
+  background: linear-gradient(110deg,
+    transparent 0%,
+    hsla(0, 0%, 100%, 0.28) 50%,
+    transparent 100%);
+  pointer-events: none;
+  transform: translateX(-130%) skewX(-18deg);
+  animation: case-cta-sheen 5.5s ease-in-out 1.2s infinite;
+}
+.case-cta-chip {
+  background: hsla(0, 0%, 100%, 0.16);
+  box-shadow: inset 0 0 0 1px hsla(0, 0%, 100%, 0.22);
+  backdrop-filter: blur(4px);
+}
+
+@keyframes case-cta-enter {
+  from { opacity: 0; transform: scale(0.96); }
+  to { opacity: 1; transform: scale(1); }
+}
+@keyframes case-cta-breathe {
+  0%, 100% {
+    box-shadow:
+      inset 0 1px 0 hsla(0, 0%, 100%, 0.22),
+      0 1px 2px hsla(0, 0%, 0%, 0.2),
+      0 6px 18px -4px var(--cta-halo);
+  }
+  50% {
+    box-shadow:
+      inset 0 1px 0 hsla(0, 0%, 100%, 0.22),
+      0 1px 2px hsla(0, 0%, 0%, 0.2),
+      0 8px 26px -2px var(--cta-halo-strong);
+  }
+}
+@keyframes case-cta-sheen {
+  0% { transform: translateX(-130%) skewX(-18deg); }
+  35%, 100% { transform: translateX(330%) skewX(-18deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .case-cta,
+  .case-cta[data-invite] {
+    animation: none;
+    transition: none;
+  }
+  .case-cta[data-invite]::after {
+    display: none;
+  }
+}
+
 /* Copy button glow - blue accent */
 @keyframes button-glow-copy {
   0%, 100% {
@@ -2104,9 +2204,10 @@ select option {
 
 /* Ideate flip cards */
 .ideate-flip { perspective: 1200px; }
-.ideate-flip-inner { position: relative; width: 100%; height: 100%; transform-style: preserve-3d; transition: transform 0.6s cubic-bezier(0.2, 0.8, 0.2, 1); }
+/* Both faces share one grid cell, so the card grows to its taller face and nothing spills out. */
+.ideate-flip-inner { display: grid; width: 100%; height: 100%; transform-style: preserve-3d; transition: transform 0.6s cubic-bezier(0.2, 0.8, 0.2, 1); }
 .ideate-flip-inner.is-flipped { transform: rotateY(180deg); }
-.ideate-flip-face { position: absolute; inset: 0; backface-visibility: hidden; -webkit-backface-visibility: hidden; }
+.ideate-flip-face { grid-area: 1 / 1; min-width: 0; overflow: hidden; backface-visibility: hidden; -webkit-backface-visibility: hidden; }
 .ideate-flip-back { transform: rotateY(180deg); }
 @media (prefers-reduced-motion: reduce) {
   .ideate-flip-inner { transition: none; }

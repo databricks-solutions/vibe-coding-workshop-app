@@ -111,10 +111,36 @@ export function useIdeas() {
   const duplicateIdea = useCallback((id: string) => {
     const src = snapshot.find(i => i.id === id);
     if (!src) return;
-    const now = new Date().toISOString();
-    // A copy never inherits the original's Insights project.
-    commit([{ ...src, id: newId(), title: `${src.title} (copy)`, status: 'exploring', catalogRef: undefined, sessionId: undefined, lockedAt: undefined, buildTarget: undefined, buildStatus: undefined, buildStage: undefined, createdAt: now, updatedAt: now }, ...snapshot]);
+    commit([copyOf(src, { title: `${src.title} (copy)` }), ...snapshot]);
   }, []);
 
-  return { ideas, createIdea, updateIdea, deleteIdea, duplicateIdea };
+  /** Saves a copy of an idea that lives outside the store, such as a sample, and returns its id. */
+  const adoptIdea = useCallback((src: Idea, note: string): string => {
+    const copy = copyOf(src, { sample: undefined });
+    commit([{ ...copy, decisions: [...src.decisions, { at: copy.createdAt, text: note }] }, ...snapshot]);
+    return copy.id;
+  }, []);
+
+  return { ideas, createIdea, updateIdea, deleteIdea, duplicateIdea, adoptIdea };
+}
+
+/** A copy never inherits the original's Insights project or build. */
+function copyOf(src: Idea, extra: Partial<Idea>): Idea {
+  const now = new Date().toISOString();
+  return {
+    ...src,
+    id: newId(),
+    status: 'exploring',
+    catalogRef: undefined,
+    sessionId: undefined,
+    lockedAt: undefined,
+    buildTarget: undefined,
+    buildStatus: undefined,
+    buildStage: undefined,
+    builtRevision: undefined,
+    caseOpenedAt: undefined,
+    createdAt: now,
+    updatedAt: now,
+    ...extra,
+  };
 }

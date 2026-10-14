@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { motion, useReducedMotion } from 'framer-motion';
-import { RefreshCw, SkipForward } from 'lucide-react';
+import { ArrowLeft, ArrowRight, History, RefreshCw, SkipForward } from 'lucide-react';
 import { ExpandableErrorBanner } from '../../ExpandableErrorBanner';
 import { STEP_ART } from '../art';
 import { stepIndex, stepMeta, stepsOf } from '../engine/ideaContext';
 import { canReach, hasOutput } from '../engine/reach';
+import { hasBuild } from '../engine/handoff';
 import type { IdeaFlow } from '../engine/useIdeaFlow';
 import type { StepKey } from '../engine/types';
 import { modeOf } from '../modes';
@@ -17,8 +18,8 @@ import { ShapeStep } from '../steps/ShapeStep';
 import { SparkStep } from '../steps/SparkStep';
 import { Thinking } from '../ui/Thinking';
 import { UseCaseBadge } from '../ui/UseCaseBadge';
-import { GhostButton, Headline } from '../ui/primitives';
-import { StepActions } from './ActionBar';
+import { GhostButton, Headline, PrimaryButton } from '../ui/primitives';
+import { ActionBar, StepActions } from './ActionBar';
 
 const STEP_VIEWS: Record<StepKey, (p: { flow: IdeaFlow }) => ReactNode> = {
   spark: SparkStep, map: MapStep, clarify: ClarifyStep, shape: ShapeStep, questions: QuestionsStep, impact: ImpactStep, brief: BriefStep,
@@ -91,6 +92,8 @@ export function IdeaStepStage({ flow, unavailable, onBackFromFirst, onChangeUseC
   const next = steps[Math.min(index + 1, steps.length - 1)].key;
   const onContinue = viewStep !== 'brief' && stepIndex(idea.step, idea.mode) > index ? () => flow.setViewStep(next) : undefined;
   const onBack = index > 0 ? () => flow.setViewStep(steps[index - 1].key) : onBackFromFirst;
+  const backLabel = index > 0 ? `Back to step ${index}: ${steps[index - 1].label}` : 'Back';
+  const revising = idea.revisingFrom && !idea.approved.includes('brief') ? stepMeta(idea, idea.revisingFrom) : null;
 
   const retry = () => {
     flow.clearError();
@@ -107,6 +110,11 @@ export function IdeaStepStage({ flow, unavailable, onBackFromFirst, onChangeUseC
 
   return (
     <div className="space-y-6">
+      {onBack && (
+        <button onClick={onBack} className="-mb-2 inline-flex items-center gap-1.5 text-ui-sm text-muted-foreground hover:text-foreground transition-colors">
+          <ArrowLeft className="w-4 h-4" /> {backLabel}
+        </button>
+      )}
       <Headline
         art={STEP_ART[viewStep].image}
         eyebrow={`${config.phaseLabel} · Step ${index + 1} of ${steps.length}${meta.optional ? ' · Optional' : ''}`}
@@ -122,6 +130,17 @@ export function IdeaStepStage({ flow, unavailable, onBackFromFirst, onChangeUseC
           {onChangeUseCase && (
             <button onClick={onChangeUseCase} className="ml-auto text-ui-sm font-medium text-primary hover:underline">Change use case</button>
           )}
+        </div>
+      )}
+
+      {revising && !flow.readOnly && (
+        <div className="flex items-start gap-3 rounded-2xl border border-sky-500/30 bg-sky-500/[0.06] px-4 py-3 animate-fade-in" role="status">
+          <History className="w-4 h-4 mt-0.5 shrink-0 text-sky-600 dark:text-sky-400" />
+          <p className="text-ui-sm text-muted-foreground">
+            <span className="font-medium text-foreground">You changed {revising.label.toLowerCase()}.</span>{' '}
+            Check each step after it, then approve the brief again.
+            {hasBuild(idea) && ' Your build keeps working on the previous version until you choose Update build.'}
+          </p>
         </div>
       )}
 
@@ -146,7 +165,17 @@ export function IdeaStepStage({ flow, unavailable, onBackFromFirst, onChangeUseC
           transition={{ duration: 0.25, ease: 'easeOut' }}
         >
           <StepView flow={flow} />
-          <StepActions
+          {flow.readOnly ? (
+            <ActionBar
+              onBack={onBack}
+              backLabel={backLabel}
+              primary={index < steps.length - 1 && (
+                <PrimaryButton size="lg" onClick={() => flow.setViewStep(next)}>
+                  Next: {steps[index + 1].label} <ArrowRight className="w-4 h-4" />
+                </PrimaryButton>
+              )}
+            />
+          ) : <StepActions
             canApprove={canApprove}
             approveLabel={approved && viewStep === 'brief' ? 'Approved' : config.approveLabel(viewStep, prefilled)}
             onApprove={() => flow.approve(viewStep)}
@@ -166,7 +195,7 @@ export function IdeaStepStage({ flow, unavailable, onBackFromFirst, onChangeUseC
                 Skip this step <SkipForward className="w-3.5 h-3.5" />
               </GhostButton>
             )}
-          />
+          />}
         </motion.div>
       ) : null}
     </div>

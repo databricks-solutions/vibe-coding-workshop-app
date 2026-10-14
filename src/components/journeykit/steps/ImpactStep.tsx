@@ -44,16 +44,16 @@ export function ImpactStep({ flow }: { flow: IdeaFlow }) {
         <p className="text-ui-sm text-muted-foreground mt-1 max-w-lg">
           Your business case will be a one-page narrative without dollar figures. Add rough numbers any time; it takes about a minute.
         </p>
-        <button onClick={flow.addImpact} className="mt-4 flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-primary/10 text-primary text-ui-sm font-medium hover:bg-primary/20">
+        {!flow.readOnly && <button onClick={flow.addImpact} className="mt-4 flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-primary/10 text-primary text-ui-sm font-medium hover:bg-primary/20">
           <Plus className="w-4 h-4" /> Add rough numbers
-        </button>
+        </button>}
       </div>
     );
   }
 
   const questions = impact.questions;
   const firstOpen = questions.findIndex(q => !impact.answers[q.key]);
-  const active = editing ?? (firstOpen === -1 ? null : firstOpen);
+  const active = flow.readOnly ? null : editing ?? (firstOpen === -1 ? null : firstOpen);
   const q = active !== null ? questions[active] : null;
   const answeredCount = questions.filter(x => impact.answers[x.key]).length;
   const lastOpen = questions.filter(x => !impact.answers[x.key]).length <= 1;
@@ -81,6 +81,7 @@ export function ImpactStep({ flow }: { flow: IdeaFlow }) {
         {questions.map((x, i) => (
           <button
             key={x.key}
+            disabled={flow.readOnly}
             onClick={() => impact.answers[x.key] && setEditing(i)}
             className={`h-1.5 rounded-full transition-all duration-300 ${
               i === active ? 'w-8 bg-primary' : impact.answers[x.key] ? 'w-4 bg-emerald-500' : 'w-4 bg-secondary'
@@ -171,14 +172,14 @@ function ImpactRecap({ flow, onEdit }: { flow: IdeaFlow; onEdit: (i: number) => 
           <TrendingUp className="w-3.5 h-3.5" /> Here's what it could be worth
         </p>
         <span className={`px-1.5 py-0.5 rounded text-ui-2xs font-medium ${CONFIDENCE[f.confidence].tone}`}>{CONFIDENCE[f.confidence].label}</span>
-        <button
+        {!flow.readOnly && <button
           onClick={flow.refreshImpact}
           disabled={!!flow.loading}
           className="ml-auto flex items-center gap-1 px-2 py-1 rounded-lg text-ui-xs text-muted-foreground hover:text-foreground hover:bg-secondary/60 disabled:opacity-40"
           title="Re-size from your latest answers"
         >
           {flow.loading === 'impact' ? <Loader2 className="w-3 h-3 animate-spin" /> : <RefreshCw className="w-3 h-3" />} Refresh the numbers
-        </button>
+        </button>}
       </div>
 
       {impact.fallbackModel && (
@@ -215,10 +216,10 @@ function ImpactRecap({ flow, onEdit }: { flow: IdeaFlow; onEdit: (i: number) => 
             <LeverRow key={l.driver} label={l.label} hard={l.hard} amount={money(l.counted)} formula={l.formula} />
           ))}
           {(impact.secondary ?? []).filter(s => impact.secondaryOff?.includes(s.driver)).map(s => (
-            <LeverRow key={s.driver} label={s.label} hard={s.driver !== 'time_saved'} amount="off" formula="" muted onToggle={() => flow.toggleLever(s.driver)} />
+            <LeverRow key={s.driver} label={s.label} hard={s.driver !== 'time_saved'} amount="off" formula="" muted onToggle={flow.readOnly ? undefined : () => flow.toggleLever(s.driver)} />
           ))}
         </div>
-        {f.levers.filter(l => !l.primary).length > 0 && (
+        {!flow.readOnly && f.levers.filter(l => !l.primary).length > 0 && (
           <div className="flex flex-wrap gap-1.5">
             {f.levers.filter(l => !l.primary).map(l => (
               <button key={l.driver} onClick={() => flow.toggleLever(l.driver)} className="px-2 py-1 rounded-lg text-ui-2xs text-muted-foreground hover:text-foreground hover:bg-secondary/60">
@@ -259,6 +260,7 @@ function ImpactRecap({ flow, onEdit }: { flow: IdeaFlow; onEdit: (i: number) => 
           return (
             <button
               key={x.key}
+              disabled={flow.readOnly}
               onClick={() => onEdit(i)}
               className="group w-full flex items-start gap-3 text-left rounded-xl border border-border bg-card/60 px-4 py-3 hover:border-primary/40 animate-cascade-in"
               style={{ animationDelay: `${200 + i * 50}ms` }}
@@ -271,7 +273,7 @@ function ImpactRecap({ flow, onEdit }: { flow: IdeaFlow; onEdit: (i: number) => 
                   {a?.source === 'assumed' && <span className="ml-2 px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-400 text-ui-2xs">estimated</span>}
                 </span>
               </span>
-              <Pencil className="w-3.5 h-3.5 mt-1 text-muted-foreground opacity-0 group-hover:opacity-100" />
+              {!flow.readOnly && <Pencil className="w-3.5 h-3.5 mt-1 text-muted-foreground opacity-0 group-hover:opacity-100" />}
             </button>
           );
         })}

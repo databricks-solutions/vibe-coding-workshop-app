@@ -114,9 +114,11 @@ TASK: Frame three genuinely different ways to deliver this idea. They must diffe
 
 - kind "copilot": a human stays in the loop and the AI assists them.
 - kind "automation": an agent acts on its own within guardrails, escalating exceptions.
-- kind "insight": people get answers or signals (Genie, dashboards) and act themselves.
+- kind "insight": people get answers or signals from a Genie space next to an AI/BI dashboard, and act themselves.
 
 {value_fields}
+
+{genie_fields}
 
 Schema:
 {{
@@ -132,7 +134,10 @@ Schema:
       "effort": "S | M | L",
       "riskiest_assumption": "The one belief that, if wrong, kills this option",
       "cheap_test": "Fastest way to test that belief",
-      "surfaces": ["App", "Agent"],
+      "surfaces": ["App", "Genie", "Dashboard"],
+      "genie_placement": "in_app | genie_space",
+      "ask_examples": ["Plain-English question the persona would ask?"],
+      "no_genie_why": "",
       "recommended": false,
       "recommended_why": ""
     }}
@@ -276,7 +281,7 @@ One press-release style sentence, followed by one short paragraph (PRFAQ style) 
 ## Problem
 ## Who It's For
 ## Chosen Shape
-Name the chosen option and why it beat the alternatives in one or two lines.
+Name the chosen option and why it beat the alternatives in one or two lines. Then one line starting **What we build:** listing every surface in "chosenShape.surfaces" (say Genie sits inside the app when "geniePlacement" is "in_app"), and one line starting **People can ask:** with the questions in "chosenShape.askExamples". If "chosenShape.noGenieWhy" is set, say why there is no Genie instead.
 
 ## Success Metric
 State today's baseline and the target. If "businessImpact" is in the context, then state the annual value at full rollout and its hard vs soft split once, quoted exactly and labeled as a directional estimate.
@@ -319,7 +324,7 @@ Numbered list of 4 to 6 features, each one line.
 Bullets naming the tables to create (bronze, silver, gold), with key columns, and that sample data should be generated.
 
 ## Databricks Architecture
-Bullets for ingestion and transforms, serving, and the user-facing surface, naming Databricks products.
+Bullets for ingestion and transforms, serving, and the user-facing surfaces, naming Databricks products. Include every surface the chosen approach builds; when it has a Databricks App, Genie is embedded in the app so users can ask their own questions, next to an AI/BI dashboard.
 
 ## Guardrails
 Bullets: the top risks and how the app guards against them.
@@ -340,6 +345,18 @@ SHAPE_VALUE_RULES = """Value and recommendation rules:
 - "hard_share" says how much of the value is hard dollars.
 - Set "recommended": true on exactly ONE option, the best value for its effort and risk, with "recommended_why" in one short sentence. Leave the others false with an empty reason."""
 
+SHAPE_GENIE_RULES = """What each option builds:
+- Every option lets people ask their own questions in plain English with Genie, and watch the numbers on an AI/BI dashboard. Without that, people only see what was built for them.
+- "surfaces" always lists everything the option builds. "insight", "ask", "monitor" and "signal": "Genie" and "Dashboard". "copilot": "App", "Genie" and "Dashboard". "automation": "Agent", "App", "Genie" and "Dashboard". Add "Lakebase" only when the app must store its own records.
+- "genie_placement": "in_app" when there is an App (people ask Genie inside it), otherwise "genie_space".
+- "ask_examples": 2 or 3 short questions this persona would ask Genie in this option, in the industry's terms, each ending with "?".
+- "no_genie_why": leave empty. Only if asking questions truly makes no sense for this option, drop "Genie" from "surfaces" and give the reason in one short line."""
+
+SHAPE_GENIE_RULES_INSIGHTS = """What each option builds:
+- Every option is a Genie space where people ask their own questions in plain English, next to an AI/BI dashboard on the same metrics. "surfaces" is always ["Genie", "Dashboard"] and "genie_placement" is "genie_space".
+- "ask_examples": 2 or 3 short questions this persona would ask Genie in this option, in the industry's terms, each ending with "?".
+- "no_genie_why": always empty."""
+
 SHAPE_INSIGHTS = """{rules}
 
 TASK: Frame three genuinely different ways people could get their answers. They must differ in how people use them day to day, not just in features.
@@ -349,6 +366,8 @@ TASK: Frame three genuinely different ways people could get their answers. They 
 - kind "signal": exceptions first: a dashboard and Genie tuned to what changed, what is off target, and who should act.
 
 {value_fields}
+
+{genie_fields}
 
 Schema:
 {{
@@ -364,7 +383,10 @@ Schema:
       "effort": "S | M | L",
       "riskiest_assumption": "The one belief that, if wrong, kills this option",
       "cheap_test": "Fastest way to test that belief",
-      "surfaces": ["Genie"],
+      "surfaces": ["Genie", "Dashboard"],
+      "genie_placement": "genie_space",
+      "ask_examples": ["Plain-English question the persona would ask?"],
+      "no_genie_why": "",
       "recommended": false,
       "recommended_why": ""
     }}
@@ -407,7 +429,8 @@ def rules_for(mode: str = "ideate") -> str:
 
 def build_step_system_prompt(step: str, mode: str = "ideate") -> str:
     template = INSIGHTS_STEP_OVERRIDES.get(step, STEP_PROMPTS[step]) if mode == "insights" else STEP_PROMPTS[step]
-    return template.format(rules=rules_for(mode), value_fields=SHAPE_VALUE_RULES)
+    return template.format(rules=rules_for(mode), value_fields=SHAPE_VALUE_RULES,
+                           genie_fields=SHAPE_GENIE_RULES_INSIGHTS if mode == "insights" else SHAPE_GENIE_RULES)
 
 
 BRIEF_INSIGHTS_PROMPT = f"""{rules_for("insights").replace("- Return ONLY a single valid JSON object matching the schema. No prose, no code fences.", "")}

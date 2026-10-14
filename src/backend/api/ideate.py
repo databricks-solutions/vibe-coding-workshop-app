@@ -396,6 +396,51 @@ def _catalog_industries() -> Dict[str, str]:
         return {}
 
 
+# What every approach builds. Genie is how people ask their own questions, so it is
+# only left out when the model gives a reason. Keep in step with engine/surfaces.ts.
+SHAPE_BUNDLES = {
+    "insight": ("Genie", "Dashboard"),
+    "ask": ("Genie", "Dashboard"),
+    "monitor": ("Genie", "Dashboard"),
+    "signal": ("Genie", "Dashboard"),
+    "copilot": ("App", "Genie", "Dashboard"),
+    "automation": ("Agent", "App", "Genie", "Dashboard"),
+}
+SURFACE_ORDER = ("App", "Agent", "Genie", "Dashboard", "Lakebase", "Lakehouse")
+SURFACE_KEYWORDS = (
+    ("genie", "Genie"), ("dashboard", "Dashboard"), ("ai/bi", "Dashboard"), ("agent", "Agent"),
+    ("lakebase", "Lakebase"), ("lakehouse", "Lakehouse"), ("pipeline", "Lakehouse"), ("app", "App"),
+)
+MAX_ASK_EXAMPLES = 3
+
+
+def _canonical_surface(name: str) -> Optional[str]:
+    n = name.strip().lower()
+    return next((surface for key, surface in SURFACE_KEYWORDS if key in n), None)
+
+
+def _shape_build(kind: str, o: Dict[str, Any]) -> Dict[str, Any]:
+    """Surfaces, Genie placement and example questions for one approach, with the bundle enforced."""
+    no_genie_why = str(o.get("no_genie_why") or "").strip()[:200]
+    given = {s for s in (_canonical_surface(x) for x in _as_str_list(o.get("surfaces"))) if s}
+    wanted = set(SHAPE_BUNDLES.get(kind, SHAPE_BUNDLES["insight"])) | given
+    if no_genie_why:
+        wanted.discard("Genie")
+    surfaces = [s for s in SURFACE_ORDER if s in wanted]
+    has_genie = "Genie" in surfaces
+    placement = str(o.get("genie_placement") or "").strip().lower()
+    if placement not in ("in_app", "genie_space"):
+        placement = "in_app" if "App" in surfaces else "genie_space"
+    out: Dict[str, Any] = {
+        "surfaces": surfaces,
+        "geniePlacement": placement,
+        "askExamples": _as_str_list(o.get("ask_examples"), MAX_ASK_EXAMPLES) if has_genie else [],
+    }
+    if not has_genie:
+        out["noGenieWhy"] = no_genie_why
+    return out
+
+
 def _clarify_question(q: Dict[str, Any], qid: str) -> Dict[str, Any]:
     options = _as_str_list(q.get("options"), 4)
     dimension = str(q.get("dimension", "functional")).strip() or "functional"
@@ -459,7 +504,7 @@ def _normalize(step: str, data: Dict[str, Any], idea: Optional[Dict[str, Any]] =
                 "effort": str(o.get("effort", "M")).strip().upper()[:1] or "M",
                 "riskiestAssumption": str(o.get("riskiest_assumption", "")).strip(),
                 "cheapTest": str(o.get("cheap_test", "")).strip(),
-                "surfaces": _as_str_list(o.get("surfaces"), 4),
+                **_shape_build(kind, o),
                 "recommended": is_rec,
                 "recommendedWhy": str(o.get("recommended_why", "")).strip() if is_rec else "",
             })

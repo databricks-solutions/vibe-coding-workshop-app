@@ -1,26 +1,27 @@
 import { Check } from 'lucide-react';
 import { StepSegment } from '../../journeykit';
-import { CHAPTERS, MOMENTS, momentsIn } from '../journey';
+import { CHAPTERS, MOMENTS, momentsIn, type Moment } from '../journey';
 
 interface ChapterRailProps {
+  moments?: Moment[];
   activeStep: number;
   isDone: (step: number) => boolean;
   reachableUpTo: number;
   onSelect: (step: number) => void;
 }
 
-export function ChapterRail({ activeStep, isDone, reachableUpTo, onSelect }: ChapterRailProps) {
-  const activeChapter = MOMENTS.find(m => m.step === activeStep)?.chapter;
+export function ChapterRail({ moments: all = MOMENTS, activeStep, isDone, reachableUpTo, onSelect }: ChapterRailProps) {
+  const activeChapter = all.find(m => m.step === activeStep)?.chapter;
 
   return (
     <nav aria-label="Chapters" className="grid grid-cols-4 gap-2 sm:gap-4">
       {CHAPTERS.map((chapter, ci) => {
-        const moments = momentsIn(chapter.id);
+        const moments = momentsIn(chapter.id, all);
         const doneCount = moments.filter(m => isDone(m.step)).length;
         const complete = doneCount === moments.length;
         const active = chapter.id === activeChapter;
         const firstOpen = moments.find(m => !isDone(m.step)) ?? moments[0];
-        const firstIdx = MOMENTS.findIndex(m => m.step === firstOpen.step);
+        const firstIdx = all.findIndex(m => m.step === firstOpen.step);
         const reachable = firstIdx <= reachableUpTo;
         return (
           <div key={chapter.id} className="min-w-0">
@@ -41,7 +42,7 @@ export function ChapterRail({ activeStep, isDone, reachableUpTo, onSelect }: Cha
             </button>
             <div className="flex gap-1 mt-2.5">
               {moments.map(m => {
-                const idx = MOMENTS.findIndex(x => x.step === m.step);
+                const idx = all.findIndex(x => x.step === m.step);
                 const done = isDone(m.step);
                 const current = m.step === activeStep;
                 return (

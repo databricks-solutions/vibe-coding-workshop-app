@@ -270,19 +270,20 @@ function GenieAcceleratorPanel({ includeGenieOntology }: { includeGenieOntology:
         const BlockIcon = block.icon;
         const services = genieAcceleratorServices(block);
         const cols = services.length >= 3 ? 'grid-cols-3' : 'grid-cols-2';
+        const blockTitle = block.id === 'ai-agents' ? 'Genie Surfaces' : block.title;
         return (
           <Fragment key={block.id}>
             {blockIdx > 0 && (
               <div className="flex justify-center"><ArrowDown className={`w-4 h-4 ${block.colors.arrow}`} /></div>
             )}
-            <div className={`bg-slate-800 border-2 ${block.colors.border} rounded-lg p-3 shadow-lg`}>
+            <div className={`bg-background/70 border ${block.colors.border} rounded-lg p-3 shadow-sm`}>
               <p className={`text-ui-xs font-bold ${block.colors.title} mb-2 text-center flex items-center justify-center gap-1`}>
                 <BlockIcon className="w-3.5 h-3.5 flex-shrink-0" />
-                <span>{block.title}</span>
+                <span>{blockTitle}</span>
               </p>
               <div className={`grid ${cols} gap-1.5`}>
                 {services.map((s, i) => (
-                  <ServicePopover key={s.label} serviceKey={s.serviceKey} position={i === 0 ? 'left' : 'top'} block>
+                  <ServicePopover key={s.label} serviceKey={s.serviceKey} position={i === 0 ? 'left' : 'top'} block hideBadge>
                     <div className={`rounded px-1.5 py-1.5 border transition-all duration-200 hover:scale-105 ${block.colors.chip}`}>
                       <p className={`text-ui-3xs font-semibold text-center leading-tight ${block.colors.chipText}`}>{s.label}</p>
                     </div>
@@ -885,12 +886,12 @@ export function ArchitectureDiagramContent({
   return (
     <div>
       {/* Interactive hint */}
-      <div className="mb-3 flex items-center justify-center gap-2 text-ui-sm text-slate-400 text-center px-2">
-        <Info className="w-3.5 h-3.5 text-blue-400 flex-shrink-0" />
+      <div className="mb-4 mx-auto flex w-fit max-w-full items-center justify-center gap-2 rounded-full border border-border/70 bg-card/70 px-3 py-1.5 text-ui-xs text-muted-foreground text-center shadow-sm">
+        <Info className="w-3.5 h-3.5 text-primary flex-shrink-0" />
         <span>
-          <span className="font-medium text-slate-300">Interactive hint</span>
+          <span className="font-semibold text-foreground">Interactive</span>
           {' — '}
-          Click on any service to learn more about it
+          Select any service to learn more
           {effectiveDirection === 'reverse' ? ' (Reverse ETL flow)' : ''}
         </span>
       </div>
@@ -899,17 +900,17 @@ export function ArchitectureDiagramContent({
       <div className="arch-perspective">
         <div className={`arch-card relative ${effectiveDirection === 'reverse' ? 'flipped' : ''}`}>
           {/* FRONT FACE - Forward Layout */}
-          <div className="arch-face w-full bg-slate-900 p-8 rounded-xl">
+          <div className="arch-face w-full bg-muted/20 border border-border/60 p-8 rounded-xl">
             <div className="max-w-6xl mx-auto">
           <div className="relative flex items-stretch gap-4 justify-center">
             {appLakebaseFade.shouldRender && (
-              <div className={`border-2 border-[#FF3621]/60 rounded-xl p-4 bg-slate-800/50 w-[13.75rem] flex-shrink-0 duration-300 ${fadeClass(appLakebaseFade.isVisible)}`}>
-                <div className="bg-[#FF3621] text-center py-2 px-3 rounded-lg mb-4">
+              <div className={`border border-[#FF3621]/40 rounded-xl p-4 bg-card/80 w-[13.75rem] flex-shrink-0 shadow-sm duration-300 ${fadeClass(appLakebaseFade.isVisible)}`}>
+                <div className="bg-[#FF3621]/10 border border-[#FF3621]/25 text-center py-2 px-3 rounded-lg mb-4">
                   <div className="flex items-center justify-center gap-2 mb-1">
-                    {visibility.ch1 && <Globe className="w-4 h-4 text-white" />}
-                    {visibility.ch2 && <HardDrive className="w-4 h-4 text-white" />}
+                    {visibility.ch1 && <Globe className="w-4 h-4 text-[#FF3621]" />}
+                    {visibility.ch2 && <HardDrive className="w-4 h-4 text-[#FF3621]" />}
                   </div>
-                  <p className="text-ui-base font-bold text-white">
+                  <p className="text-ui-base font-bold text-[#c72d1b] dark:text-[#ff806f]">
                     {visibility.ch1 && visibility.ch2 ? 'App & Database' : visibility.ch1 ? 'Databricks App' : 'Lakebase'}
                   </p>
                 </div>
@@ -917,8 +918,8 @@ export function ArchitectureDiagramContent({
                   <div className="w-16 h-16 bg-gradient-to-br from-slate-500 to-slate-600 rounded-lg shadow-lg flex items-center justify-center">
                     <Users className="w-8 h-8 text-white" />
                   </div>
-                  <p className="text-ui-base font-semibold text-slate-200">User</p>
-                  <ArrowDown className="w-5 h-5 text-slate-400" />
+                  <p className="text-ui-base font-semibold text-foreground">User</p>
+                  <ArrowDown className="w-5 h-5 text-muted-foreground" />
                   {visibility.ch1 && (
                     <ServicePopover serviceKey="databricksApp" position="right" block>
                       <div className="w-full bg-gradient-to-br from-[#FF3621] to-[#E62D1B] rounded-lg shadow-lg p-3.5 hover:shadow-[#FF3621]/40 hover:shadow-xl transition-all duration-200 hover:scale-105">
@@ -959,12 +960,12 @@ export function ArchitectureDiagramContent({
               </div>
             )}
             {lakehouseFade.shouldRender && (
-              <div className={`border-2 border-teal-500/60 rounded-xl p-4 bg-slate-800/50 flex-1 duration-300 ${fadeClass(lakehouseFade.isVisible)}`}>
-                <div className="bg-teal-600 text-center py-2 px-3 rounded-lg mb-4">
+              <div className={`border border-teal-500/40 rounded-xl p-4 bg-card/80 flex-1 shadow-sm duration-300 ${fadeClass(lakehouseFade.isVisible)}`}>
+                <div className="bg-teal-500/10 border border-teal-500/25 text-center py-2 px-3 rounded-lg mb-4">
                   <div className="flex items-center justify-center gap-2 mb-1">
-                    <Database className="w-4 h-4 text-white" />
+                    <Database className="w-4 h-4 text-teal-600 dark:text-teal-300" />
                   </div>
-                  <p className="text-ui-base font-bold text-white">Lakehouse</p>
+                  <p className="text-ui-base font-bold text-teal-700 dark:text-teal-300">Lakehouse</p>
                 </div>
                 <div className="flex flex-col gap-2">
                   {!isGenie && showBronze && (<>
@@ -1031,16 +1032,16 @@ export function ArchitectureDiagramContent({
               </div>
             )}
             {dataIntelFade.shouldRender && (
-              <div className={`border-2 border-blue-500/60 rounded-xl p-4 bg-slate-800/50 flex-1 duration-300 ${fadeClass(dataIntelFade.isVisible)}`}>
-                <div className="bg-blue-600 text-center py-2 px-3 rounded-lg mb-4">
+              <div className={`border border-sky-500/40 rounded-xl p-4 bg-card/80 flex-1 shadow-sm duration-300 ${fadeClass(dataIntelFade.isVisible)}`}>
+                <div className="bg-sky-500/10 border border-sky-500/25 text-center py-2 px-3 rounded-lg mb-4">
                   <div className="flex items-center justify-center gap-2 mb-1">
                     {isAgentsAccelerator ? (
-                      <Bot className="w-4 h-4 text-white" />
+                      <Bot className="w-4 h-4 text-sky-600 dark:text-sky-300" />
                     ) : (
-                      <Brain className="w-4 h-4 text-white" />
+                      <Brain className="w-4 h-4 text-sky-600 dark:text-sky-300" />
                     )}
                   </div>
-                  <p className="text-ui-base font-bold text-white">{isAgentsAccelerator ? 'Agent' : 'AI and Agents'}</p>
+                  <p className="text-ui-base font-bold text-sky-700 dark:text-sky-300">{isAgentsAccelerator ? 'Agent' : 'AI and Agents'}</p>
                 </div>
                 {isAgentsAccelerator ? (
                   <AgentsAcceleratorPanel mlflowFaded={false} />
@@ -1108,23 +1109,23 @@ export function ArchitectureDiagramContent({
           <div className="mt-6 flex flex-wrap justify-center gap-5 md:gap-8">
             <div className="flex items-center gap-2">
               <Globe className="w-4 h-4 text-[#FF3621]" />
-              <p className="text-ui-xs text-slate-400">Databricks Apps</p>
+              <p className="text-ui-xs text-muted-foreground">Databricks Apps</p>
             </div>
             <div className="flex items-center gap-2">
               <HardDrive className="w-4 h-4 text-violet-500" />
-              <p className="text-ui-xs text-slate-400">Lakebase</p>
+              <p className="text-ui-xs text-muted-foreground">Lakebase</p>
             </div>
             <div className="flex items-center gap-2">
               <Database className="w-4 h-4 text-teal-500" />
-              <p className="text-ui-xs text-slate-400">Lakehouse</p>
+              <p className="text-ui-xs text-muted-foreground">Lakehouse</p>
             </div>
             <div className="flex items-center gap-2">
               <Brain className="w-4 h-4 text-blue-500" />
-              <p className="text-ui-xs text-slate-400">AI and Agents</p>
+              <p className="text-ui-xs text-muted-foreground">AI and Agents</p>
             </div>
             <div className="flex items-center gap-2">
               <div className="w-2 h-2 rounded-full bg-blue-500 animate-pulse" />
-              <p className="text-ui-xs text-slate-400">Click for details</p>
+              <p className="text-ui-xs text-muted-foreground">Click for details</p>
             </div>
           </div>
 
@@ -1132,10 +1133,10 @@ export function ArchitectureDiagramContent({
             <div className="mt-5 flex gap-4 justify-center">
               {appLakebaseFade.shouldRender && leftObjectives.length > 0 && (
                 <div className={`w-[13.75rem] flex-shrink-0 duration-300 ${fadeClass(appLakebaseFade.isVisible)}`}>
-                  <div className="rounded-lg bg-slate-800/40 border border-[#FF3621]/20 p-3">
+                  <div className="rounded-lg bg-card/60 border border-[#FF3621]/20 p-3">
                     <ul className="space-y-1.5">
                       {leftObjectives.map((obj, idx) => (
-                        <li key={obj.id} className={`flex items-start gap-1.5 text-ui-xs text-slate-300 transition-all duration-300 ease-out ${bulletsRevealed ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-1'}`}
+                        <li key={obj.id} className={`flex items-start gap-1.5 text-ui-xs text-muted-foreground transition-all duration-300 ease-out ${bulletsRevealed ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-1'}`}
                           style={{ transitionDelay: bulletsRevealed ? `${idx * BULLET_STAGGER_MS}ms` : '0ms' }}>
                           <span className="text-[#FF3621]/70 mt-0.5 shrink-0">&#x2022;</span>
                           <span>{obj.content}</span>
@@ -1150,10 +1151,10 @@ export function ArchitectureDiagramContent({
               )}
               {lakehouseFade.shouldRender && middleObjectives.length > 0 && (
                 <div className={`flex-1 duration-300 ${fadeClass(lakehouseFade.isVisible)}`}>
-                  <div className="rounded-lg bg-slate-800/40 border border-teal-500/20 p-3">
+                  <div className="rounded-lg bg-card/60 border border-teal-500/20 p-3">
                     <ul className="space-y-1.5">
                       {middleObjectives.map((obj, idx) => (
-                        <li key={obj.id} className={`flex items-start gap-1.5 text-ui-xs text-slate-300 transition-all duration-300 ease-out ${bulletsRevealed ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-1'}`}
+                        <li key={obj.id} className={`flex items-start gap-1.5 text-ui-xs text-muted-foreground transition-all duration-300 ease-out ${bulletsRevealed ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-1'}`}
                           style={{ transitionDelay: bulletsRevealed ? `${(middleStaggerOffset + idx) * BULLET_STAGGER_MS}ms` : '0ms' }}>
                           <span className="text-teal-400/70 mt-0.5 shrink-0">&#x2022;</span>
                           <span>{obj.content}</span>
@@ -1168,10 +1169,10 @@ export function ArchitectureDiagramContent({
               )}
               {dataIntelFade.shouldRender && rightObjectives.length > 0 && (
                 <div className={`flex-1 duration-300 ${fadeClass(dataIntelFade.isVisible)}`}>
-                  <div className="rounded-lg bg-slate-800/40 border border-blue-500/20 p-3">
+                  <div className="rounded-lg bg-card/60 border border-blue-500/20 p-3">
                     <ul className="space-y-1.5">
                       {rightObjectives.map((obj, idx) => (
-                        <li key={obj.id} className={`flex items-start gap-1.5 text-ui-xs text-slate-300 transition-all duration-300 ease-out ${bulletsRevealed ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-1'}`}
+                        <li key={obj.id} className={`flex items-start gap-1.5 text-ui-xs text-muted-foreground transition-all duration-300 ease-out ${bulletsRevealed ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-1'}`}
                           style={{ transitionDelay: bulletsRevealed ? `${(rightStaggerOffset + idx) * BULLET_STAGGER_MS}ms` : '0ms' }}>
                           <span className="text-blue-400/70 mt-0.5 shrink-0">&#x2022;</span>
                           <span>{obj.content}</span>
@@ -1187,25 +1188,25 @@ export function ArchitectureDiagramContent({
           </div>
 
           {/* BACK FACE - Reverse Layout */}
-          <div className="arch-face arch-face-back w-full bg-slate-900 p-8 rounded-xl overflow-y-auto">
+          <div className="arch-face arch-face-back w-full bg-muted/20 border border-border/60 p-8 rounded-xl overflow-y-auto">
             <div className="max-w-6xl mx-auto">
               <div className="relative flex items-stretch gap-4 justify-center">
                 {/* LEFT (Genie, Lakehouse off): start from existing / uploaded / synthetic data */}
                 {isGenie && !showLakehouse && (
-                  <div className="border-2 border-teal-500/60 rounded-xl p-4 bg-slate-800/50 flex-1">
-                    <div className="bg-teal-600 text-center py-2 px-3 rounded-lg mb-4">
+                  <div className="border border-teal-500/40 rounded-xl p-4 bg-card/80 flex-1 min-w-0 shadow-sm">
+                    <div className="bg-teal-500/10 border border-teal-500/25 text-center py-2 px-3 rounded-lg mb-4">
                       <div className="flex items-center justify-center gap-2 mb-1">
-                        <Database className="w-4 h-4 text-white" />
+                        <Database className="w-4 h-4 text-teal-600 dark:text-teal-300" />
                       </div>
-                      <p className="text-[13px] font-bold text-white">Data Source</p>
+                      <p className="text-ui-base font-bold text-teal-700 dark:text-teal-300">Data Source</p>
                     </div>
                     <div className="flex flex-col gap-2">
-                      <div className="bg-gradient-to-br from-teal-700 to-teal-800 rounded-lg p-3.5 shadow-lg">
+                      <div className="bg-teal-500/10 border border-teal-500/25 rounded-lg p-3.5 shadow-sm">
                         <div className="flex items-center gap-2 mb-1">
-                          <Database className="w-5 h-5 text-teal-100" />
-                          <p className="text-[13px] font-bold text-white">Existing Tables</p>
+                          <Database className="w-5 h-5 text-teal-600 dark:text-teal-300" />
+                          <p className="text-ui-base font-bold text-foreground">Existing Tables</p>
                         </div>
-                        <p className="text-[11px] text-teal-200">Uploaded, synthetic, or governed UC data</p>
+                        <p className="text-ui-xs text-muted-foreground">Uploaded, synthetic, or governed UC data</p>
                       </div>
                     </div>
                   </div>
@@ -1213,12 +1214,12 @@ export function ArchitectureDiagramContent({
 
                 {/* LEFT: Lakehouse */}
                 {lakehouseFade.shouldRender && (
-                  <div className={`border-2 border-teal-500/60 rounded-xl p-4 bg-slate-800/50 flex-1 duration-300 ${fadeClass(lakehouseFade.isVisible)}`}>
-                    <div className="bg-teal-600 text-center py-2 px-3 rounded-lg mb-4">
+                  <div className={`border border-teal-500/40 rounded-xl p-4 bg-card/80 flex-1 min-w-0 shadow-sm duration-300 ${fadeClass(lakehouseFade.isVisible)}`}>
+                    <div className="bg-teal-500/10 border border-teal-500/25 text-center py-2 px-3 rounded-lg mb-4">
                       <div className="flex items-center justify-center gap-2 mb-1">
-                        <Database className="w-4 h-4 text-white" />
+                        <Database className="w-4 h-4 text-teal-600 dark:text-teal-300" />
                       </div>
-                      <p className="text-[13px] font-bold text-white">Lakehouse</p>
+                      <p className="text-ui-base font-bold text-teal-700 dark:text-teal-300">Lakehouse</p>
                     </div>
                     <div className="flex flex-col gap-2">
                       {showBronze && (
@@ -1262,19 +1263,19 @@ export function ArchitectureDiagramContent({
 
                 {/* Arrow: Lakehouse (or Genie Data Source) → DI */}
                 {(showLakehouse || isGenie) && showDataIntel && (
-                  <div className="flex flex-col items-center justify-center">
-                    <ChevronRight className="w-12 h-12 text-amber-400" strokeWidth={3} />
+                  <div className="w-12 flex-shrink-0 flex flex-col items-center justify-center">
+                    <ChevronRight className="w-9 h-9 text-amber-500/80" strokeWidth={2.5} />
                   </div>
                 )}
 
                 {/* MIDDLE: AI and Agents */}
                 {dataIntelFade.shouldRender && (
-                  <div className={`border-2 border-blue-500/60 rounded-xl p-4 bg-slate-800/50 flex-1 duration-300 ${fadeClass(dataIntelFade.isVisible)}`}>
-                    <div className="bg-blue-600 text-center py-2 px-3 rounded-lg mb-4">
+                  <div className={`border border-sky-500/40 rounded-xl p-4 bg-card/80 flex-1 min-w-0 shadow-sm duration-300 ${fadeClass(dataIntelFade.isVisible)}`}>
+                    <div className="bg-sky-500/10 border border-sky-500/25 text-center py-2 px-3 rounded-lg mb-4">
                       <div className="flex items-center justify-center gap-2 mb-1">
-                        <Brain className="w-4 h-4 text-white" />
+                        <Brain className="w-4 h-4 text-sky-600 dark:text-sky-300" />
                       </div>
-                      <p className="text-[13px] font-bold text-white">AI and Agents</p>
+                      <p className="text-ui-base font-bold text-sky-700 dark:text-sky-300">AI and Agents</p>
                     </div>
                     {isGenie ? (
                       <GenieAcceleratorPanel includeGenieOntology={includeGenieOntology} />
@@ -1339,29 +1340,29 @@ export function ArchitectureDiagramContent({
 
                 {/* Dual-path arrows: DI → App & DB */}
                 {showDataIntel && showAppLakebase && (
-                  <div className="flex flex-col items-center justify-center gap-3">
+                  <div className="w-12 flex-shrink-0 flex flex-col items-center justify-center gap-4">
                     <div className="flex flex-col items-center">
                       <div className="reverse-arrow">
-                        <ChevronRight className="w-10 h-10" strokeWidth={3} />
+                        <ChevronRight className="w-9 h-9" strokeWidth={2.5} />
                       </div>
-                      <span className="text-[9px] text-emerald-400/70 font-medium mt-0.5">Synced Tables</span>
+                      <span className="text-ui-3xs text-emerald-600 dark:text-emerald-300 font-semibold text-center mt-0.5">Synced Tables</span>
                     </div>
                     <div className="flex flex-col items-center">
-                      <ChevronRight className="w-10 h-10 text-blue-400/80" strokeWidth={2} />
-                      <span className="text-[9px] text-blue-400/70 font-medium mt-0.5">Genie Embed</span>
+                      <ChevronRight className="w-9 h-9 text-sky-500/80" strokeWidth={2.5} />
+                      <span className="text-ui-3xs text-sky-600 dark:text-sky-300 font-semibold text-center mt-0.5">Genie Embed</span>
                     </div>
                   </div>
                 )}
 
                 {/* RIGHT: App & Database */}
                 {appLakebaseFade.shouldRender && (
-                  <div className={`border-2 border-emerald-500/60 rounded-xl p-4 bg-slate-800/50 w-[220px] flex-shrink-0 duration-300 ${fadeClass(appLakebaseFade.isVisible)}`}>
-                    <div className="bg-emerald-600 text-center py-2 px-3 rounded-lg mb-4">
+                  <div className={`border border-emerald-500/40 rounded-xl p-4 bg-card/80 flex-1 min-w-0 shadow-sm duration-300 ${fadeClass(appLakebaseFade.isVisible)}`}>
+                    <div className="bg-emerald-500/10 border border-emerald-500/25 text-center py-2 px-3 rounded-lg mb-4">
                       <div className="flex items-center justify-center gap-2 mb-1">
-                        {visibility.ch2 && <HardDrive className="w-4 h-4 text-white" />}
-                        {visibility.ch1 && <Globe className="w-4 h-4 text-white" />}
+                        {visibility.ch2 && <HardDrive className="w-4 h-4 text-emerald-600 dark:text-emerald-300" />}
+                        {visibility.ch1 && <Globe className="w-4 h-4 text-emerald-600 dark:text-emerald-300" />}
                       </div>
-                      <p className="text-[13px] font-bold text-white">
+                      <p className="text-ui-base font-bold text-emerald-700 dark:text-emerald-300">
                         {isGenie ? 'Activation' : visibility.ch1 && visibility.ch2 ? 'App & Database' : visibility.ch1 ? 'Databricks App' : 'Lakebase'}
                       </p>
                     </div>
@@ -1371,8 +1372,8 @@ export function ArchitectureDiagramContent({
                           <div className="w-full bg-gradient-to-br from-violet-600 to-purple-700 rounded-lg shadow-lg p-3.5 hover:shadow-violet-500/40 hover:shadow-xl transition-all duration-200 hover:scale-105">
                             <div className="flex flex-col items-center gap-1.5">
                               <HardDrive className="w-7 h-7 text-white" />
-                              <p className="text-[13px] font-bold text-white">Lakebase</p>
-                              <p className="text-[10px] text-violet-200">Synced Tables</p>
+                              <p className="text-ui-base font-bold text-white">Lakebase</p>
+                              <p className="text-ui-3xs text-violet-200">Synced Tables</p>
                             </div>
                           </div>
                         </ServicePopover>
@@ -1385,8 +1386,8 @@ export function ArchitectureDiagramContent({
                           <div className="w-full bg-gradient-to-br from-[#FF3621] to-[#E62D1B] rounded-lg shadow-lg p-3.5 hover:shadow-[#FF3621]/40 hover:shadow-xl transition-all duration-200 hover:scale-105">
                             <div className="flex flex-col items-center gap-1.5">
                               <Globe className="w-7 h-7 text-white" />
-                              <p className="text-[13px] font-bold text-white">Analytics App</p>
-                              <span className="inline-flex items-center gap-1 text-[9px] font-medium text-blue-200 bg-blue-500/25 border border-blue-400/30 rounded-full px-2 py-0.5">
+                              <p className="text-ui-base font-bold text-white">Analytics App</p>
+                              <span className="inline-flex items-center gap-1 text-ui-3xs font-medium text-blue-100 bg-blue-950/25 border border-blue-200/30 rounded-full px-2 py-0.5">
                                 <Sparkles className="w-2.5 h-2.5" />
                                 Genie Embedded
                               </span>
@@ -1394,11 +1395,11 @@ export function ArchitectureDiagramContent({
                           </div>
                         </ServicePopover>
                       )}
-                      <ArrowDown className="w-5 h-5 text-slate-400" />
-                      <div className="w-16 h-16 bg-gradient-to-br from-slate-500 to-slate-600 rounded-lg shadow-lg flex items-center justify-center">
-                        <Users className="w-8 h-8 text-white" />
+                      <ArrowDown className="w-5 h-5 text-muted-foreground" />
+                      <div className="w-16 h-16 bg-secondary border border-border rounded-lg shadow-sm flex items-center justify-center">
+                        <Users className="w-8 h-8 text-muted-foreground" />
                       </div>
-                      <p className="text-[13px] font-semibold text-slate-200">User</p>
+                      <p className="text-ui-base font-semibold text-foreground">User</p>
                     </div>
                   </div>
                 )}
@@ -1408,27 +1409,27 @@ export function ArchitectureDiagramContent({
               <div className="mt-6 flex flex-wrap justify-center gap-5 md:gap-8">
                 <div className="flex items-center gap-2">
                   <Database className="w-4 h-4 text-teal-500" />
-                  <p className="text-[11px] text-slate-400">{isGenie && !showLakehouse ? 'Data Source' : 'Lakehouse'}</p>
+                  <p className="text-ui-xs text-muted-foreground">{isGenie && !showLakehouse ? 'Data Source' : 'Lakehouse'}</p>
                 </div>
                 <div className="flex items-center gap-2">
                   <Brain className="w-4 h-4 text-blue-500" />
-                  <p className="text-[11px] text-slate-400">AI and Agents</p>
+                  <p className="text-ui-xs text-muted-foreground">AI and Agents</p>
                 </div>
                 <div className="flex items-center gap-2">
                   <Sparkles className="w-4 h-4 text-amber-400" />
-                  <p className="text-[11px] text-slate-400">{isGenie ? 'Genie Agent' : 'Genie Spaces'}</p>
+                  <p className="text-ui-xs text-muted-foreground">{isGenie ? 'Genie Agent' : 'Genie Spaces'}</p>
                 </div>
                 <div className="flex items-center gap-2">
                   <RefreshCw className="w-4 h-4 text-emerald-500" />
-                  <p className="text-[11px] text-slate-400">Synced Tables (Reverse ETL)</p>
+                  <p className="text-ui-xs text-muted-foreground">Synced Tables (Reverse ETL)</p>
                 </div>
                 <div className="flex items-center gap-2">
                   <HardDrive className="w-4 h-4 text-violet-500" />
-                  <p className="text-[11px] text-slate-400">Lakebase</p>
+                  <p className="text-ui-xs text-muted-foreground">Lakebase</p>
                 </div>
                 <div className="flex items-center gap-2">
                   <Globe className="w-4 h-4 text-[#FF3621]" />
-                  <p className="text-[11px] text-slate-400">Analytics App</p>
+                  <p className="text-ui-xs text-muted-foreground">Analytics App</p>
                 </div>
               </div>
 
@@ -1437,12 +1438,12 @@ export function ArchitectureDiagramContent({
                 {/* Left: Lakehouse objectives */}
                 {lakehouseFade.shouldRender && REVERSE_LAKEHOUSE_OBJECTIVES.length > 0 && (
                   <div className={`flex-1 duration-300 ${fadeClass(lakehouseFade.isVisible)}`}>
-                    <div className="rounded-lg bg-slate-800/40 border border-teal-500/20 p-3">
+                    <div className="rounded-lg bg-card/60 border border-teal-500/20 p-3">
                       <ul className="space-y-1.5">
                         {REVERSE_LAKEHOUSE_OBJECTIVES.map((obj, idx) => (
                           <li
                             key={obj.id}
-                            className={`flex items-start gap-1.5 text-[11px] text-slate-300 transition-all duration-300 ease-out ${
+                            className={`flex items-start gap-1.5 text-ui-xs text-muted-foreground transition-all duration-300 ease-out ${
                               bulletsRevealed ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-1'
                             }`}
                             style={{ transitionDelay: bulletsRevealed ? `${idx * BULLET_STAGGER_MS}ms` : '0ms' }}
@@ -1464,12 +1465,12 @@ export function ArchitectureDiagramContent({
                 {/* Middle: AI and Agents objectives */}
                 {dataIntelFade.shouldRender && reverseDiObjectives.length > 0 && (
                   <div className={`flex-1 duration-300 ${fadeClass(dataIntelFade.isVisible)}`}>
-                    <div className="rounded-lg bg-slate-800/40 border border-blue-500/20 p-3">
+                    <div className="rounded-lg bg-card/60 border border-blue-500/20 p-3">
                       <ul className="space-y-1.5">
                         {reverseDiObjectives.map((obj, idx) => (
                           <li
                             key={obj.id}
-                            className={`flex items-start gap-1.5 text-[11px] text-slate-300 transition-all duration-300 ease-out ${
+                            className={`flex items-start gap-1.5 text-ui-xs text-muted-foreground transition-all duration-300 ease-out ${
                               bulletsRevealed ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-1'
                             }`}
                             style={{ transitionDelay: bulletsRevealed ? `${(REVERSE_LAKEHOUSE_OBJECTIVES.length + idx) * BULLET_STAGGER_MS}ms` : '0ms' }}
@@ -1490,13 +1491,13 @@ export function ArchitectureDiagramContent({
 
                 {/* Right: Activation / App & Database objectives */}
                 {appLakebaseFade.shouldRender && reverseActivationObjectives.length > 0 && (
-                  <div className={`w-[220px] flex-shrink-0 duration-300 ${fadeClass(appLakebaseFade.isVisible)}`}>
-                    <div className="rounded-lg bg-slate-800/40 border border-emerald-500/20 p-3">
+                  <div className={`flex-1 min-w-0 duration-300 ${fadeClass(appLakebaseFade.isVisible)}`}>
+                    <div className="rounded-lg bg-card/60 border border-emerald-500/20 p-3">
                       <ul className="space-y-1.5">
                         {reverseActivationObjectives.map((obj, idx) => (
                           <li
                             key={obj.id}
-                            className={`flex items-start gap-1.5 text-[11px] text-slate-300 transition-all duration-300 ease-out ${
+                            className={`flex items-start gap-1.5 text-ui-xs text-muted-foreground transition-all duration-300 ease-out ${
                               bulletsRevealed ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-1'
                             }`}
                             style={{ transitionDelay: bulletsRevealed ? `${(REVERSE_LAKEHOUSE_OBJECTIVES.length + reverseDiObjectives.length + idx) * BULLET_STAGGER_MS}ms` : '0ms' }}

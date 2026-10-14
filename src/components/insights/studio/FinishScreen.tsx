@@ -1,11 +1,13 @@
 import { ArrowRight, ArrowUpRight, Check, Code2, LayoutDashboard, Link2, MessagesSquare, RotateCcw } from 'lucide-react';
 import { useCopyToClipboard } from '../../../hooks/useCopyToClipboard';
 import { ART, FadeIn, GhostButton, SecondaryButton } from '../../journeykit';
+import type { AddOn } from '../recipes';
 import type { WorkspaceLinks } from '../types';
 interface FinishScreenProps {
   name: string;
   questions: string[];
   links: WorkspaceLinks;
+  addOns?: AddOn[];
   onRevisit: () => void;
   onSwitchToTechnical: () => void;
 }
@@ -29,8 +31,9 @@ function ActionCard({ icon: Icon, title, body, href, onClick, actionLabel }: {
     : <button onClick={onClick} className={cls}>{inner}</button>;
 }
 
-export function FinishScreen({ name, questions, links, onRevisit, onSwitchToTechnical }: FinishScreenProps) {
+export function FinishScreen({ name, questions, links, addOns = [], onRevisit, onSwitchToTechnical }: FinishScreenProps) {
   const { copied, handleCopy } = useCopyToClipboard();
+  const builtApp = addOns.includes('copilot') || addOns.includes('app_view');
 
   return (
     <div className="max-w-4xl mx-auto px-1 py-6 sm:py-10 space-y-10">
@@ -73,6 +76,7 @@ export function FinishScreen({ name, questions, links, onRevisit, onSwitchToTech
         />
       </FadeIn>
 
+      {!builtApp && (
       <FadeIn delay={0.15} className="flex flex-col sm:flex-row sm:items-center gap-4 rounded-3xl border border-dashed border-border p-6">
         <span className="flex items-center justify-center w-11 h-11 rounded-xl bg-secondary text-muted-foreground shrink-0"><Code2 className="w-5 h-5" /></span>
         <div className="flex-1">
@@ -81,6 +85,7 @@ export function FinishScreen({ name, questions, links, onRevisit, onSwitchToTech
         </div>
         <SecondaryButton onClick={onSwitchToTechnical}>Open in Technical</SecondaryButton>
       </FadeIn>
+      )}
 
       <div className="flex justify-center">
         <GhostButton onClick={onRevisit}><RotateCcw className="w-3.5 h-3.5" /> Revisit any step</GhostButton>

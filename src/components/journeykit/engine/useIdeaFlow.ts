@@ -3,6 +3,7 @@ import { apiClient } from '../../../api/client';
 import { useIdeas } from './useIdeas';
 import { buildContext, caseFigures, chosenShape, nextStep, placedLeaf, stepIndex, stepMeta } from './ideaContext';
 import { money, skippedImpact } from './businessCase';
+import { sampleById } from '../samples';
 import type {
   Assumption,
   CaseSummary,
@@ -51,16 +52,38 @@ function resetFrom(idea: Idea, step: StepKey): Partial<Idea> {
   }
   if (after('impact')) patch.impact = undefined;
   if (after('brief')) Object.assign(patch, { brief: undefined, lockedAt: undefined });
+  if (idea.approved.some(after)) Object.assign(patch, { revision: (idea.revision ?? 0) + 1, revisingFrom: step });
   return patch;
+}
+
+/**
+ * Changing an approved answer reopens that step and everything after it, but keeps
+ * their content so the user re-confirms rather than starts over. The brief is
+ * redrafted from the new answers; any build keeps running until it is updated.
+ */
+function reopenFrom(idea: Idea, step: StepKey): Partial<Idea> {
+  const i = stepIndex(step, idea.mode);
+  return {
+    approved: idea.approved.filter(s => stepIndex(s, idea.mode) < i),
+    brief: step === 'brief' ? idea.brief : undefined,
+    gaps: undefined,
+    summary: undefined,
+    lockedAt: undefined,
+    revision: (idea.revision ?? 0) + 1,
+    revisingFrom: step,
+  };
 }
 
 export function useIdeaFlow(ideaId: string) {
   const { ideas, updateIdea } = useIdeas();
-  const idea = ideas.find(i => i.id === ideaId);
+  const sample = sampleById(ideaId);
+  const idea = sample ?? ideas.find(i => i.id === ideaId);
+  const readOnly = !!sample;
   const ideaRef = useRef(idea);
   ideaRef.current = idea;
 
-  const [viewStep, setViewStep] = useState<StepKey>(idea?.step ?? 'spark');
+  // A sample is a walkthrough, so it opens at the start rather than where it ended.
+  const [viewStep, setViewStep] = useState<StepKey>(readOnly ? 'spark' : idea?.step ?? 'spark');
   const [loading, setLoading] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [aiUnavailable, setAiUnavailable] = useState(false);
@@ -71,10 +94,22 @@ export function useIdeaFlow(ideaId: string) {
   useEffect(() => () => briefCtrl.current?.abort(), []);
   useEffect(() => setPushbacks(null), [viewStep]);
 
-  const patch = useCallback((p: Partial<Idea> | ((i: Idea) => Partial<Idea>)) => updateIdea(ideaId, p), [ideaId, updateIdea]);
+  const patch = useCallback((p: Partial<Idea> | ((i: Idea) => Partial<Idea>)) => {
+    if (!readOnly) updateIdea(ideaId, p);
+  }, [ideaId, readOnly, updateIdea]);
 
   const logDecision = useCallback((text: string) => {
     patch(i => ({ decisions: [...i.decisions, { at: stamp(), text }] }));
+  }, [patch]);
+
+  /** Edits a step's answer; if that step was approved, reopens it and the steps after it. */
+  const revise = useCallback((step: StepKey, p: Partial<Idea> | ((i: Idea) => Partial<Idea>), note?: string) => {
+    patch(i => {
+      const changes = typeof p === 'function' ? p(i) : p;
+      if (!i.approved.includes(step)) return changes;
+      const text = note ?? `Changed ${stepMeta(i, step).label}`;
+      return { ...changes, ...reopenFrom(i, step), decisions: [...i.decisions, { at: stamp(), text }] };
+    });
   }, [patch]);
 
   const mergeAssumptions = useCallback((step: StepKey, texts: string[] = []) => {
@@ -91,6 +126,7 @@ export function useIdeaFlow(ideaId: string) {
   const lastFallback = useRef<string | null>(null);
 
   const call = useCallback(async <T,>(op: string, step: string, ctx: Record<string, unknown>, feedback?: string): Promise<T | null> => {
+    if (readOnly) return null;
     setLoading(op);
     setError(null);
     try {
@@ -107,11 +143,11 @@ export function useIdeaFlow(ideaId: string) {
     } finally {
       setLoading(null);
     }
-  }, []);
+  }, [readOnly]);
 
   const streamBrief = useCallback((feedback?: string) => {
     const current = ideaRef.current;
-    if (!current) return;
+    if (!current || readOnly) return;
     briefCtrl.current?.abort();
     setError(null);
     setLoading('brief');
@@ -124,7 +160,7 @@ export function useIdeaFlow(ideaId: string) {
       () => { setLoading(null); if (text) patch({ brief: text, gaps: undefined }); },
       err => { setLoading(null); setError(err); if (text) patch({ brief: text }); },
     );
-  }, [patch]);
+  }, [patch, readOnly]);
 
   const mergeQuestions = useCallback((incoming: string[], source: QuestionSource) => {
     patch(i => {
@@ -143,7 +179,7 @@ export function useIdeaFlow(ideaId: string) {
   /** Generate (or regenerate with feedback) the output for a step. */
   const run = useCallback(async (step: StepKey, feedback?: string) => {
     const current = ideaRef.current;
-    if (!current) return;
+    if (!current || readOnly) return;
     if (feedback !== undefined) {
       patch(resetFrom(current, step));
       logDecision(`Asked for changes on ${stepMeta(current, step).label}: "${feedback}"`);
@@ -183,12 +219,12 @@ export function useIdeaFlow(ideaId: string) {
       if (!r || ideaRef.current?.impact?.skipped) return;
       patch({ impact: { ...r, answers: {}, fallbackModel: lastFallback.current ?? undefined }, summary: undefined });
     }
-  }, [call, logDecision, mergeAssumptions, mergeQuestions, patch, streamBrief]);
+  }, [call, logDecision, mergeAssumptions, mergeQuestions, patch, readOnly, streamBrief]);
 
   // A use case's map is drafted in the background so it is ready by the time the user confirms step 1.
   const prefetched = useRef(false);
   useEffect(() => {
-    if (!idea || prefetched.current || !idea.prefilled?.includes('map') || idea.map || !idea.spark) return;
+    if (!idea || readOnly || prefetched.current || !idea.prefilled?.includes('map') || idea.map || !idea.spark) return;
     prefetched.current = true;
     const current = idea;
     (async () => {
@@ -201,7 +237,7 @@ export function useIdeaFlow(ideaId: string) {
         // The Map step runs normally when the user reaches it.
       }
     })();
-  }, [idea, mergeAssumptions, patch]);
+  }, [idea, mergeAssumptions, patch, readOnly]);
 
   const markApproved = useCallback((step: StepKey, note: string) => {
     const current = ideaRef.current;
@@ -231,12 +267,15 @@ export function useIdeaFlow(ideaId: string) {
       brief: current.mode === 'insights' ? 'Locked the idea for building' : 'Approved the brief',
     };
     markApproved(step, label[step]);
+    if (step === 'brief') patch({ revisingFrom: undefined });
     if (step === 'brief' && (current.mode === 'insights' || current.buildTarget === 'insights')) patch({ lockedAt: stamp() });
   }, [markApproved, patch]);
 
   const answerImpact = useCallback((key: string, answer: ImpactAnswer) => {
-    patch(i => (i.impact ? { impact: { ...i.impact, answers: { ...i.impact.answers, [key]: answer } }, summary: undefined } : {}));
-  }, [patch]);
+    const current = ideaRef.current?.impact?.answers[key];
+    if (current && JSON.stringify(current) === JSON.stringify(answer)) return;
+    revise('impact', i => (i.impact ? { impact: { ...i.impact, answers: { ...i.impact.answers, [key]: answer } }, summary: undefined } : {}), 'Changed a business impact answer');
+  }, [revise]);
 
   const skipImpact = useCallback(() => {
     patch({ impact: skippedImpact(), summary: undefined });
@@ -245,12 +284,12 @@ export function useIdeaFlow(ideaId: string) {
 
   /** Turn a secondary lever on or off without re-asking anything. */
   const toggleLever = useCallback((driver: ImpactDriver) => {
-    patch(i => {
+    revise('impact', i => {
       if (!i.impact) return {};
       const off = i.impact.secondaryOff ?? [];
       return { impact: { ...i.impact, secondaryOff: off.includes(driver) ? off.filter(d => d !== driver) : [...off, driver] }, summary: undefined };
-    });
-  }, [patch]);
+    }, 'Changed which value levers count');
+  }, [revise]);
 
   /** Re-size the numbers from the latest answers, keeping the brief. */
   const refreshImpact = useCallback(async () => {
@@ -258,10 +297,9 @@ export function useIdeaFlow(ideaId: string) {
     if (!current) return;
     const r = await call<Omit<Impact, 'answers'>>('impact', 'impact', buildContext({ ...current, impact: undefined }));
     if (!r) return;
-    patch(i => ({ impact: { ...r, answers: {}, fallbackModel: lastFallback.current ?? undefined }, summary: undefined, approved: i.approved.filter(s => s !== 'impact') }));
-    logDecision('Refreshed the business impact numbers');
+    revise('impact', i => ({ impact: { ...r, answers: {}, fallbackModel: lastFallback.current ?? undefined }, summary: undefined, approved: i.approved.filter(s => s !== 'impact') }), 'Refreshed the business impact numbers');
     setViewStep('impact');
-  }, [call, logDecision, patch]);
+  }, [call, revise]);
 
   /** Bring a skipped Impact step back; the flow regenerates its questions. Leaves the brief alone. */
   const addImpact = useCallback(() => {
@@ -277,7 +315,8 @@ export function useIdeaFlow(ideaId: string) {
   }, [call, patch]);
 
   const answer = useCallback(async (questionId: string, value: string) => {
-    patch(i => ({ answers: { ...i.answers, [questionId]: value } }));
+    if (ideaRef.current?.answers[questionId] === value) return;
+    revise('clarify', i => ({ answers: { ...i.answers, [questionId]: value } }), 'Changed a clarifying answer');
     const current = ideaRef.current;
     if (!current?.questions) return;
     const answers = { ...current.answers, [questionId]: value };
@@ -287,14 +326,21 @@ export function useIdeaFlow(ideaId: string) {
       const r = await call<{ followup: ClarifyQuestion | null }>('followup', 'followup', buildContext({ ...current, answers }, 'clarify'));
       if (r?.followup) patch(i => ({ questions: [...(i.questions ?? []), r.followup!] }));
     }
-  }, [call, patch]);
+  }, [call, patch, revise]);
 
   const setGenieQuestions = useCallback((list: string[]) => {
-    patch(i => ({
+    revise('questions', i => ({
       genieQuestions: list,
       genieQuestionSources: Object.fromEntries(list.map(q => [q, i.genieQuestionSources?.[q] ?? (i.genieAlternates?.includes(q) ? 'ai' : 'you')])),
-    }));
-  }, [patch]);
+    }), 'Changed the questions for Genie');
+  }, [revise]);
+
+  const chooseShape = useCallback((id: string) => {
+    const current = ideaRef.current;
+    if (!current || current.chosenShapeId === id) return;
+    const title = current.shapes?.find(s => s.id === id)?.title ?? 'another approach';
+    revise('shape', { chosenShapeId: id }, `Switched approach to ${title}`);
+  }, [revise]);
 
   const challenge = useCallback(async (step: StepKey) => {
     const current = ideaRef.current;
@@ -344,9 +390,12 @@ export function useIdeaFlow(ideaId: string) {
     briefDraft,
     pushbacks,
     clearPushbacks: () => setPushbacks(null),
+    readOnly,
     patch,
+    revise,
     run,
     approve,
+    chooseShape,
     answer,
     challenge,
     findGaps,

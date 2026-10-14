@@ -37,6 +37,9 @@ import { MessageSquare, Plus, Menu, Eye } from 'lucide-react';
 import { normalizeLevel, getFilteredSections, getCumulativeOverrides, USE_CASE_LEVEL_LOCK, isForwardProgression, getDisabledTagsForAIModules, ALL_AI_MODULES, getDisabledTagsForMedallionLayers, normalizeMedallionLayers, ALL_MEDALLION_LAYERS, getDisabledTagsForLakehouse, getDisabledTagsForGenieOntology, computeChainContext, deriveInitialChainContext, type WorkshopLevel, type WorkflowDirection, type AIAgentModule, type MedallionLayer, type ChainContext } from './constants/workflowSections';
 import { DEFAULT_LEVEL_BY_ASSISTANT, parseCodingAssistantsConfig } from './constants/codingAssistants';
 
+/** The step prompt API only stores steps 1 to 30. */
+const MAX_SAVED_STEP = 30;
+
 export default function App() {
   const location = useLocation();
   const [showConfigHint, setShowConfigHint] = useState(false);
@@ -763,6 +766,15 @@ export default function App() {
     }
   }, [readOnly, sessionId]);
 
+  // Updating a build from its idea: every prompt after the brief was written from the old
+  // answers, so it is emptied and regenerates when opened. Completed steps stay completed.
+  const clearLaterPrompts = (id: string, prompts: Record<number, string>) => Promise.all(
+    Object.entries(prompts)
+      .filter(([step, text]) => Number(step) > 1 && Number(step) <= MAX_SAVED_STEP && text)
+      .map(([step]) => apiClient.updateStepPrompt({ session_id: id, step_number: Number(step), prompt_text: '' })
+        .catch(err => console.error(`Error clearing the prompt for step ${step}:`, err))),
+  );
+
   // Insights view: one tap configures the whole session for the Genie path.
   // Saved in a single metadata call so the backend never sees an intermediate level.
   const handleInsightsStart = useCallback((setup: InsightsSetup) => {
@@ -785,7 +797,8 @@ export default function App() {
     setIncludeGenieOntology(false);
     setAiAgentsModules(new Set(ALL_AI_MODULES));
     setMedallionLayers(new Set(ALL_MEDALLION_LAYERS));
-    setStepPrompts(prev => ({ ...prev, 1: setup.description }));
+    setStepPrompts(prev => (setup.resetPrompts ? { 1: setup.description } : { ...prev, 1: setup.description }));
+    if (setup.resetPrompts && sessionId) clearLaterPrompts(sessionId, stepPrompts);
     const nextCompleted = new Set(completedSteps);
     nextCompleted.add(1);
     setCompletedSteps(nextCompleted);
@@ -813,7 +826,7 @@ export default function App() {
         workshop_level: 'genie-accelerator',
       }).catch(err => console.error('Error saving Insights brief:', err));
     }
-  }, [readOnly, sessionId, completedSteps, setMedallionLayers]);
+  }, [readOnly, sessionId, completedSteps, stepPrompts, setMedallionLayers]);
 
   const handleSaveSession = async (name: string, description: string, rating?: 'thumbs_up' | 'thumbs_down', comment?: string) => {
     if (!sessionId || readOnly) return;
@@ -898,6 +911,32 @@ export default function App() {
   const { ideas, updateIdea } = useIdeas();
   const linkedIdea = useLinkedIdea(sessionId);
 
+  const technicalUseCaseOf = (idea: Idea) => ({
+    industry: idea.spark?.catalogIndustry || 'general',
+    industryLabel: idea.spark?.catalogIndustryLabel || idea.spark?.industry || idea.industry || 'General',
+    label: idea.title.slice(0, 30),
+  });
+
+  /** Saves the idea as a Technical project's use case and step 1 brief. */
+  const writeTechnicalBrief = (idea: Idea, id: string, completed: number[], level: string | undefined = 'end-to-end') => {
+    const { industry, industryLabel, label } = technicalUseCaseOf(idea);
+    const description = buildDescription(idea);
+    return Promise.all([
+      apiClient.updateSessionMetadata({
+        session_id: id,
+        industry,
+        industry_label: industryLabel,
+        use_case: slugOf(idea.title),
+        use_case_label: label,
+        custom_use_case_label: label,
+        custom_use_case_description: description,
+        completed_steps: completed,
+      }).catch(err => console.error('Error saving the idea as the use case:', err)),
+      apiClient.updateStepPrompt({ session_id: id, step_number: 1, prompt_text: description, workshop_level: level })
+        .catch(err => console.error('Error saving the idea brief:', err)),
+    ]);
+  };
+
   /**
    * Hands an idea to a build: saves the current project if it has unsaved progress
    * (a new session clears unsaved ones), starts a fresh project linked to the idea,
@@ -964,9 +1003,7 @@ export default function App() {
     if (!newId) return;
     setViewMode(target);
 
-    const industry = idea.spark?.catalogIndustry || 'general';
-    const industryLabel = idea.spark?.catalogIndustryLabel || idea.spark?.industry || idea.industry || 'General';
-    const label = idea.title.slice(0, 30);
+    const { industry, industryLabel, label } = technicalUseCaseOf(idea);
     const description = buildDescription(idea);
     const technical = target === 'technical';
     if (technical) {
@@ -979,18 +1016,8 @@ export default function App() {
       setCustomDescription(description);
       setStepPrompts({ 1: description });
       setCompletedSteps(new Set([1]));
-      apiClient.updateSessionMetadata({
-        session_id: newId,
-        industry,
-        industry_label: industryLabel,
-        use_case: slugOf(idea.title),
-        use_case_label: label,
-        custom_use_case_label: label,
-        custom_use_case_description: description,
-        completed_steps: [1],
-      }).catch(err => console.error('Error saving the idea as the use case:', err));
-      apiClient.updateStepPrompt({ session_id: newId, step_number: 1, prompt_text: description, workshop_level: 'end-to-end' })
-        .catch(err => console.error('Error saving the idea brief:', err));
+      void writeTechnicalBrief(idea, newId, [1]);
+      updateIdea(idea.id, { builtRevision: idea.revision ?? 0 });
     }
     apiClient.saveSession({
       session_id: newId,
@@ -1012,15 +1039,53 @@ export default function App() {
     }).catch(err => console.error('Error saving the new project:', err));
   };
 
-  // Links from Ideate: `?buildIdea=` starts (or reopens) a build, `?openSession=` opens an idea's project.
+  /**
+   * Re-applies an idea to the project already building it. Technical projects get the new
+   * brief as their use case and regenerate later prompts; Insights projects open on their
+   * update screen, which keeps the data choices.
+   */
+  const updateBuildFromIdea = async (idea: Idea) => {
+    if (!idea.sessionId) return startBuildFromIdea(idea);
+    const target = buildTargetFor(idea);
+    if (target === 'technical') {
+      setIsSessionLoading(true);
+      try {
+        const current = await apiClient.loadSession(idea.sessionId);
+        const done: number[] = current.completed_steps?.length ? current.completed_steps : [1];
+        await clearLaterPrompts(idea.sessionId, current.step_prompts || {});
+        await writeTechnicalBrief(idea, idea.sessionId, done.includes(1) ? done : [1, ...done], current.workshop_level || undefined);
+        updateIdea(idea.id, i => ({
+          builtRevision: i.revision ?? 0,
+          buildStatus: 'building',
+          decisions: [...i.decisions, { at: new Date().toISOString(), text: 'Updated the build with the latest answers' }],
+        }));
+      } catch (err) {
+        console.error('Could not update the build from the idea:', err);
+      }
+    } else {
+      updateIdea(idea.id, { buildStatus: 'building' });
+    }
+    handleLoadSession(idea.sessionId);
+    setViewMode(target);
+  };
+
+  // Links from Ideate: `?buildIdea=` starts (or reopens) a build, `?updateBuild=` re-applies a changed idea,
+  // `?openSession=` opens an idea's project.
   const handledNav = useRef<string | null>(null);
   useEffect(() => {
     if (location.pathname !== '/' || handledNav.current === location.key) return;
     const params = new URLSearchParams(location.search);
     const build = params.get('buildIdea');
+    const update = params.get('updateBuild');
     const open = params.get('openSession');
-    if (!build && !open) return;
+    if (!build && !update && !open) return;
     handledNav.current = location.key;
+    if (update) {
+      const idea = ideas.find(i => i.id === update);
+      if (idea && !readOnly) void updateBuildFromIdea(idea);
+      else if (!sessionId) getOrCreateDefaultSession();
+      return;
+    }
     if (build) {
       const idea = ideas.find(i => i.id === build);
       if (idea && !readOnly) void startBuildFromIdea(idea);
@@ -1280,6 +1345,7 @@ export default function App() {
                         skippedSteps={skippedSteps}
                         onStepPromptGenerated={handleStepPromptGenerated}
                         onCompletedStepsChange={handleCompletedStepsChange}
+                        onSkippedStepsChange={handleSkippedStepsChange}
                         onStart={handleInsightsStart}
                         onNewSession={() => setShowNewSessionConfirm(true)}
                         onSwitchToTechnical={() => setViewMode('technical')}

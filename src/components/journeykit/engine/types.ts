@@ -114,9 +114,17 @@ export interface ShapeOption {
   riskiestAssumption: string;
   cheapTest: string;
   surfaces: string[];
+  /** Where people ask their questions: inside the app, or in a Genie space next to the dashboard. */
+  geniePlacement?: GeniePlacement;
+  /** Two or three questions people could ask Genie in this approach. */
+  askExamples?: string[];
+  /** Set only when Genie is deliberately left out, with the reason. */
+  noGenieWhy?: string;
   recommended?: boolean;
   recommendedWhy?: string;
 }
+
+export type GeniePlacement = 'in_app' | 'genie_space';
 
 export interface Assumption {
   id: string;
@@ -308,8 +316,18 @@ export interface Idea {
   buildTarget?: BuildTarget;
   /** `later` means the build is parked; the project stays linked. */
   buildStatus?: 'building' | 'later';
-  /** Insights stage to open the build at. */
-  buildStage?: 'data';
+  /** Insights stage to open the build at; `studio` once this idea has set up its project. */
+  buildStage?: 'data' | 'studio';
+  /** Bumped each time an approved answer changes. */
+  revision?: number;
+  /** The revision the linked build was last set up from. */
+  builtRevision?: number;
+  /** The step whose approved answer changed most recently, until the brief is approved again. */
+  revisingFrom?: StepKey;
+  /** A shipped, read-only example; never stored with the user's ideas. */
+  sample?: boolean;
+  /** When the business case 1-pager was first opened; its button stops inviting a click after that. */
+  caseOpenedAt?: string;
   /** The AI helper was unavailable, so the user listed questions by hand. */
   classic?: boolean;
   createdAt: string;

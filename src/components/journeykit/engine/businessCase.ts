@@ -1,3 +1,4 @@
+import { shapeBuild } from './surfaces';
 import { ROLLOUT_KEY, type CostProfile, type Impact, type ImpactDriver, type ImpactSource, type ShapeOption, type ValueProfile } from './types';
 
 /**
@@ -302,7 +303,7 @@ export function computeCase(impact: Impact, shape: ShapeOption | null): CaseFigu
   const spread = Math.min(0.35, 0.1 + 0.05 * assumedCount + (levers.length - 1) * 0.03);
   const value = { low: expected * (1 - spread), expected, high: expected * (1 + spread) };
 
-  const lines = runCost(impact.cost, shape?.surfaces ?? []);
+  const lines = runCost(impact.cost, shape ? shapeBuild(shape).surfaces : []);
   const pilotMonthly = lines.reduce((a, l) => a + l.monthly, 0);
   const monthly = pilotMonthly * (1 + RUN_SCALE_PER_UNIT * (scale - 1));
   const [buildLow, buildHigh] = BUILD_RANGE[shape?.effort ?? 'M'] ?? BUILD_RANGE.M;

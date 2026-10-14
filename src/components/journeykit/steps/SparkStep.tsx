@@ -8,8 +8,13 @@ export function SparkStep({ flow }: { flow: IdeaFlow }) {
   const spark = idea.spark;
   if (!spark) return null;
 
-  const set = (patch: Partial<typeof spark>) =>
-    flow.patch(i => ({ spark: { ...i.spark!, ...patch }, ...(patch.title !== undefined ? { title: patch.title } : {}) }));
+  const { readOnly } = flow;
+  // Renaming keeps the approvals; changing what the idea is reopens the steps built on it.
+  const set = (patch: Partial<typeof spark>) => {
+    const apply = (i: typeof idea) => ({ spark: { ...i.spark!, ...patch }, ...(patch.title !== undefined ? { title: patch.title } : {}) });
+    if (Object.keys(patch).every(k => k === 'title')) flow.patch(apply);
+    else flow.revise('spark', apply, 'Changed how the idea is described');
+  };
 
   return (
     <div className="space-y-6 animate-slide-up-fade">
@@ -23,13 +28,15 @@ export function SparkStep({ flow }: { flow: IdeaFlow }) {
       <div className="space-y-4">
         <p className="text-ui-2xs uppercase tracking-wider font-semibold text-primary">Here's how I understood it</p>
         <input
-          title="Click to edit"
+          title={readOnly ? undefined : 'Click to edit'}
+          readOnly={readOnly}
           value={spark.title}
           onChange={e => set({ title: e.target.value })}
           className="w-full bg-transparent text-ui-3xl font-semibold text-foreground outline-none border-b border-transparent hover:border-border focus:border-primary/60 pb-1 transition-colors"
         />
         <textarea
-          title="Click to edit"
+          title={readOnly ? undefined : 'Click to edit'}
+          readOnly={readOnly}
           value={spark.statement}
           onChange={e => set({ statement: e.target.value })}
           rows={3}
@@ -43,7 +50,8 @@ export function SparkStep({ flow }: { flow: IdeaFlow }) {
                 Where the money is{spark.businessLine ? ` · ${LINE[spark.businessLine]}` : ''}
               </p>
               <textarea
-                title="Click to edit"
+                title={readOnly ? undefined : 'Click to edit'}
+          readOnly={readOnly}
                 value={spark.valueHypothesis}
                 onChange={e => set({ valueHypothesis: e.target.value })}
                 rows={2}
@@ -57,6 +65,7 @@ export function SparkStep({ flow }: { flow: IdeaFlow }) {
           <span className="text-ui-xs text-muted-foreground">Industry</span>
           <input
             value={spark.industry}
+            readOnly={readOnly}
             onChange={e => set({ industry: e.target.value, industryAlternatives: [] })}
             className="px-2.5 py-1 rounded-full bg-primary/10 text-primary text-ui-sm font-medium outline-none border border-transparent focus:border-primary/50 w-auto"
             size={Math.max(8, spark.industry.length)}
@@ -65,7 +74,7 @@ export function SparkStep({ flow }: { flow: IdeaFlow }) {
             <span className="text-ui-xs text-muted-foreground" title="Where this lands in the use case catalog">in {spark.catalogIndustryLabel}</span>
           )}
         </div>
-        {!!spark.industryAlternatives?.length && (
+        {!readOnly && !!spark.industryAlternatives?.length && (
           <div className="flex flex-wrap items-center gap-1.5 animate-fade-in">
             <span className="text-ui-xs text-muted-foreground">Did you mean</span>
             {spark.industryAlternatives.map(alt => (

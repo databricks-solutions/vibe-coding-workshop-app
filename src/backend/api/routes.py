@@ -4306,6 +4306,19 @@ async def delete_section_input_fork(
     }
 
 
+INSIGHTS_ADD_ONS = ("ontology", "alerts", "app_view", "copilot")
+
+
+@router.get("/config/insights-recipes")
+async def get_insights_recipes() -> Dict[str, List[str]]:
+    """Insights add-ons turned on for everyone, from INSIGHTS_BUILD_RECIPES (comma list or 'all'). Empty by default."""
+    raw = os.environ.get("INSIGHTS_BUILD_RECIPES", "")
+    parts = [p.strip().lower() for p in raw.split(",") if p.strip()]
+    if "all" in parts:
+        return {"enabled": list(INSIGHTS_ADD_ONS)}
+    return {"enabled": [p for p in INSIGHTS_ADD_ONS if p in parts]}
+
+
 @router.get("/config/section-tags")
 async def get_section_tags() -> List[Dict[str, str]]:
     """

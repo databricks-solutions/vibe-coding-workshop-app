@@ -1,9 +1,10 @@
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import ReactMarkdown from 'react-markdown';
-import { Archive, ArrowRight, Briefcase, Check, CheckCircle2, ChevronDown, Copy, Download, Hammer, Loader2, Plus, Rocket, Search, Send, Shuffle, TriangleAlert, X } from 'lucide-react';
+import { Archive, ArrowRight, Check, CheckCircle2, ChevronDown, Copy, Download, FileText, Hammer, History, Loader2, Plus, Rocket, Search, Send, Shuffle, TriangleAlert, X } from 'lucide-react';
 import { SubmitDialog } from '../ui/SubmitDialog';
 import { BusinessCaseSheet } from '../ui/BusinessCase';
+import { BusinessCaseButton } from '../ui/BusinessCaseButton';
 import type { IdeaFlow } from '../engine/useIdeaFlow';
 import { useCopyToClipboard } from '../../../hooks/useCopyToClipboard';
 import { MARKDOWN_COMPONENTS, REMARK_PLUGINS } from '../../MarkdownContent';
@@ -13,7 +14,9 @@ import { ART } from '../art';
 import { DIMENSIONS } from '../engine/types';
 import { modeOf } from '../modes';
 import { PersonaStack } from '../ui/PersonaChip';
-import { BUILD_TARGET_LABEL, buildTargetFor, isBuilding, openBuildHref, startBuildHref } from '../engine/handoff';
+import { BUILD_TARGET_LABEL, buildTargetFor, isBuilding, needsBuildUpdate, openBuildHref, startBuildHref, updateBuildHref } from '../engine/handoff';
+import { useEnabledAddOns } from '../engine/buildRecipes';
+import { MakeItMineButton } from '../ui/SampleBanner';
 
 const SECTIONS = ['Headline', 'Problem', "Who It's For", 'Chosen Shape', 'Success Metric', 'Scope', 'Top Risks', 'Test Scenarios', 'Open Questions'];
 const INSIGHTS_SECTIONS = ['Headline', 'Problem', "Who It's For", 'Chosen Shape', 'Questions It Will Answer', 'Data It Needs', 'Success Metric', 'Scope', 'Top Risks', 'Open Questions'];
@@ -70,12 +73,16 @@ export function BriefStep({ flow }: { flow: IdeaFlow }) {
     setCelebrate(c => c + 1);
   };
 
+  useEnabledAddOns();
   const target = buildTargetFor(idea);
   const building = isBuilding(idea);
+  const changed = needsBuildUpdate(idea);
+  const update = changed && idea.approved.includes('brief');
   const goBuild = () => {
     if (!building) flow.logDecision(`Ready to build in ${BUILD_TARGET_LABEL[target]}`);
-    navigate(building ? openBuildHref(idea)! : startBuildHref(idea));
+    navigate(update ? updateBuildHref(idea) : building ? openBuildHref(idea)! : startBuildHref(idea));
   };
+  const buildButton = (primary?: boolean) => <BuildButton target={target} building={building} update={update} onClick={goBuild} primary={primary} />;
 
   const park = () => {
     flow.setStatus('parked', 'Parked for later');
@@ -133,13 +140,11 @@ export function BriefStep({ flow }: { flow: IdeaFlow }) {
       {!streaming && idea.brief && (
         <>
           <div className="flex flex-wrap items-center gap-1">
-            <button onClick={() => flow.findGaps()} disabled={!!flow.loading} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-ui-sm text-primary hover:bg-primary/10 disabled:opacity-50">
+            {!flow.readOnly && <button onClick={() => flow.findGaps()} disabled={!!flow.loading} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-ui-sm text-primary hover:bg-primary/10 disabled:opacity-50">
               {flow.loading === 'gaps' ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Search className="w-3.5 h-3.5" />} Find gaps
-            </button>
+            </button>}
             <div className="flex-1" />
-            <button onClick={openCase} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary/10 text-primary text-ui-sm font-medium hover:bg-primary/20">
-              <Briefcase className="w-3.5 h-3.5" /> Business case
-            </button>
+            <BusinessCaseButton idea={idea} onClick={openCase} variant="compact" className="mr-1" />
             <button onClick={() => handleCopy(briefAsMarkdown(idea))} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-ui-sm text-muted-foreground hover:text-foreground hover:bg-secondary/60">
               {copied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />} {copied ? 'Copied' : 'Copy'}
             </button>
@@ -160,29 +165,47 @@ export function BriefStep({ flow }: { flow: IdeaFlow }) {
                       <span><span className="font-medium text-foreground">{labelFor(g.key)}:</span> <span className="text-muted-foreground">{g.gap}</span></span>
                     </p>
                   ))}
-                  <button
+                  {!flow.readOnly && <button
                     onClick={() => flow.run('brief', `Fill these gaps: ${gaps.map(g => `${labelFor(g.key)}: ${g.gap}`).join('; ')}`)}
                     className="mt-1 px-3 py-1.5 rounded-lg bg-primary/10 text-primary text-ui-sm font-medium hover:bg-primary/20"
                   >
                     Fill gaps
-                  </button>
+                  </button>}
                 </>
               )}
             </div>
           )}
 
-          {!config.briefOutcomes ? (
-            <div className="flex flex-col sm:flex-row sm:items-center gap-4 rounded-2xl border border-border bg-card/60 p-5">
-              <span className="flex items-center justify-center w-11 h-11 rounded-xl bg-primary/10 text-primary shrink-0"><Briefcase className="w-5 h-5" /></span>
+          {changed && (
+            <p className="flex items-start gap-2 rounded-xl border border-sky-500/30 bg-sky-500/[0.06] px-4 py-3 text-ui-sm text-muted-foreground">
+              <History className="w-4 h-4 mt-0.5 shrink-0 text-sky-600 dark:text-sky-400" />
+              {update
+                ? 'Your answers changed since the build was set up. Update the build to carry them over; the current build keeps working until you do.'
+                : 'Your answers changed since the build was set up. Approve this brief, then update the build. The current build keeps working until you do.'}
+            </p>
+          )}
+
+          {flow.readOnly ? (
+            <div className="flex flex-col sm:flex-row sm:items-center gap-4 rounded-2xl border border-primary/25 bg-primary/[0.05] p-5">
               <div className="flex-1 min-w-0">
-                <p className="text-ui-base font-semibold text-foreground">Your business case</p>
+                <p className="text-ui-base font-semibold text-foreground">That is the whole journey</p>
+                <p className="text-ui-sm text-muted-foreground">Open the business case 1-pager to see what your sponsor gets, or make this sample yours to change it and build it.</p>
+              </div>
+              <div className="flex flex-wrap gap-2 shrink-0">
+                <BusinessCaseButton onClick={openCase} />
+                <MakeItMineButton idea={idea} />
+              </div>
+            </div>
+          ) : !config.briefOutcomes ? (
+            <div className="flex flex-col sm:flex-row sm:items-center gap-4 rounded-2xl border border-border bg-card/60 p-5">
+              <span className="flex items-center justify-center w-11 h-11 rounded-xl bg-primary/10 text-primary shrink-0"><FileText className="w-5 h-5" /></span>
+              <div className="flex-1 min-w-0">
+                <p className="text-ui-base font-semibold text-foreground">Your business case 1-pager</p>
                 <p className="text-ui-sm text-muted-foreground">
-                  A decision-ready one-pager for your sponsor: the problem, the success metric{figures ? ', what it is worth' : ''} and how it is built on Databricks.
+                  A decision-ready page for your sponsor: the problem, the success metric{figures ? ', what it is worth' : ''} and how it is built on Databricks. Ready to share or download as a PDF.
                 </p>
               </div>
-              <button onClick={openCase} className="flex items-center justify-center gap-1.5 px-4 py-2 rounded-xl bg-secondary text-foreground text-ui-sm font-medium hover:bg-secondary/80 shrink-0">
-                <Briefcase className="w-4 h-4" /> Open business case
-              </button>
+              <BusinessCaseButton onClick={openCase} />
             </div>
           ) : celebrate > 0 ? (
             <div className="relative rounded-2xl border border-emerald-500/30 bg-card overflow-hidden animate-slide-up-fade">
@@ -197,11 +220,9 @@ export function BriefStep({ flow }: { flow: IdeaFlow }) {
                     {idea.catalogRef ? 'It\'s on the use case map, waiting for review.' : 'Submit it to the use case map so others can build it in the workshop.'}
                   </p>
                   <div className="flex flex-wrap justify-center sm:justify-start gap-2 mt-4">
-                    <BuildButton target={target} building={building} onClick={goBuild} primary />
+                    {buildButton(true)}
                     <SubmitButton submitted={!!idea.catalogRef} onClick={() => setSubmitOpen(true)} />
-                    <button onClick={openCase} className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-secondary text-foreground text-ui-sm font-medium hover:bg-secondary/80">
-                      <Briefcase className="w-4 h-4" /> Business case
-                    </button>
+                    <BusinessCaseButton onClick={openCase} />
                     <button onClick={download} className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-ui-sm font-medium text-muted-foreground hover:text-foreground hover:bg-secondary/60">
                       <Download className="w-4 h-4" /> Brief
                     </button>
@@ -216,7 +237,7 @@ export function BriefStep({ flow }: { flow: IdeaFlow }) {
             <div className="rounded-2xl border border-border bg-card/60 p-5">
               <p className="text-ui-base font-semibold text-foreground">What's next for this idea?</p>
               <div className="flex flex-wrap gap-2 mt-3">
-                <BuildButton target={target} building={building} onClick={goBuild} primary />
+                {buildButton(true)}
                 <button onClick={commit} className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-ui-sm font-semibold transition-all active:scale-95 ${idea.status === 'committed' ? 'bg-emerald-500 text-white' : 'bg-primary/10 text-primary hover:bg-primary/20'}`}>
                   <Rocket className="w-4 h-4" /> {idea.status === 'committed' ? 'Committed' : 'Commit'}
                 </button>
@@ -261,14 +282,14 @@ export function BriefStep({ flow }: { flow: IdeaFlow }) {
   );
 }
 
-function BuildButton({ target, building, onClick, primary }: { target: ReturnType<typeof buildTargetFor>; building: boolean; onClick: () => void; primary?: boolean }) {
+function BuildButton({ target, building, update, onClick, primary }: { target: ReturnType<typeof buildTargetFor>; building: boolean; update: boolean; onClick: () => void; primary?: boolean }) {
   return (
     <button
       onClick={onClick}
-      title={building ? 'Open the project building this idea' : `Starts a new project in ${BUILD_TARGET_LABEL[target]}, ready for you to pick the data`}
+      title={update ? 'Rewrite the build from your latest answers' : building ? 'Open the project building this idea' : `Starts a new project in ${BUILD_TARGET_LABEL[target]}, ready for you to pick the data`}
       className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-ui-sm font-semibold transition-all active:scale-95 ${primary ? 'bg-primary text-primary-foreground hover:opacity-90' : 'bg-primary/10 text-primary hover:bg-primary/20'}`}
     >
-      <Hammer className="w-4 h-4" /> {building ? 'Open the build' : "I'm ready to build"}
+      {update ? <History className="w-4 h-4" /> : <Hammer className="w-4 h-4" />} {update ? 'Update the build' : building ? 'Open the build' : "I'm ready to build"}
       <span className="font-normal opacity-80">in {target === 'insights' ? 'Insights' : 'Technical'}</span>
       <ArrowRight className="w-3.5 h-3.5" />
     </button>

@@ -1318,6 +1318,11 @@ class ApiClient {
     return this.fetch<Record<string, string>>('/config/workshop-parameters-dict');
   }
 
+  /** Insights add-ons turned on for everyone (INSIGHTS_BUILD_RECIPES). */
+  async getInsightsRecipes(): Promise<{ enabled: string[] }> {
+    return this.fetch<{ enabled: string[] }>('/config/insights-recipes');
+  }
+
   /** Delete a workshop parameter */
   async deleteWorkshopParameter(paramKey: string): Promise<{ success: boolean; message: string }> {
     return this.fetch(`/config/workshop-parameters/${encodeURIComponent(paramKey)}`, {

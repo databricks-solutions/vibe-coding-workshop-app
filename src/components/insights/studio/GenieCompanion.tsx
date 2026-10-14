@@ -2,24 +2,27 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { ArrowUpRight, Check, Circle, Copy, Loader2, Sparkles } from 'lucide-react';
 import { useState } from 'react';
 import { useCopyToClipboard } from '../../../hooks/useCopyToClipboard';
-import { MOMENTS } from '../journey';
+import { MOMENTS, type Moment } from '../journey';
 import { ProgressRing } from '../../journeykit';
 
 const GENIE_CREATED_STEP = 62;
 const GENIE_TUNED_STEP = 66;
 
 interface GenieCompanionProps {
+  moments?: Moment[];
   name: string;
   questions: string[];
   isDone: (step: number) => boolean;
+  /** Skipped steps count towards progress but unlock nothing. */
+  isSkipped?: (step: number) => boolean;
   genieLink?: string;
 }
 
 type QuestionState = 'waiting' | 'learning' | 'ready';
 
-function statusLine(done: number, genieCreated: boolean, tuned: boolean): string {
+function statusLine(done: number, total: number, genieCreated: boolean, tuned: boolean): string {
   if (done === 0) return 'Waiting to get started';
-  if (tuned) return done === MOMENTS.length ? 'Live and ready to share' : 'Answering your questions';
+  if (tuned) return done === total ? 'Live and ready to share' : 'Answering your questions';
   if (genieCreated) return 'Learning to answer';
   return 'Learning your business';
 }
@@ -51,14 +54,14 @@ function QuestionRow({ q, state }: { q: string; state: QuestionState }) {
   );
 }
 
-export function GenieCompanion({ name, questions, isDone, genieLink }: GenieCompanionProps) {
+export function GenieCompanion({ moments = MOMENTS, name, questions, isDone, isSkipped, genieLink }: GenieCompanionProps) {
   const [showAll, setShowAll] = useState(false);
-  const doneMoments = MOMENTS.filter(m => isDone(m.step));
-  const pct = doneMoments.length / MOMENTS.length;
+  const doneMoments = moments.filter(m => isDone(m.step));
+  const pct = doneMoments.length / moments.length;
   const genieCreated = isDone(GENIE_CREATED_STEP);
   const tuned = isDone(GENIE_TUNED_STEP);
   const qState: QuestionState = tuned ? 'ready' : genieCreated ? 'learning' : 'waiting';
-  const unlocks = [...doneMoments].reverse();
+  const unlocks = doneMoments.filter(m => !(m.optional && isSkipped?.(m.step))).reverse();
   const visibleUnlocks = showAll ? unlocks : unlocks.slice(0, 4);
 
   return (
@@ -72,7 +75,7 @@ export function GenieCompanion({ name, questions, isDone, genieLink }: GenieComp
             <Sparkles className="w-3 h-3 text-primary" /> Your Genie
           </p>
           <p className="text-ui-lg font-semibold text-foreground truncate">{name || 'Untitled Genie'}</p>
-          <p className="text-ui-sm text-muted-foreground">{statusLine(doneMoments.length, genieCreated, tuned)}</p>
+          <p className="text-ui-sm text-muted-foreground">{statusLine(doneMoments.length, moments.length, genieCreated, tuned)}</p>
         </div>
       </div>
 

@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowRight, Copy, Hammer, Lightbulb, Menu, MoreHorizontal, Pencil, Send, Trash2 } from 'lucide-react';
+import { ArrowRight, BookOpenCheck, Copy, Hammer, History, Lightbulb, Menu, MoreHorizontal, Pencil, Send, Trash2 } from 'lucide-react';
 import {
-  ART, BUILD_TARGET_LABEL, PrimaryButton, STEP_ART, SubmitDialog, VoiceTextarea, buildTargetFor, caseFigures, isBuilding, money, openBuildHref, startBuildHref, stepMeta, stepsOf, useIdeas,
+  ART, BUILD_TARGET_LABEL, IndustryBadge, MakeItMineButton, PrimaryButton, SAMPLES, STEP_ART, SubmitDialog, SurfaceChips, VoiceTextarea,
+  buildTargetFor, caseFigures, chosenShape, isBuilding, money, needsBuildUpdate, openBuildHref, shapeBuild, startBuildHref, stepMeta, stepsOf, useEnabledAddOns, useIdeas,
   type Idea, type IdeaStatus,
 } from '../journeykit';
 
@@ -28,6 +29,7 @@ function timeAgo(iso: string) {
 
 export function IdeasHome({ onOpenMobileNav }: { onOpenMobileNav?: () => void }) {
   const { ideas, createIdea, updateIdea, deleteIdea, duplicateIdea } = useIdeas();
+  useEnabledAddOns();
   const navigate = useNavigate();
   const [seed, setSeed] = useState('');
   const [industry, setIndustry] = useState('');
@@ -156,6 +158,8 @@ export function IdeasHome({ onOpenMobileNav }: { onOpenMobileNav?: () => void })
             </div>
           </div>
         )}
+
+        <SamplesSection onOpen={id => navigate(`/ideate/${id}`)} />
       </div>
       {submitting && <SubmitDialog idea={ideas.find(i => i.id === submitting.id) ?? submitting} onClose={() => setSubmitting(null)} />}
     </div>
@@ -235,7 +239,7 @@ function IdeaCard({ idea, delay, value, onOpen, onRename, onDuplicate, onDelete,
         </div>
       </div>
       <p className="text-ui-sm text-muted-foreground line-clamp-2 mt-1 min-h-[2.5em]">{idea.spark?.statement ?? idea.seed}</p>
-      <div className="flex items-center gap-2 mt-3">
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5 mt-3">
         {building && later ? (
           <span className="px-2 py-0.5 rounded-full text-ui-2xs font-semibold bg-amber-500/10 text-amber-600 dark:text-amber-400">Build later</span>
         ) : idea.buildTarget && building ? (
@@ -263,9 +267,14 @@ function IdeaCard({ idea, delay, value, onOpen, onRename, onDuplicate, onDelete,
             <Send className="w-3 h-3" /> Submit
           </button>
         ) : null}
+        {needsBuildUpdate(idea) && (
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-ui-2xs font-semibold bg-sky-500/10 text-sky-600 dark:text-sky-400" title="You changed approved answers. Open the brief to update the build.">
+            <History className="w-3 h-3" /> Changes to apply
+          </span>
+        )}
         {value > 0 && <span className="text-ui-2xs font-semibold text-emerald-600 dark:text-emerald-400 tabular-nums">{money(value)}/yr</span>}
-        {(idea.spark?.industry || idea.industry) && <span className="text-ui-2xs text-muted-foreground truncate">{idea.spark?.industry || idea.industry}</span>}
-        <span className="ml-auto text-ui-2xs text-muted-foreground">{stepLabel} · {timeAgo(idea.updatedAt)}</span>
+        <span className="min-w-0 flex"><IndustryBadge industry={idea.spark?.industry || idea.industry} catalogKey={idea.spark?.catalogIndustry ?? idea.sourceUseCase?.industry} size="sm" /></span>
+        <span className="ml-auto shrink-0 text-ui-2xs text-muted-foreground">{stepLabel} · {timeAgo(idea.updatedAt)}</span>
       </div>
       <div className="h-0.5 rounded-full bg-secondary mt-3 overflow-hidden">
         <div className="h-full bg-emerald-500 transition-all duration-500" style={{ width: `${progress}%` }} />
@@ -279,5 +288,59 @@ function MenuItem({ icon: Icon, label, onClick, danger }: { icon: typeof Pencil;
     <button onClick={onClick} className={`w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-ui-sm hover:bg-secondary ${danger ? 'text-red-400' : 'text-foreground'}`}>
       <Icon className="w-3.5 h-3.5" /> {label}
     </button>
+  );
+}
+
+/** Finished examples, one per featured industry, to show what a complete idea looks like. */
+function SamplesSection({ onOpen }: { onOpen: (id: string) => void }) {
+  return (
+    <section className="mt-12" aria-labelledby="ideate-samples">
+      <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1 mb-4">
+        <h2 id="ideate-samples" className="flex items-center gap-2 text-ui-lg font-semibold text-foreground">
+          <BookOpenCheck className="w-4 h-4 text-primary" /> Samples
+        </h2>
+        <p className="text-ui-sm text-muted-foreground">Finished ideas from the use case library. Walk through every step, or make one yours.</p>
+      </div>
+      <div className="grid gap-3 md:grid-cols-3">
+        {SAMPLES.map((sample, i) => <SampleCard key={sample.id} sample={sample} delay={i * 60} onOpen={() => onOpen(sample.id)} />)}
+      </div>
+    </section>
+  );
+}
+
+function SampleCard({ sample, delay, onOpen }: { sample: Idea; delay: number; onOpen: () => void }) {
+  const shape = chosenShape(sample);
+  const figures = caseFigures(sample);
+  return (
+    <div
+      role="link"
+      tabIndex={0}
+      onClick={onOpen}
+      onKeyDown={e => { if (e.key === 'Enter' && e.target === e.currentTarget) onOpen(); }}
+      className="group flex flex-col min-w-0 rounded-2xl border border-border bg-card/60 p-4 cursor-pointer transition-colors hover:border-primary/40 hover:bg-card focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 animate-cascade-in"
+      style={{ animationDelay: `${delay}ms` }}
+    >
+      <div className="flex items-center gap-2 min-w-0">
+        <IndustryBadge industry={sample.industry} catalogKey={sample.sourceUseCase?.industry} />
+        <span className="ml-auto shrink-0 text-ui-2xs text-muted-foreground">All {stepsOf(sample).length} steps</span>
+      </div>
+      <p className="text-ui-base font-semibold text-foreground mt-3 leading-snug">{sample.title}</p>
+      <p className="text-ui-sm text-muted-foreground line-clamp-3 mt-1">{sample.spark?.statement}</p>
+      {sample.sourceUseCase && <p className="text-ui-2xs text-muted-foreground/80 mt-2 truncate">From {sample.sourceUseCase.label}</p>}
+      {shape && (
+        <div className="mt-3 space-y-1.5">
+          <p className="text-ui-2xs text-muted-foreground"><span className="text-foreground/80 font-medium">{shape.title}</span> builds</p>
+          <SurfaceChips surfaces={shapeBuild(shape).visible} size="sm" />
+        </div>
+      )}
+      <div className="flex-1" />
+      <div className="flex items-center gap-2 mt-4 pt-3 border-t border-border/60">
+        {figures && <span className="text-ui-xs font-semibold text-emerald-600 dark:text-emerald-400 tabular-nums">~{money(figures.value.expected)}/yr</span>}
+        <span className="ml-auto inline-flex items-center gap-1 text-ui-xs font-medium text-primary group-hover:underline">
+          View <ArrowRight className="w-3.5 h-3.5" />
+        </span>
+        <span onClick={e => e.stopPropagation()}><MakeItMineButton idea={sample} size="sm" /></span>
+      </div>
+    </div>
   );
 }

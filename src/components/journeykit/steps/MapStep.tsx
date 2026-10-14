@@ -3,6 +3,7 @@ import { ChevronDown, CircleDollarSign, MapPin, Sparkles, Waypoints } from 'luci
 import type { IdeaFlow } from '../engine/useIdeaFlow';
 import { placedLeaf } from '../engine/ideaContext';
 import { PersonaChip } from '../ui/PersonaChip';
+import { SurfaceChips } from '../ui/SurfaceChips';
 
 /** Leaves shown per branch before "more"; the placed and adjacent leaves always show. */
 const VISIBLE_LEAVES = 2;
@@ -17,15 +18,15 @@ export function MapStep({ flow }: { flow: IdeaFlow }) {
   const adjacent = map.branches.flatMap(b => b.leaves).filter(l => map.adjacentLeafIds.includes(l.id));
 
   const place = (leafId: string) => {
-    if (leafId === map.placedLeafId) return;
-    flow.patch(i => ({ map: { ...i.map!, placedLeafId: leafId, adjacentLeafIds: i.map!.adjacentLeafIds.filter(a => a !== leafId) } }));
+    if (leafId === map.placedLeafId || flow.readOnly) return;
+    flow.revise('map', i => ({ map: { ...i.map!, placedLeafId: leafId, adjacentLeafIds: i.map!.adjacentLeafIds.filter(a => a !== leafId) } }), 'Moved the idea on the industry map');
   };
 
   let order = 0;
   return (
     <div className="space-y-6">
       <p className="text-ui-md text-muted-foreground animate-fade-in">
-        Your idea is pinned where I think it lives in {idea.spark?.industry || 'your industry'}. Tap another spot to move it.
+        Your idea is pinned where I think it lives in {idea.spark?.industry || 'your industry'}.{flow.readOnly ? '' : ' Tap another spot to move it.'}
       </p>
 
       {placed && (
@@ -64,11 +65,7 @@ export function MapStep({ flow }: { flow: IdeaFlow }) {
                 </p>
               )}
               {placed.surfaces.length > 0 && (
-                <div className="flex flex-wrap gap-1.5">
-                  {placed.surfaces.map(s => (
-                    <span key={s} className="px-2 py-0.5 rounded-full border border-primary/30 text-ui-2xs text-primary">{s}</span>
-                  ))}
-                </div>
+                <SurfaceChips surfaces={placed.surfaces} size="sm" />
               )}
             </div>
           )}
@@ -93,6 +90,7 @@ export function MapStep({ flow }: { flow: IdeaFlow }) {
                     <button
                       key={leaf.id}
                       onClick={() => place(leaf.id)}
+                      disabled={flow.readOnly && !isPlaced}
                       className={`relative w-full text-left rounded-xl px-3 py-2.5 border transition-all animate-cascade-in ${
                         isPlaced
                           ? 'border-primary bg-primary/10 shadow-lg shadow-primary/10'

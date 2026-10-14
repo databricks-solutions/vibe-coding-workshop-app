@@ -33,6 +33,11 @@ env:
   # Blank uses DATABRICKS_SERVING_ENDPOINT.
   - name: IDEATE_ANALYSIS_ENDPOINT
     value: "__IDEATE_ANALYSIS_ENDPOINT__"
+
+  # Insights add-ons turned on for everyone: comma list of ontology, alerts, app_view, copilot (or "all").
+  # Blank keeps Insights to the Genie space and dashboard; testers can use ?recipes=all.
+  - name: INSIGHTS_BUILD_RECIPES
+    value: ""
   
   # ---------------------------------------------------------------------------
   # Lakebase PostgreSQL Configuration

@@ -11,7 +11,7 @@ export function ClarifyStep({ flow }: { flow: IdeaFlow }) {
   const firstOpen = questions.findIndex(q => !idea.answers[q.id]);
   const [editing, setEditing] = useState<number | null>(null);
 
-  const active = editing ?? (firstOpen === -1 ? null : firstOpen);
+  const active = flow.readOnly ? null : editing ?? (firstOpen === -1 ? null : firstOpen);
   const q = active !== null ? questions[active] : null;
   const answeredCount = questions.filter(x => idea.answers[x.id]).length;
   const lastOpen = questions.filter(x => !idea.answers[x.id]).length <= 1;
@@ -31,6 +31,7 @@ export function ClarifyStep({ flow }: { flow: IdeaFlow }) {
         {questions.map((x, i) => (
           <button
             key={x.id}
+            disabled={flow.readOnly}
             onClick={() => idea.answers[x.id] && setEditing(i)}
             className={`h-1.5 rounded-full transition-all duration-300 ${
               i === active ? 'w-8 bg-primary' : idea.answers[x.id] ? 'w-4 bg-emerald-500' : 'w-4 bg-secondary'
@@ -70,6 +71,7 @@ export function ClarifyStep({ flow }: { flow: IdeaFlow }) {
           {questions.map((x, i) => (
             <button
               key={x.id}
+              disabled={flow.readOnly}
               onClick={() => setEditing(i)}
               className="group w-full flex items-start gap-3 text-left rounded-xl border border-border bg-card/60 px-4 py-3 hover:border-primary/40 animate-cascade-in"
               style={{ animationDelay: `${i * 50}ms` }}
@@ -79,7 +81,7 @@ export function ClarifyStep({ flow }: { flow: IdeaFlow }) {
                 <span className="block text-ui-xs text-muted-foreground">{x.question}</span>
                 <span className={`block text-ui-base ${idea.answers[x.id] === NOT_SURE ? 'text-amber-400' : 'text-foreground'}`}>{idea.answers[x.id]}</span>
               </span>
-              <Pencil className="w-3.5 h-3.5 mt-1 text-muted-foreground opacity-0 group-hover:opacity-100" />
+              {!flow.readOnly && <Pencil className="w-3.5 h-3.5 mt-1 text-muted-foreground opacity-0 group-hover:opacity-100" />}
             </button>
           ))}
         </div>

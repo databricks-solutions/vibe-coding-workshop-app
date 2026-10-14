@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { AlertCircle, ArrowLeft, ArrowRight, Check, Copy, Eye, Lock, RotateCcw, Undo2, Wand2 } from 'lucide-react';
+import { AlertCircle, ArrowLeft, ArrowRight, Check, Copy, Eye, Lock, RotateCcw, SkipForward, Undo2, Wand2 } from 'lucide-react';
 import { useCopyToClipboard } from '../../../hooks/useCopyToClipboard';
 import { chapterOf, momentsIn, type Moment } from '../journey';
 import { useMomentPrompt } from '../useMomentPrompt';
@@ -16,8 +16,11 @@ const WRITING_HINTS = [
 
 export interface MomentCardProps {
   moment: Moment;
+  /** The build's steps, for the position within the chapter. */
+  moments?: Moment[];
   tag: string;
   isDone: boolean;
+  isSkipped?: boolean;
   lockedBy: Moment | null;
   assistantName: string;
   assistantLink?: string;
@@ -27,18 +30,22 @@ export interface MomentCardProps {
   savedPrompt?: string;
   previousOutputs?: Record<string, string>;
   readOnly: boolean;
+  /** The step's prompt is missing or switched off, so it cannot be prepared right now. */
+  unavailable?: boolean;
   onGenerated: (step: number, text: string) => void;
   onDone: () => void;
   onUndo: () => void;
+  /** Offered on add-on steps, which the build can do without. */
+  onSkip?: () => void;
   onBack?: () => void;
   onGoTo: (step: number) => void;
   /** Replaces the prompt action area (used by the setup moment). */
   customBody?: ReactNode;
 }
 
-export function MomentHeader({ moment }: { moment: Moment }) {
+export function MomentHeader({ moment, moments }: { moment: Moment; moments?: Moment[] }) {
   const chapter = chapterOf(moment.chapter);
-  const siblings = momentsIn(moment.chapter);
+  const siblings = momentsIn(moment.chapter, moments);
   const pos = siblings.findIndex(m => m.step === moment.step) + 1;
   const Icon = moment.icon;
   return (
@@ -70,29 +77,39 @@ export function WhatYoullSee({ text }: { text: string }) {
   );
 }
 
-export function MomentFooter({ isDone, canFinish, readOnly, onDone, onUndo, onBack, doneLabel = 'It worked, next' }: {
-  isDone: boolean; canFinish: boolean; readOnly: boolean; onDone: () => void; onUndo: () => void; onBack?: () => void; doneLabel?: string;
+export function MomentFooter({ isDone, isSkipped, canFinish, readOnly, onDone, onUndo, onSkip, onBack, doneLabel = 'It worked, next' }: {
+  isDone: boolean; isSkipped?: boolean; canFinish: boolean; readOnly: boolean; onDone: () => void; onUndo: () => void; onSkip?: () => void; onBack?: () => void; doneLabel?: string;
 }) {
   return (
     <footer className="flex items-center justify-between gap-3 px-6 sm:px-8 py-4 border-t border-border bg-secondary/20">
       <div>{onBack && <GhostButton onClick={onBack}><ArrowLeft className="w-4 h-4" /> Back</GhostButton>}</div>
       {readOnly ? (
-        isDone ? <DoneBadge /> : <span className="text-ui-sm text-muted-foreground">Not done yet</span>
+        isDone ? <DoneBadge skipped={isSkipped} /> : <span className="text-ui-sm text-muted-foreground">Not done yet</span>
       ) : isDone ? (
         <div className="flex items-center gap-2">
-          <GhostButton onClick={onUndo}><Undo2 className="w-3.5 h-3.5" /> Mark as not done</GhostButton>
+          <GhostButton onClick={onUndo}><Undo2 className="w-3.5 h-3.5" /> {isSkipped ? 'Do this step' : 'Mark as not done'}</GhostButton>
           <PrimaryButton onClick={onDone}>Next <ArrowRight className="w-4 h-4" /></PrimaryButton>
         </div>
       ) : (
-        <PrimaryButton onClick={onDone} disabled={!canFinish} title={canFinish ? undefined : 'Prepare and copy your instructions first'}>
-          <Check className="w-4 h-4" /> {doneLabel}
-        </PrimaryButton>
+        <div className="flex items-center gap-2">
+          {onSkip && <GhostButton onClick={onSkip} title="You can come back to it later"><SkipForward className="w-3.5 h-3.5" /> Skip for now</GhostButton>}
+          <PrimaryButton onClick={onDone} disabled={!canFinish} title={canFinish ? undefined : 'Prepare and copy your instructions first'}>
+            <Check className="w-4 h-4" /> {doneLabel}
+          </PrimaryButton>
+        </div>
       )}
     </footer>
   );
 }
 
-function DoneBadge() {
+function DoneBadge({ skipped }: { skipped?: boolean }) {
+  if (skipped) {
+    return (
+      <span className="inline-flex items-center gap-1.5 h-8 px-3 rounded-full bg-secondary text-muted-foreground text-ui-sm font-semibold">
+        <SkipForward className="w-3.5 h-3.5" /> Skipped
+      </span>
+    );
+  }
   return (
     <span className="inline-flex items-center gap-1.5 h-8 px-3 rounded-full bg-emerald-500/10 text-emerald-500 text-ui-sm font-semibold">
       <Check className="w-3.5 h-3.5" strokeWidth={3} /> Done
@@ -102,8 +119,8 @@ function DoneBadge() {
 
 export function MomentCard(props: MomentCardProps) {
   const {
-    moment, tag, isDone, lockedBy, assistantName, assistantLink, industry, useCase, sessionId,
-    savedPrompt, previousOutputs, readOnly, onGenerated, onDone, onUndo, onBack, onGoTo, customBody,
+    moment, moments, tag, isDone, isSkipped, lockedBy, assistantName, assistantLink, industry, useCase, sessionId,
+    savedPrompt, previousOutputs, readOnly, unavailable, onGenerated, onDone, onUndo, onSkip, onBack, onGoTo, customBody,
   } = props;
   const prompt = useMomentPrompt({ step: moment.step, tag, industry, useCase, sessionId, savedPrompt, previousOutputs, onGenerated });
   const { copied, handleCopy } = useCopyToClipboard();
@@ -146,6 +163,21 @@ export function MomentCard(props: MomentCardProps) {
   let body: ReactNode;
   if (customBody) {
     body = customBody;
+  } else if (isSkipped && !prompt.text) {
+    body = (
+      <p className="rounded-2xl border border-dashed border-border p-5 text-ui-md text-muted-foreground">
+        You skipped this step. The rest of the build works without it, and you can come back any time.
+      </p>
+    );
+  } else if (unavailable && prompt.status !== 'ready') {
+    body = (
+      <div className="flex flex-col sm:flex-row sm:items-center gap-4 rounded-2xl border border-dashed border-border p-5">
+        <AlertCircle className="w-5 h-5 text-muted-foreground shrink-0" />
+        <p className="flex-1 text-ui-md text-muted-foreground">
+          This step is not available in this workspace yet. Skip it for now; everything else still works.
+        </p>
+      </div>
+    );
   } else if (lockedBy && !isDone && prompt.status !== 'ready') {
     body = (
       <div className="flex flex-col sm:flex-row sm:items-center gap-4 rounded-2xl border border-dashed border-border p-5">
@@ -248,18 +280,20 @@ export function MomentCard(props: MomentCardProps) {
 
   return (
     <article className="rounded-3xl border border-border bg-card shadow-sm overflow-hidden">
-      <MomentHeader moment={moment} />
+      <MomentHeader moment={moment} moments={moments} />
       <div className="px-6 sm:px-8 pb-6">{body}</div>
       <WhatYoullSee text={moment.whatYoullSee} />
       {!customBody && (
-        <UnderTheHood tag={tag} industry={industry} useCase={useCase} sessionId={sessionId} prompt={prompt.status === 'streaming' ? '' : prompt.text} />
+        <UnderTheHood tag={tag} skill={moment.skill} industry={industry} useCase={useCase} sessionId={sessionId} prompt={prompt.status === 'streaming' ? '' : prompt.text} />
       )}
       <MomentFooter
         isDone={isDone}
-        canFinish={customBody ? true : canFinish}
+        isSkipped={isSkipped}
+        canFinish={customBody ? true : canFinish && !unavailable}
         readOnly={readOnly}
         onDone={onDone}
         onUndo={onUndo}
+        onSkip={onSkip}
         onBack={onBack}
         doneLabel={customBody ? 'It\'s set up, next' : undefined}
       />

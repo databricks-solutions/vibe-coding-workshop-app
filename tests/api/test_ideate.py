@@ -149,6 +149,22 @@ class TestNormalize(unittest.TestCase):
         self.assertEqual((a["valueLever"], a["valueSize"], a["hardShare"], a["recommended"]), ("cost_avoided", "$$$", "mostly hard", True))
         self.assertEqual((b["valueLever"], b["valueSize"], b["recommended"], b["recommendedWhy"]), (None, None, False, ""))
 
+    def test_shape_enforces_genie_bundle_per_kind(self):
+        out = ideate._normalize("shape", {"options": [
+            {"kind": "copilot", "title": "A", "surfaces": ["Databricks App"], "ask_examples": ["Which gates are short?", "", "Why?", "x?", "y?"]},
+            {"kind": "automation", "title": "B", "surfaces": ["Agent", "Lakebase"], "genie_placement": "nowhere"},
+            {"kind": "insight", "title": "C", "surfaces": ["AI/BI Dashboard"], "no_genie_why": "Read-only wallboard", "ask_examples": ["Q?"]},
+        ]})
+        a, b, c = out["options"]
+        self.assertEqual((a["surfaces"], a["geniePlacement"]), (["App", "Genie", "Dashboard"], "in_app"))
+        self.assertEqual(a["askExamples"], ["Which gates are short?", "Why?", "x?"])
+        self.assertNotIn("noGenieWhy", a)
+        self.assertEqual((b["surfaces"], b["geniePlacement"]), (["App", "Agent", "Genie", "Dashboard", "Lakebase"], "in_app"))
+        self.assertEqual((c["surfaces"], c["geniePlacement"], c["askExamples"], c["noGenieWhy"]),
+                         (["Dashboard"], "genie_space", [], "Read-only wallboard"))
+        insights = ideate._normalize("shape", {"options": [{"kind": "ask", "title": "D", "surfaces": ["Genie"]}]}, {"mode": "insights"})
+        self.assertEqual(insights["options"][0]["surfaces"], ["Genie", "Dashboard"])
+
     def test_summary_and_spark_value_fields(self):
         out = ideate._normalize("summary", {
             "subtitle": "s", "what_we_build": "w", "problem_today": "p", "metric": {"label": "m"},

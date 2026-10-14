@@ -1,4 +1,5 @@
 import type { BlueprintChoice } from './blueprint/types';
+import { ADD_ON_LABEL, ADD_ON_ORDER, normalizeAddOns, type AddOn } from './recipes';
 import type { ApprovedUseCase } from './usecases/useCaseApi';
 
 export type DataSource = 'existing' | 'upload' | 'sample' | 'blueprint';
@@ -12,6 +13,8 @@ export interface InsightsBrief {
   blueprint?: BlueprintChoice | null;
   useCase?: ApprovedUseCase | null;
   idea?: IdeaBrief | null;
+  /** What the build adds beyond the Genie space and dashboard. Empty keeps the brief exactly as before. */
+  addOns?: AddOn[];
 }
 
 /** The shaped idea, written as one labelled line per field above the questions. */
@@ -30,6 +33,10 @@ const QUESTIONS_HEADER = 'Questions this should answer:';
 const DATA_HEADER = 'Data:';
 const BLUEPRINT_HEADER = 'Blueprint:';
 const USE_CASE_HEADER = 'Approved use case:';
+const IDEA_HEADER = 'Idea:';
+const BUILDS_HEADER = 'Builds:';
+const RECIPE_HEADER = 'Recipe:';
+const RECIPE_CORE = 'genie-accelerator';
 const BLUEPRINT_REPO = 'github.com/databricks-industry-solutions/lakehouse-industry-data-models';
 
 const DATA_PHRASES: Record<DataSource, string> = {
@@ -78,9 +85,15 @@ export function composeBrief(b: InsightsBrief): string {
   const dataDetail = bp
     ? ` "${bp.label}" (${bp.catalog})`
     : b.dataSource === 'existing' && b.dataLocation ? ` (${b.dataLocation})` : '';
+  const addOns = normalizeAddOns(b.addOns ?? []);
+  const withApp = addOns.includes('copilot') || addOns.includes('app_view');
+  const scope = withApp
+    ? 'It builds on data that already exists, and adds the app described under Builds; no new pipelines.'
+    : 'It builds on data that already exists; no new apps or pipelines.';
   const lines = [
-    `${b.name}: a Genie space that lets ${audience}business users ask questions about their data in plain English and get trusted, consistent answers, plus an AI/BI dashboard built on the same governed metrics. It builds on data that already exists; no new apps or pipelines.`,
+    `${b.name}: a Genie space that lets ${audience}business users ask questions about their data in plain English and get trusted, consistent answers, plus an AI/BI dashboard built on the same governed metrics. ${scope}`,
     '',
+    ...(addOns.length ? [...addOnLines(addOns), ''] : []),
     ...(b.idea ? [...ideaLines(b.idea), ''] : []),
     QUESTIONS_HEADER,
     ...b.questions.map(q => `- ${q}`),
@@ -92,10 +105,23 @@ export function composeBrief(b: InsightsBrief): string {
   return lines.join('\n');
 }
 
+function addOnLines(addOns: AddOn[]): string[] {
+  return [
+    `${BUILDS_HEADER} a Genie space and an AI/BI dashboard on governed Metric Views; ${addOns.map(a => ADD_ON_LABEL[a].builds).join('; ')}.`,
+    `${RECIPE_HEADER} ${[RECIPE_CORE, ...addOns].join(' + ')}`,
+  ];
+}
+
+function parseAddOns(line: string | undefined): AddOn[] {
+  if (!line) return [];
+  const parts = line.slice(RECIPE_HEADER.length).split('+').map(p => p.trim());
+  return normalizeAddOns(ADD_ON_ORDER.filter(a => parts.includes(a)));
+}
+
 function ideaLines(i: IdeaBrief): string[] {
   const one = (v?: string) => (v ?? '').replace(/\s+/g, ' ').trim();
   const fields: [string, string][] = [
-    ['Idea', one(i.headline)],
+    [IDEA_HEADER.slice(0, -1), one(i.headline)],
     ['Problem', one(i.problem)],
     ['Who', one(i.who)],
     ['Success metric', one(i.metric)],
@@ -145,14 +171,23 @@ function parseBlueprint(line: string, label: string): BlueprintChoice | null {
   };
 }
 
-export function parseBrief(description: string): {
-  questions: string[]; dataSource: DataSource; dataLocation: string; blueprint: BlueprintChoice | null; useCase: ApprovedUseCase | null;
-} {
+export interface ParsedBrief {
+  questions: string[];
+  dataSource: DataSource;
+  dataLocation: string;
+  blueprint: BlueprintChoice | null;
+  useCase: ApprovedUseCase | null;
+  /** Headline of the idea the brief was set up from, if it came from one. */
+  ideaHeadline: string;
+  addOns: AddOn[];
+}
+
+export function parseBrief(description: string): ParsedBrief {
   const questions: string[] = [];
   let dataSource: DataSource = 'existing';
   let dataLocation = '';
   let blueprint: BlueprintChoice | null = null;
-  if (!description) return { questions, dataSource, dataLocation, blueprint, useCase: null };
+  if (!description) return { questions, dataSource, dataLocation, blueprint, useCase: null, ideaHeadline: '', addOns: [] };
 
   const lines = description.split('\n');
   const start = lines.findIndex(l => l.trim() === QUESTIONS_HEADER);
@@ -185,5 +220,11 @@ export function parseBrief(description: string): {
     }
   }
   const ucLine = lines.find(l => l.startsWith(USE_CASE_HEADER));
-  return { questions, dataSource, dataLocation, blueprint, useCase: ucLine ? parseUseCase(ucLine) : null };
+  const ideaLine = lines.find(l => l.startsWith(IDEA_HEADER));
+  return {
+    questions, dataSource, dataLocation, blueprint,
+    useCase: ucLine ? parseUseCase(ucLine) : null,
+    ideaHeadline: ideaLine ? ideaLine.slice(IDEA_HEADER.length).trim() : '',
+    addOns: parseAddOns(lines.find(l => l.startsWith(RECIPE_HEADER))),
+  };
 }

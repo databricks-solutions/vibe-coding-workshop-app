@@ -27,6 +27,10 @@ export interface Moment {
   /** Shown in the companion once this moment is done: "It now ..." */
   unlock: string;
   minutes: number;
+  /** Skills Navigator id of the Genie Accelerator skill this step follows. */
+  skill?: string;
+  /** Add-on steps can be skipped; the core steps cannot. */
+  optional?: boolean;
 }
 
 export const CHAPTERS: Chapter[] = [
@@ -72,83 +76,102 @@ export const MOMENTS: Moment[] = [
     unlock: 'knows who it is for',
   },
   {
-    step: 57, tag: 'semlayer_locate', chapter: 'teach', kind: 'prompt', icon: Search, minutes: 10,
+    step: 57, tag: 'semlayer_locate', chapter: 'teach', kind: 'prompt', icon: Search, minutes: 10, skill: 'gaccel-locate',
     title: 'Find your data',
     sentence: 'Genie Code finds the tables that can answer your questions. Nothing is built yet, it just looks.',
     whatYoullSee: 'A short list of the tables it found and why each one matters.',
     unlock: 'knows where your data lives',
   },
   {
-    step: 58, tag: 'semlayer_profile', chapter: 'teach', kind: 'prompt', icon: Compass, minutes: 8,
+    step: 58, tag: 'semlayer_profile', chapter: 'teach', kind: 'prompt', icon: Compass, minutes: 8, skill: 'gaccel-profile',
     title: 'Get to know your data',
     sentence: 'A quick health check: what each column holds, what is missing, and how the tables connect.',
     whatYoullSee: 'A plain summary of each table, with anything odd called out.',
     unlock: 'understands your columns',
   },
   {
-    step: 59, tag: 'semlayer_measures', chapter: 'teach', kind: 'prompt', icon: Ruler, minutes: 10,
+    step: 59, tag: 'semlayer_measures', chapter: 'teach', kind: 'prompt', icon: Ruler, minutes: 10, skill: 'gaccel-measures',
     title: 'Agree on what your numbers mean',
     sentence: 'Genie Code proposes how things like revenue or churn should be calculated. Nothing is created until you approve.',
     whatYoullSee: 'A short list of metrics with their definitions, waiting for your OK.',
     unlock: 'uses the numbers you agreed on',
   },
   {
-    step: 60, tag: 'semlayer_metric_view', chapter: 'teach', kind: 'prompt', icon: Gauge, minutes: 12,
+    step: 60, tag: 'semlayer_metric_view', chapter: 'teach', kind: 'prompt', icon: Gauge, minutes: 12, skill: 'gaccel-mv',
     title: 'Lock in your official metrics',
     sentence: 'Your approved definitions become one official source, so every answer uses the same math.',
     whatYoullSee: 'Your metrics, created and checked one by one.',
     unlock: 'has one official version of every metric',
   },
   {
-    step: 61, tag: 'semlayer_synonyms', chapter: 'teach', kind: 'prompt', icon: Tags, minutes: 6,
+    step: 61, tag: 'semlayer_synonyms', chapter: 'teach', kind: 'prompt', icon: Tags, minutes: 6, skill: 'gaccel-syn',
     title: 'Teach it the words your team uses',
     sentence: 'People say "sales", "revenue" and "bookings" for the same thing. This teaches Genie all of them.',
     whatYoullSee: 'A list of everyday words mapped to each metric.',
     unlock: 'speaks your team\'s language',
   },
   {
-    step: 62, tag: 'gagent_describe', chapter: 'answer', kind: 'prompt', icon: MessagesSquare, minutes: 6,
+    step: 62, tag: 'gagent_describe', chapter: 'answer', kind: 'prompt', icon: MessagesSquare, minutes: 6, skill: 'gaccel-describe',
     title: 'Create your Genie',
     sentence: 'Your Genie space is created on top of your official metrics, with a clear description of what it is for.',
     whatYoullSee: 'A new Genie space you can open and chat with.',
     unlock: 'exists, and you can chat with it',
   },
   {
-    step: 63, tag: 'gagent_instructions', chapter: 'answer', kind: 'prompt', icon: ScrollText, minutes: 8,
+    step: 63, tag: 'gagent_instructions', chapter: 'answer', kind: 'prompt', icon: ScrollText, minutes: 8, skill: 'gaccel-instr',
     title: 'Give it house rules',
     sentence: 'A few short rules about tone, time periods and edge cases so answers feel like they come from your team.',
     whatYoullSee: 'A handful of clear instructions added to your Genie.',
     unlock: 'follows your house rules',
   },
   {
-    step: 64, tag: 'gagent_verified', chapter: 'answer', kind: 'prompt', icon: ShieldCheck, minutes: 10,
+    step: 64, tag: 'gagent_verified', chapter: 'answer', kind: 'prompt', icon: ShieldCheck, minutes: 10, skill: 'gaccel-verified',
     title: 'Add answers you trust',
     sentence: 'For your most important questions, Genie gets a checked answer it will always use.',
     whatYoullSee: 'Your key questions saved with verified answers.',
     unlock: 'gives trusted answers to your key questions',
   },
   {
-    step: 65, tag: 'gagent_benchmarks', chapter: 'answer', kind: 'prompt', icon: BookOpenCheck, minutes: 10,
+    step: 65, tag: 'gagent_benchmarks', chapter: 'answer', kind: 'prompt', icon: BookOpenCheck, minutes: 10, skill: 'gaccel-bench',
     title: 'Test it with your questions',
     sentence: 'Your questions become a test, so you can measure how often Genie gets them right.',
     whatYoullSee: 'A test set loaded, with a first score.',
     unlock: 'is tested against your questions',
   },
   {
-    step: 66, tag: 'gagent_optimize', chapter: 'answer', kind: 'prompt', icon: Sparkles, minutes: 15,
+    step: 66, tag: 'gagent_optimize', chapter: 'answer', kind: 'prompt', icon: Sparkles, minutes: 15, skill: 'gaccel-optimize',
     title: 'Tune it until it\'s right',
     sentence: 'Genie Code reruns the test, fixes what missed, and repeats until the score clears the bar.',
     whatYoullSee: 'The score climbing, then a short summary of what changed.',
     unlock: 'passes your accuracy bar',
   },
   {
-    step: 71, tag: 'gaccel_dashboard', chapter: 'show', kind: 'prompt', icon: LayoutDashboard, minutes: 12,
+    step: 71, tag: 'gaccel_dashboard', chapter: 'show', kind: 'prompt', icon: LayoutDashboard, minutes: 12, skill: 'gaccel-dash',
     title: 'Build your dashboard',
     sentence: 'A clean dashboard built on the same official metrics, so the charts and Genie always agree.',
     whatYoullSee: 'A published dashboard with a tile for each of your questions.',
     unlock: 'has a dashboard to match',
   },
 ];
+
+/** Genie Accelerator skills the steps follow, by Skills Navigator id. */
+export const ACCELERATOR_SKILLS: Record<string, string> = {
+  'gaccel-locate': 'Locate Data & Bring Context',
+  'gaccel-profile': 'Profile Your Schema',
+  'gaccel-measures': 'Measures Analysis',
+  'gaccel-mv': 'Draft the Metric View',
+  'gaccel-syn': 'Review & Expand Synonyms',
+  'gaccel-describe': 'Describe the Genie Agent',
+  'gaccel-instr': 'Author Agent Instructions',
+  'gaccel-verified': 'Add Verified Queries',
+  'gaccel-bench': 'Load Benchmarks with Expected Answers',
+  'gaccel-optimize': 'Optimize the Agent',
+  'gaccel-domain': 'Model the Domain + Subdomains',
+  'gaccel-pages': 'Author Pages',
+  'gaccel-routing': 'Write the Routing Page',
+  'gaccel-dash': 'AI/BI Dashboard',
+  'gaccel-sync': 'Choose What to Activate',
+};
 
 export const TOTAL_MINUTES = MOMENTS.reduce((sum, m) => sum + m.minutes, 0);
 
@@ -175,12 +198,16 @@ export function chapterOf(id: ChapterId): Chapter {
   return CHAPTERS.find(c => c.id === id)!;
 }
 
-export function momentsIn(id: ChapterId): Moment[] {
-  return MOMENTS.filter(m => m.chapter === id);
+export function momentsIn(id: ChapterId, moments: Moment[] = MOMENTS): Moment[] {
+  return moments.filter(m => m.chapter === id);
 }
 
-export function chapterMinutes(id: ChapterId): number {
-  return momentsIn(id).reduce((sum, m) => sum + m.minutes, 0);
+export function chapterMinutes(id: ChapterId, moments: Moment[] = MOMENTS): number {
+  return momentsIn(id, moments).reduce((sum, m) => sum + m.minutes, 0);
+}
+
+export function totalMinutes(moments: Moment[] = MOMENTS): number {
+  return moments.reduce((sum, m) => sum + m.minutes, 0);
 }
 
 export function formatMinutes(min: number): string {

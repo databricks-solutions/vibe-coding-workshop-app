@@ -1,6 +1,6 @@
 import { Link, Navigate, useParams } from 'react-router-dom';
 import { ArrowLeft, Lightbulb, Menu } from 'lucide-react';
-import { IdeaStepStage, IdeaTools, JourneyProgress, JourneyScreen, ideaProgressSteps, openBuildHref, useIdeaFlow, type StepKey } from '../journeykit';
+import { IdeaStepStage, IdeaTools, JourneyProgress, JourneyScreen, SampleBanner, ideaProgressSteps, openBuildHref, useIdeaFlow, type StepKey } from '../journeykit';
 
 interface IdeaFlowProps {
   onOpenMobileNav?: () => void;
@@ -30,7 +30,7 @@ function IdeaFlowView({ ideaId, onOpenMobileNav }: IdeaFlowProps & { ideaId: str
               </button>
             )}
             <Link to="/ideate" className="flex items-center gap-1 text-ui-sm text-muted-foreground hover:text-foreground">
-              <ArrowLeft className="w-4 h-4" /> <span className="hidden sm:inline">My ideas</span>
+              <ArrowLeft className="w-4 h-4" /> <span className="hidden sm:inline">{flow.readOnly ? 'Ideas' : 'My ideas'}</span>
             </Link>
             <Lightbulb className="w-4 h-4 text-primary shrink-0" />
             <p className="flex-1 text-ui-base font-semibold text-foreground truncate">{idea.title}</p>
@@ -41,6 +41,7 @@ function IdeaFlowView({ ideaId, onOpenMobileNav }: IdeaFlowProps & { ideaId: str
         }
         progress={<JourneyProgress steps={ideaProgressSteps(idea, viewStep)} onSelectStep={k => flow.setViewStep(k as StepKey)} />}
       >
+        {flow.readOnly && <SampleBanner idea={idea} />}
         <IdeaStepStage flow={flow} />
       </JourneyScreen>
     </div>

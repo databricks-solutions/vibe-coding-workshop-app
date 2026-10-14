@@ -1,9 +1,11 @@
 import { useCallback, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { Clock } from 'lucide-react';
+import { getPreviousOutputsForStep } from '../../../utils/stepPreviousOutputs';
 import type { DataSource } from '../brief';
 import type { BlueprintChoice } from '../blueprint/types';
-import { MOMENTS, blueprintMoment, formatMinutes, momentsIn, tagForMoment, type ChapterId } from '../journey';
+import { MOMENTS, blueprintMoment, formatMinutes, momentsIn, tagForMoment, type ChapterId, type Moment } from '../journey';
+import { addOnOf, useTagAvailability, type AddOn } from '../recipes';
 import type { WorkspaceLinks } from '../types';
 import { ChapterCelebration } from './ChapterCelebration';
 import { ChapterRail } from './ChapterRail';
@@ -18,6 +20,9 @@ interface InsightsStudioProps {
   questions: string[];
   dataSource: DataSource;
   blueprint?: BlueprintChoice | null;
+  /** The build's steps; the core Genie Accelerator list unless add-ons were chosen. */
+  moments?: Moment[];
+  addOns?: AddOn[];
   industry: string;
   useCase: string;
   sessionId: string | null;
@@ -31,32 +36,37 @@ interface InsightsStudioProps {
   skippedSteps: Set<number>;
   onStepPromptGenerated: (step: number, text: string) => void;
   onCompletedStepsChange: (steps: Set<number>) => void;
+  onSkippedStepsChange?: (steps: Set<number>) => void;
   onSwitchToTechnical: () => void;
 }
 
+const NO_GOLD_TARGET = { catalog: '', schema: '', prefix: '' };
+
 export function InsightsStudio(props: InsightsStudioProps) {
   const {
-    name, questions, dataSource, blueprint, industry, useCase, sessionId, currentUser, codingAssistant, assistantName,
-    links, readOnly, stepPrompts, completedSteps, skippedSteps, onStepPromptGenerated, onCompletedStepsChange, onSwitchToTechnical,
+    name, questions, dataSource, blueprint, moments = MOMENTS, addOns = [], industry, useCase, sessionId, currentUser, codingAssistant, assistantName,
+    links, readOnly, stepPrompts, completedSteps, skippedSteps, onStepPromptGenerated, onCompletedStepsChange, onSkippedStepsChange, onSwitchToTechnical,
   } = props;
+  const availability = useTagAvailability();
 
   const isDone = useCallback((step: number) => completedSteps.has(step) || skippedSteps.has(step), [completedSteps, skippedSteps]);
-  const firstOpenIdx = MOMENTS.findIndex(m => !isDone(m.step));
+  const firstOpenIdx = moments.findIndex(m => !isDone(m.step));
   const allDone = firstOpenIdx === -1;
-  const reachableUpTo = allDone ? MOMENTS.length - 1 : firstOpenIdx;
+  const reachableUpTo = allDone ? moments.length - 1 : firstOpenIdx;
 
-  const [activeStep, setActiveStep] = useState<number>(() => (allDone ? MOMENTS[MOMENTS.length - 1].step : MOMENTS[firstOpenIdx].step));
+  const [activeStep, setActiveStep] = useState<number>(() => (allDone ? moments[moments.length - 1].step : moments[firstOpenIdx].step));
   const [showFinish, setShowFinish] = useState(allDone);
   const [celebrating, setCelebrating] = useState<ChapterId | null>(null);
   const [pendingFinish, setPendingFinish] = useState(false);
   const topRef = useRef<HTMLDivElement>(null);
 
-  const activeIdx = MOMENTS.findIndex(m => m.step === activeStep);
-  const moment = MOMENTS[activeIdx];
-  const nextMoment = MOMENTS.slice(activeIdx + 1).find(m => !isDone(m.step));
-  const prevMoment = activeIdx > 0 ? MOMENTS[activeIdx - 1] : undefined;
-  const lockedBy = activeIdx > 0 && !isDone(MOMENTS[activeIdx - 1].step) ? MOMENTS[activeIdx - 1] : null;
-  const minutesLeft = MOMENTS.filter(m => !isDone(m.step)).reduce((s, m) => s + m.minutes, 0);
+  const foundIdx = moments.findIndex(m => m.step === activeStep);
+  const activeIdx = foundIdx === -1 ? 0 : foundIdx;
+  const moment = moments[activeIdx];
+  const nextMoment = moments.slice(activeIdx + 1).find(m => !isDone(m.step));
+  const prevMoment = activeIdx > 0 ? moments[activeIdx - 1] : undefined;
+  const lockedBy = activeIdx > 0 && !isDone(moments[activeIdx - 1].step) ? moments[activeIdx - 1] : null;
+  const minutesLeft = moments.filter(m => !isDone(m.step)).reduce((s, m) => s + m.minutes, 0);
 
   const goTo = useCallback((step: number) => {
     setActiveStep(step);
@@ -72,10 +82,20 @@ export function InsightsStudio(props: InsightsStudioProps) {
     }
   }, [pendingFinish]);
 
+  /** Moves on once the current step counts as done, celebrating a finished chapter. */
+  const advance = useCallback((doneAfter: (step: number) => boolean) => {
+    const chapterComplete = momentsIn(moment.chapter, moments).every(m => doneAfter(m.step));
+    const next = moments.find(m => !doneAfter(m.step));
+    if (chapterComplete) setCelebrating(moment.chapter);
+    if (next) goTo(next.step);
+    else if (chapterComplete) setPendingFinish(true);
+    else setShowFinish(true);
+  }, [moment, moments, goTo]);
+
   const markDone = useCallback(() => {
     if (readOnly) return;
     if (isDone(moment.step)) {
-      const next = MOMENTS.slice(activeIdx + 1).find(m => !isDone(m.step)) ?? MOMENTS[activeIdx + 1];
+      const next = moments.slice(activeIdx + 1).find(m => !isDone(m.step)) ?? moments[activeIdx + 1];
       if (next) goTo(next.step);
       else setShowFinish(true);
       return;
@@ -83,30 +103,41 @@ export function InsightsStudio(props: InsightsStudioProps) {
     const nextSet = new Set(completedSteps);
     nextSet.add(moment.step);
     onCompletedStepsChange(nextSet);
+    advance(step => nextSet.has(step) || skippedSteps.has(step));
+  }, [readOnly, isDone, moment, moments, activeIdx, completedSteps, skippedSteps, onCompletedStepsChange, goTo, advance]);
 
-    const doneAfter = (step: number) => nextSet.has(step) || skippedSteps.has(step);
-    const chapterComplete = momentsIn(moment.chapter).every(m => doneAfter(m.step));
-    const next = MOMENTS.find(m => !doneAfter(m.step));
-    if (chapterComplete) setCelebrating(moment.chapter);
-    if (next) goTo(next.step);
-    else if (chapterComplete) setPendingFinish(true);
-    else setShowFinish(true);
-  }, [readOnly, isDone, moment, activeIdx, completedSteps, skippedSteps, onCompletedStepsChange, goTo]);
+  const skip = useCallback(() => {
+    if (readOnly || !onSkippedStepsChange || !moment.optional || isDone(moment.step)) return;
+    const nextSkipped = new Set(skippedSteps);
+    nextSkipped.add(moment.step);
+    onSkippedStepsChange(nextSkipped);
+    advance(step => completedSteps.has(step) || nextSkipped.has(step));
+  }, [readOnly, onSkippedStepsChange, moment, isDone, skippedSteps, completedSteps, advance]);
 
   const undo = useCallback(() => {
     if (readOnly) return;
-    const nextSet = new Set(completedSteps);
-    nextSet.delete(moment.step);
-    onCompletedStepsChange(nextSet);
-  }, [readOnly, completedSteps, moment, onCompletedStepsChange]);
+    if (completedSteps.has(moment.step)) {
+      const nextSet = new Set(completedSteps);
+      nextSet.delete(moment.step);
+      onCompletedStepsChange(nextSet);
+    }
+    if (skippedSteps.has(moment.step) && onSkippedStepsChange) {
+      const nextSkipped = new Set(skippedSteps);
+      nextSkipped.delete(moment.step);
+      onSkippedStepsChange(nextSkipped);
+    }
+  }, [readOnly, completedSteps, skippedSteps, moment, onCompletedStepsChange, onSkippedStepsChange]);
 
   const previousOutputs = useMemo(() => {
-    if (moment.tag !== 'gaccel_dashboard') return undefined;
-    return {
-      ...(stepPrompts[3] ? { prd_document: stepPrompts[3] } : {}),
-      ...(stepPrompts[60] ? { metric_view: stepPrompts[60] } : {}),
-    };
-  }, [moment.tag, stepPrompts]);
+    if (moment.tag === 'gaccel_dashboard' || moment.tag === 'insights_alerts') {
+      return {
+        ...(stepPrompts[3] ? { prd_document: stepPrompts[3] } : {}),
+        ...(stepPrompts[60] ? { metric_view: stepPrompts[60] } : {}),
+      };
+    }
+    if (!addOnOf(moment)) return undefined;
+    return getPreviousOutputsForStep(moment.step, stepPrompts, { goldTableTarget: NO_GOLD_TARGET, workshopLevel: 'genie-accelerator' });
+  }, [moment, stepPrompts]);
 
   if (showFinish) {
     return (
@@ -114,7 +145,8 @@ export function InsightsStudio(props: InsightsStudioProps) {
         name={name}
         questions={questions}
         links={links}
-        onRevisit={() => goTo(MOMENTS[0].step)}
+        addOns={addOns}
+        onRevisit={() => goTo(moments[0].step)}
         onSwitchToTechnical={onSwitchToTechnical}
       />
     );
@@ -126,6 +158,8 @@ export function InsightsStudio(props: InsightsStudioProps) {
   const isBlueprintStep = !!bp && moment.tag === 'semlayer_locate';
   const relabel = <T extends typeof moment | null | undefined>(m: T): T => (bp && m ? blueprintMoment(m, bp.label) as T : m);
   const shownMoment = relabel(moment);
+  const canSkip = !!moment.optional && !!onSkippedStepsChange;
+  const unavailable = !!addOnOf(moment) && availability.loaded && availability.known && !availability.has(tag);
 
   return (
     <div ref={topRef} className="max-w-6xl mx-auto py-2 sm:py-4 space-y-6 scroll-mt-24">
@@ -141,7 +175,7 @@ export function InsightsStudio(props: InsightsStudioProps) {
       </div>
 
       <div className="rounded-2xl border border-border bg-card/70 backdrop-blur px-4 sm:px-5 py-4">
-        <ChapterRail activeStep={activeStep} isDone={isDone} reachableUpTo={reachableUpTo} onSelect={goTo} />
+        <ChapterRail moments={moments} activeStep={moment.step} isDone={isDone} reachableUpTo={reachableUpTo} onSelect={goTo} />
       </div>
 
       <div className="grid lg:grid-cols-[minmax(0,1fr)_320px] gap-6 items-start">
@@ -156,8 +190,10 @@ export function InsightsStudio(props: InsightsStudioProps) {
             >
               <MomentCard
                 moment={shownMoment}
+                moments={moments}
                 tag={tag}
                 isDone={isDone(moment.step)}
+                isSkipped={!!moment.optional && skippedSteps.has(moment.step)}
                 lockedBy={relabel(lockedBy)}
                 assistantName={assistantName}
                 assistantLink={links.home}
@@ -167,9 +203,11 @@ export function InsightsStudio(props: InsightsStudioProps) {
                 savedPrompt={stepPrompts[moment.step]}
                 previousOutputs={previousOutputs}
                 readOnly={readOnly}
+                unavailable={unavailable}
                 onGenerated={onStepPromptGenerated}
                 onDone={markDone}
                 onUndo={undo}
+                onSkip={canSkip ? skip : undefined}
                 onBack={prevMoment ? () => goTo(prevMoment.step) : undefined}
                 onGoTo={goTo}
                 customBody={isSetup ? (
@@ -204,7 +242,7 @@ export function InsightsStudio(props: InsightsStudioProps) {
         </div>
 
         <aside className="lg:sticky lg:top-24">
-          <GenieCompanion name={name} questions={questions} isDone={isDone} genieLink={links.genie} />
+          <GenieCompanion moments={moments} name={name} questions={questions} isDone={isDone} isSkipped={step => skippedSteps.has(step) && !completedSteps.has(step)} genieLink={links.genie} />
         </aside>
       </div>
 

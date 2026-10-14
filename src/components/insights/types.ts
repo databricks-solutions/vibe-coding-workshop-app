@@ -6,6 +6,8 @@ export interface InsightsSetup {
   useCase: string;
   useCaseLabel: string;
   description: string;
+  /** Clears the build chapters' saved prompts so they regenerate from the new brief; progress is kept. */
+  resetPrompts?: boolean;
 }
 
 export interface InsightsFlowProps {
@@ -26,6 +28,8 @@ export interface InsightsFlowProps {
   skippedSteps: Set<number>;
   onStepPromptGenerated: (stepNumber: number, promptText: string) => void;
   onCompletedStepsChange: (steps: Set<number>) => void;
+  /** Lets add-on steps be skipped; without it they can only be done. */
+  onSkippedStepsChange?: (steps: Set<number>) => void;
   onStart: (setup: InsightsSetup) => void;
   onNewSession: () => void;
   onSwitchToTechnical: () => void;

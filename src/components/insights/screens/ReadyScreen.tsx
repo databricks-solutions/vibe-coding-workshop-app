@@ -1,14 +1,15 @@
-import { ArrowLeft, ArrowRight, BadgeCheck, Briefcase, LayoutDashboard, MessagesSquare, Pencil, ShieldCheck, Sparkles } from 'lucide-react';
+import { ArrowLeft, ArrowRight, BadgeCheck, LayoutDashboard, MessagesSquare, Pencil, ShieldCheck, Sparkles } from 'lucide-react';
 import { CertifiedBadge } from '../../CertifiedBadge';
 import type { ApprovedUseCase } from '../usecases/useCaseApi';
 import { sourceFromChoice } from '../blueprint/links';
 import { MiniConstellation } from '../blueprint/MiniConstellation';
 import { SourcePill } from '../blueprint/SourcePill';
 import type { BlueprintChoice } from '../blueprint/types';
-import { CHAPTERS, TOTAL_MINUTES, chapterMinutes, formatMinutes } from '../journey';
+import { CHAPTERS, MOMENTS, chapterMinutes, formatMinutes, totalMinutes, type Moment } from '../journey';
+import { ADD_ON_LABEL, type AddOn } from '../recipes';
 import type { ReactNode } from 'react';
 import { MAX_NAME_LENGTH } from '../brief';
-import { FadeIn, GhostButton, Headline, PrimaryButton, SHAPE_KINDS, type ShapeKind } from '../../journeykit';
+import { BusinessCaseButton, FadeIn, GhostButton, Headline, PrimaryButton, SHAPE_KINDS, type ShapeKind } from '../../journeykit';
 
 export interface IdeaRecap {
   headline: string;
@@ -30,9 +31,15 @@ interface ReadyScreenProps {
   onBack: () => void;
   onStart: () => void;
   readOnly: boolean;
+  /** The build's steps with the chosen add-ons. */
+  moments?: Moment[];
+  /** Add-ons this idea can have, and the ones chosen. */
+  offeredAddOns?: AddOn[];
+  addOns?: AddOn[];
+  onToggleAddOn?: (addOn: AddOn) => void;
 }
 
-export function ReadyScreen({ progress, idea, onEditIdea, onOpenCase, name, onNameChange, questionCount, dataLabel, blueprint, useCase, onBack, onStart, readOnly }: ReadyScreenProps) {
+export function ReadyScreen({ progress, idea, onEditIdea, onOpenCase, name, onNameChange, questionCount, dataLabel, blueprint, useCase, onBack, onStart, readOnly, moments = MOMENTS, offeredAddOns = [], addOns = [], onToggleAddOn }: ReadyScreenProps) {
   const genie = { icon: MessagesSquare, title: 'A Genie your team can chat with', body: 'Ask in plain English, get an answer in seconds.' };
   const trusted = { icon: ShieldCheck, title: `Trusted answers to your ${questionCount} question${questionCount === 1 ? '' : 's'}`, body: 'Tested and tuned until they come back right.' };
   const dashboard = { icon: LayoutDashboard, title: 'A dashboard to share', body: 'Built on the same numbers, so charts and Genie always agree.' };
@@ -79,7 +86,7 @@ export function ReadyScreen({ progress, idea, onEditIdea, onOpenCase, name, onNa
             {idea.approach && <p className="text-ui-sm text-muted-foreground mt-0.5">Approach: <span className="text-foreground/85">{idea.approach.label}</span></p>}
           </div>
           <div className="flex items-center gap-1 shrink-0">
-            {onOpenCase && <GhostButton onClick={onOpenCase}><Briefcase className="w-3.5 h-3.5" /> <span className="hidden sm:inline">Business case</span></GhostButton>}
+            {onOpenCase && <BusinessCaseButton onClick={onOpenCase} variant="quiet" />}
             {onEditIdea && !readOnly && <GhostButton onClick={onEditIdea}><Pencil className="w-3.5 h-3.5" /> Edit</GhostButton>}
           </div>
         </FadeIn>
@@ -128,10 +135,45 @@ export function ReadyScreen({ progress, idea, onEditIdea, onOpenCase, name, onNa
         ))}
       </FadeIn>
 
+      {offeredAddOns.length > 0 && onToggleAddOn && (
+        <FadeIn delay={0.18} className="rounded-2xl border border-border bg-card overflow-hidden">
+          <div className="px-5 py-3.5 border-b border-border">
+            <p className="text-ui-md font-semibold text-foreground">Also build</p>
+            <p className="text-ui-sm text-muted-foreground">Picked from your approach. The extra steps go inside the same four chapters.</p>
+          </div>
+          <ul>
+            {offeredAddOns.map(a => {
+              const on = addOns.includes(a);
+              return (
+                <li key={a} className="border-b border-border/60 last:border-b-0">
+                  <label className="flex items-center gap-4 px-5 py-3.5 cursor-pointer hover:bg-secondary/30 transition-colors">
+                    <span className="flex-1 min-w-0">
+                      <span className="block text-ui-md font-medium text-foreground">{ADD_ON_LABEL[a].title}</span>
+                      <span className="block text-ui-sm text-muted-foreground">{ADD_ON_LABEL[a].body}</span>
+                    </span>
+                    <input
+                      type="checkbox"
+                      role="switch"
+                      checked={on}
+                      disabled={readOnly}
+                      onChange={() => onToggleAddOn(a)}
+                      className="peer sr-only"
+                    />
+                    <span aria-hidden className={`relative w-10 h-6 rounded-full transition-colors peer-focus-visible:ring-4 peer-focus-visible:ring-primary/20 ${on ? 'bg-primary' : 'bg-secondary'}`}>
+                      <span className={`absolute top-1 left-1 w-4 h-4 rounded-full bg-white shadow transition-transform ${on ? 'translate-x-4' : ''}`} />
+                    </span>
+                  </label>
+                </li>
+              );
+            })}
+          </ul>
+        </FadeIn>
+      )}
+
       <FadeIn delay={0.2} className="rounded-2xl border border-border bg-card overflow-hidden">
         <div className="flex items-center justify-between px-5 py-3.5 border-b border-border">
           <p className="text-ui-md font-semibold text-foreground">Four short chapters</p>
-          <p className="text-ui-sm text-muted-foreground">About {formatMinutes(Math.round(TOTAL_MINUTES / 15) * 15)} total, pause anytime</p>
+          <p className="text-ui-sm text-muted-foreground">About {formatMinutes(Math.round(totalMinutes(moments) / 15) * 15)} total, pause anytime</p>
         </div>
         <ol>
           {CHAPTERS.map((c, i) => (
@@ -141,7 +183,7 @@ export function ReadyScreen({ progress, idea, onEditIdea, onOpenCase, name, onNa
                 <span className="block text-ui-md font-medium text-foreground">{c.title}</span>
                 <span className="block text-ui-sm text-muted-foreground">{c.promise}</span>
               </span>
-              <span className="text-ui-sm text-muted-foreground tabular-nums">{formatMinutes(chapterMinutes(c.id))}</span>
+              <span className="text-ui-sm text-muted-foreground tabular-nums">{formatMinutes(chapterMinutes(c.id, moments))}</span>
             </li>
           ))}
         </ol>

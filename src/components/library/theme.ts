@@ -99,6 +99,17 @@ export function collectionIconName(c: Pick<LibraryCollection, 'collection_id' | 
 export const collectionIcon = (c: Pick<LibraryCollection, 'collection_id' | 'kind' | 'icon' | 'label'>): LucideIcon =>
   COLLECTION_ICONS[collectionIconName(c)] || Layers;
 
+const TINT_BY_ICON: Record<string, string> = { Store: 'amber', ShoppingBasket: 'emerald', Plane: 'cyan' };
+
+/** Icon and tint for an industry outside the library, e.g. an idea's "Airlines", matching its library collection. */
+export function industryTheme(key: string, label: string): { icon: LucideIcon; tint: Tint } {
+  const iconName = collectionIconName({ collection_id: key, kind: 'industry', icon: null, label });
+  return {
+    icon: COLLECTION_ICONS[iconName] || Factory,
+    tint: TINTS[DEFAULT_TINT_BY_SLUG[key] || TINT_BY_ICON[iconName] || DEFAULT_TINT_BY_KIND.industry],
+  };
+}
+
 const UC_ICON_KEYWORDS: [RegExp, LucideIcon][] = [
   [/skill/, Sparkles], [/genie space|ask your/, Sparkles], [/agent|assistant|copilot/, Bot],
   [/close|p&l|spend|working capital|financ/, Calculator], [/control tower|operations/, Cog],

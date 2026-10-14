@@ -33,6 +33,11 @@ export function BusinessCaseView({ flow, leading, onBackToFlow, onAddNumbers }: 
     flow.generateSummary();
   }, [idea, loading, error, flow]);
 
+  const opened = !idea || !!idea.caseOpenedAt || flow.readOnly;
+  useEffect(() => {
+    if (!opened) flow.patch({ caseOpenedAt: new Date().toISOString() });
+  }, [opened, flow]);
+
   if (!idea) return null;
 
   const config = modeOf(idea);
@@ -41,7 +46,7 @@ export function BusinessCaseView({ flow, leading, onBackToFlow, onAddNumbers }: 
 
   const download = () => {
     const prev = document.title;
-    document.title = `${idea.title} - Business case`;
+    document.title = `${idea.title} - Business case 1-pager`;
     window.addEventListener('afterprint', () => { document.title = prev; }, { once: true });
     window.print();
   };
@@ -56,7 +61,7 @@ export function BusinessCaseView({ flow, leading, onBackToFlow, onAddNumbers }: 
       <div className="sticky top-0 z-10 bg-background/85 backdrop-blur border-b border-border/60">
         <div className="max-w-5xl mx-auto px-5 py-3 flex items-center gap-3">
           {leading}
-          <p className="flex-1 text-ui-base font-semibold text-foreground truncate">Business case</p>
+          <p className="flex-1 text-ui-base font-semibold text-foreground truncate">Business case 1-pager</p>
           {summary && (
             <>
               <button onClick={regenerate} disabled={!!loading} className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-ui-sm text-muted-foreground hover:text-foreground hover:bg-secondary/60 disabled:opacity-40">
@@ -144,7 +149,7 @@ export function BusinessCaseSheet({ ideaId, onClose, onAddNumbers }: BusinessCas
   }, [onClose]);
 
   return createPortal(
-    <div role="dialog" aria-modal="true" aria-label="Business case" className="fixed inset-0 z-50 overflow-y-auto bg-background animate-fade-in print:hidden">
+    <div role="dialog" aria-modal="true" aria-label="Business case 1-pager" className="fixed inset-0 z-50 overflow-y-auto bg-background animate-fade-in print:hidden">
       <BusinessCaseView
         flow={flow}
         leading={
@@ -171,7 +176,7 @@ function CaseDocument({ idea, summary, figures }: { idea: Idea; summary: CaseSum
     <>
       <Page n={1} of={pages} footer={`Shaped in ${config.caseSource}: ${idea.decisions.length} decisions, clarity ${overallClarity(idea)}%.${figures ? ' Figures are directional; the appendix shows every input.' : ''}`}>
         <div className="flex items-baseline justify-between">
-          <Eyebrow>Business case</Eyebrow>
+          <Eyebrow>Business case 1-pager</Eyebrow>
           <span className="text-[11px] text-neutral-500">{DATE.format(new Date())}</span>
         </div>
         <h1 className="text-[26px] font-bold leading-tight text-neutral-900 mt-1">{idea.title}</h1>
