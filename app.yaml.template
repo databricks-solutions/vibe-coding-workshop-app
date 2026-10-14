@@ -30,7 +30,7 @@ env:
     value: "__SERVING_ENDPOINT__"
 
   # Coaching model time budget in seconds, read per call by
-  # services/coaching.py; the code default is 8.0 when unset (D-106).
+  # services/coaching.py; matches the code default; set to override.
   - name: VIBE_COACH_BUDGET_S
     value: "20"
   
