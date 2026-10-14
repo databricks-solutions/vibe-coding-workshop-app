@@ -739,5 +739,10 @@ D8 grounding test (§4).
 > (§3.8). The coaching single-flight, cache and negative cache are keyed by
 > `(session_id, sectionTag, focus, visual_kind or "none")` (D-96, `coaching.coach`), so prose that
 > says "the table below" is never reused with a different or absent visual. The `coaching timings`
-> log line ends with a `visual=<kind|none>` field; its format string is
-> `coaching timings section=%s focus=%s db_ms=%d build_ms=%d model_ms=%d total_ms=%d outcome=%s cache=%s visual=%s`.
+> log line carries a `visual=<kind|none>` field, followed since D-111 by `endpoint=<name|default>`;
+> its format string is
+> `coaching timings section=%s focus=%s db_ms=%d build_ms=%d model_ms=%d total_ms=%d outcome=%s cache=%s visual=%s endpoint=%s`.
+>
+> **D-111/D-113 (2026-10-14):** `VIBE_COACH_ENDPOINT`, read per call, sends the coaching call to that
+> serving endpoint instead of `DATABRICKS_SERVING_ENDPOINT` (unset or blank = the app default; the
+> cache key does not include it), and the call carries no `temperature`.

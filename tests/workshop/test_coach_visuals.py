@@ -693,14 +693,14 @@ def test_timings_line_visual(env, caplog):
     result = mcp_server.vibe_explain_step(SESSION_ID, TAG, focus="what_now")
     lines = [r.getMessage() for r in caplog.records if r.getMessage().startswith("coaching timings")]
     assert len(lines) == 1
-    assert lines[0].endswith(" visual=table")
+    assert lines[0].endswith(" visual=table endpoint=default")
     assert result.visual_caption not in lines[0]
     for line in result.visual.split("\n"):
         assert line not in lines[0]
     caplog.clear()
     mcp_server.vibe_explain_step(SESSION_ID, TAG, focus="why", visual="none")
     lines = [r.getMessage() for r in caplog.records if r.getMessage().startswith("coaching timings")]
-    assert lines and lines[0].endswith(" visual=none")
+    assert lines and lines[0].endswith(" visual=none endpoint=default")
 
 
 # --- Session frontier and branches (D-94) ----------------------------------------------------------

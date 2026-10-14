@@ -8,6 +8,7 @@ Tampers (each turns the test red):
 - rename it to VIBE_COACH_BUDGET -> test_app_template_env
 - set its value to "0", "abc" or "-1" -> test_app_template_env
 - duplicate the entry -> test_app_template_env
+- delete, duplicate or change the VIBE_COACH_ENDPOINT entry -> test_app_template_coach_endpoint
 """
 
 import pathlib
@@ -35,3 +36,14 @@ def test_app_template_env(monkeypatch):
 
     monkeypatch.setenv("VIBE_COACH_BUDGET_S", entries[0]["value"])
     assert coaching._knob("VIBE_COACH_BUDGET_S", coaching.COACH_BUDGET_S, float) == 20.0
+
+
+def test_app_template_coach_endpoint(monkeypatch):
+    # The signed coaching endpoint (D-113); the code has no default for it.
+    config = yaml.safe_load(TEMPLATE.read_text())
+    entries = [entry for entry in config["env"] if entry["name"] == "VIBE_COACH_ENDPOINT"]
+    assert len(entries) == 1
+    assert entries[0]["value"] == "databricks-claude-sonnet-5-5"
+
+    monkeypatch.setenv("VIBE_COACH_ENDPOINT", entries[0]["value"])
+    assert coaching._coach_endpoint() == "databricks-claude-sonnet-5-5"

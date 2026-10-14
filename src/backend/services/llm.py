@@ -353,7 +353,7 @@ async def call_databricks_serving_endpoint(
             "max_tokens": max_tokens,
         }
         ep_lower = endpoint.lower()
-        if "mini" not in ep_lower:
+        if temperature is not None and "mini" not in ep_lower:
             openai_request_body["temperature"] = temperature
         
         

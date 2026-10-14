@@ -160,6 +160,11 @@ Before any `/mcp` deploy (plan §1.3 / generic §4 / D4 §2):
   The human raised the coaching budget to 20 s on 2026-10-14 (D-106); since D-108 that is the code
   default (`coaching.py:69`, `COACH_BUDGET_S = 20.0`), and the `VIBE_COACH_BUDGET_S` entry in
   `app.yaml.template` is an operator override.
+- **Coaching endpoint** → human. `VIBE_COACH_ENDPOINT` (D-111, D-113) moves only coaching to another
+  serving endpoint; unset or blank = `DATABRICKS_SERVING_ENDPOINT`. It is read per call, an unknown
+  endpoint fails open to static help, and the app service principal needs CAN_QUERY on the chosen
+  endpoint. `app.yaml.template` sets the signed `databricks-claude-sonnet-5-5`; the code has no
+  default. Coaching sends no `temperature` and `max_tokens` defaults to 800 (`VIBE_COACH_MAX_TOKENS`).
   Each coaching call holds a worker thread (`asyncio.to_thread`, `mcp_server.py:368`) for up to the
   budget, so on every deployment a burst of slow calls larger than the 32-worker pool
   (`executor.py:25`) queues other MCP tool calls (not the event loop).
