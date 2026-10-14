@@ -183,23 +183,25 @@ patterns; §4.5 is the first-run on-ramp; §4.6 is the Phase 2A coaching layer.
   option→text lookup; §4.6 composes those same inputs into a grounded, personalized narration.
 - **Content source:** server-assembled grounding context (D2 §12.3) + the `_COACH_SYSTEM` constant
   (D2 §12.2). The static per-option coaching bank (D5 §5.1) remains the **fallback** (below).
-- **Mechanism:** one read-only tool, **`vibe_coach`** (D2 §3.7), that the learner invokes in chat
+- **Mechanism:** the read-only tool **`vibe_explain_step`** with `focus` (D2 §3.8; planned as a
+  separate `vibe_coach` tool, D2 §3.7), that the learner invokes in chat
   ("why does this matter?", "what now?", "I'm stuck") with an optional `focus`
   (`what_now`/`why`/`unblock`/`review`). The server reads state fresh, assembles the context, calls
-  the model with `_COACH_SYSTEM`, scrubs the output for leakage (D7 §6), and returns
-  `CoachResult` (D2 §12.1). It **changes no workshop state** and **never blocks or advances** the
-  track.
+  the model with `_COACH_SYSTEM`, scrubs the output for leakage (D7 §6), and returns the step help
+  with `coaching`, `focus`, `grounded_on` and `is_fallback` (`StepHelpResult`, D2 §3.8). It
+  **changes no workshop state** and **never blocks or advances** the track.
 - **Fail-open (non-negotiable):** any model error/timeout degrades to the static option-keyed
   coaching (§4.1 / D5 §5.1) with `is_fallback:true`. Coaching failing must never fail a step or a
-  tool. If no serving endpoint is configured, `vibe_coach` still returns useful static coaching.
+  tool. If no serving endpoint is configured, `vibe_explain_step` still returns useful static help.
 - **Verbatim contract holds (§7):** coaching **explains** the step; it never rewrites or re-issues
   the verbatim `prompt`. The prompt is still presented first and remains authoritative.
 - **Still in-band, still no server→client call:** the model call is a **server-side** FMAPI request
   (server → serving endpoint), not an MCP server→client protocol call. It respects the probe floor
   (§2, §10) — the agent invokes a normal tool and reads the result aloud.
 - **Inline visuals (D12):** the server builds at most one markdown table or one ```` ```text ````
-  box-drawing diagram per `vibe_explain_step` call, from manifest step titles and output key names
-  only. The model may refer to it but never draws it (D12 spec §1 F9). The shape follows `focus` as
+  box-drawing diagram per `vibe_explain_step` call. Its labels come only from manifest step titles
+  and output key names; a curated diagram is the step's hand-converted twin file itself, used only
+  when this call served it (D-95). The model may refer to it but never draws it (D12 spec §1 F9). The shape follows `focus` as
   in the D2 §3.8 selection matrix. Visuals are fail-open: any error gives a null visual, never a
   tool error. On MCP the step help also serves hand-converted twins in place of its Mermaid
   diagrams, which Genie Code does not render. Design:
@@ -217,15 +219,16 @@ Within the ≤ ~5–6 tool budget (generic spec §3.4), the interactivity-releva
 | `vibe_submit_answer` | Records a comprehension answer or a decision override; returns coaching | **new** (folds "quiz answer" + "decision" into one tool to save budget); not destructive |
 | `vibe_complete_step` | The gate = next-action-as-approval (§4.3) | writes gate + captured output |
 | `vibe_set_parameters` | Parameter intake (§4.4) | returns `missing_required[]` |
-| `vibe_coach` | On-demand adaptive coaching (§4.6) | **new (Phase 2A)**; read-only; LLM-grounded, fail-open |
+| `vibe_explain_step` | `focus` → on-demand adaptive coaching (§4.6) | read-only; LLM-grounded, fail-open |
 
-`vibe_submit_answer` and `vibe_coach` are the net-new tools this series adds beyond D3's engine
-tools; D2 defines all schemas, annotations (all four), and `outputSchema`/`structuredContent`
+`vibe_submit_answer` is the net-new tool this series adds beyond D3's engine tools; coaching
+extended the existing `vibe_explain_step` instead of adding the planned `vibe_coach` (D2 §3.7, §9).
+D2 defines all schemas, annotations (all four), and `outputSchema`/`structuredContent`
 contracts. **Do not** add a separate tool per *question pattern* (§4.1–§4.4) — those stay
-consolidated in `vibe_submit_answer`. `vibe_coach` is the **one** deliberate exception: it is a
-distinct **capability** (a pull-based, argument-taking, model-backed narration), not a duplicate of
-a push-based question — so it earns its own tool. Net tool count is **7** (D2 §9), still far under
-the shared ~20-tool budget.
+consolidated in `vibe_submit_answer`. Coaching was planned as the **one** deliberate exception: it
+is a distinct **capability** (a pull-based, argument-taking, model-backed narration), not a
+duplicate of a push-based question. It ships as the `focus` argument of `vibe_explain_step`, so
+the tool count stays **7** (D2 §9), still far under the shared ~20-tool budget.
 
 ---
 
@@ -312,11 +315,11 @@ re-authored. The in-band path remains the guaranteed default.
   `input_required` round-trips.
 - **Streamable HTTP only.** No SSE-dependent flows.
 - **No server→client request** of any kind is on the critical path.
-- **Server-side FMAPI is allowed and is NOT a server→client call.** The `vibe_coach` model call
-  (§4.6) goes server → Databricks serving endpoint, entirely inside the app's request handling; the
-  client only ever calls a normal tool and reads the result. It does **not** use sampling (which is
-  the *client's* model) and never reaches back to the client. It is fail-open and off the critical
-  path — the track completes fully without it.
+- **Server-side FMAPI is allowed and is NOT a server→client call.** The `vibe_explain_step`
+  `focus` model call (§4.6) goes server → Databricks serving endpoint, entirely inside the app's
+  request handling; the client only ever calls a normal tool and reads the result. It does **not**
+  use sampling (which is the *client's* model) and never reaches back to the client. It is
+  fail-open and off the critical path — the track completes fully without it.
 
 ---
 
