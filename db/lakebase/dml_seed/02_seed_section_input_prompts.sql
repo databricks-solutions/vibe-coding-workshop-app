@@ -22146,7 +22146,85 @@ true, 1, false, current_timestamp(), current_timestamp(), current_user());
 INSERT INTO ${catalog}.${schema}.section_input_prompts
 (input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
 VALUES
-(300, 'insights_activation', '> **Artifact root (client-aware).** Resolve `<ARTIFACT_ROOT>` via `vibecoding-state.resolve_root` (it reads `artifact_root` from `## Environment Capabilities`, or detects the active client, `artifact_root` + `skills_install_root`) and write every artifact under it. On Cursor/Copilot that is your repo root; on Databricks Genie Code it is your user project root `/Workspace/Users/<email>/<repo>` (your user project is a **git clone** of the workshop repo so bundles are recognized; the skill tree is **copied** to `/Workspace/Users/<email>/.assistant/skills/<repo>` for skill loading only) — never the page''s current working directory.
+(300, 'insights_activation', '> **Insights path.** This copy is used only by the Insights view. There is no Bronze/Silver/Gold bundle and no `gold_layer_design.md`; your governed Metric View, Genie space and dashboard came from the Genie Accelerator steps, and their base tables may live in any schema.
+
+**Choose what to activate — decide which Gold dimension + fact tables (and why) should feed the app and dashboard, never the Metric View itself — and record the approved selection for the Synced Tables sequence. Business selection only; keys, grain, dependency order, and sync modes are the next step''s job.**
+
+**Genie Code navigation:** this is a read + select beat — inspect the Metric View source, the Gold schema, and the dashboard''s table inventory (e.g. `DESCRIBE` / `information_schema`, the ERD) just to see which base tables exist. Do NOT call the synced-tables REST API, `apps init`, or any deploy here, and do NOT work out PKs, grain, dependency order, or sync modes — the next step (`activation_reverse_sync`, Design & Provision Synced Tables) owns all of that. Skills: `databricks-lakebase` (reference only at this beat).
+
+Read `docs/genie_brief.md`, `docs/design_prd.md`, and `.vibecoding-state.md` first. Produce an ACTIVATION SELECTION (business selection only — do NOT create synced tables, an app, or deploy anything, and do NOT record keys/grain/modes):
+
+1. List the BASE TABLES to activate — the dims + facts behind my Metric View (read its `source` and joins) and the tables the AI/BI dashboard uses. They may live in `{lakehouse_default_catalog}.{user_schema_prefix}_gold` or in any other schema; record each as a fully qualified name `<catalog>.<schema>.<table>`. Do NOT select the Metric View itself (a view syncs nothing); include every dim + fact the app needs.
+2. For each table, give a one-line reason it earns a place — the app screen, dashboard tile, or PRD journey it serves. Leave PK / grain / dependency order / sync mode alone; that is worked out in the next step.
+3. Summarize the selection as a table I can approve, and record the approved tables (fully qualified names) to `.vibecoding-state.md` so the next step (Design & Provision Synced Tables) picks them up and works out the sync mechanics.
+
+**State-lock:** append this step''s Per-Step Log entry, gate result, and the captured table selection (table list + one-line reasons) to `.vibecoding-state.md`, then re-read to confirm the write landed.
+
+**Gate:** `Activation planned` — an approved list of Gold dims + facts to activate (not the MV), each with a one-line business reason, is recorded in `.vibecoding-state.md`. Keys, grain, dependency order, and sync modes are deliberately deferred to Design & Provision Synced Tables. No synced tables, app, or deploy at this beat.
+
+**➡️ Next step.** Design & Provision Synced Tables — run the reused activation sequence (Synced Tables → Design → Build → Wire → Deploy) against these selected tables.', '', 'Choose What Your App Shows (Insights)', 'Insights copy of Choose What to Activate: pick the base tables behind the Metric View and dashboard, by fully qualified name, from any schema.', 75, '> **Insights path.** This copy is used only by the Insights view. There is no Bronze/Silver/Gold bundle and no `gold_layer_design.md`; your governed Metric View, Genie space and dashboard came from the Genie Accelerator steps, and their base tables may live in any schema.
+
+> **Selection only.** This beat produces an approved list of tables to activate, each with a one-line business reason — it does not create synced tables, an app, or deploy anything, and it does not work out keys/grain/modes. The next steps (Design & Provision Synced Tables → Design → Build → Wire → Deploy) do the building and the sync mechanics; this just chooses what goes in.
+
+## 1️⃣ How To Apply
+
+1. Copy the prompt, paste it into a Genie Code Agent chat, and press Enter.
+2. Confirm the **table list** covers the dims + facts your app + dashboard need — not just one table, and never the Metric View — and that each has a clear business reason.
+3. Approve the selection; the next step (Design & Provision Synced Tables) reads the recorded tables and works out the keys, grain, order, and modes.
+
+## 2️⃣ What Are We Building?
+
+Nothing yet — an **activation selection**: the set of Gold dimension + fact tables to activate, each with a one-line reason it feeds the app or dashboard. This is the hand-off into the proven activation sequence, which figures out the sync mechanics.
+
+```mermaid
+flowchart LR
+  mv["Metric View<br/>(a VIEW — not syncable)"] --> base["resolve base tables<br/>dims + facts in _gold"]
+  dash["AI/BI dashboard<br/>table inventory"] --> base
+  base --> plan["activation selection<br/>tables + why"]
+  plan --> next["→ Design & Provision Synced Tables<br/>(keys · grain · order · mode)"]
+```
+
+Because you choose the **dimension + fact tables** (not the view), the downstream synced tables give the app real, meaningful rows.
+
+## 3️⃣ Why Are We Building It This Way? (Databricks Best Practices)
+
+| Practice | How it''s used here |
+|----------|-------------------|
+| **Choose before you sync** | Deciding which tables (and why) up front keeps the next step focused on the sync mechanics, not the scope debate |
+| **Sync tables, not views** | Metric Views/TVFs are not syncable — the selection targets the underlying dimension + fact tables |
+| **Enough tables** | Every dim + fact the app + dashboard need is listed, not just one, so joins and slices work |
+| **Business-reason first** | Each table earns its place from an app screen / dashboard tile / PRD journey, so nothing is synced "just in case" |
+| **Separation of concerns** | Keys, grain, order, and sync modes are the next step''s job — this beat stays a pure business selection |
+
+## 4️⃣ What Happens Behind the Scenes?
+
+1. **Resolve base tables** — Genie Code reads the Metric View''s source, the ERD, and the AI/BI dashboard inventory to list every Gold dimension + fact to activate (not the MV).
+2. **Attach a reason** — a one-line justification per table (the app screen / dashboard tile / PRD journey it serves). No PK/grain/mode here — that is the next step.
+3. **Summarize + record** — it prints an approvable selection and writes the chosen tables to `.vibecoding-state.md` for the next step.
+
+### Reference: what happens next
+
+The approved selection feeds **Design & Provision Synced Tables** (`activation_reverse_sync`) and the rest of the reused activation sequence — Design → Build → Wire → Deploy — which work out the keys/grain/modes, stand up the synced tables, and build the app. The synced-table REST contract, PK/CDF rules, and cost caps live there. Skills: `databricks-lakebase`, `apps_lakebase`.', '## Expected Deliverables
+
+- An approved **activation selection** listing every Gold dimension + fact to activate (not the Metric View)
+- Per table: a one-line business reason (the app screen / dashboard tile / PRD journey it serves) — no keys/grain/modes at this beat
+- The chosen tables recorded to `.vibecoding-state.md` for the next step (Design & Provision Synced Tables)
+
+**Sample — the activation selection you approve (business selection only):**
+
+```
+Activate from Metric View order_revenue_metrics + dashboard inventory → base tables:
+  dim_customer   — customer filter + "Top customers" tile (PRD: account review)
+  dim_region     — region slicer on every dashboard page (PRD: regional rollup)
+  fact_lineitem  — revenue + margin measures, the app''s line-item detail screen
+→ next: Design & Provision Synced Tables (works out PK · grain · order · mode)
+```', true, 1, true, current_timestamp(), current_timestamp(), current_user());
+
+-- insights_activation (default, version 2)
+INSERT INTO ${catalog}.${schema}.section_input_prompts
+(input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
+VALUES
+(320, 'insights_activation', '> **Artifact root (client-aware).** Resolve `<ARTIFACT_ROOT>` via `vibecoding-state.resolve_root` (it reads `artifact_root` from `## Environment Capabilities`, or detects the active client, `artifact_root` + `skills_install_root`) and write every artifact under it. On Cursor/Copilot that is your repo root; on Databricks Genie Code it is your user project root `/Workspace/Users/<email>/<repo>` (your user project is a **git clone** of the workshop repo so bundles are recognized; the skill tree is **copied** to `/Workspace/Users/<email>/.assistant/skills/<repo>` for skill loading only) — never the page''s current working directory.
 
 `<STATE_FILE>` = the live state file that `skills/vibecoding-state` resolves by its state-path rule (`<app_root>` → `<agent_app_root>` → `<dp_bundle_root>` → the bootstrap path, creating the canonical file if none exists yet), never `.vibecoding-state.md` relative to the page.
 
@@ -22222,13 +22300,35 @@ Activate from Metric View order_revenue_metrics + dashboard inventory → base t
   dim_region     — region slicer on every dashboard page (PRD: regional rollup)
   fact_lineitem  — revenue + margin measures, the app''s line-item detail screen
 → next: Design & Provision Synced Tables (works out PK · grain · order · mode)
-```', true, 1, true, current_timestamp(), current_timestamp(), current_user());
+```', true, 2, true, current_timestamp(), current_timestamp(), current_user());
 
 -- insights_activation (genie-code fork)
 INSERT INTO ${catalog}.${schema}.section_input_prompts
 (input_id, section_tag, coding_assistant, input_template, system_prompt, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
 VALUES
-(1300, 'insights_activation', 'genie-code', '> **Artifact root (client-aware).** Resolve `<ARTIFACT_ROOT>` via `vibecoding-state.resolve_root` (it reads `artifact_root` from `## Environment Capabilities`, or detects the active client, `artifact_root` + `skills_install_root`) and write every artifact under it. On Cursor/Copilot that is your repo root; on Databricks Genie Code it is your user project root `/Workspace/Users/<email>/<repo>` (your user project is a **git clone** of the workshop repo so bundles are recognized; the skill tree is **copied** to `/Workspace/Users/<email>/.assistant/skills/<repo>` for skill loading only) — never the page''s current working directory.
+(1300, 'insights_activation', 'genie-code', '> **Insights path.** This copy is used only by the Insights view. There is no Bronze/Silver/Gold bundle and no `gold_layer_design.md`; your governed Metric View, Genie space and dashboard came from the Genie Accelerator steps, and their base tables may live in any schema.
+
+**Choose what to activate — decide which Gold dimension + fact tables (and why) should feed the app and dashboard, never the Metric View itself — and record the approved selection for the Synced Tables sequence. Business selection only; keys, grain, dependency order, and sync modes are the next step''s job.**
+
+**Genie Code navigation:** this is a read + select beat — inspect the Metric View source, the Gold schema, and the dashboard''s table inventory (e.g. `DESCRIBE` / `information_schema`, the ERD) just to see which base tables exist. Do NOT call the synced-tables REST API, `apps init`, or any deploy here, and do NOT work out PKs, grain, dependency order, or sync modes — the next step (`activation_reverse_sync`, Design & Provision Synced Tables) owns all of that. Skills: `databricks-lakebase` (reference only at this beat).
+
+Read `docs/genie_brief.md`, `docs/design_prd.md`, and `.vibecoding-state.md` first. Produce an ACTIVATION SELECTION (business selection only — do NOT create synced tables, an app, or deploy anything, and do NOT record keys/grain/modes):
+
+1. List the BASE TABLES to activate — the dims + facts behind my Metric View (read its `source` and joins) and the tables the AI/BI dashboard uses. They may live in `{lakehouse_default_catalog}.{user_schema_prefix}_gold` or in any other schema; record each as a fully qualified name `<catalog>.<schema>.<table>`. Do NOT select the Metric View itself (a view syncs nothing); include every dim + fact the app needs.
+2. For each table, give a one-line reason it earns a place — the app screen, dashboard tile, or PRD journey it serves. Leave PK / grain / dependency order / sync mode alone; that is worked out in the next step.
+3. Summarize the selection as a table I can approve, and record the approved tables (fully qualified names) to `.vibecoding-state.md` so the next step (Design & Provision Synced Tables) picks them up and works out the sync mechanics.
+
+**State-lock:** append this step''s Per-Step Log entry, gate result, and the captured table selection (table list + one-line reasons) to `.vibecoding-state.md`, then re-read to confirm the write landed.
+
+**Gate:** `Activation planned` — an approved list of Gold dims + facts to activate (not the MV), each with a one-line business reason, is recorded in `.vibecoding-state.md`. Keys, grain, dependency order, and sync modes are deliberately deferred to Design & Provision Synced Tables. No synced tables, app, or deploy at this beat.
+
+**➡️ Next step.** Design & Provision Synced Tables — run the reused activation sequence (Synced Tables → Design → Build → Wire → Deploy) against these selected tables.', '', true, 1, true, current_timestamp(), current_timestamp(), current_user());
+
+-- insights_activation (genie-code fork, version 2)
+INSERT INTO ${catalog}.${schema}.section_input_prompts
+(input_id, section_tag, coding_assistant, input_template, system_prompt, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
+VALUES
+(1320, 'insights_activation', 'genie-code', '> **Artifact root (client-aware).** Resolve `<ARTIFACT_ROOT>` via `vibecoding-state.resolve_root` (it reads `artifact_root` from `## Environment Capabilities`, or detects the active client, `artifact_root` + `skills_install_root`) and write every artifact under it. On Cursor/Copilot that is your repo root; on Databricks Genie Code it is your user project root `/Workspace/Users/<email>/<repo>` (your user project is a **git clone** of the workshop repo so bundles are recognized; the skill tree is **copied** to `/Workspace/Users/<email>/.assistant/skills/<repo>` for skill loading only) — never the page''s current working directory.
 
 `<STATE_FILE>` = the live state file that `skills/vibecoding-state` resolves by its state-path rule (`<app_root>` → `<agent_app_root>` → `<dp_bundle_root>` → the bootstrap path, creating the canonical file if none exists yet), never `.vibecoding-state.md` relative to the page.
 
@@ -22248,7 +22348,7 @@ Read `<ARTIFACT_ROOT>/docs/genie_brief.md`, `<ARTIFACT_ROOT>/docs/design_prd.md`
 
 **Gate:** `Activation planned` — an approved list of Gold dims + facts to activate (not the MV), each with a one-line business reason, is recorded in `<STATE_FILE>`. Keys, grain, dependency order, and sync modes are deliberately deferred to Design & Provision Synced Tables. No synced tables, app, or deploy at this beat.
 
-**➡️ Next step.** Design & Provision Synced Tables — run the reused activation sequence (Synced Tables → Design → Build → Wire → Deploy) against these selected tables.', '', true, 1, true, current_timestamp(), current_timestamp(), current_user());
+**➡️ Next step.** Design & Provision Synced Tables — run the reused activation sequence (Synced Tables → Design → Build → Wire → Deploy) against these selected tables.', '', true, 2, true, current_timestamp(), current_timestamp(), current_user());
 
 -- insights_table_design (default)
 INSERT INTO ${catalog}.${schema}.section_input_prompts
@@ -24019,7 +24119,47 @@ Confirm the React UI loads (not a blank/error page), the screens show data from 
 INSERT INTO ${catalog}.${schema}.section_input_prompts
 (input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
 VALUES
-(305, 'insights_alerts', '> **Artifact root (client-aware).** Resolve `<ARTIFACT_ROOT>` via `vibecoding-state.resolve_root` (it reads `artifact_root` from `## Environment Capabilities`, or detects the active client, `artifact_root` + `skills_install_root`) and write every artifact under it. On Cursor/Copilot that is your repo root; on Databricks Genie Code it is your user project root `/Workspace/Users/<email>/<repo>` (your user project is a **git clone** of the workshop repo so bundles are recognized; the skill tree is **copied** to `/Workspace/Users/<email>/.assistant/skills/<repo>` for skill loading only) — never the page''s current working directory.
+(305, 'insights_alerts', '**Set up alerts on your governed metrics — propose them first, then create SQL alerts on the Metric View measures plus a schedule that emails the dashboard — so the right people hear when a number crosses a line.**
+
+**Genie Code navigation:** this is a propose → approve → create beat. Query the Metric View with `MEASURE()` only (never the raw tables) through the pre-authenticated `w`. Create alerts with the Alerts API (`w.alerts.create(...)`, or `w.api_client.do("POST", "/api/2.0/alerts", body=...)` if the SDK wrapper is missing) and the dashboard schedule with the Lakeview schedules API (`w.lakeview.create_schedule(...)` + `create_subscription(...)`). Print a clickable link for every alert and the schedule using `w.config.host` and `w.get_workspace_id()`.
+
+Read `docs/genie_brief.md`, `docs/design_prd.md`, and `.vibecoding-state.md` first — they hold the Metric View name in `{lakehouse_default_catalog}.{user_schema_prefix}_gold`, its measures, the warehouse, and the dashboard id.
+
+1. **Propose an ALERT PLAN** for {use_case_title} — 3 to 5 alerts, each tied to a question in the brief: the governed measure, the slice (if any), the condition and threshold (for example "weekly revenue below target", "stockout count above 0"), how often it is checked, and who is told. Base every threshold on a quick read-only look at recent values so it would not fire constantly. Show the plan as a table and wait for my OK — create nothing yet.
+2. For each approved alert, create a saved SQL query that returns the single value to check, using `MEASURE()` on the Metric View, then create the alert on it with the agreed condition, schedule (no more often than hourly; daily is the default) and notification to me. Run each query once and show the current value.
+3. Add a **daily schedule** on the dashboard (`dashboard id` from `.vibecoding-state.md`) with an email subscription for me, so the dashboard arrives without anyone opening it.
+4. Record every alert id, its query id, the condition, and the schedule id in `.vibecoding-state.md`.
+
+**Guardrails:** never alert on raw tables when a governed measure exists; never schedule more often than hourly; do not add recipients other than me without asking; do not change the Metric View, the Genie space, or the dashboard''s tiles.
+
+**State-lock:** append this step''s Per-Step Log entry, gate result, and the captured alert / query / schedule ids to `.vibecoding-state.md`, then re-read to confirm the write landed.
+
+**Gate:** `Alerts live` — the approved alerts exist on governed `MEASURE()` queries with a sensible threshold and an hourly-or-slower schedule, each query ran once and returned a value, the dashboard has a daily email schedule, and every id is recorded in `.vibecoding-state.md`.
+
+**➡️ Next step.** You are done with the core build — open the alerts list and the dashboard schedule from the links above to see them.', '', 'Alerts on Governed Metrics (Insights)', 'Insights add-on: propose then create SQL alerts on the Metric View measures and a daily dashboard email.', 76, '> **Artifact root (client-aware).** Resolve `<ARTIFACT_ROOT>` via `vibecoding-state.resolve_root` and write every artifact under it.
+
+## 1️⃣ How To Apply
+
+Copy the prompt, paste it into a Genie Code Agent chat, and press Enter. Genie Code proposes a short alert plan first — check each threshold makes sense for your business, then let it create the alerts and the dashboard schedule.
+
+## 2️⃣ What gets created
+
+- SQL alerts on your governed Metric View measures (queried with `MEASURE()`), checked daily by default and never more than hourly
+- A daily email schedule on your AI/BI dashboard
+- Every id recorded in `.vibecoding-state.md`
+
+Nothing in your Metric View, Genie space or dashboard tiles changes.', '## Expected Deliverables
+
+- An approved alert plan: 3 to 5 alerts, each tied to a question in the brief, with measure, condition, threshold, schedule and recipient
+- One saved `MEASURE()` query and one SQL alert per approved row, each run once
+- A daily email schedule on the dashboard
+- Alert, query and schedule ids recorded in `.vibecoding-state.md`', true, 1, true, current_timestamp(), current_timestamp(), current_user());
+
+-- insights_alerts (default, version 2)
+INSERT INTO ${catalog}.${schema}.section_input_prompts
+(input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
+VALUES
+(321, 'insights_alerts', '> **Artifact root (client-aware).** Resolve `<ARTIFACT_ROOT>` via `vibecoding-state.resolve_root` (it reads `artifact_root` from `## Environment Capabilities`, or detects the active client, `artifact_root` + `skills_install_root`) and write every artifact under it. On Cursor/Copilot that is your repo root; on Databricks Genie Code it is your user project root `/Workspace/Users/<email>/<repo>` (your user project is a **git clone** of the workshop repo so bundles are recognized; the skill tree is **copied** to `/Workspace/Users/<email>/.assistant/skills/<repo>` for skill loading only) — never the page''s current working directory.
 
 `<STATE_FILE>` = the live state file that `skills/vibecoding-state` resolves by its state-path rule (`<app_root>` → `<agent_app_root>` → `<dp_bundle_root>` → the bootstrap path, creating the canonical file if none exists yet), never `.vibecoding-state.md` relative to the page.
 
@@ -24059,13 +24199,36 @@ Nothing in your Metric View, Genie space or dashboard tiles changes.', '## Expec
 - An approved alert plan: 3 to 5 alerts, each tied to a question in the brief, with measure, condition, threshold, schedule and recipient
 - One saved `MEASURE()` query and one SQL alert per approved row, each run once
 - A daily email schedule on the dashboard
-- Alert, query and schedule ids recorded in `.vibecoding-state.md`', true, 1, true, current_timestamp(), current_timestamp(), current_user());
+- Alert, query and schedule ids recorded in `.vibecoding-state.md`', true, 2, true, current_timestamp(), current_timestamp(), current_user());
 
 -- insights_alerts (genie-code fork)
 INSERT INTO ${catalog}.${schema}.section_input_prompts
 (input_id, section_tag, coding_assistant, input_template, system_prompt, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
 VALUES
-(1305, 'insights_alerts', 'genie-code', '> **Artifact root (client-aware).** Resolve `<ARTIFACT_ROOT>` via `vibecoding-state.resolve_root` (it reads `artifact_root` from `## Environment Capabilities`, or detects the active client, `artifact_root` + `skills_install_root`) and write every artifact under it. On Cursor/Copilot that is your repo root; on Databricks Genie Code it is your user project root `/Workspace/Users/<email>/<repo>` (your user project is a **git clone** of the workshop repo so bundles are recognized; the skill tree is **copied** to `/Workspace/Users/<email>/.assistant/skills/<repo>` for skill loading only) — never the page''s current working directory.
+(1305, 'insights_alerts', 'genie-code', '**Set up alerts on your governed metrics — propose them first, then create SQL alerts on the Metric View measures plus a schedule that emails the dashboard — so the right people hear when a number crosses a line.**
+
+**Genie Code navigation:** this is a propose → approve → create beat. Query the Metric View with `MEASURE()` only (never the raw tables) through the pre-authenticated `w`. Create alerts with the Alerts API (`w.alerts.create(...)`, or `w.api_client.do("POST", "/api/2.0/alerts", body=...)` if the SDK wrapper is missing) and the dashboard schedule with the Lakeview schedules API (`w.lakeview.create_schedule(...)` + `create_subscription(...)`). Print a clickable link for every alert and the schedule using `w.config.host` and `w.get_workspace_id()`.
+
+Read `docs/genie_brief.md`, `docs/design_prd.md`, and `.vibecoding-state.md` first — they hold the Metric View name in `{lakehouse_default_catalog}.{user_schema_prefix}_gold`, its measures, the warehouse, and the dashboard id.
+
+1. **Propose an ALERT PLAN** for {use_case_title} — 3 to 5 alerts, each tied to a question in the brief: the governed measure, the slice (if any), the condition and threshold (for example "weekly revenue below target", "stockout count above 0"), how often it is checked, and who is told. Base every threshold on a quick read-only look at recent values so it would not fire constantly. Show the plan as a table and wait for my OK — create nothing yet.
+2. For each approved alert, create a saved SQL query that returns the single value to check, using `MEASURE()` on the Metric View, then create the alert on it with the agreed condition, schedule (no more often than hourly; daily is the default) and notification to me. Run each query once and show the current value.
+3. Add a **daily schedule** on the dashboard (`dashboard id` from `.vibecoding-state.md`) with an email subscription for me, so the dashboard arrives without anyone opening it.
+4. Record every alert id, its query id, the condition, and the schedule id in `.vibecoding-state.md`.
+
+**Guardrails:** never alert on raw tables when a governed measure exists; never schedule more often than hourly; do not add recipients other than me without asking; do not change the Metric View, the Genie space, or the dashboard''s tiles.
+
+**State-lock:** append this step''s Per-Step Log entry, gate result, and the captured alert / query / schedule ids to `.vibecoding-state.md`, then re-read to confirm the write landed.
+
+**Gate:** `Alerts live` — the approved alerts exist on governed `MEASURE()` queries with a sensible threshold and an hourly-or-slower schedule, each query ran once and returned a value, the dashboard has a daily email schedule, and every id is recorded in `.vibecoding-state.md`.
+
+**➡️ Next step.** You are done with the core build — open the alerts list and the dashboard schedule from the links above to see them.', '', true, 1, true, current_timestamp(), current_timestamp(), current_user());
+
+-- insights_alerts (genie-code fork, version 2)
+INSERT INTO ${catalog}.${schema}.section_input_prompts
+(input_id, section_tag, coding_assistant, input_template, system_prompt, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
+VALUES
+(1321, 'insights_alerts', 'genie-code', '> **Artifact root (client-aware).** Resolve `<ARTIFACT_ROOT>` via `vibecoding-state.resolve_root` (it reads `artifact_root` from `## Environment Capabilities`, or detects the active client, `artifact_root` + `skills_install_root`) and write every artifact under it. On Cursor/Copilot that is your repo root; on Databricks Genie Code it is your user project root `/Workspace/Users/<email>/<repo>` (your user project is a **git clone** of the workshop repo so bundles are recognized; the skill tree is **copied** to `/Workspace/Users/<email>/.assistant/skills/<repo>` for skill loading only) — never the page''s current working directory.
 
 `<STATE_FILE>` = the live state file that `skills/vibecoding-state` resolves by its state-path rule (`<app_root>` → `<agent_app_root>` → `<dp_bundle_root>` → the bootstrap path, creating the canonical file if none exists yet), never `.vibecoding-state.md` relative to the page.
 
@@ -24088,6 +24251,6 @@ Read `docs/genie_brief.md`, `docs/design_prd.md`, and `<STATE_FILE>` first — t
 
 **Gate:** `Alerts live` — the approved alerts exist on governed `MEASURE()` queries with a sensible threshold and an hourly-or-slower schedule, each query ran once and returned a value, the dashboard has a daily email schedule, and every id is recorded in `<STATE_FILE>`.
 
-**➡️ Next step.** You are done with the core build — open the alerts list and the dashboard schedule from the links above to see them.', '', true, 1, true, current_timestamp(), current_timestamp(), current_user());
+**➡️ Next step.** You are done with the core build — open the alerts list and the dashboard schedule from the links above to see them.', '', true, 2, true, current_timestamp(), current_timestamp(), current_user());
 
 -- <<< INSIGHTS-ONLY PROMPTS

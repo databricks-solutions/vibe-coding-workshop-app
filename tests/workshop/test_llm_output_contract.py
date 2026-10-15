@@ -114,7 +114,8 @@ def test_c4_no_other_row_changed(tmp_path):
     base, head = _statements(base_path), _statements(SEED)
     # Main's Insights rows (defaults 300-305, forks 1300-1305) arrived with the merge of main.
     # 1124: the D-144 ontology_domain genie-code v3 row (genie-default-ontology PR 1).
-    assert set(head) - set(base) == NEW_IDS | MAIN_INSIGHTS_IDS | {1124}
+    # 320/321/1320/1321: the D-168 v2 Insights rows (activation, alerts).
+    assert set(head) - set(base) == NEW_IDS | MAIN_INSIGHTS_IDS | {1124} | {320, 321, 1320, 1321}
     assert {pk: head[pk] for pk in base} == base
     for v1, _, _ in V2.values():
         assert _row(head[v1])["is_active"] is True

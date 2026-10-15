@@ -224,6 +224,9 @@ def test_s3_seed_only_gains_1124_and_keeps_936_and_1030(tmp_path):
     base_path.write_text(_git_show(SEED_RELPATH))
     base = dict(seed_new_rows.seed_rows(str(base_path), "section_input_prompts", "input_id"))
     head = dict(seed_new_rows.seed_rows(str(SEED), "section_input_prompts", "input_id"))
-    assert set(head) - set(base) == {V3_ID}
-    assert {pk: head[pk] for pk in base} == base
+    # D-168: the Insights rows 300/305/1300/1305 went back to main 2.6.0's text (v1) and
+    # 44a5c26's text moved to the v2 rows 320/321/1320/1321.
+    assert set(head) - set(base) == {V3_ID} | {320, 321, 1320, 1321}
+    restored = {300, 305, 1300, 1305}
+    assert {pk: head[pk] for pk in base if pk not in restored} == {pk: s for pk, s in base.items() if pk not in restored}
     assert (head[V1_ID], head[V2_ID]) == (base[V1_ID], base[V2_ID])
