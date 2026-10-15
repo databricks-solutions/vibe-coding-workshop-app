@@ -7,7 +7,8 @@ import { UseCaseBuilderPanel } from '../UseCaseBuilderPanel';
 import { categoriesOf, columnsFor, type LibraryModel } from './model';
 import type { LibraryActions } from './useLibrary';
 import { KINDS } from './theme';
-import { CollectionGlyph, Kbd, Modal, cx } from './ui';
+import { CollectionGlyph, Kbd, Modal } from './ui';
+import { cx } from './cx';
 import { BTN_GHOST, BTN_PRIMARY } from '../skills/uiStyles';
 
 interface Props {

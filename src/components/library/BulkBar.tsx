@@ -4,7 +4,8 @@ import { Eye, EyeOff, FolderPlus, Star, StarOff, X } from 'lucide-react';
 import type { LibraryUseCase } from '../../api/library';
 import type { LibraryModel } from './model';
 import { KINDS } from './theme';
-import { CollectionGlyph, cx } from './ui';
+import { CollectionGlyph } from './ui';
+import { cx } from './cx';
 
 interface Props {
   model: LibraryModel;

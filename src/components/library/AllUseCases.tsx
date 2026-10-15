@@ -6,7 +6,8 @@ import type { LibraryActions } from './useLibrary';
 import { BulkBar } from './BulkBar';
 import { UseCaseTable } from './UseCaseTable';
 import { KINDS } from './theme';
-import { CollectionGlyph, EmptyState, SegmentedControl, cx } from './ui';
+import { CollectionGlyph, EmptyState, SegmentedControl } from './ui';
+import { cx } from './cx';
 
 type Filter = 'all' | 'live' | 'hidden' | 'certified';
 

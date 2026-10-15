@@ -4,7 +4,8 @@ import type { CollectionKind, LibraryCollection } from '../../api/library';
 import type { LibraryModel } from './model';
 import type { LibraryActions } from './useLibrary';
 import { KINDS, collectionTint, tintStyle } from './theme';
-import { CollectionGlyph, Kbd, RowMenu, Switch, cx } from './ui';
+import { CollectionGlyph, Kbd, RowMenu, Switch } from './ui';
+import { cx } from './cx';
 
 export type LibraryView = { name: 'home' } | { name: 'all' } | { name: 'review' } | { name: 'skills' } | { name: 'collection'; id: string };
 

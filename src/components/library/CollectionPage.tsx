@@ -8,7 +8,8 @@ import { BulkBar } from './BulkBar';
 import { UseCaseCard } from './UseCaseCard';
 import { UseCaseTable } from './UseCaseTable';
 import { KIND_BY_ID, categoryTint, collectionIcon, collectionTint, relativeTime, tintStyle } from './theme';
-import { Avatar, CollectionGlyph, EmptyState, KindBadge, Meter, SegmentedControl, Switch, cx } from './ui';
+import { Avatar, CollectionGlyph, EmptyState, KindBadge, Meter, SegmentedControl, Switch } from './ui';
+import { cx } from './cx';
 import { BTN_PRIMARY, BTN_SECONDARY } from '../skills/uiStyles';
 
 type Filter = 'all' | 'live' | 'hidden' | 'certified' | 'cross';
@@ -41,7 +42,11 @@ function matches(e: Entry, q: string, filter: Filter, model: LibraryModel): bool
 function InlineText({ value, onSave, className, placeholder, multiline }: { value: string; onSave: (v: string) => void; className?: string; placeholder?: string; multiline?: boolean }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(value);
-  useEffect(() => { if (!editing) setDraft(value); }, [value, editing]);
+  const [prev, setPrev] = useState({ value, editing });
+  if (prev.value !== value || prev.editing !== editing) {
+    setPrev({ value, editing });
+    if (!editing) setDraft(value);
+  }
   const commit = () => { setEditing(false); if (draft.trim() !== value.trim()) onSave(draft.trim()); };
   if (editing) {
     const common = {
@@ -77,7 +82,11 @@ export function CollectionPage({ model, collection, actions, onOpen, onNewUseCas
   const [addingCat, setAddingCat] = useState(false);
   const [newCat, setNewCat] = useState('');
 
-  useEffect(() => { setSelected(new Set()); setExtraCats([]); setQuery(''); setFilter('all'); }, [collection.collection_id]);
+  const [prevId, setPrevId] = useState(collection.collection_id);
+  if (prevId !== collection.collection_id) {
+    setPrevId(collection.collection_id);
+    setSelected(new Set()); setExtraCats([]); setQuery(''); setFilter('all');
+  }
   useEffect(() => { localStorage.setItem(VIEW_KEY, mode); }, [mode]);
 
   const id = collection.collection_id;

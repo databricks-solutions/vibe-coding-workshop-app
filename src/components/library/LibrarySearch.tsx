@@ -5,7 +5,8 @@ import { CornerDownLeft, FolderPlus, Lightbulb, Search } from 'lucide-react';
 import type { LibraryCollection, LibraryUseCase } from '../../api/library';
 import { keyOf, type LibraryModel } from './model';
 import { KIND_BY_ID } from './theme';
-import { CollectionGlyph, Kbd, StatusPill, cx } from './ui';
+import { CollectionGlyph, Kbd, StatusPill } from './ui';
+import { cx } from './cx';
 
 type Result =
   | { type: 'collection'; id: string; collection: LibraryCollection }

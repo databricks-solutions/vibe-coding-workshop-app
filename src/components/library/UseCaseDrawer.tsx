@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { createElement, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import ReactMarkdown from 'react-markdown';
@@ -6,7 +6,7 @@ import {
   BadgeCheck, Check, ChevronDown, Clock, Copy, Eye, FileDiff, GitCompare, History, Home, Layers, Link2, Maximize2,
   Minimize2, PencilLine, Plus, RotateCcw, Search, Trash2, Undo2, X,
 } from 'lucide-react';
-import { libraryApi, type LibraryUseCase } from '../../api/library';
+import { libraryApi, type LibraryCollection, type LibraryUseCase } from '../../api/library';
 import { MARKDOWN_COMPONENTS, REMARK_PLUGINS } from '../MarkdownContent.utils';
 import { DiffView } from '../DiffView';
 import { OutcomeMapCard } from '../OutcomeMapCard';
@@ -14,7 +14,8 @@ import { getThemeForColumn } from '../outcomeMapTheme';
 import { categoriesOf, columnsFor, keyOf, placementsOf, type LibraryModel } from './model';
 import type { LibraryActions } from './useLibrary';
 import { KINDS, collectionIcon, collectionTint, relativeTime, tintStyle, iconForUseCase } from './theme';
-import { Avatar, CollectionGlyph, KindBadge, Modal, RowMenu, StatusPill, Switch, cx } from './ui';
+import { Avatar, CollectionGlyph, KindBadge, Modal, RowMenu, StatusPill, Switch } from './ui';
+import { cx } from './cx';
 import { BTN_GHOST, BTN_PRIMARY, BTN_SECONDARY } from '../skills/uiStyles';
 
 type Tab = 'overview' | 'edit' | 'placement' | 'history';
@@ -37,7 +38,11 @@ export function UseCaseDrawer({ model, uc, actions, onClose, onNavigateCollectio
   const panelRef = useRef<HTMLDivElement>(null);
   const key = uc ? keyOf(uc) : '';
 
-  useEffect(() => { setTab('overview'); setConfirmDelete(false); setDeleteText(''); }, [key]);
+  const [prevKey, setPrevKey] = useState(key);
+  if (prevKey !== key) {
+    setPrevKey(key);
+    setTab('overview'); setConfirmDelete(false); setDeleteText('');
+  }
 
   useEffect(() => {
     if (!uc) return;
@@ -51,7 +56,6 @@ export function UseCaseDrawer({ model, uc, actions, onClose, onNavigateCollectio
 
   const home = uc ? model.byId[uc.industry] : undefined;
   const tint = home ? collectionTint(home) : { h: 172, s: 66 };
-  const Icon = uc ? iconForUseCase(uc, home ? collectionIcon(home) : Layers) : Layers;
 
   return createPortal(
     <AnimatePresence>
@@ -103,7 +107,7 @@ export function UseCaseDrawer({ model, uc, actions, onClose, onNavigateCollectio
                 <button data-autofocus className="p-1 rounded-md hover:bg-secondary hover:text-foreground" onClick={onClose} aria-label="Close"><X className="w-4 h-4" /></button>
               </div>
               <div className="flex items-start gap-4 px-6 pt-3 pb-4">
-                <span className="lib-tile w-12 h-12 rounded-2xl inline-flex items-center justify-center shrink-0"><Icon className="w-6 h-6" /></span>
+                <span className="lib-tile w-12 h-12 rounded-2xl inline-flex items-center justify-center shrink-0"><UseCaseIcon uc={uc} home={home} className="w-6 h-6" /></span>
                 <div className="flex-1 min-w-0">
                   <TitleEditor value={uc.use_case_label} onSave={v => void actions.renameUseCase(uc, v)} />
                   <div className="mt-1.5 flex items-center gap-3 text-ui-xs text-muted-foreground">
@@ -189,9 +193,17 @@ export function UseCaseDrawer({ model, uc, actions, onClose, onNavigateCollectio
   );
 }
 
+function UseCaseIcon({ uc, home, className }: { uc: LibraryUseCase; home: LibraryCollection | undefined; className: string }) {
+  return createElement(iconForUseCase(uc, home ? collectionIcon(home) : Layers), { className });
+}
+
 function TitleEditor({ value, onSave }: { value: string; onSave: (v: string) => void }) {
   const [draft, setDraft] = useState(value);
-  useEffect(() => setDraft(value), [value]);
+  const [prevValue, setPrevValue] = useState(value);
+  if (prevValue !== value) {
+    setPrevValue(value);
+    setDraft(value);
+  }
   return (
     <input
       value={draft}
@@ -349,7 +361,11 @@ function PlacementTab({ model, uc, actions }: { model: LibraryModel; uc: Library
   const [adding, setAdding] = useState(false);
   const [q, setQ] = useState('');
   const [saving, setSaving] = useState(false);
-  useEffect(() => setList(initial), [initial]);
+  const [prevInitial, setPrevInitial] = useState(initial);
+  if (prevInitial !== initial) {
+    setPrevInitial(initial);
+    setList(initial);
+  }
   const home = model.byId[uc.industry];
   const dirty = JSON.stringify(list) !== JSON.stringify(initial);
   const taken = new Set([uc.industry, ...list.map(l => l.collection_id)]);

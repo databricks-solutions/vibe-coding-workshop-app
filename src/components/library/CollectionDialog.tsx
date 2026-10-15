@@ -1,8 +1,9 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Check } from 'lucide-react';
 import type { CollectionKind, LibraryCollection } from '../../api/library';
 import { COLLECTION_ICONS, KINDS, TINTS, collectionIconName, collectionTintKey, tintStyle } from './theme';
-import { CollectionGlyph, KindBadge, Modal, cx } from './ui';
+import { CollectionGlyph, KindBadge, Modal } from './ui';
+import { cx } from './cx';
 import { BTN_PRIMARY, BTN_SECONDARY } from '../skills/uiStyles';
 
 export interface CollectionDraft {
@@ -31,12 +32,16 @@ export function CollectionDialog({ open, initial, initialKind, onClose, onSubmit
   const [draft, setDraft] = useState<CollectionDraft>({ label: '', kind: initialKind, description: '', icon: null, color: null });
   const [busy, setBusy] = useState(false);
 
-  useEffect(() => {
-    if (!open) return;
-    setDraft(initial
-      ? { label: initial.label, kind: initial.kind, description: initial.description || '', icon: initial.icon, color: initial.color }
-      : { label: '', kind: initialKind, description: '', icon: null, color: null });
-  }, [open, initial, initialKind]);
+  // Reset the draft whenever the dialog opens or its source changes (React's "store the previous prop" pattern).
+  const [prev, setPrev] = useState<{ open: boolean; initial: LibraryCollection | null; initialKind: CollectionKind } | null>(null);
+  if (!prev || prev.open !== open || prev.initial !== initial || prev.initialKind !== initialKind) {
+    setPrev({ open, initial, initialKind });
+    if (open) {
+      setDraft(initial
+        ? { label: initial.label, kind: initial.kind, description: initial.description || '', icon: initial.icon, color: initial.color }
+        : { label: '', kind: initialKind, description: '', icon: null, color: null });
+    }
+  }
 
   const preview = { collection_id: initial?.collection_id || draft.label.toLowerCase().replace(/[^a-z0-9]+/g, '_'), kind: draft.kind, icon: draft.icon, color: draft.color, label: draft.label || 'New collection' };
   const iconName = collectionIconName(preview);
