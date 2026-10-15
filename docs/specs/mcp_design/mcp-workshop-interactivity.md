@@ -195,7 +195,7 @@ patterns; §4.5 is the first-run on-ramp; §4.6 is the Phase 2A coaching layer.
   with `coaching`, `focus`, `grounded_on` and `is_fallback` (`StepHelpResult`, D2 §3.8). It
   **changes no workshop state** and **never blocks or advances** the track.
 - **Fail-open (non-negotiable):** any model error/timeout degrades to the step's static
-  help with `is_fallback: true` and a `reason` (`services/coaching.py:448`, `:496`, `:531`, `:536`). Coaching failing must never fail a step or a
+  help with `is_fallback: true`; the reason is internal (`CoachOutcome.reason`, `services/coaching.py:449`) and appears only as `outcome=fallback:<reason>` on the coaching timings log line (`services/coaching.py:548`). Coaching failing must never fail a step or a
   tool. If no serving endpoint is configured, `vibe_explain_step` still returns useful static help.
 - **Verbatim contract holds (§7):** coaching **explains** the step; it never rewrites or re-issues
   the verbatim `prompt`. The prompt is still presented first and remains authoritative.

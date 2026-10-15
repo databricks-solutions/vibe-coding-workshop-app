@@ -390,7 +390,7 @@ description-as-prompt, `inputSchema`, `outputSchema`, annotations, errors, and t
   observability side-channel, like a log line, not workshop state).
 - **Errors:** `INVALID_SESSION`, `UNKNOWN_STEP` (explicit bad `sectionTag`). **Never** raises on an
   FMAPI failure — coaching is **fail-open**: on any model/timeout error it returns the step's
-  static help with `is_fallback: true` and a `reason` (`services/coaching.py:448`, `:496`, `:531`, `:536`). There is no
+  static help with `is_fallback: true`; the reason is internal (`CoachOutcome.reason`, `services/coaching.py:449`) and appears only as `outcome=fallback:<reason>` on the coaching timings log line (`services/coaching.py:548`). There is no
   `COACH_FAILED` code by design.
 - **Grounding (server-assembled, never client-supplied):** the current step's `title`/`why`/
   `how_to_apply`/`expected_output`/`gate` + the verbatim `prompt` (as *reference to explain*, never
@@ -708,7 +708,7 @@ tests (§4).
     "grounded_on": { "type": "array", "items": { "type": "string" },
                      "description": "Which context keys fed the answer, e.g. ['why','expected_output','captured_outputs:genie_brief']. For transparency/tests." },
     "is_fallback": { "type": "boolean",
-                     "description": "true ⇒ the FMAPI call failed/timed out and the step's static help was returned, with a `reason` (`services/coaching.py:448`, `:496`, `:531`, `:536`)." }
+                     "description": "true ⇒ the FMAPI call failed/timed out and the step's static help was returned; the reason is internal (`CoachOutcome.reason`, `services/coaching.py:449`) and appears only as `outcome=fallback:<reason>` on the coaching timings log line (`services/coaching.py:548`)." }
   },
   "additionalProperties": false
 }
