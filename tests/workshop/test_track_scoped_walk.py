@@ -416,6 +416,8 @@ def test_w5_start_genie_accelerator_is_unchanged():
         "Present the returned `prompt` verbatim first, then narrate `why`, the gate, and the next "
         "step, and show `user_trigger_prompt` verbatim before waiting. Call `vibe_explain_step` if the "
         "learner asks how to apply the step or what to expect. Keep questions in chat."
+        # genie-default-ontology PR 2 (R4): the ontology opt-out rides the prompt.
+        f"\n\n{mcp_server.GENIE_ONTOLOGY_OPT_OUT}"
     )
     assert mcp_server.start_genie_accelerator("U", "I") == f"{mcp_server.ORIENTATION_PREAMBLE}\n\n{expected_tail}"
 

@@ -519,6 +519,21 @@
     }
   },
   "ontology_pages": {
+    "decision": {
+      "id": "ontology_pages.publish_confirmation",
+      "type": "confirm",
+      "question": "Confirm you published the Page in the Databricks UI.",
+      "options": [
+        {"id": "published", "label": "I published the Page"},
+        {"id": "not_yet", "label": "Not yet — keep the step open"}
+      ],
+      "recommended": "published",
+      "skippable": false,
+      "coaching": {
+        "published": "Confirmed — the Author Pages step can now be completed.",
+        "not_yet": "No problem — finish authoring and publish the Page in the Databricks UI, then confirm."
+      }
+    },
     "post": {
       "id": "ontology_pages.check",
       "type": "comprehension",
@@ -536,6 +551,21 @@
     }
   },
   "ontology_routing": {
+    "decision": {
+      "id": "ontology_routing.publish_confirmation",
+      "type": "confirm",
+      "question": "Confirm you published the routing Page in the Databricks UI.",
+      "options": [
+        {"id": "published", "label": "I published the routing Page"},
+        {"id": "not_yet", "label": "Not yet — keep the step open"}
+      ],
+      "recommended": "published",
+      "skippable": false,
+      "coaching": {
+        "published": "Confirmed — the Write the Routing Page step can now be completed.",
+        "not_yet": "No problem — finish the routing Page and publish it in the Databricks UI, then confirm."
+      }
+    },
     "post": {
       "id": "ontology_routing.check",
       "type": "comprehension",

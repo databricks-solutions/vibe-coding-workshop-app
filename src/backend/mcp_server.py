@@ -63,9 +63,25 @@ ORIENTATION_PREAMBLE = (
     "plain-English ask), and WAIT for the learner to submit it before doing the work. Never auto-run "
     "the next step on your own. Step payloads are lean; call `vibe_explain_step` when the learner asks "
     "how to apply a step or what to expect. "
-    "The track saves progress server-side and does not block, except for one benchmark hard stop. "
+    "The track saves progress server-side and does not block, except for the benchmark and ontology publish confirms. "
     "You can mirror progress in the web UI using the same session. If tools go missing, disconnect "
     "other MCP servers to stay within the 20-tool budget."
+)
+
+# Rides the payload of the two ui-driven steps (R1): the agent cannot finish them.
+UI_DRIVEN_HINT = (
+    "This step is done in the Databricks UI: coach the learner through it, then ask its "
+    "confirm via vibe_submit_answer before vibe_complete_step."
+)
+UI_DRIVEN_GATE_MESSAGE = (
+    "This step is done in the Databricks UI. Coach the learner through it there, then ask "
+    "the confirm; complete the step only after they answer published."
+)
+# The learner's opt-out, said the same way in both genie-accelerator start prompts (R4).
+GENIE_ONTOLOGY_OPT_OUT = (
+    "New Genie Accelerator sessions include the Genie Ontology (Beta) steps. If your workspace "
+    "doesn't have Genie One Pages, say skip the ontology: call `vibe_set_parameters` with "
+    "{include_genie_ontology: false}."
 )
 
 # Re-injected on EVERY step that authors a trigger (not just step 1): MCP is
@@ -89,7 +105,9 @@ Steps are learner-triggered. After you present a step, hand the learner its `use
 a simple English prompt they submit back to you — and wait for them to send it before you do the
 work. Do not auto-execute the next step; the trigger to move forward always comes from the learner.
 
-There is one hard stop: the benchmark step requires an explicit confirmation before it can advance.
+The hard stops: the benchmark step requires an explicit confirmation before it can advance, and
+with the Genie Ontology on, Author Pages and Write the Routing Page each need the learner to
+confirm they published the Page in the Databricks UI.
 Everything else is designed to keep moving without pop-up forms or client elicitation.
 
 Troubleshooting:
@@ -1173,6 +1191,10 @@ def _step_payload(
         # The wait doctrine rides every triggered step, not just step 1.
         instruction=STEP_WAIT_DIRECTIVE if user_trigger_prompt else None,
     )
+    if step.execution == "ui-driven":
+        payload.instruction = (
+            f"{payload.instruction} {UI_DRIVEN_HINT}" if payload.instruction else UI_DRIVEN_HINT
+        )
     # Workstream D: the use-case picker inlines its options so the Genie Code agent
     # never has to read a vibe:// resource. Best-effort — a data-layer hiccup must
     # never keep the step from rendering, so the lists degrade to None.
@@ -1240,18 +1262,28 @@ def vibe_start_track(
     if track not in engine.MANIFEST.tracks:
         return _error_result("UNKNOWN_TRACK", f"Unknown workshop track: {track}")  # type: ignore[return-value]
     resolved = session_id or str(uuid.uuid4())
-    loaded = _load_session_and_track(resolved, context, track)
+    records: list[dict[str, Any]] = []
+    loaded = _load_session_for_request(resolved, context, track, _record_out=records)
     if loaded is None:
         if session_id:
             return _error_result("INVALID_SESSION", "The requested session could not be resolved.")  # type: ignore[return-value]
         state = engine.SessionState()
     else:
-        state, _, _ = loaded
+        state, _ = loaded
     before = copy.deepcopy(state)
     # MCP is exclusively the Genie Code client — mark the session so any other
     # read path (SPA bridge, the vibe://session/{id}/state resource) resolves
     # the genie-code fork too. setdefault never clobbers an explicit choice.
     state.session_parameters.setdefault("coding_assistant", DEFAULT_CODING_ASSISTANT)
+    # A NEW session (no stored record) opens in the technical view (D-143) and, on
+    # genie-accelerator, takes Genie Ontology from the facilitator switch (R2).
+    # A resumed session keeps whatever it stored.
+    if not records:
+        state.session_parameters.setdefault("view", "technical")
+        if track == "genie-accelerator":
+            from .api.routes import default_genie_ontology
+
+            _write_genie_ontology(state.session_parameters, default_genie_ontology())
     # Persist the learner's email so the project_setup step can render their
     # /Workspace/Users/<email> clone + skills paths (Workstream #5). setdefault so
     # an explicit value is never clobbered; only a real address is stored.
@@ -1668,6 +1700,39 @@ _RESERVED_PARAM_KEYS = (
     "custom_draft_ready",
     "custom_drafted_description",
 )
+# Prefix of the learner-confirm marker only engine.complete_step writes (R1); a
+# params key with it is a forgery attempt and is rejected like the keys above.
+_RESERVED_PARAM_PREFIXES = (engine.UI_CONFIRMED_PREFIX,)
+
+
+def _write_genie_ontology(parameters: dict[str, Any], value: bool) -> None:
+    """Write one Genie Ontology value to all three keys (D-149): the snake key the UI
+    hydrates from, ``flags.includeGenieOntology`` and the top-level camelCase key the
+    engine reads first, so no stored key can disagree after a write."""
+
+    flags = parameters.get("flags")
+    parameters["flags"] = {**(flags if isinstance(flags, dict) else {}), "includeGenieOntology": value}
+    parameters["include_genie_ontology"] = value
+    parameters["includeGenieOntology"] = value
+
+
+def _mirror_genie_ontology(parameters: dict[str, Any], params: dict[str, Any]) -> None:
+    """Mirror an ontology write in ``params`` (the snake key or the nested flag) over
+    all three keys of the merged ``parameters``; the snake key wins a disagreement."""
+
+    snake = params.get("include_genie_ontology")
+    flags = params.get("flags")
+    nested = flags.get("includeGenieOntology") if isinstance(flags, dict) else None
+    if snake is None and nested is None:
+        return
+    if snake is not None and nested is not None and engine._as_bool(nested) != snake:
+        logger.info(
+            "vibe_set_parameters Genie Ontology keys disagree: include_genie_ontology=%s "
+            "flags.includeGenieOntology=%s",
+            snake,
+            engine._as_bool(nested),
+        )
+    _write_genie_ontology(parameters, snake if snake is not None else engine._as_bool(nested))
 
 
 def _is_selection_call(params: dict[str, Any]) -> bool:
@@ -1869,8 +1934,8 @@ def _run_async_blocking(make_coro: Callable[[], Any], timeout_s: float | None = 
         "Record that the current step's gate passed and store its captured output (the gate = this "
         "call); advances the walk. Call ONLY after the learner triggered and ran the step in a fresh "
         "turn — never chain it yourself. If its `interaction` has a `post` check, ask it via "
-        "`vibe_submit_answer` first. Not for `execution:ui-driven` steps. Args: `session_id`, "
-        "`sectionTag`, `captured_output`."
+        "`vibe_submit_answer` first. A `ui-driven` step needs its confirm `published`. "
+        "Args: `session_id`, `sectionTag`, `captured_output`."
     ),
     annotations=ToolAnnotations(
         readOnlyHint=False,
@@ -1905,7 +1970,30 @@ def vibe_complete_step(
             next=_walk_next_payload(track, state, session_id),
             post_check=None,
         )
+    # R1: a ui-driven step is done in the Databricks UI, so it completes only once
+    # the learner answered its confirm with the recommended option (published);
+    # not_yet records nothing and keeps the step open.
+    try:
+        _step = engine.resolve_step(track, state, sectionTag)
+    except KeyError:
+        _step = None
+    ui_driven = _step is not None and _step.execution == "ui-driven"
+    learner_confirmed = False
     blocking = manifest.blocking_interactions(sectionTag)
+    if ui_driven:
+        learner_confirmed = bool(blocking) and all(
+            state.captured_outputs.get(decision_capture_key(sectionTag, block["id"]))
+            == block.get("recommended")
+            for block in blocking
+        )
+        # Unconfirmed: a locked or already-done step keeps the engine's answer
+        # (STEP_LOCKED / idempotent success); only a workable step asks for the confirm.
+        if not learner_confirmed and (
+            engine.complete_step(track, copy.deepcopy(state), sectionTag, captured_output).error_code
+            == "UI_DRIVEN_STEP"
+        ):
+            return _error_result("GATE_REQUIRED", UI_DRIVEN_GATE_MESSAGE, sectionTag=sectionTag)  # type: ignore[return-value]
+        blocking = []
     if blocking:
         confirmed = any(
             decision_capture_key(sectionTag, block["id"]) in state.captured_outputs
@@ -1952,13 +2040,15 @@ def vibe_complete_step(
             "The lock completes this step.",
             sectionTag=sectionTag,
         )  # type: ignore[return-value]
-    result = engine.complete_step(track, state, sectionTag, captured_output)
+    result = engine.complete_step(
+        track, state, sectionTag, captured_output, learner_confirmed=learner_confirmed
+    )
     if not result.ok:
         messages = {
             "UNKNOWN_TRACK": "Unknown workshop track.",
             "UNKNOWN_STEP": f"Unknown workshop step: {sectionTag}",
             "STEP_LOCKED": "The requested step is locked until its prerequisite gate is complete.",
-            "UI_DRIVEN_STEP": "This step is coached and must be completed in the web UI.",
+            "UI_DRIVEN_STEP": UI_DRIVEN_GATE_MESSAGE,
             "GATE_REQUIRED": "Confirm the blocking interaction before completing this step.",
         }
         code = result.error_code or "UNKNOWN_STEP"
@@ -2123,9 +2213,9 @@ def vibe_submit_answer(
 @mcp.tool(
     name="vibe_set_parameters",
     description=(
-        "Set/update session parameters, feature flags, and the use-case lock. "
+        "Set/update session parameters, flags (`include_genie_ontology`: bool), and the use-case lock. "
         "Selection: pass `use_case_source` (curated/custom) with `industry`, `use_case`, "
-        "`use_case_label`; custom also needs `use_case_description` (session-local). "
+        "`use_case_label`; custom also needs `use_case_description`. "
         "For a PRD-grade custom brief pass `mode=\"draft_custom\"` (+`use_case_hints`), "
         "then confirm by resending `use_case_description`. Args: `session_id`, `params`, `mode`."
     ),
@@ -2154,10 +2244,19 @@ def vibe_set_parameters(
     # rejected call persists nothing (all-or-nothing). These are set only by the
     # engine/draft paths — a learner must never forge a skip or the draft markers.
     reserved = [key for key in _RESERVED_PARAM_KEYS if key in params]
+    reserved += [
+        key for key in params if isinstance(key, str) and key.startswith(_RESERVED_PARAM_PREFIXES)
+    ]
     if reserved:
         return _error_result(  # type: ignore[return-value]
             "INVALID_PARAMETER",
             f"{', '.join(reserved)} are server-owned and cannot be set via vibe_set_parameters.",
+        )
+
+    if "include_genie_ontology" in params and not isinstance(params["include_genie_ontology"], bool):
+        return _error_result(  # type: ignore[return-value]
+            "INVALID_PARAMETER",
+            "include_genie_ontology must be true or false.",
         )
 
     # D-115: a skills-accelerator session (resolve_track gives that only while
@@ -2205,6 +2304,7 @@ def vibe_set_parameters(
             )
 
     state.session_parameters.update(params)
+    _mirror_genie_ontology(state.session_parameters, params)
     # MCP is exclusively Genie Code: keep the fork marker present so a merge that
     # omits it never silently drops the session back to the __default__ prompt.
     state.session_parameters.setdefault("coding_assistant", DEFAULT_CODING_ASSISTANT)
@@ -2529,7 +2629,8 @@ def start_genie_accelerator(use_case: str | None = None, industry: str | None = 
         f'{{track:"genie-accelerator"{suffix}}}, then call `vibe_get_step`. '
         "Present the returned `prompt` verbatim first, then narrate `why`, the gate, and the next "
         "step, and show `user_trigger_prompt` verbatim before waiting. Call `vibe_explain_step` if the "
-        "learner asks how to apply the step or what to expect. Keep questions in chat."
+        "learner asks how to apply the step or what to expect. Keep questions in chat.\n\n"
+        f"{GENIE_ONTOLOGY_OPT_OUT}"
     )
 
 
@@ -2551,6 +2652,7 @@ def start_track(track: str | None = None, use_case: str | None = None, industry:
     if industry:
         parameters.append(f'industry="{industry}"')
     title = engine.MANIFEST.tracks[track].title
+    opt_out = f"\n\n{GENIE_ONTOLOGY_OPT_OUT}" if track == "genie-accelerator" else ""
     return (
         f"{ORIENTATION_PREAMBLE}\n\n"
         f"Start the {title} track by calling `vibe_start_track` with "
@@ -2558,6 +2660,7 @@ def start_track(track: str | None = None, use_case: str | None = None, industry:
         "Present the returned `prompt` verbatim first, then narrate `why`, the gate, and the next "
         "step, and show `user_trigger_prompt` verbatim before waiting. Call `vibe_explain_step` if the "
         "learner asks how to apply the step or what to expect. Keep questions in chat."
+        f"{opt_out}"
     )
 
 
@@ -2579,7 +2682,7 @@ def continue_where_left_off() -> str:
 def how_workshop_works() -> str:
     return (
         "Read `vibe://guide/getting-started` and explain how to answer in chat, how progress and "
-        "gates work, the one benchmark hard stop, troubleshooting, and how to mirror progress in "
+        "gates work, the hard stops, troubleshooting, and how to mirror progress in "
         "the web UI. When presenting a step later, always present its prompt verbatim first."
     )
 

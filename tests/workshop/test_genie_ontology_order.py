@@ -157,8 +157,11 @@ def _outlines_agree(client, store, sid):
     return resource
 
 
-def test_o3_in_flight_session_gets_ontology_next_with_its_gates_intact(walk):
+def test_o3_in_flight_session_gets_ontology_next_with_its_gates_intact(walk, monkeypatch):
     store, client = walk
+    # A pre-default session: started with ontology off (PR 2 made new MCP
+    # genie-accelerator sessions default on via VIBE_DEFAULT_GENIE_ONTOLOGY).
+    monkeypatch.setenv("VIBE_DEFAULT_GENIE_ONTOLOGY", "false")
     sid = mcp_server.vibe_start_track(TRACK, use_case="ai_driven_booking", industry="travel").session_id
     off_tags = [item["sectionTag"] for item in _outlines_agree(client, store, sid)]
     assert not set(ONTOLOGY_TAGS) & set(off_tags)
@@ -166,7 +169,8 @@ def test_o3_in_flight_session_gets_ontology_next_with_its_gates_intact(walk):
     done = off_tags[: off_tags.index("activation_table_design") + 1]
     record = store[sid]
     record["completed_gates"] = sorted(set(record["completed_gates"]) | set(done))
-    record.setdefault("session_parameters", {}).setdefault("flags", {})[ONTOLOGY_FLAG] = True
+    # Opt in the way every write path does since PR 2: all three keys (D-149).
+    mcp_server._write_genie_ontology(record.setdefault("session_parameters", {}), True)
     gates_before = list(record["completed_gates"])
 
     outline = _outlines_agree(client, store, sid)
