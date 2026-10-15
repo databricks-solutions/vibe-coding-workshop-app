@@ -370,6 +370,16 @@ export function BlueprintScreen({ questions, initialSlug, hint, context, initial
       commitSha: d.source.commitSha,
       areas: focus,
       kpis: pinned,
+      evidence: {
+        fit: fitData?.fit ?? (fit.failed ? 'fallback' : 'unknown'),
+        matchedQuestions: recipes.filter(r => r.confidence !== 'none').length,
+        totalQuestions: recipes.length,
+        coveredNeeds: fitData?.needs.filter(n => !n.gap).length ?? 0,
+        totalNeeds: fitData?.needs.length ?? 0,
+        gapCount: fitData?.needs.filter(n => !!n.gap).length ?? 0,
+        tableCount: focusTables,
+        modelQuality: d.trust.qualityScore,
+      },
     });
   };
 

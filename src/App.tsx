@@ -10,6 +10,7 @@ import { HackathonDetailPage } from './components/hackathon/HackathonDetailPage'
 import { HackathonPlaybook } from './components/hackathon/HackathonPlaybook';
 import { ReleaseNotesPage } from './components/ReleaseNotesPage';
 import { AppSidebar } from './components/layout/AppSidebar';
+import { BundleUpdateNotice } from './components/BundleUpdateNotice';
 // Learning Academy is a large, self-contained feature (map + tours + lessons +
 // skill library with a big static data module). Lazy-load it so it never weighs down
 // the initial workflow bundle that every workshop participant hits first.
@@ -1980,6 +1981,7 @@ export default function App() {
           </button>
         </div>
       )}
+      <BundleUpdateNotice />
     </div>
   );
 }
