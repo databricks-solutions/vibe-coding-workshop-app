@@ -79,6 +79,7 @@ export function SubmitDialog({ idea, onClose }: { idea: Idea; onClose: () => voi
       const at = new Date().toISOString();
       updateIdea(idea.id, i => ({
         catalogRef: { ...r, submittedAt: at },
+        status: 'committed',
         decisions: [...i.decisions, { at, text: `Submitted to the use case map: ${r.industryLabel} / ${r.useCaseLabel}${r.version > 1 ? ` (version ${r.version})` : ''}` }],
       }));
       setDone(true);

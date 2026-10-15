@@ -3,6 +3,7 @@ import { Navigate, Route, Routes } from 'react-router-dom';
 import { IdeasHome } from './IdeasHome';
 import { IdeaFlow } from './IdeaFlow';
 import { BusinessCasePage } from './BusinessCasePage';
+import { IdeaViewer } from './IdeaViewer';
 
 interface IdeateAppProps {
   onOpenMobileNav?: () => void;
@@ -44,6 +45,7 @@ export default function IdeateApp({ onOpenMobileNav }: IdeateAppProps) {
     <IdeateErrorBoundary>
       <Routes>
         <Route index element={<IdeasHome onOpenMobileNav={onOpenMobileNav} />} />
+        <Route path="view/:ideaId" element={<IdeaViewer onOpenMobileNav={onOpenMobileNav} />} />
         <Route path=":ideaId" element={<IdeaFlow onOpenMobileNav={onOpenMobileNav} />} />
         <Route path=":ideaId/business-case" element={<BusinessCasePage onOpenMobileNav={onOpenMobileNav} />} />
         <Route path="*" element={<Navigate to="/ideate" replace />} />

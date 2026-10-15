@@ -4,7 +4,7 @@ import {
   PencilLine, RefreshCw, Rocket, ShieldCheck, Table2,
 } from 'lucide-react';
 import { apiClient } from '../../api/client';
-import { chosenShape, type Idea, type SwitchedAddOn } from '../journeykit';
+import { chosenShape, shapeBuild, type Idea, type SwitchedAddOn } from '../journeykit';
 import { MOMENTS, type Moment } from './journey';
 
 /**
@@ -213,25 +213,34 @@ const isLargerEffort = (effort?: string) => {
   return e === 'M' || e === 'L' || /^(M\b|L\b|MEDIUM|LARGE|HIGH)/.test(e);
 };
 
+/** Build capabilities promised by the chosen approach. These are contracts, not optional recipes. */
+export function requiredAddOns(idea: Idea | undefined): AddOn[] {
+  const shape = idea ? chosenShape(idea) : null;
+  if (!shape) return [];
+  if (shape.kind === 'copilot' || (shape.kind === 'automation' && shapeBuild(shape).surfaces.includes('App'))) return ['copilot'];
+  // The card's "What you'll build" surfaces are a contract. Any approach that
+  // promises an App must receive app chapters even if its internal kind is
+  // Insight, Monitor, Signal or Automation.
+  return shapeBuild(shape).surfaces.includes('App') ? ['app_view'] : [];
+}
+
 /** What the chosen approach needs by default, limited to what is turned on. */
 export function defaultAddOns(idea: Idea | undefined, enabled: ReadonlySet<SwitchedAddOn>): AddOn[] {
   const shape = idea ? chosenShape(idea) : null;
   if (!shape) return [];
-  const out: AddOn[] = [];
+  const out: AddOn[] = [...requiredAddOns(idea)];
   if (isLargerEffort(shape.effort) && enabled.has('ontology')) out.push('ontology');
   if ((shape.kind === 'signal' || shape.kind === 'automation') && enabled.has('alerts')) out.push('alerts');
-  if (shape.kind === 'copilot' && enabled.has('copilot')) out.push('copilot');
   return normalizeAddOns(out);
 }
 
 /** Add-ons the person can choose on the plan screen. */
 export function offeredAddOns(idea: Idea | undefined, enabled: ReadonlySet<SwitchedAddOn>): AddOn[] {
   const kind = idea ? chosenShape(idea)?.kind : undefined;
-  const out: AddOn[] = [];
+  const out: AddOn[] = [...requiredAddOns(idea)];
   if (enabled.has('ontology')) out.push('ontology');
   if (enabled.has('alerts')) out.push('alerts');
-  if (kind === 'copilot' && enabled.has('copilot')) out.push('copilot');
-  else if (enabled.has('app_view')) out.push('app_view');
+  if (kind !== 'copilot' && enabled.has('app_view')) out.push('app_view');
   return out;
 }
 

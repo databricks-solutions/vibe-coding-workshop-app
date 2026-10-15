@@ -12,12 +12,13 @@
  */
 
 import { useState, useEffect, useCallback, useRef, Fragment } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { 
   Trophy, 
   RefreshCw, 
   Flame, 
-  TrendingUp, 
-  TrendingDown, 
+  Mountain,
+  Code2,
   Sparkles,
   Clock,
   CheckCircle2,
@@ -32,13 +33,20 @@ import {
   Users,
   X,
   Search,
-  ExternalLink
+  ExternalLink,
+  History,
 } from 'lucide-react';
-import { apiClient, type LeaderboardEntry, type WorkshopUser, type SessionListItem } from '../api/client';
+import { apiClient, type InsightsLeaderboardEntry, type LeaderboardEntry, type LeaderboardSeason, type LeaderboardSeasons, type WorkshopUser, type SessionListItem } from '../api/client';
 import { WORKSHOP_LEVELS, type WorkshopLevel } from '../constants/workflowSections';
+import { InsightsBoard } from './leaderboard/InsightsBoard';
+import { MovementIndicator, RankBadge, RowConfetti } from './leaderboard/LeaderboardParts';
+import { formatRelativeTime, rankRowClasses, withMovement, type Movement } from './leaderboard/ranking';
 
-// Movement type for rank changes
-type Movement = 'up' | 'down' | 'new' | 'same';
+type BoardTab = 'technical' | 'insights';
+const BOARD_TABS: { key: BoardTab; label: string; icon: typeof Code2; subtitle: string }[] = [
+  { key: 'technical', label: 'Technical', icon: Code2, subtitle: 'Top workshop performers' },
+  { key: 'insights', label: 'Insights', icon: Mountain, subtitle: 'Best ideas from Ideate and Insights' },
+];
 
 // Sort config for the Workshop Participants modal table
 type UsersSortKey = 'display_name' | 'email' | 'workshop_level_label' | 'updated_at';
@@ -48,47 +56,6 @@ type SortDir = 'asc' | 'desc';
 interface LeaderboardEntryWithMovement extends LeaderboardEntry {
   movement: Movement;
   rankChange?: number;
-}
-
-// Confetti particle component
-function ConfettiParticle({ delay, color, left, rotation }: { delay: number; color: string; left: number; rotation: number }) {
-  return (
-    <div
-      className="absolute w-2 h-2 rounded-sm animate-confetti-fall"
-      style={{
-        backgroundColor: color,
-        left: `${left}%`,
-        animationDelay: `${delay}ms`,
-        transform: `rotate(${rotation}deg)`,
-      }}
-    />
-  );
-}
-
-const CONFETTI_COLORS = ['#FFD700', '#FFA500', '#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FFEAA7', '#DDA0DD'];
-
-function makeConfettiParticles() {
-  return Array.from({ length: 30 }, (_, i) => ({
-    id: i,
-    delay: Math.random() * 1000,
-    color: CONFETTI_COLORS[Math.floor(Math.random() * CONFETTI_COLORS.length)],
-    left: Math.random() * 100,
-    rotation: Math.random() * 360,
-  }));
-}
-
-// Confetti burst for #1 — particles are randomized once per mount (lazy state
-// initializer) so render stays pure.
-function ConfettiBurst() {
-  const [particles] = useState(makeConfettiParticles);
-
-  return (
-    <div className="absolute inset-0 overflow-hidden pointer-events-none">
-      {particles.map((p) => (
-        <ConfettiParticle key={p.id} delay={p.delay} color={p.color} left={p.left} rotation={p.rotation} />
-      ))}
-    </div>
-  );
 }
 
 // Tooltip component for chapter progress
@@ -164,83 +131,6 @@ function ChapterTooltip({
   );
 }
 
-// Movement indicator component
-function MovementIndicator({ movement, rankChange }: { movement: Movement; rankChange?: number }) {
-  if (movement === 'same') return null;
-
-  return (
-    <div className={`absolute -right-1 top-1/2 -translate-y-1/2 flex items-center gap-0.5 
-      ${movement === 'up' ? 'text-emerald-400 animate-rank-up' : ''}
-      ${movement === 'down' ? 'text-red-400 animate-rank-down' : ''}
-      ${movement === 'new' ? 'text-amber-400 animate-new-entry' : ''}
-    `}>
-      {movement === 'up' && (
-        <>
-          <TrendingUp className="w-4 h-4" />
-          {rankChange && rankChange > 1 && (
-            <span className="text-ui-2xs font-bold">+{rankChange}</span>
-          )}
-        </>
-      )}
-      {movement === 'down' && (
-        <>
-          <TrendingDown className="w-4 h-4" />
-          {rankChange && rankChange > 1 && (
-            <span className="text-ui-2xs font-bold">-{rankChange}</span>
-          )}
-        </>
-      )}
-      {movement === 'new' && <Sparkles className="w-4 h-4" />}
-    </div>
-  );
-}
-
-// Rank badge component
-function RankBadge({ rank }: { rank: number }) {
-  if (rank === 1) {
-    return (
-      <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-amber-400 to-amber-600 flex items-center justify-center shadow-lg shadow-amber-500/30 animate-crown-glow">
-        <span className="text-lg">🥇</span>
-      </div>
-    );
-  }
-  if (rank === 2) {
-    return (
-      <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-slate-300 to-slate-500 flex items-center justify-center shadow-lg shadow-slate-400/30">
-        <span className="text-lg">🥈</span>
-      </div>
-    );
-  }
-  if (rank === 3) {
-    return (
-      <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-orange-400 to-orange-600 flex items-center justify-center shadow-lg shadow-orange-500/30">
-        <span className="text-lg">🥉</span>
-      </div>
-    );
-  }
-  return (
-    <div className="w-10 h-10 rounded-xl bg-secondary flex items-center justify-center">
-      <span className="text-lg font-bold text-muted-foreground">{rank}</span>
-    </div>
-  );
-}
-
-// Format a relative time string from an ISO timestamp
-function formatRelativeTime(isoString: string): string {
-  const date = new Date(isoString);
-  const now = new Date();
-  const diffMs = now.getTime() - date.getTime();
-  const diffMins = Math.floor(diffMs / 60000);
-  const diffHours = Math.floor(diffMs / 3600000);
-  const diffDays = Math.floor(diffMs / 86400000);
-
-  if (diffMins < 1) return 'just now';
-  if (diffMins < 60) return `${diffMins}m ago`;
-  if (diffHours < 24) return `${diffHours}h ago`;
-  if (diffDays < 7) return `${diffDays}d ago`;
-  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-}
-
 // Single leaderboard row
 function LeaderboardRow({ 
   entry, 
@@ -256,10 +146,7 @@ function LeaderboardRow({
     : undefined;
 
   const rowClasses = `relative group flex items-center gap-4 p-4 rounded-xl border transition-all duration-300
-        ${isFirst ? 'bg-gradient-to-r from-amber-500/10 to-amber-600/5 border-amber-500/30 shadow-lg shadow-amber-500/10' : ''}
-        ${entry.rank === 2 ? 'bg-slate-500/5 border-slate-500/20' : ''}
-        ${entry.rank === 3 ? 'bg-orange-500/5 border-orange-500/20' : ''}
-        ${!isTop3 ? 'bg-card border-border hover:border-primary/30 hover:bg-primary/5' : ''}
+        ${rankRowClasses(entry.rank)}
         animate-leaderboard-slide-in
         ${entry.session_id ? 'cursor-pointer' : ''}`;
 
@@ -275,7 +162,7 @@ function LeaderboardRow({
       style={{ animationDelay: `${index * 80}ms`, textDecoration: 'none', color: 'inherit' }}
     >
       {/* Confetti for #1 */}
-      {isFirst && <ConfettiBurst />}
+      {isFirst && <RowConfetti />}
 
       {/* Rank Badge */}
       <RankBadge rank={entry.rank} />
@@ -361,6 +248,42 @@ function LeaderboardRow({
 }
 
 export function LeaderboardPage() {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const tab: BoardTab = searchParams.get('tab') === 'insights' ? 'insights' : 'technical';
+  const setTab = (next: BoardTab) => setSearchParams(prev => {
+    const p = new URLSearchParams(prev);
+    if (next === 'technical') p.delete('tab'); else p.set('tab', next);
+    p.delete('season');
+    return p;
+  }, { replace: true });
+  const seasonId = searchParams.get('season');
+  const setSeason = (id: string | null) => setSearchParams(prev => {
+    const p = new URLSearchParams(prev);
+    if (id) p.set('season', id); else p.delete('season');
+    return p;
+  }, { replace: true });
+  const [seasons, setSeasons] = useState<LeaderboardSeasons | null>(null);
+  const [archived, setArchived] = useState<{ id: string; season: (LeaderboardSeason & { entries: unknown[] }) | null } | null>(null);
+
+  useEffect(() => {
+    let live = true;
+    apiClient.leaderboardSeasons(tab).then(s => { if (live) setSeasons(s); }).catch(() => { if (live) setSeasons(null); });
+    return () => { live = false; };
+  }, [tab]);
+
+  useEffect(() => {
+    if (!seasonId) return;
+    let live = true;
+    apiClient.leaderboardSeason(seasonId)
+      .then(s => { if (live) setArchived({ id: seasonId, season: s }); })
+      .catch(() => { if (live) setArchived({ id: seasonId, season: null }); });
+    return () => { live = false; };
+  }, [seasonId]);
+
+  // An archived season, once loaded, for the board on screen.
+  const archiveState = !seasonId ? 'live' : archived?.id !== seasonId ? 'loading' : !archived.season || archived.season.board !== tab ? 'missing' : 'ready';
+  const frozen = archiveState === 'ready' ? archived!.season! : null;
+  const [insightsTick, setInsightsTick] = useState(0);
   const [entries, setEntries] = useState<LeaderboardEntryWithMovement[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -396,35 +319,9 @@ export function LeaderboardPage() {
 
   // Calculate movements between old and new data
   const calculateMovements = useCallback((newEntries: LeaderboardEntry[]): LeaderboardEntryWithMovement[] => {
-    const prevRanks = previousRanksRef.current;
-    
-    const withMovement = newEntries.map(entry => {
-      const prevRank = prevRanks.get(entry.user_id);
-      let movement: Movement = 'same';
-      let rankChange: number | undefined;
-
-      if (prevRank === undefined) {
-        // First load or new entry
-        if (prevRanks.size > 0) {
-          movement = 'new';
-        }
-      } else if (prevRank > entry.rank) {
-        movement = 'up';
-        rankChange = prevRank - entry.rank;
-      } else if (prevRank < entry.rank) {
-        movement = 'down';
-        rankChange = entry.rank - prevRank;
-      }
-
-      return { ...entry, movement, rankChange };
-    });
-
-    // Update previous ranks for next comparison
-    const newRanks = new Map<string, number>();
-    newEntries.forEach(e => newRanks.set(e.user_id, e.rank));
-    previousRanksRef.current = newRanks;
-
-    return withMovement;
+    const { rows, ranks } = withMovement(newEntries, previousRanksRef.current, e => e.user_id);
+    previousRanksRef.current = ranks;
+    return rows;
   }, []);
 
   // Fetch leaderboard data
@@ -465,7 +362,7 @@ export function LeaderboardPage() {
     const interval = setInterval(() => {
       setCountdown(prev => {
         if (prev <= 1) {
-          fetchLeaderboard();
+          if (tab === 'insights') setInsightsTick(t => t + 1); else fetchLeaderboard();
           return 30;
         }
         return prev - 1;
@@ -473,7 +370,7 @@ export function LeaderboardPage() {
     }, 1000);
 
     return () => clearInterval(interval);
-  }, [autoRefresh, isPaused, fetchLeaderboard]);
+  }, [autoRefresh, isPaused, fetchLeaderboard, tab]);
 
   // Clear movement indicators after 3 seconds
   useEffect(() => {
@@ -485,9 +382,13 @@ export function LeaderboardPage() {
   }, [entries]);
 
   const handleManualRefresh = () => {
-    fetchLeaderboard();
+    if (tab === 'insights') setInsightsTick(t => t + 1); else fetchLeaderboard();
     setCountdown(30);
   };
+
+  const shown: LeaderboardEntryWithMovement[] = frozen
+    ? (frozen.entries as LeaderboardEntry[]).map(e => ({ ...e, movement: 'same' as Movement }))
+    : entries;
 
   const formatLastUpdated = (date: Date) => {
     return date.toLocaleTimeString('en-US', {
@@ -529,7 +430,7 @@ export function LeaderboardPage() {
               </div>
               <div>
                 <h1 className="text-xl font-bold text-foreground tracking-tight">Leaderboard</h1>
-                <p className="text-ui-xs text-muted-foreground">Top workshop performers</p>
+                <p className="text-ui-xs text-muted-foreground">{BOARD_TABS.find(t => t.key === tab)!.subtitle}</p>
               </div>
             </div>
 
@@ -573,12 +474,68 @@ export function LeaderboardPage() {
 
             </div>
           </div>
+          <div className="mt-3 -mb-4 flex gap-1" role="tablist" aria-label="Leaderboard">
+            {BOARD_TABS.map(({ key, label, icon: Icon }) => (
+              <button
+                key={key}
+                role="tab"
+                aria-selected={tab === key}
+                onClick={() => setTab(key)}
+                className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
+                  tab === key ? 'border-primary text-primary' : 'border-transparent text-muted-foreground hover:text-foreground hover:border-border'
+                }`}
+              >
+                <span className="flex items-center gap-2"><Icon className="w-4 h-4" />{label}</span>
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 
       {/* Content */}
       <div className="p-6">
         <div className="max-w-3xl mx-auto">
+          {seasons && (seasons.current || seasons.archive.length > 0) && (
+            <div className="mb-4 flex flex-wrap items-center gap-2 text-ui-xs text-muted-foreground">
+              <History className="w-3.5 h-3.5" />
+              <select
+                value={seasonId ?? ''}
+                onChange={e => setSeason(e.target.value || null)}
+                aria-label="Season"
+                className="h-7 rounded-lg border border-border bg-card px-2 text-ui-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+              >
+                <option value="">Live · {seasons.current?.name || 'All time'}</option>
+                {seasons.archive.map(a => (
+                  <option key={a.id} value={a.id}>{a.name || 'Untitled'} ({a.kind === 'snapshot' ? 'snapshot' : 'archived'})</option>
+                ))}
+              </select>
+              {!seasonId && seasons.current?.startedAt && (
+                <span>Counting work started since {new Date(`${seasons.current.startedAt}Z`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
+              )}
+            </div>
+          )}
+
+          {seasonId && (
+            <div className="mb-5 flex flex-wrap items-center gap-3 rounded-xl border border-primary/25 bg-primary/[0.05] px-4 py-3 text-ui-sm">
+              <History className="w-4 h-4 text-primary shrink-0" />
+              <p className="flex-1 min-w-[12rem] text-muted-foreground">
+                {archiveState === 'loading' ? 'Loading the archive…'
+                  : archiveState === 'missing' ? "That archive isn't available for this board."
+                  : <><span className="font-medium text-foreground">{frozen!.name || 'Archived season'}</span>, read only. {frozen!.entryCount} {frozen!.entryCount === 1 ? 'entry' : 'entries'} as it stood.</>}
+              </p>
+              <button onClick={() => setSeason(null)} className="px-3 py-1 rounded-lg bg-primary text-primary-foreground text-ui-xs font-medium hover:bg-primary/90">Back to live</button>
+            </div>
+          )}
+
+          {seasonId && !frozen ? null : tab === 'insights' ? (
+            <InsightsBoard
+              key={frozen?.id ?? 'live'}
+              refreshTick={insightsTick}
+              onRefreshing={setIsRefreshing}
+              onUpdated={setLastUpdated}
+              frozen={frozen ? (frozen.entries as InsightsLeaderboardEntry[]) : undefined}
+            />
+          ) : (<>
           {/* Workshop user count banner */}
           {totalUsers > 0 && (
             <div className="mb-5 flex items-center justify-center gap-2 text-ui-base text-muted-foreground">
@@ -608,7 +565,7 @@ export function LeaderboardPage() {
               <Loader2 className="w-10 h-10 text-primary animate-spin mb-4" />
               <p className="text-muted-foreground">Loading leaderboard...</p>
             </div>
-          ) : entries.length === 0 ? (
+          ) : shown.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-20 text-center">
               <Trophy className="w-16 h-16 text-muted-foreground/30 mb-4" />
               <h2 className="text-xl font-semibold text-foreground mb-2">No entries yet</h2>
@@ -623,7 +580,7 @@ export function LeaderboardPage() {
               onMouseEnter={() => setIsPaused(true)}
               onMouseLeave={() => setIsPaused(false)}
             >
-              {entries.slice(0, visibleCount).map((entry, index) => (
+              {shown.slice(0, visibleCount).map((entry, index) => (
                 <LeaderboardRow 
                   key={entry.user_id} 
                   entry={entry} 
@@ -634,14 +591,14 @@ export function LeaderboardPage() {
           )}
 
           {/* Show More button */}
-          {!isLoading && entries.length > visibleCount && (
+          {!isLoading && shown.length > visibleCount && (
             <div className="mt-4 flex justify-center">
               <button
                 onClick={() => setVisibleCount(prev => prev + 10)}
                 className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg bg-secondary hover:bg-secondary/80 text-foreground text-ui-base font-medium transition-colors border border-border"
               >
                 <ChevronDown className="w-4 h-4" />
-                Show 10 more ({entries.length - visibleCount} remaining)
+                Show 10 more ({shown.length - visibleCount} remaining)
               </button>
             </div>
           )}
@@ -693,6 +650,7 @@ export function LeaderboardPage() {
               <span className="text-primary font-bold">720 points</span>
             </div>
           </div>
+          </>)}
         </div>
       </div>
 

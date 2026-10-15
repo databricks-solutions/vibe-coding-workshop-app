@@ -2,6 +2,7 @@ import { useState } from 'react';
 import type { IdeaFlow } from '../engine/useIdeaFlow';
 import { AssumptionsDrawer } from '../ui/AssumptionsDrawer';
 import { ClarityRing } from '../ui/ClarityRing';
+import { PointsChip } from '../ui/PointsChip';
 import { caseFigures } from '../engine/ideaContext';
 import { money, units } from '../engine/businessCase';
 
@@ -31,6 +32,7 @@ export function IdeaTools({ flow }: { flow: IdeaFlow }) {
           {count} assumption{count === 1 ? '' : 's'}
         </button>
       )}
+      {!idea.sample && <PointsChip idea={idea} />}
       <ClarityRing idea={idea} size={34} />
       <AssumptionsDrawer open={open} onClose={() => setOpen(false)} assumptions={idea.assumptions} onSet={flow.setAssumption} />
     </>

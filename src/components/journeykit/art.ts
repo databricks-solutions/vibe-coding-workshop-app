@@ -13,7 +13,7 @@ export const STEP_ART: Record<StepKey, { image: string; icon: typeof Sparkles; p
   spark: { image: `${BASE}/step-spark.webp`, icon: Sparkles, promise: 'A crisp one-line version of your idea' },
   map: { image: `${BASE}/step-map.webp`, icon: MapIcon, promise: 'Plus who it helps and what it touches' },
   clarify: { image: `${BASE}/step-clarify.webp`, icon: MessagesSquare, promise: 'Pick answers, no essays needed' },
-  shape: { image: `${BASE}/step-shape.webp`, icon: Shapes, promise: 'Each one comes with its biggest risk' },
+  shape: { image: `${BASE}/step-shape.webp`, icon: Shapes, promise: 'Compare what each builds, the effort, and what to validate first' },
   questions: { image: `${BASE}/step-clarify.webp`, icon: ListChecks, promise: 'These become the questions your Genie is tested on' },
   impact: { image: `${BASE}/step-map.webp`, icon: TrendingUp, promise: 'Pick rough answers, or skip. Not sure is fine.' },
   brief: { image: `${BASE}/step-brief.webp`, icon: FileText, promise: 'Review it, check for gaps, then decide' },

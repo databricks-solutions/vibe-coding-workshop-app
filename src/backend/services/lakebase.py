@@ -1928,9 +1928,11 @@ def _get_avatar_for_user(email: str) -> str:
     return AVATAR_EMOJIS[index]
 
 
-def get_leaderboard(limit: int = 10) -> List[Dict]:
+def get_leaderboard(limit: int = 10, since: Optional[datetime] = None) -> List[Dict]:
     """
     Get leaderboard data showing top users by score.
+
+    `since` is the current season's start: only sessions started after it count.
     
     For users with multiple sessions, uses the session with the highest score.
     Ties are broken by earliest updated_at (completed first = higher rank).
@@ -1971,10 +1973,14 @@ def get_leaderboard(limit: int = 10) -> List[Dict]:
             WHERE created_by IS NOT NULL
               AND created_by != ''
               AND (completed_gates IS NOT NULL AND completed_gates != '[]')
+              {"AND created_at >= %s" if since else ""}
             ORDER BY created_by, updated_at DESC
             """
 
-            cursor.execute(query)
+            if since:
+                cursor.execute(query, (since,))
+            else:
+                cursor.execute(query)
             rows = cursor.fetchall()
             cursor.close()
 

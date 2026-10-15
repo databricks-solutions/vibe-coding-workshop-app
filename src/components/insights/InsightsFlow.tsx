@@ -6,7 +6,7 @@ import { ASSISTANT_CATALOG } from '../../constants/codingAssistants';
 import { WORKSHOP_LEVELS } from '../../constants/workflowSections';
 import {
   BusinessCaseSheet, JourneyProgress, JourneyScreen, REVIEW_IDEA_EVENT, SHAPE_KINDS, answerFor, buildLines, caseFigures, chosenShape, matchingContext, money,
-  needsBuildUpdate, placedLeaf, seedFromUseCase, useEnabledAddOns, useIdeas,
+  needsBuildUpdate, placedLeaf, seedFromUseCase, useEnabledAddOns, useIdeaCelebrations, useIdeas,
   type Idea, type ReviewIdeaDetail, type StepKey,
 } from '../journeykit';
 import { composeBrief, fitName, parseBrief, toSlug, type DataSource, type IdeaBrief } from './brief';
@@ -14,7 +14,7 @@ import type { ModelHint } from './blueprint/industryMap';
 import type { BlueprintChoice } from './blueprint/types';
 import { INDUSTRY_IDEAS } from './journey';
 import { openPathComparison } from './pathEvents';
-import { addOnAvailable, defaultAddOns, momentsFor, normalizeAddOns, offeredAddOns, useTagAvailability, type AddOn } from './recipes';
+import { ADD_ON_LABEL, addOnAvailable, defaultAddOns, momentsFor, normalizeAddOns, offeredAddOns, requiredAddOns, tagsFor, useTagAvailability, type AddOn } from './recipes';
 import { insightsPhases, type InsightsStage } from './progress';
 import { insightsIndustryFor } from './usecases/useCaseApi';
 import { DataScreen } from './screens/DataScreen';
@@ -176,7 +176,7 @@ function InsightsFlowInner(props: InsightsFlowProps) {
       const linked = sessionId ? ideas.find(i => (i.mode === 'insights' || i.buildTarget === 'insights') && i.sessionId === sessionId) : undefined;
       setIdeaId(linked?.id ?? null);
       setLockSeen(linked?.lockedAt);
-      setStage(linked ? (linked.lockedAt ? (linked.buildStage === 'data' && linked.genieQuestions?.length ? 'data' : 'locked') : 'idea') : 'start');
+      setStage(linked ? (linked.lockedAt ? (linked.buildStage === 'data' ? 'data' : 'locked') : 'idea') : 'start');
       setDataSource(parsed.questions.length ? parsed.dataSource : null);
       setDataLocation(parsed.dataLocation);
       setBlueprint(parsed.blueprint);
@@ -245,10 +245,22 @@ function InsightsFlowInner(props: InsightsFlowProps) {
     text: [ideaText, ...questions].filter(Boolean).join('\n'),
   };
   const usingBlueprint = dataSource === 'blueprint';
-  const offered = offeredAddOns(idea, enabledAddOns).filter(a => addOnAvailable(a, availability));
-  const chosenAddOns = normalizeAddOns((addOnChoice ?? defaultAddOns(idea, enabledAddOns)).filter(a => offered.includes(a)));
+  const required = requiredAddOns(idea);
+  const optionalOffered = offeredAddOns(idea, enabledAddOns)
+    .filter(a => !required.includes(a) && addOnAvailable(a, availability));
+  const offered = normalizeAddOns([...required, ...optionalOffered]);
+  const chosenAddOns = normalizeAddOns([
+    ...required,
+    ...(addOnChoice ?? defaultAddOns(idea, enabledAddOns)).filter(a => offered.includes(a)),
+  ]);
+  const missingRequired = availability.loaded ? required.filter(a => !addOnAvailable(a, availability)) : [];
+  const requiredBuildChecking = required.length > 0 && !availability.loaded;
+  const requiredBuildBlocker = availability.loaded && missingRequired.length > 0
+    ? `The ${ADD_ON_LABEL[missingRequired[0]].title.toLowerCase()} build steps are not available for Genie Code. Required prompts: ${tagsFor(missingRequired[0]).join(', ')}.`
+    : null;
   const toggleAddOn = (a: AddOn) => setAddOnChoice(chosenAddOns.includes(a) ? chosenAddOns.filter(x => x !== a) : [...chosenAddOns, a]);
-  const builtMoments = useMemo(() => momentsFor(parsed.addOns), [parsed.addOns]);
+  const effectiveBuiltAddOns = normalizeAddOns([...required, ...parsed.addOns]);
+  const builtMoments = momentsFor(effectiveBuiltAddOns);
 
   const phases = (viewStep?: StepKey | null) => insightsPhases({ stage, idea, viewStep, blueprint: usingBlueprint });
   const progress = <JourneyProgress phases={phases()} trailing="then 4 build chapters" />;
@@ -276,6 +288,7 @@ function InsightsFlowInner(props: InsightsFlowProps) {
     setStage('idea');
     if (ready) setReviewing(true);
   };
+  const celebrationOverlay = useIdeaCelebrations(idea, { readOnly, onRaise: editIdea });
 
   const backToBuild = () => {
     setReviewing(false);
@@ -342,7 +355,7 @@ function InsightsFlowInner(props: InsightsFlowProps) {
         blueprint: parsed.blueprint,
         useCase,
         idea: ideaBriefOf(idea),
-        addOns: parsed.addOns,
+        addOns: effectiveBuiltAddOns,
       }),
       resetPrompts: true,
     });
@@ -382,7 +395,7 @@ function InsightsFlowInner(props: InsightsFlowProps) {
         dataSource={parsed.dataSource}
         blueprint={parsed.blueprint}
         moments={builtMoments}
-        addOns={parsed.addOns}
+        addOns={effectiveBuiltAddOns}
         industry={selectedIndustry}
         useCase={selectedUseCase}
         sessionId={sessionId}
@@ -438,7 +451,6 @@ function InsightsFlowInner(props: InsightsFlowProps) {
         key={idea.id}
         ideaId={idea.id}
         industryId={industryId}
-        phasesFor={phases}
         tools={ready ? <>{compare}{backToBuildButton}</> : compare}
         onBackFromFirst={idea.approved.length === 0 ? discardIdea : undefined}
         onChangeUseCase={discardIdea}
@@ -527,8 +539,11 @@ function InsightsFlowInner(props: InsightsFlowProps) {
         readOnly={readOnly}
         moments={momentsFor(chosenAddOns)}
         offeredAddOns={offered}
+        requiredAddOns={required}
         addOns={chosenAddOns}
         onToggleAddOn={toggleAddOn}
+        buildChecking={requiredBuildChecking}
+        buildBlocker={requiredBuildBlocker}
       />
     );
   }
@@ -543,6 +558,7 @@ function InsightsFlowInner(props: InsightsFlowProps) {
       {caseOpen && idea && (
         <BusinessCaseSheet ideaId={idea.id} onClose={() => setCaseOpen(false)} onAddNumbers={() => { setCaseOpen(false); editIdea(); }} />
       )}
+      {celebrationOverlay}
     </>
   );
 }

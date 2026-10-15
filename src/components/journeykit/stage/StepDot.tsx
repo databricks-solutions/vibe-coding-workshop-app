@@ -1,11 +1,11 @@
 import { Check, type LucideIcon } from 'lucide-react';
 import { PROGRESS_TOKENS, type StepState } from '../tokens';
 
-const SIZE = { sm: 'w-6 h-6', md: 'w-7 h-7' };
-const ICON = { sm: 'w-3 h-3', md: 'w-3.5 h-3.5' };
+const SIZE = { sm: 'w-6 h-6', md: 'w-7 h-7', lg: 'w-10 h-10' };
+const ICON = { sm: 'w-3 h-3', md: 'w-3.5 h-3.5', lg: 'w-5 h-5' };
 
 /** A labelled step marker: the step's icon while upcoming, a filled ring when current, a check when done. */
-export function StepDot({ icon: Icon, state, prefilled, size = 'md' }: { icon: LucideIcon; state: StepState; prefilled?: boolean; size?: 'sm' | 'md' }) {
+export function StepDot({ icon: Icon, state, prefilled, size = 'md' }: { icon: LucideIcon; state: StepState; prefilled?: boolean; size?: 'sm' | 'md' | 'lg' }) {
   return (
     <span className={`relative shrink-0 rounded-full flex items-center justify-center transition-all duration-300 ${SIZE[size]} ${PROGRESS_TOKENS.dot[state]}`}>
       {state === 'done' ? <Check className={ICON[size]} strokeWidth={3} /> : <Icon className={ICON[size]} />}

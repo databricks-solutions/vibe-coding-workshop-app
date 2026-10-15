@@ -165,11 +165,62 @@ export function BusinessCaseSheet({ ideaId, onClose, onAddNumbers }: BusinessCas
   );
 }
 
+/**
+ * Page one of the decision-ready business case, embedded in the approved-brief screen.
+ * The full sheet remains available for its numbers appendix and print controls.
+ */
+export function InlineBusinessCase({ flow, onOpenFull }: { flow: IdeaFlow; onOpenFull: () => void }) {
+  const { idea, loading, error } = flow;
+  const asked = useRef(false);
+
+  useEffect(() => {
+    if (!idea?.brief || idea.summary || loading || error || asked.current) return;
+    asked.current = true;
+    flow.generateSummary();
+  }, [idea, loading, error, flow]);
+
+  if (!idea) return null;
+  const figures = caseFigures(idea);
+  const summary = idea.summary;
+
+  if (error && !summary) {
+    return (
+      <div className="rounded-2xl border border-border bg-card p-5 space-y-3">
+        <ExpandableErrorBanner error={error} summary="Something went wrong writing the one-pager." />
+        <button onClick={() => { flow.clearError(); flow.generateSummary(); }} className="inline-flex items-center gap-1.5 text-ui-sm font-medium text-primary hover:underline">
+          <RefreshCw className="w-3.5 h-3.5" /> Try again
+        </button>
+      </div>
+    );
+  }
+
+  if (!summary) return <Thinking label="Writing your business case one-pager" image={STEP_ART.brief.image} />;
+
+  return (
+    <section className="space-y-3" aria-label="Business case one-pager">
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="flex-1 min-w-0">
+          <p className="text-ui-xl font-semibold text-foreground">Your business case one-pager</p>
+          <p className="text-ui-sm text-muted-foreground">The decision-ready version to review, share, or build from.</p>
+        </div>
+        <button onClick={onOpenFull} className="inline-flex items-center gap-1.5 h-9 px-3 rounded-lg border border-border bg-card text-ui-sm font-medium text-foreground hover:bg-secondary/60">
+          {figures ? 'View numbers appendix' : 'Open full page'} <ArrowRight className="w-3.5 h-3.5" />
+        </button>
+      </div>
+      <div className="overflow-x-auto rounded-2xl border border-border bg-secondary/30 p-3 sm:p-5">
+        <div className="w-[8.5in] mx-auto">
+          <CaseDocument idea={idea} summary={summary} figures={figures} appendix={false} />
+        </div>
+      </div>
+    </section>
+  );
+}
+
 const DATE = new Intl.DateTimeFormat(undefined, { month: 'long', day: 'numeric', year: 'numeric' });
 
-function CaseDocument({ idea, summary, figures }: { idea: Idea; summary: CaseSummary; figures: CaseFigures | null }) {
+function CaseDocument({ idea, summary, figures, appendix = true }: { idea: Idea; summary: CaseSummary; figures: CaseFigures | null; appendix?: boolean }) {
   const config = modeOf(idea);
-  const pages = figures ? 2 : 1;
+  const pages = figures && appendix ? 2 : 1;
   const scope = idea.impact?.scope;
 
   return (
@@ -209,7 +260,7 @@ function CaseDocument({ idea, summary, figures }: { idea: Idea; summary: CaseSum
         {figures ? <Decision summary={summary} figures={figures} /> : <Closing summary={summary} />}
       </Page>
 
-      {figures && (
+      {figures && appendix && (
         <Page n={2} of={pages} footer="Directional estimate at Databricks list price, sized on the inputs shown. Confirm with your Databricks account team; check anything marked assumed.">
           <div className="flex items-baseline justify-between">
             <Eyebrow>Appendix: the numbers</Eyebrow>

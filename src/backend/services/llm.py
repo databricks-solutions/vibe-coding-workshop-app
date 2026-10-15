@@ -33,14 +33,15 @@ except ImportError:
 # - databricks-dbrx-instruct (Foundation Model API)
 # - databricks-mixtral-8x7b-instruct (Foundation Model API)
 # - Custom endpoints deployed in your workspace
-# Default endpoint (Claude Sonnet 4.6)
-SERVING_ENDPOINT_NAME = os.getenv("DATABRICKS_SERVING_ENDPOINT", "databricks-claude-sonnet-4-6")
+# Default endpoint (Claude Sonnet 5.5)
+SERVING_ENDPOINT_NAME = os.getenv("DATABRICKS_SERVING_ENDPOINT", "databricks-claude-sonnet-5-5")
 
 # Fallback endpoints to try if the configured/default endpoint is not deployed in
 # the current workspace (e.g. Claude is unavailable on Databricks Free Edition).
 # Ordered: the previous Claude default, then instruct models (plain string content),
 # then reasoning models.
 FALLBACK_ENDPOINTS = [
+    "databricks-claude-sonnet-4-6",
     "databricks-claude-sonnet-4-5",
     "databricks-meta-llama-3-3-70b-instruct",
     "databricks-llama-4-maverick",

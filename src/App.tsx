@@ -582,7 +582,7 @@ export default function App() {
   /** `onCreated` runs with the new id before any state changes, so linked ideas are ready when the view renders. */
   const createNewSession = async (onCreated?: (id: string) => void, view: WorkflowViewMode = 'technical'): Promise<string | null> => {
     setIsCreatingNewSession(true);
-    setViewMode('technical');
+    setViewMode(view);
     try {
       const [response, defaults] = await Promise.all([apiClient.createNewSession(), apiClient.getWorkshopDefaults()]);
       onCreated?.(response.session_id);
@@ -1263,11 +1263,20 @@ export default function App() {
    * (a new session clears unsaved ones), starts a fresh project linked to the idea,
    * and opens it in the view that builds it. An idea that already has a project reopens it.
    */
-  const startBuildFromIdea = async (idea: Idea) => {
-    const target = buildTargetFor(idea);
-    if (idea.sessionId) {
-      updateIdea(idea.id, { buildTarget: target, buildStatus: 'building', status: 'committed' });
-      handleLoadSession(idea.sessionId);
+  const startBuildFromIdea = async (idea: Idea, targetOverride?: 'insights' | 'technical', fresh = false) => {
+    const target = targetOverride ?? buildTargetFor(idea);
+    const linkedSession = fresh ? undefined : idea.sessionId;
+    if (linkedSession) {
+      updateIdea(idea.id, {
+        buildTarget: target,
+        buildStatus: 'building',
+        status: 'committed',
+        ...(target === 'insights' ? {
+          lockedAt: idea.lockedAt ?? new Date().toISOString(),
+          buildStage: 'data' as const,
+        } : {}),
+      });
+      handleLoadSession(linkedSession);
       setViewMode(target);
       return;
     }
@@ -1292,10 +1301,9 @@ export default function App() {
         });
       }
     } catch (err) {
-      console.error('Could not save the current project before building; keeping it open:', err);
-      setIsCreatingNewSession(false);
-      getOrCreateDefaultSession();
-      return;
+      // Preserving the old draft is best-effort; it must not strand someone who
+      // explicitly asked to continue from their idea into the build.
+      console.error('Could not save the current project before building; continuing with the handoff:', err);
     }
 
     let questions = idea.genieQuestions ?? [];
@@ -1402,6 +1410,8 @@ export default function App() {
     const build = params.get('buildIdea');
     const update = params.get('updateBuild');
     const open = params.get('openSession');
+    const target = params.get('target') === 'insights' ? 'insights' : params.get('target') === 'technical' ? 'technical' : undefined;
+    const fresh = params.get('fresh') === '1';
     if (!build && !update && !open) return;
     handledNav.current = location.key;
     if (update) {
@@ -1412,7 +1422,7 @@ export default function App() {
     }
     if (build) {
       const idea = ideas.find(i => i.id === build);
-      if (idea && !readOnly) void startBuildFromIdea(idea);
+      if (idea && !readOnly) void startBuildFromIdea(idea, target, fresh);
       else if (!sessionId) getOrCreateDefaultSession();
       return;
     }

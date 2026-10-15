@@ -24,6 +24,8 @@ interface QuestionCardProps {
   reorder?: boolean;
   /** Pick all that apply. */
   multi?: boolean;
+  /** Maximum choices for a multi-select question. */
+  maxPicks?: number;
   /** One-line note shown under the options. */
   hint?: string;
   notSureLabel?: string;
@@ -59,6 +61,7 @@ export function QuestionCard({
   recommendedWhy,
   reorder = true,
   multi = false,
+  maxPicks,
   hint,
   notSureLabel = NOT_SURE,
   confirmLabel = 'Next',
@@ -81,11 +84,14 @@ export function QuestionCard({
     [options, rec, reorder],
   );
   const notSurePicked = picks.includes(NOT_SURE_PICK);
+  const atCap = !!multi && !!maxPicks && picks.filter(p => p !== NOT_SURE_PICK).length >= maxPicks;
 
   const choose = (opt: string) => setPicks(p => {
     if (!multi) return [opt];
     const rest = p.filter(x => x !== NOT_SURE_PICK);
-    return rest.includes(opt) ? rest.filter(x => x !== opt) : [...rest, opt];
+    if (rest.includes(opt)) return rest.filter(x => x !== opt);
+    if (maxPicks && rest.length >= maxPicks) return rest;
+    return [...rest, opt];
   });
   const chooseNotSure = () => setPicks([NOT_SURE_PICK]);
 
@@ -98,6 +104,7 @@ export function QuestionCard({
   const pickOther = () => {
     if (!other.trim() || otherError) return;
     const kept = ordered.filter(o => picks.includes(o));
+    if (multi && maxPicks && kept.length >= maxPicks) return;
     onPick(multi && kept.length ? [...kept, other.trim()].join(MULTI_SEPARATOR) : other.trim());
   };
 
@@ -118,7 +125,7 @@ export function QuestionCard({
   });
 
   const keyHint = picks.length
-    ? `1 to ${ordered.length} to change, Enter to continue`
+    ? `1 to ${ordered.length} to ${multi ? 'toggle' : 'change'}, Enter to continue`
     : rec
       ? `1 to ${ordered.length} to pick, Enter for ${recommendLabel.toLowerCase()}`
       : `1 to ${ordered.length} to pick`;
@@ -132,8 +139,10 @@ export function QuestionCard({
           <Info className="w-3 h-3 shrink-0" /> {why}
         </p>
       )}
-      {multi && <p className="text-ui-2xs uppercase tracking-wider font-semibold text-muted-foreground mt-4">Pick all that apply</p>}
-      <div className={`grid gap-2 sm:grid-cols-2 ${multi ? 'mt-2' : 'mt-5'}`}>
+      <p className="text-ui-2xs uppercase tracking-wider font-semibold text-muted-foreground mt-4">
+        {multi ? (maxPicks ? `Pick up to ${maxPicks}` : 'Pick all that apply') : 'Choose one'}
+      </p>
+      <div className="grid gap-2 sm:grid-cols-2 mt-2">
         {ordered.map((opt, i) => {
           const on = picks.includes(opt);
           const isRec = opt === rec;
@@ -141,6 +150,7 @@ export function QuestionCard({
             <button
               key={opt}
               onClick={() => choose(opt)}
+              disabled={atCap && !on}
               aria-pressed={on}
               className={`group relative flex items-center gap-3 text-left rounded-xl border px-3.5 py-3 transition-all animate-cascade-in active:scale-[0.98] ${
                 on
@@ -148,7 +158,7 @@ export function QuestionCard({
                   : isRec
                     ? 'border-primary/40 bg-primary/[0.04] ring-1 ring-primary/15 hover:border-primary/60 hover:bg-primary/[0.07]'
                     : 'border-border hover:border-primary/50 hover:bg-primary/5'
-              } ${isRec && reorder && !multi ? 'sm:col-span-2' : ''}`}
+              } ${isRec && reorder && !multi ? 'sm:col-span-2' : ''} disabled:opacity-45 disabled:cursor-not-allowed`}
               style={{ animationDelay: `${i * 60}ms` }}
             >
               <kbd className={`w-6 h-6 shrink-0 rounded-md text-ui-2xs font-semibold flex items-center justify-center transition-colors ${
@@ -180,7 +190,12 @@ export function QuestionCard({
           {notSurePicked ? <Check className="w-3.5 h-3.5" /> : <kbd className="text-ui-2xs font-semibold">{ordered.length + 1}</kbd>} {notSureLabel}
         </button>
         {!showOther && (
-          <button onClick={() => setShowOther(true)} className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-ui-sm text-muted-foreground hover:text-foreground hover:bg-secondary/60">
+          <button
+            onClick={() => setShowOther(true)}
+            disabled={atCap}
+            title={atCap ? `Remove one selection before adding another (maximum ${maxPicks})` : undefined}
+            className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-ui-sm text-muted-foreground hover:text-foreground hover:bg-secondary/60 disabled:opacity-45 disabled:cursor-not-allowed"
+          >
             <kbd className="text-ui-2xs font-semibold">O</kbd> Something else…
           </button>
         )}
@@ -202,8 +217,9 @@ export function QuestionCard({
         <div className="mt-3 animate-slide-up-fade">
           <VoiceTextarea value={other} onChange={setOther} rows={2} autoFocus placeholder="Say or type your answer. Ctrl+Enter to save." onSubmit={pickOther} />
           <div className="flex items-center justify-end gap-3 mt-2">
+            {atCap && <span className="text-ui-xs text-amber-500">Remove one selection before adding another.</span>}
             {otherError && <span className="text-ui-xs text-amber-400">{otherError}</span>}
-            <button onClick={pickOther} disabled={!other.trim() || !!otherError} className="px-3.5 py-1.5 rounded-lg bg-primary text-primary-foreground text-ui-sm font-medium disabled:opacity-40">
+            <button onClick={pickOther} disabled={!other.trim() || !!otherError || atCap} className="px-3.5 py-1.5 rounded-lg bg-primary text-primary-foreground text-ui-sm font-medium disabled:opacity-40">
               Save answer
             </button>
           </div>

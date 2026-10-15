@@ -17,12 +17,25 @@ import { QuestionsStep } from '../steps/QuestionsStep';
 import { ShapeStep } from '../steps/ShapeStep';
 import { SparkStep } from '../steps/SparkStep';
 import { Thinking } from '../ui/Thinking';
+import { JourneyThinkingArt } from '../ui/JourneyThinkingArt';
 import { UseCaseBadge } from '../ui/UseCaseBadge';
-import { GhostButton, Headline, PrimaryButton } from '../ui/primitives';
+import { GhostButton, Headline, PrimaryButton, SecondaryButton } from '../ui/primitives';
 import { ActionBar, StepActions } from './ActionBar';
+import { NextUpCard, WelcomeBack } from './NextUpCard';
+import { TrailheadIntro } from './TrailheadIntro';
 
 const STEP_VIEWS: Record<StepKey, (p: { flow: IdeaFlow }) => ReactNode> = {
   spark: SparkStep, map: MapStep, clarify: ClarifyStep, shape: ShapeStep, questions: QuestionsStep, impact: ImpactStep, brief: BriefStep,
+};
+
+const THINKING_HELPER: Record<StepKey, string> = {
+  spark: 'Turning what you shared into one clear idea.',
+  map: 'Finding the main area and the related opportunities.',
+  clarify: 'Using what you already shared, so you only answer what matters.',
+  shape: 'Balancing what it builds, the effort, and the value it could create.',
+  questions: 'Turning your goals into questions your Genie should answer well.',
+  impact: 'Turning rough inputs into a practical value range.',
+  brief: 'Bringing your decisions together into a page you can share.',
 };
 
 interface IdeaStepStageProps {
@@ -67,6 +80,10 @@ export function IdeaStepStage({ flow, unavailable, onBackFromFirst, onChangeUseC
 
   if (!idea) return null;
 
+  if (!idea.trailSeenAt && idea.approved.length === 0 && !flow.readOnly && !idea.sample) {
+    return <TrailheadIntro idea={idea} onStart={() => flow.patch({ trailSeenAt: new Date().toISOString() })} />;
+  }
+
   const config = modeOf(idea);
   const steps = stepsOf(idea);
   const index = stepIndex(viewStep, idea.mode);
@@ -92,7 +109,10 @@ export function IdeaStepStage({ flow, unavailable, onBackFromFirst, onChangeUseC
   const next = steps[Math.min(index + 1, steps.length - 1)].key;
   const onContinue = viewStep !== 'brief' && stepIndex(idea.step, idea.mode) > index ? () => flow.setViewStep(next) : undefined;
   const onBack = index > 0 ? () => flow.setViewStep(steps[index - 1].key) : onBackFromFirst;
-  const backLabel = index > 0 ? `Back to step ${index}: ${steps[index - 1].label}` : 'Back';
+  const prevLabel = index > 0 ? steps[index - 1].label : 'Start';
+  const backLabel = `Back: ${prevLabel}`;
+  const nextStep = index < steps.length - 1 ? steps[index + 1] : null;
+  const nextUnlocked = !!nextStep && (flow.readOnly || stepIndex(idea.step, idea.mode) > index);
   const revising = idea.revisingFrom && !idea.approved.includes('brief') ? stepMeta(idea, idea.revisingFrom) : null;
 
   const retry = () => {
@@ -110,11 +130,21 @@ export function IdeaStepStage({ flow, unavailable, onBackFromFirst, onChangeUseC
 
   return (
     <div className="space-y-6">
-      {onBack && (
-        <button onClick={onBack} className="-mb-2 inline-flex items-center gap-1.5 text-ui-sm text-muted-foreground hover:text-foreground transition-colors">
-          <ArrowLeft className="w-4 h-4" /> {backLabel}
-        </button>
+      {(onBack || nextUnlocked) && (
+        <nav className="flex items-center gap-2" aria-label="Steps">
+          {onBack && (
+            <SecondaryButton onClick={onBack} className="min-w-0 max-w-[48%]" title={index > 0 ? `Go back to step ${index}: ${prevLabel}` : 'Go back to start'}>
+              <ArrowLeft className="w-4 h-4 shrink-0" /> <span className="truncate">{prevLabel}</span>
+            </SecondaryButton>
+          )}
+          {nextUnlocked && nextStep && (
+            <SecondaryButton onClick={() => flow.setViewStep(nextStep.key)} className="ml-auto min-w-0 max-w-[48%]" title={`Go to step ${index + 2}: ${nextStep.label}`}>
+              <span className="truncate">{nextStep.label}</span> <ArrowRight className="w-4 h-4 shrink-0" />
+            </SecondaryButton>
+          )}
+        </nav>
       )}
+      {!flow.readOnly && <WelcomeBack idea={idea} />}
       <Headline
         art={STEP_ART[viewStep].image}
         eyebrow={`${config.phaseLabel} · Step ${index + 1} of ${steps.length}${meta.optional ? ' · Optional' : ''}`}
@@ -156,7 +186,11 @@ export function IdeaStepStage({ flow, unavailable, onBackFromFirst, onChangeUseC
       {!canReach(idea, viewStep) && !hasOutput(idea, viewStep) ? (
         <p className="text-ui-base text-muted-foreground">Confirm the previous step first.</p>
       ) : stepLoading || (!showContent && !error) ? (
-        <Thinking label={config.thinking[viewStep]} image={STEP_ART[viewStep].image} />
+        <Thinking
+          label={config.thinking[viewStep]}
+          art={<JourneyThinkingArt step={viewStep} />}
+          helper={THINKING_HELPER[viewStep]}
+        />
       ) : showContent ? (
         <motion.div
           key={`${viewStep}-view`}
@@ -175,7 +209,7 @@ export function IdeaStepStage({ flow, unavailable, onBackFromFirst, onChangeUseC
                 </PrimaryButton>
               )}
             />
-          ) : <StepActions
+          ) : !(viewStep === 'brief' && approved) && <StepActions
             canApprove={canApprove}
             approveLabel={approved && viewStep === 'brief' ? 'Approved' : config.approveLabel(viewStep, prefilled)}
             onApprove={() => flow.approve(viewStep)}
@@ -188,7 +222,9 @@ export function IdeaStepStage({ flow, unavailable, onBackFromFirst, onChangeUseC
             busy={!!loading && loading !== 'challenge'}
             approved={approved}
             onContinue={onContinue}
+            continueLabel={nextStep ? `Next: ${nextStep.label}` : undefined}
             onBack={onBack}
+            backLabel={backLabel}
             showKeyHint={idea.approved.length === 0}
             extra={canSkip && (
               <GhostButton onClick={flow.skipImpact}>
@@ -196,6 +232,9 @@ export function IdeaStepStage({ flow, unavailable, onBackFromFirst, onChangeUseC
               </GhostButton>
             )}
           />}
+          {!flow.readOnly && !loading && !(viewStep === 'brief' && approved) && (
+            <div className="mt-6"><NextUpCard idea={idea} viewStep={viewStep} onGo={flow.setViewStep} /></div>
+          )}
         </motion.div>
       ) : null}
     </div>
