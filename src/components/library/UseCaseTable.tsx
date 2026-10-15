@@ -4,7 +4,8 @@ import type { LibraryUseCase } from '../../api/library';
 import { deriveValueProp } from '../outcomeMapTheme';
 import { keyOf, placementsOf, type LibraryModel } from './model';
 import { collectionIcon, relativeTime, iconForUseCase, collectionTint, tintStyle } from './theme';
-import { Avatar, CollectionGlyph, Switch, cx } from './ui';
+import { Avatar, CollectionGlyph, Switch } from './ui';
+import { cx } from './cx';
 
 type SortKey = 'name' | 'status' | 'updated' | 'home';
 
@@ -45,6 +46,7 @@ export function UseCaseTable({ rows, model, selected, onToggleSelect, onToggleAl
   const keys = sorted.map(r => keyOf(r.uc));
   const allOn = keys.length > 0 && keys.every(k => selected.has(k));
 
+  // A render helper, called as a function, so the header cells are not a component created during render.
   const Th = ({ k, children, className }: { k?: SortKey; children: React.ReactNode; className?: string }) => (
     <th className={cx('px-3 py-2 text-left text-ui-2xs font-semibold uppercase tracking-wider text-muted-foreground', className)}>
       {k ? (
@@ -70,12 +72,12 @@ export function UseCaseTable({ rows, model, selected, onToggleSelect, onToggleAl
                 {allOn && <Check className="w-3 h-3" strokeWidth={3} />}
               </button>
             </th>
-            <Th k="name">Use case</Th>
-            {showHome && <Th k="home">Home</Th>}
-            <Th k="status" className="w-32">Status</Th>
-            <Th>Appears in</Th>
-            {!showHome && <Th>Category</Th>}
-            <Th k="updated" className="w-40">Updated</Th>
+            {Th({ k: 'name', children: 'Use case' })}
+            {showHome && Th({ k: 'home', children: 'Home' })}
+            {Th({ k: 'status', className: 'w-32', children: 'Status' })}
+            {Th({ children: 'Appears in' })}
+            {!showHome && Th({ children: 'Category' })}
+            {Th({ k: 'updated', className: 'w-40', children: 'Updated' })}
           </tr>
         </thead>
         <tbody>

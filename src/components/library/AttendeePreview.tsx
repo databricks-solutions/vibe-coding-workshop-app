@@ -5,7 +5,8 @@ import { OutcomeMapGrid } from '../OutcomeMapGrid';
 import { UseCaseCardGrid } from '../UseCaseCardGrid';
 import type { LibraryModel } from './model';
 import { KINDS, collectionTint, tintStyle } from './theme';
-import { CollectionGlyph, EmptyState, Modal, SegmentedControl, cx } from './ui';
+import { CollectionGlyph, EmptyState, Modal, SegmentedControl } from './ui';
+import { cx } from './cx';
 
 interface Props {
   open: boolean;
