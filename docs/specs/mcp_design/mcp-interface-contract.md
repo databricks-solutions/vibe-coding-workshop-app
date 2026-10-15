@@ -323,8 +323,8 @@ description-as-prompt, `inputSchema`, `outputSchema`, annotations, errors, and t
       "properties": {
         "catalog":              { "type": "string" },
         "schema_prefix":        { "type": "string" },
-        "include_genie_ontology": { "type": "boolean" },
-        "includeGenieOntology": { "type": "boolean" },
+        "include_genie_ontology": { "type": "boolean", "description": "Genie Ontology on/off; mirrored to all three keys. Wins over the other two." },
+        "includeGenieOntology": { "type": "boolean", "description": "Top-level camelCase key; also an ontology write, mirrored to all three keys (lowest precedence)." },
         "includeLakehouse":     { "type": "boolean" },
         "lakebase_instance":    { "type": "string" }
       },
@@ -348,11 +348,11 @@ description-as-prompt, `inputSchema`, `outputSchema`, annotations, errors, and t
   locked), a `use_case` other than `build_skill`, an `industry` other than `sample`, or
   `use_case_source="custom"` gives `INVALID_PARAMETER` and persists nothing; other keys are unaffected.
 - **Genie Ontology (R4, D-149):** `include_genie_ontology` must be a boolean (else
-  `INVALID_PARAMETER`). When a call sets it or `flags.includeGenieOntology`, the same value is
-  written to all three keys (`include_genie_ontology`, `flags.includeGenieOntology`, top-level
-  `includeGenieOntology`), so a stale top-level key can no longer override it. If one call carries
-  both and they disagree, `include_genie_ontology` wins and the disagreement is logged at INFO (the
-  two booleans only). This is the learner's opt-out ("skip the ontology" →
+  `INVALID_PARAMETER`). When a call sets any of the three keys (`include_genie_ontology`,
+  `flags.includeGenieOntology`, top-level `includeGenieOntology`), the same value is written to all
+  three, so a stale top-level key can no longer override it (D-153). If one call carries several
+  and they disagree, the precedence is `include_genie_ontology` > `flags.includeGenieOntology` >
+  top-level `includeGenieOntology`, and the disagreement is logged at INFO (the booleans only). This is the learner's opt-out ("skip the ontology" →
   `{include_genie_ontology: false}`). Opting in after step 16 makes Model the Domain the current
   step (strict order, D-78); completed gates stay done.
 - **Reserved keys:** `skipped_gates`, `skippedSteps`, `custom_draft_ready`,
@@ -519,7 +519,7 @@ declares `ttlMs` + `cacheScope ∈ {global, session}`.
 | `vibe://track/{track}/overview` | Chapter/section narrative from `pathDescriptions.ts` + manifest `why` (D3 §3) | `global` | `3600000` (1 h) |
 | `vibe://session/{session_id}/state` | `{ outline: OutlineItem[], completed_gates: string[], captured_output_keys: string[] }` — the live walk + gate ledger, mirroring `.vibecoding-state.md` | `session` | `0` (no-cache; always fresh, stateless) |
 | `vibe://style/vibecoding` | The `.vibecoding-state.md` gate-ledger convention + Tier-G READ/RECORD bookends (`../genie-accelerator-prompt-standardization.md`) | `global` | `86400000` (24 h) |
-| `vibe://guide/getting-started` | **Self-documenting help** — how the workshop works (answer in chat, silence = recommended default, the one hard stop, mirror in the web UI) + the troubleshooting table (20-tool budget, stateless, the 307). The in-product source the agent reads to help a learner **without** a human or D10 (self-serve invariant, D1 §1a). | `global` | `86400000` (24 h) |
+| `vibe://guide/getting-started` | **Self-documenting help** — how the workshop works (answer in chat, silence = recommended default, the hard stops: the benchmark confirm and, with the Genie Ontology on, the Author Pages and Write the Routing Page publish confirms, mirror in the web UI) + the troubleshooting table (20-tool budget, stateless, the 307). The in-product source the agent reads to help a learner **without** a human or D10 (self-serve invariant, D1 §1a). | `global` | `86400000` (24 h) |
 
 Notes:
 - **`outline` is a resource, not a tool** (moved from the roadmap's `vibe_track_outline`) — it is
@@ -540,7 +540,7 @@ and are how learners *find* the server.
 | `Start the Genie Accelerator` | `use_case?`, `industry?` | Instructs the agent to deliver the **first-run orientation** (D1 §4.5), then call `vibe_start_track {track:"genie-accelerator", …}` then `vibe_get_step`, present `prompt` verbatim, and narrate. Ends with the ontology opt-out: "If your workspace doesn't have Genie One Pages, say skip the ontology" (`vibe_set_parameters {include_genie_ontology: false}`). |
 | `Start a workshop track` | `track?`, `use_case?`, `industry?` | The same on any track; on `genie-accelerator` it ends with the same opt-out sentence. |
 | `Continue where I left off` | — | Instructs the agent to call `vibe_next_step` and resume, reading `vibe://session/{session_id}/state` for context. **Skips** orientation. |
-| `How does this workshop work?` | — | Self-serve orientation on demand: instructs the agent to read `vibe://guide/getting-started` and explain how to answer, how gates work, the one hard stop, and how to mirror in the web UI (D1 §1a). Costs nothing against the tool budget. |
+| `How does this workshop work?` | — | Self-serve orientation on demand: instructs the agent to read `vibe://guide/getting-started` and explain how to answer, how gates work, the hard stops (the benchmark confirm and the two ontology publish confirms), and how to mirror in the web UI (D1 §1a). Costs nothing against the tool budget. |
 
 Each prompt's resolved message MUST restate the **verbatim-first** rendering contract (D1 §6) so the
 agent presents the prompt body before narrating.

@@ -20,6 +20,8 @@ Tampers (each turns a test here red):
   test_new_session_defaults_ontology_on
 - X7 switch parsed as default false -> test_new_session_defaults_ontology_on,
   test_switch_parsing
+- X16 drop the top-level case from the vibe_set_parameters mirror
+  -> test_top_level_only_write_mirrors_all_three
 """
 
 import ast
@@ -239,6 +241,33 @@ def test_disagreeing_request_snake_wins_on_all_three(env, caplog):
     logged = [r for r in caplog.records if "disagree" in r.getMessage()]
     assert len(logged) == 1 and logged[0].levelno == logging.INFO
     assert logged[0].args == (False, True)
+
+
+def test_top_level_only_write_mirrors_all_three(env):
+    """D-153: a top-level includeGenieOntology alone is an ontology write too."""
+
+    sid = _start().session_id
+    assert len(_stored_outline(env, sid)) == 27
+    mcp_server.vibe_set_parameters(sid, {"includeGenieOntology": False})
+    params = env[sid]["session_parameters"]
+    assert params["includeGenieOntology"] is False
+    assert params["flags"]["includeGenieOntology"] is False
+    # The value the web UI hydrates from.
+    assert params["include_genie_ontology"] is False
+    assert len(_stored_outline(env, sid)) == 24
+
+
+def test_flags_beat_top_level_on_disagreement(env, caplog):
+    sid = _start().session_id
+    with caplog.at_level(logging.INFO, logger=mcp_server.logger.name):
+        mcp_server.vibe_set_parameters(
+            sid, {"flags": {"includeGenieOntology": False}, "includeGenieOntology": True}
+        )
+    params = env[sid]["session_parameters"]
+    assert (params["include_genie_ontology"], params["includeGenieOntology"]) == (False, False)
+    assert params["flags"]["includeGenieOntology"] is False
+    logged = [r for r in caplog.records if "disagree" in r.getMessage()]
+    assert len(logged) == 1 and logged[0].args == (False, True)
 
 
 def test_no_other_track_changes(env):

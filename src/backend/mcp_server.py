@@ -1717,22 +1717,27 @@ def _write_genie_ontology(parameters: dict[str, Any], value: bool) -> None:
 
 
 def _mirror_genie_ontology(parameters: dict[str, Any], params: dict[str, Any]) -> None:
-    """Mirror an ontology write in ``params`` (the snake key or the nested flag) over
-    all three keys of the merged ``parameters``; the snake key wins a disagreement."""
+    """Mirror an ontology write in ``params`` over all three keys of the merged
+    ``parameters``. Any of the three keys is a write (D-153); when one call carries
+    several, the snake key wins, then ``flags.includeGenieOntology``, then top-level
+    ``includeGenieOntology``."""
 
-    snake = params.get("include_genie_ontology")
     flags = params.get("flags")
-    nested = flags.get("includeGenieOntology") if isinstance(flags, dict) else None
-    if snake is None and nested is None:
+    candidates = (
+        ("include_genie_ontology", params.get("include_genie_ontology")),
+        ("flags.includeGenieOntology", flags.get("includeGenieOntology") if isinstance(flags, dict) else None),
+        ("includeGenieOntology", params.get("includeGenieOntology")),
+    )
+    present = [(name, engine._as_bool(value)) for name, value in candidates if value is not None]
+    if not present:
         return
-    if snake is not None and nested is not None and engine._as_bool(nested) != snake:
+    if len({value for _, value in present}) > 1:
         logger.info(
-            "vibe_set_parameters Genie Ontology keys disagree: include_genie_ontology=%s "
-            "flags.includeGenieOntology=%s",
-            snake,
-            engine._as_bool(nested),
+            "vibe_set_parameters Genie Ontology keys disagree: "
+            + " ".join(f"{name}=%s" for name, _ in present),
+            *(value for _, value in present),
         )
-    _write_genie_ontology(parameters, snake if snake is not None else engine._as_bool(nested))
+    _write_genie_ontology(parameters, present[0][1])
 
 
 def _is_selection_call(params: dict[str, Any]) -> bool:
