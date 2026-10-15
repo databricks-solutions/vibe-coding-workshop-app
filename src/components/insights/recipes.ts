@@ -4,7 +4,7 @@ import {
   PencilLine, RefreshCw, Rocket, ShieldCheck, Table2,
 } from 'lucide-react';
 import { apiClient } from '../../api/client';
-import { chosenShape, type Idea, type SwitchedAddOn } from '../journeykit';
+import { chosenShape, shapeBuild, type Idea, type SwitchedAddOn } from '../journeykit';
 import { MOMENTS, type Moment } from './journey';
 
 /**
@@ -215,8 +215,13 @@ const isLargerEffort = (effort?: string) => {
 
 /** Build capabilities promised by the chosen approach. These are contracts, not optional recipes. */
 export function requiredAddOns(idea: Idea | undefined): AddOn[] {
-  const kind = idea ? chosenShape(idea)?.kind : undefined;
-  return kind === 'copilot' ? ['copilot'] : [];
+  const shape = idea ? chosenShape(idea) : null;
+  if (!shape) return [];
+  if (shape.kind === 'copilot' || (shape.kind === 'automation' && shapeBuild(shape).surfaces.includes('App'))) return ['copilot'];
+  // The card's "What you'll build" surfaces are a contract. Any approach that
+  // promises an App must receive app chapters even if its internal kind is
+  // Insight, Monitor, Signal or Automation.
+  return shapeBuild(shape).surfaces.includes('App') ? ['app_view'] : [];
 }
 
 /** What the chosen approach needs by default, limited to what is turned on. */

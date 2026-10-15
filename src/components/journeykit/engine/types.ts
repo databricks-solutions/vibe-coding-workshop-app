@@ -99,6 +99,8 @@ export interface ClarifyQuestion {
   recommended?: number;
   /** Pick all that apply; the answer is the picks joined with "; ". */
   multi?: boolean;
+  /** Maximum selections for a multi question; absent means every option may be picked. */
+  maxPicks?: number;
   isFollowup?: boolean;
 }
 

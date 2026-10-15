@@ -151,7 +151,7 @@ export function ReadyScreen({
             </p>
             <p className="text-ui-sm text-muted-foreground">
               {requiredAddOns.length
-                ? 'Your Copilot approach includes the app automatically. Optional extras can still be switched on or off.'
+                ? 'Your chosen approach includes the app automatically. Optional extras can still be switched on or off.'
                 : 'Optional extras go inside the same four chapters.'}
             </p>
           </div>
@@ -172,7 +172,7 @@ export function ReadyScreen({
                         )}
                       </span>
                       <span className="block text-ui-sm text-muted-foreground">
-                        {required ? `Your Copilot includes this. ${ADD_ON_LABEL[a].body}` : ADD_ON_LABEL[a].body}
+                        {required ? `Your chosen approach includes this. ${ADD_ON_LABEL[a].body}` : ADD_ON_LABEL[a].body}
                       </span>
                     </span>
                     {!required && (
@@ -220,7 +220,7 @@ export function ReadyScreen({
       {buildChecking && (
         <FadeIn className="flex items-center gap-3 rounded-2xl border border-border bg-card px-4 py-3 text-ui-sm text-muted-foreground">
           <Loader2 className="w-4 h-4 shrink-0 animate-spin text-primary" />
-          Checking the required Copilot build steps…
+          Checking the required app build steps…
         </FadeIn>
       )}
 
@@ -228,7 +228,7 @@ export function ReadyScreen({
         <FadeIn className="flex items-start gap-3 rounded-2xl border border-red-500/30 bg-red-500/[0.06] px-4 py-3">
           <TriangleAlert className="w-4 h-4 mt-0.5 shrink-0 text-red-500" />
           <div>
-            <p className="text-ui-sm font-semibold text-foreground">The Copilot app build is not available yet</p>
+            <p className="text-ui-sm font-semibold text-foreground">The required app build is not available yet</p>
             <p className="text-ui-xs text-muted-foreground mt-0.5">{buildBlocker}</p>
           </div>
         </FadeIn>

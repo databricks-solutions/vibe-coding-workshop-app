@@ -76,24 +76,29 @@ Schema:
 TASK: Reverse the conversation. Ask the user the 5 or 6 questions that most reduce ambiguity about this idea and what it is worth. They will answer by clicking, so give options.
 
 Cover these, in this order, skipping any already clearly answered by the context:
-1. dimension "user": whose pain this is, specifically
+1. dimension "user": who feels the pain. Use one primary role when the first experience needs a clear owner; use up to two only when two roles genuinely collaborate in the same workflow.
 2. dimension "business": the single metric that would prove it worked. Options must be measurable and tied to money (delay minutes, overtime hours, stockout rate, churn), not activity counts or satisfaction alone.
 3. dimension "scale": how big the problem is in the first scope: how many people do this work, or how many sites or events. Options are numeric ranges with units, e.g. "10 to 25 dispatchers per hub".
 4. dimension "cost": what one miss or one bad day costs today (a delay, overtime, a write-off, a lost sale), as dollar ranges in the industry's terms, e.g. "$2k to $10k per late departure".
-5. dimension "business": why now (trigger)
+5. dimension "trigger": why now. Use up to two only when the triggers can be simultaneously true.
 6. dimension "scope": what the first version should NOT do (pick all that apply)
 
 - 3 or 4 short, distinct, realistic options per question, written in the industry's language.
 - Ranges in options are typical for a mid-size company in this industry.
 - "why": one short line on what the answer decides, e.g. "Sizes the business case" or "Keeps the pilot small".
 - "recommended": the index (0-based) of the option you would bet on given the context, or -1 if the context gives no signal. Never recommend just to fill the field.
-- "multi": true only for the scope question.
+- "multi": true only when several options can be simultaneously true and carrying several answers improves the build.
+- Success metrics, numeric ranges, scale and cost are always single-select.
+- For "user", use multi-select only for a tightly collaborating pair and set "max_picks": 2.
+- For "trigger", use multi-select only for compatible simultaneous triggers and set "max_picks": 2.
+- Scope is multi-select with "max_picks": 3.
+- For single-select questions set "multi": false and omit "max_picks".
 - Do not include "Not sure" or "Other" options; the UI adds those.
 
 Schema:
 {{
   "questions": [
-    {{"dimension": "user", "question": "Short question?", "why": "What the answer decides", "options": ["Option A", "Option B", "Option C"], "recommended": 0, "multi": false}}
+    {{"dimension": "user", "question": "Short question?", "why": "What the answer decides", "options": ["Option A", "Option B", "Option C"], "recommended": 0, "multi": true, "max_picks": 2}}
   ]
 }}""",
 

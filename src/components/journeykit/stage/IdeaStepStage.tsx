@@ -17,6 +17,7 @@ import { QuestionsStep } from '../steps/QuestionsStep';
 import { ShapeStep } from '../steps/ShapeStep';
 import { SparkStep } from '../steps/SparkStep';
 import { Thinking } from '../ui/Thinking';
+import { JourneyThinkingArt } from '../ui/JourneyThinkingArt';
 import { UseCaseBadge } from '../ui/UseCaseBadge';
 import { GhostButton, Headline, PrimaryButton, SecondaryButton } from '../ui/primitives';
 import { ActionBar, StepActions } from './ActionBar';
@@ -25,6 +26,16 @@ import { TrailheadIntro } from './TrailheadIntro';
 
 const STEP_VIEWS: Record<StepKey, (p: { flow: IdeaFlow }) => ReactNode> = {
   spark: SparkStep, map: MapStep, clarify: ClarifyStep, shape: ShapeStep, questions: QuestionsStep, impact: ImpactStep, brief: BriefStep,
+};
+
+const THINKING_HELPER: Record<StepKey, string> = {
+  spark: 'Turning what you shared into one clear idea.',
+  map: 'Finding the main area and the related opportunities.',
+  clarify: 'Using what you already shared, so you only answer what matters.',
+  shape: 'Balancing what it builds, the effort, and the value it could create.',
+  questions: 'Turning your goals into questions your Genie should answer well.',
+  impact: 'Turning rough inputs into a practical value range.',
+  brief: 'Bringing your decisions together into a page you can share.',
 };
 
 interface IdeaStepStageProps {
@@ -175,7 +186,11 @@ export function IdeaStepStage({ flow, unavailable, onBackFromFirst, onChangeUseC
       {!canReach(idea, viewStep) && !hasOutput(idea, viewStep) ? (
         <p className="text-ui-base text-muted-foreground">Confirm the previous step first.</p>
       ) : stepLoading || (!showContent && !error) ? (
-        <Thinking label={config.thinking[viewStep]} image={STEP_ART[viewStep].image} />
+        <Thinking
+          label={config.thinking[viewStep]}
+          art={<JourneyThinkingArt step={viewStep} />}
+          helper={THINKING_HELPER[viewStep]}
+        />
       ) : showContent ? (
         <motion.div
           key={`${viewStep}-view`}

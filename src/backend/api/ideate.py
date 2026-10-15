@@ -469,15 +469,27 @@ def _clarify_question(q: Dict[str, Any], qid: str) -> Dict[str, Any]:
     dimension = str(q.get("dimension", "functional")).strip() or "functional"
     rec = q.get("recommended")
     rec = rec if isinstance(rec, int) and not isinstance(rec, bool) and 0 <= rec < len(options) else -1
-    return {
+    requested_multi = bool(q.get("multi"))
+    multi = len(options) > 1 and (dimension == "scope" or (requested_multi and dimension in {"user", "trigger"}))
+    raw_max = q.get("max_picks")
+    max_picks: Optional[int] = None
+    if multi:
+        ceiling = 3 if dimension == "scope" else 2
+        default = ceiling
+        candidate = raw_max if isinstance(raw_max, int) and not isinstance(raw_max, bool) else default
+        max_picks = max(2, min(candidate, ceiling, len(options)))
+    out = {
         "id": qid,
         "dimension": dimension,
         "question": str(q.get("question", "")).strip(),
         "why": str(q.get("why", "")).strip(),
         "options": options,
         "recommended": rec,
-        "multi": bool(q.get("multi")) and dimension == "scope",
+        "multi": multi,
     }
+    if max_picks is not None:
+        out["maxPicks"] = max_picks
+    return out
 
 
 def _normalize(step: str, data: Dict[str, Any], idea: Optional[Dict[str, Any]] = None) -> Optional[Dict[str, Any]]:
@@ -501,6 +513,7 @@ def _normalize(step: str, data: Dict[str, Any], idea: Optional[Dict[str, Any]] =
             return {"followup": None}
         q = _clarify_question({"dimension": "business", **f}, _slug("followup-" + str(f.get("question")), set()))
         q["multi"] = False
+        q.pop("maxPicks", None)
         return {"followup": {**q, "isFollowup": True}}
     if step == "shape":
         used = set()
