@@ -448,7 +448,8 @@ def test_g6_v2_equals_v1_after_reversing_substitutions(tag):
 
 def test_g7_v2_defines_state_file():
     users = {pk: row for pk, row in SEED_ROWS.items() if "<STATE_FILE>" in (row.get("input_template") or "")}
-    assert set(users) == {FORK_ID[tag] for tag in V1_ID} | {FORK_ID["workspace_cleanup"]}
+    # 300/1300: main's Insights copies of gaccel_activation (insights_activation), merged in.
+    assert set(users) == {FORK_ID[tag] for tag in V1_ID} | {FORK_ID["workspace_cleanup"]} | {300, 1300}
     for pk, row in users.items():
         body = row["input_template"]
         assert body.count(STATE_FILE_DEFINITION) == 1, f"{pk} does not define <STATE_FILE> exactly once"

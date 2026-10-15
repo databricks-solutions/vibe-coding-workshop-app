@@ -1,18 +1,31 @@
 import { useState, useEffect, useCallback, useMemo, useRef, lazy, Suspense } from 'react';
 import { Routes, Route, Link, useLocation, Navigate } from 'react-router-dom';
 import { WorkflowDiagram } from './components/WorkflowDiagram';
-import { ThemeToggle } from './components/ThemeToggle';
 import { ConfigurationPage } from './components/config/ConfigurationPage';
+import { LibraryPage } from './components/library/LibraryPage';
 import { LeaderboardPage } from './components/LeaderboardPage';
 import { AnalyticsDashboard } from './components/AnalyticsDashboard';
 import { HackathonsPage } from './components/hackathon/HackathonsPage';
 import { HackathonDetailPage } from './components/hackathon/HackathonDetailPage';
 import { HackathonPlaybook } from './components/hackathon/HackathonPlaybook';
-
-// Agent Skills Navigator is a large, self-contained feature (galaxy map + tours +
-// academy with a big static data module). Lazy-load it so it never weighs down
+import { ReleaseNotesPage } from './components/ReleaseNotesPage';
+import { AppSidebar } from './components/layout/AppSidebar';
+// Learning Academy is a large, self-contained feature (map + tours + lessons +
+// skill library with a big static data module). Lazy-load it so it never weighs down
 // the initial workflow bundle that every workshop participant hits first.
 const SkillsNavigatorPage = lazy(() => import('./components/skills/SkillsNavigatorPage'));
+// Ideate (beta) is self-contained and lazy-loaded so it never affects the workflow bundle.
+const IdeateApp = lazy(() => import('./components/ideate/IdeateApp'));
+// Insights is an opt-in, simpler view of the workflow; lazy so the default view's bundle is unchanged.
+const InsightsFlow = lazy(() => import('./components/insights/InsightsFlow'));
+import { ViewModeToggle } from './components/insights/ViewModeToggle';
+import type { InsightsSetup } from './components/insights/types';
+import { isInsightsSession, useWorkflowViewMode } from './hooks/useWorkflowViewMode';
+import { useIdeas } from './components/journeykit/engine/useIdeas';
+import { buildContext } from './components/journeykit/engine/ideaContext';
+import { buildDescription, buildTargetFor, slugOf, useLinkedIdea } from './components/journeykit/engine/handoff';
+import type { Idea, QuestionSource } from './components/journeykit/engine/types';
+import { BuildLinkBar } from './components/journeykit/stage/BuildLinkBar';
 import { 
   HeaderSessionMenu,
   SaveSessionDialog, 
@@ -20,7 +33,7 @@ import {
   SessionListDialog 
 } from './components/session';
 import { apiClient } from './api/client';
-import { Zap, MessageSquare, Trophy, Plus, PanelLeftClose, PanelLeft, Menu, X, BarChart3, Eye, Compass, Award, ChevronDown, List, BookOpen } from 'lucide-react';
+import { MessageSquare, Plus, Menu, Eye } from 'lucide-react';
 import { orderedSectionsForRead, getCumulativeOverrides, USE_CASE_LEVEL_LOCK, isForwardProgression, getDisabledTagsForAIModules, ALL_AI_MODULES, getDisabledTagsForMedallionLayers, normalizeMedallionLayers, ALL_MEDALLION_LAYERS, getDisabledTagsForLakehouse, getDisabledTagsForGenieOntology, computeChainContext, deriveInitialChainContext, stepNumbersToGates, SECTION_TAG_TO_STEP_NUMBER, type WorkshopLevel, type WorkflowDirection, type AIAgentModule, type MedallionLayer, type ChainContext } from './constants/workflowSections';
 import { mergeStatus } from './constants/mergeStatus';
 import type { TrackOutlineItem } from './api/client';
@@ -28,6 +41,9 @@ import { DEFAULT_LEVEL_BY_ASSISTANT, parseCodingAssistantsConfig } from './const
 import { resolveRestoredLevel } from './constants/restoreLevel';
 import { deriveCompletedStepNumbers, deriveSkippedStepNumbers } from './constants/deriveProgress';
 import { emptyGateBase, hydrateGateBase, gateBaseFields, applyGateWriteResult, type GateBase, type GateWrite } from './utils/gateBase';
+
+/** The step prompt API only stores steps 1 to 30. */
+const MAX_SAVED_STEP = 30;
 
 export default function App() {
   const location = useLocation();
@@ -48,21 +64,17 @@ export default function App() {
   // Mobile sidebar overlay state (for screens < md)
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
 
+  const [viewMode, setViewMode, adoptSessionView] = useWorkflowViewMode();
+
   // Determine current page from URL
-  const isConfigPage = location.pathname.startsWith('/config');
+  const isConfigPage = location.pathname.startsWith('/config') || location.pathname.startsWith('/library');
   const isLeaderboardPage = location.pathname === '/leaderboard';
   const isAnalyticsPage = location.pathname === '/analytics';
   const isHackathonsPage = location.pathname.startsWith('/hackathons');
-
-  // Accordion: Hackathons sub-links in the left sidebar. Auto-open on a
-  // hackathon route; otherwise user-toggleable.
-  const [hackathonsExpanded, setHackathonsExpanded] = useState(false);
-  useEffect(() => {
-    if (isHackathonsPage) setHackathonsExpanded(true);
-  }, [isHackathonsPage]);
   const isSkillsPage = location.pathname === '/skills';
-  const isWorkflowPage = !isConfigPage && !isLeaderboardPage && !isAnalyticsPage && !isHackathonsPage && !isSkillsPage;
-  
+  const isReleaseNotesPage = location.pathname === '/release-notes';
+  const isIdeatePage = location.pathname === '/ideate' || location.pathname.startsWith('/ideate/');
+  const isWorkflowPage = !isConfigPage && !isLeaderboardPage && !isAnalyticsPage && !isHackathonsPage && !isSkillsPage && !isReleaseNotesPage && !isIdeatePage;  
   // Data refresh key - incremented when navigating from Config to Workflow
   // This forces PromptGenerator and other components to re-fetch data
   const [dataRefreshKey, setDataRefreshKey] = useState(0);
@@ -321,6 +333,8 @@ export default function App() {
     if (urlSessionId) {
       // Load specific session from URL
       loadSession(urlSessionId);
+    } else if (urlParams.get('openSession') || urlParams.get('buildIdea')) {
+      // Opening an idea's project, or starting one, is handled by the navigation effect below.
     } else {
       // Get or create default session (continues where user left off)
       getOrCreateDefaultSession();
@@ -485,6 +499,8 @@ export default function App() {
         setIncludeGenieOntology(!!sessionParams.include_genie_ontology);
         setCodingAssistant(sessionParams.coding_assistant || null);
         setCodingAssistantExplicit(!!sessionParams.coding_assistant);
+        adoptSessionView(isInsightsSession(restoredLevel, sessionParams.coding_assistant));
+
         // initialExpandedStep is a memo (T3c) derived from the engine outline; it
         // resolves once the outline lands, so no imperative set here.
 
@@ -506,10 +522,13 @@ export default function App() {
   };
 
   // Create a brand new session (user explicitly wants to start fresh)
-  const createNewSession = async () => {
+  /** `onCreated` runs with the new id before any state changes, so linked ideas are ready when the view renders. */
+  const createNewSession = async (onCreated?: (id: string) => void): Promise<string | null> => {
     setIsCreatingNewSession(true);
+    setViewMode('technical');
     try {
       const response = await apiClient.createNewSession();
+      onCreated?.(response.session_id);
       setSessionId(response.session_id);
       setSessionOwner(null);
       setSessionSaved(false);
@@ -538,8 +557,10 @@ export default function App() {
       setIncludeLakehouse(false);
       setIncludeGenieOntology(false);
       window.history.replaceState({}, '', `?sessionId=${response.session_id}`);
+      return response.session_id;
     } catch (err) {
       console.error('Error creating session:', err);
+      return null;
     } finally {
       setTimeout(() => {
         setIsCreatingFadingOut(true);
@@ -662,12 +683,21 @@ export default function App() {
         setIncludeGenieOntology(!!sessionParams.include_genie_ontology);
         setCodingAssistant(sessionParams.coding_assistant || null);
         setCodingAssistantExplicit(!!sessionParams.coding_assistant);
+        adoptSessionView(isInsightsSession(effectiveRestoredLevel, sessionParams.coding_assistant));
+
         // initialExpandedStep is a memo (T3c) derived from the engine outline; the
         // returning-user restore (gated on outlineReady) navigates once it lands.
 
         // Trigger fade-out animation
         finishSessionLoading();
       } else {
+        // An idea whose project is gone (e.g. never saved) gets a new project instead of the start screen.
+        const orphan = response.missing ? ideas.find(i => i.sessionId === id) : undefined;
+        if (orphan && !readOnly) {
+          console.warn(`Project ${id} for "${orphan.title}" was not found; starting a new one`);
+          void startBuildFromIdea({ ...orphan, sessionId: undefined });
+          return;
+        }
         // Session ID not found - try to load user's default session instead
         console.warn(`Session ${id} not found, loading default session`);
         getOrCreateDefaultSession(); // This will handle finishSessionLoading
@@ -981,6 +1011,68 @@ export default function App() {
     }
   }, [readOnly, sessionId, workshopLevel, chainContext, aiAgentsModules, includeLakehouse, includeGenieOntology, engineFlagsFrom, setMedallionLayers, fetchOutline]);
 
+  // Updating a build from its idea: every prompt after the brief was written from the old
+  // answers, so it is emptied and regenerates when opened. Completed steps stay completed.
+  const clearLaterPrompts = (id: string, prompts: Record<number, string>) => Promise.all(
+    Object.entries(prompts)
+      .filter(([step, text]) => Number(step) > 1 && Number(step) <= MAX_SAVED_STEP && text)
+      .map(([step]) => apiClient.updateStepPrompt({ session_id: id, step_number: Number(step), prompt_text: '' })
+        .catch(err => console.error(`Error clearing the prompt for step ${step}:`, err))),
+  );
+
+  // Insights view: one tap configures the whole session for the Genie path.
+  // Saved in a single metadata call so the backend never sees an intermediate level.
+  const handleInsightsStart = useCallback((setup: InsightsSetup) => {
+    if (readOnly) return;
+    setSelectedIndustry(setup.industry);
+    setSelectedIndustryLabel(setup.industryLabel);
+    setSelectedUseCase(setup.useCase);
+    setSelectedUseCaseLabel(setup.useCaseLabel);
+    setSelectedUseCaseCertified(false);
+    setUseCaseLockedLevel(null);
+    setCustomUseCaseLabel(setup.useCaseLabel);
+    setCustomDescription(setup.description);
+    setCodingAssistant('genie-code');
+    setCodingAssistantExplicit(true);
+    setWorkshopLevel('genie-accelerator');
+    setChainContext(null);
+    setLevelExplicitlySelected(true);
+    setDirection('forward');
+    setIncludeLakehouse(false);
+    setIncludeGenieOntology(false);
+    setAiAgentsModules(new Set(ALL_AI_MODULES));
+    setMedallionLayers(new Set(ALL_MEDALLION_LAYERS));
+    setStepPrompts(prev => (setup.resetPrompts ? { 1: setup.description } : { ...prev, 1: setup.description }));
+    if (setup.resetPrompts && sessionId) clearLaterPrompts(sessionId, stepPrompts);
+    const nextCompleted = new Set(completedSteps);
+    nextCompleted.add(1);
+    setCompletedSteps(nextCompleted);
+    if (sessionId) {
+      apiClient.updateSessionMetadata({
+        session_id: sessionId,
+        industry: setup.industry,
+        industry_label: setup.industryLabel,
+        use_case: setup.useCase,
+        use_case_label: setup.useCaseLabel,
+        custom_use_case_label: setup.useCaseLabel,
+        custom_use_case_description: setup.description,
+        coding_assistant: 'genie-code',
+        workshop_level: 'genie-accelerator',
+        level_explicitly_selected: true,
+        direction: 'forward',
+        include_lakehouse: false,
+        include_genie_ontology: false,
+        completed_gates: stepNumbersToGates(Array.from(nextCompleted)),
+      }).catch(err => console.error('Error saving Insights setup:', err));
+      apiClient.updateStepPrompt({
+        session_id: sessionId,
+        step_number: 1,
+        prompt_text: setup.description,
+        workshop_level: 'genie-accelerator',
+      }).catch(err => console.error('Error saving Insights brief:', err));
+    }
+  }, [readOnly, sessionId, completedSteps, stepPrompts, setMedallionLayers]);
+
   const handleSaveSession = async (name: string, description: string, rating?: 'thumbs_up' | 'thumbs_down', comment?: string) => {
     if (!sessionId || readOnly) return;
     
@@ -1076,6 +1168,196 @@ export default function App() {
     setPendingNewSession(true);
     setShowSaveDialog(true);
   };
+
+  const { ideas, updateIdea } = useIdeas();
+  const linkedIdea = useLinkedIdea(sessionId);
+
+  const technicalUseCaseOf = (idea: Idea) => ({
+    industry: idea.spark?.catalogIndustry || 'general',
+    industryLabel: idea.spark?.catalogIndustryLabel || idea.spark?.industry || idea.industry || 'General',
+    label: idea.title.slice(0, 30),
+  });
+
+  /** Saves the idea as a Technical project's use case and step 1 brief. */
+  const writeTechnicalBrief = (idea: Idea, id: string, completed: number[], level: string | undefined = 'end-to-end') => {
+    const { industry, industryLabel, label } = technicalUseCaseOf(idea);
+    const description = buildDescription(idea);
+    return Promise.all([
+      apiClient.updateSessionMetadata({
+        session_id: id,
+        industry,
+        industry_label: industryLabel,
+        use_case: slugOf(idea.title),
+        use_case_label: label,
+        custom_use_case_label: label,
+        custom_use_case_description: description,
+        completed_gates: stepNumbersToGates(completed),
+      }).catch(err => console.error('Error saving the idea as the use case:', err)),
+      apiClient.updateStepPrompt({ session_id: id, step_number: 1, prompt_text: description, workshop_level: level })
+        .catch(err => console.error('Error saving the idea brief:', err)),
+    ]);
+  };
+
+  /**
+   * Hands an idea to a build: saves the current project if it has unsaved progress
+   * (a new session clears unsaved ones), starts a fresh project linked to the idea,
+   * and opens it in the view that builds it. An idea that already has a project reopens it.
+   */
+  const startBuildFromIdea = async (idea: Idea) => {
+    const target = buildTargetFor(idea);
+    if (idea.sessionId) {
+      updateIdea(idea.id, { buildTarget: target, buildStatus: 'building', status: 'committed' });
+      handleLoadSession(idea.sessionId);
+      setViewMode(target);
+      return;
+    }
+    setIsCreatingNewSession(true);
+    try {
+      const current = await apiClient.getDefaultSession();
+      const steps: number[] = deriveCompletedStepNumbers(current.completed_gates);
+      if (current.success && !current.is_saved && (steps.length > 0 || current.use_case)) {
+        await apiClient.saveSession({
+          session_id: current.session_id,
+          industry: current.industry,
+          industry_label: current.industry_label,
+          use_case: current.use_case,
+          use_case_label: current.use_case_label,
+          session_name: current.session_name && current.session_name !== 'New Session' ? current.session_name : `${current.use_case_label || 'My project'} (autosaved)`,
+          session_description: current.session_description,
+          workshop_level: current.workshop_level,
+          // Gates-only progress (T5): carry the session's own gates through unchanged.
+          completed_gates: current.completed_gates || [],
+          skipped_gates: current.skipped_gates || [],
+          step_prompts: current.step_prompts || {},
+        });
+      }
+    } catch (err) {
+      console.error('Could not save the current project before building; keeping it open:', err);
+      setIsCreatingNewSession(false);
+      getOrCreateDefaultSession();
+      return;
+    }
+
+    let questions = idea.genieQuestions ?? [];
+    let sources: Record<string, QuestionSource> = idea.genieQuestionSources ?? {};
+    let alternates = idea.genieAlternates;
+    if (target === 'insights' && !questions.length) {
+      try {
+        const r = await apiClient.ideateStep<{ questions: string[]; alternates?: string[] }>('questions', { ...buildContext(idea), providedQuestions: [] });
+        questions = r.questions.slice(0, 6);
+        sources = Object.fromEntries(questions.map(q => [q, 'ai' as const]));
+        alternates = r.alternates;
+      } catch {
+        // Insights asks for the questions on the locked screen instead.
+      }
+    }
+
+    const now = new Date().toISOString();
+    const newId = await createNewSession(id => updateIdea(idea.id, {
+      sessionId: id,
+      buildTarget: target,
+      buildStatus: 'building',
+      status: 'committed',
+      ...(target === 'insights' ? { lockedAt: idea.lockedAt ?? now, buildStage: 'data' as const, genieQuestions: questions, genieQuestionSources: sources, genieAlternates: alternates } : {}),
+      decisions: [...idea.decisions, { at: now, text: `Started building in ${target === 'insights' ? 'Insights' : 'the Technical workflow'}` }],
+    }));
+    finishSessionLoading();
+    if (!newId) return;
+    setViewMode(target);
+
+    const { industry, industryLabel, label } = technicalUseCaseOf(idea);
+    const description = buildDescription(idea);
+    const technical = target === 'technical';
+    if (technical) {
+      setSelectedIndustry(industry);
+      setSelectedIndustryLabel(industryLabel);
+      setSelectedUseCase(slugOf(idea.title));
+      setSelectedUseCaseLabel(label);
+      setSelectedUseCaseCertified(false);
+      setCustomUseCaseLabel(label);
+      setCustomDescription(description);
+      setStepPrompts({ 1: description });
+      setCompletedSteps(new Set([1]));
+      void writeTechnicalBrief(idea, newId, [1]);
+      updateIdea(idea.id, { builtRevision: idea.revision ?? 0 });
+    }
+    apiClient.saveSession({
+      session_id: newId,
+      industry: technical ? industry : undefined,
+      industry_label: technical ? industryLabel : undefined,
+      use_case: technical ? slugOf(idea.title) : undefined,
+      use_case_label: technical ? label : undefined,
+      session_name: idea.title,
+      session_description: idea.spark?.statement ?? idea.seed,
+      workshop_level: 'end-to-end',
+      completed_gates: stepNumbersToGates(technical ? [1] : []),
+      step_prompts: technical ? { 1: description } : {},
+    }).then(r => {
+      if (!r.success) return;
+      setSessionSaved(true);
+      setSessionName(idea.title);
+      setShareUrl(r.share_url || null);
+    }).catch(err => console.error('Error saving the new project:', err));
+  };
+
+  /**
+   * Re-applies an idea to the project already building it. Technical projects get the new
+   * brief as their use case and regenerate later prompts; Insights projects open on their
+   * update screen, which keeps the data choices.
+   */
+  const updateBuildFromIdea = async (idea: Idea) => {
+    if (!idea.sessionId) return startBuildFromIdea(idea);
+    const target = buildTargetFor(idea);
+    if (target === 'technical') {
+      setIsSessionLoading(true);
+      try {
+        const current = await apiClient.loadSession(idea.sessionId);
+        const loadedDone = deriveCompletedStepNumbers(current.completed_gates);
+        const done: number[] = loadedDone.length ? loadedDone : [1];
+        await clearLaterPrompts(idea.sessionId, current.step_prompts || {});
+        await writeTechnicalBrief(idea, idea.sessionId, done.includes(1) ? done : [1, ...done], current.workshop_level || undefined);
+        updateIdea(idea.id, i => ({
+          builtRevision: i.revision ?? 0,
+          buildStatus: 'building',
+          decisions: [...i.decisions, { at: new Date().toISOString(), text: 'Updated the build with the latest answers' }],
+        }));
+      } catch (err) {
+        console.error('Could not update the build from the idea:', err);
+      }
+    } else {
+      updateIdea(idea.id, { buildStatus: 'building' });
+    }
+    handleLoadSession(idea.sessionId);
+    setViewMode(target);
+  };
+
+  // Links from Ideate: `?buildIdea=` starts (or reopens) a build, `?updateBuild=` re-applies a changed idea,
+  // `?openSession=` opens an idea's project.
+  const handledNav = useRef<string | null>(null);
+  useEffect(() => {
+    if (location.pathname !== '/' || handledNav.current === location.key) return;
+    const params = new URLSearchParams(location.search);
+    const build = params.get('buildIdea');
+    const update = params.get('updateBuild');
+    const open = params.get('openSession');
+    if (!build && !update && !open) return;
+    handledNav.current = location.key;
+    if (update) {
+      const idea = ideas.find(i => i.id === update);
+      if (idea && !readOnly) void updateBuildFromIdea(idea);
+      else if (!sessionId) getOrCreateDefaultSession();
+      return;
+    }
+    if (build) {
+      const idea = ideas.find(i => i.id === build);
+      if (idea && !readOnly) void startBuildFromIdea(idea);
+      else if (!sessionId) getOrCreateDefaultSession();
+      return;
+    }
+    if (open && open !== sessionId) handleLoadSession(open);
+    setViewMode(params.get('view') === 'insights' ? 'insights' : 'technical');
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- runs once per navigation
+  }, [location.key]);
 
   const handleDiscardAndNewSession = () => {
     setShowNewSessionConfirm(false);
@@ -1224,333 +1506,32 @@ export default function App() {
 
   return (
     <div className="min-h-screen flex bg-background">
-      {/* Mobile Sidebar Overlay */}
+      {/* Mobile navigation drawer */}
       {mobileSidebarOpen && (
         <div className="fixed inset-0 z-40 md:hidden animate-backdrop-fade-in">
           <div className="absolute inset-0 bg-black/60" onClick={() => setMobileSidebarOpen(false)} />
-          <aside className="relative w-52 h-full bg-sidebar border-r border-sidebar-border flex flex-col animate-slide-in-left">
-            <div className="px-4 py-4 border-b border-sidebar-border flex items-center justify-between">
-              <Link to="/" onClick={() => setMobileSidebarOpen(false)} className="flex items-center gap-2.5 cursor-pointer">
-                <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-primary to-emerald-500 flex items-center justify-center flex-shrink-0 overflow-hidden">
-                  {brandConfig?.logo_url ? (
-                    <img src={brandConfig.logo_url} alt="" className="w-full h-full object-contain" onError={(e) => { e.currentTarget.style.display = 'none'; e.currentTarget.nextElementSibling?.removeAttribute('style'); }} />
-                  ) : null}
-                  <Zap className="w-4 h-4 text-white" style={brandConfig?.logo_url ? { display: 'none' } : undefined} />
-                </div>
-                <div className="min-w-0">
-                  <h1 className="font-semibold text-sidebar-foreground text-ui-md tracking-tight whitespace-nowrap">{brandConfig?.company_name || 'V2V: Vibe-to-Value'}</h1>
-                  <p className="text-ui-xs text-muted-foreground whitespace-nowrap">Vibe Coding Workshop</p>
-                  <p className="text-ui-2xs text-muted-foreground/60 whitespace-nowrap">v{__APP_VERSION__}</p>
-                </div>
-              </Link>
-              <button
-                onClick={() => setMobileSidebarOpen(false)}
-                className="p-1 rounded-md text-muted-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-foreground transition-colors flex-shrink-0"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-            <nav className="flex-1 px-2.5 py-3">
-              <div className="space-y-0.5">
-                <Link to={sessionId ? `/?sessionId=${sessionId}` : '/'} onClick={() => setMobileSidebarOpen(false)} className={`w-full flex items-center gap-2.5 px-2.5 py-2 rounded-md text-ui-base font-medium transition-all duration-200 ${isWorkflowPage ? 'bg-sidebar-accent text-sidebar-primary' : 'text-muted-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-foreground'}`}>
-                  <svg className={`w-4 h-4 flex-shrink-0 ${isWorkflowPage ? 'text-primary' : 'text-muted-foreground'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M4 5a1 1 0 011-1h14a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM4 13a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H5a1 1 0 01-1-1v-6zM16 13a1 1 0 011-1h2a1 1 0 011 1v6a1 1 0 01-1 1h-2a1 1 0 01-1-1v-6z" /></svg>
-                  <span>Workflow</span>
-                </Link>
-                <Link to="/leaderboard" onClick={() => setMobileSidebarOpen(false)} className={`w-full flex items-center gap-2.5 px-2.5 py-2 rounded-md text-ui-base font-medium transition-all duration-200 ${isLeaderboardPage ? 'bg-sidebar-accent text-sidebar-primary' : 'text-muted-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-foreground'}`}>
-                  <Trophy className={`w-4 h-4 flex-shrink-0 ${isLeaderboardPage ? 'text-primary' : 'text-muted-foreground'}`} />
-                  <span>Leaderboard</span>
-                </Link>
-                <Link to="/skills" onClick={() => setMobileSidebarOpen(false)} className={`w-full flex items-center gap-2.5 px-2.5 py-2 rounded-md text-ui-base font-medium transition-all duration-200 ${isSkillsPage ? 'bg-sidebar-accent text-sidebar-primary' : 'text-muted-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-foreground'}`}>
-                  <Compass className={`w-4 h-4 flex-shrink-0 ${isSkillsPage ? 'text-primary' : 'text-muted-foreground'}`} />
-                  <span>Agent Skills Navigator</span>
-                </Link>
-                <Link to="/analytics" onClick={() => setMobileSidebarOpen(false)} className={`w-full flex items-center gap-2.5 px-2.5 py-2 rounded-md text-ui-base font-medium transition-all duration-200 ${isAnalyticsPage ? 'bg-sidebar-accent text-sidebar-primary' : 'text-muted-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-foreground'}`}>
-                  <BarChart3 className={`w-4 h-4 flex-shrink-0 ${isAnalyticsPage ? 'text-primary' : 'text-muted-foreground'}`} />
-                  <span>Analytics</span>
-                </Link>
-                <Link to="/hackathons" onClick={() => setMobileSidebarOpen(false)} className={`w-full flex items-center gap-2.5 px-2.5 py-2 rounded-md text-ui-base font-medium transition-all duration-200 ${isHackathonsPage ? 'bg-sidebar-accent text-sidebar-primary' : 'text-muted-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-foreground'}`}>
-                  <Award className={`w-4 h-4 flex-shrink-0 ${isHackathonsPage ? 'text-primary' : 'text-muted-foreground'}`} />
-                  <span className="flex items-center gap-1.5">
-                    Hackathons
-                    <span className="text-ui-2xs font-semibold uppercase tracking-wide text-amber-400 bg-amber-500/15 rounded px-1 py-0.5 leading-none">Beta</span>
-                  </span>
-                </Link>
-                <Link to="/config" onClick={() => setMobileSidebarOpen(false)} className={`w-full flex items-center gap-2.5 px-2.5 py-2 rounded-md text-ui-base font-medium transition-all duration-200 ${isConfigPage ? 'bg-sidebar-accent text-sidebar-primary' : 'text-muted-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-foreground'}`}>
-                  <svg className={`w-4 h-4 flex-shrink-0 ${isConfigPage ? 'text-primary' : 'text-muted-foreground'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" /></svg>
-                  <span>Configuration</span>
-                </Link>
-              </div>
-            </nav>
-            <div className="px-4 py-3 border-t border-sidebar-border">
-              <div className="flex items-center gap-1.5 text-ui-xs text-muted-foreground">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse flex-shrink-0"></span>
-                <span>Connected</span>
-              </div>
-            </div>
-          </aside>
+          <AppSidebar
+            variant="mobile"
+            brand={brandConfig}
+            sessionId={sessionId}
+            onClose={() => setMobileSidebarOpen(false)}
+          />
         </div>
       )}
 
-      {/* Left Sidebar Navigation - Collapsible (hidden on mobile) */}
-      <aside className={`hidden md:flex ${sidebarCollapsed ? 'w-14' : 'w-52'} bg-sidebar border-r border-sidebar-border flex-col flex-shrink-0 transition-all duration-300 ease-in-out overflow-hidden`}>
-        {/* Logo/Brand + Toggle */}
-        <div className={`${sidebarCollapsed ? 'px-2' : 'px-4'} py-4 border-b border-sidebar-border transition-all duration-300`}>
-          <div className="flex items-center justify-between">
-            <Link to="/" className={`flex items-center ${sidebarCollapsed ? 'justify-center w-full' : 'gap-2.5'} cursor-pointer`}>
-              <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-primary to-emerald-500 flex items-center justify-center flex-shrink-0 overflow-hidden">
-                {brandConfig?.logo_url ? (
-                  <img src={brandConfig.logo_url} alt="" className="w-full h-full object-contain" onError={(e) => { e.currentTarget.style.display = 'none'; e.currentTarget.nextElementSibling?.removeAttribute('style'); }} />
-                ) : null}
-                <Zap className="w-4 h-4 text-white" style={brandConfig?.logo_url ? { display: 'none' } : undefined} />
-              </div>
-              {!sidebarCollapsed && (
-                <div className="min-w-0">
-                  <h1 className="font-semibold text-sidebar-foreground text-ui-md tracking-tight whitespace-nowrap">{brandConfig?.company_name || 'V2V: Vibe-to-Value'}</h1>
-                  <p className="text-ui-xs text-muted-foreground whitespace-nowrap">Vibe Coding Workshop</p>
-                  <p className="text-ui-2xs text-muted-foreground/60 whitespace-nowrap">v{__APP_VERSION__}</p>
-                </div>
-              )}
-            </Link>
-            {!sidebarCollapsed && (
-              <button
-                onClick={toggleSidebar}
-                className="p-1 rounded-md text-muted-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-foreground transition-colors flex-shrink-0"
-                title="Collapse sidebar"
-              >
-                <PanelLeftClose className="w-4 h-4" />
-              </button>
-            )}
-          </div>
-          {sidebarCollapsed && (
-            <button
-              onClick={toggleSidebar}
-              className="w-full mt-2 p-1.5 rounded-md text-muted-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-foreground transition-colors flex items-center justify-center"
-              title="Expand sidebar"
-            >
-              <PanelLeft className="w-4 h-4" />
-            </button>
-          )}
-        </div>
-
-        {/* Navigation */}
-        <nav className={`flex-1 ${sidebarCollapsed ? 'px-1.5' : 'px-2.5'} py-3 transition-all duration-300`}>
-          <div className="space-y-0.5">
-            <Link
-              to={sessionId ? `/?sessionId=${sessionId}` : '/'}
-              title="Workflow"
-              className={`w-full flex items-center ${sidebarCollapsed ? 'justify-center px-0 py-2.5' : 'gap-2.5 px-2.5 py-2'} rounded-md text-ui-base font-medium transition-all duration-200 ${
-                isWorkflowPage
-                  ? 'bg-sidebar-accent text-sidebar-primary'
-                  : 'text-muted-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-foreground'
-              }`}
-            >
-              <svg className={`w-4 h-4 flex-shrink-0 ${isWorkflowPage ? 'text-primary' : 'text-muted-foreground'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M4 5a1 1 0 011-1h14a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM4 13a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H5a1 1 0 01-1-1v-6zM16 13a1 1 0 011-1h2a1 1 0 011 1v6a1 1 0 01-1 1h-2a1 1 0 01-1-1v-6z" />
-              </svg>
-              {!sidebarCollapsed && <span className="whitespace-nowrap">Workflow</span>}
-            </Link>
-
-            <Link
-              to="/leaderboard"
-              title="Leaderboard"
-              className={`w-full flex items-center ${sidebarCollapsed ? 'justify-center px-0 py-2.5' : 'gap-2.5 px-2.5 py-2'} rounded-md text-ui-base font-medium transition-all duration-200 ${
-                isLeaderboardPage
-                  ? 'bg-sidebar-accent text-sidebar-primary'
-                  : 'text-muted-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-foreground'
-              }`}
-            >
-              <Trophy className={`w-4 h-4 flex-shrink-0 ${isLeaderboardPage ? 'text-primary' : 'text-muted-foreground'}`} />
-              {!sidebarCollapsed && <span className="whitespace-nowrap">Leaderboard</span>}
-            </Link>
-
-            <Link
-              to="/skills"
-              title="Agent Skills Navigator"
-              className={`w-full flex items-center ${sidebarCollapsed ? 'justify-center px-0 py-2.5' : 'gap-2.5 px-2.5 py-2'} rounded-md text-ui-base font-medium transition-all duration-200 ${
-                isSkillsPage
-                  ? 'bg-sidebar-accent text-sidebar-primary'
-                  : 'text-muted-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-foreground'
-              }`}
-            >
-              <Compass className={`w-4 h-4 flex-shrink-0 ${isSkillsPage ? 'text-primary' : 'text-muted-foreground'}`} />
-              {!sidebarCollapsed && <span className="whitespace-nowrap">Agent Skills Navigator</span>}
-            </Link>
-
-            <Link
-              to="/analytics"
-              title="Analytics"
-              className={`w-full flex items-center ${sidebarCollapsed ? 'justify-center px-0 py-2.5' : 'gap-2.5 px-2.5 py-2'} rounded-md text-ui-base font-medium transition-all duration-200 ${
-                isAnalyticsPage
-                  ? 'bg-sidebar-accent text-sidebar-primary'
-                  : 'text-muted-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-foreground'
-              }`}
-            >
-              <BarChart3 className={`w-4 h-4 flex-shrink-0 ${isAnalyticsPage ? 'text-primary' : 'text-muted-foreground'}`} />
-              {!sidebarCollapsed && <span className="whitespace-nowrap">Analytics</span>}
-            </Link>
-
-            {/* Hackathons — accordion with sub-links when expanded */}
-            <div>
-              <div
-                className={`w-full flex items-center ${sidebarCollapsed ? 'justify-center px-0 py-2.5' : 'gap-2.5 px-2.5 py-2'} rounded-md text-ui-base font-medium transition-all duration-200 ${
-                  isHackathonsPage
-                    ? 'bg-sidebar-accent text-sidebar-primary'
-                    : 'text-muted-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-foreground'
-                }`}
-              >
-                <Link to="/hackathons" title="Hackathons (Beta)" className="flex items-center gap-2.5 flex-1 min-w-0">
-                  <Award className={`w-4 h-4 flex-shrink-0 ${isHackathonsPage ? 'text-primary' : 'text-muted-foreground'}`} />
-                  {!sidebarCollapsed && (
-                    <span className="whitespace-nowrap flex items-center gap-1.5">
-                      Hackathons
-                      <span className="text-ui-2xs font-semibold uppercase tracking-wide text-amber-400 bg-amber-500/15 rounded px-1 py-0.5 leading-none">Beta</span>
-                    </span>
-                  )}
-                </Link>
-                {!sidebarCollapsed && (
-                  <button
-                    onClick={() => setHackathonsExpanded((v) => !v)}
-                    className="p-0.5 rounded hover:bg-sidebar-accent/60 transition-colors"
-                    title={hackathonsExpanded ? 'Collapse' : 'Expand'}
-                  >
-                    <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-200 ${hackathonsExpanded ? 'rotate-180' : ''}`} />
-                  </button>
-                )}
-              </div>
-
-              {/* Sub-links */}
-              {!sidebarCollapsed && hackathonsExpanded && (
-                <div className="ml-3 mt-0.5 pl-3 border-l border-sidebar-border space-y-0.5">
-                  <Link
-                    to="/hackathons"
-                    className={`w-full flex items-center gap-2 px-2.5 py-1.5 rounded-md text-ui-sm transition-all duration-200 ${
-                      location.pathname === '/hackathons'
-                        ? 'text-sidebar-primary font-medium'
-                        : 'text-muted-foreground hover:text-sidebar-foreground'
-                    }`}
-                  >
-                    <List className="w-3.5 h-3.5 flex-shrink-0" />
-                    <span>All Hackathons</span>
-                  </Link>
-                  <Link
-                    to="/hackathons?create=1"
-                    className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-md text-ui-sm text-muted-foreground hover:text-sidebar-foreground transition-all duration-200"
-                  >
-                    <Plus className="w-3.5 h-3.5 flex-shrink-0" />
-                    <span>Create Hackathon</span>
-                  </Link>
-                  <Link
-                    to="/hackathons/playbook"
-                    className={`w-full flex items-center gap-2 px-2.5 py-1.5 rounded-md text-ui-sm transition-all duration-200 ${
-                      location.pathname === '/hackathons/playbook'
-                        ? 'text-sidebar-primary font-medium'
-                        : 'text-muted-foreground hover:text-sidebar-foreground'
-                    }`}
-                  >
-                    <BookOpen className="w-3.5 h-3.5 flex-shrink-0" />
-                    <span>Playbook</span>
-                  </Link>
-                </div>
-              )}
-            </div>
-
-            <div className="relative">
-              <Link
-                to="/config"
-                title="Configuration"
-                className={`w-full flex items-center ${sidebarCollapsed ? 'justify-center px-0 py-2.5' : 'gap-2.5 px-2.5 py-2'} rounded-md text-ui-base font-medium transition-all duration-200 ${
-                  isConfigPage
-                    ? 'bg-sidebar-accent text-sidebar-primary'
-                    : 'text-muted-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-foreground'
-                }`}
-              >
-                <svg className={`w-4 h-4 flex-shrink-0 ${isConfigPage ? 'text-primary' : 'text-muted-foreground'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />
-                </svg>
-                {!sidebarCollapsed && <span className="whitespace-nowrap">Configuration</span>}
-              </Link>
-              
-              {/* Bouncing Arrow Hint */}
-              {showConfigHint && !sidebarCollapsed && (
-                <Link 
-                  to="/config"
-                  className="absolute -right-1 top-1/2 animate-bounce-horizontal flex items-center gap-1.5 cursor-pointer z-20"
-                  onClick={() => {
-                    setShowConfigHint(false);
-                    setHintDismissed(true);
-                  }}
-                >
-                  <div className="relative">
-                    <div className="bg-primary rounded-full p-0.5 animate-pulse-glow">
-                      <svg 
-                        className="w-4 h-4 text-primary-foreground transform rotate-180" 
-                        fill="currentColor" 
-                        viewBox="0 0 24 24"
-                      >
-                        <path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/>
-                      </svg>
-                    </div>
-                  </div>
-                  <div className="absolute left-8 top-1/2 -translate-y-1/2 bg-primary text-primary-foreground text-ui-xs font-medium px-2.5 py-1.5 rounded shadow-lg whitespace-nowrap">
-                    <div className="absolute -left-1.5 top-1/2 -translate-y-1/2 w-0 h-0 border-t-[5px] border-t-transparent border-b-[5px] border-b-transparent border-r-[6px] border-r-primary"></div>
-                    Configure prompts here!
-                  </div>
-                </Link>
-              )}
-            </div>
-          </div>
-
-          {/* Resources Section - hidden when collapsed */}
-          {!sidebarCollapsed && (
-            <div className="mt-6 pt-4 border-t border-sidebar-border">
-              <p className="text-ui-2xs text-muted-foreground uppercase font-semibold tracking-wider mb-2 px-2.5">Resources</p>
-              <div className="space-y-0">
-                <a
-                  href="https://github.com/databricks-solutions/vibe-coding-workshop-template"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-md text-ui-sm text-muted-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-foreground transition-all duration-200"
-                >
-                  <svg className="w-3.5 h-3.5 flex-shrink-0" fill="currentColor" viewBox="0 0 24 24">
-                    <path fillRule="evenodd" clipRule="evenodd" d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.531 1.032 1.531 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z" />
-                  </svg>
-                  <span className="whitespace-nowrap">Repository template</span>
-                </a>
-                <a
-                  href="https://docs.databricks.com"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-md text-ui-sm text-muted-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-foreground transition-all duration-200"
-                >
-                  <svg className="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
-                  </svg>
-                  <span className="whitespace-nowrap">Databricks Docs</span>
-                </a>
-                <a
-                  href="https://github.com/databricks-solutions/vibe-coding-workshop-app/issues/new"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-md text-ui-sm text-muted-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-foreground transition-all duration-200"
-                >
-                  <svg className="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
-                  </svg>
-                  <span className="whitespace-nowrap">Submit Feature Request</span>
-                </a>
-              </div>
-            </div>
-          )}
-        </nav>
-
-        {/* Footer */}
-        <div className={`${sidebarCollapsed ? 'px-2 flex justify-center' : 'px-4'} py-3 border-t border-sidebar-border transition-all duration-300`}>
-          <div className={`flex items-center ${sidebarCollapsed ? 'justify-center' : 'gap-1.5'} text-ui-xs text-muted-foreground`}>
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse flex-shrink-0"></span>
-            {!sidebarCollapsed && <span className="whitespace-nowrap">Connected · v{__APP_VERSION__}</span>}
-          </div>
-        </div>
-      </aside>
+      {/* Desktop navigation (collapsible, hidden on mobile) */}
+      <AppSidebar
+        variant="desktop"
+        brand={brandConfig}
+        sessionId={sessionId}
+        collapsed={sidebarCollapsed}
+        onToggleCollapsed={toggleSidebar}
+        showConfigHint={showConfigHint}
+        onDismissConfigHint={() => {
+          setShowConfigHint(false);
+          setHintDismissed(true);
+        }}
+      />
 
       {/* Main Content */}
       <main className="flex-1 flex flex-col overflow-hidden">
@@ -1610,13 +1591,17 @@ export default function App() {
                     </button>
                     <Link to="/" className="min-w-0 cursor-pointer">
                       <h1 className="text-ui-lg sm:text-ui-xl font-semibold text-foreground tracking-tight truncate">V2V: Vibe-to-Value - Vibe Coding Workshop</h1>
-                      <p className="hidden sm:block text-ui-base text-muted-foreground">Turning ideas into measurable business outcomes faster with reusable patterns, and guided best practices</p>
+                      <p className="hidden sm:block text-ui-base text-muted-foreground">
+                        {viewMode === 'insights'
+                          ? 'Turn the data you already have into answers your team can trust'
+                          : 'Turning ideas into measurable business outcomes faster with reusable patterns, and guided best practices'}
+                      </p>
                     </Link>
                   </div>
                   
-                  {/* Theme Toggle & Session Menu in Header */}
+                  {/* View mode & Session Menu in Header */}
                   <div className="flex items-center gap-2 sm:gap-3 flex-shrink-0">
-                    <ThemeToggle />
+                    <ViewModeToggle mode={viewMode} onChange={setViewMode} />
                     {readOnly ? (
                       <div className="flex items-center gap-2 text-muted-foreground text-ui-base">
                         <Eye className="w-3.5 h-3.5" />
@@ -1653,6 +1638,34 @@ export default function App() {
               {/* Content Area */}
               <div className="p-3 sm:p-6 xl:px-10 2xl:px-14">
                 <div className="max-w-7xl xl:max-w-[88rem] 2xl:max-w-[96rem] mx-auto">
+                  {linkedIdea && !isSessionLoading && <BuildLinkBar idea={linkedIdea} readOnly={readOnly} />}
+                  {viewMode === 'insights' ? (
+                    <Suspense fallback={<div className="min-h-[50vh]" />}>
+                      <InsightsFlow
+                        sessionId={sessionId}
+                        isSessionLoaded={!isSessionLoading}
+                        readOnly={readOnly}
+                        currentUser={currentUser}
+                        workshopLevel={workshopLevel}
+                        codingAssistant={codingAssistant}
+                        selectedIndustry={selectedIndustry}
+                        selectedIndustryLabel={selectedIndustryLabel}
+                        selectedUseCase={selectedUseCase}
+                        selectedUseCaseLabel={selectedUseCaseLabel}
+                        customUseCaseLabel={customUseCaseLabel}
+                        customDescription={customDescription}
+                        stepPrompts={stepPrompts}
+                        completedSteps={completedSteps}
+                        skippedSteps={skippedSteps}
+                        onStepPromptGenerated={handleStepPromptGenerated}
+                        onCompletedStepsChange={handleCompletedStepsChange}
+                        onSkippedStepsChange={handleSkippedStepsChange}
+                        onStart={handleInsightsStart}
+                        onNewSession={() => setShowNewSessionConfirm(true)}
+                        onSwitchToTechnical={() => setViewMode('technical')}
+                      />
+                    </Suspense>
+                  ) : (
                   <WorkflowDiagram
                     sessionId={sessionId}
                     stepPrompts={stepPrompts}
@@ -1757,17 +1770,23 @@ export default function App() {
                     defaultCatalog={defaultCatalog}
                     readOnly={readOnly}
                   />
+                  )}
                 </div>
               </div>
             </div>
           } />
           
+          <Route path="/library/*" element={<LibraryPage />} />
+
           {/* Configuration Pages with tab-based routing */}
-          <Route path="/config" element={<ConfigurationPage />} />
+          <Route path="/config" element={<Navigate to="/config/section-inputs" replace />} />
+          <Route path="/config/prompts" element={<Navigate to="/library" replace />} />
           <Route path="/config/:tab" element={<ConfigurationPage />} />
           
           {/* Leaderboard Page */}
           <Route path="/leaderboard" element={<LeaderboardPage />} />
+
+          <Route path="/release-notes" element={<ReleaseNotesPage />} />
           
           {/* Analytics Page */}
           <Route path="/analytics" element={<AnalyticsDashboard />} />
@@ -1776,7 +1795,7 @@ export default function App() {
           <Route path="/hackathons" element={<HackathonsPage />} />
           <Route path="/hackathons/playbook" element={<HackathonPlaybook />} />
           <Route path="/hackathons/:id" element={<HackathonDetailPage />} />
-          {/* Agent Skills Navigator Page (lazy-loaded) */}
+          {/* Learning Academy page (lazy-loaded) */}
           <Route
             path="/skills"
             element={
@@ -1785,12 +1804,21 @@ export default function App() {
                   <div className="flex-1 flex items-center justify-center bg-background">
                     <div className="flex items-center gap-3 text-muted-foreground">
                       <div className="w-5 h-5 rounded-full border-2 border-primary/30 border-t-primary animate-spin" />
-                      <span className="text-ui-md font-medium">Loading Agent Skills Navigator…</span>
+                      <span className="text-ui-md font-medium">Loading Learning Academy…</span>
                     </div>
                   </div>
                 }
               >
                 <SkillsNavigatorPage onOpenMobileNav={() => setMobileSidebarOpen(true)} />
+              </Suspense>
+            }
+          />
+
+          <Route
+            path="/ideate/*"
+            element={
+              <Suspense fallback={<div className="flex-1 bg-background" />}>
+                <IdeateApp onOpenMobileNav={() => setMobileSidebarOpen(true)} />
               </Suspense>
             }
           />

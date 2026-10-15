@@ -1,181 +1,118 @@
-import { useEffect, useState } from 'react';
-import { SKILL_MAP } from '../../constants/skillsNavigatorData';
-import { typeColor, stripHtml, highlightCode } from './skillsNavUtils';
+import { useEffect, useRef } from 'react';
+import { ArrowLeft, X } from 'lucide-react';
+import { SKILL_MAP, type TourId } from '../../constants/skillsNavigatorData';
+import { SkillDetail } from './SkillDetail';
+import { cx } from './uiStyles';
 
 interface SkillDetailDrawerProps {
   skillId: string | null;
+  backTo: string | null;
+  onBack: () => void;
   onClose: () => void;
   onNavigate: (skillId: string) => void;
-  onLearn: (platform: string) => void;
+  onLearn: (moduleId: string) => void;
+  onOpenTour: (tour: TourId, step: number) => void;
 }
 
-/** Mode 3 — slide-in skill deep-dive panel (ported from openDetail()). */
-export function SkillDetailDrawer({ skillId, onClose, onNavigate, onLearn }: SkillDetailDrawerProps) {
-  const s = skillId ? SKILL_MAP[skillId] : null;
-  const [copied, setCopied] = useState(false);
+const FOCUSABLE = 'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
 
-  // A different skill starts un-copied
-  const [prevSkillId, setPrevSkillId] = useState(skillId);
-  if (skillId !== prevSkillId) {
-    setPrevSkillId(skillId);
-    setCopied(false);
-  }
+/** Slide-in skill panel. Traps focus while open and restores it on close. */
+export function SkillDetailDrawer({ skillId, backTo, onBack, onClose, onNavigate, onLearn, onOpenTour }: SkillDetailDrawerProps) {
+  const skill = skillId ? SKILL_MAP[skillId] : null;
+  const open = !!skill;
+  const panelRef = useRef<HTMLDivElement | null>(null);
+  const restoreRef = useRef<HTMLElement | null>(null);
 
-  // Escape closes the panel while it's open.
   useEffect(() => {
-    if (!skillId) return;
+    if (!open) return;
+    restoreRef.current = document.activeElement as HTMLElement | null;
+    const t = setTimeout(() => panelRef.current?.querySelector<HTMLElement>('[data-autofocus]')?.focus(), 30);
+    return () => {
+      clearTimeout(t);
+      restoreRef.current?.focus?.();
+    };
+  }, [open]);
+
+  useEffect(() => {
+    panelRef.current?.scrollTo({ top: 0 });
+  }, [skillId]);
+
+  useEffect(() => {
+    if (!open) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        onClose();
+        return;
+      }
+      if (e.key !== 'Tab' || !panelRef.current) return;
+      const items = Array.from(panelRef.current.querySelectorAll<HTMLElement>(FOCUSABLE)).filter((el) => el.offsetParent !== null);
+      if (!items.length) return;
+      const first = items[0];
+      const last = items[items.length - 1];
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault();
+        first.focus();
+      }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [skillId, onClose]);
+  }, [open, onClose]);
 
-  // Lock body scroll + Escape handled by parent; this only renders when open.
-  const open = !!s;
-
-  const stageLabel = s
-    ? s.stage
-      ? `Stage ${s.stage}`
-      : s.phase !== undefined
-        ? `Phase ${s.phase}`
-        : ''
-    : '';
-
-  const copyPrompt = () => {
-    if (!s?.prompt) return;
-    navigator.clipboard.writeText(s.prompt).then(() => {
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    });
-  };
+  const back = backTo ? SKILL_MAP[backTo] : null;
 
   return (
     <>
       <div
-        className={`detail-overlay${open ? ' open' : ''}`}
+        className={cx(
+          'fixed inset-0 z-40 bg-black/50 backdrop-blur-[2px] transition-opacity duration-200',
+          open ? 'opacity-100' : 'opacity-0 pointer-events-none'
+        )}
         onClick={onClose}
+        aria-hidden="true"
       />
-      <div className={`detail-panel${open ? ' open' : ''}`}>
-        {s && (
+      <div
+        ref={panelRef}
+        role="dialog"
+        aria-modal="true"
+        aria-label={skill?.name ?? 'Skill details'}
+        aria-hidden={!open}
+        className={cx(
+          'fixed top-0 right-0 z-50 h-full w-full sm:w-[480px] overflow-y-auto border-l border-border bg-background shadow-2xl transition-transform duration-300 ease-out',
+          open ? 'translate-x-0' : 'translate-x-full'
+        )}
+      >
+        {skill && (
           <>
-            <div className="dp-header">
-              <button className="dp-close" onClick={onClose} aria-label="Close">
-                ✕
+            <div className="sticky top-0 z-10 flex items-center gap-2 px-5 py-3 border-b border-border bg-background/95 backdrop-blur">
+              {back ? (
+                <button
+                  type="button"
+                  onClick={onBack}
+                  className="flex min-w-0 items-center gap-1.5 text-ui-sm font-medium text-muted-foreground hover:text-foreground"
+                >
+                  <ArrowLeft className="w-4 h-4 shrink-0" />
+                  <span className="truncate">{back.name}</span>
+                </button>
+              ) : (
+                <span className="text-ui-sm font-medium text-muted-foreground">Skill</span>
+              )}
+              <button
+                type="button"
+                data-autofocus
+                onClick={onClose}
+                aria-label="Close"
+                className="ml-auto p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-secondary"
+              >
+                <X className="w-5 h-5" />
               </button>
-              <div className="dp-title">{s.name}</div>
-              <div className="dp-badges">
-                <span className="dp-badge" style={{ background: typeColor(s.type).bg, color: typeColor(s.type).fg }}>
-                  {s.type}
-                </span>
-                {stageLabel && (
-                  <span className="dp-badge" style={{ background: 'var(--surface2)', color: 'var(--text-dim)' }}>
-                    {stageLabel}
-                  </span>
-                )}
-                {s.component && (
-                  <span className="dp-badge" style={{ background: 'var(--surface2)', color: 'var(--text-dim)' }}>
-                    {s.component}
-                  </span>
-                )}
-              </div>
-              <div className="dp-desc" dangerouslySetInnerHTML={{ __html: s.desc || '' }} />
             </div>
-
-            {s.keywords && s.keywords.length > 0 && (
-              <div className="dp-section">
-                <h4>Keywords (Routing Triggers)</h4>
-                <div className="dp-keywords">
-                  {s.keywords.map((k) => (
-                    <span className="dp-kw" key={k}>
-                      {k}
-                    </span>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {s.workers && s.workers.length > 0 && (
-              <div className="dp-section">
-                <h4>Workers ({s.workers.length})</h4>
-                <div className="dp-deps">
-                  {s.workers.map((wid) => {
-                    const w = SKILL_MAP[wid];
-                    if (!w) return null;
-                    return (
-                      <div className="dp-dep" key={wid} onClick={() => onNavigate(wid)}>
-                        <div className="dd-icon" style={{ background: 'var(--gold-dim)', color: 'var(--gold)' }}>
-                          W
-                        </div>
-                        {w.name}
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
-
-            {s.commonDeps && s.commonDeps.length > 0 && (
-              <div className="dp-section">
-                <h4>Common Dependencies</h4>
-                <div className="dp-deps">
-                  {s.commonDeps.map((did) => {
-                    const d = SKILL_MAP[did];
-                    if (!d) return null;
-                    return (
-                      <div className="dp-dep" key={did} onClick={() => onNavigate(did)}>
-                        <div className="dd-icon" style={{ background: 'var(--green-dim)', color: 'var(--green)' }}>
-                          C
-                        </div>
-                        {d.name}
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
-
-            {s.emits && s.emits.length > 0 && (
-              <div className="dp-section">
-                <h4>Emits</h4>
-                <div className="dp-keywords">
-                  {s.emits.map((e) => (
-                    <span className="dp-kw" key={e}>
-                      {e}
-                    </span>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {s.code && (
-              <div className="dp-section">
-                <h4>Key Code Pattern</h4>
-                <div className="dp-code" dangerouslySetInnerHTML={{ __html: highlightCode(s.code) }} />
-              </div>
-            )}
-
-            {(s.prompt || s.platform) && (
-              <div className="dp-actions">
-                {s.prompt && (
-                  <button className="dp-btn primary" onClick={copyPrompt}>
-                    {copied ? 'Copied!' : 'Copy Prompt'}
-                  </button>
-                )}
-                {s.platform && (
-                  <button
-                    className="dp-btn secondary"
-                    onClick={() => {
-                      onClose();
-                      onLearn(s.platform!);
-                    }}
-                    title={stripHtml(s.desc)}
-                  >
-                    Learn: {s.platform}
-                  </button>
-                )}
-              </div>
-            )}
+            <div className="px-5 pt-4 pb-10">
+              <SkillDetail key={skill.id} skill={skill} onNavigate={onNavigate} onLearn={onLearn} onOpenTour={onOpenTour} />
+            </div>
           </>
         )}
       </div>

@@ -19,7 +19,7 @@ const TYPE_COLOR_MAP: Record<string, TypeColor> = {
 };
 
 export function typeColor(t: SkillNavType): TypeColor {
-  return TYPE_COLOR_MAP[t] || { bg: 'var(--surface2)', fg: 'var(--text-dim)' };
+  return TYPE_COLOR_MAP[t] || { bg: 'var(--sn-surface2)', fg: 'var(--sn-text-dim)' };
 }
 
 export function stripHtml(h?: string): string {

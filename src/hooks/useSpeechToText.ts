@@ -5,6 +5,17 @@ const SpeechRecognitionCtor =
     ? window.SpeechRecognition || window.webkitSpeechRecognition
     : undefined;
 
+/** Errors that will keep failing if we auto-restart, so we stop and surface them. */
+const FATAL_ERRORS = new Set(['not-allowed', 'service-not-allowed', 'audio-capture', 'network', 'language-not-supported']);
+
+const ERROR_MESSAGES: Record<string, string> = {
+  'not-allowed': 'Microphone access is blocked. Allow the mic for this site in your browser settings.',
+  'service-not-allowed': 'Microphone access is blocked. Allow the mic for this site in your browser settings.',
+  'audio-capture': 'No microphone was found. Check that one is connected.',
+  network: "The browser's speech service is unreachable (often a VPN or network policy). Try Chrome or Edge on another network, or type instead.",
+  'language-not-supported': 'Speech recognition does not support this language in your browser.',
+};
+
 interface UseSpeechToTextOptions {
   onFinalTranscript: (text: string) => void;
   language?: string;
@@ -13,6 +24,7 @@ interface UseSpeechToTextOptions {
 export function useSpeechToText({ onFinalTranscript, language = 'en-US' }: UseSpeechToTextOptions) {
   const [isListening, setIsListening] = useState(false);
   const [interimTranscript, setInterimTranscript] = useState('');
+  const [error, setError] = useState<string | null>(null);
   const recognitionRef = useRef<SpeechRecognition | null>(null);
   const callbackRef = useRef(onFinalTranscript);
   const stoppedManuallyRef = useRef(false);
@@ -32,6 +44,7 @@ export function useSpeechToText({ onFinalTranscript, language = 'en-US' }: UseSp
     if (!SpeechRecognitionCtor) return;
 
     recognitionRef.current?.abort();
+    setError(null);
 
     const recognition = new SpeechRecognitionCtor();
     recognition.continuous = true;
@@ -62,6 +75,10 @@ export function useSpeechToText({ onFinalTranscript, language = 'en-US' }: UseSp
     recognition.onerror = (event: SpeechRecognitionErrorEvent) => {
       if (event.error !== 'aborted' && event.error !== 'no-speech') {
         console.warn('SpeechRecognition error:', event.error);
+      }
+      if (FATAL_ERRORS.has(event.error)) {
+        stoppedManuallyRef.current = true;
+        setError(ERROR_MESSAGES[event.error] ?? `Voice input failed (${event.error}).`);
       }
       setIsListening(false);
       setInterimTranscript('');
@@ -101,5 +118,7 @@ export function useSpeechToText({ onFinalTranscript, language = 'en-US' }: UseSp
     startListening,
     stopListening,
     isSupported: !!SpeechRecognitionCtor,
+    error,
+    clearError: useCallback(() => setError(null), []),
   };
 }

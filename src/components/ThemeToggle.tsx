@@ -1,64 +1,59 @@
-import { useState, useEffect } from 'react';
-import { Sun, Moon } from 'lucide-react';
+import { Moon, Sun } from 'lucide-react';
+import { useTheme, type Theme } from '../lib/theme';
 
-type Theme = 'dark' | 'light';
+const OPTIONS: { id: Theme; label: string; Icon: typeof Sun }[] = [
+  { id: 'light', label: 'Light', Icon: Sun },
+  { id: 'dark', label: 'Dark', Icon: Moon },
+];
 
-function applyTheme(newTheme: Theme) {
-  const root = document.documentElement;
-  if (newTheme === 'light') {
-    root.classList.add('light');
-  } else {
-    root.classList.remove('light');
+/**
+ * The app's one appearance control, shown in the left sidebar on every page.
+ * Expanded: a Light | Dark segmented switch. Collapsed: one icon button.
+ */
+export function ThemeToggle({ collapsed = false }: { collapsed?: boolean }) {
+  const [theme, setTheme] = useTheme();
+  const next: Theme = theme === 'dark' ? 'light' : 'dark';
+
+  if (collapsed) {
+    const label = `Switch to ${next} mode`;
+    const Icon = theme === 'dark' ? Moon : Sun;
+    return (
+      <button
+        type="button"
+        onClick={() => setTheme(next)}
+        title={label}
+        aria-label={label}
+        className="w-full h-8 flex items-center justify-center rounded-md text-muted-foreground hover:bg-sidebar-accent/50 hover:text-sidebar-foreground transition-colors"
+      >
+        <Icon className="w-4 h-4" />
+      </button>
+    );
   }
-}
-
-export function ThemeToggle() {
-  // Initialize theme from localStorage; with nothing stored, default to dark
-  // (the old system-preference check resolved to dark either way).
-  const [theme, setTheme] = useState<Theme>(() => (localStorage.getItem('theme') as Theme | null) || 'dark');
-
-  // Keep the document class in sync with the theme
-  useEffect(() => {
-    applyTheme(theme);
-  }, [theme]);
-
-  const toggleTheme = () => {
-    const newTheme = theme === 'dark' ? 'light' : 'dark';
-    setTheme(newTheme);
-    applyTheme(newTheme);
-    localStorage.setItem('theme', newTheme);
-  };
 
   return (
-    <button
-      onClick={toggleTheme}
-      className="relative flex items-center justify-center w-9 h-9 rounded-lg bg-secondary/50 hover:bg-secondary border border-border/50 transition-all duration-200 group"
-      title={theme === 'dark' ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
-      aria-label={theme === 'dark' ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
-    >
-      {/* Sun icon for light mode */}
-      <Sun 
-        className={`w-4 h-4 absolute transition-all duration-300 ${
-          theme === 'light' 
-            ? 'opacity-100 rotate-0 scale-100 text-amber-500' 
-            : 'opacity-0 -rotate-90 scale-75 text-amber-500'
-        }`} 
-      />
-      {/* Moon icon for dark mode */}
-      <Moon 
-        className={`w-4 h-4 absolute transition-all duration-300 ${
-          theme === 'dark' 
-            ? 'opacity-100 rotate-0 scale-100 text-blue-400' 
-            : 'opacity-0 rotate-90 scale-75 text-blue-400'
-        }`} 
-      />
-      
-      {/* Subtle glow effect on hover */}
-      <div className={`absolute inset-0 rounded-lg transition-opacity duration-200 ${
-        theme === 'dark' 
-          ? 'bg-blue-400/0 group-hover:bg-blue-400/10' 
-          : 'bg-amber-400/0 group-hover:bg-amber-400/10'
-      }`} />
-    </button>
+    <div className="flex items-center justify-between gap-2 h-8 pl-2.5">
+      <span className="text-ui-sm text-muted-foreground">Appearance</span>
+      <div role="radiogroup" aria-label="Appearance" className="flex items-center p-0.5 rounded-md bg-sidebar-accent/50 border border-sidebar-border">
+        {OPTIONS.map(({ id, label, Icon }) => {
+          const on = theme === id;
+          return (
+            <button
+              key={id}
+              type="button"
+              role="radio"
+              aria-checked={on}
+              onClick={() => setTheme(id)}
+              title={`${label} mode`}
+              className={`flex items-center gap-1 h-6 px-2 rounded text-ui-xs font-medium transition-colors ${
+                on ? 'bg-sidebar text-sidebar-foreground shadow-sm' : 'text-muted-foreground hover:text-sidebar-foreground'
+              }`}
+            >
+              <Icon className={`w-3.5 h-3.5 ${on ? (id === 'light' ? 'text-amber-500' : 'text-blue-400') : ''}`} />
+              {label}
+            </button>
+          );
+        })}
+      </div>
+    </div>
   );
 }

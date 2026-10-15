@@ -5,7 +5,7 @@ F6). ``vibe_explain_step`` asks the assembler for ``render_target="mcp"``,
 which swaps each seed fence for its reviewed text twin in
 ``src/backend/workshop/mcp_visuals/``. The web path is untouched.
 
-A1  36 twins + index.json; every twin passes lint_visual; only diagram twins
+A1  40 twins + index.json (36 from D12 PR 1, 4 for main's Insights copies); every twin passes lint_visual; only diagram twins
     carry the D-84 caption.
 A2  coverage guard: every __default__ seed fence has a twin with a matching
     hash, and no twin is an orphan.
@@ -110,9 +110,9 @@ def _assemble(tag, **kwargs):
 
 def test_twin_set_shape():
     index = _index()
-    assert len(index) == 36
+    assert len(index) == 40
     fields = [name.split(".")[1] for name in index]
-    assert (fields.count("how_to_apply"), fields.count("expected_output")) == (32, 4)
+    assert (fields.count("how_to_apply"), fields.count("expected_output")) == (36, 4)
     tables = sorted(name for name, entry in index.items() if entry["kind"] == "table")
     assert tables == ["semlayer_profile.expected_output.1"]  # the erDiagram
     assert {entry["kind"] for entry in index.values()} == {"diagram", "table"}
@@ -148,7 +148,7 @@ def test_swap_diagram_gets_caption_table_does_not(seeded):
 def test_coverage_guard():
     fences = _seed_fences()
     index = _index()
-    assert len(fences) == 36
+    assert len(fences) == 40
     missing = sorted(set(fences) - set(index))
     orphans = sorted(set(index) - set(fences))
     assert not missing, f"seed fences without a twin: {missing}"
@@ -264,7 +264,7 @@ def test_web_keeps_every_fence(seeded):
             assert len(list(visuals.iter_mermaid_fences(served[field]))) == count, (row["section_tag"], field)
             assert visuals.FALLBACK_LINE not in served[field] and CAPTION not in served[field]
             total += count
-    assert total == 34  # 36 minus the two inactive rows (gagent_share, gaccel_productionize)
+    assert total == 38  # 40 minus the two inactive rows (gagent_share, gaccel_productionize)
 
 
 # --- A5: hash mismatch -------------------------------------------------------------
@@ -651,4 +651,17 @@ WEB_GOLDEN = {
     "workspace_cleanup|genie-code": "c2463c8b4d2c1223268b7cb27ee4cc15846b65e512c161b2b4e6cccec178d6a1",
     "workspace_setup_deploy|default": "7ce6999d85648b1c5fc2d6291e69754891ec65e47826518c7c0029cb6af72d2b",
     "workspace_setup_deploy|genie-code": "bf4c5216656eab9290b24999161e08a598c74f8e262d5a57e55aa0d2668a2bb8",
+    # Main's Insights sections (merged into integration): web output at the merge head.
+    "insights_activation|default": "bcebc745a60336c98ee262906198fa7db2c0083e72b307e6d493b3343a3ec095",
+    "insights_activation|genie-code": "b68e0308caa92b631177d0e538cfc26eddfd47c603183a0d2ee732bb1fab3982",
+    "insights_alerts|default": "edaa34362d1aa573665efde2df0a2615f8735b2a0458a0f4857615f9bdf9fcb3",
+    "insights_alerts|genie-code": "78a948988b68c67fcba1d9786e10f96b1c6f3505f5fb32143d31c30082c05781",
+    "insights_app_deploy|default": "74f1cddae6c4787f4463e1d8d1fbd8a66d9fe1e93c6888780305789ce0bfcf08",
+    "insights_app_deploy|genie-code": "afe948c9d73061daedfa3119a9e10f01fa0c3953062b7acb60cfd8f631256f53",
+    "insights_genie_in_app|default": "e63611de6b44cde03fe098862a711d72b5a88e7cffdf3bd7b205ebd448bddffc",
+    "insights_genie_in_app|genie-code": "e7bd163c4f7cadd611ebec677676d462285cfd182844f5d3d51fc52800e6e3e3",
+    "insights_reverse_sync|default": "f1df749969508fb8bc20f5b616ee1012eab233d7a2924ebbba488569da12f281",
+    "insights_reverse_sync|genie-code": "74f81169b1d9e0677f08f955b387179b558875d9e3cbe44e8b161d397852815f",
+    "insights_table_design|default": "ed6a6591422d2ddd70655c40429ae96679612da3cf43b06b62f7168ba02feb82",
+    "insights_table_design|genie-code": "3a9a21fb0713a7ffb754f18d3ab0e79ba1059ce02fa1b98050e218a0c1f7dbfc",
 }

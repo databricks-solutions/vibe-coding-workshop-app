@@ -11,6 +11,7 @@ This module must not import src.backend.api.
 import asyncio
 import logging
 import os
+import re
 from typing import Any, Dict, List, Optional
 
 from fastapi import HTTPException
@@ -32,13 +33,15 @@ except ImportError:
 # - databricks-dbrx-instruct (Foundation Model API)
 # - databricks-mixtral-8x7b-instruct (Foundation Model API)
 # - Custom endpoints deployed in your workspace
-# Default endpoint (Claude Sonnet 4.5)
-SERVING_ENDPOINT_NAME = os.getenv("DATABRICKS_SERVING_ENDPOINT", "databricks-claude-sonnet-4-5")
+# Default endpoint (Claude Sonnet 4.6)
+SERVING_ENDPOINT_NAME = os.getenv("DATABRICKS_SERVING_ENDPOINT", "databricks-claude-sonnet-4-6")
 
 # Fallback endpoints to try if the configured/default endpoint is not deployed in
 # the current workspace (e.g. Claude is unavailable on Databricks Free Edition).
-# Ordered instruct-first (plain string content) then reasoning models.
+# Ordered: the previous Claude default, then instruct models (plain string content),
+# then reasoning models.
 FALLBACK_ENDPOINTS = [
+    "databricks-claude-sonnet-4-5",
     "databricks-meta-llama-3-3-70b-instruct",
     "databricks-llama-4-maverick",
     "databricks-gemma-3-12b",
@@ -135,6 +138,30 @@ def get_best_available_endpoint() -> Optional[str]:
         f"using first available endpoint: {first_available}"
     )
     return first_available
+
+
+_NO_TEMPERATURE = re.compile(r"mini|claude-(?:opus|sonnet|haiku|fable)-5", re.IGNORECASE)
+
+
+def _supports_temperature(endpoint: str) -> bool:
+    """Mini models and the Claude 5 family reject the ``temperature`` parameter."""
+    return not _NO_TEMPERATURE.search(endpoint or "")
+
+
+def resolve_endpoint(preferred: Optional[str]) -> Optional[str]:
+    """``preferred`` when this workspace serves it, otherwise the usual best available endpoint.
+
+    When endpoints cannot be listed the preferred one is trusted, matching how the
+    primary is treated in ``get_best_available_endpoint``.
+    """
+    preferred = (preferred or "").strip()
+    if not preferred:
+        return get_best_available_endpoint()
+    available = get_available_serving_endpoints()
+    if not available or preferred in available:
+        return preferred
+    logger.info(f"Preferred endpoint '{preferred}' not available; using the default resolution")
+    return get_best_available_endpoint()
 
 
 def _extract_text(content: Any) -> str:
@@ -352,8 +379,7 @@ async def call_databricks_serving_endpoint(
             "messages": messages,
             "max_tokens": max_tokens,
         }
-        ep_lower = endpoint.lower()
-        if temperature is not None and "mini" not in ep_lower:
+        if temperature is not None and _supports_temperature(endpoint):
             openai_request_body["temperature"] = temperature
         
         

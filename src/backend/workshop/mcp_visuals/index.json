@@ -83,6 +83,22 @@
     "sha256": "9e790d29c5258ee67a5a4f9384b1a3c8fee224b3df7b1aface98ddd3d47cb70c",
     "kind": "diagram"
   },
+  "insights_activation.how_to_apply.1": {
+    "sha256": "7f03a39446cea7f95d0f44efb1bae39a76fe4237eab2db93d5d9843a1637b19f",
+    "kind": "diagram"
+  },
+  "insights_genie_in_app.how_to_apply.1": {
+    "sha256": "7888fd7064c041f4cc886e8941c795dc4ab0baf8bf480a1315a6c04b2fd689be",
+    "kind": "diagram"
+  },
+  "insights_reverse_sync.how_to_apply.1": {
+    "sha256": "057062b1eec1ef2503adbe3793c36967eac7540963f308230869f84e50ebf8cb",
+    "kind": "diagram"
+  },
+  "insights_table_design.how_to_apply.1": {
+    "sha256": "6d3708e0c094a03351b763fb6e116e39c0bb4afeb42b99a883a478768f989aae",
+    "kind": "diagram"
+  },
   "ontology_domain.how_to_apply.1": {
     "sha256": "f6c017d8a03d236a9cf6459f863e851cebc7e01c41cdc8b6e8683b6a4aa16404",
     "kind": "diagram"

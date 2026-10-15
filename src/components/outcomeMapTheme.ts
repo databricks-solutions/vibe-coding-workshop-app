@@ -281,6 +281,20 @@ export const LEAF_PILLS_BY_SLUG: Record<string, string[]> = {
 };
 
 /**
+ * Pills for a card: the curated list when there is one, otherwise the numbered
+ * scenario headings ("### 1. Title" / "#### 1. Title") from the build spec.
+ */
+export const derivePills = (slug: string, template: string | undefined): string[] => {
+  const curated = LEAF_PILLS_BY_SLUG[slug];
+  if (curated) return curated;
+  if (!template) return [];
+  return [...template.matchAll(/^#{3,4}\s+\d+\.\s+(.+)$/gm)]
+    .map(m => m[1].replace(/\*\*/g, '').replace(/\s*\([^)]*\)\s*$/, '').trim())
+    .filter(Boolean)
+    .slice(0, 4);
+};
+
+/**
  * Derive a one-line value prop from the prompt-template opening line. The card
  * UI displays this as the muted subtitle below the title. We strip markdown
  * emphasis, drop the boilerplate "Create a simple <type>" prefix, and trim to

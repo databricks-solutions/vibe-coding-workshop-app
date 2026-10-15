@@ -241,6 +241,18 @@ NUMERIC_READ_ALLOWLIST = {
         2,
         "climb-chain inference from APP_LAKEBASE_STEPS over a gate-derived set",
     ),
+    # main's Insights view (merged into integration): it receives App's completedSteps /
+    # skippedSteps and hands changes to the same handleCompletedStepsChange /
+    # handleSkippedStepsChange the workflow diagram uses, which write stepNumbersToGates.
+    "src/components/insights/InsightsFlow.tsx": (
+        2,
+        "Insights readiness: step 1 (intent) done and whether a Genie step was built elsewhere",
+    ),
+    "src/components/insights/studio/InsightsStudio.tsx": (
+        9,
+        "Insights studio done/skip state per moment over App's sets; changes go up via "
+        "onCompletedStepsChange / onSkippedStepsChange and are written as gates",
+    ),
 }
 
 
@@ -276,10 +288,20 @@ _NUMERIC_COPY = re.compile(
 # file -> (exact count of copy-based reads, why they are allowed). Measured at 3d5b700.
 NUMERIC_COPY_ALLOWLIST = {
     "src/App.tsx": (
-        8,
+        9,
         "direction lock and level-switch guards (step >= 4 / >= 2 thresholds), the "
         "initial expanded step, and the stepNumbersToGates writes (toggle skipped_gates "
-        "and handleSaveSession); includes one comment line naming WorkflowDiagram's seeds",
+        "and handleSaveSession); includes one comment line naming WorkflowDiagram's seeds; "
+        "main's Insights setup seeds nextCompleted (step-1 credit, written as gates)",
+    ),
+    "src/components/insights/InsightsFlow.tsx": (
+        1,
+        "builtElsewhere: any Genie step done in the technical view (display only)",
+    ),
+    "src/components/insights/studio/InsightsStudio.tsx": (
+        4,
+        "done/skip handler seeds over App's sets; the next set goes back to App and is "
+        "written through stepNumbersToGates",
     ),
     "src/components/LevelSelector.tsx": (
         1,
@@ -301,9 +323,10 @@ _NUMERIC_ADD = re.compile(r"\b\w*(?:[Cc]ompleted|[Ss]kipped)\w*\??\.add\(\s*\d+\
 # are not display-only: stepNumbersToGates writes step 1 back as usecase_selection.
 NUMERIC_ADD_ALLOWLIST = {
     "src/App.tsx": (
-        2,
+        3,
         "step-1 intent overlay on both hydration paths when industry and use_case are set; "
-        "persisted as the usecase_selection gate on the next gate write",
+        "persisted as the usecase_selection gate on the next gate write; plus main's "
+        "Insights setup (nextCompleted.add(1)), written as completed_gates at once",
     ),
     "src/components/WorkflowDiagram.tsx": (
         1,
@@ -356,10 +379,11 @@ _ANY_NUMERIC_ADD = re.compile(r"\b[A-Za-z_]\w*\??\.add\(\s*\d+\s*\)")
 # file -> (exact count of numeric-literal adds on any receiver, why). Measured at a175f3a.
 NUMERIC_ANY_ADD_ALLOWLIST = {
     "src/App.tsx": (
-        2,
+        3,
         "restoredCompleted.add(1) (restoreSession) and loadedCompleted.add(1) (session "
         "load): the step-1 intent overlay over the deriveCompletedStepNumbers set when "
-        "industry and use_case are set; written back as usecase_selection by stepNumbersToGates",
+        "industry and use_case are set; written back as usecase_selection by stepNumbersToGates; "
+        "nextCompleted.add(1) in main's Insights setup, written as completed_gates at once",
     ),
     "src/components/WorkflowDiagram.tsx": (
         2,
@@ -416,6 +440,9 @@ def test_x3_numeric_sets_are_gate_derived():
     allowed_args = {
         "restoredCompleted", "loadedCompleted", "new Set()", "newSteps",
         "new Set(skippedStepsArray)", "new Set(loadedSkippedSteps)", "newSkipped",
+        # main's Insights setup and idea-to-build start: the step-1 credit, each
+        # written as completed_gates through stepNumbersToGates in the same handler.
+        "nextCompleted", "new Set([1])",
     }
     args = re.findall(r"set(?:Completed|Skipped)Steps\(([^;]*?)\);", app)
     assert args and set(args) <= allowed_args, args

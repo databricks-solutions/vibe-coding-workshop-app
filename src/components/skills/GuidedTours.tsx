@@ -1,580 +1,558 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { SKILL_MAP, TOURS, type Tour, type TourStep } from '../../constants/skillsNavigatorData';
-import { typeColor, stripHtml, highlightCode, escHtml } from './skillsNavUtils';
-
-type TourId = 'a' | 'b' | 'c';
-
-const TOUR_META: { id: TourId; title: string; blurb: string }[] = [
-  { id: 'a', title: 'Tour A: Schema to Production', blurb: 'Walk through all 9 DPA stages — from schema CSV to GenAI agents' },
-  { id: 'b', title: 'Tour B: PRD to Deployed App', blurb: 'Build and deploy a Databricks App through the branch-aware AppKit lifecycle' },
-  { id: 'c', title: 'Tour C: The Full Picture', blurb: 'Both paths converge — data pipeline meets the application layer' },
-];
-
-const SPEED_MS: Record<number, number> = { 1: 4000, 2: 3000, 3: 2000, 4: 1200, 5: 700 };
-const SPEED_LBL: Record<number, string> = { 1: '0.5x', 2: '0.75x', 3: '1x', 4: '1.5x', 5: '2x' };
-const TIER_COLORS: Record<number, string> = { 1: 'var(--cyan)', 2: 'var(--purple)', 3: 'var(--gold)', 4: 'var(--orange)' };
+import {
+  ArrowLeft,
+  ArrowRight,
+  CheckCircle2,
+  ChevronLeft,
+  ChevronsDownUp,
+  ChevronsUpDown,
+  MoreHorizontal,
+  Pause,
+  Play,
+  RotateCcw,
+  Route,
+} from 'lucide-react';
+import { SKILL_MAP, TOURS, type TourId, type TourStep } from '../../constants/skillsNavigatorData';
+import { highlightCode } from './skillsNavUtils';
+import { NEW_TOURS, TOUR_LIST, plainText, readStore, tint, tourMinutes, typeInfo, writeStore } from './navModel';
+import { SkillDetail } from './SkillDetail';
+import { Disclosure, Html, NewBadge, Popover, SectionLabel, TypeBadge } from './ui';
+import { BTN_GHOST, BTN_PRIMARY, BTN_SECONDARY, cx } from './uiStyles';
 
 interface GuidedToursProps {
-  onLearn: (platform: string) => void;
+  tourId: TourId | null;
+  step: number;
+  onSelectTour: (id: TourId | null) => void;
+  onStep: (step: number) => void;
+  onLearn: (moduleId: string) => void;
 }
 
-// ---- detail HTML builders (ported from renderTourDetail / renderNodeDetail) ----
+const SPEEDS = [
+  { label: '0.5x', ms: 4000 },
+  { label: '1x', ms: 2000 },
+  { label: '1.5x', ms: 1200 },
+  { label: '2x', ms: 700 },
+];
 
-function codeBlockHtml(code: string): string {
-  return `<div class="td-code"><h4>Key Code Pattern</h4><div class="td-code-block">${highlightCode(
-    code
-  )}</div><button class="td-code-copy" data-copy-code="1">Copy</button></div>`;
+const useToursDone = () => readStore<string[]>('toursDone', []);
+
+// ------------------------------------------------------------ chooser
+
+function Chooser({ onSelect }: { onSelect: (id: TourId) => void }) {
+  const done = new Set(useToursDone());
+  return (
+    <div className="h-full overflow-y-auto">
+      <div className="mx-auto max-w-5xl px-4 py-6 md:px-6 md:py-8">
+        <h2 className="text-ui-xl font-semibold text-foreground">Choose a tour</h2>
+        <p className="mt-1 text-ui-sm text-muted-foreground">Each tour lights up the path through the skills and explains every step, including why it exists.</p>
+        <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          {TOUR_LIST.map((t) => (
+            <button
+              key={t.id}
+              type="button"
+              onClick={() => onSelect(t.id)}
+              className="sn-tint-ring group flex flex-col items-start gap-3 rounded-2xl border border-border bg-card p-5 text-left transition-shadow"
+              style={tint(t.color)}
+            >
+              <span className="flex w-full items-center gap-2">
+                <span className="sn-tint grid place-items-center w-9 h-9 rounded-lg text-ui-md font-bold">{t.id.toUpperCase()}</span>
+                <span className="ml-auto flex items-center gap-1.5">
+                  {NEW_TOURS.has(t.id) && <NewBadge />}
+                  {done.has(t.id) && (
+                    <span className="inline-flex items-center gap-1 text-ui-xs text-muted-foreground">
+                      <CheckCircle2 className="w-3.5 h-3.5 text-[var(--green)]" /> Done
+                    </span>
+                  )}
+                </span>
+              </span>
+              <span>
+                <span className="block text-ui-lg font-semibold text-foreground">{t.title}</span>
+                <span className="mt-1 block text-ui-sm text-muted-foreground">{t.outcome}</span>
+              </span>
+              <span className="mt-auto flex w-full items-center justify-between text-ui-xs text-muted-foreground">
+                <span>
+                  {TOURS[t.id].steps.length} steps · about {tourMinutes(t.id)} min
+                </span>
+                <span className="inline-flex items-center gap-1 font-semibold text-primary opacity-80 group-hover:opacity-100">
+                  Start <ArrowRight className="w-3.5 h-3.5" />
+                </span>
+              </span>
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
 }
 
-function renderTourDetailHtml(step: TourStep, idx: number, total: number): string {
-  if (step.summary) {
-    const dots = Array.from({ length: total }, (_, i) =>
-      `<div class="td-progress-dot${i < idx ? ' done' : ''}${i === idx ? ' current' : ''}"></div>`
-    ).join('');
-    return `<div class="td-summary"><h3>${step.narration}</h3><p>${
-      step.designRationale ||
-      "You've completed this tour! Try another tour, explore the Galaxy Map, or dive into Platform Academy to learn the building blocks."
-    }</p><div class="td-progress">${dots}</div></div>`;
+// ------------------------------------------------------------ player helpers
+
+function cumulative(steps: TourStep[], target: number) {
+  const expanded = new Set<string>();
+  const visited = new Set<string>();
+  const lit = new Set<string>();
+  for (let i = 0; i <= target; i++) {
+    steps[i]?.expand?.forEach((id) => expanded.add(id));
+    steps[i]?.lit?.forEach((id) => lit.add(id));
+    if (i < target) steps[i]?.activate?.forEach((id) => visited.add(id));
   }
-  const skills = (step.skillIds || []).map((id) => SKILL_MAP[id]).filter(Boolean);
+  return { expanded, visited, lit, active: steps[target]?.activate ?? [] };
+}
+
+type Selection = { kind: 'skill'; id: string } | { kind: 'label'; domId: string; label: string; type: string } | null;
+
+function StepView({ step, onSkill }: { step: TourStep; onSkill: (id: string) => void }) {
+  const [more, setMore] = useState(false);
+  const skills = (step.skillIds ?? []).map((id) => SKILL_MAP[id]).filter(Boolean);
   const primary = skills[0];
-  const rationale = step.designRationale || (primary && primary.rationale) || null;
-  const io = step.inputOutput;
-  const code = primary && primary.code;
-  const tierLabel = step.tier ? step.tier[1] : '';
-  const tierNum = step.tier ? step.tier[0] : 1;
-  const tierColor = TIER_COLORS[tierNum] || 'var(--cyan)';
+  const rationale = step.designRationale || primary?.rationale;
+  const long = plainText(rationale).length > 320 || /<(table|pre|div)/.test(rationale ?? '');
+  const stepSkills = skills.length > 1 ? skills : (primary?.workers ?? []).map((id) => SKILL_MAP[id]).filter(Boolean);
 
-  let html = '<div class="td-inner">';
-  html += '<div class="td-header"><div class="td-header-top">';
-  if (primary) {
-    const tc = typeColor(primary.type);
-    html += `<span class="td-name">${primary.name}</span>`;
-    html += `<span class="td-badge" style="background:${tc.bg};color:${tc.fg}">${primary.type}</span>`;
-    if (primary.stage) html += `<span class="td-badge" style="background:var(--surface2);color:var(--text-dim)">Stage ${primary.stage}</span>`;
-    if (primary.phase !== undefined) html += `<span class="td-badge" style="background:var(--surface2);color:var(--text-dim)">Phase ${primary.phase}</span>`;
-    html += `<span class="td-badge" style="background:${tierColor}22;color:${tierColor}">${tierLabel}</span>`;
-  } else {
-    html += `<span class="td-name" style="font-size:16px">${tierLabel}</span>`;
-    html += `<span class="td-badge" style="background:${tierColor}22;color:${tierColor}">Step ${idx + 1}/${total}</span>`;
-  }
-  html += '</div>';
-  if (primary) html += `<div class="td-desc">${primary.desc}</div>`;
-  html += `<div class="td-narration">${step.narration}</div></div>`;
+  return (
+    <div className="animate-fade-in">
+      {step.tier && <SectionLabel>{step.tier[1]}</SectionLabel>}
+      <div className="mt-1.5 flex flex-wrap items-center gap-2">
+        <h2 className="text-ui-xl font-semibold text-foreground leading-tight">{primary ? primary.name : step.tier?.[1] ?? 'This step'}</h2>
+        {primary && <TypeBadge type={primary.type} />}
+      </div>
 
-  if (rationale) html += `<div class="td-rationale"><h4>Why This Pattern</h4><p>${rationale}</p></div>`;
+      <div className="mt-4 rounded-xl border border-primary/25 bg-primary/8 p-4">
+        <Html html={step.narration} className="text-foreground" />
+      </div>
 
-  if (io) {
-    html += '<div class="td-flow"><h4>Data Flow</h4><div class="td-flow-diagram">';
-    html += '<div class="td-flow-col inputs">' + io.inputs.map((i) => `<div class="td-pill">${i}</div>`).join('') + '</div>';
-    html += '<div class="td-flow-arrow">→</div>';
-    html += '<div class="td-flow-col outputs">' + io.outputs.map((o) => `<div class="td-pill">${o}</div>`).join('') + '</div>';
-    html += '</div></div>';
-  }
+      {rationale && (
+        <div className="mt-5">
+          <SectionLabel>Why this pattern</SectionLabel>
+          <Html html={rationale} className={cx('mt-1.5', long && !more && 'line-clamp-4')} />
+          {long && (
+            <button type="button" onClick={() => setMore((m) => !m)} className="mt-1 text-ui-sm font-semibold text-primary hover:underline">
+              {more ? 'Show less' : 'Read more'}
+            </button>
+          )}
+        </div>
+      )}
 
-  if (code) html += codeBlockHtml(code);
+      <div className="mt-5">
+        {step.inputOutput && (
+          <Disclosure title="Inputs and outputs">
+            <div className="grid gap-3 sm:grid-cols-[1fr_auto_1fr] sm:items-center">
+              <div className="flex flex-wrap gap-1.5">
+                {step.inputOutput.inputs.map((x) => (
+                  <span key={x} className="sn-tint px-2 py-1 rounded-md text-ui-xs font-medium" style={tint('var(--purple)')}>
+                    {x}
+                  </span>
+                ))}
+              </div>
+              <ArrowRight className="hidden sm:block w-4 h-4 text-muted-foreground" />
+              <div className="flex flex-wrap gap-1.5">
+                {step.inputOutput.outputs.map((x) => (
+                  <span key={x} className="sn-tint px-2 py-1 rounded-md text-ui-xs font-medium" style={tint('var(--green)')}>
+                    {x}
+                  </span>
+                ))}
+              </div>
+            </div>
+          </Disclosure>
+        )}
+        {primary?.code && (
+          <Disclosure title="Code pattern">
+            <div className="sn-code" dangerouslySetInnerHTML={{ __html: highlightCode(primary.code) }} />
+          </Disclosure>
+        )}
+        {stepSkills.length > 0 && (
+          <Disclosure title={skills.length > 1 ? 'Skills in this step' : 'Its steps'} count={stepSkills.length}>
+            <div className="flex flex-wrap gap-1.5">
+              {stepSkills.map((s) => (
+                <button
+                  key={s.id}
+                  type="button"
+                  onClick={() => onSkill(s.id)}
+                  className="inline-flex items-center gap-2 rounded-full border border-border bg-card px-3 py-1.5 text-ui-sm text-foreground hover:bg-secondary"
+                >
+                  <span className="w-2 h-2 rounded-full" style={{ background: typeInfo(s.type).color }} />
+                  {s.name}
+                </button>
+              ))}
+            </div>
+          </Disclosure>
+        )}
+      </div>
 
-  if (primary && primary.workers && primary.workers.length) {
-    html += '<div class="td-workers"><h4>Workers (' + primary.workers.length + ')</h4><div class="td-worker-map">';
-    html += `<div class="td-hub">${primary.stage || 'O'}</div>`;
-    html += primary.workers
-      .map((wid) => {
-        const w = SKILL_MAP[wid];
-        return w ? `<div class="td-worker-chip" data-nav="${wid}" title="${stripHtml(w.desc)}">${w.name}</div>` : '';
-      })
-      .join('');
-    html += '</div>';
-    if (primary.commonDeps && primary.commonDeps.length) {
-      html += '<div class="td-deps-row"><span class="td-dep-label">Deps:</span>';
-      html += primary.commonDeps
-        .map((did) => {
-          const d = SKILL_MAP[did];
-          return d ? `<div class="td-dep-chip" data-nav="${did}">${d.name}</div>` : '';
-        })
-        .join('');
-      html += '</div>';
-    }
-    html += '</div>';
-  } else if (skills.length > 1) {
-    html += '<div class="td-workers"><h4>Skills in this step (' + skills.length + ')</h4><div class="td-worker-map">';
-    html += skills
-      .map((s) => {
-        const tc = typeColor(s.type);
-        return `<div class="td-worker-chip" style="background:${tc.bg};border-color:${tc.fg}40;color:${tc.fg}" data-nav="${s.id}" title="${stripHtml(s.desc)}">${s.name}</div>`;
-      })
-      .join('');
-    html += '</div></div>';
-  }
-
-  if (primary) {
-    html += '<div class="td-actions">';
-    if (primary.prompt) html += `<button class="dp-btn primary" data-copy-prompt="${primary.id}">Copy Prompt</button>`;
-    if (primary.platform) html += `<button class="dp-btn secondary" data-academy="${primary.platform}">Learn: ${primary.platform}</button>`;
-    html += '</div>';
-  }
-
-  html += '</div>';
-  return html;
+      {primary && (
+        <button type="button" onClick={() => onSkill(primary.id)} className={cx(BTN_GHOST, 'mt-3 -ml-2.5 text-primary hover:text-primary')}>
+          Open full skill details
+          <ArrowRight className="w-4 h-4" />
+        </button>
+      )}
+    </div>
+  );
 }
 
-function renderNodeDetailHtml(skillId: string): string {
-  const s = SKILL_MAP[skillId];
-  if (!s) return '';
-  const tc = typeColor(s.type);
-  let html = '<div class="td-inner"><div class="td-header"><div class="td-header-top">';
-  html += `<span class="td-name">${s.name}</span>`;
-  html += `<span class="td-badge" style="background:${tc.bg};color:${tc.fg}">${s.type}</span>`;
-  if (s.stage) html += `<span class="td-badge" style="background:var(--surface2);color:var(--text-dim)">Stage ${s.stage}</span>`;
-  if (s.phase !== undefined) html += `<span class="td-badge" style="background:var(--surface2);color:var(--text-dim)">Phase ${s.phase}</span>`;
-  if (s.component) html += `<span class="td-badge" style="background:var(--surface2);color:var(--text-dim)">${s.component}</span>`;
-  html += '</div>';
-  html += `<div class="td-desc">${s.desc || ''}</div></div>`;
+// ------------------------------------------------------------ player
 
-  if (s.rationale) html += `<div class="td-rationale"><h4>Design Rationale</h4><p>${s.rationale}</p></div>`;
-
-  if (s.emits) {
-    html += '<div class="td-flow"><h4>Emits (Output Artifacts)</h4><div class="td-flow-diagram"><div class="td-flow-col outputs">';
-    html += s.emits.map((e) => `<div class="td-pill">${e}</div>`).join('');
-    html += '</div></div></div>';
-  }
-
-  if (s.code) html += codeBlockHtml(s.code);
-
-  if (s.workers && s.workers.length) {
-    html += '<div class="td-workers"><h4>Workers (' + s.workers.length + ')</h4><div class="td-worker-map">';
-    s.workers.forEach((wid) => {
-      const w = SKILL_MAP[wid];
-      if (!w) return;
-      const wc = typeColor(w.type);
-      html += `<div class="td-worker-chip" style="background:${wc.bg};border-color:${wc.fg}40;color:${wc.fg}" data-nav="${wid}" title="${stripHtml(w.desc)}">${w.name}</div>`;
-    });
-    html += '</div></div>';
-  }
-
-  if (s.commonDeps && s.commonDeps.length) {
-    html += '<div class="td-workers"><h4>Common Dependencies</h4><div class="td-worker-map">';
-    s.commonDeps.forEach((did) => {
-      const d = SKILL_MAP[did];
-      if (!d) return;
-      html += `<div class="td-worker-chip" style="background:var(--green-dim);border-color:var(--green)40;color:var(--green)" data-nav="${did}" title="${stripHtml(d.desc)}">${d.name}</div>`;
-    });
-    html += '</div></div>';
-  }
-
-  if (s.keywords && s.keywords.length) {
-    html += '<div class="td-flow"><h4>Routing Keywords</h4><div class="td-flow-diagram"><div class="td-flow-col">';
-    html += s.keywords.map((k) => `<div class="td-pill" style="background:var(--surface2);border-color:var(--border);color:var(--text-dim)">${k}</div>`).join('');
-    html += '</div></div></div>';
-  }
-
-  if (s.platform) html += `<div class="td-actions"><button class="dp-btn secondary" data-academy="${s.platform}">Learn: ${s.platform}</button></div>`;
-  if (s.prompt) html += `<div class="td-actions"><button class="dp-btn primary" data-copy-prompt="${s.id}">Copy Prompt</button></div>`;
-
-  html += '</div>';
-  return html;
-}
-
-function renderNodeLabelHtml(label: string, typeName: string): string {
-  const tc = typeColor(typeName);
-  return `<div class="td-inner"><div class="td-header"><div class="td-header-top"><span class="td-name">${escHtml(
-    label
-  )}</span><span class="td-badge" style="background:${tc.bg};color:${tc.fg}">${typeName}</span></div><div class="td-desc" style="margin-top:8px">Click on child nodes to explore what is inside, or use the Guided Tour controls above to walk through step by step.</div></div></div>`;
-}
-
-const WELCOME = (name: string) =>
-  `<div class="td-welcome"><h3>${name}</h3><p>Press <strong>Play</strong> or <strong>Next</strong> to walk through. Each step reveals design choices, code patterns, and rationale in this panel.</p></div>`;
-
-/**
- * Mode 2 — Guided Tours.
- *
- * The tour tree is rendered once from a trusted static HTML string via
- * dangerouslySetInnerHTML. All visual decorations (expand/collapse, the
- * active/visited/lit step highlights, and the user-selected node) are kept in
- * React state and re-applied to that static DOM inside a useLayoutEffect that
- * runs after every commit. This is deliberate: imperative DOM mutations don't
- * survive React re-renders (every narration `setState` re-commits the panel),
- * so decorations must be derived from state and re-applied each frame.
- */
-export function GuidedTours({ onLearn }: GuidedToursProps) {
-  const [curTour, setCurTour] = useState<TourId>('a');
-  const [stepIdx, setStepIdx] = useState(-1);
-  const [playing, setPlaying] = useState(false);
-  const [speed, setSpeed] = useState(3);
-  const [allExpanded, setAllExpanded] = useState(false);
-
-  // Decoration state (all derived → re-applied by the layout effect).
-  const [expanded, setExpanded] = useState<Set<string>>(new Set());
-  const [activeIds, setActiveIds] = useState<string[]>([]);
-  const [visited, setVisited] = useState<Set<string>>(new Set());
-  const [lit, setLit] = useState<Set<string>>(new Set());
-  const [userSel, setUserSel] = useState<string | null>(null);
-  const [detailHtml, setDetailHtml] = useState<string>(WELCOME(TOURS.a.name));
-
-  const treeRef = useRef<HTMLDivElement | null>(null);
-  const stepIdxRef = useRef(-1);
-  const activeIdsRef = useRef<string[]>([]);
-  const playingRef = useRef(false);
-  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const speedRef = useRef(SPEED_MS[3]);
-  const tickRef = useRef<() => void>(() => {});
-  const lastScrollRef = useRef<string | null>(null);
-
-  const tour: Tour = TOURS[curTour];
+function Player({ tourId, initialStep, onStep, onExit, onSwitch, onLearn }: {
+  tourId: TourId;
+  initialStep: number;
+  onStep: (step: number) => void;
+  onExit: () => void;
+  onSwitch: (id: TourId) => void;
+  onLearn: (moduleId: string) => void;
+}) {
+  const tour = TOURS[tourId];
+  const meta = TOUR_LIST.find((t) => t.id === tourId)!;
   const steps = tour.steps;
+  const last = steps.length - 1;
+  const start = Math.min(Math.max(initialStep, 0), last);
 
-  useEffect(() => { stepIdxRef.current = stepIdx; }, [stepIdx]);
-  useEffect(() => { activeIdsRef.current = activeIds; }, [activeIds]);
-  useEffect(() => { speedRef.current = SPEED_MS[speed]; }, [speed]);
+  const [stepIdx, setStepIdx] = useState(start);
+  const [expanded, setExpanded] = useState<Set<string>>(() => cumulative(steps, start).expanded);
+  const [playing, setPlaying] = useState(false);
+  const [speed, setSpeed] = useState(1);
+  const [sel, setSel] = useState<Selection>(null);
+  const [pane, setPane] = useState<'details' | 'tree'>('details');
+  const treeRef = useRef<HTMLDivElement | null>(null);
+  const detailRef = useRef<HTMLDivElement | null>(null);
 
-  // Re-apply all tree decorations after every commit. Idempotent + cheap.
+  const deco = useMemo(() => cumulative(steps, stepIdx), [steps, stepIdx]);
+  const step = steps[stepIdx];
+
+  const goTo = useCallback(
+    (target: number) => {
+      const t = Math.min(Math.max(target, 0), last);
+      setStepIdx(t);
+      setExpanded(cumulative(steps, t).expanded);
+      setSel(null);
+      onStep(t);
+      if (steps[t]?.summary) {
+        const done = readStore<string[]>('toursDone', []);
+        if (!done.includes(tourId)) writeStore('toursDone', [...done, tourId]);
+      }
+    },
+    [last, steps, onStep, tourId]
+  );
+
+  const next = useCallback(() => goTo(stepIdx + 1), [goTo, stepIdx]);
+  const back = useCallback(() => {
+    setPlaying(false);
+    goTo(stepIdx - 1);
+  }, [goTo, stepIdx]);
+  const togglePlay = useCallback(() => {
+    if (playing) return setPlaying(false);
+    if (stepIdx >= last) goTo(0);
+    setPlaying(true);
+  }, [playing, stepIdx, last, goTo]);
+
+  // Autoplay advances one step per tick and stops at the end.
+  useEffect(() => {
+    if (!playing) return;
+    const t = setTimeout(() => {
+      if (stepIdx >= last) setPlaying(false);
+      else goTo(stepIdx + 1);
+    }, SPEEDS[speed].ms);
+    return () => clearTimeout(t);
+  }, [playing, stepIdx, last, speed, goTo]);
+
+  // Re-apply tree decorations to the static, trusted tree HTML after every commit.
   useLayoutEffect(() => {
     const t = treeRef.current;
     if (!t) return;
     t.querySelectorAll<HTMLElement>('li[id]').forEach((li) => {
       const chev = li.querySelector<HTMLElement>(':scope > .tnode .chevron');
-      if (!chev) return; // leaf row, nothing to expand
+      if (!chev) return;
       const on = expanded.has(li.id);
       li.classList.toggle('expanded', on);
       li.classList.toggle('collapsed', !on);
       chev.classList.toggle('open', on);
+      li.querySelector<HTMLElement>(':scope > .tnode')?.setAttribute('aria-expanded', String(on));
     });
-    t.querySelectorAll('.tnode').forEach((n) => n.classList.remove('active-node', 'visited', 'user-selected'));
-    visited.forEach((id) => t.querySelector('#' + CSS.escape(id))?.classList.add('visited'));
-    activeIds.forEach((id) => {
-      const el = t.querySelector('#' + CSS.escape(id));
-      if (el) {
-        el.classList.remove('visited');
-        el.classList.add('active-node');
+    t.querySelectorAll<HTMLElement>('.tnode').forEach((n) => {
+      n.classList.remove('active-node', 'visited', 'user-selected');
+      if (!n.hasAttribute('tabindex')) {
+        n.tabIndex = 0;
+        n.setAttribute('role', 'button');
       }
+    });
+    deco.visited.forEach((id) => t.querySelector('#' + CSS.escape(id))?.classList.add('visited'));
+    deco.active.forEach((id) => {
+      const el = t.querySelector('#' + CSS.escape(id));
+      el?.classList.remove('visited');
+      el?.classList.add('active-node');
     });
     t.querySelectorAll('li.lit').forEach((el) => el.classList.remove('lit'));
-    lit.forEach((id) => t.querySelector('#' + CSS.escape(id))?.classList.add('lit'));
-    if (userSel) t.querySelector(userSel)?.classList.add('user-selected');
+    deco.lit.forEach((id) => t.querySelector('#' + CSS.escape(id))?.classList.add('lit'));
+    if (sel?.kind === 'skill') t.querySelector(`.tnode[data-skill="${CSS.escape(sel.id)}"]`)?.classList.add('user-selected');
+    if (sel?.kind === 'label') t.querySelector('#' + CSS.escape(sel.domId))?.classList.add('user-selected');
   });
 
-  // Scroll the active step (or a navigated node) into view when it changes.
   useEffect(() => {
-    const id = activeIds[0] ?? null;
-    if (!id || id === lastScrollRef.current) return;
-    lastScrollRef.current = id;
-    treeRef.current?.querySelector('#' + CSS.escape(id))?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-  }, [activeIds]);
+    const id = deco.active[0];
+    if (id) treeRef.current?.querySelector('#' + CSS.escape(id))?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    detailRef.current?.scrollTo({ top: 0 });
+  }, [deco.active]);
 
-  useEffect(() => {
-    if (!userSel) return;
-    treeRef.current?.querySelector(userSel)?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-  }, [userSel]);
-
-  const stopPlay = useCallback(() => {
-    playingRef.current = false;
+  const showSkill = useCallback((skillId: string) => {
+    const t = treeRef.current;
+    const node = t?.querySelector<HTMLElement>(`.tnode[data-skill="${CSS.escape(skillId)}"]`);
+    if (node) {
+      const ancestors: string[] = [];
+      let li = node.closest('li')?.parentElement?.closest('li') as HTMLElement | null;
+      while (li) {
+        if (li.id) ancestors.push(li.id);
+        li = li.parentElement?.closest('li') as HTMLElement | null;
+      }
+      if (ancestors.length) setExpanded((p) => new Set([...p, ...ancestors]));
+      setTimeout(() => node.scrollIntoView({ behavior: 'smooth', block: 'nearest' }), 50);
+    }
     setPlaying(false);
-    if (timerRef.current) clearTimeout(timerRef.current);
+    setSel({ kind: 'skill', id: skillId });
+    setPane('details');
+    detailRef.current?.scrollTo({ top: 0 });
   }, []);
 
-  const clearDecorations = useCallback(() => {
-    setExpanded(new Set());
-    setActiveIds([]);
-    setVisited(new Set());
-    setLit(new Set());
-    setUserSel(null);
-    setAllExpanded(false);
-    lastScrollRef.current = null;
-  }, []);
-
-  const selectTour = useCallback(
-    (id: TourId) => {
-      stopPlay();
-      setCurTour(id);
-      setStepIdx(-1);
-      stepIdxRef.current = -1;
-      activeIdsRef.current = [];
-      clearDecorations();
-      setDetailHtml(WELCOME(TOURS[id].name));
+  const activateNode = useCallback(
+    (tnode: HTMLElement) => {
+      const toggleId = tnode.getAttribute('data-toggle');
+      if (toggleId) {
+        setExpanded((p) => {
+          const n = new Set(p);
+          if (n.has(toggleId)) n.delete(toggleId);
+          else n.add(toggleId);
+          return n;
+        });
+      }
+      const skillId = tnode.getAttribute('data-skill');
+      if (skillId && SKILL_MAP[skillId]) {
+        setPlaying(false);
+        setSel({ kind: 'skill', id: skillId });
+      } else if (!toggleId && tnode.id) {
+        const type = (Array.from(tnode.classList).find((c) => c.startsWith('type-')) || 'type-node').slice(5);
+        setSel({ kind: 'label', domId: tnode.id, label: tnode.querySelector('.name')?.textContent || '', type });
+      }
     },
-    [stopPlay, clearDecorations]
+    []
   );
 
-  // Forward one step using refs (safe inside the play timer). Returns whether
-  // it advanced.
-  const advance = useCallback((): boolean => {
-    const idx = stepIdxRef.current;
-    if (idx >= steps.length - 1) return false;
-    const newIdx = idx + 1;
-    const step = steps[newIdx];
-    const prevActive = activeIdsRef.current;
-    if (step.expand?.length) setExpanded((p) => new Set([...p, ...step.expand!]));
-    if (prevActive.length) setVisited((p) => new Set([...p, ...prevActive]));
-    setActiveIds(step.activate || []);
-    activeIdsRef.current = step.activate || [];
-    if (step.lit?.length) setLit((p) => new Set([...p, ...step.lit!]));
-    setStepIdx(newIdx);
-    stepIdxRef.current = newIdx;
-    setDetailHtml(renderTourDetailHtml(step, newIdx, steps.length));
-    return true;
-  }, [steps]);
+  const onTreeClick = (e: React.MouseEvent) => {
+    const tnode = (e.target as HTMLElement).closest('.tnode') as HTMLElement | null;
+    if (tnode && treeRef.current?.contains(tnode)) activateNode(tnode);
+  };
+  const onTreeKey = (e: React.KeyboardEvent) => {
+    if (e.key !== 'Enter' && e.key !== ' ') return;
+    const tnode = (e.target as HTMLElement).closest('.tnode') as HTMLElement | null;
+    if (!tnode) return;
+    e.preventDefault();
+    e.stopPropagation();
+    activateNode(tnode);
+  };
 
-  const next = useCallback(() => {
-    if (!advance()) stopPlay();
-  }, [advance, stopPlay]);
-
-  // Rebuild cumulative decorations for an arbitrary target index (used by Prev).
-  const goTo = useCallback(
-    (target: number) => {
-      const exp = new Set<string>();
-      const vis = new Set<string>();
-      const litSet = new Set<string>();
-      for (let i = 0; i <= target; i++) {
-        steps[i].expand?.forEach((id) => exp.add(id));
-        steps[i].lit?.forEach((id) => litSet.add(id));
-        if (i < target) steps[i].activate?.forEach((id) => vis.add(id));
-      }
-      setExpanded(exp);
-      setVisited(vis);
-      setLit(litSet);
-      const act = steps[target]?.activate || [];
-      setActiveIds(act);
-      activeIdsRef.current = act;
-      setStepIdx(target);
-      stepIdxRef.current = target;
-      setDetailHtml(target < 0 ? WELCOME(tour.name) : renderTourDetailHtml(steps[target], target, steps.length));
-    },
-    [steps, tour.name]
-  );
-
-  const prev = useCallback(() => {
-    stopPlay();
-    if (stepIdxRef.current <= 0) {
-      goTo(-1);
-      clearDecorations();
-      setDetailHtml(WELCOME(tour.name));
-      return;
-    }
-    goTo(stepIdxRef.current - 1);
-  }, [stopPlay, goTo, clearDecorations, tour.name]);
-
-  const reset = useCallback(() => {
-    stopPlay();
-    setStepIdx(-1);
-    stepIdxRef.current = -1;
-    activeIdsRef.current = [];
-    clearDecorations();
-    setDetailHtml(WELCOME(tour.name));
-  }, [stopPlay, clearDecorations, tour.name]);
-
-  const tick = useCallback(() => {
-    if (!playingRef.current) return;
-    const advanced = advance();
-    if (!advanced || stepIdxRef.current >= steps.length - 1) {
-      stopPlay();
-      return;
-    }
-    timerRef.current = setTimeout(() => tickRef.current(), speedRef.current);
-  }, [advance, steps.length, stopPlay]);
-
-  useEffect(() => { tickRef.current = tick; }, [tick]);
-
-  const togglePlay = useCallback(() => {
-    if (playingRef.current) {
-      stopPlay();
-      return;
-    }
-    if (stepIdxRef.current >= steps.length - 1) {
-      // restart from the top
-      setStepIdx(-1);
-      stepIdxRef.current = -1;
-      activeIdsRef.current = [];
-      clearDecorations();
-    }
-    playingRef.current = true;
-    setPlaying(true);
-    tickRef.current();
-  }, [stopPlay, steps.length, clearDecorations]);
-
-  const toggleTreeAll = useCallback(() => {
-    const t = treeRef.current;
-    if (!t) return;
-    const nextAll = !allExpanded;
-    setAllExpanded(nextAll);
-    if (!nextAll) {
-      setExpanded(new Set());
-      return;
-    }
-    const ids: string[] = [];
-    t.querySelectorAll<HTMLElement>('li[id]').forEach((li) => {
-      if (li.querySelector(':scope > .tnode .chevron')) ids.push(li.id);
-    });
-    setExpanded(new Set(ids));
-  }, [allExpanded]);
-
-  // Expand all ancestors of a skill node and select it (from a detail chip).
-  const navigateToSkill = useCallback((skillId: string) => {
-    const t = treeRef.current;
-    if (t) {
-      const node = t.querySelector<HTMLElement>(`.tnode[data-skill="${CSS.escape(skillId)}"]`);
-      if (node) {
-        const ancestors: string[] = [];
-        let parentLi = node.closest('li')?.parentElement?.closest('li') as HTMLElement | null;
-        while (parentLi) {
-          if (parentLi.id) ancestors.push(parentLi.id);
-          parentLi = parentLi.parentElement?.closest('li') as HTMLElement | null;
-        }
-        if (ancestors.length) setExpanded((p) => new Set([...p, ...ancestors]));
-      }
-    }
-    setUserSel(`.tnode[data-skill="${CSS.escape(skillId)}"]`);
-    setDetailHtml(renderNodeDetailHtml(skillId));
-  }, []);
-
-  // Cleanup timer on unmount.
-  useEffect(() => () => { if (timerRef.current) clearTimeout(timerRef.current); }, []);
-
-  // Keyboard shortcuts (component only mounts while Tours mode is active).
+  // Arrow keys step through the tour; P toggles autoplay.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      const tag = (e.target as HTMLElement)?.tagName;
-      if (tag === 'INPUT' || tag === 'TEXTAREA') return;
-      if (e.key === 'ArrowRight' || e.key === ' ') {
+      const el = e.target as HTMLElement;
+      if (el?.closest('input, textarea, select, [contenteditable="true"]')) return;
+      if (document.querySelector('[aria-modal="true"]:not([aria-hidden="true"])')) return;
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      if (e.key === 'ArrowRight') {
         e.preventDefault();
         next();
       } else if (e.key === 'ArrowLeft') {
         e.preventDefault();
-        prev();
+        back();
       } else if (e.key === 'p' || e.key === 'P') {
         togglePlay();
-      } else if (e.key === 'r' || e.key === 'R') {
-        reset();
       }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [next, prev, togglePlay, reset]);
+  }, [next, back, togglePlay]);
 
-  // Tree click delegation (chevron toggle + node selection).
-  const onTreeClick = useCallback((e: React.MouseEvent) => {
-    const tnode = (e.target as HTMLElement).closest('.tnode') as HTMLElement | null;
-    if (!tnode || !treeRef.current?.contains(tnode)) return;
-    const toggleId = tnode.getAttribute('data-toggle');
-    if (toggleId) {
-      setExpanded((p) => {
-        const n = new Set(p);
-        if (n.has(toggleId)) n.delete(toggleId);
-        else n.add(toggleId);
-        return n;
-      });
-    }
-    const skillId = tnode.getAttribute('data-skill');
-    if (skillId && SKILL_MAP[skillId]) {
-      setUserSel(`.tnode[data-skill="${CSS.escape(skillId)}"]`);
-      setDetailHtml(renderNodeDetailHtml(skillId));
-    } else if (!skillId) {
-      const nameEl = tnode.querySelector('.name');
-      if (nameEl && tnode.id) {
-        const typeClass = Array.from(tnode.classList).find((c) => c.startsWith('type-')) || '';
-        const typeName = typeClass.replace('type-', '') || 'node';
-        setUserSel('#' + CSS.escape(tnode.id));
-        setDetailHtml(renderNodeLabelHtml(nameEl.textContent || '', typeName));
-      }
-    }
+  const allIds = useCallback(() => {
+    const ids: string[] = [];
+    treeRef.current?.querySelectorAll<HTMLElement>('li[id]').forEach((li) => {
+      if (li.querySelector(':scope > .tnode .chevron')) ids.push(li.id);
+    });
+    return ids;
   }, []);
 
-  // Detail-pane click delegation (nav chips, copy prompt, learn, copy code).
-  const onDetailClick = useCallback(
-    (e: React.MouseEvent) => {
-      const target = e.target as HTMLElement;
-      const navEl = target.closest('[data-nav]') as HTMLElement | null;
-      if (navEl) {
-        navigateToSkill(navEl.getAttribute('data-nav')!);
-        return;
-      }
-      const promptEl = target.closest('[data-copy-prompt]') as HTMLElement | null;
-      if (promptEl) {
-        const s = SKILL_MAP[promptEl.getAttribute('data-copy-prompt')!];
-        if (s?.prompt) {
-          navigator.clipboard.writeText(s.prompt).then(() => {
-            const orig = promptEl.textContent;
-            promptEl.textContent = 'Copied!';
-            setTimeout(() => { promptEl.textContent = orig; }, 2000);
-          });
-        }
-        return;
-      }
-      const academyEl = target.closest('[data-academy]') as HTMLElement | null;
-      if (academyEl) {
-        onLearn(academyEl.getAttribute('data-academy')!);
-        return;
-      }
-      const copyCodeEl = target.closest('[data-copy-code]') as HTMLElement | null;
-      if (copyCodeEl) {
-        const block = copyCodeEl.previousElementSibling as HTMLElement | null;
-        if (block) {
-          navigator.clipboard.writeText(block.textContent || '').then(() => {
-            copyCodeEl.textContent = 'Copied!';
-            copyCodeEl.classList.add('copied');
-            setTimeout(() => {
-              copyCodeEl.textContent = 'Copy';
-              copyCodeEl.classList.remove('copied');
-            }, 2000);
-          });
-        }
-      }
-    },
-    [navigateToSkill, onLearn]
-  );
-
-  const stepDisplay = useMemo(() => `${stepIdx + 1} / ${steps.length}`, [stepIdx, steps.length]);
+  const doneSet = new Set(readStore<string[]>('toursDone', []));
+  const nextTour = TOUR_LIST.find((t) => t.id !== tourId && !doneSet.has(t.id)) ?? TOUR_LIST.find((t) => t.id !== tourId);
+  const selSkill = sel?.kind === 'skill' ? SKILL_MAP[sel.id] : null;
 
   return (
-    <div className="sn-tours-root">
-      <div className="tour-picker">
-        {TOUR_META.map((t) => (
-          <div
-            key={t.id}
-            className={`tour-card${curTour === t.id ? ' active' : ''}`}
-            onClick={() => selectTour(t.id)}
-          >
-            <h3>{t.title}</h3>
-            <p>{t.blurb}</p>
+    <div className="flex h-full min-h-0 flex-col">
+      <div className="border-b border-border bg-card/60 px-4 md:px-6 py-3">
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+          <button type="button" onClick={onExit} className={cx(BTN_GHOST, '-ml-2.5')} title="All tours">
+            <ChevronLeft className="w-4 h-4" />
+            <span className="hidden sm:inline">All tours</span>
+          </button>
+          <span className="sn-tint grid place-items-center w-7 h-7 rounded-lg text-ui-sm font-bold" style={tint(meta.color)}>
+            {tourId.toUpperCase()}
+          </span>
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-ui-md font-semibold text-foreground">{meta.title}</p>
+            <p className="text-ui-xs text-muted-foreground">
+              Step {stepIdx + 1} of {steps.length}
+            </p>
           </div>
-        ))}
-      </div>
-      <div className="tour-controls">
-        <button className={playing ? 'active' : ''} onClick={togglePlay}>
-          {playing ? '⏸ Pause' : '▶ Play'}
-        </button>
-        <button onClick={reset}>↺ Reset</button>
-        <button onClick={prev}>◀ Prev</button>
-        <button onClick={next}>Next ▶</button>
-        <span className="tour-sep" />
-        <button onClick={toggleTreeAll}>{allExpanded ? '⊟ Collapse All' : '⊞ Expand All'}</button>
-        <div className={`tour-step-info${stepIdx >= 0 ? ' hl' : ''}`}>{stepDisplay}</div>
-        <div className="speed-ctl">
-          <label>Speed</label>
-          <input
-            type="range"
-            min={1}
-            max={5}
-            value={speed}
-            onChange={(e) => setSpeed(parseInt(e.target.value, 10))}
-          />
-          <span>{SPEED_LBL[speed]}</span>
+          <div className="flex items-center gap-1.5">
+            <button type="button" onClick={back} disabled={stepIdx === 0} className={cx(BTN_SECONDARY, 'px-2.5')} aria-label="Previous step">
+              <ArrowLeft className="w-4 h-4" />
+              <span className="hidden md:inline">Back</span>
+            </button>
+            <button type="button" onClick={togglePlay} className={cx(BTN_SECONDARY, 'px-2.5')} aria-label={playing ? 'Pause' : 'Play'} aria-pressed={playing}>
+              {playing ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
+            </button>
+            <button type="button" onClick={() => { setPlaying(false); next(); }} disabled={stepIdx >= last} className={BTN_PRIMARY}>
+              Next
+              <ArrowRight className="w-4 h-4" />
+            </button>
+            <Popover label="More tour options" align="right" trigger={<MoreHorizontal className="w-4 h-4" />}>
+              {(close) => (
+                <div className="space-y-3">
+                  <div>
+                    <SectionLabel>Autoplay speed</SectionLabel>
+                    <div className="mt-1.5 grid grid-cols-4 gap-1 rounded-lg bg-secondary p-1" role="radiogroup" aria-label="Autoplay speed">
+                      {SPEEDS.map((s, i) => (
+                        <button
+                          key={s.label}
+                          type="button"
+                          role="radio"
+                          aria-checked={speed === i}
+                          onClick={() => setSpeed(i)}
+                          className={cx('rounded-md py-1 text-ui-xs font-semibold', speed === i ? 'bg-card text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground')}
+                        >
+                          {s.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="space-y-0.5 border-t border-border pt-2">
+                    <button type="button" className={cx(BTN_GHOST, 'w-full justify-start')} onClick={() => { setExpanded(new Set(allIds())); close(); }}>
+                      <ChevronsUpDown className="w-4 h-4" /> Expand the whole tree
+                    </button>
+                    <button type="button" className={cx(BTN_GHOST, 'w-full justify-start')} onClick={() => { setExpanded(cumulative(steps, stepIdx).expanded); close(); }}>
+                      <ChevronsDownUp className="w-4 h-4" /> Collapse to this step
+                    </button>
+                    <button type="button" className={cx(BTN_GHOST, 'w-full justify-start')} onClick={() => { setPlaying(false); goTo(0); close(); }}>
+                      <RotateCcw className="w-4 h-4" /> Restart tour
+                    </button>
+                  </div>
+                  <p className="border-t border-border pt-2 text-ui-xs text-muted-foreground">
+                    Keyboard: <kbd className="rounded border border-border px-1">←</kbd> <kbd className="rounded border border-border px-1">→</kbd> to step,{' '}
+                    <kbd className="rounded border border-border px-1">P</kbd> to play or pause.
+                  </p>
+                </div>
+              )}
+            </Popover>
+          </div>
+        </div>
+        <div className="mt-3 flex gap-1" role="group" aria-label="Tour progress">
+          {steps.map((_, i) => (
+            <button
+              key={i}
+              type="button"
+              onClick={() => { setPlaying(false); goTo(i); }}
+              aria-label={`Go to step ${i + 1}`}
+              aria-current={i === stepIdx ? 'step' : undefined}
+              className={cx(
+                'h-1.5 flex-1 rounded-full transition-colors',
+                i < stepIdx ? 'bg-primary/60 hover:bg-primary' : i === stepIdx ? 'bg-primary' : 'bg-secondary hover:bg-muted-foreground/40'
+              )}
+            />
+          ))}
+        </div>
+        <div className="mt-3 grid grid-cols-2 gap-1 rounded-lg bg-secondary p-1 lg:hidden" role="tablist" aria-label="Tour panes">
+          {(['details', 'tree'] as const).map((p) => (
+            <button
+              key={p}
+              type="button"
+              role="tab"
+              aria-selected={pane === p}
+              onClick={() => setPane(p)}
+              className={cx('rounded-md py-1.5 text-ui-sm font-medium', pane === p ? 'bg-card text-foreground shadow-sm' : 'text-muted-foreground')}
+            >
+              {p === 'details' ? 'Explanation' : 'Skill tree'}
+            </button>
+          ))}
         </div>
       </div>
-      <div className="tour-body">
-        <div className="tour-tree-wrap">
+
+      <div className="grid min-h-0 flex-1 lg:grid-cols-[minmax(320px,460px)_minmax(0,1fr)]">
+        <div className={cx('min-h-0 overflow-auto border-border p-4 md:p-5 lg:block lg:border-r', pane === 'tree' ? 'block' : 'hidden')}>
           <div
-            className="ttree"
             ref={treeRef}
+            className="ttree"
             onClick={onTreeClick}
-            key={curTour}
+            onKeyDown={onTreeKey}
             dangerouslySetInnerHTML={{ __html: tour.tree }}
           />
         </div>
-        <div
-          className="tour-detail"
-          onClick={onDetailClick}
-          dangerouslySetInnerHTML={{ __html: detailHtml }}
-        />
+        <div ref={detailRef} className={cx('min-h-0 overflow-y-auto lg:block', pane === 'details' ? 'block' : 'hidden')}>
+          <div className="mx-auto max-w-2xl px-4 py-5 md:px-8 md:py-6">
+            {selSkill ? (
+              <>
+                <button type="button" onClick={() => setSel(null)} className={cx(BTN_GHOST, '-ml-2.5 mb-3')}>
+                  <ArrowLeft className="w-4 h-4" />
+                  Back to step {stepIdx + 1}
+                </button>
+                <SkillDetail key={selSkill.id} skill={selSkill} onNavigate={showSkill} onLearn={onLearn} />
+              </>
+            ) : sel?.kind === 'label' ? (
+              <>
+                <button type="button" onClick={() => setSel(null)} className={cx(BTN_GHOST, '-ml-2.5 mb-3')}>
+                  <ArrowLeft className="w-4 h-4" />
+                  Back to step {stepIdx + 1}
+                </button>
+                <div className="flex flex-wrap items-center gap-2">
+                  <h2 className="text-ui-xl font-semibold text-foreground">{sel.label}</h2>
+                  <TypeBadge type={sel.type} />
+                </div>
+                <p className="mt-2 text-ui-base text-muted-foreground">This is a group in the skill tree. Open it in the tree to see the skills inside, then select one for details.</p>
+              </>
+            ) : step.summary ? (
+              <div className="py-6 text-center animate-fade-in">
+                <CheckCircle2 className="mx-auto w-10 h-10 text-[var(--green)]" />
+                <Html html={step.narration} className="mt-3 text-ui-xl font-semibold text-foreground" />
+                <Html
+                  html={step.designRationale || 'You finished this tour. Try another one, or open the map to explore any stage on your own.'}
+                  className="mx-auto mt-2 max-w-md"
+                />
+                <div className="mt-5 flex flex-wrap justify-center gap-2">
+                  {nextTour && (
+                    <button type="button" onClick={() => onSwitch(nextTour.id)} className={BTN_PRIMARY}>
+                      <Route className="w-4 h-4" />
+                      Start Tour {nextTour.id.toUpperCase()}: {nextTour.title}
+                    </button>
+                  )}
+                  <button type="button" onClick={onExit} className={BTN_SECONDARY}>
+                    All tours
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <StepView key={`${tourId}-${stepIdx}`} step={step} onSkill={showSkill} />
+            )}
+          </div>
+        </div>
       </div>
     </div>
+  );
+}
+
+/** Tours: choose a tour first; then walk it one step at a time. */
+export function GuidedTours({ tourId, step, onSelectTour, onStep, onLearn }: GuidedToursProps) {
+  if (!tourId) return <Chooser onSelect={onSelectTour} />;
+  return (
+    <Player
+      key={tourId}
+      tourId={tourId}
+      initialStep={step}
+      onStep={onStep}
+      onExit={() => onSelectTour(null)}
+      onSwitch={onSelectTour}
+      onLearn={onLearn}
+    />
   );
 }

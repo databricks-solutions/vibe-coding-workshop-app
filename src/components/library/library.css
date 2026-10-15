@@ -1,0 +1,92 @@
+/* Use Case Library surfaces. Elements set --h / --s (see tintStyle in theme.ts);
+   lightness is chosen per theme so every tint stays legible in dark and light. */
+
+.lib-tile {
+  background: hsl(var(--h) var(--s) 55% / 0.16);
+  box-shadow: inset 0 0 0 1px hsl(var(--h) var(--s) 60% / 0.32), 0 6px 18px -10px hsl(var(--h) var(--s) 50% / 0.6);
+  color: hsl(var(--h) var(--s) 74%);
+}
+.light .lib-tile {
+  background: hsl(var(--h) var(--s) 50% / 0.12);
+  box-shadow: inset 0 0 0 1px hsl(var(--h) var(--s) 40% / 0.22), 0 6px 18px -12px hsl(var(--h) var(--s) 40% / 0.45);
+  color: hsl(var(--h) var(--s) 30%);
+}
+.lib-tile-off {
+  filter: grayscale(1);
+  opacity: 0.55;
+}
+
+.lib-ink { color: hsl(var(--h) var(--s) 72%); }
+.light .lib-ink { color: hsl(var(--h) var(--s) 32%); }
+
+.lib-dot { background: hsl(var(--h) var(--s) 55%); }
+
+.lib-soft {
+  background: hsl(var(--h) var(--s) 55% / 0.12);
+  box-shadow: inset 0 0 0 1px hsl(var(--h) var(--s) 60% / 0.22);
+}
+.light .lib-soft {
+  background: hsl(var(--h) var(--s) 50% / 0.09);
+  box-shadow: inset 0 0 0 1px hsl(var(--h) var(--s) 40% / 0.18);
+}
+
+.lib-wash {
+  background:
+    radial-gradient(120% 160% at 0% 0%, hsl(var(--h) var(--s) 55% / 0.22), transparent 55%),
+    radial-gradient(80% 120% at 100% 0%, hsl(var(--h) var(--s) 65% / 0.08), transparent 60%);
+}
+.light .lib-wash {
+  background:
+    radial-gradient(120% 160% at 0% 0%, hsl(var(--h) var(--s) 55% / 0.14), transparent 55%),
+    radial-gradient(80% 120% at 100% 0%, hsl(var(--h) var(--s) 65% / 0.06), transparent 60%);
+}
+
+.lib-band {
+  background: linear-gradient(90deg, hsl(var(--h) var(--s) 42%), hsl(var(--h) var(--s) 52%));
+  color: white;
+}
+.lib-bar { background: linear-gradient(90deg, hsl(var(--h) var(--s) 48%), hsl(var(--h) var(--s) 60%)); }
+
+.lib-column {
+  background: linear-gradient(180deg, hsl(var(--h) var(--s) 55% / 0.07), transparent 40%);
+  box-shadow: inset 0 0 0 1px hsl(var(--h) var(--s) 55% / 0.12);
+}
+
+.lib-card-edge::before {
+  content: '';
+  position: absolute;
+  inset: 0 16px auto 16px;
+  height: 2px;
+  border-radius: 2px;
+  background: linear-gradient(90deg, transparent, hsl(var(--h) var(--s) 60% / 0.85), transparent);
+  opacity: 0.7;
+  transition: opacity 200ms ease;
+}
+.lib-card-edge:hover::before { opacity: 1; }
+
+.lib-heat { background: hsl(var(--h) var(--s) 55% / var(--a, 0)); }
+.light .lib-heat { background: hsl(var(--h) var(--s) 48% / var(--a, 0)); }
+
+.lib-hatch {
+  background-image: repeating-linear-gradient(135deg, hsl(var(--muted-foreground) / 0.14) 0 5px, transparent 5px 11px);
+}
+
+.lib-switch-on {
+  background: hsl(var(--h, 158) var(--s, 70%) 45%);
+  box-shadow: 0 0 0 1px hsl(var(--h, 158) var(--s, 70%) 55% / 0.5), 0 0 14px -2px hsl(var(--h, 158) var(--s, 70%) 50% / 0.55);
+}
+
+.lib-dropzone {
+  outline: 2px dashed hsl(var(--h) var(--s) 60% / 0.6);
+  outline-offset: -4px;
+  background: hsl(var(--h) var(--s) 55% / 0.08);
+}
+
+.lib-scroll { scrollbar-gutter: stable; }
+
+@media (prefers-reduced-motion: reduce) {
+  .lib-root *, .lib-root *::before, .lib-root *::after {
+    animation-duration: 1ms !important;
+    transition-duration: 1ms !important;
+  }
+}

@@ -51,11 +51,15 @@ SEED_TABLES = [
     ("section_input_prompts", "input_id", "02_seed_section_input_prompts.sql"),
 ]
 
-# Seed files that are safe on every invocation (ON CONFLICT DO NOTHING inserts,
-# updated_by='seed'-guarded UPDATEs) and therefore run in create mode always.
+# Seed files that are safe on every invocation (ON CONFLICT DO NOTHING or
+# WHERE NOT EXISTS inserts, updated_by='seed'-guarded UPDATEs) and therefore run
+# in create mode always. 10-12 come from main's setup-lakebase.sh list.
 POST_SEED_MIGRATIONS = [
     "08_seed_step_visibility_overrides.sql",
     "09_seed_path_visibility_overrides.sql",
+    "10_seed_usecase_collections.sql",
+    "11_seed_industry_outcome_maps.sql",
+    "12_seed_office_plays.sql",
 ]
 
 
@@ -490,7 +494,7 @@ def run_create_mode_seed(cursor, schema, dml_dir, run_sql_file, baseline_path=SE
         and S5 ledgering). A POPULATED table (COUNT > 0, even partially seeded)
         gets only the S4 new-row path; missing baseline rows are admin
         deletions and stay deleted.
-      * 08/09 every time (ON CONFLICT DO NOTHING / updated_by='seed' guards).
+      * 08-12 every time (ON CONFLICT DO NOTHING / WHERE NOT EXISTS / updated_by='seed' guards).
       * any other seed file (the generated 03_seed_workshop_parameters.sql)
         only on a fresh install, i.e. when every SEED_TABLES table is empty,
         which is when the old bulk gate ran it on a first deploy.

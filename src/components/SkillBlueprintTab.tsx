@@ -474,7 +474,7 @@ interface SkillBlueprintFullScreenModalProps {
 
 export function SkillBlueprintFullScreenModal({
   config,
-  title = 'Agent Skills Navigator',
+  title = 'Skill Blueprint',
 }: SkillBlueprintFullScreenModalProps) {
   const [isOpen, setIsOpen] = useState(false);
 
