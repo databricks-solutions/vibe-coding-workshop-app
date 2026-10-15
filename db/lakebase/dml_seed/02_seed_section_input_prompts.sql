@@ -23993,22 +23993,28 @@ Confirm the React UI loads (not a blank/error page), the screens show data from 
 INSERT INTO ${catalog}.${schema}.section_input_prompts
 (input_id, section_tag, input_template, system_prompt, section_title, section_description, order_number, how_to_apply, expected_output, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
 VALUES
-(305, 'insights_alerts', '**Set up alerts on your governed metrics — propose them first, then create SQL alerts on the Metric View measures plus a schedule that emails the dashboard — so the right people hear when a number crosses a line.**
+(305, 'insights_alerts', '> **Artifact root (client-aware).** Resolve `<ARTIFACT_ROOT>` via `vibecoding-state.resolve_root` (it reads `artifact_root` from `## Environment Capabilities`, or detects the active client, `artifact_root` + `skills_install_root`) and write every artifact under it. On Cursor/Copilot that is your repo root; on Databricks Genie Code it is your user project root `/Workspace/Users/<email>/<repo>` (your user project is a **git clone** of the workshop repo so bundles are recognized; the skill tree is **copied** to `/Workspace/Users/<email>/.assistant/skills/<repo>` for skill loading only) — never the page''s current working directory.
+
+`<STATE_FILE>` = the live state file that `skills/vibecoding-state` resolves by its state-path rule (`<app_root>` → `<agent_app_root>` → `<dp_bundle_root>` → the bootstrap path, creating the canonical file if none exists yet), never `.vibecoding-state.md` relative to the page.
+
+**Set up alerts on your governed metrics — propose them first, then create SQL alerts on the Metric View measures plus a schedule that emails the dashboard — so the right people hear when a number crosses a line.**
 
 **Genie Code navigation:** this is a propose → approve → create beat. Query the Metric View with `MEASURE()` only (never the raw tables) through the pre-authenticated `w`. Create alerts with the Alerts API (`w.alerts.create(...)`, or `w.api_client.do("POST", "/api/2.0/alerts", body=...)` if the SDK wrapper is missing) and the dashboard schedule with the Lakeview schedules API (`w.lakeview.create_schedule(...)` + `create_subscription(...)`). Print a clickable link for every alert and the schedule using `w.config.host` and `w.get_workspace_id()`.
 
-Read `docs/genie_brief.md`, `docs/design_prd.md`, and `.vibecoding-state.md` first — they hold the Metric View name in `{lakehouse_default_catalog}.{user_schema_prefix}_gold`, its measures, the warehouse, and the dashboard id.
+Run `skills/vibecoding-state` operation `enter` with `prompt_id: "insights_alerts"` and `require_prior_gate: {prompt_id: "gaccel_dashboard", gate: "Dashboard live"}`. If that gate is not recorded, STOP — finish the **AI/BI Dashboard** step first.
+
+Read `docs/genie_brief.md`, `docs/design_prd.md`, and `<STATE_FILE>` first — they hold the Metric View name in `{lakehouse_default_catalog}.{user_schema_prefix}_gold`, its measures, the warehouse, and the dashboard id.
 
 1. **Propose an ALERT PLAN** for {use_case_title} — 3 to 5 alerts, each tied to a question in the brief: the governed measure, the slice (if any), the condition and threshold (for example "weekly revenue below target", "stockout count above 0"), how often it is checked, and who is told. Base every threshold on a quick read-only look at recent values so it would not fire constantly. Show the plan as a table and wait for my OK — create nothing yet.
 2. For each approved alert, create a saved SQL query that returns the single value to check, using `MEASURE()` on the Metric View, then create the alert on it with the agreed condition, schedule (no more often than hourly; daily is the default) and notification to me. Run each query once and show the current value.
-3. Add a **daily schedule** on the dashboard (`dashboard id` from `.vibecoding-state.md`) with an email subscription for me, so the dashboard arrives without anyone opening it.
-4. Record every alert id, its query id, the condition, and the schedule id in `.vibecoding-state.md`.
+3. Add a **daily schedule** on the dashboard (`dashboard id` from `<STATE_FILE>`) with an email subscription for me, so the dashboard arrives without anyone opening it.
+4. Record every alert id, its query id, the condition, and the schedule id in `<STATE_FILE>`.
 
 **Guardrails:** never alert on raw tables when a governed measure exists; never schedule more often than hourly; do not add recipients other than me without asking; do not change the Metric View, the Genie space, or the dashboard''s tiles.
 
-**State-lock:** append this step''s Per-Step Log entry, gate result, and the captured alert / query / schedule ids to `.vibecoding-state.md`, then re-read to confirm the write landed.
+**State-lock:** this prompt runs between an `enter` and an `exit`. After the gate passes, run `skills/vibecoding-state` op `exit` — params: `prompt_id: "insights_alerts"`, `gate: "Alerts live"`, `captured: {alert_ids, query_ids, schedule_id}`. **This `enter`/`exit` pair is a mandatory ritual, not advisory.** The closing `exit` MUST append this step''s Per-Step Log entry, gate result, and the captured alert / query / schedule ids to `<STATE_FILE>`, then **re-read it to confirm the write landed**. **Gate completion rule:** this step is NOT complete until that re-read confirms the `exit` entry — the chat summary is NOT the state store.
 
-**Gate:** `Alerts live` — the approved alerts exist on governed `MEASURE()` queries with a sensible threshold and an hourly-or-slower schedule, each query ran once and returned a value, the dashboard has a daily email schedule, and every id is recorded in `.vibecoding-state.md`.
+**Gate:** `Alerts live` — the approved alerts exist on governed `MEASURE()` queries with a sensible threshold and an hourly-or-slower schedule, each query ran once and returned a value, the dashboard has a daily email schedule, and every id is recorded in `<STATE_FILE>`.
 
 **➡️ Next step.** You are done with the core build — open the alerts list and the dashboard schedule from the links above to see them.', '', 'Alerts on Governed Metrics (Insights)', 'Insights add-on: propose then create SQL alerts on the Metric View measures and a daily dashboard email.', 76, '> **Artifact root (client-aware).** Resolve `<ARTIFACT_ROOT>` via `vibecoding-state.resolve_root` and write every artifact under it.
 
@@ -24033,22 +24039,28 @@ Nothing in your Metric View, Genie space or dashboard tiles changes.', '## Expec
 INSERT INTO ${catalog}.${schema}.section_input_prompts
 (input_id, section_tag, coding_assistant, input_template, system_prompt, bypass_llm, version, is_active, inserted_at, updated_at, created_by)
 VALUES
-(1305, 'insights_alerts', 'genie-code', '**Set up alerts on your governed metrics — propose them first, then create SQL alerts on the Metric View measures plus a schedule that emails the dashboard — so the right people hear when a number crosses a line.**
+(1305, 'insights_alerts', 'genie-code', '> **Artifact root (client-aware).** Resolve `<ARTIFACT_ROOT>` via `vibecoding-state.resolve_root` (it reads `artifact_root` from `## Environment Capabilities`, or detects the active client, `artifact_root` + `skills_install_root`) and write every artifact under it. On Cursor/Copilot that is your repo root; on Databricks Genie Code it is your user project root `/Workspace/Users/<email>/<repo>` (your user project is a **git clone** of the workshop repo so bundles are recognized; the skill tree is **copied** to `/Workspace/Users/<email>/.assistant/skills/<repo>` for skill loading only) — never the page''s current working directory.
+
+`<STATE_FILE>` = the live state file that `skills/vibecoding-state` resolves by its state-path rule (`<app_root>` → `<agent_app_root>` → `<dp_bundle_root>` → the bootstrap path, creating the canonical file if none exists yet), never `.vibecoding-state.md` relative to the page.
+
+**Set up alerts on your governed metrics — propose them first, then create SQL alerts on the Metric View measures plus a schedule that emails the dashboard — so the right people hear when a number crosses a line.**
 
 **Genie Code navigation:** this is a propose → approve → create beat. Query the Metric View with `MEASURE()` only (never the raw tables) through the pre-authenticated `w`. Create alerts with the Alerts API (`w.alerts.create(...)`, or `w.api_client.do("POST", "/api/2.0/alerts", body=...)` if the SDK wrapper is missing) and the dashboard schedule with the Lakeview schedules API (`w.lakeview.create_schedule(...)` + `create_subscription(...)`). Print a clickable link for every alert and the schedule using `w.config.host` and `w.get_workspace_id()`.
 
-Read `docs/genie_brief.md`, `docs/design_prd.md`, and `.vibecoding-state.md` first — they hold the Metric View name in `{lakehouse_default_catalog}.{user_schema_prefix}_gold`, its measures, the warehouse, and the dashboard id.
+Run `skills/vibecoding-state` operation `enter` with `prompt_id: "insights_alerts"` and `require_prior_gate: {prompt_id: "gaccel_dashboard", gate: "Dashboard live"}`. If that gate is not recorded, STOP — finish the **AI/BI Dashboard** step first.
+
+Read `docs/genie_brief.md`, `docs/design_prd.md`, and `<STATE_FILE>` first — they hold the Metric View name in `{lakehouse_default_catalog}.{user_schema_prefix}_gold`, its measures, the warehouse, and the dashboard id.
 
 1. **Propose an ALERT PLAN** for {use_case_title} — 3 to 5 alerts, each tied to a question in the brief: the governed measure, the slice (if any), the condition and threshold (for example "weekly revenue below target", "stockout count above 0"), how often it is checked, and who is told. Base every threshold on a quick read-only look at recent values so it would not fire constantly. Show the plan as a table and wait for my OK — create nothing yet.
 2. For each approved alert, create a saved SQL query that returns the single value to check, using `MEASURE()` on the Metric View, then create the alert on it with the agreed condition, schedule (no more often than hourly; daily is the default) and notification to me. Run each query once and show the current value.
-3. Add a **daily schedule** on the dashboard (`dashboard id` from `.vibecoding-state.md`) with an email subscription for me, so the dashboard arrives without anyone opening it.
-4. Record every alert id, its query id, the condition, and the schedule id in `.vibecoding-state.md`.
+3. Add a **daily schedule** on the dashboard (`dashboard id` from `<STATE_FILE>`) with an email subscription for me, so the dashboard arrives without anyone opening it.
+4. Record every alert id, its query id, the condition, and the schedule id in `<STATE_FILE>`.
 
 **Guardrails:** never alert on raw tables when a governed measure exists; never schedule more often than hourly; do not add recipients other than me without asking; do not change the Metric View, the Genie space, or the dashboard''s tiles.
 
-**State-lock:** append this step''s Per-Step Log entry, gate result, and the captured alert / query / schedule ids to `.vibecoding-state.md`, then re-read to confirm the write landed.
+**State-lock:** this prompt runs between an `enter` and an `exit`. After the gate passes, run `skills/vibecoding-state` op `exit` — params: `prompt_id: "insights_alerts"`, `gate: "Alerts live"`, `captured: {alert_ids, query_ids, schedule_id}`. **This `enter`/`exit` pair is a mandatory ritual, not advisory.** The closing `exit` MUST append this step''s Per-Step Log entry, gate result, and the captured alert / query / schedule ids to `<STATE_FILE>`, then **re-read it to confirm the write landed**. **Gate completion rule:** this step is NOT complete until that re-read confirms the `exit` entry — the chat summary is NOT the state store.
 
-**Gate:** `Alerts live` — the approved alerts exist on governed `MEASURE()` queries with a sensible threshold and an hourly-or-slower schedule, each query ran once and returned a value, the dashboard has a daily email schedule, and every id is recorded in `.vibecoding-state.md`.
+**Gate:** `Alerts live` — the approved alerts exist on governed `MEASURE()` queries with a sensible threshold and an hourly-or-slower schedule, each query ran once and returned a value, the dashboard has a daily email schedule, and every id is recorded in `<STATE_FILE>`.
 
 **➡️ Next step.** You are done with the core build — open the alerts list and the dashboard schedule from the links above to see them.', '', true, 1, true, current_timestamp(), current_timestamp(), current_user());
 

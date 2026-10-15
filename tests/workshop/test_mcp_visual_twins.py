@@ -654,8 +654,8 @@ WEB_GOLDEN = {
     # Main's Insights sections (merged into integration): web output at the merge head.
     "insights_activation|default": "bcebc745a60336c98ee262906198fa7db2c0083e72b307e6d493b3343a3ec095",
     "insights_activation|genie-code": "b68e0308caa92b631177d0e538cfc26eddfd47c603183a0d2ee732bb1fab3982",
-    "insights_alerts|default": "edaa34362d1aa573665efde2df0a2615f8735b2a0458a0f4857615f9bdf9fcb3",
-    "insights_alerts|genie-code": "78a948988b68c67fcba1d9786e10f96b1c6f3505f5fb32143d31c30082c05781",
+    "insights_alerts|default": "50ea29ae95cf9836fb3ba0a71043d2581787f37e9e7336933e1cd74ead0ec1e3",
+    "insights_alerts|genie-code": "90e0246ddf9ecf0b2efa0060d5cd9bb3d852bd2683f3ef1371dc9e3bf10daeed",
     "insights_app_deploy|default": "74f1cddae6c4787f4463e1d8d1fbd8a66d9fe1e93c6888780305789ce0bfcf08",
     "insights_app_deploy|genie-code": "afe948c9d73061daedfa3119a9e10f01fa0c3953062b7acb60cfd8f631256f53",
     "insights_genie_in_app|default": "e63611de6b44cde03fe098862a711d72b5a88e7cffdf3bd7b205ebd448bddffc",
