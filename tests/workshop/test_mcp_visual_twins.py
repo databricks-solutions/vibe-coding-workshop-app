@@ -60,8 +60,10 @@ def _seed_fences():
             for n, (_, close, body) in enumerate(visuals.iter_mermaid_fences(row.get(field) or ""), 1):
                 assert close is not None, f"unclosed fence in {row['section_tag']}.{field}.{n}"
                 name = f"{row['section_tag']}.{field}.{n}"
-                assert name not in fences, f"two __default__ rows carry {name} with different text"
-                fences[name] = visuals.mermaid_hash(body)
+                digest = visuals.mermaid_hash(body)
+                # D-168: a v1 row and its v2 (300/320) share how_to_apply byte for byte.
+                assert fences.get(name, digest) == digest, f"two __default__ rows carry {name} with different text"
+                fences[name] = digest
     return fences
 
 

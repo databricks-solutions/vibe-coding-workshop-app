@@ -452,9 +452,10 @@ def test_g6_v2_equals_v1_after_reversing_substitutions(tag):
 
 def test_g7_v2_defines_state_file():
     users = {pk: row for pk, row in SEED_ROWS.items() if "<STATE_FILE>" in (row.get("input_template") or "")}
-    # 300/1300: main's Insights copies of gaccel_activation (insights_activation), merged in; 305/1305: insights_alerts, given the same preamble (D-139).
+    # 320/1320: the v2 Insights copies of gaccel_activation (insights_activation); 321/1321: insights_alerts, given the same preamble (D-139).
+    # D-168: their v1 rows 300/1300/305/1305 hold main 2.6.0's text, which has no <STATE_FILE>.
     # 1124: the D-144 v3 of 1030 (ontology_domain), which keeps 1030's preamble byte-for-byte.
-    assert set(users) == {FORK_ID[tag] for tag in V1_ID} | {FORK_ID["workspace_cleanup"]} | {300, 1300, 305, 1305} | {SERVED_ID["ontology_domain"]}
+    assert set(users) == {FORK_ID[tag] for tag in V1_ID} | {FORK_ID["workspace_cleanup"]} | {320, 1320, 321, 1321} | {SERVED_ID["ontology_domain"]}
     for pk, row in users.items():
         body = row["input_template"]
         assert body.count(STATE_FILE_DEFINITION) == 1, f"{pk} does not define <STATE_FILE> exactly once"
