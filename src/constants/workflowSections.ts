@@ -642,6 +642,21 @@ export const WORKFLOW_SECTIONS: WorkflowSection[] = [
     steps: [62, 63, 64, 65, 66, 71].map(n => ALL_STEPS[n]),
   },
   {
+    // Genie Ontology sits right after the Genie Agent chapter (agent live,
+    // AI/BI Dashboard built) and before Activation: domain-scoping comes
+    // before any Lakebase or app step. Optional (includeGenieOntology).
+    id: 'genie-ontology',
+    chapter: 'AI and Agents',
+    title: 'Genie Ontology',
+    focus: 'Model the Discover domain, pages, and routing (Genie One)',
+    description: 'Model the domain and subdomains (UI-preferred), author Pages, and write the routing page so Genie One routes questions to the right space. Beta features — mostly UI-driven with Genie Code drafting content.',
+    icon: Globe,
+    color: 'text-teal-400',
+    bgColor: 'bg-teal-500/15',
+    borderColor: 'border-teal-500/30',
+    steps: [67, 68, 69].map(n => ALL_STEPS[n]),
+  },
+  {
     id: 'genie-activate',
     chapter: 'Activation',
     title: 'Activate',
@@ -658,21 +673,6 @@ export const WORKFLOW_SECTIONS: WorkflowSection[] = [
     // and the genie-accelerator-only Wire Genie step.
     // Step numbers are incidental; order follows this list.
     steps: [72, 32, 33, 34, 35, 36, 73, 37].map(n => ALL_STEPS[n]),
-  },
-  {
-    // Genie Ontology now follows Activation: the domain-scoping arc is an
-    // optional refinement layered on AFTER the agent is live and the app is
-    // built, not a prerequisite for activation.
-    id: 'genie-ontology',
-    chapter: 'AI and Agents',
-    title: 'Genie Ontology',
-    focus: 'Model the Discover domain, pages, and routing (Genie One)',
-    description: 'Model the domain and subdomains (UI-preferred), author Pages, and write the routing page so Genie One routes questions to the right space. Beta features — mostly UI-driven with Genie Code drafting content.',
-    icon: Globe,
-    color: 'text-teal-400',
-    bgColor: 'bg-teal-500/15',
-    borderColor: 'border-teal-500/30',
-    steps: [67, 68, 69].map(n => ALL_STEPS[n]),
   },
   {
     id: 'activation',

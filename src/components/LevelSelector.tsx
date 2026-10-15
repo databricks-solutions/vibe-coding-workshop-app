@@ -20,6 +20,15 @@
  * │                      │  chips                │  chips             │  [Data Eng. Acc.]      │
  * │                      │                       │                    │  [Skills Acc.]         │
  * └──────────────────────┴───────────────────────┴────────────────────┴────────────────────────┘
+ *
+ * Genie Accelerator selected: the three persona columns (and their captions)
+ * give way to the "Your Genie Accelerator Path" stage strip; the Accelerators
+ * column stays, holding the Lakehouse and Genie Ontology toggles under the
+ * Genie Acc. button:
+ * ┌────────────────────────────────────────────────────────────────┬────────────────────────┐
+ * │  [Lakehouse] → Semantic Layer → AI and Agents → [Ontology] →   │      Accelerators      │
+ * │  Activation        ([…] = only when its toggle is on)          │  [Genie Acc.] toggles  │
+ * └────────────────────────────────────────────────────────────────┴────────────────────────┘
  */
 
 import { motion, LayoutGroup } from 'framer-motion';
@@ -291,8 +300,8 @@ const GENIE_STRIP_ORDER: ChapterBlockId[] = [
   'lakehouse',
   'semantic-layer',
   'ai-agents',
-  'activation',
   'ontology',
+  'activation',
 ];
 
 function LevelSelectorGrid({

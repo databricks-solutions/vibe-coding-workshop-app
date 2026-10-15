@@ -198,6 +198,20 @@ def _prd_steps(track_data):
     ]
 
 
+def _undo_r7(track_data):
+    """genie-default-ontology PR 1 (R7) moved the genie-ontology section from after
+    genie-activate to before it; nothing else in the track changed. Move it back
+    and renumber ``order`` so the base comparison stays exact."""
+
+    data = copy.deepcopy(track_data)
+    sections = data["sections"]
+    ontology = sections.pop([section["id"] for section in sections].index("genie-ontology"))
+    sections.insert([section["id"] for section in sections].index("genie-activate") + 1, ontology)
+    for order, step in enumerate((step for section in sections for step in section["steps"]), 1):
+        step["order"] = order
+    return data
+
+
 def test_h1_manifest_requires_gate():
     assert len(ALL_TRACKS) == 14
     with_prd = [track for track in ALL_TRACKS if _prd_steps(HEAD_MANIFEST["tracks"][track])]
@@ -208,13 +222,15 @@ def test_h1_manifest_requires_gate():
             assert section_id == "define-usecase", (track, section_id)
             assert "use_case_brief" in step["consumes"], track
             assert step["requiresGate"] == USE_CASE_GATE, track
-    # genie-accelerator's subtree is byte-identical to the base (it already had both).
-    assert HEAD_MANIFEST["tracks"]["genie-accelerator"] == BASE_MANIFEST["tracks"]["genie-accelerator"]
+    # genie-accelerator's subtree is byte-identical to the base (it already had both)
+    # once the later R7 section move (genie-default-ontology) is undone.
+    assert _undo_r7(HEAD_MANIFEST["tracks"]["genie-accelerator"]) == BASE_MANIFEST["tracks"]["genie-accelerator"]
     # The ONLY manifest change is those two prd_generation fields.
     assert {k: v for k, v in HEAD_MANIFEST.items() if k != "tracks"} == {
         k: v for k, v in BASE_MANIFEST.items() if k != "tracks"
     }
     rolled_back = copy.deepcopy(HEAD_MANIFEST)
+    rolled_back["tracks"]["genie-accelerator"] = _undo_r7(rolled_back["tracks"]["genie-accelerator"])
     for track, data in rolled_back["tracks"].items():
         if track == "genie-accelerator":
             continue

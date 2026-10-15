@@ -325,6 +325,10 @@ ALLOWED[("workspace_cleanup", "bare path")] = (
 # 3 D-61 held, so none is pending.
 PENDING = {}
 
+# D-144 (genie-default-ontology): ontology_domain's served genie-code row is the v3
+# 1124 (1030 with its R7-falsified position clause reworded); v1 936 and v2 1030 stay active.
+SERVED_ID = {"ontology_domain": 1124}
+
 
 def _in_code(body):
     """Per line: True inside a ``` fence, False outside (fence lines count as code)."""
@@ -449,7 +453,8 @@ def test_g6_v2_equals_v1_after_reversing_substitutions(tag):
 def test_g7_v2_defines_state_file():
     users = {pk: row for pk, row in SEED_ROWS.items() if "<STATE_FILE>" in (row.get("input_template") or "")}
     # 300/1300: main's Insights copies of gaccel_activation (insights_activation), merged in; 305/1305: insights_alerts, given the same preamble (D-139).
-    assert set(users) == {FORK_ID[tag] for tag in V1_ID} | {FORK_ID["workspace_cleanup"]} | {300, 1300, 305, 1305}
+    # 1124: the D-144 v3 of 1030 (ontology_domain), which keeps 1030's preamble byte-for-byte.
+    assert set(users) == {FORK_ID[tag] for tag in V1_ID} | {FORK_ID["workspace_cleanup"]} | {300, 1300, 305, 1305} | {SERVED_ID["ontology_domain"]}
     for pk, row in users.items():
         body = row["input_template"]
         assert body.count(STATE_FILE_DEFINITION) == 1, f"{pk} does not define <STATE_FILE> exactly once"
@@ -499,7 +504,7 @@ def test_s3_served_version(every_active_version, tag):
     v1, v2, default = SEED_ROWS[V1_ID[tag]], SEED_ROWS[FORK_ID[tag]], SEED_ROWS[DEFAULT_ID[tag]]
     assert v1.get("is_active") is not False and v2.get("is_active") is not False
     served = routes.get_section_input_template(tag, "genie-code")
-    assert served["input"] == v2["input_template"]
+    assert served["input"] == SEED_ROWS[SERVED_ID.get(tag, FORK_ID[tag])]["input_template"]
     assert (served["how_to_apply"], served["expected_output"]) == (
         default.get("how_to_apply") or "",
         default.get("expected_output") or "",
