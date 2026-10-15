@@ -1,4 +1,4 @@
-import { ArrowLeft, ArrowRight, BadgeCheck, LayoutDashboard, MessagesSquare, Pencil, ShieldCheck, Sparkles } from 'lucide-react';
+import { ArrowLeft, ArrowRight, BadgeCheck, Check, LayoutDashboard, Loader2, MessagesSquare, Pencil, ShieldCheck, Sparkles, TriangleAlert } from 'lucide-react';
 import { CertifiedBadge } from '../../CertifiedBadge';
 import type { ApprovedUseCase } from '../usecases/useCaseApi';
 import { sourceFromChoice } from '../blueprint/links';
@@ -35,11 +35,19 @@ interface ReadyScreenProps {
   moments?: Moment[];
   /** Add-ons this idea can have, and the ones chosen. */
   offeredAddOns?: AddOn[];
+  /** Build capabilities promised by the chosen approach; shown as included and cannot be switched off. */
+  requiredAddOns?: AddOn[];
   addOns?: AddOn[];
   onToggleAddOn?: (addOn: AddOn) => void;
+  buildChecking?: boolean;
+  buildBlocker?: string | null;
 }
 
-export function ReadyScreen({ progress, idea, onEditIdea, onOpenCase, name, onNameChange, questionCount, dataLabel, blueprint, useCase, onBack, onStart, readOnly, moments = MOMENTS, offeredAddOns = [], addOns = [], onToggleAddOn }: ReadyScreenProps) {
+export function ReadyScreen({
+  progress, idea, onEditIdea, onOpenCase, name, onNameChange, questionCount, dataLabel, blueprint, useCase,
+  onBack, onStart, readOnly, moments = MOMENTS, offeredAddOns = [], requiredAddOns = [], addOns = [],
+  onToggleAddOn, buildChecking = false, buildBlocker = null,
+}: ReadyScreenProps) {
   const genie = { icon: MessagesSquare, title: 'A Genie your team can chat with', body: 'Ask in plain English, get an answer in seconds.' };
   const trusted = { icon: ShieldCheck, title: `Trusted answers to your ${questionCount} question${questionCount === 1 ? '' : 's'}`, body: 'Tested and tuned until they come back right.' };
   const dashboard = { icon: LayoutDashboard, title: 'A dashboard to share', body: 'Built on the same numbers, so charts and Genie always agree.' };
@@ -138,30 +146,50 @@ export function ReadyScreen({ progress, idea, onEditIdea, onOpenCase, name, onNa
       {offeredAddOns.length > 0 && onToggleAddOn && (
         <FadeIn delay={0.18} className="rounded-2xl border border-border bg-card overflow-hidden">
           <div className="px-5 py-3.5 border-b border-border">
-            <p className="text-ui-md font-semibold text-foreground">Also build</p>
-            <p className="text-ui-sm text-muted-foreground">Picked from your approach. The extra steps go inside the same four chapters.</p>
+            <p className="text-ui-md font-semibold text-foreground">
+              {requiredAddOns.length ? 'Included in your build' : 'Also build'}
+            </p>
+            <p className="text-ui-sm text-muted-foreground">
+              {requiredAddOns.length
+                ? 'Your Copilot approach includes the app automatically. Optional extras can still be switched on or off.'
+                : 'Optional extras go inside the same four chapters.'}
+            </p>
           </div>
           <ul>
             {offeredAddOns.map(a => {
               const on = addOns.includes(a);
+              const required = requiredAddOns.includes(a);
               return (
                 <li key={a} className="border-b border-border/60 last:border-b-0">
-                  <label className="flex items-center gap-4 px-5 py-3.5 cursor-pointer hover:bg-secondary/30 transition-colors">
+                  <label className={`flex items-center gap-4 px-5 py-3.5 transition-colors ${required ? 'bg-primary/[0.03]' : 'cursor-pointer hover:bg-secondary/30'}`}>
                     <span className="flex-1 min-w-0">
-                      <span className="block text-ui-md font-medium text-foreground">{ADD_ON_LABEL[a].title}</span>
-                      <span className="block text-ui-sm text-muted-foreground">{ADD_ON_LABEL[a].body}</span>
+                      <span className="flex items-center gap-2 text-ui-md font-medium text-foreground">
+                        {ADD_ON_LABEL[a].title}
+                        {required && (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2 py-0.5 text-ui-xs font-semibold text-primary">
+                            <Check className="w-3 h-3" strokeWidth={3} /> Included from your approach
+                          </span>
+                        )}
+                      </span>
+                      <span className="block text-ui-sm text-muted-foreground">
+                        {required ? `Your Copilot includes this. ${ADD_ON_LABEL[a].body}` : ADD_ON_LABEL[a].body}
+                      </span>
                     </span>
-                    <input
-                      type="checkbox"
-                      role="switch"
-                      checked={on}
-                      disabled={readOnly}
-                      onChange={() => onToggleAddOn(a)}
-                      className="peer sr-only"
-                    />
-                    <span aria-hidden className={`relative w-10 h-6 rounded-full transition-colors peer-focus-visible:ring-4 peer-focus-visible:ring-primary/20 ${on ? 'bg-primary' : 'bg-secondary'}`}>
-                      <span className={`absolute top-1 left-1 w-4 h-4 rounded-full bg-white shadow transition-transform ${on ? 'translate-x-4' : ''}`} />
-                    </span>
+                    {!required && (
+                      <>
+                        <input
+                          type="checkbox"
+                          role="switch"
+                          checked={on}
+                          disabled={readOnly}
+                          onChange={() => onToggleAddOn(a)}
+                          className="peer sr-only"
+                        />
+                        <span aria-hidden className={`relative w-10 h-6 rounded-full transition-colors peer-focus-visible:ring-4 peer-focus-visible:ring-primary/20 ${on ? 'bg-primary' : 'bg-secondary'}`}>
+                          <span className={`absolute top-1 left-1 w-4 h-4 rounded-full bg-white shadow transition-transform ${on ? 'translate-x-4' : ''}`} />
+                        </span>
+                      </>
+                    )}
                   </label>
                 </li>
               );
@@ -189,9 +217,26 @@ export function ReadyScreen({ progress, idea, onEditIdea, onOpenCase, name, onNa
         </ol>
       </FadeIn>
 
+      {buildChecking && (
+        <FadeIn className="flex items-center gap-3 rounded-2xl border border-border bg-card px-4 py-3 text-ui-sm text-muted-foreground">
+          <Loader2 className="w-4 h-4 shrink-0 animate-spin text-primary" />
+          Checking the required Copilot build steps…
+        </FadeIn>
+      )}
+
+      {buildBlocker && (
+        <FadeIn className="flex items-start gap-3 rounded-2xl border border-red-500/30 bg-red-500/[0.06] px-4 py-3">
+          <TriangleAlert className="w-4 h-4 mt-0.5 shrink-0 text-red-500" />
+          <div>
+            <p className="text-ui-sm font-semibold text-foreground">The Copilot app build is not available yet</p>
+            <p className="text-ui-xs text-muted-foreground mt-0.5">{buildBlocker}</p>
+          </div>
+        </FadeIn>
+      )}
+
       <FadeIn delay={0.25} className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-2">
         <p className="text-ui-sm text-muted-foreground">Your progress saves automatically.</p>
-        <PrimaryButton size="lg" disabled={!name.trim() || readOnly} onClick={onStart}>
+        <PrimaryButton size="lg" disabled={!name.trim() || readOnly || buildChecking || !!buildBlocker} onClick={onStart}>
           Start building <ArrowRight className="w-4 h-4" />
         </PrimaryButton>
       </FadeIn>

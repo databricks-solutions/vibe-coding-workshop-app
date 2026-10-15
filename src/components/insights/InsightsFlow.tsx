@@ -14,7 +14,7 @@ import type { ModelHint } from './blueprint/industryMap';
 import type { BlueprintChoice } from './blueprint/types';
 import { INDUSTRY_IDEAS } from './journey';
 import { openPathComparison } from './pathEvents';
-import { addOnAvailable, defaultAddOns, momentsFor, normalizeAddOns, offeredAddOns, useTagAvailability, type AddOn } from './recipes';
+import { ADD_ON_LABEL, addOnAvailable, defaultAddOns, momentsFor, normalizeAddOns, offeredAddOns, requiredAddOns, tagsFor, useTagAvailability, type AddOn } from './recipes';
 import { insightsPhases, type InsightsStage } from './progress';
 import { insightsIndustryFor } from './usecases/useCaseApi';
 import { DataScreen } from './screens/DataScreen';
@@ -245,10 +245,22 @@ function InsightsFlowInner(props: InsightsFlowProps) {
     text: [ideaText, ...questions].filter(Boolean).join('\n'),
   };
   const usingBlueprint = dataSource === 'blueprint';
-  const offered = offeredAddOns(idea, enabledAddOns).filter(a => addOnAvailable(a, availability));
-  const chosenAddOns = normalizeAddOns((addOnChoice ?? defaultAddOns(idea, enabledAddOns)).filter(a => offered.includes(a)));
+  const required = requiredAddOns(idea);
+  const optionalOffered = offeredAddOns(idea, enabledAddOns)
+    .filter(a => !required.includes(a) && addOnAvailable(a, availability));
+  const offered = normalizeAddOns([...required, ...optionalOffered]);
+  const chosenAddOns = normalizeAddOns([
+    ...required,
+    ...(addOnChoice ?? defaultAddOns(idea, enabledAddOns)).filter(a => offered.includes(a)),
+  ]);
+  const missingRequired = availability.loaded ? required.filter(a => !addOnAvailable(a, availability)) : [];
+  const requiredBuildChecking = required.length > 0 && !availability.loaded;
+  const requiredBuildBlocker = availability.loaded && missingRequired.length > 0
+    ? `The ${ADD_ON_LABEL[missingRequired[0]].title.toLowerCase()} build steps are not available for Genie Code. Required prompts: ${tagsFor(missingRequired[0]).join(', ')}.`
+    : null;
   const toggleAddOn = (a: AddOn) => setAddOnChoice(chosenAddOns.includes(a) ? chosenAddOns.filter(x => x !== a) : [...chosenAddOns, a]);
-  const builtMoments = useMemo(() => momentsFor(parsed.addOns), [parsed.addOns]);
+  const effectiveBuiltAddOns = normalizeAddOns([...required, ...parsed.addOns]);
+  const builtMoments = momentsFor(effectiveBuiltAddOns);
 
   const phases = (viewStep?: StepKey | null) => insightsPhases({ stage, idea, viewStep, blueprint: usingBlueprint });
   const progress = <JourneyProgress phases={phases()} trailing="then 4 build chapters" />;
@@ -343,7 +355,7 @@ function InsightsFlowInner(props: InsightsFlowProps) {
         blueprint: parsed.blueprint,
         useCase,
         idea: ideaBriefOf(idea),
-        addOns: parsed.addOns,
+        addOns: effectiveBuiltAddOns,
       }),
       resetPrompts: true,
     });
@@ -383,7 +395,7 @@ function InsightsFlowInner(props: InsightsFlowProps) {
         dataSource={parsed.dataSource}
         blueprint={parsed.blueprint}
         moments={builtMoments}
-        addOns={parsed.addOns}
+        addOns={effectiveBuiltAddOns}
         industry={selectedIndustry}
         useCase={selectedUseCase}
         sessionId={sessionId}
@@ -527,8 +539,11 @@ function InsightsFlowInner(props: InsightsFlowProps) {
         readOnly={readOnly}
         moments={momentsFor(chosenAddOns)}
         offeredAddOns={offered}
+        requiredAddOns={required}
         addOns={chosenAddOns}
         onToggleAddOn={toggleAddOn}
+        buildChecking={requiredBuildChecking}
+        buildBlocker={requiredBuildBlocker}
       />
     );
   }
