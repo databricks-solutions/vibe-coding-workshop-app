@@ -1088,6 +1088,22 @@ def save_chapter_feedback(session_id: str, chapter_name: str, rating: str) -> bo
         return False
 
 
+def session_exists(session_id: str) -> Optional[bool]:
+    """True or False when Lakebase answered; None when it is not configured or could not be reached."""
+    if not is_lakebase_configured():
+        return None
+    try:
+        with get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(f"SELECT 1 FROM {_get_sessions_table_name()} WHERE session_id = %s", (session_id,))
+            found = cursor.fetchone() is not None
+            cursor.close()
+            return found
+    except Exception as e:
+        logger.warning(f"Could not check whether session {session_id} exists: {e}")
+        return None
+
+
 def load_session(session_id: str) -> Optional[Dict]:
     """
     Load a session from Lakebase by session_id.

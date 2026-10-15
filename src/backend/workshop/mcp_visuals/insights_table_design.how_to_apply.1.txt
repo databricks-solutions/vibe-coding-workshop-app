@@ -1,0 +1,14 @@
+```text
+gold_layer_design.md ─┐
+usecase_plan.md ──────┤
+design_prd.md ────────┤
+┌─────────────────────┘
+▼
+Plan: reverse_etl.md + activation_sync_plan.md
+│
+▼
+Provision Lakebase project + endpoint (cost-capped)
+│
+▼
+Step 33: Create Synced Tables
+```

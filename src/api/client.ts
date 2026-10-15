@@ -62,6 +62,15 @@ export interface SelectOption {
   display_order?: number;
   /** Certified use cases sort to the top of each section and show a Certified badge. */
   is_certified?: boolean;
+  /** Collection options only: industry (vertical), business function or technical solution (horizontal). */
+  kind?: 'industry' | 'function' | 'solution';
+  /** Collection options only: lucide icon name and palette color token chosen in the Library. */
+  icon?: string | null;
+  color?: string | null;
+  description?: string | null;
+  /** Use cases cross-listed into another collection: the collection that owns the content. */
+  home_industry?: string;
+  home_label?: string;
 }
 
 export interface GeneratedContent {
@@ -349,6 +358,8 @@ export interface SessionLoadResponse {
   created_at?: string;
   updated_at?: string;
   is_saved: boolean;
+  /** The store answered and has no such session; false when it could not be reached. */
+  missing?: boolean;
   message: string;
 }
 
@@ -1401,6 +1412,11 @@ class ApiClient {
     return this.fetch<Record<string, string>>('/config/workshop-parameters-dict');
   }
 
+  /** Insights add-ons turned on for everyone (INSIGHTS_BUILD_RECIPES). */
+  async getInsightsRecipes(): Promise<{ enabled: string[] }> {
+    return this.fetch<{ enabled: string[] }>('/config/insights-recipes');
+  }
+
   /** Delete a workshop parameter */
   async deleteWorkshopParameter(paramKey: string): Promise<{ success: boolean; message: string }> {
     return this.fetch(`/config/workshop-parameters/${encodeURIComponent(paramKey)}`, {
@@ -1896,6 +1912,113 @@ class ApiClient {
         if ((err as Error).name !== 'AbortError') {
           onError((err as Error).message || 'Streaming failed');
         }
+      }
+    })();
+
+    return controller;
+  }
+
+  // ===========================================================================
+  // IDEATE
+  // ===========================================================================
+
+  /** Run one structured Ideate step. Throws with a friendly message on failure. */
+  async ideateStep<T = unknown>(
+    step: string,
+    idea: Record<string, unknown>,
+    feedback?: string,
+  ): Promise<T> {
+    return (await this.ideateStepWithModel<T>(step, idea, feedback)).data;
+  }
+
+  /** Same as `ideateStep`, plus which model answered and whether it was a fallback. */
+  async ideateStepWithModel<T = unknown>(
+    step: string,
+    idea: Record<string, unknown>,
+    feedback?: string,
+  ): Promise<{ data: T; model: string; fallback: boolean }> {
+    const response = await fetch(`${this.baseUrl}/ideate/step`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ step, idea, feedback }),
+    });
+    const body = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw Object.assign(new Error(body.error || `Request failed (${response.status})`), { status: response.status });
+    }
+    return { data: body.data as T, model: body.model ?? '', fallback: !!body.fallback };
+  }
+
+  /** Submit a committed idea to the use case catalog. It lands inactive until an admin turns it on. */
+  async ideateSubmit(params: {
+    idea: Record<string, unknown>;
+    business_case?: Record<string, unknown> | null;
+    value_profile?: Record<string, unknown> | null;
+    brief?: string;
+    industry?: string;
+    industry_label: string;
+    use_case_label: string;
+    category?: string;
+    use_case?: string;
+  }): Promise<{ industry: string; industryLabel: string; useCase: string; useCaseLabel: string; version: number }> {
+    const response = await fetch(`${this.baseUrl}/ideate/submit`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(params),
+    });
+    const body = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(body.error || `Request failed (${response.status})`);
+    return body;
+  }
+
+  /** Stream the Ideate brief (SSE). Returns an AbortController to cancel. */
+  ideateBriefStream(
+    params: { idea: Record<string, unknown>; feedback?: string; current_brief?: string },
+    onContent: (content: string) => void,
+    onComplete: () => void,
+    onError: (error: string) => void,
+  ): AbortController {
+    const controller = new AbortController();
+
+    (async () => {
+      try {
+        const response = await fetch(`${this.baseUrl}/ideate/brief`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(params),
+          signal: controller.signal,
+        });
+        if (!response.ok) throw new Error(`API error: ${response.status}`);
+        const reader = response.body?.getReader();
+        if (!reader) throw new Error('No response body');
+
+        const decoder = new TextDecoder();
+        let buffer = '';
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) {
+            onComplete();
+            return;
+          }
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split('\n');
+          buffer = lines.pop() || '';
+          for (const line of lines) {
+            if (!line.startsWith('data: ')) continue;
+            const jsonStr = line.slice(6).trim();
+            if (!jsonStr) continue;
+            try {
+              const data = JSON.parse(jsonStr);
+              if (data.type === 'content' && data.content) onContent(data.content);
+              else if (data.type === 'done') { onComplete(); return; }
+              else if (data.type === 'error') { onError(data.error || 'Unknown error'); return; }
+            } catch {
+              // Skip malformed chunks
+            }
+          }
+        }
+      } catch (err) {
+        if ((err as Error).name !== 'AbortError') onError((err as Error).message || 'Streaming failed');
       }
     })();
 

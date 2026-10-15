@@ -58,7 +58,9 @@ REEXPORTED = [
     "get_available_serving_endpoints",
     "get_best_available_endpoint",
     "_extract_text",
+    "_supports_temperature",
     "call_databricks_serving_endpoint",
+    "resolve_endpoint",
 ]
 MOVED_FUNCTIONS = [
     "call_databricks_serving_endpoint",
@@ -299,10 +301,11 @@ E6_INTENTIONAL_EDITS = {
             '        logger.error(f"     Traceback:\\n{traceback.format_exc()}")',
             '        logger.debug("     SDK query traceback", exc_info=True)',
         ),
-        # D-113
+        # D-113, then main's Claude 5 temperature rule (merge of main into integration)
+        ("        ep_lower = endpoint.lower()", None),
         (
             '        if "mini" not in ep_lower:',
-            '        if temperature is not None and "mini" not in ep_lower:',
+            '        if temperature is not None and _supports_temperature(endpoint):',
         ),
     ],
 }

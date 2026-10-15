@@ -116,6 +116,8 @@ CONFIG_PATH = Path(__file__).parent.parent / "prompts_config.yaml"
 _lakebase_cache = {
     "usecase_descriptions": None,
     "section_input_prompts": None,
+    "collections": None,
+    "collection_members": None,
     "last_refresh": None
 }
 
@@ -128,6 +130,8 @@ def clear_lakebase_cache():
     _lakebase_cache = {
         "usecase_descriptions": None,
         "section_input_prompts": None,
+        "collections": None,
+        "collection_members": None,
         "last_refresh": None
     }
     logger.info("Lakebase cache cleared")
@@ -160,6 +164,101 @@ def _invalidate_lakebase_cache():
     global _lakebase_cache
     _lakebase_cache["last_refresh"] = None
     logger.info("[Cache] Lakebase cache invalidated - will refresh on next access")
+
+# ---------- Use Case Library collections ----------
+# Mirrors db/lakebase/ddl/12_usecase_collections.sql minus the ALTER on
+# usecase_descriptions (the app principal does not own that table). Applied
+# once per process when the tables are missing; failures are logged and the
+# app keeps working off plain industries.
+_LIBRARY_RUNTIME_DDL = [
+    """CREATE TABLE IF NOT EXISTS {schema}.usecase_collections (
+        collection_id VARCHAR(100) PRIMARY KEY,
+        kind VARCHAR(20) NOT NULL DEFAULT 'industry',
+        label VARCHAR(255) NOT NULL,
+        description TEXT,
+        icon VARCHAR(50),
+        color VARCHAR(20),
+        display_order INTEGER NOT NULL DEFAULT 100,
+        is_enabled BOOLEAN NOT NULL DEFAULT TRUE,
+        created_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_by VARCHAR(255)
+    )""",
+    """CREATE TABLE IF NOT EXISTS {schema}.usecase_collection_members (
+        collection_id VARCHAR(100) NOT NULL,
+        home_industry VARCHAR(100) NOT NULL,
+        use_case VARCHAR(100) NOT NULL,
+        category VARCHAR(100),
+        category_order INTEGER,
+        display_order INTEGER,
+        added_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        added_by VARCHAR(255),
+        PRIMARY KEY (collection_id, home_industry, use_case)
+    )""",
+    """INSERT INTO {schema}.usecase_collections (collection_id, kind, label, display_order, is_enabled, updated_by)
+       SELECT DISTINCT ON (industry) industry, 'industry', industry_label,
+              CASE industry WHEN 'sample' THEN 1 WHEN 'retail' THEN 2 WHEN 'cpg' THEN 3 WHEN 'travel' THEN 4 ELSE 100 END,
+              TRUE, 'migration'
+       FROM {schema}.usecase_descriptions
+       ORDER BY industry, version DESC
+       ON CONFLICT (collection_id) DO NOTHING""",
+    """DELETE FROM {schema}.usecase_descriptions
+       WHERE use_case = '_placeholder'
+         AND industry IN (SELECT collection_id FROM {schema}.usecase_collections)""",
+]
+
+_library_runtime_ddl_attempted = False
+
+
+def library_capabilities(schema: str) -> Dict[str, bool]:
+    """Which Library schema pieces exist: collection tables and the source column."""
+    rows = execute_query(
+        """SELECT to_regclass(%s) IS NOT NULL AS collections,
+                  to_regclass(%s) IS NOT NULL AS members,
+                  EXISTS (SELECT 1 FROM information_schema.columns
+                          WHERE table_schema = %s AND table_name = 'usecase_descriptions'
+                            AND column_name = 'source') AS source""",
+        (f"{schema}.usecase_collections", f"{schema}.usecase_collection_members", schema),
+    )
+    row = rows[0] if rows else {}
+    return {
+        "tables": bool(row.get("collections") and row.get("members")),
+        "source": bool(row.get("source")),
+    }
+
+
+def ensure_library_schema(schema: str) -> Dict[str, bool]:
+    global _library_runtime_ddl_attempted
+    caps = library_capabilities(schema)
+    if caps["tables"] or _library_runtime_ddl_attempted:
+        return caps
+    _library_runtime_ddl_attempted = True
+    for stmt in _LIBRARY_RUNTIME_DDL:
+        try:
+            ok = execute_insert(stmt.format(schema=schema))
+        except Exception as e:
+            logger.warning(f"[Library] Runtime migration step raised: {e}")
+            ok = False
+        if not ok:
+            logger.warning("[Library] Runtime migration step failed; run setup-lakebase.sh to apply 12_usecase_collections.sql")
+            break
+    return library_capabilities(schema)
+
+
+def _load_library_collections(schema: str):
+    """Return (collections, members) or (None, None) when the tables are absent."""
+    if not ensure_library_schema(schema)["tables"]:
+        return None, None
+    collections = execute_query(
+        f"""SELECT collection_id, kind, label, description, icon, color, display_order, is_enabled
+            FROM {schema}.usecase_collections"""
+    )
+    members = execute_query(
+        f"""SELECT collection_id, home_industry, use_case, category, category_order, display_order
+            FROM {schema}.usecase_collection_members"""
+    )
+    return collections or [], members or []
+
 
 def _refresh_lakebase_cache():
     """Refresh Lakebase data from PostgreSQL tables."""
@@ -226,6 +325,10 @@ def _refresh_lakebase_cache():
             
             if section_prompts:
                 _lakebase_cache["section_input_prompts"] = section_prompts
+
+            collections, members = _load_library_collections(schema)
+            _lakebase_cache["collections"] = collections
+            _lakebase_cache["collection_members"] = members
             
             _lakebase_cache["last_refresh"] = time.time()
             logger.info(f"Lakebase cache refreshed: {len(_lakebase_cache['usecase_descriptions'])} use cases, {len(_lakebase_cache.get('section_input_prompts', []))} section prompts")
@@ -447,7 +550,9 @@ from src.backend.services.llm import (
     get_available_serving_endpoints,
     get_best_available_endpoint,
     _extract_text,
+    _supports_temperature,
     call_databricks_serving_endpoint,
+    resolve_endpoint,
 )
 
 # ============== Data Models ==============
@@ -678,6 +783,76 @@ class ConfigVersionInfo(BaseModel):
 
 # ============== Data Store (Lakebase with YAML fallback) ==============
 
+COLLECTION_KIND_ORDER = {"industry": 0, "function": 1, "solution": 2}
+_LEGACY_INDUSTRY_ORDER = ["sample", "retail", "cpg", "travel"]
+
+
+def _collection_rows_by_id(lakebase_data: List[Dict]) -> Dict[str, Dict]:
+    """Collections keyed by id, synthesizing enabled industry rows for any home
+    industry that predates the collections table."""
+    by_id = {c["collection_id"]: dict(c) for c in (_lakebase_cache.get("collections") or [])}
+    for row in lakebase_data:
+        ind = row.get("industry")
+        if ind and ind not in by_id:
+            by_id[ind] = {
+                "collection_id": ind,
+                "kind": "industry",
+                "label": row.get("industry_label") or ind.title(),
+                "description": None,
+                "icon": None,
+                "color": None,
+                "display_order": _LEGACY_INDUSTRY_ORDER.index(ind) + 1 if ind in _LEGACY_INDUSTRY_ORDER else 100,
+                "is_enabled": True,
+            }
+    return by_id
+
+
+def _collection_option(c: Dict) -> Dict:
+    return {
+        "value": c["collection_id"],
+        "label": "Sample" if c["collection_id"] == "sample" else c.get("label") or c["collection_id"],
+        "kind": c.get("kind") or "industry",
+        "icon": c.get("icon"),
+        "color": c.get("color"),
+        "description": c.get("description"),
+    }
+
+
+def _visible_collections(lakebase_data: List[Dict]) -> List[Dict]:
+    """Enabled collections that contain at least one live use case (home or cross-listed)."""
+    live = {(r.get("industry"), r.get("use_case")) for r in lakebase_data if r.get("use_case") != "_placeholder"}
+    with_content = {ind for ind, _ in live}
+    for m in _lakebase_cache.get("collection_members") or []:
+        if (m.get("home_industry"), m.get("use_case")) in live:
+            with_content.add(m.get("collection_id"))
+    by_id = _collection_rows_by_id(lakebase_data)
+    visible = [c for cid, c in by_id.items() if c.get("is_enabled") and cid in with_content]
+    visible.sort(key=lambda c: (COLLECTION_KIND_ORDER.get(c.get("kind"), 9), c.get("display_order") or 100, c.get("label") or ""))
+    return [_collection_option(c) for c in visible]
+
+
+def _apply_collections_to_use_cases(use_cases_map: Dict[str, List[Dict]], lakebase_data: List[Dict]) -> Dict[str, List[Dict]]:
+    """Drop disabled collections and add cross-listed entries under their collections."""
+    by_id = _collection_rows_by_id(lakebase_data)
+    entries = {(ind, e["value"]): e for ind, lst in use_cases_map.items() for e in lst if e.get("value")}
+    result = {ind: lst for ind, lst in use_cases_map.items() if by_id.get(ind, {}).get("is_enabled", True)}
+    for m in _lakebase_cache.get("collection_members") or []:
+        cid = m.get("collection_id")
+        home = m.get("home_industry")
+        base = entries.get((home, m.get("use_case")))
+        if not base or not by_id.get(cid, {}).get("is_enabled") or cid == home:
+            continue
+        entry = {k: v for k, v in base.items() if k not in ("category", "category_order", "display_order")}
+        if m.get("category"):
+            entry["category"] = m["category"]
+            entry["category_order"] = m.get("category_order")
+            entry["display_order"] = m.get("display_order")
+        entry["home_industry"] = home
+        entry["home_label"] = (by_id.get(home) or {}).get("label") or home
+        result.setdefault(cid, [{"value": "", "label": "Select a use case..."}]).append(entry)
+    return result
+
+
 def get_industries() -> List[Dict]:
     """Get industries - from Lakebase or YAML fallback.
     
@@ -694,6 +869,8 @@ def get_industries() -> List[Dict]:
     
     # Try Lakebase first - data is already filtered by is_active=TRUE in the SQL query
     lakebase_data = get_usecase_descriptions_from_lakebase()
+    if lakebase_data and _lakebase_cache.get("collections") is not None:
+        return [{"value": "", "label": "Select an industry..."}] + _visible_collections(lakebase_data)
     if lakebase_data:
         # Extract unique industries from Lakebase (only active use cases are returned)
         industries_dict = {}
@@ -768,6 +945,8 @@ def get_use_cases_map() -> Dict[str, List[Dict]]:
                     entry["category_order"] = row.get("category_order")
                     entry["display_order"] = row.get("display_order")
                 use_cases_map[industry].append(entry)
+        if _lakebase_cache.get("collections") is not None:
+            use_cases_map = _apply_collections_to_use_cases(use_cases_map, lakebase_data)
         return use_cases_map
     
     # Fallback to YAML (no path_type in YAML — default to 'use_case')
@@ -803,6 +982,11 @@ def get_prompt_templates_map() -> Dict[str, Dict[str, str]]:
                 if industry not in templates_map:
                     templates_map[industry] = {}
                 templates_map[industry][use_case] = template
+        # Cross-listed use cases resolve under the collection they are browsed in.
+        for m in _lakebase_cache.get("collection_members") or []:
+            template = templates_map.get(m.get("home_industry"), {}).get(m.get("use_case"))
+            if template:
+                templates_map.setdefault(m["collection_id"], {})[m["use_case"]] = template
         return templates_map
     
     # No YAML fallback - database is required
@@ -1529,8 +1713,7 @@ async def _stream_with_retry(
         "max_tokens": max_tokens,
         "stream": True,
     }
-    ep_lower = endpoint.lower()
-    if "mini" not in ep_lower:
+    if _supports_temperature(endpoint):
         request_body["temperature"] = temperature
 
     workspace_host = client.config.host.rstrip("/")
@@ -2451,25 +2634,30 @@ async def create_prompt_config(request: PromptConfigCreate) -> PromptConfigRespo
     # flag from the latest existing version so editing a prompt's text doesn't
     # silently un-certify it. The dedicated toggle-certified endpoint is what
     # flips the flag.
+    # Visibility, placement and path type carry forward too, so publishing a
+    # new description never un-hides a use case or drops its category.
+    prev_sql = f"""
+        SELECT is_certified, is_active, path_type, category, category_order, display_order
+        FROM {schema}.usecase_descriptions
+        WHERE industry = %s AND use_case = %s
+        ORDER BY version DESC
+        LIMIT 1
+    """
+    prev_result = execute_query(prev_sql, (request.industry, request.use_case))
+    prev = prev_result[0] if prev_result else None
     if request.is_certified is None:
-        prev_sql = f"""
-            SELECT is_certified
-            FROM {schema}.usecase_descriptions
-            WHERE industry = %s AND use_case = %s
-            ORDER BY version DESC
-            LIMIT 1
-        """
-        prev_result = execute_query(prev_sql, (request.industry, request.use_case))
-        resolved_certified = bool(prev_result[0].get('is_certified')) if prev_result else False
+        resolved_certified = bool(prev.get('is_certified')) if prev else False
     else:
         resolved_certified = bool(request.is_certified)
+    resolved_active = bool(prev.get('is_active')) if prev else True
     
     # Insert new row with computed version
     insert_sql = f"""
         INSERT INTO {schema}.usecase_descriptions 
         (industry, industry_label, use_case, use_case_label, prompt_template, 
-         version, is_active, inserted_at, updated_at, created_by, is_certified)
-        VALUES (%s, %s, %s, %s, %s, %s, TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, %s, %s)
+         version, is_active, inserted_at, updated_at, created_by, is_certified,
+         path_type, category, category_order, display_order)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, %s, %s, %s, %s, %s, %s)
     """
     
     success = execute_insert(insert_sql, (
@@ -2479,9 +2667,25 @@ async def create_prompt_config(request: PromptConfigCreate) -> PromptConfigRespo
         request.use_case_label,
         request.prompt_template,
         next_version,
+        resolved_active,
         current_user,
-        resolved_certified
+        resolved_certified,
+        (prev or {}).get('path_type') or ('skill' if request.use_case in SKILL_USE_CASES else 'use_case'),
+        (prev or {}).get('category'),
+        (prev or {}).get('category_order'),
+        (prev or {}).get('display_order'),
     ))
+    if not success:
+        legacy_sql = f"""
+            INSERT INTO {schema}.usecase_descriptions 
+            (industry, industry_label, use_case, use_case_label, prompt_template, 
+             version, is_active, inserted_at, updated_at, created_by, is_certified)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, %s, %s)
+        """
+        success = execute_insert(legacy_sql, (
+            request.industry, request.industry_label, request.use_case, request.use_case_label,
+            request.prompt_template, next_version, resolved_active, current_user, resolved_certified,
+        ))
     
     if not success:
         raise HTTPException(status_code=500, detail="Failed to create prompt configuration")
@@ -2498,7 +2702,7 @@ async def create_prompt_config(request: PromptConfigCreate) -> PromptConfigRespo
         use_case_label=request.use_case_label,
         prompt_template=request.prompt_template,
         version=next_version,
-        is_active=True,
+        is_active=resolved_active,
         created_by=current_user,
         is_certified=resolved_certified
     )
@@ -2522,6 +2726,21 @@ async def add_industry(request: IndustryCreate) -> Dict[str, Any]:
     
     if existing:
         raise HTTPException(status_code=400, detail=f"Industry '{request.industry}' already exists")
+
+    if ensure_library_schema(schema)["tables"]:
+        inserted = execute_insert(
+            f"""INSERT INTO {schema}.usecase_collections (collection_id, kind, label, updated_by)
+                VALUES (%s, 'industry', %s, %s) ON CONFLICT (collection_id) DO NOTHING""",
+            (request.industry, request.industry_label, _get_current_user()),
+        )
+        if inserted:
+            _invalidate_cache()
+            return {
+                "success": True,
+                "industry": request.industry,
+                "industry_label": request.industry_label,
+                "message": f"Industry '{request.industry_label}' created successfully"
+            }
     
     # Create a placeholder prompt config for this industry
     config = PromptConfigCreate(
@@ -2557,6 +2776,11 @@ async def add_use_case(request: UseCaseCreate) -> Dict[str, Any]:
         LIMIT 1
     """
     existing = execute_query(check_sql, (request.industry,))
+    if not existing and ensure_library_schema(schema)["tables"]:
+        existing = execute_query(
+            f"SELECT label AS industry_label FROM {schema}.usecase_collections WHERE collection_id = %s",
+            (request.industry,),
+        )
     
     if not existing:
         raise HTTPException(status_code=404, detail=f"Industry '{request.industry}' not found")
@@ -3286,6 +3510,19 @@ async def delete_section_input_fork(
         "section_tag": section_tag,
         "coding_assistant": assistant_key,
     }
+
+
+INSIGHTS_ADD_ONS = ("ontology", "alerts", "app_view", "copilot")
+
+
+@router.get("/config/insights-recipes")
+async def get_insights_recipes() -> Dict[str, List[str]]:
+    """Insights add-ons turned on for everyone, from INSIGHTS_BUILD_RECIPES (comma list or 'all'). Empty by default."""
+    raw = os.environ.get("INSIGHTS_BUILD_RECIPES", "")
+    parts = [p.strip().lower() for p in raw.split(",") if p.strip()]
+    if "all" in parts:
+        return {"enabled": list(INSIGHTS_ADD_ONS)}
+    return {"enabled": [p for p in INSIGHTS_ADD_ONS if p in parts]}
 
 
 @router.get("/config/section-tags")
@@ -4880,6 +5117,7 @@ try:
         save_session_merging_gates,
         save_chapter_feedback,
         load_session,
+        session_exists,
         delete_session,
         get_user_sessions,
         get_user_default_session,
@@ -4898,6 +5136,8 @@ except ImportError:
     def save_session_merging_gates(*args, **kwargs):
         return False
     def load_session(*args, **kwargs):
+        return None
+    def session_exists(*args, **kwargs):
         return None
     def delete_session(*args, **kwargs):
         return False
@@ -4990,6 +5230,7 @@ class SessionLoadResponse(BaseModel):
     created_at: Optional[str] = Field(None)
     updated_at: Optional[str] = Field(None)
     is_saved: bool = Field(False)
+    missing: bool = Field(False, description="The store answered and has no such session (not set when it could not be reached)")
     message: str = Field(..., description="Status message")
 
     @field_validator("prerequisites_completed", "is_saved", mode="before")
@@ -5342,19 +5583,20 @@ async def load_session_endpoint(session_id: str) -> SessionLoadResponse:
                 session_description=session_data.get("session_description"),
                 feedback_rating=session_data.get("feedback_rating"),
                 feedback_comment=session_data.get("feedback_comment"),
-                prerequisites_completed=session_data.get("prerequisites_completed", False),
+                # Columns can hold NULL for sessions that were created but never set up.
+                prerequisites_completed=bool(session_data.get("prerequisites_completed")),
                 workshop_level=session_data.get("workshop_level", "300"),
                 completed_gates=session_data.get("completed_gates") or [],
                 # skipped_gates lives in session_parameters (the write path patches
                 # it there); surface it top-level, symmetric to completed_gates, so
                 # the App can hydrate skipped steps gate-first (PR3b′).
                 skipped_gates=(session_data.get("session_parameters") or {}).get("skipped_gates") or [],
-                step_prompts=session_data.get("step_prompts", {}),
-                session_parameters=session_data.get("session_parameters", {}),
+                step_prompts=session_data.get("step_prompts") or {},
+                session_parameters=session_data.get("session_parameters") or {},
                 created_by=session_data.get("created_by"),
                 created_at=session_data.get("created_at"),
                 updated_at=session_data.get("updated_at"),
-                is_saved=session_data.get("is_saved", False),
+                is_saved=bool(session_data.get("is_saved")),
                 message="Session loaded successfully",
             )
         else:
@@ -5363,6 +5605,7 @@ async def load_session_endpoint(session_id: str) -> SessionLoadResponse:
                 success=False,
                 session_id=session_id,
                 is_saved=False,
+                missing=session_exists(session_id) is False,
                 message="Session not found. It may have been deleted or never saved.",
             )
             

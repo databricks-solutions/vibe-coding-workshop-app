@@ -726,13 +726,20 @@ R8_EDITED = {
 
 
 # post-redact intentional non-log edits, coach-endpoint (D-113, D-118): per file,
-# (old_line, new_line) pairs applied to the base source before the comparison. Each
+# (old_line, new_line_or_None) pairs applied to the base source before the comparison;
+# None deletes the line. Each
 # old line must occur exactly once in the base file; any other difference stays red.
 R8_INTENTIONAL_EDITS = {
+    # main's Claude 5 temperature rule (merge of main into integration)
+    "src/backend/api/routes.py": [
+        ("    ep_lower = endpoint.lower()", None),
+        ('    if "mini" not in ep_lower:', "    if _supports_temperature(endpoint):"),
+    ],
     "src/backend/services/llm.py": [
+        ("        ep_lower = endpoint.lower()", None),
         (
             '        if "mini" not in ep_lower:',
-            '        if temperature is not None and "mini" not in ep_lower:',
+            '        if temperature is not None and _supports_temperature(endpoint):',
         ),
     ],
 }
@@ -743,7 +750,10 @@ def _apply_r8_edits(rel_path, source):
     for old, new in R8_INTENTIONAL_EDITS.get(rel_path, []):
         hits = [i for i, line in enumerate(lines) if line == old]
         assert len(hits) == 1, f"intentional edit must match exactly once, got {len(hits)}: {old!r}"
-        lines[hits[0]] = new
+        if new is None:
+            del lines[hits[0]]
+        else:
+            lines[hits[0]] = new
     return "\n".join(lines)
 
 

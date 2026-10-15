@@ -619,9 +619,9 @@ function LevelSelectorGrid({
               accentContainer={stage.accent.container}
               button={
                 <div className="px-4 py-2.5 rounded-lg text-ui-sm font-medium w-full bg-secondary/60 text-foreground">
-                  <div className="flex items-center gap-2.5">
+                  <div className="flex items-center justify-center gap-2">
                     <StageIcon className="w-4 h-4 flex-shrink-0" />
-                    <span className="flex-1 text-left">{stage.title}</span>
+                    <span className="text-center">{stage.title}</span>
                   </div>
                 </div>
               }
@@ -818,41 +818,7 @@ function LevelSelectorGrid({
         <div className={getBoxClass(isAcceleratorSelected, false, isColumnLocked('accelerator'))}>
           {columnHeader('accelerator')}
           <div className="space-y-2">
-            {/* Agents Accelerator — first in the list; works with any sample use case; clicking it locks the flow */}
-            {(() => {
-              const lockState = getLockState('agents-accelerator');
-              const disabled = lockState !== null;
-              return (
-                <div className={disabled ? 'relative group' : undefined}>
-                  <button
-                    onClick={() => handleLevelClick('agents-accelerator')}
-                    disabled={disabled}
-                    className={getButtonClass('agents-accelerator')}
-                    title={getToggleHint('agents-accelerator')}
-                  >
-                    <div className="flex items-center gap-2.5">
-                      <Bot className="w-4 h-4 flex-shrink-0" />
-                      <span className="flex-1 text-left">{BUTTON_LABELS['agents-accelerator']}</span>
-                      <NewBadge tone={selectedLevel === 'agents-accelerator' ? 'inverted' : 'emerald'} />
-                      <span
-                        title="Beta — feature is available but still being tested"
-                        className={`text-ui-3xs px-1.5 py-0.5 rounded font-medium ${
-                          selectedLevel === 'agents-accelerator'
-                            ? 'bg-white/20 text-primary-foreground/80 border border-white/20'
-                            : 'bg-amber-500/20 text-amber-600 dark:text-amber-400 border border-amber-500/30'
-                        }`}
-                      >Beta</span>
-                      {!disabled && (selectedLevel === 'agents-accelerator' || isHighlighted('agents-accelerator')) && (
-                        <Check className={`w-3.5 h-3.5 flex-shrink-0 ${selectedLevel === 'agents-accelerator' ? '' : 'opacity-60'}`} />
-                      )}
-                    </div>
-                  </button>
-                  {disabled && lockState && <LockedTooltip reason={lockState.reason} title={lockState.title} body={lockState.body} />}
-                </div>
-              );
-            })()}
-
-            {/* Genie Accelerator */}
+            {/* Genie Accelerator — primary new guided path */}
             {(() => {
               const lockState = getLockState('genie-accelerator');
               const disabled = lockState !== null;
@@ -867,8 +833,82 @@ function LevelSelectorGrid({
                     <div className="flex items-center gap-2.5">
                       <MessageSquareText className="w-4 h-4 flex-shrink-0" />
                       <span className="flex-1 text-left">{BUTTON_LABELS['genie-accelerator']}</span>
+                      <NewBadge tone={selectedLevel === 'genie-accelerator' ? 'inverted' : 'emerald'} />
                       {!disabled && (selectedLevel === 'genie-accelerator' || isHighlighted('genie-accelerator')) && (
                         <Check className={`w-3.5 h-3.5 flex-shrink-0 ${selectedLevel === 'genie-accelerator' ? '' : 'opacity-60'}`} />
+                      )}
+                    </div>
+                  </button>
+                  {disabled && lockState && <LockedTooltip reason={lockState.reason} title={lockState.title} body={lockState.body} />}
+                  {selectedLevel === 'genie-accelerator' && (onIncludeLakehouseChange || onIncludeGenieOntologyChange) && (
+                    <div className="mt-1.5 ml-4 pl-3 border-l-2 border-teal-500/40 space-y-1.5">
+                      {/* Optional Lakehouse (Bronze → Gold). OFF by default: the learner
+                          starts from existing / uploaded / synthetic data. */}
+                      {onIncludeLakehouseChange && (
+                        <label className="flex items-start gap-2 rounded-lg border border-teal-500/30 bg-teal-500/[0.05] px-2.5 py-2 cursor-pointer select-none">
+                          <input
+                            type="checkbox"
+                            checked={includeLakehouse}
+                            onChange={(e) => onIncludeLakehouseChange(e.target.checked)}
+                            className="mt-0.5 h-3.5 w-3.5 shrink-0 rounded border-border accent-teal-500 cursor-pointer"
+                          />
+                          <span className="flex-1">
+                            <span className="block text-ui-2xs font-semibold text-foreground">Include Lakehouse (Bronze → Gold)</span>
+                            <span className="block text-ui-3xs text-muted-foreground leading-tight mt-0.5">
+                              Off by default — start from existing, uploaded, or synthetic data. Turn on to build the medallion layers first (+90 min).
+                            </span>
+                          </span>
+                        </label>
+                      )}
+                      {/* Optional Genie Ontology (Discover domain, Pages, routing). OFF by
+                          default: the Beta ontology arc is skipped unless the learner opts in. */}
+                      {onIncludeGenieOntologyChange && (
+                        <label className="flex items-start gap-2 rounded-lg border border-teal-500/30 bg-teal-500/[0.05] px-2.5 py-2 cursor-pointer select-none">
+                          <input
+                            type="checkbox"
+                            checked={includeGenieOntology}
+                            onChange={(e) => onIncludeGenieOntologyChange(e.target.checked)}
+                            className="mt-0.5 h-3.5 w-3.5 shrink-0 rounded border-border accent-teal-500 cursor-pointer"
+                          />
+                          <span className="flex-1">
+                            <span className="block text-ui-2xs font-semibold text-foreground">Include Genie Ontology (Beta)</span>
+                            <span className="block text-ui-3xs text-muted-foreground leading-tight mt-0.5">
+                              Off by default — skip the Discover ontology arc. Turn on to model the domain, author Pages, and write the routing page (+25 min).
+                            </span>
+                          </span>
+                        </label>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
+
+            {/* Agents Accelerator — beta; works with any sample use case */}
+            {(() => {
+              const lockState = getLockState('agents-accelerator');
+              const disabled = lockState !== null;
+              return (
+                <div className={disabled ? 'relative group' : undefined}>
+                  <button
+                    onClick={() => handleLevelClick('agents-accelerator')}
+                    disabled={disabled}
+                    className={getButtonClass('agents-accelerator')}
+                    title={getToggleHint('agents-accelerator')}
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <Bot className="w-4 h-4 flex-shrink-0" />
+                      <span className="flex-1 text-left">{BUTTON_LABELS['agents-accelerator']}</span>
+                      <span
+                        title="Beta — feature is available but still being tested"
+                        className={`text-ui-3xs px-1.5 py-0.5 rounded-full font-medium ${
+                          selectedLevel === 'agents-accelerator'
+                            ? 'bg-white/20 text-primary-foreground/80 border border-white/20'
+                            : 'bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/30'
+                        }`}
+                      >Beta</span>
+                      {!disabled && (selectedLevel === 'agents-accelerator' || isHighlighted('agents-accelerator')) && (
+                        <Check className={`w-3.5 h-3.5 flex-shrink-0 ${selectedLevel === 'agents-accelerator' ? '' : 'opacity-60'}`} />
                       )}
                     </div>
                   </button>
@@ -876,46 +916,6 @@ function LevelSelectorGrid({
                 </div>
               );
             })()}
-
-            {/* Genie Accelerator — optional Lakehouse (Bronze → Gold). OFF by
-                default: the learner starts from existing / uploaded / synthetic
-                data. Turning it on prepends the medallion build. */}
-            {selectedLevel === 'genie-accelerator' && onIncludeLakehouseChange && (
-              <label className="flex items-start gap-2 rounded-lg border border-teal-500/30 bg-teal-500/[0.05] px-2.5 py-2 cursor-pointer select-none">
-                <input
-                  type="checkbox"
-                  checked={includeLakehouse}
-                  onChange={(e) => onIncludeLakehouseChange(e.target.checked)}
-                  className="mt-0.5 h-3.5 w-3.5 shrink-0 rounded border-border accent-teal-500 cursor-pointer"
-                />
-                <span className="flex-1">
-                  <span className="block text-ui-2xs font-semibold text-foreground">Include Lakehouse (Bronze → Gold)</span>
-                  <span className="block text-ui-3xs text-muted-foreground leading-tight mt-0.5">
-                    Off by default — start from existing, uploaded, or synthetic data. Turn on to build the medallion layers first (+90 min).
-                  </span>
-                </span>
-              </label>
-            )}
-
-            {/* Genie Accelerator — optional Genie Ontology (Discover domain,
-                Pages, routing). OFF by default: the Beta ontology arc is skipped
-                unless the learner opts in. */}
-            {selectedLevel === 'genie-accelerator' && onIncludeGenieOntologyChange && (
-              <label className="flex items-start gap-2 rounded-lg border border-teal-500/30 bg-teal-500/[0.05] px-2.5 py-2 cursor-pointer select-none">
-                <input
-                  type="checkbox"
-                  checked={includeGenieOntology}
-                  onChange={(e) => onIncludeGenieOntologyChange(e.target.checked)}
-                  className="mt-0.5 h-3.5 w-3.5 shrink-0 rounded border-border accent-teal-500 cursor-pointer"
-                />
-                <span className="flex-1">
-                  <span className="block text-ui-2xs font-semibold text-foreground">Include Genie Ontology (Beta)</span>
-                  <span className="block text-ui-3xs text-muted-foreground leading-tight mt-0.5">
-                    Off by default — skip the Discover ontology arc. Turn on to model the domain, author Pages, and write the routing page (+25 min).
-                  </span>
-                </span>
-              </label>
-            )}
 
             {/* Data Engineering Accelerator */}
             {(() => {

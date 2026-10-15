@@ -28,7 +28,6 @@ import type {
 } from '../api/client';
 import { ALL_STEPS } from '../constants/workflowSections';
 import { CHAPTERS } from '../constants/scoring';
-import { ThemeToggle } from './ThemeToggle';
 
 type Tab = 'overview' | 'feedback' | 'chapter-feedback' | 'users';
 
@@ -760,7 +759,6 @@ export function AnalyticsDashboard() {
               <h1 className="text-ui-lg font-bold text-foreground">Analytics</h1>
             </div>
           </div>
-          <ThemeToggle />
         </div>
       </header>
 

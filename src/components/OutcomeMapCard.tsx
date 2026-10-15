@@ -1,10 +1,10 @@
 import { createElement, useRef, type MouseEvent, type CSSProperties } from 'react';
-import { Check } from 'lucide-react';
+import { Check, HelpCircle } from 'lucide-react';
 import type { SelectOption } from '../api/client';
 import { CertifiedBadge } from './CertifiedBadge';
+import { iconForUseCase } from './library/theme';
 import {
-  getIconForSlug,
-  LEAF_PILLS_BY_SLUG,
+  derivePills,
   deriveValueProp,
   type OutcomeMapTheme,
 } from './outcomeMapTheme';
@@ -44,7 +44,7 @@ export function OutcomeMapCard({
   promptTemplate,
   staggerIndex,
 }: OutcomeMapCardProps) {
-  const pills = LEAF_PILLS_BY_SLUG[useCase.value] ?? [];
+  const pills = derivePills(useCase.value, promptTemplate);
   const cardRef = useRef<HTMLButtonElement>(null);
 
   // Magnetic radial-gradient hover. Updates two CSS variables on the root
@@ -135,7 +135,7 @@ export function OutcomeMapCard({
             isSelected ? theme.iconBgSelected : theme.iconBg
           } group-hover:scale-[1.04] group-hover:rotate-[2deg]`}
         >
-          {createElement(getIconForSlug(useCase.value), {
+          {createElement(iconForUseCase({ use_case: useCase.value, use_case_label: useCase.label }, HelpCircle), {
             className: `w-[18px] h-[18px] ${theme.iconAccent}`,
             'aria-hidden': true,
           })}
@@ -167,6 +167,9 @@ export function OutcomeMapCard({
       <p className="relative text-[12.5px] leading-relaxed text-muted-foreground line-clamp-2 mb-4">
         {valueProp}
       </p>
+      {useCase.home_label && (
+        <p className="relative -mt-2.5 mb-3 text-[10.5px] font-medium uppercase tracking-wide text-muted-foreground/80">From {useCase.home_label}</p>
+      )}
 
       {/* Leaf-item pills — always fully visible, content over decoration */}
       {pills.length > 0 && (

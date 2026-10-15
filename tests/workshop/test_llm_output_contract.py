@@ -40,6 +40,7 @@ CONTRACT = (
     "cover the highest-value items and end with one line listing what was left out."
 )
 NEW_IDS = {v2 for _, v2, _ in V2.values()}
+MAIN_INSIGHTS_IDS = set(range(300, 306)) | set(range(1300, 1306))
 
 
 def _statements(path):
@@ -111,7 +112,8 @@ def test_c4_no_other_row_changed(tmp_path):
     base_path = tmp_path / "02_base.sql"
     base_path.write_text(blob.stdout)
     base, head = _statements(base_path), _statements(SEED)
-    assert set(head) - set(base) == NEW_IDS
+    # Main's Insights rows (defaults 300-305, forks 1300-1305) arrived with the merge of main.
+    assert set(head) - set(base) == NEW_IDS | MAIN_INSIGHTS_IDS
     assert {pk: head[pk] for pk in base} == base
     for v1, _, _ in V2.values():
         assert _row(head[v1])["is_active"] is True

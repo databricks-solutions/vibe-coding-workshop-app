@@ -1,10 +1,12 @@
 import { useEffect, useState } from 'react';
+import { useTheme } from '../lib/theme';
 
 // Lazily-rendered Mermaid diagram. `mermaid` is dynamically imported so it stays
 // out of the initial bundle and only loads when a diagram is actually present.
 // On any parse/render error it degrades gracefully to the raw Mermaid source.
 let mermaidIdCounter = 0;
 export function Mermaid({ chart }: { chart: string }) {
+  const [theme] = useTheme();
   const [svg, setSvg] = useState<string>('');
   const [error, setError] = useState(false);
 
@@ -14,7 +16,7 @@ export function Mermaid({ chart }: { chart: string }) {
     (async () => {
       try {
         const mermaid = (await import('mermaid')).default;
-        mermaid.initialize({ startOnLoad: false, theme: 'dark', securityLevel: 'strict' });
+        mermaid.initialize({ startOnLoad: false, theme: theme === 'light' ? 'default' : 'dark', securityLevel: 'strict' });
         const { svg } = await mermaid.render(id, chart);
         if (!cancelled) { setSvg(svg); setError(false); }
       } catch {
@@ -22,7 +24,7 @@ export function Mermaid({ chart }: { chart: string }) {
       }
     })();
     return () => { cancelled = true; };
-  }, [chart]);
+  }, [chart, theme]);
 
   if (error) {
     // Graceful degradation — show the readable Mermaid source.

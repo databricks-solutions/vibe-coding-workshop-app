@@ -5,6 +5,7 @@ Serves both the React frontend and API endpoints.
 """
 
 import asyncio
+import mimetypes
 import os
 import sys
 import time
@@ -12,6 +13,9 @@ from collections import deque
 from contextlib import asynccontextmanager
 from pathlib import Path
 from urllib.parse import urlparse
+
+# Some container images ship a mime table without WebP; with nosniff, images need the right type.
+mimetypes.add_type("image/webp", ".webp")
 
 # Add the src/backend directory to the Python path
 backend_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'src', 'backend')
@@ -137,6 +141,32 @@ class _MCPPathRewrite:
             # Clear the transport's 406 Accept gate for JSON-only/`*/*` clients.
             scope["headers"] = _normalize_mcp_accept(scope.get("headers", []))
         await self.app(scope, receive, send)
+from src.backend.api.library import router as library_router
+
+# Ideate is a beta, self-contained feature: it must never block the app from starting.
+try:
+    from src.backend.api.ideate import router as ideate_router
+except Exception as _ideate_err:  # pragma: no cover
+    print(f"[Ideate] disabled, failed to load: {_ideate_err}", file=sys.stderr)
+    ideate_router = None
+
+# Industry blueprints (Insights view) are optional too: a failure only hides them.
+try:
+    from src.backend.api.blueprints import router as blueprints_router
+except Exception as _blueprints_err:  # pragma: no cover
+    print(f"[Blueprints] disabled, failed to load: {_blueprints_err}", file=sys.stderr)
+    blueprints_router = None
+try:
+    from src.backend.api.blueprint_fit import router as blueprint_fit_router
+except Exception as _blueprint_fit_err:  # pragma: no cover
+    print(f"[Blueprints] use case matching disabled, failed to load: {_blueprint_fit_err}", file=sys.stderr)
+    blueprint_fit_router = None
+
+try:
+    from src.backend.api.insights import router as insights_router
+except Exception as _insights_err:  # pragma: no cover
+    print(f"[Insights] use case previews disabled, failed to load: {_insights_err}", file=sys.stderr)
+    insights_router = None
 
 # Get the directory where this script is located
 BASE_DIR = Path(__file__).resolve().parent
@@ -214,7 +244,7 @@ async def security_middleware(request: Request, call_next):
     response.headers.setdefault("X-Frame-Options", "SAMEORIGIN")
     response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
     response.headers.setdefault(
-        "Permissions-Policy", "geolocation=(), microphone=(), camera=()"
+        "Permissions-Policy", "geolocation=(), microphone=(self), camera=()"
     )
     return response
 
@@ -236,6 +266,15 @@ app.add_middleware(
 # Include the API router with /api prefix
 app.include_router(api_router, prefix="/api", tags=["API"])
 app.include_router(hackathon_router, prefix="/api", tags=["Hackathons"])
+app.include_router(library_router, prefix="/api", tags=["Library"])
+if ideate_router is not None:
+    app.include_router(ideate_router, prefix="/api", tags=["Ideate"])
+if blueprint_fit_router is not None:
+    app.include_router(blueprint_fit_router, prefix="/api", tags=["Blueprints"])
+if blueprints_router is not None:
+    app.include_router(blueprints_router, prefix="/api", tags=["Blueprints"])
+if insights_router is not None:
+    app.include_router(insights_router, prefix="/api", tags=["Insights"])
 
 
 # ============== Health Check ==============

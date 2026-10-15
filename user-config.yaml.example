@@ -35,7 +35,9 @@ app:
   # vibe-coding-workshop-app so the two never clobber each other's app or state. If you
   # deploy the non-MCP workshop from a different branch, use the unprefixed name there.
   name: "mcp-vibe-coding-workshop-app"
-  serving_endpoint: "databricks-claude-sonnet-4-5"
+  serving_endpoint: "databricks-claude-sonnet-4-6"
+  # Optional stronger model for Ideate impact sizing and the business case
+  analysis_endpoint: ""
 
 user:
   email: ""                           # Auto-discovered during install

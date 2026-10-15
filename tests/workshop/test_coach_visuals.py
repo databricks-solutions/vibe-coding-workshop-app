@@ -621,7 +621,8 @@ def test_model_fence_is_still_scrubbed():
 # --- A13: the two nit twins; index.json unchanged -------------------------------------------------
 
 
-INDEX_SHA256 = "9c754214e7db89857dc2a88389e50c43fdcbeca46452da46d34459a74b6b85f0"  # base e0078d2
+# base e0078d2, plus 4 entries added by the merge of main (main's Insights copies of existing twins).
+INDEX_SHA256 = "0f64a963225ec7209bfe2aa59d3fba6d17a0506c7653f6b4160d912de8288cb3"
 
 
 def test_index_json_unchanged():
