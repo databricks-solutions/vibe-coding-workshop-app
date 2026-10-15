@@ -55,6 +55,12 @@ env:
   # sessions keep their own setting.
   - name: VIBE_DEFAULT_GENIE_ONTOLOGY
     value: "true"
+
+  # MCP step-prompt prefetch (D-160): start the next step's prompt generation
+  # when a step becomes current, so vibe_complete_step returns it without the
+  # wait. Read per call; unset = on. "false" (or 0/off/no) = render on complete.
+  - name: VIBE_STEP_PROMPT_PREFETCH
+    value: "true"
   
   # ---------------------------------------------------------------------------
   # Lakebase PostgreSQL Configuration

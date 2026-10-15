@@ -991,6 +991,117 @@ def _generate_step_prompt(
         return None
 
 
+# Step-prompt prefetch (plan 2026-10-15-step-prompt-prefetch, D-160): when a payload
+# makes step N current, start N+1's generation in the background so the
+# vibe_complete_step that returns N+1 finds it cached (or joins it in flight)
+# instead of waiting 20-47 s. Only when N+1's assembled input is already final:
+# N+1 consumes nothing N produces and every N+1 consume is captured. It goes
+# through _generate_step_prompt unchanged (same cache key, single-flight, budget
+# and negative cache) on a daemon thread, so the current response never waits.
+_STEP_PROMPT_PREFETCH_DISABLED_VALUES = {"0", "false", "off", "no"}
+
+
+def _step_prompt_prefetch_enabled() -> bool:
+    """Kill switch, read per call: VIBE_STEP_PROMPT_PREFETCH=0/false/off/no disables."""
+
+    import os
+
+    return (
+        os.getenv("VIBE_STEP_PROMPT_PREFETCH", "").strip().lower()
+        not in _STEP_PROMPT_PREFETCH_DISABLED_VALUES
+    )
+
+
+def _prefetch_step_prompt(
+    track: str,
+    state: engine.SessionState,
+    step: manifest.Step,
+    session_id: str | None,
+) -> None:
+    """Start (never join) the next step's prompt generation; returns immediately.
+
+    Best-effort: every skip and failure is logged at INFO with tag names only and
+    leaves the read path exactly as it is without a prefetch.
+    """
+
+    if not session_id or not _step_prompt_prefetch_enabled():
+        return
+    current = engine.next_step(track, state)
+    if not isinstance(current, manifest.Step) or current.sectionTag != step.sectionTag:
+        logger.info("MCP step-prompt prefetch skipped after %s: not the current step", step.sectionTag)
+        return
+    after = copy.deepcopy(state)
+    after.completed_gates.append(step.sectionTag)
+    nxt = engine.next_step(track, after)
+    if _needs_use_case(after) or not isinstance(nxt, manifest.Step):
+        logger.info("MCP step-prompt prefetch skipped after %s: no next step", step.sectionTag)
+        return
+    if step.produces and step.produces in nxt.consumes:
+        logger.info(
+            "MCP step-prompt prefetch skipped for %s: consumes %s output",
+            nxt.sectionTag,
+            step.sectionTag,
+        )
+        return
+    if any(key not in state.captured_outputs for key in nxt.consumes):
+        logger.info("MCP step-prompt prefetch skipped for %s: inputs not captured", nxt.sectionTag)
+        return
+    # At most one prefetch in flight per session: any unresolved generation for this
+    # session (a prefetch or a read past its budget) holds the next one back.
+    with _STEP_PROMPT_LOCK:
+        busy = any(
+            key[0] == session_id and not future.done()
+            for key, future in _STEP_PROMPT_INFLIGHT.items()
+        )
+    if busy:
+        logger.info("MCP step-prompt prefetch skipped for %s: generation in flight", nxt.sectionTag)
+        return
+
+    def _run() -> None:
+        try:
+            # Exactly the inputs _step_payload(nxt) assembles after N completes, so
+            # the cache key matches the later read.
+            previous_outputs = engine.resolve_previous_outputs(nxt, after)
+            industry = after.session_parameters.get("industry", DEFAULT_INDUSTRY)
+            use_case = after.session_parameters.get("use_case", _default_use_case(track))
+            assembled = assembler.get_section_input_content(
+                industry=industry,
+                use_case=use_case,
+                section_tag=nxt.sectionTag,
+                previous_outputs=previous_outputs,
+                session_id=session_id,
+                coding_assistant_override=DEFAULT_CODING_ASSISTANT,
+            )
+            input_text = assembled.get("input") or ""
+            if assembled.get("bypass_llm") or not input_text:
+                logger.info("MCP step-prompt prefetch skipped for %s: no LLM render", nxt.sectionTag)
+                return
+            cache_key = (
+                session_id,
+                nxt.sectionTag,
+                hashlib.sha256(input_text.encode("utf-8")).hexdigest(),
+            )
+            if cache_key in _STEP_PROMPT_CACHE:
+                logger.info("MCP step-prompt prefetch hit for %s: already cached", nxt.sectionTag)
+                return
+            logger.info("MCP step-prompt prefetch started for %s", nxt.sectionTag)
+            _generate_step_prompt(
+                industry=industry,
+                use_case=use_case,
+                section_tag=nxt.sectionTag,
+                assembled=assembled,
+                previous_outputs=previous_outputs,
+                session_id=session_id,
+            )
+        except Exception:  # noqa: BLE001 — best-effort; the later read renders as today
+            logger.info("MCP step-prompt prefetch failed for %s", nxt.sectionTag, exc_info=True)
+
+    # Copied context so the OBO auth ContextVar reaches the generation, as in
+    # _run_async_blocking. A daemon, so it never blocks interpreter shutdown.
+    ctx = contextvars.copy_context()
+    threading.Thread(target=lambda: ctx.run(_run), name="step-prompt-prefetch", daemon=True).start()
+
+
 # Repo the workshop clones from. Kept in lockstep with the genie-code variant in
 # frontend `src/components/SetUpProjectStep.tsx` (REPO_URL / the three genie-*
 # commands / genieVerifyPrompt) — the web UI and the MCP path must run the SAME
@@ -1224,6 +1335,12 @@ def _step_payload(
             }
         except Exception:  # noqa: BLE001 — enrichment is advisory, never fatal
             pass
+    # Start the next step's generation without waiting on it (plan
+    # 2026-10-15-step-prompt-prefetch); a no-op when the switch is off.
+    try:
+        _prefetch_step_prompt(track, state, step, session_id)
+    except Exception:  # noqa: BLE001 — prefetch is advisory, never fatal
+        logger.info("MCP step-prompt prefetch failed after %s", step.sectionTag, exc_info=True)
     return payload
 
 

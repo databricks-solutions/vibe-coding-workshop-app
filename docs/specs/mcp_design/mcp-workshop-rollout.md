@@ -169,6 +169,14 @@ Before any `/mcp` deploy (plan §1.3 / generic §4 / D4 §2):
   Each coaching call holds a worker thread (`asyncio.to_thread`, `mcp_server.py:368`) for up to the
   budget, so on every deployment a burst of slow calls larger than the 32-worker pool
   (`executor.py:25`) queues other MCP tool calls (not the event loop).
+- **Step-prompt prefetch** → human-signed default on (D-160). `VIBE_STEP_PROMPT_PREFETCH` (read
+  per call; unset = on; `0`/`false`/`off`/`no` = the pre-prefetch behaviour) lets
+  `_step_payload` start the next step's generation through the same cache key, single-flight,
+  90 s budget and negative cache (plan 2026-10-15-step-prompt-prefetch). Known side effect:
+  `prd_generation` generations bunch at session start more than before, because they start when
+  `project_setup` becomes current; a room that starts together sends them at the same moment.
+  Live check after deploy: ~20 genie-accelerator sessions started within 10 s, reporting each
+  prefetch's completion time and the `vibe_complete_step(project_setup)` latency (report only).
 - **Destructive data operations** → never automatic. The deploy tables step is additive by default and a
   destructive reseed needs a double opt-in (#109, D-35); the release deploy guard denies a tables
   reseed whose `db/` diff adds non-additive SQL ("destructive operations are human-only", D-50).
@@ -186,6 +194,8 @@ Before any `/mcp` deploy (plan §1.3 / generic §4 / D4 §2):
 - **Code revert** — `deploy.sh --code-only` to the prior build; Lakebase state is compatible
   because writes are additive and dual-keyed (D6 §5).
 - **Content revert** — re-sync the prior `sections/*.md` and `--tables-only`.
+- **Step-prompt prefetch off** — set `VIBE_STEP_PROMPT_PREFETCH` to `"false"` in `app.yaml` and
+  redeploy; no code change. Step prompts then render on `vibe_complete_step` as before.
 
 ---
 

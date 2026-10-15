@@ -305,6 +305,31 @@ When assembling a step:
 as `consumes: [<producesKey>]` on the tag-keyed step. The parity test (§9) must include a chaining
 equivalence check for the genie track.
 
+### 6.1 Step-prompt prefetch (MCP read path)
+
+On MCP, `vibe_complete_step` returns the next step's prompt, rendered through the app FMAPI and
+cached per `(session_id, section_tag, sha256(assembled input))` (`mcp_server.py`,
+`_generate_step_prompt`). To hide that render, `_step_payload(N)` prefetches N+1 when N is the
+session's current step and N+1's assembled input is already final:
+
+1. N+1 is the step `next_step` returns once N is complete (never N+2), and the use case is resolved.
+2. N+1 consumes nothing N produces (`N.produces ∉ N+1.consumes`).
+3. Every key in N+1's `consumes` is already in `captured_outputs`.
+4. N+1 is not `bypass_llm` and has a non-empty assembled input.
+5. No generation for the session is unresolved (at most one prefetch in flight per session).
+
+Under these conditions §6 gives N+1 the same `previous_outputs` before and after N completes, so the
+prefetch assembles the same input and lands under the same cache key the later read uses. The
+prefetch runs `_generate_step_prompt` unchanged on a daemon thread: same single-flight Future,
+90 s budget and negative cache; the current response never waits on it. A complete that arrives
+mid-generation joins the in-flight Future; a failed prefetch leaves the negative entry, so the
+complete serves the template as after any failure. Qualifying slow steps: `prd_generation` (after
+`project_setup`) and `iterate_enhance`; `skill_define_strategy` and `skill_create_skillmd` consume
+the previous step's output and never qualify. `VIBE_STEP_PROMPT_PREFETCH` (read per call; unset =
+on; `0`/`false`/`off`/`no` = off) disables it. The prefetch only warms the in-process cache, so I3
+holds: a restart or another replica renders on complete, as before. The web UI does not use this
+path.
+
 ---
 
 ## 7. Assembler contract (reuse — behavior-identical)
