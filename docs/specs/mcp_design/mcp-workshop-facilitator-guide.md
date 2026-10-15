@@ -56,6 +56,19 @@ Then start: on the Genie Accelerator say "Start the Genie Accelerator"; on any o
 - Answer the occasional in-band question in chat (§6). Silence accepts the recommended default —
   the track never blocks (except the one Step-9 stop).
 
+**Genie Accelerator with the Genie Ontology on.** The optional ontology chapter comes straight after
+the AI/BI Dashboard and before any Lakebase or app step (R7, D-137): … 12 Optimize Loop,
+13 AI/BI Dashboard, **14 Model the Domain + Subdomains, 15 Author Pages, 16 Write the Routing
+Page**, 17 Choose What to Activate, … 24 Deploy & Validate, 25 Iterate & Enhance, 26 Redeploy &
+Test, 27 Workspace Clean Up (27 steps; 31 with the Lakehouse on). With the ontology off nothing
+changes (24 steps).
+
+**In-flight sessions (side effect of the move).** Progress is strict order (D-78). A learner who
+turned the ontology on and has already started Activation now gets **Model the Domain** as their
+next step: completed Activation steps stay done (no work is lost, no migration), and the remaining
+Activation steps unlock once the three ontology steps are done or skipped. Expect this on sessions
+started before the change; tell learners it is intended.
+
 ---
 
 ## 4. Dual-surface projector setup (facilitator)

@@ -281,6 +281,16 @@ USE_CASE_REQUIRES_GATE_OVERRIDES: dict[str, str] = {
     "prd_generation": "use_case_selection",
 }
 
+# Genie-accelerator-only ``requiresGate`` override (genie-default-ontology, R7).
+# The genie-ontology section now sits between genie-agent and genie-activate, so
+# chaining over declaration order would gate iterate_enhance on
+# activation_deploy_validate. Keeping its authored gate on ontology_routing leaves
+# every gate as before: with ontology off, _rewire_gates still points it at
+# gagent_optimize; strict order (D-78) still puts Activation before it.
+GENIE_REQUIRES_GATE_OVERRIDES: dict[str, str] = {
+    "iterate_enhance": "ontology_routing",
+}
+
 def _ts_string(value: str) -> str:
     return ast.literal_eval(f"'{value}'")
 
@@ -487,6 +497,8 @@ def _metadata(
     # tracks) must NOT be stamped elsewhere or outline_order would drop it by
     # default with no matching flag definition.
     if track_id == "genie-accelerator":
+        if step.section_tag in GENIE_REQUIRES_GATE_OVERRIDES:
+            data["requiresGate"] = GENIE_REQUIRES_GATE_OVERRIDES[step.section_tag]
         if step.section_tag in ontology_tags:
             data["flag"] = GENIE_ONTOLOGY_FLAG
         elif step.section_tag in lakehouse_tags:

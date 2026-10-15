@@ -3637,13 +3637,69 @@
           ]
         },
         {
+          "id": "genie-ontology",
+          "chapter": "AI and Agents",
+          "title": "Genie Ontology",
+          "why": "Model the Discover domain, pages, and routing (Genie One)",
+          "steps": [
+            {
+              "order": 18,
+              "sectionTag": "ontology_domain",
+              "title": "Model the Domain + Subdomains",
+              "why": null,
+              "gate": null,
+              "requiresGate": "gagent_optimize",
+              "consumes": [],
+              "produces": null,
+              "execution": "hybrid",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": "includeGenieOntology"
+            },
+            {
+              "order": 19,
+              "sectionTag": "ontology_pages",
+              "title": "Author Pages",
+              "why": null,
+              "gate": null,
+              "requiresGate": "ontology_domain",
+              "consumes": [],
+              "produces": null,
+              "execution": "ui-driven",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": "includeGenieOntology"
+            },
+            {
+              "order": 20,
+              "sectionTag": "ontology_routing",
+              "title": "Write the Routing Page",
+              "why": null,
+              "gate": null,
+              "requiresGate": "ontology_pages",
+              "consumes": [],
+              "produces": null,
+              "execution": "ui-driven",
+              "surfaces": [
+                "ui",
+                "mcp"
+              ],
+              "flag": "includeGenieOntology"
+            }
+          ]
+        },
+        {
           "id": "genie-activate",
           "chapter": "Activation",
           "title": "Activate",
           "why": "Plan activation, then sync to Lakebase and stand up an app",
           "steps": [
             {
-              "order": 18,
+              "order": 21,
               "sectionTag": "gaccel_activation",
               "title": "Choose What to Activate",
               "why": null,
@@ -3662,7 +3718,7 @@
               "flag": null
             },
             {
-              "order": 19,
+              "order": 22,
               "sectionTag": "activation_table_design",
               "title": "Design & Provision Synced Tables",
               "why": null,
@@ -3683,7 +3739,7 @@
               "flag": null
             },
             {
-              "order": 20,
+              "order": 23,
               "sectionTag": "activation_reverse_sync",
               "title": "Create Synced Tables",
               "why": null,
@@ -3699,7 +3755,7 @@
               "flag": null
             },
             {
-              "order": 21,
+              "order": 24,
               "sectionTag": "activation_app_design",
               "title": "Design Analytics App",
               "why": null,
@@ -3718,7 +3774,7 @@
               "flag": null
             },
             {
-              "order": 22,
+              "order": 25,
               "sectionTag": "activation_build_wire",
               "title": "Build Analytics App",
               "why": null,
@@ -3736,7 +3792,7 @@
               "flag": null
             },
             {
-              "order": 23,
+              "order": 26,
               "sectionTag": "activation_wire_lakebase",
               "title": "Wire to Lakebase",
               "why": null,
@@ -3752,7 +3808,7 @@
               "flag": null
             },
             {
-              "order": 24,
+              "order": 27,
               "sectionTag": "activation_wire_genie",
               "title": "Wire Genie",
               "why": null,
@@ -3770,7 +3826,7 @@
               "flag": null
             },
             {
-              "order": 25,
+              "order": 28,
               "sectionTag": "activation_deploy_validate",
               "title": "Deploy & Validate",
               "why": null,
@@ -3784,62 +3840,6 @@
                 "mcp"
               ],
               "flag": null
-            }
-          ]
-        },
-        {
-          "id": "genie-ontology",
-          "chapter": "AI and Agents",
-          "title": "Genie Ontology",
-          "why": "Model the Discover domain, pages, and routing (Genie One)",
-          "steps": [
-            {
-              "order": 26,
-              "sectionTag": "ontology_domain",
-              "title": "Model the Domain + Subdomains",
-              "why": null,
-              "gate": null,
-              "requiresGate": "gagent_optimize",
-              "consumes": [],
-              "produces": null,
-              "execution": "hybrid",
-              "surfaces": [
-                "ui",
-                "mcp"
-              ],
-              "flag": "includeGenieOntology"
-            },
-            {
-              "order": 27,
-              "sectionTag": "ontology_pages",
-              "title": "Author Pages",
-              "why": null,
-              "gate": null,
-              "requiresGate": "ontology_domain",
-              "consumes": [],
-              "produces": null,
-              "execution": "ui-driven",
-              "surfaces": [
-                "ui",
-                "mcp"
-              ],
-              "flag": "includeGenieOntology"
-            },
-            {
-              "order": 28,
-              "sectionTag": "ontology_routing",
-              "title": "Write the Routing Page",
-              "why": null,
-              "gate": null,
-              "requiresGate": "ontology_pages",
-              "consumes": [],
-              "produces": null,
-              "execution": "ui-driven",
-              "surfaces": [
-                "ui",
-                "mcp"
-              ],
-              "flag": "includeGenieOntology"
             }
           ]
         },

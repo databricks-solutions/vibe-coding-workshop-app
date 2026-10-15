@@ -247,6 +247,20 @@ Algorithm:
    - else `locked` if `requiresGate` is set and not in `completed_gates`;
    - `skipped` only if explicitly recorded skipped (legacy `skippedSteps`).
 
+**Genie Accelerator: where the ontology steps sit (R7, D-137).** The `genie-ontology` section is
+declared between `genie-agent` and `genie-activate` in `workflowSections.ts` (declaration order is
+the only order source; `generate_manifest.py` reads it, `_rewire_gates` never reorders). With
+`includeGenieOntology=true` the outline reads … 12 Optimize Loop, 13 AI/BI Dashboard,
+14 Model the Domain + Subdomains, 15 Author Pages, 16 Write the Routing Page, 17 Choose What to
+Activate, … 24 Deploy & Validate, 25 Iterate & Enhance, 26 Redeploy & Test, 27 Workspace Clean Up.
+No gate moved: `ontology_domain` and `gaccel_activation` both gate on `gagent_optimize`, and strict
+order (D-78) alone makes `ontology_domain` current first; `iterate_enhance` keeps its authored gate
+`ontology_routing` (`GENIE_REQUIRES_GATE_OVERRIDES`), so with the ontology off it is still rewired
+to `gagent_optimize` and every ontology-off outline is unchanged. In-flight side effect: a session
+with the ontology on that already completed some Activation steps gets `ontology_domain` as its
+current step; its completed gates stay done, later Activation steps stay `locked` and refuse
+completion (`STEP_LOCKED`) until the ontology steps are done or skipped. No migration.
+
 ### 5.2 `next_step(session) → Step | {done:true}`
 The first step in `outline` with `status == "current"`. If none remain, `{done:true}`. Port of
 `getNextIncompleteStep` (`App.tsx:441`).
