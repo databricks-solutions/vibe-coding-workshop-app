@@ -185,4 +185,14 @@ export interface BlueprintChoice {
   commitSha: string;
   areas: string[];
   kpis: string[];
+  evidence?: {
+    fit: 'strong' | 'partial' | 'weak' | 'fallback' | 'unknown';
+    matchedQuestions: number;
+    totalQuestions: number;
+    coveredNeeds: number;
+    totalNeeds: number;
+    gapCount: number;
+    tableCount: number;
+    modelQuality: number | null;
+  };
 }

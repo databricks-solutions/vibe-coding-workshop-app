@@ -67,8 +67,12 @@ export const toSlug = (s: string) =>
   s.trim().toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
 
 function blueprintLines(b: BlueprintChoice): string[] {
+  const e = b.evidence;
+  const evidence = e
+    ? ` | fit: ${e.fit} | coverage: ${e.matchedQuestions}/${e.totalQuestions} | needs: ${e.coveredNeeds}/${e.totalNeeds} | gaps: ${e.gapCount} | tables: ${e.tableCount} | quality: ${e.modelQuality ?? 'unknown'}`
+    : '';
   return [
-    `${BLUEPRINT_HEADER} ${b.slug} ${b.version} ${b.flavour} @${b.commitSha.slice(0, 7)} | catalog: ${b.catalog} | areas: ${b.areas.join(', ') || 'all'} | KPIs: ${b.kpis.join(', ') || 'none picked'}`,
+    `${BLUEPRINT_HEADER} ${b.slug} ${b.version} ${b.flavour} @${b.commitSha.slice(0, 7)} | catalog: ${b.catalog} | areas: ${b.areas.join(', ') || 'all'} | KPIs: ${b.kpis.join(', ') || 'none picked'}${evidence}`,
     `Source: ${BLUEPRINT_REPO} (data-models/${b.slug}/${b.version}/${b.flavour}, commit ${b.commitSha}). Tables, foreign keys, sensitive-field tags and metric views come from that model; the rows are generated sample data.`,
   ];
 }
@@ -159,6 +163,14 @@ function parseBlueprint(line: string, label: string): BlueprintChoice | null {
   const [, slug, version, flavour, sha, rest] = m;
   const field = (name: string) => rest.match(new RegExp(`${name}:\\s*([^|]*)`))?.[1].trim() ?? '';
   const list = (v: string) => (v && v !== 'all' && v !== 'none picked' ? v.split(',').map(s => s.trim()).filter(Boolean) : []);
+  const ratio = (name: string) => {
+    const m = field(name).match(/^(\d+)\/(\d+)$/);
+    return m ? [Number(m[1]), Number(m[2])] as const : [0, 0] as const;
+  };
+  const [matchedQuestions, totalQuestions] = ratio('coverage');
+  const [coveredNeeds, totalNeeds] = ratio('needs');
+  const fit = field('fit');
+  const quality = Number(field('quality'));
   return {
     slug,
     version,
@@ -168,6 +180,18 @@ function parseBlueprint(line: string, label: string): BlueprintChoice | null {
     catalog: field('catalog') || `idm_${slug}_${flavour}`,
     areas: list(field('areas')),
     kpis: list(field('KPIs')),
+    ...(fit ? {
+      evidence: {
+        fit: (['strong', 'partial', 'weak', 'fallback'].includes(fit) ? fit : 'unknown') as NonNullable<BlueprintChoice['evidence']>['fit'],
+        matchedQuestions,
+        totalQuestions,
+        coveredNeeds,
+        totalNeeds,
+        gapCount: Number(field('gaps')) || 0,
+        tableCount: Number(field('tables')) || 0,
+        modelQuality: Number.isFinite(quality) ? quality : null,
+      },
+    } : {}),
   };
 }
 
