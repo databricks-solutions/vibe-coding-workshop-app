@@ -116,6 +116,24 @@ one that never stored the ontology opens with it off.
   after this release reaches main they reopen in Technical one time. One click on **Insights**
   stores the view and they reopen there from then on. Tell learners it is expected.
 
+**Step prompts are prefetched by default (D-160).** Over MCP, when a step becomes current the
+app starts generating the next step's prompt in the background, so `vibe_complete_step` returns it
+without the usual 20-47 s wait. It does this only when the next step needs nothing the current
+step produces (for example `prd_generation` after `project_setup`, or `iterate_enhance`); the
+skills steps that build on the previous step's output still render on complete, as before. The web
+UI is unchanged.
+
+- **Switch:** `VIBE_STEP_PROMPT_PREFETCH` in `app.yaml` (template default `"true"`), read per
+  call. Unset means on. Set it to `"false"` (or `0`/`off`/`no`) and redeploy to get exactly the
+  old behaviour back.
+- **Cost:** a prefetch for a step the learner never reaches is a wasted generation.
+- **Start-of-session burst:** `prd_generation` starts generating as soon as `project_setup`
+  becomes current, that is at session start. When a room starts together, more `prd_generation`
+  generations run at the same moment than before (before, they spread over each learner's
+  `project_setup` completion). The serving endpoint showed about 20 concurrent requests before
+  queueing; a queued generation still falls back to the template after 90 s. If a large room
+  sees slow or template prompts on `prd_generation`, set the switch to `"false"`.
+
 ---
 
 ## 4. Dual-surface projector setup (facilitator)

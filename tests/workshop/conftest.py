@@ -39,6 +39,10 @@ def _offline_step_prompt_fmapi(monkeypatch):
 
     monkeypatch.setattr(routes, "collect_step_prompt_via_stream", _fake_collect)
     monkeypatch.setattr(routes, "generate_prompt_content_with_llm", _fake_generate)
+    # The step-prompt prefetch (default ON in production) starts a background
+    # assemble + generate that would outlive these stubs and reach the real
+    # assembler/DB. Off here; test_step_prompt_prefetch.py turns it on with its own stubs.
+    monkeypatch.setenv("VIBE_STEP_PROMPT_PREFETCH", "0")
     mcp_server._STEP_PROMPT_CACHE.clear()
     with mcp_server._STEP_PROMPT_LOCK:
         mcp_server._STEP_PROMPT_NEGATIVE.clear()
