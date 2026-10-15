@@ -269,10 +269,16 @@ The first step in `outline` with `status == "current"`. If none remain, `{done:t
 `true` iff `step.requiresGate` is `null` **or** `step.requiresGate ∈ completed_gates`. A step is
 **locked** until its predecessor gate passes.
 
-### 5.4 `complete_step(session, sectionTag, captured_output) → {completed_gates, next}`
+### 5.4 `complete_step(session, sectionTag, captured_output, learner_confirmed=False) → {completed_gates, next}`
 1. Guard: `can_start` for the step must hold; else return an error result (no state change).
-2. Guard: if `execution == "ui-driven"`, do **not** accept an agent completion silently — record a
-   coached/handoff marker, not a false gate (roadmap §10.4). (D1 §11 defines the interaction.)
+2. Guard: if `execution == "ui-driven"`, the agent cannot complete the step alone (R1, D-137). The
+   step is coached: the learner does it in the Databricks UI. Without `learner_confirmed=True` the
+   engine returns `UI_DRIVEN_STEP` and changes nothing. With it, the gate is appended and
+   `captured_outputs["ui_confirmed:<sectionTag>"] = "mcp"` records the confirmation. Over MCP,
+   `vibe_complete_step` passes `learner_confirmed=True` only after the learner answered the step's
+   non-skippable publish confirm `published` through `vibe_submit_answer`; `not_yet` keeps the step
+   open. Web completion paths never call `complete_step` (they write `completed_gates` through the
+   session save), so the default changes nothing there.
 3. Append `sectionTag` to `completed_gates` (idempotent — set semantics).
 4. If `produces` is non-null, write `captured_outputs[produces] = captured_output`.
 5. Return the updated gate list and `next_step(session)`.
@@ -401,7 +407,8 @@ CI fails on any drift. This is the single guardrail that lets the UI and engine 
 - **I2.** No second assembler; extraction is behavior-identical (§7, §9.4).
 - **I3.** Stateless: correctness never depends on in-process state (§4.2).
 - **I4.** Missing upstream outputs degrade to placeholders, never raise (§6).
-- **I5.** `ui-driven` steps are coached, never auto-gated (§5.4 step 2).
+- **I5.** `ui-driven` steps are coached, never auto-gated: the gate needs an explicit learner
+  confirmation (§5.4 step 2).
 - **I6.** Manifest is generated, never hand-edited; parity test green (§3.3, §9).
 - **F1.** Unknown `sectionTag` → error result, no state mutation.
 - **F2.** `complete_step` on a locked step → error result, no state mutation.

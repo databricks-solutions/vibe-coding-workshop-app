@@ -54,7 +54,8 @@ Then start: on the Genie Accelerator say "Start the Genie Accelerator"; on any o
 - To resume later, use **"Continue where I left off"** — it calls `vibe_next_step` from your saved
   progress (state is server-side, keyed to you).
 - Answer the occasional in-band question in chat (§6). Silence accepts the recommended default —
-  the track never blocks (except the one Step-9 stop).
+  the track never blocks, except the Step-9 benchmark confirm and the two ontology publish
+  confirms (§6).
 
 **Genie Accelerator with the Genie Ontology on.** The optional ontology chapter comes straight after
 the AI/BI Dashboard and before any Lakebase or app step (R7, D-137): … 12 Optimize Loop,
@@ -68,6 +69,26 @@ turned the ontology on and has already started Activation now gets **Model the D
 next step: completed Activation steps stay done (no work is lost, no migration), and the remaining
 Activation steps unlock once the three ontology steps are done or skipped. Expect this on sessions
 started before the change; tell learners it is intended.
+
+**Genie Ontology is on by default for new sessions (R2, R4).** The facilitator switch
+`VIBE_DEFAULT_GENIE_ONTOLOGY` in `app.yaml` (template default `"true"`) turns the ontology on for
+every NEW Genie Accelerator session, over MCP and (with PR 3) in the web UI. It is read per call:
+set it to `"false"` (or `0`/`off`/`no`) and redeploy if your workspace has no Genie One Pages.
+Unset means on. Sessions that already exist keep their own setting; nothing is migrated, and the
+manifest flag default stays off.
+
+- **Beta caveat:** the Genie Ontology steps use Genie One Pages, a Beta feature. Check that the
+  workspace has it before the workshop, or set the switch to `"false"`.
+- **Learner opt-out:** both Genie Accelerator start prompts end with "If your workspace doesn't
+  have Genie One Pages, say skip the ontology". Genie Code then calls `vibe_set_parameters` with
+  `{include_genie_ontology: false}` and the outline drops to 24 steps.
+- **Opting in late:** a learner who turns the ontology on after step 16 gets **Model the Domain**
+  as their current step (strict order); completed steps stay done and the remaining steps follow
+  once the three ontology steps are done.
+- **Author Pages and Write the Routing Page are done in the Databricks UI.** Genie Code coaches the
+  learner there, then asks "Confirm you published the Page in the Databricks UI" (or the routing
+  Page). Only **published** completes the step; **not yet** keeps it open. Genie Code cannot
+  complete these steps on its own.
 
 ---
 
@@ -103,8 +124,10 @@ the chat** and you answer in chat:
   override.
 - **Gates** — approval is implicit: the agent's next action *is* the approval. You won't be blocked
   waiting.
-- **The one hard stop** — the **benchmark step** (`gagent_benchmarks`) requires an explicit
-  confirmation that the benchmark answers are correct before it proceeds. This is by design.
+- **The hard stops** — the **benchmark step** (`gagent_benchmarks`) requires an explicit
+  confirmation that the benchmark answers are correct before it proceeds. With the Genie Ontology
+  on, **Author Pages** and **Write the Routing Page** each require the learner to confirm they
+  published the Page in the Databricks UI. This is by design.
 
 ---
 
@@ -128,7 +151,9 @@ the chat** and you answer in chat:
 - **Mode:** Agent. **Server URL:** `https://<app-url>/mcp`.
 - **Start:** "Start the Genie Accelerator". **Resume:** "Continue where I left off".
 - **Answering:** in chat; silence = accept the recommended default.
-- **Only hard stop:** the benchmark step asks you to confirm.
+- **Hard stops:** the benchmark step asks you to confirm; with the Genie Ontology on, so do Author
+  Pages and Write the Routing Page (confirm you published the Page in the Databricks UI).
+- **No Genie One Pages?** Say "skip the ontology".
 - **Your progress is saved** server-side — switch between Genie Code and the web UI freely.
 
 ---

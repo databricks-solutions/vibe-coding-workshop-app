@@ -141,8 +141,10 @@ patterns; §4.5 is the first-run on-ramp; §4.6 is the Phase 2A coaching layer.
 - **Content source:** the manifest `gate` string + the review-gate contract.
 - **Mechanism:** the gate is satisfied when the agent calls **`vibe_complete_step`** with the
   step's `captured_output` — the *next action is the approval*. The engine records the gate
-  (D3 §5.4). For `execution:"ui-driven"` steps, `complete_step` records a coached/handoff marker,
-  not a false gate (D3 §5.4 step 2). The **Step-9 benchmark** is the one genuine hard-stop (§11).
+  (D3 §5.4). For `execution:"ui-driven"` steps (Author Pages, Write the Routing Page) the agent
+  coaches the learner through the Databricks UI, then asks the step's non-skippable publish
+  confirm; only `published` lets `vibe_complete_step` record the gate (D3 §5.4 step 2). The
+  **Step-9 benchmark** is the one genuine hard-stop (§11).
 
 ### 4.4 Parameter intake
 - **Intent:** collect catalog, schema prefix, `includeGenieOntology`, `includeLakehouse`, Lakebase

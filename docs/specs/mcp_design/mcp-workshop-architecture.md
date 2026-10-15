@@ -290,7 +290,7 @@ on in-process state (roadmap "stateless MCP"). Two concurrent sessions never sha
 |---|---|
 | Client declares no elicitation (always, today) | In-band path (D1) — default, no code branch blocks |
 | Missing upstream `consumes` output | Assembler placeholder (`routes.py:1351`); never raises (D3 §6) |
-| `execution: ui-driven` step | Coached; `complete_step` records a handoff marker, not a false gate (D3 §5.4) |
+| `execution: ui-driven` step | Coached in the Databricks UI; the gate passes only after the learner answers the publish confirm `published`, and records `ui_confirmed:<sectionTag>` (D3 §5.4) |
 | Malformed tool output | `isError` result (D2 §6/§7); never malformed `structuredContent` |
 | `/mcp` reached without auth | 302 by the proxy before the app (D7) |
 | Coaching model error / timeout / no endpoint (`vibe_explain_step` with `focus`) | Static step help, `is_fallback:true` (`coaching.py:3–5`; D5 §11.4); never errors, never blocks (§1.2 / §3.5) |

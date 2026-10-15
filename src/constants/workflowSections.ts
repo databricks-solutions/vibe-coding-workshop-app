@@ -239,10 +239,11 @@ export function getDisabledTagsForLakehouse(
 
 // ---------------------------------------------------------------------------
 // Optional Genie Ontology toggle (Genie Accelerator only).
-// Same shape as the Lakehouse toggle: a single boolean that defaults OFF. The
-// Genie Ontology arc (Model the Domain, Author Pages, Write Routing) is a Beta,
-// mostly-UI-driven block that follows the Activate section (it is an optional
-// domain-scoping refinement layered on after the app is built).
+// Same shape as the Lakehouse toggle: a single boolean. The manifest flag
+// default stays OFF; NEW sessions take the facilitator default
+// (VIBE_DEFAULT_GENIE_ONTOLOGY) instead. The Genie Ontology arc (Model the
+// Domain, Author Pages, Write Routing) is a Beta, mostly-UI-driven block that
+// follows the AI/BI Dashboard and comes before Activation (Lakebase sync, app).
 // Because these three tags cover the entire `genie-ontology` section,
 // disabling them drops the whole section via the engine outline's
 // empty-section filter.
