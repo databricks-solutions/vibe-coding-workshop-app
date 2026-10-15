@@ -176,7 +176,7 @@ function InsightsFlowInner(props: InsightsFlowProps) {
       const linked = sessionId ? ideas.find(i => (i.mode === 'insights' || i.buildTarget === 'insights') && i.sessionId === sessionId) : undefined;
       setIdeaId(linked?.id ?? null);
       setLockSeen(linked?.lockedAt);
-      setStage(linked ? (linked.lockedAt ? (linked.buildStage === 'data' && linked.genieQuestions?.length ? 'data' : 'locked') : 'idea') : 'start');
+      setStage(linked ? (linked.lockedAt ? (linked.buildStage === 'data' ? 'data' : 'locked') : 'idea') : 'start');
       setDataSource(parsed.questions.length ? parsed.dataSource : null);
       setDataLocation(parsed.dataLocation);
       setBlueprint(parsed.blueprint);

@@ -22,7 +22,6 @@ import { GhostButton, Headline, PrimaryButton, SecondaryButton } from '../ui/pri
 import { ActionBar, StepActions } from './ActionBar';
 import { NextUpCard, WelcomeBack } from './NextUpCard';
 import { TrailheadIntro } from './TrailheadIntro';
-import { Scorecard } from '../ui/Scorecard';
 
 const STEP_VIEWS: Record<StepKey, (p: { flow: IdeaFlow }) => ReactNode> = {
   spark: SparkStep, map: MapStep, clarify: ClarifyStep, shape: ShapeStep, questions: QuestionsStep, impact: ImpactStep, brief: BriefStep,
@@ -195,7 +194,7 @@ export function IdeaStepStage({ flow, unavailable, onBackFromFirst, onChangeUseC
                 </PrimaryButton>
               )}
             />
-          ) : <StepActions
+          ) : !(viewStep === 'brief' && approved) && <StepActions
             canApprove={canApprove}
             approveLabel={approved && viewStep === 'brief' ? 'Approved' : config.approveLabel(viewStep, prefilled)}
             onApprove={() => flow.approve(viewStep)}
@@ -218,12 +217,7 @@ export function IdeaStepStage({ flow, unavailable, onBackFromFirst, onChangeUseC
               </GhostButton>
             )}
           />}
-          {!flow.readOnly && viewStep === 'brief' && approved && (
-            <section className="mt-8 rounded-3xl border border-border bg-card p-5 sm:p-6" aria-label="Scorecard">
-              <Scorecard idea={idea} editable autoScore onRaise={flow.setViewStep} />
-            </section>
-          )}
-          {!flow.readOnly && !loading && (
+          {!flow.readOnly && !loading && !(viewStep === 'brief' && approved) && (
             <div className="mt-6"><NextUpCard idea={idea} viewStep={viewStep} onGo={flow.setViewStep} /></div>
           )}
         </motion.div>
