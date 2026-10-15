@@ -1,38 +1,38 @@
 /**
  * LevelSelector Component
  *
- * A tiered 4-column layout for selecting workshop paths. The first three
- * columns are persona-aligned chapters; the fourth column holds role-agnostic
- * specialized tracks (Accelerators). On first open, `end-to-end` is the
- * default level and pre-highlights every chapter button — visually conveying
- * "everything selected" with no extra "Complete Workshop" toggle.
+ * Forward direction opens with the recommended Genie Accelerator card (R5
+ * "Option A"): the default path for every new session, holding the Include
+ * Genie Ontology and Include Lakehouse toggles. Below it, "Choose a different
+ * path" holds a tiered 4-column layout: three persona-aligned chapter columns
+ * and a fourth column of the other role-agnostic Accelerators. It is folded
+ * while Genie Accelerator is selected and open whenever another path is.
+ * Reverse direction has no accelerators, so it shows only the three columns.
  *
  * Path locking: Once a user explicitly selects a level AND completes all foundation
  * steps (1, 2, 3), switching between tracks is disabled. Movement within the same
- * track (e.g. "Databricks Apps" → "+ Lakebase") remains allowed.
+ * track (e.g. "Databricks Apps" → "+ Lakebase") remains allowed. The card follows
+ * the same lock rules and tooltips; a read-only session renders it disabled.
  *
- * Layout:
+ * Layout (forward):
+ * ┌───────────────────────────────────────────────────────────────────────────────────────────┐
+ * │ ★ Recommended for this workshop   [✓ Selected]                                            │
+ * │ Genie Accelerator · [Lakehouse →] Metric View → Genie Agent → Dashboard → [Ontology] →    │
+ * │ Lakebase sync → App · N steps · est. H:MM          [Include Genie Ontology] [Include Lakehouse] │
+ * └───────────────────────────────────────────────────────────────────────────────────────────┘
+ *   (Genie selected: its stage strip  [Lakehouse] → Semantic Layer → AI and Agents → [Ontology] → Activation)
+ * ▸ Choose a different path (Apps · Lakehouse · AI & Agents · other accelerators)
  *    [For App Developers]   [For Data Engineering]   [For Data Science]   (no caption)
  * ┌──────────────────────┬───────────────────────┬────────────────────┬────────────────────────┐
  * │  Apps and Lakebase   │     Lakehouse         │   AI and Agents    │      Accelerators      │
  * │  [Databricks Apps]   │  [Lakehouse]          │  [+ AI and Agents] │  [Agents Acc.]         │
- * │  [+ Lakebase]        │  Bronze/Silver/Gold   │  Genie/Agent/Dash  │  [Genie Acc.]          │
- * │                      │  chips                │  chips             │  [Data Eng. Acc.]      │
- * │                      │                       │                    │  [Skills Acc.]         │
+ * │  [+ Lakebase]        │  Bronze/Silver/Gold   │  Genie/Agent/Dash  │  [Data Eng. Acc.]      │
+ * │                      │  chips                │  chips             │  [Skills Acc.]         │
  * └──────────────────────┴───────────────────────┴────────────────────┴────────────────────────┘
- *
- * Genie Accelerator selected: the three persona columns (and their captions)
- * give way to the "Your Genie Accelerator Path" stage strip; the Accelerators
- * column stays, holding the Lakehouse and Genie Ontology toggles under the
- * Genie Acc. button:
- * ┌────────────────────────────────────────────────────────────────┬────────────────────────┐
- * │  [Lakehouse] → Semantic Layer → AI and Agents → [Ontology] →   │      Accelerators      │
- * │  Activation        ([…] = only when its toggle is on)          │  [Genie Acc.] toggles  │
- * └────────────────────────────────────────────────────────────────┴────────────────────────┘
- */
+ * ([…] = only when its toggle is on) */
 
 import { motion, LayoutGroup } from 'framer-motion';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   WORKSHOP_LEVELS,
   SKILLS_ACCELERATOR_STATUS,
@@ -51,13 +51,16 @@ import {
   type MedallionLayer,
   type ChainContext,
 } from '../constants/workflowSections';
-import { Check, Info, Globe, HardDrive, Brain, Database, Lock, Layers, MessageSquareText, BookOpen, Bot, Code2 } from 'lucide-react';
+import { Check, ChevronDown, Info, Globe, HardDrive, Brain, Database, Lock, Layers, MessageSquareText, BookOpen, Bot, Code2, Star } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { CHAPTER_BLOCKS, genieAcceleratorServices, type ChapterBlock, type ChapterBlockId, type ChipTone } from '../constants/chapterBlocks';
 import { NewBadge } from './NewBadge';
 import { PathDurationBar } from './PathDurationBar';
 import { ServicePopover } from './ServicePopover';
 import { ModuleBox, ModuleChip } from './ModuleBox';
+import { computeBuildTime, formatHM } from '../constants/pathDurations';
+import { useReadOnly } from '../contexts/ReadOnlyContext';
+import { apiClient, FALLBACK_WORKSHOP_DEFAULTS } from '../api/client';
 
 // Reasons a path button can be locked. Drives the tooltip wording so the user
 // always knows *why* a path is unavailable. 'workflow-started' is the default
@@ -272,6 +275,193 @@ export function LevelSelectorContent({
       onIncludeGenieOntologyChange={onIncludeGenieOntologyChange}
       disabledWorkshopLevels={disabledWorkshopLevels}
     />
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Recommended Genie Accelerator card (R5 "Option A")
+//
+// Sits above the persona grid in forward direction: the workshop's default
+// path, selected on every new session. It owns the Genie Accelerator's two
+// toggles (the Accelerators column no longer repeats them). Step count comes
+// from the engine outline for the card's composition, build time from the
+// same computeBuildTime the PathDurationBar uses — nothing is hard-coded.
+// ---------------------------------------------------------------------------
+
+/** The Genie Accelerator chapters in R7 order; unticked options drop out. */
+function genieChapterLine(includeLakehouse: boolean, includeGenieOntology: boolean): string[] {
+  return [
+    ...(includeLakehouse ? ['Lakehouse'] : []),
+    'Metric View',
+    'Genie Agent',
+    'Dashboard',
+    ...(includeGenieOntology ? ['Ontology'] : []),
+    'Lakebase sync',
+    'App',
+  ];
+}
+
+// One engine-outline fetch per composition per page.
+const genieStepCounts = new Map<string, Promise<number | null>>();
+
+/** Step count of the Genie Accelerator outline for this composition; null until known. */
+function useGenieStepCount(includeLakehouse: boolean, includeGenieOntology: boolean): number | null {
+  const key = `${includeLakehouse}|${includeGenieOntology}`;
+  const [counts, setCounts] = useState<Record<string, number | null>>({});
+  useEffect(() => {
+    let cancelled = false;
+    let pending = genieStepCounts.get(key);
+    if (!pending) {
+      pending = apiClient
+        .previewTrackOutline('genie-accelerator', { flags: { includeLakehouse, includeGenieOntology } })
+        .then(resp => resp.outline.length)
+        .catch(err => {
+          console.error('Error fetching the Genie Accelerator outline:', err);
+          genieStepCounts.delete(key);
+          return null;
+        });
+      genieStepCounts.set(key, pending);
+    }
+    pending.then(n => { if (!cancelled) setCounts(prev => ({ ...prev, [key]: n })); });
+    return () => { cancelled = true; };
+  }, [key, includeLakehouse, includeGenieOntology]);
+  return counts[key] ?? null;
+}
+
+/** The facilitator's ontology default (what selecting the card turns on). */
+function useFacilitatorOntologyDefault(): boolean {
+  const [value, setValue] = useState(FALLBACK_WORKSHOP_DEFAULTS.includeGenieOntology);
+  useEffect(() => {
+    let cancelled = false;
+    apiClient.getWorkshopDefaults().then(d => { if (!cancelled) setValue(d.includeGenieOntology); });
+    return () => { cancelled = true; };
+  }, []);
+  return value;
+}
+
+interface GenieRecommendedCardProps {
+  selected: boolean;
+  /** Why the card can't be picked (path lock, use case, assistant); null when it can. */
+  lockState: { reason: LockReason; title?: string; body?: string } | null;
+  readOnly: boolean;
+  includeLakehouse: boolean;
+  includeGenieOntology: boolean;
+  stepCount: number | null;
+  buildMinutes: number;
+  onSelect: () => void;
+  onIncludeLakehouseChange?: (next: boolean) => void;
+  onIncludeGenieOntologyChange?: (next: boolean) => void;
+}
+
+export function GenieRecommendedCard({
+  selected,
+  lockState,
+  readOnly,
+  includeLakehouse,
+  includeGenieOntology,
+  stepCount,
+  buildMinutes,
+  onSelect,
+  onIncludeLakehouseChange,
+  onIncludeGenieOntologyChange,
+}: GenieRecommendedCardProps) {
+  const locked = lockState !== null;
+  const disabled = readOnly || locked;
+  const chapters = genieChapterLine(includeLakehouse, includeGenieOntology);
+  const showToggles = selected && (onIncludeLakehouseChange || onIncludeGenieOntologyChange);
+
+  return (
+    <div
+      data-testid="genie-recommended-card"
+      data-selected={selected ? 'true' : 'false'}
+      className={`relative mb-4 rounded-xl border-2 transition-all duration-200 ${
+        selected
+          ? 'border-teal-500/60 bg-teal-500/[0.08] shadow-md ring-2 ring-teal-500/20'
+          : disabled
+          ? 'border-border/40 bg-card/30 opacity-70'
+          : 'border-teal-500/30 bg-card/50 hover:border-teal-500/50'
+      }`}
+    >
+      <div className={locked ? 'relative group' : undefined}>
+        <button
+          type="button"
+          onClick={() => { if (!selected && !disabled) onSelect(); }}
+          disabled={disabled}
+          aria-pressed={selected}
+          className={`w-full text-left px-4 py-3 rounded-xl ${disabled ? 'cursor-not-allowed' : selected ? 'cursor-default' : 'cursor-pointer'}`}
+        >
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="inline-flex items-center gap-1 text-ui-3xs font-semibold uppercase tracking-wider text-teal-700 dark:text-teal-300">
+              <Star className="w-3 h-3" aria-hidden="true" />
+              Recommended for this workshop
+            </span>
+            {selected && (
+              <span className="inline-flex items-center gap-1 text-ui-3xs font-semibold px-1.5 py-0.5 rounded-full bg-teal-500/15 text-teal-700 dark:text-teal-300 border border-teal-500/30">
+                <Check className="w-3 h-3" aria-hidden="true" />
+                Selected
+              </span>
+            )}
+            {locked && <Lock className="w-3 h-3 text-muted-foreground/60" aria-hidden="true" />}
+          </div>
+          <div className="mt-1.5 flex items-center gap-2">
+            <MessageSquareText className="w-4 h-4 flex-shrink-0 text-teal-600 dark:text-teal-400" />
+            <span className="text-ui-md font-semibold text-foreground">{BUTTON_LABELS['genie-accelerator']}</span>
+            <NewBadge animated={!selected} />
+          </div>
+          <div className="mt-1 text-ui-xs text-muted-foreground" data-testid="genie-chapter-line">
+            {chapters.join(' → ')}
+          </div>
+          <div className="mt-1 text-ui-2xs text-muted-foreground/80" data-testid="genie-card-meta">
+            {stepCount !== null && <span>{stepCount} steps · </span>}
+            <span>est. {formatHM(buildMinutes)} build time</span>
+          </div>
+        </button>
+        {locked && lockState && <LockedTooltip reason={lockState.reason} title={lockState.title} body={lockState.body} />}
+      </div>
+      {showToggles && (
+        <div className="px-4 pb-3 grid gap-1.5 sm:grid-cols-2">
+          {/* Optional Genie Ontology (Discover domain, Pages, routing). ON by default
+              for new sessions (facilitator switch); untick when the workspace has no
+              Genie One Pages. */}
+          {onIncludeGenieOntologyChange && (
+            <label className={`flex items-start gap-2 rounded-lg border border-teal-500/30 bg-teal-500/[0.05] px-2.5 py-2 select-none ${readOnly ? 'cursor-not-allowed opacity-70' : 'cursor-pointer'}`}>
+              <input
+                type="checkbox"
+                checked={includeGenieOntology}
+                disabled={readOnly}
+                onChange={(e) => onIncludeGenieOntologyChange(e.target.checked)}
+                className="mt-0.5 h-3.5 w-3.5 shrink-0 rounded border-border accent-teal-500 cursor-pointer disabled:cursor-not-allowed"
+              />
+              <span className="flex-1">
+                <span className="block text-ui-2xs font-semibold text-foreground">Include Genie Ontology (Beta: needs Genie One Pages)</span>
+                <span className="block text-ui-3xs text-muted-foreground leading-tight mt-0.5">
+                  Model the domain, author Pages, and write the routing page (+25 min). Untick if your workspace doesn't have Genie One Pages.
+                </span>
+              </span>
+            </label>
+          )}
+          {/* Optional Lakehouse (Bronze → Gold). OFF by default: the learner
+              starts from existing / uploaded / synthetic data. */}
+          {onIncludeLakehouseChange && (
+            <label className={`flex items-start gap-2 rounded-lg border border-teal-500/30 bg-teal-500/[0.05] px-2.5 py-2 select-none ${readOnly ? 'cursor-not-allowed opacity-70' : 'cursor-pointer'}`}>
+              <input
+                type="checkbox"
+                checked={includeLakehouse}
+                disabled={readOnly}
+                onChange={(e) => onIncludeLakehouseChange(e.target.checked)}
+                className="mt-0.5 h-3.5 w-3.5 shrink-0 rounded border-border accent-teal-500 cursor-pointer disabled:cursor-not-allowed"
+              />
+              <span className="flex-1">
+                <span className="block text-ui-2xs font-semibold text-foreground">Include Lakehouse</span>
+                <span className="block text-ui-3xs text-muted-foreground leading-tight mt-0.5">
+                  Off by default — start from existing, uploaded, or synthetic data. Turn on to build the Bronze → Gold medallion layers first (+90 min).
+                </span>
+              </span>
+            </label>
+          )}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -584,6 +774,29 @@ function LevelSelectorGrid({
   // like a Lakehouse flow. Block metadata is sourced from CHAPTER_BLOCKS so
   // titles, icons, colours and service chips never drift from the flip card.
   const isGeniePathView = selectedLevel === 'genie-accelerator';
+
+  // Recommended card (forward only). While another path is selected it shows
+  // what picking it gives: Lakehouse off, ontology at the facilitator default.
+  const readOnly = useReadOnly();
+  const facilitatorOntology = useFacilitatorOntologyDefault();
+  const cardLakehouse = isGeniePathView ? includeLakehouse : false;
+  const cardOntology = isGeniePathView ? includeGenieOntology : facilitatorOntology;
+  const genieStepCount = useGenieStepCount(cardLakehouse, cardOntology);
+  const genieBuildMinutes = computeBuildTime({
+    level: 'genie-accelerator',
+    direction: 'forward',
+    aiModules: effectiveAIModules,
+    medallionLayers: effectiveMedallionLayers,
+    completedSteps,
+    includeLakehouse: cardLakehouse,
+    includeGenieOntology: cardOntology,
+  }).total;
+  // "Choose a different path": folded while the Genie card is selected (the
+  // learner can open it), always open while any other path is selected.
+  const [showOtherPaths, setShowOtherPaths] = useState(false);
+  const isForward = direction !== 'reverse';
+  const otherPathsExpanded = !isForward || !isGeniePathView || showOtherPaths;
+
   const geniePathStages: ChapterBlock[] = [];
   if (isGeniePathView) {
     for (const id of GENIE_STRIP_ORDER) {
@@ -696,14 +909,55 @@ function LevelSelectorGrid({
         />
       </div>
 
+      {/* Recommended Genie Accelerator card — forward direction only (the
+          accelerators have no reverse counterpart). */}
+      {isForward && (
+        <GenieRecommendedCard
+          selected={isGeniePathView}
+          lockState={getLockState('genie-accelerator')}
+          readOnly={readOnly}
+          includeLakehouse={cardLakehouse}
+          includeGenieOntology={cardOntology}
+          stepCount={genieStepCount}
+          buildMinutes={genieBuildMinutes}
+          onSelect={() => onLevelChange('genie-accelerator')}
+          onIncludeLakehouseChange={onIncludeLakehouseChange}
+          onIncludeGenieOntologyChange={onIncludeGenieOntologyChange}
+        />
+      )}
+
+      {/* The selected Genie path's stages (click a chip for details). */}
+      {isForward && isGeniePathView && (
+        <LayoutGroup>
+          <div className="flex gap-3 mb-4">{geniePathStrip}</div>
+        </LayoutGroup>
+      )}
+
+      {isForward && (
+        <button
+          type="button"
+          onClick={() => { if (isGeniePathView) setShowOtherPaths(v => !v); }}
+          disabled={!isGeniePathView}
+          aria-expanded={otherPathsExpanded}
+          aria-controls="other-workshop-paths"
+          data-testid="other-paths-toggle"
+          className={`w-full flex items-center gap-2 mb-3 text-left text-ui-sm font-semibold text-foreground ${isGeniePathView ? 'cursor-pointer hover:text-primary' : 'cursor-default'}`}
+        >
+          {isGeniePathView && (
+            <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-200 ${otherPathsExpanded ? 'rotate-180' : ''}`} />
+          )}
+          <span>Choose a different path</span>
+          <span className="text-ui-xs font-normal text-muted-foreground">(Apps · Lakehouse · AI &amp; Agents · other accelerators)</span>
+        </button>
+      )}
+
+      {otherPathsExpanded && (
+      <div id="other-workshop-paths" data-testid="other-paths">
       {/* Persona caption row — subtly aligns each chapter column with the
           target audience. The 4th slot (over Accelerators) is intentionally
           blank so the role-agnostic specialized tracks stay visually distinct.
           In reverse direction, columns reorder (Lakehouse leads), so the
-          persona captions reorder to keep the alignment correct. Hidden for the
-          Genie Accelerator path view — its stage strip carries its own header
-          and the persona captions don't map to its stages. */}
-      {!isGeniePathView && (
+          persona captions reorder to keep the alignment correct. */}
       <div className="flex gap-3 mb-1.5 px-1">
         {(direction === 'reverse'
           ? [COLUMN_PERSONAS[1], COLUMN_PERSONAS[2], COLUMN_PERSONAS[0]]
@@ -720,17 +974,11 @@ function LevelSelectorGrid({
         ))}
         {direction !== 'reverse' && <div className="flex-1" aria-hidden="true" />}
       </div>
-      )}
 
       {/* 4-Column Box Layout */}
       <LayoutGroup>
         <div className="flex gap-3">
           {(() => {
-            // Genie Accelerator: swap the three persona chapter columns for the
-            // Genie path stage strip (Semantic Layer → Genie Agent → …). The
-            // Accelerators column below still renders as the chooser.
-            if (isGeniePathView) return geniePathStrip;
-
             // Build the three persona-aligned chapter columns. Each column
             // renders the same way regardless of direction; only the levels
             // they reference and the column ordering differ.
@@ -824,74 +1072,11 @@ function LevelSelectorGrid({
             reverse counterpart. Showing only 3 columns in reverse avoids
             confusing users with disabled/mismatched options. */}
         {direction !== 'reverse' && (
-        <div className={getBoxClass(isAcceleratorSelected, false, isColumnLocked('accelerator'))}>
+        <div className={getBoxClass(isAcceleratorSelected && !isGeniePathView, false, isColumnLocked('accelerator'))}>
           {columnHeader('accelerator')}
           <div className="space-y-2">
-            {/* Genie Accelerator — primary new guided path */}
-            {(() => {
-              const lockState = getLockState('genie-accelerator');
-              const disabled = lockState !== null;
-              return (
-                <div className={disabled ? 'relative group' : undefined}>
-                  <button
-                    onClick={() => handleLevelClick('genie-accelerator')}
-                    disabled={disabled}
-                    className={getButtonClass('genie-accelerator')}
-                    title={getToggleHint('genie-accelerator')}
-                  >
-                    <div className="flex items-center gap-2.5">
-                      <MessageSquareText className="w-4 h-4 flex-shrink-0" />
-                      <span className="flex-1 text-left">{BUTTON_LABELS['genie-accelerator']}</span>
-                      <NewBadge tone={selectedLevel === 'genie-accelerator' ? 'inverted' : 'emerald'} />
-                      {!disabled && (selectedLevel === 'genie-accelerator' || isHighlighted('genie-accelerator')) && (
-                        <Check className={`w-3.5 h-3.5 flex-shrink-0 ${selectedLevel === 'genie-accelerator' ? '' : 'opacity-60'}`} />
-                      )}
-                    </div>
-                  </button>
-                  {disabled && lockState && <LockedTooltip reason={lockState.reason} title={lockState.title} body={lockState.body} />}
-                  {selectedLevel === 'genie-accelerator' && (onIncludeLakehouseChange || onIncludeGenieOntologyChange) && (
-                    <div className="mt-1.5 ml-4 pl-3 border-l-2 border-teal-500/40 space-y-1.5">
-                      {/* Optional Lakehouse (Bronze → Gold). OFF by default: the learner
-                          starts from existing / uploaded / synthetic data. */}
-                      {onIncludeLakehouseChange && (
-                        <label className="flex items-start gap-2 rounded-lg border border-teal-500/30 bg-teal-500/[0.05] px-2.5 py-2 cursor-pointer select-none">
-                          <input
-                            type="checkbox"
-                            checked={includeLakehouse}
-                            onChange={(e) => onIncludeLakehouseChange(e.target.checked)}
-                            className="mt-0.5 h-3.5 w-3.5 shrink-0 rounded border-border accent-teal-500 cursor-pointer"
-                          />
-                          <span className="flex-1">
-                            <span className="block text-ui-2xs font-semibold text-foreground">Include Lakehouse (Bronze → Gold)</span>
-                            <span className="block text-ui-3xs text-muted-foreground leading-tight mt-0.5">
-                              Off by default — start from existing, uploaded, or synthetic data. Turn on to build the medallion layers first (+90 min).
-                            </span>
-                          </span>
-                        </label>
-                      )}
-                      {/* Optional Genie Ontology (Discover domain, Pages, routing). OFF by
-                          default: the Beta ontology arc is skipped unless the learner opts in. */}
-                      {onIncludeGenieOntologyChange && (
-                        <label className="flex items-start gap-2 rounded-lg border border-teal-500/30 bg-teal-500/[0.05] px-2.5 py-2 cursor-pointer select-none">
-                          <input
-                            type="checkbox"
-                            checked={includeGenieOntology}
-                            onChange={(e) => onIncludeGenieOntologyChange(e.target.checked)}
-                            className="mt-0.5 h-3.5 w-3.5 shrink-0 rounded border-border accent-teal-500 cursor-pointer"
-                          />
-                          <span className="flex-1">
-                            <span className="block text-ui-2xs font-semibold text-foreground">Include Genie Ontology (Beta)</span>
-                            <span className="block text-ui-3xs text-muted-foreground leading-tight mt-0.5">
-                              Off by default — skip the Discover ontology arc. Turn on to model the domain, author Pages, and write the routing page (+25 min).
-                            </span>
-                          </span>
-                        </label>
-                      )}
-                    </div>
-                  )}
-                </div>
-              );
-            })()}
+            {/* Genie Accelerator lives in the recommended card above (with its
+                toggles), so this column lists only the other accelerators. */}
 
             {/* Agents Accelerator — beta; works with any sample use case */}
             {(() => {
@@ -993,6 +1178,8 @@ function LevelSelectorGrid({
         )}
         </div>
       </LayoutGroup>
+      </div>
+      )}
     </>
   );
 }

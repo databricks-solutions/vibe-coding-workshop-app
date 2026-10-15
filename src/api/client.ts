@@ -312,6 +312,8 @@ export interface SessionSaveRequest {
   // wiring that populates these from UI state lands in T3b-2b.
   chain_context?: string;
   flags?: Record<string, boolean>;
+  // Which view the session opens in (D-143). Omit to keep the stored value.
+  view?: WorkflowView;
   // Gate write (Phase 3 T5). The COMPLETE gate set (sectionTags for ALL
   // completed/skipped steps, derived from the live step numbers via
   // stepNumbersToGates). Must be complete, never a delta — the backend read path
@@ -432,6 +434,59 @@ export interface UpdateSessionMetadataRequest {
   // Engine composition inputs (Phase 3 T3b-2a) — see SessionSaveRequest above.
   chain_context?: string;
   flags?: Record<string, boolean>;
+  // Which view the session opens in (D-143) — see SessionSaveRequest above.
+  view?: WorkflowView;
+}
+
+/** The view a session opens in, stored as session_parameters.view (D-143). */
+export type WorkflowView = 'technical' | 'insights';
+
+/** New-session defaults from GET /config/workshop-defaults (facilitator switch). */
+export interface WorkshopDefaults {
+  defaultTrack: string;
+  includeGenieOntology: boolean;
+}
+
+/** Used when the defaults can't be fetched: the app.yaml.template values. */
+export const FALLBACK_WORKSHOP_DEFAULTS: WorkshopDefaults = {
+  defaultTrack: 'genie-accelerator',
+  includeGenieOntology: true,
+};
+
+/**
+ * The metadata a brand-new web session persists at creation: the default track,
+ * the ontology default (snake key plus the complete engine `flags`, so a reload
+ * and GET /outline both see it) and view "technical". It never sets
+ * level_explicitly_selected, so path-lock semantics are unchanged; the server
+ * mirrors the ontology value to its other keys.
+ */
+export function newSessionMetadata(
+  sessionId: string,
+  defaults: WorkshopDefaults,
+  flags: Record<string, boolean>,
+  view: WorkflowView = 'technical',
+): UpdateSessionMetadataRequest {
+  return {
+    session_id: sessionId,
+    workshop_level: defaults.defaultTrack,
+    include_genie_ontology: defaults.includeGenieOntology,
+    flags,
+    view,
+  };
+}
+
+/**
+ * A default session the server just created for a first-time user: never saved,
+ * nothing stored in session_parameters, no gates, use case or prompts. It gets
+ * the new-session defaults; any session with stored state hydrates as before.
+ */
+export function isPristineSession(response: SessionLoadResponse): boolean {
+  return !response.is_saved
+    && Object.keys(response.session_parameters ?? {}).length === 0
+    && (response.completed_gates ?? []).length === 0
+    && (response.skipped_gates ?? []).length === 0
+    && !response.use_case
+    && Object.keys(response.step_prompts ?? {}).length === 0;
 }
 
 export interface SessionListItem {
@@ -729,6 +784,7 @@ export interface HackathonResults {
 
 class ApiClient {
   private baseUrl: string;
+  private workshopDefaults?: Promise<WorkshopDefaults>;
 
   constructor(baseUrl: string = API_BASE_URL) {
     this.baseUrl = baseUrl;
@@ -1410,6 +1466,23 @@ class ApiClient {
   /** Get all workshop parameters as a key-value dictionary */
   async getWorkshopParametersDict(): Promise<Record<string, string>> {
     return this.fetch<Record<string, string>>('/config/workshop-parameters-dict');
+  }
+
+  /**
+   * New-session defaults (VIBE_DEFAULT_GENIE_ONTOLOGY). Fetched once per page;
+   * on any failure it logs once and resolves to FALLBACK_WORKSHOP_DEFAULTS.
+   */
+  getWorkshopDefaults(): Promise<WorkshopDefaults> {
+    this.workshopDefaults ??= this.fetch<Partial<WorkshopDefaults>>('/config/workshop-defaults')
+      .then(d => ({
+        defaultTrack: typeof d.defaultTrack === 'string' && d.defaultTrack ? d.defaultTrack : FALLBACK_WORKSHOP_DEFAULTS.defaultTrack,
+        includeGenieOntology: typeof d.includeGenieOntology === 'boolean' ? d.includeGenieOntology : FALLBACK_WORKSHOP_DEFAULTS.includeGenieOntology,
+      }))
+      .catch(err => {
+        console.warn('Could not load workshop defaults; new sessions use Genie Accelerator with Genie Ontology on:', err);
+        return FALLBACK_WORKSHOP_DEFAULTS;
+      });
+    return this.workshopDefaults;
   }
 
   /** Insights add-ons turned on for everyone (INSIGHTS_BUILD_RECIPES). */

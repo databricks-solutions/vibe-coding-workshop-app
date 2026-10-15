@@ -8,17 +8,27 @@ function viewFromUrl(): WorkflowViewMode | null {
   return v === 'insights' || v === 'technical' ? v : null;
 }
 
-/** Sessions started from the Insights view are set up on the Genie path with Genie Code. */
-export function isInsightsSession(workshopLevel?: string | null, codingAssistant?: string | null) {
-  return workshopLevel === 'genie-accelerator' && codingAssistant === 'genie-code';
+/**
+ * Whether a session opens in Insights (D-143): `?view=` wins, then the session's
+ * stored `view` marker; a session with no marker opens in Technical. The track
+ * and coding assistant play no part (every MCP session stores genie-code).
+ */
+export function isInsightsSession(
+  storedView?: string | null,
+  urlView: WorkflowViewMode | null = viewFromUrl(),
+) {
+  if (urlView) return urlView === 'insights';
+  return storedView === 'insights';
 }
 
 /**
  * Presentation preference only; workshop progress always lives in the session.
  * Opening the page starts in Technical unless the link says `?view=`, or the
- * session that loads on open was started in Insights.
+ * session that loads on open stores the Insights marker. `switchMode` is the
+ * learner's own switch: it also hands the new view to `persistView` so the
+ * session's marker follows it.
  */
-export function useWorkflowViewMode() {
+export function useWorkflowViewMode(persistView?: (mode: WorkflowViewMode) => void) {
   const [explicit] = useState(viewFromUrl);
   const decided = useRef(false);
   const [mode, setModeState] = useState<WorkflowViewMode>(explicit ?? 'technical');
@@ -34,6 +44,11 @@ export function useWorkflowViewMode() {
     }
   }, []);
 
+  const switchMode = useCallback((next: WorkflowViewMode) => {
+    setMode(next);
+    persistView?.(next);
+  }, [setMode, persistView]);
+
   /** Called once the first session has loaded; only an Insights session changes the view. */
   const adoptSessionView = useCallback((insights: boolean) => {
     if (decided.current) return;
@@ -41,5 +56,5 @@ export function useWorkflowViewMode() {
     if (!explicit && insights) setModeState('insights');
   }, [explicit]);
 
-  return [mode, setMode, adoptSessionView] as const;
+  return [mode, setMode, adoptSessionView, switchMode] as const;
 }
