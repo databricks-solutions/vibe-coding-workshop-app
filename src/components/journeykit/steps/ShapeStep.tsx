@@ -44,7 +44,7 @@ export function ShapeStep({ flow }: { flow: IdeaFlow }) {
         </p>
         <p className="text-ui-sm text-muted-foreground mt-3">
           {rec ? <>We recommend <span className="text-foreground font-medium">{rec.title}</span>. </> : 'Pick one. '}
-          Every approach comes with Genie, so people can ask their own questions. Tap <span className="text-foreground">See risk</span> for what could sink it.
+          Every approach comes with Genie, so people can ask their own questions. Tap <span className="text-foreground">What to validate</span> to see the key assumption and a simple first test.
           {!readOnly && <span className="hidden md:inline text-muted-foreground/70"> Press 1 to {shapes.length}{rec && !idea.chosenShapeId ? ', or Enter for the recommended one' : ''}.</span>}
         </p>
       </div>
@@ -131,7 +131,7 @@ export function ShapeStep({ flow }: { flow: IdeaFlow }) {
                       )}
                     </div>
                   )}
-                  {footer('See risk')}
+                  {footer('What to validate')}
                 </div>
 
                 <div
@@ -139,12 +139,12 @@ export function ShapeStep({ flow }: { flow: IdeaFlow }) {
                   aria-hidden={!isFlipped}
                   className={`ideate-flip-face ideate-flip-back rounded-2xl border p-5 flex flex-col bg-card ${chosen ? 'border-primary ring-2 ring-primary/30' : 'border-amber-500/30'}`}
                 >
-                  <p className="text-ui-2xs uppercase tracking-wider font-semibold text-amber-500">Riskiest assumption</p>
+                  <p className="text-ui-2xs uppercase tracking-wider font-semibold text-amber-500">Key assumption to validate</p>
                   <p className="text-ui-base text-foreground mt-2 break-words">{s.riskiestAssumption}</p>
                   {s.cheapTest && (
                     <>
                       <p className="flex items-center gap-1 text-ui-2xs uppercase tracking-wider font-semibold text-muted-foreground mt-4">
-                        <FlaskConical className="w-3 h-3" /> Cheapest test
+                        <FlaskConical className="w-3 h-3" /> Simple first test
                       </p>
                       <p className="text-ui-sm text-muted-foreground mt-1 break-words">{s.cheapTest}</p>
                     </>

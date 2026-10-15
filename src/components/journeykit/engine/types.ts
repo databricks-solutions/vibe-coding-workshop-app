@@ -18,7 +18,7 @@ export const STEPS: StepMeta[] = [
   { key: 'spark', label: 'Your idea', hint: 'Did I get your idea right?', minutes: 1 },
   { key: 'map', label: 'Where it fits', hint: 'Where your idea sits in the industry', minutes: 1 },
   { key: 'clarify', label: 'A few questions', hint: 'A few quick questions', minutes: 2 },
-  { key: 'shape', label: 'Pick an approach', hint: 'Three ways to deliver it', minutes: 2 },
+  { key: 'shape', label: 'Pick an approach', hint: 'Three ways to bring it to life', minutes: 2 },
   { key: 'impact', label: "What it's worth", hint: 'What could it be worth?', optional: true, minutes: 2 },
   { key: 'brief', label: 'Your brief', hint: 'Your decision-ready one-pager', minutes: 2 },
 ];
