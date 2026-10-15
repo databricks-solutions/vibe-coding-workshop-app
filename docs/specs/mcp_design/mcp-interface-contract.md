@@ -156,6 +156,13 @@ description-as-prompt, `inputSchema`, `outputSchema`, annotations, errors, and t
   other `industry`/`use_case` gives `INVALID_PARAMETER`; a catalogue that answers without that pair
   gives `USE_CASE_UNAVAILABLE`; both create nothing. A catalogue outage starts anyway on the same
   lock (label "Build a Data Contract Skill") and logs one WARNING.
+- **New-session defaults (genie-default-ontology, R2/D-143):** a NEW session (no stored record)
+  stores `session_parameters.view = "technical"`. On `track="genie-accelerator"` it also takes
+  Genie Ontology from the facilitator switch `VIBE_DEFAULT_GENIE_ONTOLOGY` (read per call; unset =
+  on; `0`/`false`/`off`/`no` = off) and writes that value to all three keys:
+  `include_genie_ontology`, `flags.includeGenieOntology` and top-level `includeGenieOntology`.
+  On, the outline has 27 steps with the ontology at 14-16; off, 24. A resumed session is untouched:
+  it keeps its stored keys and step count. The manifest flag default stays `false`.
 - **Maps to:** D3 `outline(track, session)`; REST twin `GET /api/track/{track}/outline` (roadmap §9).
 
 ### 3.2 `vibe_get_step`
@@ -225,7 +232,7 @@ description-as-prompt, `inputSchema`, `outputSchema`, annotations, errors, and t
 > **Description (as-prompt):** "Record that the current step's gate passed and store its captured
 > output (the gate = this call); advances the walk. Call ONLY after the learner triggered and ran the
 > step in a fresh turn — never chain it yourself. If its `interaction` has a `post` check, ask it via
-> `vibe_submit_answer` first. Not for `execution:ui-driven` steps. Args: `session_id`,
+> `vibe_submit_answer` first. A `ui-driven` step needs its confirm `published`. Args: `session_id`,
 > `sectionTag`, `captured_output`."
 
 ```jsonc
@@ -252,8 +259,18 @@ description-as-prompt, `inputSchema`, `outputSchema`, annotations, errors, and t
 - **Annotations:** `readOnly:false, destructive:false, idempotent:true, openWorld:true`
   (re-completing a done gate is a no-op success, D3 F3).
 - **Errors:** `INVALID_SESSION`, `UNKNOWN_STEP`, `STEP_LOCKED` (D3 F2), `UI_DRIVEN_STEP`
-  (coached, not agent-completable, D3 §5.4 / D1 §4.3), `GATE_REQUIRED` (Step-9 hard-stop: the
-  confirm answer must be recorded first, D1 §11).
+  (the engine's answer for a ui-driven step without a learner confirmation, D3 §5.4 / D1 §4.3),
+  `GATE_REQUIRED` (Step-9 hard-stop: the confirm answer must be recorded first, D1 §11; and a
+  ui-driven step whose publish confirm is not answered `published`).
+- **ui-driven steps (R1):** `ontology_pages` and `ontology_routing` are done in the Databricks UI.
+  Each carries a non-skippable `decision` confirm (`<tag>.publish_confirmation`, options
+  `published` / `not_yet`, recommended `published`); their `post` checks stay. Until the learner
+  answers `published` via `vibe_submit_answer`, the call returns `GATE_REQUIRED` with a short
+  message: coach the learner through the Databricks UI, then ask the confirm. `not_yet` keeps the
+  step open. A locked or already-done step still answers `STEP_LOCKED` / idempotent success. After
+  `published` the tool calls `engine.complete_step(…, learner_confirmed=True)`, which records the
+  gate and `captured_outputs["ui_confirmed:<sectionTag>"] = "mcp"`. The step payload's
+  `instruction` carries one sentence saying the same.
 - **Maps to:** D3 `complete_step(...)`; REST twin — (not built).
 
 ### 3.5 `vibe_submit_answer`  *(net-new, from D1 §5)*
@@ -289,11 +306,11 @@ description-as-prompt, `inputSchema`, `outputSchema`, annotations, errors, and t
   log (D6). No REST twin required (UI has its own controls).
 
 ### 3.6 `vibe_set_parameters`
-> **Description (as-prompt):** "Set/update session parameters, feature flags, and the use-case lock.
-> Selection: pass `use_case_source` (curated/custom) with `industry`, `use_case`, `use_case_label`;
-> custom also needs `use_case_description` (session-local). For a PRD-grade custom brief pass
-> `mode="draft_custom"` (+`use_case_hints`), then confirm by resending `use_case_description`. Args:
-> `session_id`, `params`, `mode`."
+> **Description (as-prompt):** "Set/update session parameters, flags (`include_genie_ontology`:
+> bool), and the use-case lock. Selection: pass `use_case_source` (curated/custom) with `industry`,
+> `use_case`, `use_case_label`; custom also needs `use_case_description`. For a PRD-grade custom
+> brief pass `mode="draft_custom"` (+`use_case_hints`), then confirm by resending
+> `use_case_description`. Args: `session_id`, `params`, `mode`."
 
 ```jsonc
 "inputSchema": {
@@ -306,7 +323,8 @@ description-as-prompt, `inputSchema`, `outputSchema`, annotations, errors, and t
       "properties": {
         "catalog":              { "type": "string" },
         "schema_prefix":        { "type": "string" },
-        "includeGenieOntology": { "type": "boolean" },
+        "include_genie_ontology": { "type": "boolean", "description": "Genie Ontology on/off; mirrored to all three keys. Wins over the other two." },
+        "includeGenieOntology": { "type": "boolean", "description": "Top-level camelCase key; also an ontology write, mirrored to all three keys (lowest precedence)." },
         "includeLakehouse":     { "type": "boolean" },
         "lakebase_instance":    { "type": "string" }
       },
@@ -329,6 +347,17 @@ description-as-prompt, `inputSchema`, `outputSchema`, annotations, errors, and t
 - **Skills-accelerator lock (D-115):** on a session that resolves to skills-accelerator (build_skill
   locked), a `use_case` other than `build_skill`, an `industry` other than `sample`, or
   `use_case_source="custom"` gives `INVALID_PARAMETER` and persists nothing; other keys are unaffected.
+- **Genie Ontology (R4, D-149):** `include_genie_ontology` must be a boolean (else
+  `INVALID_PARAMETER`). When a call sets any of the three keys (`include_genie_ontology`,
+  `flags.includeGenieOntology`, top-level `includeGenieOntology`), the same value is written to all
+  three, so a stale top-level key can no longer override it (D-153). If one call carries several
+  and they disagree, the precedence is `include_genie_ontology` > `flags.includeGenieOntology` >
+  top-level `includeGenieOntology`, and the disagreement is logged at INFO (the booleans only). This is the learner's opt-out ("skip the ontology" →
+  `{include_genie_ontology: false}`). Opting in after step 16 makes Model the Domain the current
+  step (strict order, D-78); completed gates stay done.
+- **Reserved keys:** `skipped_gates`, `skippedSteps`, `custom_draft_ready`,
+  `custom_drafted_description`, and any key starting `ui_confirmed:` (the R1 learner-confirm marker
+  only `engine.complete_step` writes) give `INVALID_PARAMETER` and persist nothing.
 - **Maps to:** D3 §4 session_parameters + the outline flag filter (D3 §5.1); reuses
   `/api/session/{id}/parameters` (`GET` `src/backend/api/routes.py:4433`, `PUT`
   `src/backend/api/routes.py:4520`) + `lakehouse-params`.
@@ -490,7 +519,7 @@ declares `ttlMs` + `cacheScope ∈ {global, session}`.
 | `vibe://track/{track}/overview` | Chapter/section narrative from `pathDescriptions.ts` + manifest `why` (D3 §3) | `global` | `3600000` (1 h) |
 | `vibe://session/{session_id}/state` | `{ outline: OutlineItem[], completed_gates: string[], captured_output_keys: string[] }` — the live walk + gate ledger, mirroring `.vibecoding-state.md` | `session` | `0` (no-cache; always fresh, stateless) |
 | `vibe://style/vibecoding` | The `.vibecoding-state.md` gate-ledger convention + Tier-G READ/RECORD bookends (`../genie-accelerator-prompt-standardization.md`) | `global` | `86400000` (24 h) |
-| `vibe://guide/getting-started` | **Self-documenting help** — how the workshop works (answer in chat, silence = recommended default, the one hard stop, mirror in the web UI) + the troubleshooting table (20-tool budget, stateless, the 307). The in-product source the agent reads to help a learner **without** a human or D10 (self-serve invariant, D1 §1a). | `global` | `86400000` (24 h) |
+| `vibe://guide/getting-started` | **Self-documenting help** — how the workshop works (answer in chat, silence = recommended default, the hard stops: the benchmark confirm and, with the Genie Ontology on, the Author Pages and Write the Routing Page publish confirms, mirror in the web UI) + the troubleshooting table (20-tool budget, stateless, the 307). The in-product source the agent reads to help a learner **without** a human or D10 (self-serve invariant, D1 §1a). | `global` | `86400000` (24 h) |
 
 Notes:
 - **`outline` is a resource, not a tool** (moved from the roadmap's `vibe_track_outline`) — it is
@@ -508,9 +537,10 @@ and are how learners *find* the server.
 
 | Prompt name | Arguments | Resolves to (messages) |
 |---|---|---|
-| `Start the Genie Accelerator` | `use_case?`, `industry?` | Instructs the agent to deliver the **first-run orientation** (D1 §4.5), then call `vibe_start_track {track:"genie-accelerator", …}` then `vibe_get_step`, present `prompt` verbatim, and narrate. |
+| `Start the Genie Accelerator` | `use_case?`, `industry?` | Instructs the agent to deliver the **first-run orientation** (D1 §4.5), then call `vibe_start_track {track:"genie-accelerator", …}` then `vibe_get_step`, present `prompt` verbatim, and narrate. Ends with the ontology opt-out: "If your workspace doesn't have Genie One Pages, say skip the ontology" (`vibe_set_parameters {include_genie_ontology: false}`). |
+| `Start a workshop track` | `track?`, `use_case?`, `industry?` | The same on any track; on `genie-accelerator` it ends with the same opt-out sentence. |
 | `Continue where I left off` | — | Instructs the agent to call `vibe_next_step` and resume, reading `vibe://session/{session_id}/state` for context. **Skips** orientation. |
-| `How does this workshop work?` | — | Self-serve orientation on demand: instructs the agent to read `vibe://guide/getting-started` and explain how to answer, how gates work, the one hard stop, and how to mirror in the web UI (D1 §1a). Costs nothing against the tool budget. |
+| `How does this workshop work?` | — | Self-serve orientation on demand: instructs the agent to read `vibe://guide/getting-started` and explain how to answer, how gates work, the hard stops (the benchmark confirm and the two ontology publish confirms), and how to mirror in the web UI (D1 §1a). Costs nothing against the tool budget. |
 
 Each prompt's resolved message MUST restate the **verbatim-first** rendering contract (D1 §6) so the
 agent presents the prompt body before narrating.
@@ -533,7 +563,7 @@ error (generic §5.5). Shape:
 | `UNKNOWN_STEP` | `sectionTag` not in track | `get_step`, `complete_step`, `explain_step` | D3 F1 |
 | `STEP_LOCKED` | prerequisite gate not met | `get_step`, `complete_step` | D3 F2 |
 | `UI_DRIVEN_STEP` | step is coached, not agent-completable | `complete_step` | D3 §5.4 / D1 §4.3 |
-| `GATE_REQUIRED` | Step-9 confirm answer not yet recorded | `complete_step` | D1 §11 |
+| `GATE_REQUIRED` | Step-9 confirm answer not yet recorded, or a ui-driven step's publish confirm not answered `published` | `complete_step` | D1 §11 / D3 §5.4 |
 | `UNKNOWN_INTERACTION` | `interaction_id` not on the current step | `submit_answer` | D1 §6 |
 | `INVALID_PARAM` | unknown/invalid parameter (strict mode) | `set_parameters` | D3 §4 |
 | `USE_CASE_UNAVAILABLE` | skills-accelerator start, but the catalogue has no sample/build_skill | `start_track` | D-115, D-120 |
@@ -620,6 +650,22 @@ so the total stays **7** — still far under the shared ~20-tool ceiling.
 | `vibe_submit_answer` | (writes interaction log) | §4.1/§4.2 + §11 | — (UI-native) |
 | `vibe_set_parameters` | session_parameters + outline filter | §4.4 | `PUT /api/session/{session_id}/parameters` |
 | `vibe_explain_step` | payload + assembler; with `focus`, the `services/coaching.py` model call | D1 §4.6 (adaptive coaching) | — (MCP-only) |
+
+### 10.1 Web session fields and the workshop-defaults route (genie-default-ontology PR 2)
+- **`GET /api/config/workshop-defaults`** → `{"defaultTrack": "genie-accelerator",
+  "includeGenieOntology": <VIBE_DEFAULT_GENIE_ONTOLOGY>}` (next to `/api/config/insights-recipes`;
+  the switch is read per call, unset = `true`; `app.yaml.template` sets `"true"`). The web UI reads
+  it for new sessions (PR 3).
+- **`view`** on `POST /api/session/save` and `POST /api/session/update-metadata`:
+  `"technical"` | `"insights"`, persisted as `session_parameters.view` (D-143). Omitted or `null`
+  leaves the stored value untouched (preserve-on-omit, like the gate fields); any other value is a
+  422.
+- **Ontology mirroring (D-149):** when either request sets `include_genie_ontology` or
+  `flags.includeGenieOntology`, the server writes the same value to `include_genie_ontology`,
+  `flags.includeGenieOntology` and top-level `includeGenieOntology`. A request without `flags`
+  merges the nested key into the stored `flags` object; a request with `flags` replaces it as
+  before. On disagreement the snake key wins (INFO log, the two booleans only). Same rule as
+  `vibe_set_parameters` and `vibe_start_track`.
 
 ---
 

@@ -73,6 +73,17 @@ Canonical read for the outline = the engine (`_flags_for`): top-level `includeGe
 6. Docs: the new order in D3 and the facilitator guide (with the R7 in-flight side effect).
 - Trunk exceptions: `src/constants/workflowSections.ts` (order), `scripts/generate_manifest.py` (only if needed; expected unchanged), `src/backend/workshop/manifest.json` (regenerated). Reversal: revert the PR and regenerate.
 
+## PR 2 dispatch notes (r2.3, written after PR 1 merged as #146 at 4b871c9; D-152)
+- Base for PR 2: integration @ 4b871c9. Floor: 1998 passed / 0 failed (canonical + 2 root tests, as gated on #146).
+- Carry-over from the #146 review (nonblocking): `src/constants/workflowSections.ts:241-246` comment says the ontology arc "follows the Activate section" and is "layered on after the app is built"; rewrite it to the R7 position and say that the manifest flag default stays OFF while NEW sessions take the facilitator default (VIBE_DEFAULT_GENIE_ONTOLOGY) from PR 2/PR 3. Comment-only: no section, step, flag or gate change; manifest.json must regenerate byte-identical.
+- PR 2 includes everything in 'PR 2' below plus r2.1/r2.2: the `view` field (preserve-on-omit, Literal technical|insights, else 422) on SessionSaveRequest/SessionUpdateMetadataRequest; vibe_start_track writes view "technical" on new sessions; three-key server-side ontology mirroring on both web models and in vibe_start_track / vibe_set_parameters (snake wins on disagreement, INFO log); tampers X4-X7 and X13-X15.
+- Decision log: append D-150..D-152 verbatim from FORGE decisions.md after D-149.
+
+### PR 2 fix-up r1 (D-153, after #147 review)
+- `vibe_set_parameters`: a top-level `includeGenieOntology` is an ontology write too; mirror it to all three keys. Precedence when one call carries several: snake `include_genie_ontology` > `flags.includeGenieOntology` > top-level `includeGenieOntology`; disagreement logged at INFO with only the booleans. Test: a call with only top-level `includeGenieOntology=false` on an ontology-on session → all three keys false, engine outline 24, UI-hydrated value false. Tamper X16: drop the top-level case → that test FAIL.
+- Docs: `mcp-workshop-interactivity.md:147,168` and `mcp-interface-contract.md:522,543` name the benchmark plus the two ontology publish confirms (match mcp_server.py ORIENTATION_PREAMBLE :63, GETTING_STARTED_GUIDE :108, how_workshop_works :2685); `mcp-interface-contract.md:327` documents the mirror for all three keys.
+- Decision log: also append D-153 verbatim after D-152.
+
 ## PR 2 — engine + MCP. Trunk exceptions: `src/backend/workshop/engine.py`, `src/backend/mcp_server.py`, `src/backend/api/routes.py` (the config route, plus the r2.1 `view` field and the top-level `includeGenieOntology` mirror on the session save/update models)
 1. R1 learner-confirmed ui-driven completion:
    - interactions.json: non-skippable `decision` confirm on ontology_pages and ontology_routing ("Confirm you published the Page in the Databricks UI" / routing equivalent; options published / not_yet; recommended published), with coaching text. Keep existing `post` checks.

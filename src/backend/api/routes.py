@@ -3525,6 +3525,21 @@ async def get_insights_recipes() -> Dict[str, List[str]]:
     return {"enabled": [p for p in INSIGHTS_ADD_ONS if p in parts]}
 
 
+_GENIE_ONTOLOGY_OFF_VALUES = {"0", "false", "off", "no"}
+
+
+def default_genie_ontology() -> bool:
+    """Facilitator switch, read per call: VIBE_DEFAULT_GENIE_ONTOLOGY=0/false/off/no turns
+    Genie Ontology off for NEW genie-accelerator sessions; unset means on."""
+    return os.getenv("VIBE_DEFAULT_GENIE_ONTOLOGY", "").strip().lower() not in _GENIE_ONTOLOGY_OFF_VALUES
+
+
+@router.get("/config/workshop-defaults")
+async def get_workshop_defaults() -> Dict[str, Any]:
+    """New-session defaults: the Genie Accelerator track, with ontology from the facilitator switch."""
+    return {"defaultTrack": "genie-accelerator", "includeGenieOntology": default_genie_ontology()}
+
+
 @router.get("/config/section-tags")
 async def get_section_tags() -> List[Dict[str, str]]:
     """
@@ -5157,6 +5172,51 @@ from src.backend.workshop.gate_merge import _merge_app_gates  # noqa: E402,F401 
 
 
 # Session Pydantic Models
+def _genie_ontology_mirror(
+    include_genie_ontology: Optional[bool], flags: Optional[Dict[str, bool]]
+) -> tuple[Dict[str, Any], Optional[Dict[str, bool]]]:
+    """Mirror an ontology write over all three keys (D-149).
+
+    The UI hydrates from ``include_genie_ontology``; the engine reads top-level
+    ``includeGenieOntology`` over ``flags.includeGenieOntology``. When a request sets
+    the snake key or the nested flag, all three get the same value; the snake key
+    wins a disagreement. Returns the top-level patch and, when the request carries
+    no ``flags`` object, the nested patch to merge into the stored ``flags``.
+    """
+    nested = flags.get("includeGenieOntology") if flags else None
+    if include_genie_ontology is None and nested is None:
+        return {}, None
+    value = include_genie_ontology if include_genie_ontology is not None else nested
+    if include_genie_ontology is not None and nested is not None and nested != include_genie_ontology:
+        logger.info(
+            "[Session API] Genie Ontology keys disagree: include_genie_ontology=%s flags.includeGenieOntology=%s",
+            include_genie_ontology,
+            nested,
+        )
+    patch: Dict[str, Any] = {"include_genie_ontology": value, "includeGenieOntology": value}
+    if flags is not None:
+        patch["flags"] = {**flags, "includeGenieOntology": value}
+        return patch, None
+    return patch, {"includeGenieOntology": value}
+
+
+def _session_param_update_sql(schema: str, merge_flags: bool) -> str:
+    """The session_parameters patch; ``merge_flags`` also merges a nested patch into
+    the stored ``flags`` object (the second parameter) instead of replacing it."""
+    flags_merge = (
+        " || jsonb_build_object('flags', CASE WHEN jsonb_typeof(session_parameters->'flags') = 'object'"
+        " THEN session_parameters->'flags' ELSE '{}'::jsonb END || %s::jsonb)"
+        if merge_flags
+        else ""
+    )
+    return f"""
+                    UPDATE {schema}.sessions
+                    SET session_parameters = COALESCE(session_parameters, '{{}}'::jsonb) || %s::jsonb{flags_merge},
+                        updated_at = CURRENT_TIMESTAMP
+                    WHERE session_id = %s
+                """
+
+
 class SessionSaveRequest(BaseModel):
     """Request to save a session"""
     session_id: str = Field(..., description="Session ID")
@@ -5180,6 +5240,9 @@ class SessionSaveRequest(BaseModel):
     # existing snake_case direction/include_* keys stay for other consumers.
     chain_context: Optional[str] = Field(None, description="Additive-chain context: app | lakehouse | reverse (persisted as session_parameters.chainContext)")
     flags: Optional[Dict[str, bool]] = Field(None, description="Engine composition flags (e.g. includeLakehouse, ai.genie, medallion.bronze) persisted under session_parameters.flags")
+    # Workflow view marker (D-143): None leaves the stored value untouched, like the
+    # gate fields; anything but technical/insights is a 422.
+    view: Optional[Literal["technical", "insights"]] = Field(None, description="Workflow view marker: technical or insights (persisted as session_parameters.view)")
     # Gate write (Phase 3 T5). The SPA writes the COMPLETE App-derived gate set
     # (sectionTags for ALL completed/skipped steps). The legacy numeric progress
     # fields were retired in R4a (writes stopped); a legacy tab may still POST
@@ -5528,15 +5591,21 @@ async def save_session_endpoint(request_body: SessionSaveRequest, request: Reque
             _save_param_patch["chainContext"] = request_body.chain_context
         if request_body.flags is not None:
             _save_param_patch["flags"] = request_body.flags
+        if request_body.view is not None:
+            _save_param_patch["view"] = request_body.view
+        _ontology_patch, _flags_patch = _genie_ontology_mirror(
+            request_body.include_genie_ontology, request_body.flags
+        )
+        _save_param_patch.update(_ontology_patch)
         if success and _save_param_patch:
             try:
-                schema = get_schema()
-                execute_insert(f"""
-                    UPDATE {schema}.sessions
-                    SET session_parameters = COALESCE(session_parameters, '{{}}'::jsonb) || %s::jsonb,
-                        updated_at = CURRENT_TIMESTAMP
-                    WHERE session_id = %s
-                """, (json.dumps(_save_param_patch), request_body.session_id))
+                _sql_params = [json.dumps(_save_param_patch)]
+                if _flags_patch is not None:
+                    _sql_params.append(json.dumps(_flags_patch))
+                execute_insert(
+                    _session_param_update_sql(get_schema(), _flags_patch is not None),
+                    (*_sql_params, request_body.session_id),
+                )
             except Exception as e:
                 logger.warning(f"[Session API] Failed to persist session params: {e}")
         
@@ -5839,6 +5908,9 @@ class SessionUpdateMetadataRequest(BaseModel):
     # the UI's climb / reverse / AI+medallion / genie-opt-in state.
     chain_context: Optional[str] = Field(None, description="Additive-chain context: app | lakehouse | reverse (persisted as session_parameters.chainContext)")
     flags: Optional[Dict[str, bool]] = Field(None, description="Engine composition flags (e.g. includeLakehouse, ai.genie, medallion.bronze) persisted under session_parameters.flags")
+    # Workflow view marker (D-143): None leaves the stored value untouched, like the
+    # gate fields; anything but technical/insights is a 422.
+    view: Optional[Literal["technical", "insights"]] = Field(None, description="Workflow view marker: technical or insights (persisted as session_parameters.view)")
 
 
 @router.post("/session/update-metadata")
@@ -5927,6 +5999,12 @@ async def update_session_metadata_endpoint(request_body: SessionUpdateMetadataRe
             _session_param_patch['chainContext'] = request_body.chain_context
         if request_body.flags is not None:
             _session_param_patch['flags'] = request_body.flags
+        if request_body.view is not None:
+            _session_param_patch['view'] = request_body.view
+        _ontology_patch, _flags_patch = _genie_ontology_mirror(
+            request_body.include_genie_ontology, request_body.flags
+        )
+        _session_param_patch.update(_ontology_patch)
 
         # Derive user_schema_prefix from email + use case name (or source schema for accelerator)
         # Triggered when use case is selected, custom label is edited, or workshop_level changes
@@ -5968,14 +6046,11 @@ async def update_session_metadata_endpoint(request_body: SessionUpdateMetadataRe
         if _session_param_patch:
             try:
                 import json as _json
-                schema = get_schema()
-                merge_sql = f"""
-                    UPDATE {schema}.sessions
-                    SET session_parameters = COALESCE(session_parameters, '{{}}'::jsonb) || %s::jsonb,
-                        updated_at = CURRENT_TIMESTAMP
-                    WHERE session_id = %s
-                """
-                execute_insert(merge_sql, (_json.dumps(_session_param_patch), request_body.session_id))
+                _sql_params = [_json.dumps(_session_param_patch)]
+                if _flags_patch is not None:
+                    _sql_params.append(_json.dumps(_flags_patch))
+                merge_sql = _session_param_update_sql(get_schema(), _flags_patch is not None)
+                execute_insert(merge_sql, (*_sql_params, request_body.session_id))
                 logger.info(f"[Session API] Session parameters updated for {request_body.session_id}: {list(_session_param_patch.keys())}")
             except Exception as e:
                 logger.error(f"[Session API] Error saving session parameters: {e}")

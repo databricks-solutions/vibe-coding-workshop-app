@@ -9,7 +9,9 @@ It understands exactly the statements the session write path issues:
 - the unlocked ``load_session`` SELECT (dict rows, via a patched
   ``_dict_cursor``) -> a dict;
 - the ``_session_upsert`` INSERT ... ON CONFLICT -> COALESCE-applied to the row;
-- the ``session_parameters || %s::jsonb`` patch -> shallow-merged.
+- the ``session_parameters || %s::jsonb`` patch -> shallow-merged; with the
+  ``|| jsonb_build_object('flags', …)`` tail the second parameter is merged
+  into the stored ``flags`` object.
 
 ``interleave`` models a concurrent writer (an MCP gate write) landing during the
 App's read-modify-write. A real ``FOR UPDATE`` makes that writer wait for the
@@ -146,7 +148,15 @@ class FakeCursor:
             patch = json.loads(params[0])
             db.param_patches.append(patch)
             if db.row is not None:
-                db.row["session_parameters"] = {**(db.row.get("session_parameters") or {}), **patch}
+                stored = db.row.get("session_parameters") or {}
+                merged = {**stored, **patch}
+                if "jsonb_build_object('flags'" in text:
+                    old_flags = stored.get("flags")
+                    merged["flags"] = {
+                        **(old_flags if isinstance(old_flags, dict) else {}),
+                        **json.loads(params[1]),
+                    }
+                db.row["session_parameters"] = merged
             self.rowcount = 1
         else:
             raise AssertionError(f"unexpected SQL in fake: {text[:80]}")

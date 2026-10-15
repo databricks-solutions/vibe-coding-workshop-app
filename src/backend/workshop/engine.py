@@ -66,6 +66,9 @@ class CompleteResult:
 
 MANIFEST = manifest.load_manifest()
 
+# captured_outputs key prefix recording a learner-confirmed ui-driven step (R1).
+UI_CONFIRMED_PREFIX = "ui_confirmed:"
+
 
 def _as_bool(value: object) -> bool:
     if isinstance(value, str):
@@ -269,8 +272,15 @@ def complete_step(
     session: SessionState,
     section_tag: str,
     captured_output: str | None = None,
+    learner_confirmed: bool = False,
 ) -> CompleteResult:
-    """Complete a visible step, mutating only the supplied session state."""
+    """Complete a visible step, mutating only the supplied session state.
+
+    A ui-driven step is done in the Databricks UI, so the agent cannot finish it
+    alone (R1): it completes only when the caller passes ``learner_confirmed``
+    after the learner confirmed it, and records ``ui_confirmed:<sectionTag>``.
+    Web completion paths never pass it and keep ``UI_DRIVEN_STEP``.
+    """
 
     try:
         step = resolve_step(track_id, session, section_tag)
@@ -299,7 +309,9 @@ def complete_step(
         return _result_error(session, "STEP_LOCKED")
 
     if step.execution == "ui-driven":
-        return _result_error(session, "UI_DRIVEN_STEP", coached=True)
+        if not learner_confirmed:
+            return _result_error(session, "UI_DRIVEN_STEP", coached=True)
+        session.captured_outputs[f"{UI_CONFIRMED_PREFIX}{section_tag}"] = "mcp"
 
     session.completed_gates.append(section_tag)
     if step.produces is not None:

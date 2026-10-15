@@ -49,6 +49,12 @@ env:
   # Blank keeps Insights to the Genie space and dashboard; testers can use ?recipes=all.
   - name: INSIGHTS_BUILD_RECIPES
     value: ""
+
+  # Genie Ontology (Beta) for NEW Genie Accelerator sessions, web and MCP; read
+  # per call. Set "false" when the workspace has no Genie One Pages. Stored
+  # sessions keep their own setting.
+  - name: VIBE_DEFAULT_GENIE_ONTOLOGY
+    value: "true"
   
   # ---------------------------------------------------------------------------
   # Lakebase PostgreSQL Configuration
