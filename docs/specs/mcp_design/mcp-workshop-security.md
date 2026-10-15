@@ -142,6 +142,8 @@ An LLM that sees step context could parrot contaminating content, so `vibe_expla
 - **Output side.** The generated text is **leakage-scrubbed before it is returned to the agent and
   before it is stored** in `session_interactions.coaching_shown` (D6 §3a). A scrub failure fails
   **closed to the static fallback** (`is_fallback:true`) — it never ships unscrubbed model text.
+  The scrub rejects a verbatim run of 12 or more words shared with the step `prompt`, or 8 or
+  more shared with a captured output (D-181, `coaching.PROMPT_OVERLAP_WORDS`, `OVERLAP_WORDS`).
 - **Verbatim safety.** Coaching explains but never re-issues the step `prompt`; the authoritative
   instruction stays the assembler's verbatim body (D1 §7).
 

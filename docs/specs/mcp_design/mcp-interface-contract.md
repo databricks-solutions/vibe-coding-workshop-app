@@ -772,6 +772,11 @@ STYLE
 
 > **D12 (2026-10-13):** the last STYLE line was added by D12 coach visuals (`coaching.COACH_SYSTEM`,
 > `src/backend/services/coaching.py`).
+>
+> **D-181 (2026-10-15):** the output scrub enforces the "never restate" rule as a verbatim-overlap
+> check: a run of 12 or more words shared with the step `prompt`, or 8 or more shared with a
+> captured output, rejects the text (`overlap:<label>`; `coaching.PROMPT_OVERLAP_WORDS`,
+> `coaching.OVERLAP_WORDS`). The reject falls back to static help (D7 §6.1).
 
 ### 12.3 Grounding context (the user message)
 
