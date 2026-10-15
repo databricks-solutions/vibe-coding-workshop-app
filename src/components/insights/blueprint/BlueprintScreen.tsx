@@ -193,6 +193,34 @@ function LoadingState({ label }: { label: string }) {
   );
 }
 
+/** Holds back every provisional result until the first AI fit is complete. */
+function MatchingState({ label, questions }: { label: string; questions: number }) {
+  return (
+    <div className="min-h-[28rem] flex flex-col items-center justify-center gap-5 rounded-3xl border border-border bg-card/60 px-6 py-16 text-center">
+      <motion.div
+        animate={{ rotate: 360 }}
+        transition={{ repeat: Infinity, duration: 18, ease: 'linear' }}
+        className="relative"
+      >
+        <MiniConstellation nodes={13} size={88} />
+        <span className="absolute inset-0 flex items-center justify-center">
+          <Loader2 className="w-5 h-5 text-primary animate-spin" />
+        </span>
+      </motion.div>
+      <div className="space-y-2">
+        <p className="text-ui-xl font-semibold text-foreground">Matching your questions to the {label} model</p>
+        <p className="text-ui-sm text-muted-foreground">
+          Reading business areas, table relationships and ready-made KPIs.
+        </p>
+      </div>
+      <span className="inline-flex items-center gap-2 rounded-full border border-primary/20 bg-primary/[0.05] px-3 py-1.5 text-ui-xs font-medium text-primary">
+        <Sparkles className="w-3.5 h-3.5" />
+        Matching {questions} question{questions === 1 ? '' : 's'}
+      </span>
+    </div>
+  );
+}
+
 type AreaNote = { role: 'core' | 'supporting'; why: string; join?: [string, string] };
 
 /** What a late AI match changed in the quick pick, so it can be explained and undone. */
@@ -237,6 +265,12 @@ export function BlueprintScreen({ questions, initialSlug, hint, context, initial
   const quickPick = useMemo(() => (d ? rankAreas(d, [context, ...questions].join('\n'), wordRecipes) : []), [d, context, questions, wordRecipes]);
   const fit = useBlueprintFit(d?.slug ?? null, context, questions, quickPick.map(p => p.name));
   const fitData = fit.data && fit.data.slug === d?.slug ? fit.data : null;
+  // The quick keyword match is only a fallback. On first entry, do not expose it
+  // as a result while the deeper fit is still changing areas, KPIs and answers.
+  const matching = !!d
+    && fit.loading
+    && !fitData
+    && initialChoice?.slug !== d.slug;
   const recipes = useMemo(() => {
     if (!d) return [];
     return questions.map((q, i) => {
@@ -356,9 +390,19 @@ export function BlueprintScreen({ questions, initialSlug, hint, context, initial
     body = <ErrorState message={`The ${label} model could not be loaded from GitHub right now.`} onRetry={() => setAttempt(a => a + 1)} onBack={onBack} />;
   } else if (!d || digest.loading) {
     body = <LoadingState label={label} />;
+  } else if (matching) {
+    body = <MatchingState label={label} questions={questions.length} />;
   } else {
     body = (
       <div className="space-y-6">
+        {fit.failed && initialChoice?.slug !== d.slug && (
+          <FadeIn className="flex items-start gap-3 rounded-2xl border border-amber-500/25 bg-amber-500/[0.05] px-4 py-3">
+            <TriangleAlert className="w-4 h-4 mt-0.5 shrink-0 text-amber-500" />
+            <p className="text-ui-sm text-muted-foreground">
+              The deeper match was unavailable, so this is the model's reliable keyword match. You can adjust any area or KPI.
+            </p>
+          </FadeIn>
+        )}
         <FadeIn delay={0.05}>
           <FitPanel
             digest={d}
@@ -525,7 +569,7 @@ export function BlueprintScreen({ questions, initialSlug, hint, context, initial
 
       {body}
 
-      {d && (
+      {d && !matching && (
         <div className="sticky bottom-4 z-30">
           <div className="rounded-2xl border border-border bg-card/95 backdrop-blur shadow-lg px-4 sm:px-5 py-3 flex flex-col sm:flex-row sm:items-center gap-3">
             <div className="flex-1 min-w-0 space-y-1">
