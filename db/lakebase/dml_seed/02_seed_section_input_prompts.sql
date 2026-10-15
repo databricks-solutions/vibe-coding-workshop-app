@@ -21621,6 +21621,32 @@ You reach this after the agent is live and the app is built: modeling the domain
 '',
 true, 2, true, current_timestamp(), current_timestamp(), current_user());
 
+-- ontology_domain (genie-code fork, v3) — D-144: fork 1030 with the position clause of its "You reach this after …" sentence reworded (R7 moves the ontology chapter to directly after the AI/BI Dashboard, ahead of every Lakebase and app step); nothing else changes. v1 936 and v2 1030 stay; the resolvers serve the highest active version; bypass_LLM = TRUE
+INSERT INTO ${catalog}.${schema}.section_input_prompts
+(input_id, section_tag, coding_assistant, input_template, system_prompt,
+ bypass_llm, version, is_active, inserted_at, updated_at, created_by)
+VALUES
+(1124, 'ontology_domain', 'genie-code',
+'> **Artifact root (client-aware).** Resolve `<ARTIFACT_ROOT>` via `vibecoding-state.resolve_root` (it reads `artifact_root` from `## Environment Capabilities`, or detects the active client, `artifact_root` + `skills_install_root`) and write every artifact under it. On Cursor/Copilot that is your repo root; on Databricks Genie Code it is your user project root `/Workspace/Users/<email>/<repo>` (your user project is a **git clone** of the workshop repo so bundles are recognized; the skill tree is **copied** to `/Workspace/Users/<email>/.assistant/skills/<repo>` for skill loading only) — never the page''s current working directory.
+
+`<STATE_FILE>` = the live state file that `skills/vibecoding-state` resolves by its state-path rule (`<app_root>` → `<agent_app_root>` → `<dp_bundle_root>` → the bootstrap path, creating the canonical file if none exists yet), never `.vibecoding-state.md` relative to the page.
+
+**Model a Genie Ontology domain with 3-5 subdomains in Databricks Discover (UI-preferred, or reuse a pre-created domain) and capture the domain and subdomain IDs.**
+
+You reach this after the agent is live and the AI/BI Dashboard is built, before you choose what to activate (Lakebase sync, app): modeling the domain layers domain-scoping onto the working agent as an extra retrieval lever — you can re-run the optimize loop afterward to capture the gain.
+
+**Genie Code navigation:** open **Catalog → Discover**. Genie Code can look up an existing domain and read its IDs, but domain/subdomain creation is done in the UI. Needs **Manage Discovery** permission. Skill: `data_product_accelerator/skills/semantic-layer/06-genie-discover-ontology`.
+
+**Optional Genie Code assist (fallback only — prefer the UI).** Read `<ARTIFACT_ROOT>/docs/design_prd.md` and `<STATE_FILE>` first — the domain scope follows the PRD. If a domain called `<domain>` already exists, use it and show me its domain and subdomain IDs. Otherwise create a domain called `<domain>` with these subdomains — `<subdomain_1>`, `<subdomain_2>`, `<subdomain_3>` — with a one-sentence scope for {use_case_title}. Either way, show me the domain and subdomain IDs and save them to `<STATE_FILE>`.
+
+**State-lock:** append this step''s Per-Step Log entry, gate result, and the captured domain + subdomain IDs to `<STATE_FILE>`, then re-read to confirm the write landed.
+
+**Gate:** `Domain modeled` — a Discover domain with 3–5 subdomains exists (created in the UI or reused from the workshop); its domain ID + subdomain IDs are recorded in `<STATE_FILE>`; no Pages authored yet.
+
+**➡️ Next step.** Author Pages (Step 12) for your top measures in the Discover Page editor.',
+'',
+true, 3, true, current_timestamp(), current_timestamp(), current_user());
+
 -- ontology_pages (genie-code fork) — Discover UI Page editor (no public API); GC drafts, human publishes; chunk-safe; bypass_LLM = TRUE
 INSERT INTO ${catalog}.${schema}.section_input_prompts
 (input_id, section_tag, coding_assistant, input_template, system_prompt,

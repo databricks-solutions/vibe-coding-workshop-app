@@ -584,7 +584,9 @@ WEB_GOLDEN = {
     "mlflow_scorers_and_judges|default": "419f9acf403477a293e89c7c05e591d05dc5f7f8b574237fd7d27bc002acdadf",
     "mlflow_scorers_and_judges|genie-code": "5eacb5b33686fab740fd504970e9abb8817c2bfad5145dd81c326aa9896f7a6b",
     "ontology_domain|default": "c6d79ad196d4567c668760d2adc7a7630c994799014e2db7053b8979a40ac3c0",
-    "ontology_domain|genie-code": "60e22a22cf4808bccc25e7125d7d5ffa7cb294ef1b011f4843c9124b03fb536d",
+    # D-144 (genie-default-ontology PR 1): the served row is now the v3 1124, so this one
+    # cell changes on purpose (was 60e22a22cf4808bccc25e7125d7d5ffa7cb294ef1b011f4843c9124b03fb536d).
+    "ontology_domain|genie-code": "bce0b25525d6d59f3341bc32f05441d0945b891fa42fecf805eaefd78bac1d43",
     "ontology_pages|default": "1c4c07a81234c43cdd38365f4d1f6b7021749bcf4677e677854d73593d43d521",
     "ontology_pages|genie-code": "0c8537aca2bf3cb342e8b2010a2ca740d85a7c505f6e3c4a4a96eb2099c43f18",
     "ontology_routing|default": "c68f828607a0dda90f9846aba9a5ca42db2538d615351a202d7f8dbc6159f9df",
