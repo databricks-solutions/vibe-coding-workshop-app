@@ -14,6 +14,7 @@ import type { ModelHint } from './blueprint/industryMap';
 import type { BlueprintChoice } from './blueprint/types';
 import { INDUSTRY_IDEAS } from './journey';
 import { openPathComparison } from './pathEvents';
+import { assessPriority } from './priorityAssessment';
 import { ADD_ON_LABEL, addOnAvailable, defaultAddOns, momentsFor, normalizeAddOns, offeredAddOns, requiredAddOns, tagsFor, useTagAvailability, type AddOn } from './recipes';
 import { insightsPhases, type InsightsStage } from './progress';
 import { insightsIndustryFor } from './usecases/useCaseApi';
@@ -261,6 +262,8 @@ function InsightsFlowInner(props: InsightsFlowProps) {
   const toggleAddOn = (a: AddOn) => setAddOnChoice(chosenAddOns.includes(a) ? chosenAddOns.filter(x => x !== a) : [...chosenAddOns, a]);
   const effectiveBuiltAddOns = normalizeAddOns([...required, ...parsed.addOns]);
   const builtMoments = momentsFor(effectiveBuiltAddOns);
+  const priority = idea ? assessPriority(idea, { dataSource, dataLocation, blueprint, addOns: chosenAddOns }) : null;
+  const portfolio = ideas.map(other => other.id === idea?.id && priority ? priority : assessPriority(other));
 
   const phases = (viewStep?: StepKey | null) => insightsPhases({ stage, idea, viewStep, blueprint: usingBlueprint });
   const progress = <JourneyProgress phases={phases()} trailing="then 4 build chapters" />;
@@ -544,6 +547,10 @@ function InsightsFlowInner(props: InsightsFlowProps) {
         onToggleAddOn={toggleAddOn}
         buildChecking={requiredBuildChecking}
         buildBlocker={requiredBuildBlocker}
+        priority={priority}
+        portfolio={portfolio}
+        onImproveValue={editIdea}
+        onImproveFeasibility={() => setStage(usingBlueprint ? 'blueprint' : 'data')}
       />
     );
   }

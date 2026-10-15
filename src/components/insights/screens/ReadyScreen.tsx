@@ -1,15 +1,17 @@
-import { ArrowLeft, ArrowRight, BadgeCheck, Check, LayoutDashboard, Loader2, MessagesSquare, Pencil, ShieldCheck, Sparkles, TriangleAlert } from 'lucide-react';
+import { AppWindow, ArrowLeft, ArrowRight, BadgeCheck, Check, LayoutDashboard, Loader2, MessagesSquare, Pencil, ShieldCheck, Sparkles, TriangleAlert } from 'lucide-react';
 import { CertifiedBadge } from '../../CertifiedBadge';
 import type { ApprovedUseCase } from '../usecases/useCaseApi';
 import { sourceFromChoice } from '../blueprint/links';
 import { MiniConstellation } from '../blueprint/MiniConstellation';
 import { SourcePill } from '../blueprint/SourcePill';
 import type { BlueprintChoice } from '../blueprint/types';
-import { CHAPTERS, MOMENTS, chapterMinutes, formatMinutes, totalMinutes, type Moment } from '../journey';
-import { ADD_ON_LABEL, type AddOn } from '../recipes';
+import { CHAPTERS, MOMENTS, chapterMinutes, formatMinutes, momentsIn, totalMinutes, type Moment } from '../journey';
+import { ADD_ON_LABEL, addOnOf, type AddOn } from '../recipes';
 import type { ReactNode } from 'react';
 import { MAX_NAME_LENGTH } from '../brief';
 import { BusinessCaseButton, FadeIn, GhostButton, Headline, PrimaryButton, SHAPE_KINDS, type ShapeKind } from '../../journeykit';
+import { PriorityMatrix } from '../priority/PriorityMatrix';
+import type { PriorityAssessment } from '../priorityAssessment';
 
 export interface IdeaRecap {
   headline: string;
@@ -41,17 +43,28 @@ interface ReadyScreenProps {
   onToggleAddOn?: (addOn: AddOn) => void;
   buildChecking?: boolean;
   buildBlocker?: string | null;
+  priority?: PriorityAssessment | null;
+  portfolio?: PriorityAssessment[];
+  onImproveValue?: () => void;
+  onImproveFeasibility?: () => void;
 }
 
 export function ReadyScreen({
   progress, idea, onEditIdea, onOpenCase, name, onNameChange, questionCount, dataLabel, blueprint, useCase,
   onBack, onStart, readOnly, moments = MOMENTS, offeredAddOns = [], requiredAddOns = [], addOns = [],
   onToggleAddOn, buildChecking = false, buildBlocker = null,
+  priority = null, portfolio = [], onImproveValue, onImproveFeasibility,
 }: ReadyScreenProps) {
   const genie = { icon: MessagesSquare, title: 'A Genie your team can chat with', body: 'Ask in plain English, get an answer in seconds.' };
   const trusted = { icon: ShieldCheck, title: `Trusted answers to your ${questionCount} question${questionCount === 1 ? '' : 's'}`, body: 'Tested and tuned until they come back right.' };
   const dashboard = { icon: LayoutDashboard, title: 'A dashboard to share', body: 'Built on the same numbers, so charts and Genie always agree.' };
-  const outcomes = idea?.approach?.kind === 'monitor' ? [dashboard, genie, trusted] : [genie, trusted, dashboard];
+  const app = addOns.includes('copilot')
+    ? { icon: AppWindow, title: 'An app your team can work in', body: 'Save decisions, act on recommendations, and ask Genie in the same place.' }
+    : addOns.includes('app_view')
+      ? { icon: AppWindow, title: 'A read-only app for the wider team', body: 'Share trusted data, charts, and Genie in one focused experience.' }
+      : null;
+  const coreOutcomes = idea?.approach?.kind === 'monitor' ? [dashboard, genie, trusted] : [genie, trusted, dashboard];
+  const outcomes = app ? [...coreOutcomes, app] : coreOutcomes;
   const kind = idea?.approach ? SHAPE_KINDS[idea.approach.kind] : null;
 
   return (
@@ -133,7 +146,7 @@ export function ReadyScreen({
         </FadeIn>
       )}
 
-      <FadeIn delay={0.15} className="grid sm:grid-cols-3 gap-3">
+      <FadeIn delay={0.15} className={`grid sm:grid-cols-2 ${outcomes.length > 3 ? 'lg:grid-cols-4' : 'lg:grid-cols-3'} gap-3`}>
         {outcomes.map(o => (
           <div key={o.title} className="rounded-2xl border border-border bg-card p-5">
             <o.icon className="w-5 h-5 text-primary" />
@@ -142,6 +155,17 @@ export function ReadyScreen({
           </div>
         ))}
       </FadeIn>
+
+      {priority && (
+        <FadeIn delay={0.17}>
+          <PriorityMatrix
+            current={priority}
+            portfolio={portfolio}
+            onImproveValue={onImproveValue}
+            onImproveFeasibility={onImproveFeasibility}
+          />
+        </FadeIn>
+      )}
 
       {offeredAddOns.length > 0 && onToggleAddOn && (
         <FadeIn delay={0.18} className="rounded-2xl border border-border bg-card overflow-hidden">
@@ -204,16 +228,34 @@ export function ReadyScreen({
           <p className="text-ui-sm text-muted-foreground">About {formatMinutes(Math.round(totalMinutes(moments) / 15) * 15)} total, pause anytime</p>
         </div>
         <ol>
-          {CHAPTERS.map((c, i) => (
-            <li key={c.id} className="flex items-center gap-4 px-5 py-3.5 border-b border-border/60 last:border-b-0">
-              <span className="flex items-center justify-center w-7 h-7 rounded-full bg-secondary text-ui-sm font-semibold text-foreground shrink-0">{i + 1}</span>
-              <span className="flex-1 min-w-0">
-                <span className="block text-ui-md font-medium text-foreground">{c.title}</span>
-                <span className="block text-ui-sm text-muted-foreground">{c.promise}</span>
-              </span>
-              <span className="text-ui-sm text-muted-foreground tabular-nums">{formatMinutes(chapterMinutes(c.id, moments))}</span>
-            </li>
-          ))}
+          {CHAPTERS.map((c, i) => {
+            const added = momentsIn(c.id, moments).filter(m => !!addOnOf(m));
+            const hasApp = added.some(m => ['copilot', 'app_view'].includes(addOnOf(m) ?? ''));
+            const promise = c.id === 'show' && hasApp ? 'A dashboard and working app your team can use' : c.promise;
+            return (
+              <li key={c.id} className="flex items-start gap-4 px-5 py-3.5 border-b border-border/60 last:border-b-0">
+                <span className="flex items-center justify-center w-7 h-7 rounded-full bg-secondary text-ui-sm font-semibold text-foreground shrink-0">{i + 1}</span>
+                <span className="flex-1 min-w-0">
+                  <span className="block text-ui-md font-medium text-foreground">{c.title}</span>
+                  <span className="block text-ui-sm text-muted-foreground">{promise}</span>
+                  {added.length > 0 && (
+                    <span className="mt-2 flex flex-wrap gap-1.5">
+                      {added.map(m => {
+                        const addOn = addOnOf(m)!;
+                        const required = requiredAddOns.includes(addOn);
+                        return (
+                          <span key={`${addOn}-${m.step}`} className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-ui-xs ${required ? 'border-primary/25 bg-primary/[0.06] text-foreground/85' : 'border-border bg-secondary/40 text-muted-foreground'}`}>
+                            <m.icon className="w-3 h-3 text-primary" /> {m.title}
+                          </span>
+                        );
+                      })}
+                    </span>
+                  )}
+                </span>
+                <span className="text-ui-sm text-muted-foreground tabular-nums">{formatMinutes(chapterMinutes(c.id, moments))}</span>
+              </li>
+            );
+          })}
         </ol>
       </FadeIn>
 
