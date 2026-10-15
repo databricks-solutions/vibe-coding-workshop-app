@@ -72,7 +72,7 @@ started before the change; tell learners it is intended.
 
 **Genie Ontology is on by default for new sessions (R2, R4).** The facilitator switch
 `VIBE_DEFAULT_GENIE_ONTOLOGY` in `app.yaml` (template default `"true"`) turns the ontology on for
-every NEW Genie Accelerator session, over MCP and (with PR 3) in the web UI. It is read per call:
+every NEW Genie Accelerator session, over MCP and in the web UI. It is read per call:
 set it to `"false"` (or `0`/`off`/`no`) and redeploy if your workspace has no Genie One Pages.
 Unset means on. Sessions that already exist keep their own setting; nothing is migrated, and the
 manifest flag default stays off.
@@ -89,6 +89,32 @@ manifest flag default stays off.
   learner there, then asks "Confirm you published the Page in the Databricks UI" (or the routing
   Page). Only **published** completes the step; **not yet** keeps it open. Genie Code cannot
   complete these steps on its own.
+
+**Web UI default (R2, R3, R5).** Every new web session starts on the Genie Accelerator, for every
+coding assistant, with the ontology from the switch above (`GET /config/workshop-defaults`; if that
+call fails the UI uses the template default: Genie Accelerator, ontology on). Picking a coding
+assistant doesn't move a new session off it. Sessions that already exist open as they were saved;
+one that never stored the ontology opens with it off.
+
+- **The recommended card.** In **Workshop Path & Architecture** (Build Forward), a card marked
+  "★ Recommended for this workshop" sits above the other paths. It shows the Genie Accelerator's
+  chapters (Metric View → Genie Agent → Dashboard → Ontology → Lakebase sync → App), its step count
+  and its estimated build time, and reads "✓ Selected" while it is the session's path. Click it to
+  pick it. "Choose a different path (Apps · Lakehouse · AI & Agents · other accelerators)" is
+  folded while the Genie Accelerator is selected and open whenever another path is. The card
+  follows the usual path locks, is disabled on a read-only (shared) session and is hidden in
+  Reverse ETL.
+- **Opt-out toggle.** The card holds **Include Genie Ontology (Beta: needs Genie One Pages)** and
+  **Include Lakehouse**. Untick the ontology if the workspace has no Genie One Pages: the
+  Ontology chapter drops out and the outline goes back to 24 steps. Switching back to the Genie
+  Accelerator from another path turns the ontology back to the switch's default.
+- **Which view a session reopens in (D-143).** Every new session stores its view: Technical when
+  created in the web UI or over MCP, Insights when set up from the Insights view. Switching views
+  with the header toggle stores the new one. A `?view=` link always wins; a session with no stored
+  view opens in Technical.
+- **Accepted cost, once.** Insights sessions started on main's 2.6.0 app have no stored view, so
+  after this release reaches main they reopen in Technical one time. One click on **Insights**
+  stores the view and they reopen there from then on. Tell learners it is expected.
 
 ---
 
@@ -164,3 +190,17 @@ the chat** and you answer in chat:
    against the current Genie Code docs and update §2 screenshots/labels.
 2. **Whether to ship a facilitator "reset session" affordance** for classroom reuse.
 3. **Recommended default app name** (e.g. `mcp-vibe-workshop`) — confirm with the deploy target.
+
+---
+
+## 10. Release note for #130 (integration → main)
+
+Item for the release notes when #130 ships; this file is its home because the forge does not edit
+#130.
+
+- **New sessions start on the Genie Accelerator with the Genie Ontology on** (web UI and MCP, every
+  coding assistant). A recommended card in Workshop Path & Architecture holds the Include Genie
+  Ontology (Beta: needs Genie One Pages) and Include Lakehouse toggles; facilitators set the
+  default with `VIBE_DEFAULT_GENIE_ONTOLOGY`. Existing sessions keep their saved path and settings.
+- **Sessions remember their view.** Insights sessions started on 2.6.0 reopen in Technical once;
+  one click on Insights stores the view from then on.

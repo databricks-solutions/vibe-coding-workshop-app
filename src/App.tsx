@@ -20,7 +20,7 @@ const IdeateApp = lazy(() => import('./components/ideate/IdeateApp'));
 const InsightsFlow = lazy(() => import('./components/insights/InsightsFlow'));
 import { ViewModeToggle } from './components/insights/ViewModeToggle';
 import type { InsightsSetup } from './components/insights/types';
-import { isInsightsSession, useWorkflowViewMode } from './hooks/useWorkflowViewMode';
+import { isInsightsSession, useWorkflowViewMode, type WorkflowViewMode } from './hooks/useWorkflowViewMode';
 import { useIdeas } from './components/journeykit/engine/useIdeas';
 import { buildContext } from './components/journeykit/engine/ideaContext';
 import { buildDescription, buildTargetFor, slugOf, useLinkedIdea } from './components/journeykit/engine/handoff';
@@ -32,9 +32,9 @@ import {
   FeedbackDialog, 
   SessionListDialog 
 } from './components/session';
-import { apiClient } from './api/client';
+import { apiClient, FALLBACK_WORKSHOP_DEFAULTS, isPristineSession, newSessionMetadata, type WorkshopDefaults } from './api/client';
 import { MessageSquare, Plus, Menu, Eye } from 'lucide-react';
-import { orderedSectionsForRead, getCumulativeOverrides, USE_CASE_LEVEL_LOCK, isForwardProgression, getDisabledTagsForAIModules, ALL_AI_MODULES, getDisabledTagsForMedallionLayers, normalizeMedallionLayers, ALL_MEDALLION_LAYERS, getDisabledTagsForLakehouse, getDisabledTagsForGenieOntology, computeChainContext, deriveInitialChainContext, stepNumbersToGates, SECTION_TAG_TO_STEP_NUMBER, type WorkshopLevel, type WorkflowDirection, type AIAgentModule, type MedallionLayer, type ChainContext } from './constants/workflowSections';
+import { orderedSectionsForRead, WORKSHOP_LEVELS, getCumulativeOverrides, USE_CASE_LEVEL_LOCK, isForwardProgression, getDisabledTagsForAIModules, ALL_AI_MODULES, getDisabledTagsForMedallionLayers, normalizeMedallionLayers, ALL_MEDALLION_LAYERS, getDisabledTagsForLakehouse, getDisabledTagsForGenieOntology, computeChainContext, deriveInitialChainContext, stepNumbersToGates, SECTION_TAG_TO_STEP_NUMBER, type WorkshopLevel, type WorkflowDirection, type AIAgentModule, type MedallionLayer, type ChainContext } from './constants/workflowSections';
 import { mergeStatus } from './constants/mergeStatus';
 import type { TrackOutlineItem } from './api/client';
 import { DEFAULT_LEVEL_BY_ASSISTANT, parseCodingAssistantsConfig } from './constants/codingAssistants';
@@ -63,8 +63,6 @@ export default function App() {
 
   // Mobile sidebar overlay state (for screens < md)
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
-
-  const [viewMode, setViewMode, adoptSessionView] = useWorkflowViewMode();
 
   // Determine current page from URL
   const isConfigPage = location.pathname.startsWith('/config') || location.pathname.startsWith('/library');
@@ -230,9 +228,20 @@ export default function App() {
   // so the default Genie path starts from existing / uploaded / synthetic data.
   const [includeLakehouse, setIncludeLakehouse] = useState<boolean>(false);
 
-  // Genie Accelerator only: opt-in Genie Ontology block. Defaults OFF so the
-  // default Genie path skips the Beta Discover ontology arc.
+  // Genie Accelerator only: the optional Genie Ontology block. A new session and
+  // a switch into Genie Accelerator take the facilitator default
+  // (VIBE_DEFAULT_GENIE_ONTOLOGY); a resumed session keeps what it stored
+  // (absent = off), so the initial value stays false until a session loads.
   const [includeGenieOntology, setIncludeGenieOntology] = useState<boolean>(false);
+
+  // New-session defaults from GET /config/workshop-defaults. Until (or unless)
+  // they load, the template defaults apply: Genie Accelerator, ontology ON.
+  const [workshopDefaults, setWorkshopDefaults] = useState<WorkshopDefaults>(FALLBACK_WORKSHOP_DEFAULTS);
+  useEffect(() => {
+    let cancelled = false;
+    apiClient.getWorkshopDefaults().then(d => { if (!cancelled) setWorkshopDefaults(d); });
+    return () => { cancelled = true; };
+  }, []);
 
   // Combined disabled-tag set used everywhere downstream. The backend visibility
   // set is unioned with tags derived from chip state; this keeps both sources of
@@ -314,6 +323,15 @@ export default function App() {
     && sessionOwner !== null
     && sessionOwner !== ''
     && currentUser !== sessionOwner;
+
+  // The learner's own view switch is stored on the session (D-143) so it
+  // reopens in that view; programmatic view changes go through setViewMode.
+  const persistView = useCallback((view: WorkflowViewMode) => {
+    if (readOnly || !sessionId) return;
+    apiClient.updateSessionMetadata({ session_id: sessionId, view })
+      .catch(err => console.error('Error saving the session view:', err));
+  }, [readOnly, sessionId]);
+  const [viewMode, setViewMode, adoptSessionView, switchViewMode] = useWorkflowViewMode(persistView);
 
   // Session loading state - for professional loading overlay
   const [isSessionLoading, setIsSessionLoading] = useState(true);
@@ -499,7 +517,12 @@ export default function App() {
         setIncludeGenieOntology(!!sessionParams.include_genie_ontology);
         setCodingAssistant(sessionParams.coding_assistant || null);
         setCodingAssistantExplicit(!!sessionParams.coding_assistant);
-        adoptSessionView(isInsightsSession(restoredLevel, sessionParams.coding_assistant));
+        adoptSessionView(isInsightsSession(sessionParams.view));
+        // A first-time user's default session has nothing stored yet, so it starts
+        // on the new-session defaults like an explicitly created one.
+        if (isPristineSession(response)) {
+          applyNewSessionDefaults(response.session_id, await apiClient.getWorkshopDefaults(), 'technical');
+        }
 
         // initialExpandedStep is a memo (T3c) derived from the engine outline; it
         // resolves once the outline lands, so no imperative set here.
@@ -521,13 +544,39 @@ export default function App() {
     }
   };
 
+  /**
+   * New-session defaults (R2/R3, every assistant): the facilitator's default
+   * track with its ontology default, persisted at once with the complete engine
+   * flags and the view marker, so a reload and GET /outline match what the UI
+   * shows. Not an explicit level pick: path-lock semantics are unchanged.
+   */
+  const newSessionLevel = (defaults: WorkshopDefaults): WorkshopLevel => (
+    defaults.defaultTrack in WORKSHOP_LEVELS ? defaults.defaultTrack as WorkshopLevel : 'genie-accelerator'
+  );
+  const applyNewSessionDefaults = (id: string, defaults: WorkshopDefaults, view: WorkflowViewMode): WorkshopLevel => {
+    const level = newSessionLevel(defaults);
+    const ontology = level === 'genie-accelerator' && defaults.includeGenieOntology;
+    setWorkshopLevel(level);
+    setIncludeLakehouse(false);
+    setIncludeGenieOntology(ontology);
+    apiClient.updateSessionMetadata(newSessionMetadata(
+      id,
+      { defaultTrack: level, includeGenieOntology: ontology },
+      engineFlagsFrom(new Set(ALL_AI_MODULES), new Set(ALL_MEDALLION_LAYERS), false, ontology),
+      view,
+    ))
+      .then(() => fetchOutline(level, id))
+      .catch(err => console.error('Error saving the new-session defaults:', err));
+    return level;
+  };
+
   // Create a brand new session (user explicitly wants to start fresh)
   /** `onCreated` runs with the new id before any state changes, so linked ideas are ready when the view renders. */
-  const createNewSession = async (onCreated?: (id: string) => void): Promise<string | null> => {
+  const createNewSession = async (onCreated?: (id: string) => void, view: WorkflowViewMode = 'technical'): Promise<string | null> => {
     setIsCreatingNewSession(true);
     setViewMode('technical');
     try {
-      const response = await apiClient.createNewSession();
+      const [response, defaults] = await Promise.all([apiClient.createNewSession(), apiClient.getWorkshopDefaults()]);
       onCreated?.(response.session_id);
       setSessionId(response.session_id);
       setSessionOwner(null);
@@ -543,7 +592,6 @@ export default function App() {
       setCodingAssistant(null);
       setLevelExplicitlySelected(false);
       setUseCaseLockedLevel(null);
-      setWorkshopLevel('end-to-end');
       setChainContext(null);
       setAiAgentsModules(new Set(ALL_AI_MODULES));
       setMedallionLayers(new Set(ALL_MEDALLION_LAYERS));
@@ -554,8 +602,7 @@ export default function App() {
       setCustomUseCaseLabel('');
       setCustomDescription('');
       setDirection('forward');
-      setIncludeLakehouse(false);
-      setIncludeGenieOntology(false);
+      applyNewSessionDefaults(response.session_id, defaults, view);
       window.history.replaceState({}, '', `?sessionId=${response.session_id}`);
       return response.session_id;
     } catch (err) {
@@ -683,7 +730,7 @@ export default function App() {
         setIncludeGenieOntology(!!sessionParams.include_genie_ontology);
         setCodingAssistant(sessionParams.coding_assistant || null);
         setCodingAssistantExplicit(!!sessionParams.coding_assistant);
-        adoptSessionView(isInsightsSession(effectiveRestoredLevel, sessionParams.coding_assistant));
+        adoptSessionView(isInsightsSession(sessionParams.view));
 
         // initialExpandedStep is a memo (T3c) derived from the engine outline; the
         // returning-user restore (gated on outlineReady) navigates once it lands.
@@ -728,13 +775,15 @@ export default function App() {
     setChainContext(nextChain);
     // Whenever the user changes paths, reset the AI sub-module chips back to
     // the inclusive default. Keeps re-entering AI predictable ("all on by default").
+    // Genie Accelerator's optional Genie Ontology takes the facilitator default on
+    // (re)entry; every other path has no ontology.
+    const entryOntology = level === 'genie-accelerator' && workshopDefaults.includeGenieOntology;
     if (level !== workshopLevel) {
       setAiAgentsModules(new Set(ALL_AI_MODULES));
       setMedallionLayers(new Set(ALL_MEDALLION_LAYERS));
       // Genie Accelerator's optional Lakehouse defaults OFF on (re)entry.
       setIncludeLakehouse(false);
-      // Genie Accelerator's optional Genie Ontology defaults OFF on (re)entry.
-      setIncludeGenieOntology(false);
+      setIncludeGenieOntology(entryOntology);
     }
     if (!levelExplicitlySelected) {
       setLevelExplicitlySelected(true);
@@ -754,7 +803,7 @@ export default function App() {
       const nextAi = levelChanged ? new Set<AIAgentModule>(ALL_AI_MODULES) : aiAgentsModules;
       const nextMed = levelChanged ? new Set<MedallionLayer>(ALL_MEDALLION_LAYERS) : medallionLayers;
       const nextLake = levelChanged ? false : includeLakehouse;
-      const nextOnto = levelChanged ? false : includeGenieOntology;
+      const nextOnto = levelChanged ? entryOntology : includeGenieOntology;
       const sid = sessionId;
       apiClient.updateSessionMetadata({
         session_id: sid,
@@ -767,7 +816,7 @@ export default function App() {
         .then(() => fetchOutline(level, sid))
         .catch(err => console.error('Error saving workshop level:', err));
     }
-  }, [sessionId, levelExplicitlySelected, completedSteps, workshopLevel, readOnly, setMedallionLayers, chainContext, aiAgentsModules, medallionLayers, includeLakehouse, includeGenieOntology, engineFlagsFrom, fetchOutline]);
+  }, [sessionId, levelExplicitlySelected, completedSteps, workshopLevel, readOnly, setMedallionLayers, chainContext, aiAgentsModules, medallionLayers, includeLakehouse, includeGenieOntology, engineFlagsFrom, fetchOutline, workshopDefaults]);
 
   const handleStepPromptGenerated = useCallback((stepNumber: number, promptText: string) => {
     if (readOnly) return;
@@ -870,8 +919,9 @@ export default function App() {
   // Per-assistant cold-start default: some assistants (currently Genie Code,
   // which is in active beta and can't yet drive the full Apps + Lakebase
   // chapters) prefer a narrower default workshop level than the generic
-  // `end-to-end`. We apply that override ONLY when the user hasn't yet
-  // explicitly chosen a level — saved sessions and any explicit pick win.
+  // `end-to-end`. We apply that override ONLY on a legacy `end-to-end` session
+  // where the user hasn't explicitly chosen a level — saved sessions, any
+  // explicit pick and the new-session default (genie-accelerator) all win.
   const handleCodingAssistantChange = useCallback((assistantId: string) => {
     if (readOnly) return;
     setCodingAssistant(assistantId);
@@ -879,6 +929,7 @@ export default function App() {
     const assistantDefault = DEFAULT_LEVEL_BY_ASSISTANT[assistantId as keyof typeof DEFAULT_LEVEL_BY_ASSISTANT];
     const shouldApplyAssistantDefault =
       !levelExplicitlySelected &&
+      workshopLevel === 'end-to-end' &&
       assistantDefault !== undefined &&
       assistantDefault !== workshopLevel;
     if (shouldApplyAssistantDefault) {
@@ -1062,6 +1113,7 @@ export default function App() {
         direction: 'forward',
         include_lakehouse: false,
         include_genie_ontology: false,
+        view: 'insights',
         completed_gates: stepNumbersToGates(Array.from(nextCompleted)),
       }).catch(err => console.error('Error saving Insights setup:', err));
       apiClient.updateStepPrompt({
@@ -1260,10 +1312,12 @@ export default function App() {
       status: 'committed',
       ...(target === 'insights' ? { lockedAt: idea.lockedAt ?? now, buildStage: 'data' as const, genieQuestions: questions, genieQuestionSources: sources, genieAlternates: alternates } : {}),
       decisions: [...idea.decisions, { at: now, text: `Started building in ${target === 'insights' ? 'Insights' : 'the Technical workflow'}` }],
-    }));
+    }), target);
     finishSessionLoading();
     if (!newId) return;
     setViewMode(target);
+    // The new project keeps the new-session default track.
+    const level = newSessionLevel(await apiClient.getWorkshopDefaults());
 
     const { industry, industryLabel, label } = technicalUseCaseOf(idea);
     const description = buildDescription(idea);
@@ -1278,7 +1332,7 @@ export default function App() {
       setCustomDescription(description);
       setStepPrompts({ 1: description });
       setCompletedSteps(new Set([1]));
-      void writeTechnicalBrief(idea, newId, [1]);
+      void writeTechnicalBrief(idea, newId, [1], level);
       updateIdea(idea.id, { builtRevision: idea.revision ?? 0 });
     }
     apiClient.saveSession({
@@ -1289,7 +1343,7 @@ export default function App() {
       use_case_label: technical ? label : undefined,
       session_name: idea.title,
       session_description: idea.spark?.statement ?? idea.seed,
-      workshop_level: 'end-to-end',
+      workshop_level: level,
       completed_gates: stepNumbersToGates(technical ? [1] : []),
       step_prompts: technical ? { 1: description } : {},
     }).then(r => {
@@ -1601,7 +1655,7 @@ export default function App() {
                   
                   {/* View mode & Session Menu in Header */}
                   <div className="flex items-center gap-2 sm:gap-3 flex-shrink-0">
-                    <ViewModeToggle mode={viewMode} onChange={setViewMode} />
+                    <ViewModeToggle mode={viewMode} onChange={switchViewMode} />
                     {readOnly ? (
                       <div className="flex items-center gap-2 text-muted-foreground text-ui-base">
                         <Eye className="w-3.5 h-3.5" />
@@ -1662,7 +1716,7 @@ export default function App() {
                         onSkippedStepsChange={handleSkippedStepsChange}
                         onStart={handleInsightsStart}
                         onNewSession={() => setShowNewSessionConfirm(true)}
-                        onSwitchToTechnical={() => setViewMode('technical')}
+                        onSwitchToTechnical={() => switchViewMode('technical')}
                       />
                     </Suspense>
                   ) : (
