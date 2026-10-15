@@ -595,15 +595,17 @@ def test_invalid_visual_is_invalid_parameter(env, monkeypatch):
 
 # --- A12: the scrub is byte-identical to base e0078d2 --------------------------------------------
 
+# _scrub_output and scrub_output re-pinned for the 12-word step-prompt overlap (D-181).
+
 
 SCRUB_SOURCE_SHA256 = {
     "_has_secret": "84521488ee3aac0186660f06d2d6c37ba1624a48d7e1e4af3b45fcd3b8a7a748",
     "scrub_input": "633f28a41834f63a9fc98e73e1e86c24b2bb2804eae0ee6e685fc2599ea305e3",
     "_ngrams": "206b74e2f82c23155a4b40185f863e0130a78cd8067615f541c621fa10082f30",
     "_labelled": "73b6913538ea51b3bd5e28d3b1b5ceb822b16bfcea06d3228ad96bcb4a5912f5",
-    "_scrub_output": "b454ec4dab0097b710606037bc6c878291873420173af1e1ffed3fe96e456c7e",
+    "_scrub_output": "019681963dde2510c8bcfef192fec5510979feb5cc4ba9f039096b518a0d0403",
     "scrub_output_with_reason": "8199d42088e6beb1857b38ecc8569850e519449036f8711387e4c5768a9be47e",
-    "scrub_output": "0b08bf42ec0cf54424c16d6b6e485e8013d8186a15320e36fe899618ceaf9305",
+    "scrub_output": "88274a77b8099f8b4ac172b4d293c299049915d809f74cb0400e3ffb79989cc6",
 }
 
 

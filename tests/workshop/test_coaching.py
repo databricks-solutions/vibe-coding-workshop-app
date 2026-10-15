@@ -6,7 +6,7 @@ acceptance contract (docs/superpowers/plans/2026-10-05-coaching-explain-step.md)
 
 Tampers (each turns the named test red):
 - remove the timeout handler in ``_single_flight`` -> test_c3_fail_open
-- drop the 8-word overlap check in ``scrub_output`` -> test_c5_scrub
+- drop the overlap check in ``scrub_output`` -> test_c5_scrub
 - call ``coach()`` even when focus is None -> test_c11_no_focus_parity
 - drop the in-flight registry check -> test_c8_cache_and_single_flight
 - drop ``focus`` from the extended INSERT -> test_c14_lakebase
@@ -24,10 +24,14 @@ Tampers (each turns the named test red):
 - send ``temperature=0.3`` from the coach -> test_coach_endpoint_override_set
 - give VIBE_COACH_ENDPOINT a code default -> test_coach_endpoint_override_unset
 - COACH_MAX_TOKENS 800 -> 400 -> test_coach_max_tokens_pin
+- PROMPT_OVERLAP_WORDS 12 -> 8 -> test_c20_prompt_overlap_allowance
+- use the 12-word threshold for every source -> test_c5_scrub
+- skip the overlap check for the "prompt" source -> test_c20_prompt_overlap_allowance
 """
 
 import contextlib
 import copy
+import json
 import pathlib
 import re
 import sys
@@ -304,7 +308,7 @@ def test_c4_kill_switch(env, monkeypatch):
 @pytest.mark.parametrize(
     "planted",
     [
-        "Your PRD should " + "covers the personas goals and success metrics for the governed app" + ".",
+        "Your PRD is a " + "document that covers the personas goals and success metrics for the governed app" + ".",
         f"Authenticate with {FAKE_TOKEN} before you continue.",
         "Ask jane.doe@example.com for access to the catalog.",
         "Run this first:\n```python\nprint(1)\n```",
@@ -325,7 +329,7 @@ def test_c4_kill_switch(env, monkeypatch):
         "Then create table my_table using delta.",
     ],
     ids=[
-        "overlap8", "secret", "email", "code_fence", "sql",
+        "overlap_prompt", "secret", "email", "code_fence", "sql",
         "bearer", "pem_header", "akia", "sql_insert_into", "sql_create_table",
         "sql_update_set", "sql_delete_from", "sql_drop_table", "sql_select_identifier",
         "sql_merge_into", "sql_alter_table", "sql_truncate_table",
@@ -344,6 +348,14 @@ def test_c5_scrub(env, planted):
     source = "one two three four five six seven eight nine"
     assert coaching.scrub_output("x one two three four five six seven eight y", forbidden_sources=[source]) is None
     assert coaching.scrub_output("x one two three four five six seven y", forbidden_sources=[source]) is not None
+    # Captured outputs keep 8 words; only the "prompt" source allows 12 (test_c20).
+    captured = [("captured_outputs:use_case_brief", source)]
+    assert coaching.scrub_output_with_reason(
+        "x one two three four five six seven eight y", forbidden_sources=captured
+    ) == (None, "overlap:captured_outputs:use_case_brief")
+    assert coaching.scrub_output_with_reason(
+        "x one two three four five six seven y", forbidden_sources=captured
+    )[1] is None
     # Clean text passes through unchanged.
     assert coaching.scrub_output(CLEAN, forbidden_sources=[PROMPT, BRIEF]) == CLEAN
 
@@ -693,7 +705,7 @@ def _coach_outcome(env, monkeypatch, planted):
         ("Run this first:\n```python\nprint(1)\n```", "scrub:code_fence"),
         ("Then run merge into the gold table to apply the changes.", "scrub:sql"),
         (
-            "Your PRD should " + "covers the personas goals and success metrics for the governed app" + ".",
+            "Your PRD is a " + "document that covers the personas goals and success metrics for the governed app" + ".",
             "scrub:overlap:prompt",
         ),
         (
@@ -723,9 +735,9 @@ def test_c16_reasons_direct_and_exception(env, monkeypatch):
         None,
         "overlap:source1",
     )
-    assert coaching.scrub_output_with_reason(planted, forbidden_sources=[("prompt", source)]) == (
+    assert coaching.scrub_output_with_reason(planted, forbidden_sources=[("captured_outputs:k", source)]) == (
         None,
-        "overlap:prompt",
+        "overlap:captured_outputs:k",
     )
     # A clean response is still served with reason "generated".
     outcome = _coach_outcome(env, monkeypatch, CLEAN)
@@ -1073,3 +1085,50 @@ def test_coach_max_tokens_pin(env, no_knobs):
     assert coaching.COACH_MAX_TOKENS == 800
     assert _coach_direct(focus="why").is_fallback is False
     assert env.calls[-1]["max_tokens"] == 800
+
+
+# --- C20: the step prompt allows a 12-word shared run (D-181) -----------------
+
+OVERLAP_FIXTURES = json.loads(
+    (pathlib.Path(__file__).parent / "fixtures" / "coach_scrub_overlap.json").read_text()
+)
+
+
+def test_c20_prompt_overlap_allowance():
+    assert coaching.PROMPT_OVERLAP_WORDS == 12 and coaching.OVERLAP_WORDS == 8
+
+    # The saved r2 answers once rejected as overlap:prompt now pass against their step prompt.
+    prompts = OVERLAP_FIXTURES["prompts"]
+    answers = OVERLAP_FIXTURES["answers"]
+    assert sorted((a["tag"], a["focus"]) for a in answers) == [
+        ("gagent_optimize", "unblock")
+    ] * 4 + [("semlayer_metric_view", "what_now")]
+    for answer in answers:
+        forbidden = [("prompt", prompts[answer["tag"]])]
+        assert coaching.scrub_output_with_reason(answer["text"], forbidden_sources=forbidden) == (
+            answer["text"],
+            None,
+        ), (answer["tag"], answer["candidate"])
+
+    # Reciting 12 words of the step prompt still rejects.
+    prompt = prompts["gagent_optimize"]
+    recited = "be on the Genie Space page for the `genie_space_id` recorded in `<STATE_FILE>`"
+    assert recited in prompt and len(coaching._WORD_RE.findall(recited.lower())) == 12
+    planted = f"First, {recited}, then run the scorer."
+    assert coaching.scrub_output_with_reason(planted, forbidden_sources=[("prompt", prompt)]) == (
+        None,
+        "overlap:prompt",
+    )
+
+    words = "one two three four five six seven eight nine ten eleven twelve thirteen"
+    source = [("prompt", words)]
+    # 11 shared words with the step prompt pass, 12 reject.
+    eleven = "x one two three four five six seven eight nine ten eleven y"
+    twelve = "x one two three four five six seven eight nine ten eleven twelve y"
+    assert coaching.scrub_output_with_reason(eleven, forbidden_sources=source) == (eleven, None)
+    assert coaching.scrub_output_with_reason(twelve, forbidden_sources=source) == (None, "overlap:prompt")
+    # The same 8-word run still rejects against a captured output listed after the prompt.
+    eight = "x one two three four five six seven eight y"
+    both = source + [("captured_outputs:k", words)]
+    assert coaching.scrub_output_with_reason(eight, forbidden_sources=source) == (eight, None)
+    assert coaching.scrub_output_with_reason(eight, forbidden_sources=both) == (None, "overlap:captured_outputs:k")

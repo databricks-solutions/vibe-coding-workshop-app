@@ -74,6 +74,9 @@ PROMPT_CAP = 4000
 OUTPUT_EXCERPT_CAP = 600
 PRIOR_ANSWERS_CAP = 10
 OVERLAP_WORDS = 8
+# The step prompt allows a longer shared run: an unblock answer must restate its
+# page precondition, which carries an exact ID token (D-181).
+PROMPT_OVERLAP_WORDS = 12
 
 _DISABLED_VALUES = {"0", "false", "off", "no"}
 
@@ -204,11 +207,10 @@ def _scrub_output(
         return None, "code_fence"
     if any(pattern.search(text) for pattern in _SQL_RES):
         return None, "sql"
-    out_grams = _ngrams(text, OVERLAP_WORDS)
-    if out_grams:
-        for label, source in _labelled(forbidden_sources):
-            if source and out_grams & _ngrams(source, OVERLAP_WORDS):
-                return None, f"overlap:{label}"
+    for label, source in _labelled(forbidden_sources):
+        n = PROMPT_OVERLAP_WORDS if label == "prompt" else OVERLAP_WORDS
+        if source and _ngrams(text, n) & _ngrams(source, n):
+            return None, f"overlap:{label}"
     return text, None
 
 
@@ -231,8 +233,9 @@ def scrub_output_with_reason(
 def scrub_output(text: str, *, forbidden_sources: list[str]) -> str | None:
     """Return ``text`` unchanged if it is safe to show, else None (reject).
 
-    Rejects on a >= 8-word verbatim overlap with any forbidden source (the step
-    prompt, captured outputs), secret-like tokens, emails, code fences or SQL
+    Rejects on a verbatim overlap with a forbidden source (>= 12 words with the
+    source labelled "prompt", the step prompt; >= 8 words with any other source,
+    e.g. captured outputs), secret-like tokens, emails, code fences or SQL
     statements. Any exception while scrubbing is a reject (fail closed).
     """
 
