@@ -6709,7 +6709,12 @@ async def get_leaderboard_endpoint(limit: int = 10) -> List[LeaderboardEntry]:
             logger.info(f"[Leaderboard API] Returning cached result ({len(_leaderboard_cache['data'])} entries)")
             return _leaderboard_cache["data"]
         
-        leaderboard = get_leaderboard(limit=limit)
+        try:
+            from src.backend.api.leaderboard_seasons import season_start
+            since = season_start("technical")
+        except Exception:
+            since = None
+        leaderboard = get_leaderboard(limit=limit, since=since)
         entries = [LeaderboardEntry(**entry) for entry in leaderboard]
         _leaderboard_cache["data"] = entries
         _leaderboard_cache["timestamp"] = now

@@ -17,6 +17,7 @@ import { PersonaStack } from '../ui/PersonaChip';
 import { BUILD_TARGET_LABEL, buildTargetFor, isBuilding, needsBuildUpdate, openBuildHref, startBuildHref, updateBuildHref } from '../engine/handoff';
 import { useEnabledAddOns } from '../engine/buildRecipes';
 import { MakeItMineButton } from '../ui/SampleBanner';
+import { RefineButton } from '../ui/RefineButton';
 
 const SECTIONS = ['Headline', 'Problem', "Who It's For", 'Chosen Shape', 'Success Metric', 'Scope', 'Top Risks', 'Test Scenarios', 'Open Questions'];
 const INSIGHTS_SECTIONS = ['Headline', 'Problem', "Who It's For", 'Chosen Shape', 'Questions It Will Answer', 'Data It Needs', 'Success Metric', 'Scope', 'Top Risks', 'Open Questions'];
@@ -140,9 +141,18 @@ export function BriefStep({ flow }: { flow: IdeaFlow }) {
       {!streaming && idea.brief && (
         <>
           <div className="flex flex-wrap items-center gap-1">
-            {!flow.readOnly && <button onClick={() => flow.findGaps()} disabled={!!flow.loading} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-ui-sm text-primary hover:bg-primary/10 disabled:opacity-50">
-              {flow.loading === 'gaps' ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Search className="w-3.5 h-3.5" />} Find gaps
-            </button>}
+            {!flow.readOnly && (
+              <RefineButton
+                icon={flow.loading === 'gaps' ? Loader2 : Search}
+                spin={flow.loading === 'gaps'}
+                tone="primary"
+                label="Find gaps"
+                hint="See what a reviewer would ask"
+                badge={idea.gaps ? undefined : '+15'}
+                onClick={() => flow.findGaps()}
+                disabled={!!flow.loading}
+              />
+            )}
             <div className="flex-1" />
             <BusinessCaseButton idea={idea} onClick={openCase} variant="compact" className="mr-1" />
             <button onClick={() => handleCopy(briefAsMarkdown(idea))} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-ui-sm text-muted-foreground hover:text-foreground hover:bg-secondary/60">

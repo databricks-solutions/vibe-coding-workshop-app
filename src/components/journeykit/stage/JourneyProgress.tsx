@@ -1,6 +1,7 @@
 import type { LucideIcon } from 'lucide-react';
 import { PROGRESS_TOKENS, type StepState } from '../tokens';
 import { StepConnector, StepDot } from './StepDot';
+import { SummitTrail, type TrailBeyond, type TrailSize } from './SummitTrail';
 
 export interface ProgressStep {
   key: string;
@@ -10,6 +11,8 @@ export interface ProgressStep {
   prefilled?: boolean;
   optional?: boolean;
   disabled?: boolean;
+  /** Idea Points on this step: what it can earn, and what it has. */
+  points?: { earned: number; available: number };
 }
 
 export interface ProgressPhase {
@@ -28,6 +31,11 @@ interface JourneyProgressProps {
   onSelectStep?: (key: string) => void;
   /** Muted note after the last phase, e.g. "then 4 build chapters". */
   trailing?: string;
+  /** `trail` draws the steps as a climb (see SummitTrail). */
+  variant?: 'track' | 'trail';
+  trailSize?: TrailSize;
+  briefMarker?: 'summit' | 'camp';
+  beyond?: TrailBeyond;
 }
 
 const stepTitle = (s: ProgressStep) => `${s.label}${s.prefilled ? ' (pre-filled)' : ''}${s.optional ? ' (optional)' : ''}`;
@@ -118,6 +126,11 @@ function StepTrack({ steps, onSelect }: { steps: ProgressStep[]; onSelect?: (key
   );
 }
 
+function trailSummary(steps: ProgressStep[]) {
+  const i = steps.findIndex(s => s.state === 'current');
+  return i >= 0 ? `Stop ${i + 1} of ${steps.length}: ${steps[i].label}` : `${steps.filter(s => s.state === 'done').length} of ${steps.length} stops`;
+}
+
 function mobileSummary(phases: ProgressPhase[]) {
   const phase = phases.find(p => p.state === 'current') ?? phases[phases.length - 1];
   const steps = phase.steps;
@@ -126,7 +139,20 @@ function mobileSummary(phases: ProgressPhase[]) {
 }
 
 /** The one progress bar for every guided flow: same markers, colours and motion everywhere. */
-export function JourneyProgress({ phases, steps, onSelectStep, trailing }: JourneyProgressProps) {
+export function JourneyProgress({ phases, steps, onSelectStep, trailing, variant = 'track', trailSize = 'md', briefMarker, beyond }: JourneyProgressProps) {
+  if (variant === 'trail') {
+    const flat = steps ?? phases?.flatMap(p => p.steps ?? []) ?? [];
+    return (
+      <nav aria-label="Progress" className="min-w-0 flex-1">
+        <div className="hidden sm:block px-4">
+          <SummitTrail steps={flat} size={trailSize} briefMarker={briefMarker} beyond={beyond} onSelectStep={onSelectStep} />
+        </div>
+        <p className="sm:hidden text-ui-sm font-medium text-muted-foreground">
+          <span className="text-primary">●</span> {trailSummary(flat)}
+        </p>
+      </nav>
+    );
+  }
   if (!phases) return <StepTrack steps={steps ?? []} onSelect={onSelectStep} />;
   const anyExpanded = phases.some(p => p.state === 'current' && !!p.steps?.length);
 

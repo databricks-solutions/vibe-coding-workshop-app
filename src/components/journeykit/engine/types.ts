@@ -81,8 +81,12 @@ export interface IndustryMap {
   branches: IndustryBranch[];
   placedLeafId: string | null;
   adjacentLeafIds: string[];
+  /** Extra spots the idea also covers, picked by the user (max MAX_ALSO_LEAVES). */
+  alsoLeafIds?: string[];
   rationale: string;
 }
+
+export const MAX_ALSO_LEAVES = 3;
 
 export interface ClarifyQuestion {
   id: string;
@@ -288,6 +292,31 @@ export interface UseCaseContext {
 
 export type QuestionSource = 'use_case' | 'ai' | 'you';
 
+export interface QualityDimension {
+  key: 'problem' | 'users' | 'value' | 'feasibility' | 'risks' | 'writing';
+  label: string;
+  score: number;
+  why?: string;
+  raise?: string;
+  /** Held down because the step it depends on was skipped. */
+  capped?: boolean;
+}
+
+/** Points owned by the server; the browser never writes these. */
+export interface IdeaScore {
+  journey: number;
+  quality: number | null;
+  outcome: number;
+  total: number;
+  tier: string;
+  breakdown: QualityDimension[] | null;
+  headline?: string | null;
+  /** The idea revision the scorecard was written for. */
+  revision?: number | null;
+  scoredAt?: string | null;
+  approvedInLibrary?: boolean;
+}
+
 /** Insights builds a Genie and dashboard on existing data; Technical builds apps, agents and pipelines. */
 export type BuildTarget = 'insights' | 'technical';
 
@@ -330,6 +359,10 @@ export interface Idea {
   caseOpenedAt?: string;
   /** The AI helper was unavailable, so the user listed questions by hand. */
   classic?: boolean;
+  /** Idea Points from the server, including the AI scorecard. */
+  score?: IdeaScore;
+  /** The trail intro was shown for this idea. */
+  trailSeenAt?: string;
   createdAt: string;
   updatedAt: string;
   /** Furthest step reached. */

@@ -9,6 +9,7 @@
  * - /config/workshop-parameters -> Workshop Parameters tab
  * - /config/step-visibility -> Visibility tab (steps + workshop paths; URL kept for bookmark compat)
  * - /config/ai-gateway -> Set up AI Gateway Endpoint tab
+ * - /config/leaderboards -> Leaderboards tab (seasons: snapshot, archive and reset, restore)
  */
 
 import { useState, useEffect } from 'react';
@@ -18,8 +19,10 @@ import { WorkshopParametersConfig } from './WorkshopParametersConfig';
 import { StepVisibilityConfig } from './StepVisibilityConfig';
 import { AiGatewayEndpointConfig } from './AiGatewayEndpointConfig';
 import { TestScenarioConfig } from './TestScenarioConfig';
+import { LeaderboardsConfig } from './LeaderboardsConfig';
+import { Trophy } from 'lucide-react';
 
-type TabType = 'section-inputs' | 'workshop-parameters' | 'step-visibility' | 'ai-gateway' | 'test-scenario';
+type TabType = 'section-inputs' | 'workshop-parameters' | 'step-visibility' | 'ai-gateway' | 'test-scenario' | 'leaderboards';
 
 interface Toast {
   id: number;
@@ -34,6 +37,7 @@ const tabParamMap: Record<string, TabType> = {
   'step-visibility': 'step-visibility',
   'ai-gateway': 'ai-gateway',
   'test-scenario': 'test-scenario',
+  'leaderboards': 'leaderboards',
 };
 
 export function ConfigurationPage() {
@@ -160,6 +164,19 @@ export function ConfigurationPage() {
               Test Scenario
             </span>
           </Link>
+          <Link
+            to="/config/leaderboards"
+            className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
+              activeTab === 'leaderboards'
+                ? 'border-primary text-primary'
+                : 'border-transparent text-muted-foreground hover:text-foreground hover:border-border'
+            }`}
+          >
+            <span className="flex items-center gap-2">
+              <Trophy className="w-4 h-4" />
+              Leaderboards
+            </span>
+          </Link>
         </div>
       </div>
 
@@ -171,6 +188,7 @@ export function ConfigurationPage() {
           {activeTab === 'step-visibility' && <StepVisibilityConfig onToast={showToast} />}
           {activeTab === 'ai-gateway' && <AiGatewayEndpointConfig onToast={showToast} />}
           {activeTab === 'test-scenario' && <TestScenarioConfig onToast={showToast} />}
+          {activeTab === 'leaderboards' && <LeaderboardsConfig onToast={showToast} />}
         </div>
       </div>
 

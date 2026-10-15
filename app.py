@@ -36,6 +36,16 @@ try:
 except Exception as _ideate_err:  # pragma: no cover
     print(f"[Ideate] disabled, failed to load: {_ideate_err}", file=sys.stderr)
     ideate_router = None
+try:
+    from src.backend.api.ideate_ideas import router as ideate_ideas_router
+except Exception as _ideate_ideas_err:  # pragma: no cover
+    print(f"[Ideate] saved ideas and points disabled, failed to load: {_ideate_ideas_err}", file=sys.stderr)
+    ideate_ideas_router = None
+try:
+    from src.backend.api.leaderboard_seasons import router as leaderboard_seasons_router
+except Exception as _seasons_err:  # pragma: no cover
+    print(f"[Leaderboards] seasons disabled, failed to load: {_seasons_err}", file=sys.stderr)
+    leaderboard_seasons_router = None
 
 # Industry blueprints (Insights view) are optional too: a failure only hides them.
 try:
@@ -147,6 +157,10 @@ app.include_router(hackathon_router, prefix="/api", tags=["Hackathons"])
 app.include_router(library_router, prefix="/api", tags=["Library"])
 if ideate_router is not None:
     app.include_router(ideate_router, prefix="/api", tags=["Ideate"])
+if ideate_ideas_router is not None:
+    app.include_router(ideate_ideas_router, prefix="/api", tags=["Ideate"])
+if leaderboard_seasons_router is not None:
+    app.include_router(leaderboard_seasons_router, prefix="/api", tags=["Leaderboards"])
 if blueprint_fit_router is not None:
     app.include_router(blueprint_fit_router, prefix="/api", tags=["Blueprints"])
 if blueprints_router is not None:

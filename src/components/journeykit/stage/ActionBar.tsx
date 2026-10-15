@@ -1,5 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { ArrowLeft, ArrowRight, Loader2, MessageSquareWarning, PenLine, RefreshCw, Swords, X } from 'lucide-react';
+import { RefineButton } from '../ui/RefineButton';
 import { VoiceTextarea } from '../ui/VoiceTextarea';
 import { GhostButton, PrimaryButton, SecondaryButton } from '../ui/primitives';
 
@@ -24,7 +25,7 @@ export function ActionBar({ onBack, backLabel = 'Back', secondary, primaryLabel,
     <div className="mt-8 pt-5 border-t border-border/60 space-y-3">
       {children}
       <div className="flex flex-wrap items-center gap-2">
-        {onBack && <GhostButton onClick={onBack}><ArrowLeft className="w-4 h-4" /> {backLabel}</GhostButton>}
+        {onBack && <SecondaryButton onClick={onBack}><ArrowLeft className="w-4 h-4" /> {backLabel}</SecondaryButton>}
         {secondary}
         <div className="ml-auto flex items-center gap-3">
           {primary ?? (onPrimary && (
@@ -54,7 +55,9 @@ interface StepActionsProps {
   approved: boolean;
   /** Shown instead of the approve button when the step is already approved and not the current step. */
   onContinue?: () => void;
+  continueLabel?: string;
   onBack?: () => void;
+  backLabel?: string;
   /** Extra quiet action, e.g. "Skip this step". */
   extra?: ReactNode;
   showKeyHint?: boolean;
@@ -65,7 +68,7 @@ interface StepActionsProps {
  * ask for a targeted change (voice or text), or have the AI push back.
  */
 export function StepActions({
-  canApprove, approveLabel, onApprove, onChange, onChallenge, challengeLabel = 'Challenge me', challenging, pushbacks, onDismissPushbacks, busy, approved, onContinue, onBack, extra, showKeyHint = false,
+  canApprove, approveLabel, onApprove, onChange, onChallenge, challengeLabel = 'Challenge me', challenging, pushbacks, onDismissPushbacks, busy, approved, onContinue, continueLabel = 'Continue', onBack, backLabel, extra, showKeyHint = false,
 }: StepActionsProps) {
   const [editing, setEditing] = useState(false);
   const [feedback, setFeedback] = useState('');
@@ -91,21 +94,30 @@ export function StepActions({
     return () => window.removeEventListener('keydown', onKey);
   }, [approved, busy, canApprove, editing, onApprove, onContinue]);
 
-  const secondary = !editing && (
-    <>
-      <GhostButton onClick={() => setEditing(true)} disabled={busy}>
-        <PenLine className="w-3.5 h-3.5" /> Change something
-      </GhostButton>
-      <GhostButton onClick={onChallenge} disabled={busy || challenging} className="hover:!text-violet-400 hover:!bg-violet-500/10">
-        {challenging ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Swords className="w-3.5 h-3.5" />} {challengeLabel}
-      </GhostButton>
-      {extra}
-    </>
+  const secondary = !editing && extra;
+
+  const refine = !editing && (
+    <div className="flex flex-col sm:flex-row sm:items-center gap-2 rounded-2xl border border-dashed border-border bg-secondary/30 p-2 sm:pl-4">
+      <p className="text-ui-sm text-muted-foreground sm:mr-auto px-2 sm:px-0 pt-1 sm:pt-0">
+        <span className="font-semibold text-foreground">{approved ? 'Want to revisit it?' : 'Not quite right?'}</span>{' '}
+        {approved ? 'You can still change it.' : 'Refine it before you approve.'}
+      </p>
+      <RefineButton icon={PenLine} tone="primary" label="Change something" hint="Say or type what to fix" onClick={() => setEditing(true)} disabled={busy} />
+      <RefineButton
+        icon={challenging ? Loader2 : Swords}
+        spin={challenging}
+        tone="violet"
+        label={challengeLabel}
+        hint="Hear what a reviewer would push back on"
+        onClick={onChallenge}
+        disabled={busy || challenging}
+      />
+    </div>
   );
 
   const primary = approved && onContinue ? (
     <SecondaryButton onClick={onContinue} className="h-12 px-5 text-ui-lg font-semibold">
-      Continue <ArrowRight className="w-4 h-4" />
+      {continueLabel} <ArrowRight className="w-4 h-4" />
     </SecondaryButton>
   ) : (
     <>
@@ -117,7 +129,8 @@ export function StepActions({
   );
 
   return (
-    <ActionBar onBack={onBack} secondary={secondary} primary={primary}>
+    <ActionBar onBack={onBack} backLabel={backLabel} secondary={secondary} primary={primary}>
+      {refine}
       {pushbacks && (
         <div className="rounded-xl border border-violet-500/30 bg-violet-500/5 p-3.5 animate-slide-up-fade">
           <div className="flex items-center justify-between mb-2">
@@ -164,3 +177,4 @@ export function StepActions({
     </ActionBar>
   );
 }
+

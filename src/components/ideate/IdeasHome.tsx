@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { calculateIdeaScore } from '../../constants/scoring';
 import { ArrowRight, BookOpenCheck, Copy, Hammer, History, Lightbulb, Menu, MoreHorizontal, Pencil, Send, Trash2 } from 'lucide-react';
 import {
-  ART, BUILD_TARGET_LABEL, IndustryBadge, MakeItMineButton, PrimaryButton, SAMPLES, STEP_ART, SubmitDialog, SurfaceChips, VoiceTextarea,
-  buildTargetFor, caseFigures, chosenShape, isBuilding, money, needsBuildUpdate, openBuildHref, shapeBuild, startBuildHref, stepMeta, stepsOf, useEnabledAddOns, useIdeas,
+  ART, BUILD_TARGET_LABEL, IndustryBadge, MakeItMineButton, PrimaryButton, SAMPLES, STEP_ART, SubmitDialog, SummitTrail, SurfaceChips, TierBadge, VoiceTextarea,
+  buildTargetFor, caseFigures, chosenShape, ideaProgressSteps, ideaTrail, isBuilding, money, needsBuildUpdate, openBuildHref, shapeBuild, startBuildHref, stepMeta, stepsOf, useEnabledAddOns, useIdeas,
   type Idea, type IdeaStatus,
 } from '../journeykit';
 
@@ -186,7 +187,7 @@ function IdeaCard({ idea, delay, value, onOpen, onRename, onDuplicate, onDelete,
   const [renaming, setRenaming] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
-  const progress = (idea.approved.length / stepsOf(idea).length) * 100;
+  const score = calculateIdeaScore(idea);
   const stepLabel = stepMeta(idea, idea.step).label;
   const status = STATUS[idea.status];
   const StepIcon = STEP_ART[idea.step].icon;
@@ -276,8 +277,14 @@ function IdeaCard({ idea, delay, value, onOpen, onRename, onDuplicate, onDelete,
         <span className="min-w-0 flex"><IndustryBadge industry={idea.spark?.industry || idea.industry} catalogKey={idea.spark?.catalogIndustry ?? idea.sourceUseCase?.industry} size="sm" /></span>
         <span className="ml-auto shrink-0 text-ui-2xs text-muted-foreground">{stepLabel} · {timeAgo(idea.updatedAt)}</span>
       </div>
-      <div className="h-0.5 rounded-full bg-secondary mt-3 overflow-hidden">
-        <div className="h-full bg-emerald-500 transition-all duration-500" style={{ width: `${progress}%` }} />
+      <div className="flex items-center gap-3 mt-3">
+        <div className="flex-1 min-w-0">
+          <SummitTrail steps={ideaProgressSteps(idea, null)} size="xs" {...ideaTrail(idea)} />
+        </div>
+        <TierBadge total={score.total} size="xs" />
+        <span className="shrink-0 text-ui-2xs font-semibold tabular-nums text-foreground" title={score.quality == null ? 'Climb and outcome points. Finish the brief for your quality score.' : undefined}>
+          {score.total.toLocaleString()} pts
+        </span>
       </div>
     </div>
   );

@@ -29,6 +29,21 @@ export interface ModeConfig {
   briefOutcomes: boolean;
   /** Where the business case says it was shaped. */
   caseSource: string;
+  trail: TrailConfig;
+}
+
+/** How the journey reads as a climb. Ideate tops out at the brief; Insights camps there and summits at the Genie build. */
+export interface TrailConfig {
+  /** What the brief waypoint is on this trail. */
+  briefMarker: 'summit' | 'camp';
+  /** A further peak after the brief, drawn faintly until the build starts. */
+  beyond?: { label: string; hint: string };
+  /** Copy for the trailhead: what the summit is. */
+  summitLine: string;
+  /** Title of the milestone when the brief is approved. */
+  briefMilestone: string;
+  /** Close button on that milestone. */
+  briefMilestoneClose: string;
 }
 
 const THINKING: Record<StepKey, string> = {
@@ -53,6 +68,12 @@ export const MODE_CONFIG: Record<JourneyMode, ModeConfig> = {
     approveLabel: (step, prefilled) => (prefilled ? 'Looks right' : step === 'brief' ? 'Approve brief' : 'Looks good'),
     briefOutcomes: true,
     caseSource: 'Ideate',
+    trail: {
+      briefMarker: 'summit',
+      summitLine: 'Your brief is the summit.',
+      briefMilestone: 'Summit reached',
+      briefMilestoneClose: 'See what to do next',
+    },
   },
   insights: {
     mode: 'insights',
@@ -67,6 +88,13 @@ export const MODE_CONFIG: Record<JourneyMode, ModeConfig> = {
     approveLabel: (step, prefilled) => (prefilled ? 'Looks right' : step === 'brief' ? 'Lock it in' : step === 'questions' ? 'Use these questions' : 'Looks good'),
     briefOutcomes: false,
     caseSource: 'Insights',
+    trail: {
+      briefMarker: 'camp',
+      beyond: { label: 'Genie build', hint: 'Pick data, then set up your Genie space' },
+      summitLine: 'Your brief is base camp. Your Genie is the summit.',
+      briefMilestone: 'Base camp reached',
+      briefMilestoneClose: 'Continue to the build',
+    },
   },
 };
 

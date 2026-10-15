@@ -6,7 +6,7 @@ import { ASSISTANT_CATALOG } from '../../constants/codingAssistants';
 import { WORKSHOP_LEVELS } from '../../constants/workflowSections';
 import {
   BusinessCaseSheet, JourneyProgress, JourneyScreen, REVIEW_IDEA_EVENT, SHAPE_KINDS, answerFor, buildLines, caseFigures, chosenShape, matchingContext, money,
-  needsBuildUpdate, placedLeaf, seedFromUseCase, useEnabledAddOns, useIdeas,
+  needsBuildUpdate, placedLeaf, seedFromUseCase, useEnabledAddOns, useIdeaCelebrations, useIdeas,
   type Idea, type ReviewIdeaDetail, type StepKey,
 } from '../journeykit';
 import { composeBrief, fitName, parseBrief, toSlug, type DataSource, type IdeaBrief } from './brief';
@@ -276,6 +276,7 @@ function InsightsFlowInner(props: InsightsFlowProps) {
     setStage('idea');
     if (ready) setReviewing(true);
   };
+  const celebrationOverlay = useIdeaCelebrations(idea, { readOnly, onRaise: editIdea });
 
   const backToBuild = () => {
     setReviewing(false);
@@ -438,7 +439,6 @@ function InsightsFlowInner(props: InsightsFlowProps) {
         key={idea.id}
         ideaId={idea.id}
         industryId={industryId}
-        phasesFor={phases}
         tools={ready ? <>{compare}{backToBuildButton}</> : compare}
         onBackFromFirst={idea.approved.length === 0 ? discardIdea : undefined}
         onChangeUseCase={discardIdea}
@@ -543,6 +543,7 @@ function InsightsFlowInner(props: InsightsFlowProps) {
       {caseOpen && idea && (
         <BusinessCaseSheet ideaId={idea.id} onClose={() => setCaseOpen(false)} onAddNumbers={() => { setCaseOpen(false); editIdea(); }} />
       )}
+      {celebrationOverlay}
     </>
   );
 }

@@ -1,8 +1,8 @@
 """
 Ideate API: a standalone space for shaping raw ideas into decision-ready briefs.
 
-The browser owns the idea (localStorage) and sends the approved context with
-every call, so the steps touch no sessions or workshop state. The one write is
+The browser sends the approved context with every call, so the steps touch no
+sessions or workshop state (ideas are saved separately, see ideate_ideas.py). The one write is
 /ideate/submit, which adds a committed idea to the use case catalog
 (usecase_descriptions) as an inactive entry for an admin to review.
 """
@@ -12,11 +12,13 @@ import logging
 import math
 import os
 import re
+import time
+from collections import deque
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse, StreamingResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from src.backend.api.ideate_prompts import (
     CATALOG_PROMPT,
@@ -63,18 +65,39 @@ except Exception:  # pragma: no cover
 
 MAX_CONTEXT_CHARS = 14000
 AI_UNAVAILABLE = "The AI assistant isn't reachable right now. Check that a model serving endpoint is configured, then try again."
+MAX_IDEA_CHARS = 200_000
+MAX_FEEDBACK_CHARS = 20_000
+MAX_BRIEF_CHARS = 200_000
+RATE_PER_MIN = int(os.getenv("IDEATE_RATE_PER_MIN", "120"))
+_rate_buckets: Dict[str, deque] = {}
 
 
 class IdeateStepRequest(BaseModel):
-    step: str
+    step: str = Field(max_length=40)
     idea: Dict[str, Any] = {}
-    feedback: Optional[str] = None
+    feedback: Optional[str] = Field(default=None, max_length=MAX_FEEDBACK_CHARS)
 
 
 class IdeateBriefRequest(BaseModel):
     idea: Dict[str, Any] = {}
-    feedback: Optional[str] = None
-    current_brief: Optional[str] = None
+    feedback: Optional[str] = Field(default=None, max_length=MAX_FEEDBACK_CHARS)
+    current_brief: Optional[str] = Field(default=None, max_length=MAX_BRIEF_CHARS)
+
+
+def _guard(request: Request, idea: Dict[str, Any]) -> Optional[JSONResponse]:
+    """A bounded idea, and a per-user rate limit on LLM calls (identified users only, so a shared fallback identity is never throttled)."""
+    user = _get_session_user(request)
+    if len(json.dumps(idea, ensure_ascii=False, default=str)) > MAX_IDEA_CHARS:
+        return JSONResponse({"error": "This idea is too large to send. Trim long answers and try again."}, status_code=413)
+    if RATE_PER_MIN > 0 and user and user != "unknown":
+        now = time.monotonic()
+        bucket = _rate_buckets.setdefault(user, deque())
+        while bucket and bucket[0] < now - 60:
+            bucket.popleft()
+        if len(bucket) >= RATE_PER_MIN:
+            return JSONResponse({"error": "That's a lot of requests in a minute. Give it a moment and try again."}, status_code=429)
+        bucket.append(now)
+    return None
 
 
 class IdeateSubmitRequest(BaseModel):
@@ -541,9 +564,12 @@ def _normalize(step: str, data: Dict[str, Any], idea: Optional[Dict[str, Any]] =
 
 
 @router.post("/ideate/step", summary="Run one structured Ideate step")
-async def ideate_step(body: IdeateStepRequest):
+async def ideate_step(body: IdeateStepRequest, request: Request):
     if body.step not in STEP_PROMPTS:
         return JSONResponse({"error": f"Unknown step '{body.step}'"}, status_code=400)
+    blocked = _guard(request, body.idea)
+    if blocked:
+        return blocked
 
     system_prompt = build_step_system_prompt(body.step, _mode(body.idea))
     extra = f"CURRENT STEP: {body.idea.get('currentStep', '')}" if body.step == "challenge" else ""
@@ -583,7 +609,10 @@ async def ideate_step(body: IdeateStepRequest):
 
 
 @router.post("/ideate/brief", summary="Stream the Ideate initiative brief")
-async def ideate_brief(body: IdeateBriefRequest):
+async def ideate_brief(body: IdeateBriefRequest, request: Request):
+    blocked = _guard(request, body.idea)
+    if blocked:
+        return blocked
     extra = ""
     if body.current_brief and body.feedback:
         extra = f"CURRENT BRIEF (revise it, keep what works):\n{body.current_brief[:MAX_CONTEXT_CHARS]}"
@@ -677,6 +706,26 @@ async def ideate_submit(body: IdeateSubmitRequest, request: Request):
     version = int((version_rows or [{}])[0].get("v") or 0) + 1
     user = _get_session_user(request)
     category = (body.category or "").strip() or None
+
+    # A resubmit while the last version still waits for review replaces it, so the queue holds one entry per idea.
+    pending = execute_query(
+        f"SELECT version FROM {schema}.usecase_descriptions WHERE industry = %s AND use_case = %s AND version = %s "
+        f"AND is_active = FALSE AND created_by = %s AND source = 'ideate'",
+        (industry, use_case, version - 1, user),
+    ) if version > 1 else []
+    if pending and execute_insert(
+        f"UPDATE {schema}.usecase_descriptions SET prompt_template = %s, use_case_label = %s, "
+        f"category = COALESCE(%s, category), updated_at = CURRENT_TIMESTAMP "
+        f"WHERE industry = %s AND use_case = %s AND version = %s",
+        (template, label, category, industry, use_case, version - 1),
+    ):
+        _invalidate_cache()
+        if body.value_profile:
+            from src.backend.api.value_profiles import put_profile
+            put_profile(industry, use_case, body.value_profile, "submitted")
+        logger.info(f"[Ideate] Updated pending {industry}/{use_case} v{version - 1} by {user}")
+        return {"industry": industry, "industryLabel": industry_label, "useCase": use_case, "useCaseLabel": label, "version": version - 1}
+
     position = _outcome_map_position(schema, industry, category)
 
     base_cols = "industry, industry_label, use_case, use_case_label, prompt_template, version, is_active, inserted_at, updated_at, created_by"

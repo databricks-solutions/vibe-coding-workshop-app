@@ -1,6 +1,9 @@
 import { Link, Navigate, useParams } from 'react-router-dom';
 import { ArrowLeft, Lightbulb, Menu } from 'lucide-react';
-import { IdeaStepStage, IdeaTools, JourneyProgress, JourneyScreen, SampleBanner, ideaProgressSteps, openBuildHref, useIdeaFlow, type StepKey } from '../journeykit';
+import {
+  IdeaStepStage, IdeaTools, JourneyProgress, JourneyScreen, SampleBanner, SaveStatus, ideaProgressSteps, ideaTrail, openBuildHref, useIdeaCelebrations, useIdeaFlow,
+  type StepKey,
+} from '../journeykit';
 
 interface IdeaFlowProps {
   onOpenMobileNav?: () => void;
@@ -14,6 +17,7 @@ export function IdeaFlow(props: IdeaFlowProps) {
 function IdeaFlowView({ ideaId, onOpenMobileNav }: IdeaFlowProps & { ideaId: string }) {
   const flow = useIdeaFlow(ideaId);
   const { idea, viewStep } = flow;
+  const celebrationOverlay = useIdeaCelebrations(idea, { readOnly: flow.readOnly, onRaise: flow.setViewStep });
 
   if (!idea) return <Navigate to="/ideate" replace />;
   if (idea.mode === 'insights') return <Navigate to={openBuildHref(idea) ?? '/?view=insights'} replace />;
@@ -35,15 +39,17 @@ function IdeaFlowView({ ideaId, onOpenMobileNav }: IdeaFlowProps & { ideaId: str
             <Lightbulb className="w-4 h-4 text-primary shrink-0" />
             <p className="flex-1 text-ui-base font-semibold text-foreground truncate">{idea.title}</p>
             <div className="flex items-center gap-2 shrink-0">
+              {!flow.readOnly && <SaveStatus />}
               <IdeaTools flow={flow} />
             </div>
           </div>
         }
-        progress={<JourneyProgress steps={ideaProgressSteps(idea, viewStep)} onSelectStep={k => flow.setViewStep(k as StepKey)} />}
+        progress={<JourneyProgress variant="trail" steps={ideaProgressSteps(idea, viewStep)} {...ideaTrail(idea)} onSelectStep={k => flow.setViewStep(k as StepKey)} />}
       >
         {flow.readOnly && <SampleBanner idea={idea} />}
         <IdeaStepStage flow={flow} />
       </JourneyScreen>
+      {celebrationOverlay}
     </div>
   );
 }
