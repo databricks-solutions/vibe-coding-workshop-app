@@ -27,8 +27,8 @@ probe constraints in
 | Track overview narrative source | `src/constants/pathDescriptions.ts` | same |
 | Gate ledger convention | `.vibecoding-state.md` (Tier-G READ/RECORD bookends, `../genie-accelerator-prompt-standardization.md` §17 + `../genie-accelerator-locate-daisychain-and-prompt-cleanup.md`) | `.vibecoding-state.md` |
 | SPA catch-all (mount `/mcp` before it) | `app.py:162` | `:162` |
-| FMAPI call (adaptive coaching, §3.7) | `call_databricks_serving_endpoint(prompt, endpoint_name, max_tokens, temperature, system_prompt)` — **async** — `src/backend/api/routes.py:1400` | (new) |
-| Default serving endpoint | `SERVING_ENDPOINT_NAME = os.getenv("DATABRICKS_SERVING_ENDPOINT", "databricks-claude-sonnet-4-5")` `routes.py:440` | (new) |
+| FMAPI call (adaptive coaching, §3.7) | `call_databricks_serving_endpoint(prompt, endpoint_name, max_tokens, temperature, system_prompt)` — **async** — `src/backend/services/llm.py:192` | (new) |
+| Default serving endpoint | `SERVING_ENDPOINT_NAME = os.getenv("DATABRICKS_SERVING_ENDPOINT", "databricks-claude-sonnet-4-6")` `services/llm.py:37` | (new) |
 
 > **Ledger naming.** The live Tier-G convention is `.vibecoding-state.md` — verified in both the
 > prompt-standardization spec (§17, line 74 RECORD bookend) and the Locate daisy-chain spec. This

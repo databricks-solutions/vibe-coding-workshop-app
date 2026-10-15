@@ -164,7 +164,8 @@ Before any `/mcp` deploy (plan §1.3 / generic §4 / D4 §2):
   serving endpoint; unset or blank = `DATABRICKS_SERVING_ENDPOINT`. It is read per call, an unknown
   endpoint fails open to static help, and the app service principal needs CAN_QUERY on the chosen
   endpoint. `app.yaml.template` sets the signed `databricks-claude-sonnet-5-5`; the code has no
-  default. Coaching sends no `temperature` and `max_tokens` defaults to 800 (`VIBE_COACH_MAX_TOKENS`).
+  default. Coaching sends no `temperature` and `max_tokens` defaults to `COACH_MAX_TOKENS = 800`
+  (`services/coaching.py:68`), overridable per call with `VIBE_COACH_MAX_TOKENS`.
   Each coaching call holds a worker thread (`asyncio.to_thread`, `mcp_server.py:368`) for up to the
   budget, so on every deployment a burst of slow calls larger than the 32-worker pool
   (`executor.py:25`) queues other MCP tool calls (not the event loop).

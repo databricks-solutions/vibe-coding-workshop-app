@@ -222,6 +222,15 @@ The genie-specific sections, in engine order (foundation `define-usecase`, share
 > the `includeGenieOntology` flag (default **off**, `workflowSections.ts:266–272`). Activate reuses
 > the reverse-ETL sequence 32–37 per `genie-track-activation-and-step-cleanup.md`.
 
+**Genie Code light path (genie-accelerator + Insights).** A named RULE_10 exception (human ruling
+D-156): the AI/BI dashboard via `createAsset` (`gaccel_dashboard`, seed input_id 1028,
+`02_seed_section_input_prompts.sql:22036`) and its operational add-ons — SQL alerts via
+`w.alerts.create` and the dashboard schedule/subscription via `w.lakeview.create_schedule` /
+`create_subscription` (`insights_alerts`, seed input_id 1305, `:24068`) — may be created in-session,
+Genie Code only. Conditions: each object's id is recorded in `<STATE_FILE>` and a clickable link is
+printed. Making them reproducible belongs to a bundle step (e.g. `gaccel_productionize`), never an
+ad-hoc import.
+
 ### 4.3 Generation (anti-divergence)
 
 Add a build step `scripts/generate_manifest.py` (or a `npm run gen:manifest`) that reads
