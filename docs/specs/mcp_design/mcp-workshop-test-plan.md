@@ -120,7 +120,7 @@ planned as `vibe_coach`, D2 §3.7, now D2 §3.8):
   context but the returned `coaching` is not required to equal it; the contract is enforced by
   `COACH_SYSTEM` (assert the system prompt text carries the "never restate the prompt" rule).
 - **Fail-open (the important one)** — (a) mock the model to raise/timeout → `vibe_explain_step` returns the
-  static option-keyed fallback with `is_fallback:true`, **not** an `isError`; (b) unset the endpoint
+  step's static help with `is_fallback: true` (the reason is internal (`CoachOutcome.reason`, `services/coaching.py:449`) and appears only as `outcome=fallback:<reason>` on the coaching timings log line (`services/coaching.py:548`)), **not** an `isError`; (b) unset the endpoint
   (`DATABRICKS_SERVING_ENDPOINT` empty) → still returns useful static coaching, `is_fallback:true`.
 - **Leakage scrub (D7 §6.1)** — feed the mock a response containing a planted benchmark-style
   string / literal; assert it is scrubbed from both the returned `coaching` **and** the stored

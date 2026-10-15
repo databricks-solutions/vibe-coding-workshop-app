@@ -116,7 +116,7 @@ code redeploy.**
 - After bumping, re-run the deployment regression tests (D8 §5), especially the 307 and lifespan
   checks, since transport behavior can shift across `mcp`/`fastmcp` patch releases.
 - **Phase 2A adds no new dependency.** The coaching path (the `vibe_explain_step` extension) reuses
-  the existing serving-endpoint client behind `call_databricks_serving_endpoint` (`routes.py:1400`) —
+  the existing serving-endpoint client behind `call_databricks_serving_endpoint` (`services/llm.py:192`) —
   whatever HTTP/OpenAI client the app already pins. Extracting it to `services/llm.py` (D4 §1.2) is a
   move, not a new import to pin.
 

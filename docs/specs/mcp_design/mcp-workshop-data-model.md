@@ -118,7 +118,7 @@ a new table — a coaching turn is just another interaction:
 
 | Column | Type | Purpose |
 |---|---|---|
-| `is_fallback` | `BOOLEAN DEFAULT FALSE` | TRUE ⇒ the FMAPI call failed/timed out (or no endpoint configured) and the static option-keyed coaching was returned (D5 §11.4). Drives the **fallback-rate** metric. |
+| `is_fallback` | `BOOLEAN DEFAULT FALSE` | TRUE ⇒ the FMAPI call failed/timed out (or no endpoint configured) and the step's static help was returned; the reason is internal (`CoachOutcome.reason`, `services/coaching.py:449`) and appears only as `outcome=fallback:<reason>` on the coaching timings log line (`services/coaching.py:548`). Drives the **fallback-rate** metric. |
 | `focus` | `VARCHAR(16)` | The coaching lens: `what_now` \| `why` \| `unblock` \| `review` (D2 §3.8). NULL for non-coaching rows. |
 
 - The write is **best-effort telemetry** — a failed insert must **not** fail the `vibe_explain_step` call

@@ -389,8 +389,8 @@ description-as-prompt, `inputSchema`, `outputSchema`, annotations, errors, and t
   state — progress/gates/answers are untouched. The optional coaching-telemetry row (D6 §3a) is an
   observability side-channel, like a log line, not workshop state).
 - **Errors:** `INVALID_SESSION`, `UNKNOWN_STEP` (explicit bad `sectionTag`). **Never** raises on an
-  FMAPI failure — coaching is **fail-open**: on any model/timeout error it returns the static,
-  option-keyed fallback (D5 §11.4 / interactions bank) with `is_fallback:true`. There is no
+  FMAPI failure — coaching is **fail-open**: on any model/timeout error it returns the step's
+  static help with `is_fallback: true`; the reason is internal (`CoachOutcome.reason`, `services/coaching.py:449`) and appears only as `outcome=fallback:<reason>` on the coaching timings log line (`services/coaching.py:548`). There is no
   `COACH_FAILED` code by design.
 - **Grounding (server-assembled, never client-supplied):** the current step's `title`/`why`/
   `how_to_apply`/`expected_output`/`gate` + the verbatim `prompt` (as *reference to explain*, never
@@ -398,7 +398,7 @@ description-as-prompt, `inputSchema`, `outputSchema`, annotations, errors, and t
   and `industry`/`use_case` (D5 §11.2). The model call carries `COACH_SYSTEM` (§12) as
   `system_prompt`.
 - **Maps to:** D5 §11 (pedagogy/doctrine) via `services/llm.py` (extract of
-  `call_databricks_serving_endpoint`, `routes.py:1400`; D4 §1.2). **No REST twin required** for v1
+  `call_databricks_serving_endpoint`, `services/llm.py:192`; D4 §1.2). **No REST twin required** for v1
   (the SPA renders its own coaching); add `GET /api/track/{track}/coach` later if the UI needs it.
 
 ### 3.8 `vibe_explain_step`  *(shipped 2026-09-27; Phase 2A coaching; D12 coach visuals 2026-10-13)*
@@ -708,7 +708,7 @@ tests (§4).
     "grounded_on": { "type": "array", "items": { "type": "string" },
                      "description": "Which context keys fed the answer, e.g. ['why','expected_output','captured_outputs:genie_brief']. For transparency/tests." },
     "is_fallback": { "type": "boolean",
-                     "description": "true ⇒ the FMAPI call failed/timed out and the static option-keyed fallback was returned (D5 §11.4)." }
+                     "description": "true ⇒ the FMAPI call failed/timed out and the step's static help was returned; the reason is internal (`CoachOutcome.reason`, `services/coaching.py:449`) and appears only as `outcome=fallback:<reason>` on the coaching timings log line (`services/coaching.py:548`)." }
   },
   "additionalProperties": false
 }
@@ -733,7 +733,7 @@ class CoachResult(BaseModel):
 
 ### 12.2 `COACH_SYSTEM` (the model system prompt)
 
-Passed as `system_prompt` to `call_databricks_serving_endpoint` (`routes.py:1400` → `services/llm.py`,
+Passed as `system_prompt` to `call_databricks_serving_endpoint` (`services/llm.py:192`,
 D4 §1.2). It is a **server-owned constant** (like `ORIENTATION_PREAMBLE` in `mcp_server.py`), never
 learner- or agent-supplied. The **user message** is the assembled grounding context (§3.7); this
 system prompt fixes the role, the guardrails, and the output shape.
