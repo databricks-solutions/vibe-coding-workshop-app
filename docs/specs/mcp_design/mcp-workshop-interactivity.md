@@ -183,7 +183,7 @@ patterns; §4.5 is the first-run on-ramp; §4.6 is the Phase 2A coaching layer.
 - **What makes it possible:** the MCP server already holds everything a good explanation needs — the
   step's verbatim `prompt`, `why`, `how_to_apply`, `expected_output` and gate (D3 §8), the learner's
   `captured_outputs` and prior answers (D6), the parameters — **and** in-workspace access to an FMAPI
-  model via `call_databricks_serving_endpoint` (`routes.py:1400`). §4.1's coaching is a static
+  model via `call_databricks_serving_endpoint` (`services/llm.py:192`). §4.1's coaching is a static
   option→text lookup; §4.6 composes those same inputs into a grounded, personalized narration.
 - **Content source:** server-assembled grounding context (D2 §12.3) + the `COACH_SYSTEM` constant
   (D2 §12.2). The static per-option coaching bank (D5 §5.1) remains the **fallback** (below).

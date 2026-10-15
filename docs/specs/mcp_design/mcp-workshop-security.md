@@ -124,8 +124,8 @@ that `startswith("/api/")` (`app.py:64`). Consequences and the required decision
   only to attribute the session (`created_by`) and authorize session access (§1).
 - No new secrets are introduced by the MCP surface. Reuse existing env config (roadmap env vars).
 - **Adaptive coaching (`vibe_explain_step` with `focus`, D2 §3.8) calls FMAPI as the app SP** via the existing
-  `call_databricks_serving_endpoint` path (`routes.py:1400`) and the existing
-  `DATABRICKS_SERVING_ENDPOINT` config (`routes.py:440`) — **no new endpoint, credential, or secret**.
+  `call_databricks_serving_endpoint` path (`services/llm.py:192`) and the existing
+  `DATABRICKS_SERVING_ENDPOINT` config (`services/llm.py:37`) — **no new endpoint, credential, or secret**.
   The learner's OBO identity is not forwarded to the model call; coaching is generated under the SP,
   the same trust boundary as every other Lakebase read.
 - No benchmark question text, literals, or PII in tool outputs, resource payloads, or interaction

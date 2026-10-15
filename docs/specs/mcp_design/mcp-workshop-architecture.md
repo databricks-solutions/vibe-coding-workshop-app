@@ -267,7 +267,7 @@ sequenceDiagram
     LLM-->>MCP: coaching text
     MCP->>MCP: leakage-scrub (D7 §6.1)
   else model error / timeout / no endpoint
-    MCP->>MCP: static option-keyed fallback (is_fallback=true, D5 §11.4)
+    MCP->>MCP: step's static help, is_fallback=true + reason (services/coaching.py:448, :496, :531, :536)
   end
   MCP-)DB: best-effort append kind='coaching' row (D6 §3a)  %% failure ignored
   MCP-->>GC: StepHelpResult {…, coaching, focus, is_fallback, grounded_on}
