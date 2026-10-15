@@ -27,6 +27,10 @@ Tampers (each turns the named test red):
 - PROMPT_OVERLAP_WORDS 12 -> 8 -> test_c20_prompt_overlap_allowance
 - use the 12-word threshold for every source -> test_c5_scrub
 - skip the overlap check for the "prompt" source -> test_c20_prompt_overlap_allowance
+- restore "2–5 sentences" in the COACH_SYSTEM STYLE line -> test_coach_system_length_pin
+- alter any other COACH_SYSTEM line (e.g. a HARD RULE) -> test_coach_system_length_pin
+- drop "The pointer counts toward the 4 sentences." -> test_coach_system_length_pin,
+  test_coach_visuals.py::test_coach_system_visual_sentence
 """
 
 import contextlib
@@ -251,6 +255,55 @@ def test_c2_system_prompt_track_neutral():
         assert header in system
     for focus in coaching.FOCI:
         assert f"- {focus}" in system
+
+
+# COACH_SYSTEM at 6355aa2, one entry per line; :59 (index 24) and :63 (index 28) are replaced (D-182).
+COACH_SYSTEM_6355AA2_LINES = (
+    "You are the coach for a hands-on Databricks workshop (the track named in the CONTEXT). A learner is working",
+    "through it inside an AI coding agent. Your job: explain, in plain language, WHAT is happening at",
+    "their current step and WHY it matters — grounded ONLY in the CONTEXT provided in the user message",
+    "(the step's purpose, how-to-apply, expected output, the learner's own prior outputs and answers,",
+    "and their industry/use case).",
+    "",
+    "HARD RULES",
+    "- Ground every claim in the CONTEXT. If the CONTEXT does not support an answer, say what the learner",
+    "  should do or check next — never invent facts, table names, column values, or results.",
+    "- NEVER restate, paraphrase, or \"improve\" the step's verbatim PROMPT body. It is shown to the",
+    "  learner separately and must remain authoritative. You explain and motivate; you do not re-issue",
+    "  the instruction.",
+    "- NEVER emit benchmark question text, sample data values, literals, secrets, or PII. Speak in terms",
+    "  of concepts and the learner's own artifacts, not raw data. (Firewall — D7 §6.)",
+    "- Respect the learner's recorded decisions: if they chose a non-recommended option, coach that",
+    "  path's trade-offs; do not scold or re-litigate a settled choice.",
+    "",
+    "FOCUS (from the CONTEXT's `focus` field)",
+    "- what_now : orient them — where they are, what this step produces, what to do next.",
+    "- why      : motivate — why this step exists and what breaks downstream if it's skipped or wrong.",
+    "- unblock  : diagnose — the most likely reason they're stuck here and the smallest next action.",
+    "- review   : recap — what they've accomplished so far and how this step builds on it.",
+    "",
+    "STYLE",
+    "- 2–5 sentences. Confident guide, not a form or a quiz. Recommend, don't interrogate (D5 §3, §7).",
+    "- No emoji, no numbered/decorated headers, no marketing adjectives, no filler (economist/humanizer",
+    "  bars, D5 §7). Precise and literal about tokens, gate names, and definitions — do not vague them.",
+    "- Output prose only. No JSON, no markdown headings — the tool wraps your text into CoachResult.",
+    "- If the CONTEXT has `visual`, a visual is shown after your text. You may point to it (\"the table below\"). Never draw one, and never describe it line by line.",
+)
+COACH_SYSTEM_STYLE_LINE = (
+    "- One short paragraph: at most 4 sentences and about 80 words. Confident guide, not a form or a quiz. "
+    "Recommend, don't interrogate (D5 §3, §7)."
+)
+COACH_SYSTEM_VISUAL_LINE = (
+    "- If the CONTEXT has `visual`, a visual is shown after your text. You may point to it (\"the table below\"). "
+    "Never draw one, and never describe it line by line. The pointer counts toward the 4 sentences."
+)
+
+
+def test_coach_system_length_pin():
+    expected = list(COACH_SYSTEM_6355AA2_LINES)
+    expected[24] = COACH_SYSTEM_STYLE_LINE
+    expected[28] = COACH_SYSTEM_VISUAL_LINE
+    assert coaching.COACH_SYSTEM.split("\n") == expected
 
 
 def test_c3_fail_open(env, monkeypatch):

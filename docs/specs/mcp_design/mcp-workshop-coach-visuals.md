@@ -45,7 +45,7 @@ space") that can pull a learner ahead of the current step. Not addressed here; s
 
 ### 2.1 The coach is prose-only by construction
 
-- `COACH_SYSTEM` asks for "2–5 sentences … Output prose only. No JSON, no markdown headings"
+- `COACH_SYSTEM` asks for "One short paragraph: at most 4 sentences and about 80 words … Output prose only. No JSON, no markdown headings" (was: 2–5 sentences; D-182)
   (`src/backend/services/coaching.py:35-63`), with `COACH_MAX_TOKENS = 800` (`:68`).
 - `_scrub_output` rejects any code fence (`coaching.py:194`). A diagram is a fence, so a model
   reply containing one is dropped and the learner gets the static fallback (`is_fallback: true`).
@@ -268,10 +268,10 @@ visual_caption: str | None = None    # takeaway; diagrams prefixed "Diagram only
 > Pass `visual` (table|diagram) when the learner asks to see, show, draw or map something.
 > Present `coaching`, then `visual` exactly as given, then `visual_caption`.
 
-`COACH_SYSTEM` addition. The prose stays 2–5 sentences, and the scrub is **unchanged**:
+`COACH_SYSTEM` addition. The prose stays one short paragraph of at most 4 sentences and about 80 words (was: 2–5 sentences; D-182), and the scrub is **unchanged**:
 
 > If the CONTEXT has `visual`, a visual is shown after your text. You may point to it ("the table
-> below"). Never draw one, and never describe it line by line.
+> below"). Never draw one, and never describe it line by line. The pointer counts toward the 4 sentences. (was: 2–5 sentences; D-182)
 
 `build_context` adds `visual: <kind>, <caption>` when a visual was built. The visual is built
 **before** the model call, so the prose can refer to it.
